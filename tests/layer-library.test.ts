@@ -1217,3 +1217,48 @@ describe("createLayerLibraryEntryId", () => {
     assert.notEqual(a, b);
   });
 });
+
+describe("hasRestorableLayerSource for Cesium Ion assets", () => {
+  it("treats an Ion asset id as a re-fetchable source", () => {
+    assert.equal(
+      hasRestorableLayerSource({
+        source: { type: "3d-tiles", ionAssetId: 96188 },
+        metadata: { sourceKind: "cesium-ion" },
+      }),
+      true,
+    );
+    assert.equal(
+      hasRestorableLayerSource({ source: { type: "raster", ionAssetId: 0 }, metadata: {} }),
+      false,
+    );
+    assert.equal(
+      hasRestorableLayerSource({
+        source: { type: "raster", ionAssetId: "96188" },
+        metadata: { sourceKind: "cesium-ion" },
+      }),
+      true,
+      "a hand-authored numeric string parses the way the globe parses it",
+    );
+    assert.equal(
+      hasRestorableLayerSource({ source: { type: "raster", ionAssetId: 96188 }, metadata: {} }),
+      false,
+      "without the cesium-ion source kind the id is not a contract the globe honours",
+    );
+  });
+});
+
+it("strips geometry edit flags when capturing and importing library entries", () => {
+  const original = layer({
+    source: { url: "https://example.com/buildings.geojson" },
+    metadata: { geometryEdited: true },
+  });
+  const captured = captureLayerLibraryEntry(original, CAPTURE_OPTIONS);
+  assert.equal(captured.ok, true);
+  if (!captured.ok) return;
+  assert.equal(captured.entry.metadata.geometryEdited, undefined);
+  assert.equal(original.metadata.geometryEdited, true);
+  const [normalized] = normalizeLayerLibraryEntries([
+    { ...captured.entry, metadata: { geometryEdited: true } },
+  ]);
+  assert.equal(normalized.metadata.geometryEdited, undefined);
+});

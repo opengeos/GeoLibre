@@ -1,9 +1,5 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { FeatureCollection } from "geojson";
-import {
-  readSavedPostgresConnections,
-  savedPostgresConnectionLabel,
-} from "./saved-postgres-connections";
+import { savedPostgresConnectionsWithLabel } from "./saved-postgres-connections";
 
 /**
  * In-memory registry mapping an editable PostGIS layer to the connection
@@ -57,31 +53,6 @@ export function unregisterPostgisConnection(layerId: string): void {
 }
 
 /**
- * The primary-key values the layer's edit session started from, persisted on
- * the layer metadata (`postgisBaselineKeys`) so the protection survives a
- * project reload — unlike the connection string, keys are not credentials.
- * Sent with a save so the sidecar scopes deletions to rows this session
- * actually read, leaving concurrently inserted rows alone.
- */
-export function postgisBaselineKeys(layer: GeoLibreLayer): Array<string | number> | undefined {
-  const keys = layer.metadata.postgisBaselineKeys;
-  if (!Array.isArray(keys)) return undefined;
-  return keys.filter(
-    (key): key is string | number => typeof key === "string" || typeof key === "number",
-  );
-}
-
-/**
- * The primary-key values carried by a freshly read PostGIS FeatureCollection
- * (the /postgis/read endpoint sets each row's key as `feature.id`).
- */
-export function postgisFeatureKeys(geojson: FeatureCollection): Array<string | number> {
-  return geojson.features
-    .map((feature) => feature.id)
-    .filter((id): id is string | number => typeof id === "string" || typeof id === "number");
-}
-
-/**
  * Resolve the connection string for an editable PostGIS layer.
  *
  * Prefers the in-session registry; falls back to the saved connection whose
@@ -102,8 +73,6 @@ export function resolvePostgisConnection(layer: GeoLibreLayer): string | null {
   // only an unambiguous match: guessing between candidate credentials would
   // read as an unexplained auth failure (or hit the wrong environment), while
   // returning null surfaces the explicit "reconnect" message.
-  const matches = readSavedPostgresConnections().filter(
-    (connection) => savedPostgresConnectionLabel(connection) === label,
-  );
+  const matches = savedPostgresConnectionsWithLabel(label);
   return matches.length === 1 ? matches[0] : null;
 }

@@ -19,6 +19,7 @@ describe("maplibreDirectionsPlugin", () => {
   it("is a Controls toggle that is off by default", () => {
     assert.equal(maplibreDirectionsPlugin.id, DIRECTIONS_PLUGIN_ID);
     assert.equal(maplibreDirectionsPlugin.activeByDefault, undefined);
+    assert.deepEqual(maplibreDirectionsPlugin.engines, ["maplibre"]);
     assert.equal(typeof maplibreDirectionsPlugin.activate, "function");
     assert.equal(typeof maplibreDirectionsPlugin.deactivate, "function");
   });

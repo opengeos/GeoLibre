@@ -1,5 +1,6 @@
-import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
+import { rendererCapabilities, type MapEngine } from "@geolibre/map";
+import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,21 +12,25 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import type maplibregl from "maplibre-gl";
 import {
   BookOpen,
   Braces,
   Circle,
   Crosshair,
   Earth,
+  Eye,
   MapIcon,
   MapPin,
+  Navigation2,
   Route,
+  Signpost,
   Sparkles,
+  Spline,
   ZoomIn,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { ContextMenuGestureTracker, type ContextMenuRequest } from "../../lib/context-menu-gesture";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import { openExternalLink } from "../../lib/open-external";
 import {
@@ -35,9 +40,13 @@ import {
   QUICK_TRAVEL_CONTOURS,
   QUICK_TRAVEL_CONTOURS_LABEL,
   runQuickAnalysis,
+  beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
+import { useLineOfSightTool } from "../../lib/line-of-sight-store";
+import { useNavigationTool } from "../../lib/navigation/store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
+import { runViewshed } from "../../lib/run-viewshed";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
 
 interface ContextMenuState {
@@ -79,14 +88,20 @@ async function copyText(value: string): Promise<void> {
   }
 }
 
+/** Read the camera zoom only while the engine still owns a render surface. */
+function liveZoom(engine: MapEngine | null | undefined): number | undefined {
+  return engine?.getRenderSurface() ? engine.readView().zoom : undefined;
+}
+
 /**
  * Renders the map's right-click context menu (issue #829).
  *
- * Listening to MapLibre's own `contextmenu` event (rather than a raw DOM
- * handler) yields the clicked geographic coordinate directly. The top item
- * shows that coordinate and copies it to the clipboard on click, Google-Maps
- * style; below it sits a curated set of quick actions that operate on the
- * clicked point (copy GeoJSON, recenter, zoom in, open in Google Maps/Earth).
+ * Listening on the renderer-neutral surface keeps the menu available on every
+ * engine. The surface converts the canvas-relative pointer position to a
+ * geographic coordinate. The top item shows that coordinate and copies it to
+ * the clipboard on click, Google-Maps style; below it sits a curated set of
+ * quick actions that operate on the clicked point (copy GeoJSON, recenter,
+ * zoom in, open in Google Maps/Earth).
  *
  * The menu is positioned with an invisible zero-size trigger pinned at the
  * cursor: Radix anchors its content to that trigger. The whole menu is keyed by
@@ -102,7 +117,7 @@ export function MapContextMenu({
   mapReadyGeneration,
   onExplorePlace,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
   /** Open a Wikipedia knowledge card for the clicked coordinate. */
   onExplorePlace?: (lat: number, lng: number) => void;
@@ -115,24 +130,72 @@ export function MapContextMenu({
   const seqRef = useRef(0);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const surface = mapControllerRef.current?.getRenderSurface();
+    if (!surface) return;
+    const canvas = surface.getCanvas();
 
-    const handleContextMenu = (event: maplibregl.MapMouseEvent) => {
+    const openAt = ({ clientX, clientY }: ContextMenuRequest) => {
+      const rect = canvas.getBoundingClientRect();
+      const coordinate = surface.unproject([clientX - rect.left, clientY - rect.top]);
+      // Globe renderers can return no coordinate when the pointer is over
+      // empty space beyond the planet. In that case there is no point for the
+      // menu actions to operate on.
+      if (!coordinate) return;
       seqRef.current += 1;
       setMenu({
         id: seqRef.current,
-        lng: event.lngLat.lng,
-        lat: event.lngLat.lat,
-        x: event.originalEvent.clientX,
-        y: event.originalEvent.clientY,
+        lng: coordinate.lng,
+        lat: coordinate.lat,
+        x: clientX,
+        y: clientY,
       });
       setOpen(true);
     };
+    // A right-button drag turns the camera, so it must not also open the menu
+    // (issue #2721). The tracker defers the menu to the button release and
+    // drops it when the pointer moved. Touch is left alone so a long-press
+    // still opens the menu while the finger is down.
+    const tracker = new ContextMenuGestureTracker(openAt);
 
-    map.on("contextmenu", handleContextMenu);
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      tracker.pointerDown(event);
+    };
+    const handlePointerMove = (event: PointerEvent) => tracker.pointerMove(event);
+    const handlePointerUp = (event: PointerEvent) => tracker.pointerUp(event);
+    const handlePointerCancel = (event: PointerEvent) => tracker.cancel(event.pointerId);
+    const handleBlur = () => tracker.cancel();
+    // The menu key and Shift+F10 open the menu from the keyboard; forget any
+    // just-released right-drag so it cannot swallow that request. Other keys
+    // are ignored so holding Shift during a drag keeps the gesture.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) tracker.cancel();
+    };
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      // The geo editor owns right-click while drawing or editing: it removes
+      // the vertex under the cursor or finishes the draw (discussion #2750).
+      if (isGeoEditorUsingRightClick()) return;
+      tracker.contextMenu(event);
+    };
+
+    // Move/up listen on the window in the capture phase: the drag leaves the
+    // canvas, and map engines may capture the pointer or stop propagation.
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", handlePointerUp, true);
+    window.addEventListener("pointercancel", handlePointerCancel, true);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("keydown", handleKeyDown, true);
+    canvas.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      map.off("contextmenu", handleContextMenu);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", handlePointerUp, true);
+      window.removeEventListener("pointercancel", handlePointerCancel, true);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      canvas.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);
 
@@ -161,8 +224,9 @@ export function MapContextMenu({
     // Read the live zoom; if the map was torn down between right-click and
     // selection, omit zoom so the move still recenters instead of snapping to
     // zoom 1. MapLibre clamps the +1 to the configured maxZoom on its own.
-    const currentZoom = mapControllerRef.current?.getMap()?.getZoom();
-    mapControllerRef.current?.flyTo({
+    const engine = mapControllerRef.current;
+    const currentZoom = liveZoom(engine);
+    engine?.flyTo({
       center: [menu.lng, menu.lat],
       ...(currentZoom !== undefined ? { zoom: currentZoom + 1 } : {}),
     });
@@ -180,13 +244,15 @@ export function MapContextMenu({
   // city-level view rather than dropping the action.
   const viewInGoogleMaps = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const engine = mapControllerRef.current;
+    const zoom = liveZoom(engine) ?? 12;
     void openExternalLink(googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }));
   }, [menu, mapControllerRef]);
 
   const viewInGoogleEarth = useCallback(() => {
     if (!menu) return;
-    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    const engine = mapControllerRef.current;
+    const zoom = liveZoom(engine) ?? 12;
     void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
   }, [menu, mapControllerRef]);
 
@@ -197,9 +263,103 @@ export function MapContextMenu({
   const bufferPresets = useMemo(() => bufferPresetsFor(scaleUnit), [scaleUnit]);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
 
+  /**
+   * Radius label for the viewshed entries.
+   *
+   * Follows the scale bar's unit system like the buffer ladder above, so an
+   * imperial-preference user does not get miles for buffers and kilometres for
+   * viewsheds in the same submenu. The radii themselves stay metric constants —
+   * they size the analysis, not the label — so an imperial reading is a
+   * conversion of the same distance rather than a different one.
+   */
+  const formatViewshedRadius = useCallback(
+    (meters: number): string => {
+      const imperial = scaleUnit === "imperial";
+      const perUnit = imperial ? METERS_PER_MILE : 1000;
+      const large = meters >= perUnit;
+      const value = large ? meters / perUnit : imperial ? meters * FEET_PER_METER : meters;
+      const formatted = new Intl.NumberFormat(i18n.language, {
+        maximumFractionDigits: large ? 1 : 0,
+      }).format(value);
+      const unit = large
+        ? imperial
+          ? t("quickAnalysis.unit.miles")
+          : t("quickAnalysis.unit.kilometers")
+        : imperial
+          ? t("quickAnalysis.unit.feet")
+          : t("quickAnalysis.unit.meters");
+      return `${formatted} ${unit}`;
+    },
+    [scaleUnit, i18n.language, t],
+  );
+
   const formatDistance = useCallback(
     (preset: QuickBufferPreset) => formatBufferDistance(preset, i18n.language, t),
     [i18n.language, t],
+  );
+
+  // Viewshed radii. Small enough that the tile fetch and the line-of-sight walk
+  // stay interactive; the 50km cap in the processing module is the hard limit.
+  const VIEWSHED_RADII_METERS = [2000, 5000, 15000];
+
+  const [viewshedBusy, setViewshedBusy] = useState(false);
+  const viewshedHere = useCallback(
+    (radiusMeters: number) => {
+      if (!menu || viewshedBusy) return;
+      const { lng, lat } = menu;
+      setViewshedBusy(true);
+      const toolName = t("quickAnalysis.viewshedToolName");
+      // Reported through the Quick Analysis banner like every other action in
+      // this menu rather than failing silently: the terrain fetch takes seconds
+      // and can fail, and a click with no feedback either way reads as a broken
+      // menu item. The returned setter is bound to this run, so a slow viewshed
+      // cannot overwrite the status of a faster action started after it.
+      const reportStatus = beginQuickAnalysisRun(toolName);
+      void runViewshed({
+        lng,
+        lat,
+        radiusMeters,
+        mapControllerRef,
+        layerName: t("quickAnalysis.viewshedLayerName", {
+          radius: formatViewshedRadius(radiusMeters),
+        }),
+      })
+        .then((result) => {
+          reportStatus(
+            result
+              ? { phase: "idle" }
+              : { phase: "error", toolName, message: t("quickAnalysis.viewshedNoResult") },
+          );
+        })
+        .catch((error: unknown) => {
+          reportStatus({
+            phase: "error",
+            toolName,
+            message: error instanceof Error ? error.message : t("quickAnalysis.viewshedNoResult"),
+          });
+        })
+        .finally(() => setViewshedBusy(false));
+    },
+    [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
+  );
+
+  // Line of sight (#2858) draws transient MapLibre style layers, so it is
+  // offered only where the primary map exposes a MapLibre instance.
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const lineOfSightAvailable = rendererCapabilities(primaryRenderer).nativeMapInstance;
+  const openLineOfSight = useLineOfSightTool((s) => s.openLineOfSight);
+  const lineOfSightHere = useCallback(() => {
+    if (!menu) return;
+    openLineOfSight({ lng: menu.lng, lat: menu.lat });
+  }, [menu, openLineOfSight]);
+  // Navigation draws MapLibre style layers too, so it shares the same gate.
+  const openNavigation = useNavigationTool((s) => s.openNavigation);
+  const directionsHere = useCallback(
+    (as: "origin" | "destination") => {
+      if (!menu) return;
+      openNavigation({ point: { lng: menu.lng, lat: menu.lat }, as });
+    },
+    [menu, openNavigation],
   );
 
   const bufferHere = useCallback(
@@ -334,6 +494,18 @@ export function MapContextMenu({
             <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
             {t("mapContextMenu.zoomInHere")}
           </DropdownMenuItem>
+          {lineOfSightAvailable ? (
+            <>
+              <DropdownMenuItem onSelect={() => directionsHere("destination")} className="gap-2">
+                <Signpost className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("mapContextMenu.directionsToHere")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => directionsHere("origin")} className="gap-2">
+                <Navigation2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("mapContextMenu.directionsFromHere")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="gap-2">
@@ -360,6 +532,26 @@ export function MapContextMenu({
                 <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
                 {t("quickAnalysis.walkTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL })}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {VIEWSHED_RADII_METERS.map((radiusMeters) => (
+                <DropdownMenuItem
+                  key={`viewshed-${radiusMeters}`}
+                  onSelect={() => viewshedHere(radiusMeters)}
+                  disabled={viewshedBusy}
+                  className="gap-2"
+                >
+                  <Eye className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.viewshedHere", {
+                    radius: formatViewshedRadius(radiusMeters),
+                  })}
+                </DropdownMenuItem>
+              ))}
+              {lineOfSightAvailable ? (
+                <DropdownMenuItem onSelect={lineOfSightHere} className="gap-2">
+                  <Spline className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.lineOfSightHere")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               {/* Escape hatch when the presets aren't what was wanted: the full
                 dialog, preselected on the same tool. */}

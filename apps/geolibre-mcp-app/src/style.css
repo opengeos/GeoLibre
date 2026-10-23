@@ -1,0 +1,215 @@
+@import "@geolibre/ui/theme.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+html,
+body {
+  margin: 0;
+}
+#map {
+  width: 100%;
+  height: 480px;
+}
+#status {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  z-index: 2;
+  padding: 6px 10px;
+  font: 12px/1.4 system-ui;
+  background: hsl(var(--popover) / 90%);
+  color: hsl(var(--popover-foreground));
+  max-height: 40%;
+  overflow-y: auto;
+  white-space: pre-line;
+}
+#network-consent {
+  --consent-surface: hsl(var(--popover));
+  --consent-muted-surface: hsl(var(--muted));
+  --consent-text: hsl(var(--popover-foreground));
+  --consent-muted: hsl(var(--muted-foreground));
+  --consent-border: hsl(var(--border));
+  --consent-accent: hsl(var(--primary));
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  box-sizing: border-box;
+  background: rgb(0 0 0 / 80%);
+  backdrop-filter: blur(4px);
+  color: var(--consent-text);
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+}
+#network-consent[hidden] {
+  display: none;
+}
+.consent-card {
+  inline-size: min(100%, 480px);
+  max-block-size: calc(100dvh - 24px);
+  box-sizing: border-box;
+  padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--consent-border);
+  border-radius: 16px;
+  background: var(--consent-surface);
+  box-shadow: 0 20px 64px rgb(0 0 0 / 24%);
+}
+.consent-card p,
+.consent-card h2 {
+  margin: 0;
+}
+.consent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.consent-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 42px;
+  block-size: 42px;
+  border: 1px solid var(--consent-border);
+  border-radius: 12px;
+  background: var(--consent-muted-surface);
+  color: var(--consent-accent);
+}
+.consent-eyebrow {
+  color: var(--consent-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.consent-card h2 {
+  font-size: 20px;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+.consent-card .consent-description {
+  margin-block: 14px 16px;
+  color: var(--consent-muted);
+}
+.consent-count {
+  color: var(--consent-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.consent-origins {
+  max-block-size: 144px;
+  margin-block: 8px 16px;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--consent-border);
+  border-radius: 10px;
+  background: var(--consent-muted-surface);
+}
+.consent-origins li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+}
+.consent-origins li + li {
+  border-block-start: 1px solid var(--consent-border);
+}
+.consent-origins li::before {
+  content: "";
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--consent-accent);
+}
+.consent-origins code {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  text-align: start;
+}
+.consent-decision {
+  flex: none;
+  color: var(--consent-muted);
+  font-size: 11px;
+}
+.consent-privacy,
+.consent-scope {
+  color: var(--consent-muted);
+  font-size: 12px;
+}
+.consent-card .consent-scope {
+  margin-block-start: 8px;
+}
+.consent-actions {
+  position: sticky;
+  inset-block-end: -20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-block: 18px -20px;
+  margin-inline: -20px;
+  padding: 14px 20px 20px;
+  border-block-start: 1px solid var(--consent-border);
+  background: var(--consent-surface);
+}
+.consent-actions button {
+  min-block-size: 38px;
+  padding: 8px 18px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 8px;
+  background: var(--consent-surface);
+  color: var(--consent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.consent-actions button:hover {
+  background: hsl(var(--accent));
+}
+.consent-actions button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+.consent-actions .consent-allow {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.consent-actions .consent-allow:hover {
+  border-color: hsl(var(--primary) / 90%);
+  background: hsl(var(--primary) / 90%);
+}
+@media (max-width: 360px) {
+  .consent-card h2 {
+    font-size: 18px;
+  }
+  .consent-actions button {
+    flex: 1;
+  }
+}
+.geolibre-identify-popup-root {
+  font: 12px/1.4 system-ui;
+  max-width: 320px;
+}
+.maplibregl-popup-content {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+.maplibregl-popup-close-button {
+  color: hsl(var(--popover-foreground));
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}

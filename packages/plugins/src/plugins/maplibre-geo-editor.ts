@@ -1,17 +1,45 @@
-import { type GeoLibreLayer, lineWidthValue, styleValue, useAppStore } from "@geolibre/core";
-import { Geoman, defaultLayerStyles } from "@geoman-io/maplibre-geoman-free";
-import type { Feature, FeatureCollection } from "geojson";
-import type maplibregl from "maplibre-gl";
-import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
+  currentEditorIdentity,
+  editorTrackingFieldNames,
+  lineWidthValue,
+  styleValue,
+  useAppStore,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import type { Geoman } from "@geoman-io/maplibre-geoman-free";
+import {
+  mapboxFillLayerId,
+  mapboxLineLayerId,
+  mapboxSourceId,
+} from "@geolibre/map/style-layer-ids";
+import type { Feature, FeatureCollection, MultiLineString, Position } from "geojson";
+import type * as maplibregl from "maplibre-gl";
+import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
+import {
+  type EditedFeatureIds,
   type EditedFeatureProperties,
+  type GeometryEditTrackingOptions,
+  type ReconcileEditedFeaturesOptions,
   SKETCHES_SOURCE_KIND,
+  applySyncedEditorTracking,
   canEditLayerGeometry,
+  findGeometryEditFeature,
+  geometryEditMetadata,
+  captureEditedFeatureIds,
+  captureEditedGeometries,
   captureEditedProperties,
+  removeMultiLineStringVertex,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
 } from "./geo-editor-geometry";
+import type { MapboxGl } from "./geo-editor-mapbox";
+import {
+  ARCGIS_FEATURE_SOURCE_KIND,
+  arcGISCopiedFeatureProperties,
+  arcGISNewFeatureProperties,
+} from "./arcgis-defaults";
+import type { ArcGISEditInfo } from "./arcgis-edits";
 import {
   type ViewImportBaseline,
   type ViewImportExport,
@@ -20,6 +48,7 @@ import {
   captureViewImportBaseline,
   tagViewFeaturesForImport,
 } from "./geo-editor-view-import";
+import { getStyleMap } from "./style-map";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { GEO_EDITOR_PLUGIN_ID } from "../plugin-ids";
 
@@ -28,6 +57,62 @@ export { canEditLayerGeometry, SKETCHES_SOURCE_KIND } from "./geo-editor-geometr
 const SKETCHES_LAYER_NAME = "Sketches";
 const SKETCHES_SOURCE_PATH = "geoeditor://sketches";
 const GEOMAN_TEXT_PROPERTY = "__gm_text";
+const MASSING_HEIGHT_EXPRESSION =
+  '["step",["zoom"],0,12,["case",["has","height"],["max",0,["to-number",["get","height"],0]],0]]';
+
+type PreMassingExtrusionStyle = Pick<
+  GeoLibreLayer["style"],
+  | "elevation3dEnabled"
+  | "extrusionEnabled"
+  | "extrusionHeightProperty"
+  | "extrusionAdvancedStyleEnabled"
+  | "extrusionHeightExpression"
+>;
+
+const preMassingExtrusionStyles = new Map<string, PreMassingExtrusionStyle>();
+
+/**
+ * User-facing strings the editor renders as copy (the draw/edit mode entries in
+ * {@link GEO_EDITOR_OPTIONS} are keys, not display text). This package is
+ * framework-agnostic and cannot call react-i18next's `t()` directly, so the host
+ * pushes translated values via {@link setGeoEditorLabels}, the pattern used by
+ * `maplibre-graticule` and `maplibre-reverse-geocode`. Defaults are English.
+ */
+export interface GeoEditorLabels {
+  /** Header of the feature-attribute form. */
+  attributePanelTitle: string;
+  /** Label of the massing footprint's height field, in metres. */
+  massingHeight: string;
+}
+
+export const DEFAULT_GEO_EDITOR_LABELS: GeoEditorLabels = {
+  attributePanelTitle: "Feature properties",
+  massingHeight: "Height (m)",
+};
+
+let geoEditorLabels: GeoEditorLabels = { ...DEFAULT_GEO_EDITOR_LABELS };
+
+/**
+ * Replace the user-facing strings (the host calls this with translations on
+ * every language change). The third-party control reads its options once at
+ * construction, so a language switch while the editor is open takes effect the
+ * next time the plugin is activated rather than live.
+ */
+export function setGeoEditorLabels(next: Partial<GeoEditorLabels>): void {
+  geoEditorLabels = { ...geoEditorLabels, ...next };
+}
+
+let geoEditorFileTools = true;
+
+/**
+ * Show or hide the toolbar's Open/Save GeoJSON file buttons. The host turns
+ * them off in the read-only viewer, where they would import and export data
+ * around the deployment's capability gates. Read at construction, so it
+ * applies the next time the plugin is activated.
+ */
+export function setGeoEditorFileTools(enabled: boolean): void {
+  geoEditorFileTools = enabled;
+}
 
 let geoEditorPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -35,7 +120,16 @@ const GEO_EDITOR_OPTIONS = {
   collapsed: false,
   toolbarOrientation: "vertical",
   columns: 2,
-  drawModes: ["polygon", "line", "rectangle", "circle", "marker", "freehand", "text_marker"],
+  drawModes: [
+    "polygon",
+    "massing",
+    "line",
+    "rectangle",
+    "circle",
+    "marker",
+    "freehand",
+    "text_marker",
+  ],
   editModes: [
     "select",
     "drag",
@@ -54,11 +148,16 @@ const GEO_EDITOR_OPTIONS = {
   fileModes: ["open", "save"],
   hideGeomanControl: true,
   showFeatureProperties: true,
+  enableAttributeEditing: true,
+  // Leave the right-side MapLibre controls clickable while the form is open.
+  attributePanelSideOffset: 54,
   // Avoid zoom/fit on Sketches restore — it retriggers style churn and races with draw.
   fitBoundsOnLoad: false,
 } satisfies Omit<
   GeoEditorOptions,
   | "position"
+  | "attributePanelTitle"
+  | "attributeSchema"
   | "onFeatureCreate"
   | "onFeatureEdit"
   | "onFeatureDelete"
@@ -69,6 +168,48 @@ const GEO_EDITOR_OPTIONS = {
   | "onSelectionChange"
 >;
 
+/**
+ * The editor's heavy dependencies (Geoman and maplibre-gl-geo-editor, ~1.1 MB)
+ * are imported on first activation rather than at app startup.
+ */
+interface GeoEditorModules {
+  geoman: typeof import("@geoman-io/maplibre-geoman-free");
+  editor: typeof import("maplibre-gl-geo-editor");
+  mapbox: typeof import("./geo-editor-mapbox");
+}
+
+let geoEditorModules: GeoEditorModules | null = null;
+let geoEditorModulesPromise: Promise<GeoEditorModules> | null = null;
+// Bumped by deactivate so an activation still awaiting the imports does not
+// mount the editor after the plugin was turned off again.
+let geoEditorActivationGeneration = 0;
+
+/**
+ * Loads the editor's packages on first use. A failed load (e.g. offline) is
+ * dropped so the next activation retries the import.
+ *
+ * @returns The loaded modules.
+ */
+function loadGeoEditorModules(): Promise<GeoEditorModules> {
+  if (geoEditorModulesPromise) return geoEditorModulesPromise;
+  const promise = Promise.all([
+    import("@geoman-io/maplibre-geoman-free"),
+    import("maplibre-gl-geo-editor"),
+    import("./geo-editor-mapbox"),
+  ]).then(([geoman, editor, mapbox]) => {
+    // When the stale-chunk handler cancels Vite's preload error, the import
+    // resolves to undefined instead of rejecting; treat that as a failure.
+    if (!geoman || !editor || !mapbox) throw new Error("The Geo Editor packages failed to load");
+    geoEditorModules = { geoman, editor, mapbox };
+    return geoEditorModules;
+  });
+  geoEditorModulesPromise = promise;
+  promise.catch(() => {
+    if (geoEditorModulesPromise === promise) geoEditorModulesPromise = null;
+  });
+  return promise;
+}
+
 let geoEditorControl: GeoEditor | null = null;
 let sketchesLayerId: string | null = null;
 let geoEditorStoreUnsubscribe: (() => void) | null = null;
@@ -78,8 +219,6 @@ let pushingSketchesToStore = false;
 let appApi: GeoLibreAppAPI | null = null;
 /** Map-only hide of Sketches while GeoEditor interacts; does not touch store.visible. */
 let sketchesMapLayerSuppressed = false;
-/** After a draw completes, show Sketches even if draw mode stays active for another shape. */
-let sketchesIdleDisplayOverride = false;
 /** Union store + editor on the next sync so a partial getAll cannot drop prior sketches. */
 let unionSketchesWithStoreOnNextSync = false;
 /** Pending one-shot `styledata` listener, so repeated draw events don't pile up listeners. */
@@ -108,8 +247,26 @@ let editTargetOriginalVisible: boolean | null = null;
  * `GEOMAN_SHAPE_PROPERTIES` in `./geo-editor-geometry`.
  */
 let editTargetOriginalProperties: EditedFeatureProperties | null = null;
+/**
+ * Geometry of each feature as the session loaded it, keyed by the same feature
+ * tag as `editTargetOriginalProperties`. Only used when the target layer has
+ * editor tracking enabled, to stamp the features the session actually changed
+ * rather than every feature it loaded.
+ */
+let editTargetOriginalGeometries: ReadonlyMap<string, string> | null = null;
+/**
+ * Original `feature.id` of each loaded feature, keyed by the same feature tag,
+ * so a save hands back numeric ids (such as ArcGIS object IDs) unchanged.
+ */
+let editTargetOriginalIds: EditedFeatureIds | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
+/**
+ * The sketches restore still running after a session ended, or null. A session
+ * ends (and releases its layer) before the restore finishes, so a new session
+ * waits for it.
+ */
+let pendingSketchesRestore: Promise<void> | null = null;
 
 /**
  * Baseline of the features most recently loaded from a map view, keyed by their
@@ -123,42 +280,43 @@ let viewImportLoadCounter = 0;
 
 const GEOMAN_EDIT_SYNC_EVENTS = ["gm:dragend", "gm:editend", "gm:rotateend"] as const;
 
+/**
+ * MapLibre v6 narrowed the catch-all `Map#on`/`off` overload from `type: string`
+ * to `type: keyof MapEventType`, so Geoman's `gm:*` events no longer type-check
+ * even though the map dispatches them. Bind through this slice instead.
+ */
+interface ThirdPartyEventTarget {
+  on(type: string, listener: () => void): unknown;
+  off(type: string, listener: () => void): unknown;
+}
+
 export { GEO_EDITOR_PLUGIN_ID };
 
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: GEO_EDITOR_PLUGIN_ID,
   name: "GeoEditor",
   version: "0.9.0",
+  // Geoman and the toolbar both stay on the Style Spec surface the two 2D
+  // engines share once their few MapLibre object constructions are swapped for
+  // mapbox-gl's (see `adaptGeomanToMapbox` and the `createPopup` option below).
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    pluginActive = true;
-    appApi = app;
-
-    if (!geoEditorControl) {
-      geoEditorControl = new GeoEditor(getGeoEditorOptions());
-      const map = app.getMap?.();
-      if (map) {
-        geomanInstance = new Geoman(map, {
-          layerStyles: geomanLayerStylesForMap(map),
-          settings: { useControlsUi: false },
-        });
-        geoEditorControl.setGeoman(geomanInstance);
-        bindGeomanEditSync(map);
-      }
-    }
-
-    const added = app.addMapControl(geoEditorControl, geoEditorPosition);
-    if (!added) {
-      geoEditorControl = null;
-      pluginActive = false;
-      appApi = null;
-      return false;
-    }
-
-    bindSketchesStoreSync();
-    void restoreSketchesLayerToEditor();
-    setTimeout(() => geoEditorControl?.expand(), 0);
+    if (geoEditorControl || geoEditorModules) return activateGeoEditor(app);
+    const generation = ++geoEditorActivationGeneration;
+    return loadGeoEditorModules().then(
+      () => {
+        // Deactivated (or re-activated) while the packages loaded.
+        if (generation !== geoEditorActivationGeneration) return false;
+        return activateGeoEditor(app);
+      },
+      (error: unknown) => {
+        console.error("[GeoLibre] Failed to load the Geo Editor", error);
+        return false;
+      },
+    );
   },
   deactivate: (app: GeoLibreAppAPI) => {
+    geoEditorActivationGeneration += 1;
     // Persist any in-progress geometry edit and restore the editor to Sketches
     // mode before tearing the control down. The write-back is synchronous; only
     // the sketches restore is async, which is moot since the control is removed
@@ -166,8 +324,8 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     if (editTargetLayerId) void endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
     viewImportBaseline = null;
-    sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
+    preMassingExtrusionStyles.clear();
     setSketchesMapLayerSuppressed(false);
     showGeomanDisplayLayers();
     appApi = null;
@@ -191,17 +349,97 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   },
 };
 
-function getGeoEditorOptions(): GeoEditorOptions {
+/**
+ * Creates (when needed) and mounts the editor. Runs once the editor's packages
+ * are loaded.
+ *
+ * @param app - The GeoLibre app API.
+ * @returns False when the editor could not be mounted.
+ */
+function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
+  pluginActive = true;
+  appApi = app;
+
+  if (!geoEditorControl) {
+    const { geoman, editor, mapbox } = geoEditorModules!;
+    const mapboxMap = app.getMapboxMap?.() ?? null;
+    const mapboxGl = mapboxMap ? (app.getMapboxGl?.() ?? null) : null;
+    // A Mapbox map without the mapbox-gl namespace cannot host Geoman: its
+    // deferred init would run MapLibre's marker and image paths on the
+    // mapbox-gl map and fail. Refuse the activation rather than half-mount.
+    if (mapboxMap && !mapboxGl) {
+      pluginActive = false;
+      appApi = null;
+      return false;
+    }
+    geoEditorControl = new editor.GeoEditor(getGeoEditorOptions(mapboxGl));
+    const map = getStyleMap(app);
+    if (map) {
+      geomanInstance = new geoman.Geoman(map, {
+        layerStyles: geomanLayerStylesForMap(map, mapboxGl !== null),
+        settings: { useControlsUi: false },
+      });
+      // Before anything else: Geoman's deferred init loads its marker image
+      // through the adapter member this swaps.
+      if (mapboxGl && mapboxMap) {
+        mapbox.adaptGeomanToMapbox(geomanInstance, mapboxGl, mapboxMap);
+      }
+      geoEditorControl.setGeoman(geomanInstance);
+      installMultiLineVertexRemoval(geomanInstance);
+      bindGeomanEditSync(map);
+    }
+  }
+
+  const added = app.addMapControl(geoEditorControl, geoEditorPosition);
+  if (!added) {
+    geoEditorControl = null;
+    pluginActive = false;
+    appApi = null;
+    return false;
+  }
+
+  bindSketchesStoreSync();
+  void restoreSketchesLayerToEditor();
+  setTimeout(() => geoEditorControl?.expand(), 0);
+  return undefined;
+}
+
+export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions {
   return {
     ...GEO_EDITOR_OPTIONS,
+    // An empty list is safe upstream: the control merges options over its
+    // defaults with a spread (so `[]` is kept) and only builds the file group
+    // when `fileModes.length > 0` (maplibre-gl-geo-editor, createToolbar).
+    fileModes: geoEditorFileTools ? GEO_EDITOR_OPTIONS.fileModes : [],
+    // Only when present: an explicit `createPopup: undefined` would override
+    // the control's MapLibre default rather than fall through to it.
+    ...(mapboxGl
+      ? { createPopup: geoEditorModules!.mapbox.mapboxGeoEditorPopupFactory(mapboxGl) }
+      : {}),
     position: geoEditorPosition,
-    onFeatureCreate: () => {
-      sketchesIdleDisplayOverride = true;
+    attributePanelTitle: geoEditorLabels.attributePanelTitle,
+    attributeSchema: {
+      polygon: [
+        {
+          name: "height",
+          label: geoEditorLabels.massingHeight,
+          type: "number",
+          min: 0,
+          step: 0.5,
+        },
+      ],
+    },
+    onFeatureCreate: (feature) => {
       unionSketchesWithStoreOnNextSync = true;
-      // Defer until Geoman commits the new feature to its feature store.
+      // GeoEditor opens the attribute panel synchronously after this callback
+      // returns, so a geometry-edit session closes it in the same deferred pass.
+      const isGeometryEditSession = Boolean(editTargetLayerId);
+      // Geoman's callback payload is authoritative even if the collection read
+      // still reflects the pre-create snapshot.
       queueMicrotask(() => {
-        syncSketchesToStore();
+        syncSketchesToStore(feature);
         applySketchesMapDisplay();
+        if (isGeometryEditSession) geoEditorControl?.closeAttributeEditor();
       });
     },
     onFeatureEdit: () => {
@@ -219,10 +457,7 @@ function getGeoEditorOptions(): GeoEditorOptions {
     },
     onAttributeChange: () => syncSketchesToStore(),
     onHistoryChange: () => syncSketchesToStore(),
-    onModeChange: () => {
-      sketchesIdleDisplayOverride = false;
-      applySketchesMapDisplay();
-    },
+    onModeChange: () => applySketchesMapDisplay(),
     onSelectionChange: () => applySketchesMapDisplay(),
   };
 }
@@ -239,33 +474,139 @@ function bindGeomanEditSync(map: maplibregl.Map): void {
   unbindGeomanEditSync();
   geomanEditSyncMap = map;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    map.on(eventName, handleGeomanEditSync);
+    (map as unknown as ThirdPartyEventTarget).on(eventName, handleGeomanEditSync);
   }
 }
 
 function unbindGeomanEditSync(): void {
   if (!geomanEditSyncMap) return;
   for (const eventName of GEOMAN_EDIT_SYNC_EVENTS) {
-    geomanEditSyncMap.off(eventName, handleGeomanEditSync);
+    (geomanEditSyncMap as unknown as ThirdPartyEventTarget).off(eventName, handleGeomanEditSync);
   }
   geomanEditSyncMap = null;
 }
 
-function geomanLayerStylesForMap(map: maplibregl.Map) {
-  const layerStyles = structuredClone(defaultLayerStyles);
+/** The parts of Geoman's change-mode `cutVertex` payload this module reads. */
+interface GeomanCutVertexEvent {
+  featureData: {
+    getGeoJson(): Feature;
+    updateGeometry(geometry: MultiLineString): Promise<void>;
+  };
+  markerData: {
+    type: string;
+    position?: { coordinate: Position; path: (string | number)[] };
+  };
+}
+
+/** Geoman's change-mode action instance, as far as vertex removal goes. */
+interface GeomanChangeAction {
+  gm: { features: { delete(feature: unknown): Promise<void> } };
+  cutVertex(event: GeomanCutVertexEvent): Promise<void>;
+  fireFeatureUpdatedEvent(event: {
+    sourceFeatures: unknown[];
+    targetFeatures: unknown[];
+    markerData: unknown;
+  }): Promise<void>;
+}
+
+const MULTILINE_CUT_PATCHED = Symbol("geolibre.multiLineCut");
+
+/**
+ * Lets right-click remove a vertex from a MultiLineString. Geoman's change mode
+ * only implements removal for LineString, Polygon and MultiPolygon, so on a
+ * MultiLineString it logs "EditChange.cutVertex: feature not updated" and
+ * leaves the vertex (discussion #2750). The change-mode action is created each
+ * time Edit is turned on, so this hooks `actionInstances` and wraps that
+ * instance's `cutVertex`; every other geometry still goes to Geoman.
+ *
+ * @param geoman - The Geoman instance the editor drives.
+ */
+function installMultiLineVertexRemoval(geoman: Geoman): void {
+  const instances = geoman.actionInstances as Record<string, unknown>;
+  geoman.actionInstances = new Proxy(instances, {
+    set(target, key, value) {
+      if (key === "edit__change") patchChangeAction(value);
+      return Reflect.set(target, key, value);
+    },
+  }) as Geoman["actionInstances"];
+}
+
+function patchChangeAction(value: unknown): void {
+  const action = value as (GeomanChangeAction & { [MULTILINE_CUT_PATCHED]?: true }) | null;
+  if (!action || typeof action.cutVertex !== "function" || action[MULTILINE_CUT_PATCHED]) return;
+  action[MULTILINE_CUT_PATCHED] = true;
+  const original = action.cutVertex.bind(action);
+  action.cutVertex = async (event) => {
+    const feature = event.featureData?.getGeoJson();
+    const position = event.markerData?.position;
+    if (
+      event.markerData?.type !== "vertex" ||
+      feature?.geometry?.type !== "MultiLineString" ||
+      !position
+    ) {
+      return original(event);
+    }
+    const next = removeMultiLineStringVertex(feature.geometry, position.coordinate, position.path);
+    if (next === undefined) return original(event);
+    if (next === null) {
+      // Same call Geoman makes when a cut leaves too few vertices: it also
+      // drops the feature from the store and selection, which delete() alone
+      // doesn't.
+      await action.gm.features.delete(event.featureData);
+      return;
+    }
+    await event.featureData.updateGeometry(next);
+    await action.fireFeatureUpdatedEvent({
+      sourceFeatures: [event.featureData],
+      targetFeatures: [event.featureData],
+      markerData: event.markerData,
+    });
+  };
+}
+
+function geomanLayerStylesForMap(map: maplibregl.Map, mapbox: boolean) {
+  const layerStyles = structuredClone(geoEditorModules!.geoman.defaultLayerStyles);
+  const textFont = textFontForMapStyle(map, mapbox ? MAPBOX_TEXT_FONT : MAPLIBRE_TEXT_FONT);
 
   for (const sourceLayers of Object.values(layerStyles.text_marker ?? {})) {
     for (const layer of sourceLayers) {
       if (layer.type !== "symbol") continue;
       layer.layout = {
         ...layer.layout,
-        "text-font": textFontForMapStyle(map),
+        "text-font": textFont,
       };
+    }
+  }
+
+  // Geoman draws the midpoint "add a vertex here" handles almost exactly like
+  // real vertices (radius 6 vs 7), so editing a line looks like it multiplies
+  // nodes (discussion #2750). Make the handles smaller and fainter.
+  for (const sourceLayers of Object.values(layerStyles.edge_marker ?? {})) {
+    for (const layer of sourceLayers) {
+      if (layer.type !== "circle") continue;
+      layer.paint = { ...layer.paint, ...EDGE_MARKER_PAINT };
     }
   }
 
   return layerStyles;
 }
+
+/** Paint for Geoman's midpoint handles, distinct from its vertex markers. */
+const EDGE_MARKER_PAINT = {
+  "circle-radius": 4,
+  "circle-opacity": 0.5,
+  "circle-stroke-width": 1.5,
+  "circle-stroke-opacity": 0.6,
+};
+
+/** The font stack the default MapLibre basemaps serve glyphs for. */
+const MAPLIBRE_TEXT_FONT = ["Noto Sans Regular"];
+/**
+ * Mapbox Standard's root style carries no symbol layer to borrow a font from,
+ * and Mapbox's glyph server has no Noto Sans; these are the faces it serves
+ * (the same fallback the DGGS grid labels use on Mapbox).
+ */
+const MAPBOX_TEXT_FONT = ["Open Sans Regular", "Arial Unicode MS Regular"];
 
 // Operators that can start a data-driven text-font expression. A bare
 // ["get", "font"] is all strings, so an every(typeof === "string") check
@@ -290,7 +631,7 @@ const FONT_EXPRESSION_OPERATORS = new Set([
   "format",
 ]);
 
-function textFontForMapStyle(map: maplibregl.Map): string[] {
+function textFontForMapStyle(map: maplibregl.Map, fallback: string[]): string[] {
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (styleLayer.type !== "symbol") continue;
     // Icon-only symbol layers may carry a glyph/sprite font unsuited to text.
@@ -311,7 +652,7 @@ function textFontForMapStyle(map: maplibregl.Map): string[] {
       return fonts as string[];
     }
   }
-  return ["Noto Sans Regular"];
+  return fallback;
 }
 
 function isSketchesLayer(layer: GeoLibreLayer): boolean {
@@ -348,9 +689,31 @@ function featureCollectionsEquivalent(a: FeatureCollection, b: FeatureCollection
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Identity of a sketch feature across two copies of the same collection — the
+ * editor's and the store's — for `unionFeatureCollections` and the editor
+ * tracking merge.
+ *
+ * The fallback hashes the geometry rather than the whole feature deliberately:
+ * properties are not stable across the two copies, because the store's carries
+ * the editor tracking columns and the editor's never does, so a key that read
+ * them would give one feature two identities the moment it was stamped. The
+ * cost is that two DISTINCT features with no `id` and no `__gm_id`, identical
+ * geometry, and the same array index now collide and one wins — which is the
+ * lesser problem, since the alternative silently duplicates every stamped
+ * id-less feature on each sync.
+ *
+ * Either way the fallback cannot give a feature a stable identity ACROSS a
+ * geometry change, so an id-less feature that is dragged reads as a new feature
+ * and has its creation stamp reset. Nothing reaches it today: every feature in
+ * this path enters through Geoman, which assigns `id`/`__gm_id` to shapes it
+ * draws and to anything imported via `loadGeoJson`. That is the invariant this
+ * fallback leans on — if Geoman ever stops guaranteeing it, editor tracking
+ * needs a real identity here, not a better hash.
+ */
 function sketchFeatureKey(feature: Feature, index: number): string {
   const props = feature.properties as Record<string, unknown> | null;
-  return String(feature.id ?? props?.__gm_id ?? `${JSON.stringify(feature)}@${index}`);
+  return String(feature.id ?? props?.__gm_id ?? `${JSON.stringify(feature.geometry)}@${index}`);
 }
 
 function unionFeatureCollections(...collections: FeatureCollection[]): FeatureCollection {
@@ -363,7 +726,74 @@ function unionFeatureCollections(...collections: FeatureCollection[]): FeatureCo
   return { type: "FeatureCollection", features: [...byKey.values()] };
 }
 
-function syncSketchesToStore(): void {
+/**
+ * Add the feature a create callback reported unless the editor's own read
+ * already holds it. The callback copy may lack, or differ from, the id Geoman
+ * gives the imported feature, so besides a matching id the read counts as
+ * holding it when it has more features with that exact geometry than the
+ * stored Sketches had before. A separate sketch drawn on the same spot as an
+ * existing one is therefore still added while the read lags.
+ */
+export function withCreatedSketch(
+  collection: FeatureCollection,
+  created: Feature,
+  stored: FeatureCollection | undefined,
+): FeatureCollection {
+  const createdId = sketchIdentity(created);
+  const createdGeometry = JSON.stringify(created.geometry);
+  const coincident = (features: Feature[] = []) =>
+    features.filter((feature) => JSON.stringify(feature.geometry) === createdGeometry).length;
+  const present =
+    (createdId != null &&
+      collection.features.some(
+        (feature) => String(sketchIdentity(feature)) === String(createdId),
+      )) ||
+    coincident(collection.features) > coincident(stored?.features);
+  if (present) return collection;
+  return { ...collection, features: [...collection.features, structuredClone(created)] };
+}
+
+function sketchIdentity(feature: Feature): unknown {
+  const props = feature.properties as Record<string, unknown> | null;
+  return feature.id ?? props?.__gm_id;
+}
+
+/**
+ * Drop stored sketches that were saved from an id-less create callback while
+ * the editor read lagged, once the editor holds them under Geoman's id. Each
+ * id-bearing editor feature not already stored under its id supersedes one
+ * id-less stored copy with the same geometry, so a separate sketch on the
+ * same coordinates is kept.
+ */
+export function withoutSupersededSketchCopies(
+  stored: FeatureCollection,
+  editor: FeatureCollection,
+): FeatureCollection {
+  const storedIds = new Set(
+    stored.features
+      .map(sketchIdentity)
+      .filter((id) => id != null)
+      .map(String),
+  );
+  const unclaimed = new Map<string, number>();
+  for (const feature of editor.features) {
+    const id = sketchIdentity(feature);
+    if (id == null || storedIds.has(String(id))) continue;
+    const geometry = JSON.stringify(feature.geometry);
+    unclaimed.set(geometry, (unclaimed.get(geometry) ?? 0) + 1);
+  }
+  const features = stored.features.filter((feature) => {
+    if (sketchIdentity(feature) != null) return true;
+    const geometry = JSON.stringify(feature.geometry);
+    const remaining = unclaimed.get(geometry) ?? 0;
+    if (remaining === 0) return true;
+    unclaimed.set(geometry, remaining - 1);
+    return false;
+  });
+  return features.length === stored.features.length ? stored : { ...stored, features };
+}
+
+function syncSketchesToStore(createdFeature?: Feature): void {
   if (!geoEditorControl || restoringSketchesToEditor) return;
 
   // During a geometry-edit session edits live in the editor and are written
@@ -372,20 +802,37 @@ function syncSketchesToStore(): void {
   // so skip store writes here; `endLayerGeometryEdit` flushes the final state.
   if (editTargetLayerId) return;
 
-  let collection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   const store = useAppStore.getState();
   const existing = findSketchesLayer(store.layers);
+  let collection = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
+  if (createdFeature) collection = withCreatedSketch(collection, createdFeature, existing?.geojson);
 
   if (unionSketchesWithStoreOnNextSync && existing?.geojson) {
-    collection = unionFeatureCollections(existing.geojson, collection);
+    collection = unionFeatureCollections(
+      withoutSupersededSketchCopies(existing.geojson, collection),
+      collection,
+    );
     unionSketchesWithStoreOnNextSync = false;
+  }
+
+  // The editor holds its own copy of the features and never sees the tracking
+  // columns, so they are merged back in from the store layer here rather than
+  // being lost on every sync.
+  if (existing && editorTrackingFieldNames(existing.editorTracking)) {
+    collection = applySyncedEditorTracking(collection, existing.geojson, sketchFeatureKey, {
+      config: existing.editorTracking!,
+      userIdentity: currentEditorIdentity(),
+    });
   }
 
   pushingSketchesToStore = true;
   try {
     if (existing) {
       sketchesLayerId = existing.id;
-      store.updateLayer(existing.id, { geojson: collection });
+      store.updateLayer(existing.id, {
+        geojson: collection,
+        style: sketchesStyleForMassing(existing, collection),
+      });
     } else {
       if (collection.features.length === 0) {
         return;
@@ -398,15 +845,104 @@ function syncSketchesToStore(): void {
           ...useAppStore.getState().layers.find((layer) => layer.id === id)?.metadata,
           sourceKind: SKETCHES_SOURCE_KIND,
         },
+        style: sketchesStyleForMassing(
+          useAppStore.getState().layers.find((layer) => layer.id === id)!,
+          collection,
+        ),
       });
     }
   } finally {
     pushingSketchesToStore = false;
   }
 
-  if (!sketchesIdleDisplayOverride) {
-    scheduleApplySketchesMapDisplay();
+  scheduleApplySketchesMapDisplay();
+}
+
+export function hasMassingFeatures(collection: FeatureCollection): boolean {
+  return collection.features.some((feature) => {
+    const height = feature.properties?.height;
+    const numericHeight =
+      typeof height === "number"
+        ? height
+        : typeof height === "string" && height.trim() !== ""
+          ? Number(height)
+          : Number.NaN;
+    return (
+      (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon") &&
+      Number.isFinite(numericHeight)
+    );
+  });
+}
+
+export function sketchesStyleForMassing(
+  layer: GeoLibreLayer,
+  collection: FeatureCollection,
+): GeoLibreLayer["style"] {
+  if (!hasMassingFeatures(collection)) {
+    if (layer.style.extrusionHeightExpression !== MASSING_HEIGHT_EXPRESSION) {
+      return layer.style;
+    }
+    // The user switched the layer out of extrusion while massing features were
+    // still present (the same signal the enable path below honors). That later,
+    // explicit choice outranks the pre-massing snapshot, which would otherwise
+    // turn extrusion back on as the last footprint goes away.
+    if (!layer.style.extrusionEnabled) {
+      preMassingExtrusionStyles.delete(layer.id);
+      return layer.style;
+    }
+    const previous = preMassingExtrusionStyles.get(layer.id);
+    preMassingExtrusionStyles.delete(layer.id);
+    return {
+      ...layer.style,
+      ...(previous ?? {
+        elevation3dEnabled: false,
+        extrusionEnabled: false,
+        extrusionHeightProperty: "height",
+        extrusionAdvancedStyleEnabled: false,
+        extrusionHeightExpression: "",
+      }),
+    };
   }
+
+  // Leave a style the user has taken over alone. Two shapes count as taken over:
+  // an extrusion height the user's own expression is currently driving, and the
+  // auto-managed expression with extrusion switched off — the Style panel's 2D /
+  // 3D-elevation radios clear `extrusionEnabled` without clearing the expression,
+  // so that pairing can only come from the user picking another visualization
+  // mode. The first test mirrors `extrusionHeightValue`, which ignores the
+  // expression unless `extrusionAdvancedStyleEnabled` is on, so a stray
+  // expression left behind by a since-disabled advanced mode does not block
+  // auto-management. A custom expression that is not rendering yet (extrusion
+  // still off) is overwritten but recoverable: `preMassingExtrusionStyles`
+  // restores it when the last massing feature goes away.
+  if (layer.style.extrusionHeightExpression === MASSING_HEIGHT_EXPRESSION) {
+    if (!layer.style.extrusionEnabled) return layer.style;
+  } else if (
+    layer.style.extrusionEnabled &&
+    layer.style.extrusionAdvancedStyleEnabled &&
+    layer.style.extrusionHeightExpression !== ""
+  ) {
+    return layer.style;
+  }
+
+  if (!preMassingExtrusionStyles.has(layer.id)) {
+    preMassingExtrusionStyles.set(layer.id, {
+      elevation3dEnabled: layer.style.elevation3dEnabled,
+      extrusionEnabled: layer.style.extrusionEnabled,
+      extrusionHeightProperty: layer.style.extrusionHeightProperty,
+      extrusionAdvancedStyleEnabled: layer.style.extrusionAdvancedStyleEnabled,
+      extrusionHeightExpression: layer.style.extrusionHeightExpression,
+    });
+  }
+
+  return {
+    ...layer.style,
+    elevation3dEnabled: false,
+    extrusionEnabled: true,
+    extrusionHeightProperty: "height",
+    extrusionAdvancedStyleEnabled: true,
+    extrusionHeightExpression: MASSING_HEIGHT_EXPRESSION,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -555,6 +1091,41 @@ export function getGeometryEditTargetLayerId(): string | null {
   return editTargetLayerId;
 }
 
+/** How a geometry-edit session ended. */
+export interface GeometryEditEnd {
+  /** The layer the session edited. */
+  layerId: string;
+  /** True when the edits were written back to the layer. */
+  saved: boolean;
+}
+
+// Every path that ends a session writes a new record here before notifying
+// listeners: onEditSessionChange in the app API only trusts a record written
+// since its last notification.
+let lastGeometryEditEnd: GeometryEditEnd | null = null;
+
+/**
+ * How the most recent geometry-edit session ended: saved, cancelled, or
+ * abandoned because its layer was removed. Set before session listeners are
+ * notified, so a listener seeing a session end can read it.
+ *
+ * @returns The last session's end, or null before any session has ended.
+ */
+export function getLastGeometryEditEnd(): GeometryEditEnd | null {
+  return lastGeometryEditEnd;
+}
+
+/**
+ * Whether the geo editor is in a draw or edit mode that acts on right-click
+ * (vertex removal, finishing a draw, the rotate popup). The map's right-click
+ * menu checks this so it doesn't open over the editor's own gesture.
+ *
+ * @returns True while a GeoEditor draw or edit mode is enabled.
+ */
+export function isGeoEditorUsingRightClick(): boolean {
+  return isGeoEditorInteractionMode();
+}
+
 /** Subscribe to geometry-edit session changes (for `useSyncExternalStore`). */
 export function subscribeGeometryEdit(listener: () => void): () => void {
   geometryEditListeners.add(listener);
@@ -564,29 +1135,51 @@ export function subscribeGeometryEdit(listener: () => void): () => void {
 }
 
 function notifyGeometryEdit(): void {
-  for (const listener of geometryEditListeners) listener();
+  for (const listener of geometryEditListeners) {
+    // Listeners include plugin callbacks (onEditSessionChange). One that throws
+    // must not keep the rest, such as the Layers panel's editing state, from
+    // hearing that a session started or ended.
+    try {
+      listener();
+    } catch (error) {
+      console.error("A geometry edit session listener failed:", error);
+    }
+  }
 }
 
 /**
  * Write the editor's current features back to the target layer. Called only
  * when a session ends with save, so the target's map source is rebuilt once
  * rather than on every edit operation.
+ *
+ * @returns False when there was nothing to write to (no editor, no session, or
+ *   the layer is gone), so the session isn't reported as saved.
  */
-function syncEditTargetToStore(): void {
-  if (!geoEditorControl || !editTargetLayerId) return;
+function syncEditTargetToStore(): boolean {
+  if (!geoEditorControl || !editTargetLayerId) return false;
 
   const store = useAppStore.getState();
   const layer = store.layers.find((l) => l.id === editTargetLayerId);
-  if (!layer) return;
+  if (!layer) return false;
 
+  const tagged = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   const edited = reconcileEditedFeatures(
-    cloneFeatureCollection(geoEditorControl.getAllFeatureCollection()),
+    tagged,
     editTargetOriginalProperties ?? undefined,
+    geometryEditTracking(layer),
+    {
+      originalIds: editTargetOriginalIds ?? undefined,
+      originalGeometries: editTargetOriginalGeometries ?? undefined,
+      prepareNewFeature: newFeaturePreparer(layer),
+    },
   );
 
   pushingSketchesToStore = true;
   try {
-    store.updateLayer(editTargetLayerId, { geojson: edited });
+    store.updateLayer(editTargetLayerId, {
+      geojson: edited,
+      metadata: geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
+    });
   } finally {
     pushingSketchesToStore = false;
   }
@@ -595,6 +1188,39 @@ function syncEditTargetToStore(): void {
   // own rather than from `layer.geojson`, so push the edits there too or the map
   // would keep showing the pre-edit geometry.
   writeBackToVectorSource(layer, edited);
+  return true;
+}
+
+/**
+ * How features created in a session start out on a data source that needs it:
+ * on an ArcGIS feature layer a copy drops the server-assigned object ID (so it
+ * saves as a new feature) and a drawn feature gets the service's creation
+ * defaults. Other layers keep what the editor produced.
+ */
+function newFeaturePreparer(
+  layer: GeoLibreLayer,
+): ReconcileEditedFeaturesOptions["prepareNewFeature"] {
+  if (layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
+  if (!info?.fields?.length) return undefined;
+  return (properties, kind) =>
+    kind === "copied"
+      ? arcGISCopiedFeatureProperties(info, properties)
+      : arcGISNewFeatureProperties(info, properties);
+}
+
+/**
+ * Editor tracking options for the session's write-back, or `undefined` when the
+ * target layer does not track edits (the common case, so the geometry baseline
+ * is simply ignored rather than never captured).
+ */
+function geometryEditTracking(layer: GeoLibreLayer): GeometryEditTrackingOptions | undefined {
+  if (!editorTrackingFieldNames(layer.editorTracking)) return undefined;
+  return {
+    config: layer.editorTracking!,
+    userIdentity: currentEditorIdentity(),
+    originalGeometries: editTargetOriginalGeometries ?? new Map(),
+  };
 }
 
 /** Source id of an Add-Vector-Layer geojson-mode layer, or null. */
@@ -608,7 +1234,7 @@ function vectorSourceIdForLayer(layer: GeoLibreLayer): string | null {
 function writeBackToVectorSource(layer: GeoLibreLayer, collection: FeatureCollection): void {
   const sourceId = vectorSourceIdForLayer(layer);
   if (!sourceId) return;
-  const source = appApi?.getMap?.()?.getSource(sourceId) as
+  const source = getStyleMap(appApi)?.getSource(sourceId) as
     | { setData?: (data: FeatureCollection) => void }
     | undefined;
   if (source && typeof source.setData === "function") {
@@ -627,9 +1253,34 @@ async function ensureGeomanReady(): Promise<void> {
   if (!geoman || geoman.loaded) return;
   try {
     await geoman.waitForGeomanLoaded();
-  } catch {
-    // If readiness cannot be awaited, the caller's load will no-op safely.
+  } catch (error) {
+    // The caller's load will no-op safely, but a readiness wait that rejects
+    // is not expected, so leave a trace in the diagnostics log.
+    console.warn("Geo Editor: waiting for Geoman to load failed", error);
   }
+}
+
+// Messages Geoman and maplibre-gl-geo-editor throw when an import runs before
+// Geoman's async init has finished (no instance yet, or no sources yet).
+const GEOMAN_NOT_READY_MESSAGES = ["Missing source", "Geoman not initialized"];
+
+/**
+ * Logs a failed Geoman import unless it is one of the expected "not ready
+ * yet" failures. The callers recover from those (a later store sync restores
+ * again); anything else, such as malformed GeoJSON, would otherwise vanish.
+ * The app captures `console.warn` into its diagnostics log.
+ *
+ * @param context Which operation failed, for the log message.
+ * @param error The rejection from `loadGeoJson`.
+ */
+function warnUnlessGeomanNotReady(context: string, error: unknown): void {
+  if (
+    error instanceof Error &&
+    GEOMAN_NOT_READY_MESSAGES.some((message) => error.message.includes(message))
+  ) {
+    return;
+  }
+  console.warn(`Geo Editor: ${context} failed`, error);
 }
 
 /**
@@ -653,6 +1304,12 @@ export async function startLayerGeometryEdit(
   layerId: string,
 ): Promise<boolean> {
   if (!pluginActive || !geoEditorControl) return false;
+  // A session ended elsewhere (the toolbar's Save or Cancel) may still be
+  // putting the sketches back; starting now would interleave with that.
+  if (pendingSketchesRestore) {
+    await pendingSketchesRestore;
+    if (!pluginActive || !geoEditorControl) return false;
+  }
 
   // Only one session at a time; finish any open one first (saving its work).
   // Await it so its sketches restore completes before the new session starts.
@@ -680,7 +1337,6 @@ export async function startLayerGeometryEdit(
   // The store layer is left untouched until save, so Cancel simply discards the
   // editor's copy and the original geojson is still in the store.
   editTargetLayerId = layerId;
-  sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
 
   // Hide the target's normal rendering through the store, not via a map-layer
@@ -701,15 +1357,15 @@ export async function startLayerGeometryEdit(
     // edits geometry, so these values are what must come back out. Read from the
     // pre-tag `source` so a feature with null properties stays null.
     editTargetOriginalProperties = captureEditedProperties(tagged, source);
+    editTargetOriginalGeometries = captureEditedGeometries(tagged);
+    editTargetOriginalIds = captureEditedFeatureIds(tagged, source);
     await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
   } catch (error) {
     // A "Missing source" failure means Geoman is not ready yet (handled by the
     // rollback below). Log anything else so unexpected failures (e.g. malformed
     // geojson) are not silently swallowed.
-    if (!(error instanceof Error) || !error.message.includes("Missing source")) {
-      console.warn("startLayerGeometryEdit: loadGeoJson failed", error);
-    }
+    warnUnlessGeomanNotReady("startLayerGeometryEdit: loadGeoJson", error);
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -726,6 +1382,8 @@ export async function startLayerGeometryEdit(
     setEditTargetStoreVisible(layerId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
+    editTargetOriginalIds = null;
+    editTargetOriginalGeometries = null;
     editTargetLayerId = null;
     await restoreSketchesAfterSession();
     applySketchesMapDisplay();
@@ -734,6 +1392,23 @@ export async function startLayerGeometryEdit(
 
   applySketchesMapDisplay();
   notifyGeometryEdit();
+  return true;
+}
+
+/**
+ * Select one feature of the active geometry-edit session in the editor, so the
+ * session opened from an Identify result starts on the feature the user picked
+ * (#2932). Select mode stays off: in it the editor would open its attribute
+ * panel, and a geometry session discards attribute changes on save.
+ *
+ * @param featureId The feature's id in the attribute table's scheme.
+ * @returns True when the feature was found and selected.
+ */
+export function selectGeometryEditFeature(featureId: string): boolean {
+  if (!pluginActive || !geoEditorControl || !editTargetLayerId) return false;
+  const match = findGeometryEditFeature(geoEditorControl.getAllFeatureCollection(), featureId);
+  if (!match) return false;
+  geoEditorControl.selectFeatures([match]);
   return true;
 }
 
@@ -768,24 +1443,27 @@ export async function endLayerGeometryEdit(
   // Defensive: if the control was torn down while a session id lingered, clear
   // the session state so the UI does not get stuck in the "editing" state.
   if (!geoEditorControl) {
+    lastGeometryEditEnd = { layerId: editTargetLayerId, saved: false };
     editTargetLayerId = null;
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
-    sketchesIdleDisplayOverride = false;
+    editTargetOriginalIds = null;
+    editTargetOriginalGeometries = null;
     unionSketchesWithStoreOnNextSync = false;
     notifyGeometryEdit();
     return;
   }
 
   const targetId = editTargetLayerId;
+  let saved = false;
   // Run the write-back in try/finally so a throw (e.g. from the store update)
   // cannot leave the session half-torn-down with the target layer still hidden
   // and the user unable to exit.
   try {
-    if (save) syncEditTargetToStore();
+    if (save) saved = syncEditTargetToStore();
   } finally {
+    lastGeometryEditEnd = { layerId: targetId, saved };
     editTargetLayerId = null;
-    sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     // Restore the target layer's normal rendering (it now reflects the saved
     // edits, or the untouched original on cancel).
@@ -793,6 +1471,8 @@ export async function endLayerGeometryEdit(
     editTargetOriginalVisible = null;
     // The snapshot only describes the session that just ended.
     editTargetOriginalProperties = null;
+    editTargetOriginalIds = null;
+    editTargetOriginalGeometries = null;
     // Await the sketches restore so a caller switching sessions does not start a
     // new edit while the previous restore is still clearing/loading the editor.
     await restoreSketchesAfterSession();
@@ -813,18 +1493,39 @@ function abortGeometryEditSession(): void {
   );
   // The layer is gone, so there is no visibility to restore; just drop the flag.
   // (restoreSketchesAfterSession exits Geoman edit modes.)
+  if (editTargetLayerId) lastGeometryEditEnd = { layerId: editTargetLayerId, saved: false };
   editTargetOriginalVisible = null;
   editTargetOriginalProperties = null;
+  editTargetOriginalIds = null;
+  editTargetOriginalGeometries = null;
   editTargetLayerId = null;
-  sketchesIdleDisplayOverride = false;
   unionSketchesWithStoreOnNextSync = false;
   void restoreSketchesAfterSession();
   applySketchesMapDisplay();
   notifyGeometryEdit();
 }
 
+/**
+ * Clear the editor and reload the sketches stashed at session start, after
+ * any restore already under way.
+ *
+ * @returns Resolves once the sketches are back in the editor.
+ */
+function restoreSketchesAfterSession(): Promise<void> {
+  const restore = pendingSketchesRestore
+    ? pendingSketchesRestore.then(restoreSketchesNow)
+    : restoreSketchesNow();
+  const settled: Promise<void> = restore
+    .catch(() => undefined)
+    .then(() => {
+      if (pendingSketchesRestore === settled) pendingSketchesRestore = null;
+    });
+  pendingSketchesRestore = settled;
+  return restore;
+}
+
 /** Clear the editor and reload the sketches stashed at session start. */
-async function restoreSketchesAfterSession(): Promise<void> {
+async function restoreSketchesNow(): Promise<void> {
   if (!geoEditorControl) {
     savedSketchesCollection = null;
     return;
@@ -835,8 +1536,9 @@ async function restoreSketchesAfterSession(): Promise<void> {
     restoringSketchesToEditor = true;
     try {
       await geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
-    } catch {
+    } catch (error) {
       // Geoman may not be ready; the store subscription will re-restore.
+      warnUnlessGeomanNotReady("restoring sketches after an edit session", error);
     } finally {
       restoringSketchesToEditor = false;
     }
@@ -849,7 +1551,11 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
 
   const layer = findSketchesLayer(useAppStore.getState().layers);
   if (!layer?.geojson?.features?.length) {
-    if (layer) sketchesLayerId = layer.id;
+    if (layer) {
+      sketchesLayerId = layer.id;
+      await clearSketchesFromEditor();
+      scheduleApplySketchesMapDisplay();
+    }
     return;
   }
 
@@ -871,8 +1577,9 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
   restoringSketchesToEditor = true;
   try {
     await geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
-  } catch {
+  } catch (error) {
     // Geoman may not be ready until the map style finishes loading.
+    warnUnlessGeomanNotReady("loading the Sketches layer into the editor", error);
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -889,8 +1596,9 @@ async function clearSketchesFromEditor(): Promise<void> {
       { type: "FeatureCollection", features: [] },
       SKETCHES_SOURCE_PATH,
     );
-  } catch {
-    // Ignore when Geoman is not initialized yet.
+  } catch (error) {
+    // Expected when Geoman is not initialized yet.
+    warnUnlessGeomanNotReady("clearing the editor", error);
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -974,11 +1682,17 @@ function teardownSketchesStoreSync(): void {
 
 function isGeoEditorInteractionMode(): boolean {
   if (!geoEditorControl) return false;
-  if (sketchesIdleDisplayOverride) return false;
   const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
   return activeDrawMode !== null || activeEditMode !== null;
 }
 
+/**
+ * The map layers a store GeoJSON layer is drawn with, under both 2D engines'
+ * id schemes: MapLibre's `layer-<id>-*` and the Mapbox engine's
+ * `geolibre-mapbox-<id>-geojson-*` (where the fill layer doubles as the
+ * extrusion). Every consumer checks `getLayer` first, so the ids of the engine
+ * that is not mounted are simply skipped.
+ */
 function sketchesMapLayerIds(layerId: string): string[] {
   return [
     `layer-${layerId}-fill`,
@@ -986,6 +1700,10 @@ function sketchesMapLayerIds(layerId: string): string[] {
     `layer-${layerId}-line`,
     `layer-${layerId}-circle`,
     `layer-${layerId}-text`,
+    mapboxFillLayerId(layerId),
+    mapboxLineLayerId(layerId),
+    `${mapboxSourceId(layerId)}-geojson-circle`,
+    `${mapboxSourceId(layerId)}-geojson-labels`,
   ];
 }
 
@@ -1010,10 +1728,10 @@ function applySketchesMapDisplay(): void {
   }
 
   if (isGeoEditorInteractionMode()) {
-    showGeomanDisplayLayers();
+    applyGeomanInteractionDisplay();
     positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
-    setSketchesMapLayerSuppressed(true);
+    setSketchesMapLayerSuppressed(!isMassingDrawDisplay());
     return;
   }
 
@@ -1048,13 +1766,13 @@ function scheduleApplySketchesMapDisplay(): void {
 }
 
 function scheduleShowGeomanDisplayLayersOnStyleData(): void {
-  const map = appApi?.getMap?.();
+  const map = getStyleMap(appApi);
   if (!map || pendingStyleDataListener) return;
 
   pendingStyleDataListener = () => {
     pendingStyleDataListener = null;
     if (editTargetLayerId || isGeoEditorInteractionMode()) {
-      showGeomanDisplayLayers();
+      applyGeomanInteractionDisplay();
       positionGeoEditorOverlayLayers();
     }
   };
@@ -1073,7 +1791,7 @@ function setSketchesMapLayerSuppressed(suppress: boolean): void {
 }
 
 function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
-  const map = appApi?.getMap?.();
+  const map = getStyleMap(appApi);
   if (!map) return;
 
   const visibility = layer.visible && !sketchesMapLayerSuppressed ? "visible" : "none";
@@ -1089,8 +1807,11 @@ function setSketchesMapLayersVisibility(layer: GeoLibreLayer): void {
   }
 }
 
-function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void {
-  const map = appApi?.getMap?.();
+function setGeomanDisplayLayersVisibility(
+  visibility: "visible" | "none",
+  matches: (layer: maplibregl.LayerSpecification) => boolean = isGeomanDisplayLayer,
+): void {
+  const map = getStyleMap(appApi);
   if (!map) return;
   const sketchesLayer = activeEditableLayer(useAppStore.getState().layers);
   // In a session the target is intentionally store-hidden, so its `visible`
@@ -1109,13 +1830,62 @@ function setGeomanDisplayLayersVisibility(visibility: "visible" | "none"): void 
   if (!style?.layers) return;
 
   for (const layer of style.layers) {
-    if (!isGeomanDisplayLayer(layer)) continue;
+    if (!matches(layer)) continue;
     try {
       map.setLayoutProperty(layer.id, "visibility", effectiveVisibility);
     } catch {
       // Layer may have been removed with the current style.
     }
   }
+}
+
+/**
+ * Geoman's `gm_main-*` layers draw its committed features; every other `gm_*`
+ * layer is a transient drawing aid (the in-progress rubber band, vertex, edge
+ * and snap markers).
+ */
+export function isGeomanCommittedDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
+  if (!isGeomanDisplayLayer(layer)) return false;
+  const source = "source" in layer && typeof layer.source === "string" ? layer.source : "";
+  return layer.id.toLowerCase().startsWith("gm_main") || source.startsWith("gm_main");
+}
+
+/**
+ * Whether the Sketches layer's auto-managed massing extrusion is what the user
+ * should be seeing right now: a draw tool is armed — so the display would
+ * otherwise fall back to Geoman's flat rendering for as long as the tool stays
+ * armed for the next footprint — and the layer carries the extrusion this
+ * plugin manages.
+ *
+ * Edit modes are excluded: their handles hit-test against Geoman's committed
+ * layers, which this state hides.
+ */
+function isMassingDrawDisplay(): boolean {
+  if (editTargetLayerId || !geoEditorControl) return false;
+  const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
+  if (activeDrawMode === null || activeEditMode !== null) return false;
+  const layer = activeEditableLayer(useAppStore.getState().layers);
+  return (
+    layer?.style.extrusionEnabled === true &&
+    layer.style.extrusionHeightExpression === MASSING_HEIGHT_EXPRESSION
+  );
+}
+
+/**
+ * Show Geoman for an active interaction. While a massing extrusion is what the
+ * user should see, Geoman's committed-feature layers stay hidden so the
+ * extruded Sketches layer is not covered by a flat copy of itself, and the
+ * transient aids stay visible so the next footprint still rubber-bands as it is
+ * drawn — showing Sketches by hiding *all* of Geoman is what e8bd03bf had to
+ * revert.
+ */
+function applyGeomanInteractionDisplay(): void {
+  if (!isMassingDrawDisplay()) {
+    showGeomanDisplayLayers();
+    return;
+  }
+  setGeomanDisplayLayersVisibility("visible", (layer) => !isGeomanCommittedDisplayLayer(layer));
+  setGeomanDisplayLayersVisibility("none", isGeomanCommittedDisplayLayer);
 }
 
 function hideGeomanDisplayLayers(): void {
@@ -1157,7 +1927,7 @@ function geoEditorTargetAnchorLayerIds(map: maplibregl.Map, layer: GeoLibreLayer
  * does not loop.
  */
 function positionGeoEditorOverlayLayers(): void {
-  const map = appApi?.getMap?.();
+  const map = getStyleMap(appApi);
   if (!map) return;
   const styleLayers = map.getStyle()?.layers;
   if (!styleLayers || styleLayers.length === 0) return;
@@ -1261,6 +2031,11 @@ function applyGeomanDisplayLayerOpacity(
   }
 }
 
+/** See the cast inside `setGeomanPaintProperty`. */
+interface DynamicPaintTarget {
+  setPaintProperty(layerId: string, property: string, value: unknown): void;
+}
+
 function setGeomanPaintProperty(
   map: maplibregl.Map,
   layerId: string,
@@ -1268,7 +2043,11 @@ function setGeomanPaintProperty(
   value: unknown,
 ): void {
   try {
-    map.setPaintProperty(layerId, property, value);
+    // v6 types setPaintProperty as generic over `keyof AllPaintProperties`, and
+    // these names are computed per layer type. Same rationale as
+    // `dynamic-style-property.ts` in @geolibre/map, which this package cannot
+    // import (plugins depends only on @geolibre/core).
+    (map as unknown as DynamicPaintTarget).setPaintProperty(layerId, property, value);
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
   }

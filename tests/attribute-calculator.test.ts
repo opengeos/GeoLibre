@@ -212,3 +212,86 @@ describe("calculateField", () => {
     assert.equal(calculateField(makeLayer(), DISCOVERED, "ghost", false, "1", "number"), null);
   });
 });
+
+describe("calculateField — editor tracking", () => {
+  const tracked = () => makeLayer({ editorTracking: { enabled: true } });
+
+  it("stamps the features it evaluated", () => {
+    const result = calculateField(tracked(), DISCOVERED, "pop", false, "pop * 2", "number");
+    assert.ok(result && "patch" in result);
+    const props = result.patch.geojson?.features.map((f) => f.properties);
+    assert.equal(props?.[0]?.edited_by, "local-user");
+    assert.ok(!Number.isNaN(Date.parse(String(props?.[0]?.edited_at))));
+    // A calculation is one edit however many rows it touches, so every stamped
+    // feature shares its timestamp.
+    assert.equal(props?.[0]?.edited_at, props?.[1]?.edited_at);
+  });
+
+  it("leaves out-of-scope features unstamped", () => {
+    const result = calculateField(
+      tracked(),
+      DISCOVERED,
+      "pop",
+      false,
+      "999",
+      "number",
+      new Set(["f1"]),
+    );
+    assert.ok(result && "patch" in result);
+    const props = result.patch.geojson?.features.map((f) => f.properties);
+    assert.equal(props?.[0]?.edited_by, undefined);
+    assert.equal(props?.[1]?.edited_by, "local-user");
+  });
+
+  it("refuses to calculate into a maintained tracking column", () => {
+    // The value would be overwritten by the next edit's stamp, and the column
+    // would stop meaning what its name says.
+    assert.equal(
+      calculateField(tracked(), [...DISCOVERED, "edited_by"], "edited_by", false, '"me"', "text"),
+      null,
+    );
+    assert.equal(calculateField(tracked(), DISCOVERED, "created_at", true, '"x"', "text"), null);
+  });
+
+  it("allows those names on a layer that does not track edits", () => {
+    const result = calculateField(makeLayer(), DISCOVERED, "edited_by", true, '"me"', "text");
+    assert.ok(result && "patch" in result);
+  });
+
+  it("adds no columns when the layer does not track edits", () => {
+    const result = calculateField(makeLayer(), DISCOVERED, "pop", false, "pop * 2", "number");
+    assert.ok(result && "patch" in result);
+    assert.deepEqual(Object.keys(result.patch.geojson?.features[0].properties ?? {}), [
+      "name",
+      "pop",
+      "area",
+    ]);
+  });
+});
+
+describe("calculateField — unusable tracking config", () => {
+  // A config with blank or colliding names can only arrive from a hand-edited
+  // project, an MCP-authored one, or an older client — the settings panel never
+  // stores one. The attribute table already reads such a layer as untracked, so
+  // a calculation must agree with it rather than throw out of the click.
+  const broken = (config: Record<string, unknown>) =>
+    makeLayer({ editorTracking: config as never });
+
+  it("treats a duplicate-name config as untracked instead of throwing", () => {
+    const layer = broken({ enabled: true, createdAtField: "x", editedAtField: "x" });
+    const result = calculateField(layer, DISCOVERED, "pop", false, "pop * 2", "number");
+    assert.ok(result && "patch" in result);
+    assert.deepEqual(Object.keys(result.patch.geojson?.features[0].properties ?? {}), [
+      "name",
+      "pop",
+      "area",
+    ]);
+  });
+
+  it("treats a blank-name config as untracked instead of throwing", () => {
+    const layer = broken({ enabled: true, createdByField: "   " });
+    const result = calculateField(layer, DISCOVERED, "pop", false, "pop * 2", "number");
+    assert.ok(result && "patch" in result);
+    assert.equal(result.patch.geojson?.features[0].properties?.edited_by, undefined);
+  });
+});

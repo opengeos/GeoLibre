@@ -19,6 +19,18 @@ describe("isKnownWhiteboxToolId", () => {
     assert.equal(isKnownWhiteboxToolId("write_geoparquet"), true);
   });
 
+  it("accepts the app-native global DEM tool without adding a duplicate menu entry", () => {
+    assert.equal(isKnownWhiteboxToolId("download_global_dem"), true);
+    assert.deepEqual(
+      whiteboxToolFromSearch("?tool=download_global_dem&bbox=-84%2C35%2C-83%2C36&bbox_crs=4326"),
+      {
+        toolId: "download_global_dem",
+        known: true,
+        parameters: { bbox: "-84,35,-83,36", bbox_crs: "4326" },
+      },
+    );
+  });
+
   it("rejects ids not in the catalog", () => {
     assert.equal(isKnownWhiteboxToolId("not_a_real_tool"), false);
     assert.equal(isKnownWhiteboxToolId(""), false);
@@ -88,6 +100,11 @@ describe("whiteboxToolFromSearch", () => {
       "?tool=slope&theme=dark&maponly=1&locale=fr&panels=none&z_factor=2",
     );
     // Only the genuine tool parameter survives; app chrome keeps its own meaning.
+    assert.deepEqual(target?.parameters, { z_factor: "2" });
+  });
+
+  it("reserves the viewer draw flag instead of passing it to the tool", () => {
+    const target = whiteboxToolFromSearch("?tool=slope&layout=viewer&draw&z_factor=2");
     assert.deepEqual(target?.parameters, { z_factor: "2" });
   });
 

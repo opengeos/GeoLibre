@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import type { Feature } from "geojson";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-geometry";
 import type { AddLayerSpec } from "@geolibre/embed";
 import {
+  readDrawnFeatures,
+  readLayerFeatures,
+} from "../apps/geolibre-desktop/src/lib/plugin-layer-queries";
+import {
+  assertEmbedCapability,
   EMBED_API_SOURCE,
   EMBED_API_VERSION,
+  EMBED_FEATURES_DEBOUNCE_MS,
   EMBED_ORIGINS_ENV,
   buildEmbedEvent,
   buildEmbedLayer,
+  createFeaturesChangeTracker,
   embedEventTargets,
   embedEventVersions,
   embedLayerSummaries,
@@ -106,6 +114,16 @@ describe("readEmbedOrigins", () => {
 
   it("is empty when neither is configured, which keeps the API off", () => {
     assert.deepEqual(readEmbedOrigins({}, {}), []);
+  });
+
+  it("lets deployment.json override the env, and an empty list turns the API off", () => {
+    const build = { [EMBED_ORIGINS_ENV]: "https://b.example" };
+    const runtime = { [EMBED_ORIGINS_ENV]: "https://a.example" };
+    assert.deepEqual(readEmbedOrigins(build, runtime, []), []);
+    assert.deepEqual(readEmbedOrigins(build, runtime, ["https://p.example"]), [
+      "https://p.example",
+    ]);
+    assert.deepEqual(readEmbedOrigins(build, runtime, undefined), ["https://a.example"]);
   });
 });
 
@@ -214,10 +232,54 @@ describe("parseEmbedRequest: v2 commands", () => {
         requestId: null,
       },
     );
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addData", {
+          url: "https://example.com/data.parquet",
+          styleUrl: "https://example.com/style.json",
+          fit: false,
+        }),
+      ),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/data.parquet",
+          styleUrl: "https://example.com/style.json",
+          fit: false,
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(
+      parseEmbedRequest(message("addData", { url: "https://example.com/data.geojson" })),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/data.geojson",
+          styleUrl: null,
+          fit: true,
+        },
+        requestId: null,
+      },
+    );
     assert.deepEqual(parseEmbedRequest(message("exportImage")), {
       command: { type: "exportImage" },
       requestId: null,
     });
+  });
+
+  it("rejects invalid addData URLs and options", () => {
+    for (const payload of [
+      { url: "file:///tmp/data.geojson" },
+      { url: "/relative.geojson" },
+      { url: "https://example.com/data.geojson", styleUrl: "data:text/json,{}" },
+      { url: "https://example.com/data.geojson", fit: "yes" },
+    ]) {
+      assert.match(
+        (parseEmbedRequest(message("addData", payload)) as { error: string }).error,
+        /^addData:/,
+      );
+    }
   });
 });
 
@@ -726,5 +788,365 @@ describe("buildEmbedEvent", () => {
       type: "ready",
       payload: { version: "2.2.0" },
     });
+  });
+});
+
+it("validates renderer selection commands", () => {
+  assert.deepEqual(
+    parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "cesium" } }),
+    {
+      command: { type: "setRenderer", renderer: "cesium" },
+      requestId: null,
+    },
+  );
+  assert.ok(
+    "error" in parseEmbedRequest({ v: 2, type: "setRenderer", payload: { renderer: "unknown" } })!,
+  );
+  assert.deepEqual(parseEmbedRequest({ v: 2, type: "getRenderer" }), {
+    command: { type: "getRenderer" },
+    requestId: null,
+  });
+});
+
+/** A point feature, with the id exactly as a host would have stored it. */
+function point(id: string | number | undefined, name = "p"): Feature {
+  return {
+    type: "Feature",
+    ...(id === undefined ? {} : { id }),
+    geometry: { type: "Point", coordinates: [8, 52] },
+    properties: { name },
+  };
+}
+
+function collection(...features: Feature[]): FeatureCollection {
+  return { type: "FeatureCollection", features };
+}
+
+function sketchesLayer(geojson: FeatureCollection): GeoLibreLayer {
+  return layer({
+    id: "sketches-1",
+    name: "Sketches",
+    type: "geojson",
+    source: { type: "geojson" },
+    metadata: { sourceKind: SKETCHES_SOURCE_KIND },
+    geojson,
+  });
+}
+
+describe("parseEmbedRequest: getLayerFeatures and getDrawnFeatures", () => {
+  it("accepts a layerId", () => {
+    assert.deepEqual(parseEmbedRequest(message("getLayerFeatures", { layerId: "parcels" })), {
+      command: { type: "getLayerFeatures", layerId: "parcels" },
+      requestId: null,
+    });
+  });
+
+  it("rejects a layerId that is missing, empty, null, or not a string", () => {
+    for (const payload of [undefined, null, [], {}, { layerId: undefined }]) {
+      const result = parseEmbedRequest(message("getLayerFeatures", payload, { requestId: "r" }));
+      assert.ok(result && "error" in result, `accepted ${JSON.stringify(payload)}`);
+    }
+    for (const layerId of ["", null, 7, true, ["a"], { id: "a" }]) {
+      const result = parseEmbedRequest(
+        message("getLayerFeatures", { layerId }, { requestId: "r" }),
+      );
+      assert.ok(result && "error" in result, `accepted ${JSON.stringify(layerId)}`);
+      assert.match((result as { error: string }).error, /getLayerFeatures: layerId/);
+      assert.equal((result as { requestId: string | null }).requestId, "r");
+    }
+  });
+
+  it("accepts getDrawnFeatures with any payload", () => {
+    for (const payload of [undefined, {}, null, []]) {
+      assert.deepEqual(
+        parseEmbedRequest(message("getDrawnFeatures", payload, { requestId: "r" })),
+        {
+          command: { type: "getDrawnFeatures" },
+          requestId: "r",
+        },
+      );
+    }
+  });
+
+  it("is accepted from a v1 host too", () => {
+    for (const type of ["getLayerFeatures", "getDrawnFeatures"]) {
+      const result = parseEmbedRequest({ v: 1, type, payload: { layerId: "a" } });
+      assert.ok(result && "command" in result);
+    }
+  });
+});
+
+describe("readLayerFeatures and readDrawnFeatures", () => {
+  const parcels = layer({
+    id: "parcels",
+    type: "geojson",
+    source: { type: "geojson" },
+    geojson: collection(point("a"), point(7), point(0), point(undefined)),
+  });
+
+  it("returns the named layer's features as an array", () => {
+    const result = readLayerFeatures([parcels], "parcels");
+    assert.ok(Array.isArray(result));
+    assert.equal(result.length, 4);
+  });
+
+  it("returns string and numeric ids exactly as stored, without renumbering", () => {
+    const features = readLayerFeatures([parcels], "parcels");
+    assert.equal(features[0]?.id, "a");
+    assert.equal(features[1]?.id, 7);
+    assert.equal(features[2]?.id, 0);
+    assert.ok(!("id" in features[3]!), "an id-less feature must stay id-less");
+  });
+
+  it("rejects an unknown layer", () => {
+    assert.throws(() => readLayerFeatures([parcels], "nope"), /No layer with id "nope"/);
+  });
+
+  it("returns an empty array for a layer without in-memory features, like the plugin API", () => {
+    const raster = layer({ id: "dem", type: "cog" as GeoLibreLayer["type"] });
+    assert.deepEqual(readLayerFeatures([raster], "dem"), []);
+    const remote = layer({
+      id: "remote",
+      type: "geojson",
+      source: { type: "geojson", url: "https://example.com/big.geojson" },
+    });
+    assert.deepEqual(readLayerFeatures([remote], "remote"), []);
+  });
+
+  it("returns a copy: mutating it leaves the store object untouched", () => {
+    const stored = collection(point("a", "original"));
+    const result = readLayerFeatures([layer({ id: "x", type: "geojson", geojson: stored })], "x");
+    assert.notEqual(result[0], stored.features[0]);
+    (result[0]!.properties as Record<string, unknown>).name = "changed";
+    (result[0]!.geometry as { coordinates: number[] }).coordinates[0] = 0;
+    result.push(point("b"));
+    assert.equal(stored.features.length, 1);
+    assert.equal((stored.features[0]!.properties as Record<string, unknown>).name, "original");
+    assert.equal((stored.features[0]!.geometry as { coordinates: number[] }).coordinates[0], 8);
+  });
+
+  it("returns plain JSON-serializable data", () => {
+    const result = readLayerFeatures([parcels], "parcels");
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+  });
+
+  it("returns the drawn features of the Sketches layer", () => {
+    const sketches = sketchesLayer(collection(point("s1")));
+    assert.deepEqual(
+      readDrawnFeatures([parcels, sketches]).map((feature) => feature.id),
+      ["s1"],
+    );
+  });
+
+  it("combines every Sketches layer", () => {
+    const second = { ...sketchesLayer(collection(point("s2"))), id: "sketches-2" };
+    assert.deepEqual(
+      readDrawnFeatures([sketchesLayer(collection(point("s1"))), parcels, second]).map(
+        (feature) => feature.id,
+      ),
+      ["s1", "s2"],
+    );
+  });
+
+  it("finds the Sketches layer by its marker, not its name", () => {
+    const renamed = { ...sketchesLayer(collection(point("s1"))), name: "My drawings" };
+    assert.equal(readDrawnFeatures([renamed]).length, 1);
+  });
+
+  it("returns an empty array, not an error, when nothing is drawn yet", () => {
+    assert.deepEqual(readDrawnFeatures([parcels]), []);
+    assert.deepEqual(readDrawnFeatures([]), []);
+    assert.deepEqual(readDrawnFeatures([sketchesLayer(collection())]), []);
+  });
+
+  it("returns drawn features as a copy", () => {
+    const stored = collection(point("s1", "original"));
+    const result = readDrawnFeatures([sketchesLayer(stored)]);
+    (result[0]!.properties as Record<string, unknown>).name = "changed";
+    assert.equal((stored.features[0]!.properties as Record<string, unknown>).name, "original");
+  });
+});
+
+describe("assertEmbedCapability", () => {
+  it("passes when the capability is granted", () => {
+    assert.doesNotThrow(() => assertEmbedCapability(new Set(["export:data"]), "export:data"));
+  });
+
+  it("throws the standard message when it is denied", () => {
+    assert.throws(
+      () => assertEmbedCapability(new Set(["data:add"]), "export:data"),
+      /^Error: Missing export:data capability$/,
+    );
+    assert.throws(() => assertEmbedCapability(new Set(), "export:data"), /Missing export:data/);
+  });
+});
+
+describe("createFeaturesChangeTracker", () => {
+  const geo = (id: string, ...features: Feature[]) =>
+    layer({ id, type: "geojson", source: { type: "geojson" }, geojson: collection(...features) });
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+  });
+  afterEach(() => {
+    mock.timers.reset();
+  });
+
+  function setup() {
+    let layers: GeoLibreLayer[] = [];
+    const reports: Array<{ layerId: string; featureCount: number; removed?: boolean }> = [];
+    const tracker = createFeaturesChangeTracker(
+      (change) => reports.push(change),
+      () => layers,
+    );
+    const push = (next: GeoLibreLayer[]) => {
+      layers = next;
+      tracker.update(next);
+    };
+    return { tracker, reports, push };
+  }
+
+  it("uses a debounce quiet period of a quarter second by default", () => {
+    assert.equal(EMBED_FEATURES_DEBOUNCE_MS, 250);
+  });
+
+  it("reports the feature count after a geojson change, once the quiet period passes", () => {
+    const { reports, push } = setup();
+    push([geo("a", point(1))]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    reports.length = 0;
+    push([geo("a", point(1), point(2), point(3))]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS - 1);
+    assert.equal(reports.length, 0, "must wait out the quiet period");
+    mock.timers.tick(1);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 3 }]);
+  });
+
+  it("collapses a burst of changes into one report with the latest count", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    for (let count = 2; count <= 6; count++) {
+      push([geo("a", ...Array.from({ length: count }, (_, i) => point(i)))]);
+      mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS - 1);
+    }
+    assert.equal(reports.length, 0, "each change restarts the quiet period");
+    mock.timers.tick(1);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 6 }]);
+  });
+
+  it("debounces each layer independently", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1)), geo("b", point(1))]);
+    const a = geo("a", point(1), point(2));
+    push([a, geo("b", point(1))]);
+    mock.timers.tick(100);
+    push([a, geo("b", point(1), point(2), point(3))]);
+    mock.timers.tick(150);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 2 }]);
+    mock.timers.tick(100);
+    assert.deepEqual(reports, [
+      { layerId: "a", featureCount: 2 },
+      { layerId: "b", featureCount: 3 },
+    ]);
+  });
+
+  it("reports a layer that first appears with features (the first drawing)", () => {
+    const { reports, push } = setup();
+    push([]);
+    push([geo("sketches", point(1))]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, [{ layerId: "sketches", featureCount: 1 }]);
+  });
+
+  it("stays silent for a layer that appears without features", () => {
+    const { reports, push } = setup();
+    push([layer({ id: "dem", type: "cog" as GeoLibreLayer["type"] })]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, []);
+  });
+
+  it("reports features that arrive late on a known layer", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([layer({ id: "late", type: "geojson" })]);
+    push([geo("late", point(1), point(2))]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, [{ layerId: "late", featureCount: 2 }]);
+  });
+
+  it("does not report a change that leaves the geojson reference alone", () => {
+    const { tracker, reports, push } = setup();
+    const first = geo("a", point(1));
+    tracker.reset([first]);
+    push([{ ...first, name: "Renamed", visible: false }]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, []);
+  });
+
+  it("reports a removal at once with removed: true, and drops a report still waiting", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    push([geo("a", point(1), point(2))]);
+    push([]);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 0, removed: true }]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.equal(reports.length, 1, "the pending change must not fire after removal");
+  });
+
+  it("does not report the removal of a layer that never held features", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([layer({ id: "dem", type: "cog" as GeoLibreLayer["type"] })]);
+    push([]);
+    assert.deepEqual(reports, []);
+  });
+
+  it("reports a layer whose geojson is cleared as count 0 and drops a waiting report", () => {
+    const { tracker, reports, push } = setup();
+    const noGeojson = layer({ id: "a", type: "geojson" });
+    tracker.reset([geo("a", point(1))]);
+    push([geo("a", point(1), point(2))]);
+    push([noGeojson]);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 0 }]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.equal(reports.length, 1, "the pending change must not fire after the clear");
+  });
+
+  it("still reports the removal of a layer that was cleared before", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    push([layer({ id: "a", type: "geojson" })]);
+    reports.length = 0;
+    push([]);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 0, removed: true }]);
+  });
+
+  it("reports a re-added layer as a change", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    push([]);
+    reports.length = 0;
+    push([geo("a", point(1), point(2))]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 2 }]);
+  });
+
+  it("reports the empty state after the last feature is deleted", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    push([geo("a")]);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, [{ layerId: "a", featureCount: 0 }]);
+  });
+
+  it("reset re-baselines without reporting (a project load) and cancels pending reports", () => {
+    const { tracker, reports, push } = setup();
+    tracker.reset([geo("a", point(1))]);
+    push([geo("a", point(1), point(2))]);
+    const replaced = [geo("b", point(9))];
+    tracker.reset(replaced);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, [], "neither the stale change nor the replaced layers report");
+    tracker.update(replaced);
+    mock.timers.tick(EMBED_FEATURES_DEBOUNCE_MS);
+    assert.deepEqual(reports, []);
   });
 });

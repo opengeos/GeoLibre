@@ -14,6 +14,7 @@
 
 import { isAllowedPluginManifestUrl } from "@geolibre/core";
 import { normalizeStringList } from "./string-lists";
+import type { DeploymentPolicy } from "./deployment-policy";
 
 export interface PartitionedProjectPluginUrls {
   /** Project URLs already trusted (installed in settings or bundled). */
@@ -34,6 +35,8 @@ export interface PartitionedProjectPluginUrls {
  * URLs that fail the scheme allow-list (`isAllowedPluginManifestUrl`) can never
  * load, so they are dropped from both lists — matching the filter applied when
  * the project file is parsed (`normalizeProjectPlugins`).
+ * When sideloading is disabled, unknown project URLs are silently held back:
+ * no trust prompt may offer to override the deployment's code-loading policy.
  *
  * @param projectManifestUrls - `plugins.manifestUrls` from the opened project.
  * @param trustedManifestUrls - The user's installed plugin URLs (desktop settings).
@@ -44,6 +47,7 @@ export function partitionProjectPluginManifestUrls(
   projectManifestUrls: readonly string[],
   trustedManifestUrls: readonly string[],
   bundledManifestUrls: readonly string[],
+  policy: DeploymentPolicy | null = null,
 ): PartitionedProjectPluginUrls {
   const trustedSet = new Set(normalizeStringList([...trustedManifestUrls, ...bundledManifestUrls]));
   const trusted: string[] = [];
@@ -54,7 +58,7 @@ export function partitionProjectPluginManifestUrls(
     if (!isAllowedPluginManifestUrl(url)) continue;
     if (trustedSet.has(url)) {
       trusted.push(url);
-    } else {
+    } else if (policy?.plugins?.sideload !== false) {
       untrusted.push(url);
     }
   }

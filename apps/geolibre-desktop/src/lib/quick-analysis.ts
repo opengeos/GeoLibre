@@ -1,10 +1,11 @@
 import {
+  shouldZoomToNewLayers,
   DEFAULT_LAYER_STYLE,
   useAppStore,
   type GeoLibreLayer,
   type MapScaleUnit,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   getNetworkTool,
   getVectorTool,
@@ -142,6 +143,32 @@ const listeners = new Set<() => void>();
  */
 let latestRun = 0;
 
+/**
+ * Claim the banner for a quick action that is not a registry tool -- the
+ * viewshed, which computes a raster rather than running a registered vector
+ * tool -- so it can report running and failed like every other entry in that
+ * menu instead of failing silently.
+ *
+ * Unlike `runQuickAnalysis` this records **no Processing History entry**: the
+ * caller is not a registry tool, so there is no algorithm id and parameter set
+ * to replay or copy as Python. The module docstring's claim that every quick
+ * action lands in the History covers the registry-tool actions; this is the
+ * exception, so History is not a complete audit trail of the menu.
+ *
+ * Returns a setter bound to this run's id, so it goes through the same
+ * {@link latestRun} guard `runQuickAnalysis` uses. Without that, a slow
+ * viewshed resolving after the user has fired a quick buffer would clobber the
+ * buffer's status with its own -- exactly the "resurrect a banner for a run the
+ * user has moved on from" case the counter exists to prevent.
+ */
+export function beginQuickAnalysisRun(toolName: string): (next: QuickAnalysisStatus) => void {
+  const run = ++latestRun;
+  setStatus({ phase: "running", toolName });
+  return (next) => {
+    if (run === latestRun) setStatus(next);
+  };
+}
+
 function setStatus(next: QuickAnalysisStatus): void {
   status = next;
   for (const listener of listeners) listener();
@@ -181,7 +208,7 @@ export interface QuickAnalysisRequest {
    */
   extraLayers?: GeoLibreLayer[];
   /** Live map controller, used to frame the result. */
-  mapControllerRef: { current: MapController | null };
+  mapControllerRef: { current: MapEngine | null };
 }
 
 /** Resolve a tool id against the registries Quick analysis draws from. */
@@ -204,7 +231,11 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
   const { toolId, parameters, resultName, extraLayers = [], mapControllerRef } = request;
   const tool = resolveQuickTool(toolId);
   if (!tool) {
-    setStatus({ phase: "error", toolName: toolId, message: `Unknown tool "${toolId}"` });
+    setStatus({
+      phase: "error",
+      toolName: toolId,
+      message: `Unknown tool "${toolId}"`,
+    });
     return null;
   }
 
@@ -236,12 +267,7 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
     const captured = await runAlgorithmCapture(tool, parameters, {
       layers: [...useAppStore.getState().layers, ...extraLayers],
       log,
-      viewportBounds: () => {
-        const map = mapControllerRef.current?.getMap();
-        if (!map) return null;
-        const bounds = map.getBounds();
-        return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-      },
+      viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
     });
 
     if (softError) {
@@ -263,7 +289,7 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
     tracker.addOutputLayer(resultName);
     tracker.finish("success");
     const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-    if (layer) mapControllerRef.current?.fitLayer(layer);
+    if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     setRunStatus({ phase: "idle" });
     return layerId;
   } catch (error) {

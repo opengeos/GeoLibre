@@ -217,6 +217,63 @@ describe("geometry generator sync", () => {
     assert.ok(!layers.has("layer-poly-generator-circle"));
   });
 
+  it("sizes generated centroids by the chosen attribute", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      polygonLayer({
+        geometryGenerator: "centroid",
+        geometryGeneratorCircleRadius: 5,
+        geometryGeneratorSizeProperty: "count",
+        geometryGeneratorSizeMinValue: 0,
+        geometryGeneratorSizeMaxValue: 50,
+        geometryGeneratorSizeMinRadius: 3,
+        geometryGeneratorSizeMaxRadius: 30,
+      }),
+    );
+    const circle = layers.get("layer-poly-generator-circle") as {
+      paint: Record<string, unknown>;
+    };
+    assert.deepEqual(circle.paint["circle-radius"], [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "count"], 0],
+      0,
+      3,
+      50,
+      30,
+    ]);
+  });
+
+  it("threads the buffer distance field through to the derived geometry", () => {
+    const { map, sources } = makeMap();
+    // Two squares side by side, buffered by their own `radius` values, so the
+    // derived extents prove the field reached buildGeneratedGeometry rather
+    // than every feature taking the flat distance.
+    const layer = polygonLayer({
+      geometryGenerator: "buffer",
+      geometryGeneratorBufferDistance: 1000,
+      geometryGeneratorBufferProperty: "radius",
+    });
+    const square = layer.geojson!.features[0];
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        { ...square, properties: { radius: 1000 } },
+        { ...square, properties: { radius: 50_000 } },
+      ],
+    };
+    syncLayer(map as never, layer);
+
+    const derived = sources.get("source-poly-generator")?.data as GeoJSON.FeatureCollection;
+    assert.equal(derived.features.length, 2);
+    const widths = derived.features.map((feature) => {
+      const xs = (feature.geometry as GeoJSON.Polygon).coordinates[0].map(([x]) => x);
+      return Math.max(...xs) - Math.min(...xs);
+    });
+    assert.ok(widths[1] > widths[0]);
+  });
+
   it("suppresses generator layers while a time filter is active", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({ geometryGenerator: "centroid" }));

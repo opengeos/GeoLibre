@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #15343a;
+  background: #edf4f2;
+  --ink: #15343a;
+  --muted: #60777a;
+  --paper: #fbfdfc;
+  --line: #cdddda;
+  --teal: #247d76;
+  --teal-dark: #155a57;
+  --blue: #236a91;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  background: #edf4f2;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: var(--teal);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+form {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+input#base-url {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.field-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+#save-button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--teal-dark);
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+#save-button:hover {
+  background: #196963;
+}
+
+.text-button {
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+#status {
+  margin: 12px 0 0;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+#status[data-tone="success"] {
+  color: var(--teal-dark);
+}
+
+#status[data-tone="error"] {
+  color: #9b3d2e;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

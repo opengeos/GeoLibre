@@ -2,9 +2,12 @@
 // a host page (a portal, an ERP, a dashboard) has with a framed GeoLibre at
 // runtime, instead of encoding everything in the initial URL (issue #1462).
 //
-// This module is deliberately pure — no window, no store, no map — so the
-// envelope, the origin allowlist, and every verb payload are unit-testable. The
-// runtime wiring lives in `hooks/useEmbedApi.ts`.
+// This module has no store or map dependency, and its readers take their inputs
+// as parameters, so the envelope, the origin allowlist, and every verb payload
+// are unit-testable. The defaults of `readEmbedOrigins` do consult `window`, the
+// build env and the active deployment policy (`getDeploymentPolicy`), which
+// tests bypass by passing explicit arguments. The runtime wiring lives in
+// `hooks/useEmbedApi.ts`.
 //
 // Relationship to the other bridges: `useEmbedBridge`/`useCommandBridge` speak an
 // unversioned, fully-trusted protocol with the GeoLibre Jupyter widget, which
@@ -13,8 +16,14 @@
 // origins it trusts, and every message is checked against that list.
 
 import type { Feature, Geometry } from "geojson";
-import { LAYER_TYPES, hasRestorableLayerSource, validateMapExpression } from "@geolibre/core";
+import {
+  LAYER_TYPES,
+  getBuildEnvironment,
+  hasRestorableLayerSource,
+  validateMapExpression,
+} from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { getDeploymentPolicy } from "./deployment-env";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
 
 export { EMBED_API_SOURCE, EMBED_API_VERSION };
@@ -30,6 +39,9 @@ export const EMBED_ORIGINS_ENV = "VITE_GEOLIBRE_EMBED_ORIGINS";
 
 /** Any-origin wildcard accepted in the allowlist. */
 export const EMBED_ORIGIN_WILDCARD = "*";
+
+/** Quiet period before a layer's `featuresChanged` is emitted. */
+export const EMBED_FEATURES_DEBOUNCE_MS = 250;
 
 type EnvRecord = Record<string, string | undefined> | undefined;
 
@@ -75,12 +87,18 @@ export function parseEmbedOrigins(raw: unknown): string[] {
  * so an operator can set it with `-e GEOLIBRE_EMBED_ORIGINS=...` without
  * rebuilding) before the build-time Vite env.
  *
- * @param viteEnv - Build-time env; defaults to `import.meta.env`.
+ * @param viteEnv - Build-time env; defaults to the allowlisted build env.
  * @param deploymentEnv - Runtime env; defaults to the value the Docker image
  *   writes onto `window`.
  * @returns The allowed origins, empty when the API is not enabled.
  */
-export function readEmbedOrigins(viteEnv?: EnvRecord, deploymentEnv?: EnvRecord): string[] {
+export function readEmbedOrigins(
+  viteEnv?: EnvRecord,
+  deploymentEnv?: EnvRecord,
+  policyOrigins: readonly string[] | undefined = getDeploymentPolicy()?.sharing?.embedOrigins,
+): string[] {
+  // deployment.json wins outright; an empty list turns the embed API off.
+  if (policyOrigins !== undefined) return parseEmbedOrigins(policyOrigins.join(","));
   const runtime =
     deploymentEnv ??
     (typeof window === "undefined"
@@ -89,7 +107,7 @@ export function readEmbedOrigins(viteEnv?: EnvRecord, deploymentEnv?: EnvRecord)
           .__GEOLIBRE_DEPLOYMENT_ENV__);
   const fromRuntime = parseEmbedOrigins(runtime?.[EMBED_ORIGINS_ENV]);
   if (fromRuntime.length > 0) return fromRuntime;
-  const build = viteEnv ?? (import.meta.env as EnvRecord);
+  const build = viteEnv ?? (getBuildEnvironment() as EnvRecord);
   return parseEmbedOrigins(build?.[EMBED_ORIGINS_ENV]);
 }
 
@@ -141,9 +159,14 @@ export type EmbedCommand =
   | { type: "setLayerVisibility"; layerId: string; visible: boolean }
   | { type: "listLayers" }
   | { type: "setFilter"; layerId: string; expression: unknown[] | null }
+  | { type: "getRenderer" }
+  | { type: "setRenderer"; renderer: "maplibre" | "cesium" | "mapbox" | "arcgis" }
   | { type: "getViewport" }
   | { type: "addLayer"; spec: AddLayerSpec }
-  | { type: "exportImage" };
+  | { type: "addData"; url: string; styleUrl: string | null; fit: boolean }
+  | { type: "exportImage" }
+  | { type: "getLayerFeatures"; layerId: string }
+  | { type: "getDrawnFeatures" };
 
 /** A parsed inbound message: the command plus the host's correlation id. */
 export interface EmbedRequest {
@@ -158,9 +181,11 @@ export type EmbedEventType =
   | "ack"
   | "projectLoaded"
   | "selectionChanged"
+  | "rendererchange"
   | "viewChanged"
   | "toolCompleted"
-  | "serverFileWritten";
+  | "serverFileWritten"
+  | "featuresChanged";
 
 /** An app → host message, ready to hand to `postMessage`. */
 export interface EmbedEvent {
@@ -335,7 +360,9 @@ function parseToolParams(value: unknown): Record<string, string> {
  * null when it is a usable filter.
  *
  * `setFilter` stores its expression as `layer.embedFilter`, which `layer-sync`
- * merges into every render layer's filter (`["all", <geometry>, …]`). A
+ * merges into every render layer's filter (`["all", <geometry>, …]`) alongside
+ * the layer's own quick filters, so a host filter and a user's filter narrow
+ * the layer together rather than clobbering each other. A
  * malformed one cannot be reported from there: the store write always succeeds,
  * so the host would get `ok: true` and the failure would surface later, on a
  * `setFilter` call the host is no longer waiting on — or not at all. Compiling
@@ -494,6 +521,19 @@ export function parseEmbedRequest(
       }
       return { command: { type: "loadProject", url: payload.url }, requestId };
     }
+    case "getRenderer":
+      return { command: { type: "getRenderer" }, requestId };
+    case "setRenderer":
+      /* eslint-disable local/no-renderer-kind-checks -- validates a renderer name */
+      if (
+        payload.renderer !== "maplibre" &&
+        payload.renderer !== "cesium" &&
+        payload.renderer !== "mapbox" &&
+        payload.renderer !== "arcgis"
+      )
+        /* eslint-enable local/no-renderer-kind-checks */
+        return fail("setRenderer: renderer must be maplibre, cesium, mapbox, or arcgis");
+      return { command: { type: "setRenderer", renderer: payload.renderer }, requestId };
     case "setView": {
       const target = parseSetView(payload);
       if (!target) return fail("setView: expected a bbox or a center/zoom camera");
@@ -583,8 +623,38 @@ export function parseEmbedRequest(
         requestId,
       };
     }
+    case "addData": {
+      if (!isFetchableUrl(payload.url) || !/^https?:/i.test(payload.url)) {
+        return fail("addData: url must be an http(s) URL");
+      }
+      if (
+        payload.styleUrl !== undefined &&
+        (!isFetchableUrl(payload.styleUrl) || !/^https?:/i.test(payload.styleUrl))
+      ) {
+        return fail("addData: styleUrl must be an http(s) URL");
+      }
+      if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
+        return fail("addData: fit must be a boolean");
+      }
+      return {
+        command: {
+          type: "addData",
+          url: payload.url,
+          styleUrl: typeof payload.styleUrl === "string" ? payload.styleUrl : null,
+          fit: payload.fit ?? true,
+        },
+        requestId,
+      };
+    }
     case "exportImage":
       return { command: { type: "exportImage" }, requestId };
+    case "getLayerFeatures":
+      if (typeof payload.layerId !== "string" || !payload.layerId) {
+        return fail("getLayerFeatures: layerId must be a non-empty string");
+      }
+      return { command: { type: "getLayerFeatures", layerId: payload.layerId }, requestId };
+    case "getDrawnFeatures":
+      return { command: { type: "getDrawnFeatures" }, requestId };
     default:
       return null;
   }
@@ -700,5 +770,111 @@ export function buildEmbedLayer(spec: AddLayerSpec, layers: GeoLibreLayer[]): Ge
     metadata: spec.metadata ?? {},
     ...(spec.geojson ? { geojson: spec.geojson as GeoLibreLayer["geojson"] } : {}),
     ...(spec.beforeId ? { beforeId: spec.beforeId } : {}),
+  };
+}
+
+/**
+ * Throw the message the host receives in its `ack` when the deployment has not
+ * granted a capability. The same wording `exportImage` and the other gated
+ * verbs use.
+ *
+ * @param capabilities - The store's `deploymentCapabilities`.
+ * @param capability - The capability the command needs, e.g. `export:data`.
+ */
+export function assertEmbedCapability(
+  capabilities: { has(capability: string): boolean },
+  capability: string,
+): void {
+  if (!capabilities.has(capability)) throw new Error(`Missing ${capability} capability`);
+}
+
+/** What {@link createFeaturesChangeTracker} reports for one layer. */
+export interface EmbedFeaturesChange {
+  layerId: string;
+  featureCount: number;
+  /** True when the layer was removed; `featureCount` is then 0. */
+  removed?: boolean;
+}
+
+/**
+ * Detect geojson changes on layers and report them debounced per layer.
+ *
+ * Call `update` with the store's layers on every store change. A change is a
+ * different `layer.geojson` reference, or a layer appearing with features: the
+ * editor creates its Sketches layer together with the first drawing, so a first
+ * appearance has to count. A burst of changes to one layer (a vertex drag)
+ * collapses into one report after the quiet period, carrying the feature count
+ * at that moment. Layers debounce independently. A removal is reported at once
+ * with `removed: true` and drops any report still waiting. `reset` re-baselines
+ * silently, which is how a whole-project load stays quiet.
+ *
+ * @param report - Receives each change.
+ * @param getLayers - Reads the current layers when a timer fires.
+ * @param debounceMs - Quiet period, defaults to {@link EMBED_FEATURES_DEBOUNCE_MS}.
+ */
+export function createFeaturesChangeTracker(
+  report: (change: EmbedFeaturesChange) => void,
+  getLayers: () => GeoLibreLayer[],
+  debounceMs: number = EMBED_FEATURES_DEBOUNCE_MS,
+) {
+  const known = new Map<string, GeoLibreLayer["geojson"]>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Layers whose cleared state the host was told about; a later removal of
+  // one of them is still worth a `removed: true` report.
+  const cleared = new Set<string>();
+
+  const clear = (layerId: string) => {
+    const timer = timers.get(layerId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    timers.delete(layerId);
+  };
+
+  return {
+    /** Diff against the previous layers; schedule a report per changed layer. */
+    update(layers: GeoLibreLayer[]) {
+      const present = new Set<string>();
+      for (const layer of layers) {
+        present.add(layer.id);
+        const previous = known.get(layer.id);
+        known.set(layer.id, layer.geojson);
+        if (layer.geojson === previous) continue;
+        clear(layer.id);
+        if (!layer.geojson) {
+          // The layer stays but lost its in-memory features: tell the host at
+          // once (count 0, not removed) and drop any report still waiting.
+          if (previous) {
+            cleared.add(layer.id);
+            report({ layerId: layer.id, featureCount: 0 });
+          }
+          continue;
+        }
+        cleared.delete(layer.id);
+        timers.set(
+          layer.id,
+          setTimeout(() => {
+            timers.delete(layer.id);
+            const current = getLayers().find((item) => item.id === layer.id);
+            if (!current?.geojson) return;
+            report({ layerId: layer.id, featureCount: current.geojson.features.length });
+          }, debounceMs),
+        );
+      }
+      for (const [layerId, geojson] of [...known]) {
+        if (present.has(layerId)) continue;
+        known.delete(layerId);
+        clear(layerId);
+        const wasCleared = cleared.delete(layerId);
+        // A layer that never held features has nothing to tell the host.
+        if (geojson || wasCleared) report({ layerId, featureCount: 0, removed: true });
+      }
+    },
+    /** Forget every layer and cancel pending reports (project switch, teardown). */
+    reset(layers: GeoLibreLayer[] = []) {
+      for (const layerId of [...timers.keys()]) clear(layerId);
+      known.clear();
+      cleared.clear();
+      for (const layer of layers) known.set(layer.id, layer.geojson);
+    },
   };
 }

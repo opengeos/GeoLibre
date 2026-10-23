@@ -3,6 +3,10 @@ name: Publish embed SDK
 on:
   release:
     types: [published]
+  # Build-only trial run before a tag is cut. The publish steps below also
+  # require the `release` event, so a dispatch installs, builds, prepares the
+  # manifests, and checks the registry without publishing anything.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,6 +14,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       id-token: write # Required for npm trusted publishing and provenance.
@@ -45,5 +50,5 @@ jobs:
       # can be made: version 2.4.0 is published from a maintainer's machine
       # once, then every later release goes through here.
       - name: Publish to npm (Trusted Publishing)
-        if: steps.version.outputs.publish == 'true'
+        if: github.event_name == 'release' && steps.version.outputs.publish == 'true'
         run: npm publish -w @geolibre/embed --provenance --access public

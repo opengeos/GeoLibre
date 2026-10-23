@@ -1,6 +1,7 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Map as MapLibreMap, RasterTileSource } from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
+import { getStyleMap } from "./style-map";
 
 /**
  * Shared engine for the Weather overlays (Clouds, Precipitation).
@@ -107,6 +108,8 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
   let index = 0;
   let playing = false;
   let frameTimer: ReturnType<typeof setInterval> | null = null;
+  /** The layer's frame before a playback that writes each frame to the store. */
+  let playbackStart: { tiles: unknown; metadata: GeoLibreLayer["metadata"] } | null = null;
   const listeners = new Set<() => void>();
   /** Recent tile-load-failure timestamps for this layer's source (ms). */
   let errorTimestamps: number[] = [];
@@ -126,7 +129,11 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
   /** Swap the live source to the current frame for an instant visual update. */
   const applyFrameToMap = (): void => {
     if (layerId === null || frames.length === 0) return;
-    const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+    // mapbox-gl's raster source has the same `setTiles`, so the instant frame
+    // swap works on either 2D engine; the globe relies on the store write alone.
+    // No style map on ArcGIS: the store write redraws the frame.
+    // engine-audit-allow: arcgis-null-map
+    const map = getStyleMap(appRef) as MapLibreMap | null;
     const source = map?.getSource(rasterSourceId(layerId)) as RasterTileSource | undefined;
     source?.setTiles([frames[index].tileUrl]);
   };
@@ -141,7 +148,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
    * enrich sparse metadata even when the tile matches.) Clears {@link layerId}
    * if the layer was deleted from the panel.
    */
-  const syncStore = (): void => {
+  const syncStore = ({ transient = false }: { transient?: boolean } = {}): void => {
     if (layerId === null || frames.length === 0) return;
     const store = useAppStore.getState();
     const layer = store.layers.find((l) => l.id === layerId);
@@ -154,10 +161,29 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
     const currentTile = Array.isArray(layer.source.tiles) ? layer.source.tiles[0] : undefined;
     const unchanged = currentTile === frame.tileUrl && metadataEqual(layer.metadata, nextMetadata);
     if (unchanged) return;
-    store.updateLayer(layerId, {
-      source: { ...layer.source, tiles: [frame.tileUrl] },
-      metadata: nextMetadata,
-    });
+    const patch = { source: { ...layer.source, tiles: [frame.tileUrl] }, metadata: nextMetadata };
+    if (!transient) {
+      store.updateLayer(layerId, patch);
+      return;
+    }
+    // A playback tick is not an edit: it neither dirties the project nor joins
+    // the undo history. The layer as it was before playback is kept, so the
+    // stop can record the resting frame as a single edit from it.
+    playbackStart ??= { tiles: layer.source.tiles, metadata: layer.metadata };
+    writeQuietly(layerId, patch);
+  };
+
+  /** Write a layer patch with the undo history paused and the dirty flag kept. */
+  const writeQuietly = (id: string, patch: Partial<GeoLibreLayer>): void => {
+    const history = useAppStore.temporal.getState();
+    const wasDirty = useAppStore.getState().isDirty;
+    history.pause();
+    try {
+      useAppStore.getState().updateLayer(id, patch);
+    } finally {
+      history.resume();
+    }
+    if (!wasDirty) useAppStore.setState({ isDirty: false });
   };
 
   const stopPlaying = (): void => {
@@ -167,6 +193,19 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
     }
     if (playing) {
       playing = false;
+      // Frames written quietly during playback (a renderer with no style map):
+      // restore the pre-playback layer quietly, so persisting the resting frame
+      // below is one edit — undoable back to it, and dirtying only if the frame
+      // actually changed.
+      const start = playbackStart;
+      playbackStart = null;
+      const layer =
+        layerId === null ? undefined : useAppStore.getState().layers.find((l) => l.id === layerId);
+      if (start && layer)
+        writeQuietly(layer.id, {
+          source: { ...layer.source, tiles: start.tiles as string[] | undefined },
+          metadata: start.metadata,
+        });
       // Persist the frame we landed on so a saved project reopens on it.
       syncStore();
     }
@@ -186,8 +225,12 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
       }
       index = (index + 1) % frames.length;
       // Live source swap only per tick; avoid churning the store (and its dirty
-      // flag) every frame — the resting frame is written on pause.
-      applyFrameToMap();
+      // flag) every frame — the resting frame is written on pause. A renderer
+      // with no style map (the globe, ArcGIS) redraws only from the store, so
+      // there the frame is written on every tick.
+      // engine-audit-allow: arcgis-null-map
+      if (getStyleMap(appRef)) applyFrameToMap();
+      else syncStore({ transient: true });
       notify();
     }, config.frameMs);
   };
@@ -268,7 +311,9 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
 
       // Watch for this source's tile failures so a rate-limited animation can
       // stop itself instead of spiralling (see handleMapError).
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      // No style map on ArcGIS: tile-error watching is skipped.
+      // engine-audit-allow: arcgis-null-map
+      const map = getStyleMap(appRef) as MapLibreMap | null;
       if (map) {
         mapErrorHandler = handleMapError;
         map.on("error", mapErrorHandler);
@@ -289,7 +334,10 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
         frameTimer = null;
       }
       playing = false;
-      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      playbackStart = null;
+      // No style map on ArcGIS: nothing to detach.
+      // engine-audit-allow: arcgis-null-map
+      const map = getStyleMap(appRef) as MapLibreMap | null;
       if (map && mapErrorHandler) map.off("error", mapErrorHandler);
       mapErrorHandler = null;
       errorTimestamps = [];

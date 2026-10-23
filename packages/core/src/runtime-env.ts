@@ -1,16 +1,45 @@
 /**
  * Resolves runtime environment variables shared by the external-service clients
- * (geocoding, routing). Build-time Vite vars (`import.meta.env`) are overlaid
+ * (geocoding, routing). Allowlisted build-time vars (`__GEOLIBRE_BUILD_ENV__`,
+ * injected by `vite.config.ts`) are overlaid
  * with project-supplied runtime vars (`window.__GEOLIBRE_RUNTIME_ENV__`, set
  * from project preferences) so a self-hosted endpoint can be configured without
  * a rebuild. Carries no React/MapLibre dependency so callers stay unit-testable.
  */
 
-const buildEnv = (
-  import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  }
-).env;
+// Injected by `vite.config.ts`'s `define` from an explicit allowlist
+// (BUILD_ENV_KEYS), with credential-bearing names withheld from redistributable
+// builds such as the Jupyter wheel.
+//
+// This deliberately does NOT read `import.meta.env`. That read is a whole-object
+// one — nothing here names a static key — so Vite could not replace it per-key
+// and instead inlined the entire env record into every chunk importing this
+// module. Combined with the bare-to-prefixed shell bridge in `vite.config.ts`,
+// every chunk importing this module would carry whatever the build machine had
+// set. Keep this indirection: reverting to `import.meta.env` silently restores
+// that behaviour, and no test would catch it.
+declare const __GEOLIBRE_BUILD_ENV__: Record<string, string> | undefined;
+
+const buildEnv: Record<string, string | undefined> =
+  typeof __GEOLIBRE_BUILD_ENV__ === "undefined" ? {} : __GEOLIBRE_BUILD_ENV__;
+
+/**
+ * The allowlisted build-time environment, with no runtime overlay.
+ *
+ * For settings that must be fixed by the build and NOT overridable by a
+ * `.geolibre.json` a user opened — the auth gate, the deployment profile, the
+ * embed origin allowlist. Routing those through {@link getRuntimeEnvironment}
+ * would let project-supplied `__GEOLIBRE_RUNTIME_ENV__` values relax them.
+ *
+ * Callers should prefer this over reading `import.meta.env` directly: a
+ * whole-object read defeats Vite's per-key replacement and inlines every
+ * `VITE_` var on the build machine into the chunk.
+ *
+ * @returns The build-time environment record.
+ */
+export function getBuildEnvironment(): Record<string, string | undefined> {
+  return buildEnv;
+}
 
 /**
  * Merges build-time env with project runtime env (the latter wins). Falls back
@@ -19,11 +48,11 @@ const buildEnv = (
  * @returns The resolved environment variables.
  */
 export function getRuntimeEnvironment(): Record<string, string | undefined> {
-  if (typeof window === "undefined") return buildEnv ?? {};
+  if (typeof window === "undefined") return buildEnv;
 
   // __GEOLIBRE_RUNTIME_ENV__ is declared globally in ./types.
   return {
-    ...(buildEnv ?? {}),
+    ...buildEnv,
     ...(window.__GEOLIBRE_RUNTIME_ENV__ ?? {}),
   };
 }
@@ -121,15 +150,42 @@ export function getMapboxAccessToken(env?: Record<string, string | undefined>): 
 }
 
 /**
+ * Resolves the ArcGIS API key from the runtime environment.
+ *
+ * The ArcGIS renderer draws the translated project basemap and non-Esri layers
+ * without a key; Esri's basemap styles and location services require one
+ * (an ArcGIS Location Platform or ArcGIS Online API key credential). It is
+ * supplied via `VITE_ARCGIS_API_KEY` (baked in at build time from the bare
+ * `ARCGIS_API_KEY` env var, which `vite.config.ts` copies into the prefixed
+ * name) or set at runtime through Settings → Environment variables
+ * (`window.__GEOLIBRE_RUNTIME_ENV__`, so a bare `ARCGIS_API_KEY` entry works
+ * there too). Same precedence as {@link getMapboxAccessToken}.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed key, or undefined when unset.
+ */
+export function getArcgisApiKey(env?: Record<string, string | undefined>): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed = runtimeEnv.VITE_ARCGIS_API_KEY?.trim() || runtimeEnv.ARCGIS_API_KEY?.trim();
+  return trimmed || undefined;
+}
+
+/**
  * Resolves the Cesium Ion access token from the runtime environment.
  *
- * The 3D-globe view's world imagery and terrain need a Cesium Ion token. It is
+ * Cesium World Terrain and Ion World Imagery need a Cesium Ion token. It is
  * supplied via `VITE_CESIUM_TOKEN` (baked in at build time from the bare
  * `CESIUM_TOKEN` env var, which `vite.config.ts` copies into the prefixed name)
  * or set at runtime through Settings → Environment variables
  * (`window.__GEOLIBRE_RUNTIME_ENV__`, which bypasses Vite's envPrefix allowlist,
- * so a bare `CESIUM_TOKEN` entry works there too). When unset, the globe cannot
- * render and the 3D view is not offered.
+ * so a bare `CESIUM_TOKEN` entry works there too).
+ *
+ * The 3D-globe view itself does **not** need one: it draws the project basemap
+ * as its base imagery whenever that basemap has a raster form (see
+ * {@link basemapToCesiumImagery}), and falls back to Ion World Imagery — or, with
+ * no token, to OpenStreetMap — for the ones that do not. So an absent token
+ * costs terrain and the quality of that fallback, not the view.
  *
  * @param env - Environment record (defaults to the runtime environment);
  *   injectable for testing.

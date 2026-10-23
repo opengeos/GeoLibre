@@ -1,5 +1,9 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { isFullViewportMapCanvas } from "./print-capture";
+// The subpath keeps this module loadable outside the browser (the package
+// barrel pulls in MapLibre's stylesheet), which the recorder tests rely on.
+import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
+import i18next from "i18next";
+import { notify } from "./notify";
 
 /**
  * Records the live map to a video file by capturing the MapLibre canvas.
@@ -565,7 +569,7 @@ export async function rasterizeDomOverlays(
 }
 
 export interface RecordMapOptions {
-  map: MapLibreMap;
+  map: Pick<MapLibreMap, "getCanvas" | "getContainer">;
   /** Screen rectangle to capture, or null/omitted for the whole viewport. */
   region?: RecordRegion | null;
   /**
@@ -660,6 +664,7 @@ export async function recordMapCanvas({
       // (chunk 404, offline desktop build, blocked by an extension), fall back to
       // a canvas-only recording instead of failing the whole take.
       console.warn("Skipping map panel overlays; html2canvas-pro failed to load", err);
+      notify.warning(i18next.t("notifications.recordingOverlaysSkipped"));
     }
   }
   // Rasterization is async and can outlast a quick Stop; if the caller already

@@ -42,6 +42,35 @@ beforeEach(() => {
 });
 
 describe("createWeatherLayer", () => {
+  it("plays a map-less renderer's frames through the store without dirtying or undo entries", async () => {
+    const frames: WeatherFrame[] = [
+      { tileUrl: "https://example.test/a/{z}/{x}/{y}.png", label: "a", metadata: { title: "A" } },
+      { tileUrl: "https://example.test/b/{z}/{x}/{y}.png", label: "b", metadata: { title: "B" } },
+    ];
+    const c = createWeatherLayer(makeConfig({ frameMs: 20, loadFrames: async () => frames }));
+    assert.equal(await c.activate(app), true);
+    // Let the activation's history window close, so the stop is its own entry.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    useAppStore.setState({ isDirty: false });
+    useAppStore.temporal.getState().clear();
+    const tile = () => (ownedLayers()[0]?.source.tiles as string[] | undefined)?.[0];
+    const before = tile();
+    c.togglePlaying();
+    // Exactly one tick: the resting frame differs from the start frame.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    // The ticks moved the layer without an edit to show for it.
+    assert.equal(useAppStore.getState().isDirty, false);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+    c.togglePlaying();
+    // Stopping records the resting frame as one edit, undoable to the start.
+    assert.notEqual(tile(), before);
+    assert.equal(useAppStore.getState().isDirty, true);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+    useAppStore.temporal.getState().undo();
+    assert.equal(tile(), before);
+    c.deactivate();
+  });
+
   it("adds one store layer on activate and removes it on deactivate", async () => {
     const c = createWeatherLayer(makeConfig());
     assert.equal(await c.activate(app), true);

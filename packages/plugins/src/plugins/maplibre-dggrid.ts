@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Polygon, Position } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getControlMap } from "./style-map";
 
 export const DGGRID_PLUGIN_ID = "maplibre-dggrid";
 
@@ -12,6 +13,9 @@ const LABEL_LAYER_ID = "geolibre-dggrid-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-dggrid-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-dggrid-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-dggrid-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-dggrid-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-dggrid-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-dggrid-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-dggrid-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-dggrid-parents-line";
 
@@ -173,7 +177,7 @@ export const DEFAULT_DGGRID_LABELS: DggridLabels = {
   selectedCell: "Selected cell",
   noSelection: "No cell selected",
   copyId: "Copy ID",
-  parent: "Parent(s)",
+  parent: "Parent",
   children: "Children",
   neighbors: "Neighbors",
   center: "Center",
@@ -182,7 +186,7 @@ export const DEFAULT_DGGRID_LABELS: DggridLabels = {
   exportGeoJson: "Export GeoJSON",
   exportCsv: "Export CSV",
   includeNeighbors: "Include selected cell neighbors",
-  includeParents: "Include selected cell parent(s)",
+  includeParents: "Include selected cell parent",
 };
 
 let labels: DggridLabels = { ...DEFAULT_DGGRID_LABELS };
@@ -200,7 +204,10 @@ let panelContainer: HTMLElement | null = null;
 let selectedCell: string | null = null;
 let selectedResolution = 0;
 
-let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", features: [] };
+let currentGrid: FeatureCollection<Polygon> = {
+  type: "FeatureCollection",
+  features: [],
+};
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
@@ -738,6 +745,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -745,7 +754,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -758,13 +767,19 @@ function ensureLayers(): void {
       id: FILL_LAYER_ID,
       type: "fill",
       source: SOURCE_ID,
-      paint: { "fill-color": settings.fillColor, "fill-opacity": settings.fillOpacity },
+      paint: {
+        "fill-color": settings.fillColor,
+        "fill-opacity": settings.fillOpacity,
+      },
     });
     map.addLayer({
       id: LINE_LAYER_ID,
       type: "line",
       source: SOURCE_ID,
-      paint: { "line-color": settings.lineColor, "line-width": settings.lineWidth },
+      paint: {
+        "line-color": settings.lineColor,
+        "line-width": settings.lineWidth,
+      },
     });
     map.addLayer({
       id: LABEL_LAYER_ID,
@@ -784,8 +799,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected cell stays on top of its
-  // (larger, overlapping) parents.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // cell stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -796,8 +811,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -889,33 +926,27 @@ function updatePanelStatus(): void {
 }
 
 /**
- * The cell plus its edge neighbors at the same resolution. The engine has no
- * neighbor lookup for TRIANGLE grids, so the cell stands alone there.
+ * Edge neighbors at the same resolution (excludes the cell itself). The engine
+ * has no neighbor lookup for TRIANGLE grids, so the result is empty there.
  */
 function neighborCells(cell: string): string[] {
-  if (!dggs || settings.topology === "TRIANGLE") return [cell];
-  const ids = new Set<string>([cell]);
+  if (!dggs || settings.topology === "TRIANGLE") return [];
+  const ids = new Set<string>();
   for (const neighbor of dggs.sequenceNumNeighbors([BigInt(cell)], selectedResolution)[0] ?? []) {
     ids.add(neighbor.toString());
   }
+  ids.delete(cell);
   return [...ids];
 }
 
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
-}
-
 /**
- * Every resolution r-1 cell the selected cell overlaps. Aperture-4 hexagons
- * do not nest exactly, so a boundary cell can touch several coarser cells;
- * webdggrid's sequenceNumAllParents returns them all, canonical parent first.
+ * The canonical parent at resolution r-1, or none for a resolution-0 cell.
+ * Uses webdggrid `sequenceNumParent` — one unique parent per cell.
  */
 function parentCells(cell: string): string[] {
   if (!dggs || selectedResolution <= 0) return [];
-  return (dggs.sequenceNumAllParents([BigInt(cell)], selectedResolution)[0] ?? []).map((id) =>
-    id.toString(),
-  );
+  const [parent] = dggs.sequenceNumParent([BigInt(cell)], selectedResolution);
+  return parent === undefined ? [] : [parent.toString()];
 }
 
 function updateSelectedSource(): void {
@@ -923,7 +954,17 @@ function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map((cell) => dggridCellFeature(dggs!, cell, selectedResolution)),
+    features: selectedCell ? [dggridCellFeature(dggs, selectedCell, selectedResolution)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map((cell) =>
+            dggridCellFeature(dggs!, cell, selectedResolution),
+          )
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -1168,17 +1209,14 @@ function renderPanel(container: HTMLElement): void {
       dd.textContent = value;
       dd.style.margin = "0";
       dd.style.overflowWrap = "anywhere";
-      // Multi-line values (one overlapping parent per line) keep their breaks.
-      dd.style.whiteSpace = "pre-line";
       details.append(dt, dd);
     };
     addDetail("ID", selectedCell);
     addDetail(labels.resolution, String(selectedResolution));
     addDetail(labels.center, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
     if (selectedResolution > 0) {
-      // Every overlapping r-1 cell (canonical parent first), matching the
-      // dashed parent outlines on the map.
-      addDetail(labels.parent, parentCells(selectedCell).join("\n"));
+      const [parent] = parentCells(selectedCell);
+      if (parent) addDetail(labels.parent, parent);
     }
     if (selectedResolution < MAX_DGGRID_RESOLUTION) {
       addDetail(
@@ -1187,7 +1225,7 @@ function renderPanel(container: HTMLElement): void {
       );
     }
     if (settings.topology !== "TRIANGLE") {
-      addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
+      addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     }
     section.appendChild(details);
   } else {
@@ -1261,8 +1299,13 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
   id: DGGRID_PLUGIN_ID,
   name: "DGGRID",
   version: "1.0.0",
+  // Draws the grid through the Style Spec surface both 2D engines share
+  // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
+  // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
+  // and the Cesium globe the host draws the same GeoJSON layers natively.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: async (app) => {
-    const activeMap = app.getMap?.();
+    const activeMap = getControlMap(app);
     if (!activeMap) return false;
     const generation = (activationGeneration += 1);
     // Await WASM before mutating map/panel state so a deactivate during the
@@ -1322,7 +1365,14 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
     if (map && clickHandler) map.off("click", clickHandler);
     unsubscribeBasemap?.();
     unregisterPanel?.();
-    if (map) removeLayers(map);
+    // A renderer swap deactivates this plugin after the old map was removed;
+    // a removed mapbox-gl map throws from getLayer (its style is gone), and
+    // there is nothing left to remove.
+    try {
+      if (map) removeLayers(map);
+    } catch {
+      // Already torn down with the map.
+    }
     moveHandler = null;
     clickHandler = null;
     unsubscribeBasemap = null;

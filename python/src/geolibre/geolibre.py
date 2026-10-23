@@ -12,20 +12,30 @@ import math
 import os
 import pathlib
 import re
+import tempfile
 import time
+import urllib.parse
 import uuid
 import warnings
-from typing import Any, Callable
+import weakref
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 from urllib.error import URLError
 
 import anywidget
 import traitlets
 
+from . import authoring as _authoring
 from . import project as _project
-from ._server import app_port, register_local_file, serve_app
+from ._server import (
+    app_port,
+    register_local_file,
+    register_raster_tiles,
+    serve_app,
+    unregister_local_file,
+)
 from .basemaps import resolve_basemap
-from .color_ramp import graduated_stops
-from .legends import get_builtin_legend
+from .polyline import polyline_to_geojson
 
 _HERE = pathlib.Path(__file__).parent
 _STATIC_APP = _HERE / "static" / "app"
@@ -35,21 +45,63 @@ _STATIC_APP = _HERE / "static" / "app"
 _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
 
-# Accepted values for the split-map / legend / colorbar helpers, validated up
-# front so a typo surfaces in Python instead of silently falling back in the app.
-# Reuse the canonical corner set from project.py so the two cannot drift.
-_VALID_CONTROL_POSITIONS = _project.CONTROL_POSITIONS
-_VALID_ORIENTATIONS = frozenset({"vertical", "horizontal"})
-_VALID_LEGEND_SHAPES = frozenset({"square", "circle", "line"})
+#: Toolbar panels :meth:`Map.show_control` opens. Mirrors ``SCRIPTABLE_PANELS``
+#: in ``apps/geolibre-desktop/src/lib/scripting/ui-controls.ts``.
+MAP_PANELS = frozenset({"bookmark", "search", "measure", "minimap", "print"})
+
+#: Built-in map controls :meth:`Map.show_control` shows or hides. Mirrors
+#: ``SCRIPTABLE_MAP_CONTROLS`` in the same module.
+MAP_CONTROLS = frozenset(
+    {"navigation", "fullscreen", "compass", "geolocate", "globe", "scale", "attribution", "logo"}
+)
+
+_VALID_PROJECTIONS = frozenset({"globe", "mercator"})
 
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
 # same 50 MB ceiling applies to a fetched response or a local file.
 _MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
 
+# ``ee.FeatureCollection.style()`` is declared with explicit keyword parameters,
+# not ``**kwargs``, so an image-shaped ``vis_params`` (``min``/``max``/``palette``)
+# would reach it as ``TypeError: style() got an unexpected keyword argument`` --
+# indistinguishable, to the caller, from the ``TypeError`` add_ee_layer raises for
+# an unsupported object. Validate against the accepted keys instead.
+_EE_VECTOR_STYLE_KEYS = frozenset(
+    {
+        "color",
+        "pointSize",
+        "pointShape",
+        "width",
+        "fillColor",
+        "styleProperty",
+        "neighborhood",
+        "lineType",
+    }
+)
+
 # Column name for CSV fields beyond the header row. csv.DictReader's default
 # restkey is ``None``, which would put a non-string key in the feature
 # properties and break JSON serialization on the way to the widget.
 _CSV_RESTKEY = "_extra"
+
+
+def _remove_temporary_rasters(paths: list[pathlib.Path]) -> None:
+    """Delete GeoTIFFs materialized from in-memory xarray objects.
+
+    Args:
+        paths: Paths to remove. The list is cleared in place so the same
+            object can be shared with a ``weakref.finalize`` safety net.
+    """
+    for path in paths:
+        # Drop the static server's token as well: each materialization writes to
+        # a fresh temporary path, so the registry would otherwise keep an entry
+        # per call for the life of the kernel.
+        unregister_local_file(path)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - best-effort cleanup at exit
+            pass
+    paths.clear()
 
 
 def _read_local_vector(
@@ -165,7 +217,7 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
     loaded = true;
     frame.contentWindow.postMessage(
       {{ type: "geolibre:load-project", project: project, seq: 1 }},
-      "*"
+      {app_origin}
     );
   }}
   // The app posts "geolibre:ready" once mounted; reply with the project. Guard
@@ -180,6 +232,118 @@ _HTML_EXPORT_TEMPLATE = """<!doctype html>
 </body>
 </html>
 """
+
+# Where a standalone export loads the app from by default: the hosted viewer, so
+# the exported file stays portable once the kernel is gone.
+DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
+
+
+def render_project_html(
+    project: dict[str, Any],
+    *,
+    title: str = "GeoLibre Map",
+    width: str = "100%",
+    height: str = "800px",
+    app_url: str | None = None,
+    layout: str | None = None,
+    theme: str | None = None,
+) -> str:
+    """Render a project dict as a standalone HTML page.
+
+    The page embeds the GeoLibre app in an ``<iframe>`` and injects the project
+    into it over the same ``postMessage`` bridge the widget uses, so it renders
+    the map as configured. Credentials are stripped from the inlined project on
+    the way out, exactly as :meth:`Map.to_html` does.
+
+    This is the widget-free half of :meth:`Map.to_html`; the MCP server calls it
+    to export a project that was never attached to a live map.
+
+    Args:
+        project: The project dict to embed.
+        title: The exported page's ``<title>``.
+        width: CSS width of the embedded map (e.g. ``"100%"`` or ``"800px"``).
+        height: CSS height of the embedded map.
+        app_url: Base URL of the GeoLibre app to embed. Defaults to
+            :data:`DEFAULT_HTML_APP_URL`.
+        layout: The app chrome to embed with: ``"embed"``, ``"full"``, or
+            ``"maponly"``, as for :class:`Map`. ``None`` leaves the app's
+            default chrome.
+        theme: ``"light"`` or ``"dark"``; ``None`` follows the viewer's OS.
+
+    Returns:
+        The HTML document as a string.
+
+    Raises:
+        ValueError: If ``width`` or ``height`` is not a plain CSS dimension,
+            ``app_url`` is not an ``http``/``https`` URL, or ``layout`` or
+            ``theme`` is not a recognized value.
+    """
+    base_url = app_url or DEFAULT_HTML_APP_URL
+    # The project is posted into the frame, so the app URL decides where it
+    # lands. Pin it to http(s) with a real host, and post to that exact origin
+    # rather than "*": the MCP server takes app_url straight from a tool call,
+    # and a model can pick an argument up from content it is reading. A
+    # redacted project still carries inlined features and layer URLs.
+    origin = urllib.parse.urlsplit(base_url)
+    if origin.scheme not in ("http", "https") or not origin.netloc:
+        raise ValueError(f"to_html: app_url must be an http(s) URL, got {base_url!r}")
+    app_origin = f"{origin.scheme}://{origin.netloc}"
+    # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
+    # parameter into the query string *before* any URL fragment: a "#..."
+    # fragment would otherwise swallow a trailing "?embed=1" (browsers read it
+    # as part of the fragment), so the app never sees the flag. partition keeps
+    # the fragment and its "#" intact when present and yields "" when absent.
+    # The chrome flags ride along the same way, matching the query the widget
+    # front-end builds, so the export looks like the notebook map (#2764).
+    if layout is not None and layout not in _VALID_LAYOUTS:
+        raise ValueError(f"to_html: layout must be one of {sorted(_VALID_LAYOUTS)}, got {layout!r}")
+    if theme is not None and theme not in _VALID_THEMES:
+        raise ValueError(f"to_html: theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}")
+    flags = ["embed=1"]
+    if layout == "maponly":
+        flags.append("maponly=1")
+    elif layout == "embed":
+        flags.append("layout=embed")
+    if theme is not None:
+        flags.append(f"theme={theme}")
+    base, hash_sep, fragment = base_url.partition("#")
+    # A layout/theme key the app_url already sets wins, like the in-app
+    # exporter's flags. embed=1 is forced: without embed mode the app never
+    # accepts the posted project, and the app reads only the first "embed", so
+    # an app_url "embed" that does not enable it is dropped rather than kept.
+    path, query_sep, query = base.partition("?")
+    kept = [
+        pair
+        for pair in query.split("&")
+        if pair and not (pair.split("=", 1)[0] == "embed" and pair not in ("embed=1", "embed=true"))
+    ]
+    base = f"{path}{query_sep if kept else ''}{'&'.join(kept)}"
+    preset = {pair.split("=", 1)[0] for pair in kept}
+    flags = [flag for flag in flags if flag.split("=", 1)[0] not in preset]
+    separator = "&" if "?" in base else "?"
+    query = "&".join(flags)
+    iframe_src = f"{base}{separator if query else ''}{query}{hash_sep}{fragment}"
+    # width/height land inside a <style> rule; _html_escape does not neutralise
+    # CSS metacharacters like "}" or ";", so validate them as plain CSS
+    # dimensions to keep a stray value from closing the rule and injecting CSS.
+    if not _CSS_DIMENSION_RE.match(width):
+        raise ValueError(f"to_html: invalid CSS width value {width!r}")
+    if not _CSS_DIMENSION_RE.match(height):
+        raise ValueError(f"to_html: invalid CSS height value {height!r}")
+    # Inline the project inside a JSON <script> block and escape "<" so a
+    # property value can never break out of the script element; "<" is valid
+    # JSON that JSON.parse restores to "<".
+    project_json = json.dumps(_project.redact_credentials(project)).replace("<", "\\u003c")
+    return _HTML_EXPORT_TEMPLATE.format(
+        title=_html_escape(title),
+        width=_html_escape(width),
+        height=_html_escape(height),
+        iframe_src=_html_escape(iframe_src),
+        project_json=project_json,
+        # json.dumps supplies the surrounding quotes, so the template field is
+        # the whole JS string literal.
+        app_origin=json.dumps(app_origin),
+    )
 
 
 class Map(anywidget.AnyWidget):
@@ -226,6 +390,12 @@ class Map(anywidget.AnyWidget):
     _seq = traitlets.Int(0).tag(sync=True)
     # Last error reported by the app (e.g. an invalid project).
     error = traitlets.Unicode("").tag(sync=True)
+    # UI state replayed into the app whenever it loads: ``identify`` (a layer
+    # id, a list of layer ids, "all", or None) and ``controls`` (a control or
+    # panel name -> shown). Set through set_identify/show_control. The live
+    # project does not carry it; exports write it as the project's
+    # ``interaction`` block (see _project_with_ui).
+    _ui = traitlets.Dict().tag(sync=True)
 
     def __init__(
         self,
@@ -233,6 +403,7 @@ class Map(anywidget.AnyWidget):
         zoom: float | None = None,
         *,
         basemap: str | None = None,
+        renderer: str = "maplibre",
         height: str = "800px",
         layout: str = "embed",
         theme: str = "light",
@@ -245,6 +416,7 @@ class Map(anywidget.AnyWidget):
             center: Initial ``[lng, lat]`` map center.
             zoom: Initial zoom level.
             basemap: A basemap name or MapLibre style URL for the background.
+            renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or ``"arcgis"``.
             height: CSS height of the widget (e.g. ``"800px"``).
             layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
                 ``"maponly"`` (map without chrome).
@@ -284,6 +456,7 @@ class Map(anywidget.AnyWidget):
             center=center,
             zoom=zoom,
             basemap_url=resolve_basemap(basemap) if basemap else None,
+            renderer=renderer,
         )
         # Scripting RPC state. Command/result and event traffic ride anywidget's
         # custom message channel (self.send / on_msg), kept off the project trait
@@ -292,7 +465,26 @@ class Map(anywidget.AnyWidget):
         # name to its registered callbacks.
         self._pending: dict[str, dict[str, Any]] = {}
         self._event_handlers: dict[str, list[Callable[[Any], None]]] = {}
+        # GeoTIFFs materialized from in-memory xarray objects must remain on
+        # disk while the widget is alive because the app reads them lazily via
+        # HTTP Range requests.
+        self._temporary_rasters: list[pathlib.Path] = []
+        # ``close()`` is easy to forget, so the same list is handed to a
+        # finalizer, which weakref runs when the Map is collected and, because
+        # ipywidgets keeps widgets referenced until then, at interpreter exit.
+        # ``close()`` clears the list in place rather than rebinding it, so this
+        # finalizer stays valid for anything materialized afterwards.
+        self._raster_cleanup = weakref.finalize(
+            self, _remove_temporary_rasters, self._temporary_rasters
+        )
         self.on_msg(self._on_custom_msg)
+
+    def close(self) -> None:
+        """Close the widget and remove rasters materialized from xarray data."""
+        try:
+            super().close()
+        finally:
+            _remove_temporary_rasters(getattr(self, "_temporary_rasters", []))
 
     @staticmethod
     def _running_on_colab() -> bool:
@@ -770,6 +962,62 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
+    def run_model_builder(
+        self,
+        graph: dict[str, Any],
+        *,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Run a serialized GeoLibre Model Builder graph in the displayed app.
+
+        Sending the complete graph in one request also makes copied Model
+        Builder scripts portable to JupyterLite, whose browser kernel cannot
+        synchronously retrieve each intermediate layer id.
+        """
+        return self.request("runModelBuilder", {"graph": graph}, timeout=timeout)
+
+    def list_whitebox_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
+        """List the bundled Whitebox/GeoLibre WASM tools and their parameters.
+
+        The catalog is resolved by the displayed app because the same browser
+        runtime executes the tools. Display the map before calling this method.
+        """
+        return self.request("listWhiteboxTools", timeout=timeout)
+
+    def run_whitebox_tool(
+        self,
+        tool_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Run a bundled Whitebox tool locally in the browser via WASM.
+
+        Dataset parameters may be layer ids or :class:`Layer` handles. Vector
+        and raster outputs are added to the map automatically; a tool that
+        writes a plain file instead (a CSV, GeoParquet, PMTiles, …) reports it
+        in ``logs``, since only the Processing panel can download one.
+
+        Args:
+            tool_id: An id from :meth:`list_whitebox_tools`, such as ``"slope"``.
+            parameters: Tool parameters. Pass a :class:`Layer` handle for an
+                input-layer parameter, or its id as a string.
+            timeout: Seconds to wait; terrain and LiDAR tools may need several
+                minutes for large inputs.
+
+        Returns:
+            ``{"logs": [...], "resultLayerIds": [...]}``.
+        """
+        resolved = {
+            key: self._resolve_layer(value).id if isinstance(value, Layer) else value
+            for key, value in (parameters or {}).items()
+        }
+        return self.request(
+            "runWhiteboxTool",
+            {"id": str(tool_id), "params": resolved},
+            timeout=timeout,
+        )
+
     def to_image(self, path: str | None = None, *, timeout: float = 30.0) -> bytes | None:
         """Capture the current map view as a PNG.
 
@@ -793,11 +1041,6 @@ class Map(anywidget.AnyWidget):
             return None
         return png
 
-    # Hosted GeoLibre viewer used as the default to_html() app, so an exported
-    # file is portable (loads the app over the network instead of the
-    # session-bound localhost bundle).
-    _DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
-
     def to_html(
         self,
         path: str | None = None,
@@ -811,7 +1054,8 @@ class Map(anywidget.AnyWidget):
 
         The page embeds the GeoLibre app in an ``<iframe>`` and injects the
         current project into it over the same ``postMessage`` bridge the widget
-        uses, so it renders the map exactly as configured here. Unlike
+        uses, so it renders the map exactly as configured here, in this map's
+        :attr:`layout` and :attr:`theme`. Unlike
         :meth:`to_image` this needs no running kernel to view; by default it
         loads the hosted GeoLibre app over the network so the file stays
         portable.
@@ -837,34 +1081,14 @@ class Map(anywidget.AnyWidget):
             exported page cannot reach them once the kernel stops. Use hosted
             URLs or tile sources for a fully self-contained export.
         """
-        base_url = app_url or self._DEFAULT_HTML_APP_URL
-        # Force the embed bridge on (isEmbedded() honours ?embed=1). Insert the
-        # parameter into the query string *before* any URL fragment: a "#..."
-        # fragment would otherwise swallow a trailing "?embed=1" (browsers read
-        # it as part of the fragment), so the app never sees the flag. partition
-        # keeps the fragment and its "#" intact when present and yields "" when
-        # absent.
-        base, hash_sep, fragment = base_url.partition("#")
-        separator = "&" if "?" in base else "?"
-        iframe_src = f"{base}{separator}embed=1{hash_sep}{fragment}"
-        # width/height land inside a <style> rule; _html_escape does not neutralise
-        # CSS metacharacters like "}" or ";", so validate them as plain CSS
-        # dimensions to keep a stray value from closing the rule and injecting CSS.
-        frame_height = height or self.height
-        if not _CSS_DIMENSION_RE.match(width):
-            raise ValueError(f"to_html: invalid CSS width value {width!r}")
-        if not _CSS_DIMENSION_RE.match(frame_height):
-            raise ValueError(f"to_html: invalid CSS height value {frame_height!r}")
-        # Inline the project inside a JSON <script> block and escape "<" so a
-        # property value can never break out of the script element; "<" is
-        # valid JSON that JSON.parse restores to "<".
-        project_json = json.dumps(_project.redact_credentials(self.project)).replace("<", "\\u003c")
-        html = _HTML_EXPORT_TEMPLATE.format(
-            title=_html_escape(title),
-            width=_html_escape(width),
-            height=_html_escape(frame_height),
-            iframe_src=_html_escape(iframe_src),
-            project_json=project_json,
+        html = render_project_html(
+            self._project_with_ui(copy.deepcopy(self.project)),
+            title=title,
+            width=width,
+            height=height or self.height,
+            app_url=app_url,
+            layout=self.layout,
+            theme=self.theme,
         )
         if path is not None:
             out = pathlib.Path(path).expanduser()
@@ -916,13 +1140,12 @@ class Map(anywidget.AnyWidget):
             # Access verifies that a stale handle has not been removed.
             layer._layer()
             return layer
-        try:
-            return self.get_layer(str(layer))
-        except ValueError:
-            match = self.find_layer(str(layer))
-            if match is not None:
-                return match
-        raise ValueError(f"No layer with id or name {layer!r}")
+        # Share the authoring resolver so scripting and the MCP tools agree on
+        # what a reference means: an id wins outright, then an exact name, then a
+        # case-insensitive one, and a name several layers share is an error rather
+        # than an arbitrary pick. `find_layer` returns the first name match by
+        # design (leafmap compatibility), so it is not the resolver for mutations.
+        return Layer(self, str(_authoring.find_layer(self.project, str(layer))["id"]))
 
     def set_layer_visibility(self, layer: str | Layer, visible: bool = True) -> None:
         """Show or hide a layer addressed by id, name, or layer handle."""
@@ -931,6 +1154,549 @@ class Map(anywidget.AnyWidget):
     def set_layer_opacity(self, layer: str | Layer, opacity: float) -> None:
         """Set a layer's opacity in ``[0, 1]``."""
         self._resolve_layer(layer).opacity = opacity
+
+    def set_popup(
+        self,
+        layer: str | Layer,
+        fields: Any = None,
+        *,
+        click: bool | None = None,
+        hover: bool | None = None,
+        title: str | None = None,
+        title_expression: str | None = None,
+        body_expression: str | None = None,
+        show_feature_id: bool | None = None,
+        max_width: int | None = None,
+        image_height: int | None = None,
+        tooltip: Any = None,
+        merge: bool = False,
+    ) -> dict[str, Any]:
+        """Configure a layer's click popup (and, with ``tooltip``, its hover tip).
+
+        Without a config a layer shows its name and every visible property; a
+        config narrows, orders, relabels and formats those rows.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            fields: Property names and/or field mappings, in display order. A
+                mapping takes ``field`` plus any of ``label``, ``kind``
+                (``"auto"``, ``"text"``, ``"number"``, ``"date"``, ``"link"``,
+                ``"image"``), ``hover``, ``decimals``, ``thousands``,
+                ``date_format``, ``prefix``, ``suffix``, and ``link_label``.
+            click: ``False`` suppresses the click popup.
+            hover: ``True`` shows a hover tooltip built from the ``hover`` fields.
+            title: Property whose value titles the popup.
+            title_expression: MapLibre expression source producing the title.
+            body_expression: MapLibre expression source producing the body text.
+            show_feature_id: ``False`` drops the synthetic ``id`` row.
+            max_width: Widest the click popup may draw, in CSS pixels (288 to
+                1200). The viewport still caps it.
+            image_height: Tallest an ``"image"`` field's thumbnail may draw
+                inside the popup, in CSS pixels (40 to 1200). A thumbnail keeps
+                its aspect ratio, so raise ``max_width`` too for a landscape
+                photo to use the extra height.
+            tooltip: Hover shorthand -- a property name, a sequence of names,
+                ``True`` to flag every configured field, or ``False`` to turn
+                the tooltip off. The tooltip and the click popup share one
+                field list, so naming a tooltip field on a popup that had none
+                also narrows the click popup to it; pass ``fields`` too to keep
+                the click popup full.
+            merge: Merge into the layer's existing popup config rather than
+                replacing it.
+
+        Returns:
+            The layer's popup config after the change.
+
+        Example:
+            >>> m.set_popup(
+            ...     "Sites",
+            ...     [
+            ...         {"field": "name", "label": "Site"},
+            ...         {"field": "photo", "kind": "image", "label": "Photo"},
+            ...         {"field": "url", "kind": "link", "link_label": "Details"},
+            ...         {"field": "pop", "kind": "number", "thousands": True},
+            ...     ],
+            ...     title="name",
+            ...     tooltip="name",
+            ...     max_width=480,
+            ...     image_height=320,
+            ... )
+        """
+        handle = self._resolve_layer(layer)
+        # Delegate rather than re-deriving the merge: authoring.set_popup is the
+        # one implementation the MCP server uses too, so the two cannot drift.
+        self._update_project(
+            lambda project: _authoring.set_popup(
+                project,
+                handle.id,
+                fields,
+                click=click,
+                hover=hover,
+                title=title,
+                title_expression=title_expression,
+                body_expression=body_expression,
+                show_feature_id=show_feature_id,
+                max_width=max_width,
+                image_height=image_height,
+                tooltip=tooltip,
+                merge=merge,
+            )
+        )
+        return handle.popup
+
+    def set_tooltip(self, layer: str | Layer, fields: Any = True) -> dict[str, Any]:
+        """Show a hover tooltip on a layer, built from ``fields``.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            fields: A property name, a sequence of names, ``True`` to use every
+                field the layer's popup already configures, or ``False`` to
+                turn the tooltip off. On a layer whose popup configures no
+                fields, naming one here also narrows the click popup to it --
+                see :meth:`set_popup`.
+
+        Returns:
+            The layer's popup config after the change.
+        """
+        return self.set_popup(layer, tooltip=fields, merge=True)
+
+    def clear_popup(self, layer: str | Layer) -> None:
+        """Drop a layer's popup config, restoring the default popup."""
+        handle = self._resolve_layer(layer)
+        self._update_project(lambda project: _authoring.clear_popup(project, handle.id))
+
+    def set_layer_metadata(
+        self, layer: str | Layer, *, merge: bool = False, **fields: Any
+    ) -> dict[str, Any] | None:
+        """Set a layer's descriptive (catalog) metadata.
+
+        The app shows and edits it in the layer's Metadata dialog, exports it
+        as a STAC Item, and writes it into GeoParquet exports.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            merge: Keep existing fields that ``fields`` does not name.
+            **fields: Any of ``title``, ``abstract``, ``keywords`` (list or
+                comma-separated string), ``license`` (SPDX id or free text),
+                ``attribution``, ``contact`` (mapping with ``name``,
+                ``email``, ``organization``), ``lineage``,
+                ``temporal_extent`` (``(start, end)`` ISO 8601 dates), and
+                ``links`` (URLs or mappings with ``href``, ``rel``, ``title``).
+
+        Returns:
+            The layer's metadata block after the change, or ``None`` when empty.
+
+        Raises:
+            ValueError: If a value fails validation (email, dates, URLs).
+
+        Example:
+            >>> m.set_layer_metadata(
+            ...     "Rivers",
+            ...     title="Rivers of Tennessee",
+            ...     keywords=["hydrology", "rivers"],
+            ...     license="CC-BY-4.0",
+            ...     contact={"name": "Ada", "email": "ada@example.org"},
+            ...     temporal_extent=("2019-01-01", "2019-12-31"),
+            ... )
+        """
+        handle = self._resolve_layer(layer)
+        self._update_project(
+            lambda project: _authoring.set_layer_metadata(project, handle.id, merge=merge, **fields)
+        )
+        return handle.descriptive_metadata or None
+
+    def clear_layer_metadata(self, layer: str | Layer) -> None:
+        """Drop a layer's descriptive metadata."""
+        handle = self._resolve_layer(layer)
+        self._update_project(lambda project: _authoring.clear_layer_metadata(project, handle.id))
+
+    def set_layer_filter(self, layer: str | Layer, expression: Any) -> None:
+        """Hide a layer's features that do not match a boolean expression.
+
+        Writes the layer's saved ``filterExpression`` -- the same filter the
+        app's **Select by Expression -> Filter layer** creates. The data is
+        untouched; non-matching features are just not drawn.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            expression: A boolean MapLibre expression, as a list or a JSON
+                string, e.g. ``[">=", ["get", "population"], 100000]``.
+                ``None`` clears the filter.
+
+        Example:
+            >>> m.set_layer_filter("Cities", ["==", ["get", "state"], "TN"])
+        """
+        handle = self._resolve_layer(layer)
+        self._update_project(
+            lambda project: _authoring.set_layer_filter(project, handle.id, expression)
+        )
+
+    def set_labels(
+        self,
+        layer: str | Layer,
+        field: str | None = None,
+        *,
+        expression: Any = None,
+        enabled: bool | None = None,
+        **options: Any,
+    ) -> dict[str, Any]:
+        """Label a vector layer's features from an attribute or an expression.
+
+        Options left out keep the layer's current label settings.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            field: Property whose value becomes the label text.
+            expression: MapLibre expression for the label text, overriding
+                ``field`` (e.g. ``["concat", ["get", "name"], " ", ["get",
+                "pop"]]``).
+            enabled: ``False`` hides the labels but keeps their settings;
+                omitted, they keep their current state (on for a new layer).
+            **options: ``placement`` (``"point"``/``"line"``), ``size``,
+                ``color``, ``halo_color``, ``halo_width``, ``min_zoom``,
+                ``max_zoom``, ``allow_overlap``, ``anchor``, ``offset_x``,
+                ``offset_y``, ``rotation``, ``max_width``, ``transform``
+                (``"none"``/``"uppercase"``/``"lowercase"``),
+                ``number_format``, ``number_decimals``, ``number_locale``,
+                ``dedupe`` (``"off"``/``"unique"``/``"concatenate"``), and the
+                data-defined ``size_expression``, ``color_expression``,
+                ``opacity_expression``, ``visibility_expression``,
+                ``priority_expression``.
+
+        Returns:
+            The layer's labels object after the change.
+
+        Example:
+            >>> m.set_labels("Cities", "name", size=14, halo_width=2, anchor="top")
+        """
+        handle = self._resolve_layer(layer)
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.set_labels(
+                    project, handle.id, field, expression=expression, enabled=enabled, **options
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def set_plugin_state(
+        self,
+        plugin_id: str,
+        state: Any = None,
+        *,
+        position: str | None = None,
+        activate: bool = True,
+        allow_unknown: bool = False,
+        clear: bool = False,
+    ) -> dict[str, Any]:
+        """Store a plugin's saved state in the project, as the app saves it.
+
+        Each plugin reads its own state shape when the project opens (the
+        Time Slider's timeline config, a grid plugin's resolution, ...). Use
+        :meth:`add_swipe`, :meth:`add_legend`, and :meth:`add_colorbar` for
+        those controls; they build validated state.
+
+        Args:
+            plugin_id: A built-in plugin id from
+                ``geolibre.project.PLUGIN_STATE_IDS``, or an external plugin's
+                id with ``allow_unknown=True``.
+            state: The plugin's settings, as plain JSON. ``None`` keeps the
+                stored settings (to change only ``position``/``activate``).
+            position: Optional control corner (``"top-left"``, ...).
+            activate: Start the plugin active when the project opens.
+            allow_unknown: Accept an id that is not a built-in plugin.
+            clear: Remove the stored settings only, leaving activation and
+                position as they were.
+
+        Returns:
+            ``{"pluginId", "active", "position", "state"}`` as stored.
+        """
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.set_plugin_state(
+                    project,
+                    plugin_id,
+                    state,
+                    position=position,
+                    activate=activate,
+                    allow_unknown=allow_unknown,
+                    clear=clear,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def set_story_map(self, **settings: Any) -> dict[str, Any]:
+        """Set the story map's title block and presentation settings.
+
+        Args:
+            **settings: ``title``, ``subtitle``, ``byline``, ``footer``,
+                ``theme`` (``"light"``/``"dark"``), ``show_markers``,
+                ``marker_color``, ``inset``, ``inset_position``,
+                ``hide_chapter_nav``, ``start_slide`` and ``end_slide``
+                (``"none"``, ``"blank"``, ``"black"``, ``"global"``,
+                ``"adjacent"``).
+
+        Returns:
+            The story settings with each chapter's id and title.
+        """
+        result: dict[str, Any] = {}
+        self._update_project(lambda p: result.update(_authoring.set_story_map(p, **settings)))
+        return result
+
+    def add_story_chapter(
+        self,
+        title: str,
+        *,
+        description: str = "",
+        center: tuple[float, float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        image: str | None = None,
+        alignment: str = "left",
+        hidden: bool = False,
+        map_animation: str = "flyTo",
+        rotate_animation: bool = False,
+        on_enter: list[dict[str, Any]] | None = None,
+        on_exit: list[dict[str, Any]] | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a chapter to the map's story (Project -> Story Map).
+
+        A camera value left out is taken from the map's current saved view.
+
+        Args:
+            title: Chapter heading.
+            description: Chapter body text.
+            center: Camera target ``(lng, lat)``.
+            zoom: Camera zoom, 0-24.
+            pitch: Camera tilt in degrees, 0-85.
+            bearing: Camera rotation in degrees.
+            image: Optional image URL shown in the chapter panel.
+            alignment: ``"left"``, ``"center"``, ``"right"``, or ``"full"``.
+            hidden: Hide the text panel while still moving the map.
+            map_animation: ``"flyTo"``, ``"easeTo"``, or ``"jumpTo"``.
+            rotate_animation: Slowly rotate the camera once the move settles.
+            on_enter: Layer opacity changes on entering the chapter, as
+                ``{"layer": <id, name or Layer>, "opacity": 0-1,
+                "duration": ms}`` entries.
+            on_exit: Layer opacity changes on leaving, in the same form.
+            index: Position to insert at; appended when omitted.
+
+        Returns:
+            The chapter that was added, including its ``id``.
+
+        Example:
+            >>> m.add_story_chapter("Downtown", center=(-83.92, 35.96), zoom=14,
+            ...                     description="Where it started.")
+        """
+
+        def _layer_refs(entries: Any) -> Any:
+            if not isinstance(entries, (list, tuple)):
+                return entries
+            return [
+                {**entry, "layer": entry["layer"].id}
+                if isinstance(entry, dict) and isinstance(entry.get("layer"), Layer)
+                else entry
+                for entry in entries
+            ]
+
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.add_story_chapter(
+                    project,
+                    title,
+                    description=description,
+                    center=center,
+                    zoom=zoom,
+                    pitch=pitch,
+                    bearing=bearing,
+                    image=image,
+                    alignment=alignment,
+                    hidden=hidden,
+                    map_animation=map_animation,
+                    rotate_animation=rotate_animation,
+                    on_enter=_layer_refs(on_enter),
+                    on_exit=_layer_refs(on_exit),
+                    index=index,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def remove_story_chapter(self, chapter: str | int) -> None:
+        """Remove a story chapter by id, title, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_story_chapter(p, chapter))
+
+    def move_story_chapter(self, chapter: str | int, index: int) -> None:
+        """Move a story chapter (by id, title, or index) to a new position."""
+        self._update_project(lambda p: _authoring.move_story_chapter(p, chapter, index))
+
+    def add_bookmark(
+        self,
+        name: str,
+        *,
+        center: tuple[float, float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        folder: str | None = None,
+        visible_layers: list[str | Layer] | None = None,
+    ) -> dict[str, Any]:
+        """Add a saved map view to the Bookmarks panel (Controls -> Bookmarks).
+
+        Bookmarks are saved in the project, so they travel with the file. A
+        camera value left out is taken from the map's current saved view.
+
+        Args:
+            name: Bookmark name.
+            center: Camera target ``(lng, lat)``.
+            zoom: Camera zoom, 0-24.
+            pitch: Camera tilt in degrees, 0-85.
+            bearing: Camera rotation in degrees.
+            folder: A folder id or name to file it under; a new name creates
+                the folder.
+            visible_layers: Layers (ids, names, or handles) to show when the
+                bookmark is opened; the others are hidden. Omit to leave layer
+                visibility alone.
+
+        Returns:
+            The bookmark that was added, including its ``id``.
+
+        Example:
+            >>> m.add_bookmark("Downtown", center=(-83.92, 35.96), zoom=14,
+            ...                folder="Neighborhoods")
+        """
+        layer_refs = (
+            [layer.id if isinstance(layer, Layer) else layer for layer in visible_layers]
+            if visible_layers is not None
+            else None
+        )
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.add_bookmark(
+                    project,
+                    name,
+                    center=center,
+                    zoom=zoom,
+                    pitch=pitch,
+                    bearing=bearing,
+                    folder=folder,
+                    visible_layers=layer_refs,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def remove_bookmark(self, bookmark: str | int) -> None:
+        """Remove a bookmark by id, name, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_bookmark(p, bookmark))
+
+    def rename_layer(self, layer: str | Layer, name: str) -> None:
+        """Rename a layer addressed by id, name, or handle.
+
+        Args:
+            layer: The layer to rename, by id, name, or handle.
+            name: The new display name, surrounding whitespace stripped.
+
+        Raises:
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
+        """
+        handle = self._resolve_layer(layer)
+        clean = self._clean_layer_name(name)
+        self._update_project(lambda p: _authoring.update_layer(p, handle.id, name=clean))
+
+    @staticmethod
+    def _clean_layer_name(name: str) -> str:
+        """Strip a display name and refuse a blank one.
+
+        `authoring.update_layer` guards only the reserved basemap pseudo-id, so
+        emptiness is checked here, matching the `name` setter. A layer named ""
+        or "   " renders as a blank row that cannot be referenced back by name.
+        """
+        clean = str(name).strip()
+        if not clean:
+            raise ValueError("name must be a non-empty string")
+        return clean
+
+    def move_layer(self, layer: str | Layer, index: int) -> None:
+        """Move a layer to ``index`` in the project's draw order.
+
+        Negative indices count from the end the way sequence *indexing* does, so
+        ``-1`` moves the layer to the last position (not ``list.insert(-1, ...)``,
+        which would leave it second to last). Out-of-range indices are clamped.
+        """
+        handle = self._resolve_layer(layer)
+
+        def _move(project: dict[str, Any]) -> None:
+            destination = int(index)
+            if destination < 0:
+                destination = max(0, len(project.get("layers", [])) + destination)
+            _authoring.update_layer(project, handle.id, index=destination)
+
+        self._update_project(_move)
+
+    def duplicate_layer(self, layer: str | Layer, *, name: str | None = None) -> str:
+        """Duplicate a layer, returning the new layer id.
+
+        The copy is appended to the draw order (drawn on top), the same place a
+        newly added layer lands, rather than next to its source. Use
+        :meth:`move_layer` to put it elsewhere.
+
+        Args:
+            layer: The layer to copy, by id, name, or handle.
+            name: Name for the copy, surrounding whitespace stripped; defaults
+                to the source name plus ``copy``.
+
+        Raises:
+            ValueError: If ``name`` is blank or the reserved basemap pseudo-id.
+        """
+        if name is not None:
+            name = self._clean_layer_name(name)
+        source = copy.deepcopy(self._resolve_layer(layer)._layer())
+        source["id"] = str(uuid.uuid4())
+        source["name"] = name if name is not None else f"{source.get('name', 'Layer')} copy"
+        # `_add_layer` appends raw; `authoring.add_layer` is the entry point that
+        # applies the reserved-name check `rename_layer` gets from `update_layer`.
+        self._update_project(lambda p: _authoring.add_layer(p, source))
+        return str(source["id"])
+
+    def show_layer(self, layer: str | Layer) -> None:
+        """Show a layer."""
+        self.set_layer_visibility(layer, True)
+
+    def hide_layer(self, layer: str | Layer) -> None:
+        """Hide a layer."""
+        self.set_layer_visibility(layer, False)
+
+    def layer_properties(self, layer: str | Layer) -> dict[str, list[Any]]:
+        """Return sampled property values for an inlined GeoJSON layer."""
+        return _authoring.layer_properties(self._resolve_layer(layer)._layer())
+
+    def column_values(self, layer: str | Layer, column: str) -> list[Any]:
+        """Return one property column from an inlined GeoJSON layer."""
+        return _authoring.column_values(self._resolve_layer(layer)._layer(), column)
+
+    def describe(self) -> dict[str, Any]:
+        """Return a compact, JSON-serializable project summary."""
+        # Copy the summary, not the project: `describe_project` hands back the
+        # live `mapView`, so the result needs detaching, but deep-copying the
+        # project first would duplicate every inlined GeoJSON blob only to
+        # report a feature count.
+        return copy.deepcopy(_authoring.describe_project(self.project))
 
     def _mutate_layer(self, layer_id: str, mutate: Callable[[dict[str, Any]], None]) -> None:
         """Apply an in-place mutation to one layer through the project trait."""
@@ -1004,6 +1770,31 @@ class Map(anywidget.AnyWidget):
             source_layer=layer,
             **style,
         )
+
+    def add_polyline(
+        self,
+        polyline: str | Sequence[str],
+        name: str = "Polyline",
+        *,
+        precision: int = 5,
+        unescape: bool = False,
+        **style: Any,
+    ) -> str:
+        """Add an Encoded Polyline layer.
+
+        Args:
+            polyline: A single polyline string (e.g. Google or Valhalla encoded)
+                or a list of polyline strings.
+            name: Layer display name.
+            precision: Decimal digits of precision (5 for Google/OSRM, 6 for Valhalla/Mapbox).
+            unescape: Whether to unescape double-escaped backslashes before decoding.
+            **style: Style overrides (e.g. ``lineColor="#ff0000"``, ``lineWidth=3``).
+
+        Returns:
+            The id of the added layer.
+        """
+        fc = polyline_to_geojson(polyline, precision=precision, unescape=unescape)
+        return self.add_geojson(fc, name=name, **style)
 
     # -- markers ---------------------------------------------------------
 
@@ -1087,24 +1878,58 @@ class Map(anywidget.AnyWidget):
         name: str = "Marker",
         *,
         properties: dict[str, Any] | None = None,
+        color: str | None = None,
+        opacity: float | None = None,
+        radius: float | None = None,
+        stroke_color: str | None = None,
+        stroke_width: float | None = None,
+        shape: str | None = None,
+        size: float | None = None,
+        icon: str | None = None,
         **style: Any,
     ) -> str:
         """Add a single point marker at ``[lng, lat]``.
 
-        The marker is a GeoJSON point layer (rendered as a circle); its
-        ``properties`` are shown when the point is clicked. Style overrides such
-        as ``fillColor`` and ``circleRadius`` control its appearance.
+        The marker is a GeoJSON point layer; its ``properties`` are shown in a
+        popup when the point is clicked while Identify is armed (see
+        :meth:`set_identify`). See :meth:`add_markers` for the symbology and
+        popup arguments, which behave identically here.
 
         Args:
             lng: Marker longitude.
             lat: Marker latitude.
             name: Layer display name.
-            properties: Optional feature properties (shown on click).
-            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+            properties: Optional feature properties (shown in the Identify popup).
+            color: Marker color.
+            opacity: Fill opacity in ``[0, 1]``.
+            radius: Circle radius in pixels.
+            stroke_color: Outline color.
+            stroke_width: Outline width in pixels.
+            shape: Marker shape; switches to sprite rendering.
+            size: Sprite size in pixels; switches to sprite rendering.
+            icon: SVG markup or data URL for a custom sprite.
+            **style: Further style overrides, plus ``popup=``/``tooltip=`` and
+                the ``popup_max_width=``/``popup_image_height=`` size
+                shorthands (see :meth:`add_markers`).
 
         Returns:
             The id of the added layer.
         """
+        # setdefault, not update: a raw style key passed alongside the named
+        # argument is the low-level escape hatch and keeps winning, which is
+        # also the precedence add_circle_markers had before these arguments
+        # existed.
+        for key, value in _project.marker_style(
+            color=color,
+            opacity=opacity,
+            radius=radius,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            shape=shape,
+            size=size,
+            icon=icon,
+        ).items():
+            style.setdefault(key, value)
         fc = {
             "type": "FeatureCollection",
             "features": [self._point_feature(lng, lat, properties)],
@@ -1115,9 +1940,24 @@ class Map(anywidget.AnyWidget):
         self,
         points: Any,
         name: str = "Markers",
+        *,
+        color: str | None = None,
+        opacity: float | None = None,
+        radius: float | None = None,
+        stroke_color: str | None = None,
+        stroke_width: float | None = None,
+        shape: str | None = None,
+        size: float | None = None,
+        icon: str | None = None,
         **style: Any,
     ) -> str:
         """Add point markers from a collection of points.
+
+        Markers draw as MapLibre circles by default, sized by ``radius``.
+        Passing ``shape``, ``size`` or ``icon`` switches the layer to a marker
+        sprite instead, sized by ``size``; ``radius`` no longer applies to it,
+        and ``color`` must then be a hex color because that is all the sprite
+        baker accepts.
 
         Args:
             points: A sequence of ``(lng, lat)`` pairs or
@@ -1125,11 +1965,53 @@ class Map(anywidget.AnyWidget):
                 point FeatureCollection/Feature/geometry, a GeoJSON string, or a
                 ``__geo_interface__`` object (e.g. a point GeoDataFrame).
             name: Layer display name.
-            **style: Style overrides (e.g. ``fillColor``, ``circleRadius``).
+            color: Marker color, e.g. ``"#e11d48"``.
+            opacity: Fill opacity in ``[0, 1]``.
+            radius: Circle radius in pixels (circle rendering only).
+            stroke_color: Outline color.
+            stroke_width: Outline width in pixels.
+            shape: One of ``"circle"``, ``"square"``, ``"triangle"``,
+                ``"diamond"``, ``"star"``, ``"cross"``, ``"pin"``, or
+                ``"custom"`` (which needs ``icon``).
+            size: Sprite size in pixels.
+            icon: Raw SVG markup or a data URL drawn as a custom sprite.
+            **style: Further style overrides, plus ``popup=`` and ``tooltip=``
+                to configure what a click and a hover show. ``popup`` takes a
+                property name, a list of names or field mappings, or a config
+                mapping; see :meth:`set_popup`. ``popup_max_width=`` and
+                ``popup_image_height=`` size the popup and its pictures, in CSS
+                pixels, without spelling out the rest of a config mapping.
 
         Returns:
             The id of the added layer.
+
+        Example:
+            >>> m.add_markers(
+            ...     [{"lon": -122.9, "lat": 47.0, "name": "Olympia", "photo": url}],
+            ...     shape="pin",
+            ...     color="#e11d48",
+            ...     size=32,
+            ...     popup=["name", {"field": "photo", "kind": "image"}],
+            ...     tooltip="name",
+            ...     popup_max_width=480,
+            ...     popup_image_height=320,
+            ... )
         """
+        # setdefault, not update: a raw style key passed alongside the named
+        # argument is the low-level escape hatch and keeps winning, which is
+        # also the precedence add_circle_markers had before these arguments
+        # existed.
+        for key, value in _project.marker_style(
+            color=color,
+            opacity=opacity,
+            radius=radius,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            shape=shape,
+            size=size,
+            icon=icon,
+        ).items():
+            style.setdefault(key, value)
         fc = self._points_to_featurecollection(points)
         return self._add_layer(_project.geojson_layer(name, fc, **style))
 
@@ -1155,9 +2037,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        if radius is not None:
-            style.setdefault("circleRadius", float(radius))
-        return self.add_markers(points, name=name, **style)
+        return self.add_markers(points, name=name, radius=radius, **style)
 
     def add_marker_cluster(
         self,
@@ -1197,9 +2077,25 @@ class Map(anywidget.AnyWidget):
         *,
         radius: float = 30,
         intensity: float = 1,
+        color_ramp: str = "turbo",
+        weight_field: str = "",
         **style: Any,
     ) -> str:
-        """Add point data using GeoLibre's density heatmap renderer."""
+        """Add point data using GeoLibre's density heatmap renderer.
+
+        Args:
+            points: Points in any form accepted by :meth:`add_markers`.
+            name: Layer display name.
+            radius: Heatmap radius in pixels.
+            intensity: Heatmap intensity multiplier.
+            color_ramp: Name of the built-in heatmap color ramp.
+            weight_field: Numeric property used to weight each point, or an
+                empty string to give every point equal weight.
+            **style: Additional style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
         # NaN and infinity slip past the comparisons below, so check finiteness
         # first rather than storing an unusable renderer setting.
         if not math.isfinite(float(radius)) or float(radius) <= 0:
@@ -1209,6 +2105,8 @@ class Map(anywidget.AnyWidget):
         style.setdefault("pointRenderer", "heatmap")
         style.setdefault("heatmapRadius", float(radius))
         style.setdefault("heatmapIntensity", float(intensity))
+        style.setdefault("heatmapColorRamp", str(color_ramp))
+        style.setdefault("heatmapWeightProperty", str(weight_field))
         return self.add_markers(points, name=name, **style)
 
     @staticmethod
@@ -1339,34 +2237,16 @@ class Map(anywidget.AnyWidget):
         ]
         if all(value is None for value in values):
             raise ValueError(f"Column {column!r} not found in any feature's properties")
-
-        def _is_numeric(value: Any) -> bool:
-            try:
-                return math.isfinite(float(value))
-            except (TypeError, ValueError):
-                return False
-
-        # graduated_stops would otherwise fall back to index-based stops for a
-        # non-numeric column, succeeding with misleading symbology; reject it.
-        if not any(_is_numeric(value) for value in values):
-            raise ValueError(
-                f"Column {column!r} must contain at least one numeric value for "
-                "a graduated choropleth"
-            )
-        stops = graduated_stops(
+        # build_choropleth_style rejects a wholly non-numeric column: graduated
+        # stops would otherwise fall back to index-based breaks and succeed with
+        # misleading symbology.
+        choropleth_style = _authoring.build_choropleth_style(
             values,
+            column,
             class_count=class_count,
-            color_ramp=colormap,
-            classification_scheme=scheme,
+            colormap=colormap,
+            scheme=scheme,
         )
-        choropleth_style: dict[str, Any] = {
-            "vectorStyleMode": "graduated",
-            "vectorStyleProperty": column,
-            "vectorStyleClassCount": min(12, max(2, int(class_count))),
-            "vectorStyleColorRamp": colormap,
-            "vectorStyleClassificationScheme": scheme,
-            "vectorStyleStops": stops,
-        }
         # Caller overrides win over the computed symbology.
         choropleth_style.update(style)
         return self._add_layer(
@@ -1407,6 +2287,7 @@ class Map(anywidget.AnyWidget):
         *,
         tile_size: int = 256,
         attribution: str | None = None,
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a raster XYZ tile layer.
@@ -1416,6 +2297,7 @@ class Map(anywidget.AnyWidget):
             name: Layer display name.
             tile_size: Tile size in pixels.
             attribution: Optional attribution string.
+            bounds: Optional ``[west, south, east, north]`` request bounds.
             **style: Style overrides.
 
         Returns:
@@ -1427,9 +2309,164 @@ class Map(anywidget.AnyWidget):
                 url,
                 tile_size=tile_size,
                 attribution=attribution,
+                bounds=bounds,
                 **style,
             )
         )
+
+    def add_ee_layer(
+        self,
+        ee_object: Any,
+        vis_params: dict[str, Any] | None = None,
+        name: str = "Earth Engine",
+        shown: bool = True,
+        opacity: float = 1.0,
+    ) -> str:
+        """Add a Google Earth Engine object as a raster tile layer.
+
+        This follows the ``geemap``/``leafmap`` convention: Earth Engine is
+        evaluated in the Python kernel to obtain a map tile URL, while the
+        GeoLibre app renders that URL as a normal raster layer. Earth Engine
+        must already be authenticated and initialized (usually with
+        ``ee.Authenticate()`` and ``ee.Initialize(project=...)``).
+
+        Args:
+            ee_object: An ``ee.Image``, ``ee.ImageCollection``,
+                ``ee.FeatureCollection``, ``ee.Feature``, or ``ee.Geometry``.
+                A compatible object exposing ``getMapId`` is also accepted.
+            vis_params: Earth Engine visualization parameters, such as
+                ``bands``, ``min``, ``max``, and ``palette``. For vector
+                objects these are ``ee.FeatureCollection.style()`` keys
+                instead (``color``, ``fillColor``, ``width``, ``pointSize``,
+                ``pointShape``, ``lineType``, ``styleProperty``,
+                ``neighborhood``).
+            name: Layer display name.
+            shown: Whether the layer is initially visible.
+            opacity: Initial opacity between 0 and 1.
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: If conversion requires the optional Earth Engine
+                Python package and it is not installed.
+            TypeError: If ``ee_object`` is not a supported Earth Engine object,
+                or ``vis_params`` is not a mapping.
+            ValueError: If Earth Engine returns no usable tile URL, opacity is
+                outside the range 0--1, or ``vis_params`` carries a key
+                ``ee.FeatureCollection.style()`` does not accept.
+            RuntimeError: If Earth Engine fails to prepare the object or to
+                create map tiles (for example when it is not initialized, or
+                the request is rejected).
+
+        Note:
+            The generated tile URL is tied to the Earth Engine map ID. A saved
+            project may need the layer to be regenerated after that map ID
+            expires.
+
+            The layer is a plain raster tile layer, not one of the live layers
+            the app's own Earth Engine panel manages, so it is listed and
+            styled like any other tile layer rather than appearing in that
+            panel.
+        """
+        try:
+            opacity_value = float(opacity)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("opacity must be a finite number between 0 and 1") from exc
+        if not math.isfinite(opacity_value) or not 0 <= opacity_value <= 1:
+            raise ValueError("opacity must be a finite number between 0 and 1")
+
+        if vis_params is not None and not isinstance(vis_params, Mapping):
+            raise TypeError("vis_params must be a mapping of Earth Engine visualization keys")
+        params = dict(vis_params or {})
+        map_object = ee_object
+        map_params = params
+
+        try:
+            import ee
+        except ImportError:
+            ee = None
+
+        # Earth Engine types are classified *before* the duck-typed
+        # ``getMapId`` fallback: ``ee.ImageCollection``, ``ee.FeatureCollection``
+        # and ``ee.Feature`` all expose ``getMapId`` themselves, so a
+        # ``getMapId``-first check would silently skip the mosaic/style step and
+        # drop every vector option except ``color``.
+        ee_types = (
+            (ee.Image, ee.ImageCollection, ee.FeatureCollection, ee.Feature, ee.Geometry)
+            if ee is not None
+            else ()
+        )
+        if ee is not None and isinstance(map_object, ee_types):
+            is_vector = isinstance(map_object, (ee.FeatureCollection, ee.Feature, ee.Geometry))
+            if is_vector:
+                unsupported = sorted(set(params) - _EE_VECTOR_STYLE_KEYS)
+                if unsupported:
+                    raise ValueError(
+                        "vis_params for an Earth Engine FeatureCollection, Feature, or "
+                        f"Geometry may only contain {sorted(_EE_VECTOR_STYLE_KEYS)}; got "
+                        f"{unsupported}"
+                    )
+            try:
+                if isinstance(map_object, ee.ImageCollection):
+                    map_object = map_object.mosaic()
+                elif is_vector:
+                    if isinstance(map_object, ee.Geometry):
+                        map_object = ee.Feature(map_object)
+                    if isinstance(map_object, ee.Feature):
+                        map_object = ee.FeatureCollection([map_object])
+                    vector_style = {
+                        "color": "000000",
+                        "fillColor": "00000000",
+                        "width": 2,
+                        "pointSize": 3,
+                        "pointShape": "circle",
+                        **params,
+                    }
+                    map_object = map_object.style(**vector_style)
+                    map_params = {}
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Earth Engine could not prepare this object for display: {exc}"
+                ) from exc
+        elif not callable(getattr(map_object, "getMapId", None)):
+            if ee is None:
+                raise ImportError(
+                    "Adding this Earth Engine object requires the `earthengine-api` "
+                    "package. Install it with `pip install earthengine-api`."
+                )
+            raise TypeError(
+                "ee_object must be an Earth Engine Image, ImageCollection, "
+                "FeatureCollection, Feature, or Geometry"
+            )
+
+        try:
+            map_id = map_object.getMapId(map_params)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Earth Engine could not create map tiles: {exc}. Authenticate and "
+                "initialize Earth Engine before calling add_ee_layer(), and check "
+                "that vis_params are valid for this object."
+            ) from exc
+
+        tile_fetcher = map_id.get("tile_fetcher") if isinstance(map_id, dict) else None
+        tile_url = getattr(tile_fetcher, "url_format", None)
+        if not tile_url and isinstance(map_id, dict):
+            tile_url = map_id.get("tile_url") or map_id.get("url_format")
+        if not isinstance(tile_url, str) or not tile_url:
+            raise ValueError("Earth Engine returned a map ID without a tile URL")
+
+        layer = _project.tile_layer(
+            name,
+            tile_url,
+            attribution="Google Earth Engine",
+        )
+        layer["visible"] = bool(shown)
+        layer["opacity"] = opacity_value
+        layer["metadata"]["provider"] = "earth-engine"
+        if isinstance(map_id, dict) and map_id.get("mapid"):
+            layer["metadata"]["earthEngineMapId"] = map_id["mapid"]
+        return self._add_layer(layer)
 
     @staticmethod
     def _resolve_raster_source(source: Any) -> str:
@@ -1456,7 +2493,7 @@ class Map(anywidget.AnyWidget):
 
     def add_cog(
         self,
-        url: str,
+        url: str | os.PathLike[str],
         name: str = "COG",
         *,
         bands: list[int] | None = None,
@@ -1471,9 +2508,12 @@ class Map(anywidget.AnyWidget):
                 kernel host. A local file is served by the bundled static server
                 so the app can read it; that URL lives only for this kernel
                 session, so a project saved with a local raster will not restore
-                the raster when reopened later, and the file is only reachable
-                when the browser runs on the same host as the kernel (local
-                Jupyter, VS Code).
+                the raster when reopened later. It is read directly in local
+                Jupyter and VS Code. Colab renders it as PNG XYZ tiles in the
+                kernel instead, and JupyterHub can route it through the kernel
+                port when ``jupyter-server-proxy`` is available; a deployment
+                that can only serve the app extension cannot expose kernel
+                files, so pass a hosted URL there.
             name: Layer display name.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
@@ -1483,6 +2523,34 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
+        if self._running_on_colab() and not (
+            isinstance(url, str) and url.startswith(("http://", "https://"))
+        ):
+            # Resolve once so rasterio sees the same file the tile route
+            # registered; GDAL does not expand "~" on its own.
+            local_path = pathlib.Path(url).expanduser().resolve()
+            tile_url = register_raster_tiles(
+                local_path,
+                bands=bands,
+                colormap=colormap,
+                rescale=rescale,
+            )
+            try:
+                import rasterio
+                from rasterio.warp import transform_bounds
+
+                with rasterio.open(local_path) as dataset:
+                    bounds = list(
+                        transform_bounds(
+                            dataset.crs,
+                            "EPSG:4326",
+                            *dataset.bounds,
+                            densify_pts=21,
+                        )
+                    )
+            except Exception:  # pragma: no cover - tile renderer reports invalid rasters
+                bounds = None
+            return self.add_tile_layer(tile_url, name, bounds=bounds, **style)
         return self._add_layer(
             _project.cog_layer(
                 name,
@@ -1496,32 +2564,174 @@ class Map(anywidget.AnyWidget):
 
     def add_raster(
         self,
-        url: str,
+        source: Any = None,
         name: str = "Raster",
         *,
+        url: str | os.PathLike[str] | None = None,
         bands: list[int] | None = None,
         colormap: str | None = None,
         rescale: list[list[float]] | None = None,
+        array_args: dict[str, Any] | None = None,
         **style: Any,
     ) -> str:
-        """Add a raster (COG / GeoTIFF) layer.
+        """Add a raster from a COG, GeoTIFF, or xarray object.
 
-        Alias of :meth:`add_cog` with a generic default name. Accepts a URL or a
-        kernel-side local GeoTIFF path (see :meth:`add_cog` for the local-file
-        caveats).
+        URLs and paths are passed to :meth:`add_cog`. An
+        ``xarray.DataArray`` or ``xarray.Dataset`` is first materialized as a
+        temporary GeoTIFF using rioxarray. Longitude/latitude dimensions imply
+        EPSG:4326; other dimension names require georeferencing through the
+        object's ``.rio`` accessor or ``array_args``.
+
+        The temporary GeoTIFF is removed by :meth:`close`, and, if that is never
+        called, when the ``Map`` is garbage collected or the interpreter exits
+        normally. A killed kernel leaves the file in the system temp directory.
 
         Args:
-            url: URL of the COG / GeoTIFF, or a local GeoTIFF path.
+            source: URL or path of a COG / GeoTIFF, or an
+                ``xarray.DataArray`` / ``xarray.Dataset``.
             name: Layer display name.
+            url: Deprecated alias of ``source``, kept because this method used
+                to name its first parameter ``url`` (as :meth:`add_cog` still
+                does). Passing it emits a ``DeprecationWarning``.
             bands: Optional 1-based band indices to render.
             colormap: Optional colormap name (single-band rendering).
             rescale: Optional ``[[min, max], ...]`` ranges per band.
+            array_args: Options used only for xarray inputs. ``variable``
+                selects one Dataset variable, ``isel`` slices extra dimensions,
+                and ``x_dim``, ``y_dim``, ``crs``, and ``nodata`` override the
+                corresponding spatial metadata. Remaining options are passed to
+                ``rio.to_raster``.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
         """
-        return self.add_cog(url, name, bands=bands, colormap=colormap, rescale=rescale, **style)
+        if url is not None:
+            if source is not None:
+                raise TypeError("add_raster() got both 'source' and its deprecated alias 'url'")
+            warnings.warn(
+                "add_raster(url=...) is deprecated; pass the raster as the first "
+                "positional argument or as source=...",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            source = url
+        if source is None:
+            raise TypeError("add_raster() missing required argument: 'source'")
+
+        raster_source = source
+        is_xarray = not isinstance(source, (str, os.PathLike))
+        if is_xarray:
+            raster_source = self._materialize_xarray(source, array_args)
+        elif array_args:
+            warnings.warn(
+                "array_args is ignored unless source is an xarray object",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self.add_cog(
+            raster_source,
+            name,
+            bands=bands,
+            colormap=colormap,
+            rescale=rescale,
+            **style,
+        )
+
+    def _materialize_xarray(
+        self, source: Any, array_args: dict[str, Any] | None = None
+    ) -> pathlib.Path:
+        """Write an xarray DataArray or Dataset to a session-scoped COG."""
+        try:
+            import xarray as xr
+        except ImportError as exc:  # pragma: no cover - object normally implies install
+            raise ImportError(
+                "xarray support requires the 'raster' extra: pip install geolibre[raster]"
+            ) from exc
+
+        if not isinstance(source, (xr.DataArray, xr.Dataset)):
+            raise TypeError(
+                "source must be a COG/GeoTIFF URL or path, or an xarray DataArray/Dataset"
+            )
+        try:
+            import rioxarray  # noqa: F401 -- registers the .rio accessor
+        except ImportError as exc:
+            raise ImportError(
+                "xarray raster support requires rioxarray and rasterio; "
+                "install them with: pip install geolibre[raster]"
+            ) from exc
+
+        options = dict(array_args or {})
+        variable = options.pop("variable", None)
+        indexers = options.pop("isel", None)
+        x_dim = options.pop("x_dim", None)
+        y_dim = options.pop("y_dim", None)
+        crs = options.pop("crs", None)
+        nodata = options.pop("nodata", None)
+
+        data = source
+        if variable is not None:
+            if not isinstance(data, xr.Dataset):
+                raise ValueError("array_args['variable'] is only valid for an xarray Dataset")
+            if variable not in data.data_vars:
+                raise ValueError(f"Dataset has no data variable named {variable!r}")
+            data = data[variable]
+        elif isinstance(data, xr.Dataset) and not data.data_vars:
+            raise ValueError("Cannot visualize an xarray Dataset with no data variables")
+        if indexers is not None:
+            if not isinstance(indexers, Mapping):
+                raise TypeError(
+                    "array_args['isel'] must be a mapping of dimension names to indices"
+                )
+            data = data.isel(dict(indexers))
+
+        dims = set(data.dims)
+        x_dim = x_dim or next((d for d in ("x", "lon", "longitude") if d in dims), None)
+        y_dim = y_dim or next((d for d in ("y", "lat", "latitude") if d in dims), None)
+        if x_dim is None or y_dim is None:
+            raise ValueError(
+                "Could not identify x/y dimensions. Set array_args={'x_dim': ..., 'y_dim': ...}."
+            )
+        data = data.rio.set_spatial_dims(x_dim=x_dim, y_dim=y_dim, inplace=False)
+        if crs is not None:
+            data = data.rio.write_crs(crs, inplace=False)
+        elif data.rio.crs is None:
+            if x_dim in {"lon", "longitude"} and y_dim in {"lat", "latitude"}:
+                data = data.rio.write_crs("EPSG:4326", inplace=False)
+            else:
+                raise ValueError(
+                    "The xarray object has no CRS. Set it with .rio.write_crs() or "
+                    "array_args={'crs': 'EPSG:...'} ."
+                )
+        if nodata is not None:
+            if isinstance(data, xr.Dataset):
+                # RasterDataset has no write_nodata method; nodata metadata
+                # belongs to each DataArray variable instead. Assign the
+                # results explicitly because Dataset.map() discards the
+                # per-variable _FillValue attributes written by rioxarray.
+                data = data.copy()
+                for variable_name in data.data_vars:
+                    data[variable_name] = data[variable_name].rio.write_nodata(
+                        nodata, inplace=False
+                    )
+                data = data.rio.set_spatial_dims(x_dim=x_dim, y_dim=y_dim, inplace=False)
+            else:
+                data = data.rio.write_nodata(nodata, inplace=False)
+
+        handle, raw_path = tempfile.mkstemp(prefix="geolibre-xarray-", suffix=".tif")
+        os.close(handle)
+        path = pathlib.Path(raw_path)
+        try:
+            # The browser can range-read a COG directly. A plain GTiff makes
+            # the app warn and convert the full file client-side before it can
+            # display the layer.
+            options.setdefault("driver", "COG")
+            data.rio.to_raster(path, **options)
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        self._temporary_rasters.append(path)
+        return path
 
     def add_wms(
         self,
@@ -1534,6 +2744,8 @@ class Map(anywidget.AnyWidget):
         transparent: bool = True,
         tile_size: int = 256,
         version: str | None = "1.1.1",
+        crs: str | None = None,
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -1549,10 +2761,23 @@ class Map(anywidget.AnyWidget):
             version: WMS protocol version, ``"1.1.1"`` (default) or
                 ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
                 some servers accept only one version.
+            crs: The CRS tiles are requested in, ``"EPSG:3857"`` when None.
+                For a server without Web Mercator, a CRS it lists: a
+                geographic one (``"EPSG:4326"``, ``"EPSG:4258"``,
+                ``"EPSG:6706"``, ``"CRS:84"``) or a projected
+                ``"EPSG:<code>"`` such as ``"EPSG:25832"``. The desktop app
+                redraws those tiles into Web Mercator.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84. A WMS layer has no geometry to derive an extent from,
+                so without these "zoom to layer" cannot reach it.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is not four finite numbers with valid
+                latitudes, or ``crs`` is not a supported CRS.
         """
         return self._add_layer(
             _project.wms_layer(
@@ -1564,6 +2789,8 @@ class Map(anywidget.AnyWidget):
                 transparent=transparent,
                 tile_size=tile_size,
                 version=version,
+                crs=crs,
+                bounds=bounds,
                 **style,
             )
         )
@@ -1574,6 +2801,7 @@ class Map(anywidget.AnyWidget):
         name: str = "WMTS Layer",
         *,
         tile_size: int = 256,
+        bounds: list[float] | None = None,
         **style: Any,
     ) -> str:
         """Add a WMTS layer from a tile URL template.
@@ -1582,12 +2810,19 @@ class Map(anywidget.AnyWidget):
             url: A WMTS tile URL template (``{z}/{y}/{x}``).
             name: Layer display name.
             tile_size: Tile size in pixels.
+            bounds: Optional ``[west, south, east, north]`` request bounds, in
+                WGS84.
             **style: Style overrides.
 
         Returns:
             The id of the added layer.
+
+        Raises:
+            ValueError: If ``bounds`` is not four finite numbers with valid latitudes.
         """
-        return self._add_layer(_project.wmts_layer(name, url, tile_size=tile_size, **style))
+        return self._add_layer(
+            _project.wmts_layer(name, url, tile_size=tile_size, bounds=bounds, **style)
+        )
 
     def add_wfs(
         self,
@@ -1824,18 +3059,21 @@ class Map(anywidget.AnyWidget):
 
     def add_3d_tiles(
         self,
-        url: str,
+        url: str | None = None,
         name: str = "3D Tiles",
         *,
+        ion_asset_id: int | None = None,
         altitude_offset: float = 0,
         request_headers: dict[str, str] | None = None,
         **style: Any,
     ) -> str:
-        """Add a 3D Tiles layer from a ``tileset.json`` URL.
+        """Add a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
 
         Args:
-            url: URL of the 3D Tiles ``tileset.json``.
+            url: URL of the 3D Tiles ``tileset.json``. Omit for an Ion asset.
             name: Layer display name.
+            ion_asset_id: A Cesium Ion asset id (for example 96188, Cesium OSM
+                Buildings). Renders on the 3D globe only, with the app's Ion token.
             altitude_offset: Vertical offset applied to the tileset, in meters.
             request_headers: Optional request headers (persisted in the project).
             **style: Style overrides.
@@ -1847,10 +3085,353 @@ class Map(anywidget.AnyWidget):
             _project.three_d_tiles_layer(
                 name,
                 url,
+                ion_asset_id=ion_asset_id,
                 altitude_offset=altitude_offset,
                 request_headers=request_headers,
                 **style,
             )
+        )
+
+    def add_lidar(self, url: str, name: str | None = None, **style: Any) -> str:
+        """Add a LiDAR point cloud from a LAS, LAZ, COPC or EPT URL.
+
+        COPC and EPT stream by level of detail; LAS/LAZ download whole. Open the
+        app's **Plugins → Point Cloud Annotation** to label its points.
+
+        Args:
+            url: HTTP(S) URL of a ``.las``, ``.laz``, ``.copc.laz`` file or an
+                EPT ``ept.json``.
+            name: Layer display name (defaults to the file name).
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        if name is None and isinstance(url, str):
+            tail = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+            name = tail or "LiDAR"
+        return self._add_layer(_project.lidar_layer(name, url, **style))
+
+    def add_icesat2(
+        self,
+        source: str | os.PathLike[str],
+        name: str | None = None,
+        *,
+        beams: Sequence[str] | None = None,
+        fields: Sequence[Any] | None = None,
+        quality_filter: bool = True,
+        bbox: Sequence[float] | None = None,
+        max_points: int | None = 100_000,
+        color_by: str | None = None,
+        colormap: str = "viridis",
+        **style: Any,
+    ) -> str:
+        """Add ICESat-2 ATL06 or ATL08 footprints from an HDF5 granule.
+
+        Reads the granule locally (with h5py) the way the app's Add Data →
+        ICESat-2 / GEDI does: one point per along-track segment in each ground
+        track, the product's quality filter applied, and ``beam``,
+        ``beam_type`` (strong/weak), ``time`` and ``distance_km`` on every
+        point, colored by the main field (``h_li`` for ATL06,
+        ``h_te_best_fit`` for ATL08). Download granules with ``earthaccess``
+        (``earthaccess.download(...)``) or from NASA Earthdata Search.
+
+        Args:
+            source: Path to an ATL06 or ATL08 ``.h5`` granule.
+            name: Layer name; ``"<product> <file name>"`` by default.
+            beams: Ground tracks to read, e.g. ``["gt1l", "gt2l"]`` (all by default).
+            fields: Fields to attach: default names (``"h_canopy"``) or dataset
+                paths relative to the ground track (the product defaults when
+                omitted).
+            quality_filter: Drop segments the product's quality flag rejects.
+            bbox: ``[west, south, east, north]`` to keep only segments inside.
+            max_points: Cap on points; every beam is thinned evenly to stay
+                under it. ``None`` keeps every segment.
+            color_by: Field to color by; ``""`` for a single color.
+            colormap: Color ramp for the graduated colors.
+            **style: Style overrides (e.g. ``circleRadius=4``).
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: Without h5py (``pip install "geolibre[spaceborne]"``).
+            ValueError: For a GEDI or unsupported granule, or no footprints kept.
+        """
+        return self._add_spaceborne_lidar(
+            ("ICESat-2",),
+            source,
+            name,
+            beams=beams,
+            fields=fields,
+            quality_filter=quality_filter,
+            bbox=bbox,
+            max_points=max_points,
+            color_by=color_by,
+            colormap=colormap,
+            **style,
+        )
+
+    def add_gedi(
+        self,
+        source: str | os.PathLike[str],
+        name: str | None = None,
+        *,
+        beams: Sequence[str] | None = None,
+        fields: Sequence[Any] | None = None,
+        quality_filter: bool = True,
+        bbox: Sequence[float] | None = None,
+        max_points: int | None = 100_000,
+        color_by: str | None = None,
+        colormap: str = "viridis",
+        **style: Any,
+    ) -> str:
+        """Add GEDI L2A, L2B or L4A shots from an HDF5 granule.
+
+        Reads the granule locally (with h5py) the way the app's Add Data →
+        ICESat-2 / GEDI does: one point per shot in each beam, the product's
+        quality flag applied, and ``beam``, ``beam_type`` (power/coverage),
+        ``time`` and ``distance_km`` on every point, colored by the main field
+        (``rh98`` for L2A, ``cover`` for L2B, ``agbd`` for L4A). A full orbit
+        holds millions of shots, so pass ``bbox`` for a regional subset.
+
+        Args:
+            source: Path to a GEDI L2A, L2B or L4A ``.h5`` granule.
+            name: Layer name; ``"<product> <file name>"`` by default.
+            beams: Beams to read, e.g. ``["BEAM0101"]`` (all by default).
+            fields: Fields to attach: default names (``"rh50"``) or dataset
+                paths relative to the beam (the product defaults when omitted).
+            quality_filter: Drop shots the product's quality flag rejects.
+            bbox: ``[west, south, east, north]`` to keep only shots inside.
+            max_points: Cap on points; every beam is thinned evenly to stay
+                under it. ``None`` keeps every shot.
+            color_by: Field to color by; ``""`` for a single color.
+            colormap: Color ramp for the graduated colors.
+            **style: Style overrides (e.g. ``circleRadius=4``).
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: Without h5py (``pip install "geolibre[spaceborne]"``).
+            ValueError: For an ICESat-2 or unsupported granule, or no shots kept.
+        """
+        return self._add_spaceborne_lidar(
+            ("GEDI",),
+            source,
+            name,
+            beams=beams,
+            fields=fields,
+            quality_filter=quality_filter,
+            bbox=bbox,
+            max_points=max_points,
+            color_by=color_by,
+            colormap=colormap,
+            **style,
+        )
+
+    def _add_spaceborne_lidar(
+        self,
+        missions: tuple[str, ...],
+        source: str | os.PathLike[str],
+        name: str | None,
+        **options: Any,
+    ) -> str:
+        """Build and add a footprint layer for :meth:`add_icesat2` / :meth:`add_gedi`.
+
+        Args:
+            missions: The missions the calling method accepts.
+            source: Path to the granule.
+            name: Layer name, or None for the default.
+            **options: Reader and style options.
+
+        Returns:
+            The id of the added layer.
+        """
+        from .spaceborne_lidar import spaceborne_lidar_layer
+
+        layer, _result = spaceborne_lidar_layer(source, name, missions=missions, **options)
+        return self._add_layer(layer)
+
+    def point_cloud_annotations(self) -> dict[str, Any]:
+        """The point labels and 3D boxes saved by the app's point cloud annotator.
+
+        Returns:
+            ``{"labels", "instances", "boxes", "classes"}``; see
+            :func:`geolibre.project.point_cloud_annotations`. Apply the
+            labels of a whole-file LAS/LAZ source to ``laspy`` data with
+            :func:`geolibre.project.apply_point_labels`.
+        """
+        return _project.point_cloud_annotations(self.project)
+
+    def prelabel_point_cloud(
+        self,
+        url: str,
+        input_file: str,
+        tool: str = "ground",
+        *,
+        only_unclassified: bool = True,
+    ) -> dict[str, int]:
+        """Pre-label a LiDAR layer with a Whitebox classifier, without the app.
+
+        Runs the app's Pre-label classifiers on a local copy of the layer's file
+        and saves the changed classes as annotator labels for the layer, so
+        they show when the project opens. Needs ``geolibre[pointcloud]``.
+
+        Args:
+            url: The LiDAR layer's source URL (as passed to :meth:`add_lidar`).
+            input_file: A local copy of that point cloud (LAS/LAZ/COPC).
+            tool: ``"ground"`` or ``"ground-vegetation"``.
+            only_unclassified: Only relabel points still 0 or 1.
+
+        Returns:
+            Class code -> number of points relabelled into it.
+
+        Raises:
+            ValueError: When no LiDAR layer uses ``url``, or for an unknown tool.
+        """
+        from . import pointcloud as _pointcloud
+
+        if url not in _authoring.lidar_source_urls(self.project):
+            raise ValueError("No LiDAR layer in this map uses that URL; add it with add_lidar().")
+        current, _ = _pointcloud.labels_for_source(self.project, url)
+        labels = _pointcloud.prelabel_point_cloud(
+            input_file, tool, current=current, only_unclassified=only_unclassified
+        )
+        self._update_project(lambda project: _authoring.merge_point_labels(project, url, labels))
+        counts: dict[int, int] = {}
+        for edits in labels.values():
+            for code in edits.values():
+                counts[code] = counts.get(code, 0) + 1
+        return counts
+
+    def write_labeled_point_cloud(
+        self, url: str, input_file: str, output_file: str
+    ) -> dict[str, int]:
+        """Write a LiDAR layer's file with this map's point labels applied.
+
+        Streams ``input_file`` (a local copy of the layer's LAS/LAZ/COPC file)
+        and writes every point with the annotator's saved classes and instance
+        ids applied. Needs ``geolibre[pointcloud]``.
+
+        Args:
+            url: The LiDAR layer's source URL whose labels to apply.
+            input_file: A local copy of that point cloud.
+            output_file: The ``.las`` or ``.laz`` file to write.
+
+        Returns:
+            ``{"points", "relabelled", "instanced"}`` counts.
+        """
+        from . import pointcloud as _pointcloud
+
+        if url not in _authoring.lidar_source_urls(self.project):
+            raise ValueError("No LiDAR layer in this map uses that URL; add it with add_lidar().")
+        labels, instances = _pointcloud.labels_for_source(self.project, url)
+        return _pointcloud.write_labeled_point_cloud(input_file, output_file, labels, instances)
+
+    def set_point_cloud_classes(self, classes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Define custom point cloud classes for the app's annotator.
+
+        Custom classes (codes 19-255) extend the ASPRS standard classes: the
+        annotator can assign them, and the LiDAR layer draws them in their
+        colour and names them in its legend.
+
+        Args:
+            classes: ``{"code", "name", "color"}`` dicts, e.g.
+                ``[{"code": 64, "name": "Car", "color": "#e11d48"}]``;
+                ``color`` may also be an ``(r, g, b)`` triple. An empty list
+                clears them.
+
+        Returns:
+            The validated classes as saved.
+
+        Raises:
+            ValueError: For an invalid class.
+        """
+        # Validate first so a bad class raises before the project changes.
+        schema = _project.point_cloud_class_schema(classes)
+        self._update_project(lambda project: _authoring.set_point_cloud_classes(project, schema))
+        return schema
+
+    def add_cesium_ion(
+        self,
+        asset_id: int,
+        name: str = "Cesium Ion asset",
+        *,
+        kind: str = "3d-tiles",
+        altitude_offset: float = 0,
+        **style: Any,
+    ) -> str:
+        """Add a Cesium Ion asset (a 3D Tiles tileset or imagery) by asset id.
+
+        The layer renders on the 3D globe only, which loads it with the app's
+        Cesium Ion token; the token is never written to the project.
+
+        Args:
+            asset_id: The Cesium Ion asset id (a positive integer).
+            name: Layer display name.
+            kind: ``"3d-tiles"`` for a tileset or ``"imagery"`` for an imagery asset.
+            altitude_offset: Vertical offset applied to a tileset, in meters.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.cesium_ion_layer(
+                name, asset_id, kind=kind, altitude_offset=altitude_offset, **style
+            )
+        )
+
+    def add_czml(
+        self,
+        url: str | None = None,
+        name: str = "CZML scene",
+        *,
+        data: list[dict[str, Any]] | dict[str, Any] | None = None,
+        source_path: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add a CZML (Cesium Language) dynamic 3D scene.
+
+        CZML describes time-varying scenes (satellite orbits, vehicle tracks,
+        moving models with paths). The 3D globe loads it natively and follows
+        the document's clock; the 2D map badges the layer "3D only".
+
+        Args:
+            url: URL of a ``.czml`` document.
+            name: Layer display name.
+            data: Inline CZML packets (a list, or one packet dict) instead of
+                a URL.
+            source_path: Local path the document was loaded from, if any.
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ValueError: If neither ``url`` nor ``data`` is given.
+        """
+        return self._add_layer(
+            _project.czml_layer(name, url=url, data=data, source_path=source_path, **style)
+        )
+
+    def add_cesium_kml(
+        self,
+        url: str | None = None,
+        name: str = "KML / KMZ",
+        *,
+        data: str | None = None,
+        source_path: str | None = None,
+        **style: Any,
+    ) -> str:
+        """Add native KML/KMZ on the globe, preserving document styling.
+
+        Supply a URL, inline XML, or a KMZ data URL. Use ``add_kml`` for the
+        vector conversion that works on both rendering engines.
+        """
+        return self._add_layer(
+            _project.cesium_kml_layer(name, url=url, data=data, source_path=source_path, **style)
         )
 
     def add_video(
@@ -1875,20 +3456,29 @@ class Map(anywidget.AnyWidget):
         url_list = [urls] if isinstance(urls, str) else list(urls)
         return self._add_layer(_project.video_layer(name, url_list, coordinates, **style))
 
-    def remove_layer(self, layer_id: str) -> None:
-        """Remove a layer by id.
+    def remove_layer(self, layer_id: str | Layer) -> None:
+        """Remove a layer by id, display name, or handle.
 
         Args:
-            layer_id: The id returned when the layer was added.
+            layer_id: A layer id, display name, or :class:`Layer` handle.
+
+        Raises:
+            ValueError: If the reference matches no layer, or matches a display
+                name several layers share. Removing an unknown layer used to be
+                a silent no-op; it now reports the miss.
         """
 
-        def _drop(p: dict[str, Any]) -> None:
-            p["layers"] = [layer for layer in p["layers"] if layer.get("id") != layer_id]
-
-        self._update_project(_drop)
+        resolved_id = self._resolve_layer(layer_id).id
+        # Disarm before the project sync, not after: the two traits sync
+        # independently, so clearing second leaves a window where the front end
+        # replays `identify` for a layer the project push just deleted.
+        self._drop_identify_layers(lambda layer_id: layer_id == resolved_id)
+        self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
+        # Disarm first, for the reason given in `remove_layer`.
+        self._drop_identify_layers(lambda _layer_id: True)
         self._update_project(lambda p: p.update({"layers": []}))
 
     # -- view / basemap API ---------------------------------------------
@@ -1919,16 +3509,267 @@ class Map(anywidget.AnyWidget):
             lat: Latitude of the new center.
             zoom: Optional zoom level.
         """
-
-        def mutate(p: dict[str, Any]) -> None:
-            p["mapView"]["center"] = [float(lng), float(lat)]
-            if zoom is not None:
-                p["mapView"]["zoom"] = float(zoom)
-
-        self._update_project(mutate)
+        self._update_project(
+            lambda p: _authoring.set_view(p, center=(lng, lat), zoom=zoom),
+        )
 
     # leafmap compatibility alias for set_center
     set_center_zoom = set_center
+
+    def set_renderer(self, renderer: str, *, pane_id: str | None = None) -> None:
+        """Select maplibre, cesium, mapbox or arcgis for the primary map or a named pane."""
+        self._update_project(lambda p: _authoring.set_renderer(p, renderer, pane_id=pane_id))
+
+    def get_renderer(self, *, pane_id: str | None = None) -> str:
+        """Read the primary renderer or a secondary pane's ``viewKind``."""
+        if pane_id is None:
+            return self.project.get("primaryRenderer", "maplibre")
+        for pane in _authoring.secondary_panes(self.project):
+            if pane["id"] == pane_id:
+                return pane.get("viewKind", "maplibre")
+        raise ValueError(f"Unknown pane: {pane_id}")
+
+    def set_map_layout(
+        self, rows: int, cols: int, *, view_kinds: list[str] | None = None, sync_view: bool = True
+    ) -> None:
+        """Configure a grid; ``view_kinds`` lists all pane renderers, primary first."""
+        self._update_project(
+            lambda p: _authoring.set_map_layout(
+                p, rows, cols, view_kinds=view_kinds, sync_view=sync_view
+            )
+        )
+
+    def set_zoom(self, zoom: float) -> None:
+        """Set the map zoom while preserving the other camera fields."""
+        self._update_project(lambda p: _authoring.set_view(p, zoom=zoom))
+
+    def set_bearing(self, bearing: float) -> None:
+        """Set clockwise camera bearing in degrees."""
+        self._update_project(lambda p: _authoring.set_view(p, bearing=bearing))
+
+    def set_pitch(self, pitch: float) -> None:
+        """Set camera pitch in degrees (clamped to the supported range)."""
+        self._update_project(lambda p: _authoring.set_view(p, pitch=pitch))
+
+    def fit_project_bounds(self, bounds: list[float] | tuple[float, float, float, float]) -> None:
+        """Persist a fitted camera for ``[west, south, east, north]`` bounds.
+
+        Unlike :meth:`fit_bounds`, this is a pure project mutation and does not
+        require a live browser connection.
+        """
+        self._update_project(lambda p: _authoring.fit_bounds(p, bounds))
+
+    @property
+    def center(self) -> tuple[float, float]:
+        """The persisted ``(longitude, latitude)`` camera center."""
+        center = self.project.get("mapView", {}).get("center", [0, 0])
+        return float(center[0]), float(center[1])
+
+    @property
+    def zoom(self) -> float:
+        """The persisted camera zoom."""
+        return float(self.project.get("mapView", {}).get("zoom", 0))
+
+    @property
+    def bearing(self) -> float:
+        """The persisted clockwise camera bearing in degrees."""
+        return float(self.project.get("mapView", {}).get("bearing", 0))
+
+    @property
+    def pitch(self) -> float:
+        """The persisted camera pitch in degrees."""
+        return float(self.project.get("mapView", {}).get("pitch", 0))
+
+    @property
+    def basemap(self) -> str | None:
+        """The current basemap style URL, embedded credentials redacted.
+
+        MapTiler, Stadia and others put an API key in the style URL itself, so
+        this is swept like :attr:`Layer.source` rather than printed into a
+        notebook cell. Read :attr:`project` for the URL exactly as stored.
+        """
+        value = self.project.get("basemapStyleUrl")
+        return _project.redact_url(str(value)) if value is not None else None
+
+    @property
+    def name(self) -> str:
+        """The project name."""
+        return str(self.project.get("name", ""))
+
+    @name.setter
+    def name(self, value: str) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("name must be a non-empty string")
+        self._update_project(lambda p: p.update(name=value.strip()))
+
+    # -- interaction: identify, controls, projection ---------------------
+
+    def _set_ui(self, **changes: Any) -> None:
+        """Merge ``changes`` into the synced ``_ui`` trait.
+
+        Like :meth:`_update_project`, this reassigns a new dict, because
+        traitlets only syncs a changed value, not an in-place edit.
+
+        Args:
+            **changes: ``identify`` and/or ``controls`` entries to replace.
+        """
+        self._ui = {**self._ui, **changes}
+
+    def _drop_identify_layers(self, removed: Callable[[str], bool]) -> None:
+        """Drop removed layers from the Identify target in ``_ui``.
+
+        A list that keeps one layer narrows to that layer, and one that keeps
+        none turns Identify off, matching what the app does when those layers
+        are deleted there. ``"all"`` and ``None`` are left alone.
+
+        Args:
+            removed: Returns ``True`` for the id of a layer being removed.
+        """
+        identify = self._ui.get("identify")
+        if identify is None or identify == "all":
+            return
+        if isinstance(identify, str):
+            if removed(identify):
+                self._set_ui(identify=None)
+            return
+        kept = [layer_id for layer_id in identify if not removed(layer_id)]
+        if len(kept) == len(identify):
+            return
+        self._set_ui(identify=kept[0] if len(kept) == 1 else (kept or None))
+
+    def _project_with_ui(self, project: dict[str, Any]) -> dict[str, Any]:
+        """Write the Identify and control state into ``project`` for export.
+
+        :meth:`set_identify` and :meth:`show_control` keep their state out of
+        the live project so a project push never reopens a panel the user
+        closed. A saved or exported project has no kernel to replay it, so it
+        carries the state as its ``interaction`` block, which the app applies
+        when the project opens.
+
+        Args:
+            project: A detached project dict, modified in place.
+
+        Returns:
+            ``project``, for chaining.
+        """
+        interaction: dict[str, Any] = {}
+        identify = self._ui.get("identify")
+        if identify is not None:
+            interaction["identify"] = list(identify) if isinstance(identify, list) else identify
+        controls = self._ui.get("controls")
+        if controls:
+            interaction["controls"] = dict(controls)
+        if interaction:
+            project["interaction"] = interaction
+        return project
+
+    def set_identify(self, layer: str | Layer | Sequence[str | Layer] | None = "all") -> None:
+        """Arm the Identify tool so clicking a feature opens its popup.
+
+        Popups (including those configured with :meth:`set_popup` or the
+        ``popup=`` argument of :meth:`add_markers`) open only while Identify is
+        armed. This does from Python what the Identify button on a layer, or
+        the "Identify visible layers" button in the Layers panel header, does
+        in the app. The choice is applied when the map loads, so it can be
+        made before the map is displayed.
+
+        Identify is armed on one layer, on a list of layers, or on every
+        visible layer, and hover tooltips pause while it is armed, as they do
+        in the app. The choice is saved by :meth:`save_project`,
+        :meth:`to_project` and :meth:`to_html`, so a shared map opens with
+        Identify armed the same way.
+
+        Args:
+            layer: A layer id, display name, or :class:`Layer` handle to
+                identify on that layer; a list of them to identify only those
+                layers (clicking opens popups for them and not for the rest);
+                ``"all"`` (the default) to identify every visible queryable
+                layer; or ``None`` to turn Identify off. ``"all"`` is matched
+                before the lookup, so a layer whose id or display name is
+                literally ``"all"`` cannot be targeted on its own.
+
+        Raises:
+            ValueError: If ``layer`` (or any entry of a list) matches no layer,
+                or a list is empty.
+        """
+        if layer is None or (isinstance(layer, str) and layer == "all"):
+            self._set_ui(identify=layer)
+            return
+        if isinstance(layer, (str, Layer)):
+            self._set_ui(identify=self._resolve_layer(layer).id)
+            return
+        if not isinstance(layer, Sequence):
+            raise ValueError(
+                "set_identify: layer must be a layer id, name, handle, a list of them, "
+                f'"all", or None, got {type(layer).__name__}'
+            )
+        ids = list(dict.fromkeys(self._resolve_layer(item).id for item in layer))
+        if not ids:
+            raise ValueError("set_identify: the list of layers is empty")
+        self._set_ui(identify=ids[0] if len(ids) == 1 else ids)
+
+    def show_control(self, name: str, visible: bool = True) -> None:
+        """Show (or hide) a map control or toolbar panel.
+
+        Covers the panels in the app's Controls menu (``"bookmark"``,
+        ``"search"``, ``"measure"``, ``"minimap"``, ``"print"``) and the
+        built-in map controls (``"navigation"``, ``"fullscreen"``,
+        ``"compass"``, ``"geolocate"``, ``"globe"``, ``"scale"``,
+        ``"attribution"``, ``"logo"``). The choice is applied when the map
+        loads, so it can be made before the map is displayed. It is saved by
+        :meth:`save_project`, :meth:`to_project` and :meth:`to_html`, so a
+        shared map opens with the same controls.
+
+        Hiding ``"globe"`` removes the globe/flat toggle button only; use
+        :meth:`set_projection` to change how the map is drawn.
+
+        Args:
+            name: The control or panel name.
+            visible: ``True`` to show it, ``False`` to hide it.
+
+        Raises:
+            ValueError: If ``name`` is not a known control or panel.
+        """
+        if name not in MAP_PANELS and name not in MAP_CONTROLS:
+            raise ValueError(
+                f"Unknown control {name!r}; expected one of {sorted(MAP_PANELS | MAP_CONTROLS)}"
+            )
+        self._set_ui(controls={**self._ui.get("controls", {}), name: bool(visible)})
+
+    def hide_control(self, name: str) -> None:
+        """Hide a map control or toolbar panel (see :meth:`show_control`).
+
+        Args:
+            name: The control or panel name.
+        """
+        self.show_control(name, False)
+
+    def set_projection(self, projection: str) -> None:
+        """Draw the map as a 3D globe or as a flat Web Mercator map.
+
+        New maps use ``"globe"``, which shows the Earth as a sphere at low
+        zooms. The projection is saved in the project.
+
+        Args:
+            projection: ``"globe"`` or ``"mercator"``.
+
+        Raises:
+            ValueError: If ``projection`` is not one of the two.
+        """
+        if projection not in _VALID_PROJECTIONS:
+            raise ValueError(f"projection must be 'globe' or 'mercator', got {projection!r}")
+
+        def _apply(p: dict[str, Any]) -> None:
+            preferences = p.setdefault("preferences", {})
+            preferences.setdefault("map", {})["projection"] = projection
+
+        self._update_project(_apply)
+
+    @property
+    def projection(self) -> str:
+        """The persisted map projection, ``"globe"`` or ``"mercator"``."""
+        projection = self.project.get("preferences", {}).get("map", {}).get("projection")
+        return "mercator" if projection == "mercator" else "globe"
 
     # -- map controls: split map / legend / colorbar --------------------
 
@@ -2005,66 +3846,21 @@ class Map(anywidget.AnyWidget):
             ValueError: If ``orientation``, ``control_position``, or a layer
                 reference is invalid.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
-            )
-        if control_position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                "control_position must be one of "
-                f"{sorted(_VALID_CONTROL_POSITIONS)}, got {control_position!r}"
-            )
+        # Layer objects are resolved to ids here (authoring.py works on plain
+        # project dicts and knows nothing about the Layer handle); the rest of
+        # the validation and state building is shared with the MCP server.
         left = self._coerce_layer_ids(left_layers)
         right = self._coerce_layer_ids(right_layers)
-        clamped = min(100.0, max(0.0, float(position)))
-        state = _project.swipe_state(
-            left_layers=left,
-            right_layers=right,
-            orientation=orientation,
-            position=clamped,
+        self._update_project(
+            lambda p: _authoring.add_swipe(
+                p,
+                left_layers=left,
+                right_layers=right,
+                orientation=orientation,
+                position=position,
+                control_position=control_position,
+            )
         )
-
-        def mutate(p: dict[str, Any]) -> None:
-            _project.set_plugin_state(
-                p,
-                _project.SWIPE_PLUGIN_ID,
-                state,
-                position=control_position,
-            )
-
-        self._update_project(mutate)
-
-    def _update_components_state(
-        self, key: str, entry_state_builder: Callable[[Any], dict[str, Any]]
-    ) -> None:
-        """Merge one feature's state into the Components plugin settings.
-
-        The Components plugin (legend / colorbar / html) stores all its features
-        under a single settings blob keyed by feature name, so a new legend must
-        be merged in without dropping an existing colorbar (and vice versa).
-
-        Args:
-            key: The feature key (``"legend"`` or ``"colorbar"``).
-            entry_state_builder: Called with the feature's current state (or
-                ``None``) and returns its new state.
-        """
-
-        def mutate(p: dict[str, Any]) -> None:
-            plugins = _project.ensure_plugins_block(p)
-            current = plugins["settings"].get(_project.COMPONENTS_PLUGIN_ID)
-            components = dict(current) if isinstance(current, dict) else {}
-            components[key] = entry_state_builder(components.get(key))
-            # The legend/colorbar restore from their settings blob alone, so the
-            # plugin is configured but not added to activePluginIds (activating
-            # it would also mount the full Components toolbar).
-            _project.set_plugin_state(
-                p,
-                _project.COMPONENTS_PLUGIN_ID,
-                components,
-                activate=False,
-            )
-
-        self._update_project(mutate)
 
     def add_legend(
         self,
@@ -2102,54 +3898,59 @@ class Map(anywidget.AnyWidget):
             ValueError: If no entries are supplied, ``labels``/``colors`` lengths
                 differ, or ``position``/``shape``/``builtin`` is invalid.
         """
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
+        self._update_project(
+            lambda p: _authoring.add_legend(
+                p,
+                title,
+                legend_dict=legend_dict,
+                labels=labels,
+                colors=colors,
+                builtin=builtin,
+                position=position,
+                shape=shape,
             )
-        if shape not in _VALID_LEGEND_SHAPES:
-            raise ValueError(f"shape must be one of {sorted(_VALID_LEGEND_SHAPES)}, got {shape!r}")
-
-        # The three ways to supply entries are mutually exclusive; reject a
-        # combination rather than silently letting one win by check order.
-        sources = (
-            builtin is not None,
-            legend_dict is not None,
-            labels is not None or colors is not None,
         )
-        if sum(sources) > 1:
-            raise ValueError(
-                "Provide legend entries via exactly one of: builtin=, "
-                "legend_dict=, or labels= and colors=."
-            )
 
-        pairs: list[tuple[str, str]]
-        if builtin is not None:
-            preset = get_builtin_legend(builtin)
-            pairs = list(preset["items"])
-            if title is None:
-                title = preset["title"]
-        elif legend_dict is not None:
-            pairs = [(str(label), str(color)) for label, color in legend_dict.items()]
-        elif labels is not None or colors is not None:
-            if labels is None or colors is None:
-                raise ValueError("labels and colors must be provided together")
-            if len(labels) != len(colors):
-                raise ValueError(
-                    f"labels and colors must have the same length ({len(labels)} != {len(colors)})"
-                )
-            pairs = [(str(label), str(color)) for label, color in zip(labels, colors)]
-        else:
-            raise ValueError(
-                "Provide legend entries via builtin=, legend_dict=, or labels= and colors=."
-            )
-        if not pairs:
-            raise ValueError("Legend has no items")
+    def set_map_legend(
+        self,
+        title: str | None = None,
+        *,
+        position: str | None = None,
+        group_by_layer: bool | None = None,
+        visible: bool | None = None,
+        collapsed: bool | None = None,
+    ) -> None:
+        """Show the map legend, the panel behind the app's Controls -> Legend.
 
-        items = [{"label": label, "color": color, "shape": shape} for label, color in pairs]
-        entry = _project.legend_gui_entry(title or "Legend", items, position)
-        self._update_components_state(
-            "legend",
-            lambda existing: _project.legend_gui_state(entry, existing=existing),
+        Its rows come from each visible layer's symbology, so a classified or
+        categorized layer gets a matching legend without restating its colors
+        (use :meth:`add_legend` for hand-written entries). A map has one;
+        calling this again updates it.
+
+        Args:
+            title: Heading drawn above the entries; keeps the current one when
+                omitted.
+            position: ``"top-left"``, ``"top-right"``, ``"bottom-left"``, or
+                ``"bottom-right"``; keeps the current corner when omitted.
+            group_by_layer: Group each layer's classes under a layer heading;
+                keeps the current setting when omitted.
+            visible: Whether the on-map panel is open; keeps the current state
+                when omitted, and opens it when the map has no legend yet.
+            collapsed: Whether the open panel is collapsed to its header bar;
+                keeps the current state when omitted.
+
+        Raises:
+            ValueError: If ``position`` is not a map corner.
+        """
+        self._update_project(
+            lambda p: _authoring.set_map_legend(
+                p,
+                title,
+                position=position,
+                group_by_layer=group_by_layer,
+                visible=visible,
+                collapsed=collapsed,
+            )
         )
 
     def add_colorbar(
@@ -2188,41 +3989,18 @@ class Map(anywidget.AnyWidget):
                 ``vmin`` is not less than ``vmax``, or ``colors`` is given but
                 empty.
         """
-        if orientation not in _VALID_ORIENTATIONS:
-            raise ValueError(
-                f"orientation must be one of {sorted(_VALID_ORIENTATIONS)}, got {orientation!r}"
+        self._update_project(
+            lambda p: _authoring.add_colorbar(
+                p,
+                colormap=colormap,
+                vmin=vmin,
+                vmax=vmax,
+                label=label,
+                units=units,
+                colors=colors,
+                orientation=orientation,
+                position=position,
             )
-        if position not in _VALID_CONTROL_POSITIONS:
-            raise ValueError(
-                f"position must be one of {sorted(_VALID_CONTROL_POSITIONS)}, got {position!r}"
-            )
-        vmin_f, vmax_f = float(vmin), float(vmax)
-        # The app's normalizer only fixes vmin == vmax; an inverted range would
-        # otherwise render a reversed gradient, so reject it here.
-        if vmin_f >= vmax_f:
-            raise ValueError(f"vmin ({vmin_f}) must be less than vmax ({vmax_f})")
-        if colors is not None:
-            if not colors:
-                raise ValueError("colors must be a non-empty list when provided")
-            mode = "custom"
-            custom_colors = ", ".join(str(color) for color in colors)
-        else:
-            mode = "named"
-            custom_colors = ""
-        entry = _project.colorbar_gui_entry(
-            mode=mode,
-            colormap=colormap,
-            custom_colors=custom_colors,
-            vmin=vmin_f,
-            vmax=vmax_f,
-            label=label,
-            units=units,
-            orientation=orientation,
-            position=position,
-        )
-        self._update_components_state(
-            "colorbar",
-            lambda existing: _project.colorbar_gui_state(entry, existing=existing),
         )
 
     def add_colormap(
@@ -2256,10 +4034,14 @@ class Map(anywidget.AnyWidget):
         Credentials are removed by default so a returned project is safe to
         serialize or commit. Pass ``keep_credentials=True`` only for a trusted
         local workflow that must preserve authenticated layer configuration.
+
+        The Identify target and control visibility set with
+        :meth:`set_identify` and :meth:`show_control` are included as the
+        project's ``interaction`` block.
         """
         if keep_credentials:
-            return copy.deepcopy(self.project)
-        return _project.redact_credentials(self.project)
+            return self._project_with_ui(copy.deepcopy(self.project))
+        return self._project_with_ui(_project.redact_credentials(self.project))
 
     def load_project(self, source: Any) -> None:
         """Replace the current project.
@@ -2318,11 +4100,65 @@ class Map(anywidget.AnyWidget):
             project["layers"] = []
         elif not isinstance(layers, list):
             raise ValueError("Invalid project: 'layers' must be a list")
+        layer_ids = {layer.get("id") for layer in project["layers"] if isinstance(layer, dict)}
+        # A saved project carries its Identify target and controls as an
+        # `interaction` block. Move it into `_ui`, which is what the widget
+        # replays, so the live project never carries a second copy that a
+        # project push would re-apply.
+        interaction = project.pop("interaction", None)
+        # A pinned Identify target belongs to the project being replaced, so
+        # drop it unless the incoming project still has that layer. Leaving it
+        # would replay `setIdentify` for a missing layer on the next sync, which
+        # the front end rejects into a reply nobody reads -- Identify would end
+        # up disarmed anyway, just via a stray error. "all" and None survive any
+        # project, as in `clear_layers`.
+        self._drop_identify_layers(lambda layer_id: layer_id not in layer_ids)
         self._seq += 1
         self.project = project
+        if isinstance(interaction, dict):
+            self._apply_interaction(interaction, layer_ids)
+
+    def _apply_interaction(self, interaction: dict[str, Any], layer_ids: set[Any]) -> None:
+        """Load a saved project's ``interaction`` block into ``_ui``.
+
+        Entries the app would ignore are skipped rather than raised on: the
+        block may come from a hand-edited file or a newer app version.
+
+        Args:
+            interaction: The project's ``interaction`` block.
+            layer_ids: Ids of the layers in the loaded project.
+        """
+        changes: dict[str, Any] = {}
+        if "identify" in interaction:
+            identify = interaction["identify"]
+            if identify is None or identify == "all":
+                changes["identify"] = identify
+            else:
+                raw = [identify] if isinstance(identify, str) else identify
+                ids = (
+                    list(dict.fromkeys(i for i in raw if i in layer_ids))
+                    if isinstance(raw, list)
+                    else []
+                )
+                changes["identify"] = ids[0] if len(ids) == 1 else (ids or None)
+        controls = interaction.get("controls")
+        if isinstance(controls, dict):
+            changes["controls"] = {
+                **self._ui.get("controls", {}),
+                **{
+                    name: shown
+                    for name, shown in controls.items()
+                    if (name in MAP_PANELS or name in MAP_CONTROLS) and isinstance(shown, bool)
+                },
+            }
+        if changes:
+            self._set_ui(**changes)
 
     def save_project(self, path: str, *, keep_credentials: bool = False) -> None:
         """Write the current project to a ``.geolibre.json`` file.
+
+        Like :meth:`to_project`, the file carries the Identify target and
+        control visibility as its ``interaction`` block.
 
         Args:
             path: Destination file path. Parent directories are created if
@@ -2332,11 +4168,7 @@ class Map(anywidget.AnyWidget):
         """
         out = pathlib.Path(path).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
-        project = (
-            copy.deepcopy(self.project)
-            if keep_credentials
-            else _project.redact_credentials(self.project)
-        )
+        project = self.to_project(keep_credentials=keep_credentials)
         out.write_text(json.dumps(project, indent=2), encoding="utf-8")
 
 
@@ -2412,7 +4244,7 @@ class Layer:
 
     @name.setter
     def name(self, value: str) -> None:
-        self._map._mutate_layer(self._id, lambda layer: layer.update(name=value))
+        self._map.rename_layer(self, value)
 
     @property
     def visible(self) -> bool:
@@ -2440,6 +4272,42 @@ class Layer:
         """A copy of the layer's style object."""
         return copy.deepcopy(self._layer().get("style", {}))
 
+    @property
+    def source(self) -> Any:
+        """A detached copy of the layer source configuration.
+
+        Credentials are swept the way :meth:`Map.to_project` sweeps them: a
+        notebook auto-displays whatever a cell returns, and a source built with
+        ``request_headers`` or a signed URL would otherwise print its secrets
+        into an output that often gets committed or shared. Read
+        :attr:`Map.project` for the record exactly as stored.
+        """
+        # Sweep the one field rather than the whole layer: `redact_layer` would
+        # copy an inlined geojson blob first, only to discard it here.
+        return _project.redact_layer_field(self._layer().get("source"))
+
+    @property
+    def data(self) -> dict[str, Any]:
+        """A detached copy of the complete layer record.
+
+        Credentials are swept, as in :attr:`source`. "Complete" is literal: an
+        inlined ``geojson`` blob is copied whole, which for a large layer is
+        tens of megabytes to copy and to display. Use :meth:`properties` or
+        :meth:`Map.describe` when a summary will do.
+        """
+        return _project.redact_layer(self._layer())
+
+    @property
+    def index(self) -> int:
+        """The layer's current index in draw order.
+
+        Raises:
+            ValueError: If the layer has been removed, matching the other
+                accessors rather than raising ``StopIteration``.
+        """
+        self._layer()
+        return next(i for i, layer in enumerate(self._map.layers) if layer.id == self._id)
+
     def set_style(self, **style: Any) -> None:
         """Merge style overrides into the layer (e.g. ``fillColor="#ff0000"``)."""
 
@@ -2448,9 +4316,53 @@ class Layer:
 
         self._map._mutate_layer(self._id, _apply)
 
+    @property
+    def popup(self) -> dict[str, Any]:
+        """This layer's popup/tooltip config, or ``{}`` when it has none."""
+        config = self._layer().get("popup")
+        return copy.deepcopy(config) if isinstance(config, dict) else {}
+
+    @property
+    def descriptive_metadata(self) -> dict[str, Any]:
+        """This layer's descriptive (catalog) metadata, or ``{}`` when it has none."""
+        block = self._layer().get("descriptiveMetadata")
+        return copy.deepcopy(block) if isinstance(block, dict) else {}
+
+    def set_metadata(self, *, merge: bool = False, **fields: Any) -> dict[str, Any] | None:
+        """Set this layer's descriptive metadata (see :meth:`Map.set_layer_metadata`)."""
+        return self._map.set_layer_metadata(self, merge=merge, **fields)
+
+    def set_popup(self, fields: Any = None, **kwargs: Any) -> dict[str, Any]:
+        """Configure this layer's popup (see :meth:`Map.set_popup`)."""
+        return self._map.set_popup(self, fields, **kwargs)
+
+    def set_tooltip(self, fields: Any = True) -> dict[str, Any]:
+        """Show a hover tooltip on this layer (see :meth:`Map.set_tooltip`)."""
+        return self._map.set_tooltip(self, fields)
+
+    def clear_popup(self) -> None:
+        """Drop this layer's popup config, restoring the default popup."""
+        self._map.clear_popup(self)
+
     def get_features(self, *, timeout: float = 10.0) -> list[Feature]:
         """Return this layer's features (see :meth:`Map.get_features`)."""
         return self._map.get_features(self._id, timeout=timeout)
+
+    def properties(self) -> dict[str, list[Any]]:
+        """Return sampled property values for inlined GeoJSON."""
+        return self._map.layer_properties(self)
+
+    def column(self, name: str) -> list[Any]:
+        """Return a property column from inlined GeoJSON."""
+        return self._map.column_values(self, name)
+
+    def move(self, index: int) -> None:
+        """Move this layer to an index in draw order."""
+        self._map.move_layer(self, index)
+
+    def duplicate(self, *, name: str | None = None) -> Layer:
+        """Duplicate this layer and return its new handle."""
+        return self._map.get_layer(self._map.duplicate_layer(self, name=name))
 
     def zoom_to(self, *, timeout: float = 10.0) -> None:
         """Fit the map camera to this layer's extent."""

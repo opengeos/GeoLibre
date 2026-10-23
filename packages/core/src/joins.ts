@@ -71,6 +71,11 @@ export function layerJoinKey(value: unknown): string | null {
   return isEmpty ? null : valueToString(value);
 }
 
+/** GeoJSON columns are own properties; inherited object members are not data. */
+function fieldValue(properties: GeoJsonProperties, field: string): unknown {
+  return properties && Object.hasOwn(properties, field) ? properties[field] : undefined;
+}
+
 /**
  * Remove every column previously added by `joins` (per their `addedFields`
  * bookkeeping) from a copy of `features`, restoring the pre-join properties.
@@ -202,7 +207,7 @@ export function applyLayerJoins(
     // First-match lookup: when several join rows share a key, the first wins.
     const lookup = new Map<string, GeoJsonProperties>();
     for (const jf of joinFeatures) {
-      const key = layerJoinKey(jf.properties?.[join.joinField]);
+      const key = layerJoinKey(fieldValue(jf.properties, join.joinField));
       if (key === null || lookup.has(key)) continue;
       lookup.set(key, jf.properties ?? {});
     }
@@ -211,13 +216,13 @@ export function applyLayerJoins(
     const targetKeys = new Set<string>();
     for (const feature of out) {
       const props = feature.properties;
-      const key = layerJoinKey(props[join.targetField]);
+      const key = layerJoinKey(fieldValue(props, join.targetField));
       if (key !== null) targetKeys.add(key);
       const row = key === null ? undefined : lookup.get(key);
       if (row) {
         matched += 1;
         for (const [field, outputName] of fieldPairs) {
-          props[outputName] = row[field] !== undefined ? row[field] : null;
+          props[outputName] = fieldValue(row, field) ?? null;
         }
       } else {
         for (const [, outputName] of fieldPairs) props[outputName] = null;
@@ -228,7 +233,7 @@ export function applyLayerJoins(
     // the stat (and the UI copy) promise.
     let unmatchedJoin = 0;
     for (const jf of joinFeatures) {
-      const key = layerJoinKey(jf.properties?.[join.joinField]);
+      const key = layerJoinKey(fieldValue(jf.properties, join.joinField));
       if (key !== null && !targetKeys.has(key)) unmatchedJoin += 1;
     }
 

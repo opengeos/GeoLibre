@@ -683,13 +683,13 @@ export function parseSld(xml: string): SldImportResult {
   try {
     root = parser.parse(xml);
   } catch {
-    warnings.push("The file could not be parsed as XML; nothing was imported.");
+    warnings.push("That could not be parsed as XML; nothing was imported.");
     return { style: patch, labels, warnings, matchedRuleCount: 0 };
   }
 
   const sld = isNode(root) ? root.StyledLayerDescriptor : undefined;
   if (!isNode(sld)) {
-    warnings.push("This file is not an SLD (no StyledLayerDescriptor); nothing was imported.");
+    warnings.push("That is not an SLD (no StyledLayerDescriptor); nothing was imported.");
     return { style: patch, labels, warnings, matchedRuleCount: 0 };
   }
 

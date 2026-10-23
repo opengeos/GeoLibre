@@ -3,6 +3,10 @@
   "productName": "GeoLibre",
   "identifier": "org.geolibre.app",
   "bundle": {
-    "resources": []
+    "resources": [],
+    "fileAssociations": [],
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
   }
 }

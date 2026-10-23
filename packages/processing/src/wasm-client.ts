@@ -7,7 +7,12 @@
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
-import { normalizeVectorOutputFormat } from "./sidecar-client";
+import {
+  identifierWords,
+  isMultipleWhiteboxDatasetParameter,
+  normalizeVectorOutputFormat,
+} from "./sidecar-client";
+import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
   VectorOutputFormat,
@@ -352,15 +357,17 @@ export function mergeWasmToolManifests(
       source: wasm.source ?? tool.source,
     };
   });
-  // Everything the WASM binary ships that the catalog snapshot does not list,
-  // whatever its provenance. This used to be filtered to `source === "geolibre"`
-  // on the assumption that only GeoLibre-authored tools were missing from the
-  // catalog, but the WASM also carries Whitebox-sourced tools the Whitebox Next
-  // Gen snapshot has never listed (buffer_vector, the variogram/cokriging tools,
-  // greater_than_or_equal_to, less_than_or_equal_to). Those are runnable — the
-  // WASM runner executes them — yet the filter dropped them, so the dialog
-  // listed fewer tools than the binary actually provides.
-  const wasmOnly = [...wasmById.values()];
+  // Everything runnable the WASM binary ships that the catalog snapshot does not
+  // list, whatever its provenance. This used to be filtered to
+  // `source === "geolibre"` on the assumption that only GeoLibre-authored tools
+  // were missing from the catalog, but the WASM also carries Whitebox-sourced
+  // tools the Whitebox Next Gen snapshot has never listed (buffer_vector, the
+  // variogram/cokriging tools, greater_than_or_equal_to,
+  // less_than_or_equal_to). Those are runnable — the WASM runner executes them —
+  // yet the filter dropped them, so the dialog listed fewer tools than the
+  // binary actually provides. Locked pro-tier tools stay hidden with the other
+  // locked catalog entries.
+  const wasmOnly = [...wasmById.values()].filter((tool) => !tool.locked);
   return [...merged, ...wasmOnly];
 }
 
@@ -414,18 +421,79 @@ export function fileOutputTargetExtension(
   return outputTextFormatHint(param) ?? "dat";
 }
 
+/** A point cloud file extension the WASM runner reads and writes. */
+export type LidarFileExtension = "las" | "laz" | "copc.laz";
+
+/**
+ * The extension the WASM runner asks a `lidar_out` tool to write. Whitebox
+ * picks its LiDAR writer from the output extension, so a user-typed `.laz`
+ * path gets LASzip-compressed output and `.copc.laz` a Cloud Optimized Point
+ * Cloud; anything else (blank, `.las`, an unrecognized extension) keeps the
+ * uncompressed `.las` default.
+ *
+ * @param requested - The user-chosen output path, if any.
+ * @returns `copc.laz`, `laz` or `las`.
+ */
+export function lidarOutputTargetExtension(requested: unknown): LidarFileExtension {
+  if (typeof requested !== "string") return "las";
+  const path = requested.trim();
+  if (/\.copc\.laz$/i.test(path)) return "copc.laz";
+  return /\.laz$/i.test(path) ? "laz" : "las";
+}
+
+/**
+ * The extension a LAS-family file's bytes call for. Whitebox picks its LiDAR
+ * reader from the file extension alone, so LAZ or COPC bytes written as
+ * `.las` are decoded as uncompressed records and yield garbage points. The
+ * point data format byte (offset 104) has bit 7 set (bit 6 in old LASzip
+ * files) when the records are compressed, and a COPC file's first VLR, right
+ * after the header, has the user id `copc` and record id 1.
+ *
+ * @param bytes - The file bytes (only the header and first VLR are read).
+ * @returns `copc.laz`, `laz` or `las`; `las` when the bytes are not LAS at all.
+ */
+export function lidarBytesExtension(bytes: Uint8Array): LidarFileExtension {
+  if (!isLas(bytes) || bytes.length < 105) return "las";
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // The COPC info VLR: first after the header, user id "copc" (NUL-padded to
+  // 16 bytes), record id 1.
+  const userId = view.getUint16(94, true) + 2;
+  if (
+    bytes.length >= userId + 18 &&
+    String.fromCharCode(...bytes.subarray(userId, userId + 16)).replace(/\0+$/, "") === "copc" &&
+    view.getUint16(userId + 16, true) === 1
+  ) {
+    return "copc.laz";
+  }
+  return (bytes[104] & 0xc0) !== 0 ? "laz" : "las";
+}
+
 /**
  * The text/tabular output format a `file_out` parameter declares through its
  * name, description, or `table` data kind, as a bare extension (`csv`/`html`/
- * `json`), or `null` when nothing recognizable is found. Shared by the WASM
- * runner's {@link fileOutputTargetExtension} and the dialog's default-name and
- * download-naming code so the two hint lists cannot drift apart.
+ * `json`/...), or `null` when nothing recognizable is found. Shared by the
+ * WASM runner's {@link fileOutputTargetExtension} and the dialog's
+ * default-name and download-naming code so the two hint lists cannot drift
+ * apart.
  *
  * @param param - The output parameter.
- * @returns `"csv" | "html" | "json"`, or `null` if no text format is implied.
+ * @returns A bare extension, or `null` if no text format is implied.
  */
 export function outputTextFormatHint(param: WhiteboxToolParameter): string | null {
-  const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
+  // An explicit "<ext> recommended" in the description is the tool author's
+  // own guidance and wins over every heuristic below. `excel_to_table`'s
+  // output is `data_kind: "table"` but its writer is the generic vector
+  // format dispatch (same as GeoParquet/GPKG tools), which has no CSV driver
+  // -- defaulting a blank path to ".csv" made the tool reject its own default,
+  // the same failure mode as #1074.
+  // The capture must start with a letter so a decimal in the prose ("a
+  // tolerance of 0.5 recommended") cannot be mistaken for an extension.
+  const recommended = (param.description ?? "").match(/\.([a-z][a-z0-9]*)\s+recommended/i);
+  if (recommended) return recommended[1].toLowerCase();
+  // Split the name into words first: `_` is a word character, so `\bcsv\b`
+  // alone never matches inside `output_csv`.
+  const nameWords = identifierWords(param.name ?? "").join(" ");
+  const hint = `${nameWords} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";
   if (/\bjson\b/i.test(hint)) return "json";
@@ -449,6 +517,83 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
+const WEB_MERCATOR_RADIUS = 6378137;
+const MAX_WEB_MERCATOR_LATITUDE = 85.0511287798066;
+
+export function projectGeographicBufferInput(geojson: FeatureCollection): FeatureCollection {
+  const projectPosition = (position: number[]): number[] => {
+    const longitude = position[0];
+    const latitude = Math.max(
+      -MAX_WEB_MERCATOR_LATITUDE,
+      Math.min(MAX_WEB_MERCATOR_LATITUDE, position[1]),
+    );
+    const x = WEB_MERCATOR_RADIUS * ((longitude * Math.PI) / 180);
+    const y = WEB_MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + (latitude * Math.PI) / 360));
+    return [x, y, ...position.slice(2)];
+  };
+
+  const projectCoordinates = (coordinates: unknown): unknown => {
+    if (!Array.isArray(coordinates)) return coordinates;
+    if (
+      coordinates.length >= 2 &&
+      typeof coordinates[0] === "number" &&
+      typeof coordinates[1] === "number"
+    ) {
+      return projectPosition(coordinates as number[]);
+    }
+    return coordinates.map(projectCoordinates);
+  };
+
+  const projected = structuredClone(geojson) as FeatureCollection & {
+    crs?: { type: "name"; properties: { name: string } };
+  };
+  const projectGeometry = (geometry: (typeof projected.features)[number]["geometry"]): void => {
+    if (!geometry) return;
+    if (geometry.type === "GeometryCollection") {
+      for (const member of geometry.geometries) {
+        projectGeometry(member);
+      }
+      return;
+    }
+    if ("coordinates" in geometry) {
+      geometry.coordinates = projectCoordinates(geometry.coordinates) as never;
+    }
+  };
+  for (const feature of projected.features) {
+    projectGeometry(feature.geometry);
+  }
+  projected.crs = { type: "name", properties: { name: "EPSG:3857" } };
+  return projected;
+}
+
+/**
+ * Prepare a WGS84 map layer for Whitebox's planar buffer operation.
+ *
+ * `buffer_vector` treats both axes as Cartesian map units. Buffering RFC 7946
+ * longitude/latitude directly therefore creates a circle in degrees which is
+ * stretched into an oval when MapLibre displays it in Web Mercator. Projecting
+ * the input to EPSG:3857 makes the tool operate in the same conformal plane as
+ * the map. The GeoJSON writer sees the attached CRS and reprojects the result
+ * back to WGS84 before GeoLibre imports it.
+ *
+ * The dialog stores the buffer distance in degrees, including values converted
+ * from metres by its explicitly approximate geographic-distance control. Using
+ * the equatorial metres-per-degree scale preserves the old buffer's horizontal
+ * radius while making its vertical radius match.
+ */
+export function prepareGeographicBufferInput(
+  geojson: FeatureCollection,
+  distance: unknown,
+): { geojson: FeatureCollection; distance: number } | null {
+  const degrees = typeof distance === "number" ? distance : Number(distance);
+  if (!Number.isFinite(degrees) || degrees <= 0) return null;
+
+  return {
+    geojson: projectGeographicBufferInput(geojson),
+    distance: WEB_MERCATOR_RADIUS * ((degrees * Math.PI) / 180),
+  };
+}
+
 /**
  * Whether bytes start with the TIFF signature: "II" (little-endian) or "MM"
  * (big-endian) followed by the version number in the byte order's own
@@ -469,8 +614,13 @@ export function isTiff(b: Uint8Array): boolean {
   return magic === 0x2a || magic === 0x2b;
 }
 
-// LAS/LAZ magic: every LAS and LAZ file begins with the signature "LASF".
-function isLas(b: Uint8Array): boolean {
+/**
+ * LAS/LAZ magic: every LAS, LAZ and COPC file begins with the signature "LASF".
+ *
+ * @param b - The candidate file bytes.
+ * @returns `true` if the bytes start with the LAS signature.
+ */
+export function isLas(b: Uint8Array): boolean {
   return b.length >= 4 && b[0] === 0x4c && b[1] === 0x41 && b[2] === 0x53 && b[3] === 0x46;
 }
 
@@ -563,10 +713,22 @@ export async function ensureWhiteboxRasterCog(bytes: Uint8Array): Promise<Uint8A
  * (Cloud Optimized GeoTIFF) for `raster_out` - never a server path.
  */
 export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Promise<WhiteboxJob> {
-  const { runTool } = await loadToolsModule();
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
+  const parameterOverrides: Record<string, unknown> = {};
+  let geographicBufferInput: FeatureCollection | null = null;
+  const rawInput = request.layer_inputs?.input;
+  const geojson = (Array.isArray(rawInput) ? rawInput[0] : rawInput)?.geojson;
+  if (request.tool_id === "buffer_vector" && geojson) {
+    const prepared = prepareGeographicBufferInput(geojson, request.parameters.distance);
+    if (prepared) {
+      geographicBufferInput = prepared.geojson;
+      parameterOverrides.distance = prepared.distance;
+    }
+  } else if (request.tool_id === "multiple_ring_buffer" && geojson) {
+    geographicBufferInput = projectGeographicBufferInput(geojson);
+  }
   // How each output file is turned into a job output: "geojson" is parsed into a
   // FeatureCollection (a map layer); "raster" is normalized to a COG before it
   // reaches the map; "bytes" is returned raw (a file_out blob or a
@@ -591,43 +753,112 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
     const name = param.name;
 
     if (kind === "vector_in") {
-      const geojson = request.layer_inputs?.[name]?.geojson;
-      if (!geojson) throw new Error(`Missing vector input for "${name}"`);
-      const file = `${name}.geojson`;
-      input[file] = encoder.encode(JSON.stringify(geojson));
-      args.push(`--${name}=/work/${file}`);
+      const supplied = request.layer_inputs?.[name];
+      let layerInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      if (!layerInputs.length) {
+        const provided = request.parameters[name];
+        const paths =
+          isMultipleWhiteboxDatasetParameter(param) && typeof provided === "string"
+            ? provided
+                .split(/[;,]/)
+                .map((path) => path.trim())
+                .filter(Boolean)
+            : provided == null || provided === ""
+              ? []
+              : [String(provided)];
+        layerInputs = await Promise.all(
+          paths.map(async (path) => {
+            const bytes = (await fetchBytes(path)) ?? undefined;
+            // A fetched URL is untyped: parse it as GeoJSON when it is one, and
+            // fail fast on an unrecognised payload (e.g. an HTML error page)
+            // rather than handing Whitebox an opaque `.dat`.
+            let geojson: FeatureCollection | undefined;
+            if (bytes) {
+              try {
+                const parsed = JSON.parse(new TextDecoder().decode(bytes));
+                if (isFeatureCollection(parsed)) geojson = parsed;
+              } catch {
+                // not JSON; fall through to the extension check
+              }
+              if (!geojson && !/\.[A-Za-z0-9]+$/.test(path.split(/[?#]/)[0])) {
+                throw new Error(`Input "${name}" at ${path} is not a readable vector file.`);
+              }
+            }
+            return { name: path, kind, bytes, geojson };
+          }),
+        );
+      }
+      if (!layerInputs.length || layerInputs.some((item) => !item.geojson && !item.bytes)) {
+        // An optional vector input the user left blank (no layer and no path)
+        // is omitted, mirroring the raster/lidar/file branch below.
+        if (!param.required && !layerInputs.length) continue;
+        throw new Error(`Missing vector input for "${name}"`);
+      }
+      // A map layer is RFC 7946 WGS84, while Whitebox's buffer tools are
+      // Cartesian. Run them in Web Mercator; the EPSG tag makes the GeoJSON
+      // writer return WGS84.
+      const files = layerInputs.map((item, index) => {
+        const geojson =
+          name === "input" && geographicBufferInput ? geographicBufferInput : item.geojson;
+        const extension = item.geojson
+          ? "geojson"
+          : (item.name.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase() ?? "dat");
+        const file =
+          layerInputs.length === 1 ? `${name}.${extension}` : `${name}_${index + 1}.${extension}`;
+        input[file] = geojson ? encoder.encode(JSON.stringify(geojson)) : item.bytes!;
+        return `/work/${file}`;
+      });
+      args.push(`--${name}=${files.join(",")}`);
     } else if (kind === "raster_in" || kind === "lidar_in" || kind === "file_in") {
       // Prefer bytes the caller resolved (the dialog fetches the layer's data);
       // otherwise try to fetch the parameter as a URL.
       const provided = request.parameters[name];
       const hasValue = typeof provided === "string" ? provided.length > 0 : provided != null;
-      const bytes =
-        request.layer_inputs?.[name]?.bytes ?? (hasValue ? await fetchBytes(provided) : null);
-      if (!bytes) {
+      const supplied = request.layer_inputs?.[name];
+      const suppliedInputs = Array.isArray(supplied) ? supplied : supplied ? [supplied] : [];
+      const paths =
+        isMultipleWhiteboxDatasetParameter(param) && typeof provided === "string"
+          ? provided
+              .split(/[;,]/)
+              .map((path) => path.trim())
+              .filter(Boolean)
+          : hasValue
+            ? [provided]
+            : [];
+      const byteInputs = suppliedInputs.length
+        ? suppliedInputs.map((item) => item.bytes ?? null)
+        : await Promise.all(paths.map((path) => fetchBytes(path)));
+      if (!byteInputs.length || byteInputs.some((bytes) => !bytes)) {
         // An optional data input the user left blank is simply omitted rather
         // than force-fetched: e.g. extract_cog_subset's `input` when a `url` is
         // supplied instead (the tool reads the COG by byte-range from that url).
         // Only a required input, or one with a value that could not be fetched,
         // is a hard error.
-        if (!param.required && !hasValue) continue;
+        if (!param.required && !hasValue && !suppliedInputs.length) continue;
         throw new Error(
           `Could not read input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
         );
       }
-      if (kind === "raster_in" && !isTiff(bytes)) {
+      if (kind === "raster_in" && byteInputs.some((bytes) => !isTiff(bytes!))) {
         throw new Error(
-          `Input "${name}" is not a readable GeoTIFF in the browser (received ${describeBytes(bytes)}). Load the raster as a COG/GeoTIFF, or use the sidecar.`,
+          `Input "${name}" is not a readable GeoTIFF in the browser. Load the rasters as COG/GeoTIFF, or use the sidecar.`,
         );
       }
-      if (kind === "lidar_in" && !isLas(bytes)) {
+      if (kind === "lidar_in" && byteInputs.some((bytes) => !isLas(bytes!))) {
         throw new Error(
-          `Input "${name}" is not a readable LAS/LAZ file in the browser (received ${describeBytes(bytes)}). Load a LAS/LAZ file, or use the sidecar.`,
+          `Input "${name}" is not a readable LAS/LAZ file in the browser. Load LAS/LAZ files, or use the sidecar.`,
         );
       }
-      const ext = kind === "lidar_in" ? "las" : kind === "file_in" ? "dat" : "tif";
-      const file = `${name}.${ext}`;
-      input[file] = bytes;
-      args.push(`--${name}=/work/${file}`);
+      const files = byteInputs.map((bytes, index) => {
+        // A LiDAR input is named for its own encoding: Whitebox reads by
+        // extension, so LAZ/COPC bytes named `.las` decode as garbage.
+        const ext =
+          kind === "lidar_in" ? lidarBytesExtension(bytes!) : kind === "file_in" ? "dat" : "tif";
+        const file = byteInputs.length === 1 ? `${name}.${ext}` : `${name}_${index + 1}.${ext}`;
+        input[file] = bytes!;
+        return `/work/${file}`;
+      });
+      args.push(`--${name}=${files.join(",")}`);
     } else if (kind === "vector_out") {
       const base = outputBaseName(request.tool_id, name);
       // GeoJSON is reprojected to WGS84 on write (a map layer); the other formats
@@ -645,6 +876,15 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
         });
         args.push(`--${name}=/work/${file}`);
       }
+    } else if (kind === "lidar_out") {
+      // LiDAR outputs come back as raw LAS bytes (e.g. a classified copy of the
+      // input); callers decide whether to load or parse them. The tool picks
+      // its writer from the extension, so honour a user-typed `.laz` (LASzip
+      // compressed) instead of always asking for uncompressed `.las`.
+      const ext = lidarOutputTargetExtension(request.parameters[name]);
+      const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
+      outputs.push({ name, file, kind: "bytes" });
+      args.push(`--${name}=/work/${file}`);
     } else if (kind === "raster_out" || kind === "file_out") {
       // raster_out is always a GeoTIFF. file_out is an opaque output whose
       // format the tool infers from the output *extension* (e.g.
@@ -656,17 +896,28 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       const ext =
         kind === "file_out" ? fileOutputTargetExtension(param, request.parameters[name]) : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, kind: kind === "raster_out" ? "raster" : "bytes" });
+      outputs.push({
+        name,
+        file,
+        kind: kind === "raster_out" ? "raster" : "bytes",
+      });
       args.push(`--${name}=/work/${file}`);
     } else {
-      const value = request.parameters[name];
+      const value = parameterOverrides[name] ?? request.parameters[name];
       if (value !== undefined && value !== null && value !== "") {
         args.push(`--${name}=${value}`);
       }
     }
   }
 
-  const { exitCode, stdout, files } = await runTool(request.tool_id, { args, input });
+  // Off the main thread: the WASI runner is one synchronous call with no yield
+  // points, so running it here would freeze the UI for the tool's whole
+  // duration (~60s for the 290-polygon dissolve in GeoLibre#1977).
+  const { exitCode, stdout, files } = await runWasmToolInBackground({
+    tool: request.tool_id,
+    args,
+    input,
+  });
   if (exitCode !== 0) {
     return job(
       request.tool_id,

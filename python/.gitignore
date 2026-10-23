@@ -1,4 +1,4 @@
-# Bundled web app, produced by `npm run build:embed` at build time.
+# Bundled frontend apps, staged by `npm run build:embed` and `npm run build:mcp-app`.
 src/geolibre/static/
 
 # Python build artifacts

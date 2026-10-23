@@ -6,7 +6,11 @@ const STORE_NAME = "snapshots";
 const METADATA_STORE_NAME = "snapshot-metadata";
 const MAX_SNAPSHOTS = 20;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
-const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+/**
+ * Largest serialized project autosave keeps. Above it a snapshot is skipped
+ * ("too-large") and the status bar shows autosave as paused.
+ */
+export const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 
 export interface ProjectHistorySnapshot {
   id: string;
@@ -40,6 +44,9 @@ function snapshotMetadata(snapshot: ProjectHistorySnapshot): ProjectHistoryMetad
 function available(): boolean {
   return typeof indexedDB !== "undefined";
 }
+
+/** Another tab holds an older version of the database open. Transient. */
+class ProjectHistoryBlockedError extends Error {}
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -83,7 +90,7 @@ function openDatabase(): Promise<IDBDatabase> {
       rejectOnce(request.error ?? new Error("Could not open project history."));
     request.onblocked = () =>
       rejectOnce(
-        new Error(
+        new ProjectHistoryBlockedError(
           "Project history is blocked by another GeoLibre tab. Close or reload other tabs and try again.",
         ),
       );
@@ -105,6 +112,29 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
     transaction.onabort = () =>
       reject(transaction.error ?? new Error("Project history transaction was aborted."));
   });
+}
+
+/**
+ * Whether this browser lets the app keep project history at all.
+ *
+ * False when IndexedDB is missing or refuses to open — a private window in some
+ * browsers, site data blocked by policy, a storage failure — in which case
+ * autosave can never write a snapshot and crash recovery has nothing to offer.
+ * A database merely blocked by another tab's upgrade counts as available: that
+ * clears once the other tab closes.
+ *
+ * Returns:
+ *   Whether the project history database can be opened.
+ */
+export async function probeProjectHistoryStorage(): Promise<boolean> {
+  if (!available()) return false;
+  try {
+    const db = await openDatabase();
+    db.close();
+    return true;
+  } catch (error) {
+    return error instanceof ProjectHistoryBlockedError;
+  }
 }
 
 export async function listProjectSnapshots(projectKey?: string): Promise<ProjectHistorySnapshot[]> {
@@ -158,6 +188,7 @@ function createSnapshotId(): string {
 export async function addProjectSnapshot(
   content: string,
   projectKey?: string,
+  createdAt = new Date().toISOString(),
 ): Promise<AddProjectSnapshotResult> {
   if (!available()) return "duplicate";
   const size = new Blob([content]).size;
@@ -173,7 +204,7 @@ export async function addProjectSnapshot(
   if (existing[0]?.contentHash === contentHash) return "duplicate";
   const snapshot: ProjectHistorySnapshot = {
     id: createSnapshotId(),
-    createdAt: new Date().toISOString(),
+    createdAt,
     content,
     size,
     name: project.name,

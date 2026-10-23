@@ -1,0 +1,98 @@
+import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+import type { GeoLibreAppAPI } from "../types";
+import { getControlMap } from "./style-map";
+
+const mountedControlCleanup = new WeakMap<IControl, () => void>();
+
+/** Synchronously unmount a bridged control if its docked panel is mounted. */
+export function unmountMapControlFromPanel(control: IControl): void {
+  mountedControlCleanup.get(control)?.();
+}
+
+/**
+ * Mount only a MapLibre control's content inside a host-owned dockable panel.
+ *
+ * The control lifecycle remains an implementation bridge for its map and
+ * service logic, but its toolbar button and floating shell are not mounted.
+ * Layout, resizing, and close/collapse chrome belong exclusively to GeoLibre.
+ *
+ * The bridge binds to whichever 2D engine is drawing the primary map
+ * ({@link getControlMap}): the docked controls only use the style API both
+ * engines share, so a plugin that declares Mapbox support docks here on the
+ * Mapbox renderer without a second mount path. On ArcGIS the control gets the
+ * host's facade, whose style is recorded but not drawn: a plugin docked there
+ * must mirror what it draws into the store, as the Web Services catalogs do.
+ *
+ * @param onMapRemove - Called after the bridge unmounts because the map itself
+ *   was removed (not on a panel close). A renderer swap with no replacement
+ *   engine re-renders nothing, so a plugin that keeps state outside the control
+ *   releases it here.
+ */
+export function mountMapControlInPanel(
+  app: GeoLibreAppAPI,
+  control: IControl,
+  container: HTMLElement,
+  onMountFailure?: () => void,
+  onMapRemove?: () => void,
+): (() => void) | null {
+  const map = getControlMap(app);
+  if (!map) {
+    console.warn("Could not mount docked map control: the map is not ready.");
+    onMountFailure?.();
+    return null;
+  }
+
+  // Most MapLibre controls return their toolbar button from onAdd(), but the
+  // Web Services controls append the actual floating panel as a sibling under
+  // the map container. Capture those new siblings so the dock receives the
+  // real UI instead of only the (hidden) toolbar toggle.
+  const mapContainer = map.getContainer();
+  const existingMapChildren = new Set(mapContainer.children);
+  const element = control.onAdd(map as MapLibreMap);
+  const appendedElements = [...mapContainer.children].filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !existingMapChildren.has(child) && child !== element,
+  );
+  const contentElements =
+    appendedElements.length > 0
+      ? appendedElements
+      : [
+          element.matches(".vantor-panel")
+            ? element
+            : element.querySelector<HTMLElement>(".vantor-panel"),
+        ].filter((candidate): candidate is HTMLElement => candidate !== null);
+  if (contentElements.length === 0) {
+    console.warn("Could not mount docked map control: no panel content was created.");
+    control.onRemove(map as MapLibreMap);
+    onMountFailure?.();
+    return null;
+  }
+  container.classList.add("geolibre-docked-map-control");
+  container.replaceChildren(...contentElements);
+
+  let removed = false;
+  const cleanup = (event?: unknown) => {
+    if (removed) return;
+    removed = true;
+    if (mountedControlCleanup.get(control) === cleanup) mountedControlCleanup.delete(control);
+    map.off("remove", cleanup);
+    try {
+      control.onRemove(map as MapLibreMap);
+    } catch (error) {
+      // A "remove" event fires after the engine has torn the map down (a
+      // renderer swap), so a control that touches the canvas in onRemove
+      // throws. That must not abort the map's own destroy; a panel close
+      // keeps the map alive, so there a throw is a real bug and propagates.
+      if (!event) throw error;
+    }
+    container.replaceChildren();
+    container.classList.remove("geolibre-docked-map-control");
+    if (event) onMapRemove?.();
+  };
+  // Unlike a floating control this bridge is not in MapLibre's internal
+  // control list, so explicitly participate in map teardown as well as panel
+  // teardown. The idempotent cleanup handles either ordering.
+  map.on("remove", cleanup);
+  mountedControlCleanup.set(control, cleanup);
+  return cleanup;
+}

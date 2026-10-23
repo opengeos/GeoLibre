@@ -13,7 +13,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { ChartRow } from "../../lib/attribute-charts";
-import { computeFieldStats, formatStatValue, type FieldStats } from "../../lib/attribute-stats";
+import {
+  computeFieldStats,
+  formatStatValue,
+  resolveStatsScope,
+  statsScopeAvailability,
+  type FieldStats,
+  type StatsScope,
+} from "../../lib/attribute-stats";
 
 interface AttributeStatsDialogProps {
   open: boolean;
@@ -22,25 +29,29 @@ interface AttributeStatsDialogProps {
   rows: ChartRow[];
   /** Rows matching the table's current search filter (a subset of `rows`). */
   filteredRows: ChartRow[];
+  /** Rows matching the layer's current feature selection (a subset of `rows`). */
+  selectedRows: ChartRow[];
   columns: string[];
   layerName: string;
 }
 
-type StatsScope = "all" | "filtered";
+/** Neither narrowed scope, for while the dialog is closed. */
+const NO_SCOPES = { hasFilter: false, hasSelection: false };
 
 /**
  * One-click field statistics summary for the attribute table: pick a field and
  * read its count / nulls / min / max / mean / median / std / sum / unique
  * (numeric) or count / nulls / unique / most-frequent values (text). When a
- * search filter is active the scope can switch between all features and the
- * filtered subset. The computation lives in `attribute-stats`; this only renders
- * it.
+ * search filter or a feature selection narrows the table, the scope can switch
+ * between all features and that subset. The computation lives in
+ * `attribute-stats`; this only renders it.
  */
 export function AttributeStatsDialog({
   open,
   onOpenChange,
   rows,
   filteredRows,
+  selectedRows,
   columns,
   layerName,
 }: AttributeStatsDialogProps) {
@@ -49,9 +60,13 @@ export function AttributeStatsDialog({
   const [scope, setScope] = useState<StatsScope>("all");
   const [copied, setCopied] = useState(false);
 
-  // A filter is active (and worth offering as a scope) only when it actually
-  // narrows the row set; otherwise the two scopes would be identical.
-  const hasFilter = filteredRows.length !== rows.length;
+  // Which narrowed scopes to offer. Only worth working out while the dialog is
+  // open: the parent keeps it mounted and feeds it rows whenever any analysis
+  // dialog is open, and the overlap check walks the rows.
+  const { hasFilter, hasSelection } = useMemo(
+    () => (open ? statsScopeAvailability(rows, filteredRows, selectedRows) : NO_SCOPES),
+    [open, rows, filteredRows, selectedRows],
+  );
 
   // Seed the field picker when the dialog opens. Keyed on `open` only: `columns`
   // gets a fresh identity every parent render, so depending on it here would
@@ -64,13 +79,17 @@ export function AttributeStatsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Fall back to "all" when the active filter clears while the dialog is open,
-  // so the scope select never points at an option that is no longer offered.
-  useEffect(() => {
-    if (!hasFilter) setScope("all");
-  }, [hasFilter]);
+  const activeScope = resolveStatsScope(scope, { hasFilter, hasSelection });
 
-  const scopedRows = scope === "filtered" && hasFilter ? filteredRows : rows;
+  // Follow the resolved scope back into state when a transient scope disappears
+  // while the dialog is open, so the select never points at an option that is no
+  // longer offered.
+  useEffect(() => {
+    if (activeScope !== scope) setScope(activeScope);
+  }, [activeScope, scope]);
+
+  const scopedRows =
+    activeScope === "filtered" ? filteredRows : activeScope === "selected" ? selectedRows : rows;
 
   const stats = useMemo<FieldStats | null>(() => {
     if (!open || !field) return null;
@@ -81,9 +100,11 @@ export function AttributeStatsDialog({
     if (!stats || !field) return;
     const lines = statRows(stats, t).map(([label, value]) => `${label}\t${value}`);
     const header =
-      scope === "filtered"
+      activeScope === "filtered"
         ? t("attributeStats.copyHeaderFiltered", { field })
-        : t("attributeStats.copyHeader", { field });
+        : activeScope === "selected"
+          ? t("attributeStats.copyHeaderSelected", { field })
+          : t("attributeStats.copyHeader", { field });
     void navigator.clipboard
       ?.writeText([header, ...lines].join("\n"))
       .then(() => setCopied(true))
@@ -125,13 +146,13 @@ export function AttributeStatsDialog({
                   ))}
                 </Select>
               </div>
-              {hasFilter ? (
+              {hasFilter || hasSelection ? (
                 <div className="grid gap-1.5">
                   <Label htmlFor="stats-scope">{t("attributeStats.scope")}</Label>
                   <Select
                     id="stats-scope"
                     className="w-44"
-                    value={scope}
+                    value={activeScope}
                     onChange={(event) => {
                       setScope(event.target.value as StatsScope);
                       setCopied(false);
@@ -140,11 +161,20 @@ export function AttributeStatsDialog({
                     <option value="all">
                       {t("attributeStats.scopeAll", { total: rows.length.toLocaleString() })}
                     </option>
-                    <option value="filtered">
-                      {t("attributeStats.scopeFiltered", {
-                        total: filteredRows.length.toLocaleString(),
-                      })}
-                    </option>
+                    {hasFilter ? (
+                      <option value="filtered">
+                        {t("attributeStats.scopeFiltered", {
+                          total: filteredRows.length.toLocaleString(),
+                        })}
+                      </option>
+                    ) : null}
+                    {hasSelection ? (
+                      <option value="selected">
+                        {t("attributeStats.scopeSelected", {
+                          total: selectedRows.length.toLocaleString(),
+                        })}
+                      </option>
+                    ) : null}
                   </Select>
                 </div>
               ) : null}

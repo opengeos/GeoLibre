@@ -14,7 +14,8 @@
 import { ANNOTATIONS_PLUGIN_ID, GEOAGENT_PLUGIN_ID, GEO_EDITOR_PLUGIN_ID } from "./plugin-ids";
 
 /**
- * Plugins that must never be active under the viewer preset, because their
+ * Plugins that must never be active under the plain viewer preset (see
+ * {@link isViewerBlockedPlugin} for the `draw` exception), because their
  * on-map control creates or edits project data:
  *
  * - {@link GEO_EDITOR_PLUGIN_ID} — vertex/geometry editing handles.
@@ -49,3 +50,24 @@ export const VIEWER_BLOCKED_PLUGIN_IDS: readonly string[] = [
   ANNOTATIONS_PLUGIN_ID,
   GEOAGENT_PLUGIN_ID,
 ];
+
+/**
+ * Whether the viewer preset refuses to run a plugin for this launch.
+ *
+ * With `drawing` (`?layout=viewer&draw`) the geometry editor is let through, so
+ * a host page can offer drawing in an otherwise read-only embed. Annotations
+ * and GeoAgent stay blocked: they are authoring tools, not drawing for the
+ * host to read back. Outside the viewer nothing is blocked.
+ *
+ * @param id - The plugin id.
+ * @param launch - `viewer`: the launch is `layout=viewer`; `drawing`: it also opted into `draw`.
+ * @returns True when the plugin must stay deactivated.
+ */
+export function isViewerBlockedPlugin(
+  id: string,
+  launch: { viewer: boolean; drawing: boolean },
+): boolean {
+  if (!launch.viewer) return false;
+  if (launch.drawing && id === GEO_EDITOR_PLUGIN_ID) return false;
+  return VIEWER_BLOCKED_PLUGIN_IDS.includes(id);
+}

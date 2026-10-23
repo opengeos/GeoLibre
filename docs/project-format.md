@@ -1,25 +1,61 @@
 # GeoLibre Project Format
 
-Projects are saved as **`.geolibre.json`** files.
+Projects are saved as **`.geolibre`** files. GeoLibre continues to open the
+earlier **`.geolibre.json`** name, but the single extension lets desktop
+installers associate projects with GeoLibre without taking ownership of every
+JSON file on the system.
+
+## Desktop file opening
+
+Desktop installers register `.geolibre` as a GeoLibre Project document. Opening
+one from the file manager launches GeoLibre, or brings the existing GeoLibre
+window forward, and loads the project. The desktop executable also accepts both
+supported names on the command line:
+
+```text
+geolibre-desktop /path/to/watershed.geolibre
+geolibre-desktop /path/to/legacy.geolibre.json
+```
+
+Operating systems see only `.json` at the end of a `.geolibre.json` name. Those
+legacy files continue to open from inside GeoLibre and from the command line,
+but renaming one to `.geolibre` is required for file-manager association. The
+file contents do not change.
 
 ## Schema
 
 | Field             | Type    | Description                                                                                                  |
 | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| `version`         | string  | Format version (`0.1.0`)                                                                                     |
+| `version`         | string  | Format version: the app writes `0.2.0`; older files and the Python package write `0.1.0`                    |
 | `name`            | string  | Project display name                                                                                         |
 | `mapView`         | object  | `center`, `zoom`, `bearing`, `pitch`, optional `bbox`                                                        |
 | `basemapStyleUrl` | string  | MapLibre style JSON URL, or an empty string for a blank background                                           |
 | `basemapVisible`  | boolean | Whether the Background layer is visible                                                                      |
 | `basemapOpacity`  | number  | Background layer opacity from `0` to `1`                                                                     |
+| `blankBackgroundColor` | string \| null | Optional custom colour for the Blank background; `null` uses the theme default                       |
 | `layers`          | array   | Layer definitions (see below)                                                                                |
+| `selectedLayerId` | string \| null | Optional layer selected in the Layers panel when the project was saved; `null` restores no active layer    |
+| `layerGroups`     | array   | Optional Layers-panel folders (`id`, `name`, `parentId`, `collapsed`, `visible`, `opacity`); omitted when empty |
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
+| `preferences`     | object  | Project map preferences, environment variables, and geocoding settings (see [Credential redaction](#credential-redaction)) |
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
 | `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
+| `printLayout`     | object  | Optional Print Layout composer settings (title, page size, orientation, blocks, atlas); omitted when default  |
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
+| `models`          | array   | Optional saved processing models (Model Builder pipelines)                                                   |
+| `processingHistory` | array | Optional record of processing tool runs (Processing History)                                                 |
+| `obia`            | object  | Optional Object-Based Analysis workbench state: settings, classes, and run provenance (see [Object-Based Analysis](user-guide/obia.md#saving-and-provenance)); omitted until the workbench is used |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
+| `mapLayout`       | object  | Optional multi-map grid (`rows`, `cols`, `syncView`); omitted for a single map                               |
+| `secondaryMapViews` | array | Optional panes past the primary one, each with its own camera and layer visibility; omitted for a single map |
+| `primaryMapLabel` | string  | Optional label for the primary pane of a multi-map grid                                                      |
+| `bookmarks`       | array   | Optional saved map views from the Bookmarks panel (see below); omitted when there are none                   |
+| `bookmarkGroups`  | array   | Optional folders the bookmarks are organized into; omitted when there are none                               |
 | `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
+| `primaryRenderer` | string  | Optional engine for the primary map area: `"maplibre"` (2D, the default), `"mapbox"` (Mapbox GL JS), `"arcgis"` (ArcGIS Maps SDK for JavaScript) or `"cesium"` (3D globe); omitted when default |
+| `comments`        | array   | Optional review comments anchored to map points or features, with replies                                    |
+| `interaction`     | object  | Optional startup Identify target and control visibility (see below); omitted by default                      |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state
@@ -78,6 +114,48 @@ survive layer additions and removals.
 Projects without a `legend` section open with the default legend (auto-generated
 from the layers, titled "Legend").
 
+## Print layout
+
+The Print Layout composer (Project -> Print Layout) belongs to the project, so
+the page it composes reopens as it was saved. The section is written only once
+a setting differs from the defaults, so a project that never opened the composer
+carries no `printLayout` key.
+
+```json
+{
+  "title": "Dentists by region",
+  "subtitle": "2026",
+  "paperSize": "a3",
+  "orientation": "portrait",
+  "pageMargin": "normal",
+  "showLegend": true,
+  "showScaleBar": true,
+  "showNorthArrow": true,
+  "showDataTable": true,
+  "tableLayerId": "layer-a",
+  "tableColumns": ["name", "count"],
+  "atlasEnabled": false
+}
+```
+
+- Title block: `title`, `subtitle`, `titlePlacement`, `titleAlign`. A blank
+  `title` follows the project name rather than freezing a copy of it.
+- Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
+  `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
+  `customUnit` for `custom`, `pageMargin`, and the page/map frame colours.
+- Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
+  date, attribution, colorbar, custom legend and info block, with their
+  per-element settings.
+- Data blocks: `tableLayerId` / `chartLayerId` name a project layer; a block
+  whose layer is missing from the project opens cleared rather than blank.
+- Atlas: `atlasEnabled` plus the coverage layer, extent mode, sorting, filter
+  and filename pattern for the map series.
+
+Unknown or malformed values fall back to the default for that field, so a
+hand-edited file never leaves the composer in an unusable state. Per-session
+state (the captured map image, the current atlas page, the dialog's panel
+widths) is deliberately not stored.
+
 ## Story map
 
 A story map turns the project into a scroll-driven narrative. Each chapter
@@ -130,9 +208,13 @@ self-contained HTML page for static hosting.
 ```
 
 Each widget binds a chart to a layer's attributes. `type` is one of `histogram`,
-`scatter`, `bar`, `line`, `box`, or `pie`. Which other keys apply depends on the
-type: `field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
-`aggregation` + `valueField` (bar/pie), `bins` (histogram). Bar `aggregation` is
+`scatter`, `bar`, `line`, `box`, `pie`, `indicator`, `selector`, or `list`.
+Which other keys apply depends on the type: `field` (histogram/line/box, and
+indicator unless it counts), `xField`/`yField` (scatter), `category` +
+`aggregation` + `valueField` (bar/pie), `bins` (histogram),
+`indicatorAggregation` (`count`/`sum`/`mean`/`min`/`max`/`median`) + `prefix` +
+`suffix` (indicator), `category` + `multiple` (selector), and `listFields` +
+`sortBy` + `sortDir` + `limit` (list). Bar `aggregation` is
 `count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label and
 `color` an optional hex (`#rgb`/`#rrggbb`) for the chart's marks (the series
 color for single-series charts; the base of a monochromatic ramp for bar/pie).
@@ -141,6 +223,61 @@ Unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
 widget-grid column count (1-6, default 2), at the top level of the project.
 Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets
 bound to a missing or non-attribute layer are shown as empty.
+
+## Bookmarks
+
+```json
+{
+  "bookmarkGroups": [{ "id": "hoods", "name": "Neighborhoods", "collapsed": false }],
+  "bookmarks": [
+    {
+      "id": "downtown",
+      "name": "Downtown",
+      "lng": -83.92,
+      "lat": 35.96,
+      "zoom": 14,
+      "pitch": 30,
+      "bearing": 340,
+      "createdAt": 1700000000000,
+      "groupId": "hoods",
+      "extra": { "visibleLayerIds": ["cities"] }
+    }
+  ]
+}
+```
+
+Saved views from the Bookmarks panel (Controls → Bookmark), in panel order.
+`lng`/`lat` (-180..180 / -90..90), `zoom` (0-24), `pitch` (0-85) and `bearing`
+(wrapped into 0-360) are the camera; `createdAt` is milliseconds since the
+epoch. `groupId` files a bookmark in one of `bookmarkGroups` (folders do not
+nest); a `groupId` that names no folder is dropped on load. `extra` is state
+captured with the view: `visibleLayerIds` lists the layers to show when the
+bookmark is opened, and the others are hidden. Bookmarks with a missing or
+out-of-range camera, or a duplicate `id`, are dropped on load. Before these
+fields existed, bookmarks lived only in the browser's local storage.
+
+## Interaction
+
+```json
+{
+  "interaction": {
+    "identify": ["layer-a", "layer-b"],
+    "controls": { "search": true, "globe": false }
+  }
+}
+```
+
+Applied when the project opens, so a map shared from a notebook starts the way
+it was set up there. The Python package writes it from `Map.set_identify` and
+`Map.show_control` / `Map.hide_control` in `save_project`, `to_project` and
+`to_html`. `identify` is a layer id, `"all"` for every visible queryable layer,
+a list of layer ids to identify only those, or `null` for off; ids that name no
+layer are skipped. `controls` maps a toolbar panel (`bookmark`, `search`,
+`measure`, `minimap`, `print`) or built-in map control (`navigation`,
+`fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`)
+to whether it starts shown; other names are ignored. The app writes the block
+back unchanged when it saves the project; turning Identify or a control on or
+off in the app does not edit it.
 
 ## Layer object
 
@@ -169,9 +306,48 @@ bound to a missing or non-attribute layer are shown as empty.
   },
   "metadata": {},
   "geojson": { "type": "FeatureCollection", "features": [] },
-  "sourcePath": "/path/to/file.geojson"
+  "sourcePath": "/path/to/file.geojson",
+  "editorTracking": {
+    "enabled": false,
+    "createdByField": "created_by",
+    "createdAtField": "created_at",
+    "editedByField": "edited_by",
+    "editedAtField": "edited_at"
+  },
+  "capabilities": {
+    "query": true,
+    "create": true,
+    "update": true,
+    "delete": true,
+    "export": true
+  }
 }
 ```
+
+A layer can define an optional `capabilities` set (`query`, `create`, `update`,
+`delete`, `export`) to explicitly declare allowed user and session actions. Each
+flag gates only the actions it names: `query` the identify/attribute-table and
+feature-selection paths, `create`/`update`/`delete` the feature writes, and
+`export` the paths that copy the layer's data out (Export, Save to Layer
+Library, Export selection). Renaming a layer or removing it from the project is
+not a feature edit and stays available. Omitted capabilities default to the
+behavior inferred from the layer's source kind. When `export` is `false`,
+project sharing/publishing strips embedded GeoJSON for that layer.
+
+`export: false` strips the feature data the project file itself carries — the
+layer's inline `geojson` and its `metadata.embeddedGeoJSON` snapshot. It does
+not remove the layer's `source` or `connection`, so a layer that fetches its
+data live (WFS, ArcGIS FeatureServer, a remote GeoJSON or tile URL) is still
+shared with a reachable URL and re-fetches the same data when the project is
+opened. For that class of layer the flag hides the copy in the file, not the
+data itself.
+
+`capabilities` describes the layer, and the app enforces it in the UI; it is not
+an access-control mechanism. The PostGIS sidecar refuses writes that contradict
+the capabilities the client sends with a save, which keeps an in-app edit from
+contradicting the layer's own configuration, but the sidecar has no independent
+record of a table's capabilities and cannot tell one caller from another. Use
+database grants for restrictions that must hold against an untrusted client.
 
 For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
 optional auto-refresh interval. `intervalMs` can be any positive interval in
@@ -209,6 +385,14 @@ manual synchronization only. `lastSyncedAt` records the most recent successful
 synchronization and `lastError` the most recent failure (cleared on the next
 success). `onFailure` decides whether a failed synchronization retains the last
 good data (`"keep-last"`, the default) or discards it (`"clear"`).
+
+SQL Server layers may also carry top-level `mssqlWritebackPending: true` when
+a write committed but its reread failed, or the write outcome could not be
+confirmed. This flag survives project save/load and blocks another Save Edits
+until a successful manual Refresh restores generated keys and the read baseline.
+Recovery failure preserves the layer's features even with `onFailure: "clear"`.
+Successful recovery removes the flag; the prior baseline metadata remains
+unchanged until that read succeeds.
 
 For local-file vector layers on the desktop app, `metadata.watch` can persist a
 "watch this file for changes" toggle. When enabled, the desktop app registers a
@@ -261,11 +445,198 @@ rewritten on every apply: `addedFields` lists the output columns the join added
 against the loaded layer set on project open, so a saved copy of the joined
 output self-heals if the join table changed.
 
+A vector layer may carry **quick filters** (Layer properties → Quick filters):
+data-driven filter controls that narrow what the layer draws without anyone
+writing a MapLibre expression. What persists is the *control state*, never the
+compiled output, so a saved filter can always be reopened and changed:
+
+```json
+{
+  "quickFilters": [
+    {
+      "id": "uuid",
+      "field": "state",
+      "kind": "categorical",
+      "values": ["OR", "WA"]
+    },
+    { "id": "uuid", "field": "pop", "kind": "range", "min": 200000, "max": null },
+    {
+      "id": "uuid",
+      "field": "founded",
+      "kind": "date",
+      "dateKind": "iso",
+      "start": "1840-01-01",
+      "end": "1900-12-31"
+    },
+    { "id": "uuid", "field": "name", "kind": "text", "operator": "contains", "text": "port" }
+  ]
+}
+```
+
+`kind` picks the control and the comparison: `categorical` (checkboxes over
+`values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
+open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
+(case-insensitive `contains` / `startsWith` / `equals` against `text`).
+`dateKind` says how the field stores its timestamps — `iso` (the default,
+comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
+`enabled: false` mutes a control without discarding what it was answered with.
+A control with nothing chosen places no constraint, so an emptied selection
+shows every feature rather than none.
+
+A vector layer may also carry a persistent boolean MapLibre expression filter.
+This is authored from **Select by Expression → Filter layer** and hides
+non-matching features without changing or copying the source data:
+
+```json
+{
+  "filterExpression": [">=", ["get", "population"], 100000]
+}
+```
+
+The expression is saved with the project and remains active until it is cleared
+from the Select by Expression panel or from the layer's **Clear filters** action.
+It combines with Quick Filters and the transient filters described below.
+
+What is stored is a plain MapLibre expression, so the Expression Builder's `@`
+variables (`@project_name`, `@layer_name`, `@feature_count`, `@map_zoom`,
+`@map_scale`) are resolved to literal values at the moment the filter is
+applied and do not track the map afterwards. Use the MapLibre `["zoom"]`
+operator instead when the filter should follow the current zoom.
+
+A point layer using the cluster renderer is worth noting, because MapLibre
+clusters at the source, before the renderer evaluates any filter. GeoLibre
+therefore narrows a clustered layer's source data by the persistent expression
+filter and Quick Filters, so its bubbles and counts follow both. A Time Slider
+window, a rule filter, and an embed `setFilter` remain per-feature render
+filters and cannot change an already-built cluster, so counts stay unnarrowed by
+those while clustering is on.
+
+The compiled filter is combined with the transient `timeFilter` and
+`embedFilter` and with the rule-based renderer's hide-unmatched filter under a
+single `all`, so a host page's `setFilter`, a Time Slider window, and a user's
+quick filter narrow the layer together instead of replacing one another. Quick
+filters are also shown in the read-only `layout=viewer` chrome: filtering is a
+way of reading a shared map, not of editing it.
+
 When a `geojson` layer enables `style.simpleStyleEnabled`, individual features
 may override the layer style with [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
 properties (`stroke`, `fill`, `stroke-width`, `fill-opacity`, ...). GeoLibre also
 honors a per-feature `text-color` on text-marker points (used by the Annotations
 layer), falling back to `style.textColor` when a feature does not set it.
+
+A vector layer may carry a `popup` block (Style panel → Popup): the design for
+what a viewer sees when they click or hover a feature. It decides which fields
+appear, in what order, under what labels and value formatting, what titles the
+popup, and whether a hover tooltip follows the pointer:
+
+```json
+{
+  "popup": {
+    "click": true,
+    "hover": true,
+    "titleField": "name",
+    "showFeatureId": false,
+    "maxWidth": 640,
+    "imageHeight": 420,
+    "fields": [
+      {
+        "field": "pop_max",
+        "label": "Population",
+        "kind": "number",
+        "format": { "thousands": true, "suffix": " people" },
+        "hover": true
+      },
+      { "field": "region", "label": "Region" },
+      { "field": "homepage", "kind": "link", "format": { "linkLabel": "City website" } }
+    ]
+  }
+}
+```
+
+Every key is optional, and **a layer with no `popup` block keeps the historical
+behavior**: the layer name as the heading, then every property as a row. `click`
+defaults to `true` (`false` suppresses the Identify popup); `hover` defaults to
+`false`. `fields` narrows and orders what is shown — an absent or empty list
+means every visible field, in the data's own order — and a listed field the
+feature does not carry is skipped rather than printed empty. Each field's `kind`
+is one of `auto` (the untyped rendering: sanitized KML `description` markup and
+inline `data:image/*;base64` values as thumbnails), `text`, `number`, `date`,
+`link`, or `image`, and `format` carries `decimals`, `thousands`, `dateFormat`
+(`date` | `datetime` | `time` | `iso` | `year`), `prefix`, `suffix`, and
+`linkLabel`. `hover: true` on a field puts it in the tooltip's short subset; a
+tooltip with no flagged field shows the title alone, or nothing when the title
+is just the layer name.
+
+`maxWidth` (288-1200) is how wide the click popup may draw and `imageHeight`
+(40-1200) how tall an `image` field's thumbnail may draw inside it, both in CSS
+pixels; each is clamped to its range and `maxWidth` is capped by the viewport
+besides, so neither can produce a popup that blankets the map. Absent, the
+popup keeps its default width and image height. A thumbnail keeps its aspect
+ratio, so `imageHeight` alone does little for a landscape photo without
+`maxWidth` to match.
+
+`titleField` leads the popup with a feature's own value instead of the layer
+name; `titleExpression` (a MapLibre expression source) wins over it, and both
+fall back to the layer name when they produce nothing. `bodyExpression`
+replaces the whole body — the field rows and the `id` row with them — with a
+sentence built from the feature's properties, so `showFeatureId` has no effect
+while one is set.
+
+`fieldVisibility` stays authoritative: a field marked `"hidden"` or
+`"excluded"` never reaches a popup, even when the `popup` block names it — the
+popup design selects from what is visible, it cannot re-expose what the author
+hid. That holds for the expressions too: `titleExpression` and `bodyExpression`
+are evaluated against the visible properties only, so a `["get", …]` cannot
+pull back a hidden column or one of GeoLibre's internal ones. Raster pixel identify goes through a different path and ignores `popup`.
+
+### Descriptive metadata
+
+A layer may carry a `descriptiveMetadata` block: the catalog description edited
+in the layer's **Metadata** dialog (layer menu → Metadata). It documents the
+data and changes nothing about how the layer renders. It is separate from the
+layer's `metadata` record, which holds internal state the renderers and plugins
+key off.
+
+```json
+{
+  "descriptiveMetadata": {
+    "title": "Rivers of Tennessee",
+    "abstract": "Major rivers digitized from 1:24k topographic maps.",
+    "keywords": ["hydrology", "rivers"],
+    "license": "CC-BY-4.0",
+    "attribution": "© Tennessee GIS",
+    "contact": { "name": "Ada Lovelace", "email": "ada@example.org", "organization": "TN GIS" },
+    "lineage": "Digitized in 2019; generalized with Douglas-Peucker (10 m).",
+    "temporalExtent": { "start": "2019-01-01", "end": "2019-12-31" },
+    "links": [{ "href": "https://example.org/rivers", "rel": "about", "title": "Project page" }]
+  }
+}
+```
+
+Every member is optional and every value is a string (or a list of them).
+`license` is an [SPDX identifier](https://spdx.org/licenses/) or free text.
+`temporalExtent` bounds are ISO 8601 dates (`YYYY-MM-DD`) or date-times;
+either may be left out for an open interval. A link needs an absolute `href`;
+`rel` is a link relation (`related` when omitted) and `title` a label. On load,
+blank members, blank or duplicate (case-insensitive) keywords, and links with no
+`href` are dropped, and a block left with nothing in it is removed — an empty
+`descriptiveMetadata` is never written. Malformed values (an email without a
+domain, an impossible date) are kept so the dialog can show and fix them; the
+dialog refuses to save them.
+
+The dialog's **Export as STAC Item** writes the block as a
+[STAC 1.0](https://github.com/radiantearth/stac-spec/tree/v1.0.0) Item: the
+layer id as `id`, the layer's WGS84 extent as `geometry`/`bbox`, `title` (the
+layer name when unset), `abstract` as `description`, `keywords`, `license`, the
+contact as a `producer` provider, `lineage` as `processing:lineage` (with the
+processing extension declared), the temporal extent as `datetime` or
+`start_datetime`/`end_datetime`, the links, and a `data` asset for a remote
+source URL (a `tiles` asset when it is a `{z}/{x}/{y}` tile template). A
+license that is not an SPDX-style identifier is exported as `proprietary` with
+the text in `geolibre:license`; the attribution goes to `geolibre:attribution`. A layer with no temporal extent is stamped with the
+export time, since STAC requires a `datetime`. Exporting a vector layer to
+GeoParquet writes the block as JSON into the file's Parquet key-value metadata
+under `geolibre:metadata`, beside the `geo` key.
 
 ## Layer types
 
@@ -274,10 +645,11 @@ layer), falling back to `style.textColor` when a feature does not set it.
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
 | `wms`            | Supported as tiled WMS GetMap layers                                                               |
-| `raster`         | Supported for raster tile templates                                                                |
+| `wmts`           | Supported for WMTS raster tile templates                                                           |
+| `raster`         | Supported for raster tile templates; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion imagery asset the 3D globe loads with the app's Ion token (3D only) |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
 | `mbtiles`        | Desktop: local MapLibre protocol over Tauri. Browser: in-memory sql.js, not restored on reopen    |
-| `arcgis`         | Supported for ArcGIS FeatureServer and VectorTileServer layers                                     |
+| `arcgis`         | Supported for ArcGIS VectorTileServer layers (FeatureServer layers are saved as `geojson`, and MapServer/ImageServer layers as `raster`) |
 | `pmtiles`        | Supported through the Components plugin                                                            |
 | `cog`            | Supported for COG and GeoTIFF raster layers                                                        |
 | `flatgeobuf`     | Supported through the Components plugin and imported as GeoJSON when loaded as a local vector file |
@@ -286,7 +658,10 @@ layer), falling back to `style.textColor` when a feature does not set it.
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
 | `duckdb-query`   | Supported for SQL query-result layers                                              |
-| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin                               |
+| `deckgl-viz`     | Supported through the Deck.gl Layer plugin                                                         |
+| `video`          | Supported for georeferenced video overlays                                                         |
+| `image`          | Supported for georeferenced image overlays (KML ground overlays, the Georeferencer, NetCDF grids)  |
+| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` package; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion tileset the 3D globe loads with the app's Ion token (3D only) |
 
 ## API
 
@@ -305,9 +680,26 @@ A local project may contain credentials needed to restore authenticated data,
 including layer request headers, geocoding API keys, environment variables, and
 plugin settings. Any project leaving the local workspace must pass through
 `redactCredentials(project)` first. GeoLibre applies this invariant to Share,
-standalone HTML export, embed snapshots, and collaboration snapshots. Local
-Save and Save As ask whether credentials should be stripped or deliberately
-kept.
+standalone HTML export, embed snapshots, and collaboration snapshots. On the
+desktop app, geocoding API keys and uniquely named secret environment
+variables move to the OS keychain rather than the file; see
+[Credential storage](architecture.md#credential-storage). Duplicate or
+nameless secret environment rows cannot be stored under a unique account, so
+Local Save and Save As offer the same keep/strip prompt used when the keychain
+is unavailable or the web build contains project credentials.
+
+A layer `source.requestHeaders` value may reference an environment variable as
+`${NAME}`, e.g. `"Authorization": "Bearer ${TILES_TOKEN}"`. The reference is
+saved as written and resolved from the enabled `environmentVariables` rows when
+the request is made; a header whose variable is unset or empty is not sent. A
+value that is only an optional scheme word followed by one reference survives
+redaction; any other header value is removed.
+
+Each `preferences.environmentVariables` row may carry `"secret": false`. Rows
+without it are secrets: redaction removes them, and the desktop app stores
+their values in the keychain when they have a unique, nonempty name. Rows
+marked `"secret": false` are ordinary values: they stay in the file and survive
+Share and export.
 
 Saved model and processing-history parameter bags do not currently accept
 credentials and are treated as structural project content. If a future

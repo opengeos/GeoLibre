@@ -127,7 +127,7 @@ function emit(): void {
 
 function runHook(
   id: string,
-  hookName: "onOpen" | "onCollapse" | "onClose",
+  hookName: "onOpen" | "onCollapse" | "onClose" | "onExplicitClose",
   hook: (() => void) | undefined,
 ): void {
   if (!hook) return;
@@ -250,17 +250,20 @@ export function collapseRightPanel(id: string): void {
  * Close the active panel. No-op unless `id` is active.
  */
 export function closeRightPanel(id: string): void {
+  const panel = registry.get(id);
   if (!visibleIds.delete(id)) return;
   panelDocks.delete(id);
   if (activeId !== id) {
     emit();
+    runHook(id, "onExplicitClose", panel?.onExplicitClose);
     return;
   }
   activeId = null;
   collapsed = false;
   activeDock = null;
   emit();
-  runHook(id, "onClose", registry.get(id)?.onClose);
+  runHook(id, "onClose", panel?.onClose);
+  runHook(id, "onExplicitClose", panel?.onExplicitClose);
 }
 
 /**

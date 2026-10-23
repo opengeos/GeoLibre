@@ -13,8 +13,9 @@ import { Button, Input, Select } from "@geolibre/ui";
 import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
+import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { engineMarkerMap } from "../../lib/engine-style-map";
 import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";
 import { usePluginRegistry } from "../../hooks/usePlugins";
@@ -51,7 +52,9 @@ const SERIES_COLORS = [
 const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
+  /** Bumped by the shell each time the map (re)initialises, e.g. a renderer swap. */
+  mapReadyGeneration: number;
 }
 
 /**
@@ -124,7 +127,10 @@ interface ClickedPoint {
  * The pixel reads happen client-side via HTTP range reads (the same reader as
  * the single-COG Identify tool), so no Python sidecar is required.
  */
-export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesControlProps) {
+export function PixelTimeSeriesControl({
+  mapControllerRef,
+  mapReadyGeneration,
+}: PixelTimeSeriesControlProps) {
   const { t } = useTranslation();
   const { isActive } = usePluginRegistry();
   const timeSliderActive = isActive(TIME_SLIDER_PLUGIN_ID);
@@ -172,12 +178,14 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   const abortControllers = useRef<Map<number, AbortController>>(new Map());
   const idCounter = useRef(0);
 
-  // One MapLibre marker per clicked point, keyed by point id, so the map shows
+  // One marker per clicked point, keyed by point id, so the map shows
   // where each charted series was sampled. Held in a ref rather than state:
   // markers are imperative map objects, not rendered output, and the effect
   // below reconciles them against `points` (which "Clear all", removing a
   // point, and the Time Slider teardown all empty).
-  const markers = useRef<Map<number, maplibregl.Marker>>(new Map());
+  const markers = useRef<Map<number, AnnotationMarker>>(new Map());
+  // The map those markers were added to, so a renderer swap can rebuild them.
+  const markersMap = useRef<unknown>(null);
 
   // Panel geometry. A null rect means "use the default top-left placement
   // (CSS)"; the first drag or resize switches to absolute px so the panel is
@@ -203,16 +211,25 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // "Clear all", removing a single point, and the teardown that fires when the
   // Time Slider stack goes away all clear the map without their own bookkeeping.
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    // MapLibre's Marker, or a projected DOM marker on any other renderer.
+    const map = engineMarkerMap(mapControllerRef.current);
     const live = markers.current;
+    // After a renderer swap the markers still sit on the discarded map: drop
+    // them so the loop below rebuilds every point on the new one.
+    if (markersMap.current !== map) {
+      for (const marker of live.values()) marker.remove();
+      live.clear();
+      markersMap.current = map;
+    }
+    if (!map) return;
     for (const point of points) {
       if (live.has(point.id)) continue;
       live.set(
         point.id,
-        new maplibregl.Marker({ element: buildMarkerElement(point), anchor: "center" })
-          .setLngLat(point.lngLat)
-          .addTo(map),
+        createAnnotationMarker(map, {
+          element: buildMarkerElement(point),
+          anchor: "center",
+        }).setLngLat(point.lngLat),
       );
     }
     const ids = new Set(points.map((point) => point.id));
@@ -221,7 +238,7 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
       marker.remove();
       live.delete(id);
     }
-  }, [points, mapControllerRef]);
+  }, [points, mapControllerRef, mapReadyGeneration]);
 
   // Unmount (rather than an emptied `points`) leaves the effect above no chance
   // to run, so drop every marker here or they outlive the panel on the map.
@@ -285,17 +302,18 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // Esc stops picking.
   useEffect(() => {
     if (!picking) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    // Any engine with a render surface: its click subscription and canvas
+    // (the samples are drawn as projected markers).
+    const engine = mapControllerRef.current;
+    const canvas = engine?.getRenderSurface()?.getCanvas();
+    if (!engine || !canvas) {
       setPicking(false);
       return;
     }
-    const canvas = map.getCanvas();
     const prevCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
-    const onClick = (event: { lngLat: { lng: number; lat: number } }) => {
+    const onClick = (lngLat: [number, number]) => {
       const id = (idCounter.current += 1);
-      const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
       setPoints((prev) => [
         ...prev,
         {
@@ -316,14 +334,14 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
       // autocomplete closing), so picking isn't cancelled out from under it.
       if (event.key === "Escape" && !event.defaultPrevented) setPicking(false);
     };
-    map.on("click", onClick);
+    const unsubscribeClick = engine.onMapClick(onClick);
     window.addEventListener("keydown", onKey);
     return () => {
-      map.off("click", onClick);
+      unsubscribeClick();
       window.removeEventListener("keydown", onKey);
       canvas.style.cursor = prevCursor;
     };
-  }, [picking, runQueryForPoint, mapControllerRef, t]);
+  }, [picking, runQueryForPoint, mapControllerRef, mapReadyGeneration, t]);
 
   // Leaving the time-slider stack (dock closed or stack removed) tears the tool
   // down so the crosshair, panel, and click handler do not linger.

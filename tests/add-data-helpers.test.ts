@@ -6,11 +6,13 @@ import {
   type GeoLibreLayer,
   LAYER_PALETTE,
   useAppStore,
+  VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   EOX_S2CLOUDLESS_ATTRIBUTION,
   GEBCO_ATTRIBUTION,
+  ZARR_GLOBE_SAMPLES,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
 import {
   appendQuery,
@@ -20,15 +22,18 @@ import {
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
+  normalizeWmsCrs,
   normalizeWmsVersion,
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
   geoJsonToPointRows,
+  isServiceFormUrl,
   layerNameFromPath,
   normalizeCrs,
   parseOptionalNumber,
   parseRequiredNumber,
   parseVideoCorner,
+  readLimitedBody,
   resolveDelimitedTextDelimiter,
   savedPostgresConnectionLabel,
   serviceRequestErrorMessage,
@@ -137,6 +142,68 @@ describe("createWmsTileUrl", () => {
   });
 });
 
+describe("createWmsTileUrl with a crs", () => {
+  const base = {
+    endpoint: "https://x.test/wms",
+    layers: "a",
+    styles: "",
+    format: "image/png",
+    transparent: true,
+    tileSize: 256,
+  };
+
+  it("writes a geographic CRS as SRS for WMS 1.1.1", () => {
+    const url = createWmsTileUrl({ ...base, crs: "EPSG:4326" });
+    assert.ok(url.includes("SRS=EPSG%3A4326"));
+    assert.ok(!url.includes("EPSG%3A3857"));
+    // The BBOX stays the Web Mercator template: the desktop tile protocol
+    // rewrites it for the requested CRS.
+    assert.ok(url.includes("BBOX={bbox-epsg-3857}"));
+  });
+
+  it("writes the CRS parameter for WMS 1.3.0", () => {
+    const url = createWmsTileUrl({ ...base, version: "1.3.0", crs: "EPSG:4326" });
+    assert.ok(url.includes("CRS=EPSG%3A4326"));
+    assert.ok(!url.includes("SRS="));
+  });
+
+  it("writes CRS:84 and a projected EPSG code", () => {
+    assert.ok(
+      createWmsTileUrl({ ...base, version: "1.3.0", crs: "CRS:84" }).includes("CRS=CRS%3A84"),
+    );
+    assert.ok(createWmsTileUrl({ ...base, crs: "EPSG:25833" }).includes("SRS=EPSG%3A25833"));
+  });
+});
+
+describe("normalizeWmsCrs", () => {
+  it("defaults to Web Mercator", () => {
+    assert.equal(normalizeWmsCrs(undefined, "1.1.1"), "EPSG:3857");
+    assert.equal(normalizeWmsCrs(null, "1.3.0"), "EPSG:3857");
+  });
+
+  it("trims and upper-cases the geographic and EPSG codes it accepts", () => {
+    assert.equal(normalizeWmsCrs(" epsg:4326 ", "1.1.1"), "EPSG:4326");
+    assert.equal(normalizeWmsCrs("EPSG:6706", "1.3.0"), "EPSG:6706");
+    assert.equal(normalizeWmsCrs("crs:84", "1.3.0"), "CRS:84");
+    assert.equal(normalizeWmsCrs("EPSG:25832", "1.1.1"), "EPSG:25832");
+  });
+
+  it("rejects CRS:84 with WMS 1.1.1", () => {
+    assert.throws(() => normalizeWmsCrs("CRS:84", "1.1.1"), /needs version "1.3.0"/);
+    assert.throws(() => normalizeWmsCrs("CRS:84", undefined), /needs version "1.3.0"/);
+  });
+
+  it("reads the version the way normalizeWmsVersion does", () => {
+    assert.equal(normalizeWmsCrs("CRS:84", "1.3"), "CRS:84");
+  });
+
+  it("rejects values that are not an EPSG code", () => {
+    for (const value of ["", "EPSG:", "EPSG:12", "WGS84", "urn:ogc:def:crs:EPSG::4326", 4326]) {
+      assert.throws(() => normalizeWmsCrs(value, "1.3.0"), /Unsupported WMS CRS/);
+    }
+  });
+});
+
 describe("normalizeWmsVersion", () => {
   it("collapses versions to the 1.1.1/1.3.0 pair", () => {
     assert.equal(normalizeWmsVersion(undefined), "1.1.1");
@@ -219,6 +286,16 @@ describe("createWmsGetCapabilitiesUrl", () => {
     assert.equal(params.get("LAYERS"), null);
     assert.equal(params.get("token"), "abc");
   });
+
+  it("keeps outputFormat, which portals publish on their capabilities URLs", () => {
+    const url = new URL(
+      createWmsGetCapabilitiesUrl(
+        "https://x.test/ows?service=WMS&version=1.3.0&request=GetCapabilities&outputFormat=application/xml",
+      ),
+    );
+    assert.equal(url.searchParams.get("outputFormat"), "application/xml");
+    assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
+  });
 });
 
 describe("createWfsGetCapabilitiesUrl", () => {
@@ -261,6 +338,20 @@ describe("stripOgcOperationParams", () => {
     assert.equal(
       stripOgcOperationParams("https://x.test/wms?REQUEST=GetMap&LAYERS=a&token=abc", "WMS"),
       "https://x.test/wms?token=abc",
+    );
+  });
+
+  it("drops outputFormat from a WMS endpoint, case-insensitively", () => {
+    assert.equal(
+      stripOgcOperationParams(
+        "https://x.test/ows?service=WMS&version=1.3.0&request=GetCapabilities&outputFormat=application/xml&token=abc",
+        "WMS",
+      ),
+      "https://x.test/ows?token=abc",
+    );
+    assert.equal(
+      stripOgcOperationParams("https://x.test/ows?OUTPUTFORMAT=text/xml", "WMS"),
+      "https://x.test/ows",
     );
   });
 
@@ -334,6 +425,47 @@ describe("savedPostgresConnectionLabel", () => {
       savedPostgresConnectionLabel("postgres://user:secret@host:5432/db"),
       "postgres://user:****@host:5432/db",
     );
+  });
+
+  it("masks a password passed as a URI query parameter", () => {
+    assert.equal(
+      savedPostgresConnectionLabel(
+        "postgresql://gis@db.example.com/city?sslmode=require&password=secret&SSLPassword=key",
+      ),
+      "postgresql://gis@db.example.com/city?sslmode=require&password=****&SSLPassword=****",
+    );
+  });
+
+  it("masks a URI that the URL parser reads as an opaque path", () => {
+    // Chromium before 130 parsed `postgresql:` with an empty host and the
+    // password left in the path.
+    const realUrl = globalThis.URL;
+    globalThis.URL = class extends realUrl {
+      get host() {
+        return "";
+      }
+      get password() {
+        return "";
+      }
+    } as typeof URL;
+    try {
+      assert.equal(
+        savedPostgresConnectionLabel(
+          "postgresql://gis:secret@db.example.com/city?password=two&sslmode=require",
+        ),
+        "postgresql://gis:****@db.example.com/city?password=****&sslmode=require",
+      );
+      // A port and an `@` in the query are not a user:password pair.
+      const portOnly = "postgresql://host:5432/db?application_name=a@b";
+      assert.equal(savedPostgresConnectionLabel(portOnly), portOnly);
+    } finally {
+      globalThis.URL = realUrl;
+    }
+  });
+
+  it("leaves a URI query without a password untouched", () => {
+    const connection = "postgresql://gis@db.example.com/city?options=-c%20search_path%3Dgis";
+    assert.equal(savedPostgresConnectionLabel(connection), connection);
   });
 
   it("masks the password in a keyword connection string", () => {
@@ -479,6 +611,39 @@ describe("attributionForTileUrl", () => {
       undefined,
     );
     assert.equal(attributionForTileUrl("not a url"), undefined);
+  });
+});
+
+describe("isServiceFormUrl", () => {
+  it("accepts absolute HTTP(S) service URLs", () => {
+    assert.equal(isServiceFormUrl("https://geoserver.example.org/geoserver/wms"), true);
+    assert.equal(isServiceFormUrl("http://127.0.0.1:8080/wfs"), true);
+    assert.equal(isServiceFormUrl("  https://x.test/wms  "), true);
+  });
+
+  it("accepts same-origin references for reverse-proxied deployments", () => {
+    assert.equal(isServiceFormUrl("/geoserver/wms"), true);
+    assert.equal(isServiceFormUrl("geoserver/wfs"), true);
+  });
+
+  it("refuses non-HTTP schemes, protocol-relative URLs, and blank values", () => {
+    assert.equal(isServiceFormUrl(""), false);
+    assert.equal(isServiceFormUrl("   "), false);
+    assert.equal(isServiceFormUrl("javascript:alert(1)"), false);
+    assert.equal(isServiceFormUrl("data:text/plain,x"), false);
+    assert.equal(isServiceFormUrl("ftp://x.test/wms"), false);
+    assert.equal(isServiceFormUrl("/geoserver/wms has space"), false);
+    // Protocol-relative URLs share only the scheme, not the origin; the app
+    // must never treat a foreign host as same-origin (and the dev CORS proxy
+    // would skip them too).
+    assert.equal(isServiceFormUrl("//example.com/geoserver/wms"), false);
+    assert.equal(isServiceFormUrl("//attacker.example/wms"), false);
+    // A scheme without a host is not a usable endpoint: reject here rather
+    // than throwing from new URL() in the request builders.
+    assert.equal(isServiceFormUrl("https://"), false);
+    assert.equal(isServiceFormUrl("http://"), false);
+    assert.equal(isServiceFormUrl("https://host"), true);
+    assert.equal(isServiceFormUrl("https://x.test/wms"), true);
   });
 });
 
@@ -641,5 +806,51 @@ describe("createBaseLayer", () => {
         .simpleStyleEnabled,
       false,
     );
+  });
+});
+
+describe("readLimitedBody", () => {
+  const streamed = (chunks: string[], headers: Record<string, string> = {}) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+          controller.close();
+        },
+      }),
+      { headers },
+    );
+
+  it("returns a body that fits within the ceiling", async () => {
+    const bytes = await readLimitedBody(streamed(["abcd", "efgh"]), 8);
+    assert.equal(new TextDecoder().decode(bytes), "abcdefgh");
+  });
+
+  it("refuses an advertised length over the ceiling before reading a byte", async () => {
+    await assert.rejects(
+      readLimitedBody(
+        new Response("{}", { headers: { "Content-Length": String(64 * 1024 * 1024) } }),
+        8,
+      ),
+      // Callers match on "download limit" to map either branch — the native
+      // `read_limited_body` or this one — onto their own error.
+      /download limit/,
+    );
+  });
+
+  it("stops a chunked body that streams past the ceiling", async () => {
+    await assert.rejects(readLimitedBody(streamed(["abcd", "efgh", "ijkl"]), 8), /download limit/);
+  });
+});
+
+describe("ZARR_GLOBE_SAMPLES", () => {
+  it("names ramps the form offers, increasing limits, and HTTPS stores", () => {
+    const ramps = new Set(VECTOR_COLOR_RAMPS.map((ramp) => ramp.value));
+    for (const sample of ZARR_GLOBE_SAMPLES) {
+      assert.ok(ramps.has(sample.colormap), `${sample.label}: ${sample.colormap}`);
+      assert.ok(sample.clim[1] > sample.clim[0], sample.label);
+      assert.equal(new URL(sample.url).protocol, "https:", sample.label);
+      assert.ok(sample.variable, sample.label);
+    }
   });
 });

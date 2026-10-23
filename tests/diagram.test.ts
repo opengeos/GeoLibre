@@ -18,6 +18,7 @@ import {
   declutterEntries,
   packDiagramCells,
 } from "../packages/plugins/src/plugins/deckgl-viz/diagrams";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function style(overrides: Partial<LayerStyle> = {}): LayerStyle {
   return {
@@ -193,7 +194,7 @@ describe("collectDiagramData", () => {
     const data = collectDiagramData(
       collection([
         pointFeature({ a: 0, b: 0 }),
-        { type: "Feature", geometry: null, properties: { a: 1, b: 1 } },
+        { type: "Feature", geometry: NULL_GEOMETRY, properties: { a: 1, b: 1 } },
         pointFeature({ a: 2, b: 2 }),
       ]),
       style(),
@@ -334,6 +335,18 @@ describe("declutterEntries", () => {
       position: [i * 100, 0] as [number, number],
     }));
     assert.equal(declutterEntries(entries, project).length, 5);
+  });
+  it("omits points a native view cannot project onto the screen", () => {
+    const entries = [
+      { width: 10, height: 10, position: [0, 0] as [number, number] },
+      { width: 10, height: 10, position: [100, 0] as [number, number] },
+    ];
+    assert.deepEqual(
+      declutterEntries(entries, ([x, y]) =>
+        x === 0 ? { x: Number.NaN, y: Number.NaN } : { x, y },
+      ),
+      [entries[1]],
+    );
   });
 });
 

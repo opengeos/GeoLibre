@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreProject } from "@geolibre/core";
-import { createEmptyProject } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, createEmptyProject } from "@geolibre/core";
 import {
   buildProjectHtml,
   DEFAULT_VIEWER_BASE_URL,
   resolveViewerBaseUrl,
+  viewerChromeParams,
 } from "../apps/geolibre-desktop/src/lib/html-export";
 
 // A minimal project that only exercises the fields the HTML builder touches.
@@ -26,12 +27,15 @@ describe("buildProjectHtml", () => {
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
     assert.match(
       html,
-      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/,
+      /<iframe id="geolibre-frame" data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/,
     );
     // The project rides in a JSON <script> block and is replayed over the bridge.
     assert.match(html, /id="geolibre-project"/);
     assert.match(html, /"geolibre:load-project"/);
     assert.match(html, /"geolibre:ready"/);
+    assert.match(html, /window\.location\.protocol === "file:"/);
+    assert.match(html, /#geolibreProject=/);
+    assert.match(html, /frame\.src = directFile/);
     // The inlined JSON round-trips back to the original project.
     const json = html.match(
       /<script type="application\/json" id="geolibre-project">([\s\S]*?)<\/script>/,
@@ -52,7 +56,7 @@ describe("buildProjectHtml", () => {
       source: { requestHeaders: { Authorization: "Bearer html-egress-secret" } },
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
     });
     const html = buildProjectHtml({ project, title: project.name });
@@ -62,7 +66,7 @@ describe("buildProjectHtml", () => {
 
   it("defaults the app URL to the hosted viewer", () => {
     const html = buildProjectHtml({ project: PROJECT, title: "T" });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("escapes '<' in the inlined JSON so a value cannot break out", () => {
@@ -93,7 +97,7 @@ describe("buildProjectHtml", () => {
       appUrl: "https://example.com/app?lang=fr",
     });
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
-    assert.match(html, /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/);
   });
 
   it("falls back to the default viewer for an unsafe appUrl", () => {
@@ -104,7 +108,7 @@ describe("buildProjectHtml", () => {
       appUrl: "javascript:alert(1)",
     });
     assert.ok(!html.includes("javascript:alert(1)"));
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("does not append embed=1 twice when the app URL already has it", () => {
@@ -113,7 +117,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://web.geolibre.app/?embed=1",
     });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
     assert.ok(!html.includes("embed=1&amp;embed=1"));
   });
 
@@ -123,7 +127,7 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://web.geolibre.app/?welcome=off",
     });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?welcome=off&amp;embed=1"/);
+    assert.match(html, /data-src="https:\/\/web\.geolibre\.app\/\?welcome=off&amp;embed=1"/);
     assert.ok(!html.includes("welcome=off&amp;welcome=0"));
   });
 
@@ -143,7 +147,8 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://example.com/app#/view",
     });
-    assert.match(html, /src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
+    assert.match(html, /data-src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/);
+    assert.match(html, /geolibreViewerFragment=%23%2Fview/);
   });
 
   it("accepts calc() dimensions with division", () => {
@@ -164,6 +169,75 @@ describe("buildProjectHtml", () => {
     assert.throws(
       () => buildProjectHtml({ project: PROJECT, title: "T", height: "1px;color:red" }),
       /Invalid CSS height/,
+    );
+  });
+
+  it("includes a sandbox attribute that restricts top-navigation and popups", () => {
+    const html = buildProjectHtml({ project: PROJECT, title: "T" });
+    // The sandbox must be present with only the minimal set of permissions.
+    assert.match(html, /sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"/);
+    // Dangerous permissions must NOT be present.
+    assert.ok(!html.includes("allow-top-navigation"));
+    assert.ok(!html.includes("allow-popups"));
+  });
+});
+
+describe("viewerChromeParams (#2764)", () => {
+  it("carries the layout flags, theme and a collapsed Layers panel", () => {
+    assert.deepEqual(
+      viewerChromeParams("?embed=1&layout=embed&theme=light&foo=1", {
+        themeMode: "dark",
+        layersCollapsed: true,
+      }),
+      [
+        ["layout", "embed"],
+        ["panels", "collapsed"],
+        ["theme", "dark"],
+      ],
+    );
+    assert.deepEqual(viewerChromeParams("?maponly=1&toolbar=hidden"), [
+      ["maponly", "1"],
+      ["toolbar", "hidden"],
+    ]);
+  });
+
+  it("drops a launch-time panels=collapsed the user has since expanded", () => {
+    assert.deepEqual(viewerChromeParams("?panels=collapsed", { layersCollapsed: false }), []);
+  });
+
+  it("lets a collapsed Layers panel replace a non-hidden panels value", () => {
+    assert.deepEqual(viewerChromeParams("?panels=visible", { layersCollapsed: true }), [
+      ["panels", "collapsed"],
+    ]);
+  });
+
+  it("treats a falsy maponly as panels shown", () => {
+    assert.deepEqual(viewerChromeParams("?maponly=false", { layersCollapsed: true }), [
+      ["maponly", "false"],
+      ["panels", "collapsed"],
+    ]);
+  });
+
+  it("does not collapse panels that are hidden", () => {
+    assert.deepEqual(viewerChromeParams("?maponly", { layersCollapsed: true }), [["maponly", ""]]);
+    assert.deepEqual(viewerChromeParams("?panels=hidden", { layersCollapsed: true }), [
+      ["panels", "hidden"],
+    ]);
+  });
+
+  it("lands in the viewer URL before a fragment, without overriding the configured URL", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "My Map",
+      appUrl: "https://example.com/app?theme=light#x",
+      viewerParams: viewerChromeParams("?layout=embed", {
+        themeMode: "dark",
+        layersCollapsed: true,
+      }),
+    });
+    assert.match(
+      html,
+      /data-src="https:\/\/example\.com\/app\?theme=light&amp;embed=1&amp;welcome=0&amp;layout=embed&amp;panels=collapsed#x"/,
     );
   });
 });

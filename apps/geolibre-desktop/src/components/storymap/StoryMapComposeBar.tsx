@@ -1,12 +1,13 @@
 import { type RefObject, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
 import { Check, Frame, X } from "lucide-react";
 
 interface StoryMapComposeBarProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /**
@@ -18,7 +19,10 @@ interface StoryMapComposeBarProps {
  * zooms, and tilts the real map, then saves the resulting camera straight into
  * the chapter and returns to the editor, or cancels to discard the changes.
  */
-export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps) {
+export function StoryMapComposeBar({
+  mapControllerRef,
+  mapReadyGeneration,
+}: StoryMapComposeBarProps) {
   const { t } = useTranslation();
   const composingId = useAppStore((s) => s.ui.storymapComposingId);
   const storymap = useAppStore((s) => s.storymap);
@@ -69,18 +73,16 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
   // Track camera motion so Save can disable itself mid-flight (see mapMoving).
   useEffect(() => {
     if (!composingId) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    setMapMoving(map.isMoving());
-    const onStart = () => setMapMoving(true);
-    const onEnd = () => setMapMoving(false);
-    map.on("movestart", onStart);
-    map.on("moveend", onEnd);
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    setMapMoving(engine.isCameraMoving());
+    const stopMoving = engine.onCameraMove(() => setMapMoving(true));
+    const stopIdle = engine.onCameraIdle(() => setMapMoving(false));
     return () => {
-      map.off("movestart", onStart);
-      map.off("moveend", onEnd);
+      stopMoving();
+      stopIdle();
     };
-  }, [composingId, mapControllerRef]);
+  }, [composingId, mapControllerRef, mapReadyGeneration]);
 
   // Escape exits compose mode, mirroring how the presenter handles Escape, so
   // keyboard-only users can dismiss the bar without clicking Cancel.
@@ -102,7 +104,7 @@ export function StoryMapComposeBar({ mapControllerRef }: StoryMapComposeBarProps
   return (
     <div className="pointer-events-none absolute bottom-6 left-1/2 z-20 flex w-[min(92vw,34rem)] -translate-x-1/2 flex-col">
       <div
-        className="pointer-events-auto flex flex-col gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+        className="pointer-events-auto flex flex-col gap-2 rounded-md border map-glass px-3 py-2 text-sm shadow-lg"
         role="region"
         aria-label={t("storymap.composeMode.title")}
         data-testid="storymap-compose-bar"

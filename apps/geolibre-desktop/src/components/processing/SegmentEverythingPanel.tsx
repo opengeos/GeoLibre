@@ -1,6 +1,7 @@
-import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import {
+  isOrtAvailable,
   readRasterData,
   segmentEverything,
   type RasterData,
@@ -30,7 +31,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
-import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import {
   fetchSegmentModel,
   SLIMSAM_DECODER_URL,
@@ -38,7 +38,7 @@ import {
 } from "../../lib/segment-models";
 
 interface SegmentEverythingPanelProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 const IMAGE_FILTERS = [{ name: "Imagery", extensions: ["tif", "tiff"] }];
@@ -111,6 +111,10 @@ export function SegmentEverythingPanel({
   const open = useAppStore((s) => s.ui.segmentEverythingOpen);
   const setOpen = useAppStore((s) => s.setSegmentEverythingOpen);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+
+  // Segmentation always goes through onnxruntime-web, which cannot load in a
+  // no-external-CDN build.
+  const ortAvailable = isOrtAvailable();
 
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
@@ -245,10 +249,17 @@ export function SegmentEverythingPanel({
         return;
       }
       const tagged = masksToFeatureCollection(masks, raster);
+      const { reprojectFeatureCollectionToWgs84 } = await import("../../lib/duckdb-vector-loader");
+      // Skip the reprojection (it may open a DuckDB connection) if the panel
+      // closed while the loader chunk was fetched.
+      if (controller.signal.aborted) return;
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
+      // The panel may have been closed while the loader chunk or the
+      // reprojection was pending.
+      if (controller.signal.aborted) return;
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentEverything.added", { count: masks.length }));
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -302,6 +313,15 @@ export function SegmentEverythingPanel({
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             {t("segmentEverything.hint")}
           </p>
+
+          {/* SlimSAM runs through the same ONNX Runtime WASM backend as object
+              detection, which a no-external-CDN build cannot load. */}
+          {!ortAvailable && (
+            <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              {t("segmentEverything.unavailableNoExternalCdn")}
+            </p>
+          )}
 
           {/* Image source */}
           <div className="grid gap-1.5">
@@ -396,7 +416,7 @@ export function SegmentEverythingPanel({
           <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleRun()}
-              disabled={running || !imageBytes}
+              disabled={!ortAvailable || running || !imageBytes}
               className="gap-2"
             >
               {running ? (

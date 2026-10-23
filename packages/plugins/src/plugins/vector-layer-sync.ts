@@ -1,5 +1,7 @@
 import {
+  applyGroupEffects,
   DEFAULT_LAYER_STYLE,
+  DUCKDB_VECTOR_FEATURE_WARN_COUNT,
   extrusionColorValue,
   extrusionHeightValue,
   isVectorColorExpression,
@@ -10,11 +12,43 @@ import {
   type LayerStyle,
   type VectorColorValue,
   useAppStore,
+  documentLocale,
+  resolveLabelNumberLocale,
 } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import type { PropertyValueSpecification } from "maplibre-gl";
 import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
+import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
+
+/**
+ * `metadata.sourceKind` of an Add Vector Layer layer GeoLibre has adopted: its
+ * features were read out of the control into `layer.geojson` and the control's
+ * copy was dropped, so GeoLibre renders and styles it like a drag-and-drop
+ * layer (opengeos/GeoLibre#2715). The record keeps the control's load state
+ * (`source.url`, `sourcePath`, `metadata.vectorState`), so a saved project
+ * replays it through the control, which then adopts it again.
+ *
+ * A distinct kind rather than a flag on {@link VECTOR_SOURCE_KIND}, because
+ * code across the app keys DuckDB-backed behavior on that kind (the attribute
+ * table, exports, classification value loading), and an adopted layer must take
+ * the ordinary GeoJSON path in every one of them.
+ */
+export const ADOPTED_VECTOR_SOURCE_KIND = "maplibre-gl-vector-adopted";
+
+/**
+ * Largest layer GeoLibre adopts. Matches the feature count at which a
+ * drag-and-drop load switches to DuckDB, so both import paths hold the same
+ * data in the store. Larger layers, tiled layers and streamed GeoParquet stay
+ * with the control, which is where it earns its keep.
+ */
+export const VECTOR_ADOPTION_MAX_FEATURES = DUCKDB_VECTOR_FEATURE_WARN_COUNT;
+
+// The control draws KML/KMZ placemark icons from sprites it registers itself,
+// keyed by this property. GeoLibre has no equivalent, so a layer carrying them
+// stays with the control rather than losing its icons on adoption.
+const KML_ICON_PROPERTY = "__geolibre_kml_icon_url";
 
 // Upper bound on a restored color expression's serialized size. Generous for a
 // real categorized/graduated style (hundreds of stops are well under this) but
@@ -36,6 +70,19 @@ export type VectorSyncableControl = {
   setLayerStyle: (id: string, style: Partial<VectorLayerStyle>) => void;
 };
 
+const geometryReaders = new WeakMap<
+  VectorSyncableControl,
+  (info: VectorLayerInfo) => FeatureCollection | undefined
+>();
+
+/** Register the geometry backing a control rendered by a non-MapLibre engine. */
+export function setVectorGeometryReader(
+  control: VectorSyncableControl,
+  reader: (info: VectorLayerInfo) => FeatureCollection | undefined,
+): void {
+  geometryReaders.set(control, reader);
+}
+
 let syncedControl: VectorSyncableControl | null = null;
 let storeUnsubscribe: (() => void) | null = null;
 // Guards the store subscriber against re-entrancy: store mutations made by
@@ -48,6 +95,46 @@ let syncingLayersToStore = false;
 // control emits layer* events from those calls, and syncing mid-mutation
 // would observe a partially restored layer list.
 let storeSyncSuspended = 0;
+// The last visibility/opacity this module knows each vector to hold in the
+// control. Group-folded values exist only at render time, so this record lets
+// the control-to-store mirror distinguish an echoed fold from a genuine edit.
+const controlRenderState = new Map<string, { visible?: boolean; opacity?: number }>();
+
+/**
+ * Record the effective render state most recently pushed to the vector control.
+ *
+ * @param id - The vector/store layer id.
+ * @param patch - The fields the control now holds.
+ */
+export function rememberControlVectorRenderState(
+  id: string,
+  patch: { visible?: boolean; opacity?: number },
+): void {
+  const existing = controlRenderState.get(id);
+  controlRenderState.set(id, existing ? { ...existing, ...patch } : { ...patch });
+}
+
+/**
+ * Stop treating selected render fields as echoes of a prior control push.
+ *
+ * @param id - The vector/store layer id.
+ * @param fields - The tracked fields to clear.
+ */
+function forgetControlVectorRenderState(
+  id: string,
+  fields: { visible?: boolean; opacity?: boolean },
+): void {
+  const existing = controlRenderState.get(id);
+  if (!existing) return;
+  const next = { ...existing };
+  if (fields.visible) delete next.visible;
+  if (fields.opacity) delete next.opacity;
+  if (next.visible === undefined && next.opacity === undefined) {
+    controlRenderState.delete(id);
+  } else {
+    controlRenderState.set(id, next);
+  }
+}
 
 /**
  * Detects a layer panel entry owned by the maplibre-gl-vector control.
@@ -79,6 +166,223 @@ function hasRestorableVectorUrl(layer: GeoLibreLayer): boolean {
  */
 export function isEmbeddableLocalVectorLayer(layer: GeoLibreLayer): boolean {
   return isVectorControlStoreLayer(layer) && !hasRestorableVectorUrl(layer);
+}
+
+/**
+ * Detects an Add Vector Layer layer that GeoLibre has adopted (see
+ * {@link ADOPTED_VECTOR_SOURCE_KIND}).
+ *
+ * @param layer - A store layer.
+ * @returns True when the layer was adopted from the vector control.
+ */
+export function isAdoptedVectorLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.sourceKind === ADOPTED_VECTOR_SOURCE_KIND;
+}
+
+/**
+ * Detects an adopted layer whose features are not in the store yet, as after
+ * reopening a project that saved it by URL or file path. Only the control can
+ * read it back, so project restore replays it and the control adopts it again.
+ *
+ * @param layer - A store layer.
+ * @returns True when the adopted layer must be replayed through the control.
+ */
+export function needsAdoptedVectorReplay(layer: GeoLibreLayer): boolean {
+  return isAdoptedVectorLayer(layer) && !layer.geojson;
+}
+
+/**
+ * Whether the control's copy of a layer is small and simple enough for GeoLibre
+ * to take over. Only GeoJSON-mode layers read into a DuckDB table qualify: a
+ * tiled layer or a streamed GeoParquet has no whole collection to hand over.
+ *
+ * @param info - The control's snapshot of the layer.
+ * @returns True when the layer may be adopted.
+ */
+export function isAdoptableVectorInfo(
+  info: Pick<VectorLayerInfo, "renderMode" | "ingestMode" | "featureCount">,
+): boolean {
+  return (
+    info.renderMode === "geojson" &&
+    info.ingestMode !== "stream" &&
+    (info.featureCount ?? 0) <= VECTOR_ADOPTION_MAX_FEATURES
+  );
+}
+
+/** The slice of VectorControl that adoption needs (eases testing). */
+export type VectorAdoptionControl = Pick<VectorSyncableControl, "getLayers" | "removeLayer"> & {
+  getLayerGeoJSON: (id: string) => Promise<FeatureCollection | null>;
+};
+
+// Metadata that only describes the control's rendering. Dropped on adoption so
+// no consumer mistakes the adopted record for a control-drawn layer.
+const CONTROL_RENDER_METADATA_KEYS = [
+  "controlOwnsPaint",
+  "customLayerType",
+  "embeddedGeoJSON",
+  "externalNativeLayer",
+  "nativeLayerIds",
+  "panelCollapsed",
+  "sourceIds",
+] as const;
+
+/**
+ * Builds the patch that turns a control-drawn record into an adopted one: the
+ * features move into `geojson`, the control's render metadata goes, and the
+ * load state (URL, file path, `vectorState`) stays so the layer can be replayed
+ * from a saved project. The name, style, visibility, joins and every other
+ * user edit are untouched because they are not in the patch.
+ *
+ * @param layer - The current store layer (control-drawn, or adopted and being
+ *   replayed).
+ * @param info - The control's snapshot of the layer.
+ * @param geojson - The features read out of the control.
+ * @returns The store patch for {@link GeoLibreLayer}.
+ */
+export function adoptedVectorLayerPatch(
+  layer: GeoLibreLayer,
+  info: VectorLayerInfo,
+  geojson: FeatureCollection,
+): Partial<GeoLibreLayer> {
+  const metadata: Record<string, unknown> = { ...layer.metadata };
+  for (const key of CONTROL_RENDER_METADATA_KEYS) delete metadata[key];
+  metadata.sourceKind = ADOPTED_VECTOR_SOURCE_KIND;
+  metadata.featureCount = geojson.features.length;
+  metadata.vectorState = serializableVectorState(info);
+  return {
+    type: "geojson",
+    source: { ...layer.source, type: "geojson" },
+    geojson,
+    metadata,
+  };
+}
+
+// Ids with an adoption in flight, so overlapping triggers (a layer event and an
+// addData completion) cannot read the same layer out of the control twice.
+const adoptingLayerIds = new Set<string>();
+// Layers whose features were read and turned out not adoptable (KML icons, or
+// more features than the snapshot claimed), keyed to the source revision read.
+// Every style edit fires a layer event, and re-reading a large layer on each
+// one would be pure waste; a new source revision (a reload, a render-mode
+// switch) gets a fresh look.
+const declinedAdoptions = new Map<string, string>();
+
+/**
+ * Hands every eligible control layer over to GeoLibre: reads its features into
+ * the store record, marks it adopted, and removes the control's copy (its map
+ * source and its DuckDB table) in the same step, so the data is held once in
+ * the store and once by MapLibre, the same as a drag-and-drop layer.
+ *
+ * A layer stays with the control when it is tiled, streamed, over
+ * {@link VECTOR_ADOPTION_MAX_FEATURES}, carries KML icons, or its data cannot
+ * be read back. The swap does not join the undo history, since it changes who
+ * draws the layer rather than the layer itself, and it leaves the dirty flag
+ * alone, since a restore adopts too.
+ *
+ * @param control - The vector control holding the layers.
+ * @param options - `skip` excludes ids whose load is still in flight, so a
+ *   container import can group its tables before they leave the control.
+ * @returns The ids that were adopted.
+ */
+export async function adoptVectorControlLayers(
+  control: VectorAdoptionControl,
+  options: { skip?: (id: string) => boolean } = {},
+): Promise<string[]> {
+  const candidates = control
+    .getLayers()
+    .filter(
+      (info) =>
+        isAdoptableVectorInfo(info) &&
+        !adoptingLayerIds.has(info.id) &&
+        declinedAdoptions.get(info.id) !== info.sourceId &&
+        !options.skip?.(info.id),
+    );
+  const adopted: string[] = [];
+  await Promise.all(
+    candidates.map(async (info) => {
+      if (!findAdoptionTarget(info.id)) return;
+      adoptingLayerIds.add(info.id);
+      try {
+        const geojson = await control.getLayerGeoJSON(info.id);
+        if (!isAdoptableCollection(geojson)) {
+          declinedAdoptions.set(info.id, info.sourceId);
+          return;
+        }
+        // The await can span a reload, a render-mode switch or a removal. Only
+        // swap in data read from the source the control still shows.
+        const current = control.getLayers().find((candidate) => candidate.id === info.id);
+        if (!current || current.sourceId !== info.sourceId || !isAdoptableVectorInfo(current)) {
+          return;
+        }
+        const layer = findAdoptionTarget(info.id);
+        if (!layer) return;
+        runQuietly(() => {
+          runWithVectorStoreSyncSuspended(() => {
+            // Drop the control's copy first: if its cleanup throws, the record
+            // stays control-drawn instead of being marked adopted beside a
+            // control copy that no sync would ever remove.
+            control.removeLayer(info.id);
+            useAppStore
+              .getState()
+              .updateLayer(info.id, adoptedVectorLayerPatch(layer, current, geojson));
+          });
+        });
+        controlRenderState.delete(info.id);
+        declinedAdoptions.delete(info.id);
+        adopted.push(info.id);
+      } catch (error) {
+        console.error(`[GeoLibre] Could not adopt vector layer "${info.name}"`, error);
+      } finally {
+        adoptingLayerIds.delete(info.id);
+      }
+    }),
+  );
+  return adopted;
+}
+
+/**
+ * The store record adoption may write to: the control's own record, or an
+ * adopted record the control is replaying.
+ *
+ * @param id - The layer id.
+ * @returns The store layer, or undefined when there is nothing to adopt into.
+ */
+function findAdoptionTarget(id: string): GeoLibreLayer | undefined {
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === id);
+  if (!layer) return undefined;
+  return isVectorControlStoreLayer(layer) || isAdoptedVectorLayer(layer) ? layer : undefined;
+}
+
+/**
+ * Whether features read out of the control can be adopted: a FeatureCollection
+ * within the size limit and without control-drawn KML icons.
+ *
+ * @param value - The control's getLayerGeoJSON result.
+ * @returns True when the collection can live in the store.
+ */
+function isAdoptableCollection(value: FeatureCollection | null): value is FeatureCollection {
+  if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features)) {
+    return false;
+  }
+  if (value.features.length > VECTOR_ADOPTION_MAX_FEATURES) return false;
+  return !value.features.some((feature) => feature?.properties?.[KML_ICON_PROPERTY] != null);
+}
+
+/**
+ * Runs a store write with the undo history paused and the dirty flag kept.
+ *
+ * @param callback - The store write.
+ */
+function runQuietly(callback: () => void): void {
+  const history = useAppStore.temporal.getState();
+  const wasDirty = useAppStore.getState().isDirty;
+  history.pause();
+  try {
+    callback();
+  } finally {
+    history.resume();
+  }
+  if (!wasDirty) useAppStore.setState({ isDirty: false });
 }
 
 /**
@@ -127,9 +431,12 @@ export function createVectorStoreLayer(
       // not also re-apply paint — that would clobber control-only renderers like
       // the cluster bubble's stepped radius.
       controlOwnsPaint: true,
-      // The control's own picker popup handles feature inspection; the
-      // app-level identify tool does not target these layers.
-      identifiable: false,
+      // Feature inspection goes through GeoLibre's Identify tool and the Style
+      // panel's Popup design, not the control's own attribute popup — that one
+      // is off by default (`enablePicker: false` in maplibre-vector.ts) so the
+      // two do not both answer a click. Identify queries `nativeLayerIds`
+      // below, which the control does create, so it works here unchanged.
+      identifiable: true,
       // The control creates real MapLibre style layers (fill/outline/
       // line/circle per geometry), so ordering moves reach them directly.
       nativeLayerIds: [...info.layerIds],
@@ -165,25 +472,57 @@ export function createVectorStoreLayer(
  * layer panel survive later syncs.
  *
  * @param control - The vector control to mirror.
+ * @param options - `preserveLayerIds` names store layers that must survive this
+ *   diff even though the control does not have them. Restore passes the layers
+ *   whose replay *failed*: their absence means a download or read error, not a
+ *   removal, and pruning them would delete the user's layers from the project
+ *   over a transient network fault (opengeos/GeoLibre discussion #1757). They
+ *   stay in the project, and a refresh replays them (see
+ *   replayVectorControlLayerById).
  */
-export function syncVectorLayersToStore(control: VectorSyncableControl): void {
+export function syncVectorLayersToStore(
+  control: VectorSyncableControl,
+  options: { preserveLayerIds?: ReadonlySet<string> } = {},
+): void {
   if (isVectorStoreSyncSuspended()) return;
 
+  const preserveLayerIds = options.preserveLayerIds;
   const infos = control.getLayers();
   const infoIds = new Set(infos.map((info) => info.id));
   const panelCollapsed = vectorPanelCollapsedFromControl(control);
+
+  // A removed vector can no longer echo a pushed render state. Clearing it also
+  // prevents a future layer that reuses the id from inheriting stale state.
+  for (const id of controlRenderState.keys()) {
+    if (!infoIds.has(id)) controlRenderState.delete(id);
+  }
+  // Likewise a declined adoption: a later layer reusing the id (a restore
+  // replaying a saved layer) must get a fresh look.
+  for (const id of declinedAdoptions.keys()) {
+    if (!infoIds.has(id)) declinedAdoptions.delete(id);
+  }
 
   syncingLayersToStore = true;
   try {
     for (const storeLayer of useAppStore.getState().layers) {
       if (!isVectorControlStoreLayer(storeLayer)) continue;
-      if (!infoIds.has(storeLayer.id)) {
+      if (!infoIds.has(storeLayer.id) && !preserveLayerIds?.has(storeLayer.id)) {
         useAppStore.getState().removeLayer(storeLayer.id);
       }
     }
 
     for (const info of infos) {
       const layer = createVectorStoreLayer(info, panelCollapsed);
+      const geometryReader = geometryReaders.get(control);
+      if (geometryReader) {
+        layer.geojson = geometryReader(info);
+        // The globe draws the collection itself, so a tiled record takes the
+        // GeoJSON path: the drape never creates the control's DuckDB source.
+        if (layer.geojson) {
+          layer.type = "geojson";
+          layer.source = { ...layer.source, type: "geojson" };
+        }
+      }
       const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
       if (!existing) {
@@ -191,29 +530,113 @@ export function syncVectorLayersToStore(control: VectorSyncableControl): void {
         continue;
       }
 
+      // The control is replaying an adopted layer (project restore, refresh).
+      // Leave the record to adoptVectorControlLayers, which refills it; turning
+      // it back into a control record in between would only flicker. A replay
+      // that is no longer adoptable (the source grew past the limit) falls
+      // through and becomes a control-drawn layer again.
+      const adoptedReplay = isAdoptedVectorLayer(existing);
+      if (adoptedReplay && isAdoptableVectorInfo(info)) continue;
+
+      // A group fold pushed through the control API is reported back in the
+      // next full control snapshot. Keep the child's own values for such echoes
+      // so showing or unfading the group restores them. A different value came
+      // from the control's UI and remains a real layer edit.
+      const known = controlRenderState.get(layer.id);
+      const visibleIsEcho = known?.visible !== undefined && layer.visible === known.visible;
+      const opacityIsEcho =
+        known?.opacity !== undefined && numbersEqual(layer.opacity, known.opacity);
+      const visible = visibleIsEcho ? existing.visible : layer.visible;
+      const opacity = opacityIsEcho ? existing.opacity : layer.opacity;
+      const sourceUrl = typeof layer.source.url === "string" ? layer.source.url : undefined;
+      const stacAssetAccess = sourceUrl ? stacAssetAccessFromLayer(existing, sourceUrl) : null;
+      let metadata = stacAssetAccess
+        ? { ...layer.metadata, [STAC_ASSET_ACCESS_METADATA_KEY]: stacAssetAccess }
+        : layer.metadata;
+      const style = geometryReader
+        ? { ...existing.style, ...vectorStyleToLayerStyle(info) }
+        : existing.style;
+      const source = stacAssetAccess
+        ? { ...layer.source, url: stacAssetAccess.href }
+        : layer.source;
+      const sourcePath = stacAssetAccess ? stacAssetAccess.href : layer.sourcePath;
+      // Render-mode changes keep the same data, but a replacement URL, file,
+      // or source kind must not inherit the previous source's edited snapshot.
+      const sourceChanged =
+        existing.source.url !== source.url ||
+        existing.sourcePath !== sourcePath ||
+        existing.metadata.vectorSource !== metadata.vectorSource;
+      if (!sourceChanged && existing.metadata.geometryEdited === true) {
+        metadata = { ...metadata, geometryEdited: true };
+      }
+
       if (
+        adoptedReplay ||
         existing.type !== layer.type ||
-        existing.visible !== layer.visible ||
-        existing.opacity !== layer.opacity ||
-        existing.sourcePath !== layer.sourcePath ||
-        !recordsEqual(existing.source, layer.source) ||
-        !recordsEqual(existing.metadata, layer.metadata)
+        (geometryReader &&
+          (existing.geojson !== layer.geojson ||
+            !recordsEqual({ ...existing.style }, { ...style }))) ||
+        existing.visible !== visible ||
+        existing.opacity !== opacity ||
+        existing.sourcePath !== sourcePath ||
+        !recordsEqual(existing.source, source) ||
+        !recordsEqual(existing.metadata, metadata)
       ) {
         useAppStore.getState().updateLayer(layer.id, {
-          // Replace metadata wholesale so stale keys (bounds, featureCount,
-          // and any embeddedGeoJSON loaded from the project) cannot survive a
-          // layer being swapped out under the same id. embeddedGeoJSON is not
-          // kept live: the web Save flow re-materializes it fresh from the
-          // control (getLayerGeoJSON), so a reopened layer drops its loaded
-          // blob here and re-embeds current data on the next save.
-          metadata: layer.metadata,
-          opacity: layer.opacity,
-          source: layer.source,
-          sourcePath: layer.sourcePath,
+          // Replace control-derived metadata wholesale so stale keys (bounds,
+          // featureCount, and loaded embeddedGeoJSON) cannot survive a layer
+          // being swapped out under the same id. Preserve the host-owned geometry
+          // edit flag and STAC access record so edits survive synchronization
+          // and protected URLs can be re-signed.
+          // The web Save flow re-materializes embeddedGeoJSON fresh from the
+          // control (getLayerGeoJSON), so it intentionally is not preserved.
+          metadata,
+          ...(geometryReader ? { style } : {}),
+          // An adopted layer handed back to the control drops its store copy:
+          // the control's own data is what renders from here on.
+          ...(geometryReader
+            ? { geojson: layer.geojson }
+            : sourceChanged || adoptedReplay
+              ? { geojson: undefined }
+              : {}),
+          opacity,
+          source,
+          sourcePath,
           // A render-mode switch in the panel flips geojson <-> vector-tiles.
           type: layer.type,
-          visible: layer.visible,
+          visible,
         });
+      }
+
+      // The control uses one value for both its layer UI and map paint. After a
+      // genuine control-side edit updates the child's own value, immediately
+      // fold the current group chain back over it so a faded or hidden parent
+      // continues to affect the rendered layer.
+      if (!visibleIsEcho || !opacityIsEcho) {
+        const state = useAppStore.getState();
+        const effective = applyGroupEffects(state.layers, state.layerGroups).find(
+          (current) => current.id === layer.id,
+        );
+        if (effective) {
+          runWithVectorStoreSyncSuspended(() => {
+            if (!visibleIsEcho) {
+              if (effective.visible !== layer.visible) {
+                control.setLayerVisibility(layer.id, effective.visible);
+                rememberControlVectorRenderState(layer.id, { visible: effective.visible });
+              } else {
+                forgetControlVectorRenderState(layer.id, { visible: true });
+              }
+            }
+            if (!opacityIsEcho) {
+              if (!numbersEqual(effective.opacity, layer.opacity)) {
+                control.setLayerOpacity(layer.id, effective.opacity);
+                rememberControlVectorRenderState(layer.id, { opacity: effective.opacity });
+              } else {
+                forgetControlVectorRenderState(layer.id, { opacity: true });
+              }
+            }
+          });
+        }
       }
     }
   } finally {
@@ -241,7 +664,7 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
       !activeControl ||
       syncingLayersToStore ||
       isVectorStoreSyncSuspended() ||
-      state.layers === previous.layers
+      (state.layers === previous.layers && state.layerGroups === previous.layerGroups)
     ) {
       return;
     }
@@ -250,22 +673,30 @@ export function wireVectorStoreSync(control: VectorSyncableControl): void {
     // when the previous snapshot held no control-managed layers at all.
     if (!previous.layers.some(isVectorControlStoreLayer)) return;
 
-    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    // Diff effective render values so edits to a parent or nested group reach
+    // vector layers whose paint is owned by the external control.
+    const currentById = new Map(
+      applyGroupEffects(state.layers, state.layerGroups).map((layer) => [layer.id, layer]),
+    );
+    const previousLayers = applyGroupEffects(previous.layers, previous.layerGroups);
     runWithVectorStoreSyncSuspended(() => {
-      for (const layer of previous.layers) {
+      for (const layer of previousLayers) {
         if (!isVectorControlStoreLayer(layer)) continue;
 
         const current = currentById.get(layer.id);
         if (!current) {
           activeControl.removeLayer(layer.id);
+          controlRenderState.delete(layer.id);
           continue;
         }
 
         if (current.visible !== layer.visible) {
           activeControl.setLayerVisibility(layer.id, current.visible);
+          rememberControlVectorRenderState(layer.id, { visible: current.visible });
         }
         if (current.opacity !== layer.opacity) {
           activeControl.setLayerOpacity(layer.id, current.opacity);
+          rememberControlVectorRenderState(layer.id, { opacity: current.opacity });
         }
         const nextStyle = layerStyleToVectorStyle(current.style);
         if (!vectorStylesEqual(layerStyleToVectorStyle(layer.style), nextStyle)) {
@@ -311,6 +742,8 @@ export function unwireVectorStoreSync(): void {
   storeUnsubscribe?.();
   storeUnsubscribe = null;
   syncedControl = null;
+  controlRenderState.clear();
+  declinedAdoptions.clear();
 }
 
 /**
@@ -566,6 +999,24 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
   if (typeof candidate.labelAllowOverlap === "boolean") {
     style.labelAllowOverlap = candidate.labelAllowOverlap;
   }
+  if (typeof candidate.labelNumberFormat === "boolean") {
+    style.labelNumberFormat = candidate.labelNumberFormat;
+  }
+  // Same 0-10 integer range the control and LabelStyle both clamp to, so a
+  // hand-edited project cannot restore a fractional or out-of-range precision.
+  if (
+    typeof candidate.labelNumberDecimals === "number" &&
+    Number.isInteger(candidate.labelNumberDecimals) &&
+    candidate.labelNumberDecimals >= 0 &&
+    candidate.labelNumberDecimals <= 10
+  ) {
+    style.labelNumberDecimals = candidate.labelNumberDecimals;
+  }
+  // Length-capped like the field name; the renderer validates the tag itself
+  // and falls back when Intl rejects it or the map cannot draw its separators.
+  if (typeof candidate.labelNumberLocale === "string" && candidate.labelNumberLocale.length <= 35) {
+    style.labelNumberLocale = candidate.labelNumberLocale;
+  }
 
   return Object.keys(style).length > 0 ? style : null;
 }
@@ -633,7 +1084,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     // an empty labelField clears it.
     //
     // Only field-based labeling is wired here. LabelStyle.expression,
-    // .minZoom, and .maxZoom have no maplibre-gl-vector@0.8.0 equivalent, so
+    // .minZoom, and .maxZoom have no maplibre-gl-vector equivalent, so
     // they are intentionally left out of this mapping, out of vectorStylesEqual,
     // and out of savedVectorStyle. The shared Style panel still shows those
     // controls, but for a control-managed layer they are no-ops; adding them
@@ -646,6 +1097,13 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     labelHaloWidth: style.labels.haloWidth,
     labelPlacement: style.labels.placement,
     labelAllowOverlap: style.labels.allowOverlap,
+    labelNumberFormat: style.labels.numberFormatEnabled,
+    labelNumberDecimals: style.labels.numberDecimals,
+    // Resolve the "match app language" sentinel here rather than pushing the
+    // empty string: the control would hand "" to Intl as the runtime default,
+    // which is the browser's locale, not GeoLibre's UI language. layer-sync
+    // resolves it the same way for its own layers, so both paths agree.
+    labelNumberLocale: resolveLabelNumberLocale(style.labels.numberLocale, documentLocale()) ?? "",
   };
 }
 
@@ -725,6 +1183,18 @@ function vectorStyleToLayerStyle(info: VectorLayerInfo): Partial<LayerStyle> {
         typeof style.labelHaloWidth === "number" ? style.labelHaloWidth : defaults.haloWidth,
       placement: style.labelPlacement === "line" ? "line" : "point",
       allowOverlap: style.labelAllowOverlap ?? defaults.allowOverlap,
+      numberFormatEnabled: style.labelNumberFormat ?? defaults.numberFormatEnabled,
+      // Range-checked like labelSize above: the control's snapshot is untrusted
+      // input here (it can come from a hand-edited project), and a fractional,
+      // negative or huge precision would otherwise reach LabelStyle.
+      numberDecimals:
+        typeof style.labelNumberDecimals === "number" &&
+        Number.isInteger(style.labelNumberDecimals) &&
+        style.labelNumberDecimals >= 0 &&
+        style.labelNumberDecimals <= 10
+          ? style.labelNumberDecimals
+          : defaults.numberDecimals,
+      numberLocale: style.labelNumberLocale ?? defaults.numberLocale,
     };
   }
 
@@ -779,7 +1249,10 @@ function vectorStylesEqual(left: VectorLayerStyle, right: VectorLayerStyle): boo
     left.labelHaloColor === right.labelHaloColor &&
     left.labelHaloWidth === right.labelHaloWidth &&
     left.labelPlacement === right.labelPlacement &&
-    left.labelAllowOverlap === right.labelAllowOverlap
+    left.labelAllowOverlap === right.labelAllowOverlap &&
+    left.labelNumberFormat === right.labelNumberFormat &&
+    left.labelNumberDecimals === right.labelNumberDecimals &&
+    left.labelNumberLocale === right.labelNumberLocale
   );
 }
 
@@ -836,6 +1309,17 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Compare render opacities while tolerating floating-point group multiplication.
+ *
+ * @param left - The first opacity.
+ * @param right - The second opacity.
+ * @returns True when the values differ only by floating-point noise.
+ */
+function numbersEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-9;
 }
 
 function serializableVectorState(info: VectorLayerInfo): Record<string, unknown> {

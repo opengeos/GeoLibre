@@ -8,6 +8,9 @@ import type {
 } from "maplibre-gl";
 import proj4, { type Converter } from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { buildMgrsGrid } from "./mgrs-grid";
+import { gridZoneLongitudeRange, utmZoneNumber } from "./mgrs-reference";
+import { getControlMap } from "./style-map";
 
 /**
  * Coordinate graticule plugin.
@@ -47,6 +50,7 @@ export interface GraticuleLabels {
   gridType: string;
   typeGeographic: string;
   typeUtm: string;
+  typeMgrs: string;
   spacing: string;
   spacingAuto: string;
   spacingFixed: string;
@@ -73,6 +77,7 @@ export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
   gridType: "Grid type",
   typeGeographic: "Geographic (lat/long)",
   typeUtm: "UTM (easting/northing)",
+  typeMgrs: "MGRS / USNG",
   spacing: "Spacing",
   spacingAuto: "Auto (by zoom)",
   spacingFixed: "Fixed interval",
@@ -118,13 +123,15 @@ export type GraticuleLabelEdges = "left-bottom" | "all";
 
 /**
  * Which coordinate reference the grid follows: a geographic lat/long graticule
- * (meridians + parallels in degrees) or a metric UTM grid (constant
- * easting/northing lines with metre labels and a zone designation).
+ * (meridians + parallels in degrees), a metric UTM grid (constant
+ * easting/northing lines with metre labels and a zone designation), or the
+ * MGRS/USNG grid (grid zones, lettered 100 km squares, then 10 km and 1 km
+ * lines as the map zooms in; see `mgrs-grid.ts`).
  */
-export type GraticuleGridType = "geographic" | "utm";
+export type GraticuleGridType = "geographic" | "utm" | "mgrs";
 
 export interface GraticuleSettings {
-  /** Geographic lat/long graticule or a metric UTM easting/northing grid. */
+  /** Geographic lat/long graticule, a metric UTM grid, or the MGRS/USNG grid. */
   gridType: GraticuleGridType;
   /** Auto spacing adapts to the zoom level; fixed uses {@link spacingDegrees}/{@link spacingMeters}. */
   spacingMode: "auto" | "fixed";
@@ -252,7 +259,8 @@ export function autoMetricStep(eastingSpan: number, northingSpan: number): numbe
  * UTM zone number (1-60) for a longitude. Longitudes are normalized into
  * [-180, 180) first so unwrapped (antimeridian-crossing) values still map to a
  * valid zone. Note: this uses the regular 6°-wide zones and does not apply the
- * Norway/Svalbard exceptions (32V, 31-37X).
+ * Norway/Svalbard exceptions (32V, 31-37X); the UTM grid overlay applies them
+ * through its own zone layout.
  */
 export function utmZoneForLon(lon: number): number {
   const norm = (((lon + 180) % 360) + 360) % 360; // 0..360
@@ -278,7 +286,85 @@ export function utmZoneDesignation(lon: number, lat: number): string {
 
 /** proj4 definition string for a WGS84 UTM zone (northern or southern). */
 function utmProjDef(zone: number, south: boolean): string {
-  return `+proj=utm +zone=${zone}${south ? " +south" : ""} +datum=WGS84 +units=m +no_defs +type=crs`;
+  return `+proj=utm +zone=${zone}${
+    south ? " +south" : ""
+  } +datum=WGS84 +units=m +no_defs +type=crs`;
+}
+
+/**
+ * A point's full UTM coordinate: zone number, latitude band, hemisphere, and
+ * easting/northing in metres.
+ */
+export interface UtmCoordinate {
+  zone: number;
+  band: string;
+  south: boolean;
+  easting: number;
+  northing: number;
+}
+
+/**
+ * Project a lng/lat to its UTM zone's easting/northing.
+ *
+ * Shared with the status bar's coordinate readout (issue #1814) so the grid the
+ * user sees and the numbers they read come from one projection, rather than the
+ * grid using proj4 here and the readout re-deriving UTM somewhere else.
+ *
+ * Returns null outside UTM's valid latitude range (-80 to 84) or when proj4
+ * cannot project the point, so callers can fall back rather than print a
+ * meaningless number. The zone follows {@link utmZoneNumber}, the rule MGRS uses,
+ * so the Norway/Svalbard exceptions apply (Bergen is 32V, Longyearbyen 33X) and
+ * the UTM and MGRS readouts always agree on the zone.
+ */
+export function lngLatToUtm(lng: number, lat: number): UtmCoordinate | null {
+  const band = utmLatBand(lat);
+  if (!band) return null;
+  const zone = utmZoneNumber(lng, lat);
+  const south = lat < 0;
+  try {
+    const [easting, northing] = proj4("EPSG:4326", utmProjDef(zone, south), [lng, lat]) as [
+      number,
+      number,
+    ];
+    if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+    return { zone, band, south, easting, northing };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Inverse of {@link lngLatToUtm}: unproject a UTM easting/northing in a zone and
+ * hemisphere back to lng/lat, through the same proj4 definition.
+ *
+ * Args:
+ *   zone: UTM zone number, 1–60.
+ *   south: Whether the northing is a southern-hemisphere (false-northing) value.
+ *   easting: Easting in metres.
+ *   northing: Northing in metres.
+ *
+ * Returns:
+ *   `[lng, lat]` in degrees, or null for an invalid zone or when proj4 cannot
+ *   unproject the values.
+ */
+export function utmToLngLat(
+  zone: number,
+  south: boolean,
+  easting: number,
+  northing: number,
+): [number, number] | null {
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60) return null;
+  if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+  try {
+    const [lng, lat] = proj4(utmProjDef(zone, south), "EPSG:4326", [easting, northing]) as [
+      number,
+      number,
+    ];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    return [lng, lat];
+  } catch {
+    return null;
+  }
 }
 
 /** Format a UTM easting for display, e.g. `500000mE`. */
@@ -362,9 +448,70 @@ interface GraticuleGeometry {
   step: number;
 }
 
+/** Where on-screen edge labels go: the latitude or longitude each screen edge shows. */
+export interface ScreenEdges {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
+/**
+ * The latitudes and longitudes at the middle of each screen edge, on a globe.
+ *
+ * In Mercator the viewport bounds are the screen edges, so edge labels placed
+ * on them sit on the edges. On a globe (MapLibre's globe projection, the
+ * Cesium globe) the bounds are the rectangle around a curved footprint and
+ * run past the screen, which puts every edge label off it. An edge whose
+ * middle misses the globe (the view shows space there) keeps the bounds
+ * value: a point is only trusted when it projects back onto the screen near
+ * where it was read.
+ *
+ * @param map - The map, read through its `getProjection`, `getCanvas`,
+ *   `unproject` and `project`.
+ * @param fallback - The bounds-derived edges, kept for an edge that misses.
+ * @returns The screen edges, or `fallback` itself when the map is not a globe.
+ */
+export function globeScreenEdges(
+  map: Pick<MapLibreMap, "getCanvas" | "unproject" | "project"> & {
+    getProjection?: () => { type?: unknown } | undefined;
+  },
+  fallback: ScreenEdges,
+): ScreenEdges {
+  if (map.getProjection?.()?.type !== "globe") return fallback;
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!(width > 0 && height > 0)) return fallback;
+  const inset = 2;
+  const read = (x: number, y: number) => {
+    const lngLat = map.unproject([x, y]);
+    const back = map.project(lngLat);
+    return Math.hypot(back.x - x, back.y - y) <= 2 ? lngLat : null;
+  };
+  /** A longitude moved into the unwrapped `west..east` range the lines use. */
+  const unwrap = (lng: number) => {
+    let out = lng;
+    while (out < fallback.west) out += 360;
+    while (out > fallback.east) out -= 360;
+    return out >= fallback.west ? out : lng;
+  };
+  const bottom = read(width / 2, height - inset);
+  const top = read(width / 2, inset);
+  const left = read(inset, height / 2);
+  const right = read(width - inset, height / 2);
+  return {
+    south: bottom ? Math.max(bottom.lat, fallback.south) : fallback.south,
+    north: top ? Math.min(top.lat, fallback.north) : fallback.north,
+    west: left ? unwrap(left.lng) : fallback.west,
+    east: right ? unwrap(right.lng) : fallback.east,
+  };
+}
+
 /** Build the grid lines and edge labels for the current viewport. */
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   if (settings.gridType === "utm") return buildUtmGeometry(activeMap);
+  if (settings.gridType === "mgrs") return buildMgrsGeometry(activeMap);
   const bounds = activeMap.getBounds();
   const { west, east } = unwrappedLongitudeRange(bounds);
   // Mercator cannot show the poles; clamp parallels to the renderable range.
@@ -378,6 +525,9 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const lineFeatures: Feature<LineString>[] = [];
   const labelFeatures: Feature<Point>[] = [];
   const showAllEdges = settings.labelEdges === "all";
+  const edges = settings.showLabels
+    ? globeScreenEdges(activeMap, { south, north, west, east })
+    : { south, north, west, east };
 
   // Note: edge labels are positioned at the (possibly unwrapped) viewport bounds,
   // so for an antimeridian-crossing view their longitudes can exceed [-180, 180].
@@ -393,15 +543,18 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     lineFeatures.push({
       type: "Feature",
       properties: {},
-      geometry: { type: "LineString", coordinates: densifyLine(lon, south, north, "lon") },
+      geometry: {
+        type: "LineString",
+        coordinates: densifyLine(lon, south, north, "lon"),
+      },
     });
     if (settings.showLabels) {
       labelFeatures.push(
-        labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"),
+        labelFeature(lon, edges.south, formatLon(lon, step, settings.labelFormat), "bottom"),
       );
       if (showAllEdges) {
         labelFeatures.push(
-          labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"),
+          labelFeature(lon, edges.north, formatLon(lon, step, settings.labelFormat), "top"),
         );
       }
     }
@@ -415,15 +568,18 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     lineFeatures.push({
       type: "Feature",
       properties: {},
-      geometry: { type: "LineString", coordinates: densifyLine(lat, west, east, "lat") },
+      geometry: {
+        type: "LineString",
+        coordinates: densifyLine(lat, west, east, "lat"),
+      },
     });
     if (settings.showLabels) {
       labelFeatures.push(
-        labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"),
+        labelFeature(edges.west, lat, formatLat(lat, step, settings.labelFormat), "left"),
       );
       if (showAllEdges) {
         labelFeatures.push(
-          labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"),
+          labelFeature(edges.east, lat, formatLat(lat, step, settings.labelFormat), "right"),
         );
       }
     }
@@ -486,9 +642,60 @@ function utmExtent(
   return any ? { eMin, eMax, nMin, nMax } : null;
 }
 
+/** Latitudes where the Norway/Svalbard exceptions start or stop changing zone widths. */
+const UTM_EXCEPTION_LATITUDES = [56, 64, 72];
+
+/** Split a latitude band at each of `latitudes` that falls strictly inside it. */
+export function splitAtLatitudes<T extends { south: number; north: number }>(
+  band: T,
+  latitudes: number[],
+): T[] {
+  const edges = [
+    band.south,
+    ...latitudes.filter((lat) => lat > band.south && lat < band.north),
+    band.north,
+  ];
+  const segments: T[] = [];
+  for (let i = 0; i < edges.length - 1; i += 1) {
+    segments.push({ ...band, south: edges[i], north: edges[i + 1] });
+  }
+  return segments;
+}
+
+/**
+ * UTM zones that overlap `[west, east]` within one latitude segment, honouring
+ * the Norway/Svalbard exceptions. `east` may exceed 180 for an antimeridian
+ * view, so each zone is repeated per world copy and shifted by a multiple of
+ * 360°. Segments must not straddle 56°, 64° or 72° (see {@link splitAtLatitudes}).
+ */
+export function utmZoneSpans(
+  band: { south: number; north: number },
+  west: number,
+  east: number,
+): { zone: number; zoneWest: number; zoneEast: number }[] {
+  const letter = utmLatBand((band.south + band.north) / 2);
+  const spans: { zone: number; zoneWest: number; zoneEast: number }[] = [];
+  if (!letter) return spans;
+  const firstCopy = Math.floor((west + 180) / 360);
+  const lastCopy = Math.floor((east + 180) / 360);
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const offset = copy * 360;
+    for (let zone = 1; zone <= 60; zone += 1) {
+      const range = gridZoneLongitudeRange(zone, letter);
+      if (!range) continue;
+      const zoneWest = range[0] + offset;
+      const zoneEast = range[1] + offset;
+      if (zoneEast <= west || zoneWest >= east) continue;
+      spans.push({ zone, zoneWest, zoneEast });
+    }
+  }
+  return spans.sort((a, b) => a.zoneWest - b.zoneWest);
+}
+
 /**
  * Build a metric UTM grid (constant easting/northing lines) for the current
- * viewport. The viewport is split into 6°-wide UTM zones; each zone's lines are
+ * viewport. The viewport is split into UTM zones (6° wide, except the Norway and
+ * Svalbard exceptions); each zone's lines are
  * generated in projected metres and inverse-projected back to lng/lat so they
  * follow the true grid curvature in Web Mercator. Labels show easting/northing
  * in metres plus a per-zone designation (e.g. "37T").
@@ -522,122 +729,128 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   // southern zones down from a 10,000,000 m false northing), so a viewport that
   // straddles the equator must be split into per-hemisphere bands and projected
   // with the matching hemisphere convention in each.
-  const bands: { south: number; north: number; useSouth: boolean }[] = [];
-  if (south < 0) bands.push({ south, north: Math.min(north, 0), useSouth: true });
-  if (north > 0) bands.push({ south: Math.max(south, 0), north, useSouth: false });
-  if (bands.length === 0) bands.push({ south, north, useSouth: centerLat < 0 });
+  const hemisphereBands: { south: number; north: number; useSouth: boolean }[] = [];
+  if (south < 0) hemisphereBands.push({ south, north: Math.min(north, 0), useSouth: true });
+  if (north > 0) hemisphereBands.push({ south: Math.max(south, 0), north, useSouth: false });
+  if (hemisphereBands.length === 0) hemisphereBands.push({ south, north, useSouth: centerLat < 0 });
 
-  // Walk the viewport longitude range zone by zone. Zone boundaries sit every
-  // 6° from -180°; align to the zone edge at or before `west` (works for the
-  // unwrapped, possibly >180° range produced by an antimeridian-crossing view).
-  const firstZoneWest = Math.floor((west + 180) / 6) * 6 - 180;
-  for (let zoneWest = firstZoneWest; zoneWest < east && count < maxLines; zoneWest += 6) {
-    const zoneEast = zoneWest + 6;
+  // Norway (32V) and Svalbard (31X/33X/35X/37X) use zones wider or narrower than
+  // 6° in the 56-64° and 72-84° bands, so split each hemisphere band at those
+  // latitudes and lay zones out per segment rather than every 6° across the view.
+  const bands = hemisphereBands.flatMap((hemisphereBand) =>
+    splitAtLatitudes(hemisphereBand, UTM_EXCEPTION_LATITUDES),
+  );
+
+  // Lay out each latitude segment's zones across the (possibly unwrapped,
+  // antimeridian-crossing) viewport longitude range.
+  const cells = bands.flatMap((band) =>
+    utmZoneSpans(band, west, east).map((span) => ({ band, ...span })),
+  );
+  const topBandNorth = Math.max(...bands.map((band) => band.north));
+  for (const { band, zone, zoneWest, zoneEast } of cells) {
+    if (count >= maxLines) break;
     const clipWest = Math.max(zoneWest, west);
     const clipEast = Math.min(zoneEast, east);
     if (clipEast <= clipWest) continue;
-    const zone = utmZoneForLon(zoneWest + 3);
 
-    for (const band of bands) {
-      if (band.north <= band.south || count >= maxLines) continue;
-      let toUtm: Converter;
-      let toLngLat: Converter;
+    if (band.north <= band.south) continue;
+    let toUtm: Converter;
+    let toLngLat: Converter;
+    try {
+      const def = utmProjDef(zone, band.useSouth);
+      toUtm = proj4("EPSG:4326", def);
+      toLngLat = proj4(def, "EPSG:4326");
+    } catch {
+      continue;
+    }
+
+    const extent = utmExtent(toUtm, clipWest, clipEast, band.south, band.north);
+    if (!extent) continue;
+    const { eMin, eMax, nMin, nMax } = extent;
+    const zoneStep =
+      settings.spacingMode === "fixed" ? step : autoMetricStep(eMax - eMin, nMax - nMin);
+    reportedStep = zoneStep;
+
+    // Inverse-project a projected point, wrapping its longitude into the
+    // zone's (possibly unwrapped, antimeridian-crossing) range before clipping
+    // so a zone's grid does not bleed into its neighbour and an antimeridian
+    // view does not drop points that proj4 reports in [-180, 180]. Returns
+    // null when the point falls outside the zone.
+    const project = (e: number, n: number): [number, number] | null => {
       try {
-        const def = utmProjDef(zone, band.useSouth);
-        toUtm = proj4("EPSG:4326", def);
-        toLngLat = proj4(def, "EPSG:4326");
+        const projected = toLngLat.forward([e, n]);
+        let lon = projected[0];
+        const lat = projected[1];
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+        while (lon < clipWest - 180) lon += 360;
+        while (lon > clipEast + 180) lon -= 360;
+        if (lon < clipWest - 1e-6 || lon > clipEast + 1e-6) return null;
+        return [lon, lat];
       } catch {
-        continue;
+        return null;
       }
+    };
 
-      const extent = utmExtent(toUtm, clipWest, clipEast, band.south, band.north);
-      if (!extent) continue;
-      const { eMin, eMax, nMin, nMax } = extent;
-      const zoneStep =
-        settings.spacingMode === "fixed" ? step : autoMetricStep(eMax - eMin, nMax - nMin);
-      reportedStep = zoneStep;
+    // The equator split hands each viewport edge to a single band, so a band
+    // only carries the bottom/top easting label when it reaches that edge.
+    const bandAtSouth = band.south === south;
+    const bandAtNorth = band.north === north;
 
-      // Inverse-project a projected point, wrapping its longitude into the
-      // zone's (possibly unwrapped, antimeridian-crossing) range before clipping
-      // so a zone's grid does not bleed into its neighbour and an antimeridian
-      // view does not drop points that proj4 reports in [-180, 180]. Returns
-      // null when the point falls outside the zone.
-      const project = (e: number, n: number): [number, number] | null => {
-        try {
-          const projected = toLngLat.forward([e, n]);
-          let lon = projected[0];
-          const lat = projected[1];
-          if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-          while (lon < clipWest - 180) lon += 360;
-          while (lon > clipEast + 180) lon -= 360;
-          if (lon < clipWest - 1e-6 || lon > clipEast + 1e-6) return null;
-          return [lon, lat];
-        } catch {
-          return null;
-        }
-      };
-
-      // The equator split hands each viewport edge to a single band, so a band
-      // only carries the bottom/top easting label when it reaches that edge.
-      const bandAtSouth = band.south === south;
-      const bandAtNorth = band.north === north;
-
-      // Constant-easting lines (run north-south), densified along northing.
-      const firstE = Math.ceil(eMin / zoneStep) * zoneStep;
-      for (let e = firstE; e <= eMax && count < maxLines; e += zoneStep) {
-        const coords: [number, number][] = [];
-        for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
-          const n = nMin + ((nMax - nMin) * i) / UTM_LINE_SEGMENTS;
-          const point = project(e, n);
-          if (point) coords.push(point);
-        }
-        if (coords.length < 2) continue;
-        lineFeatures.push({
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: coords },
-        });
-        if (settings.showLabels) {
-          // Snap the label onto the viewport edge (matching the geographic grid)
-          // so the line's endpoint sits under the label text rather than poking
-          // out beside it, where a short line stub would read as a stray "-".
-          if (bandAtSouth) {
-            labelFeatures.push(labelFeature(coords[0][0], south, formatEasting(e), "bottom"));
-          }
-          if (showAllEdges && bandAtNorth) {
-            const top = coords[coords.length - 1];
-            labelFeatures.push(labelFeature(top[0], north, formatEasting(e), "top"));
-          }
-        }
-        count += 1;
+    // Constant-easting lines (run north-south), densified along northing.
+    const firstE = Math.ceil(eMin / zoneStep) * zoneStep;
+    for (let e = firstE; e <= eMax && count < maxLines; e += zoneStep) {
+      const coords: [number, number][] = [];
+      for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
+        const n = nMin + ((nMax - nMin) * i) / UTM_LINE_SEGMENTS;
+        const point = project(e, n);
+        if (point) coords.push(point);
       }
-
-      // Constant-northing lines (run east-west), densified along easting.
-      const firstN = Math.ceil(nMin / zoneStep) * zoneStep;
-      for (let n = firstN; n <= nMax && count < maxLines; n += zoneStep) {
-        const coords: [number, number][] = [];
-        for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
-          const e = eMin + ((eMax - eMin) * i) / UTM_LINE_SEGMENTS;
-          const point = project(e, n);
-          if (point) coords.push(point);
+      if (coords.length < 2) continue;
+      lineFeatures.push({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: coords },
+      });
+      if (settings.showLabels) {
+        // Snap the label onto the viewport edge (matching the geographic grid)
+        // so the line's endpoint sits under the label text rather than poking
+        // out beside it, where a short line stub would read as a stray "-".
+        if (bandAtSouth) {
+          labelFeatures.push(labelFeature(coords[0][0], south, formatEasting(e), "bottom"));
         }
-        if (coords.length < 2) continue;
-        lineFeatures.push({
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: coords },
-        });
-        if (settings.showLabels) {
-          // Snap onto the zone's west/east boundary so the line endpoint tucks
-          // under the label text instead of showing a stub beside it.
-          labelFeatures.push(labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"));
-          if (showAllEdges) {
-            const right = coords[coords.length - 1];
-            labelFeatures.push(labelFeature(clipEast, right[1], formatNorthing(n), "right"));
-          }
+        if (showAllEdges && bandAtNorth) {
+          const top = coords[coords.length - 1];
+          labelFeatures.push(labelFeature(top[0], north, formatEasting(e), "top"));
         }
-        count += 1;
       }
+      count += 1;
+    }
+
+    // Constant-northing lines (run east-west), densified along easting.
+    const firstN = Math.ceil(nMin / zoneStep) * zoneStep;
+    for (let n = firstN; n <= nMax && count < maxLines; n += zoneStep) {
+      const coords: [number, number][] = [];
+      for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
+        const e = eMin + ((eMax - eMin) * i) / UTM_LINE_SEGMENTS;
+        const point = project(e, n);
+        if (point) coords.push(point);
+      }
+      if (coords.length < 2) continue;
+      lineFeatures.push({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: coords },
+      });
+      if (settings.showLabels) {
+        // Snap onto the zone's west/east boundary so the line endpoint tucks
+        // under the label text instead of showing a stub beside it.
+        labelFeatures.push(labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"));
+        if (showAllEdges) {
+          const right = coords[coords.length - 1];
+          labelFeatures.push(labelFeature(clipEast, right[1], formatNorthing(n), "right"));
+        }
+      }
+      count += 1;
     }
 
     // Draw the zone's western boundary meridian as a grid line. Each zone's
@@ -655,8 +868,8 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
         geometry: {
           type: "LineString",
           coordinates: [
-            [zoneWest, south],
-            [zoneWest, north],
+            [zoneWest, band.south],
+            [zoneWest, band.north],
           ],
         },
       });
@@ -664,11 +877,12 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     }
 
     // One zone-designation label per visible zone, centred along the top edge.
-    if (settings.showLabels) {
+    // Only the topmost latitude segment carries it: lower segments would put the
+    // label mid-map, and the top segment's zone is the one that touches the edge.
+    if (settings.showLabels && band.north === topBandNorth) {
       const zoneCenterLon = (clipWest + clipEast) / 2;
-      labelFeatures.push(
-        labelFeature(zoneCenterLon, north, utmZoneDesignation(zoneCenterLon, centerLat), "top"),
-      );
+      const designation = `${zone}${utmLatBand((band.south + band.north) / 2)}`;
+      labelFeatures.push(labelFeature(zoneCenterLon, north, designation, "top"));
     }
   }
 
@@ -677,6 +891,25 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     labels: { type: "FeatureCollection", features: labelFeatures },
     step: reportedStep || settings.spacingMeters,
   };
+}
+
+/**
+ * Build the MGRS/USNG grid for the current viewport. Its density follows the
+ * ground resolution rather than the spacing settings, which only apply to the
+ * lat/long and UTM grids.
+ */
+function buildMgrsGeometry(activeMap: MapLibreMap): GraticuleGeometry {
+  const bounds = activeMap.getBounds();
+  const { west, east } = unwrappedLongitudeRange(bounds);
+  const grid = buildMgrsGrid(
+    { west, east, south: bounds.getSouth(), north: bounds.getNorth() },
+    {
+      zoom: activeMap.getZoom(),
+      showLabels: settings.showLabels,
+      labelEdges: settings.labelEdges,
+    },
+  );
+  return { lines: grid.lines, labels: grid.labels, step: grid.step };
 }
 
 function labelFeature(
@@ -719,7 +952,7 @@ function pickTextFont(activeMap: MapLibreMap): string[] {
       if (!Array.isArray(font) || font.length === 0) continue;
       // Prefer an upright regular face; keep the first usable font as a fallback
       // for styles that only ship italic/bold faces.
-      if (font.every((f) => !/italic|bold/i.test(f))) return font;
+      if (font.every((f) => !/italic|bold/i.test(f))) return (cachedTextFont = font);
       if (!fallback) fallback = font;
     }
   } catch {
@@ -763,7 +996,22 @@ function ensureLayers(activeMap: MapLibreMap): void {
 
 function applyStyleProps(activeMap: MapLibreMap): void {
   activeMap.setPaintProperty(LINE_LAYER_ID, "line-color", settings.lineColor);
-  activeMap.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
+  // The MGRS grid tags each line with its tier: zone boundaries draw heaviest,
+  // then 100 km squares, with 1 km lines lightest. The other grids carry no
+  // `level` and fall through to the configured width.
+  activeMap.setPaintProperty(LINE_LAYER_ID, "line-width", [
+    "match",
+    ["get", "level"],
+    "zone",
+    settings.lineWidth * 2,
+    "square",
+    settings.lineWidth * 1.5,
+    "10km",
+    settings.lineWidth,
+    "1km",
+    settings.lineWidth * 0.75,
+    settings.lineWidth,
+  ]);
   activeMap.setPaintProperty(LINE_LAYER_ID, "line-opacity", settings.lineOpacity);
   // Setting the dash array to undefined reverts to a solid line; a literal like
   // [1] would render as a 1px dotted line that is almost invisible.
@@ -781,7 +1029,12 @@ function applyStyleProps(activeMap: MapLibreMap): void {
   );
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-field", ["get", "label"]);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-font", pickTextFont(activeMap));
-  activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-size", settings.labelSize);
+  // MGRS zone and square labels carry a `scale` so they read as headings.
+  activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-size", [
+    "*",
+    settings.labelSize,
+    ["coalesce", ["get", "scale"], 1],
+  ]);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-anchor", anchor);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-allow-overlap", true);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-ignore-placement", true);
@@ -863,6 +1116,50 @@ function update(): void {
   refreshGeometry();
   applyStyleProps(map);
 }
+
+/**
+ * Put the grid back as soon as a basemap swap drops it, instead of waiting for
+ * the new basemap's tiles to settle (`idle`), which left the overlay missing for
+ * a visible moment. Each `styledata` event retries until the new style document
+ * accepts sources (adding one before that throws), then the listener detaches on
+ * `idle`, which also runs the full {@link update} as the fallback.
+ */
+function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
+  // A second swap before the first settles replaces the pending listener rather
+  // than stacking another one.
+  stopStyleHeal?.();
+  const heal = () => {
+    if (map !== activeMap) {
+      activeMap.off("styledata", heal);
+      return;
+    }
+    try {
+      if (activeMap.getLayer(LINE_LAYER_ID) && activeMap.getLayer(LABEL_LAYER_ID)) return;
+      ensureLayers(activeMap);
+      const geometry = buildGeometry(activeMap);
+      void (activeMap.getSource(LINE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+        geometry.lines,
+      );
+      void (activeMap.getSource(LABEL_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+        geometry.labels,
+      );
+      applyStyleProps(activeMap);
+    } catch {
+      // The style is still loading; the next styledata (or idle) retries.
+    }
+  };
+  const stop = () => {
+    activeMap.off("styledata", heal);
+    activeMap.off("idle", stop);
+    if (stopStyleHeal === stop) stopStyleHeal = null;
+  };
+  stopStyleHeal = stop;
+  activeMap.on("styledata", heal);
+  activeMap.once("idle", stop);
+}
+
+/** Detaches the pending {@link redrawWhenStyleSwaps} listeners, if any. */
+let stopStyleHeal: (() => void) | null = null;
 
 function teardownLayers(activeMap: MapLibreMap): void {
   if (activeMap.getLayer(LABEL_LAYER_ID)) activeMap.removeLayer(LABEL_LAYER_ID);
@@ -1049,39 +1346,47 @@ function buildPanelBody(container: HTMLElement): void {
     [
       { value: "geographic", label: labels.typeGeographic },
       { value: "utm", label: labels.typeUtm },
+      { value: "mgrs", label: labels.typeMgrs },
     ],
     () => settings.gridType,
     (v) => setGraticuleSettings({ gridType: v as GraticuleGridType }),
   );
-  select(
-    labels.spacing,
-    [
-      { value: "auto", label: labels.spacingAuto },
-      { value: "fixed", label: labels.spacingFixed },
-    ],
-    () => settings.spacingMode,
-    (v) => setGraticuleSettings({ spacingMode: v as GraticuleSettings["spacingMode"] }),
-  );
-  if (settings.gridType === "utm") {
-    number(
-      labels.intervalMeters,
-      { min: 100, max: 1000000, step: 100 },
-      () => settings.spacingMeters,
-      (v) => setGraticuleSettings({ spacingMeters: v }),
-      // Auto spacing is purely zoom-driven, so the interval has no effect there.
-      () => settings.spacingMode === "auto",
+  // The MGRS grid picks its own tiers (100 km, 10 km, 1 km) from the zoom, so
+  // the spacing controls do not apply to it.
+  if (settings.gridType !== "mgrs") {
+    select(
+      labels.spacing,
+      [
+        { value: "auto", label: labels.spacingAuto },
+        { value: "fixed", label: labels.spacingFixed },
+      ],
+      () => settings.spacingMode,
+      (v) =>
+        setGraticuleSettings({
+          spacingMode: v as GraticuleSettings["spacingMode"],
+        }),
     );
-  } else {
-    number(
-      labels.interval,
-      // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
-      // native number input rather than reading as step mismatches.
-      { min: 0.001, max: 45, step: 0.001 },
-      () => settings.spacingDegrees,
-      (v) => setGraticuleSettings({ spacingDegrees: v }),
-      // Auto spacing is purely zoom-driven, so the interval has no effect there.
-      () => settings.spacingMode === "auto",
-    );
+    if (settings.gridType === "utm") {
+      number(
+        labels.intervalMeters,
+        { min: 100, max: 1000000, step: 100 },
+        () => settings.spacingMeters,
+        (v) => setGraticuleSettings({ spacingMeters: v }),
+        // Auto spacing is purely zoom-driven, so the interval has no effect there.
+        () => settings.spacingMode === "auto",
+      );
+    } else {
+      number(
+        labels.interval,
+        // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
+        // native number input rather than reading as step mismatches.
+        { min: 0.001, max: 45, step: 0.001 },
+        () => settings.spacingDegrees,
+        (v) => setGraticuleSettings({ spacingDegrees: v }),
+        // Auto spacing is purely zoom-driven, so the interval has no effect there.
+        () => settings.spacingMode === "auto",
+      );
+    }
   }
   color(
     labels.lineColor,
@@ -1111,8 +1416,8 @@ function buildPanelBody(container: HTMLElement): void {
     (v) => setGraticuleSettings({ showLabels: v }),
   );
   // The label format (decimal vs DMS) only applies to the geographic grid; UTM
-  // labels are always metric easting/northing values.
-  if (settings.gridType !== "utm") {
+  // and MGRS labels are always metric values or grid letters.
+  if (settings.gridType === "geographic") {
     select(
       labels.labelFormat,
       [
@@ -1176,7 +1481,7 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
   const v = (value ?? {}) as Partial<GraticuleSettings>;
   const d = DEFAULT_GRATICULE_SETTINGS;
   return {
-    gridType: v.gridType === "utm" ? "utm" : "geographic",
+    gridType: v.gridType === "utm" || v.gridType === "mgrs" ? v.gridType : "geographic",
     spacingMode: v.spacingMode === "fixed" ? "fixed" : "auto",
     spacingDegrees: clampNumber(v.spacingDegrees, 0.001, 45, d.spacingDegrees),
     spacingMeters: clampNumber(v.spacingMeters, 100, 1000000, d.spacingMeters),
@@ -1227,8 +1532,13 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
   id: GRATICULE_PLUGIN_ID,
   name: "Gridlines",
   version: "0.1.0",
+  // Draws the graticule through the Style Spec surface both 2D engines share
+  // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
+  // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
+  // and the Cesium globe the host draws the same GeoJSON layers natively.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
-    const activeMap = app.getMap?.();
+    const activeMap = getControlMap(app);
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;
@@ -1244,6 +1554,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     unsubscribeBasemap = app.onBasemapChange(() => {
       if (!map) return;
       cachedTextFont = null;
+      redrawWhenStyleSwaps(map);
       map.once("idle", () => update());
     });
 
@@ -1267,6 +1578,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     moveHandler = null;
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    stopStyleHeal?.();
     if (control) {
       app.removeMapControl(control);
       control = null;
@@ -1279,7 +1591,14 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     // deferred draw instead of waiting on the previous run's stale listener.
     idlePending = false;
     cachedTextFont = null;
-    if (map) teardownLayers(map);
+    // A renderer swap deactivates this plugin after the old map was removed;
+    // a removed mapbox-gl map throws from getLayer (its style is gone), and
+    // there is nothing left to remove.
+    try {
+      if (map) teardownLayers(map);
+    } catch {
+      // Already torn down with the map.
+    }
     map = null;
     appRef = null;
   },

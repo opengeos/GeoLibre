@@ -7,7 +7,10 @@ import {
   type ServiceRef,
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { pluginDisplayTitle } from "../plugin-i18n";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -22,7 +25,7 @@ const SOURCE_KIND = "enviroatlas";
 // Matches the package's AddedLayer.bounds type, which is not exported.
 type LngLatBoundsArray = [number, number, number, number];
 
-let enviroAtlasPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "enviroatlas-panel";
 
 const ENVIROATLAS_OPTIONS = {
   collapsed: false,
@@ -36,6 +39,7 @@ const ENVIROATLAS_OPTIONS = {
 
 let enviroAtlasControl: EnviroAtlasControl | null = null;
 let controlEventHandler: EnviroAtlasControlEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 function isServiceRef(value: unknown): value is ServiceRef {
   if (!value || typeof value !== "object") return false;
@@ -145,43 +149,57 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-enviroatlas",
   name: "US EPA EnviroAtlas",
   version: "0.1.1",
+  // The control's raster layers are mirrored into store layers; on ArcGIS and
+  // the Cesium globe its style is only recorded and the engine draws those
+  // store layers.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!enviroAtlasControl) {
       enviroAtlasControl = new EnviroAtlasControl(getEnviroAtlasControlOptions());
     }
 
-    const added = app.addMapControl(enviroAtlasControl, enviroAtlasPosition);
-    if (!added) {
+    const activeControl = enviroAtlasControl;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: pluginDisplayTitle(app, "maplibre-gl-enviroatlas", "US EPA EnviroAtlas"),
+      dock: "replace-style",
+      defaultWidth: 360,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        enviroAtlasStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          enviroAtlasStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       enviroAtlasControl = null;
       return false;
     }
-    enviroAtlasStoreSync.attach(enviroAtlasControl);
-    setTimeout(() => enviroAtlasControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!enviroAtlasControl) return;
     enviroAtlasStoreSync.detach();
-    app.removeMapControl(enviroAtlasControl);
+    unmountMapControlFromPanel(enviroAtlasControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     enviroAtlasControl = null;
-  },
-  getMapControlPosition: () => enviroAtlasPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    enviroAtlasPosition = position;
-    if (!enviroAtlasControl) return;
-    app.removeMapControl(enviroAtlasControl);
-    const added = app.addMapControl(enviroAtlasControl, enviroAtlasPosition);
-    if (!added) {
-      enviroAtlasStoreSync.detach();
-      enviroAtlasControl = null;
-      return false;
-    }
-    setTimeout(() => enviroAtlasControl?.expand(), 0);
   },
 };
 
 function getEnviroAtlasControlOptions(): EnviroAtlasControlOptions {
   return {
     ...ENVIROATLAS_OPTIONS,
-    position: enviroAtlasPosition,
+    position: "top-left",
   };
 }

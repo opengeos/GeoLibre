@@ -12,7 +12,31 @@ declare module "maplibre-gl-usgs-lidar" {
   // as `Partial<LidarControlOptions>` from `maplibre-gl-lidar`, so that package
   // must stay a direct dependency of @geolibre/plugins for this shim (the only
   // remaining consumer after the old LiDAR viewer was removed) to resolve.
-  import type { LidarControlOptions } from "maplibre-gl-lidar";
+  import type { LidarControlOptions, PointCloudInfo } from "maplibre-gl-lidar";
+
+  /** A point cloud the control has loaded, named after its USGS item. */
+  export interface LoadedItemInfo extends PointCloudInfo {
+    name: string;
+  }
+
+  /** The subset of the control's state the layer sync reads. */
+  export interface UsgsLidarState {
+    /** Loaded point clouds, keyed by USGS item id. */
+    loadedItems: Map<string, LoadedItemInfo>;
+  }
+
+  /**
+   * Bridges the control's loaded items to a layer list: `add`/`remove` events
+   * keyed by item id, and per-item visibility and opacity.
+   */
+  export class UsgsLidarLayerAdapter {
+    constructor(usgsControl: UsgsLidarControl);
+    getLayerIds(): string[];
+    setVisibility(layerId: string, visible: boolean): void;
+    setOpacity(layerId: string, opacity: number): void;
+    onLayerChange(callback: (event: "add" | "remove", layerId: string) => void): () => void;
+    destroy(): void;
+  }
 
   export interface UsgsLidarControlOptions {
     /** Whether the control panel should start collapsed. @default true */
@@ -50,5 +74,9 @@ declare module "maplibre-gl-usgs-lidar" {
     collapse(): void;
     /** Toggles the panel open/closed. */
     toggle(): void;
+    /** The control's current state. */
+    getState(): UsgsLidarState;
+    /** Unloads one loaded item's point cloud. */
+    unloadItem(itemId: string): void;
   }
 }

@@ -70,6 +70,13 @@ GeoLibre Desktop $version (portable, $Architecture)
 Unzip this folder anywhere and run $binaryName.exe. No installation or admin
 rights are required.
 
+Each time it starts, the app registers itself for the current user as the
+handler for org.geolibre.desktop: links, so share-server sign-in can return to
+it from the browser. This is the only registry change (HKCU\Software\Classes),
+and it always points at wherever you last started the app. After moving this
+folder, start the app once from the new location. After deleting it, remove
+that key so sign-in links do not point at a missing exe.
+
 Requirements:
   - Microsoft Edge WebView2 Runtime. Preinstalled on Windows 11 and current
     Windows 10. If the app does not start, install the Evergreen runtime from
@@ -81,6 +88,10 @@ Requirements:
 This portable build does not auto-update; download a newer zip to upgrade.
 "@
 Set-Content -Path (Join-Path $payloadDir "README.txt") -Value $readme -Encoding utf8
+# Tells the app it runs from the portable zip, so it registers the OAuth
+# callback scheme itself (lib.rs, is_portable_windows_build). Installers
+# register it at install time; without the marker nothing would.
+Set-Content -Path (Join-Path $payloadDir "portable.marker") -Value "" -Encoding utf8
 
 Remove-Item -Force $zipPath -ErrorAction SilentlyContinue
 Compress-Archive -Path $payloadDir -DestinationPath $zipPath -CompressionLevel Optimal

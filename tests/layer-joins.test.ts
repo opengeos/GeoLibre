@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerJoin,
@@ -13,9 +14,10 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function tableFeature(properties: Record<string, unknown>): Feature {
-  return { type: "Feature", geometry: null, properties };
+  return { type: "Feature", geometry: NULL_GEOMETRY, properties };
 }
 
 function pointFeature(properties: Record<string, unknown>): Feature {
@@ -147,6 +149,31 @@ describe("applyLayerJoins", () => {
         : undefined,
     );
     assert.equal(joins[0].stats?.unmatchedJoinCount, 2);
+  });
+
+  it("does not match missing keys inherited from Object.prototype", () => {
+    const { features, joins } = applyLayerJoins(
+      [pointFeature({}), pointFeature({ constructor: "Alabama" })],
+      [join({ targetField: "constructor", joinField: "constructor" })],
+      () =>
+        collection([tableFeature({ pop: 99 }), tableFeature({ constructor: "Alabama", pop: 1 })]),
+    );
+    assert.equal(features[0].properties?.pop, null);
+    assert.equal(features[1].properties?.pop, 1);
+    assert.equal(joins[0].stats?.matchedCount, 1);
+    assert.equal(joins[0].stats?.unmatchedTargetCount, 1);
+    assert.equal(joins[0].stats?.unmatchedJoinCount, 0);
+  });
+
+  it("null-fills missing joined columns whose names exist on Object.prototype", () => {
+    const { features } = applyLayerJoins(states().features, [join()], () =>
+      collection([
+        tableFeature({ state_name: "Alabama", toString: "label" }),
+        tableFeature({ state_name: "Arizona" }),
+      ]),
+    );
+    assert.equal(features[0].properties?.toString, "label");
+    assert.equal(features[2].properties?.toString, null);
   });
 
   it("keeps the first matching join row when keys repeat", () => {
@@ -487,7 +514,7 @@ function bareLayer(
     source: { type: "geojson" },
     visible: true,
     opacity: 1,
-    style: {},
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata: {},
     geojson: collection([pointFeature(properties)]),
     ...(joins ? { joins } : {}),

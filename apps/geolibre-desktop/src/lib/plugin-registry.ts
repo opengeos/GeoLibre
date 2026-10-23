@@ -4,7 +4,9 @@
 // external-plugin loader then fetches and registers - the registry adds no new
 // trust path. See docs/plugin-api.md and docs/roadmap.md.
 
-import { isAllowedPluginManifestUrl } from "@geolibre/core";
+import { isAllowedPluginManifestUrl, setRegistryPublishableSettings } from "@geolibre/core";
+import { getDeploymentPolicy } from "./deployment-env";
+import { pinPluginBundle } from "./plugin-integrity";
 
 /** A single curated plugin in the marketplace registry. */
 export interface PluginRegistryEntry {
@@ -19,6 +21,17 @@ export interface PluginRegistryEntry {
   categories?: string[];
   /** Minimum GeoLibre app version this plugin supports, e.g. "1.0.0". */
   minGeoLibreVersion?: string;
+  /**
+   * Project-state keys that survive "Strip credentials" and shared exports.
+   * `null` keeps the plugin's whole state. Absent means nothing is kept.
+   */
+  publishableSettings?: string[] | null;
+  /**
+   * SHA-256 of the published bundle, in the form `computePluginBundleHash`
+   * produces. When present, installing and updating check the downloaded code
+   * against it instead of trusting whatever the URL serves first.
+   */
+  bundleSha256?: string;
 }
 
 export interface PluginRegistry {
@@ -33,12 +46,14 @@ export interface PluginRegistry {
 const DEFAULT_REGISTRY_URL = "https://plugins.geolibre.app/plugin-registry.json";
 
 /**
- * Resolve the registry URL. Honors VITE_GEOLIBRE_PLUGIN_REGISTRY_URL (resolved
- * against the app origin so a relative value works) and otherwise falls back to
- * the hosted default registry.
+ * Resolve the registry URL. Honors deployment.json `plugins.registryUrl`, then
+ * VITE_GEOLIBRE_PLUGIN_REGISTRY_URL (resolved against the app origin so a
+ * relative value works) and otherwise falls back to the hosted default registry.
  */
 export function resolveRegistryUrl(): string {
-  const configured = import.meta.env.VITE_GEOLIBRE_PLUGIN_REGISTRY_URL;
+  const configured =
+    getDeploymentPolicy()?.plugins?.registryUrl ??
+    import.meta.env.VITE_GEOLIBRE_PLUGIN_REGISTRY_URL;
   // Resolving a configured value needs window.location as its base; outside a
   // browser (tests, SSR, Node scripts) fall back to the absolute default, the
   // same way bundledPluginManifestUrls guards window access.
@@ -52,6 +67,26 @@ export function resolveRegistryUrl(): string {
 // fast path; the streaming reader below is the real enforcement for chunked or
 // compressed responses that omit the header.
 const MAX_REGISTRY_BYTES = 5 * 1024 * 1024;
+
+const inFlightRegistryFetches = new Map<string, Promise<PluginRegistry>>();
+
+/**
+ * Share only an in-flight registry response for callers classifying the same
+ * resolved registry URL. Successful and failed results are never cached.
+ */
+export function fetchPluginRegistryShared(
+  registryUrl: string = resolveRegistryUrl(),
+): Promise<PluginRegistry> {
+  const current = inFlightRegistryFetches.get(registryUrl);
+  if (current) return current;
+  const request = fetchPluginRegistry(registryUrl).finally(() => {
+    if (inFlightRegistryFetches.get(registryUrl) === request) {
+      inFlightRegistryFetches.delete(registryUrl);
+    }
+  });
+  inFlightRegistryFetches.set(registryUrl, request);
+  return request;
+}
 
 /**
  * Fetch and normalize the plugin registry. Entry manifest URLs are resolved to
@@ -90,6 +125,7 @@ export async function fetchPluginRegistry(
     const entries = rawEntries
       .map((entry) => normalizeEntry(entry, registryUrl))
       .filter((entry): entry is PluginRegistryEntry => entry !== null);
+    publishRegistrySettings(entries);
     return { entries, registryUrl };
   } finally {
     clearTimeout(timeout);
@@ -101,12 +137,26 @@ export async function fetchPluginRegistry(
  * Read a response body as text, enforcing a hard byte ceiling. The
  * Content-Length header is a fast-fail; the streaming reader is the real
  * enforcement for responses that omit it (chunked/compressed). Mirrors the
- * cap in fetchPluginText for plugin assets.
+ * cap in fetchPluginText for plugin assets. Also used for the registry's
+ * blocklist (plugin-blocklist.ts).
+ *
+ * @param response - The response to read.
+ * @param maxBytes - The byte ceiling.
+ * @param label - What is being fetched, for the error message.
+ * @returns The body as text.
  */
-async function readBodyWithCap(response: Response, maxBytes: number): Promise<string> {
+export async function readBodyWithCap(
+  response: Response,
+  maxBytes: number,
+  label = "plugin registry",
+): Promise<string> {
+  const tooLarge = () =>
+    new Error(
+      `Could not fetch ${label}: response exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB size limit.`,
+    );
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+    throw tooLarge();
   }
   const reader = response.body?.getReader();
   if (!reader) {
@@ -115,7 +165,7 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
     // without first building the full string.
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength > maxBytes) {
-      throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+      throw tooLarge();
     }
     return new TextDecoder().decode(buffer);
   }
@@ -127,7 +177,7 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+        throw tooLarge();
       }
       chunks.push(value);
     }
@@ -144,6 +194,45 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(merged);
+}
+
+// Ids of the plugins that ship with the app. A registry entry may not declare
+// publishable settings for them, because the static allowlist in core is the
+// reviewed source of truth for first-party plugin state.
+let builtInPluginIds: ReadonlySet<string> = new Set();
+
+/**
+ * Record the ids of the built-in plugins so registry entries cannot declare
+ * publishable settings for them.
+ *
+ * @param ids Ids of every plugin that ships with the app.
+ */
+export function reserveBuiltInPluginIds(ids: Iterable<string>): void {
+  builtInPluginIds = new Set(ids);
+}
+
+/** Hand the registry-declared publishable settings to the credential redaction. */
+function publishRegistrySettings(entries: PluginRegistryEntry[]): void {
+  setRegistryPublishableSettings(
+    entries
+      .filter((entry) => entry.publishableSettings !== undefined && !builtInPluginIds.has(entry.id))
+      .map((entry) => [entry.id, entry.publishableSettings ?? null] as const),
+  );
+}
+
+/**
+ * Read an entry's `publishableSettings`: `true` keeps the whole state, a string
+ * array keeps those keys, anything else keeps nothing (`undefined`).
+ */
+function normalizePublishableSettings(value: unknown): string[] | null | undefined {
+  if (value === true) return null;
+  if (!Array.isArray(value)) return undefined;
+  const keys = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().slice(0, 128))
+    .filter((item) => item.length > 0)
+    .slice(0, 64);
+  return keys.length ? keys : undefined;
 }
 
 /** Accept either a bare array or `{ plugins: [...] }` / `{ entries: [...] }`. */
@@ -193,7 +282,37 @@ function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntr
     homepage: httpUrlOrUndefined(trimmedString(record.homepage, 2048)),
     categories: stringArray(record.categories),
     minGeoLibreVersion: trimmedString(record.minGeoLibreVersion, 64) || undefined,
+    publishableSettings: normalizePublishableSettings(record.publishableSettings),
+    bundleSha256: bundleHashOrUndefined(record.bundleSha256, id),
   };
+}
+
+// A bundle hash is a lowercase hex SHA-256. Anything else is ignored, so the
+// entry falls back to trust-on-first-use rather than pinning a value no bundle
+// can ever match. That silently weakens the check, so say so in the console.
+// `null` is how a registry generator commonly writes "no hash", so it means the
+// same as an absent field and is not worth a warning.
+function bundleHashOrUndefined(value: unknown, id: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && /^[0-9a-f]{64}$/.test(value)) return value;
+  console.warn(
+    `[GeoLibre] Ignoring the registry's bundleSha256 for "${id}": expected 64 lowercase hex characters. Installing it falls back to trust-on-first-use.`,
+  );
+  return undefined;
+}
+
+/**
+ * Pin the bundle hash a registry entry announces, before its manifest URL is
+ * installed. The first load then checks the downloaded code against the
+ * reviewed hash instead of trusting whatever the URL serves first: a mismatch
+ * is held back like any other changed bundle.
+ *
+ * @param entry - The registry entry being installed.
+ */
+export function pinRegistryEntryBundle(entry: PluginRegistryEntry): void {
+  if (entry.bundleSha256) {
+    pinPluginBundle(entry.manifestUrl, entry.bundleSha256, entry.version);
+  }
 }
 
 // Trim and, when a cap is given, bound the length so untrusted registry data

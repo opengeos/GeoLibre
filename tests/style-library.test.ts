@@ -83,6 +83,15 @@ describe("sanitizeLayerStylePatch", () => {
     assert.deepEqual(patch, { fillColor: "#ff0000" });
   });
 
+  it("keeps every graduated classification scheme the Style panel offers", () => {
+    for (const scheme of ["standard-deviation", "geometric-interval", "manual"]) {
+      assert.deepEqual(sanitizeLayerStylePatch({ vectorStyleClassificationScheme: scheme }), {
+        vectorStyleClassificationScheme: scheme,
+      });
+    }
+    assert.deepEqual(sanitizeLayerStylePatch({ vectorStyleClassificationScheme: "pretty" }), {});
+  });
+
   it("completes a partial labels object against the defaults", () => {
     const patch = sanitizeLayerStylePatch({ labels: { enabled: true } });
     assert.equal(patch.labels?.enabled, true);

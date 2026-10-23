@@ -1,27 +1,18 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import type { GeoLibreProject } from "@geolibre/core";
+import { createEmptyProject, type GeoLibreProject } from "@geolibre/core";
 import { excludeHiddenFieldsFromProject } from "../packages/core/src/visibility";
+import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("visibility", () => {
   test("excludeHiddenFieldsFromProject strips excluded fields from geojson and embeddedGeoJSON", () => {
     const project: GeoLibreProject = {
+      ...createEmptyProject("Test"),
       id: "proj-1",
-      name: "Test",
-      version: 1,
-      viewState: {
-        longitude: 0,
-        latitude: 0,
-        zoom: 0,
-        pitch: 0,
-        bearing: 0,
-      },
       layers: [
-        {
+        geojsonLayer({
           id: "layer-1",
           name: "Layer",
-          type: "geojson",
-          visible: true,
           metadata: {
             embeddedGeoJSON: {
               type: "FeatureCollection",
@@ -45,7 +36,7 @@ describe("visibility", () => {
               },
             ],
           },
-        },
+        }),
       ],
     };
 

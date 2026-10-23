@@ -10,12 +10,11 @@ import {
   buildGridFromSourceSql,
   buildGridFromWktSql,
   estimateCellCount,
-  getH3Tool,
   normalizeLonLatBbox,
   rowsToFeatureCollection,
   suggestResolution,
 } from "../packages/processing/src/h3-tools";
-import { getVectorTool, resolveVectorRerun } from "../packages/processing/src/vector-tools";
+import { getVectorTool, resolveVectorRerun } from "../packages/processing/src/vector-tool-registry";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {
@@ -71,10 +70,13 @@ describe("h3 resolution math", () => {
 });
 
 describe("h3 tools registry", () => {
-  it("no longer registers grid/bin tools under getH3Tool (moved to DGGS)", () => {
-    assert.equal(getH3Tool("h3-bin-points"), undefined);
-    assert.equal(getH3Tool("h3-grid"), undefined);
-    assert.equal(getH3Tool("missing"), undefined);
+  it("has no H3-only tool ids: H3 runs through the DGGS tools", () => {
+    for (const id of ["h3-grid", "h3-bin-points", "h3-compact"]) {
+      assert.equal(getVectorTool(id), undefined);
+    }
+    for (const id of ["dggs-grid", "dggs-bin", "dggs-compact"]) {
+      assert.ok(getVectorTool(id), `expected ${id} to be registered in VECTOR_TOOLS`);
+    }
   });
 });
 

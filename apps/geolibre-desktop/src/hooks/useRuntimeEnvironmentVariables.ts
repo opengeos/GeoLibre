@@ -1,4 +1,10 @@
-import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
+import {
+  normalizeGeocodingProviderId,
+  overlayStoredEnvironmentVariables,
+  overlayStoredGeocodingApiKeys,
+  selectedGeocodingLocator,
+  useAppStore,
+} from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -9,12 +15,18 @@ import {
 } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { useProjectCredentialStore } from "../lib/project-credentials";
 
 export function useRuntimeEnvironmentVariables() {
   const environmentVariables = useAppStore((s) => s.preferences.environmentVariables);
   const geocoding = useAppStore((s) => s.preferences.geocoding);
+  // Desktop: keychain values for project credentials the project file keeps
+  // empty. Subscribed so a Settings edit re-projects the runtime env.
+  const storedCredentials = useProjectCredentialStore((s) => s.values);
   // Device-local Cesium Ion token (Settings → Environment). Projected below so
   // getCesiumIonToken() picks it up as a runtime override without a rebuild.
+  const mapboxAccessToken = useDesktopSettingsStore((s) => s.desktopSettings.mapboxAccessToken);
+  const arcgisApiKey = useDesktopSettingsStore((s) => s.desktopSettings.arcgisApiKey);
   const cesiumIonToken = useDesktopSettingsStore((s) => s.desktopSettings.cesiumIonToken);
   // Device-local AI Assistant provider credentials (Settings → AI Providers).
   // Projected below so the assistant picks them up after a restart without the
@@ -52,16 +64,23 @@ export function useRuntimeEnvironmentVariables() {
     const geocoderEnv: Record<string, string> = {
       VITE_GEOCODER_PROVIDER: providerId,
     };
-    const apiKey = geocoding.apiKeys?.[providerId]?.trim();
+    const apiKey = overlayStoredGeocodingApiKeys(geocoding).apiKeys[providerId]?.trim();
     if (apiKey) geocoderEnv.VITE_GEOCODER_API_KEY = apiKey;
-    if (geocoding.forwardEndpoint?.trim())
-      geocoderEnv.VITE_GEOCODER_ENDPOINT = geocoding.forwardEndpoint.trim();
-    if (geocoding.reverseEndpoint?.trim())
-      geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT = geocoding.reverseEndpoint.trim();
+    if (providerId === "arcgis-locator") {
+      // The locator (nonsecret: URL, portal, capabilities) travels as JSON; its
+      // endpoints derive from its URL, so the built-in overrides are not sent.
+      const locator = selectedGeocodingLocator(geocoding);
+      if (locator) geocoderEnv.VITE_GEOCODER_LOCATOR = JSON.stringify(locator);
+    } else {
+      if (geocoding.forwardEndpoint?.trim())
+        geocoderEnv.VITE_GEOCODER_ENDPOINT = geocoding.forwardEndpoint.trim();
+      if (geocoding.reverseEndpoint?.trim())
+        geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT = geocoding.reverseEndpoint.trim();
+    }
     if (geocoding.email?.trim()) geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
     const projectEnv = Object.fromEntries(
-      environmentVariables
+      overlayStoredEnvironmentVariables(environmentVariables)
         .filter((variable) => variable.enabled && variable.key.trim())
         .map((variable) => [variable.key.trim(), variable.value]),
     );
@@ -98,6 +117,10 @@ export function useRuntimeEnvironmentVariables() {
       aiEnv,
       geocoderEnv,
       cesiumEnv,
+      mapboxEnv: mapboxAccessToken.trim()
+        ? { VITE_MAPBOX_ACCESS_TOKEN: mapboxAccessToken.trim() }
+        : {},
+      arcgisEnv: arcgisApiKey.trim() ? { VITE_ARCGIS_API_KEY: arcgisApiKey.trim() } : {},
       projectEnv,
     });
 
@@ -123,5 +146,14 @@ export function useRuntimeEnvironmentVariables() {
     lastSerializedEnv.current = serializedEnv;
 
     window.dispatchEvent(new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }));
-  }, [environmentVariables, geocoding, cesiumIonToken, aiProfiles, osEnv]);
+  }, [
+    environmentVariables,
+    geocoding,
+    cesiumIonToken,
+    mapboxAccessToken,
+    arcgisApiKey,
+    aiProfiles,
+    osEnv,
+    storedCredentials,
+  ]);
 }

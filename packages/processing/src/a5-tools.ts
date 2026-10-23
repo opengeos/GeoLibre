@@ -92,47 +92,69 @@ export function buildA5GridFromWktSql(wkt: string, res: number, compact = false)
 }
 
 /**
- * Grid SQL from a lon/lat bbox.
+ * Grid SQL from lon/lat boxes.
  *
  * - Full longitude (`[-180, 180]` after normalize): enumerate via
  *   {@link cellsFromRes0Expr}, optionally filtering by latitude.
  * - Spans wider than {@link A5_MAX_POLYFILL_LON_SPAN}: slice into strips
  *   (a single wide ring returns empty or incomplete cells from DuckDB A5).
  * - Narrower spans: one WKT polyfill.
+ *
+ * Several boxes — a layer extent cut in two at the dateline — contribute their
+ * selects to one union, so `a5_compact` sees the whole set and can fold a
+ * parent whose children straddle ±180.
  */
+export function buildA5GridFromBboxesSql(
+  boxes: [number, number, number, number][],
+  res: number,
+  compact = false,
+): string {
+  const selects: string[] = [];
+  for (const bbox of boxes) {
+    const [w, s, e, n] = normalizeLonLatBbox(bbox);
+    if (w === -180 && e === 180) {
+      // Full globe in longitude. Filter by cell centroid latitude when the
+      // view is not essentially ±90 (e.g. Web Mercator max ~±85).
+      const fullLat = s <= -89.999 && n >= 89.999;
+      // Every cell, so any other box's cells are already in it.
+      if (fullLat) {
+        return finalizeA5Cells(`SELECT ${cellsFromRes0Expr(res)} AS cell`, compact);
+      }
+      selects.push(
+        `SELECT cell FROM (SELECT ${cellsFromRes0Expr(res)} AS cell) ` +
+          `WHERE list_extract(a5_cell_to_lonlat(cell), 2) BETWEEN ${s} AND ${n}`,
+      );
+      continue;
+    }
+    const lonSpan = e - w;
+    if (lonSpan <= A5_MAX_POLYFILL_LON_SPAN) {
+      const wkt = bboxToWktPolygon([w, s, e, n]);
+      selects.push(`SELECT ${cellsFromGeomExpr(`ST_GeomFromText(${sqlStr(wkt)})`, res)} AS cell`);
+      continue;
+    }
+    const parts = Math.ceil(lonSpan / A5_MAX_POLYFILL_LON_SPAN);
+    const step = lonSpan / parts;
+    for (let i = 0; i < parts; i += 1) {
+      const left = w + i * step;
+      const right = w + (i + 1) * step;
+      const wkt = bboxToWktPolygon([left, s, right, n]);
+      selects.push(`SELECT ${cellsFromGeomExpr(`ST_GeomFromText(${sqlStr(wkt)})`, res)} AS cell`);
+    }
+  }
+  const raw =
+    selects.length === 1
+      ? selects[0]!
+      : `SELECT DISTINCT cell FROM (${selects.join(" UNION ALL ")})`;
+  return finalizeA5Cells(raw, compact);
+}
+
+/** Grid SQL from a single lon/lat bbox. */
 export function buildA5GridFromBboxSql(
   bbox: [number, number, number, number],
   res: number,
   compact = false,
 ): string {
-  const [w, s, e, n] = normalizeLonLatBbox(bbox);
-  if (w === -180 && e === 180) {
-    // Full globe in longitude. Filter by cell centroid latitude when the view
-    // is not essentially ±90 (e.g. Web Mercator max ~±85).
-    const fullLat = s <= -89.999 && n >= 89.999;
-    if (fullLat) {
-      return finalizeA5Cells(`SELECT ${cellsFromRes0Expr(res)} AS cell`, compact);
-    }
-    return finalizeA5Cells(
-      `SELECT cell FROM (SELECT ${cellsFromRes0Expr(res)} AS cell) ` +
-        `WHERE list_extract(a5_cell_to_lonlat(cell), 2) BETWEEN ${s} AND ${n}`,
-      compact,
-    );
-  }
-  const lonSpan = e - w;
-  if (lonSpan <= A5_MAX_POLYFILL_LON_SPAN) {
-    return buildA5GridFromWktSql(bboxToWktPolygon([w, s, e, n]), res, compact);
-  }
-  const parts = Math.ceil(lonSpan / A5_MAX_POLYFILL_LON_SPAN);
-  const step = lonSpan / parts;
-  const selects: string[] = [];
-  for (let i = 0; i < parts; i += 1) {
-    const left = w + i * step;
-    const right = w + (i + 1) * step;
-    const wkt = bboxToWktPolygon([left, s, right, n]);
-    selects.push(`SELECT ${cellsFromGeomExpr(`ST_GeomFromText(${sqlStr(wkt)})`, res)} AS cell`);
-  }
-  return finalizeA5Cells(`SELECT DISTINCT cell FROM (${selects.join(" UNION ALL ")})`, compact);
+  return buildA5GridFromBboxesSql([bbox], res, compact);
 }
 
 /**

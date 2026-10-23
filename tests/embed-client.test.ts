@@ -24,7 +24,7 @@ function harness() {
     payload: Record<string, unknown>,
     origin = "https://app.test",
     source: unknown = frameWindow,
-    protocolSource = EMBED_API_SOURCE,
+    protocolSource: string = EMBED_API_SOURCE,
   ) => {
     const event = new Event("message");
     Object.defineProperties(event, {
@@ -106,6 +106,38 @@ describe("@geolibre/embed client", () => {
     off();
     receive("ack", { requestId: "after-off", ok: true });
     assert.equal(seen.length, 2);
+    client.disconnect();
+  });
+
+  it("reads features back and subscribes to featuresChanged", async () => {
+    const { iframe, receive, sent } = harness();
+    const pending = connect(iframe, { origin: "https://app.test" });
+    receive("ready", {});
+    const client = await pending;
+    const changes: Array<{ layerId: string; featureCount: number; removed?: boolean }> = [];
+    client.on("featuresChanged", (payload) => changes.push(payload));
+    receive("featuresChanged", { layerId: "sketches", featureCount: 2 });
+    receive("featuresChanged", { layerId: "sketches", featureCount: 0, removed: true });
+    assert.deepEqual(changes, [
+      { layerId: "sketches", featureCount: 2 },
+      { layerId: "sketches", featureCount: 0, removed: true },
+    ]);
+
+    const drawings = client.getDrawnFeatures();
+    assert.equal(sent.at(-1)!.message.type, "getDrawnFeatures");
+    assert.deepEqual(sent.at(-1)!.message.payload, {});
+    receive("ack", { requestId: sent.at(-1)!.message.requestId, ok: true, result: [] });
+    assert.deepEqual(await drawings, []);
+
+    const named = client.getLayerFeatures("parcels");
+    assert.equal(sent.at(-1)!.message.type, "getLayerFeatures");
+    assert.deepEqual(sent.at(-1)!.message.payload, { layerId: "parcels" });
+    receive("ack", {
+      requestId: sent.at(-1)!.message.requestId,
+      ok: false,
+      error: 'No layer with id "parcels"',
+    });
+    await assert.rejects(named, /No layer with id/);
     client.disconnect();
   });
 

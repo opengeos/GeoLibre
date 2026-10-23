@@ -18,6 +18,7 @@ describe("Mac App Store build flag", () => {
 describe("masHidesDataSource", () => {
   it("hides the sidecar/martin-only sources in the MAS build", () => {
     assert.equal(masHidesDataSource("postgres", true), true);
+    assert.equal(masHidesDataSource("mssql", true), true);
     assert.equal(masHidesDataSource("gdb", true), true);
   });
 

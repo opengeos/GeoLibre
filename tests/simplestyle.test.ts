@@ -33,6 +33,11 @@ function styledCollection(): GeoJSON.FeatureCollection {
   };
 }
 
+/** Type a literal as a full FeatureCollection (the function takes a looser shape). */
+function collection(value: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+  return value;
+}
+
 describe("hasSimpleStyleProperties", () => {
   it("detects a valid hex color in a simplestyle key", () => {
     assert.equal(hasSimpleStyleProperties(styledCollection()), true);
@@ -40,39 +45,46 @@ describe("hasSimpleStyleProperties", () => {
 
   it("detects a finite numeric simplestyle key", () => {
     assert.equal(
-      hasSimpleStyleProperties({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [0, 0] },
-            properties: { "stroke-width": 3 },
-          },
-        ],
-      }),
+      hasSimpleStyleProperties(
+        collection({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [0, 0] },
+              properties: { "stroke-width": 3 },
+            },
+          ],
+        }),
+      ),
       true,
     );
   });
 
   it("ignores non-color strings in color keys", () => {
     assert.equal(
-      hasSimpleStyleProperties({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [0, 0] },
-            properties: { fill: "not-a-color", stroke: "red-ish" },
-          },
-        ],
-      }),
+      hasSimpleStyleProperties(
+        collection({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [0, 0] },
+              properties: { fill: "not-a-color", stroke: "red-ish" },
+            },
+          ],
+        }),
+      ),
       false,
     );
   });
 
   it("returns false for an empty or undefined collection", () => {
     assert.equal(hasSimpleStyleProperties(undefined), false);
-    assert.equal(hasSimpleStyleProperties({ type: "FeatureCollection", features: [] }), false);
+    assert.equal(
+      hasSimpleStyleProperties(collection({ type: "FeatureCollection", features: [] })),
+      false,
+    );
   });
 });
 

@@ -1,31 +1,14 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { expectAccessible } from "./a11y";
 
 const FIXTURE_TEXT = readFileSync(join(__dirname, "fixtures", "smoke.geojson"), "utf8");
 
-// Known, pre-existing serious issue tracked as a separate follow-up: the layer
-// panel renders each row as a `role="button"` card that wraps interactive
-// children (visibility toggle, opacity slider, actions menu), which axe flags
-// as `nested-interactive`. The rows are already keyboard-operable; removing the
-// nesting needs a layer-panel interaction redesign.
-//
-// The allowlist is scoped to the LayerPanel selection cards specifically (not
-// the rule id globally), so a new `nested-interactive` violation anywhere else
-// still fails the suite. Both the per-layer rows and the basemap row carry a
-// `data-layer-card` marker (placed first so it stays within axe's truncated
-// `html` snippet); we allow the violation only when every offending node is one
-// of those cards.
-function isAllowlistedSerious(violation: {
-  id: string;
-  nodes: Array<{ target: string[]; html: string }>;
-}): boolean {
-  if (violation.id !== "nested-interactive" || violation.nodes.length === 0) {
-    return false;
-  }
-  return violation.nodes.every((node) => node.html.includes("data-layer-card"));
-}
+// Nothing is allowlisted here. The layer-panel rows used to be `role="button"`
+// cards wrapping their own controls (a serious `nested-interactive` finding);
+// they are listitems now, with a dedicated name button for selection (#2858).
+// The broader per-dialog sweep lives in a11y-screens.spec.ts (nightly).
 
 async function waitForMap(page: Page): Promise<void> {
   await page.goto("/");
@@ -50,31 +33,13 @@ async function dropFixtureLayer(page: Page): Promise<void> {
   await page.locator('[data-testid="layer-row"][data-layer-name="smoke"]').waitFor();
 }
 
-/**
- * Run axe against the current screen and fail on any critical violation, or any
- * serious violation that isn't on the documented allowlist. Moderate/minor
- * findings are attached for review but don't fail the build. Every screen's
- * full violation list is attached as a test artifact.
- */
-async function expectAccessible(page: Page, label: string, testInfo: TestInfo): Promise<void> {
-  const { violations } = await new AxeBuilder({ page }).analyze();
-  await testInfo.attach(`axe-${label}`, {
-    body: JSON.stringify(violations, null, 2),
-    contentType: "application/json",
-  });
-  const blocking = violations.filter(
-    (v) => v.impact === "critical" || (v.impact === "serious" && !isAllowlistedSerious(v)),
-  );
-  expect(
-    blocking,
-    `${label} — blocking a11y violations: ${
-      blocking.map((v) => `${v.impact}/${v.id}`).join(", ") || "none"
-    }`,
-  ).toEqual([]);
-}
-
 test("no critical/serious axe violations across key screens", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  // Five sequential axe sweeps over a WebGL app, each one a full-document scan.
+  // On CI this lands at 1.8-2.1 min against the old 120s cap, so an ordinarily
+  // slow runner pushed it over and the nightly failed on a timeout rather than
+  // on a real violation. 240s is the value most of the heavy specs here use and
+  // leaves roughly 2x headroom over the worst run observed.
+  test.setTimeout(240_000);
 
   await waitForMap(page);
   await expectAccessible(page, "initial", testInfo);

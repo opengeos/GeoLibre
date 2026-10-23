@@ -1,4 +1,4 @@
-// web.geolibre.app (and viewer.geolibre.app, the original alias)
+// viewer.geolibre.app (legacy alias)
 //
 // Serves the GeoLibre web viewer at a clean subdomain by proxying to the build
 // already published at https://geolibre.app/demo (GitHub Pages). We proxy rather
@@ -6,9 +6,8 @@
 // which exceeds Cloudflare's 25 MiB per-asset limit for Workers/Pages. GitHub
 // Pages has no such limit, so it stays the origin of record.
 //
-// Both hostnames route to this worker. The viewer build uses relative asset
-// paths, so requests map 1:1 regardless of which host they arrive on:
-//   {web,viewer}.geolibre.app/<path>?<query> -> geolibre.app/demo/<path>?<query>
+// The viewer build uses relative asset paths, so requests map 1:1:
+//   viewer.geolibre.app/<path>?<query> -> geolibre.app/demo/<path>?<query>
 //
 // Origin redirects (e.g. trailing slash) are followed server-side only when the
 // Location stays on https://geolibre.app/demo/… — a cross-origin or off-prefix

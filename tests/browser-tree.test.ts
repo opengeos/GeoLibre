@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RecentProjectEntry } from "@geolibre/core";
 import {
+  augmentArcGISServices,
   augmentConnections,
   augmentFolders,
   buildBrowserTree,
   buildDirectoryNodes,
   buildFavoriteNodes,
+  buildMssqlTableNodes,
   buildPostgisTableNodes,
   filterBrowserTree,
+  isArcGISMapServiceEntry,
   flattenVisibleTree,
   MAX_DIRECTORY_ENTRIES,
   type BrowserNode,
@@ -128,7 +131,7 @@ describe("buildBrowserTree", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
-      sectionLabels: { services: "Servicios", recent: "Recientes" },
+      sectionLabels: { services: "Servicios", recent: "Recientes", databases: "Bases de datos" },
     });
     assert.equal(find(tree, "section:services")?.label, "Servicios");
     assert.equal(find(tree, "section:recent")?.label, "Recientes");
@@ -143,7 +146,7 @@ describe("buildBrowserTree", () => {
     );
   });
 
-  it("adds a Databases section with connection leaves + a postgres ＋", () => {
+  it("adds the PostgreSQL engine group under Databases", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
@@ -151,9 +154,13 @@ describe("buildBrowserTree", () => {
     });
     const db = find(tree, "section:databases");
     assert.equal(db?.kind, "section");
-    // The section's ＋ opens the Add Data PostgreSQL source.
-    assert.equal(db?.newConnectionKind, "postgres");
+    assert.equal(db?.newConnectionKind, undefined);
     assert.equal(db?.count, 1);
+    const postgres = find(tree, "database-engine:postgres");
+    assert.equal(postgres?.kind, "category");
+    assert.equal(postgres?.label, "PostgreSQL");
+    assert.equal(postgres?.newConnectionKind, "postgres");
+    assert.equal(postgres?.count, 1);
     const conn = find(tree, "connection:postgres://u@h/db");
     assert.equal(conn?.kind, "connection");
     assert.equal(conn?.connectionString, "postgres://u@h/db");
@@ -553,7 +560,7 @@ describe("augmentConnections", () => {
     });
 
   function augment(load?: ConnectionLoad): BrowserNode | undefined {
-    const loads = load ? { [CONN]: load } : {};
+    const loads: Record<string, ConnectionLoad> = load ? { [CONN]: load } : {};
     const out = augmentConnections(baseTree(), loads, "Loading tables…");
     return find(out, `connection:${CONN}`);
   }
@@ -597,6 +604,134 @@ describe("augmentConnections", () => {
     const tree = baseTree();
     augmentConnections(tree, { [CONN]: { status: "loading" } }, "Loading…");
     assert.deepEqual(find(tree, `connection:${CONN}`)?.children, []);
+  });
+});
+
+describe("SQL Server Browser tree", () => {
+  const ID = "profile-123";
+  const baseTree = () =>
+    buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      mssqlConnections: [{ id: ID, label: "sql.example/db" }],
+    });
+
+  it("adds SQL Server under Databases only when its input is supplied", () => {
+    const without = buildBrowserTree({ services: [], recentProjects: [] });
+    assert.equal(find(without, "section:databases"), undefined);
+    assert.equal(find(without, "database-engine:mssql"), undefined);
+
+    const tree = baseTree();
+    const section = find(tree, "section:databases");
+    assert.equal(section?.kind, "section");
+    assert.deepEqual(
+      section?.children?.map((node) => node.id),
+      ["database-engine:mssql"],
+    );
+    const group = find(tree, "database-engine:mssql");
+    assert.equal(group?.newConnectionKind, "mssql");
+    assert.equal(group?.children?.[0].id, `mssql-connection:${ID}`);
+    assert.equal(group?.children?.[0].mssqlConnectionId, ID);
+  });
+
+  it("keeps an empty PostgreSQL group when both engine inputs are supplied", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      databaseConnections: [],
+      mssqlConnections: [{ id: ID, label: "sql.example/db" }],
+    });
+    const section = find(tree, "section:databases");
+    assert.deepEqual(
+      section?.children?.map((node) => node.id),
+      ["database-engine:postgres", "database-engine:mssql"],
+    );
+    const postgres = find(tree, "database-engine:postgres");
+    assert.equal(postgres?.count, 0);
+    assert.deepEqual(postgres?.children, []);
+    assert.equal(section?.count, 1);
+  });
+
+  it("filters by engine and keeps table connections at the nested visible depth", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      databaseConnections: [{ connectionString: "postgres://u@db/postgres", label: "u@db" }],
+      mssqlConnections: [{ id: ID, label: "sql.example/db" }],
+    });
+    const filtered = filterBrowserTree(tree, "sql.example");
+    const databases = find(filtered, "section:databases");
+    assert.deepEqual(
+      databases?.children?.map((node) => node.id),
+      ["database-engine:mssql"],
+    );
+    assert.equal(find(filtered, "database-engine:postgres"), undefined);
+    assert.equal(find(filtered, `mssql-connection:${ID}`)?.kind, "connection");
+
+    const rows = flattenVisibleTree(tree, new Set(["section:databases", "database-engine:mssql"]));
+    const connection = rows.find((row) => row.id === `mssql-connection:${ID}`);
+    assert.equal(connection?.depth, 2);
+    assert.equal(connection?.parentId, "database-engine:mssql");
+  });
+
+  it("groups sorted tables under schemas, deduplicating tables with multiple geometry columns", () => {
+    const schemas = buildMssqlTableNodes(ID, [
+      { schema: "dbo", table: "z_roads" },
+      { schema: "gis", table: "parcels" },
+      { schema: "dbo", table: "a_roads" },
+      { schema: "dbo", table: "z_roads" },
+    ]);
+    assert.deepEqual(
+      schemas.map((schema) => [schema.label, schema.count]),
+      [
+        ["dbo", 2],
+        ["gis", 1],
+      ],
+    );
+    assert.deepEqual(
+      schemas[0].children?.map((table) => table.label),
+      ["a_roads", "z_roads"],
+    );
+    const table = schemas[0].children?.[1];
+    assert.equal(table?.kind, "table");
+    assert.equal(table?.mssqlConnectionId, ID);
+    assert.equal(table?.connectionString, undefined);
+    assert.equal(table?.tableSchema, "dbo");
+    assert.equal(table?.tableName, "z_roads");
+  });
+
+  it("injects SQL Server loading, error, and loaded states without mutating the source tree", () => {
+    const tree = baseTree();
+    const loading = augmentConnections(
+      tree,
+      { [`mssql:${ID}`]: { status: "loading" } },
+      "Loading tables…",
+    );
+    assert.equal(find(loading, `mssql-connection:${ID}:loading`)?.label, "Loading tables…");
+
+    const error = augmentConnections(
+      tree,
+      { [`mssql:${ID}`]: { status: "error", message: "offline" } },
+      "",
+    );
+    assert.equal(find(error, `mssql-connection:${ID}:error`)?.label, "offline");
+
+    const loaded = augmentConnections(
+      tree,
+      { [`mssql:${ID}`]: { status: "loaded", tables: [{ schema: "dbo", table: "roads" }] } },
+      "",
+    );
+    assert.equal(find(loaded, `mssql-table:${ID}:dbo.roads`)?.kind, "table");
+    assert.deepEqual(find(tree, `mssql-connection:${ID}`)?.children, []);
+  });
+
+  it("does not apply a PostGIS load keyed by the bare profile id", () => {
+    const loaded = augmentConnections(
+      baseTree(),
+      { [ID]: { status: "loaded", tables: [{ schema: "dbo", table: "roads" }] } },
+      "",
+    );
+    assert.deepEqual(find(loaded, `mssql-connection:${ID}`)?.children, []);
   });
 });
 
@@ -711,5 +846,176 @@ describe("filterBrowserTree", () => {
     const before = tree[0].children?.length;
     filterBrowserTree(tree, "landsat");
     assert.equal(tree[0].children?.length, before);
+  });
+});
+
+describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
+  const MAP_SERVICE = service("storm", "Stormwater", "arcgis", {
+    fields: {
+      layerType: "map-service",
+      sourceType: "url",
+      url: "https://example.com/arcgis/rest/services/Stormwater/MapServer",
+    },
+  });
+  const FEATURE_SERVICE = service("cities", "Cities", "arcgis", {
+    fields: { layerType: "feature", sourceType: "url", url: "https://example.com/FeatureServer/0" },
+  });
+  const PORTAL_MAP_SERVICE = service("portal", "Portal map", "arcgis", {
+    fields: { layerType: "map-service", sourceType: "portal-item", itemId: "abc" },
+  });
+  const LABELS = { loading: "Loading sublayers…", allLayers: "All layers" };
+
+  function arcgisServices(tree: BrowserNode[]): BrowserNode[] {
+    const services = tree.find((node) => node.id === "section:services");
+    return services?.children?.find((node) => node.id === "kind:arcgis")?.children ?? [];
+  }
+
+  it("only treats URL-addressed map services as expandable", () => {
+    assert.equal(isArcGISMapServiceEntry(MAP_SERVICE), true);
+    assert.equal(isArcGISMapServiceEntry(FEATURE_SERVICE), false);
+    assert.equal(isArcGISMapServiceEntry(PORTAL_MAP_SERVICE), false);
+    assert.equal(isArcGISMapServiceEntry(service("x", "XYZ")), false);
+  });
+
+  it("renders a map service as an expandable group and other services as leaves", () => {
+    const tree = buildBrowserTree({
+      services: [MAP_SERVICE, FEATURE_SERVICE, PORTAL_MAP_SERVICE],
+      recentProjects: [],
+    });
+    const byId = new Map(arcgisServices(tree).map((node) => [node.serviceId, node]));
+    assert.deepEqual(byId.get("storm")?.children, []);
+    assert.equal(byId.get("cities")?.children, undefined);
+    assert.equal(byId.get("portal")?.children, undefined);
+  });
+
+  it("makes a favorited map service expandable too", () => {
+    const tree = buildBrowserTree({
+      services: [MAP_SERVICE],
+      recentProjects: [],
+      favorites: [
+        {
+          id: "service:storm",
+          kind: "service",
+          label: "Stormwater",
+          serviceId: "storm",
+          serviceKind: "arcgis",
+        },
+      ],
+    });
+    const favorite = tree.find((node) => node.id === "section:favorites")?.children?.[0];
+    assert.deepEqual(favorite?.children, []);
+  });
+
+  it("fills a loaded service with All layers and the service's layer tree", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            // A group wrapping a same-named leaf plus its label layer, the
+            // shape real utility services use.
+            { id: 0, name: "Storm Inlet", subLayerIds: [1, 2] },
+            { id: 1, name: "Storm Inlet", subLayerIds: null },
+            // Hidden by default, so the group's All layers row leaves it out.
+            { id: 2, name: "Storm Inlet Label", defaultVisibility: false },
+            { id: 3, name: "Storm Main" },
+          ],
+        },
+      },
+      LABELS,
+    );
+    const children = arcgisServices(augmented)[0].children ?? [];
+    const summary = (node: BrowserNode): unknown => [
+      node.label,
+      node.arcgisSublayerId,
+      node.addable,
+      ...(node.arcgisLayerName ? [node.arcgisLayerName, node.arcgisSublayers] : []),
+      ...(node.children ? [node.children.map(summary)] : []),
+    ];
+    assert.deepEqual(children.map(summary), [
+      ["All layers", undefined, true],
+      [
+        // The group row only expands; its "All layers" row is what adds it.
+        "Storm Inlet",
+        undefined,
+        false,
+        [
+          // Adds the whole group, under the group's name.
+          ["All layers", 0, true, "Storm Inlet", "1"],
+          ["Storm Inlet", 1, true],
+          ["Storm Inlet Label", 2, true],
+        ],
+      ],
+      ["Storm Main", 3, true],
+    ]);
+    const all = (nodes: BrowserNode[]): BrowserNode[] =>
+      nodes.flatMap((node) => [node, ...all(node.children ?? [])]);
+    const flat = all(children);
+    assert.ok(flat.every((node) => node.kind === "arcgis-sublayer" && node.serviceId === "storm"));
+    assert.equal(new Set(flat.map((node) => node.id)).size, flat.length);
+  });
+
+  it("draws every leaf of a group when none is visible by default", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            { id: 0, name: "Basins", defaultVisibility: false, subLayerIds: [1, 2] },
+            { id: 1, name: "Basin", defaultVisibility: false },
+            { id: 2, name: "Basin Label", defaultVisibility: false },
+          ],
+        },
+      },
+      LABELS,
+    );
+    const group = arcgisServices(augmented)[0].children?.[1];
+    assert.equal(group?.children?.[0].arcgisSublayers, "1,2");
+  });
+
+  it("survives a group that lists itself as a descendant", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            { id: 0, name: "Root", subLayerIds: [1] },
+            { id: 1, name: "Loop", subLayerIds: [0] },
+          ],
+        },
+      },
+      LABELS,
+    );
+    // Both ids are someone's child, so neither is a root: no infinite recursion.
+    assert.deepEqual(
+      arcgisServices(augmented)[0].children?.map((child) => child.label),
+      ["All layers"],
+    );
+  });
+
+  it("shows loading and error status rows", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const loading = augmentArcGISServices(tree, { storm: { status: "loading" } }, LABELS);
+    assert.deepEqual(
+      arcgisServices(loading)[0].children?.map((child) => [child.kind, child.label]),
+      [["info", "Loading sublayers…"]],
+    );
+    const failed = augmentArcGISServices(
+      tree,
+      { storm: { status: "error", message: "Boom" } },
+      LABELS,
+    );
+    assert.deepEqual(
+      arcgisServices(failed)[0].children?.map((child) => [child.kind, child.label]),
+      [["info", "Boom"]],
+    );
+    // An unexpanded service keeps its empty child list.
+    assert.deepEqual(arcgisServices(augmentArcGISServices(tree, {}, LABELS))[0].children, []);
   });
 });

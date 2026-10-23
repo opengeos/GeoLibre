@@ -13,6 +13,15 @@ export interface ArcGisHubItem {
   url?: string;
   extent?: [[number, number], [number, number]];
   thumbnail?: string;
+  /**
+   * Where the item's data downloads from, for a card that is not an ArcGIS
+   * portal item (such as a Socrata dataset). Portal items derive it from `id`.
+   */
+  dataUrl?: string;
+  /** The item's page, for a card that is not an ArcGIS portal item. */
+  pageUrl?: string;
+  /** The most features `dataUrl` returns, when the export is capped. */
+  featureLimit?: number;
 }
 
 export interface ArcGisHubSearchResult {
@@ -25,7 +34,20 @@ interface ArcGisErrorEnvelope {
   error?: { message?: string };
 }
 
-const SEARCH_TYPES = ["Feature Service", "GeoJson", "CSV", "Shapefile", "KML", "File Geodatabase"];
+export const ARCGIS_HUB_SEARCH_TYPES = [
+  "Feature Service",
+  "GeoJson",
+  "CSV",
+  "Shapefile",
+  "KML",
+  "File Geodatabase",
+] as const;
+// ArcGIS group ids are 32 hex characters; anything else would be pasted into
+// the Lucene query verbatim, so it is dropped rather than escaped.
+const GROUP_ID_RE = /^[0-9a-f]{32}$/i;
+// ArcGIS Online organization ids are 16 alphanumeric characters; checked for
+// the same reason as group ids.
+const ORG_ID_RE = /^[0-9A-Za-z]{16}$/;
 const LUCENE_METACHARACTERS_RE = /["\\/(){}[\]^~:!?+]|&&|\|\|/g;
 
 export function sanitizeArcGisHubSearchText(value: string): string {
@@ -36,38 +58,58 @@ export function sanitizeArcGisHubSearchText(value: string): string {
     .trim();
 }
 
+export interface ArcGisHubSearchOptions {
+  start?: number;
+  num?: number;
+  bbox?: [number, number, number, number];
+  portalUrl?: string;
+  /**
+   * Restrict results to items shared to any of these groups — how a Hub site
+   * (such as a state open-data portal) defines its catalog.
+   */
+  groups?: readonly string[];
+  /**
+   * Restrict results to items owned by this ArcGIS organization — the scope
+   * for a portal whose Hub site has no catalog groups to search.
+   */
+  orgId?: string;
+  /** Item types to include. Defaults to {@link ARCGIS_HUB_SEARCH_TYPES}. */
+  types?: readonly string[];
+}
+
 export function buildArcGisHubSearchUrl(
   query: string,
-  options: {
-    start?: number;
-    num?: number;
-    bbox?: [number, number, number, number];
-    portalUrl?: string;
-  } = {},
+  options: ArcGisHubSearchOptions = {},
 ): string {
   const portalUrl = options.portalUrl ?? ARCGIS_HUB_PORTAL_URL;
   const url = new URL("/sharing/rest/search", portalUrl);
   const text = sanitizeArcGisHubSearchText(query);
-  const typeQuery = SEARCH_TYPES.map((type) => `type:"${type}"`).join(" OR ");
-  url.searchParams.set("q", `${text ? `(${text}) AND ` : ""}(${typeQuery}) AND access:public`);
+  const types = options.types ?? ARCGIS_HUB_SEARCH_TYPES;
+  const typeQuery = types.map((type) => `type:"${type.replace(/"/g, "")}"`).join(" OR ");
+  const groups = (options.groups ?? []).filter((group) => GROUP_ID_RE.test(group));
+  const groupQuery = groups.length
+    ? ` AND (${groups.map((group) => `group:${group}`).join(" OR ")})`
+    : "";
+  const orgQuery =
+    options.orgId && ORG_ID_RE.test(options.orgId) ? ` AND orgid:${options.orgId}` : "";
+  url.searchParams.set(
+    "q",
+    `${text ? `(${text}) AND ` : ""}(${typeQuery})${groupQuery}${orgQuery} AND access:public`,
+  );
   url.searchParams.set("f", "json");
   url.searchParams.set("start", String(options.start ?? 1));
   url.searchParams.set("num", String(options.num ?? 20));
-  url.searchParams.set("sortField", "relevance");
-  url.searchParams.set("sortOrder", "desc");
+  // Relevance has nothing to rank when there is no keyword (browsing a scoped
+  // catalog), so list it alphabetically instead of in an arbitrary order.
+  url.searchParams.set("sortField", text ? "relevance" : "title");
+  url.searchParams.set("sortOrder", text ? "desc" : "asc");
   if (options.bbox) url.searchParams.set("bbox", options.bbox.join(","));
   return url.href;
 }
 
 export async function searchArcGisHub(
   query: string,
-  options: {
-    start?: number;
-    num?: number;
-    bbox?: [number, number, number, number];
-    portalUrl?: string;
-    signal?: AbortSignal;
-  } = {},
+  options: ArcGisHubSearchOptions & { signal?: AbortSignal } = {},
 ): Promise<ArcGisHubSearchResult> {
   const response = await fetch(buildArcGisHubSearchUrl(query, options), {
     signal: options.signal,
@@ -79,8 +121,76 @@ export async function searchArcGisHub(
   return json;
 }
 
-export function arcGisHubItemPageUrl(item: Pick<ArcGisHubItem, "id">): string {
-  return `${ARCGIS_HUB_PAGE_URL}/datasets/${encodeURIComponent(item.id)}/about`;
+export function arcGisHubItemPageUrl(
+  item: Pick<ArcGisHubItem, "id">,
+  pageUrl = ARCGIS_HUB_PAGE_URL,
+): string {
+  return new URL(`/datasets/${encodeURIComponent(item.id)}/about`, pageUrl).href;
+}
+
+/**
+ * Collect the group ids of one catalog predicate's `group` value, which Hub
+ * writes as a bare id, a list, or an `{ any, all }` object.
+ */
+function predicateGroups(value: unknown): unknown[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const { any, all } = value as { any?: unknown; all?: unknown };
+    return [...predicateGroups(any), ...predicateGroups(all)];
+  }
+  return [];
+}
+
+/**
+ * Read the catalog groups of a Hub site from its site item.
+ *
+ * A Hub site's dataset catalog is the union of the groups its site item lists:
+ * under `data.catalogV2.scopes.item` (group predicates) on current sites, or
+ * `data.catalog.groups` on older ones. Searching those groups reproduces the
+ * site's own search.
+ *
+ * Args:
+ *   siteId: The Hub site's portal item id.
+ *   portalUrl: The portal that owns the site item.
+ *   signal: Aborts the request.
+ *
+ * Returns:
+ *   The catalog's group ids (only well-formed ones, without duplicates).
+ */
+export async function fetchArcGisHubSiteGroups(
+  siteId: string,
+  portalUrl = ARCGIS_HUB_PORTAL_URL,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const url = new URL(`/sharing/rest/content/items/${encodeURIComponent(siteId)}/data`, portalUrl);
+  url.searchParams.set("f", "json");
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`Hub site lookup failed with ${response.status}.`);
+  const json = (await response.json()) as ArcGisErrorEnvelope & {
+    catalog?: { groups?: unknown };
+    catalogV2?: { scopes?: { item?: { filters?: unknown } } };
+  };
+  if (json.error) throw new Error(json.error.message || "Hub site lookup failed.");
+  const filters = json.catalogV2?.scopes?.item?.filters;
+  const v2Groups = Array.isArray(filters)
+    ? filters.flatMap((filter: { predicates?: unknown }) =>
+        Array.isArray(filter?.predicates)
+          ? filter.predicates.flatMap((predicate: { group?: unknown }) =>
+              predicateGroups(predicate?.group),
+            )
+          : [],
+      )
+    : [];
+  const groups = v2Groups.length > 0 ? v2Groups : json.catalog?.groups;
+  if (!Array.isArray(groups)) throw new Error("The Hub site has no catalog groups.");
+  return [
+    ...new Set(
+      groups.filter(
+        (group): group is string => typeof group === "string" && GROUP_ID_RE.test(group),
+      ),
+    ),
+  ];
 }
 
 export function arcGisHubItemDataUrl(
@@ -206,7 +316,9 @@ async function resolveFeatureLayerUrl(
   service.hash = "";
   service.search = "";
   service.pathname = service.pathname.replace(/\/+$/, "");
-  if (/\/FeatureServer\/\d+$/i.test(service.pathname)) {
+  // A "Feature Service" item may point at one layer of a map service, which
+  // answers the same queries (see resolvePortalFeatureLayerUrl in arcgis-layer).
+  if (/\/(?:FeatureServer|MapServer)\/\d+$/i.test(service.pathname)) {
     return { url: service.href, layerCount: 1 };
   }
   const metadataUrl = new URL(service);

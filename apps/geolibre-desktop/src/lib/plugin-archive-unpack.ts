@@ -4,7 +4,10 @@
 // file" flow (in-browser unzip). The heavier external-plugin loader re-exports
 // what it needs from here.
 
-import type { GeoLibreExternalPluginManifest } from "@geolibre/plugins";
+import type {
+  GeoLibreExternalPluginManifest,
+  GeoLibrePluginAssistantInfo,
+} from "@geolibre/plugins";
 import { unzip } from "fflate";
 
 export interface ExternalPluginBundle {
@@ -26,6 +29,52 @@ function isRequiredManifestString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value;
 }
 
+/**
+ * Type guard for a declared renderer list: an array whose every entry is a
+ * known renderer kind (`"maplibre"` or `"cesium"`). Shared by the manifest
+ * check below and the external-plugin loader, which validates the same field
+ * on the plugin a bundle exports.
+ *
+ * @param value - The unknown value to validate.
+ * @returns `true` when the value is a valid engines array, otherwise `false`.
+ */
+export function isPluginEngineList(
+  value: unknown,
+): value is ("maplibre" | "cesium" | "mapbox" | "arcgis")[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (engine) =>
+        engine === "maplibre" || engine === "cesium" || engine === "mapbox" || engine === "arcgis",
+    )
+  );
+}
+
+/** Longest assistant description an external plugin may declare. */
+export const MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH = 300;
+
+/**
+ * Whether a value is a valid plugin `assistant` declaration.
+ *
+ * @param value The declared value, from `plugin.json` or the exported plugin.
+ * @returns True when it has a non-empty description within the length limit.
+ */
+export function isPluginAssistantInfo(value: unknown): value is GeoLibrePluginAssistantInfo {
+  if (!value || typeof value !== "object") return false;
+  const { description } = value as Partial<GeoLibrePluginAssistantInfo>;
+  return (
+    typeof description === "string" &&
+    description.trim().length > 0 &&
+    description.length <= MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH
+  );
+}
+
+/**
+ * Type guard validating that a candidate object conforms to the GeoLibre external plugin manifest schema.
+ *
+ * @param value - The unknown value to validate.
+ * @returns `true` if the value is a valid {@link GeoLibreExternalPluginManifest}, otherwise `false`.
+ */
 export function isExternalPluginManifest(value: unknown): value is GeoLibreExternalPluginManifest {
   if (!value || typeof value !== "object") return false;
   const manifest = value as Partial<GeoLibreExternalPluginManifest>;
@@ -38,7 +87,9 @@ export function isExternalPluginManifest(value: unknown): value is GeoLibreExter
     (manifest.description === undefined || typeof manifest.description === "string") &&
     (manifest.style === undefined ||
       (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
-    (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean")
+    (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean") &&
+    (manifest.engines === undefined || isPluginEngineList(manifest.engines)) &&
+    (manifest.assistant === undefined || isPluginAssistantInfo(manifest.assistant))
   );
 }
 

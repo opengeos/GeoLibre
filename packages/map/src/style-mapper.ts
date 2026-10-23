@@ -3,6 +3,7 @@ import {
   circleRadiusValue,
   extrusionColorValue,
   extrusionHeightValue,
+  heatmapRampColors,
   lineWidthValue,
   mapZoomStepOutputs,
   simpleStyleNumberValue,
@@ -15,6 +16,7 @@ import {
   type LayerStyle,
 } from "@geolibre/core";
 import type { ExpressionSpecification, PropertyValueSpecification } from "maplibre-gl";
+import { LAYER_OPACITY_FOR_BLEND, isBlending, layerBlendModesSupported } from "./layer-blend-modes";
 
 function styleValue<K extends keyof LayerStyle>(style: LayerStyle, key: K): LayerStyle[K] {
   return style[key] ?? DEFAULT_LAYER_STYLE[key];
@@ -34,6 +36,20 @@ function scaleByOpacity(
   ) as PropertyValueSpecification<number>;
 }
 
+/**
+ * The `*-layer-opacity` a fill or line layer renders with: just under 1 while
+ * the layer blends, so MapLibre flattens it into a scratch framebuffer and
+ * composites it in the single draw `layer-blend-modes` applies the mode to.
+ *
+ * Also gated on support, so a build where the render wrappers failed to install
+ * is fully inert rather than only visually inert: a project saved with a blend
+ * mode would otherwise still pay for a render-to-texture pass per blended
+ * layer, compositing a mode that nothing is left to apply.
+ */
+function layerOpacityForBlend(style: LayerStyle): number {
+  return isBlending(style.blendMode) && layerBlendModesSupported() ? LAYER_OPACITY_FOR_BLEND : 1;
+}
+
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
@@ -48,6 +64,11 @@ export function fillPaint(style: LayerStyle, opacity: number) {
     // expression mode it also applies the user's expression to the hairline
     // outline (matching the separate line layer that draws the polygon stroke).
     "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
+    // Elects MapLibre's render-to-texture composite so the layer blends as one
+    // surface instead of once per overlapping polygon. Always emitted (rather
+    // than only while blending) because `ensureLayer` only writes the paint
+    // keys it is handed, so clearing a blend mode has to restore the 1.
+    "fill-layer-opacity": layerOpacityForBlend(style),
   };
 }
 
@@ -76,6 +97,8 @@ export function linePaint(style: LayerStyle, opacity: number) {
     "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
     "line-width": lineWidthValue(style) as unknown as PropertyValueSpecification<number>,
     "line-opacity": scaleByOpacity(simpleStyleNumberValue(style, "stroke-opacity", 1), opacity),
+    // See the note on `fill-layer-opacity` in fillPaint.
+    "line-layer-opacity": layerOpacityForBlend(style),
   };
 }
 
@@ -105,31 +128,34 @@ export function circlePaint(style: LayerStyle, opacity: number) {
   };
 }
 
-// A perceptually-ordered cold→hot ramp over MapLibre's heatmap-density (0..1).
-const HEATMAP_COLOR_RAMP: ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["heatmap-density"],
-  0,
-  "rgba(33,102,172,0)",
-  0.2,
-  "rgb(103,169,207)",
-  0.4,
-  "rgb(209,229,240)",
-  0.6,
-  "rgb(253,219,199)",
-  0.8,
-  "rgb(239,138,98)",
-  1,
-  "rgb(178,24,43)",
-];
+export function heatmapColorRampExpression(colors: readonly string[]): ExpressionSpecification {
+  const expression: unknown[] = [
+    "interpolate",
+    ["linear"],
+    ["heatmap-density"],
+    0,
+    "rgba(0,0,0,0)",
+  ];
+  colors.forEach((color, index) => {
+    expression.push((index + 1) / colors.length, color);
+  });
+  return expression as ExpressionSpecification;
+}
+
+function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {
+  const property = styleValue(style, "heatmapWeightProperty").trim();
+  return property === ""
+    ? 1
+    : (["max", 0, ["to-number", ["get", property], 0]] as PropertyValueSpecification<number>);
+}
 
 export function heatmapPaint(style: LayerStyle, opacity: number) {
   return {
     "heatmap-radius": styleValue(style, "heatmapRadius"),
     "heatmap-intensity": styleValue(style, "heatmapIntensity"),
+    "heatmap-weight": heatmapWeight(style),
     "heatmap-opacity": opacity,
-    "heatmap-color": HEATMAP_COLOR_RAMP,
+    "heatmap-color": heatmapColorRampExpression(heatmapRampColors(style)),
   };
 }
 

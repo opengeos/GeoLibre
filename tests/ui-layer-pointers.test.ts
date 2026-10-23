@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { useAppStore } from "@geolibre/core";
+import { createEmptyProject, useAppStore } from "@geolibre/core";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 describe("UI layer pointer cleanup", () => {
@@ -106,7 +106,7 @@ describe("UI layer pointer cleanup", () => {
       store.setLoadEditorFeaturesOpen(true, "target");
       assert.equal(useAppStore.getState().ui.loadEditorFeaturesOpen, true);
 
-      useAppStore.getState().loadProject({ name: "Loaded", layers: [], version: 1 });
+      useAppStore.getState().loadProject({ ...createEmptyProject("Loaded"), layers: [] });
       const ui = useAppStore.getState().ui;
       assert.equal(ui.loadEditorFeaturesOpen, false);
       assert.equal(ui.loadEditorFeaturesLayerId, null);

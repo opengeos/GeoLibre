@@ -1,8 +1,7 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryActiveSlideMode, StoryChapter, StoryMap } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -17,9 +16,11 @@ import {
   Separator,
 } from "@geolibre/ui";
 import { FileDown, Loader2 } from "lucide-react";
-import { captureMapImage } from "../../lib/print-layout-export";
+import { captureEngineMapImage } from "../../lib/print-layout-export";
+import { googleMapsUrl } from "../../lib/external-map-links";
 import { PAPER_SIZES, type Orientation, type PaperSizeId } from "../../lib/print-layout";
-import { buildStoryMapHandoutPdf, singleLine, type HandoutChapter } from "../../lib/storymap-pdf";
+import type { HandoutChapter } from "../../lib/storymap-pdf";
+import { singleLine } from "../../lib/storymap-text";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 import {
@@ -28,12 +29,13 @@ import {
   STORY_START_STEP_ID,
   storySlideCoverColor,
 } from "../../lib/storymap-constants";
+import { applyStoryViewAndWait } from "./storymap-engine";
 
 interface StoryMapHandoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   story: StoryMap;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** One exportable screen: a chapter or an intro/outro slide. */
@@ -108,61 +110,10 @@ function slideLocation(
   return chapters[index]?.location ?? STORY_GLOBAL_VIEW;
 }
 
-/** Maximum time to wait for the map to settle (tiles loaded) per chapter. */
-const IDLE_TIMEOUT_MS = 5000;
 /** Maximum time to wait for a chapter photo to load before falling back to
  * map-only. Shorter than the map-idle wait since a missing photo degrades
  * gracefully and shouldn't double the per-chapter stall. */
 const PHOTO_TIMEOUT_MS = 3000;
-
-/**
- * Jump the map to a chapter location and resolve once it has rendered all
- * tiles (the `idle` event), with a timeout so a chapter that never fully loads
- * (e.g. a throttled tab) cannot stall the whole export. Also resolves promptly
- * when `isAborted()` becomes true so the Stop button takes effect mid-wait
- * instead of after the full timeout.
- */
-function jumpAndWaitIdle(
-  map: maplibregl.Map,
-  location: StoryMap["chapters"][number]["location"],
-  isAborted: () => boolean,
-): Promise<void> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      map.off("idle", finish);
-      clearTimeout(timer);
-      clearInterval(poll);
-      resolve();
-    };
-    const timer = setTimeout(finish, IDLE_TIMEOUT_MS);
-    // Poll the abort flag so Stop takes effect mid-wait instead of after the
-    // full timeout.
-    const poll = setInterval(() => {
-      if (isAborted()) finish();
-    }, 150);
-    const before = map.getCenter();
-    map.jumpTo({
-      center: location.center,
-      zoom: location.zoom,
-      pitch: location.pitch,
-      bearing: location.bearing,
-    });
-    // A no-op jump (an adjacent chapter sharing this exact location) changes
-    // nothing, so MapLibre fires no `idle` and the wait would hit the full
-    // timeout. The current frame is already rendered with tiles loaded, so
-    // resolve on the next frame instead.
-    const after = map.getCenter();
-    if (before.lng === after.lng && before.lat === after.lat && map.areTilesLoaded()) {
-      requestAnimationFrame(finish);
-    }
-    // Register after jumpTo so a pre-existing idle event isn't consumed before
-    // the new camera has started rendering.
-    map.on("idle", finish);
-  });
-}
 
 /**
  * Load a chapter image URL (or data URI) into a canvas for embedding in the
@@ -255,6 +206,8 @@ export function StoryMapHandoutDialog({
   const [subtitle, setSubtitle] = useState("");
   const [byline, setByline] = useState("");
   const [footer, setFooter] = useState("");
+  // Draw a clickable pin at each chapter's centre that opens Google Maps (#1839).
+  const [markers, setMarkers] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -277,6 +230,9 @@ export function StoryMapHandoutDialog({
     setSubtitle(singleLine(story.subtitle));
     setByline(singleLine(story.byline));
     setFooter(singleLine(story.footer));
+    // Follow the story's own marker setting, so a story that shows markers on
+    // screen exports them by default (#1839).
+    setMarkers(story.showMarkers);
     setError(null);
     setNotice(null);
     setProgress(null);
@@ -300,8 +256,7 @@ export function StoryMapHandoutDialog({
     setError(null);
     setNotice(null);
     const controller = mapControllerRef.current;
-    const map = controller?.getMap();
-    if (!controller || !map) {
+    if (!controller?.getRenderSurface()) {
       setError(t("storymap.handout.noMap"));
       return;
     }
@@ -364,9 +319,13 @@ export function StoryMapHandoutDialog({
             });
             continue;
           }
-          await jumpAndWaitIdle(map, slideLocation(screen, chapters), () => abortRef.current);
+          await applyStoryViewAndWait(
+            controller,
+            slideLocation(screen, chapters),
+            () => abortRef.current,
+          );
           if (abortRef.current) break;
-          const slideShot = captureMapImage(map);
+          const slideShot = await captureEngineMapImage(controller);
           captures.push({
             title: "",
             map: {
@@ -391,16 +350,27 @@ export function StoryMapHandoutDialog({
           applyEffects(chapter.onChapterEnter);
           lastChapterIndex = screen.index;
         }
-        await jumpAndWaitIdle(map, chapter.location, () => abortRef.current);
+        await applyStoryViewAndWait(controller, chapter.location, () => abortRef.current);
         if (abortRef.current) break;
-        const shot = captureMapImage(map);
+        const shot = await captureEngineMapImage(controller);
         // Load the chapter's own photo (if any) so it appears beside the map.
         const photo = chapter.image ? await loadChapterPhoto(chapter.image) : null;
+        const [lng, lat] = chapter.location.center;
         captures.push({
           title: chapter.title,
           description: chapter.description,
           map: { data: shot.image, width: shot.width, height: shot.height },
           ...(photo ? { photo } : {}),
+          // A pin over the map centre, linked to the chapter coordinate in
+          // Google Maps so a reader can navigate to the place (#1839).
+          ...(markers
+            ? {
+                marker: {
+                  url: googleMapsUrl(lat, lng, chapter.location.zoom, { marker: true }),
+                  color: story.markerColor,
+                },
+              }
+            : {}),
         });
       }
       // Stopped: discard the export entirely rather than saving a partial PDF
@@ -410,6 +380,8 @@ export function StoryMapHandoutDialog({
         if (abortRef.current) setNotice(t("storymap.handout.cancelled"));
         return;
       }
+      // The PDF builder (and jsPDF) loads on first export, not at startup.
+      const { buildStoryMapHandoutPdf } = await import("../../lib/storymap-pdf");
       const bytes = buildStoryMapHandoutPdf(captures, {
         paperSize,
         orientation,
@@ -436,14 +408,7 @@ export function StoryMapHandoutDialog({
       // Undo the replayed opacity effects (like the presenter does on exit) and
       // return the map to where the user left it, even on failure.
       if (effectsApplied) controller.restoreLayerStyles();
-      if (original) {
-        map.jumpTo({
-          center: original.center,
-          zoom: original.zoom,
-          bearing: original.bearing,
-          pitch: original.pitch,
-        });
-      }
+      if (original) controller.applyView(original);
       setGenerating(false);
       setProgress(null);
     }
@@ -457,8 +422,10 @@ export function StoryMapHandoutDialog({
     subtitle,
     byline,
     footer,
+    markers,
     story.title,
     story.theme,
+    story.markerColor,
     mapControllerRef,
     onOpenChange,
     t,
@@ -592,6 +559,22 @@ export function StoryMapHandoutDialog({
                 placeholder={t("storymap.handout.footerPlaceholder")}
               />
             </Field>
+
+            <Separator />
+
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={markers}
+                  onChange={(e) => setMarkers(e.target.checked)}
+                />
+                {t("storymap.handout.markers")}
+              </label>
+              <p className="ms-6 text-xs text-muted-foreground">
+                {t("storymap.handout.markersHint")}
+              </p>
+            </div>
           </div>
         </ScrollArea>
 

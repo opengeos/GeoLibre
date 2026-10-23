@@ -13,7 +13,16 @@ function isRecentProjectEntry(value: unknown): value is RecentProjectEntry {
   );
 }
 
-function loadRecentProjects(): RecentProjectEntry[] {
+/**
+ * Read the persisted recent-projects list straight from storage.
+ *
+ * Exported so a consumer that runs before this hook's hydration effect (see
+ * `useStartupProject`) can read the same list without depending on its own
+ * position in `App.tsx`'s hook order. Entries come back in stored order; the
+ * store's `setRecentProjects` dedups and trims but does not reorder, so "most
+ * recent first" holds either way.
+ */
+export function loadRecentProjects(): RecentProjectEntry[] {
   if (typeof window === "undefined") return [];
 
   try {

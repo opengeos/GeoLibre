@@ -26,17 +26,33 @@ Or with conda from [conda-forge](https://anaconda.org/conda-forge/geolibre):
 conda install -c conda-forge geolibre
 ```
 
-Optional extras for `add_geojson()` from a GeoDataFrame and for reading **local**
-vector files with `add_vector()` / `add_geoparquet()` / `add_flatgeobuf()` /
-`add_shp()` / `add_kml()` / `add_gpkg()` (remote URLs for those formats need no
-extras):
+Optional extras provide GeoPandas/Shapely support for GeoDataFrames and local
+vector files, plus xarray/rioxarray/rasterio/rio-tiler support for in-memory rasters:
 
 ```bash
-pip install "geolibre[all]"   # adds GeoPandas and Shapely
+pip install "geolibre[all]"      # both
+pip install "geolibre[vector]"   # GeoPandas/Shapely only
+pip install "geolibre[raster]"   # xarray/rioxarray/rasterio/rio-tiler only
+```
+
+`[all]` is the union of the two, so it now installs rasterio (and GDAL with it);
+use `[vector]` to keep an existing vector-only environment as light as before.
+
+`add_icesat2` / `add_gedi` read ICESat-2 and GEDI HDF5 granules with h5py:
+
+```bash
+pip install "geolibre[spaceborne]"   # h5py + NumPy
 ```
 
 The optional `[all]` extra is pip-only. If you installed via conda, add it with
 `pip install "geolibre[all]"` inside the same environment.
+
+To embed the map in a [Dash](https://dash.plotly.com/) app, install the `dash`
+extra and use `from geolibre import DashMap`:
+
+```bash
+pip install "geolibre[dash]"
+```
 
 ## Quickstart
 
@@ -61,13 +77,58 @@ m.add_basemap("dark")
 m.set_center(-120, 47, zoom=8)
 ```
 
+Google Earth Engine layers are optional and need `pip install earthengine-api`
+plus credentials (`ee.Authenticate()` once, then a Google Cloud project):
+
+```python
+import ee
+
+ee.Authenticate()  # once per machine
+ee.Initialize(project="your-google-cloud-project")
+m.add_ee_layer(ee.Image("USGS/SRTMGL1_003"), {"min": 0, "max": 3000}, name="SRTM")
+```
+
+`add_ee_layer` evaluates the Earth Engine object in the kernel and adds the
+resulting tile URL as a raster layer (ImageCollections are mosaicked, vector
+objects are styled into raster tiles — for those, `vis_params` takes
+`ee.FeatureCollection.style()` keys such as `color`, `fillColor`, `width`, and
+`pointSize`, not image keys). That URL is tied to an Earth Engine map id that
+expires, so a saved project may need the Earth Engine layer regenerated when it
+is reopened. The result is a plain raster tile layer, not one of the live layers
+the app's own Earth Engine panel manages.
+
 `add_raster` / `add_cog` also accept a **local** GeoTIFF path on the kernel host:
 the file is served by the bundled localhost server so the app can read it. This
-only works where the **browser can reach the kernel's localhost** (local Jupyter,
-VS Code); on remote/browser-separated setups (Colab, JupyterHub, remote servers)
-the localhost route is unreachable, so pass a hosted URL there. The served URL is
-also session-scoped, so a project saved with a local raster will not restore it
-when reopened later — pass a hosted URL for durable projects.
+works directly in local Jupyter and VS Code. In Google Colab, where the kernel
+proxy does not preserve the byte-range semantics required by browser COG
+rendering, GeoLibre renders local rasters as PNG XYZ tiles in the kernel instead.
+JupyterHub can route the COG through the kernel port when
+`jupyter-server-proxy` is available. A static-server-extension-only deployment
+cannot expose kernel files, so pass a hosted URL there. The served URL is
+session-scoped, so a project saved with a local raster will not restore it when
+reopened later — pass a hosted URL for durable projects.
+
+Install `geolibre[raster]` to visualize an in-memory xarray object. Spatial
+dimensions named `lon`/`lat` or `longitude`/`latitude` default to EPSG:4326;
+otherwise provide CRS and dimension names explicitly. Dataset variables become
+bands unless one is selected:
+
+```python
+m.add_raster(data_array, name="Temperature", colormap="viridis")
+m.add_raster(
+    dataset,
+    name="Temperature",
+    array_args={"variable": "temperature", "isel": {"time": 0}},
+)
+```
+
+The temporary Cloud-Optimized GeoTIFF backing an xarray layer is removed when the widget is
+closed, so xarray layers have the same session-only limitation as local files.
+Locally the browser reads that COG directly; in Colab rio-tiler renders it into
+ordinary PNG XYZ tiles to avoid Colab's incompatible byte-range proxy behavior.
+Call `m.close()` when you are done to remove it promptly; otherwise it is removed
+when the `Map` is garbage collected or when the kernel exits normally. A kernel
+that is killed outright leaves the file behind in the system temp directory.
 
 Add markers and data-driven symbology without precomputing styles:
 
@@ -87,6 +148,9 @@ m.add_choropleth(
 Add a legend, a colorbar, and a swipe (split-map) comparison:
 
 ```python
+# The app's legend panel (Controls > Legend), built from each layer's style.
+m.set_map_legend("Population", position="bottom-right")
+
 # A built-in land-cover legend, or your own {label: color} dict.
 m.add_legend(builtin="nlcd")
 m.add_legend(legend_dict={"Water": "#0000ff", "Land": "#00ff00"})
@@ -122,7 +186,8 @@ m2
 ```
 
 `to_project()`, `save_project()`, and `to_html()` redact credentials — API keys,
-tokens, authenticated request headers, environment variables, geocoder keys, and
+tokens, authenticated request headers, secret environment variables (every row
+not marked `"secret": false`), geocoder keys, and
 credential URL parameters — so anything you serialize, commit, or share is safe
 by default. Pass `keep_credentials=True` to `to_project()` or `save_project()`
 for a trusted local file that must keep working without re-entering them:
@@ -211,8 +276,10 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `set_layer_visibility(layer, visible)` / `set_layer_opacity(layer, opacity)` | Change a layer by id, name, or handle. |
 | `list_algorithms()` | Available processing algorithms (`id`, `parameters`, …). |
 | `run_algorithm(id, parameters=None, timeout=)` | Run an algorithm; returns `{logs, resultLayerIds}`. |
+| `run_model_builder(graph, timeout=)` | Run a serialized Model Builder graph in the displayed app. |
+| `list_whitebox_tools()` / `run_whitebox_tool(tool_id, parameters=None, timeout=)` | List, or run in the browser via WASM, the bundled Whitebox tools; `run_whitebox_tool` returns `{logs, resultLayerIds}`. |
 | `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
-| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted); returns the HTML or writes to `path`. |
+| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted) in this map's `layout` and `theme`; returns the HTML or writes to `path`. |
 | `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
 | `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
 
@@ -220,15 +287,15 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 
 | Method | Description |
 | --- | --- |
-| `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. |
+| `Map(center, zoom, basemap=, renderer=, height=, layout=, theme=, server_proxy=)` | Create a map. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv(data, x="longitude", y="latitude", name=, **style)` / `add_xy_data(...)` | Add points from a CSV path, URL, text, DataFrame, or row mappings. |
-| `add_marker(lng, lat, name=, properties=, **style)` | Add a single point marker (shown as a circle; `properties` appear on click). |
-| `add_markers(points, name=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
+| `add_marker(lng, lat, name=, properties=, color=, opacity=, radius=, stroke_color=, stroke_width=, shape=, size=, icon=, **style)` | Add a single point marker (`properties` appear on click). |
+| `add_markers(points, name=, color=, opacity=, radius=, stroke_color=, stroke_width=, shape=, size=, icon=, **style)` | Add point markers from `(lng, lat)` pairs, `{lng/lon/x, lat/y, …}` dicts, GeoJSON, or a GeoDataFrame. |
 | `add_circle_markers(points, name=, radius=, **style)` | Add circle markers with an explicit `radius`. |
 | `add_marker_cluster(points, name=, cluster_radius=, cluster_max_zoom=, **style)` | Add clustered point markers. |
-| `add_heatmap(points, name=, radius=, intensity=, **style)` | Add point data using the density heatmap renderer. |
+| `add_heatmap(points, name=, radius=, intensity=, color_ramp=, weight_field=, **style)` | Add point data using the density heatmap renderer, optionally weighted by a numeric field. |
 | `add_choropleth(data, column, name=, class_count=, colormap=, scheme=, **style)` | Add a GeoJSON layer with graduated symbology computed from a numeric `column`. |
 | `add_data(data, column=None, name=, **kwargs)` | Add data; a choropleth when `column` is given, else a plain GeoJSON layer (leafmap parity). |
 | `add_vector(data, name=, render_mode=, data_format=, source_layer=, **style)` | Add a vector dataset from a URL (GeoParquet, FlatGeobuf, zipped Shapefile, GeoJSON, …) or a local file (read via GeoPandas and inlined). |
@@ -236,30 +303,274 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_flatgeobuf(data, name=, **style)` | Add a FlatGeobuf dataset (URL or local file). |
 | `add_shp(data, name=, **style)` | Add a Shapefile (zipped URL or local `.shp`). |
 | `add_kml(data, name=, **style)` / `add_gpkg(data, name=, layer=None, **style)` | Add KML/KMZ or GeoPackage data. |
+| `add_polyline(polyline, name="Polyline", precision=5, unescape=False, **style)` | Add an Encoded Polyline layer from a string or list of strings (precision 5 or 6). |
 | `add_vector_tiles(url, name=, source_layers=, source_layer=, **style)` | Add a vector tile layer from a TileJSON endpoint. |
 | `add_pmtiles(url, name=, tile_type=, source_layers=, **style)` | Add a PMTiles archive (vector or raster). |
-| `add_tile_layer(url, name=, tile_size=, attribution=)` | Add a raster XYZ tile layer. |
-| `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, **style)` | Add a WMS layer (GetMap, tiled raster). |
-| `add_wmts(url, name=, tile_size=, **style)` | Add a WMTS layer from a tile URL template. |
+| `add_tile_layer(url, name=, tile_size=, attribution=, bounds=, **style)` | Add a raster XYZ tile layer. |
+| `add_ee_layer(ee_object, vis_params=, name=, shown=, opacity=)` | Add an authenticated Google Earth Engine object as raster tiles (needs `earthengine-api`). |
+| `add_wms(endpoint, layers, name=, styles=, image_format=, transparent=, tile_size=, version=, crs=, bounds=, **style)` | Add a WMS layer (GetMap, tiled raster). `bounds` is `[west, south, east, north]`, needed for zoom-to-layer. `crs` defaults to `EPSG:3857`; for a server without Web Mercator pass a CRS it lists: preferably a geographic one (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version="1.3.0"`), otherwise a projected `EPSG:<code>` such as `EPSG:25832`, which the desktop app warps from its EPSG tables. Only the desktop app redraws those tiles into Web Mercator: the web build and `to_html` pages still send the Web Mercator BBOX, so such a layer stays blank there. |
+| `add_wmts(url, name=, tile_size=, bounds=, **style)` | Add a WMTS layer from a tile URL template. |
 | `add_wfs(endpoint, type_name, name=, version=, output_format=, srs_name=, max_features=, **style)` | Add a WFS layer (GetFeature GeoJSON, fetched and inlined). |
 | `add_cog(url, name=, bands=, colormap=, rescale=, **style)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
-| `add_raster(url, name=, bands=, colormap=, rescale=, **style)` | Add a raster (COG/GeoTIFF), URL or local path; alias of `add_cog`. |
-| `add_3d_tiles(url, name=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json`. |
+| `add_raster(source, name=, url=, bands=, colormap=, rescale=, array_args=, **style)` | Add a COG/GeoTIFF URL or path, or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
+| `add_lidar(url, name=None, **style)` | Add a LAS, LAZ, COPC or EPT point cloud by URL (COPC/EPT stream by level of detail). |
+| `add_icesat2(source, name=None, *, beams=None, fields=None, quality_filter=True, bbox=None, max_points=100000, color_by=None, colormap="viridis", **style)` | Add ICESat-2 ATL06 or ATL08 footprints from a local HDF5 granule as a point layer, read like the app's Add Data → ICESat-2 / GEDI (quality filter, `beam`, `beam_type`, `time`, `distance_km`; needs `geolibre[spaceborne]`). |
+| `add_gedi(source, name=None, *, beams=None, fields=None, quality_filter=True, bbox=None, max_points=100000, color_by=None, colormap="viridis", **style)` | Add GEDI L2A, L2B or L4A shots from a local HDF5 granule the same way (`rh98`, `cover` or `agbd` by default; needs `geolibre[spaceborne]`). |
+| `point_cloud_annotations()` | Read the point labels, instance ids, custom classes, 3D boxes and 3D vectors saved by the app's [point cloud annotator](user-guide/point-cloud-annotation.md). Labels and instance ids are keyed by source URL, then node key and point index; `geolibre.project.apply_point_labels` writes a whole-file source's labels onto `laspy` classification. |
+| `prelabel_point_cloud(url, input_file, tool="ground", only_unclassified=True)` | Run the annotator's Whitebox pre-label on a local copy of a LiDAR layer and save the changed classes as its labels (`ground` or `ground-vegetation`; needs `geolibre[pointcloud]`). |
+| `write_labeled_point_cloud(url, input_file, output_file)` | Write a local copy of a LiDAR layer's LAS/LAZ/COPC file with the saved labels and instance ids applied, streaming files larger than memory (needs `geolibre[pointcloud]`). |
+| `set_point_cloud_classes(classes)` | Define the annotator's custom classes, e.g. `[{"code": 64, "name": "Car", "color": "#e11d48"}]` (codes 19-255); the LiDAR layer draws them in their colour and names them in its legend. |
+| `add_3d_tiles(url=None, name=, ion_asset_id=, altitude_offset=, request_headers=, **style)` | Add a 3D Tiles `tileset.json` URL, or a Cesium Ion tileset by asset id (3D globe only). |
+| `add_cesium_ion(asset_id, name=, kind="3d-tiles", altitude_offset=, **style)` | Add a Cesium Ion asset by id: a 3D Tiles tileset or (`kind="imagery"`) an imagery layer. Renders on the 3D globe, with the app's Ion token. |
+| `add_czml(url=None, name=, data=, source_path=, **style)` | Add a CZML (Cesium Language) dynamic 3D scene by URL or inline packets: orbits, vehicle tracks, moving models. Renders on the 3D globe, which follows the document's clock. |
+| `add_cesium_kml(url=None, name=, data=, source_path=, **style)` | Native KML/KMZ on the globe with document styles and overlays. Supply a URL, inline XML, or a KMZ data URL; use `add_kml` for vector conversion. |
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
-| `add_basemap(basemap)` | Set the background basemap. |
+| `add_basemap(basemap)` / `set_basemap(basemap)` | Set the background basemap. |
 | `split_map(left_layers=None, right_layers=None, orientation=, position=, control_position=)` | Add a swipe (split-map) comparison slider between two layer sets. |
+| `set_map_legend(title=None, position=, group_by_layer=, visible=, collapsed=)` | Show the map legend (Controls → Legend), whose rows come from each visible layer's symbology. One per map; calling it again updates it. |
 | `add_legend(title=None, legend_dict=, labels=, colors=, builtin=, position=, shape=)` | Add a legend from a `{label: color}` dict, parallel `labels`/`colors`, or a `builtin` preset (`"nlcd"`, `"esa_worldcover"`). |
 | `add_colorbar(colormap=, vmin=, vmax=, label=, units=, colors=, orientation=, position=)` | Add a colorbar for a continuous raster, from a named colormap or custom `colors`. |
 | `add_colormap(colormap, vmin=, vmax=, label=, **kwargs)` | Add a colorbar from a named colormap (leafmap-style alias of `add_colorbar`). |
 | `set_center(lng, lat, zoom=None)` | Center (and optionally zoom) the map. |
 | `set_center_zoom(lng, lat, zoom=None)` | Alias of `set_center` (leafmap compatibility). |
-| `remove_layer(layer_id)` / `clear_layers()` | Remove layers. |
+| `set_zoom(zoom)` / `set_bearing(bearing)` / `set_pitch(pitch)` / `fit_project_bounds(bounds)` | Persist camera changes without requiring the widget to be displayed. |
+| `center` / `zoom` / `bearing` / `pitch` / `basemap` / `name` | Read persisted project and camera state; `name` is writable. |
+| `rename_layer(layer, name)` / `move_layer(layer, index)` / `duplicate_layer(layer, name=)` / `show_layer(layer)` / `hide_layer(layer)` | Manage layers by id, name, or `Layer` handle. |
+| `layer_properties(layer)` / `column_values(layer, column)` / `describe()` | Inspect inlined data and summarize a project without a browser round trip. |
+| `remove_layer(layer_id)` / `clear_layers()` | Remove one layer by id, name, or handle, or remove all layers. |
+| `set_popup(layer, fields=None, click=, hover=, title=, title_expression=, body_expression=, show_feature_id=, max_width=, image_height=, tooltip=, merge=False)` | Choose what a click popup shows for a layer, and how each value is formatted. |
+| `set_tooltip(layer, fields=True)` / `clear_popup(layer)` | Turn a hover tooltip on (or off), or drop the popup config and restore the default popup. |
+| `set_layer_metadata(layer, merge=False, title=, abstract=, keywords=, license=, attribution=, contact=, lineage=, temporal_extent=, links=)` / `clear_layer_metadata(layer)` | Describe a layer for catalogs (the app's Metadata dialog, its STAC Item export and GeoParquet export metadata). Emails, dates (ISO 8601) and link URLs are validated. `Layer.descriptive_metadata` reads it back. |
+| `set_layer_filter(layer, expression)` | Hide a layer's features that do not match a boolean MapLibre expression, e.g. `[">=", ["get", "pop"], 100000]` (the filter Select by Expression → Filter layer saves). `None` clears it. |
+| `set_labels(layer, field=None, expression=None, enabled=None, **options)` | Label features from a property or a text expression. Options: `placement`, `size`, `color`, `halo_color`, `halo_width`, `min_zoom`, `max_zoom`, `allow_overlap`, `anchor`, `offset_x`, `offset_y`, `rotation`, `max_width`, `transform`, `number_format`, `number_decimals`, `number_locale`, `dedupe`, and the data-defined `size_expression`, `color_expression`, `opacity_expression`, `visibility_expression`, `priority_expression`. Settings left out keep their values. |
+| `set_plugin_state(plugin_id, state=None, position=, activate=True, allow_unknown=False, clear=False)` | Store a plugin's saved project state (the blob it restores on open) for a built-in id in `geolibre.project.PLUGIN_STATE_IDS`, or an external plugin's id with `allow_unknown=True`. `state` must be plain JSON; omit it to change only `position`/`activate`. `clear=True` removes the stored state and leaves activation alone. |
+| `set_story_map(**settings)` | Set the [story map](project-format.md#story-map)'s `title`, `subtitle`, `byline`, `footer`, `theme`, `show_markers`, `marker_color`, `inset`, `inset_position`, `hide_chapter_nav`, `start_slide`, `end_slide`. |
+| `add_story_chapter(title, description=, center=, zoom=, pitch=, bearing=, image=, alignment=, hidden=, map_animation=, rotate_animation=, on_enter=, on_exit=, index=)` | Add a story chapter; camera values left out come from the saved view. `on_enter`/`on_exit` fade layers: `[{"layer": "Cities", "opacity": 1, "duration": 800}]`. |
+| `move_story_chapter(chapter, index)` / `remove_story_chapter(chapter)` | Reorder or drop a chapter by id, title, or 0-based index. |
+| `add_bookmark(name, center=, zoom=, pitch=, bearing=, folder=, visible_layers=)` | Save a view to the Bookmarks panel; camera values left out come from the saved view. `folder` is a folder id or name (a new name creates it); `visible_layers` lists the layers (ids, names, or handles) to show when it is opened. |
+| `remove_bookmark(bookmark)` | Drop a bookmark by id, name, or 0-based index. |
+| `set_identify(layer="all")` | Arm the Identify tool so a click opens the popup: on one layer (id, name, or handle), on a list of layers, on every visible layer (`"all"`), or off (`None`). |
+| `show_control(name, visible=True)` / `hide_control(name)` | Show or hide a toolbar panel (`bookmark`, `search`, `measure`, `minimap`, `print`) or a built-in map control (`navigation`, `fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`). |
+| `set_projection(projection)` / `projection` | Draw the map as a `"globe"` (the default) or flat `"mercator"` map; saved in the project. |
 | `to_project(keep_credentials=False)` | Return the current project as a dict, credentials redacted unless `keep_credentials=True`. |
 | `load_project(src)` | Replace the project from a dict, JSON string, or `.geolibre.json` path. |
 | `save_project(path, keep_credentials=False)` | Write the current project to a `.geolibre.json` file, credentials redacted unless `keep_credentials=True`. |
 
 Style keyword arguments (for example `fillColor`, `strokeColor`, `strokeWidth`,
 `circleRadius`) map to the GeoLibre [layer style fields](project-format.md).
+
+### Marker symbology
+
+`add_marker` and `add_markers` take the common point-symbology settings as named
+arguments, so you do not have to know the underlying style keys:
+
+```python
+m.add_markers(points, color="#e11d48", radius=8, stroke_color="#ffffff", stroke_width=2)
+m.add_markers(points, shape="pin", color="#e11d48", size=32)
+m.add_markers(points, icon='<svg viewBox="0 0 24 24">…</svg>', size=28)
+```
+
+A point layer draws two ways. By default it is a MapLibre circle sized by
+`radius`. Passing `shape`, `size`, or `icon` switches it to a **marker sprite**:
+one of `circle`, `square`, `triangle`, `diamond`, `star`, `cross`, `pin`, or
+`custom` (which needs `icon`, raw SVG markup or a data URL).
+
+The two modes take different settings, and mixing them is an error rather than a
+silent no-op. A sprite layer replaces the circle layer outright and draws its own
+white halo, so `opacity`, `radius`, `stroke_color`, and `stroke_width` are
+circle-only and are rejected when `shape`/`size`/`icon` is also given — use
+`size` for a sprite's size. A sprite's `color` must be a hex color, because the
+sprite baker accepts nothing else and would otherwise fall back to the default
+blue in silence.
+
+Where a named argument and its underlying style key are both passed
+(`add_markers(pts, radius=8, circleRadius=20)`), the raw style key wins — it is
+the low-level escape hatch.
+
+### Popups and tooltips
+
+Without any configuration, clicking a feature while Identify is armed shows
+the layer name and every visible property, and there is no hover tooltip. Every `add_*` method that
+takes style overrides accepts `popup=` and `tooltip=` to change that (the
+exception is `add_ee_layer`, which has a fixed signature), and `set_popup` /
+`set_tooltip` / `clear_popup` change it on a layer that already exists.
+
+```python
+m.add_markers(
+    points,
+    popup={
+        "title": "name",                 # heading, instead of the layer name
+        "fields": [
+            {"field": "name", "label": "Site"},
+            {"field": "photo", "kind": "image", "label": "Photo"},
+            {"field": "url", "kind": "link", "link_label": "Read more"},
+            {"field": "pop", "kind": "number", "thousands": True, "suffix": " people"},
+            {"field": "surveyed", "kind": "date", "date_format": "datetime"},
+        ],
+    },
+    tooltip="name",
+)
+
+m.set_popup("Sites", ["name", "pop"], title="name")   # replace the config
+m.set_tooltip("Sites", ["name"])                       # add a hover tip
+m.set_popup("Sites", click=False)                      # no popup on click
+m.clear_popup("Sites")                                 # back to the default
+```
+
+Popups open only while the Identify tool is armed, which in the app is the
+Identify button on a layer or the "Identify visible layers" button in the Layers
+panel header. `set_identify` arms it from Python, and can run before the map is
+displayed. Identify covers one layer, a list of layers, or every visible layer,
+and hover tooltips pause while it is armed:
+
+```python
+m.set_identify()                 # every visible layer
+m.set_identify("Sites")          # one layer
+m.set_identify(["Sites", "Roads"])  # only these layers
+m.set_identify(None)             # off
+
+m.show_control("bookmark")       # open the Bookmarks panel
+m.show_control("search")         # open the place search box
+m.hide_control("globe")          # hide the globe/flat toggle button
+m.set_projection("mercator")     # draw a flat map instead of a globe
+```
+
+`save_project`, `to_project` and `to_html` save the Identify target and the
+controls in the project's `interaction` block, so the saved file or HTML page
+opens the same way, and `load_project` reads them back. `set_projection` is
+saved as a project preference.
+
+`popup=` also accepts shorter forms: a single property name (`popup="name"`), a
+list of names (`popup=["name", "pop"]`), a list of field mappings, or `False` to
+suppress the click popup. The full mapping form above takes the same keys as
+`set_popup` — `fields`, `click`, `hover`, `title`, `title_expression`,
+`body_expression`, `show_feature_id`, `max_width`, `image_height`, `tooltip` —
+and rejects a key it does not know, so a misspelling is an error rather than a
+setting that quietly does nothing. Those keys belong *inside* `popup=`; passed
+to `add_markers` directly they would be taken for style keys. The two sizes are
+the exception: `popup_max_width=` and `popup_image_height=` work as top-level
+arguments on every `add_*` method too, for when a wider popup is the only
+change you want. `tooltip=` takes a property name, a list of names, `True` to
+put every configured popup field in the tip, or `False` to turn it off.
+
+A field's `kind` decides how the value renders:
+
+| `kind` | Renders as |
+| --- | --- |
+| `auto` (default) | Text, except an inline base64 raster data URL, which becomes a thumbnail. |
+| `text` | Text, with `prefix`/`suffix` applied. |
+| `number` | A localized number; `decimals`, `thousands`, `prefix`, `suffix`. |
+| `date` | A localized date; `date_format` is `date`, `datetime`, `time`, `iso`, or `year`. |
+| `link` | An `http(s)` value becomes a link, labelled `link_label`. |
+| `image` | An `http(s)` value or inline base64 raster data URL becomes a thumbnail. |
+
+### Sizing the popup and its pictures
+
+The popup is 520 px wide by default (420 px when it carries a picture, which it
+lets you drag wider), and a picture inside it draws at most `min(50vh, 420px)`
+tall. `max_width` and `image_height` change both, in CSS pixels:
+
+```python
+m.add_markers(
+    sites,
+    shape="pin", color="#e11d48", size=32,
+    popup={
+        "title": "name",
+        "max_width": 640,       # 288–1200; the viewport still caps it
+        "image_height": 420,    # 40–1200
+        "fields": [
+            {"field": "photo", "kind": "image", "label": "Photo"},
+            {"field": "url", "kind": "link", "link_label": "Read more"},
+        ],
+    },
+    tooltip="name",
+)
+
+# The same two settings as top-level arguments, on any add_* method:
+m.add_markers(sites, popup=["name", "photo"], popup_max_width=640, popup_image_height=420)
+
+# Or on a layer that already exists (merge=True keeps the fields):
+m.set_popup("Sites", max_width=640, image_height=420, merge=True)
+```
+
+A thumbnail keeps its aspect ratio, so a landscape photo needs the **width** to
+grow before it can use the extra height — raise `max_width` alongside
+`image_height`. A size outside the range the app renders is an error rather
+than a value silently clamped on the map, and clicking a picture still opens it
+full-size in a lightbox whatever the popup's own size is.
+
+Two rules worth knowing before you port a popup from another library:
+
+- **Raw HTML in a property is not rendered as markup, and neither is Markdown.**
+  A popup value that arrives from a GeoJSON file is untrusted, so it is written
+  as text rather than parsed. Use `kind="image"` and `kind="link"` for pictures
+  and links, and
+  `body_expression` (a [MapLibre expression](https://maplibre.org/maplibre-style-spec/expressions/),
+  as JSON text) when you want a composed sentence instead of a table:
+  `body_expression='["concat", ["get", "name"], " — ", ["get", "county"], " County"]'`.
+  The one exception is a KML `description` property, whose known markup is
+  sanitized and rendered, so a converted KML keeps its description card.
+- **A tooltip needs fields flagged for hover, and flagging them narrows the
+  click popup.** The two share one field list: the tooltip shows the entries
+  flagged for hover, and the click popup shows *every* entry — but only falls
+  back to "all visible properties" while that list is empty. So
+
+  ```python
+  m.add_markers(points, tooltip="name")     # click popup now shows ONLY name
+  ```
+
+  because naming a tooltip field creates the list. To keep the full click popup,
+  list the fields you want on click as well, and flag one for hover:
+
+  ```python
+  m.add_markers(points, popup=["name", "pop", "county"], tooltip="name")
+  ```
+
+  A tooltip that could never show anything is an error rather than a tip that
+  silently never appears — including one whose only flagged field is an
+  `image`, since images are dropped from tooltips (their value is a URL, which
+  would become the whole tip). The click popup still shows the picture.
+
+## Use in marimo
+
+[marimo](https://marimo.io/) can render GeoLibre's anywidget, but its browser
+may not be able to reach the random `127.0.0.1` port where GeoLibre normally
+serves the bundled app. The symptom is an iframe displaying
+`127.0.0.1 refused to connect`. Point the widget at GeoLibre's hosted app before
+displaying it:
+
+```python
+from geolibre import Map
+
+m = Map(center=(-100, 40), zoom=4)
+m._app_url = "https://web.geolibre.app/"
+m.add_basemap("dark")
+m.add_vector(
+    "https://data.source.coop/giswqs/opengeos/world_cities.geojson",
+    name="World cities",
+)
+m
+```
+
+This uses the same project-sync bridge as the regular widget; only the app's
+location changes. Set `_app_url` before returning `m` from the cell so the
+iframe uses the hosted URL on its first render.
+
+The example uses `add_vector()` so the hosted browser app fetches the remote
+GeoJSON directly. `add_geojson(url)` instead downloads and inlines the file in
+Python, which can fail when a data host rejects Python's HTTP client.
+
+Because the hosted app cannot access files exposed by the kernel's temporary
+localhost server, use hosted URLs for rasters and other sources the browser
+loads directly. Local GeoJSON, CSV, and vector files that GeoLibre reads in
+Python and inlines into the project continue to work. The `_app_url` attribute
+is currently an internal compatibility workaround rather than a public
+constructor option.
+
+**Privacy:** The widget sends its synchronized project, including any inlined
+local data, to the origin in `_app_url` through `window.postMessage`. Use only a
+trusted app URL, or host the GeoLibre app yourself, when working with sensitive
+data.
 
 ## How it works
 
@@ -269,10 +580,12 @@ that app in an iframe and exchanges the project over `window.postMessage`.
 Adding data from Python rewrites the synced project and pushes it into the app;
 UI edits flow back the same way.
 
+<!-- markdownlint-disable MD046 -->
+
 !!! note "Environment support"
 
-    The interactive widget works in **local Jupyter, VS Code, Google Colab, and
-    JupyterHub / remote servers**:
+    The interactive widget works in **local Jupyter, VS Code, Google Colab,
+    JupyterHub / remote servers, and marimo**:
 
     - **Local Jupyter / VS Code** - the app is served directly from localhost.
     - **Google Colab** - routes through Colab's built-in port proxy
@@ -291,12 +604,17 @@ UI edits flow back the same way.
           wherever `jupyter-server-proxy` is installed.
     - **Other remote servers** (Binder, remote JupyterLab over SSH/network) -
       pass `Map(server_proxy=True)` to use that same dual-route remote path.
+    - **marimo** - use the hosted app URL shown in [Use in
+      marimo](#use-in-marimo); Jupyter's proxy and server-extension routes are
+      not available in marimo.
 
     Set `Map(server_proxy=False)` to force the direct localhost path. If the app
     fails to load on a hub, either install `jupyter-server-proxy`, or confirm the
     extension is enabled with `jupyter server extension list` (look for
     `geolibre`; run `jupyter server extension enable geolibre` if absent) and
     **restart** the Jupyter server so the extension loads.
+
+<!-- markdownlint-enable MD046 -->
 
 !!! warning "URL fetching"
 
@@ -309,17 +627,57 @@ UI edits flow back the same way.
     instead, so those can still point at a local server. Do not load untrusted
     `.geolibre.json` projects or URLs on a shared/multi-tenant kernel.
 
+## MCP server
+
+The same package ships an [MCP](https://modelcontextprotocol.io) server that
+authors `.geolibre.json` projects from an AI client, with no notebook and no
+running app involved:
+
+```bash
+pip install "geolibre[mcp]"
+geolibre-mcp --root ~/maps
+```
+
+It builds projects through the same builders this package uses, so anything it
+writes opens in the widget (and in the desktop and web apps) unchanged. See
+[MCP server](mcp.md) for the tool list and client configuration.
+
 ## Building from source
 
 The package lives in [`python/`](https://github.com/opengeos/GeoLibre/tree/main/python).
-The bundled app is produced from the monorepo with:
+The two bundled frontends are built independently from the monorepo root:
 
 ```bash
-npm run build:embed      # builds the app and stages it into the wheel
-python -m build          # builds the wheel
-python -m twine upload dist/*  # upload to PyPI
-pip install -e python    # editable install for development
+npm install
+npm run build:embed      # builds and stages the Jupyter/web app
+npm run build:mcp-app    # builds and stages the standalone MCP App
+python -m build python  # builds the wheel and sdist
+python -m twine upload python/dist/*  # upload to PyPI
+pip install -e python   # editable install for development
 ```
 
-Changes to the Python code are picked up on kernel restart. Changes to the app
-(TypeScript) require re-running `npm run build:embed` and restarting the kernel.
+The packaging hook runs only the frontend builds whose staged outputs are
+missing. Set `GEOLIBRE_FORCE_JS_BUILD=1` to refresh both when building from a
+full checkout; a prebuilt sdist needs neither Node nor the monorepo sources.
+
+Changes to Python code are picked up on kernel restart. Changes to the Jupyter
+app require re-running `npm run build:embed` and restarting the kernel. For MCP
+preview changes, run `npm run build:mcp-app` and restart the MCP client.
+
+## Rendering engines and mixed pane layouts
+
+```python
+m = Map(renderer="cesium", center=(-100, 40), zoom=4)
+m.set_map_layout(1, 2, view_kinds=["cesium", "maplibre"], sync_view=True)
+pane_id = m.project["secondaryMapViews"][0]["id"]
+m.set_renderer("cesium", pane_id=pane_id)
+assert m.get_renderer() == "cesium"
+```
+
+Renderer choices are `"maplibre"`, `"mapbox"`, `"cesium"`, and `"arcgis"`.
+Omitting `pane_id` targets the
+primary map. Grid dimensions are 1–4; `view_kinds` contains one renderer per
+pane, primary first. Existing pane IDs, cameras, and visibility overrides survive
+layout resizing. Save the project normally to preserve `primaryRenderer` and
+each secondary pane's `viewKind`. `DashMap(renderer="cesium")` selects the same
+initial renderer; Dash callbacks can update these fields through `project`.

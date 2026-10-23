@@ -6,7 +6,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BUILTIN_SERVICES,
+  listAllServices,
   readUserServices,
   type ServiceLibraryEntry,
 } from "../components/layout/add-data/service-library";
@@ -15,6 +15,11 @@ import {
   readSavedPostgresConnections,
   savedPostgresConnectionLabel,
 } from "../lib/saved-postgres-connections";
+import {
+  MSSQL_CONNECTIONS_CHANGED_EVENT,
+  mssqlConnectionLabel,
+  readSavedMssqlConnections,
+} from "../lib/saved-mssql-connections";
 import {
   folderLabel,
   PINNED_FOLDERS_CHANGED_EVENT,
@@ -38,8 +43,8 @@ export interface BrowserTreeState {
 
 /**
  * Assembles the Browser panel's tree from live inputs: the saved-service
- * library (built-in presets + the user's localStorage entries), the store's
- * recent-projects list, and the store's Layer Library (My Data).
+ * library (built-in presets, deployment services, and the user's localStorage
+ * entries), the store's recent-projects list, and the store's Layer Library (My Data).
  *
  * The saved-service library is not a reactive store, so it is read when the
  * panel mounts (the panel is conditionally rendered, so it re-mounts each time
@@ -60,45 +65,56 @@ export function useBrowserTree(): BrowserTreeState {
   const servicesLabel = t("browser.services");
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
+  const postgresqlLabel = t("browser.postgresql");
   const filesLabel = t("browser.files");
   const favoritesLabel = t("browser.favorites");
   const myDataLabel = t("browser.myData");
+  const sqlServerLabel = t("browser.sqlServer");
 
-  // Saved connections live in localStorage (no reactive store), so re-read them
+  // Saved connections are not a reactive store (localStorage on the web, an
+  // in-memory cache over the OS credential store on desktop), so re-read them
   // when one is added/removed — otherwise a connection saved from the Add Data
   // dialog wouldn't appear until the (still-mounted) panel is reopened. The
   // pinned folders are the same story (see the Files section below).
   const [connectionsRevision, setConnectionsRevision] = useState(0);
+  const [mssqlRevision, setMssqlRevision] = useState(0);
   const [foldersRevision, setFoldersRevision] = useState(0);
   const [favoritesRevision, setFavoritesRevision] = useState(0);
   useEffect(() => {
     const bumpConnections = () => setConnectionsRevision((n) => n + 1);
     const bumpFolders = () => setFoldersRevision((n) => n + 1);
     const bumpFavorites = () => setFavoritesRevision((n) => n + 1);
+    const bumpMssql = () => setMssqlRevision((n) => n + 1);
     window.addEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
     window.addEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
     window.addEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
+    window.addEventListener(MSSQL_CONNECTIONS_CHANGED_EVENT, bumpMssql);
     return () => {
       window.removeEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
       window.removeEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
       window.removeEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
+      window.removeEventListener(MSSQL_CONNECTIONS_CHANGED_EVENT, bumpMssql);
     };
   }, []);
 
   return useMemo(() => {
-    const services = [...BUILTIN_SERVICES, ...readUserServices()];
+    const services = listAllServices(readUserServices());
     const byId = new Map(services.map((entry) => [entry.id, entry]));
-    // Shown on every platform for discovery; the PostgreSQL add flow itself
-    // reports when it needs GeoLibre Desktop (Martin has no mobile build).
-    // Kept in the saved list's order (most-recently-used first), deliberately
-    // unlike the alphabetized Services list — this mirrors the Recent section.
-    // The Mac App Store build cannot run the sidecar/martin at all, so the
-    // whole Databases section is omitted there (undefined hides it).
+    // Keep both engine groups visible on supported builds, including when a
+    // saved list is empty so each group retains its own "New connection" (＋).
+    // The Mac App Store build cannot run the local processing sidecar, so it
+    // passes undefined for both inputs and omits the whole Databases section.
     const databaseConnections = IS_MAS_BUILD
       ? undefined
       : readSavedPostgresConnections().map((connectionString) => ({
           connectionString,
           label: savedPostgresConnectionLabel(connectionString),
+        }));
+    const mssqlConnections = IS_MAS_BUILD
+      ? undefined
+      : readSavedMssqlConnections().map((profile) => ({
+          id: profile.id,
+          label: mssqlConnectionLabel(profile, t),
         }));
     // The Files section is desktop-only: directory reading uses the fs plugin's
     // readDir, which only works within the scope the OS folder dialog grants, so
@@ -119,6 +135,7 @@ export function useBrowserTree(): BrowserTreeState {
         services,
         recentProjects,
         databaseConnections,
+        mssqlConnections,
         files,
         favorites,
         libraryLayers: layerLibrary.map((entry) => ({
@@ -128,8 +145,10 @@ export function useBrowserTree(): BrowserTreeState {
         })),
         sectionLabels: {
           services: servicesLabel,
+          postgresql: postgresqlLabel,
           recent: recentLabel,
           databases: databasesLabel,
+          sqlServer: sqlServerLabel,
           files: filesLabel,
           favorites: favoritesLabel,
           myData: myDataLabel,
@@ -145,11 +164,15 @@ export function useBrowserTree(): BrowserTreeState {
     servicesLabel,
     recentLabel,
     databasesLabel,
+    postgresqlLabel,
     filesLabel,
     favoritesLabel,
     myDataLabel,
+    sqlServerLabel,
     connectionsRevision,
+    mssqlRevision,
     foldersRevision,
     favoritesRevision,
+    t,
   ]);
 }

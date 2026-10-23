@@ -15,6 +15,7 @@ import {
   assertPublicHttpUrl,
   assertResolvedPublicHost,
   fetchWithGuard,
+  guardedLookup,
   PROXY_MAX_BODY_BYTES,
   PROXY_MAX_REDIRECT_HOPS,
   readBodyWithLimit,
@@ -124,6 +125,60 @@ describe("viewer redirect policy", () => {
 });
 
 describe("tiles allowlisted fetch", () => {
+  it("accepts only Austin's fixed CCTV frame prefix", () => {
+    assert.equal(isAllowedTilesUpstreamUrl("https://cctv.austinmobility.io/image/86.jpg"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://cctv.austinmobility.io/admin"), false);
+  });
+
+  it("accepts only the fixed Ontario CCTV catalog and frame prefixes", () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://511on.ca/api/v2/get/cameras?format=json&lang=en"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://511on.ca/map/Cctv/1456"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://511on.ca/api/v2/get/events"), false);
+  });
+
+  it("accepts only the fixed NSW CCTV catalog and frame prefixes", () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://data.livetraffic.com/cameras/traffic-cam.json"),
+      true,
+    );
+    assert.equal(
+      isAllowedTilesUpstreamUrl(
+        "https://webcams.transport.nsw.gov.au/livetraffic-webcams/cameras/test.jpeg",
+      ),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://data.livetraffic.com/events.json"), false);
+  });
+
+  it("accepts only Caltrans public camera data paths", () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://cwwp2.dot.ca.gov/data/d4/cctv/cctvStatusD04.json"),
+      true,
+    );
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://cwwp2.dot.ca.gov/data/d4/cctv/image/camera/camera.jpg"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://cwwp2.dot.ca.gov/admin"), false);
+  });
+
+  it("accepts the fixed transit feeds and CapMetro's versioned redirect path", () => {
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://cdn.mbta.com/realtime/VehiclePositions.pb"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://gtfs.ovapi.nl/nl/vehiclePositions.pb"), true);
+    assert.equal(
+      isAllowedTilesUpstreamUrl("https://data.texas.gov/api/views/eiei-9rpf/files/versioned"),
+      true,
+    );
+    assert.equal(isAllowedTilesUpstreamUrl("https://cdn.mbta.com/realtime/TripUpdates.pb"), false);
+    assert.equal(isAllowedTilesUpstreamUrl("https://data.texas.gov/resource/secret.json"), false);
+  });
+
   it("refuses off-host and off-prefix S3 redirects", async () => {
     assert.equal(isAllowedTilesUpstreamUrl("https://api.openaerialmap.org/meta"), true);
     assert.equal(isAllowedTilesUpstreamUrl("https://evil.example/meta"), false);
@@ -135,6 +190,9 @@ describe("tiles allowlisted fetch", () => {
       isAllowedTilesUpstreamUrl("https://data.humdata.org/api/3/action/package_search_v2"),
       false,
     );
+    assert.equal(isAllowedTilesUpstreamUrl("https://opensky-network.org/api/states/all"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://api.adsb.lol/v2/mil"), true);
+    assert.equal(isAllowedTilesUpstreamUrl("https://api.adsbdb.com/v0/aircraft/abc123"), true);
     assert.equal(
       isAllowedTilesUpstreamUrl(
         "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola-color/0/0/0.png",
@@ -385,9 +443,11 @@ describe("Vite proxy guard — readBodyWithLimit", () => {
   });
 
   it("returns the full body when under the limit", async () => {
-    const response = new Response("hello", { headers: { "content-length": "5" } });
+    const response = new Response("hello", {
+      headers: { "content-length": "5" },
+    });
     const buf = await readBodyWithLimit(response, 100);
-    assert.equal(buf.toString("utf8"), "hello");
+    assert.equal(new TextDecoder().decode(buf), "hello");
   });
 });
 
@@ -459,5 +519,71 @@ describe("Vite proxy guard — fetchWithGuard redirect policy", () => {
       /10\.0\.0\.5/,
     );
     assert.equal(called, false);
+  });
+});
+
+describe("guarded connector DNS lookup", () => {
+  // `dns.lookup(host, { all: true }, cb)` stand-in.
+  const resolving = (addresses: Array<{ address: string; family: number }>) =>
+    ((hostname: string, options: unknown, cb: (err: unknown, addresses: unknown) => void) => {
+      cb(null, addresses);
+    }) as never;
+
+  it("answers the array form when the connector asked for all addresses", () => {
+    // Node's `net` enables autoSelectFamily by default, so it passes
+    // `all: true` and then reads `addresses[0].address` off the reply. Replying
+    // with the single-address string form makes it index into a string and
+    // throw `ERR_INVALID_IP_ADDRESS: undefined`, which 502s every proxied
+    // raster fetch.
+    const addresses = [
+      { address: "93.184.216.34", family: 4 },
+      { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+    ];
+    let reply: unknown[] | undefined;
+    guardedLookup(
+      "example.com",
+      { all: true },
+      (err, address, family) => {
+        assert.equal(err, null);
+        reply = [address, family];
+      },
+      resolving(addresses),
+    );
+
+    assert.deepEqual(reply?.[0], addresses, "hands back every validated address");
+  });
+
+  it("answers the single-address form when the connector did not ask for all", () => {
+    let reply: unknown[] | undefined;
+    guardedLookup(
+      "example.com",
+      {},
+      (err, address, family) => {
+        assert.equal(err, null);
+        reply = [address, family];
+      },
+      resolving([{ address: "93.184.216.34", family: 4 }]),
+    );
+
+    assert.deepEqual(reply, ["93.184.216.34", 4]);
+  });
+
+  it("refuses a host that resolves to a private address in either reply shape", () => {
+    for (const options of [{ all: true }, {}]) {
+      let error: Error | null = null;
+      guardedLookup(
+        "rebind.example",
+        options,
+        (err) => {
+          error = err as Error;
+        },
+        resolving([
+          { address: "93.184.216.34", family: 4 },
+          { address: "169.254.169.254", family: 4 },
+        ]),
+      );
+
+      assert.match(String(error), /169\.254\.169\.254/);
+    }
   });
 });

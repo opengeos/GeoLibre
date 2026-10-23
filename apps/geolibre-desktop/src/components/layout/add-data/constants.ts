@@ -13,46 +13,69 @@ export const DECK_VIZ_SIZE_WARN_BYTES = 10 * 1024 * 1024;
  * `t(\`addData.kind.${key}.label\`)` lookups stay type-checked against en.json. */
 export type KindI18nKey =
   | "xyz"
+  | "wcs"
   | "wms"
+  | "csw"
   | "wfs"
   | "wmts"
   | "ogcFeatures"
   | "ogcVectorTiles"
   | "gpx"
+  | "landxml"
   | "georss"
+  | "geoBoundaries"
   | "delimitedText"
   | "cad"
   | "gdb"
   | "photos"
   | "mbtiles"
+  | "polyline"
   | "arcgis"
   | "postgres"
+  | "mssql"
+  | "iceberg"
   | "deckglViz"
-  | "video";
+  | "video"
+  | "cesiumIon"
+  | "czml"
+  | "kml";
 
 /**
  * Maps each Add Data kind to its `addData.kind.<key>` i18n segment. The dialog
  * title and description are resolved via `t()` from these keys; `en.json` is the
  * source of truth (see `i18n/locales/en.json`).
  */
-export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
+export const KIND_I18N_KEY: Record<
+  Exclude<AddDataKind, "pmtiles" | "zarr" | "raster">,
+  KindI18nKey
+> = {
   xyz: "xyz",
+  wcs: "wcs",
   wms: "wms",
+  csw: "csw",
   wfs: "wfs",
   wmts: "wmts",
   "ogc-features": "ogcFeatures",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
+  landxml: "landxml",
   georss: "georss",
+  geoboundaries: "geoBoundaries",
   "delimited-text": "delimitedText",
   cad: "cad",
   gdb: "gdb",
   photos: "photos",
   mbtiles: "mbtiles",
+  polyline: "polyline",
   arcgis: "arcgis",
   postgres: "postgres",
+  mssql: "mssql",
+  iceberg: "iceberg",
   "deckgl-viz": "deckglViz",
   video: "video",
+  "cesium-ion": "cesiumIon",
+  czml: "czml",
+  kml: "kml",
 };
 
 export const DEFAULT_XYZ_URL =
@@ -66,6 +89,9 @@ export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 // attribution and must not be used for navigation. See gebco.net/data-products.
 export const GEBCO_WMS_ENDPOINT = "https://wms.gebco.net/mapserv";
 export const GEBCO_WMS_LAYERS = "GEBCO_LATEST";
+/** USGS MRLC NLCD 2021 land cover (CONUS); its capabilities advertise a legend. */
+export const NLCD_WMS_ENDPOINT = "https://www.mrlc.gov/geoserver/mrlc_display/wms";
+export const NLCD_WMS_LAYERS = "NLCD_2021_Land_Cover_L48";
 // GEBCO's license requires its imagery credit the source. `attributionForTileUrl`
 // (helpers) attaches this to any GEBCO WMS layer, however it was added (the sample
 // below or a hand-pasted wms.gebco.net URL).
@@ -102,6 +128,31 @@ export const DEFAULT_OGC_VECTOR_TILES_URL =
 export const DEFAULT_OGC_VECTOR_TILES_STYLE_URL =
   "https://api.pdok.nl/lv/bgt/ogc/v1/styles/bgt_standaardvisualisatie__webmercatorquad?f=mapbox";
 export const DEFAULT_GPX_URL = "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
+// Synthetic CC0 civil-design datasets offered in the LandXML dialog. The files
+// are hosted on Source Cooperative with the other GeoLibre samples. Their CRS
+// values are also embedded in the documents, but keeping them here lets the UI
+// fill the field before the remote file is downloaded.
+export const LANDXML_SAMPLES: readonly {
+  label: string;
+  url: string;
+  crs: string;
+}[] = [
+  {
+    label: "Boston civic site (WGS 84)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-boston-site-wgs84.xml",
+    crs: "EPSG:4326",
+  },
+  {
+    label: "Minneapolis road corridor (UTM 15N)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-minneapolis-road-utm15n.xml",
+    crs: "EPSG:26915",
+  },
+  {
+    label: "London earthworks (British National Grid)",
+    url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-london-earthworks-bng.xml",
+    crs: "EPSG:27700",
+  },
+];
 // USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed (Simple georss:point).
 export const DEFAULT_GEORSS_URL =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom";
@@ -120,15 +171,29 @@ export const DEFAULT_ARCGIS_FEATURE_URL =
   "https://services3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/USA_Major_Cities/FeatureServer/0";
 export const DEFAULT_ARCGIS_VECTOR_TILE_URL =
   "https://vectortileservices3.arcgis.com/GVgbJbqm8hXASVYi/arcgis/rest/services/Santa_Monica_parcels_VTL/VectorTileServer";
+// USGS National Boundaries Dataset (states, counties, tribal and federal areas).
+// A keyless *dynamic* (uncached) MapServer, so it exercises the `/export` path
+// rather than a tile cache.
+export const DEFAULT_ARCGIS_MAP_SERVICE_URL =
+  "https://carto.nationalmap.gov/arcgis/rest/services/govunits/MapServer";
+// USGS 3DEP bare-earth elevation, a keyless ImageServer that renders through
+// `/exportImage` (it has no tile cache) and accepts rendering rules.
+export const DEFAULT_ARCGIS_IMAGE_SERVICE_URL =
+  "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer";
 export const DEFAULT_ARCGIS_URLS: Record<ArcGISLayerType, string> = {
   feature: DEFAULT_ARCGIS_FEATURE_URL,
   "vector-tile": DEFAULT_ARCGIS_VECTOR_TILE_URL,
+  "map-service": DEFAULT_ARCGIS_MAP_SERVICE_URL,
+  "image-service": DEFAULT_ARCGIS_IMAGE_SERVICE_URL,
 };
 // Keep in sync with GPX_PROXY_PATH in vite.config.ts (the dev proxy binds it there).
 export const GPX_PROXY_PATH = "/__geolibre_gpx_proxy";
 // Keep in sync with WMS_PROXY_PATH in vite.config.ts (the dev proxy binds it
 // there). Used to fetch a WMS GetCapabilities document without tripping CORS.
 export const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
+// Keep in sync with CSW_PROXY_PATH in vite.config.ts. Used to fetch a CSW
+// GetRecords response (and a record's GeoJSON) without tripping CORS.
+export const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts. Used to fetch a WFS
 // GetCapabilities document (and GetFeature responses) without tripping CORS.
 export const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
@@ -181,6 +246,109 @@ export const CAD_SAMPLES: readonly {
     label: "World populated places (WGS84)",
     url: "https://data.source.coop/giswqs/opengeos/ne_populated_places_wgs84.dxf",
     crs: "",
+  },
+];
+
+// Public CSW catalogs offered in the Add CSW Catalog dialog's "Load sample data"
+// dropdown. A CSW endpoint is unguessable, so without these the panel opens on an
+// empty field with nothing to try. Each entry was checked to answer an anonymous
+// GetRecords over CORS *and* to return records carrying WMS/WFS/ArcGIS/GeoJSON
+// online resources, which is what makes the result list's Add buttons appear —
+// a conforming catalog whose records advertise no services (the pycsw demo
+// servers, for one) searches fine but offers nothing to add. A broad listing
+// buries those records, so three entries ship the keyword "WMS": it is the word
+// service-backed records carry in their own metadata, and searching it fills the
+// first page with entries that have something to add. Open Canada needs no
+// keyword and its unfiltered listing also advertises GeoJSON, which the dialog
+// adds to the map directly instead of handing off to another source. Labels are
+// organization names, so like CAD_SAMPLES above they stay untranslated.
+export const CSW_SAMPLES: readonly {
+  label: string;
+  endpoint: string;
+  keyword: string;
+}[] = [
+  {
+    label: "Open Canada (Government of Canada)",
+    endpoint: "https://csw.open.canada.ca/geonetwork/srv/csw",
+    keyword: "",
+  },
+  {
+    label: "European Environment Agency (SDI)",
+    endpoint: "https://sdi.eea.europa.eu/catalogue/srv/eng/csw",
+    keyword: "WMS",
+  },
+  {
+    label: "geocat.ch (Swiss geodata catalog)",
+    endpoint: "https://www.geocat.ch/geonetwork/srv/eng/csw",
+    keyword: "WMS",
+  },
+  {
+    label: "Nationaal Georegister (Netherlands)",
+    endpoint: "https://nationaalgeoregister.nl/geonetwork/srv/dut/csw",
+    keyword: "WMS",
+  },
+];
+
+/** A public Zarr store the Add Zarr Layer form can fill itself in with. */
+export interface ZarrSample {
+  label: string;
+  url: string;
+  variable: string;
+  clim: [number, number];
+  /** A GeoLibre ramp name (see `VECTOR_COLOR_RAMPS`). */
+  colormap: string;
+  /** Array indices for the non-spatial dimensions, as the Time Slider writes them. */
+  selector?: Record<string, number>;
+}
+
+// Samples for the Add Zarr Layer form on the 3D globe (opengeos/GeoLibre#2261).
+// Each is a public, CORS-enabled store in EPSG:4326 or EPSG:3857 with
+// longitudes in -180..180, which is what the globe's zarr-cesium provider can
+// place (a 0..360 grid such as NOC's ERA5 hurricane store draws nothing). They
+// cover the layouts it reads: a single-scale v2 cube with an int64 CF time axis
+// (NOAA, which also binds to the Time Slider), a v2 ndpyramid with band/month
+// dimensions (CarbonPlan), and v2 and v3 multiscale ocean model output with
+// depth (NOC's NEMO runs, from zarr-cesium's own demo). Labels name the dataset
+// and its publisher, so like CAD_SAMPLES above they stay untranslated.
+export const ZARR_GLOBE_SAMPLES: readonly ZarrSample[] = [
+  {
+    label: "Sea surface temperature, monthly 1981-2023 (NOAA OISST)",
+    url: "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr",
+    variable: "sst",
+    clim: [-2, 32],
+    colormap: "turbo",
+  },
+  {
+    label: "Air temperature, January climatology (CarbonPlan)",
+    url: "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month",
+    variable: "climate",
+    clim: [-20, 30],
+    colormap: "coolwarm",
+    // band 0 is `tavg` (band 1 is `prec`); month 0 is January.
+    selector: { band: 0, month: 0 },
+  },
+  {
+    label: "Precipitation, July climatology (CarbonPlan)",
+    url: "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month",
+    variable: "climate",
+    clim: [0, 300],
+    colormap: "blues",
+    selector: { band: 1, month: 6 },
+  },
+  {
+    label: "Ocean temperature at the surface, yearly (NOC NEMO eORCA025)",
+    url: "https://atlantis-vis-o.s3-ext.jc.rl.ac.uk/noc-npd-era5-demo/npd-eorca025-era5v1/gn/T1y_4d/thetao_con",
+    variable: "thetao_con",
+    clim: [0, 30],
+    colormap: "plasma",
+    selector: { deptht: 0, time: 0 },
+  },
+  {
+    label: "Sea surface salinity, daily (NOC NEMO eORCA1)",
+    url: "https://atlantis-vis-o.s3-ext.jc.rl.ac.uk/nemotest101/pyramid2/T1d/sos_abs.zarr",
+    variable: "sos_abs",
+    clim: [30, 37],
+    colormap: "viridis",
   },
 ];
 

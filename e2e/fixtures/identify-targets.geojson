@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Target West" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-101, 36],
+            [-99, 36],
+            [-99, 38],
+            [-101, 38],
+            [-101, 36]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Target East" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-91, 36],
+            [-89, 36],
+            [-89, 38],
+            [-91, 38],
+            [-91, 36]
+          ]
+        ]
+      }
+    }
+  ]
+}

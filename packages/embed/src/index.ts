@@ -2,6 +2,8 @@
 export const EMBED_API_VERSION = 2 as const;
 export const EMBED_API_SOURCE = "geolibre" as const;
 
+export type MapRenderer = "maplibre" | "cesium" | "mapbox" | "arcgis";
+
 export interface Viewport {
   bbox?: [number, number, number, number] | null;
   center: [number, number];
@@ -19,6 +21,14 @@ export type ViewTarget =
       pitch?: number;
       duration?: number;
     };
+
+/** A GeoJSON feature as returned by `getLayerFeatures` and `getDrawnFeatures`; `id` is exactly as stored. */
+export interface EmbedFeature {
+  type: "Feature";
+  id?: string | number;
+  geometry: { type: string; coordinates?: unknown; geometries?: unknown[] } | null;
+  properties: Record<string, unknown> | null;
+}
 
 export interface LayerSummary {
   id: string;
@@ -41,6 +51,12 @@ export interface AddLayerSpec {
   beforeId?: string;
 }
 
+export interface AddDataOptions {
+  styleUrl?: string;
+  /** Fit the map to the newly added data. Defaults to true. */
+  fit?: boolean;
+}
+
 export type EmbedEventMap = {
   ready: { version: string };
   /**
@@ -51,9 +67,19 @@ export type EmbedEventMap = {
   ack: { requestId: string; ok: boolean; error?: string; result?: unknown };
   projectLoaded: { url: string | null; name: string; layerIds: string[] };
   selectionChanged: { layerId: string | null; featureIds: string[] };
+  rendererchange: { renderer: MapRenderer };
   viewChanged: Viewport;
   toolCompleted: Record<string, unknown>;
   serverFileWritten: { path: string; toolId: string };
+  /**
+   * A layer's in-memory feature collection was replaced: drawings, edits,
+   * attribute edits, refreshes, late-loaded data. It may fire without a content
+   * change. Debounced per layer (about 250 ms). A layer appearing with features
+   * counts; a layer's removal is sent at once with `removed: true`. Not sent for
+   * whole project loads (use `projectLoaded`), and only when the deployment
+   * grants `export:data`. Read the features with `getLayerFeatures(layerId)`.
+   */
+  featuresChanged: { layerId: string; featureCount: number; removed?: boolean };
 };
 
 type EventName = keyof EmbedEventMap;
@@ -82,9 +108,27 @@ export interface GeoLibreEmbedClient {
   setLayerVisibility(layerId: string, visible: boolean): Promise<void>;
   listLayers(): Promise<LayerSummary[]>;
   setFilter(layerId: string, expression: unknown[] | null): Promise<void>;
+  setRenderer(renderer: MapRenderer): Promise<void>;
+  getRenderer(): Promise<MapRenderer>;
   getViewport(): Promise<Viewport>;
   addLayer(spec: AddLayerSpec): Promise<string>;
+  addData(url: string, options?: AddDataOptions): Promise<string[]>;
   exportImage(): Promise<string>;
+  /**
+   * Read a layer's features (WGS84, ids exactly as stored), the same as the
+   * plugin API's `getLayerFeatures`. Rejects for an unknown layer. A layer
+   * that holds no in-memory features (raster, tiles, remote vector sources)
+   * resolves to an empty array. An empty array therefore means "no in-memory
+   * features" (an empty layer, or a raster, tile or remote source); the layer
+   * `type` from `listLayers` cannot tell these apart. Removed layers reject.
+   */
+  getLayerFeatures(layerId: string): Promise<EmbedFeature[]>;
+  /**
+   * Read the user's free drawings (all Sketches layers, combined), the same as
+   * the plugin API's `getDrawnFeatures`. Resolves to an empty array when
+   * nothing is drawn yet.
+   */
+  getDrawnFeatures(): Promise<EmbedFeature[]>;
   on<K extends EventName>(type: K, listener: Listener<K>): () => void;
   disconnect(): void;
 }
@@ -162,9 +206,14 @@ export function connect(
     setLayerVisibility: (layerId, visible) => send("setLayerVisibility", { layerId, visible }),
     listLayers: () => send<LayerSummary[]>("listLayers"),
     setFilter: (layerId, expression) => send("setFilter", { layerId, expression }),
+    setRenderer: (renderer) => send("setRenderer", { renderer }),
+    getRenderer: () => send<MapRenderer>("getRenderer"),
     getViewport: () => send<Viewport>("getViewport"),
     addLayer: (spec) => send<string>("addLayer", { spec }),
+    addData: (url, options = {}) => send<string[]>("addData", { url, ...options }),
     exportImage: () => send<string>("exportImage"),
+    getLayerFeatures: (layerId) => send<EmbedFeature[]>("getLayerFeatures", { layerId }),
+    getDrawnFeatures: () => send<EmbedFeature[]>("getDrawnFeatures", {}),
     on: (type, listener) => {
       const set = listeners.get(type) ?? new Set();
       set.add(listener as (payload: never) => void);

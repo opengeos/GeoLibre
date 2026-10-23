@@ -385,6 +385,48 @@ describe("undo/redo behavior", () => {
     assert.equal(useAppStore.getState().selectedLayerId, null);
   });
 
+  it("brings back a removed layer's widgets and legend entries on undo", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    useAppStore.getState().addWidget({ id: "w1", layerId: a, type: "histogram", field: "v" });
+    useAppStore
+      .getState()
+      .setLegend({ ...useAppStore.getState().legend, overrides: { [a]: { label: "Alpha" } } });
+    useAppStore.getState().removeLayer(a);
+    assert.equal(useAppStore.getState().widgets.length, 0);
+    assert.deepEqual(useAppStore.getState().legend.overrides, {});
+
+    undo();
+    assert.deepEqual(
+      useAppStore.getState().widgets.map((w) => w.id),
+      ["w1"],
+    );
+    assert.deepEqual(useAppStore.getState().legend.overrides, { [a]: { label: "Alpha" } });
+  });
+
+  it("records a legend edit as its own undo step", () => {
+    useAppStore.getState().setLegend({ ...useAppStore.getState().legend, title: "Before" });
+    useAppStore.getState().setLegend({ ...useAppStore.getState().legend, title: "After" });
+    undo();
+    assert.equal(useAppStore.getState().legend.title, "Before");
+  });
+
+  it("scrubs pane visibility and Print Layout blocks left pointing at a layer undo removed", () => {
+    useAppStore.getState().setMapGrid(1, 2);
+    const a = useAppStore.getState().addGeoJsonLayer("A", emptyFC);
+    // Untracked sections that reference A, as a snapshot layer restore leaves them.
+    useAppStore.setState((s) => ({
+      secondaryMapViews: s.secondaryMapViews.map((pane) => ({
+        ...pane,
+        layerVisibility: { [a]: false },
+      })),
+      printLayout: { ...s.printLayout, tableLayerId: a, showDataTable: true },
+    }));
+    undo(); // removes A
+    assert.deepEqual(useAppStore.getState().secondaryMapViews[0].layerVisibility, {});
+    assert.equal(useAppStore.getState().printLayout.tableLayerId, "");
+    assert.equal(useAppStore.getState().printLayout.showDataTable, false);
+  });
+
   it("resets the coalesce window when history is cleared mid-burst", () => {
     setHistoryCoalesceMs(50); // non-zero so a burst window is active
     useAppStore.getState().addGeoJsonLayer("A", emptyFC); // opens the window

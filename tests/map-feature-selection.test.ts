@@ -1,0 +1,326 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { parseHTML } from "linkedom";
+import { useAppStore } from "@geolibre/core";
+import {
+  attachFeatureSelection,
+  FEATURE_SELECTION_BEGIN_EVENT,
+  type FeatureSelectionMap,
+  type FeatureSelectionState,
+} from "../packages/map/src/map-feature-selection";
+import {
+  CAMERA_HANDLERS,
+  FEATURE_SELECTION_EVENT,
+  type FeatureSelectionShape,
+} from "../packages/map/src/feature-selection";
+import { geojsonLayer } from "./helpers/layer-fixtures";
+
+type MapListener = (event: never) => void;
+
+function withSelectionHarness(body: (harness: ReturnType<typeof makeHarness>) => void): void {
+  const dom = parseHTML("<html><body><div id='map'><canvas></canvas></div></body></html>");
+  const previous = {
+    document: globalThis.document,
+    window: globalThis.window,
+    Event: globalThis.Event,
+    CustomEvent: globalThis.CustomEvent,
+  };
+  Object.assign(globalThis, {
+    document: dom.document,
+    window: dom.window,
+    Event: dom.window.Event,
+    CustomEvent: dom.window.CustomEvent,
+  });
+  try {
+    body(makeHarness(dom.document));
+  } finally {
+    Object.assign(globalThis, previous);
+    useAppStore.setState({
+      layers: [],
+      layerGroups: [],
+      selectedLayerId: null,
+      selectedFeatureId: null,
+      selectedFeatureIds: [],
+      identifyLayerId: null,
+      identifyLayerIds: null,
+      featureSelectionActive: false,
+    });
+  }
+}
+
+function makeHarness(document: Document) {
+  const container = document.querySelector("#map") as HTMLElement;
+  const canvas = container.querySelector("canvas") as HTMLCanvasElement;
+  canvas.getBoundingClientRect = () =>
+    ({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+    }) as DOMRect;
+  const listeners = new Map<string, Set<MapListener>>();
+  const cameraEnabled = new Map(CAMERA_HANDLERS.map((name) => [name, true]));
+  const map = {
+    getCanvas: () => canvas,
+    getContainer: () => container,
+    unproject: ([x, y]: [number, number]) => ({ lng: x, lat: y }),
+    on: (type: string, listener: MapListener) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(listener);
+    },
+    off: (type: string, listener: MapListener) => listeners.get(type)?.delete(listener),
+    ...Object.fromEntries(
+      CAMERA_HANDLERS.map((name) => [
+        name,
+        {
+          isEnabled: () => cameraEnabled.get(name)!,
+          disable: () => cameraEnabled.set(name, false),
+          enable: () => cameraEnabled.set(name, true),
+        },
+      ]),
+    ),
+  } as unknown as FeatureSelectionMap;
+  const fire = (type: string, point: { x: number; y: number }, modifiers = {}) => {
+    const event = {
+      point,
+      originalEvent: { shiftKey: false, altKey: false, ...modifiers },
+      preventDefault() {},
+    };
+    for (const listener of listeners.get(type) ?? []) listener(event as never);
+  };
+  return { map, fire, listeners, cameraEnabled, canvas, container };
+}
+
+function seedLayer(): void {
+  useAppStore.setState({
+    layers: [
+      geojsonLayer({
+        id: "countries",
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              id: "inside",
+              properties: {},
+              geometry: { type: "Point", coordinates: [1, 1] },
+            },
+            {
+              type: "Feature",
+              id: "outside",
+              properties: {},
+              geometry: { type: "Point", coordinates: [5, 5] },
+            },
+          ],
+        },
+      }),
+    ],
+    layerGroups: [],
+    selectedLayerId: null,
+    selectedFeatureId: null,
+    selectedFeatureIds: [],
+  });
+}
+
+function requestSelection(shape: FeatureSelectionShape): void {
+  window.dispatchEvent(
+    new CustomEvent(FEATURE_SELECTION_EVENT, {
+      detail: { layerId: "countries", shape },
+    }),
+  );
+}
+
+type SelectionFire = ReturnType<typeof makeHarness>["fire"];
+
+const completedShapeGestures: Array<{
+  shape: Exclude<FeatureSelectionShape, "single">;
+  draw: (fire: SelectionFire) => void;
+}> = [
+  {
+    shape: "rectangle",
+    draw: (fire) => {
+      fire("mousedown", { x: 0, y: 0 });
+      fire("mousemove", { x: 2, y: 2 });
+      fire("mouseup", { x: 2, y: 2 });
+    },
+  },
+  {
+    shape: "polygon",
+    draw: (fire) => {
+      fire("click", { x: -1, y: -1 });
+      fire("click", { x: 3, y: -1 });
+      fire("click", { x: 3, y: 3 });
+      fire("click", { x: -1, y: 3 });
+      fire("dblclick", { x: -1, y: 3 });
+    },
+  },
+  {
+    shape: "freehand",
+    draw: (fire) => {
+      fire("mousedown", { x: -1, y: -1 });
+      fire("mousemove", { x: 3, y: -1 });
+      fire("mousemove", { x: 3, y: 3 });
+      fire("mousemove", { x: -1, y: 3 });
+      fire("mouseup", { x: -1, y: -1 });
+    },
+  },
+  {
+    shape: "radius",
+    draw: (fire) => {
+      fire("mousedown", { x: 1, y: 1 });
+      fire("mouseup", { x: 3, y: 1 });
+    },
+  },
+];
+
+describe("attachFeatureSelection", () => {
+  it("begins click selection, applies a match, and fully detaches", () => {
+    withSelectionHarness(({ map, fire, listeners, cameraEnabled, canvas, container }) => {
+      seedLayer();
+      const state: FeatureSelectionState = {
+        active: { current: false },
+        cancel: { current: null },
+      };
+      let ended = 0;
+      const detach = attachFeatureSelection(map, {
+        state,
+        featureIdAtPoint: () => "inside",
+        onEnd: () => {
+          ended += 1;
+          canvas.style.cursor = "crosshair";
+        },
+      });
+
+      requestSelection("single");
+      assert.equal(state.active.current, true);
+      assert.equal(useAppStore.getState().featureSelectionActive, true);
+      assert.equal(cameraEnabled.get("boxZoom"), false);
+      assert.equal(canvas.style.cursor, "crosshair");
+      assert.ok(container.querySelector("svg"));
+
+      fire("click", { x: 1, y: 1 });
+      assert.equal(state.active.current, true, "click selection stays armed");
+      assert.equal(useAppStore.getState().featureSelectionActive, true);
+      assert.equal(useAppStore.getState().selectedLayerId, "countries");
+      assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["inside"]);
+
+      detach();
+      assert.equal(state.active.current, false);
+      assert.equal(state.cancel.current, null);
+      assert.equal(useAppStore.getState().featureSelectionActive, false);
+      assert.equal(cameraEnabled.get("boxZoom"), true);
+      assert.equal(canvas.style.cursor, "crosshair");
+      assert.equal(ended, 1);
+      assert.equal(container.querySelector("svg"), null);
+      assert.ok([...listeners.values()].every((registered) => registered.size === 0));
+    });
+  });
+
+  it("keeps the active tool continuous when replacing a gesture and cancels on project change", () => {
+    withSelectionHarness(({ map }) => {
+      seedLayer();
+      const state: FeatureSelectionState = {
+        active: { current: false },
+        cancel: { current: null },
+      };
+      const toolChanges: boolean[] = [];
+      const unsubscribe = useAppStore.subscribe((next, previous) => {
+        if (next.featureSelectionActive !== previous.featureSelectionActive) {
+          toolChanges.push(next.featureSelectionActive);
+        }
+      });
+      const detach = attachFeatureSelection(map, {
+        state,
+        featureIdAtPoint: () => null,
+      });
+
+      requestSelection("single");
+      requestSelection("polygon");
+      assert.equal(state.active.current, true);
+      assert.equal(useAppStore.getState().featureSelectionActive, true);
+      assert.deepEqual(toolChanges, [true]);
+
+      useAppStore.getState().newProject({ name: "Replacement project" });
+      assert.equal(state.active.current, false);
+      assert.equal(useAppStore.getState().featureSelectionActive, false);
+      assert.deepEqual(toolChanges, [true, false]);
+
+      detach();
+      unsubscribe();
+    });
+  });
+
+  it("announces only the replacement when an activation subscriber switches gestures", () => {
+    withSelectionHarness(({ map, fire, listeners, container }) => {
+      seedLayer();
+      const state: FeatureSelectionState = {
+        active: { current: false },
+        cancel: { current: null },
+      };
+      let begins = 0;
+      const onBegin = () => {
+        begins += 1;
+      };
+      window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, onBegin);
+      const detach = attachFeatureSelection(map, {
+        state,
+        featureIdAtPoint: () => null,
+      });
+      const unsubscribe = useAppStore.subscribe((next, previous) => {
+        if (next.featureSelectionActive && !previous.featureSelectionActive) {
+          requestSelection("rectangle");
+        }
+      });
+      try {
+        requestSelection("single");
+        assert.equal(begins, 1);
+        assert.equal(container.querySelectorAll("svg").length, 1);
+        assert.equal(listeners.get("click")?.size, 1);
+
+        fire("mousedown", { x: 0, y: 0 });
+        fire("mousemove", { x: 2, y: 2 });
+        fire("mouseup", { x: 2, y: 2 });
+        assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["inside"]);
+        assert.equal(useAppStore.getState().featureSelectionActive, false);
+        assert.equal(container.querySelector("svg"), null);
+        assert.ok([...listeners.values()].every((registered) => registered.size === 0));
+      } finally {
+        unsubscribe();
+        detach();
+        window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, onBegin);
+      }
+    });
+  });
+
+  for (const { shape, draw } of completedShapeGestures) {
+    it(`finishes ${shape} as a one-shot gesture and restores interaction state`, () => {
+      withSelectionHarness(({ map, fire, listeners, cameraEnabled, canvas, container }) => {
+        seedLayer();
+        const state: FeatureSelectionState = {
+          active: { current: false },
+          cancel: { current: null },
+        };
+        const detach = attachFeatureSelection(map, {
+          state,
+          featureIdAtPoint: () => null,
+        });
+
+        requestSelection(shape);
+        assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === false));
+        draw(fire);
+
+        assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["inside"]);
+        assert.equal(state.active.current, false);
+        assert.equal(state.cancel.current, null);
+        assert.equal(useAppStore.getState().featureSelectionActive, false);
+        assert.equal(canvas.style.cursor, "");
+        assert.equal(container.querySelector("svg"), null);
+        assert.ok(CAMERA_HANDLERS.every((name) => cameraEnabled.get(name) === true));
+        assert.ok([...listeners.values()].every((registered) => registered.size === 0));
+        detach();
+      });
+    });
+  }
+});

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { GeoLibreLayer } from "../packages/core/src/types";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
 import {
   MAX_RAT_SYMBOLOGY_CLASSES,
   categoricalBreaks,
@@ -27,9 +27,9 @@ function layerWith(metadata: Record<string, unknown>): GeoLibreLayer {
     source: { type: "raster" },
     visible: true,
     opacity: 1,
-    style: {},
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata,
-  } as GeoLibreLayer;
+  };
 }
 
 function row(

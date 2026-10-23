@@ -16,8 +16,11 @@ export const DEFAULT_LANGUAGE = "en";
  */
 export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: string }> = {
   en: { nativeName: "English", englishName: "English" },
+  az: { nativeName: "Azərbaycanca", englishName: "Azerbaijani" },
+  he: { nativeName: "עברית", englishName: "Hebrew" },
   zh: { nativeName: "中文", englishName: "Chinese" },
   es: { nativeName: "Español", englishName: "Spanish" },
+  fa: { nativeName: "فارسی", englishName: "Persian" },
   fr: { nativeName: "Français", englishName: "French" },
   de: { nativeName: "Deutsch", englishName: "German" },
   pt: { nativeName: "Português", englishName: "Portuguese" },
@@ -32,6 +35,7 @@ export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: s
   ar: { nativeName: "العربية", englishName: "Arabic" },
   ka: { nativeName: "ქართული", englishName: "Georgian" },
   th: { nativeName: "ไทย", englishName: "Thai" },
+  vi: { nativeName: "Tiếng Việt", englishName: "Vietnamese" },
 };
 
 /**

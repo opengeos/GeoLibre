@@ -1,0 +1,309 @@
+import type { GeoLibreLayer } from "@geolibre/core";
+import {
+  OBIA_FELZENSZWALB_MAX_PIXELS,
+  OBIA_MAX_PIXELS,
+  felzenszwalbSegmentLabels,
+  segmentImage,
+  segmentImageFelzenszwalb,
+  segmentLabels,
+  type ObiaImage,
+  type ObiaSegmentation,
+  type RegionGrowingParams,
+  cancelObiaNativeJob,
+  fetchConversionJob,
+  fetchObiaNativeFile,
+  fetchObiaNativeStatus,
+  nativeFeatureTable,
+  startObiaNativeMeasure,
+  startObiaNativeSegment,
+  type ConversionJob,
+  type ObiaFeatureOptions,
+  type ObiaFeatureTable,
+  type ObiaNativeSegmentation,
+  type ObiaReadArea,
+  type ObiaRunOptions,
+  type ObiaToolCall,
+} from "@geolibre/processing";
+import { isTauri } from "@tauri-apps/api/core";
+import type { FeatureCollection } from "geojson";
+import { IS_MAS_BUILD } from "../build-flags";
+import { startGeoLibreSidecar } from "../sidecar";
+
+/**
+ * How the workbench segments: seeded region growing or Felzenszwalb's graph
+ * method in the browser, or a scikit-image method run natively by the
+ * desktop app's sidecar. The browser Felzenszwalb follows scikit-image's and
+ * shares its parameters.
+ */
+export type ObiaMethod = "region-growing" | "felzenszwalb-browser" | "slic" | "felzenszwalb";
+
+/** Parameters of the native methods. */
+export interface ObiaNativeParams {
+  slic: { size: number; compactness: number };
+  felzenszwalb: { scale: number; sigma: number; minSize: number };
+}
+
+export const DEFAULT_OBIA_NATIVE_PARAMS: ObiaNativeParams = {
+  slic: { size: 400, compactness: 0.1 },
+  felzenszwalb: { scale: 100, sigma: 0.5, minSize: 50 },
+};
+
+/** Whether a method reads the Felzenszwalb parameters (`nativeParams.felzenszwalb`). */
+export const usesMethodParams = (method: ObiaMethod | undefined): boolean =>
+  isNativeMethod(method) || method === "felzenszwalb-browser";
+
+/** The most pixels a browser run of a method reads. */
+export const browserPixelLimit = (method: ObiaMethod | undefined): number =>
+  method === "felzenszwalb-browser" ? OBIA_FELZENSZWALB_MAX_PIXELS : OBIA_MAX_PIXELS;
+
+/**
+ * Segment an image in the browser by the method: Felzenszwalb, or seeded
+ * region growing.
+ *
+ * @param image The bands to segment.
+ * @param method A browser method.
+ * @param params Region-growing parameters.
+ * @param nativeParams Felzenszwalb parameters (with the native methods').
+ * @param run Cancellation and progress.
+ */
+export function segmentInBrowser(
+  image: ObiaImage,
+  method: ObiaMethod,
+  params: RegionGrowingParams,
+  nativeParams: ObiaNativeParams,
+  run: ObiaRunOptions = {},
+): Promise<ObiaSegmentation> {
+  return method === "felzenszwalb-browser"
+    ? segmentImageFelzenszwalb(image, nativeParams.felzenszwalb, run)
+    : segmentImage(image, params, run);
+}
+
+/** The label raster of a browser segmentation, rebuilt the same way. */
+export async function browserSegmentLabels(
+  image: ObiaImage,
+  method: ObiaMethod | undefined,
+  params: RegionGrowingParams,
+  nativeParams: ObiaNativeParams,
+  run: ObiaRunOptions = {},
+): Promise<Uint8Array> {
+  const { labels } =
+    method === "felzenszwalb-browser"
+      ? await felzenszwalbSegmentLabels(image, nativeParams.felzenszwalb, run)
+      : await segmentLabels(image, params, run);
+  return labels;
+}
+
+/** Whether a method runs natively in the sidecar. */
+export const isNativeMethod = (method: ObiaMethod | undefined): method is "slic" | "felzenszwalb" =>
+  method === "slic" || method === "felzenszwalb";
+
+/**
+ * The local file a layer was loaded from, which the sidecar can read; null
+ * for a layer added by URL or from a file the browser holds only in memory.
+ */
+export function obiaLocalPath(layer: GeoLibreLayer): string | null {
+  const path = layer.sourcePath;
+  if (!path || /^[a-z][\w+.-]*:\/\//i.test(path) || path.startsWith("blob:")) return null;
+  return /\.tiff?$/i.test(path) ? path : null;
+}
+
+/** Native availability and each native method's pixel limit. */
+export interface ObiaNativeStatus {
+  available: boolean;
+  /** The runtime is installing scikit-image; ask again later. */
+  installing?: boolean;
+  maxPixels: Record<"slic" | "felzenszwalb", number>;
+}
+
+let statusPromise: Promise<ObiaNativeStatus | null> | null = null;
+
+/**
+ * Whether native segmentation is available: a reachable sidecar (the desktop
+ * app's, which this starts, or a deployment's server-side one) with
+ * scikit-image in its runtime. The first check installs scikit-image, which
+ * can take a minute. The Mac App Store build has no sidecar.
+ *
+ * @returns The availability and native pixel limit, or null when there is no
+ *   sidecar to ask.
+ */
+export function obiaNativeStatus(): Promise<ObiaNativeStatus | null> {
+  if (IS_MAS_BUILD) return Promise.resolve(null);
+  statusPromise ??= (async () => {
+    if (isTauri()) await startGeoLibreSidecar();
+    const status = await fetchObiaNativeStatus();
+    // Keep only a success: an unavailable runtime (say, scikit-image failed
+    // to install offline) is asked about again next time.
+    if (!status.available) statusPromise = null;
+    return {
+      available: status.available,
+      ...(status.installing ? { installing: true } : {}),
+      maxPixels: {
+        slic: status.max_pixels?.slic ?? 0,
+        felzenszwalb: status.max_pixels?.felzenszwalb ?? 0,
+      },
+    };
+  })().catch(() => {
+    // No sidecar (a plain web build): ask again next time, it may start later.
+    statusPromise = null;
+    return null;
+  });
+  return statusPromise;
+}
+
+/**
+ * The pixels a native run may read: the method's limit, lowered in proportion
+ * for more than 4 bands, as the sidecar does.
+ *
+ * @param status Native availability and limits.
+ * @param method The native method.
+ * @param bandCount Bands to segment.
+ */
+export function nativePixelLimit(
+  status: ObiaNativeStatus,
+  method: "slic" | "felzenszwalb",
+  bandCount: number,
+): number {
+  return Math.floor((status.maxPixels[method] * 4) / Math.max(4, bandCount));
+}
+
+/** The native request for a segmentation. */
+export function nativeSegmentation(
+  path: string,
+  bandIndexes: readonly number[],
+  area: ObiaReadArea | undefined,
+  method: "slic" | "felzenszwalb",
+  params: ObiaNativeParams,
+): ObiaNativeSegmentation {
+  return {
+    input_path: path,
+    bands: [...bandIndexes],
+    area: area ? { level: area.level, window: [...area.window] } : null,
+    method,
+    slic: method === "slic" ? { ...params.slic } : null,
+    felzenszwalb:
+      method === "felzenszwalb"
+        ? {
+            scale: params.felzenszwalb.scale,
+            sigma: params.felzenszwalb.sigma,
+            min_size: params.felzenszwalb.minSize,
+          }
+        : null,
+  };
+}
+
+/** A native call as a provenance entry: the endpoint and its JSON body. */
+function callOf(tool: string, body: object): ObiaToolCall {
+  return { tool, args: [JSON.stringify(body)] };
+}
+
+/**
+ * Wait for a sidecar job to finish, reporting it as the run's step and
+ * cancelling it when the run is cancelled.
+ */
+async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<ConversionJob> {
+  let current = job;
+  const cancel = () => void cancelObiaNativeJob(job.id);
+  run.onStep?.(job.tool_id);
+  run.signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    while (current.status === "pending" || current.status === "running") {
+      if (run.signal?.aborted) {
+        cancel();
+        throw new DOMException(`${job.tool_id} was cancelled.`, "AbortError");
+      }
+      // Wake early on Cancel instead of finishing the second.
+      await new Promise<void>((resolve) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          run.signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, 1000);
+        run.signal?.addEventListener("abort", onAbort, { once: true });
+      });
+      current = await fetchConversionJob(job.id);
+    }
+  } finally {
+    run.signal?.removeEventListener("abort", cancel);
+  }
+  if (current.status === "cancelled" || run.signal?.aborted) {
+    throw new DOMException(`${job.tool_id} was cancelled.`, "AbortError");
+  }
+  if (current.status !== "succeeded") throw new Error(current.error || `${job.tool_id} failed.`);
+  return current;
+}
+
+/** Refuse to start a job for a run that is already cancelled. */
+function throwIfAborted(run: ObiaRunOptions, tool: string): void {
+  if (run.signal?.aborted) throw new DOMException(`${tool} was cancelled.`, "AbortError");
+}
+
+/** A finished native segmentation. */
+export interface ObiaNativeSegmentResult {
+  labels: Uint8Array;
+  objects: FeatureCollection;
+  objectCount: number;
+  width: number;
+  height: number;
+  pixelSize: number;
+  jobId: string;
+  call: ObiaToolCall;
+}
+
+/**
+ * Segment and polygonize natively in the sidecar, and download the label
+ * raster and objects.
+ *
+ * @param request The native segmentation.
+ * @param run Cancellation and progress.
+ */
+export async function runNativeSegmentation(
+  request: ObiaNativeSegmentation,
+  run: ObiaRunOptions = {},
+): Promise<ObiaNativeSegmentResult> {
+  throwIfAborted(run, "obia-segment");
+  const job = await waitForJob(await startObiaNativeSegment(request), run);
+  const result = (job.result ?? {}) as Record<string, number>;
+  const [labels, objects] = await Promise.all([
+    fetchObiaNativeFile(job.id, "segments.tif"),
+    fetchObiaNativeFile(job.id, "objects.geojson"),
+  ]);
+  return {
+    labels,
+    objects: JSON.parse(new TextDecoder().decode(objects)) as FeatureCollection,
+    objectCount: Number(result.object_count ?? 0),
+    width: Number(result.width ?? 0),
+    height: Number(result.height ?? 0),
+    pixelSize: Number(result.pixel_size ?? 0),
+    jobId: job.id,
+    call: callOf("obia/segment", { ...request, input_path: undefined }),
+  };
+}
+
+/**
+ * Measure a native segmentation's objects in the sidecar.
+ *
+ * @param request The segmentation the objects came from.
+ * @param options Feature options; texture is not available natively.
+ * @param segmentJobId The segmentation's job, whose labels the sidecar reuses
+ *   while it keeps them.
+ * @param run Cancellation and progress.
+ */
+export async function runNativeMeasure(
+  request: ObiaNativeSegmentation,
+  options: ObiaFeatureOptions,
+  segmentJobId: string | null,
+  run: ObiaRunOptions = {},
+): Promise<{ table: ObiaFeatureTable; call: ObiaToolCall; objectCount: number }> {
+  throwIfAborted(run, "obia-measure");
+  const native = { spectral: options.spectral, shape: options.shape, context: options.context };
+  const job = await waitForJob(await startObiaNativeMeasure(request, native, segmentJobId), run);
+  const csv = new TextDecoder().decode(await fetchObiaNativeFile(job.id, "features.csv"));
+  return {
+    objectCount: Number((job.result as { object_count?: number } | null)?.object_count ?? 0),
+    table: nativeFeatureTable(csv, request.bands, options.spectral ? options.indices : undefined),
+    call: callOf("obia/measure", { options: native }),
+  };
+}

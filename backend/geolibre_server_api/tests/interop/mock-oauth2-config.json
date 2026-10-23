@@ -1,0 +1,33 @@
+{
+  "interactiveLogin": false,
+  "httpServer": {
+    "type": "NettyWrapper",
+    "ssl": {
+      "keystoreFile": "/idp/keystore.p12",
+      "keystoreType": "PKCS12",
+      "keystorePassword": "changeit",
+      "keyPassword": "changeit"
+    }
+  },
+  "tokenCallbacks": [
+    {
+      "issuerId": "geolibre",
+      "tokenExpiry": 300,
+      "requestMappings": [
+        {
+          "requestParam": "code",
+          "match": "*",
+          "claims": {
+            "sub": "interop-user-1",
+            "aud": ["geolibre-interop"],
+            "preferred_username": "interop.user",
+            "email": "interop@example.org",
+            "email_verified": true,
+            "groups": ["gis-admins"],
+            "amr": ["mfa"]
+          }
+        }
+      ]
+    }
+  ]
+}

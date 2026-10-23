@@ -140,7 +140,7 @@ describe("Geohash plugin helpers", () => {
 
     const neighbors = geohashNeighborCells(cell);
     assert.ok(neighbors.includes(cell));
-    assert.equal(neighbors.length, 9);
+    assert.equal(neighbors.length, 5);
     for (const neighbor of neighbors) {
       assert.equal(neighbor.length, 6);
     }

@@ -105,7 +105,7 @@ function geometriesEqual(a: Geometry | null, b: Geometry | null, tol: number): b
       a.geometries.every((g, i) => geometriesEqual(g, subB[i], tol))
     );
   }
-  return almostEqual(a.coordinates, b.coordinates, tol);
+  return almostEqual(a.coordinates, (b as typeof a).coordinates, tol);
 }
 
 function bboxOf(features: Feature[]): [number, number, number, number] | null {

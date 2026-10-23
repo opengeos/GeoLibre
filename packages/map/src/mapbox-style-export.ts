@@ -1,9 +1,12 @@
 import {
   DEFAULT_LAYER_STYLE,
+  compileLayerFilters,
+  labelFieldTextField,
   ruleBasedVisibilityFilter,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
+  documentLocale,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
@@ -26,6 +29,21 @@ const DEFAULT_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{ran
 
 /** Font stack used for exported label layers (a widely available default). */
 const DEFAULT_TEXT_FONT = ["Open Sans Regular", "Arial Unicode MS Regular"];
+
+/**
+ * Strip the `*-layer-opacity` properties `fillPaint` / `linePaint` emit to
+ * elect MapLibre's blend-mode composite path (see `layer-blend-modes`).
+ *
+ * They are MapLibre 6 additions that Mapbox GL rejects outright, and an
+ * exported style is a portable fragment meant to drop into either renderer.
+ * Nothing is lost by dropping them: a blend mode is a GeoLibre render-loop
+ * concern with no style-spec representation, so it cannot travel in a style
+ * file at all.
+ */
+function withoutLayerOpacity<T extends Record<string, unknown>>(paint: T): T {
+  const { "fill-layer-opacity": _fill, "line-layer-opacity": _line, ...rest } = paint;
+  return rest as unknown as T;
+}
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -54,7 +72,7 @@ export interface MapboxStyleExportResult {
  */
 export type ExportableLayer = Pick<
   GeoLibreLayer,
-  "id" | "name" | "type" | "style" | "opacity" | "visible"
+  "id" | "name" | "type" | "style" | "opacity" | "visible" | "quickFilters" | "filterExpression"
 >;
 
 export interface MapboxStyleExportOptions {
@@ -141,20 +159,18 @@ function labelTextField(style: LayerStyle, warnings: string[]): ExpressionSpecif
       warnings.push("Label expression could not be parsed; used the label field instead.");
     }
   }
-  if (labels.field) {
-    return [
-      "to-string",
-      ["coalesce", ["get", labels.field], ""],
-    ] as unknown as ExpressionSpecification;
-  }
-  return null;
+  // Shared with the live map so an exported style labels exactly as the map
+  // does, number formatting included.
+  const fieldTextField = labelFieldTextField(labels, documentLocale());
+  return fieldTextField === "" ? null : (fieldTextField as unknown as ExpressionSpecification);
 }
 
 /**
- * The symbol (label) layer for a layer whose labels are enabled. `ruleFilter`
- * is the rule-based hide-unmatched filter (or null) — the live map filters
- * labels too, so the exported label layer must not label features the render
- * layers drop.
+ * The symbol (label) layer for a layer whose labels are enabled.
+ * `visibilityFilter` is the layer's per-feature filter — the rule-based
+ * hide-unmatched filter and the compiled quick filters, or null — because the
+ * live map filters labels too, so the exported label layer must not label
+ * features the render layers drop.
  */
 function buildLabelLayer(
   layer: ExportableLayer,
@@ -163,7 +179,7 @@ function buildLabelLayer(
   visibility: "visible" | "none",
   pointOnly: boolean,
   warnings: string[],
-  ruleFilter: unknown[] | null,
+  visibilityFilter: unknown[] | null,
 ): LayerSpecification | null {
   const style = layer.style;
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
@@ -203,7 +219,7 @@ function buildLabelLayer(
     type: "symbol",
     source: sourceKey,
     ...range,
-    ...(ruleFilter ? { filter: ruleFilter as unknown as ExpressionSpecification } : {}),
+    ...(visibilityFilter ? { filter: visibilityFilter as unknown as ExpressionSpecification } : {}),
     layout: {
       "text-field": textField,
       "text-font": DEFAULT_TEXT_FONT,
@@ -282,14 +298,25 @@ export function buildMapboxStyle(
   const zoom = zoomRange(style);
 
   // A rule-based layer whose else rule is switched off hides features matching
-  // no rule; the live map does that with a per-feature filter, so fold the same
-  // filter into every exported render layer or the exported style would draw
-  // features GeoLibre hides.
-  const ruleFilter = ruleBasedVisibilityFilter(style);
+  // no rule, and the layer's authored filters hide whatever they exclude; the
+  // live map does both with a per-feature filter, so fold the same filters into
+  // every exported render layer or the exported style would draw features
+  // GeoLibre hides.
+  const visibilityFilters = [ruleBasedVisibilityFilter(style), compileLayerFilters(layer)].filter(
+    (filter): filter is unknown[] => filter !== null,
+  );
   const withRuleVisibility = (geometryFilter: ExpressionSpecification): ExpressionSpecification =>
-    ruleFilter
-      ? (["all", geometryFilter, ruleFilter] as unknown as ExpressionSpecification)
+    visibilityFilters.length > 0
+      ? (["all", geometryFilter, ...visibilityFilters] as unknown as ExpressionSpecification)
       : geometryFilter;
+  // The label layer carries the same filter on its own (it has no geometry
+  // filter to combine with), so collapse the list once for it.
+  const visibilityFilter =
+    visibilityFilters.length === 0
+      ? null
+      : visibilityFilters.length === 1
+        ? visibilityFilters[0]
+        : (["all", ...visibilityFilters] as unknown[]);
 
   // Only warn about a dropped fill pattern when the layer actually has polygons
   // to fill (and is not extruded, where the pattern never applies).
@@ -323,7 +350,7 @@ export function buildMapboxStyle(
         source: sourceKey,
         ...zoom,
         filter: withRuleVisibility(POLYGON_FILTER),
-        paint: fillPaint(style, opacity),
+        paint: withoutLayerOpacity(fillPaint(style, opacity)),
         layout: { visibility },
       } as LayerSpecification);
     }
@@ -336,7 +363,7 @@ export function buildMapboxStyle(
       source: sourceKey,
       ...zoom,
       filter: withRuleVisibility(LINE_FILTER),
-      paint: linePaint(style, opacity),
+      paint: withoutLayerOpacity(linePaint(style, opacity)),
       layout: { visibility },
     } as LayerSpecification);
   }
@@ -396,7 +423,15 @@ export function buildMapboxStyle(
   const labelLayer =
     style.extrusionEnabled || effectiveRenderer === "heatmap"
       ? null
-      : buildLabelLayer(layer, sourceKey, idBase, visibility, pointOnly, warnings, ruleFilter);
+      : buildLabelLayer(
+          layer,
+          sourceKey,
+          idBase,
+          visibility,
+          pointOnly,
+          warnings,
+          visibilityFilter,
+        );
   if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a

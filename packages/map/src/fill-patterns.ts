@@ -1,5 +1,6 @@
 import { normalizeHexColor, styleValue, type FillPattern, type LayerStyle } from "@geolibre/core";
 import {
+  generatedImageToCanvas,
   hashText,
   registerGeneratedImage,
   resolveSvgSource,
@@ -133,4 +134,24 @@ export function prepareFillPattern(style: LayerStyle): string | null {
   const id = `geolibre-pattern-${pattern}-${color.replace("#", "")}`;
   registerGeneratedImage(id, () => drawBuiltinPattern(pattern, color));
   return id;
+}
+
+/**
+ * The fill pattern tile as a canvas, for a renderer that takes an element
+ * rather than a MapLibre image id (the globe's polygon materials). Resolves
+ * `null` when no pattern applies or the SVG cannot be rasterised.
+ *
+ * @param style - The layer style.
+ */
+export async function renderFillPatternCanvas(
+  style: LayerStyle,
+): Promise<{ canvas: HTMLCanvasElement; pixelRatio: number } | null> {
+  const pattern = styleValue(style, "fillPattern");
+  if (pattern === "none") return Promise.resolve(null);
+  if (pattern === "svg") {
+    const markup = styleValue(style, "fillPatternSvg").trim();
+    return markup ? generatedImageToCanvas(loadSvgImage(markup)) : Promise.resolve(null);
+  }
+  if (!BUILTIN_PATTERNS.has(pattern)) return Promise.resolve(null);
+  return generatedImageToCanvas(drawBuiltinPattern(pattern, patternColor(style)));
 }

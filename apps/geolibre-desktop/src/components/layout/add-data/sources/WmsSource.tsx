@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { buildWmsLayer } from "../apply-service";
 import {
@@ -8,14 +8,27 @@ import {
   DEFAULT_WMS_LAYERS,
   GEBCO_WMS_ENDPOINT,
   GEBCO_WMS_LAYERS,
+  NLCD_WMS_ENDPOINT,
+  NLCD_WMS_LAYERS,
 } from "../constants";
 import {
   fetchWmsCapabilities,
+  isServiceFormUrl,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
+  stripOgcOperationParams,
+  wmsCrsChoices,
+  wmsLayersQueryable,
+  pickWmsCrs,
+  usableWmsCrs,
+  wmsLayersAdvertiseCrs,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
+import { routeWmsLayerThroughNativeProtocol } from "../../../../lib/xyz-url";
+import { isHttpWmsUrl } from "../../../../lib/native-wms-url";
+import { reprojectableWmsCodes, reprojectableWmsCrs } from "../../../../lib/wms-projected";
+import { isTauri } from "../../../../lib/tauri-io";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
@@ -34,32 +47,48 @@ interface WmsFormCache {
   tileSize: string;
   version: string;
   versionTouched: boolean;
+  crs: string;
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
 
-export function WmsSource() {
+export function WmsSource({
+  initialUrl = "",
+  initialLayers = "",
+}: {
+  initialUrl?: string;
+  initialLayers?: string;
+}) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState(wmsFormCache?.endpoint ?? "");
-  const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
-  const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
+  const [wmsEndpoint, setWmsEndpoint] = useState(initialUrl || wmsFormCache?.endpoint || "");
+  // A deep link brings its own service, so everything the cache holds *about a
+  // service* belongs to a different one: its layers, styles, retrieved layer
+  // list and negotiated version. Pairing a fresh endpoint with any of those
+  // would describe a service this form is no longer pointed at. Generic
+  // preferences (image format, transparency, tile size) still carry over.
+  const serviceCache = initialUrl ? null : wmsFormCache;
+  const [wmsLayers, setWmsLayers] = useState(initialLayers || (serviceCache?.layers ?? ""));
+  const [wmsStyles, setWmsStyles] = useState(serviceCache?.styles ?? "");
   const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
   const [wmsTransparent, setWmsTransparent] = useState(wmsFormCache?.transparent ?? true);
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
-  const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
+  const [wmsVersion, setWmsVersion] = useState(serviceCache?.version ?? "1.1.1");
   // True while the version has an explicit source — the selector, a pasted
   // URL's VERSION parameter, or a saved service entry. Capabilities
   // auto-detection only fills the version in when no explicit source exists.
   // Mirrored in a ref so the async retrieve handler reads the value current at
   // response time, not the one captured when the button was clicked.
-  const [versionTouched, setVersionTouched] = useState(wmsFormCache?.versionTouched ?? false);
+  const [versionTouched, setVersionTouched] = useState(serviceCache?.versionTouched ?? false);
   const versionTouchedRef = useRef(versionTouched);
   const markVersionTouched = (touched: boolean) => {
     versionTouchedRef.current = touched;
     setVersionTouched(touched);
   };
-  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(wmsFormCache?.options ?? []);
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(serviceCache?.options ?? []);
+  // The CRS picked in the selector or restored from a saved service; empty for
+  // the default. It applies only while the layers offer it (see wmsCrs below).
+  const [wmsCrsPick, setWmsCrsPick] = useState(serviceCache?.crs ?? "");
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();
@@ -76,6 +105,7 @@ export function WmsSource() {
       tileSize: wmsTileSize,
       version: wmsVersion,
       versionTouched,
+      crs: wmsCrsPick,
       options: layerOptions,
     };
   }, [
@@ -87,8 +117,68 @@ export function WmsSource() {
     wmsTileSize,
     wmsVersion,
     versionTouched,
+    wmsCrsPick,
     layerOptions,
   ]);
+
+  // The CRS codes every selected layer advertises. The desktop tile protocol
+  // reprojects them into Web Mercator, so there the user can request a layer
+  // in a CRS of its own; the web build cannot, and keeps EPSG:3857.
+  const advertisedCrs = useMemo(
+    () => wmsCrsChoices(layerOptions, wmsLayers, wmsVersion),
+    [layerOptions, wmsLayers, wmsVersion],
+  );
+  // Of those, and of the user's own pick (a saved service may carry one), the
+  // ones the tile protocol can reproject: an EPSG code missing from its tables
+  // cannot be. The web build checks too, so its note promises only CRSs the
+  // desktop app can draw.
+  const usablePick = usableWmsCrs(wmsCrsPick, wmsVersion);
+  const checkedKey = [...new Set([...advertisedCrs, ...(usablePick ? [usablePick] : [])])].join(
+    ",",
+  );
+  // Keyed by the list it was computed for, so a stale result never applies.
+  const [reprojectable, setReprojectable] = useState<{ key: string; codes: ReadonlySet<string> }>({
+    key: "",
+    codes: new Set(),
+  });
+  useEffect(() => {
+    if (!checkedKey) return;
+    let cancelled = false;
+    void reprojectableWmsCodes(checkedKey.split(",")).then((codes) => {
+      if (!cancelled) setReprojectable({ key: checkedKey, codes: new Set(codes) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkedKey]);
+  const reprojectableReady = reprojectable.key === checkedKey;
+  const canDraw = (code: string) => reprojectableReady && reprojectable.codes.has(code);
+  const reprojectableChoices = advertisedCrs.filter(canDraw);
+  const crsChoices = isTauri() ? reprojectableChoices : advertisedCrs;
+  const layersAdvertiseCrs = wmsLayersAdvertiseCrs(layerOptions, wmsLayers);
+  // A pick the tile protocol turned out unable to draw is dropped, so the form
+  // never claims a reprojection the submit would not do.
+  const pickUndrawable =
+    isTauri() && reprojectableReady && usablePick !== undefined && !canDraw(usablePick);
+  const pickedCrs = pickWmsCrs(
+    crsChoices,
+    pickUndrawable ? "" : wmsCrsPick,
+    wmsVersion,
+    layersAdvertiseCrs,
+  );
+  const wmsCrs = isTauri() ? pickedCrs : "EPSG:3857";
+  // Without retrieved layers (typed by hand, or a saved service) the selector
+  // still shows the saved CRS and lets the user go back to EPSG:3857.
+  const crsOptions = crsChoices.length > 0 ? crsChoices : [...new Set([wmsCrs, "EPSG:3857"])];
+  const showCrs = isTauri() && crsOptions.some((code) => code !== "EPSG:3857");
+  const showCrsWebNote =
+    !isTauri() && reprojectableChoices.length > 0 && !reprojectableChoices.includes("EPSG:3857");
+  // The selected layers offer only CRSs this build cannot reproject: say so
+  // rather than silently requesting Web Mercator, which they do not offer.
+  const showCrsUnsupportedNote =
+    isTauri() && reprojectableReady && advertisedCrs.length > 0 && crsChoices.length === 0;
+  // The saved or picked CRS cannot be drawn and the layers offer nothing else.
+  const showPickUnsupportedNote = pickUndrawable && advertisedCrs.length === 0;
   // Guards against a stale in-flight retrieval overwriting the form after the
   // user has moved on: a monotonic token identifies the latest request, and the
   // AbortController cancels the previous one when a new request or an endpoint
@@ -113,7 +203,10 @@ export function WmsSource() {
 
   const handleRetrieveLayers = async () => {
     const endpoint = wmsEndpoint.trim();
-    if (!endpoint) {
+    // Relative endpoints are a web-origin deployment feature: in the desktop
+    // app they would resolve against the app origin, and the native HTTP path
+    // needs an absolute URL, so require http(s) there with the translated error.
+    if (!isServiceFormUrl(endpoint) || (isTauri() && !isHttpWmsUrl(endpoint))) {
       setRetrieveError(t("addData.wms.errorUrl"));
       return;
     }
@@ -156,6 +249,9 @@ export function WmsSource() {
     }
   };
 
+  // The web build cannot pick a CRS but keeps one set on desktop, so saving a
+  // service there again does not drop it.
+  const savedCrs = isTauri() ? wmsCrs : wmsCrsPick;
   const getFields = (): ServiceFields => ({
     endpoint: wmsEndpoint,
     layers: wmsLayers,
@@ -165,7 +261,10 @@ export function WmsSource() {
     tileSize: wmsTileSize,
     // Only persist the version when it has an explicit source; an untouched
     // default stays eligible for URL/capabilities auto-detection on reload.
-    ...(versionTouched ? { version: wmsVersion } : {}),
+    // CRS:84 exists only in WMS 1.3.0, so it keeps the version it needs even
+    // when the version came from capabilities auto-detection.
+    ...(versionTouched || savedCrs === "CRS:84" ? { version: wmsVersion } : {}),
+    ...(savedCrs && savedCrs !== "EPSG:3857" ? { crs: savedCrs } : {}),
   });
 
   const applyFields = (fields: ServiceFields) => {
@@ -185,6 +284,7 @@ export function WmsSource() {
     const detectedVersion = wmsVersionFromEndpoint(endpoint);
     setWmsVersion(normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"));
     markVersionTouched(Boolean(savedVersion || detectedVersion));
+    setWmsCrsPick(serviceFieldString(fields, "crs").trim().toUpperCase());
     // The new endpoint's layers must be re-retrieved, so drop the old list and
     // cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
@@ -192,9 +292,20 @@ export function WmsSource() {
     setRetrieveError(null);
   };
 
-  const handleSubmit = source.runSubmit(() => {
+  // The CRS to submit, resolved against the reprojection check even when the
+  // one behind the selector has not finished yet, so an early submit never
+  // requests a CRS the selected layers do not offer.
+  const submittedCrs = async (): Promise<string | undefined> => {
+    if (!isTauri()) return undefined;
+    const choices = reprojectableReady ? crsChoices : await reprojectableWmsCodes(advertisedCrs);
+    return reprojectableWmsCrs(pickWmsCrs(choices, wmsCrsPick, wmsVersion, layersAdvertiseCrs));
+  };
+
+  const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || t("addData.wms.defaultName");
-    if (!wmsEndpoint.trim()) throw new Error(t("addData.wms.errorUrl"));
+    if (!isServiceFormUrl(wmsEndpoint.trim()) || (isTauri() && !isHttpWmsUrl(wmsEndpoint.trim()))) {
+      throw new Error(t("addData.wms.errorUrl"));
+    }
     if (!wmsLayers.trim()) {
       throw new Error(t("addData.wms.errorLayers"));
     }
@@ -202,16 +313,20 @@ export function WmsSource() {
     // GetCapabilities URL), normalizes the version, and credits known keyless
     // services (e.g. GEBCO) in the map's attribution control.
     source.addAndClose(
-      buildWmsLayer({
-        name,
-        endpoint: wmsEndpoint,
-        layers: wmsLayers,
-        styles: wmsStyles,
-        format: wmsFormat,
-        transparent: wmsTransparent,
-        tileSize: wmsTileSize,
-        version: wmsVersion,
-      }),
+      routeWmsLayerThroughNativeProtocol(
+        buildWmsLayer({
+          name,
+          endpoint: wmsEndpoint,
+          layers: wmsLayers,
+          styles: wmsStyles,
+          format: wmsFormat,
+          transparent: wmsTransparent,
+          tileSize: wmsTileSize,
+          version: wmsVersion,
+          crs: await submittedCrs(),
+          queryable: wmsLayersQueryable(layerOptions, wmsLayers),
+        }),
+      ),
     );
   });
 
@@ -266,6 +381,15 @@ export function WmsSource() {
                 } else if (detected && detected !== wmsVersionFromEndpoint(previous)) {
                   setWmsVersion(detected);
                   markVersionTouched(true);
+                }
+                // The CRS belongs to the service, and a query parameter can
+                // select a different one on the same path (MapServer's `map=`):
+                // compare everything but the WMS operation parameters.
+                if (
+                  stripOgcOperationParams(value.trim(), "WMS") !==
+                  stripOgcOperationParams(previous.trim(), "WMS")
+                ) {
+                  setWmsCrsPick("");
                 }
                 // Layers belong to the previous endpoint; clear them (and cancel
                 // any in-flight retrieval) so the list never reflects a
@@ -377,7 +501,37 @@ export function WmsSource() {
               <option value="1.3.0">1.3.0</option>
             </Select>
           </div>
+          {showCrs ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="wms-crs">{t("addData.wms.crs")}</Label>
+              <Select
+                id="wms-crs"
+                value={wmsCrs}
+                onChange={(event) => setWmsCrsPick(event.target.value)}
+              >
+                {crsOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </Select>
+              {wmsCrs !== "EPSG:3857" ? (
+                <p className="text-xs text-muted-foreground">{t("addData.wms.crsReprojected")}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
+        {showCrsWebNote ? (
+          <p className="text-xs text-muted-foreground">{t("addData.wms.crsDesktopOnly")}</p>
+        ) : null}
+        {showCrsUnsupportedNote ? (
+          <p className="text-xs text-muted-foreground">{t("addData.wms.crsUnsupported")}</p>
+        ) : null}
+        {showPickUnsupportedNote ? (
+          <p className="text-xs text-muted-foreground">
+            {t("addData.wms.crsPickUnsupported", { crs: usablePick })}
+          </p>
+        ) : null}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -399,6 +553,10 @@ export function WmsSource() {
                 layers: GEBCO_WMS_LAYERS,
                 version: "1.3.0",
               },
+            },
+            {
+              label: t("addData.wms.sampleLabelNlcd"),
+              value: { endpoint: NLCD_WMS_ENDPOINT, layers: NLCD_WMS_LAYERS },
             },
           ]}
           onSelect={applyFields}

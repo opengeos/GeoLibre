@@ -20,7 +20,7 @@
  * a user imported: a "decompression bomb" that is a few KB on disk can declare
  * 50000x50000 and make the decode below allocate gigabytes on the main thread.
  * The compressed-size caps around the callers (`MAX_OVERLAY_IMAGE_BYTES` in
- * `tauri-io.ts`) bound the *file*, not what it expands to, so the ceiling has to
+ * `file-io/kml-kmz.ts`) bound the *file*, not what it expands to, so the ceiling has to
  * be checked here, before any pixel buffer is allocated. 64 megapixels leaves
  * room for the large aerials a ground overlay legitimately carries — at 4 bytes
  * per pixel it still bounds the RGBA buffer at 256 MB.

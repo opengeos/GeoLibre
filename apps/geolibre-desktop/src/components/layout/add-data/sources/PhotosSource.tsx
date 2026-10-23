@@ -1,17 +1,12 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import { Button, Label } from "@geolibre/ui";
 import { Images, MapPin } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  type GeotaggedPhotoResult,
-  loadGeotaggedPhotos,
-  loadPhotosAtLocation,
-  relocatePhotoFeatures,
-} from "../../../../lib/geotagged-photos";
+import type { GeotaggedPhotoResult } from "../../../../lib/geotagged-photos";
 import { pickImageFilesWithFallback } from "../../../../lib/tauri-io";
 import { createBaseLayer, errorMessage } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { AddDataError, AddDataSourceForm, useAddDataSource } from "../shared";
 
 /** Round a lng/lat for the placement prompt so it reads cleanly. */
 function formatCoordinate(value: number): string {
@@ -58,6 +53,8 @@ export function PhotosSource() {
       throw new Error(t("addData.photos.errorChooseFiles"));
     }
 
+    // Loaded on demand so the importer stays out of the boot bundle.
+    const { loadGeotaggedPhotos } = await import("../../../../lib/geotagged-photos");
     const result = await loadGeotaggedPhotos(selectedFiles);
     if (result.located === 0) {
       // A single photo with no GPS pivots to manual placement instead of a hard
@@ -89,7 +86,7 @@ export function PhotosSource() {
       geojson: result.featureCollection,
     };
     source.shell.addLayer(layer, source.beforeLayer);
-    source.shell.mapControllerRef.current?.fitLayer(layer);
+    if (shouldZoomToNewLayers()) source.shell.mapControllerRef.current?.fitLayer(layer);
     // Keep the dialog open on a summary panel so the skipped/no-thumbnail
     // counts are reported clearly before the user dismisses it.
     setSummary(result);
@@ -98,6 +95,8 @@ export function PhotosSource() {
   const handleManualPlace = source.runSubmit(async () => {
     if (!manualCenter) return;
     const name = source.layerName.trim() || defaultName;
+    const { loadPhotosAtLocation, relocatePhotoFeatures } =
+      await import("../../../../lib/geotagged-photos");
     const result = await loadPhotosAtLocation(selectedFiles, manualCenter);
     const layer = {
       ...createBaseLayer(
@@ -191,7 +190,7 @@ export function PhotosSource() {
             })}
           </p>
         </div>
-        {source.error ? <p className="text-sm text-destructive">{source.error}</p> : null}
+        {source.error ? <AddDataError message={source.error} /> : null}
         <div className="flex justify-end gap-2">
           <Button
             type="button"

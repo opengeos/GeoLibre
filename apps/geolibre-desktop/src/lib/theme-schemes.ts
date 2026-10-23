@@ -3,7 +3,7 @@
  * re-tints the accent-bearing tokens (`--primary`, `--primary-foreground`,
  * `--ring`); the neutral base (background, border, muted) is shared.
  *
- * Preset schemes have their token values baked into `packages/ui/src/globals.css`
+ * Preset schemes have their token values baked into `packages/ui/src/theme.css`
  * under `[data-theme="<id>"]` selectors and are selected via a `data-theme`
  * attribute on <html>. The "custom" scheme instead derives its tokens from a
  * user-picked hex color at runtime and injects them as inline styles on <html>
@@ -12,7 +12,7 @@
  */
 /**
  * Preset scheme ids, the single source of truth. Each one has a matching
- * `[data-theme="<id>"]` block in `globals.css` and an entry in `THEME_SCHEMES`.
+ * `[data-theme="<id>"]` block in `theme.css` and an entry in `THEME_SCHEMES`.
  * Deriving the type from this array keeps the three in sync: adding an id here
  * without a `THEME_SCHEMES` entry is a compile error (the array is typed against
  * the derived id), so persisted values can't silently fall back to the default.
@@ -26,9 +26,9 @@ export type ThemeScheme = PresetScheme | "custom";
 
 /**
  * The default scheme matches the base `:root` / `.dark` tokens already shipped in
- * `globals.css`, so no `data-theme` attribute is set for it. Invariant: if this
+ * `theme.css`, so no `data-theme` attribute is set for it. Invariant: if this
  * ever changes to another preset, add a `[data-theme="<old default>"]` block in
- * `globals.css` for the now-non-default scheme (see `applyThemeScheme`).
+ * `theme.css` for the now-non-default scheme (see `applyThemeScheme`).
  */
 export const DEFAULT_THEME_SCHEME: PresetScheme = "blue";
 

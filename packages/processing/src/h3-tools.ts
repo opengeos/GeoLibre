@@ -1,6 +1,9 @@
+// H3 SQL builders and resolution math. The user-facing H3 algorithms live in
+// `dggs-tools.ts` (the DGGS Generator / Binning / Compact tools, `dggsType:
+// "h3"`), which is what `VECTOR_TOOLS` registers; this module has no registry
+// of its own.
 import type { FeatureCollection, Geometry } from "geojson";
 import { unwrapAntimeridianGeometry } from "./antimeridian";
-import type { ProcessingAlgorithm } from "./types";
 
 /** Average area (km^2) of an H3 cell at each resolution 0..15 (official values). */
 export const H3_AVG_AREA_KM2: number[] = [
@@ -131,29 +134,43 @@ export function buildGridFromWktSql(wkt: string, res: number, compact = false): 
 }
 
 /**
- * Grid SQL from a lon/lat bbox. After {@link normalizeLonLatBbox}, a whole-world
- * request is [-180, s, 180, n]; a single ring polyfills to a dateline sliver, so
- * that case is split into western/eastern hemispheres and unioned.
+ * Grid SQL from lon/lat boxes. After {@link normalizeLonLatBbox}, a whole-world
+ * request is [-180, s, 180, n]; a single ring polyfill to a dateline sliver, so
+ * that case is split into western/eastern hemispheres and unioned. Several
+ * boxes — a layer extent cut in two at the dateline — are unioned the same way,
+ * and reach `h3_compact_cells` as one set so a parent whose children straddle
+ * ±180 can still fold back together.
  */
+export function buildGridFromBboxesSql(
+  boxes: [number, number, number, number][],
+  res: number,
+  compact = false,
+): string {
+  const fill = (box: [number, number, number, number]) =>
+    `SELECT ${polyfillUnnest(sqlStr(bboxToWktPolygon(box)), res)} AS cell`;
+  const selects: string[] = [];
+  for (const bbox of boxes) {
+    const [w, s, e, n] = normalizeLonLatBbox(bbox);
+    if (w === -180 && e === 180) {
+      selects.push(fill([-180, s, 0, n]), fill([0, s, 180, n]));
+    } else {
+      selects.push(fill([w, s, e, n]));
+    }
+  }
+  const raw =
+    selects.length === 1
+      ? selects[0]!
+      : `SELECT DISTINCT cell FROM (${selects.join(" UNION ALL ")})`;
+  return finalizeH3Cells(raw, compact);
+}
+
+/** Grid SQL from a single lon/lat bbox. */
 export function buildGridFromBboxSql(
   bbox: [number, number, number, number],
   res: number,
   compact = false,
 ): string {
-  const [w, s, e, n] = normalizeLonLatBbox(bbox);
-  if (w === -180 && e === 180) {
-    const left = bboxToWktPolygon([-180, s, 0, n]);
-    const right = bboxToWktPolygon([0, s, 180, n]);
-    return finalizeH3Cells(
-      `SELECT DISTINCT cell FROM (` +
-        `SELECT ${polyfillUnnest(sqlStr(left), res)} AS cell ` +
-        `UNION ALL ` +
-        `SELECT ${polyfillUnnest(sqlStr(right), res)} AS cell` +
-        `)`,
-      compact,
-    );
-  }
-  return buildGridFromWktSql(bboxToWktPolygon([w, s, e, n]), res, compact);
+  return buildGridFromBboxesSql([bbox], res, compact);
 }
 
 /**
@@ -285,10 +302,4 @@ export function rowsToFeatureCollection(
     });
   }
   return { type: "FeatureCollection", features };
-}
-
-export const H3_TOOLS: ProcessingAlgorithm[] = [];
-
-export function getH3Tool(id: string): ProcessingAlgorithm | undefined {
-  return H3_TOOLS.find((tool) => tool.id === id);
 }

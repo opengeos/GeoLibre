@@ -174,6 +174,11 @@ export const maplibrePrecipitationPlugin: GeoLibrePlugin = {
   id: PRECIPITATION_PLUGIN_ID,
   name: "Precipitation",
   version: "0.1.0",
+  // The overlay is a store tile layer (`addTileLayer`), which every renderer
+  // draws; the 2D style map is only used for an instant frame swap and tile
+  // error watching, and the controller does without it on the globe and on
+  // ArcGIS.
+  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };

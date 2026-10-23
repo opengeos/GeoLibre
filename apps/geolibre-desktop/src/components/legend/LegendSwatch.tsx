@@ -6,7 +6,7 @@
  * Adapted from the GeoLens viewer legend design (Apache-2.0) to GeoLibre's
  * layer model.
  */
-import { drawMarkerPath, type MarkerShape } from "@geolibre/core";
+import { drawMarkerPath, resolveSvgSource, type MarkerShape } from "@geolibre/core";
 import { Image as RasterIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { LayerSwatchShape } from "../../lib/layer-swatch";
@@ -15,8 +15,17 @@ import type { LegendMarker } from "../../lib/print-layout";
 /** Neutral outline that reads on both light and dark themes. */
 const OUTLINE = "rgba(107,114,128,0.6)";
 
-/** Largest radius / stroke width a proportional legend symbol is drawn at (px). */
-const MAX_SWATCH_RADIUS = 12;
+/**
+ * Largest radius / stroke width a proportional legend symbol is drawn at (px).
+ *
+ * A proportional row's `size` IS the radius the map paints for that value (and,
+ * for markers, half the sprite's on-screen width — see `markerIconSizeValue` in
+ * `@geolibre/map`), so below the cap the legend symbol is drawn at exactly the
+ * size the reader sees on the map. The radius cap matches the style editor's
+ * default max radius (24) so the common ramp is 1:1 rather than shrunk to
+ * roughly half scale; ramps configured past it scale down as one entry.
+ */
+const MAX_SWATCH_RADIUS = 24;
 const MAX_SWATCH_STROKE = 8;
 
 /**
@@ -111,50 +120,89 @@ export function GeometrySwatch({
   );
 }
 
+/** Chip edge length for a marker with no proportional size (px). */
+const MARKER_CHIP_SIZE = 14;
+
 /**
  * A point-marker preview: built-in shapes are traced with the same
  * {@link drawMarkerPath} the map's sprite baker uses, so the legend chip and
- * the on-map marker cannot disagree; custom SVG markers render as an image.
+ * the on-map marker cannot disagree; custom SVG markers render as an image
+ * whose source is resolved by the shared {@link resolveSvgSource} — inline
+ * markup, a `data:` URL, and an `https:` URL are all valid `markerSvg` inputs,
+ * and re-encoding the latter two as data URLs left the chip blank.
+ *
+ * `size` (a proportional row's radius) and `maxSize` (the entry's largest)
+ * scale the marker exactly like {@link GeometrySwatch} scales a circle, so a
+ * marker layer's size ramp reads at the map's true symbol widths.
  */
-export function MarkerSwatch({ marker, opacity = 1 }: { marker: LegendMarker; opacity?: number }) {
+export function MarkerSwatch({
+  marker,
+  size,
+  maxSize,
+  opacity = 1,
+}: {
+  marker: LegendMarker;
+  size?: number;
+  maxSize?: number;
+  opacity?: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const style = opacity < 1 ? { opacity } : undefined;
+  // The map draws a marker at the diameter its proportional radius spans, so
+  // the chip box is 2×radius after the entry's shared fit-to-legend scale.
+  const scale = size !== undefined ? swatchScale(maxSize, size, MAX_SWATCH_RADIUS) : 1;
+  const box = size !== undefined ? Math.max(4, Math.round(size * scale * 2)) : MARKER_CHIP_SIZE;
+  // One column width per entry, so labels stay aligned when rows differ in size.
+  const boxWidth =
+    size !== undefined
+      ? Math.max(box, Math.round(Math.max(maxSize ?? size, size) * scale * 2))
+      : MARKER_CHIP_SIZE;
+
+  const svgSource = marker.shape === "custom" ? resolveSvgSource(marker.svg ?? "") : null;
 
   useEffect(() => {
-    if (marker.shape === "custom") return;
+    // A custom marker whose source resolved renders as an <img> below; one that
+    // did not (an unsupported scheme — `pointMarkerSwatch` only rejects EMPTY
+    // markup) falls through to this canvas, where drawMarkerPath traces its
+    // documented default circle rather than leaving the chip blank.
+    if (marker.shape === "custom" && svgSource) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    const size = canvas.width;
-    ctx.clearRect(0, 0, size, size);
-    drawMarkerPath(ctx, marker.shape as MarkerShape, size);
+    const edge = canvas.width;
+    ctx.clearRect(0, 0, edge, edge);
+    drawMarkerPath(ctx, marker.shape as MarkerShape, edge);
     ctx.fillStyle = marker.color;
     ctx.fill();
     ctx.strokeStyle = OUTLINE;
     ctx.lineWidth = 1;
     ctx.stroke();
-  }, [marker]);
+  }, [marker, box, svgSource]);
 
-  if (marker.shape === "custom" && marker.svg) {
+  if (marker.shape === "custom" && svgSource) {
     return (
-      <img
+      <span
         aria-hidden="true"
-        className="h-3.5 w-3.5 shrink-0 object-contain"
-        style={style}
-        alt=""
-        src={`data:image/svg+xml;utf8,${encodeURIComponent(marker.svg)}`}
-      />
+        className="flex shrink-0 items-center justify-center"
+        style={{ width: boxWidth, ...style }}
+      >
+        <img
+          className="object-contain"
+          style={{ width: box, height: box }}
+          alt=""
+          src={svgSource}
+        />
+      </span>
     );
   }
   return (
-    <canvas
-      ref={canvasRef}
-      width={14}
-      height={14}
-      className="h-3.5 w-3.5 shrink-0"
-      style={style}
+    <span
       aria-hidden="true"
-    />
+      className="flex shrink-0 items-center justify-center"
+      style={{ width: boxWidth, ...style }}
+    >
+      <canvas ref={canvasRef} width={box} height={box} style={{ width: box, height: box }} />
+    </span>
   );
 }
 

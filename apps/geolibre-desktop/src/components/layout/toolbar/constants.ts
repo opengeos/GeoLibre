@@ -1,5 +1,5 @@
 import type { ConversionToolKind, RasterToolKind, VectorToolKind } from "@geolibre/core";
-import { type BuiltInMapControl, type MapController } from "@geolibre/map";
+import { type BuiltInMapControl, type MapEngine } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
 import type { createAppAPI } from "../../../hooks/usePlugins";
@@ -8,8 +8,8 @@ import type { AddDataKind } from "../AddDataDialog";
 /** The live app API surface plugins and panels are driven through. */
 export type AppApi = ReturnType<typeof createAppAPI>;
 
-/** A ref to the live MapController, shared across the toolbar pieces. */
-export type MapControllerRef = React.RefObject<MapController | null>;
+/** A ref to the live map engine, shared across the toolbar pieces. */
+export type MapControllerRef = React.RefObject<MapEngine | null>;
 
 /** Built-in map controls that the Controls menu can toggle (all but the layer control). */
 export type ToolbarMapControl = Exclude<BuiltInMapControl, "layer-control">;
@@ -26,6 +26,7 @@ export interface AddLayerHandlers {
   pmtiles: () => void;
   zarr: () => void;
   netcdf: () => void;
+  spaceborneLidar: () => void;
   lidar: () => void;
   splatting: () => void;
   threeDTiles: () => void;
@@ -35,7 +36,6 @@ export interface AddLayerHandlers {
 /** Shared styling/affordances passed to each toolbar menu's trigger button. */
 export interface ToolbarChrome {
   buttonClass: string;
-  secondaryButtonClass: string;
   buttonSize: "icon" | "sm";
   iconClassName: string;
   renderLabel: (label: string) => React.ReactNode;
@@ -104,6 +104,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
   { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
+  { kind: "landxml", titleKey: "toolbar.layerType.landxml" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
   { kind: "xyz", titleKey: "toolbar.layerType.xyz" },
   { kind: "wms", titleKey: "toolbar.layerType.wms" },
@@ -113,6 +114,8 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "video", titleKey: "toolbar.layerType.video" },
   { kind: "deckgl-viz", titleKey: "toolbar.layerType.deckglViz" },
   { kind: "postgres", titleKey: "toolbar.layerType.postgres" },
+  { kind: "mssql", titleKey: "toolbar.layerType.mssql" },
+  { kind: "iceberg", titleKey: "toolbar.layerType.iceberg" },
 ];
 
 export const CONVERSION_COMMANDS: Array<{
@@ -154,6 +157,8 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dissolve", titleKey: "toolbar.vectorTool.dissolve" },
   { kind: "bounding-box", titleKey: "toolbar.vectorTool.boundingBox" },
   { kind: "simplify", titleKey: "toolbar.vectorTool.simplify" },
+  { kind: "decode-polyline", titleKey: "toolbar.vectorTool.decodePolyline" },
+  { kind: "encode-polyline", titleKey: "toolbar.vectorTool.encodePolyline" },
   { kind: "clip", titleKey: "toolbar.vectorTool.clip" },
   { kind: "intersection", titleKey: "toolbar.vectorTool.intersection" },
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
@@ -169,6 +174,11 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "explode", titleKey: "toolbar.vectorTool.explode" },
   { kind: "aggregate", titleKey: "toolbar.vectorTool.aggregate" },
   { kind: "smooth", titleKey: "toolbar.vectorTool.smooth" },
+  { kind: "extract-vertices", titleKey: "toolbar.vectorTool.extractVertices" },
+  {
+    kind: "points-along-geometry",
+    titleKey: "toolbar.vectorTool.pointsAlongGeometry",
+  },
   { kind: "grid", titleKey: "toolbar.vectorTool.grid" },
   { kind: "voronoi", titleKey: "toolbar.vectorTool.voronoi" },
   { kind: "dggs-grid", titleKey: "toolbar.vectorTool.dggsGenerator" },
@@ -216,11 +226,39 @@ export function formatRecentProjectTime(openedAt: string): string {
   }).format(openedDate);
 }
 
-/** Initial toolbar control visibility map applied when a new project is created. */
-export function newProjectToolbarControlVisibility(): Record<ToolbarMapControl, boolean> {
+/**
+ * Whether a built-in map control starts visible in a new project.
+ *
+ * The Maptoolkit logo is attribution, required whenever a Maptoolkit basemap
+ * is in use, so it follows the new project's basemap rather than a fixed
+ * default: hiding it would leave a Maptoolkit basemap unattributed, since the
+ * logo's own sync only reacts when that basemap's active state flips.
+ *
+ * @param control - The built-in control.
+ * @param maptoolkitBasemapActive - Whether the new project shows a Maptoolkit basemap.
+ * @returns `true` when the control should be shown.
+ */
+export function newProjectBuiltInControlVisible(
+  control: BuiltInMapControl,
+  maptoolkitBasemapActive: boolean,
+): boolean {
+  return control === "maptoolkit-logo"
+    ? maptoolkitBasemapActive
+    : NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control);
+}
+
+/**
+ * Initial toolbar control visibility map applied when a new project is created.
+ *
+ * @param maptoolkitBasemapActive - Whether the new project shows a Maptoolkit basemap.
+ * @returns The Controls menu's checkmarks.
+ */
+export function newProjectToolbarControlVisibility(
+  maptoolkitBasemapActive = false,
+): Record<ToolbarMapControl, boolean> {
   return MAP_CONTROL_ITEMS.reduce(
     (acc, { id }) => {
-      acc[id] = NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(id);
+      acc[id] = newProjectBuiltInControlVisible(id, maptoolkitBasemapActive);
       return acc;
     },
     {} as Record<ToolbarMapControl, boolean>,

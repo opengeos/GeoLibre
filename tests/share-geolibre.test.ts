@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createEmptyProject, serializeProject } from "@geolibre/core";
+import { createEmptyProject, serializeProject, type LayerStyle } from "@geolibre/core";
 import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
+  fetchProjectShares,
+  ShareLinksUnsupportedError,
+  fetchSharedProjectVersions,
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
+  normalizeShareRole,
   resolveShareBaseUrl,
   resolveShareHost,
+  revokeShare,
   SHARE_URL_ENV,
+  sharedProjectContentMatches,
   shareHostLabel,
   ShareUploadError,
+  updateSharedProjectContent,
   uploadProjectToShare,
+  verifySharePassword,
 } from "../apps/geolibre-desktop/src/lib/share-geolibre";
 
 const PROJECT_DTO = {
@@ -21,6 +29,7 @@ const PROJECT_DTO = {
   viewerUrl: "https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/my-map.geolibre.json",
   rawJsonUrl: "https://share.geolibre.app/giswqs/my-map.geolibre.json",
 };
+const BASE = "https://share.geolibre.app";
 
 function fakeFetch(
   status: number,
@@ -105,6 +114,13 @@ describe("resolveShareBaseUrl", () => {
     assert.equal(resolveShareBaseUrl("https://user:pass@maps.example.org"), null);
     assert.equal(resolveShareBaseUrl("https://user@maps.example.org"), null);
     assert.equal(resolveShareBaseUrl("http://user:pass@localhost:8000"), null);
+  });
+
+  it("refuses query strings and fragments in share base URLs", () => {
+    assert.equal(resolveShareBaseUrl("https://maps.example.org/?tenant=private"), null);
+    assert.equal(resolveShareBaseUrl("https://maps.example.org/#section"), null);
+    assert.equal(resolveShareBaseUrl("https://maps.example.org?"), null);
+    assert.equal(resolveShareBaseUrl("https://maps.example.org#"), null);
   });
 
   it('treats "off" as sharing disabled', () => {
@@ -215,7 +231,7 @@ describe("uploadProjectToShare", () => {
       },
       visible: true,
       opacity: 1,
-      style: {},
+      style: {} as LayerStyle,
       metadata: {},
     });
 
@@ -235,6 +251,33 @@ describe("uploadProjectToShare", () => {
 
   it("rejects when no token is provided", async () => {
     await assert.rejects(() => uploadProjectToShare({ ...baseArgs, token: "  " }), /token/i);
+  });
+
+  it("reports a body past the string cap as too large, not as a network failure", async () => {
+    // The request body escapes the project text into a JSON string, so it is
+    // the longest string an upload builds. Cap strings just above the project
+    // text so only the body trips it, the way a large embedded layer does
+    // against V8's real limit (GeoLibre#3025).
+    const content = serializeProject(createEmptyProject("Big map"));
+    const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
+    const original = JSON.stringify;
+    JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+      const text = original(...args);
+      if (typeof text === "string" && text.length > content.length + 16) {
+        throw new RangeError("Invalid string length");
+      }
+      return text;
+    }) as typeof JSON.stringify;
+    try {
+      await assert.rejects(
+        () => uploadProjectToShare({ ...baseArgs, content, fetchImpl: fn }),
+        (error: unknown) =>
+          error instanceof RangeError && /invalid string length/i.test(error.message),
+      );
+    } finally {
+      JSON.stringify = original;
+    }
+    assert.equal(calls.length, 0);
   });
 
   it("POSTs the project with a bearer token and returns the URLs", async () => {
@@ -260,11 +303,31 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.rawJsonUrl, PROJECT_DTO.rawJsonUrl);
   });
 
-  it("maps 401 to an invalid-token message", async () => {
+  it("sends organization ownership and additive group shares", async () => {
+    const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
+    await uploadProjectToShare({
+      ...baseArgs,
+      visibility: "organization",
+      organizationId: "org-1",
+      groupIds: ["group-1", "group-2"],
+      fetchImpl: fn,
+    });
+    const body = JSON.parse(String(calls[0].init.body)) as {
+      organizationId: string;
+      groupIds: string[];
+    };
+    assert.equal(body.organizationId, "org-1");
+    assert.deepEqual(body.groupIds, ["group-1", "group-2"]);
+  });
+
+  it("flags 401 with an unauthorized code so the UI prompts re-auth", async () => {
     const { fn } = fakeFetch(401, { error: "Unauthorized" });
     await assert.rejects(
       () => uploadProjectToShare({ ...baseArgs, fetchImpl: fn }),
-      /invalid or expired/i,
+      (err: ShareUploadError) =>
+        err instanceof ShareUploadError &&
+        err.code === "unauthorized" &&
+        err.message === "unauthorized",
     );
   });
 
@@ -354,5 +417,390 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.username, "");
     assert.equal(result.slug, "");
     assert.equal(result.viewerUrl, "");
+  });
+
+  it("sends role, expiresIn, and password when provided", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      project: {
+        ...PROJECT_DTO,
+        role: "view",
+        expiresAt: "2026-07-30T12:00:00Z",
+        hasPassword: true,
+      },
+    });
+    const result = await uploadProjectToShare({
+      ...baseArgs,
+      role: "view",
+      expiresIn: "24h",
+      password: "secretpassword",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    const body = JSON.parse(calls[0].init.body as string);
+    assert.equal(body.role, "view");
+    assert.equal(body.expiresIn, "24h");
+    assert.equal(body.password, "secretpassword");
+    assert.equal(result.role, "view");
+    assert.equal(result.hasPassword, true);
+    assert.deepEqual(result.unconfirmedSettings, []);
+  });
+
+  it("flags requested settings a URL-only response did not confirm", async () => {
+    // A server that predates link settings ignores the fields and answers with
+    // the plain v1 response, so none of them may be reported as applied.
+    const { fn } = fakeFetch(201, { project: PROJECT_DTO });
+    const result = await uploadProjectToShare({
+      ...baseArgs,
+      role: "view",
+      expiresIn: "24h",
+      password: "secretpassword",
+      fetchImpl: fn,
+    });
+    assert.deepEqual(result.unconfirmedSettings, ["role", "expiry", "password"]);
+  });
+
+  it("does not flag the default edit role on a URL-only response", async () => {
+    const { fn } = fakeFetch(201, { project: PROJECT_DTO });
+    const result = await uploadProjectToShare({ ...baseArgs, role: "edit", fetchImpl: fn });
+    assert.deepEqual(result.unconfirmedSettings, []);
+  });
+
+  it("fails closed to the view role when the upload response sends an unknown one", async () => {
+    const { fn } = fakeFetch(201, { project: { ...PROJECT_DTO, role: "owner" } });
+    const result = await uploadProjectToShare({ ...baseArgs, role: "comment", fetchImpl: fn });
+    assert.equal(result.role, "view");
+    assert.deepEqual(result.unconfirmedSettings, ["role"]);
+  });
+
+  it("does not treat an unknown role as confirming a requested view role", async () => {
+    const { fn } = fakeFetch(201, { project: { ...PROJECT_DTO, role: "owner" } });
+    const result = await uploadProjectToShare({ ...baseArgs, role: "view", fetchImpl: fn });
+    assert.equal(result.role, "view");
+    assert.deepEqual(result.unconfirmedSettings, ["role"]);
+  });
+});
+
+describe("fetchProjectShares", () => {
+  it("fetches active shares for authenticated user", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      shares: [
+        {
+          id: "s1",
+          slug: "my-map",
+          title: "My Map",
+          visibility: "unlisted",
+          role: "view",
+          expiresAt: null,
+          hasPassword: false,
+          createdAt: "2026-07-29T12:00:00Z",
+          projectUrl: "https://share.geolibre.app/u/my-map",
+          viewerUrl: "https://share.geolibre.app/viewer?url=https://share.geolibre.app/u/my-map",
+        },
+      ],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/shares");
+    assert.equal(shares.length, 1);
+    assert.equal(shares[0].id, "s1");
+    assert.equal(shares[0].role, "view");
+    assert.equal(shares[0].visibility, "unlisted");
+  });
+
+  it("rejects when no token is provided", async () => {
+    await assert.rejects(() => fetchProjectShares({ token: "   " }), /token/i);
+  });
+
+  it("reports a server without the share-link API as unsupported, not failed", async () => {
+    // share.geolibre.app publishes projects but has no GET /api/shares.
+    const { fn } = fakeFetch(404, { error: "Not Found" });
+
+    await assert.rejects(
+      () =>
+        fetchProjectShares({
+          token: "glb_secrettoken",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        err instanceof ShareLinksUnsupportedError && err.host === "share.geolibre.app",
+    );
+  });
+
+  it("still reports other server failures as errors", async () => {
+    const { fn } = fakeFetch(500, { error: "boom" });
+
+    await assert.rejects(
+      () =>
+        fetchProjectShares({
+          token: "glb_secrettoken",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        !(err instanceof ShareLinksUnsupportedError) && /HTTP 500/.test(String(err)),
+    );
+  });
+
+  it("fails closed to the view role when the server sends an unknown one", async () => {
+    const { fn } = fakeFetch(200, {
+      shares: [
+        { id: "s1", slug: "my-map" },
+        { id: "s2", slug: "other-map", role: "owner" },
+      ],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(shares.length, 2);
+    // A missing or unrecognized role must never be displayed as full edit access.
+    assert.equal(shares[0].role, "view");
+    assert.equal(shares[1].role, "view");
+  });
+
+  it("percent-encodes the project URL in the fallback viewer link", async () => {
+    const { fn } = fakeFetch(200, {
+      shares: [{ id: "s1", projectUrl: "https://example.com/p?a=1&b=2#frag" }],
+    });
+
+    const shares = await fetchProjectShares({
+      token: "glb_secrettoken",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    // Without encoding, the raw `&` and `#` would truncate the viewer link.
+    assert.equal(
+      shares[0].viewerUrl,
+      "https://share.geolibre.app/viewer?url=https%3A%2F%2Fexample.com%2Fp%3Fa%3D1%26b%3D2%23frag",
+    );
+  });
+});
+
+describe("normalizeShareRole", () => {
+  it("passes through valid share roles", () => {
+    assert.equal(normalizeShareRole("view"), "view");
+    assert.equal(normalizeShareRole("comment"), "comment");
+    assert.equal(normalizeShareRole("edit"), "edit");
+  });
+
+  it("fails closed to view for unknown or missing values", () => {
+    assert.equal(normalizeShareRole("owner"), "view");
+    assert.equal(normalizeShareRole(null), "view");
+    assert.equal(normalizeShareRole(undefined), "view");
+  });
+});
+
+describe("revokeShare", () => {
+  it("deletes the specified share", async () => {
+    const { fn, calls } = fakeFetch(200, { ok: true });
+    await revokeShare({
+      token: "glb_secrettoken",
+      shareId: "s1",
+      baseUrl: "https://share.geolibre.app",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/shares/s1");
+    assert.equal(calls[0].init.method, "DELETE");
+  });
+
+  it("rejects when no token is provided", async () => {
+    await assert.rejects(() => revokeShare({ token: "", shareId: "s1" }), /token/i);
+  });
+
+  it("rejects when revocation returns 404", async () => {
+    const { fn } = fakeFetch(404, { error: "Not found" });
+    await assert.rejects(
+      () =>
+        revokeShare({
+          token: "glb_secrettoken",
+          shareId: "s1",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      /Failed to revoke share \(HTTP 404\)/i,
+    );
+  });
+});
+
+describe("verifySharePassword", () => {
+  it("POSTs password and returns project content on success", async () => {
+    const { fn, calls } = fakeFetch(200, { content: '{"version":"1.0.0"}', role: "view" });
+    const result = await verifySharePassword({
+      shareUrl: "https://share.geolibre.app/u/protected-share",
+      password: "secretpassword",
+      fetchImpl: fn,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://share.geolibre.app/u/protected-share/access");
+    assert.equal(calls[0].init.method, "POST");
+    assert.equal(result.projectContent, '{"version":"1.0.0"}');
+    assert.equal(result.role, "view");
+  });
+
+  it("rejects with incorrect password on 401/403", async () => {
+    const { fn } = fakeFetch(401, { error: "Incorrect password" });
+    await assert.rejects(
+      () =>
+        verifySharePassword({
+          shareUrl: "https://share.geolibre.app/u/protected-share",
+          password: "wrongpassword",
+          fetchImpl: fn,
+        }),
+      /incorrect password/i,
+    );
+  });
+});
+
+describe("updateSharedProjectContent", () => {
+  it("PUTs content with expectedVersion and returns a stale-version warning", async () => {
+    const { fn, calls } = fakeFetch(201, {
+      project: { versionCount: 4 },
+      version: 4,
+      warning: "version conflict",
+    });
+    const result = await updateSharedProjectContent({
+      token: "glb_secrettoken",
+      projectId: "project/id",
+      content: baseArgs.content,
+      expectedVersion: 2,
+      baseUrl: baseArgs.baseUrl,
+      fetchImpl: fn,
+    });
+    assert.equal(calls[0].url, "https://share.geolibre.app/api/projects/project%2Fid/content");
+    assert.equal(calls[0].init.method, "PUT");
+    assert.equal(
+      (calls[0].init.headers as Record<string, string>).Authorization,
+      "Bearer glb_secrettoken",
+    );
+    const body = JSON.parse(String(calls[0].init.body)) as {
+      content: string;
+      expectedVersion: number;
+    };
+    assert.equal(body.expectedVersion, 2);
+    assert.equal(result.versionCount, 4);
+    assert.equal(result.warning, "version conflict");
+    assert.equal(result.savedContent, body.content);
+  });
+
+  it("returns no warning after an ordinary update", async () => {
+    const { fn } = fakeFetch(201, { project: { versionCount: 3 }, version: 3 });
+    const result = await updateSharedProjectContent({
+      token: "glb_secrettoken",
+      projectId: "project-1",
+      content: baseArgs.content,
+      expectedVersion: 2,
+      baseUrl: baseArgs.baseUrl,
+      fetchImpl: fn,
+    });
+    assert.equal(result.warning, null);
+  });
+
+  it("rejects with ShareUploadError when the server returns a non-ok status", async () => {
+    const { fn } = fakeFetch(400, { error: "Version conflict detected" });
+    await assert.rejects(
+      () =>
+        updateSharedProjectContent({
+          token: "glb_secrettoken",
+          projectId: "project-1",
+          content: baseArgs.content,
+          expectedVersion: 2,
+          baseUrl: baseArgs.baseUrl,
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        err instanceof ShareUploadError && /Version conflict detected/.test(err.message),
+    );
+  });
+});
+
+describe("sharedProjectContentMatches", () => {
+  it("matches canonical sanitized content but detects edits made during a save", () => {
+    const sent = createEmptyProject("Remote map");
+    sent.preferences.geocoding.apiKeys.mapbox = "secret-a";
+    const same = structuredClone(sent);
+    same.preferences.geocoding.apiKeys.mapbox = "secret-b";
+    assert.equal(sharedProjectContentMatches(serializeProject(sent), serializeProject(same)), true);
+
+    same.name = "Edited while saving";
+    assert.equal(
+      sharedProjectContentMatches(serializeProject(sent), serializeProject(same)),
+      false,
+    );
+  });
+
+  it("fails safely for invalid live content", () => {
+    assert.equal(sharedProjectContentMatches(baseArgs.content, "not json"), false);
+  });
+});
+
+describe("fetchSharedProjectVersions", () => {
+  it("fetches, normalizes, and sorts authoritative server versions", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      versions: [
+        { number: 1, createdAt: "2026-01-01T00:00:00Z" },
+        { version: 3, createdAt: "2026-01-03T00:00:00Z" },
+      ],
+    });
+    const versions = await fetchSharedProjectVersions({
+      token: "glb_secrettoken",
+      projectId: "project/id",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.equal(calls[0].url, `${BASE}/api/projects/project%2Fid/versions`);
+    assert.equal(
+      (calls[0].init.headers as Record<string, string>).Authorization,
+      "Bearer glb_secrettoken",
+    );
+    assert.deepEqual(
+      versions.map((version) => [version.number, version.rawUrl]),
+      [
+        [3, `${BASE}/api/projects/project%2Fid/versions/3`],
+        [1, `${BASE}/api/projects/project%2Fid/versions/1`],
+      ],
+    );
+  });
+
+  it("rejects when the versions payload is not an array", async () => {
+    const { fn } = fakeFetch(200, { versions: "invalid" });
+    await assert.rejects(
+      () =>
+        fetchSharedProjectVersions({
+          token: "glb_secrettoken",
+          projectId: "project/id",
+          baseUrl: BASE,
+          fetchImpl: fn,
+        }),
+      /unexpected response/i,
+    );
+  });
+
+  it("surfaces the server error message for non-ok responses", async () => {
+    const { fn } = fakeFetch(404, { error: "Project history not found" });
+    await assert.rejects(
+      () =>
+        fetchSharedProjectVersions({
+          token: "glb_secrettoken",
+          projectId: "project/id",
+          baseUrl: BASE,
+          fetchImpl: fn,
+        }),
+      /Project history not found/,
+    );
   });
 });

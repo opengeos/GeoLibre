@@ -1,0 +1,323 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
+import {
+  DATACENTERS_URL,
+  fetchDatacentersCzml,
+  fetchRadioBrowserCzml,
+  infrastructureQueryBounds,
+  osmInfrastructureToCzml,
+  radioBrowserStationsToCzml,
+  radioStationMatchesCategory,
+  submarineCablesToCzml,
+} from "../packages/plugins/src/plugins/gods-eye-view-catalog-feeds";
+
+describe("God's Eye View catalog feeds", () => {
+  it("normalizes geolocated Radio Browser stations and rejects invalid coordinates", () => {
+    const result = radioBrowserStationsToCzml([
+      {
+        stationuuid: "station-1",
+        name: "World Service",
+        url_resolved: "https://radio.example/live.mp3",
+        country: "United Kingdom",
+        codec: "MP3",
+        bitrate: 128,
+        geo_long: -0.12,
+        geo_lat: 51.5,
+      },
+      { stationuuid: "bad", name: "Nowhere", geo_long: 999, geo_lat: 0 },
+    ]);
+    assert.equal(result.packets.length, 2);
+    assert.equal(result.packets[1].id, "radio-station-1");
+    assert.deepEqual(result.packets[1].position, {
+      cartographicDegrees: [-0.12, 51.5, 0],
+    });
+    assert.equal(result.attributes.features.length, 1);
+    assert.equal(
+      result.attributes.features[0].properties?.streamUrl,
+      "https://radio.example/live.mp3",
+    );
+  });
+
+  it("files radio stations under upstream's tag categories by whole word", () => {
+    assert.equal(radioStationMatchesCategory("news,talk", "news"), true);
+    assert.equal(radioStationMatchesCategory("news,talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("News_Talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("police scanner", "public-safety"), true);
+    assert.equal(radioStationMatchesCategory("ATC,Airport", "aviation-marine"), true);
+    assert.equal(radioStationMatchesCategory("classic rock,80s", "music"), true);
+    assert.equal(radioStationMatchesCategory("Hip-Hop", "music"), true);
+    assert.equal(radioStationMatchesCategory("news/talk", "news"), true);
+    assert.equal(radioStationMatchesCategory("news/talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("R&B", "music"), true);
+    // Whole words, not substrings: upstream's substring match files these
+    // under Public Safety and Aviation / Marine.
+    assert.equal(radioStationMatchesCategory("problems", "public-safety"), false);
+    assert.equal(radioStationMatchesCategory("match of the day", "aviation-marine"), false);
+    // Other is what no named category claims, music included.
+    assert.equal(radioStationMatchesCategory("community,local", "other"), true);
+    assert.equal(radioStationMatchesCategory("", "other"), true);
+    assert.equal(radioStationMatchesCategory("jazz", "other"), false);
+    assert.equal(radioStationMatchesCategory("news", "other"), false);
+    assert.equal(radioStationMatchesCategory("", "all"), true);
+  });
+
+  it("refilters cached Radio Browser stations when the category changes", async () => {
+    let requests = 0;
+    const mockFetch = (async () => {
+      requests += 1;
+      return new Response(
+        JSON.stringify([
+          { stationuuid: "news", name: "News", tags: "news", geo_long: 1, geo_lat: 2 },
+          { stationuuid: "jazz", name: "Jazz", tags: "jazz,smooth", geo_long: 3, geo_lat: 4 },
+        ]),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const ids = (result: Awaited<ReturnType<typeof fetchRadioBrowserCzml>>) =>
+      result.attributes.features.map((feature) => feature.id);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch })), [
+      "radio-news",
+      "radio-jazz",
+    ]);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch, category: "news" })), [
+      "radio-news",
+    ]);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch, category: "music" })), [
+      "radio-jazz",
+    ]);
+    assert.equal(requests, 1, "the directory is read once for every category");
+  });
+
+  it("turns GeoJSONL polygons into lightweight datacenter points", async () => {
+    const mockFetch = (async (input: string | URL | Request) => {
+      assert.equal(String(input), DATACENTERS_URL);
+      return new Response(
+        `${JSON.stringify({
+          type: "Feature",
+          id: 7,
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [179.8, 10],
+                [-179.8, 10],
+                [-179.8, 10.2],
+                [179.8, 10.2],
+                [179.8, 10],
+              ],
+            ],
+          },
+          properties: {
+            tags: {
+              name: "Date Line DC",
+              operator: "Example",
+              empty: null,
+              invalid: Infinity,
+            },
+          },
+        })}\n`,
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const result = await fetchDatacentersCzml({ fetch: mockFetch });
+    assert.equal(result.packets.length, 2);
+    const position = result.packets[1].position as {
+      cartographicDegrees: number[];
+    };
+    assert.ok(Math.abs(Math.abs(position.cartographicDegrees[0]) - 180) < 0.01);
+    assert.equal(result.packets[1].name, "Date Line DC");
+    assert.equal(result.attributes.features[0].properties?.operator, "Example");
+    assert.ok(!("empty" in (result.packets[1].properties as Record<string, unknown>)));
+    assert.ok(!("invalid" in (result.packets[1].properties as Record<string, unknown>)));
+  });
+
+  it("places multipart catalog features on their largest polygon", async () => {
+    const mockFetch = (async () =>
+      new Response(
+        `${JSON.stringify({
+          type: "Feature",
+          geometry: {
+            type: "MultiPolygon",
+            coordinates: [
+              [
+                [
+                  [100, 40],
+                  [100.01, 40],
+                  [100.01, 40.01],
+                  [100, 40.01],
+                  [100, 40],
+                ],
+              ],
+              [
+                [
+                  [10, 20],
+                  [12, 20],
+                  [12, 22],
+                  [10, 22],
+                  [10, 20],
+                ],
+              ],
+            ],
+          },
+          properties: { name: "Multipart campus" },
+        })}\n`,
+      )) as typeof fetch;
+    const result = await fetchDatacentersCzml({ fetch: mockFetch });
+    assert.deepEqual(result.packets[1].position, { cartographicDegrees: [11, 21, 0] });
+  });
+
+  it("preserves every submarine-cable line and provider color", () => {
+    const input: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { id: "cable-a", name: "Cable A", color: "#123456" },
+          geometry: {
+            type: "MultiLineString",
+            coordinates: [
+              [
+                [1, 2],
+                [3, 4],
+              ],
+              [
+                [5, 6],
+                [7, 8],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+    const result = submarineCablesToCzml(input);
+    assert.equal(result.packets.length, 3);
+    assert.equal(result.attributes.features.length, 2);
+    // Ground-clamping the whole global network costs ~14x the per-frame time of
+    // the same geometry drawn geodesically, and submarine cables have no
+    // terrain to drape onto.
+    const polyline = result.packets[1].polyline as Record<string, unknown>;
+    assert.ok(!("clampToGround" in polyline));
+    assert.equal(polyline.arcType, "GEODESIC");
+    assert.deepEqual(
+      (
+        (
+          (result.packets[1].polyline as Record<string, unknown>).material as Record<
+            string,
+            unknown
+          >
+        ).solidColor as { color: { rgba: number[] } }
+      ).color.rgba,
+      [18, 52, 86, 215],
+    );
+  });
+
+  it("bounds Overpass infrastructure searches around the current view", () => {
+    assert.throws(() => infrastructureQueryBounds(null), /current map extent is not available yet/);
+    assert.deepEqual(
+      infrastructureQueryBounds([-122.5, 37.7, -122.4, 37.8]),
+      [-122.5, 37.7, -122.4, 37.8],
+    );
+    const global = infrastructureQueryBounds([-180, -90, 180, 90]);
+    assert.ok((global[2] - global[0]) * (global[3] - global[1]) <= 4);
+    const crossing = infrastructureQueryBounds([-181, 10, -178, 13]);
+    assert.ok(crossing[0] >= -180 && crossing[0] <= 180);
+    assert.ok(crossing[2] > 180, "the antimeridian crossing stays unwrapped");
+  });
+
+  it("renders point and line OSM infrastructure as CZML", () => {
+    const collection: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "node/1",
+          geometry: { type: "Point", coordinates: [10, 20] },
+          properties: { man_made: "communications_tower" },
+        },
+        {
+          type: "Feature",
+          id: "way/2",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [10, 20],
+              [11, 21],
+            ],
+          },
+          properties: { name: "Pipeline", man_made: "pipeline" },
+        },
+        {
+          type: "Feature",
+          id: "node/bad",
+          geometry: { type: "Point", coordinates: [999, 20] },
+          properties: { name: "Invalid tower" },
+        },
+      ],
+    };
+    const result = osmInfrastructureToCzml(collection);
+    assert.equal(result.packets.length, 3);
+    assert.deepEqual(result.packets[1].position, {
+      cartographicDegrees: [10, 20, 0],
+    });
+    assert.equal(result.packets[2].name, "Pipeline");
+    assert.deepEqual(
+      result.attributes.features.map((feature) => feature.id),
+      ["osm-infrastructure-node/1", "osm-infrastructure-way/2-0"],
+    );
+    assert.deepEqual(
+      result.attributes.features.map((feature) => feature.geometry.type),
+      ["Point", "LineString"],
+    );
+  });
+
+  it("skips malformed GeoJSONL rows and lets a top-level key outrank its tag", async () => {
+    const good = JSON.stringify({
+      type: "Feature",
+      id: 1,
+      geometry: { type: "Point", coordinates: [5, 6] },
+      properties: { tags: { name: "Tagged", operator: "Example" }, name: "Top Level" },
+    });
+    const mockFetch = (async () =>
+      new Response(`{"type":"Feature","geometry":\n${good}\n`, {
+        status: 200,
+      })) as typeof fetch;
+    const result = await fetchDatacentersCzml({ fetch: mockFetch });
+    assert.equal(result.attributes.features.length, 1);
+    assert.equal(result.packets[1].name, "Top Level");
+    assert.equal(result.attributes.features[0].properties?.operator, "Example");
+  });
+
+  it("falls back to a label when a feature's name is blank", () => {
+    const cables = submarineCablesToCzml({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { name: "   " },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [1, 2],
+              [3, 4],
+            ],
+          },
+        },
+      ],
+    });
+    assert.equal(cables.packets[1].name, "Cable 1");
+
+    const infrastructure = osmInfrastructureToCzml({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "node/3",
+          geometry: { type: "Point", coordinates: [10, 20] },
+          properties: { name: " ", man_made: " water_tower " },
+        },
+      ],
+    });
+    assert.equal(infrastructure.packets[1].name, "water tower");
+  });
+});

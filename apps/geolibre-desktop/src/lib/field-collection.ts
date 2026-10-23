@@ -52,13 +52,34 @@ export interface CollectionSchema {
 export const FIELD_COLLECTION_FLAG = "fieldCollection";
 export const COLLECTION_SCHEMA_KEY = "collectionSchema";
 export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
+export const PHOTOS_PROPERTY = "geolibre_photos";
+export const PHOTO_NAMES_PROPERTY = "geolibre_photo_names";
 
 /** Property keys the tool manages itself; user fields must not reuse them. */
-export const RESERVED_PROPERTY_KEYS: readonly string[] = [PHOTO_PROPERTY, PHOTO_FULL_PROPERTY];
+export const RESERVED_PROPERTY_KEYS: readonly string[] = [
+  PHOTO_PROPERTY,
+  PHOTO_FULL_PROPERTY,
+  PHOTOS_PROPERTY,
+  PHOTO_NAMES_PROPERTY,
+];
+
+export interface CollectionPhoto {
+  src: string;
+  name?: string;
+}
+
+/** Keep the first photo in the legacy property for existing popup/export consumers. */
+export function buildPhotoProperties(photos: CollectionPhoto[]): Record<string, unknown> {
+  if (photos.length === 0) return {};
+  return {
+    [PHOTO_PROPERTY]: photos[0].src,
+    [PHOTOS_PROPERTY]: photos.map((photo) => photo.src),
+    [PHOTO_NAMES_PROPERTY]: photos.map((photo) => photo.name ?? ""),
+  };
+}
 
 /**
- * Cap embedded photos so a capture session can't bloat the project JSON without
- * bound. Photos are stored inline as data URLs, so this is a hard per-photo cap.
+ * Cap each embedded data URL, not the combined size of an observation or session.
  */
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 
@@ -76,6 +97,25 @@ export function emptyFeatureCollection(): FeatureCollection {
 /** True when a layer is a field-collection target (geojson + tagged metadata). */
 export function isCollectionLayer(layer: CollectionLayerLike): boolean {
   return layer.type === "geojson" && layer.metadata?.[FIELD_COLLECTION_FLAG] === true;
+}
+
+/**
+ * Pick the capture target when the Field Collection dialog opens.
+ *
+ * The target belongs to the collection *session*, not to the dialog, so a layer
+ * the user switched to earlier survives closing and reopening the dialog.
+ *
+ * `currentId` distinguishes three states that the dialog's own `""` cannot:
+ * `null` means the session has no target yet, so fall back to the first
+ * collection layer; `""` means the user deliberately chose the "new layer"
+ * setup step and must be left there even when the project has layers to offer;
+ * an id is kept if it is still a collection layer, and falls back to the first
+ * one when it has been removed.
+ */
+export function resolveTargetLayer(collectionLayerIds: string[], currentId: string | null): string {
+  if (currentId === "") return "";
+  if (currentId && collectionLayerIds.includes(currentId)) return currentId;
+  return collectionLayerIds[0] ?? "";
 }
 
 /** Read a layer's stored collection schema, defaulting to an empty schema. */
@@ -320,23 +360,6 @@ export function buildGeometryFeature(
   const pt = coords[0];
   if (!pt) throw new Error("buildGeometryFeature: a point needs one vertex");
   return makePointFeature(pt[0], pt[1], properties);
-}
-
-/**
- * A GeoJSON preview of in-progress drawing: a vertex point per coordinate, the
- * connecting line, and — for a polygon with enough vertices — the closed,
- * fillable ring so the user sees the finished shape before saving.
- */
-export function drawPreview(geometry: GeometryType, coords: Vertex[]): FeatureCollection {
-  const features: Feature[] = coords.map((c, i) => makePointFeature(c[0], c[1], { index: i }));
-  if (geometry === "polygon" && coords.length >= 3) {
-    features.push(makePolygonFeature(coords, {}));
-    // Close the dashed stroke so it matches the filled ring (back to the start).
-    features.push(makeLineFeature([...coords, coords[0]], {}));
-  } else if ((geometry === "line" || geometry === "polygon") && coords.length >= 2) {
-    features.push(makeLineFeature(coords, {}));
-  }
-  return { type: "FeatureCollection", features };
 }
 
 /** Return a new FeatureCollection with `feature` appended (immutably). */

@@ -6,13 +6,18 @@ import {
 } from "@geolibre/core";
 import {
   BasemapControl,
+  DEFAULT_BASEMAPS,
   type BasemapChangeEvent,
   type BasemapDefinition,
   type BasemapControlEventPayload,
   type BasemapControlOptions,
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { pluginDisplayTitle } from "../plugin-i18n";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { installBasemapThumbnails } from "./basemap-thumbnails";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 
 const basemapEnv = (
   import.meta as ImportMeta & {
@@ -82,6 +87,7 @@ function getStyleProviderCredentials(): {
   protomapsApiKey?: string;
   stadiaApiKey?: string;
   mapboxAccessToken?: string;
+  tiandituApiKey?: string;
 } {
   const env = getRuntimeEnvironment();
   const protomapsApiKey = getProtomapsApiKey(env);
@@ -90,14 +96,81 @@ function getStyleProviderCredentials(): {
   // the others: the panel's API keys view has a Mapbox field, so pushing an
   // empty string would clobber a token typed there.
   const mapboxAccessToken = getMapboxAccessToken(env);
+  // Tianditu (added in maplibre-gl-basemap-control 0.14.0) is the only basemap
+  // provider in the catalog reachable from mainland China that also aligns with
+  // WGS84 data, so its key gets the same env route as every other provider
+  // rather than being panel-only.
+  const tiandituApiKey = env.VITE_TIANDITU_API_KEY?.trim() || undefined;
   return {
     ...(protomapsApiKey ? { protomapsApiKey } : {}),
     ...(stadiaApiKey ? { stadiaApiKey } : {}),
     ...(mapboxAccessToken ? { mapboxAccessToken } : {}),
+    ...(tiandituApiKey ? { tiandituApiKey } : {}),
   };
 }
 
-let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
+/**
+ * The control's credential inputs (the API keys view and the inline field shown
+ * beside a missing-key error share these wrapper classes), each mapped to the
+ * `app.credentials` name the value is saved under and the control option it
+ * seeds. The control keeps a typed key only in memory and emits no event for it,
+ * so GeoLibre watches the inputs to keep keys across panel closes and restarts.
+ * The names are stored in users' keychains: renaming one orphans saved keys.
+ */
+export const PANEL_CREDENTIAL_FIELDS = [
+  { className: "basemap-control-carto-key", name: "carto", option: "cartoApiKey" },
+  { className: "basemap-control-maptiler-key", name: "maptiler", option: "mapTilerApiKey" },
+  { className: "basemap-control-mapbox-token", name: "mapbox", option: "mapboxAccessToken" },
+  { className: "basemap-control-protomaps-key", name: "protomaps", option: "protomapsApiKey" },
+  { className: "basemap-control-stadia-key", name: "stadia", option: "stadiaApiKey" },
+  { className: "basemap-control-tianditu-key", name: "tianditu", option: "tiandituApiKey" },
+  { className: "basemap-control-tomtom-key", name: "tomtom", option: "tomtomApiKey" },
+  { className: "basemap-control-here-key", name: "here", option: "hereApiKey" },
+  { className: "basemap-control-google-key", name: "google", option: "googleMapsApiKey" },
+  { className: "basemap-control-amazon-key", name: "amazon", option: "amazonApiKey" },
+  { className: "basemap-control-aws-region", name: "aws-region", option: "awsRegion" },
+] as const satisfies readonly {
+  className: string;
+  name: string;
+  option: keyof BasemapControlOptions;
+}[];
+
+type PanelCredentialOption = (typeof PANEL_CREDENTIAL_FIELDS)[number]["option"];
+
+/** Keys the user saved in the panel, keyed by control option; unset ones are omitted. */
+function getSavedPanelCredentials(
+  app: GeoLibreAppAPI,
+): Partial<Record<PanelCredentialOption, string>> {
+  const saved: Partial<Record<PanelCredentialOption, string>> = {};
+  for (const field of PANEL_CREDENTIAL_FIELDS) {
+    const value = app.credentials?.get(field.name).trim();
+    if (value) saved[field.option] = value;
+  }
+  return saved;
+}
+
+/**
+ * Save every edit to a credential input through `app.credentials`, so a key
+ * typed in the panel survives closing it and restarting the app. Clearing the
+ * field deletes the saved key, letting an env-configured one apply again.
+ * Returns a disposer.
+ */
+function persistPanelCredentials(app: GeoLibreAppAPI, container: HTMLElement): () => void {
+  const handleInput = (event: Event) => {
+    const input = event.target as HTMLInputElement | null;
+    const wrapper = input?.parentElement;
+    if (!input || !wrapper) return;
+    const field = PANEL_CREDENTIAL_FIELDS.find((f) => wrapper.classList.contains(f.className));
+    // The result is ignored: on a failed write the host keeps the key for this
+    // session and raises the credential-storage warning on desktop.
+    if (field) app.credentials?.set(field.name, input.value.trim());
+  };
+  container.addEventListener("input", handleInput);
+  return () => container.removeEventListener("input", handleInput);
+}
+
+const PANEL_ID = "basemaps-panel";
+let unregisterPanel: (() => void) | null = null;
 let removeRuntimeEnvListener: (() => void) | null = null;
 
 /**
@@ -128,6 +201,7 @@ export function setBasemapControlLabels(next: Partial<BasemapControlLabels>): vo
 }
 
 let basemapControl: BasemapControl | null = null;
+let thumbnails: ReturnType<typeof installBasemapThumbnails> | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
 const registeredRasterLayers = new Map<string, string>();
@@ -155,87 +229,123 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   id: BASEMAP_CONTROL_PLUGIN_ID,
   name: "Basemaps",
   version: "0.3.0",
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!basemapControl) {
-      basemapControl = new BasemapControl(getBasemapControlOptions(app));
-      basemapControl.on("basemapchange", (event) => {
-        handleBasemapChange(app, event);
-      });
-      basemapControl.on("basemapremove", (event) => {
-        handleBasemapRemove(app, event);
-      });
-      basemapControl.on("error", (event) => {
-        handleBasemapError(app, event);
-      });
-      addRuntimeEnvListener();
-    }
-
-    const added = app.addMapControl(basemapControl, basemapControlPosition);
-    if (!added) {
-      // Tear the listener down too, or it outlives the nulled control: deactivate
-      // bails on `!basemapControl`, so it would never be cleaned up otherwise.
-      cleanupRuntimeEnvListener();
-      basemapControl = null;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: pluginDisplayTitle(app, BASEMAP_CONTROL_PLUGIN_ID, "Basemaps"),
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const control = new BasemapControl(getBasemapControlOptions(app));
+        control.on("basemapchange", (event) => {
+          handleBasemapChange(app, event);
+        });
+        control.on("basemapremove", (event) => {
+          handleBasemapRemove(app, event);
+        });
+        control.on("error", (event) => {
+          handleBasemapError(app, event);
+        });
+        const unmount = mountMapControlInPanel(app, control, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        const stopPersistingCredentials = persistPanelCredentials(app, container);
+        basemapControl = control;
+        addRuntimeEnvListener(app);
+        // Re-link raster basemap layers restored from a reopened project (or kept
+        // from a previous activation in this session) so that a later switch to a
+        // style basemap or a removal can unregister them (the module state does not
+        // survive a new session).
+        relinkRestoredRasterBasemaps();
+        thumbnails?.dispose();
+        thumbnails = installBasemapThumbnails(control);
+        // Seed the fresh control instance with every basemap already on the map —
+        // the active style basemap plus any stacked rasters we just relinked — so
+        // the reopened panel highlights them as active and a re-click on a stacked
+        // raster removes it. Without the raster ids the new instance only knows the
+        // style basemap and shows restored overlays as inactive. When rasters are
+        // stacked the map is in overlay mode, so restore that too.
+        const activeStyleId = getBasemapIdForStyleUrl(app.getActiveBasemap());
+        const stackedRasterIds = [...registeredRasterLayers.keys()];
+        const activeBasemapIds = [
+          ...new Set(
+            [activeStyleId, ...stackedRasterIds].filter(
+              (id): id is string => typeof id === "string",
+            ),
+          ),
+        ];
+        control.setState({
+          activeBasemapId: activeStyleId,
+          activeBasemapIds,
+          ...(stackedRasterIds.length > 0 ? { allowMultiple: true } : {}),
+        });
+        control.expand();
+        return () => {
+          stopPersistingCredentials();
+          releaseControl();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       return false;
     }
-    // Re-link raster basemap layers restored from a reopened project (or kept
-    // from a previous activation in this session) so that a later switch to a
-    // style basemap or a removal can unregister them (the module state does not
-    // survive a new session).
-    relinkRestoredRasterBasemaps();
-    // Seed the fresh control instance with every basemap already on the map —
-    // the active style basemap plus any stacked rasters we just relinked — so
-    // the reopened panel highlights them as active and a re-click on a stacked
-    // raster removes it. Without the raster ids the new instance only knows the
-    // style basemap and shows restored overlays as inactive. When rasters are
-    // stacked the map is in overlay mode, so restore that too.
-    const activeStyleId = getBasemapIdForStyleUrl(app.getActiveBasemap());
-    const stackedRasterIds = [...registeredRasterLayers.keys()];
-    const activeBasemapIds = [
-      ...new Set(
-        [activeStyleId, ...stackedRasterIds].filter((id): id is string => typeof id === "string"),
-      ),
-    ];
-    basemapControl.setState({
-      activeBasemapId: activeStyleId,
-      activeBasemapIds,
-      ...(stackedRasterIds.length > 0 ? { allowMultiple: true } : {}),
-    });
-    setTimeout(() => basemapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
-    if (!basemapControl) return;
-    cleanupRuntimeEnvListener();
-    // Closing the control must not throw away the stacked raster basemaps the
-    // user assembled — they are real layers in the Layers panel. Keep them in
-    // the store and only drop the module-level link tracking; a later
-    // reactivation relinks them from the store via relinkRestoredRasterBasemaps
-    // (the same path a reopened project takes). See #1113 follow-up.
-    registeredRasterLayers.clear();
-    app.removeMapControl(basemapControl);
-    basemapControl = null;
-    // Drop any pending style-failure fallback so a later reactivation cannot
-    // act on it against a fresh control instance.
-    styleChangeFallback = null;
-  },
-  getMapControlPosition: () => basemapControlPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    basemapControlPosition = position;
-    if (!basemapControl) return;
-    app.removeMapControl(basemapControl);
-    const added = app.addMapControl(basemapControl, basemapControlPosition);
-    if (!added) return false;
-    basemapControl.setState({
-      activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
-    });
-    setTimeout(() => basemapControl?.expand(), 0);
+    releaseControl();
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
   },
 };
 
+/** Detach the live control from the docked panel and drop its module state. */
+function releaseControl(): void {
+  if (!basemapControl) return;
+  cleanupRuntimeEnvListener();
+  // Closing the control must not throw away the stacked raster basemaps the
+  // user assembled — they are real layers in the Layers panel. Keep them in
+  // the store and only drop the module-level link tracking; a later
+  // reactivation relinks them from the store via relinkRestoredRasterBasemaps
+  // (the same path a reopened project takes). See #1113 follow-up.
+  registeredRasterLayers.clear();
+  thumbnails?.dispose();
+  thumbnails = null;
+  unmountMapControlFromPanel(basemapControl);
+  basemapControl = null;
+  // Drop any pending style-failure fallback so a later reactivation cannot
+  // act on it against a fresh control instance.
+  styleChangeFallback = null;
+}
+
 function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
   return {
+    ...(app.getMapboxMap?.()
+      ? {
+          basemaps: [
+            {
+              id: "mapbox-standard",
+              name: "Mapbox Standard",
+              provider: "mapbox",
+              type: "style",
+              source: {
+                type: "style",
+                url: "https://api.mapbox.com/styles/v1/mapbox/standard?access_token={api-key}",
+              },
+            },
+          ],
+        }
+      : {}),
     collapsed: false,
-    position: basemapControlPosition,
+    // Not used for layout (the dock owns placement); the control still reads it
+    // when it builds its hidden toggle.
+    position: "top-left",
     title: "Basemaps",
     // Provider basemaps that need a key (the Google/TomTom/HERE traffic overlays
     // and the Amazon Location styles) authenticate with the user's own
@@ -243,9 +353,7 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
     // just reports a missing-key error instead of loading tiles. Amazon is
     // spread only when its key is set, so an unset key leaves the control's own
     // region default in place.
-    ...getTrafficOverlayCredentials(),
-    ...(getAmazonCredentials() ?? {}),
-    ...getStyleProviderCredentials(),
+    ...getProviderCredentials(app),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
     // a carefully assembled stack, so confirm before the rasters are lost. See
@@ -264,32 +372,47 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
 }
 
 /**
+ * Every provider credential the control is seeded with: runtime env first, then
+ * the keys the user saved in the panel, which win (as the Mapillary plugin's
+ * pasted token beats its env default).
+ */
+function getProviderCredentials(app: GeoLibreAppAPI) {
+  return {
+    ...getTrafficOverlayCredentials(),
+    ...(getAmazonCredentials() ?? {}),
+    ...getStyleProviderCredentials(),
+    ...getSavedPanelCredentials(app),
+  };
+}
+
+/**
  * Push updated provider keys into the live control when the user edits their
  * runtime environment variables, so a newly entered key takes effect without
  * reopening the project. The control's setters re-resolve tile templates in
  * place, so the panel state (and any stacked basemaps) is preserved.
  */
-function addRuntimeEnvListener(): void {
+function addRuntimeEnvListener(app: GeoLibreAppAPI): void {
   if (removeRuntimeEnvListener || typeof window === "undefined") return;
 
   const handleRuntimeEnvChange = () => {
     if (!basemapControl) return;
-    const { googleMapsApiKey, tomtomApiKey, hereApiKey } = getTrafficOverlayCredentials();
-    basemapControl.setGoogleMapsApiKey(googleMapsApiKey);
-    basemapControl.setTomTomApiKey(tomtomApiKey);
-    basemapControl.setHereApiKey(hereApiKey);
-    // Only push Amazon credentials when a key is configured via env, so an
-    // unrelated env change never clears a key entered in the panel. The region
-    // is left undefined when unset, keeping the control's own default.
-    const amazon = getAmazonCredentials();
-    if (amazon) {
-      basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
+    // A key saved in the panel still wins over env (see getProviderCredentials).
+    const credentials = getProviderCredentials(app);
+    basemapControl.setGoogleMapsApiKey(credentials.googleMapsApiKey);
+    basemapControl.setTomTomApiKey(credentials.tomtomApiKey);
+    basemapControl.setHereApiKey(credentials.hereApiKey);
+    // The rest are pushed only when set, so an unrelated env change never clears
+    // a key typed in the panel this session. The Amazon region is left undefined
+    // when unset, keeping the control's own default.
+    if (credentials.amazonApiKey) {
+      basemapControl.setAmazonCredentials(credentials.amazonApiKey, credentials.awsRegion);
     }
-    // Same rule for the style-provider keys: push only what the user actually set.
-    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken } = getStyleProviderCredentials();
-    if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
-    if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
-    if (mapboxAccessToken) basemapControl.setMapboxAccessToken(mapboxAccessToken);
+    if (credentials.protomapsApiKey) basemapControl.setProtomapsApiKey(credentials.protomapsApiKey);
+    if (credentials.stadiaApiKey) basemapControl.setStadiaApiKey(credentials.stadiaApiKey);
+    if (credentials.mapboxAccessToken) {
+      basemapControl.setMapboxAccessToken(credentials.mapboxAccessToken);
+    }
+    if (credentials.tiandituApiKey) basemapControl.setTiandituApiKey(credentials.tiandituApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
@@ -320,6 +443,7 @@ function handleBasemapChange(app: GeoLibreAppAPI, event: BasemapControlEventPayl
   // before touching the layer manager, so an unrecognized future source type
   // does not evict the raster overlays without replacing the style.
   if (source.type !== "style" && source.type !== "vector-style") return;
+  thumbnails?.pause();
   // Provider style basemaps (Amazon Location, MapTiler, Mapbox, ...) carry a
   // templated source.url with `{api-key}`/`{aws-region}` placeholders that the
   // control substitutes from the user's credentials. Apply the resolved URL the
@@ -388,6 +512,9 @@ function registerRasterBasemap(
     return;
   }
 
+  // Keep the provider-resolved source so Mapbox can restore the adopted layer
+  // after a style reload without requesting literal credential placeholders.
+  const nativeSource = app.getMapboxMap?.()?.getStyle()?.sources[managedRaster.sourceId];
   app.registerExternalNativeLayer({
     id: layerId,
     name: basemap.name,
@@ -399,7 +526,7 @@ function registerRasterBasemap(
       scheme: basemap.source.scheme,
       sourceId: managedRaster.sourceId,
       tileSize: basemap.source.tileSize ?? 256,
-      tiles: basemap.source.tiles,
+      tiles: nativeSource?.type === "raster" ? nativeSource.tiles : basemap.source.tiles,
       type: "raster",
     },
     nativeLayerIds: [managedRaster.layerId],
@@ -484,6 +611,17 @@ function normalizeBeforeId(value: string | undefined | null): string | undefined
 }
 
 function getBasemapIdForStyleUrl(url: string): string | undefined {
+  // Match both native Mapbox URLs from older projects and resolved catalog URLs.
+  const normalize = (value: string) =>
+    value.split("?")[0].replace("mapbox://styles/", "https://api.mapbox.com/styles/v1/");
+  if (normalize(url) === "https://api.mapbox.com/styles/v1/mapbox/standard")
+    return "mapbox-standard";
+  const match = DEFAULT_BASEMAPS.find(
+    ({ source }) =>
+      (source.type === "style" || source.type === "vector-style") &&
+      normalize(source.url) === normalize(url),
+  );
+  if (match) return match.id;
   if (url === "https://tiles.openfreemap.org/styles/positron") {
     return "openfreemap-positron";
   }

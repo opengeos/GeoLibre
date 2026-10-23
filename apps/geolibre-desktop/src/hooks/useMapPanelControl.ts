@@ -1,12 +1,12 @@
 /**
- * Hosts a React-rendered panel inside the MapLibre control container.
+ * Hosts a React-rendered panel inside the active GL engine's control container.
  *
  * Mounting as a real `IControl` (instead of an absolutely-positioned sibling)
  * buys corner stacking with the built-in controls, automatic RTL mirroring of
  * the control corners, and inclusion in Record Video's on-map panel capture,
  * which rasterizes elements inside the map container.
  */
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { ControlPosition, IControl } from "maplibre-gl";
 import { useEffect, useState, type RefObject } from "react";
 
@@ -24,7 +24,7 @@ import { useEffect, useState, type RefObject } from "react";
  * @returns The mounted host element, or null while hidden / map not ready.
  */
 export function useMapPanelControl(
-  mapControllerRef: RefObject<MapController | null>,
+  mapControllerRef: RefObject<MapEngine | null>,
   visible: boolean,
   position: ControlPosition,
   className: string,
@@ -37,8 +37,8 @@ export function useMapPanelControl(
       setHost(null);
       return;
     }
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const engine = mapControllerRef.current;
+    if (!engine) return;
     const element = document.createElement("div");
     element.className = className;
     const control: IControl = {
@@ -47,13 +47,13 @@ export function useMapPanelControl(
         element.remove();
       },
     };
-    map.addControl(control, position);
+    if (!engine.addControl(control, position)) return;
     setHost(element);
     return () => {
       setHost(null);
       // The map may already be destroyed during teardown; removal is best-effort.
       try {
-        map.removeControl(control);
+        engine.removeControl(control);
       } catch {
         element.remove();
       }

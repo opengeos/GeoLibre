@@ -17,32 +17,66 @@ export interface OpenAddDataPostgres {
   table?: string;
 }
 
+/** Prefill for the SQL Server source, so Browser table nodes can select a connection and table. */
+export interface OpenAddDataMssql {
+  /** Saved SQL Server profile id to preselect. */
+  connectionId: string;
+  /** Schema of the table to preselect (with {@link table}). */
+  schema?: string;
+  /** Table to preselect once connected. */
+  table?: string;
+}
+
 /** The detail carried by {@link OPEN_ADD_DATA_EVENT}. */
 export interface OpenAddDataDetail {
   kind: AddDataKind;
   /** Prefill for the PostgreSQL source (only meaningful when `kind` is "postgres"). */
   postgres?: OpenAddDataPostgres;
+  /** Prefill for SQL Server when `kind` is "mssql". */
+  mssql?: OpenAddDataMssql;
   /** Layers created before this dialog closes are moved into this group. */
   groupId?: string;
+  /** Service URL used to prefill URL-based Add Data forms. */
+  url?: string;
+  /** Optional WMS layer or WFS feature type advertised by a catalog. */
+  layer?: string;
+  /** Saved search term for the CSW source (only meaningful when `kind` is "csw"). */
+  keyword?: string;
 }
 
 /**
  * Open the Add Data dialog preselected to `kind` from anywhere in the app,
  * without prop-drilling (mirrors {@link openSettingsSection}). TopToolbar owns
  * the dialog and its kind state and listens for this event. Used by the Browser
- * panel's per-source "New connection" action and its PostGIS table nodes.
+ * panel's per-source "New connection" action and its PostGIS/SQL Server table
+ * nodes.
  *
  * @param kind - The Add Data source to open (e.g. "wms", "wfs", "xyz").
- * @param options - Optional source-specific prefill (currently `postgres`).
+ * @param options - Optional source-specific prefill (`postgres` or `mssql`).
  */
 export function openAddData(
   kind: AddDataKind,
-  options?: { postgres?: OpenAddDataPostgres; groupId?: string },
+  options?: {
+    postgres?: OpenAddDataPostgres;
+    mssql?: OpenAddDataMssql;
+    groupId?: string;
+    url?: string;
+    layer?: string;
+    keyword?: string;
+  },
 ): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<OpenAddDataDetail>(OPEN_ADD_DATA_EVENT, {
-      detail: { kind, postgres: options?.postgres, groupId: options?.groupId },
+      detail: {
+        kind,
+        postgres: options?.postgres,
+        mssql: options?.mssql,
+        groupId: options?.groupId,
+        url: options?.url,
+        layer: options?.layer,
+        keyword: options?.keyword,
+      },
     }),
   );
 }

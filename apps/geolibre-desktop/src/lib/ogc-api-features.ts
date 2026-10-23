@@ -223,6 +223,67 @@ export function createOgcItemsUrl(request: {
 }
 
 /**
+ * Formats a map view's extent as an OGC API - Features `bbox` parameter value.
+ *
+ * The extent a map engine reports is the camera's own, which at low zoom (or
+ * after panning past the 180th meridian) runs outside ±180° longitude because
+ * the view takes in more than one copy of the world. That is not a valid CRS84
+ * box, so the longitudes are wrapped back into range and a view that already
+ * spans a whole world copy collapses to the full -180…180 width.
+ *
+ * A view that straddles the antimeridian also widens to the full -180…180
+ * range, rather than being spelled `west > east`. That spelling is what the
+ * specification prescribes for a crossing box, but servers do not honour it
+ * uniformly: pygeoapi (which this dialog offers as its sample service) simply
+ * sorts the pair, so a crossing box silently returns the *complement* of what
+ * the user is looking at. Widening only narrows less; it is a superset of the
+ * view under either reading, and the latitudes still do their share of the
+ * filtering.
+ *
+ * Latitudes are clamped rather than wrapped — a camera tilted toward the pole
+ * reports beyond ±90°, and the box there really is the pole.
+ *
+ * Corners are rounded to six decimals *before* the box is checked for area, so
+ * a span too narrow to survive rounding is rejected rather than sent as an
+ * empty box — which would filter every feature out instead of narrowing the
+ * request.
+ *
+ * @param bounds - A `[west, south, east, north]` extent in degrees.
+ * @returns The `bbox` value, or null when the extent has no usable area.
+ */
+export function viewBoundsToOgcBbox(bounds: readonly number[]): string | null {
+  if (bounds.length !== 4 || !bounds.every((value) => Number.isFinite(value))) return null;
+  const [west, south, east, north] = bounds;
+  const round = (value: number) => Number(value.toFixed(6));
+  const clampLatitude = (value: number) => Math.max(-90, Math.min(90, value));
+  const southEdge = round(clampLatitude(south));
+  const northEdge = round(clampLatitude(north));
+  if (!(southEdge < northEdge)) return null;
+
+  const span = east - west;
+  if (!(span > 0)) return null;
+  let westEdge = -180;
+  let eastEdge = 180;
+  if (span < 360) {
+    // Wrap the west corner into range, then carry the span across from it so
+    // the box keeps its width instead of being wrapped corner by corner.
+    const wrappedWest = ((((west + 180) % 360) + 360) % 360) - 180;
+    const wrappedEast = wrappedWest + span;
+    // Checked before the widening below, so a sliver too narrow to survive
+    // rounding is rejected wherever it sits rather than only off the meridian.
+    if (round(wrappedWest) === round(wrappedEast)) return null;
+    // Past 180° the box would have to cross the antimeridian, which is not safe
+    // to spell; the -180…180 defaults already stand in for it.
+    if (wrappedEast <= 180) {
+      westEdge = round(wrappedWest);
+      eastEdge = round(wrappedEast);
+    }
+  }
+
+  return [westEdge, southEdge, eastEdge, northEdge].map(String).join(",");
+}
+
+/**
  * Reads the feature collections from a `/collections` document, in document
  * order and deduplicated by id.
  *

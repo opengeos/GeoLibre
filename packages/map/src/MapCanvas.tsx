@@ -1,600 +1,118 @@
 import {
+  createHoverTooltipElement,
+  createIdentifyPopupElement,
+  identifyPopupShellMaxWidth,
+} from "./feature-popup";
+import {
   applyGroupEffects,
+  createPointerElevationResolver,
+  effectiveLayerRenderState,
+  getActiveEllipsoid,
+  IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
   isDuckDBQueryLayer,
+  isPopupClickEnabled,
+  isPopupHoverEnabled,
   NETCDF_IMAGE_SOURCE_KIND,
-  PHOTO_FULL_PROPERTY,
-  PHOTO_PROPERTY,
+  resolveLayerCapabilities,
+  resolvePopupMaxWidth,
   useAppStore,
   type GeoLibreLayer,
+  type PointerElevationResolver,
 } from "@geolibre/core";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+import type { Feature } from "geojson";
 import { memo, useEffect, useMemo, useRef } from "react";
+import { circleLayerId, markerLayerId } from "./geojson-loader";
+import { identifyStyleLayerIds } from "./identify-layer-ids";
 import {
-  circleLayerId,
-  fillExtrusionLayerId,
-  fillLayerId,
-  lineLayerId,
-  markerLayerId,
-} from "./geojson-loader";
+  attachFeatureSelection,
+  FEATURE_SELECTION_BEGIN_EVENT,
+  type FeatureSelectionMap,
+} from "./map-feature-selection";
+import { isGlobeControlToggleClick } from "./globe-control-toggle";
+import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import {
-  externalExtrusionLayerId,
-  mbtilesStyleLayerIds,
-  vectorTileStyleLayerIds,
-} from "./layer-sync";
+  duckDBBridge,
+  fetchWmsIdentifyProperties,
+  isAbortError,
+  isPixelIdentifyLayer,
+  isWmsLayer,
+  isWmsQueryable,
+  pixelIdentifyProperties,
+  timeSliderBridge,
+} from "./identify-sources";
+import { createPhotoPopupElement, PHOTO_SOURCE_KIND } from "./photo-popup";
+import {
+  createGlobalIdentifyPopupElement,
+  DEFAULT_IDENTIFY_ALL_LABELS,
+  type GlobalIdentifyHit,
+  type MapCanvasIdentifyAllLabels,
+} from "./identify-all-popup";
+import {
+  createIdentifyEditActionsElement,
+  type MapCanvasIdentifyEditActions,
+} from "./identify-edit-actions";
+
+export type { MapCanvasIdentifyAllLabels, MapCanvasIdentifyEditActions };
+import type { MapCanvasRasterIdentify } from "./raster-identify";
+export type { MapCanvasRasterIdentify, MapCanvasRasterIdentifyResult } from "./raster-identify";
 import { createMapController, type MapController } from "./map-controller";
+import type { MapEngine } from "./map-engine";
+import {
+  createIdentifyPopupState,
+  consumePendingIdentifyRestore,
+  removeIdentifyPopup as removeIdentifyPopupLifecycle,
+  restoreIdentifySelection,
+  type IdentifyPopupState,
+} from "./map-identify-lifecycle";
+import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
+import { createMapResizeScheduler } from "./map-resize";
+import { type MapDiagnosticEvent, summarizeDiagnosticTile } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
 
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
-const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
-const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798066;
-const WEB_MERCATOR_EARTH_RADIUS = 6378137;
-const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
-const MAPLIBRE_TILE_SIZE = 512;
-const WMS_IDENTIFY_QUERY_SIZE = 101;
-const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
-const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
-
 export interface MapCanvasProps {
-  controllerRef?: React.MutableRefObject<MapController | null>;
+  controllerRef?: React.MutableRefObject<MapEngine | null>;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   onControllerReady?: () => void;
+  /**
+   * Whether the status bar's elevation readout may fall back to the public
+   * Open-Meteo service. Supplied by the app, which owns the persisted consent
+   * flag; `@geolibre/map` has no opinion about consent storage.
+   *
+   * **Omitting it denies the remote lookup.** A privacy gate that fails open
+   * would send coordinates off-device for any embedder that simply did not know
+   * to pass a predicate. The terrain path is unaffected either way, since it
+   * sends nothing anywhere.
+   */
+  canUseRemoteElevation?: () => boolean;
+  /** Localized labels for the grouped, all-layer Identify popup. */
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  /** Reads app-owned raster layers for the grouped, all-layer Identify popup. */
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
+  /**
+   * Edit geometry / Edit attributes actions shown on vector Identify results
+   * (#2932). Omitted, Identify results offer no edit actions.
+   */
+  identifyEditActions?: MapCanvasIdentifyEditActions;
 }
 
-export interface MapDiagnosticEvent {
-  message: string;
-  detail?: string;
-  source?: string;
-  status?: number;
-  url?: string;
-}
-
-interface DuckDBIdentifyBridgeResult {
-  coordinate: [number, number] | null;
-  featureId: string;
-  properties: Record<string, unknown>;
-}
-
-interface GeoLibreDuckDBBridge {
-  getFeatureBounds?: (
-    layerId: string,
-    featureId: string,
-  ) => [number, number, number, number] | null;
-  identifyLayerAtPoint?: (
-    layerId: string,
-    point: { x: number; y: number },
-  ) => DuckDBIdentifyBridgeResult | null;
-  setSelectedFeature?: (layerId: string, featureId: string | null) => void;
-}
-
-/** One band's value at an identified pixel, from the Time Slider bridge. */
-interface TimeSliderBandReading {
-  index: number;
-  name: string | null;
-  value: number;
-  isNodata: boolean;
-}
-
-interface TimeSliderPixelIdentifyBridgeResult {
-  sourceId: string;
-  date: string;
-  url: string;
-  bands: TimeSliderBandReading[];
-}
-
-interface GeoLibreTimeSliderBridge {
-  identifyPixelAt?: (
-    sourceId: string,
-    lngLat: [number, number],
-    options?: { signal?: AbortSignal },
-  ) => Promise<TimeSliderPixelIdentifyBridgeResult | null>;
-}
-
-function stringifyIdentifyValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function createIdentifyPopupElement(
-  layerName: string,
-  properties: Record<string, unknown>,
-  featureId?: string | number,
-): HTMLElement {
-  const root = document.createElement("div");
-  root.className =
-    "geolibre-identify-popup-root flex min-w-[min(18rem,calc(100vw-48px))] max-w-[min(520px,calc(100vw-48px))] flex-col text-xs";
-
-  const title = document.createElement("div");
-  title.className = "mb-2 font-semibold text-foreground";
-  title.textContent = layerName;
-  root.appendChild(title);
-
-  const rows = document.createElement("div");
-  rows.className = "geolibre-identify-popup-rows pe-2";
-  root.appendChild(rows);
-
-  const appendRow = (key: string, value: unknown) => {
-    const row = document.createElement("div");
-    row.className = "grid grid-cols-[minmax(5rem,0.45fr)_1fr] gap-2 border-t py-1";
-
-    const keyCell = document.createElement("div");
-    keyCell.className = "break-words font-medium text-muted-foreground";
-    keyCell.textContent = key;
-
-    const valueCell = document.createElement("div");
-    valueCell.className = "break-words text-foreground";
-    // Render known KML description structures as sanitized markup. Requiring a
-    // supported tag keeps ordinary text such as "Elevation <500m>" intact.
-    if (
-      key === "description" &&
-      typeof value === "string" &&
-      /<(?:a|b|br|div|em|i|p|span|strong|table|tbody|td|th|thead|tr)\b/i.test(value)
-    ) {
-      appendSanitizedKmlDescription(valueCell, value);
-      // Render inline image data URLs (e.g. a geotagged-photo or field-collection
-      // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
-      // Match base64 raster images only, excluding SVG (which can carry scripts)
-      // so an untrusted GeoJSON value can't smuggle one in.
-    } else if (typeof value === "string" && /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)) {
-      const image = document.createElement("img");
-      image.src = value;
-      image.alt = key;
-      image.loading = "lazy";
-      image.className = "max-h-40 max-w-full rounded";
-      valueCell.appendChild(image);
-    } else {
-      valueCell.textContent = stringifyIdentifyValue(value);
-    }
-
-    row.append(keyCell, valueCell);
-    rows.appendChild(row);
-  };
-
-  if (featureId != null) appendRow("id", featureId);
-
-  // Skip the full-resolution image: it is an internal companion to the
-  // thumbnail, so Identify shouldn't decode a multi-megapixel data URL just to
-  // show a second copy of the same photo in the same small box. Filter before
-  // the empty-state check so a feature whose only property is `photo_full` still
-  // reports "No attributes" rather than rendering an empty panel.
-  const entries = Object.entries(properties).filter(
-    ([key]) => key !== PHOTO_FULL_KEY && !key.startsWith("__geolibre_"),
-  );
-  if (entries.length === 0 && featureId == null) {
-    const empty = document.createElement("div");
-    empty.className = "text-muted-foreground";
-    empty.textContent = "No attributes";
-    rows.appendChild(empty);
-  } else {
-    for (const [key, value] of entries) appendRow(key, value);
-  }
-
-  return root;
-}
-
-const KML_DESCRIPTION_TAGS = new Set([
-  "a",
-  "b",
-  "br",
-  "div",
-  "em",
-  "i",
-  "p",
-  "span",
-  "strong",
-  "table",
-  "tbody",
-  "td",
-  "th",
-  "thead",
-  "tr",
-]);
-
-/** Render useful KML description markup while dropping scripts and attributes. */
-function appendSanitizedKmlDescription(target: HTMLElement, html: string): void {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  const copy = (node: Node, parent: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      parent.appendChild(document.createTextNode(node.textContent ?? ""));
-      return;
-    }
-    if (!(node instanceof Element)) return;
-    const tag = node.localName.toLowerCase();
-    if (tag === "script" || tag === "style" || tag === "head" || tag === "meta") return;
-    if (!KML_DESCRIPTION_TAGS.has(tag)) {
-      for (const child of node.childNodes) copy(child, parent);
-      return;
-    }
-    const element = document.createElement(tag);
-    if (tag === "a") {
-      const href = node.getAttribute("href")?.trim();
-      if (href && /^(https?:|mailto:)/i.test(href)) {
-        element.setAttribute("href", href);
-        element.setAttribute("target", "_blank");
-        element.setAttribute("rel", "noopener noreferrer");
-      }
-    }
-    for (const child of node.childNodes) copy(child, element);
-    parent.appendChild(element);
-  };
-  const content = document.createElement("div");
-  content.className = "geolibre-kml-description";
-  for (const child of parsed.body.childNodes) copy(child, content);
-  target.appendChild(content);
+function setMapLibreIdentifyCursor(map: maplibregl.Map, active: boolean): void {
+  // MapLibre's grab cursor belongs to the interactive canvas container, so the
+  // crosshair goes there as well as on the canvas. It is inline rather than
+  // MapLibre's `maplibregl-crosshair` class: that class is BoxZoom's, and every
+  // camera move (jumpTo, easeTo, fitBounds) resets the gesture handlers, which
+  // strips it and hands the container back its grab cursor (#2879). An inline
+  // value also outranks the stylesheet's `:active` grabbing cursor.
+  const cursor = active ? "crosshair" : "";
+  map.getCanvasContainer().style.cursor = cursor;
+  map.getCanvas().style.cursor = cursor;
 }
 
 function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {
   return createIdentifyPopupElement(layerName, { status: message });
-}
-
-/** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
-const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
-
-// Feature-property keys for geotagged/field-collection photos, from the shared
-// @geolibre/core schema: the popup shows the light thumbnail while the fullscreen
-// viewer and "Save image" use the embedded full-resolution image.
-const PHOTO_THUMBNAIL_KEY = PHOTO_PROPERTY;
-const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
-
-/** Return the value at `key` when it is an inline raster image data URL. */
-function imageDataUrlAt(properties: Record<string, unknown>, key: string): string | null {
-  const value = properties[key];
-  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value) ? value : null;
-}
-
-/**
- * Find the first feature property holding an inline raster image (a geotagged
- * photo or field-collection thumbnail), returning its data URL or null. The
- * full-resolution key is skipped so this fallback never returns the heavy
- * original as if it were the light thumbnail (e.g. for a hand-edited feature
- * whose `photo` thumbnail is missing but `photo_full` is present).
- */
-function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
-  for (const [key, value] of Object.entries(properties)) {
-    if (key !== PHOTO_FULL_KEY && typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
-      return value;
-    }
-  }
-  return null;
-}
-
-/** How far past native resolution the fullscreen viewer can magnify (400%). */
-const PHOTO_MAX_ZOOM_FRACTION = 4;
-/** Per-wheel-notch zoom step. */
-const PHOTO_ZOOM_STEP = 1.15;
-
-/**
- * Open a photo in a fullscreen lightbox: a backdrop overlay with the image
- * centered and scaled to fit. The mouse wheel zooms in on the photo (up to 400%
- * of its native resolution) and, once zoomed past the fit, dragging pans it; a
- * badge reports the current zoom as a percentage of native resolution alongside
- * the source pixel dimensions. Uses the native Fullscreen API so it fills the
- * whole screen, falling back to a viewport-filling overlay where fullscreen is
- * denied. Closes on the × button, a backdrop click, or Escape (double-click
- * toggles zoom rather than closing), or when the user leaves native fullscreen.
- *
- * @param src - The image data URL or URL (native resolution where available).
- * @param alt - Accessible label for the image.
- */
-function openPhotoFullscreen(src: string, alt: string): void {
-  const overlay = document.createElement("div");
-  overlay.className = "geolibre-photo-fullscreen";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", alt);
-
-  const image = document.createElement("img");
-  image.src = src;
-  image.alt = alt;
-  image.className = "geolibre-photo-fullscreen-img";
-  overlay.appendChild(image);
-
-  const badge = document.createElement("div");
-  badge.className = "geolibre-photo-fullscreen-badge";
-  badge.setAttribute("aria-hidden", "true");
-  overlay.appendChild(badge);
-
-  const closeButton = document.createElement("button");
-  closeButton.type = "button";
-  closeButton.className = "geolibre-photo-fullscreen-close";
-  closeButton.setAttribute("aria-label", "Close");
-  closeButton.textContent = "×";
-  overlay.appendChild(closeButton);
-
-  document.body.appendChild(overlay);
-  // Move focus into the lightbox so keyboard and screen-reader users land on a
-  // control inside it (and Escape/Enter act on the close button by default).
-  closeButton.focus();
-
-  // Zoom is a multiple of the fit-to-screen size (1 = fit). `tx`/`ty` translate
-  // the image while panning a zoomed photo.
-  let zoom = 1;
-  let tx = 0;
-  let ty = 0;
-  // Set once the image loads: the fit-size-to-native ratio (so the badge can
-  // report zoom as a fraction of native), and the fit and max zoom multiples.
-  let fitToNative = 1;
-  let maxZoom = PHOTO_MAX_ZOOM_FRACTION;
-
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-  const applyTransform = () => {
-    // Bound the pan so the image can't be dragged fully off-screen: the image is
-    // centered, so keeping |tx|/|ty| within half its scaled size guarantees the
-    // viewport centre always sits on the photo (and its double-click-to-reset
-    // target stays reachable). clientWidth/Height are the fit-rendered size.
-    const maxTx = (image.clientWidth * zoom) / 2;
-    const maxTy = (image.clientHeight * zoom) / 2;
-    tx = clamp(tx, -maxTx, maxTx);
-    ty = clamp(ty, -maxTy, maxTy);
-    image.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
-    image.classList.toggle("is-zoomed", zoom > 1.001);
-    const nativePercent = Math.round(fitToNative * zoom * 100);
-    badge.textContent =
-      image.naturalWidth > 0
-        ? `${nativePercent}% · ${image.naturalWidth} × ${image.naturalHeight}`
-        : "";
-  };
-
-  const measure = () => {
-    // clientWidth is the fit-rendered width (max-width/height:100%, aspect kept);
-    // dividing by naturalWidth gives how much of native the fit view shows.
-    fitToNative =
-      image.naturalWidth > 0 && image.clientWidth > 0 ? image.clientWidth / image.naturalWidth : 1;
-    // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native. The floor of 1
-    // only guards the degenerate case where the image is somehow larger than the
-    // fit (fitToNative > cap) so zoom never drops below the fit; in the normal
-    // case (fitToNative <= 1, no upscaling) this is always the native-cap branch,
-    // keeping the badge at exactly 400% of native at maximum zoom.
-    maxZoom = Math.max(1, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
-    // A resize (or entering fullscreen) can grow the fit ratio and shrink
-    // maxZoom below the current zoom; reclamp so the 400%-of-native cap holds
-    // instead of rendering (and reporting) a now-out-of-range zoom.
-    zoom = clamp(zoom, 1, maxZoom);
-    if (zoom === 1) {
-      tx = 0;
-      ty = 0;
-    }
-    applyTransform();
-  };
-  if (image.complete && image.naturalWidth > 0) measure();
-  else image.addEventListener("load", measure, { once: true });
-  // The fit size (and thus the native-zoom ratio and 400% cap) depends on the
-  // viewport, which changes when the browser window resizes or the viewer
-  // enters/leaves native fullscreen, so remeasure on both.
-  const onResize = () => measure();
-  window.addEventListener("resize", onResize);
-
-  const setZoom = (next: number) => {
-    zoom = clamp(next, 1, maxZoom);
-    if (zoom <= 1.001) {
-      // Back at fit: recenter so a later zoom-in starts from the middle.
-      zoom = 1;
-      tx = 0;
-      ty = 0;
-    }
-    applyTransform();
-  };
-
-  overlay.addEventListener(
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      setZoom(zoom * (event.deltaY < 0 ? PHOTO_ZOOM_STEP : 1 / PHOTO_ZOOM_STEP));
-    },
-    { passive: false },
-  );
-
-  // Pan (one pointer) and pinch-zoom (two pointers). Touch devices have no
-  // wheel, and `touch-action: none` disables native pinch, so drive the same
-  // zoom/pan transform from raw pointer events here.
-  const activePointers = new Map<number, { x: number; y: number }>();
-  let lastX = 0;
-  let lastY = 0;
-  let pinchStartDist = 0;
-  let pinchStartZoom = 1;
-  const pointerSpread = () => {
-    const [a, b] = [...activePointers.values()];
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  };
-  image.addEventListener("pointerdown", (event) => {
-    // Track at most two pointers; a third (e.g. an accidental palm touch) is
-    // ignored so it can't perturb the pan anchor or the pinch spread.
-    if (activePointers.size >= 2) return;
-    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    // Arm pan/pinch state before capturing the pointer: setPointerCapture can
-    // throw for a non-active pointer, and that must not skip the setup below.
-    if (activePointers.size === 2) {
-      pinchStartDist = pointerSpread();
-      pinchStartZoom = zoom;
-    } else {
-      lastX = event.clientX;
-      lastY = event.clientY;
-    }
-    try {
-      image.setPointerCapture(event.pointerId);
-    } catch {
-      // The pointer is already gone; pan/pinch still work without capture.
-    }
-    // Only suppress the default for a mouse drag while zoomed, to stop the native
-    // image ghost-drag during a pan. Touch gestures are already neutralized by
-    // `touch-action: none` on the image, so we must NOT preventDefault there: on
-    // pointerdown that would suppress the compatibility events a double-tap's
-    // dblclick is synthesized from, breaking double-tap-to-zoom on touch. A plain
-    // mouse click at fit is likewise left untouched so mouse double-click works.
-    if (event.pointerType === "mouse" && zoom > 1) {
-      event.preventDefault();
-    }
-  });
-  image.addEventListener("pointermove", (event) => {
-    if (!activePointers.has(event.pointerId)) return;
-    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (activePointers.size >= 2) {
-      const spread = pointerSpread();
-      // Re-anchor if the initial spread was zero (both fingers landed on the
-      // same spot), so pinch isn't stuck disabled for the rest of the gesture.
-      if (pinchStartDist <= 0) {
-        pinchStartDist = spread;
-        pinchStartZoom = zoom;
-      } else {
-        setZoom((pinchStartZoom * spread) / pinchStartDist);
-      }
-      return;
-    }
-    // Single-pointer pan, only meaningful once zoomed past the fit.
-    if (zoom <= 1) return;
-    tx += event.clientX - lastX;
-    ty += event.clientY - lastY;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    applyTransform();
-  });
-  const endPointer = (event: PointerEvent) => {
-    if (!activePointers.delete(event.pointerId)) return;
-    if (image.hasPointerCapture(event.pointerId)) {
-      image.releasePointerCapture(event.pointerId);
-    }
-    // Dropping from a pinch back to one finger: resume panning from the survivor
-    // so the image doesn't jump on the next move.
-    const [survivor] = [...activePointers.values()];
-    if (survivor) {
-      lastX = survivor.x;
-      lastY = survivor.y;
-    }
-  };
-  image.addEventListener("pointerup", endPointer);
-  image.addEventListener("pointercancel", endPointer);
-
-  let closed = false;
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    window.removeEventListener("resize", onResize);
-    document.removeEventListener("keydown", onKeyDown);
-    document.removeEventListener("fullscreenchange", onFullscreenChange);
-    if (document.fullscreenElement === overlay) {
-      void document.exitFullscreen().catch(() => {});
-    }
-    overlay.remove();
-  };
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") close();
-  };
-  const onFullscreenChange = () => {
-    if (document.fullscreenElement === overlay) {
-      // Entering fullscreen changes the rendered fit size; remeasure so the
-      // badge percentage and the 400%-of-native cap track the new layout.
-      requestAnimationFrame(measure);
-    } else {
-      // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
-      close();
-    }
-  };
-
-  closeButton.addEventListener("click", close);
-  // Click the backdrop (but not the image) to dismiss.
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) close();
-  });
-  // Double-click toggles between fit and 100% of native (or max, if native is
-  // beyond the cap), rather than closing, so the viewer stays a zoom surface.
-  image.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    setZoom(zoom > 1.001 ? 1 : Math.min(1 / fitToNative, maxZoom));
-  });
-  document.addEventListener("keydown", onKeyDown);
-  document.addEventListener("fullscreenchange", onFullscreenChange);
-
-  // Best-effort true fullscreen; the overlay already fills the viewport if the
-  // request is unsupported or denied (e.g. inside a sandboxed embed).
-  void overlay.requestFullscreen?.().catch(() => {});
-}
-
-/**
- * Build the geotagged-photo popup: a resizable box showing the photo scaled to
- * fill it, captioned with the photo's name and timestamp. The box uses CSS
- * `resize` so the user can drag its corner to enlarge the photo, and
- * double-clicking the photo opens it fullscreen. Photos with no thumbnail (e.g.
- * HEIC) fall back to a "No preview available" note.
- *
- * @param properties - The clicked feature's properties.
- * @returns The popup's DOM content element.
- */
-function createPhotoPopupElement(properties: Record<string, unknown>): HTMLElement {
-  const root = document.createElement("div");
-  root.className = "geolibre-photo-popup";
-
-  // The popup shows the light thumbnail; the fullscreen viewer prefers the
-  // embedded full-resolution image (falling back to the thumbnail when no
-  // original was embedded, e.g. a format that can't be shown at full size).
-  const thumbnail = imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ?? findPhotoDataUrl(properties);
-  if (thumbnail) {
-    // Prefer the embedded full-resolution image, falling back to the thumbnail
-    // when no original was embedded (TIFF/HEIC, mislabeled bytes, or an original
-    // over the size ceiling); `thumbnail` is non-null here, so this is a string.
-    const fullImage = imageDataUrlAt(properties, PHOTO_FULL_KEY);
-    const fullResolution = fullImage ?? thumbnail;
-    const image = document.createElement("img");
-    image.src = thumbnail;
-    image.alt = typeof properties.name === "string" ? properties.name : "Photo";
-    image.className = "geolibre-photo-popup-img";
-    // Only promise "full resolution" when the native original is actually
-    // embedded; otherwise the double-click just opens the thumbnail fullscreen.
-    image.title = fullImage
-      ? "Double-click to view at full resolution"
-      : "Double-click to view fullscreen";
-    // Double-click (not single, so it never fights the resize drag) opens the
-    // photo fullscreen. The image is popup DOM, not the map canvas, so this does
-    // not trigger MapLibre's double-click zoom.
-    image.addEventListener("dblclick", (event) => {
-      event.stopPropagation();
-      openPhotoFullscreen(fullResolution, image.alt);
-    });
-    root.appendChild(image);
-  } else {
-    const placeholder = document.createElement("div");
-    placeholder.className = "geolibre-photo-popup-placeholder";
-    placeholder.textContent = "No preview available";
-    root.appendChild(placeholder);
-  }
-
-  const caption = [properties.name, properties.timestamp]
-    .map((part) => (typeof part === "string" ? part.trim() : ""))
-    .filter(Boolean)
-    .join(" · ");
-  if (caption) {
-    const captionEl = document.createElement("div");
-    captionEl.className = "geolibre-photo-popup-caption";
-    captionEl.textContent = caption;
-    captionEl.title = caption;
-    root.appendChild(captionEl);
-  }
-
-  return root;
-}
-
-function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
-  const nativeLayerIds = layer.metadata.nativeLayerIds;
-  return Array.isArray(nativeLayerIds)
-    ? nativeLayerIds.filter((id): id is string => typeof id === "string")
-    : [];
-}
-
-function identifyStyleLayerIds(layer: GeoLibreLayer): string[] {
-  return [
-    ...nativeIdentifyLayerIds(layer),
-    ...nativeIdentifyLayerIds(layer).map(externalExtrusionLayerId),
-    ...mbtilesStyleLayerIds(layer),
-    markerLayerId(layer.id),
-    circleLayerId(layer.id),
-    lineLayerId(layer.id),
-    fillExtrusionLayerId(layer.id),
-    fillLayerId(layer.id),
-    ...vectorTileStyleLayerIds(layer),
-  ];
 }
 
 function findFeatureId(layer: GeoLibreLayer, feature: maplibregl.MapGeoJSONFeature): string | null {
@@ -609,340 +127,6 @@ function findFeatureId(layer: GeoLibreLayer, feature: maplibregl.MapGeoJSONFeatu
   });
 
   return index >= 0 ? String(layer.geojson.features[index].id ?? index) : null;
-}
-
-function isWmsLayer(layer: GeoLibreLayer): boolean {
-  return layer.type === "wms";
-}
-
-/**
- * The features to highlight for the current selection: the full multi-select
- * set when present, otherwise the single anchor (or none). Shared by the
- * selection effect and the map/basemap style-load handlers so a style reload
- * never collapses a multi-selection down to its anchor.
- */
-function resolveHighlightIds(state: {
-  selectedFeatureIds: string[];
-  selectedFeatureId: string | null;
-}): string[] {
-  if (state.selectedFeatureIds.length > 0) return state.selectedFeatureIds;
-  return state.selectedFeatureId ? [state.selectedFeatureId] : [];
-}
-
-function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
-  return typeof window === "undefined"
-    ? undefined
-    : (window as Window & { __GEOLIBRE_DUCKDB__?: GeoLibreDuckDBBridge }).__GEOLIBRE_DUCKDB__;
-}
-
-function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
-  return typeof window === "undefined"
-    ? undefined
-    : (window as Window & { __GEOLIBRE_TIME_SLIDER__?: GeoLibreTimeSliderBridge })
-        .__GEOLIBRE_TIME_SLIDER__;
-}
-
-/**
- * Whether Identify should read source pixel values for this layer rather than
- * query vector features. Set by the Time Slider for its COG/mosaic sources,
- * which resolve to a different file per timeline date.
- */
-function isPixelIdentifyLayer(layer: GeoLibreLayer): boolean {
-  return layer.metadata.pixelIdentify === true;
-}
-
-/**
- * Trim a float sample to something readable. A 32-bit raster value decoded to a
- * JS double prints all 17 digits of its binary representation
- * (`48.11851119995117`), which is noise past the sensor's precision — six
- * significant digits is more than any COG carries. Integers are left alone so a
- * classification code is never shown in exponential form.
- */
-function formatPixelValue(value: number): string {
-  if (!Number.isFinite(value)) return String(value);
-  if (Number.isInteger(value)) return String(value);
-  return String(Number(value.toPrecision(6)));
-}
-
-/** Turn a pixel reading into the flat key/value rows the identify popup shows. */
-function pixelIdentifyProperties(
-  result: TimeSliderPixelIdentifyBridgeResult,
-): Record<string, unknown> {
-  const properties: Record<string, unknown> = { Date: result.date };
-  for (const band of result.bands) {
-    // Prefer the COG's own band name, falling back to the 1-based index so
-    // unnamed bands still get a stable, distinct row label.
-    const key = band.name ?? `Band ${band.index}`;
-    const formatted = formatPixelValue(band.value);
-    properties[key] = band.isNodata ? `${formatted} (nodata)` : formatted;
-  }
-  return properties;
-}
-
-function stringSource(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function appendWmsQuery(endpoint: string, params: Array<[string, string]>): string {
-  // Prefer URL parsing so our control parameters override any duplicates the
-  // endpoint already carries (e.g. a pasted GetMap URL) and land before any
-  // fragment, which the browser would otherwise strip along with the query.
-  try {
-    const url = new URL(endpoint);
-    const controlKeys = new Set(params.map(([key]) => key.toLowerCase()));
-    for (const existing of [...url.searchParams.keys()]) {
-      if (controlKeys.has(existing.toLowerCase())) {
-        url.searchParams.delete(existing);
-      }
-    }
-    for (const [key, value] of params) {
-      url.searchParams.append(key, value);
-    }
-    return url.toString();
-  } catch {
-    // Fall back to plain concatenation for non-absolute endpoints.
-    const fragIdx = endpoint.indexOf("#");
-    const base = fragIdx >= 0 ? endpoint.slice(0, fragIdx) : endpoint;
-    const separator = base.includes("?")
-      ? base.endsWith("?") || base.endsWith("&")
-        ? ""
-        : "&"
-      : "?";
-    const query = params
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-      .join("&");
-    return `${base}${separator}${query}`;
-  }
-}
-
-function lngLatToWebMercator(lng: number, lat: number): [number, number] {
-  const clampedLat = Math.max(-WEB_MERCATOR_MAX_LATITUDE, Math.min(WEB_MERCATOR_MAX_LATITUDE, lat));
-  const x = (WEB_MERCATOR_EARTH_RADIUS * (lng * Math.PI)) / 180;
-  const y =
-    WEB_MERCATOR_EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI) / 360));
-  return [x, y];
-}
-
-function wmsIdentifyResolution(zoom: number): number {
-  const normalizedZoom = Number.isFinite(zoom) ? Math.max(0, zoom) : 0;
-  return WEB_MERCATOR_WORLD_SIZE / (MAPLIBRE_TILE_SIZE * 2 ** normalizedZoom);
-}
-
-function wmsIdentifyBbox3857(map: maplibregl.Map, lngLat: maplibregl.LngLat): string {
-  const [centerX, centerY] = lngLatToWebMercator(lngLat.lng, lngLat.lat);
-  const halfSpan = (WMS_IDENTIFY_QUERY_SIZE * wmsIdentifyResolution(map.getZoom())) / 2;
-  return [centerX - halfSpan, centerY - halfSpan, centerX + halfSpan, centerY + halfSpan].join(",");
-}
-
-function isViteDevServer(): boolean {
-  return Boolean(
-    (
-      import.meta as ImportMeta & {
-        env?: { DEV?: boolean };
-      }
-    ).env?.DEV,
-  );
-}
-
-// Only the Vite dev server proxies GetFeatureInfo requests (to dodge CORS in
-// the browser). Production builds target the Tauri webview, which does not
-// enforce same-origin restrictions, so the raw URL is used directly. A WMS
-// server lacking CORS headers would fail if this app were ever hosted as a
-// plain web page; such a deployment would need its own proxy.
-function proxyWmsRequestUrl(url: string): string {
-  return isViteDevServer() ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
-}
-
-function createWmsGetFeatureInfoUrl(
-  layer: GeoLibreLayer,
-  map: maplibregl.Map,
-  event: maplibregl.MapMouseEvent,
-  infoFormat: string,
-): string | null {
-  const endpoint = stringSource(layer.source.url) ?? layer.sourcePath;
-  const layers = stringSource(layer.source.layers);
-  if (!endpoint || !layers) return null;
-
-  const styles = stringSource(layer.source.styles) ?? "";
-  const format = stringSource(layer.source.format) ?? "image/png";
-  // WMS 1.3.0 renames the SRS parameter to CRS and the pixel coordinates from
-  // X/Y to I/J. EPSG:3857 keeps easting/northing axis order across both
-  // versions, so the BBOX layout is unchanged.
-  const version = stringSource(layer.source.version) ?? "1.1.1";
-  const isV13 = version.startsWith("1.3");
-  const crsParam = isV13 ? "CRS" : "SRS";
-  // Treat a deliberate featureCount of 0 ("all features" on some servers) as
-  // intentional; only fall back to 1 when it is unset (null/undefined), blank,
-  // or non-numeric. Number(null) and Number("") are both 0, so guard those.
-  const featureCount =
-    layer.source.featureCount != null && layer.source.featureCount !== ""
-      ? Number(layer.source.featureCount)
-      : NaN;
-
-  return appendWmsQuery(endpoint, [
-    ["SERVICE", "WMS"],
-    ["REQUEST", "GetFeatureInfo"],
-    ["VERSION", version],
-    ["LAYERS", layers],
-    ["QUERY_LAYERS", layers],
-    ["STYLES", styles],
-    ["FORMAT", format],
-    ["TRANSPARENT", layer.source.transparent === false ? "FALSE" : "TRUE"],
-    [crsParam, "EPSG:3857"],
-    ["BBOX", wmsIdentifyBbox3857(map, event.lngLat)],
-    ["WIDTH", String(WMS_IDENTIFY_QUERY_SIZE)],
-    ["HEIGHT", String(WMS_IDENTIFY_QUERY_SIZE)],
-    [isV13 ? "I" : "X", String(WMS_IDENTIFY_QUERY_CENTER)],
-    [isV13 ? "J" : "Y", String(WMS_IDENTIFY_QUERY_CENTER)],
-    ["INFO_FORMAT", infoFormat],
-    ["FEATURE_COUNT", String(Number.isFinite(featureCount) ? featureCount : 1)],
-  ]);
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function textFromHtml(value: string): string {
-  const document = new DOMParser().parseFromString(value, "text/html");
-  return normalizeText(document.body.textContent ?? "");
-}
-
-function isWmsExceptionResponse(value: string): boolean {
-  return /<([\w:]+)?(ServiceException|ExceptionReport)\b/i.test(value);
-}
-
-function parseWmsJsonProperties(value: unknown): {
-  featureId?: string | number;
-  properties: Record<string, unknown>;
-} | null {
-  if (!value || typeof value !== "object") return null;
-
-  if (Array.isArray(value)) {
-    // Some servers return a bare array of features instead of a FeatureCollection.
-    if (value.length === 0) return { properties: {} };
-    const first = value[0];
-    // A plain property bag (no "properties"/"features" key) is not a GeoJSON
-    // Feature; delegate so the catch-all below returns its own keys rather than
-    // wrapping it into a feature whose properties resolve to {}.
-    if (
-      first &&
-      typeof first === "object" &&
-      !Array.isArray(first) &&
-      !("properties" in first) &&
-      !("features" in first && Array.isArray((first as Record<string, unknown>).features))
-    ) {
-      return parseWmsJsonProperties(first);
-    }
-    return parseWmsJsonProperties({
-      type: "FeatureCollection",
-      features: [first],
-    });
-  }
-
-  if ("features" in value && Array.isArray(value.features)) {
-    // An empty collection is the standard "no hit" response: report success
-    // with no properties rather than null, so we don't probe other formats.
-    if (value.features.length === 0) return { properties: {} };
-    const [feature] = value.features;
-    if (!feature || typeof feature !== "object") return null;
-    const properties =
-      "properties" in feature &&
-      feature.properties &&
-      typeof feature.properties === "object" &&
-      !Array.isArray(feature.properties)
-        ? (feature.properties as Record<string, unknown>)
-        : {};
-    const featureId =
-      "id" in feature && (typeof feature.id === "string" || typeof feature.id === "number")
-        ? feature.id
-        : undefined;
-    return { featureId, properties };
-  }
-
-  return { properties: value as Record<string, unknown> };
-}
-
-async function fetchWmsIdentifyProperties(
-  layer: GeoLibreLayer,
-  map: maplibregl.Map,
-  event: maplibregl.MapMouseEvent,
-  signal: AbortSignal,
-): Promise<{
-  featureId?: string | number;
-  properties: Record<string, unknown>;
-} | null> {
-  let fallbackText = "";
-
-  // Honor an explicitly configured INFO_FORMAT so we issue a single request
-  // instead of probing JSON/HTML/plain-text in sequence.
-  const configuredFormat = stringSource(layer.source.infoFormat);
-  const infoFormats = configuredFormat ? [configuredFormat] : WMS_IDENTIFY_INFO_FORMATS;
-
-  for (const infoFormat of infoFormats) {
-    const targetUrl = createWmsGetFeatureInfoUrl(layer, map, event, infoFormat);
-    if (!targetUrl) return null;
-
-    const response = await fetch(proxyWmsRequestUrl(targetUrl), { signal });
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
-    // Response.text() cannot take a signal, so bail out as soon as the read
-    // resolves if the request was aborted meanwhile, skipping parsing.
-    const text = await response.text();
-    if (signal.aborted) return null;
-    if (!response.ok) {
-      // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
-      // the status code so a failed request never surfaces as "No attributes".
-      fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
-      continue;
-    }
-
-    const trimmed = text.trim();
-    const looksLikeJson =
-      contentType.includes("json") ||
-      infoFormat.includes("json") ||
-      trimmed.startsWith("{") ||
-      trimmed.startsWith("[");
-
-    // Only run the XML exception check on bodies that are not JSON, so a JSON
-    // response that merely mentions "ServiceException" is not misread as one.
-    if (!looksLikeJson && isWmsExceptionResponse(text)) {
-      fallbackText = normalizeText(text);
-      continue;
-    }
-
-    if (looksLikeJson) {
-      try {
-        const parsed = parseWmsJsonProperties(JSON.parse(text));
-        if (parsed) return parsed;
-        // Valid JSON the parser couldn't map: keep the raw text as a fallback
-        // so an unrecognized-but-real response isn't silently discarded.
-        fallbackText = fallbackText || normalizeText(text);
-      } catch {
-        fallbackText = normalizeText(text);
-      }
-      continue;
-    }
-
-    if (contentType.includes("html")) {
-      const resultText = textFromHtml(text);
-      if (resultText) return { properties: { result: resultText } };
-      continue;
-    }
-
-    const resultText = normalizeText(text);
-    if (!resultText) continue;
-    // Only treat plain text as the final answer when we actually probed a
-    // text format; a body that arrived in an unexpected format is stashed as
-    // a fallback so the remaining info formats are still tried.
-    if (infoFormat.includes("plain")) return { properties: { result: resultText } };
-    fallbackText = resultText;
-  }
-
-  return fallbackText ? { properties: { result: fallbackText } } : null;
-}
-
-function isAbortError(error: unknown): boolean {
-  return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
@@ -1009,7 +193,7 @@ function mapErrorDiagnosticEvent(event: maplibregl.ErrorEvent): MapDiagnosticEve
       url,
       dataType: eventRecord?.dataType,
       sourceDataType: eventRecord?.sourceDataType,
-      tile: eventRecord?.tile,
+      tile: summarizeDiagnosticTile(eventRecord?.tile),
       error: event.error,
     }),
     source,
@@ -1022,6 +206,10 @@ export const MapCanvas = memo(function MapCanvas({
   controllerRef,
   onMapDiagnosticEvent,
   onControllerReady,
+  canUseRemoteElevation,
+  identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
+  identifyRasterLayerAt,
+  identifyEditActions,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -1037,22 +225,82 @@ export const MapCanvas = memo(function MapCanvas({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
+  const blankBackgroundColor = useAppStore((s) => s.blankBackgroundColor);
   const mapPreferences = useAppStore((s) => s.preferences.map);
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
+  const hoverTooltipsEnabled = useAppStore((s) => s.hoverTooltipsEnabled);
   const layerGroups = useAppStore((s) => s.layerGroups);
+  const layerGroupsRef = useRef(layerGroups);
+  // Read by the photo-popup effect, which rebinds only on photo-layer changes.
+  const identifyLabelsRef = useRef(identifyAllLabels);
+  identifyLabelsRef.current = identifyAllLabels;
+  // Read at click time, so a new actions object does not rebind Identify.
+  const identifyEditActionsRef = useRef(identifyEditActions);
+  identifyEditActionsRef.current = identifyEditActions;
+  layerGroupsRef.current = layerGroups;
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
+  const selectLayer = useAppStore((s) => s.selectLayer);
   const setMapView = useAppStore((s) => s.setMapView);
   const setPointerCoords = useAppStore((s) => s.setPointerCoords);
+  const setPointerElevation = useAppStore((s) => s.setPointerElevation);
+  const setCameraAltitude = useAppStore((s) => s.setCameraAltitude);
+  const showPointerElevation = useAppStore((s) => s.preferences.map.showPointerElevation);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
+  const pointerElevationRef = useRef<PointerElevationResolver | null>(null);
+  // Held in a ref so the once-only init effect can read the current predicate
+  // without re-creating the map when the consent flag changes.
+  const canUseRemoteElevationRef = useRef<() => boolean>(() => true);
+  canUseRemoteElevationRef.current = canUseRemoteElevation ?? (() => false);
+
+  // loadProject resets the readout, but a lookup already in flight for the
+  // previous project would repaint it a moment later -- including Earth to
+  // Earth, where neither the body nor the pointer changed.
+  useEffect(() => {
+    pointerElevationRef.current?.invalidate();
+  }, [projectGeneration]);
+
+  // The resolver consults the preference, but only when a pointer event asks it
+  // to. Switching the toggle off with the cursor resting motionless over the
+  // map (a keyboard-only toggle) would otherwise leave the last resolved value
+  // on screen until the next mousemove.
+  useEffect(() => {
+    if (!showPointerElevation) {
+      // invalidate() before clearing: a lookup scheduled inside the 500ms
+      // debounce window would otherwise still fire the request, and only be
+      // suppressed afterwards by the isEnabled() re-check. Cancelling the timer
+      // means the request is never made at all.
+      pointerElevationRef.current?.invalidate();
+      setPointerElevation(null);
+      return;
+    }
+    // Symmetrically, switching it *on* while the cursor sits still would show
+    // nothing until the next mousemove. Resolve once for wherever the pointer
+    // already is, so the readout appears with the toggle.
+    const coords = useAppStore.getState().pointerCoords;
+    if (coords) pointerElevationRef.current?.update(coords);
+  }, [showPointerElevation, setPointerElevation]);
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
+  // The layer all-layer Identify last activated, so a click that hits nothing
+  // can retire that selection without touching one the user made themselves.
+  const globalIdentifyActivatedLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
   const photoPopup = useRef<maplibregl.Popup | null>(null);
+  const hoverTooltip = useRef<maplibregl.Popup | null>(null);
+  // Set for the duration of a map selection gesture. The other click handlers
+  // bound to the same map (Identify, geotagged-photo popups) read it and bail,
+  // so a rectangle drag or a polygon vertex click never also opens a popup.
+  const featureSelectionActive = useRef(false);
+  // Tears down the gesture in progress, if any. Held at component scope so the
+  // Identify effect can end a half-drawn selection when the user switches
+  // tools instead of finishing or pressing Esc.
+  const cancelFeatureSelection = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -1066,10 +314,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current = mc;
     if (controllerRef) controllerRef.current = mc;
 
-    map.on("mousemove", (e) => {
-      setPointerCoords([e.lngLat.lng, e.lngLat.lat]);
+    // Ground elevation under the cursor for the status bar (issue #1813).
+    // Terrain sampling is synchronous so the readout tracks the pointer live;
+    // the resolver only falls back to the network once the pointer settles.
+    const pointerElevation = createPointerElevationResolver({
+      getMap: () => map,
+      isEarth: () => getActiveEllipsoid().id === "earth",
+      // Read per call, not captured: the map is initialised once, so a captured
+      // value would freeze at whatever the toggle was at mount.
+      isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+      // Only the Open-Meteo fallback is gated; the terrain path sends nothing
+      // anywhere. Checked here rather than by scrubbing the stored preference,
+      // so a project that arrives with the readout switched on still cannot
+      // reach the network without local consent.
+      canUseRemote: () => canUseRemoteElevationRef.current(),
+      emit: setPointerElevation,
     });
-    map.on("mouseout", () => setPointerCoords(null));
+    pointerElevationRef.current = pointerElevation;
+
+    map.on("mousemove", (e) => {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setPointerCoords(point);
+      pointerElevation.update(point);
+    });
+    map.on("mouseout", () => {
+      // invalidate() rather than update(null): both cancel a pending lookup, but
+      // update(null) also emits null, and setPointerCoords(null) already clears
+      // the stored elevation — so emitting here would be a second store write
+      // and re-render saying the same thing.
+      pointerElevation.invalidate();
+      setPointerCoords(null);
+    });
     map.on("error", (event) => {
       // Cancelled tile fetches are already surfaced (as info) by the
       // network capture; logging them here would double-count aborts.
@@ -1090,13 +365,18 @@ export const MapCanvas = memo(function MapCanvas({
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
       setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // The store-sync effect below must not jump to this write (issue #3083).
+      mc.markStoreEcho(useAppStore.getState().mapView);
+      // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
+      // live and the rest lag during a drag reads as broken.
+      setCameraAltitude(mc.readCameraAltitude());
     };
     map.on("moveend", updateView);
 
-    // Persist projection toggles (the GlobeControl) into project preferences so
-    // a project reopens with the projection it was saved in. getProjection()
-    // returns the configured type, so the internal globe→mercator switch at high
-    // zoom (which also fires this event) leaves the stored preference unchanged.
+    // Persist user clicks on MapLibre's GlobeControl into project preferences so
+    // a project reopens with the projection it was saved in. See
+    // `globe-control-toggle.ts` for why the click, and not MapLibre's
+    // `projectiontransition` event, is what this listens to.
     const updateProjection = () => {
       const projection = mc.readProjection();
       // Functional update so a concurrent preference change (zoom-limit edit,
@@ -1112,7 +392,14 @@ export const MapCanvas = memo(function MapCanvas({
         };
       });
     };
-    map.on("projectiontransition", updateProjection);
+    const handleProjectionControlClick = (event: MouseEvent) => {
+      // The control's own handler runs on the button before the event reaches
+      // this container-level listener, and `setProjection` is synchronous, so
+      // `readProjection()` already reflects the toggle.
+      if (!isGlobeControlToggleClick(event.target)) return;
+      updateProjection();
+    };
+    map.getContainer().addEventListener("click", handleProjectionControlClick);
     map.on("load", () => {
       const state = useAppStore.getState();
       mc.setBasemapVisible(state.basemapVisible);
@@ -1125,51 +412,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
 
-    let resizeFrame: number | null = null;
-    let panelResizeActive = false;
-    let resizeAfterPanelResize = false;
-    const resizeMap = () => {
-      if (panelResizeActive) {
-        resizeAfterPanelResize = true;
-        return;
-      }
-
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null;
-        mc.getMap()?.resize();
-      });
-    };
-    const onPanelResizeStart = () => {
-      panelResizeActive = true;
-      resizeAfterPanelResize = false;
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = null;
-      }
-    };
-    const onPanelResizeEnd = () => {
-      panelResizeActive = false;
-      if (resizeAfterPanelResize) {
-        resizeAfterPanelResize = false;
-      }
-      resizeMap();
-    };
-    const resizeObserver = new ResizeObserver(resizeMap);
-    resizeObserver.observe(containerRef.current);
-    window.addEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-    window.addEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-    resizeMap();
+    const disposeResizeScheduler = createMapResizeScheduler({
+      getMap: () => mc.getMap(),
+      container: containerRef.current,
+    });
 
     return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener(PANEL_RESIZE_START_EVENT, onPanelResizeStart);
-      window.removeEventListener(PANEL_RESIZE_END_EVENT, onPanelResizeEnd);
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame);
-      }
+      disposeResizeScheduler();
+      pointerElevation.dispose();
+      map.getContainer().removeEventListener("click", handleProjectionControlClick);
       mc.destroy();
       controller.current = null;
       if (controllerRef) controllerRef.current = null;
@@ -1195,6 +446,15 @@ export const MapCanvas = memo(function MapCanvas({
       onControllerReadyRef.current?.();
     });
     controller.current?.setStyle(basemapStyleUrl);
+    // Switching the active body without moving the camera -- the planet switcher
+    // or a different planetary basemap -- changes the radius the altitude is
+    // scaled by, but fires no moveend, so the readout would keep the previous
+    // body's number until the next pan. Mirrors how setStyle refreshes the
+    // scale bar for the same reason.
+    setCameraAltitude(controller.current?.readCameraAltitude() ?? null);
+    // setCameraAltitude is a stable store action; the effect is keyed on the
+    // basemap alone so it does not re-run on unrelated store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basemapStyleUrl]);
 
   useEffect(() => {
@@ -1204,6 +464,14 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.setBasemapOpacity(basemapOpacity);
   }, [basemapOpacity]);
+
+  useEffect(() => {
+    controller.current?.setBlankBackgroundColor(blankBackgroundColor);
+    if (blankBackgroundColor !== null || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => controller.current?.setBlankBackgroundColor(null));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [blankBackgroundColor]);
 
   useEffect(() => {
     controller.current?.applyMapPreferences(mapPreferences);
@@ -1219,13 +487,37 @@ export const MapCanvas = memo(function MapCanvas({
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
 
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map) return;
+    return attachFeatureSelection(map as unknown as FeatureSelectionMap, {
+      state: {
+        active: featureSelectionActive,
+        cancel: cancelFeatureSelection,
+      },
+      featureIdAtPoint: (layer, point) => {
+        const queryIds = identifyStyleLayerIds(layer).filter((id) => map.getLayer(id));
+        const rendered = map.queryRenderedFeatures(
+          [
+            [point.x - 4, point.y - 4],
+            [point.x + 4, point.y + 4],
+          ],
+          { layers: queryIds },
+        );
+        return rendered[0] ? findFeatureId(layer, rendered[0]) : null;
+      },
+      onDiagnostic: (event) => onMapDiagnosticEventRef.current?.(event),
+      onEnd: () => setMapLibreIdentifyCursor(map, Boolean(useAppStore.getState().identifyLayerId)),
+    });
+  }, []);
+
   // Stable key over just the geotagged-photo layer ids, so the photo-click
   // effect re-binds only when such a layer is added/removed, not on every
   // unrelated layer edit (e.g. a coordinate update while dragging a pin).
   const photoLayerKey = useMemo(
     () =>
       layers
-        .filter((layer) => layer.metadata.sourceKind === "geotagged-photos")
+        .filter((layer) => layer.metadata.sourceKind === PHOTO_SOURCE_KIND)
         .map((layer) => layer.id)
         .join(","),
     [layers],
@@ -1233,27 +525,26 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
-    // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
-    const highlightIds = resolveHighlightIds({
-      selectedFeatureIds,
+    const previousKey = previousSelectedFeatureKey.current;
+    // This effect runs after an Identify restore has returned, so it reads
+    // the restore's read-once marker rather than a synchronous flag.
+    const restoring = consumePendingIdentifyRestore(
+      selectionFitKey({ selectedLayerId, selectedFeatureIds, selectedFeatureId }),
+    );
+    const nextKey = applySelectionHighlight(
+      controller.current,
+      layers,
+      selectedLayerId,
       selectedFeatureId,
-    });
-    // Key on the whole selection set, not just the anchor: a Shift-range pick
-    // keeps the anchor fixed while adding features, so an anchor-only key would
-    // never re-fit. Any change to the set re-triggers the fit to frame them all.
-    // Join on NUL — a byte that can't appear in a feature id — so ids containing
-    // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
-    const nextKey =
-      selectedLayerId && highlightIds.length > 0
-        ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
-        : null;
+      selectedFeatureIds,
+      zoomToSelectedFeature,
+      previousKey,
+      restoring,
+    );
     const shouldFit = Boolean(
-      zoomToSelectedFeature && nextKey && nextKey !== previousSelectedFeatureKey.current,
+      !restoring && zoomToSelectedFeature && nextKey && nextKey !== previousKey,
     );
     previousSelectedFeatureKey.current = nextKey;
-    controller.current?.highlightFeature(layer, highlightIds, {
-      fit: shouldFit,
-    });
     if (layer && isDuckDBQueryLayer(layer)) {
       duckDBBridge()?.setSelectedFeature?.(layer.id, selectedFeatureId);
       if (shouldFit && selectedFeatureId) {
@@ -1269,11 +560,287 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const map = controller.current?.getMap();
-    const layer = layers.find((item) => item.id === identifyLayerId);
-    if (!map || !layer) {
+    const identifyAllLayers = identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+    const layer = identifyAllLayers
+      ? undefined
+      : layers.find((item) => item.id === identifyLayerId);
+    if (!map || (!layer && !identifyAllLayers)) {
       identifyPopup.current?.remove();
       identifyPopup.current = null;
-      if (map) map.getCanvas().style.cursor = "";
+      // Same guard as the cleanup below: picking a gesture turns Identify off,
+      // and begin() has already claimed the crosshair by the time this runs.
+      if (map && !featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
+      return;
+    }
+
+    // Switching to Identify ends a half-drawn selection. Without this the
+    // gesture stays live and its handlers keep swallowing map clicks, so the
+    // Identify button would light up while Identify itself did nothing.
+    cancelFeatureSelection.current?.();
+
+    if (identifyAllLayers) {
+      setMapLibreIdentifyCursor(map, true);
+      let globalIdentifyAbortController: AbortController | null = null;
+      const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
+        if (featureSelectionActive.current) return;
+
+        globalIdentifyAbortController?.abort();
+        const abortController = new AbortController();
+        globalIdentifyAbortController = abortController;
+
+        const owners = new Map<string, GeoLibreLayer>();
+        // effectiveLayerRenderState rebuilds an id -> group map on every call
+        // when handed the array form, so fold every candidate against one map
+        // built once per click instead of one per layer.
+        const groupById = new Map(layerGroupsRef.current.map((group) => [group.id, group]));
+        // Read at click time: a restriction set by a script or project names
+        // the layers this mode is limited to (issue #2688).
+        const { identifyLayerIds } = useAppStore.getState();
+        const eligibleLayers = layers.filter(
+          (candidate) =>
+            identifyAllIncludes(candidate.id, identifyLayerIds) &&
+            effectiveLayerRenderState(candidate, groupById).visible &&
+            resolveLayerCapabilities(candidate).query &&
+            isPopupClickEnabled(candidate.popup),
+        );
+        for (const candidate of eligibleLayers) {
+          for (const styleLayerId of identifyStyleLayerIds(candidate)) {
+            if (map.getLayer(styleLayerId)) owners.set(styleLayerId, candidate);
+          }
+        }
+
+        const hits: GlobalIdentifyHit[] = [];
+        const acceptHit = createGlobalIdentifyHitDeduper();
+        const queryLayerIds = [...owners.keys()];
+        const rendered =
+          queryLayerIds.length === 0
+            ? []
+            : map.queryRenderedFeatures(event.point, { layers: queryLayerIds });
+        for (const feature of rendered) {
+          const owner = owners.get(feature.layer.id);
+          if (!owner) continue;
+          const hit: GlobalIdentifyHit = {
+            layer: owner,
+            properties: feature.properties ?? {},
+            feature,
+            featureId: findFeatureId(owner, feature),
+          };
+          if (!acceptHit(hit.layer.id, hit.featureId, feature)) continue;
+          hits.push(hit);
+        }
+
+        // DuckDB query layers draw through deck.gl, so they own no MapLibre
+        // style layer and never surface in queryRenderedFeatures. The plugin
+        // bridge picks them the same way the single-layer path does.
+        for (const candidate of eligibleLayers) {
+          if (!isDuckDBQueryLayer(candidate)) continue;
+          const result = duckDBBridge()?.identifyLayerAtPoint?.(candidate.id, {
+            x: event.point.x,
+            y: event.point.y,
+          });
+          if (!result) continue;
+          hits.push({
+            layer: candidate,
+            properties: result.properties,
+            featureId: result.featureId,
+          });
+        }
+
+        const activate = (hit: GlobalIdentifyHit) => {
+          selectLayer(hit.layer.id);
+          selectFeature(hit.featureId);
+          globalIdentifyActivatedLayerId.current = hit.layer.id;
+        };
+        const showPopup = (content: HTMLElement, shellMaxWidth = "560px") => {
+          identifyPopup.current?.remove();
+          identifyPopup.current = new maplibregl.Popup({
+            className: "geolibre-identify-popup",
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: shellMaxWidth,
+          })
+            .setLngLat(event.lngLat)
+            .setDOMContent(content)
+            .addTo(map);
+        };
+        const finish = (allHits: GlobalIdentifyHit[]) => {
+          if (abortController.signal.aborted) return;
+          const order = new Map(layers.map((candidate, index) => [candidate.id, index]));
+          allHits.sort((a, b) => (order.get(b.layer.id) ?? -1) - (order.get(a.layer.id) ?? -1));
+          if (allHits.length === 0) {
+            identifyPopup.current?.remove();
+            identifyPopup.current = null;
+            selectFeature(null);
+            // Retire the layer selection only when this mode is what set it.
+            // A layer the user picked in the Layers panel — to edit its style,
+            // say — is theirs to keep, and the single-layer Identify path
+            // never clears it either.
+            if (
+              globalIdentifyActivatedLayerId.current !== null &&
+              useAppStore.getState().selectedLayerId === globalIdentifyActivatedLayerId.current
+            ) {
+              selectLayer(null);
+            }
+            globalIdentifyActivatedLayerId.current = null;
+            return;
+          }
+          activate(allHits[0]);
+          // The grouped popup holds several layers at once, so it takes the
+          // widest width any of them asked for rather than picking one layer's
+          // setting over the others'.
+          const widest = allHits.reduce<number | undefined>((widestSoFar, hit) => {
+            const configured = resolvePopupMaxWidth(hit.layer.popup);
+            if (configured === undefined) return widestSoFar;
+            return widestSoFar === undefined ? configured : Math.max(widestSoFar, configured);
+          }, undefined);
+          const content = createGlobalIdentifyPopupElement(
+            allHits,
+            map.getZoom(),
+            activate,
+            identifyAllLabels,
+            widest,
+            identifyEditActionsRef.current,
+            () => {
+              identifyPopup.current?.remove();
+              identifyPopup.current = null;
+            },
+          );
+          showPopup(content, identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined));
+        };
+
+        const asyncLayers = eligibleLayers.filter(
+          (candidate) =>
+            (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
+            isPixelIdentifyLayer(candidate) ||
+            candidate.type === "cog" ||
+            candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
+        );
+        if (asyncLayers.length === 0) {
+          finish(hits);
+          return;
+        }
+
+        selectFeature(null);
+        showPopup(
+          createIdentifyMessagePopupElement(
+            identifyAllLabels.loadingTitle,
+            identifyAllLabels.loading,
+          ),
+        );
+        const loadingPopup = identifyPopup.current;
+        const onLoadingClose = () => abortController.abort();
+        loadingPopup?.once("close", onLoadingClose);
+
+        void Promise.all(
+          asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
+            try {
+              if (isWmsLayer(candidate)) {
+                const result = await fetchWmsIdentifyProperties(
+                  candidate,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  map.getZoom(),
+                  abortController.signal,
+                );
+                if (
+                  !result ||
+                  (result.featureId == null && Object.keys(result.properties).length === 0)
+                ) {
+                  return null;
+                }
+                return {
+                  layer: candidate,
+                  properties: result.properties,
+                  featureId: result.featureId == null ? null : String(result.featureId),
+                };
+              }
+
+              // Ordered before the pixel-identify branch on purpose: the
+              // NetCDF dialog marks these layers `pixelIdentify` too, and that
+              // branch reads through the Time Slider bridge, which knows
+              // nothing about a retained NetCDF grid.
+              if (candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) {
+                const result = await identifyRasterLayerAt?.(
+                  candidate,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: result.properties,
+                      featureId: null,
+                      title: result.title ?? identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              if (isPixelIdentifyLayer(candidate)) {
+                const result = await timeSliderBridge()?.identifyPixelAt?.(
+                  candidate.id,
+                  [event.lngLat.lng, event.lngLat.lat],
+                  { signal: abortController.signal },
+                );
+                return result
+                  ? {
+                      layer: candidate,
+                      properties: pixelIdentifyProperties(result),
+                      featureId: null,
+                      title: identifyAllLabels.pixel,
+                    }
+                  : null;
+              }
+
+              const result = await identifyRasterLayerAt?.(
+                candidate,
+                [event.lngLat.lng, event.lngLat.lat],
+                { signal: abortController.signal },
+              );
+              return result
+                ? {
+                    layer: candidate,
+                    properties: result.properties,
+                    featureId: null,
+                    title: result.title ?? identifyAllLabels.pixel,
+                  }
+                : null;
+            } catch (error: unknown) {
+              if (abortController.signal.aborted || isAbortError(error)) return null;
+              return {
+                layer: candidate,
+                properties: {
+                  [identifyAllLabels.errorLabel]:
+                    error instanceof Error ? error.message : identifyAllLabels.error,
+                },
+                featureId: null,
+              };
+            }
+          }),
+        ).then((asyncHits) => {
+          if (abortController.signal.aborted) return;
+          loadingPopup?.off("close", onLoadingClose);
+          finish([...hits, ...asyncHits.filter((hit): hit is GlobalIdentifyHit => hit !== null)]);
+        });
+      };
+
+      map.on("click", handleIdentifyAllClick);
+      return () => {
+        globalIdentifyAbortController?.abort();
+        map.off("click", handleIdentifyAllClick);
+        identifyPopup.current?.remove();
+        identifyPopup.current = null;
+        globalIdentifyActivatedLayerId.current = null;
+        if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
+      };
+    }
+
+    if (!layer) return;
+
+    // An author can turn the click popup off for a layer they only want
+    // hovered (or only styled). Identify then does nothing for it rather than
+    // opening a popup the shared map was designed without.
+    if (!isPopupClickEnabled(layer.popup)) {
+      identifyPopup.current?.remove();
+      identifyPopup.current = null;
       return;
     }
 
@@ -1287,30 +854,67 @@ export const MapCanvas = memo(function MapCanvas({
     // retained grid directly, and the image layer has no features to query.
     if (layer.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND) return;
 
-    map.getCanvas().style.cursor = "crosshair";
+    setMapLibreIdentifyCursor(map, true);
 
     let wmsIdentifyAbortController: AbortController | null = null;
     let pixelIdentifyAbortController: AbortController | null = null;
+    let identifyPopupState: IdentifyPopupState | null = null;
+
+    const removeIdentifyPopup = () => {
+      const popup = identifyPopup.current;
+      const popupState = identifyPopupState;
+      identifyPopup.current = null;
+      identifyPopupState = null;
+      // Every removal through this path is programmatic: a follow-up click,
+      // mode/effect cleanup, or an async popup swap. Only the popup's own close
+      // event below represents a user dismissal and may restore the snapshot.
+      removeIdentifyPopupLifecycle(popup, popupState, { restore: false });
+    };
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
+      // A selection gesture owns the map clicks while it runs.
+      if (featureSelectionActive.current) return;
       const clearIdentifyResult = () => {
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
         selectFeature(null);
-        identifyPopup.current?.remove();
-        identifyPopup.current = null;
+        removeIdentifyPopup();
       };
-      const showIdentifyPopup = (content: HTMLElement) => {
-        identifyPopup.current?.remove();
-        identifyPopup.current = new maplibregl.Popup({
+      const createAndAddIdentifyPopup = (content: HTMLElement) =>
+        new maplibregl.Popup({
           className: "geolibre-identify-popup",
           closeButton: true,
           closeOnClick: false,
-          maxWidth: "560px",
+          maxWidth: identifyPopupShellMaxWidth(layer.popup),
         })
           .setLngLat(event.lngLat)
           .setDOMContent(content)
           .addTo(map);
+      const showIdentifyPopup = (content: HTMLElement) => {
+        removeIdentifyPopup();
+        identifyPopup.current = createAndAddIdentifyPopup(content);
+      };
+      const showResolvedHitPopup = (content: HTMLElement, featureId: string | null) => {
+        removeIdentifyPopup();
+        let popupState: IdentifyPopupState;
+        const onClose = () => {
+          if (identifyPopupState !== popupState) return;
+          identifyPopup.current = null;
+          identifyPopupState = null;
+          restoreIdentifySelection(popupState);
+        };
+        popupState = createIdentifyPopupState({
+          layerId: layer.id,
+          featureId,
+          onClose,
+        });
+        const selectionState = useAppStore.getState();
+        if (selectionState.selectedLayerId !== layer.id) selectionState.selectLayer(layer.id);
+        selectionState.selectFeature(featureId);
+        const popup = createAndAddIdentifyPopup(content);
+        identifyPopup.current = popup;
+        identifyPopupState = popupState;
+        popup.once("close", onClose);
       };
 
       if (isPixelIdentifyLayer(layer)) {
@@ -1323,7 +927,7 @@ export const MapCanvas = memo(function MapCanvas({
         const abortController = new AbortController();
         pixelIdentifyAbortController = abortController;
         selectFeature(null);
-        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, identifyAllLabels.loading));
         // Same dismissal dance as the WMS branch: the × on the loading popup
         // must cancel the read, but the programmatic swap to the result popup
         // also fires "close", so track user dismissal with a flag rather than
@@ -1351,7 +955,7 @@ export const MapCanvas = memo(function MapCanvas({
             showIdentifyPopup(
               result
                 ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
-                : createIdentifyMessagePopupElement(layer.name, "No data at this location."),
+                : createIdentifyMessagePopupElement(layer.name, identifyAllLabels.noData),
             );
           })
           .catch((error: unknown) => {
@@ -1359,9 +963,19 @@ export const MapCanvas = memo(function MapCanvas({
             pixelIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
             const message =
-              error instanceof Error ? error.message : "The pixel value could not be read.";
+              error instanceof Error ? error.message : identifyAllLabels.pixelReadFailed;
             showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
+        return;
+      }
+
+      if (isWmsLayer(layer) && !isWmsQueryable(layer)) {
+        // The capabilities say this layer answers no GetFeatureInfo (#2887).
+        wmsIdentifyAbortController?.abort();
+        selectFeature(null);
+        showIdentifyPopup(
+          createIdentifyMessagePopupElement(layer.name, identifyAllLabels.wmsNotQueryable),
+        );
         return;
       }
 
@@ -1370,7 +984,7 @@ export const MapCanvas = memo(function MapCanvas({
         const abortController = new AbortController();
         wmsIdentifyAbortController = abortController;
         selectFeature(null);
-        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, "Loading..."));
+        showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, identifyAllLabels.loading));
         // Closing the loading popup (the × button) must cancel the in-flight
         // request so its result does not reopen a popup the user dismissed.
         // Track user dismissal with a flag rather than the abort signal: the
@@ -1389,7 +1003,12 @@ export const MapCanvas = memo(function MapCanvas({
         // showIdentifyPopup just assigned identifyPopup.current, so it is set.
         loadingPopup!.once("close", onLoadingClose);
 
-        void fetchWmsIdentifyProperties(layer, map, event, abortController.signal)
+        void fetchWmsIdentifyProperties(
+          layer,
+          [event.lngLat.lng, event.lngLat.lat],
+          map.getZoom(),
+          abortController.signal,
+        )
           .then((result) => {
             if (userDismissed || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
@@ -1404,8 +1023,7 @@ export const MapCanvas = memo(function MapCanvas({
             if (userDismissed || isAbortError(error) || abortController.signal.aborted) return;
             wmsIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
-            const message =
-              error instanceof Error ? error.message : "The WMS GetFeatureInfo request failed.";
+            const message = error instanceof Error ? error.message : identifyAllLabels.wmsFailed;
             showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
         return;
@@ -1422,9 +1040,27 @@ export const MapCanvas = memo(function MapCanvas({
         }
 
         selectFeature(result.featureId);
-        showIdentifyPopup(
-          createIdentifyPopupElement(layer.name, result.properties, result.featureId),
+        const content = createIdentifyPopupElement(
+          layer.name,
+          result.properties,
+          result.featureId,
+          {
+            popup: layer.popup,
+            fieldVisibility: layer.fieldVisibility,
+            zoom: map.getZoom(),
+          },
         );
+        // DuckDB rows are editable in the attribute table too, as in the
+        // grouped popup.
+        const editRow = createIdentifyEditActionsElement(
+          layer,
+          result.featureId,
+          identifyEditActionsRef.current,
+          identifyAllLabels,
+          () => removeIdentifyPopup(),
+        );
+        if (editRow) content.firstElementChild?.after(editRow);
+        showIdentifyPopup(content);
         return;
       }
 
@@ -1443,11 +1079,28 @@ export const MapCanvas = memo(function MapCanvas({
       }
 
       const featureId = findFeatureId(layer, feature);
-      selectFeature(featureId);
-
-      showIdentifyPopup(
-        createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id),
+      const content = createIdentifyPopupElement(
+        layer.name,
+        feature.properties ?? {},
+        featureId ?? feature.id,
+        {
+          popup: layer.popup,
+          fieldVisibility: layer.fieldVisibility,
+          feature,
+          zoom: map.getZoom(),
+        },
       );
+      const editRow = createIdentifyEditActionsElement(
+        layer,
+        featureId,
+        identifyEditActionsRef.current,
+        identifyAllLabels,
+        // Programmatic: the edit action owns the selection from here.
+        () => removeIdentifyPopup(),
+      );
+      // Under the title, above the attribute rows.
+      if (editRow) content.firstElementChild?.after(editRow);
+      showResolvedHitPopup(content, featureId);
     };
 
     map.on("click", handleIdentifyClick);
@@ -1456,11 +1109,20 @@ export const MapCanvas = memo(function MapCanvas({
       wmsIdentifyAbortController?.abort();
       pixelIdentifyAbortController?.abort();
       map.off("click", handleIdentifyClick);
-      identifyPopup.current?.remove();
-      identifyPopup.current = null;
-      map.getCanvas().style.cursor = "";
+      removeIdentifyPopup();
+      // Starting a selection gesture turns Identify off, so this cleanup runs
+      // after the gesture has already claimed the crosshair — leave its cursor
+      // alone rather than resetting it out from under the drawing.
+      if (!featureSelectionActive.current) setMapLibreIdentifyCursor(map, false);
     };
-  }, [identifyLayerId, layers, selectFeature]);
+  }, [
+    identifyAllLabels,
+    identifyLayerId,
+    identifyRasterLayerAt,
+    layers,
+    selectFeature,
+    selectLayer,
+  ]);
 
   // Geotagged photos: clicking a photo point opens a resizable popup with the
   // photo, without needing the Identify tool. The popup is photo-specific, and
@@ -1478,8 +1140,9 @@ export const MapCanvas = memo(function MapCanvas({
 
     const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
       // The Identify tool already renders the photo in its own popup; skip ours
-      // so one click never opens two popups.
-      if (useAppStore.getState().identifyLayerId) return;
+      // so one click never opens two popups. Likewise while a selection gesture
+      // is drawing, where a click is a vertex rather than a pick.
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       const feature = event.features?.[0];
       if (!feature) return;
       // Anchor to the feature's own coordinate rather than the click point, so
@@ -1496,15 +1159,17 @@ export const MapCanvas = memo(function MapCanvas({
         maxWidth: "none",
       })
         .setLngLat(anchor)
-        .setDOMContent(createPhotoPopupElement(feature.properties ?? {}))
+        .setDOMContent(
+          createPhotoPopupElement(feature.properties ?? {}, identifyLabelsRef.current.photo),
+        )
         .addTo(map);
     };
     const handleEnter = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "pointer";
     };
     const handleLeave = () => {
-      if (useAppStore.getState().identifyLayerId) return;
+      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
       map.getCanvas().style.cursor = "";
     };
 
@@ -1559,9 +1224,212 @@ export const MapCanvas = memo(function MapCanvas({
     };
   }, [photoLayerKey]);
 
+  // Hover tooltips (#2113): a lightweight tip following the pointer over the
+  // layers whose author turned one on, showing the fields they flagged for
+  // hover. Keyed on the ids AND the popup blocks, so editing the tooltip's
+  // fields in the Style panel rebinds immediately.
+  const hoverTooltipKey = useMemo(
+    () =>
+      !hoverTooltipsEnabled
+        ? ""
+        : layers
+            // Group-aware, like the Identify handler and the selection query: a
+            // layer whose own switch is on can still be hidden by its group, and
+            // binding pointer handlers to it would be binding to something the
+            // user cannot see. `applyGroupEffects` also sets the synced MapLibre
+            // layer's visibility to `none`, so nothing fires today either way —
+            // this keeps the two from drifting if that ever stops being true.
+            .filter(
+              (layer) =>
+                effectiveLayerRenderState(layer, layerGroups).visible &&
+                isPopupHoverEnabled(layer.popup),
+            )
+            .map((layer) => `${layer.id}\u0000${JSON.stringify(layer.popup ?? {})}`)
+            .join("\u0001"),
+    [layers, layerGroups, hoverTooltipsEnabled],
+  );
+
   useEffect(() => {
-    controller.current?.applyView(mapView);
+    const map = controller.current?.getMap();
+    if (!map || !hoverTooltipKey) return;
+    const hoverLayerIds = hoverTooltipKey.split("\u0001").map((part) => part.split("\u0000")[0]);
+
+    // The pointer move that has not been drawn yet, and the frame that will
+    // draw it. `mousemove` fires far more often than the screen refreshes, and
+    // each tip rebuilds a small DOM tree, so moves are coalesced to one render
+    // per frame rather than one per event.
+    let pending: {
+      layerId: string;
+      feature: maplibregl.MapGeoJSONFeature;
+      lngLat: maplibregl.LngLat;
+    } | null = null;
+    let pendingFrame = 0;
+    // A `mouseleave` waiting for the same frame to decide. One logical layer
+    // renders as several MapLibre style layers (a polygon's fill and its own
+    // stroke, a point's circle and its marker), and this effect binds to each
+    // of them, so crossing from a feature's fill onto that feature's own
+    // stroke fires `mouseleave` on the first and `mousemove` on the second
+    // from a single pointer event. Removing on the spot would tear the popup
+    // down and rebuild it on every such crossing — and if the leave arrived
+    // after the move, it would cancel the redraw and blank the tip until the
+    // pointer moved again. Deferring the decision to the frame lets a move
+    // anywhere in the same layer outvote the leave.
+    let pendingLeave = false;
+
+    /** Drop the tooltip now, discarding anything waiting on a frame. */
+    const removeTooltip = () => {
+      pending = null;
+      pendingLeave = false;
+      if (pendingFrame) {
+        cancelAnimationFrame(pendingFrame);
+        pendingFrame = 0;
+      }
+      hoverTooltip.current?.remove();
+      hoverTooltip.current = null;
+    };
+
+    const drawPending = () => {
+      pendingFrame = 0;
+      const next = pending;
+      const leaving = pendingLeave;
+      pending = null;
+      pendingLeave = false;
+      // A move seen this frame means the pointer is still over one of this
+      // layer's style layers, whichever one it left.
+      if (!next) {
+        if (leaving) removeTooltip();
+        return;
+      }
+      // Read the layer from the store rather than from a captured array, so an
+      // edit to the tooltip's fields shows on the very next pointer move.
+      const layer = useAppStore.getState().layers.find((item) => item.id === next.layerId);
+      if (!layer) {
+        removeTooltip();
+        return;
+      }
+      const content = createHoverTooltipElement(layer.name, next.feature.properties ?? {}, {
+        popup: layer.popup,
+        fieldVisibility: layer.fieldVisibility,
+        feature: next.feature,
+        zoom: map.getZoom(),
+      });
+      if (!content) {
+        removeTooltip();
+        return;
+      }
+      if (!hoverTooltip.current) {
+        hoverTooltip.current = new maplibregl.Popup({
+          className: "geolibre-hover-tooltip",
+          closeButton: false,
+          closeOnClick: false,
+          // The tip must never sit under the cursor, or it would steal the
+          // pointer from the feature and flicker itself in and out.
+          offset: 12,
+          maxWidth: "280px",
+        }).addTo(map);
+      }
+      hoverTooltip.current
+        .setMaxWidth(`min(${(resolvePopupMaxWidth(layer.popup) ?? 256) + 24}px, calc(100% - 24px))`)
+        .setLngLat(next.lngLat)
+        .setDOMContent(content);
+    };
+
+    const handleLeave = () => {
+      pendingLeave = true;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
+    };
+
+    /** Build the pointer handler for one hovered layer. */
+    const moveHandlerFor = (layerId: string) => (event: maplibregl.MapLayerMouseEvent) => {
+      // A selection gesture owns the pointer while it draws, and the Identify
+      // crosshair means the user is about to click for the full popup: neither
+      // wants a tip trailing the cursor.
+      if (featureSelectionActive.current || useAppStore.getState().identifyLayerId) {
+        removeTooltip();
+        return;
+      }
+      const feature = event.features?.[0];
+      if (!feature) {
+        removeTooltip();
+        return;
+      }
+      pending = { layerId, feature, lngLat: event.lngLat };
+      pendingLeave = false;
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(drawPending);
+    };
+
+    // Style-layer id -> the handler bound to it, so unbinding detaches the very
+    // same function reference MapLibre was given.
+    let bound: {
+      id: string;
+      move: (event: maplibregl.MapLayerMouseEvent) => void;
+    }[] = [];
+    const unbind = () => {
+      for (const entry of bound) {
+        map.off("mousemove", entry.id, entry.move);
+        map.off("mouseleave", entry.id, handleLeave);
+      }
+      bound = [];
+    };
+    const bind = () => {
+      unbind();
+      const layersById = new Map(useAppStore.getState().layers.map((layer) => [layer.id, layer]));
+      for (const layerId of hoverLayerIds) {
+        const layer = layersById.get(layerId);
+        if (!layer) continue;
+        const move = moveHandlerFor(layerId);
+        for (const styleLayerId of identifyStyleLayerIds(layer)) {
+          if (!map.getLayer(styleLayerId)) continue;
+          map.on("mousemove", styleLayerId, move);
+          map.on("mouseleave", styleLayerId, handleLeave);
+          bound.push({ id: styleLayerId, move });
+        }
+      }
+    };
+
+    bind();
+    // syncLayers creates the style layers and then dispatches this event, so
+    // re-bind on it to catch layers that did not exist yet on the first run.
+    window.addEventListener("geolibre-layer-labels-change", bind);
+    // A selection gesture takes the pointer the same way Identify does, and can
+    // be armed from a menu with the cursor sitting still on a hovered feature.
+    window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
+    // Identify is armed from the toolbar, with no pointer event to hide a tip
+    // that is already open. `mouseleave` does not fire under a motionless
+    // cursor, so without this the tooltip would sit there while the Identify
+    // popup opened beside it. Same off->on guard as the photo-popup effect:
+    // this listener runs on every store change, so testing the current value
+    // alone would keep clearing a tip the user is still reading.
+    const unsubscribeIdentify = useAppStore.subscribe((state, prev) => {
+      if (state.identifyLayerId && !prev.identifyLayerId) removeTooltip();
+    });
+
+    return () => {
+      window.removeEventListener("geolibre-layer-labels-change", bind);
+      window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, removeTooltip);
+      unsubscribeIdentify();
+      unbind();
+      removeTooltip();
+    };
+  }, [hoverTooltipKey]);
+
+  // applyStoreView, not applyView: the store's echo of a view the map itself
+  // wrote on moveend must not jump, or it stops any camera move a plugin or
+  // script started since (issue #3083).
+  useEffect(() => {
+    controller.current?.applyStoreView(mapView);
   }, [mapView.center[0], mapView.center[1], mapView.zoom, mapView.bearing, mapView.pitch]);
 
-  return <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />;
+  // The map container sits inside a host element React owns. A control may
+  // reparent the container (the Time Slider wraps it in a flex column to dock
+  // its timeline below the map) and only undoes that when the map is torn down,
+  // which runs after React has already removed this component's DOM. React
+  // removes the host, which stays where it put it, instead of the container,
+  // so a renderer swap with such a control mounted no longer throws
+  // "removeChild: the node to be removed is not a child of this node".
+  return (
+    <div className="h-full w-full">
+      <div ref={containerRef} className="h-full w-full" data-testid="map-canvas" />
+    </div>
+  );
 });

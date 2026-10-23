@@ -9,6 +9,7 @@ import {
   nextItemsPageUrl,
   parseOgcCollections,
   parseOgcFeaturesUrl,
+  viewBoundsToOgcBbox,
 } from "../apps/geolibre-desktop/src/lib/ogc-api-features";
 import { buildOgcFeaturesLayer } from "../apps/geolibre-desktop/src/components/layout/add-data/apply-service";
 
@@ -223,6 +224,59 @@ describe("nextItemsPageUrl", () => {
   });
 });
 
+describe("viewBoundsToOgcBbox", () => {
+  it("formats an in-range view as west,south,east,north", () => {
+    assert.equal(viewBoundsToOgcBbox([4.85, 52.3, 4.95, 52.4]), "4.85,52.3,4.95,52.4");
+  });
+
+  it("rounds to six decimals rather than emitting float noise", () => {
+    assert.equal(viewBoundsToOgcBbox([4.8512345678, 52.3, 4.95, 52.4]), "4.851235,52.3,4.95,52.4");
+  });
+
+  it("collapses a view wider than one world copy to the full longitude span", () => {
+    assert.equal(viewBoundsToOgcBbox([-400, -60, 400, 60]), "-180,-60,180,60");
+  });
+
+  it("wraps a view panned a whole world copy east, keeping its width", () => {
+    assert.equal(viewBoundsToOgcBbox([350, -10, 370, 10]), "-10,-10,10,10");
+    assert.equal(viewBoundsToOgcBbox([-370, -10, -350, 10]), "-10,-10,10,10");
+  });
+
+  it("widens a view straddling the antimeridian instead of crossing the box", () => {
+    // A `west > east` box is how the specification spells a crossing one, but
+    // pygeoapi sorts the pair and answers with the complement of the view. The
+    // full width is a superset of the view under either reading.
+    assert.equal(viewBoundsToOgcBbox([170, -10, 190, 10]), "-180,-10,180,10");
+    assert.equal(viewBoundsToOgcBbox([-190, -10, -170, 10]), "-180,-10,180,10");
+  });
+
+  it("still reads as the whole world when the span only rounds up to 360", () => {
+    // The `span < 360` test runs on the raw extent, so these take the wrapping
+    // path; it has to arrive at the same full-width box the shortcut would.
+    assert.equal(viewBoundsToOgcBbox([-180, -10, 179.9999996, 10]), "-180,-10,180,10");
+    assert.equal(viewBoundsToOgcBbox([-10, -10, 349.9999996, 10]), "-180,-10,180,10");
+  });
+
+  it("clamps latitudes that run past the poles", () => {
+    assert.equal(viewBoundsToOgcBbox([-10, -95, 10, 95]), "-10,-90,10,90");
+  });
+
+  it("rejects an extent with no usable area", () => {
+    assert.equal(viewBoundsToOgcBbox([10, 20, 10, 30]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 20, 10, 20]), null);
+    assert.equal(viewBoundsToOgcBbox([0, Number.NaN, 10, 20]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 10, 20]), null);
+  });
+
+  it("rejects a span too narrow to survive rounding", () => {
+    // An empty box would filter every feature out rather than narrow the query.
+    assert.equal(viewBoundsToOgcBbox([0, 0, 0.0000004, 1]), null);
+    assert.equal(viewBoundsToOgcBbox([0, 0, 1, 0.0000004]), null);
+    // Sitting on the antimeridian must not turn the sliver into a whole world.
+    assert.equal(viewBoundsToOgcBbox([179.9999998, -10, 180.0000002, 10]), null);
+  });
+});
+
 describe("fetchOgcFeatureItems", () => {
   it("follows next links until maxFeatures is reached", async () => {
     const first = "https://ex.com/ogcapi/collections/lakes/items?f=json&limit=25";
@@ -372,5 +426,25 @@ describe("buildOgcFeaturesLayer", () => {
     assert.equal(layer.source.extraQuery, undefined);
     assert.equal(layer.metadata.numberMatched, undefined);
     assert.equal(layer.metadata.truncated, true);
+  });
+
+  it("reserves a different palette color for a pending batch sibling", () => {
+    const params = {
+      name: "First",
+      itemsUrl: "https://ex.com/ogcapi/collections/first/items?f=json",
+      data,
+      baseUrl: "https://ex.com/ogcapi",
+      collectionId: "first",
+      maxFeatures: 1000,
+      truncated: false,
+    };
+    const first = buildOgcFeaturesLayer(params);
+    const second = buildOgcFeaturesLayer({
+      ...params,
+      name: "Second",
+      collectionId: "second",
+      pendingLayers: [first],
+    });
+    assert.notEqual(second.style.fillColor, first.style.fillColor);
   });
 });

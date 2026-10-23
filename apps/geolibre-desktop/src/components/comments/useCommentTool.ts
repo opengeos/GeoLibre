@@ -2,14 +2,20 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import { useAppStore, type CommentAnchor, type ProjectComment } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { v4 as uuidv4 } from "uuid";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
-import type maplibreGl from "maplibre-gl";
+import type * as maplibreGl from "maplibre-gl";
 
 interface UseCommentToolOptions {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   collaboration?: CollaborationApi;
+  /**
+   * Bumped whenever a canvas publishes an engine, and on an engine hand-off.
+   * The ref has stable identity, so this is what re-runs the click-listener
+   * effect when the map underneath changes (#2268 review).
+   */
+  mapReadyGeneration: number;
 }
 
 export interface PendingCommentState {
@@ -17,7 +23,11 @@ export interface PendingCommentState {
   point: { x: number; y: number };
 }
 
-export function useCommentTool({ mapControllerRef, collaboration }: UseCommentToolOptions) {
+export function useCommentTool({
+  mapControllerRef,
+  collaboration,
+  mapReadyGeneration,
+}: UseCommentToolOptions) {
   const { t } = useTranslation();
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
@@ -25,10 +35,32 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   const addComment = useAppStore((s) => s.addComment);
   const collab = useAppStore((s) => s.collaboration);
 
+  /**
+   * Whether the current engine can host the tool at all. Placing a comment needs
+   * a map click and feature picking: the MapLibre map, or any engine with a
+   * render surface through `onMapClick` and `identifyFeatures` (#2477).
+   */
+  const canPlaceComments = useCallback(
+    // A null ref (no engine published yet) must not arm the tool. The effect
+    // below only attaches its click listener when `isActive` flips, and
+    // mutating the ref does not re-run it — so a tool armed before the map was
+    // ready would stay armed and dead until the user toggled it off and on
+    // again (#2268 review).
+    () => {
+      const engine = mapControllerRef.current;
+      return (
+        !!engine &&
+        (engine.capabilities.nativeMapInstance === true || engine.getRenderSurface() !== null)
+      );
+    },
+    [mapControllerRef],
+  );
+
   const activateTool = useCallback(() => {
+    if (!canPlaceComments()) return;
     setIsActive(true);
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const deactivateTool = useCallback(() => {
     setIsActive(false);
@@ -36,9 +68,9 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   const toggleTool = useCallback(() => {
-    setIsActive((prev) => !prev);
+    setIsActive((prev) => (prev ? false : canPlaceComments()));
     setPendingComment(null);
-  }, []);
+  }, [canPlaceComments]);
 
   const submitComment = useCallback(
     (body: string, authorName?: string) => {
@@ -98,8 +130,54 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
   }, []);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !isActive) return;
+    // Placing a comment needs a map click plus feature picking: MapLibre's
+    // own events, or the engine's `onMapClick` and `identifyFeatures` on any
+    // other renderer with a render surface (#2477). Without either, the tool
+    // could read as armed while no click ever lands (#2268 review), so
+    // `activateTool`/`toggleTool` refuse to arm.
+    const engine = mapControllerRef.current;
+    const map = engine?.getMap();
+    if (!isActive) return;
+    const surface = map ? null : engine?.getRenderSurface();
+    if (!map && engine && surface) {
+      // Another renderer: the engine reports the click and the features under
+      // it (#2477).
+      const canvas = surface.getCanvas();
+      canvas.style.cursor = "crosshair";
+      const stop = engine.onMapClick((lngLat) => {
+        const storeIds = new Set(useAppStore.getState().layers.map((l) => l.id));
+        const hit = engine
+          .identifyFeatures(lngLat)
+          .find((feature) => feature.featureId !== null && storeIds.has(feature.layerId));
+        const anchor: CommentAnchor = hit
+          ? { type: "feature", layerId: hit.layerId, featureId: hit.featureId!, lngLat }
+          : { type: "point", lngLat };
+        let point = { x: 0, y: 0 };
+        try {
+          point = surface.project(lngLat);
+        } catch {
+          // Cesium cannot project the far side of the globe; the click itself
+          // landed on the visible side, so this is only a guard.
+        }
+        setPendingComment({ anchor, point: { x: point.x, y: point.y } });
+      });
+      return () => {
+        canvas.style.cursor = "";
+        stop();
+      };
+    }
+    if (!map) {
+      // Armed with no map to click: disarm rather than leave the tool looking
+      // active. Unconditional, including when the ref is momentarily null — the
+      // hand-off bumps the generation before the incoming engine publishes, and
+      // waiting for a non-null ref left the tool stuck armed if that engine
+      // never arrived (a Cesium or WebGL failure means no second bump) (#2268
+      // review). There is no initial-mount case to protect: `canPlaceComments`
+      // requires a published engine, so `isActive` cannot be true before one
+      // has published.
+      setIsActive(false);
+      return;
+    }
 
     map.getCanvas().style.cursor = "crosshair";
 
@@ -158,7 +236,11 @@ export function useCommentTool({ mapControllerRef, collaboration }: UseCommentTo
       map.getCanvas().style.cursor = "";
       map.off("click", handleMapClick);
     };
-  }, [isActive, mapControllerRef]);
+    // `mapReadyGeneration` is what makes this re-run on an engine hand-off: the
+    // ref has stable identity, so without it a tool armed on the 2D map would
+    // stay armed across a switch and never attach to the replacement map
+    // (#2268 review).
+  }, [isActive, mapControllerRef, mapReadyGeneration]);
 
   return {
     isActive,

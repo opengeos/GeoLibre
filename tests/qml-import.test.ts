@@ -33,6 +33,47 @@ describe("parseQml", () => {
     assert.equal(result.style.strokeWidth, 3);
   });
 
+  // QGIS writes the Layer Styling panel's opacity slider onto <symbol alpha=…>, not into the
+  // color, and multiplies the two. GeoLibre's own exporter folds opacity into the color and leaves
+  // alpha="1", so a round-trip test cannot see this — only a QGIS-authored file can.
+  it("multiplies the symbol's own alpha into the opacity", () => {
+    const result = parseQml(
+      qgis(
+        `<renderer-v2 type="singleSymbol"><symbols>
+          <symbol type="fill" name="0" alpha="0.5"><layer class="SimpleFill"><Option type="Map">
+            <Option name="color" type="QString" value="255,136,0,255"/>
+          </Option></layer></symbol>
+        </symbols></renderer-v2>`,
+      ),
+    );
+    // An opaque color at 50% symbol opacity.
+    assert.ok(Math.abs((result.style.fillOpacity ?? 0) - 0.5) < 0.01);
+  });
+
+  it("combines the symbol's alpha with the color's own", () => {
+    const result = parseQml(
+      qgis(
+        `<renderer-v2 type="singleSymbol"><symbols>
+          <symbol type="fill" name="0" alpha="0.5"><layer class="SimpleFill"><Option type="Map">
+            <Option name="color" type="QString" value="255,136,0,128"/>
+          </Option></layer></symbol>
+        </symbols></renderer-v2>`,
+      ),
+    );
+    // 128/255 ≈ 0.502, halved again by the symbol.
+    assert.ok(Math.abs((result.style.fillOpacity ?? 0) - 0.251) < 0.01);
+  });
+
+  // The attribute is optional, and every QML written before this was read must keep its meaning.
+  it("leaves the opacity alone when the symbol declares no alpha", () => {
+    const result = parseQml(
+      qgis(
+        `<renderer-v2 type="singleSymbol"><symbols>${fillSymbol("0", "255,136,0,102")}</symbols></renderer-v2>`,
+      ),
+    );
+    assert.ok(Math.abs((result.style.fillOpacity ?? 0) - 0.4) < 0.01);
+  });
+
   it("reads a legacy <prop> symbol layer", () => {
     const result = parseQml(
       qgis(`<renderer-v2 type="singleSymbol"><symbols>

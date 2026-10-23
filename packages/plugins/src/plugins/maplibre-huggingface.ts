@@ -14,7 +14,8 @@
  *  - **Upload** — with a user access token, create a dataset repo and push
  *    files into it. This is the one panel in the Web Services menu that writes,
  *    which is why the token handling here is deliberately conservative: the
- *    token lives in `localStorage` under the user's control, is sent only as a
+ *    token is kept through `app.credentials` (the OS keychain on desktop,
+ *    `localStorage` on the web), is sent only as a
  *    bearer header by `huggingface-api.ts`, and is never written into a layer's
  *    URL or a saved project.
  *
@@ -24,6 +25,7 @@
  */
 
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
@@ -74,8 +76,8 @@ import {
 
 export const HUGGINGFACE_PLUGIN_ID = "maplibre-gl-huggingface";
 
-/** Where the user's access token is kept. Mirrors the Mapillary plugin's key. */
-const TOKEN_STORAGE_KEY = "geolibre:huggingface-token";
+/** The `app.credentials` name the user's access token is saved under. */
+const TOKEN_CREDENTIAL_NAME = "token";
 
 /** Where the panel sends a user who has no token yet. */
 const TOKEN_SETTINGS_URL = `${HF_SITE}/settings/tokens`;
@@ -230,6 +232,7 @@ export interface HuggingFaceLabels {
   /** Upload half. */
   tokenLabel: string;
   tokenHint: string;
+  tokenHintKeychain: string;
   tokenPlaceholder: string;
   tokenSave: string;
   tokenClear: string;
@@ -352,6 +355,9 @@ export const DEFAULT_HUGGINGFACE_LABELS: HuggingFaceLabels = {
   tokenHint:
     "Creating a dataset repo and uploading files needs a Hugging Face access token with write access. " +
     "It is stored in this browser only and sent to huggingface.co alone.",
+  tokenHintKeychain:
+    "Creating a dataset repo and uploading files needs a Hugging Face access token with write access. " +
+    "It is stored in your system keychain and sent to huggingface.co alone.",
   tokenPlaceholder: "hf_…",
   tokenSave: "Save token",
   tokenClear: "Clear",
@@ -524,31 +530,6 @@ const mountedPanels = new Set<() => void>();
 // Access token
 // ---------------------------------------------------------------------------
 
-/**
- * Reads the saved token. Wrapped in try/catch because `localStorage` throws
- * outright in a partitioned or storage-blocked context rather than returning
- * null, which would take the whole panel down on mount.
- */
-function readToken(): string {
-  if (typeof localStorage === "undefined") return "";
-  try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeToken(token: string): void {
-  if (typeof localStorage === "undefined") return;
-  try {
-    if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    else localStorage.removeItem(TOKEN_STORAGE_KEY);
-  } catch {
-    // Storage unavailable: the token still works for this session, held in the
-    // panel's own state, so a failure to persist is not worth surfacing.
-  }
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -682,13 +663,13 @@ async function addFileToMap(
     case "pmtiles":
       return addPMTilesLayerFromUrl(app, file.url);
     case "cog":
-      // Deliberately the Add Raster Layer control rather than `app.addCogLayer`.
-      // Both render a COG, but they are different controls: `addCogLayer` goes
-      // to the components CogLayerControl, whose store layer does not carry
-      // RASTER_SOURCE_KIND, so the Style panel shows only opacity. This one
-      // syncs through raster-layer-sync and gets the full Raster symbology
-      // section (band pickers, colormap, classification).
-      await addRasterToMap(app, file.url, { name: file.name, defaults: rasterDefaults });
+      // The Add Raster Layer control (the same one `app.addCogLayer` uses), so
+      // the layer syncs through raster-layer-sync and gets the full Raster
+      // symbology section (band pickers, colormap, classification).
+      await addRasterToMap(app, file.url, {
+        name: file.name,
+        defaults: rasterDefaults,
+      });
       return true;
     case "mosaic": {
       // The extension made this a candidate; the body decides. Without this a
@@ -700,12 +681,18 @@ async function addFileToMap(
       if (!isRasterIndexJson(body)) throw new Error(labels.notRasterIndex);
       // The same control takes the sidecar's URL directly and stitches the
       // scenes it points at at read time.
-      await addRasterToMap(app, file.url, { name: file.name, defaults: rasterDefaults });
+      await addRasterToMap(app, file.url, {
+        name: file.name,
+        defaults: rasterDefaults,
+      });
       return true;
     }
     default:
       if (!usesDuckDB(file.format)) return false;
-      return addVectorLayerFromUrl(app, file.url, { name: file.name, ingestMode });
+      return addVectorLayerFromUrl(app, file.url, {
+        name: file.name,
+        ingestMode,
+      });
   }
 }
 
@@ -799,7 +786,10 @@ interface UploadableLayer {
  *
  * @returns The uploadable layers, and how many remote rasters were skipped
  */
-function listUploadableLayers(): { layers: UploadableLayer[]; skippedRemote: number } {
+function listUploadableLayers(): {
+  layers: UploadableLayer[];
+  skippedRemote: number;
+} {
   const layers: UploadableLayer[] = [];
   let skippedRemote = 0;
 
@@ -960,7 +950,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   let filesLoading = false;
 
   // Upload state.
-  let token = readToken();
+  let token = app?.credentials?.get(TOKEN_CREDENTIAL_NAME).trim() ?? "";
   let identity: HfIdentity | null = null;
   let tokenBusy = false;
   let tokenError = "";
@@ -1505,7 +1495,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
   async function verifyToken(next: string): Promise<void> {
     token = next.trim();
-    writeToken(token);
+    // The result is ignored: on a failed write the host keeps the token for
+    // this session and raises the credential-storage warning on desktop.
+    app?.credentials?.set(TOKEN_CREDENTIAL_NAME, token);
     identity = null;
     tokenError = "";
     if (!token) {
@@ -1667,7 +1659,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     // --- Token ---
     const tokenSection = el("div", CSS.section);
     tokenSection.appendChild(el("div", CSS.sectionTitle, labels.tokenLabel));
-    tokenSection.appendChild(el("div", CSS.hint, labels.tokenHint));
+    tokenSection.appendChild(
+      el(
+        "div",
+        CSS.hint,
+        app?.credentials?.location() === "keychain" ? labels.tokenHintKeychain : labels.tokenHint,
+      ),
+    );
     // A token is a secret, so the field is masked — a previously saved token
     // reopened in a shared screen share should not be readable.
     const tokenField = field(labels.tokenLabel, {
@@ -2183,13 +2181,16 @@ export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
     id: HUGGINGFACE_PLUGIN_ID,
     name: "Hugging Face",
     version: "0.1.0",
+    // Store-only: the browser adds ordinary GeoLibre layers and never touches
+    // the map itself.
+    engines: ["maplibre", "mapbox", "arcgis", "cesium"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);
       unregisterPanel =
         app.registerRightPanel?.({
           id: HUGGINGFACE_PLUGIN_ID,
-          title: "Hugging Face",
+          title: pluginDisplayTitle(app, HUGGINGFACE_PLUGIN_ID, "Hugging Face"),
           dock: "replace-style",
           defaultWidth: 340,
           render: (container) => {

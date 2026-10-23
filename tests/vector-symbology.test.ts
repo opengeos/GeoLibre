@@ -4,6 +4,7 @@ import {
   DEFAULT_LAYER_STYLE,
   circleRadiusValue,
   effectiveVectorRules,
+  generatorCircleRadiusValue,
   lineWidthValue,
   ruleBasedColorExpression,
   ruleBasedVisibilityFilter,
@@ -280,6 +281,84 @@ describe("circleRadiusValue proportional sizing", () => {
       }),
     );
     assert.equal(result, 8);
+  });
+});
+
+describe("generatorCircleRadiusValue", () => {
+  it("returns the flat generator radius when no field is chosen", () => {
+    assert.equal(generatorCircleRadiusValue(style({ geometryGeneratorCircleRadius: 7 })), 7);
+  });
+
+  it("keeps the 1px floor on the flat radius", () => {
+    assert.equal(generatorCircleRadiusValue(style({ geometryGeneratorCircleRadius: 0 })), 1);
+  });
+
+  it("returns an interpolate over the chosen field", () => {
+    const result = generatorCircleRadiusValue(
+      style({
+        geometryGeneratorSizeProperty: "nb_dentist",
+        geometryGeneratorSizeMinValue: 500,
+        geometryGeneratorSizeMaxValue: 9000,
+        geometryGeneratorSizeMinRadius: 4,
+        geometryGeneratorSizeMaxRadius: 30,
+      }),
+    );
+    assert.deepEqual(result, [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "nb_dentist"], 500],
+      500,
+      4,
+      9000,
+      30,
+    ]);
+  });
+
+  it("falls back to the flat radius when the value range is degenerate", () => {
+    const result = generatorCircleRadiusValue(
+      style({
+        geometryGeneratorCircleRadius: 5,
+        geometryGeneratorSizeProperty: "pop",
+        geometryGeneratorSizeMinValue: 50,
+        geometryGeneratorSizeMaxValue: 50,
+      }),
+    );
+    assert.equal(result, 5);
+  });
+
+  it("falls back to the flat radius when a radius output is non-finite", () => {
+    const result = generatorCircleRadiusValue(
+      style({
+        geometryGeneratorCircleRadius: 8,
+        geometryGeneratorSizeProperty: "pop",
+        geometryGeneratorSizeMinValue: 0,
+        geometryGeneratorSizeMaxValue: 100,
+        geometryGeneratorSizeMaxRadius: Number.NaN,
+      }),
+    );
+    assert.equal(result, 8);
+  });
+
+  it("is independent of the layer-wide proportional renderer", () => {
+    // Sizing centroids must not resize the layer's own symbols, and vice
+    // versa: the two settings drive different paint properties.
+    const generatorOnly = style({
+      geometryGeneratorSizeProperty: "pop",
+      geometryGeneratorSizeMinValue: 0,
+      geometryGeneratorSizeMaxValue: 100,
+    });
+    assert.ok(Array.isArray(generatorCircleRadiusValue(generatorOnly)));
+    assert.equal(circleRadiusValue(generatorOnly), DEFAULT_LAYER_STYLE.circleRadius);
+    assert.equal(lineWidthValue(generatorOnly), DEFAULT_LAYER_STYLE.strokeWidth);
+
+    const proportionalOnly = style({
+      geometryGeneratorCircleRadius: 5,
+      proportionalSizeEnabled: true,
+      proportionalSizeProperty: "pop",
+      proportionalSizeMinValue: 0,
+      proportionalSizeMaxValue: 100,
+    });
+    assert.equal(generatorCircleRadiusValue(proportionalOnly), 5);
   });
 });
 

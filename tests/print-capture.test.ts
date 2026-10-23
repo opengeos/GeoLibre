@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isFullViewportMapCanvas } from "../apps/geolibre-desktop/src/lib/print-capture";
+import { isFullViewportMapCanvas } from "../packages/map/src/map-capture";
 
 describe("isFullViewportMapCanvas", () => {
   const base = { width: 1920, height: 1080 };

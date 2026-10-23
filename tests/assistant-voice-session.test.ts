@@ -1,0 +1,820 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import type {
+  SpeechRecognitionResultEvent,
+  SpeechRecognizer,
+} from "../apps/geolibre-desktop/src/lib/assistant/speech";
+import {
+  VoiceSession,
+  type VoiceEvent,
+} from "../apps/geolibre-desktop/src/lib/assistant/voice-session";
+
+/** A recognizer that records what the session did to it and can be driven. */
+class FakeRecognizer implements SpeechRecognizer {
+  lang = "";
+  continuous = false;
+  interimResults = false;
+  maxAlternatives = 0;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  onend: (() => void) | null = null;
+
+  started = false;
+  stopCalls = 0;
+  abortCalls = 0;
+  /** Throw from start(), as a browser does when one is already running. */
+  failOnStart = false;
+  /** Leave `end` for the test to deliver after stop(), as a real engine does. */
+  deferEnd = false;
+
+  start(): void {
+    if (this.failOnStart) throw new Error("already started");
+    this.started = true;
+  }
+
+  /** Ends the recognizer the way `stop()` does: the turn is finalized. */
+  stop(): void {
+    this.stopCalls += 1;
+    if (!this.deferEnd) this.end();
+  }
+
+  abort(): void {
+    this.abortCalls += 1;
+    this.end();
+  }
+
+  /** Fires `end` once, as a real recognizer does. */
+  end(): void {
+    if (!this.started) return;
+    this.started = false;
+    this.onend?.();
+  }
+
+  /** Delivers one phrase. */
+  say(transcript: string, isFinal = true): void {
+    this.onresult?.({
+      resultIndex: 0,
+      results: Object.assign({ length: 1 }, [
+        { length: 1, isFinal, 0: { transcript, confidence: 0.9 } },
+      ]),
+    } as unknown as SpeechRecognitionResultEvent);
+  }
+}
+
+/** A synthesizer that hands back the utterances it was asked to speak. */
+class FakeSynthesis {
+  spoken: Array<{ text: string; onend: (() => void) | null }> = [];
+  cancelCalls = 0;
+
+  speak(utterance: { text: string; onend: (() => void) | null }): void {
+    this.spoken.push(utterance);
+  }
+
+  cancel(): void {
+    this.cancelCalls += 1;
+  }
+
+  /** Ends the most recent utterance, as the browser does when it finishes. */
+  finish(): void {
+    this.spoken.at(-1)?.onend?.();
+  }
+}
+
+/** A microphone stream that records whether its track was stopped. */
+function fakeStream() {
+  const track = {
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+  };
+  return { track, stream: { getTracks: () => [track] } as unknown as MediaStream };
+}
+
+/** Builds a session over fakes, exposing what the test needs to drive it. */
+function harness(
+  options: {
+    synthesis?: boolean;
+    streams?: boolean;
+    endpointMs?: number;
+    /** Start a run from inside the transcript event, as the panel does. */
+    autoRun?: boolean;
+  } = {},
+) {
+  const recognizers: FakeRecognizer[] = [];
+  const events: VoiceEvent[] = [];
+  const streams: Array<ReturnType<typeof fakeStream>> = [];
+  const synthesis = options.synthesis ? new FakeSynthesis() : null;
+  // When set, every recognizer built from here on refuses to start.
+  let failStarts = false;
+  const session = new VoiceSession({
+    createRecognizer: () => {
+      const recognizer = new FakeRecognizer();
+      recognizer.failOnStart = failStarts;
+      recognizers.push(recognizer);
+      return recognizer;
+    },
+    endpointMs: options.endpointMs,
+    requestStream: options.streams
+      ? async () => {
+          const made = fakeStream();
+          streams.push(made);
+          return made.stream;
+        }
+      : undefined,
+    synthesis: synthesis as unknown as SpeechSynthesis | null,
+    createUtterance: synthesis
+      ? (text) => ({ text, lang: "", onend: null, onerror: null }) as SpeechSynthesisUtterance
+      : undefined,
+    language: () => "en-US",
+    onEvent: (event) => {
+      events.push(event);
+      // The panel starts the agent run synchronously from its transcript
+      // handler, nested inside the session's own call stack. Mirrored here so
+      // that ordering is covered rather than assumed.
+      if (options.autoRun && event.type === "transcript") session.notifyRunStart();
+    },
+  });
+  return {
+    session,
+    recognizers,
+    events,
+    streams,
+    synthesis,
+    /** Make every future recognizer refuse to start. */
+    breakRecognizers: () => {
+      failStarts = true;
+    },
+    /** The recognizer currently driving the session. */
+    get current() {
+      return recognizers.at(-1)!;
+    },
+    /** Every transcript the session published. */
+    transcripts: () =>
+      events.filter((e) => e.type === "transcript").map((e) => (e as { text: string }).text),
+    /** Every status the session passed through. */
+    statuses: () =>
+      events.filter((e) => e.type === "state").map((e) => (e as { status: string }).status),
+  };
+}
+
+describe("voice session start", () => {
+  it("configures an open-mic recognizer to keep listening", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    assert.equal(h.current.continuous, true);
+    assert.equal(h.current.interimResults, true);
+    assert.equal(h.current.lang, "en-US");
+    assert.equal(h.session.getStatus(), "listening");
+    assert.equal(h.session.getMode(), "open-mic");
+  });
+
+  it("keeps a push-to-talk recognizer continuous so the key owns the endpoint", () => {
+    // With `continuous = false` the engine returns one final result and stops
+    // itself at the first pause, ending the turn mid-sentence with the key
+    // still down.
+    const h = harness();
+    h.session.start("push-to-talk");
+    assert.equal(h.current.continuous, true);
+    assert.equal(h.session.getMode(), "push-to-talk");
+  });
+
+  it("ignores a second start in the same mode instead of stacking microphones", () => {
+    const { session, recognizers } = harness();
+    session.start("open-mic");
+    session.start("open-mic");
+    assert.equal(recognizers.length, 1);
+  });
+
+  it("replaces the session when the other mode starts", () => {
+    const { session, recognizers } = harness();
+    session.start("open-mic");
+    session.start("push-to-talk");
+    assert.equal(recognizers.length, 2);
+    assert.equal(recognizers[0].abortCalls, 1);
+    assert.equal(session.getMode(), "push-to-talk");
+  });
+
+  it("reports a recognizer that refuses to start, with nothing left running", () => {
+    const events: VoiceEvent[] = [];
+    const recognizer = new FakeRecognizer();
+    recognizer.failOnStart = true;
+    const session = new VoiceSession({
+      createRecognizer: () => recognizer,
+      language: () => "en-US",
+      onEvent: (event) => events.push(event),
+    });
+    session.start("open-mic");
+    assert.equal(session.getStatus(), "error");
+    assert.equal(session.isActive(), false);
+    assert.deepEqual(
+      events.filter((e) => e.type === "error"),
+      [{ type: "error", messageKey: "assistant.voice.errorGeneric" }],
+    );
+  });
+});
+
+describe("voice session transcripts", () => {
+  it("previews an interim phrase and publishes only the final one", async () => {
+    const h = harness({ endpointMs: 10 });
+    h.session.start("open-mic");
+    h.current.say("show me riv", false);
+    h.current.say("show me rivers", true);
+    assert.deepEqual(h.transcripts(), [], "sent before the endpoint");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.deepEqual(h.transcripts(), ["show me rivers"]);
+    const interims = h.events.filter((e) => e.type === "interim");
+    assert.deepEqual(
+      interims.map((e) => (e as { text: string }).text),
+      ["show me riv", "show me rivers", ""],
+    );
+  });
+
+  it("drops a phrase from a recognizer the session already replaced", () => {
+    // The hazard this guards: a stopped recognizer delivering its last result
+    // into the session that replaced it, sending a phrase nobody is speaking.
+    const h = harness();
+    h.session.start("open-mic");
+    const stale = h.current;
+    h.session.stop();
+    stale.onresult?.({
+      resultIndex: 0,
+      results: Object.assign({ length: 1 }, [
+        { length: 1, isFinal: true, 0: { transcript: "ghost", confidence: 1 } },
+      ]),
+    } as unknown as SpeechRecognitionResultEvent);
+    assert.deepEqual(h.transcripts(), []);
+  });
+});
+
+describe("voice session push-to-talk", () => {
+  it("finalizes the turn on release rather than discarding it", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    const recognizer = h.current;
+    h.session.releasePushToTalk();
+    // stop(), not abort(): the phrase in progress must still be delivered.
+    assert.equal(recognizer.stopCalls, 1);
+    assert.equal(recognizer.abortCalls, 0);
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("does not let Space close an open-mic session started by the button", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.session.releasePushToTalk();
+    assert.equal(h.session.getStatus(), "listening");
+    assert.equal(h.current.stopCalls, 0);
+  });
+
+  it("stays alive while the run it triggered is still working", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("add a basemap");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    // The microphone is closed, but the session keeps reporting the run.
+    assert.equal(h.session.getStatus(), "executing");
+    h.session.notifyRunEnd();
+    assert.equal(h.session.getStatus(), "idle");
+  });
+});
+
+describe("voice session push-to-talk endpoint", () => {
+  it("keeps listening when the engine ends the recognizer mid-hold", () => {
+    // The engine ends on its own at a pause. The key is still down, so the turn
+    // is not over: re-arm and keep what was already heard.
+    const h = harness();
+    h.session.start("push-to-talk");
+    const first = h.current;
+    h.current.say("show me the rivers");
+    first.end();
+    assert.ok(h.recognizers.length > 1, "the recognizer was not re-armed");
+    assert.deepEqual(h.transcripts(), [], "the turn was sent before the key came up");
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("sends one request for a hold the engine split into phrases", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("buffer the roads by 100 metres");
+    h.current.end();
+    h.current.say("then clip them to the county");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), [
+      "buffer the roads by 100 metres then clip them to the county",
+    ]);
+  });
+
+  it("sends nothing for a hold that heard nothing", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), []);
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("survives a run started from inside the transcript event", () => {
+    // The production order is one call stack: releasing the key ends the
+    // recognizer, which publishes the transcript, which starts the run. The
+    // session must see that run before it decides the turn is over, or it stops
+    // a moment before the run it is meant to report.
+    const h = harness({ autoRun: true });
+    h.session.start("push-to-talk");
+    h.current.say("zoom to Kenya");
+    h.session.releasePushToTalk();
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+    assert.equal(h.session.isActive(), true, "the session ended under its own run");
+    assert.equal(h.session.getStatus(), "executing");
+  });
+
+  it("does not re-arm once the key is up", () => {
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("zoom to Kenya");
+    const count = h.recognizers.length;
+    h.session.releasePushToTalk();
+    assert.equal(h.recognizers.length, count);
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+  });
+});
+
+describe("voice session open-mic restarts", () => {
+  it("restarts the recognizer that ended on a silence", async () => {
+    // Chrome ends recognition at every pause; without this an open mic would
+    // go deaf after the first sentence.
+    const h = harness({ endpointMs: 10 });
+    h.session.start("open-mic");
+    h.current.end();
+    assert.equal(h.recognizers.length, 2);
+    assert.equal(h.session.getStatus(), "listening");
+    h.current.say("second phrase");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.deepEqual(h.transcripts(), ["second phrase"]);
+  });
+
+  it("gives up on a recognizer that ends the moment it starts", () => {
+    // A restart loop would otherwise spin for as long as the panel is open.
+    const h = harness();
+    h.session.start("open-mic");
+    for (let i = 0; i < 6 && h.session.isActive(); i++) h.current.end();
+    assert.equal(h.session.getStatus(), "error");
+    assert.ok(h.recognizers.length <= 6, `stopped restarting after ${h.recognizers.length}`);
+  });
+
+  it("gives up on a held key whose recognizer will not stay running", () => {
+    // The held branch re-arms too, so it needs the same brake as an open mic —
+    // without it a flaky engine spins a restart loop for as long as Space is
+    // down.
+    const h = harness();
+    h.session.start("push-to-talk");
+    for (let i = 0; i < 8 && h.session.isActive(); i++) h.current.end();
+    assert.equal(h.session.getStatus(), "error");
+    assert.ok(h.recognizers.length <= 8, `restarted ${h.recognizers.length} times`);
+  });
+
+  it("brakes on a recognizer that ends without ever reporting a start", () => {
+    // The elapsed check is measured from the call, not from `onstart`: an
+    // engine that never fires it would otherwise look unhurried every time and
+    // never trip the cap.
+    const h = harness();
+    h.session.start("open-mic");
+    for (let i = 0; i < 8 && h.session.isActive(); i++) h.current.end();
+    assert.equal(h.session.getStatus(), "error");
+  });
+
+  it("keeps reporting a run in flight across a restart", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.current.say("zoom to Kenya");
+    h.session.notifyRunStart();
+    h.current.end();
+    assert.equal(h.session.getStatus(), "executing");
+    h.session.notifyRunEnd();
+    assert.equal(h.session.getStatus(), "listening");
+  });
+});
+
+describe("voice session errors", () => {
+  let h: ReturnType<typeof harness>;
+  beforeEach(() => {
+    h = harness();
+    h.session.start("open-mic");
+  });
+
+  it("releases the microphone before reporting a refusal", () => {
+    const recognizer = h.current;
+    recognizer.onerror?.({ error: "not-allowed" });
+    // Teardown precedes the error state: no hot microphone behind it.
+    assert.equal(recognizer.abortCalls, 1);
+    assert.equal(h.session.getStatus(), "error");
+    assert.equal(h.session.isActive(), false);
+    assert.deepEqual(
+      h.events.filter((e) => e.type === "error"),
+      [{ type: "error", messageKey: "assistant.voice.errorDenied" }],
+    );
+  });
+
+  it("keeps listening through a turn that heard nothing", () => {
+    h.current.onerror?.({ error: "no-speech" });
+    assert.equal(h.session.getStatus(), "listening");
+    assert.deepEqual(
+      h.events.filter((e) => e.type === "error"),
+      [],
+    );
+  });
+
+  it("does not restart the recognizer after a fatal error", () => {
+    h.current.onerror?.({ error: "audio-capture" });
+    const afterError = h.recognizers.length;
+    h.recognizers[afterError - 1].end();
+    assert.equal(h.recognizers.length, afterError);
+  });
+});
+
+describe("voice session spoken replies", () => {
+  it("suspends the open microphone while speaking, then resumes it", () => {
+    // Without this the recognizer transcribes the speakers and the assistant
+    // answers itself.
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    const listening = h.current;
+    h.session.speak("Twelve rivers are in view.");
+    assert.equal(listening.abortCalls, 1);
+    assert.equal(h.session.getStatus(), "speaking");
+    assert.equal(h.synthesis!.spoken.at(-1)?.text, "Twelve rivers are in view.");
+    h.synthesis!.finish();
+    assert.equal(h.session.getStatus(), "listening");
+    assert.equal(h.recognizers.length, 2);
+  });
+
+  it("ends a push-to-talk session once the reply has been read", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.speak("Twelve.");
+    h.session.notifyRunEnd();
+    assert.equal(h.session.getStatus(), "speaking");
+    h.synthesis!.finish();
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("lets a new turn cut off a reply in progress", () => {
+    // New intent supersedes old. The microphone is closed while the reply is
+    // read out, so talking over it means starting a turn — holding Space here —
+    // rather than simply speaking at a recognizer that is not listening.
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.session.speak("A long answer nobody wants to sit through.");
+    h.synthesis!.cancelCalls = 0;
+    h.session.start("push-to-talk");
+    assert.equal(h.synthesis!.cancelCalls, 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("drops an answer from a push-to-talk turn once an open mic has started", () => {
+    // The user gave up waiting and switched to the button. The older answer
+    // must not be read into the new session, nor abort its microphone.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("first question");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.start("open-mic");
+    const listening = h.current;
+    h.session.speak("The answer to the first question.");
+    assert.deepEqual(h.synthesis!.spoken, []);
+    assert.equal(h.session.getStatus(), "listening");
+    assert.equal(listening.abortCalls, 0, "the new session's microphone was taken");
+  });
+
+  it("brings an open mic back when a reply is silenced part-way", () => {
+    // Cancelling the audio is not enough: the utterance's end event bails once
+    // `speaking` is false, so without going through the resume path the mic
+    // stays suspended and the status sticks on "speaking".
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.session.speak("A long answer nobody wants to sit through.");
+    assert.equal(h.session.getStatus(), "speaking");
+    h.session.stopSpeaking();
+    assert.equal(h.synthesis!.cancelCalls, 1);
+    assert.equal(h.session.getStatus(), "listening");
+    assert.ok(h.current.started, "the microphone never came back");
+  });
+
+  it("ends a push-to-talk turn when its reply is silenced part-way", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.speak("Twelve.");
+    h.session.notifyRunEnd();
+    h.session.stopSpeaking();
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("silences a reply when the session stops", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.session.speak("Still talking.");
+    h.synthesis!.cancelCalls = 0;
+    h.session.stop();
+    assert.equal(h.synthesis!.cancelCalls, 1);
+    assert.equal(h.session.getStatus(), "idle");
+  });
+
+  it("reads an answer back even if it beats the engine's own end event", () => {
+    // The guard keys on the turn, not on a live recognizer: a fast reply for
+    // the turn that just ended must still be spoken.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.speak("Twelve.");
+    assert.deepEqual(
+      h.synthesis!.spoken.map((u) => u.text),
+      ["Twelve."],
+    );
+  });
+
+  it("drops a stale answer rather than reading it into a newer turn", () => {
+    // The user got impatient and asked again. A push-to-talk recognizer ends on
+    // key release, so one that is live when the previous turn's answer finally
+    // arrives means a new hold is under way — reading the old answer would talk
+    // over the new question, into a microphone that would transcribe it.
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("first question");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.start("push-to-talk");
+    h.session.speak("The answer to the first question.");
+    assert.deepEqual(h.synthesis!.spoken, []);
+    assert.equal(h.session.getStatus(), "listening", "the new turn keeps listening");
+    assert.ok(h.recognizers.at(-1)!.started, "and its microphone stays open");
+  });
+
+  it("still reads an answer back when the turn that asked is the live one", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    h.session.speak("Twelve.");
+    assert.deepEqual(
+      h.synthesis!.spoken.map((u) => u.text),
+      ["Twelve."],
+    );
+  });
+
+  it("says nothing when there is no synthesizer or nothing to say", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.session.speak("anything");
+    assert.equal(h.session.getStatus(), "listening");
+    const withVoice = harness({ synthesis: true });
+    withVoice.session.start("open-mic");
+    withVoice.session.speak("   ");
+    assert.equal(withVoice.synthesis!.spoken.length, 0);
+  });
+});
+
+describe("voice session end-of-phrase", () => {
+  it("stops an open mic after the silence window so the phrase lands sooner", async () => {
+    // Recognizers wait well over a second before calling a phrase finished,
+    // which is dead air between the last word and the app reacting.
+    const h = harness({ endpointMs: 10 });
+    h.session.start("open-mic");
+    const first = h.current;
+    h.current.say("zoom to Kenya", false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(first.stopCalls, 1);
+    // Ending the phrase is not ending the session: it re-arms as usual.
+    assert.ok(h.recognizers.length > 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("restarts the window while the user is still talking", async () => {
+    const h = harness({ endpointMs: 40 });
+    h.session.start("open-mic");
+    const first = h.current;
+    for (let i = 0; i < 4; i++) {
+      h.current.say(`word ${i}`, false);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+    assert.equal(first.stopCalls, 0, "a speaker mid-sentence must not be cut off");
+  });
+
+  it("sends a sentence the engine split at a pause as one request", async () => {
+    // The reported bug: Chrome finalizes a phrase at every short pause, and
+    // sending each one ran the first half of the sentence, which the second
+    // half then cancelled and replaced.
+    const h = harness({ endpointMs: 40 });
+    h.session.start("open-mic");
+    const first = h.current;
+    h.current.say("zoom to Paris");
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    h.current.say("and add a satellite basemap", false);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    h.current.say("and add a satellite basemap");
+    assert.deepEqual(h.transcripts(), [], "a speaker mid-sentence must not be cut off");
+    assert.equal(first.stopCalls, 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.deepEqual(h.transcripts(), ["zoom to Paris and add a satellite basemap"]);
+    assert.equal(first.stopCalls, 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("keeps a request together when the engine ends at a pause mid-sentence", async () => {
+    const h = harness({ endpointMs: 30 });
+    h.session.start("open-mic");
+    const first = h.current;
+    h.current.say("zoom to Paris");
+    // The engine ends on a silence of its own before the window elapses.
+    h.current.end();
+    assert.deepEqual(h.transcripts(), [], "an engine pause is not the endpoint");
+    assert.equal(first.stopCalls, 0);
+    const replacement = h.current;
+    assert.notEqual(replacement, first);
+    replacement.say("and add a basemap");
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(h.transcripts(), ["zoom to Paris and add a basemap"]);
+    assert.equal(replacement.stopCalls, 1);
+  });
+
+  it("still sends what was heard when the engine ends and nothing follows", async () => {
+    const h = harness({ endpointMs: 30 });
+    h.session.start("open-mic");
+    h.current.say("zoom to Kenya");
+    h.current.end();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("holds a reply back between the endpoint's stop and the end it causes", async () => {
+    const h = harness({ synthesis: true, endpointMs: 10 });
+    h.session.start("open-mic");
+    const recognizer = h.current;
+    recognizer.deferEnd = true;
+    recognizer.say("zoom to Kenya");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(recognizer.stopCalls, 1, "the endpoint fired");
+    // Stopped, but `end` not yet delivered: the request is still unsent.
+    h.session.speak("An older answer.");
+    assert.equal(h.synthesis!.spoken.length, 0);
+    recognizer.end();
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+  });
+
+  it("clears the preview when a phrase is revised away to nothing", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.current.say("um", false);
+    h.current.say("", false);
+    const last = h.events.filter((e) => e.type === "interim").at(-1) as { text: string };
+    assert.equal(last.text, "");
+  });
+
+  it("still reads a reply once a lone interim phrase is retracted", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.current.say("um", false);
+    h.current.say("", false);
+    h.session.speak("Here is the answer.");
+    assert.equal(h.synthesis!.spoken.length, 1);
+  });
+
+  it("previews the whole request, not just the phrase in progress", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.current.say("zoom to Paris");
+    h.current.say("and add", false);
+    const last = h.events.filter((e) => e.type === "interim").at(-1) as { text: string };
+    assert.equal(last.text, "zoom to Paris and add");
+  });
+
+  it("does not read a reply over a user who is still talking", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.current.say("zoom to", false);
+    h.session.speak("Here is the answer.");
+    assert.equal(h.synthesis!.spoken.length, 0);
+    assert.equal(h.current.abortCalls, 0, "the microphone was closed mid-sentence");
+  });
+
+  it("leaves push-to-talk to the key, which is its own endpoint", async () => {
+    const h = harness({ endpointMs: 10 });
+    h.session.start("push-to-talk");
+    h.current.say("still holding", false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(h.current.stopCalls, 0);
+  });
+});
+
+describe("voice session microphone stream", () => {
+  it("keeps one stream across the restarts an open mic makes on every pause", async () => {
+    // Re-acquiring per pause costs a getUserMedia and an AudioContext per
+    // sentence, and drops the meter to baseline between utterances.
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams.length, 1);
+    h.current.end();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams.length, 1, "the restart re-acquired the microphone");
+    assert.equal(h.streams[0].track.stopped, false);
+  });
+
+  it("releases the microphone while a reply is read aloud", async () => {
+    const h = harness({ streams: true, synthesis: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.session.speak("Twelve rivers.");
+    assert.equal(h.streams[0].track.stopped, true);
+    assert.deepEqual(h.events.filter((e) => e.type === "stream").at(-1), {
+      type: "stream",
+      stream: null,
+    });
+  });
+
+  it("drops a stream that arrives after the session it was acquired for", async () => {
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    h.session.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(h.streams[0].track.stopped, true);
+  });
+
+  it("releases the microphone when the session ends", async () => {
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.session.stop();
+    assert.equal(h.streams[0].track.stopped, true);
+  });
+});
+
+describe("voice session supersede", () => {
+  it("lets a new push-to-talk turn replace one that is still working", () => {
+    // The turn has no recognizer left (the key was released), so the same-mode
+    // guard must not read it as a session already listening.
+    const h = harness();
+    h.session.start("push-to-talk");
+    h.current.say("how many rivers");
+    h.session.notifyRunStart();
+    h.session.releasePushToTalk();
+    assert.equal(h.session.getStatus(), "executing");
+    const before = h.recognizers.length;
+    h.session.start("push-to-talk");
+    assert.equal(h.recognizers.length, before + 1);
+    assert.equal(h.session.getStatus(), "listening");
+  });
+
+  it("still refuses to stack a second recognizer on a live microphone", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.session.start("open-mic");
+    assert.equal(h.recognizers.length, 1);
+  });
+
+  it("keeps a failed restart in its error state, with no microphone behind it", async () => {
+    // Restoring the run over the failure would paint the session as working
+    // with nothing listening behind it — and the stream a restart deliberately
+    // retains must not survive into an error state either.
+    const h = harness({ streams: true });
+    h.session.start("open-mic");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.current.say("zoom to Kenya");
+    h.session.notifyRunStart();
+    h.breakRecognizers();
+    h.recognizers.at(-1)!.end();
+    assert.equal(h.session.getStatus(), "error");
+    assert.equal(h.session.isActive(), false);
+    assert.equal(h.streams[0].track.stopped, true);
+  });
+});
+
+describe("voice session disposal", () => {
+  it("releases the microphone and refuses to start again", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    const recognizer = h.current;
+    h.session.dispose();
+    assert.equal(recognizer.abortCalls, 1);
+    assert.equal(h.session.isActive(), false);
+    h.session.start("open-mic");
+    assert.equal(h.recognizers.length, 1);
+  });
+
+  it("is safe to dispose twice", () => {
+    const h = harness();
+    h.session.start("open-mic");
+    h.session.dispose();
+    h.session.dispose();
+    assert.equal(h.session.getStatus(), "idle");
+  });
+});

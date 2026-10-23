@@ -143,12 +143,11 @@ describe("DGGRID plugin helpers", () => {
     );
   });
 
-  it("returns every overlapping direct parent, canonical first", async () => {
+  it("returns a unique direct parent via sequenceNumParent", async () => {
     const engine = await loadDggrid();
     engine.setDggs({ ...DGGRID_CONFIG }, 5);
     const [cell] = engine.geoToSequenceNum([[106.6, 10.8]], 5);
-    const parents = engine.sequenceNumAllParents([cell], 5)[0];
-    assert.ok(parents.length >= 1);
-    assert.equal(parents[0], engine.sequenceNumParent([cell], 5)[0]);
+    const parents = engine.sequenceNumParent([cell], 5);
+    assert.equal(parents.length, 1);
   });
 });

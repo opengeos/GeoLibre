@@ -61,6 +61,96 @@ describe("buildSymbologyStyle", () => {
     assert.equal(style.vectorStyleStops?.length, 3);
   });
 
+  it("uses explicit breaks verbatim instead of a computed scheme", () => {
+    const layer = layerWith("pm25", [3, 12, 30, 44, 61, 120]);
+    const style = buildSymbologyStyle(layer, {
+      mode: "graduated",
+      property: "pm25",
+      // Thailand's official PM2.5 health bands: unevenly spaced, and no
+      // statistical scheme reproduces them.
+      breaks: [0, 25, 37, 50, 90],
+    });
+    assert.equal(style.vectorStyleMode, "graduated");
+    assert.equal(style.vectorStyleClassCount, 5);
+    assert.deepEqual(
+      style.vectorStyleStops?.map((stop) => stop.value),
+      [0, 25, 37, 50, 90],
+    );
+  });
+
+  it("ignores class_count and scheme when explicit breaks are given", () => {
+    const layer = layerWith("pm25", [3, 12, 30, 44, 61, 120]);
+    const style = buildSymbologyStyle(layer, {
+      mode: "graduated",
+      property: "pm25",
+      classCount: 3,
+      scheme: "quantile",
+      breaks: [0, 25, 37, 50, 90],
+    });
+    assert.deepEqual(
+      style.vectorStyleStops?.map((stop) => stop.value),
+      [0, 25, 37, 50, 90],
+    );
+    // No scheme produced these breaks, so the patch does not carry one; the
+    // layer keeps whatever scheme it already had (setLayerStyle merges shallowly).
+    assert.equal(style.vectorStyleClassificationScheme, undefined);
+  });
+
+  it("sorts and de-duplicates explicit breaks so MapLibre accepts them", () => {
+    const layer = layerWith("pm25", [3, 12, 30, 44, 61, 120]);
+    const style = buildSymbologyStyle(layer, {
+      mode: "graduated",
+      property: "pm25",
+      breaks: [50, 0, 37, 25, 37, Number.NaN],
+    });
+    assert.deepEqual(
+      style.vectorStyleStops?.map((stop) => stop.value),
+      [0, 25, 37, 50],
+    );
+    assert.equal(style.vectorStyleClassCount, 4);
+  });
+
+  it("accepts explicit breaks against a single-value property", () => {
+    // Deriving classes from one value is meaningless, but explicit thresholds
+    // do not come from the sample, so the two-value floor must not apply.
+    const layer = layerWith("pm25", [42]);
+    const style = buildSymbologyStyle(layer, {
+      mode: "graduated",
+      property: "pm25",
+      breaks: [0, 25, 50],
+    });
+    assert.equal(style.vectorStyleStops?.length, 3);
+  });
+
+  it("throws when explicit breaks hold fewer than two usable values", () => {
+    const layer = layerWith("pm25", [3, 12, 30]);
+    assert.throws(() =>
+      buildSymbologyStyle(layer, { mode: "graduated", property: "pm25", breaks: [] }),
+    );
+    assert.throws(() =>
+      buildSymbologyStyle(layer, {
+        mode: "graduated",
+        property: "pm25",
+        breaks: [Number.NaN, Number.POSITIVE_INFINITY],
+      }),
+    );
+    // vectorColorExpression paints a flat fallback below two graduated stops,
+    // so one break would report success and render nothing.
+    assert.throws(() =>
+      buildSymbologyStyle(layer, { mode: "graduated", property: "pm25", breaks: [25] }),
+    );
+    assert.throws(() =>
+      buildSymbologyStyle(layer, { mode: "graduated", property: "pm25", breaks: [25, 25] }),
+    );
+  });
+
+  it("still rejects a non-numeric property when breaks are supplied", () => {
+    const layer = layerWith("kind", ["red", "green"]);
+    assert.throws(() =>
+      buildSymbologyStyle(layer, { mode: "graduated", property: "kind", breaks: [0, 25] }),
+    );
+  });
+
   it("builds a categorized style with one stop per distinct value", () => {
     const layer = layerWith("kind", ["a", "b", "a", "c", "b"]);
     const style = buildSymbologyStyle(layer, {
@@ -87,6 +177,61 @@ describe("buildSymbologyStyle", () => {
   it("throws when the property has no values", () => {
     const layer = layerWith("pop", []);
     assert.throws(() => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }));
+  });
+
+  it("lists the layer's real fields when the property does not exist", () => {
+    const layer = layerWith("population", [1, 2, 3]);
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "pop_est" }),
+      (error: Error) =>
+        /does not exist on layer "Test layer"/.test(error.message) &&
+        /Available fields: "population"\./.test(error.message) &&
+        !/Did you mean/.test(error.message),
+    );
+  });
+
+  it("suggests a field that differs only in case", () => {
+    const layer = layerWith("population", [1, 2, 3]);
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "Population" }),
+      /Did you mean "population"\?/,
+    );
+  });
+
+  it("truncates a long field list", () => {
+    const properties = Object.fromEntries(
+      Array.from({ length: 60 }, (_, index) => [`f${index}`, index]),
+    );
+    const layer = {
+      id: "wide",
+      name: "Wide",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: null, properties }],
+      },
+    } as unknown as GeoLibreLayer;
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "categorized", property: "missing" }),
+      (error: Error) =>
+        /"f49" \(and 10 more\)\.$/.test(error.message) && !/"f50"/.test(error.message),
+    );
+  });
+
+  it("says the field has no non-null values rather than missing when it exists", () => {
+    const layer = layerWith("pop", [null, null]);
+    // A sparse field (present on some features, absent on others) is reported
+    // the same way, without claiming every feature carries a null.
+    layer.geojson?.features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [0, 0] },
+      properties: { other: 1 },
+    });
+    assert.throws(
+      () => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }),
+      (error: Error) =>
+        /Property "pop" has no non-null values on layer "Test layer"\.$/.test(error.message),
+    );
   });
 
   it("throws when graduated mode is asked for non-numeric data", () => {

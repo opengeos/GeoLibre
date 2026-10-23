@@ -15,6 +15,7 @@
  */
 import {
   effectiveVectorRules,
+  heatmapRampColors,
   isHexColor,
   proportionalSizeRange,
   styleValue,
@@ -30,9 +31,11 @@ import {
 import { isRasterLike, layerSwatchShape, type LayerSwatchShape } from "./layer-swatch";
 import {
   diagramSwatches,
+  geometryGeneratorLegendParts,
   isVectorStyledLayer,
   NON_LEGEND_TYPES,
   pointMarkerSwatch,
+  type GeometryGeneratorLegendLabels,
 } from "./print-legend";
 import type { LegendMarker } from "./print-layout";
 import { savedRasterAttributeTable } from "./raster-attribute-table";
@@ -48,19 +51,6 @@ export const MAX_LEGEND_ROWS = 100;
 
 /** Colors sampled per gradient bar. */
 const GRADIENT_SAMPLES = 6;
-
-/**
- * The map's heatmap ramp colors (mirrors `HEATMAP_COLOR_RAMP` in
- * `@geolibre/map`'s style-mapper, minus the fully-transparent zero stop so the
- * bar starts visible).
- */
-export const HEATMAP_RAMP_COLORS: readonly string[] = [
-  "rgb(103,169,207)",
-  "rgb(209,229,240)",
-  "rgb(253,219,199)",
-  "rgb(239,138,98)",
-  "rgb(178,24,43)",
-];
 
 /** One row (class / rule / size step / custom item) under a legend entry. */
 export interface AutoLegendRow {
@@ -109,6 +99,13 @@ export interface AutoLegendEntry {
   headerSwatch: { color: string; marker?: LegendMarker } | null;
   /** Caption above class rows (the classified attribute), when meaningful. */
   fieldLabel?: string;
+  /**
+   * How a graduated layer's classes were built: the Style panel's scheme id
+   * (e.g. `quantile`, or `manual` for hand-edited breaks) and the number of
+   * classes on the map. The panel localizes it into a caption such as
+   * "Quantile, 5 classes". Absent for every other entry kind.
+   */
+  classification?: AutoLegendClassification;
   rows: AutoLegendRow[];
   gradient: AutoLegendGradient | null;
   /** Compound opacity applied to this entry's swatches. */
@@ -121,6 +118,14 @@ export interface AutoLegendEntry {
   hidden: boolean;
 }
 
+/** The classification method behind a graduated legend entry. */
+export interface AutoLegendClassification {
+  /** The layer's `vectorStyleClassificationScheme`. */
+  scheme: string;
+  /** Number of classes the map draws (the stop count, not the requested count). */
+  classCount: number;
+}
+
 /** Injected environment for {@link buildAutoLegend}. */
 export interface AutoLegendOptions {
   /** BCP-47 locale for number formatting; defaults to the runtime locale. */
@@ -130,6 +135,8 @@ export interface AutoLegendOptions {
    * `colormapColors` from `@geolibre/plugins`); null falls back to grayscale.
    */
   resolveColormapColors?: (name: string) => readonly string[] | null;
+  /** Localized names for derived centroid / polygon legend rows. */
+  geometryGeneratorLabels?: Partial<GeometryGeneratorLegendLabels>;
 }
 
 /** Prefix for standalone custom-section ids (not tied to a layer). */
@@ -457,6 +464,8 @@ function proportionalSizeRows(
   locale: string | undefined,
   /** Field caption for the block, when the entry's own caption names another. */
   caption?: string,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
 ): RawRow[] {
   const rowShape: LayerSwatchShape = shape === "line" ? "line" : "circle";
   return [0, 0.5, 1].map((ratio, index) => ({
@@ -464,6 +473,7 @@ function proportionalSizeRows(
     color,
     shape: rowShape,
     size: lerp(range.minRadius, range.maxRadius, ratio),
+    ...(marker ? { marker } : {}),
     ...(index === 0 && caption ? { caption } : {}),
   }));
 }
@@ -492,6 +502,8 @@ function sizeClassRows(
   rows: RawRow[],
   stops: VectorStyleStop[],
   range: ProportionalSizeRange,
+  /** The layer's point marker, so the ramp shows the symbol the map draws. */
+  marker?: LegendMarker,
 ): RawRow[] {
   return rows.map((row, index) => {
     const from = Number(stops[index]?.value);
@@ -499,7 +511,11 @@ function sizeClassRows(
     // The top class has no upper bound ("≥ x"): represent it at its lower bound.
     const representative = Number.isFinite(to) ? (from + to) / 2 : from;
     if (!Number.isFinite(representative)) return row;
-    return { ...row, size: proportionalSize(range, representative) };
+    return {
+      ...row,
+      size: proportionalSize(range, representative),
+      ...(marker ? { marker } : {}),
+    };
   });
 }
 
@@ -645,11 +661,13 @@ function vectorParts(
   layer: GeoLibreLayer,
   shape: LayerSwatchShape,
   locale: string | undefined,
+  geometryGeneratorLabels: Partial<GeometryGeneratorLegendLabels> | undefined,
 ): {
   rows: RawRow[];
   gradient: AutoLegendGradient | null;
   headerSwatch: { color: string; marker?: LegendMarker } | null;
   fieldLabel?: string;
+  classification?: AutoLegendClassification;
 } {
   const style = layer.style;
   const mode = styleValue(style, "vectorStyleMode");
@@ -659,12 +677,28 @@ function vectorParts(
     color: swatch.color,
     shape: "square" as const,
   }));
+  const generated = geometryGeneratorLegendParts(layer, {
+    labels: geometryGeneratorLabels,
+    formatValue: (value) => formatLegendNumber(value, locale),
+  });
+  const generatorRows: RawRow[] = generated
+    ? generated.swatches.map((swatch, index) => ({
+        label: generated.fieldLabel ? (swatch.label ?? "") : generated.label,
+        color: swatch.color,
+        shape: generated.shape,
+        ...(swatch.size !== undefined ? { size: swatch.size } : {}),
+        ...(index === 0 && generated.fieldLabel
+          ? { caption: `${generated.label} · ${generated.fieldLabel}` }
+          : {}),
+      }))
+    : [];
 
   // A density heatmap renders no per-feature symbols: the entry is the ramp.
   if (shape === "circle" && styleValue(style, "pointRenderer") === "heatmap") {
+    const colors = heatmapRampColors(style);
     return {
-      rows: diagrams,
-      gradient: { colors: [...HEATMAP_RAMP_COLORS], minLabel: null, maxLabel: null },
+      rows: [...diagrams, ...generatorRows],
+      gradient: { colors: ["rgba(0,0,0,0)", ...colors], minLabel: null, maxLabel: null },
       headerSwatch: null,
     };
   }
@@ -673,6 +707,11 @@ function vectorParts(
   // sizing on exactly the layers the map actually sizes. Only circles and line
   // strokes carry a size; polygon fills ignore it.
   const sizeRange = shape === "circle" || shape === "line" ? proportionalSizeRange(style) : null;
+  // A marker layer's proportional rows draw the marker (scaled by icon-size on
+  // the map), not a circle, so carry it onto every sized row. Lines never take a
+  // marker. Markers bake ONE sprite from markerColor, so a per-row color is not
+  // something the map renders here — the marker is the faithful symbol.
+  const sizeMarker = shape === "circle" ? pointMarkerSwatch(style)?.marker : undefined;
 
   if ((mode === "graduated" || mode === "categorized") && stops.length > 0) {
     const classProperty = styleValue(style, "vectorStyleProperty");
@@ -683,7 +722,9 @@ function vectorParts(
       sizeRange !== null && mode === "graduated" && sizeRange.property === classProperty;
     return {
       rows: [
-        ...(merged && sizeRange ? sizeClassRows(classRows, stops, sizeRange) : classRows),
+        ...(merged && sizeRange
+          ? sizeClassRows(classRows, stops, sizeRange, sizeMarker)
+          : classRows),
         ...(sizeRange && !merged
           ? proportionalSizeRows(
               sizeRange,
@@ -693,13 +734,23 @@ function vectorParts(
               // The entry caption already names the classified field; say which
               // field this second block sizes by so the two are not confused.
               sizeRange.property === classProperty ? undefined : sizeRange.property,
+              sizeMarker,
             )
           : []),
         ...diagrams,
+        ...generatorRows,
       ],
       gradient: null,
       headerSwatch: null,
       fieldLabel: classProperty || undefined,
+      ...(mode === "graduated"
+        ? {
+            classification: {
+              scheme: styleValue(style, "vectorStyleClassificationScheme"),
+              classCount: stops.length,
+            },
+          }
+        : {}),
     };
   }
   if (mode === "rule-based") {
@@ -715,9 +766,11 @@ function vectorParts(
                 shape,
                 locale,
                 sizeRange.property,
+                sizeMarker,
               )
             : []),
           ...diagrams,
+          ...generatorRows,
         ],
         gradient: null,
         headerSwatch: null,
@@ -737,9 +790,11 @@ function vectorParts(
                 shape,
                 locale,
                 sizeRange.property === parts.fieldLabel ? undefined : sizeRange.property,
+                sizeMarker,
               )
             : []),
           ...diagrams,
+          ...generatorRows,
         ],
         gradient: parts.gradient,
         headerSwatch: null,
@@ -751,14 +806,26 @@ function vectorParts(
   // Single symbology: the size ramp IS the classification, so it carries the
   // field caption and replaces the single-swatch heading chip.
   const sizeRows = sizeRange
-    ? proportionalSizeRows(sizeRange, styleValue(style, "fillColor") || NEUTRAL, shape, locale)
+    ? proportionalSizeRows(
+        sizeRange,
+        styleValue(style, "fillColor") || NEUTRAL,
+        shape,
+        locale,
+        undefined,
+        sizeMarker,
+      )
     : [];
   const marker = pointMarkerSwatch(style);
   const headerSwatch = marker
     ? { color: marker.color, marker: marker.marker }
     : { color: styleValue(style, "fillColor") || NEUTRAL };
   const fieldLabel = sizeRange ? sizeRange.property : undefined;
-  return { rows: [...sizeRows, ...diagrams], gradient: null, headerSwatch, fieldLabel };
+  return {
+    rows: [...sizeRows, ...diagrams, ...generatorRows],
+    gradient: null,
+    headerSwatch,
+    fieldLabel,
+  };
 }
 
 /**
@@ -829,6 +896,7 @@ export function buildAutoLegend(
     let gradient: AutoLegendGradient | null = null;
     let headerSwatch: { color: string; marker?: LegendMarker } | null = null;
     let fieldLabel: string | undefined;
+    let classification: AutoLegendClassification | undefined;
     let defaultName = layer.name;
 
     if (custom) {
@@ -840,11 +908,12 @@ export function buildAutoLegend(
       gradient = parts.gradient;
       fieldLabel = parts.fieldLabel;
     } else {
-      const parts = vectorParts(layer, shape, locale);
+      const parts = vectorParts(layer, shape, locale, options.geometryGeneratorLabels);
       rows = parts.rows;
       gradient = parts.gradient;
       headerSwatch = parts.headerSwatch;
       fieldLabel = parts.fieldLabel;
+      classification = parts.classification;
     }
 
     entries.push(
@@ -853,6 +922,7 @@ export function buildAutoLegend(
         custom: Boolean(custom),
         standalone: false,
         opacity: custom ? 1 : entryOpacity(layer),
+        classification,
       }),
     );
   }
@@ -892,7 +962,13 @@ function finishEntry(
   fieldLabel: string | undefined,
   rows: RawRow[],
   gradient: AutoLegendGradient | null,
-  context: { config: LegendConfig; custom: boolean; standalone: boolean; opacity: number },
+  context: {
+    config: LegendConfig;
+    custom: boolean;
+    standalone: boolean;
+    opacity: number;
+    classification?: AutoLegendClassification;
+  },
 ): AutoLegendEntry {
   const { config } = context;
   const entryOverride = config.overrides[id];
@@ -903,6 +979,7 @@ function finishEntry(
     shape,
     headerSwatch,
     ...(fieldLabel ? { fieldLabel } : {}),
+    ...(context.classification ? { classification: context.classification } : {}),
     rows: rows.map((row, index) => {
       const key = legendRowKey(id, index);
       const override = config.overrides[key];

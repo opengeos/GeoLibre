@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
 import { getVectorTool } from "@geolibre/processing";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 
@@ -154,6 +154,62 @@ describe("trajectory speed", () => {
     });
     // Two segments (one per target), not three across the id boundary.
     assert.equal(result!.features.length, 2);
+  });
+});
+
+describe("the active celestial body", () => {
+  // These tools convert their distance threshold into turf's Earth-based units
+  // once, outside the O(n²) scans, rather than converting every measured
+  // distance (issue #1128). Pin that the hoisted comparison is still the body's
+  // ground distance, not Earth's.
+  it("scales the trajectory speed by the body's radius ratio", () => {
+    const track = pointLayer("track", [
+      [0, 0, { t: 0 }],
+      [0, 0.01, { t: 3600 }],
+    ]);
+    const speedOn = (body: string): number => {
+      setActiveEllipsoidId(body);
+      try {
+        const { result } = runTool("trajectory-speed", [track], {
+          layer: "track",
+          timeField: "t",
+          speedUnits: "km/h",
+        });
+        return result!.features[0].properties?.speed as number;
+      } finally {
+        setActiveEllipsoidId("earth");
+      }
+    };
+    // Mars' mean radius is ~0.532x Earth's, so the same fixes an hour apart
+    // cover about half the ground.
+    assert.ok(Math.abs(speedOn("mars") / speedOn("earth") - 0.532) < 0.002);
+  });
+
+  it("holds the stop-detection threshold in the body's ground distance", () => {
+    // ~1.1 km apart on Earth, which is ~590 m of Martian ground. A 800 m
+    // threshold therefore separates them on Earth but merges them on Mars.
+    const track = pointLayer("track", [
+      [0, 0, { t: 0 }],
+      [0, 0.01, { t: 600 }],
+    ]);
+    const stopsWith = (body: string): number => {
+      setActiveEllipsoidId(body);
+      try {
+        const { result } = runTool("detect-stops", [track], {
+          layer: "track",
+          timeField: "t",
+          maxDistance: 0.8,
+          distanceUnits: "kilometers",
+          minDuration: 1,
+          durationUnits: "minutes",
+        });
+        return result?.features.length ?? 0;
+      } finally {
+        setActiveEllipsoidId("earth");
+      }
+    };
+    assert.equal(stopsWith("earth"), 0);
+    assert.equal(stopsWith("mars"), 1);
   });
 });
 

@@ -1,0 +1,539 @@
+import type {
+  GeoLibreLayer,
+  MapPreferences,
+  MapProjection,
+  MapRendererKind,
+  MapViewState,
+  StoryChapterAnimation,
+  StoryChapterLocation,
+} from "@geolibre/core";
+import type { FeatureCollection, Geometry, Point, Polygon } from "geojson";
+import type * as maplibregl from "maplibre-gl";
+import type { SupportedLayerKinds } from "./layer-kind";
+import { MAPLIBRE_SUPPORTED_LAYER_KINDS } from "./maplibre-layer-kinds";
+
+/** Shared search highlight color across rendering engines. */
+export const SEARCH_HIGHLIGHT_COLOR = "#ef4444";
+
+/**
+ * The renderer-neutral surface the app drives a map through (issue #2260).
+ *
+ * Historically there was no such seam: every panel, menu, and plugin reached
+ * the map through `MapController`, a MapLibre-specific class, so the 3D globe
+ * — which has no `MapController` — left ~681 call sites pointing at `null` and
+ * the UI compensated with hardcoded `primaryRenderer === "cesium"` gates. This
+ * interface is the extraction of that surface, so a second engine can satisfy
+ * it and those gates can key off {@link MapEngineCapabilities} instead of the
+ * engine's name.
+ *
+ * `init()` is deliberately absent: it constructs the underlying map and returns
+ * an engine-specific handle, and only each engine's own canvas component calls
+ * it (`MapCanvas`/`SecondaryMapCanvas` for MapLibre). Construction is where the
+ * engines legitimately differ; everything after it is what this interface
+ * covers.
+ *
+ * Members that only one engine can honor are still declared here rather than
+ * being split into a second interface. Two reasons: the call sites already
+ * handle the "no map yet" case (a `MapController` returns `null`/`false` before
+ * `init` and after `destroy`), so an engine that never supports an operation is
+ * shaped like a map that is not ready yet; and splitting would push a
+ * discriminated union onto all ~681 call sites for no gain. Which members are
+ * meaningful is instead declared by {@link capabilities} — read that, do not
+ * branch on {@link kind}.
+ */
+export interface MapEngine {
+  /** Which renderer backs this engine. Diagnostics and telemetry only. */
+  readonly kind: MapRendererKind;
+  /**
+   * What this engine can actually do. Gate UI on these, not on {@link kind}:
+   * a feature disabled because "the engine is Cesium" gets it wrong in both
+   * directions — it hides camera and terrain work Cesium does natively, and it
+   * silently stops describing reality the moment a third engine appears.
+   */
+  readonly capabilities: MapEngineCapabilities;
+
+  // ---------------------------------------------------------------- lifecycle
+
+  /** Tear the map down and release its GPU resources. Safe to call twice. */
+  destroy(): void;
+
+  // ------------------------------------------------------------------- camera
+
+  /** Place the camera at `view` without animation, resolving after asynchronous engines settle. */
+  applyView(view: MapViewState): void | Promise<void>;
+  /** Animate the camera to `view` with a short ease. */
+  easeToView(view: MapViewState): void;
+  /** The camera's current position, in the store's engine-neutral shape. */
+  readView(): MapViewState;
+  /**
+   * Camera height above the ground in metres, or `null` when the engine cannot
+   * report one (no map yet, or a projection with no metric altitude).
+   */
+  readCameraAltitude(): number | null;
+  /** Animate to a partial camera description; omitted fields are left alone. */
+  flyTo(camera: FlyToCamera): void;
+  /** Animate to a story-chapter location. */
+  flyToView(location: StoryChapterLocation): void;
+  /** Apply a story chapter's camera, optionally animated and auto-rotating. */
+  applyStoryChapterCamera(
+    location: StoryChapterLocation,
+    animation?: StoryChapterAnimation,
+    rotate?: boolean,
+  ): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  /** Reset bearing to north, keeping the current pitch. */
+  resetNorth(): void;
+  /** Reset bearing to north and pitch to nadir. */
+  resetNorthPitch(): void;
+  /** Reset pitch to nadir, keeping the current bearing. */
+  resetPitch(): void;
+  /** Frame `bounds` (`[west, south, east, north]`) with the standard padding. */
+  fitBounds(bounds: [number, number, number, number]): void;
+  /**
+   * Frame a layer's extent. Returns false, without moving the camera, when the
+   * layer's extent is unknown, so a caller can tell the user why nothing moved.
+   * An engine that hands the fit to an asynchronous loader returns true.
+   */
+  fitLayer(layer: GeoLibreLayer): boolean;
+  /** The projection the map is currently drawing in. */
+  readProjection(): MapProjection;
+  /** Apply min/max zoom, max pitch, and bounds constraints from the project. */
+  applyMapPreferences(preferences: MapPreferences): void;
+
+  // ------------------------------------------------------------------- layers
+
+  /** Reconcile the map against `layers`, adding, updating, and removing. */
+  syncLayers(layers: GeoLibreLayer[]): void;
+  /**
+   * Like {@link syncLayers}, but deferred until the engine is ready to accept
+   * layers (a style swap in flight, terrain still streaming).
+   */
+  waitAndSyncLayers(layers: GeoLibreLayer[]): void;
+  /** A layer's features, read back from the map. `null` when unavailable. */
+  getLayerGeoJson(layerId: string): Promise<FeatureCollection | null>;
+  /** A raster layer's source description, or `null` when it has none. */
+  getLayerRasterSource(layerId: string): Record<string, unknown> | null;
+
+  // ------------------------------------------------------------------ basemap
+
+  setBasemapVisible(visible: boolean): void;
+  setBasemapOpacity(opacity: number): void;
+  /**
+   * Swap the basemap. Requires {@link MapEngineCapabilities.styleSpec} for a
+   * style URL; engines without it draw the basemap from their own translation
+   * of the project's `basemapStyleUrl` instead (`basemapToCesiumImagery`).
+   */
+  setStyle(url: string): void;
+  /**
+   * The style-layer ids belonging to the basemap rather than to project layers.
+   * Empty without {@link MapEngineCapabilities.styleSpec}.
+   */
+  getBasemapStyleLayerIds(): string[];
+  /** Background color for the Blank basemap; `null` restores the theme default. */
+  setBlankBackgroundColor(color: string | null): void;
+
+  // ---------------------------------------------------------- story rendering
+
+  /** Fade a layer for story playback without touching its stored opacity. */
+  setStoryLayerOpacity(layerId: string, opacity: number, durationMs?: number): void;
+  /** Undo every {@link setStoryLayerOpacity} applied since the last restore. */
+  restoreLayerStyles(): void;
+
+  // ------------------------------------------------------------------ picking
+
+  /**
+   * Features under `lngLat`, optionally restricted to one layer. Empty without
+   * {@link MapEngineCapabilities.picking}.
+   */
+  identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[];
+  /** Highlight one or more features on `layer`; `null` clears the highlight. */
+  highlightFeature(
+    layer: GeoLibreLayer | undefined,
+    featureId: string | string[] | null,
+    options?: { fit?: boolean },
+  ): void;
+  clearFeatureHighlight(): void;
+  /** Draw a temporary search marker or cell outline; dispose clears only this result. */
+  showSearchResult(geometry: Point | Polygon): () => void;
+  /**
+   * Drop a draggable pin for the user to position, returning a teardown
+   * function. Requires {@link MapEngineCapabilities.onMapDrawing}; engines
+   * without it return a no-op teardown and place nothing.
+   */
+  startManualPlacement(lngLat: [number, number], options: ManualPlacementOptions): () => void;
+  /** Draw a two-corner extent; dispose cancels without calling callbacks. */
+  drawExtent(options: ExtentDrawingOptions): () => void;
+  /** Current visible geographic extent, or null when the view is unavailable. */
+  getViewBounds(): MapExtent | null;
+  /** Globe-native overlay; MapLibre panels keep their existing SVG overlay. */
+  showExtent(extent: MapExtent): () => void;
+  /** Rendered pixels and geometry for capture without requiring a MapLibre map. */
+  getRenderSurface(): MapRenderSurface | null;
+  getRenderStatus(): { pending: string[]; errors: string[] };
+  captureImage(): Promise<Blob>;
+  /** Subscribe to primary-button map clicks in geographic coordinates. */
+  onMapClick(listener: (lngLat: [number, number]) => void): () => void;
+  /** Whether the camera is currently moving or animating. */
+  isCameraMoving(): boolean;
+  /** Subscribe to camera changes while the view is moving. */
+  onCameraMove(listener: () => void): () => void;
+  /**
+   * Subscribe to the camera settling. `storyCamera` marks a settle that ends a
+   * story chapter or chapter-preview move, which is scripted, not navigation.
+   */
+  onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void;
+  /**
+   * Resolve once the view has settled and drawn everything it is loading, or
+   * after `timeoutMs`, for captures that drive the camera (the Print Layout
+   * atlas). Engines without it are waited on through {@link onCameraIdle}.
+   */
+  whenDrawn?(timeoutMs: number): Promise<void>;
+  stopCamera(): void;
+  suspendNavigation(): () => void;
+
+  // ----------------------------------------------------------------- controls
+
+  /**
+   * Mount a control. Returns whether it was added — `false` means this engine
+   * has nowhere to host it, which callers already treat as "not available".
+   */
+  addControl(control: maplibregl.IControl, position?: maplibregl.ControlPosition): boolean;
+  removeControl(control: maplibregl.IControl): void;
+  setBuiltInControlVisible(control: BuiltInMapControl, visible: boolean): boolean;
+  getBuiltInControlPosition(control: BuiltInMapControl): maplibregl.ControlPosition;
+  setBuiltInControlPosition(
+    control: BuiltInMapControl,
+    position: maplibregl.ControlPosition,
+  ): boolean;
+  /** Translated tooltip for the on-map compass (reset pitch/bearing) control. */
+  setCompassLabel(label: string): void;
+  /** Translated label for the layer control's basemap ("Background") row. */
+  setBackgroundLabel(label: string): void;
+
+  // ------------------------------------------------------------------ terrain
+
+  isTerrainEnabled(): boolean;
+  setTerrainEnabled(enabled: boolean): boolean;
+  getTerrainExaggeration(): number;
+  setTerrainExaggeration(exaggeration: number): void;
+  /** The COG URL currently backing terrain, or `null` for the default source. */
+  getTerrainCogSource(): string | null;
+  hasCustomTerrainSource(): boolean;
+  setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /** Cesium-only Ion terrain asset, or `null` when the normal global source is used. */
+  getTerrainIonAssetId?(): number | null;
+  /** Select or clear the Cesium-only Ion terrain source. */
+  setTerrainIonAssetId?(assetId: number | null): Promise<boolean>;
+  /** Translated tooltip for the on-map terrain control. */
+  setTerrainLabel(label: string): void;
+
+  // ------------------------------------------------------------------- escape
+
+  /**
+   * The underlying MapLibre map, or `null` when this engine is not MapLibre.
+   *
+   * The escape hatch for code that genuinely needs the Style Spec — and the
+   * reason every consumer already null-checks, which is what lets a non-MapLibre
+   * engine satisfy this interface without breaking them. Prefer a typed member
+   * above; reach for this only behind
+   * {@link MapEngineCapabilities.nativeMapInstance}.
+   */
+  getMap(): maplibregl.Map | null;
+}
+
+/**
+ * What an engine can do, so UI gates describe a capability rather than name an
+ * engine.
+ *
+ * Each flag exists because something in the app branches on it today. Adding a
+ * flag without a consumer makes the set harder to reason about, not richer.
+ *
+ * The fields are `readonly` because an engine's capabilities are a fact about
+ * that engine, not a setting: a capability object is shared by every instance of
+ * an engine (see {@link MAPLIBRE_CAPABILITIES}), so one write would rewrite it
+ * for all of them.
+ */
+export interface MapEngineCapabilities {
+  /**
+   * The Mapbox Style Spec is live: `setStyle`, paint-property edits, style
+   * layer ids, and the style import/export paths (Mapbox, QML, SLD) work.
+   * Cesium has no analogue — it draws imagery and primitives, not a style
+   * document — so these are the operations that stay MapLibre-only.
+   */
+  readonly styleSpec: boolean;
+  /**
+   * {@link MapEngine.getMap} returns a live MapLibre map. Gates the features
+   * that read the MapLibre canvas or drive MapLibre directly: AI object
+   * detection, segment-everything, and plugins written against `maplibre-gl`.
+   */
+  readonly nativeMapInstance: boolean;
+  /**
+   * The engine hosts MapLibre `CustomLayerInterface` layers and deck.gl
+   * overlays — layers whose pixels something other than the engine draws.
+   */
+  readonly customLayers: boolean;
+  /**
+   * The engine hosts deck.gl's `MapboxOverlay` (`@deck.gl/mapbox`), so the
+   * shared interleaved deck overlay and everything drawn through it — Deck.gl
+   * Layers, glTF models, DuckDB query results, 3D Tiles, LiDAR — has a map to
+   * bind to. Narrower than {@link customLayers}: Mapbox GL JS is that
+   * overlay's native host without exposing a MapLibre map or hosting MapLibre
+   * `CustomLayerInterface` layers.
+   */
+  readonly deckOverlay: boolean;
+  /** 3D terrain can be enabled and exaggerated. */
+  readonly terrain: boolean;
+  /** {@link MapEngine.identifyFeatures} can return features. */
+  readonly picking: boolean;
+  /**
+   * The user can draw or drag on the map surface: {@link
+   * MapEngine.startManualPlacement}, and the raster-subset extract box.
+   */
+  readonly onMapDrawing: boolean;
+  /**
+   * The engine can host `IControl` DOM controls, so plugin controls and the
+   * built-in on-map controls have somewhere to mount.
+   */
+  readonly domControls: boolean;
+  /**
+   * Straight screen-space geometry pinned through
+   * {@link MapRenderSurface.project} tracks the map closely enough to draw an
+   * overlay with, so a panel renders its own SVG outline instead of asking for
+   * a native one through {@link MapEngine.showExtent}.
+   *
+   * Both 2D engines qualify — including in globe projection, where a
+   * four-corner box is already the accepted approximation — and the SVG is what
+   * the extract panels want, because it sits above the interleaved deck.gl
+   * raster overlay that a style layer would end up underneath. The globe
+   * engines do not: a box wide enough to wrap past the limb has corners that
+   * project to nothing, so they draw the extent natively instead.
+   */
+  readonly screenOverlays: boolean;
+  /**
+   * The engine draws flat when the project asks for a `mercator` projection, so
+   * globe-only features read `preferences.map.projection` to decide whether
+   * they apply. Without it the engine is a globe whatever that preference says,
+   * because it has no flat mode the preference maps onto.
+   */
+  readonly flatProjection: boolean;
+  /**
+   * {@link MapEngine.setTerrainCogSource} can install a custom DEM — a COG URL,
+   * a local file, or a raster layer already on the map — as the elevation
+   * source. Without it the engine only has its own default terrain, so the
+   * Terrain source controls are hidden rather than left to fail quietly.
+   */
+  readonly terrainSource: boolean;
+  /**
+   * {@link MapEngine.setTerrainIonAssetId} can use a Cesium Ion terrain asset
+   * as the elevation source, so the Terrain dialog offers the Ion asset field.
+   */
+  readonly ionTerrain: boolean;
+  /**
+   * The engine draws Zarr layers itself from the store record, so the
+   * `maplibre-gl-zarr` control is never mounted: Zarr layers are added through
+   * the Add Data form and restored, styled, and time-stepped through the record
+   * alone (opengeos/GeoLibre#2261).
+   */
+  readonly nativeZarr: boolean;
+  /**
+   * The engine loads KML/KMZ, CZML and Cesium ion assets through its own data
+   * source loaders. Without it KML is converted to map layers by the host
+   * importer, and CZML and ion assets are not offered.
+   */
+  readonly nativeDataSources: boolean;
+  /**
+   * The engine publishes itself only once its map has finished its first load
+   * (the initial style, or a ready view), so UI that hands work to plugin panels
+   * must wait for the engine rather than for the renderer switch.
+   */
+  readonly deferredEngineReady: boolean;
+  /** The built-in measure control can draw its sketch on this engine. */
+  readonly measureTool: boolean;
+  /**
+   * The raster and PMTiles add-layer panels (`IControl`s the plugins mount on
+   * the map) work here. Without it those formats, and Zarr, are added through
+   * the Add Data dialog's forms instead.
+   */
+  readonly controlLayerPanels: boolean;
+  /**
+   * What the engine's per-kind layer dispatch does with each
+   * layer kind (`classifyLayer`): draws it from the store record (`"native"`), leaves it
+   * to a plugin control (`"plugin"`), or never draws it (`"unsupported"`).
+   * MapLibre's layer sync and the Cesium and ArcGIS kind checks read this
+   * same object; Mapbox's kind switch is separate, and
+   * tests/layer-support-matrix.test.ts holds every table to its engine's
+   * dispatch. It describes kinds, not records: whether one record
+   * draws still depends on its data, which the per-record support checks
+   * (`isCesiumSupportedLayerType`, `isMapboxSupportedLayer`,
+   * `isArcgisSupportedLayer`) answer. ArcGIS's `"plugin"` kinds draw on its
+   * deck.gl overlay, so they also need {@link deckOverlay}.
+   */
+  readonly supportedLayerKinds: SupportedLayerKinds;
+}
+
+/**
+ * Capabilities of the MapLibre engine: everything, by construction, except the
+ * flags that describe another engine's own loaders or lifecycle (`nativeZarr`,
+ * `nativeDataSources`, `deferredEngineReady`) — MapLibre reaches those through
+ * its controls and publishes itself synchronously.
+ *
+ * Frozen, not merely `readonly`. Every `MapController` — the primary map and
+ * each split-view pane — exposes this one object, and `readonly` is erased at
+ * runtime, so it stops a typed write but not an untyped one. External plugins
+ * load from zips and manifests as plain JavaScript and reach the engine through
+ * the plugin API, which is exactly the caller TypeScript cannot check.
+ */
+export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
+  styleSpec: true,
+  nativeMapInstance: true,
+  customLayers: true,
+  deckOverlay: true,
+  terrain: true,
+  picking: true,
+  onMapDrawing: true,
+  domControls: true,
+  screenOverlays: true,
+  flatProjection: true,
+  terrainSource: true,
+  ionTerrain: false,
+  nativeZarr: false,
+  nativeDataSources: false,
+  deferredEngineReady: false,
+  measureTool: true,
+  controlLayerPanels: true,
+  supportedLayerKinds: MAPLIBRE_SUPPORTED_LAYER_KINDS,
+});
+
+/** One feature returned by {@link MapEngine.identifyFeatures}. */
+export interface IdentifiedFeature {
+  layerId: string;
+  featureId: string | null;
+  properties: Record<string, unknown>;
+  geometry: Geometry | null;
+}
+
+/** A partial camera description; omitted fields keep their current value. */
+export interface FlyToCamera {
+  center?: [number, number];
+  zoom?: number;
+  bearing?: number;
+  pitch?: number;
+  duration?: number;
+}
+
+/** Options for {@link MapEngine.startManualPlacement}. */
+export interface ManualPlacementOptions {
+  /** Instruction shown in the pin's popup while it is draggable. */
+  hint: string;
+  /** Label for the button that finishes placement. */
+  doneLabel: string;
+  /** Called with `[lng, lat]` on every drag of the pin. */
+  onMove: (lngLat: [number, number]) => void;
+  /** Called once when the user clicks the "Done" button. */
+  onDone?: () => void;
+}
+
+/**
+ * Geographic bounds in degrees, unwrapped the way MapLibre's `getBounds()`
+ * reports them: `west < east` always, and a span across the antimeridian
+ * carries `east > 180` instead of inverting the pair.
+ */
+/** Details of a camera-idle notification; engines that can't tell omit it. */
+export interface CameraIdleEvent {
+  storyCamera: boolean;
+}
+
+export type MapExtent = [west: number, south: number, east: number, north: number];
+
+export interface MapRenderSurface {
+  getCanvas(): HTMLCanvasElement;
+  getContainer(): HTMLElement;
+  getBearing(): number;
+  project(location: [number, number]): { x: number; y: number };
+  /** Convert a canvas point to degrees, or return `null` when it has no map location. */
+  unproject(point: [number, number]): { lng: number; lat: number } | null;
+  redraw(): void;
+}
+
+export interface ExtentDrawingOptions {
+  onChange: (extent: MapExtent) => void;
+  onDone?: (extent: MapExtent) => void;
+  onCancel?: () => void;
+}
+
+/**
+ * The on-map controls GeoLibre owns, as opposed to the ones plugins add.
+ *
+ * Lives here rather than in `map-controller.ts` because {@link MapEngine}
+ * references it and every engine has to speak the same set; `map-controller.ts`
+ * re-exports it so existing importers are unaffected.
+ */
+export type BuiltInMapControl =
+  | "navigation"
+  | "fullscreen"
+  | "compass"
+  | "geolocate"
+  | "globe"
+  | "terrain"
+  | "scale"
+  | "attribution"
+  | "logo"
+  | "maptoolkit-logo"
+  | "layer-control";
+
+/**
+ * The paint properties a story-map fade drives, per style layer type. Both 2D
+ * engines apply a chapter's transient layer opacity through these.
+ */
+export const STORY_OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
+  background: ["background-opacity"],
+  // A point's outline fades with its fill so story playback can fully hide a
+  // circle layer; without the stroke property a faded-out point still renders
+  // as a hollow ring (#934).
+  circle: ["circle-opacity", "circle-stroke-opacity"],
+  fill: ["fill-opacity"],
+  "fill-extrusion": ["fill-extrusion-opacity"],
+  heatmap: ["heatmap-opacity"],
+  hillshade: ["hillshade-exaggeration"],
+  line: ["line-opacity"],
+  raster: ["raster-opacity"],
+  symbol: ["icon-opacity", "text-opacity"],
+};
+
+/**
+ * Which built-in controls a fresh map shows, and where. Every engine starts
+ * from these so the Controls menu's checkboxes (seeded from the same table)
+ * agree with the map whichever renderer is primary; the Mapbox engine mounts
+ * the same set as MapLibre and only skips the ids it cannot host.
+ */
+export const DEFAULT_BUILT_IN_CONTROL_VISIBILITY: Record<BuiltInMapControl, boolean> = {
+  navigation: false,
+  fullscreen: true,
+  compass: true,
+  geolocate: false,
+  globe: true,
+  terrain: false,
+  scale: true,
+  attribution: true,
+  logo: false,
+  "maptoolkit-logo": false,
+  "layer-control": true,
+};
+
+export const DEFAULT_BUILT_IN_CONTROL_POSITIONS: Record<
+  BuiltInMapControl,
+  maplibregl.ControlPosition
+> = {
+  navigation: "top-right",
+  fullscreen: "top-right",
+  compass: "top-right",
+  geolocate: "top-right",
+  globe: "top-right",
+  terrain: "top-right",
+  scale: "bottom-left",
+  attribution: "bottom-right",
+  logo: "bottom-left",
+  "maptoolkit-logo": "bottom-left",
+  "layer-control": "top-right",
+};

@@ -1,12 +1,34 @@
 import type { FeatureCollection, Geometry } from "geojson";
 import {
+  circleRadiusValue,
+  documentLocale,
   extrusionColorValue,
   extrusionHeightValue,
+  isInlineImageValue,
+  isPopupClickEnabled,
+  isPopupHoverEnabled,
+  isSafePopupUrl,
+  lineWidthValue,
+  mapZoomStepOutputs,
+  resolveConfiguredPopupTitle,
+  resolvePopupBody,
+  resolvePopupRows,
+  resolvePopupTitle,
+  simpleStyleNumberValue,
   styleValue,
+  vectorCircleColorValue,
+  vectorFillColorValue,
+  vectorFillOpacityValue,
+  vectorLineColorValue,
+  vectorOutlineColorValue,
+  vectorStrokeWidthValue,
   type GeoLibreLayer,
   type MapProjection,
+  type PopupRow,
   type StoryMap,
 } from "@geolibre/core";
+import { buildMapboxStyle } from "@geolibre/map/style-export";
+import { NO_EXTERNAL_CDN } from "./build-flags";
 import { sanitizeStoryHtml } from "./sanitize-html";
 import {
   STORY_END_STEP_ID,
@@ -32,6 +54,48 @@ export interface StoryMapExportOptions {
    * Defaults to English when omitted so the export still works standalone.
    */
   navToggleLabel?: string;
+  /**
+   * Marker sprites baked by the caller, keyed by layer id. A point layer with
+   * markers enabled exports as a symbol layer drawing its sprite, so the story
+   * keeps the pins, stars, etc. the map shows (#2597). Baking needs a canvas,
+   * which is why the caller supplies it; a marker layer without an entry falls
+   * back to the plain circle.
+   */
+  markerImages?: Record<string, StoryMarkerImage>;
+}
+
+/** A marker sprite baked for the export (see {@link StoryMapExportOptions.markerImages}). */
+export interface StoryMarkerImage {
+  /** The sprite as a PNG data URL. */
+  dataUrl: string;
+  /** Device pixels per CSS pixel the sprite was baked at. */
+  pixelRatio: number;
+  /** The `icon-size` layout value: `1`, or an expression for proportional sizing. */
+  iconSize: number | unknown[];
+}
+
+/**
+ * One popup row as the exported page draws it. `u` is a pre-validated URL; an
+ * inline `data:` image instead names its property in `p`, which the page reads
+ * back from the feature, so the (often large) data URL is not embedded twice.
+ */
+interface ExportPopupRow {
+  l: string;
+  k: "text" | "image" | "link";
+  v: string;
+  u?: string;
+  p?: string;
+}
+
+/** Per-feature popup content, indexed like the layer's features. */
+interface ExportFeaturePopup {
+  /** Click popup title, body text, and rows; absent when click is off. */
+  t?: string;
+  b?: string;
+  r?: ExportPopupRow[];
+  /** Hover tooltip title and rows; absent when there is no tooltip. */
+  ht?: string;
+  hr?: ExportPopupRow[];
 }
 
 interface InlineLayerExport {
@@ -39,6 +103,8 @@ interface InlineLayerExport {
   /** MapLibre source spec (a GeoJSON source, or a raster tile source). */
   source: Record<string, unknown>;
   layerSpec: Record<string, unknown>;
+  /** The layer's text label (symbol) spec, drawn above it when labels are on. */
+  labelSpec?: Record<string, unknown>;
   /** GeoLibre layer-level opacity, combined with the style's per-geometry one. */
   layerOpacity: number;
   /**
@@ -81,6 +147,15 @@ const BLANK_EXPORT_STYLE: Record<string, unknown> = {
  * @returns A complete HTML document as a string.
  */
 export function buildStoryMapHtml(options: StoryMapExportOptions): string {
+  // The exported standalone HTML loads maplibre-gl, scrollama, and the RTL text
+  // plugin from external CDNs (unpkg.com). When external CDN references are
+  // stripped from the build, the export cannot produce a functioning page.
+  if (NO_EXTERNAL_CDN) {
+    throw new Error(
+      "Story map HTML export is unavailable in this build (external CDN resources are disabled).",
+    );
+  }
+
   const {
     storymap,
     basemapStyleUrl,
@@ -96,19 +171,6 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     throw new Error("Cannot export a story map with no chapters.");
   }
 
-  // Only inline layers that are actually referenced by a chapter transition or
-  // that are visible GeoJSON layers, so the export stays focused on the story.
-  // `referenced` (enter ∪ exit) drives which layers to inline.
-  const referenced = new Set<string>();
-  for (const chapter of storymap.chapters) {
-    for (const change of chapter.onChapterEnter) {
-      referenced.add(change.layerId);
-    }
-    for (const change of chapter.onChapterExit) {
-      referenced.add(change.layerId);
-    }
-  }
-
   // A layer's starting opacity must match what the in-app presenter shows on the
   // first chapter, which applies chapter 0's onChapterEnter on top of the live
   // (naturally visible) layers via enterChapter(0). So seed each layer from
@@ -121,10 +183,12 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     chapterZeroOpacity.set(change.layerId, change.opacity);
   }
 
+  const markerImages = options.markerImages ?? {};
   const inlineLayers: InlineLayerExport[] = [];
-  for (const layer of layers) {
-    const isReferenced = referenced.has(layer.id);
-    if (!isReferenced && !layer.visible) continue;
+  const popups: Record<string, ExportFeaturePopup[]> = {};
+  // Resolve popups the way the app would on the story's opening view.
+  const popupContext = { zoom: storymap.chapters[0].location.zoom, locale: documentLocale() };
+  for (const layer of storyExportCandidates(storymap, layers)) {
     // Inline GeoJSON layers and raster tile layers (the latter covers basemaps
     // added through the Basemaps plugin, which are raster layers rather than a
     // style URL, #936). Layers iterate in store order; the store array is
@@ -132,12 +196,19 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     // so the export reproduces whatever stacking the user set in the app
     // (the Basemaps plugin inserts basemaps at the bottom, so they end up under
     // the overlays here too).
-    const built = buildInlineLayer(layer);
+    const built = buildInlineLayer(layer, markerImages[layer.id]);
     if (!built) continue;
+    const layerPopups = buildLayerPopups(layer, popupContext);
+    if (layerPopups) {
+      popups[layer.id] = layerPopups;
+      // Popups look features up by index, so let MapLibre number them.
+      built.source.generateId = true;
+    }
     inlineLayers.push({
       id: layer.id,
       source: built.source,
       layerSpec: built.layerSpec,
+      ...(built.labelSpec ? { labelSpec: built.labelSpec } : {}),
       // Hidden layers export fully transparent so the export matches what
       // GeoLibre renders (the opacity slider value alone ignores visibility).
       layerOpacity: layer.visible ? layer.opacity : 0,
@@ -152,6 +223,20 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   // template runtime reads `layer.layer` for the MapLibre id, so map our
   // `layerId` field onto that shape as well.
   const inlinedIds = new Set(inlineLayers.map((entry) => entry.id));
+  // Register only the sprites a symbol layer in the export actually draws.
+  const usedMarkerImages: Record<string, { url: string; pixelRatio: number }> = {};
+  for (const entry of inlineLayers) {
+    const image = markerImages[entry.id];
+    if (entry.layerSpec.type === "symbol" && image) {
+      usedMarkerImages[markerImageId(entry.id)] = {
+        url: image.dataUrl,
+        pixelRatio: image.pixelRatio,
+      };
+    }
+  }
+  const usesCog = inlineLayers.some(
+    (entry) => typeof entry.source.url === "string" && entry.source.url.startsWith("cog://"),
+  );
   const keepChanges = (changes: StoryMap["chapters"][number]["onChapterEnter"]) =>
     changes
       .filter((change) => inlinedIds.has(change.layerId))
@@ -184,6 +269,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     startStepId: STORY_START_STEP_ID,
     endStepId: STORY_END_STEP_ID,
     navToggleLabel,
+    labelLayerSuffix: STORY_LABEL_LAYER_SUFFIX,
+    labelGlyphs: STORY_LABEL_GLYPHS_URL,
+    markerImages: usedMarkerImages,
+    popups,
     title: storymap.title,
     subtitle: storymap.subtitle,
     byline: storymap.byline,
@@ -214,34 +303,151 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const inlineLayerScript = inlineLayers
     .map((entry) => {
       const sourceId = `${entry.id}-source`;
-      const paint = { ...(entry.layerSpec.paint as Record<string, unknown>) };
-      // Seed every opacity paint property the layer type fades. When chapter 0
-      // assigns this layer an opacity, start there (matching the in-app first
-      // frame, #950); otherwise use the style's per-property opacity scaled by
-      // the layer opacity so the export matches what GeoLibre renders. A chapter
-      // 0 opacity wins outright, including over a hidden layer's 0, exactly as
-      // the in-app presenter's setLayerOpacity overwrites the live value. Circles
-      // carry both fill and stroke opacity so a faded point hides fully (#934).
-      for (const opacityProp of opacityProperties(entry.layerSpec.type as string)) {
-        const styleOpacity =
-          typeof paint[opacityProp] === "number" ? (paint[opacityProp] as number) : 1;
-        paint[opacityProp] =
-          entry.chapterZeroOpacity !== undefined
-            ? entry.chapterZeroOpacity
-            : styleOpacity * entry.layerOpacity;
-      }
       const spec = {
         ...entry.layerSpec,
         id: entry.id,
         source: sourceId,
-        paint,
+        paint: seedOpacity(
+          entry.layerSpec.paint as Record<string, unknown>,
+          opacityProperties(entry.layerSpec.type as string),
+          entry,
+        ),
       };
-      return `    map.addSource(${jsonForScript(sourceId)}, ${jsonForScript(entry.source)});
-    map.addLayer(${jsonForScript(spec)});`;
+      const lines = [
+        `    map.addSource(${jsonForScript(sourceId)}, ${jsonForScript(entry.source)});`,
+        `    map.addLayer(${jsonForScript(spec)});`,
+      ];
+      if (entry.labelSpec) {
+        // The label fades with its layer: the page's setLayerOpacity applies a
+        // chapter's opacity to the companion label layer too.
+        const labelSpec = {
+          ...entry.labelSpec,
+          id: `${entry.id}${STORY_LABEL_LAYER_SUFFIX}`,
+          source: sourceId,
+          paint: seedOpacity(
+            entry.labelSpec.paint as Record<string, unknown>,
+            ["text-opacity"],
+            entry,
+          ),
+        };
+        lines.push(`    addLabelLayer(${jsonForScript(labelSpec)});`);
+      }
+      return lines.join("\n");
     })
     .join("\n");
 
-  return renderTemplate(config, inlineLayerScript);
+  return renderTemplate(config, inlineLayerScript, usesCog);
+}
+
+/**
+ * The layers a story export considers inlining: those a chapter transition
+ * references (enter or exit), plus every visible layer, so the export stays
+ * focused on the story. Callers preparing per-layer inputs (such as baked
+ * marker sprites) use it to skip layers the export would drop anyway.
+ *
+ * @param storymap The story being exported.
+ * @param layers The project layers, bottom to top.
+ * @returns The candidate layers, in the same order.
+ */
+export function storyExportCandidates(
+  storymap: StoryMap,
+  layers: GeoLibreLayer[],
+): GeoLibreLayer[] {
+  const referenced = new Set<string>();
+  for (const chapter of storymap.chapters) {
+    for (const change of chapter.onChapterEnter) {
+      referenced.add(change.layerId);
+    }
+    for (const change of chapter.onChapterExit) {
+      referenced.add(change.layerId);
+    }
+  }
+  return layers.filter((layer) => layer.visible || referenced.has(layer.id));
+}
+
+/** The export's style image id for a layer's baked marker sprite. */
+function markerImageId(layerId: string): string {
+  return `geolibre-story-marker-${layerId}`;
+}
+
+/** Convert a resolved popup row to the export's minimal, pre-sanitized shape. */
+function exportPopupRow(row: PopupRow): ExportPopupRow {
+  const trimmed = typeof row.value === "string" ? row.value.trim() : "";
+  if (
+    (row.kind === "image" && isSafePopupUrl(row.value, true)) ||
+    (row.kind === "auto" && isInlineImageValue(row.value))
+  ) {
+    // The image itself is the value, so no fallback text is needed.
+    return /^data:/i.test(trimmed)
+      ? { l: row.label, k: "image", v: "", p: row.field }
+      : { l: row.label, k: "image", v: "", u: trimmed };
+  }
+  if (row.kind === "link" && isSafePopupUrl(row.value)) {
+    return { l: row.label, k: "link", v: row.linkLabel ?? row.text, u: trimmed };
+  }
+  return { l: row.label, k: "text", v: row.text };
+}
+
+/**
+ * Resolve the click popup and hover tooltip content of every feature in a
+ * GeoJSON layer that carries an authored popup config, so the exported page
+ * shows the same titles, labels and formatted values as the app (#2597). The
+ * rows are resolved here with the app's own popup helpers rather than
+ * re-implemented in the page; the page only draws them, as text, images and
+ * links whose URLs were validated above.
+ *
+ * Layers without a popup config get none, keeping the export's story-first
+ * behavior for layers the author never set popups up on.
+ *
+ * @param layer The layer being inlined.
+ * @param context The zoom `["zoom"]` expressions evaluate at (the story's
+ *   opening view) and the locale values are formatted in (the app's UI
+ *   language), since the content is resolved once rather than per view.
+ * @returns Popup content per feature index, or `null` when there is none.
+ */
+function buildLayerPopups(
+  layer: GeoLibreLayer,
+  context: { zoom: number; locale?: string },
+): ExportFeaturePopup[] | null {
+  const { popup, geojson } = layer;
+  if (layer.type !== "geojson" || !geojson || !popup) return null;
+  const click = isPopupClickEnabled(popup);
+  const hover = isPopupHoverEnabled(popup);
+  if (!click && !hover) return null;
+  const fieldVisibility = layer.fieldVisibility;
+  const result = geojson.features.map((feature): ExportFeaturePopup => {
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    const options = { feature, fieldVisibility, zoom: context.zoom };
+    const { locale } = context;
+    const entry: ExportFeaturePopup = {};
+    if (click) {
+      entry.t = resolvePopupTitle(layer.name, properties, popup, options);
+      const body = resolvePopupBody(properties, popup, options);
+      if (body !== null) {
+        entry.b = body;
+      } else {
+        entry.r = resolvePopupRows(properties, { popup, fieldVisibility, locale }).map(
+          exportPopupRow,
+        );
+      }
+    }
+    if (hover) {
+      const rows = resolvePopupRows(properties, {
+        popup,
+        fieldVisibility,
+        hover: true,
+        locale,
+      });
+      const title = resolveConfiguredPopupTitle(properties, popup, options);
+      // Mirror the app: no flagged field and no configured title means no tip.
+      if (rows.length > 0 || title !== null) {
+        entry.ht = title ?? layer.name;
+        entry.hr = rows.map((row) => ({ l: row.label, k: "text", v: row.text }));
+      }
+    }
+    return entry;
+  });
+  return result;
 }
 
 /**
@@ -255,6 +461,62 @@ function jsonForScript(value: unknown, space?: number): string {
   return JSON.stringify(value, null, space).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
 }
 
+/**
+ * Suffix of a layer's companion label layer id in the exported page. The page
+ * runtime appends the same suffix to fade a layer's labels with it.
+ */
+const STORY_LABEL_LAYER_SUFFIX = "::label";
+
+/**
+ * Glyph server the exported page falls back to for labels when the basemap
+ * style has no text layer whose font they could borrow. MapLibre's demo font
+ * server serves the page's fallback "Noto Sans Regular" stack.
+ */
+const STORY_LABEL_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
+
+/**
+ * Seed the opacity paint properties an exported layer fades.
+ *
+ * When chapter 0 assigns the layer an opacity, start there (matching the in-app
+ * first frame, #950); otherwise use the style's per-property opacity scaled by
+ * the layer opacity so the export matches what GeoLibre renders. A chapter 0
+ * opacity wins outright, including over a hidden layer's 0, exactly as the
+ * in-app presenter's setLayerOpacity overwrites the live value. Circles carry
+ * both fill and stroke opacity so a faded point hides fully (#934). A
+ * data-driven opacity (a graduated or rule-based renderer) is scaled inside any
+ * zoom step, as the live map's paint builders do.
+ *
+ * @param paint The layer spec's paint, left unmodified.
+ * @param props The opacity paint properties to seed.
+ * @param entry The exported layer's opacity inputs.
+ * @returns A copy of `paint` with the opacity properties seeded.
+ */
+function seedOpacity(
+  paint: Record<string, unknown>,
+  props: string[],
+  entry: Pick<InlineLayerExport, "layerOpacity" | "chapterZeroOpacity">,
+): Record<string, unknown> {
+  const seeded = { ...paint };
+  for (const prop of props) {
+    if (entry.chapterZeroOpacity !== undefined) {
+      seeded[prop] = entry.chapterZeroOpacity;
+      continue;
+    }
+    const value = seeded[prop] ?? 1;
+    seeded[prop] =
+      typeof value === "number"
+        ? value * entry.layerOpacity
+        : entry.layerOpacity === 1
+          ? value
+          : mapZoomStepOutputs(value, (output) =>
+              typeof output === "number"
+                ? output * entry.layerOpacity
+                : ["*", output, entry.layerOpacity],
+            );
+  }
+  return seeded;
+}
+
 function opacityProperties(type: string): string[] {
   switch (type) {
     case "fill":
@@ -263,6 +525,8 @@ function opacityProperties(type: string): string[] {
       return ["line-opacity"];
     case "circle":
       return ["circle-opacity", "circle-stroke-opacity"];
+    case "symbol":
+      return ["icon-opacity"];
     case "fill-extrusion":
       return ["fill-extrusion-opacity"];
     case "raster":
@@ -275,22 +539,33 @@ function opacityProperties(type: string): string[] {
 /**
  * Build the MapLibre source and layer spec for a layer the export inlines.
  *
- * Handles in-memory GeoJSON layers and raster tile layers (XYZ basemaps and
- * services). Returns `null` for layer types the export cannot reproduce
- * stand-alone (e.g. PMTiles or MBTiles that need GeoLibre's own protocols).
+ * Handles in-memory GeoJSON layers, raster tile layers (XYZ basemaps and
+ * services) and remote Cloud Optimized GeoTIFFs. Returns `null` for layer
+ * types the export cannot reproduce stand-alone (e.g. PMTiles or MBTiles that
+ * need GeoLibre's own protocols).
+ *
+ * @param layer The project layer.
+ * @param markerImage The layer's baked marker sprite, when it has one.
  */
 function buildInlineLayer(
   layer: GeoLibreLayer,
-): { source: Record<string, unknown>; layerSpec: Record<string, unknown> } | null {
+  markerImage?: StoryMarkerImage,
+): {
+  source: Record<string, unknown>;
+  layerSpec: Record<string, unknown>;
+  labelSpec?: Record<string, unknown>;
+} | null {
   if (layer.type === "geojson" && layer.geojson) {
-    const layerSpec = buildLayerSpec(layer);
+    const layerSpec = buildLayerSpec(layer, markerImage);
     if (!layerSpec) return null;
+    const labelSpec = buildLabelSpec(layer);
     return {
       source: { type: "geojson", data: layer.geojson },
       layerSpec,
+      ...(labelSpec ? { labelSpec } : {}),
     };
   }
-  const rasterSource = buildRasterTileSource(layer);
+  const rasterSource = buildRasterTileSource(layer) ?? buildCogSource(layer);
   if (rasterSource) {
     return {
       source: rasterSource,
@@ -374,6 +649,27 @@ function buildRasterTileSource(layer: GeoLibreLayer): Record<string, unknown> | 
   return source;
 }
 
+/**
+ * Build a raster source for a remote COG layer, read in the exported page by
+ * the MapLibre COG protocol's `cog://` handler (#2597). The in-app renderer
+ * (maplibre-gl-raster on deck.gl) cannot run in a standalone page, while the
+ * protocol turns the COG into ordinary raster tiles with HTTP range requests.
+ * It reads COGs in EPSG:3857 (web-optimized), the usual layout of a hosted
+ * COG; other projections do not draw in the export. Only an http(s) URL is
+ * reachable from the page, so a local file (blob:, sidecar path) is skipped.
+ *
+ * @param layer The project layer.
+ * @returns The raster source, or `null` when the layer is not a remote COG.
+ */
+function buildCogSource(layer: GeoLibreLayer): Record<string, unknown> | null {
+  if (layer.type !== "cog") return null;
+  const url = [layer.source.url, layer.sourcePath].find(
+    (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value.trim()),
+  );
+  if (!url) return null;
+  return { type: "raster", url: `cog://${url.trim()}`, tileSize: 256 };
+}
+
 /** Pick the dominant (most common) geometry kind for the MapLibre layer type. */
 function geometryKind(geojson: FeatureCollection): "polygon" | "line" | "point" | null {
   const counts = { polygon: 0, line: 0, point: 0 };
@@ -414,7 +710,10 @@ function classifyGeometry(geometry: Geometry | null): "polygon" | "line" | "poin
 }
 
 /** Convert a GeoLibre GeoJSON layer to a minimal MapLibre layer spec. */
-function buildLayerSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
+function buildLayerSpec(
+  layer: GeoLibreLayer,
+  markerImage?: StoryMarkerImage,
+): Record<string, unknown> | null {
   if (!layer.geojson) return null;
   const kind = geometryKind(layer.geojson);
   if (!kind) return null;
@@ -436,12 +735,23 @@ function buildLayerSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
         },
       };
     }
+    // The color/width/opacity values come from the same core builders the
+    // live map's paint uses, so categorized, graduated, rule-based and
+    // expression renderers export as the data-driven expressions the app draws
+    // rather than the single-symbol fallback color (#3033).
     return {
       type: "fill",
       paint: {
-        "fill-color": styleValue(layer.style, "fillColor"),
-        "fill-opacity": styleValue(layer.style, "fillOpacity"),
-        "fill-outline-color": styleValue(layer.style, "strokeColor"),
+        "fill-color": vectorFillColorValue(layer.style),
+        "fill-opacity": vectorFillOpacityValue(
+          layer.style,
+          simpleStyleNumberValue(
+            layer.style,
+            "fill-opacity",
+            styleValue(layer.style, "fillOpacity"),
+          ),
+        ),
+        "fill-outline-color": vectorLineColorValue(layer.style),
       },
     };
   }
@@ -449,27 +759,97 @@ function buildLayerSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
     return {
       type: "line",
       paint: {
-        "line-color": styleValue(layer.style, "strokeColor"),
-        "line-width": styleValue(layer.style, "strokeWidth"),
-        "line-opacity": 1,
+        "line-color": vectorLineColorValue(layer.style),
+        "line-width": lineWidthValue(layer.style),
+        "line-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
       },
+    };
+  }
+  if (markerImage && styleValue(layer.style, "markerEnabled")) {
+    // Draw the baked marker sprite, laid out as the app's marker layer is.
+    return {
+      type: "symbol",
+      layout: {
+        "icon-image": markerImageId(layer.id),
+        "icon-size": markerImage.iconSize,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+      paint: { "icon-opacity": 1 },
     };
   }
   return {
     type: "circle",
     paint: {
-      "circle-color": styleValue(layer.style, "fillColor"),
-      "circle-radius": styleValue(layer.style, "circleRadius"),
-      "circle-stroke-color": styleValue(layer.style, "strokeColor"),
-      "circle-stroke-width": styleValue(layer.style, "strokeWidth"),
+      "circle-color": vectorCircleColorValue(layer.style),
+      "circle-radius": circleRadiusValue(layer.style),
+      "circle-stroke-color": vectorOutlineColorValue(layer.style),
+      "circle-stroke-width": vectorStrokeWidthValue(
+        layer.style,
+        styleValue(layer.style, "strokeWidth"),
+      ),
       // In-app circle-opacity is fillOpacity * layerOpacity; seed fillOpacity
       // here so the later layerOpacity scaling matches.
-      "circle-opacity": styleValue(layer.style, "fillOpacity"),
+      "circle-opacity": vectorFillOpacityValue(
+        layer.style,
+        simpleStyleNumberValue(
+          layer.style,
+          "marker-opacity",
+          styleValue(layer.style, "fillOpacity"),
+        ),
+      ),
+      "circle-stroke-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
     },
   };
 }
 
-function renderTemplate(config: Record<string, unknown>, inlineLayerScript: string): string {
+/**
+ * The text label (symbol) layer spec for a layer whose labels are enabled, or
+ * `null` when it draws none.
+ *
+ * Taken from the Mapbox/MapLibre style exporter so the story labels exactly as
+ * that export does: the same text-field (field, expression, number format),
+ * zoom window, per-feature filters, and suppression on extruded and heatmap
+ * layers. It is built at full opacity and visible, since the story seeds and
+ * fades opacity itself. `text-font` is left for the page to resolve against the
+ * basemap's glyphs at load time (`addLabelLayer`), as the live map does.
+ *
+ * @param layer The project layer.
+ * @returns The label layer spec without `id`/`source`, or `null`.
+ */
+function buildLabelSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
+  if (!layer.style.labels?.enabled) return null;
+  const { style } = buildMapboxStyle(
+    { ...layer, opacity: 1, visible: true },
+    layer.geojson ?? null,
+  );
+  const label = style.layers.find(
+    (styleLayer) => styleLayer.type === "symbol" && styleLayer.layout?.["text-field"] !== undefined,
+  );
+  if (!label) return null;
+  const { id: _id, source: _source, ...spec } = label as unknown as Record<string, unknown>;
+  const layout = { ...(spec.layout as Record<string, unknown>) };
+  delete layout["text-font"];
+  delete layout.visibility;
+  return { ...spec, layout };
+}
+
+/**
+ * SRI hash of the pinned `@geomatico/maplibre-cog-protocol@0.10.0` UMD build the
+ * exported page loads for COG layers; update both together.
+ */
+const COG_PROTOCOL_SRI = "sha384-t1PE7x+ltzMRnLBdPzuY56UPewCP9ZGEFqEuaEa579Mq61Q0psO4LM+lNUFP5WqP";
+
+function renderTemplate(
+  config: Record<string, unknown>,
+  inlineLayerScript: string,
+  usesCog: boolean,
+): string {
+  // Only a story with a COG layer pulls in the COG protocol (it is ~0.6 MB).
+  const cogScript = usesCog
+    ? `
+    <script src='https://unpkg.com/@geomatico/maplibre-cog-protocol@0.10.0/dist/index.js' integrity='${COG_PROTOCOL_SRI}' crossorigin='anonymous'></script>`
+    : "";
   const configJson = jsonForScript(config, 4);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -481,7 +861,7 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
     <!-- SRI hashes are pinned to the versions above; update both together. -->
     <script src='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js' integrity='sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp' crossorigin='anonymous'></script>
     <link href='https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css' rel='stylesheet' integrity='sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK' crossorigin='anonymous' />
-    <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.js" integrity="sha384-cQr5Cx9W8UDNyE09swPH4QMork1pq5sHUzY32DbxJ/WpWFSpr2MG8FGs/3pMjp2S" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/scrollama@3.2.0/build/scrollama.js" integrity="sha384-cQr5Cx9W8UDNyE09swPH4QMork1pq5sHUzY32DbxJ/WpWFSpr2MG8FGs/3pMjp2S" crossorigin="anonymous"></script>${cogScript}
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         a, a:hover, a:visited { color: #0071bc; }
@@ -537,6 +917,19 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
         #inset-map.top-right { top: 10px; right: 10px; }
         #inset-map.bottom-left { bottom: 30px; left: 10px; }
         #inset-map.bottom-right { bottom: 30px; right: 10px; }
+        /* The story column scrolls over the fixed map; let clicks outside the
+           cards reach the map so feature popups open (#2597). Wheel and touch
+           scrolling still move the page. */
+        #story { pointer-events: none; }
+        #header, #footer, .sm-card { pointer-events: auto; }
+        .sm-popup { font-size: 12px; line-height: 1.4; max-width: 300px; color: #222; }
+        .sm-popup-title { font-weight: 600; margin: 0 16px 6px 0; }
+        .sm-popup-body { white-space: pre-wrap; }
+        .sm-popup-row { display: flex; gap: 6px; padding: 2px 0; border-top: 1px solid rgba(127,127,127,0.2); }
+        .sm-popup-label { flex: 0 0 40%; color: #666; overflow-wrap: anywhere; }
+        .sm-popup-value { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .sm-popup-value img { display: block; max-width: 100%; max-height: 200px; border-radius: 2px; }
+        .sm-tooltip .maplibregl-popup-content { pointer-events: none; }
         .inset-marker { width: 12px; height: 12px; background-color: #ff6b6b; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
     </style>
 </head>
@@ -562,16 +955,54 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
         var alignments = { 'left': 'lefty', 'center': 'centered', 'right': 'righty', 'full': 'fully' };
 
         function getLayerPaintType(layer) { var sl = map.getLayer(layer); return sl ? layerTypes[sl.type] : null; }
-        function setLayerOpacity(layer) {
-            if (!map.getLayer(layer.layer)) return;
-            var paintProps = getLayerPaintType(layer.layer);
+        function fadeLayer(id, opacity, duration) {
+            if (!map.getLayer(id)) return;
+            var paintProps = getLayerPaintType(id);
             if (!paintProps) return;
             paintProps.forEach(function (prop) {
-                if (layer.duration) {
-                    map.setPaintProperty(layer.layer, prop + '-transition', { duration: layer.duration });
+                if (duration) {
+                    map.setPaintProperty(id, prop + '-transition', { duration: duration });
                 }
-                map.setPaintProperty(layer.layer, prop, layer.opacity);
+                map.setPaintProperty(id, prop, opacity);
             });
+        }
+        // A layer's text labels live in a companion symbol layer that fades with it.
+        function setLayerOpacity(layer) {
+            fadeLayer(layer.layer, layer.opacity, layer.duration);
+            fadeLayer(layer.layer + config.labelLayerSuffix, layer.opacity, layer.duration);
+        }
+        // Labels borrow a font the basemap style already serves glyphs for (as
+        // the live map does), falling back to Noto Sans on a public glyph server
+        // when the basemap has no text layers (e.g. a blank or raster basemap).
+        // resolveLabelFont mirrors resolveTextFontFromStyleLayers in
+        // @geolibre/map's text-font.ts; keep the two in step.
+        var labelFont = null;
+        function addLabelLayer(spec) {
+            if (!labelFont) {
+                var style = map.getStyle();
+                labelFont = resolveLabelFont(style.layers) || ['Noto Sans Regular'];
+                // Swap the glyphs only when no basemap label reads them (or there
+                // are none), so a basemap label on a default or data-driven font
+                // keeps its glyph source.
+                var basemapText = (style.layers || []).some(function (layer) {
+                    return layer.type === 'symbol' && layer.layout && layer.layout['text-field'];
+                });
+                if (!style.glyphs || !basemapText) map.setGlyphs(config.labelGlyphs);
+            }
+            spec.layout['text-font'] = labelFont;
+            map.addLayer(spec);
+        }
+        function resolveLabelFont(layers) {
+            var operators = ['literal', 'get', 'has', 'at', 'in', 'case', 'match', 'coalesce', 'step', 'interpolate', 'let', 'var', 'concat', 'to-string', 'string', 'array', 'format'];
+            for (var i = 0; i < (layers || []).length; i++) {
+                var layer = layers[i];
+                if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
+                var font = layer.layout['text-font'];
+                if (!Array.isArray(font)) continue;
+                var fonts = font[0] === 'literal' && Array.isArray(font[1]) ? font[1] : font;
+                if (fonts.length > 0 && fonts.every(function (f) { return typeof f === 'string'; }) && operators.indexOf(fonts[0]) === -1) return fonts;
+            }
+            return null;
         }
 
         var story = document.getElementById('story');
@@ -735,6 +1166,11 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
         // flash chapter 0's view before the load handler flies out (#998 review).
         var openLocation = config.startSlide === 'global' ? config.globalView : config.chapters[0].location;
 
+        // Read Cloud Optimized GeoTIFF layers straight from their URL (#2597).
+        if (typeof MaplibreCOGProtocol !== 'undefined') {
+            maplibregl.addProtocol('cog', MaplibreCOGProtocol.cogProtocol);
+        }
+
         var map = new maplibregl.Map({
             container: 'map',
             style: config.style,
@@ -766,6 +1202,77 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
             if (config.startSlide === 'global') marker.getElement().style.visibility = 'hidden';
         }
 
+        // Feature popups and hover tooltips, from content resolved at export
+        // time (#2597). Everything is drawn as text; image and link URLs were
+        // validated as http(s) or inline raster images before export.
+        function popupRows(parent, rows, properties) {
+            (rows || []).forEach(function (row) {
+                var line = document.createElement('div'); line.className = 'sm-popup-row';
+                var label = document.createElement('span'); label.className = 'sm-popup-label'; label.textContent = row.l;
+                var value = document.createElement('span'); value.className = 'sm-popup-value';
+                // A "p" row was validated as an inline raster image at export.
+                var src = row.u || (row.p && properties && typeof properties[row.p] === 'string' ? properties[row.p].trim() : '');
+                if (row.k === 'image' && src) {
+                    var img = document.createElement('img'); img.src = src; img.alt = row.l; img.loading = 'lazy';
+                    value.appendChild(img);
+                } else if (row.k === 'link' && row.u) {
+                    var a = document.createElement('a'); a.href = row.u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = row.v;
+                    value.appendChild(a);
+                } else {
+                    value.textContent = row.v;
+                }
+                line.appendChild(label); line.appendChild(value); parent.appendChild(line);
+            });
+        }
+        function popupElement(title, body, rows, properties) {
+            var root = document.createElement('div'); root.className = 'sm-popup';
+            var heading = document.createElement('div'); heading.className = 'sm-popup-title'; heading.textContent = title;
+            root.appendChild(heading);
+            if (body) { var b = document.createElement('div'); b.className = 'sm-popup-body'; b.textContent = body; root.appendChild(b); }
+            popupRows(root, rows, properties);
+            return root;
+        }
+        function popupAt(layerId, feature) {
+            var list = config.popups[layerId];
+            return list && feature && typeof feature.id === 'number' ? list[feature.id] : null;
+        }
+        function setupPopups() {
+            var ids = Object.keys(config.popups || {}).filter(function (id) { return map.getLayer(id); });
+            if (ids.length === 0) return;
+            var tooltip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'sm-tooltip', offset: 12 });
+            map.on('click', function (e) {
+                var hits = map.queryRenderedFeatures(e.point, { layers: ids });
+                for (var i = 0; i < hits.length; i++) {
+                    var entry = popupAt(hits[i].layer.id, hits[i]);
+                    if (entry && entry.t !== undefined) {
+                        tooltip.remove();
+                        new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setDOMContent(popupElement(entry.t, entry.b, entry.r, hits[i].properties)).addTo(map);
+                        return;
+                    }
+                }
+            });
+            map.on('mousemove', function (e) {
+                var hits = map.queryRenderedFeatures(e.point, { layers: ids });
+                var entry = null;
+                for (var i = 0; i < hits.length && !entry; i++) {
+                    var candidate = popupAt(hits[i].layer.id, hits[i]);
+                    if (candidate && (candidate.ht !== undefined || candidate.t !== undefined)) entry = candidate;
+                }
+                map.getCanvas().style.cursor = entry ? 'pointer' : '';
+                if (entry && entry.ht !== undefined) {
+                    tooltip.setLngLat(e.lngLat).setDOMContent(popupElement(entry.ht, null, entry.hr)).addTo(map);
+                } else {
+                    tooltip.remove();
+                }
+            });
+            // Moving straight onto a chapter card fires no further map
+            // mousemove, so clear the tooltip when the pointer leaves the map.
+            map.on('mouseout', function () {
+                map.getCanvas().style.cursor = '';
+                tooltip.remove();
+            });
+        }
+
         var scroller = scrollama();
         var cameraToken = 0;
         // Set once the start slide is initialized synchronously on load, so the
@@ -780,7 +1287,18 @@ function renderTemplate(config: Record<string, unknown>, inlineLayerScript: stri
             } catch (e) {
                 console.error('[GeoLibre] projection failed', e);
             }
+            // Register the baked marker sprites. Symbol layers added below lay
+            // out again once their image arrives, so no need to wait (#2597).
+            Object.keys(config.markerImages || {}).forEach(function (id) {
+                var entry = config.markerImages[id];
+                var img = new Image();
+                img.onload = function () {
+                    if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: entry.pixelRatio });
+                };
+                img.src = entry.url;
+            });
 ${inlineLayerScript}
+            setupPopups();
 
             // Drive a start/closing slide (#998): blank/black paint a solid
             // cover over the map; global zooms out; "adjacent" previews the

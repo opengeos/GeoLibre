@@ -8,12 +8,15 @@ import {
   formatLon,
   formatNorthing,
   getGraticuleSettings,
+  globeScreenEdges,
   maplibreGraticulePlugin,
   normalizeGraticuleSettings,
   setGraticuleSettings,
+  splitAtLatitudes,
   utmLatBand,
   utmZoneDesignation,
   utmZoneForLon,
+  utmZoneSpans,
 } from "../packages/plugins/src/plugins/maplibre-graticule";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
@@ -109,6 +112,46 @@ describe("normalizeGraticuleSettings", () => {
   });
 });
 
+describe("globeScreenEdges", () => {
+  const fallback = { south: -40, north: 60, west: -30, east: 50 };
+  /** A map whose screen x/y are longitude/latitude offsets, within a disc of radius `r`. */
+  const globe = (r: number, type = "globe") => ({
+    getProjection: () => ({ type }),
+    getCanvas: () => ({ clientWidth: 200, clientHeight: 100 }) as HTMLCanvasElement,
+    unproject: ([x, y]: [number, number]) => {
+      // Off the disc the globe has no answer; like the Cesium facade, it
+      // falls back to the view centre, which does not project back there.
+      const off = Math.hypot(x - 100, y - 50) > r;
+      return off ? { lng: 10, lat: 10 } : { lng: (x - 100) / 4 + 10, lat: (50 - y) / 4 + 10 };
+    },
+    project: ({ lng, lat }: { lng: number; lat: number }) => ({
+      x: (lng - 10) * 4 + 100,
+      y: 50 - (lat - 10) * 4,
+    }),
+  });
+
+  it("reads each edge where the screen meets it on a globe", () => {
+    const edges = globeScreenEdges(globe(1000) as never, fallback);
+    assert.equal(edges.south, 10 - 48 / 4);
+    assert.equal(edges.north, 10 + 48 / 4);
+    assert.equal(edges.west, 10 - 98 / 4);
+    assert.equal(edges.east, 10 + 98 / 4);
+  });
+
+  it("keeps the bounds for an edge whose middle misses the globe", () => {
+    // A disc of radius 60 reaches the top and bottom edge middles (48 px
+    // away) but not the left and right ones (98 px away).
+    const edges = globeScreenEdges(globe(60) as never, fallback);
+    assert.equal(edges.south, 10 - 48 / 4);
+    assert.equal(edges.west, fallback.west);
+    assert.equal(edges.east, fallback.east);
+  });
+
+  it("leaves a flat map's bounds alone", () => {
+    assert.equal(globeScreenEdges(globe(1000, "mercator") as never, fallback), fallback);
+  });
+});
+
 describe("coordinate label formatting", () => {
   it("formats decimal-degree longitudes with a hemisphere suffix", () => {
     assert.equal(formatLon(-110, 5, "dd"), "110°W");
@@ -169,6 +212,54 @@ describe("UTM grid helpers", () => {
     assert.equal(utmZoneDesignation(21, -33), "34H");
   });
 
+  it("splits a latitude band at the Norway/Svalbard exception latitudes", () => {
+    const band = { south: 50, north: 80, useSouth: false };
+    const segments = splitAtLatitudes(band, [56, 64, 72]);
+    assert.deepEqual(
+      segments.map((s) => [s.south, s.north]),
+      [
+        [50, 56],
+        [56, 64],
+        [64, 72],
+        [72, 80],
+      ],
+    );
+    assert.equal(splitAtLatitudes({ south: 56, north: 64 }, [56, 64]).length, 1);
+  });
+
+  it("lays out Norway's widened zone 32 and Svalbard's zones", () => {
+    const zones = (south: number, north: number, west = -10, east = 45) =>
+      utmZoneSpans({ south, north }, west, east).map((s) => [s.zone, s.zoneWest, s.zoneEast]);
+    // Regular 6° zones below 56°N.
+    assert.deepEqual(zones(48, 56, 0, 12), [
+      [31, 0, 6],
+      [32, 6, 12],
+    ]);
+    // 32V spans 3°-12°E and 31V shrinks to 0°-3°E.
+    assert.deepEqual(zones(56, 64, 0, 18), [
+      [31, 0, 3],
+      [32, 3, 12],
+      [33, 12, 18],
+    ]);
+    // Svalbard: 31X, 33X, 35X, 37X widened, 32X/34X/36X absent.
+    assert.deepEqual(zones(72, 84, 0, 45), [
+      [31, 0, 9],
+      [33, 9, 21],
+      [35, 21, 33],
+      [37, 33, 42],
+      [38, 42, 48],
+    ]);
+  });
+
+  it("repeats zones per world copy for an antimeridian view", () => {
+    const spans = utmZoneSpans({ south: 0, north: 8 }, 170, 190);
+    assert.deepEqual(
+      spans.map((s) => s.zone),
+      [59, 60, 1, 2],
+    );
+    assert.equal(spans[2].zoneWest, 180);
+  });
+
   it("formats metric easting/northing labels", () => {
     assert.equal(formatEasting(500000), "500000mE");
     assert.equal(formatNorthing(4649000.4), "4649000mN");
@@ -194,7 +285,7 @@ describe("UTM settings project round-trip", () => {
     setGraticuleSettings({ gridType: "geographic" }); // reset to a known state
     setGraticuleSettings({ gridType: "utm", spacingMode: "fixed", spacingMeters: 50000 });
 
-    const state = maplibreGraticulePlugin.getProjectState?.(noopApp) as
+    const state = maplibreGraticulePlugin.getProjectState?.() as
       | Record<string, unknown>
       | undefined;
     assert.equal(state?.gridType, "utm");

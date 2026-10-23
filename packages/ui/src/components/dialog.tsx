@@ -37,7 +37,7 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden border bg-background shadow-lg duration-200 supports-[not_(max-height:1dvh)]:max-h-[calc(100vh-1rem)] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden border bg-popover text-popover-foreground shadow-xl duration-200 supports-[not_(max-height:1dvh)]:max-h-[calc(100vh-1rem)] sm:rounded-lg",
         className,
       )}
       {...props}
@@ -45,7 +45,10 @@ export const DialogContent = React.forwardRef<
       <div className={cn("grid min-h-0 flex-1 gap-4 overflow-auto", bodyClassName ?? "p-4 sm:p-6")}>
         {children}
       </div>
-      <DialogPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring">
+      {/* ring-offset matches the popover surface this sits on, not --background.
+          Inert today (no ring-offset width utility is applied, so the offset
+          colour never paints) but wrong the moment one is added. */}
+      <DialogPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-popover transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

@@ -142,7 +142,10 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
      * preserves the normal result on coarse-only or non-GNSS devices.
      */
     private fun resolveCurrentPosition(invoke: Invoke, location: Location) {
-        if (implementation.satellitesUsed != null) {
+        if (
+            implementation.satellitesUsedFor(location) != null ||
+            !implementation.canWaitForSatellites(location)
+        ) {
             resolveOneShot(invoke, location)
             return
         }
@@ -209,13 +212,21 @@ class GeolocationPlugin(private val activity: Activity): Plugin(activity) {
         coords.put("latitude", location.latitude)
         coords.put("longitude", location.longitude)
         coords.put("accuracy", location.accuracy)
-        implementation.satellitesUsed?.let { coords.put("satellites", it) }
+        implementation.satellitesUsedFor(location)?.let { coords.put("satellites", it) }
         coords.put("altitude", location.altitude)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             coords.put("altitudeAccuracy", location.verticalAccuracyMeters)
         }
-        coords.put("speed", location.speed)
-        coords.put("heading", location.bearing)
+        if (location.hasSpeed()) {
+            val speed =
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    location.hasSpeedAccuracy() &&
+                    location.speed <= location.speedAccuracyMetersPerSecond
+                ) 0f else location.speed
+            coords.put("speed", speed)
+        }
+        if (location.hasBearing()) coords.put("heading", location.bearing)
         ret.put("timestamp", location.time)
         ret.put("coords", coords)
 

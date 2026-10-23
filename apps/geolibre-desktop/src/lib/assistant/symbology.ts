@@ -5,6 +5,7 @@ import {
   type LayerStyle,
   type VectorStyleStop,
 } from "@geolibre/core";
+import { inferPropertyColumns } from "../pglite-sql";
 
 /** Styling mode the assistant can apply to a vector layer. */
 export type AssistantSymbologyMode = "graduated" | "categorized";
@@ -20,6 +21,14 @@ export interface SymbologyRequest {
   classCount?: number;
   /** Classification scheme for graduated mode. */
   scheme?: "equal-interval" | "quantile";
+  /**
+   * Explicit class lower bounds for graduated mode. When present these are used
+   * verbatim in place of `classCount`/`scheme`, so a caller can reproduce
+   * unevenly spaced thresholds fixed by an external standard (an air-quality
+   * band table, an agency's severity levels) that no statistical scheme
+   * reproduces.
+   */
+  breaks?: number[];
 }
 
 /** Read every value a property takes across a layer's features. */
@@ -31,6 +40,47 @@ function propertyValues(layer: GeoLibreLayer, property: string): unknown[] {
     if (value !== undefined && value !== null) values.push(value);
   }
   return values;
+}
+
+/**
+ * Every attribute name that appears on at least one of a layer's features, in
+ * first-seen order. Derived from the same `inferPropertyColumns` scan that
+ * `list_layers` reports, so the two listings cannot drift apart.
+ */
+function layerFieldNames(layer: GeoLibreLayer): string[] {
+  return inferPropertyColumns(layer.geojson?.features ?? []).map((column) => column.name);
+}
+
+/** How many field names the missing-property error lists before truncating. */
+const MAX_LISTED_FIELDS = 50;
+
+/**
+ * Explain why a property produced no values: either the layer has no such
+ * field (then list the fields it does have, so a caller can correct the name
+ * without guessing again) or the field exists but holds no non-null value
+ * (null, undefined, or absent on every feature).
+ */
+function missingPropertyError(layer: GeoLibreLayer, property: string): Error {
+  const fields = layerFieldNames(layer);
+  if (fields.includes(property)) {
+    return new Error(`Property "${property}" has no non-null values on layer "${layer.name}".`);
+  }
+  if (fields.length === 0) {
+    return new Error(
+      `Property "${property}" does not exist on layer "${layer.name}", which has no attribute fields.`,
+    );
+  }
+  // Field names are case-sensitive, and a model often gets only the case
+  // wrong ("Population" for "population"), so name that match first.
+  const lower = property.toLowerCase();
+  const caseMatch = fields.find((field) => field.toLowerCase() === lower);
+  const listed = fields.slice(0, MAX_LISTED_FIELDS).map((field) => `"${field}"`);
+  const more = fields.length - listed.length;
+  return new Error(
+    `Property "${property}" does not exist on layer "${layer.name}".` +
+      (caseMatch ? ` Did you mean "${caseMatch}"?` : "") +
+      ` Available fields: ${listed.join(", ")}${more > 0 ? ` (and ${more} more)` : ""}.`,
+  );
 }
 
 /** Build graduated color stops from numeric breaks and a ramp. */
@@ -46,6 +96,28 @@ function graduatedStops(
   const breaks = createGraduatedClassBreaks(values, classCount, scheme);
   const colors = interpolateRampColors(colorRamp, breaks.length);
   return breaks.map((value, index) => ({
+    value,
+    color: colors[index],
+  }));
+}
+
+/**
+ * Build graduated color stops from caller-supplied break values and a ramp.
+ *
+ * The breaks are class lower bounds, the same contract `graduatedStops` follows,
+ * so they are sorted ascending and de-duplicated before use: MapLibre rejects a
+ * `step` expression whose inputs are not strictly ascending, and a caller
+ * listing an official band table is under no obligation to have sorted it.
+ */
+function customGraduatedStops(breaks: number[], colorRamp: string): VectorStyleStop[] {
+  const sorted = breaks.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  const unique: number[] = [];
+  for (const value of sorted) {
+    if (unique.length > 0 && value === unique[unique.length - 1]) continue;
+    unique.push(value);
+  }
+  const colors = interpolateRampColors(colorRamp, unique.length);
+  return unique.map((value, index) => ({
     value,
     color: colors[index],
   }));
@@ -81,7 +153,9 @@ function categorizedStops(values: unknown[], colorRamp: string): VectorStyleStop
  * @param layer The layer to read property values from.
  * @param request The symbology to apply.
  * @returns A partial style ready for `setLayerStyle`.
- * @throws If the property is missing, or graduated mode has too few numeric values.
+ * @throws If the property is missing (the message lists the layer's actual
+ *   field names) or has no non-null values, graduated mode has too few numeric values,
+ *   or `breaks` was supplied with fewer than two distinct finite values in it.
  */
 export function buildSymbologyStyle(
   layer: GeoLibreLayer,
@@ -89,17 +163,56 @@ export function buildSymbologyStyle(
 ): Partial<LayerStyle> {
   const colorRamp = request.colorRamp?.trim() || "viridis";
   const values = propertyValues(layer, request.property);
-  if (values.length === 0) {
-    throw new Error(`Property "${request.property}" has no values on layer "${layer.name}".`);
-  }
+  if (values.length === 0) throw missingPropertyError(layer, request.property);
 
   if (request.mode === "graduated") {
     const numbers = values
       .map((value) => (typeof value === "number" ? value : Number.parseFloat(String(value))))
       .filter((value) => Number.isFinite(value));
-    if (numbers.length < 2) {
+    if (numbers.length === 0) {
       throw new Error(
         `Property "${request.property}" is not numeric; use categorized mode instead.`,
+      );
+    }
+    if (request.breaks !== undefined) {
+      // Explicit breaks describe the classes outright, so neither the class
+      // count nor the scheme applies, and the "needs two values to classify"
+      // floor below does not either: the thresholds come from the caller, not
+      // from the sample. `vectorStyleClassificationScheme` is left out of the
+      // patch because no scheme produced these stops; note that `setLayerStyle`
+      // merges shallowly, so the layer keeps whatever scheme it already had.
+      // That leftover value only matters if the user then edits the ramp or
+      // class count in the Style panel, which regenerates stops from scratch —
+      // the same thing that already happens to hand-edited stops there.
+      const stops = customGraduatedStops(request.breaks, colorRamp);
+      // Two is the render-side floor, not a stylistic one: vectorColorExpression
+      // falls back to a flat color below two graduated stops, so a single break
+      // would report success and paint nothing. The statistical path holds the
+      // same floor through `Math.max(2, ...)` on the class count.
+      if (stops.length < 2) {
+        throw new Error("`breaks` must contain at least two distinct finite numbers.");
+      }
+      // No ceiling to match the statistical path's 12, though: that cap exists so
+      // a derived classification never asks for more breaks than the sample
+      // supports, which says nothing about a published band table. The map paints
+      // every break; only the Style panel's Classes control clamps its reading to
+      // 12 (clampClassCount), so past that the stop list and the count it shows
+      // disagree. Truncating a standard's thresholds to fit that widget would
+      // defeat the point of accepting them, so the breaks win.
+      return {
+        vectorStyleMode: "graduated",
+        vectorStyleProperty: request.property,
+        vectorStyleColorRamp: colorRamp,
+        vectorStyleClassCount: stops.length,
+        vectorStyleStops: stops,
+      };
+    }
+    if (numbers.length < 2) {
+      // One numeric value is not a broken property, it is too little data to
+      // break into classes; saying "not numeric" there sends the reader after
+      // the wrong cause.
+      throw new Error(
+        `Property "${request.property}" has only one numeric value on layer "${layer.name}"; graduated mode needs at least two.`,
       );
     }
     // Cap classes by the number of values too, so we never ask for more breaks

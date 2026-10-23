@@ -83,13 +83,32 @@ describe("collaboration projectChanged", () => {
     assert.equal(projectChanged(before, useAppStore.getState()), true);
   });
 
-  it("detects project-plugin edits", () => {
+  it("keeps plugin activation and settings local to each participant", () => {
     const before = useAppStore.getState();
     useAppStore.setState({
-      projectPlugins: { manifestUrls: ["https://example.com/plugin.json"] },
+      projectPlugins: {
+        manifestUrls: ["https://example.com/plugin.json"],
+        activePluginIds: [],
+        mapControlPositions: {},
+        settings: {},
+      },
       isDirty: true,
     });
-    assert.equal(projectChanged(before, useAppStore.getState()), true);
+    assert.equal(projectChanged(before, useAppStore.getState()), false);
+  });
+
+  it("leaves comment synchronization to the dedicated mutation protocol", () => {
+    const before = useAppStore.getState();
+    useAppStore.getState().addComment({
+      id: "comment-1",
+      anchor: { type: "point", lngLat: [12, 34] },
+      author: { name: "Ada", color: "#123456" },
+      body: "Check this location",
+      createdAt: "2026-08-06T00:00:00.000Z",
+      resolved: false,
+      replies: [],
+    });
+    assert.equal(projectChanged(before, useAppStore.getState()), false);
   });
 
   it("ignores camera-only and UI-only churn", () => {

@@ -1,0 +1,816 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  CZML_QUICK_PICKS,
+  CZML_SOURCE_KIND,
+  createCzmlLayer,
+  czmlSource,
+  isCesiumOnlyLayer,
+  isCzmlLayer,
+  parseCzml,
+} from "../packages/core/src";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
+import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
+
+// CZML (Cesium Language) dynamic 3D scenes (issue #2290).
+// Tests cover the layer builder, parser, quick picks, and CesiumLayerSync integration.
+
+describe("czml layer builder & parser", () => {
+  it("parses czml text into documents and rejects invalid input", () => {
+    const arrayJson = JSON.stringify([
+      { id: "document", name: "test", version: "1.0" },
+      { id: "sat", point: { color: { rgba: [255, 0, 0, 255] } } },
+    ]);
+    const parsedArray = parseCzml(arrayJson);
+    assert.ok(Array.isArray(parsedArray));
+    assert.equal(parsedArray.length, 2);
+
+    const singleJson = JSON.stringify({ id: "document", version: "1.0" });
+    const parsedSingle = parseCzml(singleJson);
+    assert.ok(Array.isArray(parsedSingle));
+    assert.equal(parsedSingle.length, 1);
+
+    assert.equal(parseCzml(""), null);
+    assert.equal(parseCzml("not json"), null);
+    assert.equal(parseCzml("12345"), null);
+    assert.equal(parseCzml("null"), null);
+  });
+
+  it("builds a CZML layer from a URL", () => {
+    const layer = createCzmlLayer({
+      name: "Satellite Track",
+      url: "https://example.com/orbit.czml",
+    });
+    assert.equal(layer.type, "3d-tiles");
+    assert.equal(layer.source.url, "https://example.com/orbit.czml");
+    assert.equal(layer.metadata.sourceKind, CZML_SOURCE_KIND);
+    assert.equal(layer.metadata.externalNativeLayer, true);
+    // CZML entities are pickable and answered by the layer sync's CZML branch
+    // (issue #2504), so the default flipped to identifiable.
+    assert.equal(layer.metadata.identifiable, true);
+    assert.deepEqual(layer.metadata.nativeLayerIds, [layer.id]);
+    assert.equal(isCzmlLayer(layer), true);
+    assert.equal(isCesiumOnlyLayer(layer), true);
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+
+    const source = czmlSource(layer);
+    assert.ok(source);
+    assert.equal(source.url, "https://example.com/orbit.czml");
+    assert.equal(source.data, undefined);
+  });
+
+  it("builds a CZML layer from inline data packets", () => {
+    const packets = [
+      { id: "document", name: "Simple Point", version: "1.0" },
+      { id: "point1", point: { pixelSize: 10 } },
+    ];
+    const layer = createCzmlLayer({
+      name: "Point Sample",
+      data: packets,
+      sourcePath: "/local/data/point.czml",
+    });
+    assert.equal(layer.type, "3d-tiles");
+    assert.deepEqual(layer.source.czmlData, packets);
+    // The document is stored once; `czml` is only read as a legacy fallback.
+    assert.equal("czml" in layer.source, false);
+    assert.equal(layer.source.sourcePath, "/local/data/point.czml");
+    assert.equal(layer.sourcePath, "/local/data/point.czml");
+    assert.equal(isCzmlLayer(layer), true);
+    assert.equal(isCesiumOnlyLayer(layer), true);
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+
+    const source = czmlSource(layer);
+    assert.ok(source);
+    assert.deepEqual(source.data, packets);
+  });
+
+  it("keeps source attribution on a CZML layer", () => {
+    const layer = createCzmlLayer({
+      name: "Attributed feed",
+      data: [{ id: "document", version: "1.0" }],
+      attribution: "© Example contributors",
+    });
+    assert.equal(layer.source.attribution, "© Example contributors");
+  });
+
+  it("provides valid quick picks with document packets and timestamps", () => {
+    assert.ok(CZML_QUICK_PICKS.length >= 2);
+    for (const pick of CZML_QUICK_PICKS) {
+      assert.ok(pick.name.length > 0);
+      assert.ok(Array.isArray(pick.data));
+      assert.ok(pick.data.length >= 2);
+      const docPacket = pick.data[0];
+      assert.equal(docPacket.id, "document");
+      assert.equal(docPacket.version, "1.0");
+    }
+  });
+
+  it("does not mistake ordinary 3D tiles or layers for CZML", () => {
+    const tileset: GeoLibreLayer = {
+      id: "plain-3d",
+      name: "Tileset",
+      type: "3d-tiles",
+      source: { type: "3d-tiles", url: "https://example.com/tileset.json" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE },
+      metadata: { sourceKind: "3d-tiles-url" },
+    };
+    assert.equal(isCzmlLayer(tileset), false);
+    assert.equal(czmlSource(tileset), null);
+  });
+});
+
+function makeGlobe() {
+  const calls = {
+    czmlLoads: [] as unknown[],
+    dataSourcesAdded: [] as unknown[],
+    dataSourcesRemoved: [] as unknown[],
+    primitivesAdded: [] as unknown[],
+    primitivesRemoved: [] as unknown[],
+    creditsAdded: [] as unknown[],
+    creditsRemoved: [] as unknown[],
+  };
+
+  const Cesium = {
+    CzmlDataSource: {
+      // Tests swap in their own loader, each returning just the slice of a
+      // CzmlDataSource the code under test reads.
+      load: async (czml: unknown): Promise<unknown> => {
+        calls.czmlLoads.push(czml);
+        const clock = {
+          startTime: { dayNumber: 2459000, secondsOfDay: 0 },
+          stopTime: { dayNumber: 2459001, secondsOfDay: 0 },
+          currentTime: { dayNumber: 2459000, secondsOfDay: 100 },
+          clockRange: 1,
+          multiplier: 60,
+        };
+        return {
+          kind: "czml-data-source",
+          show: true,
+          clock,
+          isLoading: false,
+          entities: { values: [] },
+        };
+      },
+    },
+    Event: class {
+      addEventListener() {
+        return () => {};
+      }
+    },
+    Credit: class {
+      constructor(
+        public html: string,
+        public showOnScreen: boolean,
+      ) {}
+    },
+  };
+
+  const viewer = {
+    clock: {
+      startTime: null as unknown,
+      stopTime: null as unknown,
+      currentTime: null as unknown,
+      clockRange: null as unknown,
+      multiplier: null as unknown,
+    },
+    camera: { moveEnd: new Cesium.Event(), changed: new Cesium.Event() },
+    scene: {
+      canvas: { clientWidth: 800, clientHeight: 600, width: 800, height: 600 },
+      primitives: {
+        add: (primitive: unknown) => {
+          calls.primitivesAdded.push(primitive);
+          return primitive;
+        },
+        remove: (primitive: unknown) => {
+          calls.primitivesRemoved.push(primitive);
+          return true;
+        },
+      },
+      requestRender: () => {},
+    },
+    imageryLayers: {
+      addImageryProvider: () => ({ show: true, alpha: 1 }),
+      remove: () => {},
+      raiseToTop: () => {},
+    },
+    dataSources: {
+      add: async (ds: unknown) => {
+        calls.dataSourcesAdded.push(ds);
+        return ds;
+      },
+      remove: (ds: unknown) => {
+        calls.dataSourcesRemoved.push(ds);
+      },
+    },
+    creditDisplay: {
+      addStaticCredit: (credit: unknown) => calls.creditsAdded.push(credit),
+      removeStaticCredit: (credit: unknown) => calls.creditsRemoved.push(credit),
+    },
+  };
+
+  return { calls, Cesium, viewer };
+}
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("CesiumLayerSync with CZML", () => {
+  it("loads a CZML layer, adds dataSource, and syncs viewer clock", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+
+    const layer = createCzmlLayer({
+      id: "czml-sat",
+      name: "Satellite",
+      url: "https://example.com/sat.czml",
+    });
+
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    assert.equal(calls.czmlLoads.length, 1);
+    assert.equal(calls.czmlLoads[0], "https://example.com/sat.czml");
+    assert.equal(calls.dataSourcesAdded.length, 1);
+
+    // Verify clock synchronization
+    assert.deepEqual(viewer.clock.startTime, { dayNumber: 2459000, secondsOfDay: 0 });
+    assert.deepEqual(viewer.clock.stopTime, { dayNumber: 2459001, secondsOfDay: 0 });
+    assert.deepEqual(viewer.clock.currentTime, { dayNumber: 2459000, secondsOfDay: 100 });
+    assert.equal(viewer.clock.clockRange, 1);
+    assert.equal(viewer.clock.multiplier, 60);
+
+    // Verify getRenderStatus reports settled
+    const status = sync.getRenderStatus();
+    assert.deepEqual(status.pending, []);
+    assert.deepEqual(status.errors, []);
+
+    // Toggle visibility
+    sync.sync([{ ...layer, visible: false }]);
+    for (let i = 0; i < 4; i++) await flush();
+    const ds = calls.dataSourcesAdded[0] as { show: boolean };
+    assert.equal(ds.show, false);
+
+    // Remove layer
+    sync.sync([]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(calls.dataSourcesRemoved.length, 1);
+    assert.equal(calls.dataSourcesRemoved[0], ds);
+    sync.destroy();
+  });
+
+  it("shows and removes a CZML source attribution with the layer", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-credit",
+      name: "Attributed",
+      data: [{ id: "document", version: "1.0" }],
+      attribution: '© Example contributors <img src=x onerror="alert(1)"> & partners',
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    assert.equal(calls.creditsAdded.length, 1);
+    assert.equal(
+      (calls.creditsAdded[0] as { html: string }).html,
+      "© Example contributors &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; partners",
+    );
+    sync.sync([]);
+    assert.deepEqual(calls.creditsRemoved, calls.creditsAdded);
+    sync.destroy();
+  });
+
+  it("parses a serialized inline document instead of handing Cesium a URL", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const packets = [
+      { id: "document", name: "Serialized", version: "1.0" },
+      { id: "p", point: { pixelSize: 4 } },
+    ];
+
+    sync.sync([createCzmlLayer({ id: "czml-str", name: "Text", data: JSON.stringify(packets) })]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    assert.deepEqual(calls.czmlLoads, [packets]);
+    assert.equal(calls.dataSourcesAdded.length, 1);
+
+    sync.sync([createCzmlLayer({ id: "czml-bad", name: "Garbage", data: "not json" })]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(calls.czmlLoads.length, 1);
+    assert.match(sync.getRenderStatus().errors[0], /Garbage: Invalid CZML document/);
+    sync.destroy();
+  });
+
+  it("wraps a bare packet from the Python API into a document array", async () => {
+    const packet = { id: "document", version: "1.0" };
+    const layer = createCzmlLayer({ id: "czml-one", name: "One", data: [packet] });
+    layer.source.czmlData = packet;
+    assert.deepEqual(czmlSource(layer)?.data, [packet]);
+
+    // The wrap is a fresh array per call, so an unrelated store update must
+    // not read as a data change and reload the document.
+    const { calls, Cesium, viewer } = makeGlobe();
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+    sync.sync([{ ...layer, opacity: 0.5 }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(calls.czmlLoads.length, 1);
+    sync.destroy();
+  });
+
+  it("treats an empty packet array as no document", () => {
+    const layer = createCzmlLayer({ id: "czml-empty", name: "Empty", data: [] });
+    assert.equal(czmlSource(layer), null);
+    assert.equal(isCesiumSupportedLayerType(layer), true);
+  });
+
+  it("elects the clock owner by layer order and re-elects when the owner leaves", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    const multipliers: Record<string, number> = {
+      "https://example.com/a.czml": 10,
+      "https://example.com/b.czml": 20,
+      "https://example.com/c.czml": 30,
+    };
+    Cesium.CzmlDataSource.load = async (czml: unknown) => {
+      calls.czmlLoads.push(czml);
+      // `a` resolves after `b` even though it comes first in layer order.
+      if (czml === "https://example.com/a.czml") await new Promise((r) => setTimeout(r, 20));
+      return {
+        kind: "czml-data-source",
+        show: true,
+        clock: { multiplier: multipliers[czml as string], currentTime: `t-${czml}` },
+        isLoading: false,
+        entities: { values: [] },
+      };
+    };
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const a = createCzmlLayer({ id: "czml-a", name: "A", url: "https://example.com/a.czml" });
+    const b = createCzmlLayer({ id: "czml-b", name: "B", url: "https://example.com/b.czml" });
+    const c = createCzmlLayer({ id: "czml-c", name: "C", url: "https://example.com/c.czml" });
+
+    sync.sync([a, b]);
+    await new Promise((r) => setTimeout(r, 40));
+    for (let i = 0; i < 4; i++) await flush();
+    // Out-of-order loads still settle on the first layer.
+    assert.equal(viewer.clock.multiplier, 10);
+    assert.equal(viewer.clock.currentTime, "t-https://example.com/a.czml");
+
+    // The user (or the Time Slider) moved the clock; a later document must not
+    // stomp it while the owner is unchanged.
+    viewer.clock.multiplier = 5;
+    viewer.clock.currentTime = "scrubbed";
+    sync.sync([a, b, c]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(viewer.clock.multiplier, 5);
+    assert.equal(viewer.clock.currentTime, "scrubbed");
+
+    // Removing the owner hands the clock to the next loaded document, without
+    // reloading it.
+    sync.sync([b, c]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(viewer.clock.multiplier, 20);
+    assert.equal(viewer.clock.currentTime, "t-https://example.com/b.czml");
+    assert.equal(calls.czmlLoads.length, 3);
+
+    // Reordering already-loaded documents re-elects without a reload.
+    sync.sync([c, b]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(viewer.clock.multiplier, 30);
+    assert.equal(calls.czmlLoads.length, 3);
+
+    sync.sync([c]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(viewer.clock.multiplier, 30);
+    sync.destroy();
+  });
+
+  it("does not hand the clock to a document that never reached the scene", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    viewer.dataSources.add = async () => {
+      throw new Error("scene rejected the data source");
+    };
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    sync.sync([createCzmlLayer({ id: "czml-x", name: "X", url: "https://example.com/x.czml" })]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(viewer.clock.multiplier, null);
+    assert.match(sync.getRenderStatus().errors[0], /scene rejected/);
+    sync.destroy();
+  });
+
+  it("identifies a picked CZML entity, sampling its properties at the current time", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const currentTime = { dayNumber: 2459000, secondsOfDay: 100 };
+    const quake = {
+      id: "quake-1",
+      name: "M 6.1 — 120km SSW of Adak",
+      properties: {
+        getValue: (time: unknown) => ({
+          // Sampled at the viewer's clock, not the document's start.
+          magnitude: time === currentTime ? 6.1 : 0,
+          depthKm: 31.4,
+          // A nested bag has no flat rendering in the popup, so it is dropped.
+          origin: { author: "us" },
+        }),
+      },
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      kind: "czml-data-source",
+      show: true,
+      clock: { startTime: null, stopTime: null, currentTime, clockRange: 1, multiplier: 1 },
+      isLoading: false,
+      entities: { values: [quake], contains: (e: unknown) => e === quake },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-quakes",
+      name: "Earthquakes",
+      url: "https://example.com/quakes.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    const hit = sync.resolveFeature(quake);
+    assert.ok(hit);
+    assert.equal(hit.layerId, "czml-quakes");
+    assert.equal(hit.featureId, "quake-1");
+    // A CZML position is a time-dynamic property, not stored geometry.
+    assert.equal(hit.geometry, null);
+    assert.deepEqual(hit.properties, {
+      name: "M 6.1 — 120km SSW of Adak",
+      magnitude: 6.1,
+      depthKm: 31.4,
+    });
+
+    // An entity no loaded document owns is not this synchronizer's to answer.
+    assert.equal(sync.resolveFeature({ id: "stranger" }), null);
+
+    // A hidden entity is not pickable. The same object stays in the document,
+    // so this tests the `show` guard rather than ownership.
+    (quake as { show?: boolean }).show = false;
+    assert.equal(sync.resolveFeature(quake), null);
+    delete (quake as { show?: boolean }).show;
+
+    // Neither is one whose layer the user hid or faded out.
+    sync.sync([{ ...layer, visible: false }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([{ ...layer, opacity: 0 }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake), null);
+
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(sync.resolveFeature(quake)?.featureId, "quake-1");
+    sync.destroy();
+  });
+
+  it("replays a highlight made while the document was still loading", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    const point = {
+      color: "original",
+      clone() {
+        return { ...this, clone: this.clone };
+      },
+    };
+    const entity = { id: "sat-1", point };
+    // Assigned synchronously by the Promise executor.
+    let release!: () => void;
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    Cesium.CzmlDataSource.load = async () => {
+      await loaded;
+      return {
+        show: true,
+        isLoading: false,
+        entities: {
+          values: [entity],
+          contains: (e: unknown) => e === entity,
+          getById: (id: string) => (id === entity.id ? entity : undefined),
+        },
+      };
+    };
+    // The highlight paints through these two; nothing else of Cesium is needed.
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: (css: string) => ({ css }) },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-sats",
+      name: "Satellites",
+      url: "https://example.com/sats.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    // A feed refresh rebuilds the document under a selected satellite: the
+    // canvas re-applies the selection while the entry still has no handle.
+    sync.highlight("czml-sats", ["sat-1"]);
+    assert.equal(entity.point, point, "nothing to paint until the entities exist");
+
+    release();
+    for (let i = 0; i < 6; i++) await flush();
+
+    assert.notEqual(entity.point, point, "the load replays the retained selection");
+    // assert.equal above narrowed entity.point to the original; it has since been replaced.
+    assert.deepEqual((entity.point as unknown as { color: { value: unknown } }).color.value, {
+      css: "#facc15",
+    });
+
+    // Clearing the selection puts the document's own styling back.
+    sync.highlight(undefined, []);
+    assert.equal(entity.point, point);
+    sync.destroy();
+  });
+
+  it("names and traces the satellite the user selects, and undoes both", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    const satellite = {
+      id: "celestrak-25545",
+      name: "COSMOS 2251",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 96 },
+        tleLine1: {
+          getValue: () => "1 25545U 93036A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () => "2 25545  74.0400 120.0000 0010000  80.0000 280.0000 15.00000000400000",
+        },
+      },
+      label: undefined as unknown,
+      path: undefined as unknown,
+      polyline: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [satellite],
+        contains: (e: unknown) => e === satellite,
+        getById: (id: string) => (id === satellite.id ? satellite : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: { toDate: () => new Date("2026-09-20T00:00:00.000Z") },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-fleet",
+      name: "Satellites",
+      url: "https://example.com/fleet.czml",
+    });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-fleet", ["celestrak-25545"]);
+    // The document names only what deserves a standing label, so a picked
+    // satellite gets its name from the packet.
+    const label = satellite.label as { options: { text: string } };
+    assert.ok(label);
+    assert.equal(label.options.text, "COSMOS 2251");
+    // Selection builds a synchronous primitive with an explicit depth-fail
+    // appearance. Entity polylines can silently lose the behind-Earth material
+    // when Cesium classifies the parent moving entity as dynamic, making a
+    // complete orbit look absent once the dense catalog is enabled.
+    assert.equal(calls.primitivesAdded.length, 1);
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+        depthFailAppearance?: unknown;
+        asynchronous: boolean;
+        allowPicking: boolean;
+      };
+    };
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.ok(orbit.options.depthFailAppearance);
+    assert.equal(orbit.options.asynchronous, false);
+    assert.equal(orbit.options.allowPicking, false);
+    assert.equal(satellite.polyline, undefined);
+    assert.equal(satellite.path, undefined);
+
+    sync.highlight(undefined, []);
+    assert.equal(satellite.label, undefined, "clearing the selection restores the document");
+    assert.equal(satellite.path, undefined);
+    assert.equal(satellite.polyline, undefined);
+    assert.deepEqual(calls.primitivesRemoved, calls.primitivesAdded);
+    sync.destroy();
+  });
+
+  it("traces a complete GEO orbit beyond the document's three-hour sample window", async () => {
+    const { calls, Cesium, viewer } = makeGlobe();
+    class SampledPositionProperty {}
+    // A GEO satellite: a 24-hour period, but only the plugin's three-hour
+    // window is sampled, and the clock sits in the middle of it.
+    const geo = {
+      id: "celestrak-99999",
+      name: "GEOSAT",
+      point: {
+        color: "original",
+        clone() {
+          return { ...this, clone: this.clone };
+        },
+      },
+      position: new SampledPositionProperty(),
+      properties: {
+        orbitalPeriodMinutes: { getValue: () => 1440 },
+        tleLine1: {
+          getValue: () => "1 99999U 20001A   26262.50000000  .00000000  00000+0  00000-0 0  9990",
+        },
+        tleLine2: {
+          getValue: () => "2 99999   0.0100 120.0000 0001000  80.0000 280.0000  1.00270000400000",
+        },
+      },
+      availability: { start: "window-start", stop: "window-stop" },
+      label: undefined as unknown,
+      path: undefined as unknown,
+      polyline: undefined as unknown,
+    };
+    Cesium.CzmlDataSource.load = async () => ({
+      show: true,
+      isLoading: false,
+      entities: {
+        values: [geo],
+        contains: (e: unknown) => e === geo,
+        getById: (id: string) => (id === geo.id ? geo : undefined),
+      },
+    });
+    const colour = (css: string) => ({ css, withAlpha: (a: number) => ({ css, alpha: a }) });
+    Object.assign(Cesium, {
+      Color: { fromCssColorString: colour, WHITE: colour("#fff"), BLACK: colour("#000") },
+      ConstantProperty: class {
+        constructor(public value: unknown) {}
+      },
+      LabelStyle: { FILL_AND_OUTLINE: 2 },
+      Cartesian2: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
+      Cartesian3: class {
+        constructor(
+          public x: number,
+          public y: number,
+          public z: number,
+        ) {}
+      },
+      ArcType: { NONE: 0 },
+      JulianDate: {
+        toDate: () => new Date("2026-09-20T00:00:00.000Z"),
+        secondsDifference: (left: unknown, right: unknown) =>
+          right === "window-start" || left === "window-stop" ? 5400 : 0,
+      },
+      LabelGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PathGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGraphics: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      Primitive: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      GeometryInstance: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineGeometry: class {
+        constructor(public options: Record<string, unknown>) {}
+      },
+      PolylineColorAppearance: class {
+        static VERTEX_FORMAT = "polyline-color";
+        constructor(public options: Record<string, unknown>) {}
+      },
+      ColorGeometryInstanceAttribute: {
+        fromColor: (value: unknown) => ({ value }),
+      },
+      ColorMaterialProperty: class {
+        constructor(public color: unknown) {}
+      },
+      SampledPositionProperty,
+    });
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    sync.sync([
+      createCzmlLayer({ id: "czml-geo", name: "Satellites", url: "https://example.com/geo.czml" }),
+    ]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    sync.highlight("czml-geo", ["celestrak-99999"]);
+    const orbit = calls.primitivesAdded[0] as {
+      options: {
+        geometryInstances: {
+          options: {
+            geometry: {
+              options: { positions: Array<{ x: number; y: number; z: number }> };
+            };
+          };
+        };
+      };
+    };
+    assert.ok(orbit);
+    const positions = orbit.options.geometryInstances.options.geometry.options.positions;
+    assert.equal(positions.length, 181);
+    assert.deepEqual(positions.at(-1), positions[0]);
+    assert.equal(geo.polyline, undefined);
+    assert.equal(geo.path, undefined);
+    sync.destroy();
+  });
+
+  it("handles load errors gracefully and reports in getRenderStatus", async () => {
+    const { Cesium, viewer } = makeGlobe();
+    Cesium.CzmlDataSource.load = async () => {
+      throw new Error("Network timeout loading CZML");
+    };
+
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10);
+    const layer = createCzmlLayer({
+      id: "czml-fail",
+      name: "Broken Orbit",
+      url: "https://example.com/broken.czml",
+    });
+
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+
+    const status = sync.getRenderStatus();
+    assert.equal(status.errors.length, 1);
+    assert.match(status.errors[0], /Broken Orbit: Network timeout loading CZML/);
+    sync.destroy();
+  });
+});

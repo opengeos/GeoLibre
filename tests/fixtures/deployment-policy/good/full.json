@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "capabilities": [
+    "project:edit",
+    "data:add",
+    "processing:run",
+    "export:data",
+    "plugins:install",
+    "settings:manage"
+  ],
+  "interface": {
+    "enabled": true,
+    "level": "intermediate",
+    "lock": true,
+    "hiddenDataSources": ["arcgis"],
+    "hiddenPlugins": ["plugin-a"],
+    "hiddenMenus": ["help"],
+    "hiddenMenuItems": ["file.print"]
+  },
+  "plugins": {
+    "registryUrl": "https://plugins.example.com/registry.json",
+    "allowed": ["acme-tools"],
+    "blocked": ["bad-plugin"],
+    "sideload": false,
+    "defaultActive": ["acme-tools"]
+  },
+  "services": {
+    "builtins": true,
+    "catalog": [
+      {
+        "id": "city-wms",
+        "name": "City WMS",
+        "kind": "wms",
+        "category": "Municipal",
+        "fields": {
+          "url": "https://maps.example.com/wms",
+          "version": "1.3.0",
+          "opacity": 0.8,
+          "transparent": true
+        }
+      },
+      {
+        "id": "city-xyz",
+        "name": "City tiles",
+        "kind": "xyz",
+        "fields": {
+          "url": "https://tiles.example.com/{z}/{x}/{y}.png",
+          "maxZoom": 19
+        }
+      }
+    ]
+  },
+  "sharing": {
+    "shareUrl": "https://projects.example.com",
+    "collabUrl": "wss://relay.example.com",
+    "embedOrigins": ["https://portal.example.com"]
+  },
+  "geolens": {
+    "url": "same-origin"
+  },
+  "ai": {
+    "enabled": true,
+    "model": "gpt-5-mini"
+  },
+  "branding": {
+    "appName": "Acme Maps",
+    "welcome": false
+  }
+}

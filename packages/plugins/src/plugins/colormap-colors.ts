@@ -1,5 +1,4 @@
 import { VECTOR_COLOR_RAMPS, getVectorColorRamp, rgbToHex } from "@geolibre/core";
-import { sampleColormapStops } from "maplibre-gl-raster";
 
 // Anchor stops sampled from the renderer's colormap sprite -- enough to
 // interpolate down to any class count or a smooth preview gradient.
@@ -48,7 +47,10 @@ export function warmColormapColors(name: string): Promise<readonly string[] | nu
   if (known) return Promise.resolve(known);
   let pending = inflight.get(name);
   if (!pending) {
-    pending = sampleColormapStops(name, ANCHOR_STOPS, false)
+    // maplibre-gl-raster is imported here, not at module scope, so the
+    // colormap helpers do not pull it onto the startup path.
+    pending = import("maplibre-gl-raster")
+      .then(({ sampleColormapStops }) => sampleColormapStops(name, ANCHOR_STOPS, false))
       .then((stops) => {
         // Clear the in-flight marker only after the cache is written, so a
         // re-entrant call in the same microtask can't miss both.

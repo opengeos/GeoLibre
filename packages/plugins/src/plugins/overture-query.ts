@@ -2,7 +2,7 @@ import { VectorTile } from "@mapbox/vector-tile";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import {
   DEFAULT_TILES_BASE_URL,
-  fetchReleases,
+  resolveReleases,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
 import { PbfReader } from "pbf";
@@ -402,7 +402,10 @@ export async function queryOvertureFeatures(
   const tiles = overtureTilesForBBox(query.bbox, zoom);
   const preparedFilter = prepareAreaFilter(query.filterGeometry);
 
-  const { latest: release } = await fetchReleases();
+  // Resolved from the tile distribution, not from Overture's frozen
+  // releases.json: that document names a release whose archives have been
+  // deleted, so every fetch below would 404.
+  const { latest: release } = await resolveReleases();
   const archive = new PMTiles(overtureArchiveUrl(release, query.theme));
   const features: Feature[] = [];
   let matchedFeatureCount = 0;

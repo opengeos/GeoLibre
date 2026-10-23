@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   computePluginBundleHash,
   getPluginBundlePin,
+  getPluginBundlePinVersion,
+  pinPluginBundle,
   removePluginBundlePin,
   verifyPluginBundleIntegrity,
 } from "../apps/geolibre-desktop/src/lib/plugin-integrity";
@@ -73,5 +75,24 @@ describe("plugin bundle integrity pinning", () => {
     assert.equal(getPluginBundlePin(url), null);
     const afterRemoval = await verifyPluginBundleIntegrity(url, tampered);
     assert.equal(afterRemoval.status, "pinned-first-use");
+  });
+
+  it("records the fetched manifest version over a registry entry's version", async () => {
+    const url = "https://plugins.example.com/bar/plugin.json";
+    const bundle = { entrySource: "v1", styleSource: null };
+    const hash = await computePluginBundleHash(bundle);
+
+    // A registry install pins the entry's announced version before fetching.
+    pinPluginBundle(url, hash, "1.0.0");
+    const verdict = await verifyPluginBundleIntegrity(url, bundle, "1.0.1");
+    assert.equal(verdict.status, "unchanged");
+    assert.equal(getPluginBundlePinVersion(url), "1.0.1");
+
+    // A legacy pin without a version is backfilled; a missing version keeps it.
+    pinPluginBundle(url, hash);
+    await verifyPluginBundleIntegrity(url, bundle, "1.0.2");
+    assert.equal(getPluginBundlePinVersion(url), "1.0.2");
+    await verifyPluginBundleIntegrity(url, bundle);
+    assert.equal(getPluginBundlePinVersion(url), "1.0.2");
   });
 });

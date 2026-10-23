@@ -190,7 +190,9 @@ describe("normalizeWidgets", () => {
     ] as never);
     assert.equal(result?.length, 3);
     for (const id of ["a", "b", "c"]) {
-      const normalized = result?.find((w) => w.id === id);
+      const normalized: NonNullable<typeof result>[number] | undefined = result?.find(
+        (w) => w.id === id,
+      );
       assert.ok(normalized, `selector ${id} should survive normalization`);
       assert.equal("multiple" in normalized, false);
     }

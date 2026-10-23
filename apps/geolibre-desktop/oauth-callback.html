@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GeoLibre sign-in</title>
+  </head>
+  <body>
+    <!--
+      OAuth authorization-code callback (Stack 3). Standalone from the app
+      shell on purpose: the opener (Project Share / Gallery / Settings) opens
+      this page in a popup, the share server redirects here with ?code/&state/
+      &iss (or ?error), and this page relays the parameters to the opener with
+      one postMessage before closing itself. English-only status text: this
+      entry has no app chrome or i18n pipeline, and it mirrors the share
+      server's own consent page, which is also server-rendered English.
+    -->
+    <p id="status">Completing sign-in…</p>
+    <script type="module" src="/src/oauth-callback.ts"></script>
+  </body>
+</html>

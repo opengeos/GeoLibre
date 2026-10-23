@@ -1,5 +1,6 @@
-import type { MapViewState } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { useAppStore, type MapViewState } from "@geolibre/core";
+import type { CameraIdleEvent, MapEngine } from "@geolibre/map";
+import { isFlying } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -31,10 +32,10 @@ export interface ViewportHistory {
 /**
  * Tracks a browser-style back/forward history of map viewports.
  *
- * Every time the user settles the camera (a `moveend` that we did not trigger)
+ * Every time the user settles the camera (an engine camera-idle event that we did not trigger)
  * the new view is pushed onto a stack, dropping any "forward" entries the way a
  * browser does after you navigate from a back-stack position. `goBack`/
- * `goForward` jump the camera through that stack; the `moveend` those jumps emit
+ * `goForward` jump the camera through that stack; the camera-idle event those jumps emit
  * is flagged so it is not recorded as a fresh entry.
  *
  * The stack lives in refs so routine map panning does not re-render the toolbar;
@@ -42,7 +43,7 @@ export interface ViewportHistory {
  * actually change.
  *
  * Args:
- *     mapControllerRef: Ref to the live MapController.
+ *     mapControllerRef: Ref to the live map engine.
  *     mapReadyGeneration: Counter that increments when the map (re)initialises,
  *         used to (re)attach the `moveend` listener once a map exists.
  *     projectGeneration: Counter that increments when a different project is
@@ -53,7 +54,7 @@ export interface ViewportHistory {
  *     The current navigability flags and the back/forward actions.
  */
 export function useViewportHistory(
-  mapControllerRef: React.RefObject<MapController | null>,
+  mapControllerRef: React.RefObject<MapEngine | null>,
   mapReadyGeneration: number,
   projectGeneration: number,
 ): ViewportHistory {
@@ -69,21 +70,41 @@ export function useViewportHistory(
   const projectGenerationRef = useRef(projectGeneration);
   const [nav, setNav] = useState({ canGoBack: false, canGoForward: false });
 
+  /**
+   * Whether history is usable right now. Every engine publishes camera-idle
+   * events and can restore a neutral view, so the ref itself is the capability.
+   */
+  const canNavigateHistory = useCallback(
+    () => Boolean(mapControllerRef.current),
+    [mapControllerRef],
+  );
+
   const syncNav = useCallback(() => {
-    const canGoBack = indexRef.current > 0;
-    const canGoForward = indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
+    // Report "nowhere to go" whenever history cannot be used, so a `restore()`
+    // that raced a hand-off cannot leave the menu items looking enabled.
+    const usable = canNavigateHistory();
+    const canGoBack = usable && indexRef.current > 0;
+    const canGoForward =
+      usable && indexRef.current >= 0 && indexRef.current < historyRef.current.length - 1;
     setNav((prev) =>
       prev.canGoBack === canGoBack && prev.canGoForward === canGoForward
         ? prev
         : { canGoBack, canGoForward },
     );
-  }, []);
+  }, [canNavigateHistory]);
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap() ?? null;
-    if (!map) return;
     const controller = mapControllerRef.current;
-
+    if (!controller) {
+      // Re-report on the hand-off: `syncNav` answers "nowhere to go" without a
+      // usable map, so panning on the 2D map and then switching to the globe no
+      // longer leaves the last 2D answer standing. The stack itself is kept —
+      // switching back re-runs this effect and `syncNav` restores the real
+      // answer, so a round trip through the globe does not cost the user their
+      // history.
+      syncNav();
+      return;
+    }
     // Loading a different project clears the stack so navigation can't cross
     // project boundaries. A basemap change (which only bumps mapReadyGeneration)
     // keeps the history, since the viewport is unchanged.
@@ -95,6 +116,9 @@ export function useViewportHistory(
     }
 
     const record = () => {
+      // Story playback owns the camera and should not turn scripted chapter
+      // changes into user viewport history.
+      if (useAppStore.getState().ui.storymapPresenting || isFlying()) return;
       const view = controller?.readView();
       if (!view) return;
       // Seed the stack with the first view we see.
@@ -117,18 +141,21 @@ export function useViewportHistory(
       syncNav();
     };
 
-    const onMoveEnd = (event: { storyCameraToken?: number; flightCameraToken?: number }) => {
-      // Story presenter / chapter-preview camera moves carry a storyCameraToken
-      // in their event data. Those are scripted playback, not user navigation,
-      // so don't record them (checked before the restore counter so a story
-      // move never consumes a pending restore's slot).
-      if (event?.storyCameraToken !== undefined) return;
-      // The flight simulator jumps the camera every animation frame; recording
-      // those would bury the user's real history under ~60 entries a second.
-      if (event?.flightCameraToken !== undefined) {
-        // A flight frame is authoritative: its jumpTo cancels any restore ease
-        // still animating, so drop the pending count rather than leaving it to
-        // swallow the next ordinary moveend. Already 0 in the common case.
+    const onCameraIdle = (event?: CameraIdleEvent) => {
+      // Story presenter and chapter-preview moves are scripted, not user
+      // navigation. Checked before the restore counter so a story move never
+      // consumes a pending restore's slot.
+      if (event?.storyCamera) return;
+      // Presenting owns the camera and supersedes any restore still easing, so
+      // drop the pending count rather than leave it to swallow a later pan.
+      if (useAppStore.getState().ui.storymapPresenting) {
+        restoringCountRef.current = 0;
+        return;
+      }
+      // A flight frame is authoritative: its jump cancels any restore ease still
+      // animating, so drop the pending count rather than leaving it to swallow
+      // the next ordinary camera-idle event. `record` skips flight frames too.
+      if (isFlying()) {
         restoringCountRef.current = 0;
         return;
       }
@@ -139,7 +166,7 @@ export function useViewportHistory(
       record();
     };
 
-    map.on("moveend", onMoveEnd);
+    const unsubscribeCameraIdle = controller.onCameraIdle(onCameraIdle);
     // Clear any pending count left by a restore that was in flight when a prior
     // map was torn down (its `moveend` never fired), so this map starts clean.
     restoringCountRef.current = 0;
@@ -147,7 +174,7 @@ export function useViewportHistory(
     record();
 
     return () => {
-      map.off("moveend", onMoveEnd);
+      unsubscribeCameraIdle();
       restoringCountRef.current = 0;
     };
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, syncNav]);
@@ -157,16 +184,16 @@ export function useViewportHistory(
       const view = historyRef.current[nextIndex];
       if (!view) return;
       const controller = mapControllerRef.current;
-      // Bail before touching the flag if there's no map to drive — otherwise it
+      // Bail before touching the flag if there's no engine to drive — otherwise it
       // would stay `true` (no `moveend` to clear it) and swallow the next pan.
-      if (!controller) return;
+      if (!controller || !canNavigateHistory()) return;
       indexRef.current = nextIndex;
       restoringCountRef.current++;
       // Animate (easeTo) rather than jump, matching the browser-style framing.
       controller.easeToView(view);
       syncNav();
     },
-    [mapControllerRef, syncNav],
+    [canNavigateHistory, mapControllerRef, syncNav],
   );
 
   const goBack = useCallback(() => {

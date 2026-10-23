@@ -1,4 +1,5 @@
 import { closeFloatingPanel, focusFloatingPanel, getFloatingPanel } from "@geolibre/plugins";
+import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
 import { Button } from "@geolibre/ui";
 import { GripVertical, X } from "lucide-react";
 import {
@@ -77,6 +78,7 @@ function FloatingPanelCard({ id, initialOffset }: { id: string; initialOffset: n
       cleanup = panel.render(container);
     } catch (error) {
       console.error(`Floating panel "${id}" render() threw.`, error);
+      notifyPanelRenderFailed(id, panel.title, error);
     }
     return () => {
       try {

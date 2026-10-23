@@ -1,4 +1,5 @@
 import {
+  shouldZoomToNewLayers,
   csvRowsToGeocodeRequests,
   geocodeForward,
   geocodeMatchToFeature,
@@ -12,7 +13,7 @@ import {
   rowCap,
   useAppStore,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -33,7 +34,7 @@ import { sniffDelimiter } from "../../lib/deck-viz-input";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 interface GeocodeDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 interface ParsedCsv {
@@ -237,7 +238,7 @@ export function GeocodeDialog({ mapControllerRef }: GeocodeDialogProps): ReactEl
       };
       const layerId = addGeoJsonLayer(layerNameFromFile(csv.fileName), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     }
 
     if (cancelled) {

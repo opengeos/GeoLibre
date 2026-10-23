@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry } from "geojson";
 
 // vector-export.ts statically pulls in tauri-io -> shpjs, whose bundle reads the
 // browser `self` global at module-eval time; shim it before the dynamic import.
 (globalThis as { self?: unknown }).self ??= globalThis;
 
-type ShapefileFieldWarnings = (geojson: FeatureCollection) => string[];
+type ShapefileFieldWarnings = (geojson: FeatureCollection<Geometry | null>) => string[];
 let shapefileFieldWarnings: ShapefileFieldWarnings;
 
 function fc(properties: Record<string, unknown>[]): FeatureCollection {

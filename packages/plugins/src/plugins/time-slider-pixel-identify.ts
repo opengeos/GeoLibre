@@ -1,12 +1,5 @@
 import { type CogSourceSpec, type MosaicSourceSpec, resolveUrl } from "maplibre-gl-time-slider";
-import {
-  type BandReading,
-  loadGeoTIFF,
-  loadMosaic,
-  MosaicUnsupportedError,
-  readBandNames,
-  readPixelValues,
-} from "maplibre-gl-raster";
+import type { BandReading } from "maplibre-gl-raster";
 import { getActiveTimeSliderControl } from "./maplibre-time-slider";
 import { usesMosaicManifest } from "./time-slider-source-url";
 
@@ -94,6 +87,8 @@ export async function resolvePixelReadUrl(
   signal?: AbortSignal,
 ): Promise<string | null> {
   if (!usesMosaicManifest(spec, resolvedUrl)) return resolvedUrl;
+  // Outside the try: a failed import is a failed read, not a non-manifest URL.
+  const { loadMosaic, MosaicUnsupportedError } = await import("maplibre-gl-raster");
   try {
     const mosaic = await loadMosaic(resolvedUrl, signal);
     return pickMosaicAsset(mosaic.assets, lngLat);
@@ -193,6 +188,7 @@ export async function identifyTimeSliderPixel(
   if (signal?.aborted) return null;
   if (!url) throw new PixelOutsideCoverageError();
 
+  const { loadGeoTIFF, readBandNames, readPixelValues } = await import("maplibre-gl-raster");
   const tiff = await loadGeoTIFF(url);
   // loadGeoTIFF does not accept the abort signal, so once its header fetch
   // resolves, skip the pixel read if the identify was cancelled meanwhile.

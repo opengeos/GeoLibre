@@ -19,6 +19,8 @@ project.
     world tour. Hit **Present** and scroll to see it in action, then edit or
     replace the chapters with your own.
 
+![The Story Map builder, with the story settings above and the chapter list below](https://assets.geolibre.app/images/geolibre-story-map.webp)
+
 ## Story settings
 
 - **Title / Subtitle / Byline / Footer** appear in the presentation header and
@@ -26,6 +28,15 @@ project.
 - **Panel theme** switches the chapter panels between light and dark.
 - **Show markers** drops a marker at each chapter's center; pick its color.
 - **Inset minimap** shows a small overview map in a chosen corner.
+- **Hide chapter list** removes the navigation pane from the presentation, for a
+  story meant to be read straight through.
+- **Enable start view** adds an opening screen before the first chapter, carrying
+  the story's title block. Choose what the map shows behind it: an **Empty
+  screen**, a **Black screen**, a **Global view**, or a **Preview of first
+  chapter**.
+- **Enable closing slide** adds a final screen after the last chapter, for
+  credits or a closing note. The same backdrop choices apply, plus **Hold on last
+  chapter** to leave the camera where the story ended.
 
 ## Chapters
 
@@ -72,6 +83,8 @@ progresses.
 Click **Present** to start the scroll-driven presentation over the live map.
 Scroll to move between chapters; press **Esc** or **Exit** to return to editing.
 
+![A story map in presentation mode, with the chapter navigation pane, a chapter card, and the inset minimap over the live map](https://assets.geolibre.app/images/geolibre-story-map-present.webp)
+
 A **navigation pane** on the left lists every chapter for a quick overview;
 click any entry to jump straight to it. Toggle the pane with the list button next
 to **Exit**. The map controls (navigation, fullscreen, globe, layer control)
@@ -80,6 +93,20 @@ stay usable during the presentation.
 Each chapter card is **movable and resizable**: drag its title bar to reposition
 it (double-click the bar to reset), or drag the bottom-right corner to resize, so
 you can move a card aside and explore the map beneath it.
+
+## Handout (PDF)
+
+Click **Handout (PDF)** to export the story as a multi-page PDF, one page per
+screen. Pick which screens to include, the paper size and orientation, and the
+document title, subtitle, byline, and footer text drawn on every page. Each
+chapter page shows the captured map view, the chapter photo beside it when the
+chapter has one, and the chapter description.
+
+**Clickable location markers** draws a marker at each chapter's location, its
+tip on the chapter coordinate. Opened in a PDF viewer, clicking a marker opens
+that coordinate in Google Maps, so a reader can navigate to the place. The
+marker takes the story's **Marker color**, and the option starts on when **Show
+markers** is enabled for the story.
 
 ## Export to HTML
 

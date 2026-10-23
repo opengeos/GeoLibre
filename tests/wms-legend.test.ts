@@ -1,0 +1,226 @@
+import assert from "node:assert/strict";
+import { after, afterEach, describe, it } from "node:test";
+import { DOMParser } from "linkedom";
+import {
+  findCapabilitiesLegendUrl,
+  parseLegendImageUrl,
+  resolveWmsLegends,
+  savedLegendImageUrl,
+  wmsGetLegendGraphicUrl,
+  wmsLegendHtml,
+  wmsLegendSource,
+} from "../apps/geolibre-desktop/src/lib/wms-legend";
+import { geojsonLayer } from "./helpers/layer-fixtures";
+
+const wmsLayer = (source: Record<string, unknown>) =>
+  geojsonLayer({
+    id: "wms",
+    type: "wms",
+    geojson: undefined,
+    source: { type: "raster", ...source },
+  });
+
+const CAPS = `<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">
+<Capability><Layer><Title>root</Title>
+<Layer><Name>dtm</Name><Style><Name>default</Name><LegendURL><OnlineResource xlink:href="https://wms.example/legend/default.png"/></LegendURL></Style>
+<Style><Name>fancy</Name><LegendURL><OnlineResource xlink:href="https://wms.example/legend/fancy.png"/></LegendURL></Style></Layer>
+<Layer><Name>bare</Name></Layer></Layer></Capability></WMS_Capabilities>`;
+
+describe("WMS legend", () => {
+  it("reads request fields from a WMS layer only", () => {
+    const source = wmsLegendSource(
+      wmsLayer({
+        url: "https://wms.example/s?SERVICE=WMS",
+        layers: "a, b",
+        styles: "x",
+        version: "1.3.0",
+      }),
+    );
+    assert.deepEqual(source, {
+      endpoint: "https://wms.example/s",
+      capabilitiesEndpoint: "https://wms.example/s?SERVICE=WMS",
+      layers: ["a", "b"],
+      styles: ["x", ""],
+      version: "1.3.0",
+    });
+    assert.equal(wmsLegendSource(wmsLayer({ url: "https://x/s", layers: "" })), null);
+    assert.equal(
+      wmsLegendSource({ ...wmsLayer({ url: "https://x/s", layers: "a" }), type: "xyz" }),
+      null,
+    );
+  });
+
+  it("builds a GetLegendGraphic URL", () => {
+    const url = new URL(
+      wmsGetLegendGraphicUrl(
+        { endpoint: "https://wms.example/s", version: "1.1.1" },
+        "dtm",
+        "fancy",
+      ),
+    );
+    assert.equal(url.searchParams.get("REQUEST"), "GetLegendGraphic");
+    assert.equal(url.searchParams.get("LAYER"), "dtm");
+    assert.equal(url.searchParams.get("STYLE"), "fancy");
+    assert.equal(url.searchParams.get("FORMAT"), "image/png");
+  });
+
+  it("prefers the named style's LegendURL, then the first style", () => {
+    const doc = new DOMParser().parseFromString(CAPS, "text/xml") as unknown as Document;
+    assert.equal(
+      findCapabilitiesLegendUrl(doc, "dtm", "fancy"),
+      "https://wms.example/legend/fancy.png",
+    );
+    assert.equal(
+      findCapabilitiesLegendUrl(doc, "dtm", ""),
+      "https://wms.example/legend/default.png",
+    );
+    assert.equal(findCapabilitiesLegendUrl(doc, "bare", ""), null);
+    assert.equal(findCapabilitiesLegendUrl(doc, "missing", ""), null);
+  });
+
+  it("builds escaped legend HTML, labelling layers only when there are several", () => {
+    const one = wmsLegendHtml([{ layer: "dtm", url: 'https://x/s?a=1&b="2"' }]);
+    assert.ok(one.includes('src="https://x/s?a=1&amp;b=&quot;2&quot;"'));
+    assert.ok(!one.includes("font-weight"));
+    const two = wmsLegendHtml([
+      { layer: "a<b", url: "https://x/1" },
+      { layer: "c", url: "https://x/2" },
+    ]);
+    assert.ok(two.includes("a&lt;b"));
+    assert.equal(two.match(/<img /g)?.length, 2);
+  });
+
+  it("keeps styles paired with layers when a LAYERS entry is blank", () => {
+    const source = wmsLegendSource(
+      wmsLayer({ url: "https://x/s", layers: "a,,b", styles: "sa,,sb" }),
+    );
+    assert.deepEqual(source?.layers, ["a", "b"]);
+    assert.deepEqual(source?.styles, ["sa", "sb"]);
+  });
+
+  it("resolves relative LegendURLs, rejects non-http(s) ones and keeps searching", () => {
+    const caps = (href: string, second = "") =>
+      new DOMParser().parseFromString(
+        `<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink"><Capability>
+<Layer><Name>dtm</Name><Style><Name>d</Name><LegendURL><OnlineResource xlink:href="${href}"/></LegendURL></Style></Layer>${second}
+</Capability></WMS_Capabilities>`,
+        "text/xml",
+      ) as unknown as Document;
+    const base = "https://wms.example/geoserver/wms";
+    assert.equal(
+      findCapabilitiesLegendUrl(caps("/legend/dtm.png"), "dtm", "", base),
+      "https://wms.example/legend/dtm.png",
+    );
+    assert.equal(findCapabilitiesLegendUrl(caps("javascript:alert(1)"), "dtm", "", base), null);
+    assert.equal(
+      findCapabilitiesLegendUrl(caps("data:image/png;base64,AA"), "dtm", "", base),
+      null,
+    );
+    const twice = caps(
+      "",
+      '<Layer><Name>dtm</Name><Style><Name>d</Name><LegendURL><OnlineResource xlink:href="https://wms.example/second.png"/></LegendURL></Style></Layer>',
+    );
+    assert.equal(
+      findCapabilitiesLegendUrl(twice, "dtm", "", base),
+      "https://wms.example/second.png",
+    );
+  });
+
+  it("accepts only absolute http(s) legend image URLs", () => {
+    assert.equal(parseLegendImageUrl("  https://x.example/l.png "), "https://x.example/l.png");
+    assert.equal(parseLegendImageUrl("http://x.example/l.png"), "http://x.example/l.png");
+    for (const bad of [
+      "",
+      "   ",
+      "legend.png",
+      "/l.png",
+      "javascript:alert(1)",
+      "data:image/png;base64,AA",
+      "file:///l.png",
+    ]) {
+      assert.equal(parseLegendImageUrl(bad), null, bad);
+    }
+  });
+
+  it("reads a saved legend image URL from layer metadata", () => {
+    const layer = (value: unknown) => ({
+      ...wmsLayer({ url: "https://x/s", layers: "a" }),
+      metadata: { legendImageUrl: value },
+    });
+    assert.equal(savedLegendImageUrl(layer("https://x.example/l.png")), "https://x.example/l.png");
+    assert.equal(savedLegendImageUrl(layer("javascript:alert(1)")), null);
+    assert.equal(savedLegendImageUrl(layer(42)), null);
+    assert.equal(savedLegendImageUrl(wmsLayer({ url: "https://x/s", layers: "a" })), null);
+  });
+});
+
+describe("resolveWmsLegends", () => {
+  const originalFetch = globalThis.fetch;
+  const originalDOMParser = globalThis.DOMParser;
+  // Node has no DOMParser; the lookup parses the capabilities with the global one.
+  globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+  after(() => {
+    globalThis.DOMParser = originalDOMParser;
+  });
+  const source = {
+    endpoint: "https://wms.example/s",
+    layers: ["dtm", "bare"],
+    styles: ["", ""],
+    version: "1.1.1",
+  };
+  const capsResponse = () =>
+    new Response(CAPS, { status: 200, headers: { "content-type": "text/xml" } });
+
+  it("uses the advertised LegendURL and falls back to GetLegendGraphic per layer", async () => {
+    globalThis.fetch = (async () => capsResponse()) as typeof fetch;
+    const [dtm, bare] = await resolveWmsLegends(source);
+    assert.equal(dtm.url, "https://wms.example/legend/default.png");
+    assert.equal(new URL(bare.url).searchParams.get("REQUEST"), "GetLegendGraphic");
+    assert.equal(new URL(bare.url).searchParams.get("LAYER"), "bare");
+  });
+
+  it("falls back to GetLegendGraphic for every layer when capabilities are unreachable", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    const entries = await resolveWmsLegends(source);
+    assert.equal(entries.length, 2);
+    for (const entry of entries) {
+      assert.equal(new URL(entry.url).searchParams.get("REQUEST"), "GetLegendGraphic");
+    }
+  });
+
+  it("keeps a pasted outputFormat on the capabilities request but not on GetLegendGraphic", async () => {
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input));
+      return capsResponse();
+    }) as typeof fetch;
+    const withOutputFormat = wmsLegendSource(
+      wmsLayer({
+        url: "https://wms.example/s?service=WMS&request=GetCapabilities&outputFormat=application/xml",
+        layers: "dtm,bare",
+        styles: "",
+        version: "1.1.1",
+      }),
+    );
+    assert.ok(withOutputFormat);
+    const [, bare] = await resolveWmsLegends(withOutputFormat);
+    assert.equal(new URL(requested[0]).searchParams.get("outputFormat"), "application/xml");
+    assert.equal(new URL(requested[0]).searchParams.get("REQUEST"), "GetCapabilities");
+    assert.equal(new URL(bare.url).searchParams.get("REQUEST"), "GetLegendGraphic");
+    assert.equal(new URL(bare.url).searchParams.get("outputFormat"), null);
+  });
+
+  it("rethrows when the lookup was aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    globalThis.fetch = (async () => {
+      throw new DOMException("aborted", "AbortError");
+    }) as typeof fetch;
+    await assert.rejects(resolveWmsLegends(source, controller.signal));
+  });
+});

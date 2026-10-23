@@ -1,22 +1,17 @@
-import {
-  DEFAULT_BASEMAP,
-  DEFAULT_LAYER_STYLE,
-  type GeoLibreLayer,
-  useAppStore,
-} from "@geolibre/core";
+import { DEFAULT_BASEMAP, useAppStore } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
+  createPMTilesStoreLayer,
   evictOfflineBasemapStyle,
   hasPMTilesArchive,
-  type MapController,
   OFFLINE_BASEMAP_SENTINEL_PREFIX,
-  pmtilesNativeLayerIds,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,
   readPMTilesArchiveInfo,
   registerOfflineBasemapStyle,
   registerPMTilesArchive,
   unregisterPMTilesArchive,
+  type MapEngine,
 } from "@geolibre/map";
 import { extractPmtiles, type PmtilesExtractProgress } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
@@ -45,6 +40,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { screenOverlayCovers, useExtentScreenOverlay } from "../../hooks/useExtentScreenOverlay";
 import { clamp } from "../../lib/clamp";
 import {
   deleteOfflineBasemap,
@@ -92,12 +88,15 @@ const CONFIRM_BYTES = 150 * 1024 * 1024;
 
 type Phase = "idle" | "running" | "done";
 
-interface PanelPos {
-  x: number;
-  y: number;
-}
+/**
+ * A near-global box (e.g. "Use view" at a world/globe zoom) has corners that
+ * project to the same pole or wrap around, so the four-corner SVG polygon
+ * degenerates into a stray diagonal line. Past this span the panel takes the
+ * engine's native rectangle instead.
+ */
+const MAX_OVERLAY_SPAN_DEG = 170;
 
-interface ScreenPoint {
+interface PanelPos {
   x: number;
   y: number;
 }
@@ -116,17 +115,13 @@ const EMPTY_COORDS: CoordFields = { west: "", south: "", east: "", north: "" };
 interface BasemapExtractPanelProps {
   open: boolean;
   onClose: () => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /** Round a coordinate to a readable-but-precise 6 decimal places. */
 function fmtCoord(value: number): string {
   return Number(value.toFixed(6)).toString();
-}
-
-/** Order two corners into a `[west, south, east, north]` box. */
-function orderBbox(a: [number, number], b: [number, number]): [number, number, number, number] {
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
@@ -263,7 +258,12 @@ function baseNameFromUrl(url: string): string {
  * is non-modal so the map stays interactive for drawing, mirroring the Raster
  * Subset panel.
  */
-export function BasemapExtractPanel({ open, onClose, mapControllerRef }: BasemapExtractPanelProps) {
+export function BasemapExtractPanel({
+  open,
+  onClose,
+  mapControllerRef,
+  mapReadyGeneration,
+}: BasemapExtractPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((state) => state.addLayer);
   const setBasemapStyleUrl = useAppStore((state) => state.setBasemapStyleUrl);
@@ -336,17 +336,14 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
     parentW: number;
     parentH: number;
   } | null>(null);
-  const [screenPoints, setScreenPoints] = useState<ScreenPoint[] | null>(null);
 
   // Cancels an in-flight extraction when the panel closes or a new run starts.
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const seedFromView = useCallback(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
-    const b = map.getBounds();
-    setCoords(coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]));
+    const bounds = mapControllerRef.current?.getViewBounds();
+    if (bounds) setCoords(coordsFromBbox(bounds));
   }, [mapControllerRef]);
 
   // Reset every field whenever the panel opens (seeding the bbox from the
@@ -388,127 +385,45 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
     setUrl(seededUrl);
   }, [open]);
 
-  // Latest box, read inside the projection callback so the map listeners don't
-  // need `bbox` as a dependency (which changes on every drag mousemove).
-  const bboxRef = useRef(bbox);
-  bboxRef.current = bbox;
-  const reprojectRef = useRef<() => void>(() => {});
+  // Keep the SVG overlay's corner positions in sync with the camera. Rendered
+  // as an SVG so it sits above any deck.gl overlay, and projected through the
+  // engine's render surface so both 2D engines get it.
+  const screenPoints = useExtentScreenOverlay(
+    mapControllerRef,
+    bbox ?? null,
+    open,
+    mapReadyGeneration,
+    { maxSpanDeg: MAX_OVERLAY_SPAN_DEG },
+  );
 
-  // Keep the SVG overlay's corner positions in sync with the camera. Subscribed
-  // once per open (not per box edit) to avoid re-attaching listeners on every
-  // drag tick. Rendered as an SVG so it sits above any deck.gl overlay.
-  useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !open) {
-      setScreenPoints(null);
-      return;
-    }
-    const reproject = () => {
-      const b = bboxRef.current;
-      if (!b) {
-        setScreenPoints(null);
-        return;
-      }
-      const [w, s, e, n] = b;
-      // A near-global box (e.g. "Use view" at a world/globe zoom) has corners
-      // that project to the same pole or wrap around, so the four-corner polygon
-      // degenerates into a stray diagonal line. Skip the overlay for such boxes;
-      // the extraction still works, there's just no meaningful rectangle to draw.
-      if (e - w > 170 || n - s > 170) {
-        setScreenPoints(null);
-        return;
-      }
-      const corners: [number, number][] = [
-        [w, n],
-        [e, n],
-        [e, s],
-        [w, s],
-      ];
-      setScreenPoints(
-        corners.map((corner) => {
-          const p = map.project(corner);
-          return { x: p.x, y: p.y };
-        }),
-      );
-    };
-    reprojectRef.current = reproject;
-    reproject();
-    map.on("move", reproject);
-    map.on("resize", reproject);
-    return () => {
-      map.off("move", reproject);
-      map.off("resize", reproject);
-    };
-  }, [open, mapControllerRef]);
-
-  useEffect(() => {
-    reprojectRef.current();
-  }, [bbox]);
-
-  // Rubber-band draw mode: drag a rectangle on the map. Mirrors the Raster
-  // Subset panel and lib/print-extent.ts: draw starts on a canvas mousedown,
-  // then tracking is driven by window mousemove/mouseup so a drag leaving the
-  // canvas still commits. dragPan/boxZoom are suspended for the duration.
+  // Both renderers share the pointer lifecycle; the globe draws a native rectangle.
   useEffect(() => {
     if (!drawing) return;
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const engine = mapControllerRef.current;
+    if (!engine) {
       setDrawing(false);
       return;
     }
-    const canvas = map.getCanvas();
-    const prevCursor = canvas.style.cursor;
-    canvas.style.cursor = "crosshair";
-    const panWasEnabled = map.dragPan.isEnabled();
-    const boxZoomWasEnabled = map.boxZoom.isEnabled();
-    map.dragPan.disable();
-    map.boxZoom.disable();
+    return engine.drawExtent({
+      onChange: (extent) => {
+        setCoords(coordsFromBbox(extent));
+        clearStatus();
+      },
+      onDone: () => setDrawing(false),
+      onCancel: () => setDrawing(false),
+    });
+  }, [drawing, mapControllerRef, clearStatus, mapReadyGeneration]);
 
-    const toLngLat = (clientX: number, clientY: number): [number, number] => {
-      const rect = canvas.getBoundingClientRect();
-      const ll = map.unproject([clientX - rect.left, clientY - rect.top]);
-      return [ll.lng, ll.lat];
-    };
-
-    let start: [number, number] | null = null;
-    const onDown = (e: {
-      lngLat: { lng: number; lat: number };
-      originalEvent?: { button?: number };
-    }) => {
-      if (e.originalEvent && e.originalEvent.button !== 0) return;
-      start = [e.lngLat.lng, e.lngLat.lat];
-    };
-    const onWindowMove = (e: MouseEvent) => {
-      if (!start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      clearStatus();
-    };
-    const onWindowUp = (e: MouseEvent) => {
-      if (e.button !== 0 || !start) return;
-      setCoords(coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))));
-      start = null;
-      setDrawing(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) setDrawing(false);
-    };
-    const onBlur = () => setDrawing(false);
-    map.on("mousedown", onDown);
-    window.addEventListener("mousemove", onWindowMove);
-    window.addEventListener("mouseup", onWindowUp);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      map.off("mousedown", onDown);
-      window.removeEventListener("mousemove", onWindowMove);
-      window.removeEventListener("mouseup", onWindowUp);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", onBlur);
-      canvas.style.cursor = prevCursor;
-      if (panWasEnabled) map.dragPan.enable();
-      if (boxZoomWasEnabled) map.boxZoom.enable();
-    };
-  }, [drawing, mapControllerRef, clearStatus]);
+  // Whatever the SVG overlay above does not cover — a globe engine, or a box
+  // too wide for the span guard — is drawn as a native entity instead, so a
+  // "Use view" at world zoom still gets an outline (the engine's own rectangle
+  // is a line, which does not degenerate the way four projected corners do).
+  useEffect(() => {
+    const engine = mapControllerRef.current;
+    if (!open || !bbox || !engine) return;
+    if (screenOverlayCovers(engine, open, bbox, MAX_OVERLAY_SPAN_DEG)) return;
+    return engine.showExtent(bbox);
+  }, [open, bbox, mapControllerRef, mapReadyGeneration]);
 
   const handleUseView = useCallback(() => {
     seedFromView();
@@ -708,39 +623,22 @@ export function BasemapExtractPanel({ open, onClose, mapControllerRef }: Basemap
         setBasemapStyleUrl(registerOfflineBasemapStyle(layerId, style));
         trackStyledBasemap(layerId, `${layerId}.pmtiles`);
       } else {
-        const fillColor = DEFAULT_LAYER_STYLE.fillColor;
-        const layer: GeoLibreLayer = {
-          id: layerId,
-          name: fileName,
-          type: "pmtiles",
-          source: {
-            sourceId: layerId,
-            sourceLayers: info.sourceLayers,
-            tileType: info.tileType,
-            type: info.tileType === "raster" ? "raster" : "vector",
+        // One layer, deliberately: an extract is a backdrop to draw over, not the thing being
+        // inspected, so it stays a single row rather than being split per source layer the way an
+        // archive added from the PMTiles control or a STAC asset is.
+        addLayer(
+          createPMTilesStoreLayer({
+            id: layerId,
+            name: fileName,
             url: layerUrl,
-          },
-          visible: true,
-          // Raster basemaps render dimmed (raster-opacity reads the layer-level
-          // `opacity`, not style.fillOpacity); vector renders fully opaque.
-          opacity: info.tileType === "raster" ? 0.6 : 1,
-          style: {
-            ...DEFAULT_LAYER_STYLE,
-            fillColor,
-            strokeColor: fillColor,
-          },
-          metadata: {
-            externalNativeLayer: true,
-            nativeLayerIds: pmtilesNativeLayerIds(layerId, info.tileType, info.sourceLayers),
-            pickable: true,
-            sourceId: layerId,
-            sourceKind: "pmtiles-url",
-            sourceLayers: info.sourceLayers,
             tileType: info.tileType,
-          },
-          sourcePath: layerUrl,
-        };
-        addLayer(layer);
+            ...(info.encoding ? { encoding: info.encoding } : {}),
+            sourceLayers: info.sourceLayers,
+            // Raster basemaps render dimmed (raster-opacity reads the layer-level
+            // `opacity`, not style.fillOpacity); vector renders fully opaque.
+            opacity: info.tileType === "raster" ? 0.6 : 1,
+          }),
+        );
       }
       setPhase("done");
 

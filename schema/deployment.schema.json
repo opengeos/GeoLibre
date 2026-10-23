@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/opengeos/GeoLibre/main/schema/deployment.schema.json",
+  "title": "GeoLibre deployment policy",
+  "description": "Client-facing settings for a GeoLibre deployment. Every value is public: never put secrets here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "$defs": {
+    "nonBlank": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "idList": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "\\S" },
+      "uniqueItems": true
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional editor hint; ignored by GeoLibre."
+    },
+    "version": {
+      "const": 1,
+      "description": "Policy format version. GeoLibre ignores documents with any other version."
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "Capabilities granted to users. Omit to grant all; an empty list grants none.",
+      "items": {
+        "enum": [
+          "project:edit",
+          "data:add",
+          "processing:run",
+          "export:data",
+          "plugins:install",
+          "settings:manage"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "interface": {
+      "type": "object",
+      "description": "UI profile filtering: which data sources, plugins and menus are visible.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether UI profile filtering is active (default true)."
+        },
+        "level": {
+          "enum": ["beginner", "intermediate", "advanced"],
+          "description": "Experience-level preset that seeds the hidden lists."
+        },
+        "lock": {
+          "type": "boolean",
+          "description": "Prevent users from changing the profile in Settings."
+        },
+        "hiddenDataSources": {
+          "$ref": "#/$defs/idList",
+          "description": "Explicit hidden data-source ids, overriding the preset."
+        },
+        "hiddenPlugins": {
+          "$ref": "#/$defs/idList",
+          "description": "Explicit hidden plugin ids, overriding the preset."
+        },
+        "hiddenMenus": {
+          "$ref": "#/$defs/idList",
+          "description": "Explicit hidden menu ids, overriding the preset."
+        },
+        "hiddenMenuItems": {
+          "$ref": "#/$defs/idList",
+          "description": "Explicit hidden menu item ids, overriding the preset."
+        }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Plugin marketplace and loading policy for external plugins.",
+      "additionalProperties": false,
+      "properties": {
+        "registryUrl": {
+          "$ref": "#/$defs/nonBlank",
+          "description": "Plugin marketplace registry URL (absolute or relative to the app)."
+        },
+        "allowed": {
+          "$ref": "#/$defs/idList",
+          "description": "External plugin ids allowed to load. Omit for any; an empty list allows none."
+        },
+        "blocked": {
+          "$ref": "#/$defs/idList",
+          "description": "External plugin ids never loaded, even if also allowed."
+        },
+        "sideload": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow installing from a manifest URL, zip, directory or project file."
+        },
+        "defaultActive": {
+          "$ref": "#/$defs/idList",
+          "description": "Plugin ids active in a fresh project."
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "description": "Web-service library offered in the Add Data dialogs.",
+      "additionalProperties": false,
+      "properties": {
+        "builtins": {
+          "type": "boolean",
+          "description": "Set to false to hide the built-in starter services."
+        },
+        "catalog": {
+          "type": "array",
+          "description": "Curated service library entries.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "kind", "fields"],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/nonBlank",
+                "description": "Unique entry id."
+              },
+              "name": {
+                "$ref": "#/$defs/nonBlank",
+                "description": "Display name."
+              },
+              "kind": {
+                "enum": ["wms", "wfs", "wmts", "xyz", "arcgis", "csw"],
+                "description": "Service type."
+              },
+              "category": {
+                "type": "string",
+                "description": "Optional grouping label."
+              },
+              "fields": {
+                "type": "object",
+                "minProperties": 1,
+                "description": "Form field values for the service kind.",
+                "additionalProperties": {
+                  "type": ["string", "number", "boolean"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "sharing": {
+      "type": "object",
+      "description": "Project sharing and collaboration endpoints.",
+      "additionalProperties": false,
+      "properties": {
+        "shareUrl": {
+          "type": "string",
+          "pattern": "^(off|https?://\\S+)$",
+          "description": "Projects server URL, or \"off\" to remove Share and the Gallery."
+        },
+        "collabUrl": {
+          "type": "string",
+          "pattern": "^wss?://\\S+$",
+          "description": "Live collaboration relay URL."
+        },
+        "embedOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(\\*|https?://[^/\\s]+)$"
+          },
+          "uniqueItems": true,
+          "description": "Origins allowed to drive a framed app; \"*\" for any."
+        }
+      }
+    },
+    "geolens": {
+      "type": "object",
+      "description": "GeoLens integration.",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^(off|same-origin|https?://\\S+)$",
+          "description": "Default GeoLens server URL, \"same-origin\", or \"off\"."
+        }
+      }
+    },
+    "ai": {
+      "type": "object",
+      "description": "AI assistant settings. Proxy URLs and tokens stay in server environment, never here.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Expose the same-origin AI assistant route."
+        },
+        "model": {
+          "$ref": "#/$defs/nonBlank",
+          "description": "Default assistant model id."
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Application branding.",
+      "additionalProperties": false,
+      "properties": {
+        "appName": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 60,
+          "description": "App name shown in the toolbar and tab title."
+        },
+        "welcome": {
+          "type": "boolean",
+          "description": "Set to false to skip the first-launch welcome wizard."
+        }
+      }
+    }
+  }
+}

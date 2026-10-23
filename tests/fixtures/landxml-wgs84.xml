@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2">
+  <CoordinateSystem name="WGS 84" epsgCode="4326" />
+  <CgPoints>
+    <CgPoint name="MON-1" code="CONTROL">42.3600 -71.0600 18</CgPoint>
+    <CgPoint name="MON-2" code="CONTROL">42.3650 -71.0500 22</CgPoint>
+  </CgPoints>
+  <Surfaces>
+    <Surface name="Existing Ground">
+      <Definition surfType="TIN">
+        <Pnts>
+          <P id="1">42.3580 -71.0640 10</P>
+          <P id="2">42.3580 -71.0540 16</P>
+          <P id="3">42.3660 -71.0640 20</P>
+          <P id="4">42.3660 -71.0540 28</P>
+        </Pnts>
+        <Faces>
+          <F>1 2 3</F>
+          <F>2 4 3</F>
+          <F>-1 3 4</F>
+          <F>1 2 999</F>
+        </Faces>
+      </Definition>
+    </Surface>
+  </Surfaces>
+  <Alignments>
+    <Alignment name="Main Road" staStart="0" length="1200">
+      <CoordGeom>
+        <Line>
+          <Start>42.3570 -71.0650 12</Start>
+          <End>42.3610 -71.0600 15</End>
+        </Line>
+        <Curve rot="ccw">
+          <Start>42.3610 -71.0600 15</Start>
+          <Center>42.3650 -71.0600 17</Center>
+          <End>42.3650 -71.0560 19</End>
+        </Curve>
+        <Line>
+          <Start>42.3650 -71.0560 19</Start>
+          <End>42.3680 -71.0520 24</End>
+        </Line>
+      </CoordGeom>
+      <Profile>
+        <ProfAlign name="Finished Grade">
+          <PVI>0 12</PVI>
+          <PVI>600 18</PVI>
+          <PVI>1200 24</PVI>
+        </ProfAlign>
+      </Profile>
+    </Alignment>
+  </Alignments>
+</LandXML>

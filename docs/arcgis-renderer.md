@@ -1,0 +1,468 @@
+# ArcGIS renderer
+
+Choose **View → Rendering engine → ArcGIS** to render a project with the
+[ArcGIS Maps SDK for JavaScript](https://developers.arcgis.com/javascript/latest/).
+The engine is also available from the rendering-engine menu in each split pane.
+MapLibre remains the default. Projects save the primary and secondary renderer
+choices, and the Python and iframe APIs accept `arcgis` as a renderer name.
+
+## Nothing is bundled
+
+The SDK is **not** part of GeoLibre's build. `@arcgis/core` is 84 MB unpacked
+across 18,810 files, and bundling it would grow the web build, the Python wheel
+and the desktop installers by tens of megabytes. Instead the engine imports the
+modules it needs from Esri's versioned ES-module CDN the first time an ArcGIS
+pane mounts (`https://js.arcgis.com/<version>/@arcgis/core/…`), the same way
+the PostGIS and Sedona SQL engines are fetched from jsDelivr. Only the adapter
+code in `packages/map/src/arcgis-*.ts` ships with GeoLibre.
+
+Consequences:
+
+- The first ArcGIS pane needs network access, on the desktop too. The service
+  worker caches the SDK modules and stylesheet after first use
+  (`geolibre-arcgis-sdk` in `vite.config.ts`), so the SDK itself boots offline
+  afterwards like the other CDN-loaded engines. Esri basemaps, tile services
+  and other remote layers still need the network, as on every renderer.
+- The SDK version is pinned in `packages/map/src/arcgis-sdk.ts`
+  (`ARCGIS_SDK_VERSION`). Bumping it is a deliberate change; see
+  [Maintenance](maintenance.md#arcgis-maps-sdk-for-javascript-loaded-from-esris-cdn).
+- Esri documents the ES-module CDN as a prototyping path and logs "Only use ES
+  modules from ArcGIS CDN for testing" once per session; its supported
+  production path is an npm build, which is exactly what this integration
+  avoids for size. The first load pulls a few hundred small modules, so the
+  first ArcGIS pane of a session takes longer to appear than a Mapbox one.
+- The content-security policies of the desktop app (`tauri.conf.json`) and the
+  Docker image (`docker/nginx.conf`) allow-list `https://js.arcgis.com/` in
+  `script-src` and `font-src` (the SDK's icon and text fonts). The SDK's
+  stylesheet is fetched as text and inlined, since neither policy allows
+  external stylesheets.
+
+## API key
+
+The renderer works without a key. New projects then show keyless **Esri World
+Imagery** as the ArcGIS basemap; a basemap you pick from the shared
+**Basemaps** panel is translated into tiles the SDK can draw (the same
+translation the 3D globe uses), with World Imagery as the fallback for a style
+that has no tiled form. Your layers draw through the SDK's own layer classes.
+
+An **ArcGIS API key** adds Esri's basemap styles. Create one in your ArcGIS
+account (ArcGIS Online or ArcGIS Location Platform) under **Content → New item
+→ Developer credentials → API key credentials** with the **Basemaps**
+privilege, then paste it into **Settings → Environment Variables → ArcGIS API
+key** and click **Save Settings**. Like the Mapbox and Cesium tokens, it is
+stored on this device, outside the project file. Alternatively, launch the
+development server with `ARCGIS_API_KEY` in its environment. Key changes
+recreate ArcGIS maps. Requests made with the key are metered against its
+account and subject to Esri's terms; basemap requests have a generous free
+allotment.
+
+With a key, new projects use **ArcGIS Streets** for the ArcGIS renderer. The
+**Change background** picker offers Esri's Streets, Navigation, Topographic,
+Light Gray, Dark Gray, Imagery, Imagery (no labels), Oceans, Outdoor and
+OpenStreetMap styles when ArcGIS is active
+and a key is configured. Selecting one preserves the camera. The
+choice is saved as `preferences.map.arcgisBasemap` (an Esri basemap style id
+such as `arcgis/streets`, `arcgis/imagery` or `osm/standard`); selecting a
+basemap from the shared **Basemaps** panel while ArcGIS is active clears it,
+so the pane follows the shared MapLibre/Cesium basemap again. Without a key the
+override draws Esri World Imagery instead.
+
+## Supported paths
+
+- Native GeoJSON, including the vector importer's materialized data, FlatGeobuf
+  and GeoParquet imports, and ArcGIS feature layers already loaded into the
+  project. Point, line and polygon symbology, fill and stroke opacity, circle
+  radius, labels (field or expression, size, colour, halo, placement, offset,
+  rotation, case transform), and the data-driven colour modes — categorized,
+  graduated, rule-based, expression and simplestyle — all render. The SDK has no
+  MapLibre Style Spec, so the engine evaluates the same MapLibre expressions
+  `@geolibre/core` builds for the 2D map _per feature_ with the style-spec
+  engine and bakes the answers into the features; the layer's renderer is a
+  unique-value renderer over the resulting symbol keys. Layer filters, quick
+  filters, the time slider's filter and the embed filter are applied the same
+  way before features reach the SDK. Zoom-dependent expressions (metre-unit
+  strokes, per-rule zoom ranges) are re-evaluated when the integer zoom
+  changes.
+- The symbology pack draws through companion layers built from the filtered
+  features: the **inverted fill** as a world mask with the polygons cut out
+  (clamped to the Web Mercator latitude limit, as on Mapbox), the **geometry
+  generator** (centroids, bounding boxes, convex hulls, buffers) in its own
+  fill, stroke and proportional circle size, and **line decorations** as a CIM
+  marker line that repeats the shape at the style's spacing and turns arrows
+  to follow the line (a flat `MapView` only; the SDK draws no CIM line symbols
+  in a scene). **Label de-duplication** labels the aggregated points from a
+  label-only layer. The label size, colour, opacity and visibility
+  expressions are evaluated per feature and grouped into one label class per
+  resolved size and colour, since the SDK's label symbols are not
+  data-driven (a continuous ramp is binned into a few dozen classes). The layer's
+  opacity also applies to its labels, so an opacity expression cannot make a
+  label more opaque than its layer. Companion layers are not identified or
+  selected.
+- HTTP(S) raster tiles (XYZ, WMTS tile templates), WMS (the GetMap template is
+  split into the SDK's `WMSLayer` description), and vector tiles with named
+  source layers (drawn by the SDK's `VectorTileLayer` from the same style
+  layers the Mapbox engine compiles). Markers, line decorations and fill
+  patterns are GeoLibre's generated images, baked into a sprite sheet the SDK
+  reads through a request interceptor; labels use Arial from Esri's public
+  glyph service, so they need the network. Past a source's maximum zoom the
+  SDK magnifies its last tiles, patterns and decoration spacing with them,
+  where MapLibre keeps them crisp. A raster template
+  `WebTileLayer` cannot express — a `{bbox-epsg-3857}` request, a TMS scheme,
+  `{-y}` or `{quadkey}`, a 512 px tile size, a source `minzoom`/`maxzoom`, or
+  several templates — draws through a custom tile layer that requests each
+  tile as MapLibre would, cropping 512 px tiles and overzooming past `maxzoom`.
+  A template on a registered MapLibre protocol (the desktop app's CORS-exempt
+  `geolibre-wms://` WMS fetcher, say) is asked of that protocol's handler, as
+  the globe does.
+- **Add Data → ArcGIS Layer** stores cached MapServer and ImageServer services
+  as tile templates and dynamic ones (sublayers, a rendering rule, no usable
+  cache) as `/export` / `/exportImage` bounding-box templates, both drawn as
+  above. FeatureServer layers, and any service recorded as `type: "arcgis"`
+  (hand-authored or Python records), draw through the SDK's own
+  `FeatureLayer`, `TileLayer`, `MapImageLayer` and `ImageryLayer`; a single
+  MapServer sublayer (`MapServer/2`) is a `FeatureLayer` too. A service layer
+  draws with its layer style, as on the 2D map; its identified features can be
+  highlighted, and its features read back as GeoJSON (paged past the service's
+  per-request record limit, up to 50 requests). A
+  FeatureServer layer's filters (quick filters, the expression filter, the time
+  and embed filters) become the service's SQL `definitionExpression`; a filter
+  with no SQL form is reported in the map's banner and the service draws
+  unfiltered.
+- Georeferenced images, placed by their four corners through a control-point
+  georeference, so rotated and skewed fits land where they do on MapLibre.
+- Shared layer/group visibility, opacity and ordering; synchronized or
+  independent split-view cameras; the project's zoom and bounds constraints.
+- The Style panel's raster brightness, contrast, saturation and hue sliders,
+  as the SDK's CSS-filter `effect` on raster layers, and every layer's blend
+  mode as the SDK's `blendMode` (`add` is the SDK's `plus`). A `SceneView`
+  ignores the raster effects, and blends only tiled and imagery layers.
+- Geo Editor text markers and annotation text, drawn as text at their points
+  in their own colours.
+- Feature picking (click identify with the layer's popup template and field
+  visibility; **Identify visible layers** groups every layer's hits, including
+  WMS GetFeatureInfo, Time Slider pixels, COG/NetCDF pixels and DuckDB
+  layers), hover map tips (the layer's hover fields, picked from the store's
+  features as on Mapbox), geotagged-photo popups on a click without the
+  Identify tool, selection highlighting, extent
+  drawing, draggable placement, and engine-level image capture. **Layers →
+  Select features** (single, rectangle, polygon, freehand and radius) runs the
+  same gestures as on MapLibre on the primary map. The status bar's pointer
+  elevation reads the ground under the cursor from the scene's elevation
+  surface, or (with consent) the same remote lookup the other maps use.
+- **GPS Tracking** (the position marker, accuracy circle and track, following
+  the position), **Add comment**, the Georeferencer's **Link on map**, and the
+  Pixel Time Series and NetCDF sample markers work through the engine's render
+  surface and click events.
+- Plugin controls hosted on the map receive MapLibre's `move`, `zoom`,
+  `rotate`, `click` and `mousemove` events, so readouts such as View State and
+  the minimap follow the camera. Story chapter layer fades run over the
+  chapter's transition.
+- **Search places** flies to places and coordinates with a temporary marker,
+  and frames H3 cells with a filled outline. Clearing the search removes its
+  highlight without removing a selection made elsewhere.
+- Point heatmaps use the shared color ramp, radius, intensity and optional
+  weight field in both 2D and 3D. Esri's density kernel differs from MapLibre's,
+  so the visual density can differ; SceneView caps the radius at 112 points.
+  Clustering uses native count labels and the configured radius and maximum
+  zoom in 2D. Built-in and custom SVG fill patterns also render in 2D, with
+  per-feature fill opacity and independent outlines.
+- The built-in controls the **Controls** menu governs, as the SDK's own widgets:
+  fullscreen, compass (resets rotation), zoom (navigation) and locate
+  (geolocate), plus a globe/Mercator toggle and terrain (see
+  [2D and 3D](#2d-and-3d)). The scale bar is the 2D map's own: it measures
+  around the view's centre with the active body's radius, in metric, imperial
+  or nautical units, on a flat map and in a scene. Attribution is drawn by the view
+  itself (`attributionVisible`); Esri requires it and it cannot be hidden.
+- The **Print Layout** atlas frames each page by driving the view's camera
+  north up, with the fit MapLibre's `fitBounds` computes, and waits for the
+  view to finish drawing before the capture. The mask outside the current
+  feature is painted onto the capture rather than drawn on the live map, and
+  a fixed scale is corrected up to three times, aiming for 0.5 % of the
+  requested one, since the SDK rounds the zoom it is given.
+- **Controls → Layer Control** toggles the native ArcGIS layer list, enabled by
+  default on the primary map like the shared plugin. Its visibility
+  toggles update the project and the sidebar, and sidebar changes update the
+  list. Mixed-geometry GeoJSON records have one entry for all their parts.
+  Temporary search and selection highlights are omitted. Split panes keep the
+  control hidden by default and retain their independent layer visibility.
+- Plugins that only add store layers: **ArcGIS Hub**, **Socrata** and **CKAN**
+  search, the **OSM Downloader**, **Source Cooperative**, **Hugging Face**,
+  **Earthdata GIS**, and the **Weather** overlays (Clouds and Precipitation).
+- Plugins built on a MapLibre control, through the map the host hands its
+  controls (see [Plugin controls](#plugin-controls)): the **Web Services**
+  catalogs (FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas, USGS National Map),
+  **Historical Imagery** (Esri Wayback), the **DGGS** grids (H3, S2, A5,
+  DGGRID, DGGAL, OLC, Geohash, Tilecode) and the **Graticule**, and the
+  imagery catalogs with footprints (STAC, OpenAerialMap, Vantor, Fields of the
+  World, Satellite Embeddings, IGN LiDAR HD, GeoLens, USGS 3DEP). Footprint clicks and
+  hover, selection outlines and box drawing work; a GeoLens raster that needs
+  an API key still requires MapLibre.
+- **USGS NLDI** and **Reverse Geocode**, whose popups are placed through the
+  control map's `project()` (`map-popup.ts` in the plugins package) in place of
+  MapLibre's `Popup`, which needs a MapLibre map.
+- **Controls** menu entries and plugins whose plugin needs a MapLibre, Mapbox
+  or Cesium map (Atmospheric Effects, Sun, Route Animation, Flight Simulator,
+  Directions, the Geo Editor, Annotations, Swipe, Street View,
+  Timelapse and others) are greyed out with the reason while ArcGIS is the
+  primary renderer.
+- If the SDK cannot be loaded from the CDN, the map's banner offers **Retry**,
+  which reloads the page: the browser keeps a failed module import for the life
+  of the page, so only a reload can fetch it again.
+
+## 2D and 3D
+
+The SDK draws flat maps and 3D scenes through two different view classes, so
+the ArcGIS pane picks one from the project's map preferences and rebuilds the
+view when the choice changes. The camera (centre, zoom, bearing and pitch)
+carries over.
+
+| Projection | Terrain   | View                               |
+| ---------- | --------- | ---------------------------------- |
+| Globe      | off or on | `SceneView`, global (a 3D globe)   |
+| Mercator   | on        | `SceneView`, local (a flat 3D map) |
+| Mercator   | off       | `MapView` (a flat 2D map)          |
+
+New projects use the globe projection, so an ArcGIS pane opens as a globe.
+The globe button under the compass switches projection (as on MapLibre, a
+split pane's button only switches that pane), and **Controls → Terrain** turns
+terrain on or off. The 3D modules (`views/SceneView` and the elevation layers, close to a
+megabyte) are not part of the first load: a flat ArcGIS map fetches them in the
+background once the page is idle, so the first switch to a globe does not wait
+on the network. While a new view loads, the previous one stays on screen and is
+swapped out once the new view's basemap has drawn; data layers and terrain
+finish loading on the new view.
+
+In a scene:
+
+- The camera tilts (right-drag, or the project's saved pitch), limited by the
+  project's maximum pitch. The status bar shows the camera's altitude.
+- Lighting follows the camera (the SDK's virtual lighting), so the whole
+  visible map is lit. The SDK's default simulated sun would leave part of the
+  globe on the night side.
+- Terrain drapes the map over Esri's
+  [World Elevation](https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer)
+  service. It needs no API key. **Controls → Terrain exaggeration** scales the
+  heights.
+- **Controls → Terrain exaggeration** also accepts a local or remote COG DEM
+  in EPSG:3857 or EPSG:4326, using the same reader as the other engines.
+  The local file stays on the device. The source and exaggeration survive
+  switches between flat maps, local scenes and the globe during the session;
+  they are not saved in the project. Missing DEM pixels and areas outside the
+  COG use zero metres. **Use global terrain** restores Esri's World Elevation.
+- Polygon layers whose style extrudes (the Style panel's **3D extrusion**) draw as
+  extruded 3D shapes with the same height and colour as MapLibre's
+  fill-extrusion: the height property times the height scale (or the advanced
+  height expression) is the top and the base height the bottom, and the colour
+  follows the layer's categorized, graduated or rule-based symbology, the
+  advanced colour expression, or the extrusion colour. On a 2D `MapView` they
+  stay flat fills.
+- Identify, selection highlighting, extent drawing and capture work as in 2D.
+  The project's zoom range becomes the scene's altitude range on a globe.
+- **3D (Z values)** places vector coordinates at their absolute altitude, with
+  the configured vertical scale and offset. Selection highlights use the same
+  transformed coordinates. Source data stays unchanged.
+
+## Map projections
+
+MapLibre and Mapbox draw only Web Mercator and a globe, but the SDK can draw a
+flat `MapView` in any projected coordinate system it knows by well-known ID
+(issue #2708). **Settings → Map → ArcGIS map projection** offers Spilhaus
+(54099), Equal Earth (8857), Robinson (54030), Winkel Tripel (54042),
+Mollweide (54009), Plate Carrée (4326) and the Arctic (3995) and Antarctic
+(3031) polar stereographic projections, plus **Custom WKID…** for any other
+Esri or EPSG code. The choice is saved as `preferences.map.arcgisWkid`; absent
+means Web Mercator. Picking a projection turns the globe off, since only the
+flat map uses it, and the globe button still switches to the globe and back.
+
+In another projection:
+
+- Vector layers (GeoJSON, feature services, the symbology pack's companion
+  layers) are reprojected on the client by the SDK's `projectOperator`, which
+  loads with the projected map only.
+- **COGs are warped into the projection** (`arcgis-reprojected-tiles.ts`). The
+  SDK cannot reproject a tile layer, so the COG layer tiles the view's
+  projection instead and fills each tile from the same Web Mercator tiles
+  `cog-tiler-wasm` renders on a Web Mercator map, with the same bands,
+  stretch and colormap: a 33 × 33 grid of the tile's points is projected to
+  longitude/latitude and the pixels between them are interpolated. Cells that
+  straddle a seam of the projection (Spilhaus cuts the land) are projected
+  pixel by pixel, and each tile reads the source zoom that matches how far
+  the projection stretches it there. Web Mercator tiles stop at ±85.05°, so
+  the polar caps above that latitude stay empty.
+- **No basemap is drawn.** Esri basemap styles and XYZ tiles are not warped,
+  so the Blank background colour shows instead. Other tiled data layers (XYZ,
+  WMS tiles, PMTiles, Zarr) do not draw either.
+- The camera, pointer coordinates, identify, selection and extent drawing
+  convert between the projection and longitude/latitude, so the shared
+  camera, other split panes and saved views stay in degrees.
+- The flat map stays a `MapView` even with terrain on, since a local scene
+  cannot use the projection; terrain applies again on the globe or in Web
+  Mercator. An unknown WKID shows the SDK's error over the map.
+- MapLibre, Mapbox and Cesium panes ignore the setting.
+
+## Adding data
+
+Files dropped onto the map, the host importers behind **Add Data → FlatGeobuf
+Layer / GeoParquet Layer / KML / KMZ / Delimited Text**, and the **XYZ**,
+**WMS**, **WMTS** and **ArcGIS Layer** dialogs all work on the ArcGIS map. The
+**Vector Layer** panel uses the shared store bridge for bounded vector imports;
+large streaming GeoParquet still requires MapLibre. **Raster Layer** opens a
+host dialog for a local GeoTIFF or HTTP(S) URL.
+
+GeoTIFF/COG files and URLs render through the existing WebAssembly COG tiler
+and a native ArcGIS tile layer in 2D and 3D. Saved RGB bands, continuous color
+ramps, stretch, gamma, nodata and opacity are honored; edit them in the Style
+panel. Browser files last for the session; desktop local paths can be reopened
+on the same device. GPU-only classified/custom color ramps still require the
+MapLibre raster control.
+
+## deck.gl layers
+
+**Add Data → Deck.gl Layer / 3D Model** works on the primary flat map and
+local 3D scene. The shared overlay renders saved visualizations and models,
+follows visibility, opacity and ordering among deck.gl layers, and releases
+its GPU resources on a renderer switch. The shared overlay is one native SDK
+layer; deck.gl layers cannot be interleaved individually with native ArcGIS
+layers. Native feature Z rendering stays owned by ArcGIS.
+
+The adapter uses the MIT-licensed compositor from `@deck.gl/arcgis` 9.4.0
+with CDN-loaded SDK classes, avoiding a bundled `@arcgis/core` dependency.
+Local 3D rendering uses the upstream experimental camera approximation: it can
+drift at extreme camera angles and does not share the terrain depth buffer.
+Global scenes and secondary panes do not host the overlay; the menus and layer
+badges reflect that restriction. Switch back to a flat map or local scene to
+restore the layers.
+
+## Tile archives
+
+**Add Data → PMTiles** loads remote vector (MVT) and raster archives directly
+through the shared PMTiles reader. Native vector tiles retain polygon, line and
+point styles; raster archives use native tiled imagery and resample their last
+native level when zooming in. Existing in-memory archives in the shared registry
+also work. **Add Data → MBTiles** uses the desktop file reader for both vector
+and raster tiles. MBTiles still requires the desktop app.
+
+The vector adapter owns a request interceptor per layer and removes it when the
+layer is replaced or removed. Tiles are read on demand, including cancellation;
+synthetic tile addresses never go to the network. MLT encoding and archive text
+labels are not supported. The adapter reads PMTiles zoom limits from the archive
+header, including for older projects that omit those limits.
+
+Each vector source layer uses a separate native VectorTileLayer so its style and
+visibility can be controlled independently. The PMTiles reader is shared, but
+the SDK decodes tiles separately for each native layer. Archives with many source
+layers therefore use more decoding work and memory than the shared MapLibre
+source; enable only the layers needed for the current view.
+
+## Zarr and NetCDF grids
+
+**Add Data → Zarr** loads numeric Zarr v2/v3 variables through native tiled
+imagery. The reader supports regularly spaced, one-dimensional spatial axes,
+ascending or descending latitude, 0–360° longitude, CF scale/offset and fill
+values, and integer selectors for other dimensions. The Time Slider uses the
+same selector path. Projected grids require a CRS or proj4 definition through
+the import API. Curvilinear coordinates and automatic multiscale selection are
+not supported; a pyramid level can be selected by its variable path. The plugin
+`queryZarrLayer` API (point values and region statistics) is not yet supported
+for native ArcGIS grids.
+
+**Add Data → NetCDF** uses the existing file dialog. Image slices render as
+native image overlays; kerchunk-backed grids share the tiled Zarr reader.
+Reference manifests are preserved in the layer source for project restoration.
+Registered local Zarr stores remain session-local. Reads return bounded windows
+and retain at most 32 MiB of compressed data per layer; coarse views of large
+untiled arrays can still require many chunk requests.
+
+## Plugin controls
+
+A plugin control mounted on the ArcGIS map receives a MapLibre-shaped map.
+Camera, projection, pointer events and the DOM go through the view. Its style
+calls (`addSource`, `addLayer`, `setPaintProperty`, `getStyle`, ...) record
+into a style that is never drawn by the SDK directly; instead:
+
+- A layer the plugin mirrors into the GeoLibre store (a Web Services WMS
+  layer, footprints registered with `registerExternalNativeLayer`) is drawn by
+  the engine from that store record, like any other layer.
+- Any other GeoJSON layer (a grid, a selection outline, a draw preview) is
+  drawn as graphics in one overlay above the project layers. Fill, line,
+  circle and text layers are drawn, with filters, zoom ranges, data-driven
+  or zoom expressions, and text anchors and offsets evaluated per feature as
+  MapLibre evaluates them. Icons, fill patterns, extrusions and text along
+  lines are not drawn, and labels have no collision handling.
+- Layer-scoped events (`map.on("click", layerId, ...)`, `mouseenter`,
+  `mouseleave`) and a point `queryRenderedFeatures` answer from whichever of
+  those two draws the layer. A box query answers empty.
+- `dragPan.disable()` stops the view panning, so a control's own box or line
+  drawing receives the drag. Feature state, images and the other interaction
+  handlers are inert.
+
+A plugin that draws through custom layers, canvas sources, `Marker`/`Popup`,
+raster or vector-tile sources it does not mirror, or MapLibre-only APIs still
+declares no ArcGIS support. Plugins read this map through `getControlMap` in
+`packages/plugins/src/plugins/style-map.ts`.
+
+## Adapted plugin panels
+
+**LiDAR**, **DuckDB** and ordinary **3D Tiles** render through deck.gl on the
+primary flat map or local scene. Google Photorealistic and I3S tiles still
+require another renderer. The global globe and secondary panes do not
+host these overlays. LiDAR keeps the existing COPC/EPT streaming and styling
+controls; its terrain toggle delegates to the host terrain setting. Saved URL
+LiDAR and 3D Tiles layers restore when the view is rebuilt. Browser-local point
+cloud files and cached DuckDB query results retain their existing session
+lifetime; reopen the source/query when necessary. Scene overlays have the same
+experimental alignment and depth limitations described above.
+
+## Not supported yet
+
+- Gaussian splats and Cesium-only sources, STAC search results and video
+  overlays. **Add Data** greys these out while ArcGIS is the primary
+  renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
+  plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
+  banner too.
+- An Esri vector tile service's own icon and label layers (its stored style
+  keeps no sprite or glyphs), in any view.
+- Navigation limits differ slightly from MapLibre's: a view that settles past
+  the zoom range or the restricted bounds eases back inside them (on a flat
+  map the wheel also stops at the zoom limits), the bounds hold the view's
+  centre rather than the whole viewport, and the SDK always wraps around the
+  antimeridian, so turning off world copies only clamps the views the app
+  applies.
+- Measure and the geometry editor draw through the MapLibre/Mapbox style API;
+  the Controls menu greys Measure out, and editing a layer's geometry says the
+  renderer does not support it.
+- Diagrams and the label priority expression (the SDK has no per-feature
+  label priority); clustering, fill patterns, blend modes and line
+  decorations in a `SceneView`; extrusion on a flat map. The Style panel names
+  whichever of these a layer turns on.
+- Arbitrary MapLibre custom layers and rendering APIs still require adapters.
+  The primary view hosts DOM controls with navigation methods; Vector, LiDAR,
+  DuckDB and 3D Tiles have explicit rendering bridges. Layer Control delegates
+  to ArcGIS's native layer list.
+- Video overlays. The SDK does not support clustering or picture-fill patterns
+  in SceneView: scenes retain individual point symbols and solid polygon fills.
+  Heatmap labels are also unsupported in scenes.
+  Markers (built-in shapes, custom SVG, KML icons) do draw,
+  as picture symbols baked from the same sprites MapLibre uses.
+
+## Testing
+
+`tests/arcgis-layers.test.ts` covers the layer compiler and basemap planner,
+`tests/arcgis-engine.test.ts` drives the engine against a fake SDK, and
+`tests/arcgis-renderer.test.ts` covers the project format, settings and loader
+boundaries. None of them touch the network. `e2e/arcgis-renderer.spec.ts` is
+the opt-in browser check against Esri's real CDN: set `ARCGIS_API_KEY` for
+the full suite, or `ARCGIS_E2E=1` for keyless coordinate and H3 search coverage.
+With `ARCGIS_E2E=1`, `e2e/arcgis-offline.spec.ts` also verifies a fresh keyless
+boot under the production Tauri CSP, cached SDK/inline-data startup with the
+browser offline, and a visible error when the CDN is unavailable on first use.
+The CSP test runs in Chromium with the exact policy header; it does not replace
+native webview testing on each desktop platform.
+
+## License and terms
+
+The ArcGIS Maps SDK for JavaScript is distributed by Esri under its own
+[terms of use](https://developers.arcgis.com/javascript/latest/licensing/), not
+an open-source license. GeoLibre does not redistribute it; the SDK is fetched
+from Esri's CDN by the user's browser at runtime, and use of Esri's basemaps and
+location services is governed by the account the API key belongs to.

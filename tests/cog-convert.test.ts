@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
-import { GeoTiffReader } from "geolibre-wasm";
+import { CogBuilder, GeoTiffReader } from "geolibre-wasm";
 import {
   COG_WASM_COMPRESSIONS,
   convertGeoTiffToCog,
+  convertRasterDataToCog,
   initCogWasm,
   isTiledGeoTiff,
   readGeoTiffInfo,
@@ -70,6 +71,48 @@ describe("convertGeoTiffToCog", () => {
     }
   });
 
+  it("encodes in-memory Float32 processing results without corrupting sample bytes", async () => {
+    const expected = Float32Array.from([0, 250.25, 282.2, 322.89]);
+    const cog = await convertRasterDataToCog({
+      bands: [expected],
+      width: 4,
+      height: 1,
+      originX: 2.8,
+      originY: 47.35,
+      resX: 0.001,
+      resY: 0.001,
+      nodata: -99999,
+      geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+    });
+    const reader = new GeoTiffReader(cog);
+    try {
+      assert.deepEqual(Array.from(reader.read_band_f32(0)), Array.from(expected));
+      assert.equal(reader.epsg, 4326);
+      assert.deepEqual(Array.from(reader.geo_transform()), [2.8, 0.001, 0, 47.35, 0, -0.001]);
+    } finally {
+      reader.free();
+    }
+  });
+
+  for (const crsCode of [32767, 32768, 65535]) {
+    it(`rejects user-defined or private CRS code ${crsCode}`, async () => {
+      await assert.rejects(
+        convertRasterDataToCog({
+          bands: [Float32Array.from([1])],
+          width: 1,
+          height: 1,
+          originX: 0,
+          originY: 1,
+          resX: 1,
+          resY: 1,
+          nodata: null,
+          geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: crsCode },
+        }),
+        new RegExp(`cannot preserve user-defined or private CRS code ${crsCode}`),
+      );
+    });
+  }
+
   // Raster to COG lets the user pick a codec on the web, so every advertised
   // choice has to survive an Int16 source — webp/jpeg/jpegxl do not (they reject
   // anything but 8-bit samples) and zstd/raw are not implemented at all, which
@@ -91,6 +134,61 @@ describe("convertGeoTiffToCog", () => {
       }
     });
   }
+
+  it("skips the overview pyramid when asked, for categorical rasters", async () => {
+    const { fromArrayBuffer, writeArrayBuffer } = await import("geotiff");
+    // 600 x 600 is large enough to get averaged overviews by default.
+    const codes = new Uint8Array(600 * 600).map((_, i) => (i % 2 ? 1 : 3));
+    const tiff = new Uint8Array(
+      writeArrayBuffer(codes, {
+        width: 600,
+        height: 600,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const imageCount = async (bytes: Uint8Array) =>
+      (
+        await fromArrayBuffer(
+          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+        )
+      ).getImageCount();
+    assert.ok((await imageCount(await convertGeoTiffToCog(tiff))) > 1);
+    const flat = await convertGeoTiffToCog(tiff, { overviews: false });
+    assert.equal(await imageCount(flat), 1);
+    assert.equal(await isTiledGeoTiff(flat), true);
+  });
+
+  it("keeps a user-defined projection that has no EPSG code (#3130)", async () => {
+    // South Africa's Lo29 (ESRI:102567): GDAL tags it ProjectedCSType 32767 with
+    // the datum's GeographicType 4148, which used to read back as EPSG:4148.
+    const lo29 =
+      "+proj=tmerc +lat_0=0 +lon_0=29 +k_0=1 +x_0=0 +y_0=0 +a=6378137 +rf=298.257223563 +units=m +no_defs";
+    const builder = new CogBuilder(16, 16, 1);
+    builder.set_proj_string(lo29);
+    builder.set_origin(20000, -2800000, 10);
+    builder.set_overview_levels(new Uint32Array());
+    const source = builder.write_f32(new Float32Array(16 * 16).fill(1));
+    builder.free();
+    // CogBuilder writes the datum as user-defined (32767). Retag it as GDAL
+    // does, GeographicTypeGeoKey (2048) = 4148, the case that was misread.
+    const words = new Uint16Array(source.buffer, source.byteOffset, source.byteLength >> 1);
+    const entry = words.findIndex(
+      (w, i) => w === 2048 && words[i + 1] === 0 && words[i + 2] === 1 && words[i + 3] === 32767,
+    );
+    assert.ok(entry >= 0, "GeographicTypeGeoKey entry not found");
+    words[entry + 3] = 4148;
+
+    const reader = new GeoTiffReader(await convertGeoTiffToCog(source));
+    try {
+      assert.equal(reader.epsg, undefined);
+      assert.equal(reader.proj_string, lo29);
+    } finally {
+      reader.free();
+    }
+  });
 
   it("defaults to deflate, which compresses better than storing raw", async () => {
     const [deflate, none] = await Promise.all([

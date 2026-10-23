@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import json
 import sys
 import types
 
@@ -199,6 +200,65 @@ def test_run_algorithm_builds_params(m, monkeypatch):
     assert captured["params"] == {"id": "buffer", "params": {"distance": 100}}
 
 
+def test_run_model_builder_builds_request(m, monkeypatch):
+    graph = {"nodes": [], "edges": []}
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs) or {"outputLayerIds": []}
+        ),
+    )
+
+    assert m.run_model_builder(graph, timeout=42) == {"outputLayerIds": []}
+    assert captured == {
+        "method": "runModelBuilder",
+        "params": {"graph": graph},
+        "kwargs": {"timeout": 42},
+    }
+
+
+def test_list_whitebox_tools_builds_request(m, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs) or []
+        ),
+    )
+
+    assert m.list_whitebox_tools(timeout=12) == []
+    assert captured == {
+        "method": "listWhiteboxTools",
+        "params": None,
+        "kwargs": {"timeout": 12},
+    }
+
+
+def test_run_whitebox_tool_resolves_layer_handles(m, monkeypatch):
+    layer = m.get_layer(m.add_geojson({"type": "FeatureCollection", "features": []}, name="Input"))
+    captured = {}
+    monkeypatch.setattr(
+        m,
+        "request",
+        lambda method, params=None, **kwargs: (
+            captured.update(method=method, params=params, kwargs=kwargs)
+            or {"logs": [], "resultLayerIds": []}
+        ),
+    )
+
+    m.run_whitebox_tool("centroids", {"input": layer, "text_output": False}, timeout=45)
+
+    assert captured["method"] == "runWhiteboxTool"
+    assert captured["params"] == {
+        "id": "centroids",
+        "params": {"input": layer.id, "text_output": False},
+    }
+    assert captured["kwargs"] == {"timeout": 45}
+
+
 def test_get_features_wraps_in_feature(m, monkeypatch):
     monkeypatch.setattr(
         m,
@@ -362,6 +422,124 @@ def test_python_project_egress_redacts_credentials(m, tmp_path):
     assert m.to_project(keep_credentials=True)["plugins"]["settings"]
 
 
+def test_redact_credentials_keeps_only_non_secret_environment_variables():
+    """Same rule as the app: rows travel only when marked ``secret: false``."""
+    safe = redact_credentials(
+        {
+            "preferences": {
+                "environmentVariables": [
+                    {"key": "SERVICE_TOKEN", "value": "env-secret", "enabled": True},
+                    {"key": "MARKED", "value": "marked-secret", "enabled": True, "secret": True},
+                    {"key": "ENDPOINT", "value": "https://x", "enabled": True, "secret": False},
+                ]
+            }
+        }
+    )
+    assert safe["preferences"]["environmentVariables"] == [
+        {"key": "ENDPOINT", "value": "https://x", "enabled": True, "secret": False}
+    ]
+
+
+def test_redact_credentials_keeps_the_first_party_map_controls():
+    """Wiping these stripped the legend/colorbar/swipe from every export."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {"legend": {"A": "#111"}},
+                    "maplibre-gl-swipe": {"position": 50},
+                    "maplibre-gl-time-slider": {
+                        "datesUrl": "https://example.com/dates.json",
+                        "sources": [
+                            {
+                                "type": "mosaic",
+                                "id": "acdom",
+                                "url": "https://example.com/{date:YYYYMMDD}_acdom.json",
+                            }
+                        ],
+                    },
+                    "some-third-party-plugin": {"apiKey": "third-party-secret"},
+                }
+            }
+        }
+    )
+    settings = safe["plugins"]["settings"]
+    assert settings["maplibre-gl-components"] == {"legend": {"A": "#111"}}
+    assert settings["maplibre-gl-swipe"] == {"position": 50}
+    assert settings["maplibre-gl-time-slider"] == {
+        "datesUrl": "https://example.com/dates.json",
+        "sources": [
+            {
+                "type": "mosaic",
+                "id": "acdom",
+                "url": "https://example.com/{date:YYYYMMDD}_acdom.json",
+            }
+        ],
+    }
+    # An unknown plugin's blob is free-form and can hold a key, so it still goes.
+    assert "some-third-party-plugin" not in settings
+
+
+def test_redact_credentials_keeps_only_the_geolens_publish_keys():
+    """The GeoLens plugin lists explicit sub-keys, so a stored key never publishes."""
+    saved = {
+        "serverUrl": "https://demo.getgeolens.com",
+        "mapKey": "geolibre-map-0b7d4e1f-6a2c-4f88-9d3e-5c1a2b8e7f90",
+        "layerKeys": {"layer-1": "geolibre-7c2f1c0e-3b0a-4d6e-9a53-1f0d9d6a2b11"},
+    }
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-geolens": {
+                        **saved,
+                        "apiKey": "gl-live-secret",
+                        "session": "bearer-secret",
+                    }
+                }
+            }
+        }
+    )
+    assert safe["plugins"]["settings"]["maplibre-gl-geolens"] == saved
+    assert "secret" not in json.dumps(safe)
+
+
+def test_redact_credentials_drops_the_custom_html_panel():
+    """The HTML panel is hand-authored, so it can carry a credentialed URL."""
+    safe = redact_credentials(
+        {
+            "plugins": {
+                "settings": {
+                    "maplibre-gl-components": {
+                        "legend": {"A": "#111"},
+                        "html": {
+                            "htmls": [{"html": '<img src="https://x/y?api_key=html-secret">'}]
+                        },
+                    }
+                }
+            }
+        }
+    )
+    components = safe["plugins"]["settings"]["maplibre-gl-components"]
+    assert components == {"legend": {"A": "#111"}}
+    assert "html-secret" not in json.dumps(safe)
+
+
+def test_redact_credentials_still_sweeps_a_kept_plugin_blob():
+    """A kept blob gets the same scrub layer configuration gets, not a free pass."""
+    safe = redact_credentials(
+        {"plugins": {"settings": {"maplibre-gl-swipe": {"position": 50, "apiKey": "swipe-secret"}}}}
+    )
+    assert "swipe-secret" not in json.dumps(safe)
+    assert safe["plugins"]["settings"]["maplibre-gl-swipe"]["position"] == 50
+
+
+def test_to_html_keeps_the_composed_map_controls(m):
+    """The documented compose-then-export flow must not lose what it composed."""
+    m.add_legend(legend_dict={"A": "#112233"})
+    assert "#112233" in m.to_html()
+
+
 def test_python_credential_field_registry_matches_js():
     """Every object-key spelling the JS registry strips must be stripped here too."""
     safe = redact_credentials(
@@ -395,6 +573,26 @@ def test_python_credential_field_registry_matches_js():
     ):
         assert secret not in serialized
     assert safe["layers"][0]["source"] == {"sr": 4326, "key": "layer-identifier"}
+
+
+def test_redact_credentials_keeps_header_values_that_only_reference_a_variable():
+    """Same rule as the app's isHeaderReferenceOnly: `Bearer ${T}` holds no secret."""
+    safe = redact_credentials(
+        {
+            "layers": [
+                {
+                    "source": {
+                        "requestHeaders": {
+                            "Authorization": "Bearer ${T}",
+                            "X-Key": "literal",
+                            "X-Mixed": "abc${T}",
+                        }
+                    }
+                }
+            ]
+        }
+    )
+    assert safe["layers"][0]["source"] == {"requestHeaders": {"Authorization": "Bearer ${T}"}}
 
 
 def test_python_redaction_sweeps_layer_connection():
@@ -447,7 +645,56 @@ def test_to_html_inserts_embed_before_fragment(m):
     # embed=1 must land in the query string, before any "#fragment", or the
     # browser folds it into the fragment and the iframe never sees the flag.
     html = m.to_html(app_url="https://example.com/app#section")
-    assert "https://example.com/app?embed=1#section" in html
+    assert "https://example.com/app?embed=1&amp;layout=embed&amp;theme=light#section" in html
+
+
+@pytest.mark.parametrize(
+    ("layout", "theme", "flags"),
+    [
+        ("maponly", "dark", "embed=1&amp;maponly=1&amp;theme=dark"),
+        ("embed", "light", "embed=1&amp;layout=embed&amp;theme=light"),
+        ("full", "dark", "embed=1&amp;theme=dark"),
+    ],
+)
+def test_to_html_carries_the_layout_and_theme(monkeypatch, layout, theme, flags):
+    # The export frames the app with the same chrome flags the widget uses, so a
+    # map-only notebook map exports as map-only (#2764).
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    html = Map(layout=layout, theme=theme).to_html(app_url="https://example.com/app")
+    assert f'src="https://example.com/app?{flags}"' in html
+
+
+def test_to_html_keeps_flags_the_app_url_already_sets(m):
+    html = m.to_html(app_url="https://example.com/app?theme=dark&embed=1")
+    assert 'src="https://example.com/app?theme=dark&amp;embed=1&amp;layout=embed"' in html
+
+
+def test_to_html_still_forces_embed_over_a_disabling_app_url(m):
+    # The app reads only the first "embed", so a disabling one is replaced.
+    html = m.to_html(app_url="https://example.com/app?embed=0&foo=1")
+    assert 'src="https://example.com/app?foo=1&amp;embed=1&amp;layout=embed' in html
+
+
+def test_render_project_html_rejects_an_unknown_layout():
+    with pytest.raises(ValueError, match="layout must be one of"):
+        gmod.render_project_html({}, layout="sidebar")
+    with pytest.raises(ValueError, match="theme must be one of"):
+        gmod.render_project_html({}, theme="sepia")
+
+
+def test_to_html_posts_the_project_to_the_app_origin_only(m):
+    # The project is posted into the frame, so a wildcard targetOrigin would
+    # hand it to whatever the app URL redirected to.
+    html = m.to_html(app_url="https://example.com/app?foo=bar")
+    assert '"https://example.com"' in html
+    assert '"*"' not in html
+
+
+def test_to_html_rejects_a_non_http_app_url(m):
+    for bad in ("javascript:alert(1)", "file:///etc/passwd", "not a url"):
+        with pytest.raises(ValueError, match="must be an http\\(s\\) URL"):
+            m.to_html(app_url=bad)
 
 
 def test_to_html_rejects_css_injection_dimensions(m):
@@ -551,6 +798,174 @@ def test_layer_remove(m):
     layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="A")
     m.get_layer(layer_id).remove()
     assert m.project["layers"] == []
+
+
+def test_map_layer_management_and_introspection(m):
+    first = m.add_geojson(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {"type": "Feature", "geometry": None, "properties": {"kind": "a", "value": 2}},
+                {"type": "Feature", "geometry": None, "properties": {"kind": "b", "value": 3}},
+            ],
+        },
+        name="First",
+    )
+    second = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Second")
+
+    m.rename_layer(first, "Renamed")
+    m.hide_layer("Renamed")
+    assert m.get_layer(first).name == "Renamed"
+    assert m.get_layer(first).visible is False
+    assert m.layer_properties(first)["kind"] == ["a", "b"]
+    assert m.column_values(first, "value") == [2, 3]
+
+    m.move_layer(second, 0)
+    assert [layer.id for layer in m.layers] == [second, first]
+    copy_id = m.duplicate_layer(first, name="Clone")
+    assert m.get_layer(copy_id).name == "Clone"
+    assert m.get_layer(copy_id).data["geojson"] == m.get_layer(first).data["geojson"]
+    assert m.describe()["layerCount"] == 3
+
+    m.remove_layer("Clone")
+    assert m.find_layer("Clone") is None
+
+
+def test_layer_handle_expanded_helpers(m):
+    layer_id = m.add_geojson(
+        {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature", "geometry": None, "properties": {"x": 1}}],
+        },
+        name="Data",
+    )
+    layer = m.get_layer(layer_id)
+    assert layer.index == 0
+    assert layer.source == {"type": "geojson"}
+    assert layer.properties() == {"x": [1]}
+    assert layer.column("x") == [1]
+    duplicate = layer.duplicate()
+    assert duplicate.name == "Data copy"
+    duplicate.move(0)
+    assert duplicate.index == 0
+
+    duplicate.remove()
+    with pytest.raises(ValueError, match="no longer exists"):
+        _ = duplicate.index
+
+
+def test_layer_reference_matching_is_shared_with_authoring(m):
+    first = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Rivers")
+    m.add_geojson({"type": "FeatureCollection", "features": []}, name="Roads")
+
+    # Case-insensitive name matching, as `authoring.find_layer` defines it.
+    m.set_layer_opacity("rivers", 0.25)
+    assert m.get_layer(first).opacity == 0.25
+
+    # A name several layers share is an error, not an arbitrary pick.
+    m.add_geojson({"type": "FeatureCollection", "features": []}, name="Roads")
+    with pytest.raises(ValueError, match="2 layers are named"):
+        m.remove_layer("Roads")
+    with pytest.raises(ValueError, match="No layer matches"):
+        m.remove_layer("Nothing")
+
+
+def test_duplicate_layer_rejects_the_reserved_basemap_name(m):
+    layer_id = m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data")
+    with pytest.raises(ValueError, match="reserved for the basemap"):
+        m.duplicate_layer(layer_id, name="__basemap__")
+    with pytest.raises(ValueError, match="non-empty"):
+        m.duplicate_layer(layer_id, name="  ")
+    assert len(m.layers) == 1
+
+    padded = m.duplicate_layer(layer_id, name="  Clone  ")
+    assert m.get_layer(padded).name == "Clone"
+
+
+def test_rename_layer_strips_and_rejects_a_blank_name(m):
+    layer = m.get_layer(m.add_geojson({"type": "FeatureCollection", "features": []}, name="Data"))
+    layer.name = "  Renamed  "
+    assert layer.name == "Renamed"
+    for blank in ("", "   "):
+        with pytest.raises(ValueError, match="non-empty"):
+            m.rename_layer(layer, blank)
+    assert layer.name == "Renamed"
+
+
+def test_layer_data_and_source_redact_credentials(m):
+    layer_id = m.add_3d_tiles(
+        "https://example.com/tileset.json?token=secret",
+        name="Secured",
+        request_headers={"Authorization": "Bearer hunter2"},
+    )
+    layer = m.get_layer(layer_id)
+
+    # The stored record keeps the headers; the reads that hand one back do not.
+    assert "requestHeaders" in m.project["layers"][0]["source"]
+    assert "requestHeaders" not in layer.source
+    assert "requestHeaders" not in layer.data["source"]
+    assert "hunter2" not in json.dumps(layer.data)
+    assert "secret" not in json.dumps(layer.data)
+
+
+def test_basemap_property_redacts_an_embedded_key(m):
+    m.project = {**m.project, "basemapStyleUrl": "https://api.example.com/style.json?key=secret"}
+    assert m.basemap == "https://api.example.com/style.json"
+    assert m.project["basemapStyleUrl"].endswith("key=secret")
+
+
+def test_describe_redacts_credentials_like_its_sibling_accessors(m):
+    m.project = {**m.project, "basemapStyleUrl": "https://api.example.com/style.json?key=secret"}
+    m.add_tile_layer("https://api.example.com/{z}/{x}/{y}.png?key=secret", name="Tiles")
+
+    summary = m.describe()
+    assert summary["basemapStyleUrl"] == "https://api.example.com/style.json"
+    assert "secret" not in json.dumps(summary)
+
+
+def test_move_layer_negative_index_counts_from_the_end(m):
+    ids = [
+        m.add_geojson({"type": "FeatureCollection", "features": []}, name=name)
+        for name in ("A", "B", "C")
+    ]
+
+    # -1 lands the layer last, unlike `list.insert(-1, ...)` which would leave
+    # it second to last.
+    m.move_layer(ids[0], -1)
+    assert [layer.id for layer in m.layers] == [ids[1], ids[2], ids[0]]
+
+    m.move_layer(ids[0], -2)
+    assert [layer.id for layer in m.layers] == [ids[1], ids[0], ids[2]]
+
+    # Out-of-range negatives clamp to the front rather than wrapping.
+    m.move_layer(ids[2], -99)
+    assert [layer.id for layer in m.layers] == [ids[2], ids[1], ids[0]]
+
+
+def test_persisted_camera_and_project_metadata_helpers(m):
+    m.name = "My analysis"
+    m.set_center(-80, 35, zoom=4)
+    m.set_zoom(6)
+    m.set_bearing(370)
+    m.set_pitch(100)
+    assert m.name == "My analysis"
+    assert m.center == (-80.0, 35.0)
+    assert m.zoom == 6
+    assert m.bearing == 370
+    assert m.pitch == 85
+    with pytest.raises(ValueError, match="non-empty"):
+        m.name = "  "
+
+
+def test_fit_project_bounds_is_browser_independent(m):
+    m.fit_project_bounds([-10, -5, 10, 5])
+    assert m.center == (0.0, 0.0)
+    assert m.zoom > 0
+    assert "bbox" in m.project["mapView"]
+
+    # Recentering by hand leaves the fitted bbox describing a different extent.
+    m.set_center(20, 10)
+    assert "bbox" not in m.project["mapView"]
 
 
 def test_layer_zoom_to_sends_command(m, monkeypatch):

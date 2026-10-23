@@ -9,9 +9,10 @@
 import { IS_MAS_BUILD } from "./build-flags";
 
 // Add Data sources that are 100% sidecar/martin-backed: PostgreSQL layers are
-// served through the martin helper binary, and File Geodatabase reading runs
-// on the sidecar's GeoPandas/GDAL stack. Neither has a client-side engine.
-export const MAS_HIDDEN_DATA_SOURCES: ReadonlySet<string> = new Set(["postgres", "gdb"]);
+// served through the martin helper binary, SQL Server uses the sidecar, and
+// File Geodatabase reading runs on the sidecar's GeoPandas/GDAL stack. None has
+// a client-side engine.
+export const MAS_HIDDEN_DATA_SOURCES: ReadonlySet<string> = new Set(["postgres", "mssql", "gdb"]);
 
 // Menu items whose feature is sidecar-only with no fallback: AI Segmentation
 // (samgeo runs on the sidecar; the client-side detection tools are separate
@@ -30,7 +31,7 @@ export function masHidesMenuItem(id: string, mas: boolean = IS_MAS_BUILD): boole
 
 // Extensions of the shapefile parts that ride along with a `.shp`, mirroring
 // the full SHAPEFILE_SIDECAR_EXTENSIONS list of the Rust read_shapefile_siblings
-// command (src-tauri/src/lib.rs), not the 4-extension subset in tauri-io.ts:
+// command (src-tauri/src/lib.rs), not the 4-extension subset in file-io/paths.ts:
 // the selection is the only companion source under the sandbox, so it must not
 // forward less than the sibling read would. Exported so the MAS file dialog can
 // make these extensions selectable in the first place.

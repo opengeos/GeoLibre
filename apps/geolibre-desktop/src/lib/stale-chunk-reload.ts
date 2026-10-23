@@ -89,6 +89,20 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps): StaleChunkReloa
   return "reloaded";
 }
 
+/** A third-party module cannot become available by refreshing our app build. */
+export function isExternalModuleFailure(payload: unknown, appOrigin: string): boolean {
+  const message =
+    payload instanceof Error ? payload.message : typeof payload === "string" ? payload : "";
+  const urls = message.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
+  return urls.some((url) => {
+    try {
+      return new URL(url).origin !== appOrigin;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * Registers a `vite:preloadError` handler that reloads once (cooldown-guarded)
  * to recover from chunks orphaned by a redeploy. A no-op when disabled or
@@ -116,6 +130,25 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
     // Vite dispatches a plain Event with the underlying error on `.payload`
     // (not a CustomEvent `.detail`); surface it so a recovery is visible.
     const payload = (event as Event & { payload?: unknown }).payload;
+    // CDN engines (ArcGIS, Pyodide, etc.) are not deployment chunks. Leave
+    // their rejection intact for the feature to report, preserving its project.
+    if (isExternalModuleFailure(payload, window.location.origin)) {
+      console.warn(
+        "[GeoLibre] External module preload failed; leaving the error to its feature.",
+        payload,
+      );
+      return;
+    }
+    // WebKit omits the failed URL. It may be a CDN outage, so leave this
+    // ambiguous failure to the feature instead of reloading the whole project.
+    const message = payload instanceof Error ? payload.message : payload;
+    if (typeof message === "string" && /importing a module script failed/i.test(message)) {
+      console.warn(
+        "[GeoLibre] Ambiguous WebKit module preload failure; preserving the open project.",
+        payload,
+      );
+      return;
+    }
     let outcome: StaleChunkReloadOutcome = "suppressed-cooldown";
     try {
       outcome = reloadForStaleChunk({
@@ -150,11 +183,16 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
       event.preventDefault();
     } else if (outcome === "deferred-unsaved") {
       // Reloading would discard unsaved work (and raise the "Leave site?"
-      // prompt), so the feature is left unloaded. Record an actionable notice
-      // instead of letting the raw preload error surface, and suppress Vite's
-      // rethrow so it does not read as an unhandled crash. Skip the append when
-      // the same notice is already present so repeated retries (each firing a
-      // fresh preload error) do not stack identical entries in the panel.
+      // prompt), so the feature is left unloaded. Record an actionable notice.
+      // Skip the append when the same notice is already present so repeated
+      // retries (each firing a fresh preload error) do not stack identical
+      // entries in the panel.
+      //
+      // Vite's rethrow is NOT suppressed here: preventDefault() makes the
+      // preload wrapper resolve the import to `undefined` instead of
+      // rejecting, so the caller would read properties off `undefined` (a
+      // React.lazy dialog then crashed the whole toolbar). Left to reject, the
+      // feature's own error handling sees a real load failure.
       const alreadyRecorded = getDiagnosticsSnapshot().records.some(
         (record) =>
           record.source === STALE_CHUNK_DIAGNOSTIC_SOURCE &&
@@ -174,7 +212,6 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
           source: STALE_CHUNK_DIAGNOSTIC_SOURCE,
         });
       }
-      event.preventDefault();
     }
   };
 

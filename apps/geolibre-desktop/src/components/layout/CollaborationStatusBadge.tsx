@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { Button, Input } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { ChevronUp, MapPin, Send, Settings2, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,7 @@ interface Announcement {
 
 interface CollaborationStatusBadgeProps {
   api: CollaborationApi;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 // How long a join/leave announcement stays on screen before auto-dismissing.
@@ -238,11 +238,8 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
     const now = Date.now();
     if (now - lastSentAtRef.current < MIN_CHAT_SEND_INTERVAL_MS) return;
     // Capture the live map center only when the pin is active, at send time.
-    const center =
-      attachLocation && mapControllerRef.current
-        ? mapControllerRef.current.getMap()?.getCenter()
-        : null;
-    const sent = api.sendChat(text, center ? { lng: center.lng, lat: center.lat } : null);
+    const center = attachLocation ? mapControllerRef.current?.readView().center : null;
+    const sent = api.sendChat(text, center ? { lng: center[0], lat: center[1] } : null);
     // Only clear the composer (and stamp the floor) when the message actually
     // reached an open socket; otherwise keep the draft so a transient
     // disconnect doesn't lose it.
@@ -253,7 +250,9 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
   };
 
   const flyToCoordinate = (coordinate: { lng: number; lat: number }) => {
-    mapControllerRef.current?.getMap()?.flyTo({ center: [coordinate.lng, coordinate.lat] });
+    mapControllerRef.current?.flyTo({
+      center: [coordinate.lng, coordinate.lat],
+    });
   };
 
   if (!isActive) return null;
@@ -276,7 +275,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
         {announcements.map((a) => (
           <div
             key={a.id}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-md border bg-background/95 px-2 py-1 text-xs text-foreground shadow-sm backdrop-blur-sm"
+            className="pointer-events-auto flex items-center gap-1.5 rounded-md border map-glass px-2 py-1 text-xs text-foreground shadow-sm"
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
             <span className="truncate">{a.text}</span>
@@ -288,7 +287,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
       {expanded && (
         <div
           id="collab-roster-panel"
-          className="pointer-events-auto rounded-md border bg-background/95 shadow-md backdrop-blur-sm"
+          className="pointer-events-auto rounded-md border map-glass shadow-md"
         >
           <div className="flex items-center justify-between border-b px-2.5 py-1.5">
             <span className="text-xs font-medium">
@@ -449,7 +448,7 @@ export function CollaborationStatusBadge({ api, mapControllerRef }: Collaboratio
               : t("collaborate.sessionStatusTooltip")
         }
         title={expanded ? t("collaborate.collapseRoster") : t("collaborate.sessionStatusTooltip")}
-        className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition hover:bg-accent"
+        className="pointer-events-auto flex items-center gap-1.5 self-start rounded-full border map-glass px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition hover:bg-accent"
       >
         <span className="relative flex h-2 w-2" aria-hidden="true">
           {!connecting && (

@@ -8,6 +8,9 @@ import {
 } from "../packages/plugins/src/toolbar-menu-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
 
+/** The panel a plugin hands to `registerRightPanel`. */
+type RightPanel = Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0];
+
 const app = {} as GeoLibreAppAPI;
 
 function testPlugin(patch: Partial<GeoLibrePlugin> = {}): GeoLibrePlugin {
@@ -20,6 +23,112 @@ function testPlugin(patch: Partial<GeoLibrePlugin> = {}): GeoLibrePlugin {
     ...patch,
   };
 }
+
+describe("PluginManager exclusive groups", () => {
+  it("deactivates the active sibling before activating another group member", () => {
+    const calls: string[] = [];
+    const manager = new PluginManager();
+    manager.register(
+      testPlugin({
+        id: "stac-catalogs",
+        exclusiveGroup: "stac-browser",
+        activate: () => {
+          calls.push("activate:stac");
+        },
+        deactivate: () => {
+          calls.push("deactivate:stac");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "planet-open-data",
+        exclusiveGroup: "stac-browser",
+        activate: () => {
+          calls.push("activate:planet");
+        },
+        deactivate: () => {
+          calls.push("deactivate:planet");
+        },
+      }),
+    );
+
+    manager.activate("stac-catalogs", app);
+    manager.activate("planet-open-data", app);
+
+    assert.equal(manager.isActive("stac-catalogs"), false);
+    assert.equal(manager.isActive("planet-open-data"), true);
+    assert.deepEqual(calls, ["activate:stac", "deactivate:stac", "activate:planet"]);
+  });
+
+  it("restores the displaced sibling after activation failures", async () => {
+    for (const failure of ["false", "throw", "reject"] as const) {
+      const manager = new PluginManager();
+      let siblingActivations = 0;
+      manager.register(
+        testPlugin({
+          id: "working",
+          exclusiveGroup: "viewer",
+          activate: () => {
+            siblingActivations += 1;
+          },
+        }),
+      );
+      manager.register(
+        testPlugin({
+          id: "failing",
+          exclusiveGroup: "viewer",
+          activate: () => {
+            if (failure === "false") return false;
+            if (failure === "throw") throw new Error("sync failure");
+            return Promise.reject(new Error("async failure"));
+          },
+        }),
+      );
+      manager.activate("working", app);
+
+      if (failure === "throw") {
+        assert.throws(() => manager.activate("failing", app), /sync failure/);
+      } else {
+        assert.equal(await manager.activate("failing", app), false);
+      }
+
+      assert.equal(manager.isActive("working"), true);
+      assert.equal(manager.isActive("failing"), false);
+      assert.equal(siblingActivations, 2);
+    }
+  });
+
+  it("keeps only the last requested group member active during project restore", () => {
+    const manager = new PluginManager();
+    const activations: string[] = [];
+    for (const id of ["stac", "planet"]) {
+      manager.register(
+        testPlugin({
+          id,
+          exclusiveGroup: "stac-browser",
+          activate: () => {
+            activations.push(id);
+          },
+        }),
+      );
+    }
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["stac", "planet"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      app,
+    );
+
+    assert.equal(manager.isActive("stac"), false);
+    assert.equal(manager.isActive("planet"), true);
+    assert.deepEqual(activations, ["planet"]);
+  });
+});
 
 describe("PluginManager URL parameters", () => {
   it("runs matching active plugin URL parameter handlers once per context", async () => {
@@ -641,6 +750,69 @@ describe("PluginManager toolbar menu scoping", () => {
     assert.deepEqual(seen, ["menu-plugin"]);
   });
 
+  it("tags registerMenuContribution with the activating plugin's id and name", () => {
+    const manager = new PluginManager();
+    const seen: Array<[string | undefined, string | undefined]> = [];
+    // Only the contribution registrar: a scope must still be built for it.
+    const mockApp = {
+      registerMenuContribution: (_c: unknown, ownerPluginId?: string, ownerName?: string) => {
+        seen.push([ownerPluginId, ownerName]);
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "contrib-plugin",
+        name: "Contrib Plugin",
+        activate: (api) =>
+          void api.registerMenuContribution?.({
+            id: "contrib-plugin-processing",
+            menu: "processing",
+            items: [],
+          }),
+      }),
+    );
+    manager.activate("contrib-plugin", mockApp);
+
+    assert.deepEqual(seen, [["contrib-plugin", "Contrib Plugin"]]);
+  });
+
+  it("tags app.credentials calls with the calling plugin's id", () => {
+    const manager = new PluginManager();
+    const seen: Array<[string, string | undefined]> = [];
+    // Only `credentials`: a scope must still be built when nothing else needs one.
+    const mockApp = {
+      credentials: {
+        get: (name: string, ownerPluginId?: string) => {
+          seen.push([`get:${name}`, ownerPluginId]);
+          return "";
+        },
+        set: (name: string, _value: string, ownerPluginId?: string) => {
+          seen.push([`set:${name}`, ownerPluginId]);
+          return true;
+        },
+        location: () => "browser",
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "cred-plugin",
+        activate: (api) => {
+          api.credentials?.set("token", "x");
+          api.credentials?.get("token");
+        },
+      }),
+    );
+    manager.activate("cred-plugin", mockApp);
+
+    assert.deepEqual(seen, [
+      ["set:token", "cred-plugin"],
+      ["get:token", "cred-plugin"],
+    ]);
+  });
+
   it("records the owner on the real registry when wired through activate", () => {
     // Guards the TypeScript-invisible contract between scopeAppToPlugin's cast
     // and the real registry's optional second parameter: drive the genuine
@@ -796,6 +968,147 @@ describe("PluginManager panel auto-expand on restore", () => {
       true,
       "a project restore must not leave plugin panels expanded over the map",
     );
+  });
+
+  it("keeps restored native right panels collapsed", async () => {
+    const manager = new PluginManager();
+    let collapsed = false;
+    const mockApp = {
+      registerRightPanel: () => () => undefined,
+      openRightPanel: () => true,
+      collapseRightPanel: () => {
+        collapsed = true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "native-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "native-panel-content",
+            title: "Native panel",
+            render: () => undefined,
+          });
+          api.openRightPanel?.("native-panel-content");
+        },
+      }),
+    );
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["native-panel"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(collapsed, true, "a restored native right panel must remain collapsed");
+  });
+
+  it("deactivates an opted-in plugin when its native panel closes", async () => {
+    const manager = new PluginManager();
+    let registeredPanel = null as RightPanel | null;
+    const mockApp = {
+      registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
+        registeredPanel = panel;
+        return () => undefined;
+      },
+      deactivatePlugin: (id: string) => manager.deactivate(id, mockApp as GeoLibreAppAPI),
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "close-with-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "close-with-panel-content",
+            title: "Close with panel",
+            deactivatePluginOnClose: true,
+            render: () => undefined,
+          });
+        },
+      }),
+    );
+
+    manager.activate("close-with-panel", mockApp);
+    assert.ok(registeredPanel);
+    registeredPanel.onClose?.();
+    await flushTimers(1);
+    assert.equal(manager.isActive("close-with-panel"), true);
+    registeredPanel.onExplicitClose?.();
+    await flushTimers(1);
+    assert.equal(manager.isActive("close-with-panel"), false);
+  });
+
+  it("deactivates an opted-in plugin when its panel close hook throws", async () => {
+    const manager = new PluginManager();
+    let registeredPanel = null as RightPanel | null;
+    const mockApp = {
+      registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
+        registeredPanel = panel;
+        return () => undefined;
+      },
+      deactivatePlugin: (id: string) => manager.deactivate(id, mockApp as GeoLibreAppAPI),
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "throwing-close-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "throwing-close-panel-content",
+            title: "Throwing close panel",
+            deactivatePluginOnClose: true,
+            render: () => undefined,
+            onExplicitClose: () => {
+              throw new Error("close failed");
+            },
+          });
+        },
+      }),
+    );
+
+    manager.activate("throwing-close-panel", mockApp);
+    assert.ok(registeredPanel);
+    const panel = registeredPanel;
+    assert.throws(() => panel.onExplicitClose?.(), /close failed/);
+    await flushTimers(1);
+    assert.equal(manager.isActive("throwing-close-panel"), false);
+  });
+
+  it("keeps a plugin re-activated after its own deactivate closed its panel", async () => {
+    const manager = new PluginManager();
+    let registeredPanel = null as RightPanel | null;
+    const mockApp = {
+      registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
+        registeredPanel = panel;
+        return () => undefined;
+      },
+      deactivatePlugin: (id: string) => manager.deactivate(id, mockApp as GeoLibreAppAPI),
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "swap-with-panel",
+        activate: (api) => {
+          api.registerRightPanel?.({
+            id: "swap-with-panel-content",
+            title: "Swap with panel",
+            deactivatePluginOnClose: true,
+            render: () => undefined,
+          });
+        },
+        // Like the docked Web Services plugins: deactivate closes the panel.
+        deactivate: () => registeredPanel?.onExplicitClose?.(),
+      }),
+    );
+
+    manager.activate("swap-with-panel", mockApp);
+    manager.deactivate("swap-with-panel", mockApp);
+    // A renderer swap re-activates before the deferred deactivation runs.
+    manager.activate("swap-with-panel", mockApp);
+    await flushTimers(1);
+    assert.equal(manager.isActive("swap-with-panel"), true);
   });
 
   it("leaves a plugin that persists its own collapsed state expanded", async () => {
@@ -1024,6 +1337,94 @@ describe("PluginManager plugin coordination", () => {
     assert.equal(manager.applyPluginState("missing", app, {}), false);
   });
 
+  it("clears project-data state on a load that does not carry it, when opted in", () => {
+    const manager = new PluginManager();
+    const data: unknown[] = [];
+    const preference: unknown[] = [];
+    manager.register(
+      testPlugin({
+        id: "data",
+        clearsStateOnProjectLoad: true,
+        applyProjectState: (_app, state) => {
+          data.push(state);
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "preference",
+        applyProjectState: (_app, state) => {
+          preference.push(state);
+        },
+      }),
+    );
+    const empty = { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} };
+    manager.restoreProjectState(
+      { ...empty, settings: { data: { labels: 1 }, preference: { on: true } } },
+      app,
+    );
+    // A second project with neither setting: only the opted-in plugin is reset.
+    manager.restoreProjectState(empty, app);
+    assert.deepEqual(data, [{ labels: 1 }, undefined]);
+    assert.deepEqual(preference, [{ on: true }]);
+  });
+
+  it("keeps a session-scoped plugin active through project loads and map swaps", () => {
+    const manager = new PluginManager();
+    const calls: string[] = [];
+    let renderer: "maplibre" | "cesium" | "mapbox" = "maplibre";
+    const api = { getMapRenderer: () => renderer } as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "browser",
+        sessionScoped: true,
+        engines: ["maplibre", "cesium"],
+        activate: () => {
+          calls.push("activate:browser");
+        },
+        deactivate: () => {
+          calls.push("deactivate:browser");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "project-tool",
+        deactivate: () => {
+          calls.push("deactivate:project-tool");
+        },
+      }),
+    );
+    const empty = { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} };
+    manager.restoreProjectState(empty, api);
+    manager.activate("browser", api);
+    manager.activate("project-tool", api);
+    calls.length = 0;
+
+    // A project that lists neither plugin closes only the project's one.
+    manager.restoreProjectState(empty, api);
+    assert.equal(manager.isActive("browser"), true);
+    assert.equal(manager.isActive("project-tool"), false);
+    // A replaced map on a supported renderer leaves it running too.
+    renderer = "cesium";
+    manager.restoreProjectState(empty, api, { mapReplaced: true });
+    assert.equal(manager.isActive("browser"), true);
+    assert.deepEqual(calls, ["deactivate:project-tool"]);
+    // One it does not support still tears it down.
+    renderer = "mapbox";
+    manager.restoreProjectState(empty, api, { mapReplaced: true });
+    assert.equal(manager.isActive("browser"), false);
+  });
+
+  it("leaves a session-scoped plugin out of the saved active plugins", () => {
+    const manager = new PluginManager();
+    manager.register(testPlugin({ id: "browser", sessionScoped: true }));
+    manager.register(testPlugin({ id: "project-tool" }));
+    manager.activate("browser", app);
+    manager.activate("project-tool", app);
+    assert.deepEqual(manager.getProjectState().activePluginIds, ["project-tool"]);
+  });
+
   it("prevents recursive activation across coordinating plugins", async () => {
     const manager = new PluginManager();
     let firstCalls = 0;
@@ -1067,7 +1468,7 @@ describe("PluginManager plugin coordination", () => {
         return !manager.isActive(id);
       },
     } as GeoLibreAppAPI;
-    let closer: GeoLibreAppAPI | null = null;
+    let closer = null as GeoLibreAppAPI | null;
     manager.register(
       testPlugin({
         id: "closer",
@@ -1089,5 +1490,373 @@ describe("PluginManager plugin coordination", () => {
 
     assert.equal(closer!.deactivatePlugin?.("dock"), true);
     assert.equal(manager.isActive("dock"), false);
+  });
+});
+
+describe("PluginManager renderer compatibility", () => {
+  it("rejects unsupported activation, state changes, and URL callbacks", async () => {
+    const manager = new PluginManager();
+    let calls = 0;
+    manager.register(
+      testPlugin({
+        activate: () => {
+          calls++;
+        },
+        applyProjectState: () => {
+          calls++;
+        },
+        urlParameterNames: ["dataset"],
+        handleUrlParameters: () => {
+          calls++;
+        },
+      }),
+    );
+    const globe = { getMapRenderer: () => "cesium" } as GeoLibreAppAPI;
+    assert.equal(manager.activate("url-loader", globe), false);
+    assert.equal(manager.applyPluginState("url-loader", globe, {}), false);
+    await manager.handleUrlParameters(new URLSearchParams("dataset=places"), globe);
+    assert.equal(calls, 0);
+  });
+
+  it("blocks late control registration after changing to an unsupported renderer", () => {
+    const manager = new PluginManager();
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    let mounted = 0;
+    let scoped: GeoLibreAppAPI | undefined;
+    const api = {
+      getMapRenderer: () => renderer,
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        activate: (value) => {
+          scoped = value;
+        },
+      }),
+    );
+    manager.activate("url-loader", api);
+    renderer = "cesium";
+    assert.equal(scoped!.addMapControl({ onAdd: () => null as never, onRemove: () => {} }), false);
+    assert.equal(mounted, 0);
+  });
+
+  it("suspends unsupported plugins without losing their saved activation or settings", () => {
+    const manager = new PluginManager();
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    let active = 0;
+    let stopped = 0;
+    let settings: unknown = { value: 1 };
+    manager.register(
+      testPlugin({
+        activate: () => {
+          active++;
+        },
+        deactivate: () => {
+          stopped++;
+        },
+        getProjectState: () => settings,
+        applyProjectState: (_app, value) => {
+          settings = value;
+        },
+      }),
+    );
+    const api = { getMapRenderer: () => renderer } as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: ["url-loader"],
+      mapControlPositions: {},
+      settings: { "url-loader": { value: 42 } },
+    };
+    manager.restoreProjectState(state, api);
+    renderer = "cesium";
+    manager.restoreProjectState(state, api);
+    assert.equal(manager.isActive("url-loader"), false);
+    assert.equal(stopped, 1);
+    assert.deepEqual(manager.getProjectState(), state);
+    renderer = "maplibre";
+    manager.restoreProjectState(manager.getProjectState(), api);
+    assert.equal(manager.isActive("url-loader"), true);
+    assert.equal(active, 2);
+    assert.deepEqual(settings, { value: 42 });
+  });
+
+  it("remounts a compatible plugin once on renderer replacement", () => {
+    const manager = new PluginManager();
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    let mounts = 0;
+    manager.register(
+      testPlugin({
+        engines: ["maplibre", "cesium"],
+        activate: () => {
+          mounts++;
+        },
+      }),
+    );
+    const api = { getMapRenderer: () => renderer } as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: ["url-loader"],
+      mapControlPositions: {},
+      settings: {},
+    };
+    manager.restoreProjectState(state, api);
+    renderer = "cesium";
+    manager.restoreProjectState(state, api);
+    manager.restoreProjectState(state, api);
+    assert.equal(mounts, 2);
+  });
+  it("blocks UI registration from a retained state scope once the plugin deactivates", () => {
+    const manager = new PluginManager();
+    let scoped: GeoLibreAppAPI | undefined;
+    let registered = 0;
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        registered++;
+        return true;
+      },
+      registerToolbarMenu: () => {
+        registered++;
+        return () => undefined;
+      },
+      registerRightPanel: () => {
+        registered++;
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        applyProjectState: (value) => {
+          scoped = value;
+        },
+      }),
+    );
+    manager.activate("url-loader", api);
+    manager.applyPluginState("url-loader", api, {});
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scoped!.addMapControl(control), true);
+    manager.deactivate("url-loader", api);
+    assert.equal(scoped!.addMapControl(control), false);
+    scoped!.registerToolbarMenu?.({ id: "stale", label: "Stale", items: [] });
+    scoped!.registerRightPanel?.({ id: "stale-panel", title: "Stale", render: () => undefined });
+    assert.equal(registered, 1);
+  });
+  it("lets an inactive plugin mount restored panels after an async import", async () => {
+    // The Components legend/colorbar/HTML panels restore from saved settings
+    // without activating the plugin, and mount only once a dynamic import
+    // resolves, so the restore scope must outlive the synchronous turn.
+    const manager = new PluginManager();
+    let scoped: GeoLibreAppAPI | undefined;
+    let mounted = 0;
+    manager.register(
+      testPlugin({
+        restoresPanelCollapseState: true,
+        applyProjectState: (value) => {
+          scoped = value;
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    await Promise.resolve();
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scoped!.addMapControl(control), true);
+    assert.equal(mounted, 1);
+  });
+  it("rejects restored panels after a renderer handoff or re-registration", async () => {
+    const manager = new PluginManager();
+    const scopes: GeoLibreAppAPI[] = [];
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    manager.register(
+      testPlugin({
+        engines: ["maplibre", "cesium"],
+        applyProjectState: (value) => {
+          scopes.push(value);
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => renderer,
+      addMapControl: () => true,
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    renderer = "cesium";
+    assert.equal(scopes[0].addMapControl(control), false);
+    renderer = "maplibre";
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    manager.register(testPlugin({ engines: ["maplibre", "cesium"] }));
+    assert.equal(scopes[1].addMapControl(control), false);
+  });
+  it("rejects restored panels once a later restore supersedes the scope", async () => {
+    const manager = new PluginManager();
+    const scopes: GeoLibreAppAPI[] = [];
+    let mounted = 0;
+    manager.register(
+      testPlugin({
+        applyProjectState: (value) => {
+          scopes.push(value);
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    manager.restoreProjectState(state, api);
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scopes[0].addMapControl(control), false);
+    assert.equal(scopes[1].addMapControl(control), true);
+    assert.equal(mounted, 1);
+  });
+  it("rejects controls from an activation replaced by a renderer switch", () => {
+    const manager = new PluginManager();
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    const scopes: GeoLibreAppAPI[] = [];
+    let mounted = 0;
+    manager.register(
+      testPlugin({
+        engines: ["maplibre", "cesium"],
+        activate: (api) => {
+          scopes.push(api);
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => renderer,
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: ["url-loader"],
+      mapControlPositions: {},
+      settings: {},
+    };
+    manager.restoreProjectState(state, api);
+    renderer = "cesium";
+    manager.restoreProjectState(state, api);
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scopes[0].addMapControl(control), false);
+    assert.equal(scopes[1].addMapControl(control), true);
+    assert.equal(mounted, 1);
+  });
+});
+
+describe("PluginManager getProjectState fallback", () => {
+  const restored = {
+    manifestUrls: [],
+    activePluginIds: [],
+    mapControlPositions: { broken: "top-left" as const },
+    settings: { broken: { step: 1 } },
+  };
+  const brokenPlugin = () =>
+    testPlugin({
+      id: "broken",
+      getProjectState: () => {
+        throw new Error("control is gone");
+      },
+    });
+
+  it("keeps a failing plugin's restored entry by default", () => {
+    const manager = new PluginManager();
+    manager.register(brokenPlugin());
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState();
+    assert.deepEqual(state.settings.broken, { step: 1 });
+    assert.equal(state.mapControlPositions.broken, "top-left");
+  });
+
+  it("takes a failing plugin's entry from a newer stored snapshot when given one", () => {
+    const manager = new PluginManager();
+    manager.register(brokenPlugin());
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState({
+      ...restored,
+      mapControlPositions: { broken: "bottom-right" },
+      settings: { broken: { step: 7 } },
+    });
+    assert.deepEqual(state.settings.broken, { step: 7 });
+    assert.equal(state.mapControlPositions.broken, "bottom-right");
+  });
+
+  it("keeps a live control position read before the state accessor threw", () => {
+    const manager = new PluginManager();
+    manager.register({ ...brokenPlugin(), getMapControlPosition: () => "top-right" });
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState();
+    assert.equal(state.mapControlPositions.broken, "top-right");
+    assert.deepEqual(state.settings.broken, { step: 1 });
+  });
+});
+
+describe("PluginManager restore onto a replaced map", () => {
+  it("reactivates active plugins when the map was replaced on the same renderer", () => {
+    const manager = new PluginManager();
+    const calls: string[] = [];
+    manager.register(
+      testPlugin({
+        id: "dock",
+        activate: () => {
+          calls.push("activate");
+        },
+        deactivate: () => {
+          calls.push("deactivate");
+        },
+      }),
+    );
+    const state = {
+      manifestUrls: [],
+      activePluginIds: ["dock"],
+      mapControlPositions: {},
+      settings: {},
+    };
+    manager.restoreProjectState(state, app);
+    manager.restoreProjectState(state, app);
+    assert.deepEqual(calls, ["activate"]);
+
+    manager.restoreProjectState(state, app, { mapReplaced: true });
+    assert.deepEqual(calls, ["activate", "deactivate", "activate"]);
+    assert.equal(manager.isActive("dock"), true);
   });
 });

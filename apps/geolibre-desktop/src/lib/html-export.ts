@@ -1,7 +1,13 @@
 // Standalone "Export as interactive HTML" builder; the in-app counterpart of the
 // Python widget's `Map.to_html()`. See `docs/python.md` and `embedHost.ts`.
 
-import { redactCredentials, type GeoLibreProject } from "@geolibre/core";
+import { getBuildEnvironment, redactCredentials, type GeoLibreProject } from "@geolibre/core";
+import {
+  encodeInlineProjectFragment,
+  INLINE_PROJECT_FRAGMENT_KEY,
+  INLINE_VIEWER_FRAGMENT_KEY,
+} from "./inline-project-fragment";
+import { arePanelsHidden, HIDDEN_PANEL_VALUES, normalizedParam } from "./layout-params";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
@@ -14,7 +20,7 @@ const CSS_DIMENSION_RE = /^[\w%.+\-/\s()]+$/;
 // Resolve the viewer URL from the env, accepting only HTTPS (or loopback HTTP)
 // and matching the hostname exactly; mirrors resolveShareBaseUrl.
 export function resolveViewerBaseUrl(
-  configured: unknown = import.meta.env?.VITE_GEOLIBRE_VIEWER_URL,
+  configured: unknown = getBuildEnvironment().VITE_GEOLIBRE_VIEWER_URL,
 ): string {
   if (typeof configured === "string" && configured.trim()) {
     const trimmed = configured.trim();
@@ -57,13 +63,69 @@ function appendFlag(base: string, flag: string, present: RegExp): string {
 // lands straight on the map (issue #991). `welcome=0` is what the currently
 // deployed viewer honors, so the export works without waiting for the
 // embed-mode onboarding suppression to ship.
-function withViewerFlags(baseUrl: string): string {
+// `viewerParams` (the exporting app's chrome, see viewerChromeParams) follow,
+// each skipped when the configured viewer URL already sets that key.
+function withViewerFlags(
+  baseUrl: string,
+  viewerParams: ReadonlyArray<readonly [string, string]> = [],
+): string {
   const hashIndex = baseUrl.indexOf("#");
   let base = hashIndex === -1 ? baseUrl : baseUrl.slice(0, hashIndex);
   const fragment = hashIndex === -1 ? "" : baseUrl.slice(hashIndex);
   base = appendFlag(base, "embed=1", /[?&]embed=(1|true)(&|$)/);
   base = appendFlag(base, "welcome=0", /[?&]welcome=(0|false|off|no)(&|$)/);
+  for (const [key, value] of viewerParams) {
+    base = appendFlag(
+      base,
+      `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
+      new RegExp(`[?&]${key}(=|&|$)`),
+    );
+  }
   return `${base}${fragment}`;
+}
+
+// Query params that pick the app's chrome (see useLayoutOptions); an export
+// carries the exporting app's values so it opens looking the same (#2764).
+const CHROME_PARAMS = ["layout", "maponly", "toolbar", "panels", "hidePanels"] as const;
+
+export interface ViewerChromeState {
+  /** The theme the exporting app is showing. */
+  themeMode?: "light" | "dark";
+  /** Whether the exporting app's Layers panel is collapsed to its rail. */
+  layersCollapsed?: boolean;
+}
+
+/**
+ * The viewer query params that reproduce the exporting app's chrome: its own
+ * layout params (`layout`, `maponly`, `toolbar`, `panels`, `hidePanels`), the
+ * current theme, and `panels=collapsed` while the Layers panel is collapsed.
+ *
+ * Args:
+ *   search: The exporting app's query string (`window.location.search`).
+ *   state: The live chrome state the query string does not carry.
+ *
+ * Returns:
+ *   `[key, value]` pairs for {@link BuildProjectHtmlOptions.viewerParams}.
+ */
+export function viewerChromeParams(
+  search: string,
+  state: ViewerChromeState = {},
+): Array<[string, string]> {
+  const params = new URLSearchParams(search);
+  const out: Array<[string, string]> = [];
+  for (const key of CHROME_PARAMS) {
+    const value = params.get(key);
+    // Only a hidden `panels` value is forwarded: the live collapse state below
+    // replaces any other (e.g. a launch-time `panels=collapsed` the user has
+    // since expanded).
+    if (value === null || (key === "panels" && !HIDDEN_PANEL_VALUES.has(normalizedParam(value)))) {
+      continue;
+    }
+    out.push([key, value]);
+  }
+  if (state.layersCollapsed && !arePanelsHidden(params)) out.push(["panels", "collapsed"]);
+  if (state.themeMode) out.push(["theme", state.themeMode]);
+  return out;
 }
 
 export interface BuildProjectHtmlOptions {
@@ -78,6 +140,8 @@ export interface BuildProjectHtmlOptions {
   width?: string;
   /** CSS height of the embedded map (default `"100vh"`). */
   height?: string;
+  /** Extra viewer query params, e.g. from {@link viewerChromeParams}. */
+  viewerParams?: ReadonlyArray<readonly [string, string]>;
 }
 
 // Build a self-contained HTML page that frames the viewer (with ?embed=1) and
@@ -98,10 +162,27 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   if (!CSS_DIMENSION_RE.test(height)) {
     throw new Error(`Invalid CSS height value: ${height}`);
   }
-  const iframeSrc = withViewerFlags(appUrl);
+  const iframeSrc = withViewerFlags(appUrl, options.viewerParams);
   // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(redactCredentials(project)).replace(/</g, "\\u003c");
+  const inlineProject = encodeInlineProjectFragment(redactCredentials(project));
+  const viewerFragment = new URL(iframeSrc).hash;
+  const inlineViewerFragment = viewerFragment
+    ? `&${INLINE_VIEWER_FRAGMENT_KEY}=${encodeURIComponent(viewerFragment)}`
+    : "";
 
+  // The iframe sandbox below withholds top-navigation and popups, but each of
+  // the tokens it does grant is load-bearing - don't trim them:
+  //   allow-scripts       the framed page is the app itself
+  //   allow-same-origin   without it the frame's origin is opaque ("null"), so
+  //                       the event.origin === viewerOrigin check below never
+  //                       matches and the ready/load-project handshake dies
+  //                       (it also keeps the app's storage/IndexedDB working)
+  //   allow-forms         in-app form submits
+  //   allow-downloads     the framed app is the full viewer, so anchor-download
+  //                       exports (Save Project, chart/processing/georeferencer
+  //                       output) run from inside the frame; browsers block
+  //                       those silently without this token
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -114,17 +195,19 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
 </style>
 </head>
 <body>
-<iframe id="geolibre-frame" src="${escapeHtml(iframeSrc)}" allow="fullscreen" allowfullscreen></iframe>
+<iframe id="geolibre-frame" data-src="${escapeHtml(iframeSrc)}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" allow="fullscreen" allowfullscreen></iframe>
 <script type="application/json" id="geolibre-project">${projectJson}</script>
 <script>
 (function () {
   var frame = document.getElementById("geolibre-frame");
+  var viewerSrc = frame.getAttribute("data-src");
   var project = JSON.parse(
     document.getElementById("geolibre-project").textContent
   );
-  // The src attribute is fixed, so this pins to the viewer origin: both the
-  // inbound "ready" check and the outbound post are scoped to it.
-  var viewerOrigin = new URL(frame.src).origin;
+  var viewerOrigin = new URL(viewerSrc).origin;
+  var directFile = window.location.protocol === "file:";
+  // Keep the postMessage fallback active for hosted viewers that predate
+  // support for loading an inline project from the URL fragment.
   var loaded = false;
   function load() {
     if (loaded || !frame.contentWindow) return;
@@ -140,6 +223,12 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
     var data = event.data;
     if (data && data.type === "geolibre:ready") load();
   });
+  // A URL fragment stays entirely in the browser and is consumed/erased by the
+  // viewer during startup. This avoids opaque file-origin messaging in WebKit.
+  // HTTP(S) exports keep the existing scoped postMessage bridge.
+  frame.src = directFile
+    ? viewerSrc.split("#")[0] + "#${INLINE_PROJECT_FRAGMENT_KEY}=${inlineProject}${inlineViewerFragment}"
+    : viewerSrc;
 })();
 </script>
 </body>

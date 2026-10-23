@@ -1,13 +1,16 @@
 /**
- * Print layout capture, legend building, and export (PNG / PDF).
+ * Print layout capture, legend building, and export (PNG / PDF / SVG).
  *
  * {@link buildLegend} is a pure transform from layers to legend entries and is
  * unit tested. {@link captureMapImage} reads the live map's canvases, and the
- * export helpers rasterize {@link drawLayout} at print resolution.
+ * PNG/PDF helpers rasterize {@link drawLayout} at print resolution; SVG keeps
+ * the layout furniture editable and embeds the captured map image.
  */
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
-import jsPDF from "jspdf";
-import { isFullViewportMapCanvas } from "./print-capture";
+import type { jsPDF } from "jspdf";
+import type { MapEngine } from "@geolibre/map";
+import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
 import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
 import type { PrintExtent } from "./print-extent";
 import { saveBinaryFileWithFallback } from "./tauri-io";
@@ -28,6 +31,8 @@ export interface CapturedMap {
   height: number;
   /** Ground metres per device pixel of the captured image, at map centre. */
   metersPerPixel: number;
+  /** Device pixels per CSS pixel in the captured map canvas. */
+  pixelRatio: number;
   bearingDeg: number;
 }
 
@@ -35,7 +40,7 @@ interface MapLike {
   getCanvas(): HTMLCanvasElement;
   getContainer(): HTMLElement;
   getBearing(): number;
-  unproject(point: [number, number]): { lng: number; lat: number };
+  unproject(point: [number, number]): { lng: number; lat: number } | null;
   project(lngLat: [number, number]): { x: number; y: number };
   /** Force a synchronous redraw so the preserved drawing buffer is current. */
   redraw?(): void;
@@ -104,6 +109,41 @@ function cropCaptureToClip(
 }
 
 /**
+ * Capture either engine while retaining the print scale and geographic crop.
+ *
+ * @param engine - The live map engine.
+ * @param clip - Optional geographic extent to crop to.
+ * @param decorate - Paints over the full-viewport capture before it is
+ *   cropped (the atlas mask off a Style Spec engine), given capture pixels
+ *   per CSS pixel.
+ * @returns The captured map.
+ */
+export async function captureEngineMapImage(
+  engine: MapEngine,
+  clip?: CaptureClip | null,
+  decorate?: (context: CanvasRenderingContext2D, scale: number) => void,
+): Promise<CapturedMap> {
+  const surface = engine.getRenderSurface();
+  if (!surface) throw new Error("The map is not ready yet");
+  const bitmap = await createImageBitmap(await engine.captureImage());
+  try {
+    if (engine.getRenderSurface() !== surface)
+      throw new Error("The map was destroyed during capture");
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not create the print canvas");
+    context.drawImage(bitmap, 0, 0);
+    const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
+    decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
+    return captureMapImage(surface, clip, canvas);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/**
  * Capture the current map view as a single composited canvas. All `<canvas>`
  * elements inside the map container (the MapLibre base canvas plus any deck.gl
  * overlay) are drawn in DOM order so the snapshot matches what is on screen.
@@ -114,7 +154,11 @@ function cropCaptureToClip(
  * @returns The composited image plus the ground scale and bearing needed to
  *   render a scale bar and north arrow.
  */
-export function captureMapImage(map: MapLike, clip?: CaptureClip | null): CapturedMap {
+export function captureMapImage(
+  map: MapLike,
+  clip?: CaptureClip | null,
+  captured?: HTMLCanvasElement,
+): CapturedMap {
   // Force a synchronous render first. MapLibre only paints on demand, so when
   // the Print Layout modal opens without any recent camera movement the
   // preserved drawing buffer can be stale or cleared -- which surfaced as a
@@ -136,7 +180,7 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   if (!ctx) {
     throw new Error("Could not acquire a 2D canvas context for map capture");
   }
-  const canvases = map.getContainer().querySelectorAll("canvas");
+  const canvases = captured ? [captured] : map.getContainer().querySelectorAll("canvas");
   canvases.forEach((c) => {
     // Skip the decorative effects overlay (the effects plugin's space /
     // starfield / atmosphere canvases). They are full-viewport but sit *behind*
@@ -149,7 +193,7 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
     // container -- the raster colorbar/colormap previews, the lidar profile
     // chart -- and stretching one of those over the page would overwrite the
     // map with, for example, a horizontal colormap ramp.
-    if (!isFullViewportMapCanvas(c, base)) return;
+    if (!captured && !isFullViewportMapCanvas(c, base)) return;
     try {
       ctx.drawImage(c, 0, 0, out.width, out.height);
     } catch (err) {
@@ -185,6 +229,9 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
   const span = Math.min(100, cssWidth / 2);
   const left = map.unproject([centerX - span / 2, centerY]);
   const right = map.unproject([centerX + span / 2, centerY]);
+  if (!left || !right) {
+    throw new Error("Could not measure the print scale outside the map view");
+  }
   const metersPerCssPx = haversineMeters(left, right) / span;
   const metersPerPixel = dpr > 0 ? metersPerCssPx / dpr : metersPerCssPx;
 
@@ -209,12 +256,15 @@ export function captureMapImage(map: MapLike, clip?: CaptureClip | null): Captur
     width: image.width,
     height: image.height,
     metersPerPixel,
+    pixelRatio: dpr,
     bearingDeg: map.getBearing(),
   };
 }
 
 function haversineMeters(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
-  const R = 6371008.8;
+  // The active body's radius, so an exported layout's scale bar matches the
+  // on-map one on a Moon/Mars project (GeoLibre#1128).
+  const R = getActiveMeanRadiusMeters();
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
@@ -244,6 +294,21 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
   );
   if (!blob) throw new Error("Failed to render PNG");
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Export one page with editable layout furniture and an embedded map image. */
+export async function exportLayoutSvg(
+  opts: LayoutOptions,
+  filename: string,
+): Promise<string | null> {
+  const { renderLayoutSvg } = await import("./print-layout-svg");
+  const bytes = new TextEncoder().encode(renderLayoutSvg(opts));
+  return saveBinaryFileWithFallback(bytes, {
+    defaultName: filename,
+    filters: [{ name: "SVG Image", extensions: ["svg"] }],
+    browserTypes: [{ description: "SVG Image", accept: { "image/svg+xml": [".svg"] } }],
+    mimeType: "image/svg+xml",
+  });
 }
 
 /**
@@ -315,6 +380,7 @@ export async function exportLayoutPdf(
   filename: string,
   dpi = 150,
 ): Promise<string | null> {
+  const JsPdf = await loadJsPdf();
   const size = resolvePageSize(opts);
   const { widthMm, heightMm } = pageMm(size);
   const canvas = renderToCanvas(opts, dpi);
@@ -323,7 +389,7 @@ export async function exportLayoutPdf(
   // first, so the toggle alone can disagree with the actual page shape. jsPDF
   // normalizes the format array to match the orientation (portrait forces
   // width <= height), so the two must be consistent or the page gets rotated.
-  const pdf = new jsPDF({
+  const pdf = new JsPdf({
     orientation: widthMm >= heightMm ? "landscape" : "portrait",
     unit: "mm",
     format: [widthMm, heightMm],
@@ -338,6 +404,16 @@ export async function exportLayoutPdf(
     browserTypes: [{ description: "PDF Document", accept: { "application/pdf": [".pdf"] } }],
     mimeType: "application/pdf",
   });
+}
+
+/**
+ * Imports jsPDF (~0.4 MB) on first PDF export instead of at app startup.
+ *
+ * @returns The jsPDF constructor.
+ */
+async function loadJsPdf(): Promise<typeof jsPDF> {
+  const { jsPDF: JsPdf } = await import("jspdf");
+  return JsPdf;
 }
 
 /**
@@ -371,6 +447,9 @@ export async function exportAtlasPdf(
 ): Promise<string | null> {
   const { total, optionsForPage, onProgress } = source;
   if (total < 1) throw new Error("Atlas export needs at least one page");
+  // Load jsPDF before driving the map through every page, so a failed import
+  // (e.g. offline) stops the export up front.
+  const JsPdf = await loadJsPdf();
   let pdf: jsPDF | null = null;
   for (let i = 0; i < total; i++) {
     onProgress?.(i + 1, total);
@@ -380,7 +459,7 @@ export async function exportAtlasPdf(
     const orientation = widthMm >= heightMm ? "landscape" : "portrait";
     const canvas = renderToCanvas(opts, dpi);
     if (!pdf) {
-      pdf = new jsPDF({ orientation, unit: "mm", format: [widthMm, heightMm] });
+      pdf = new JsPdf({ orientation, unit: "mm", format: [widthMm, heightMm] });
     } else {
       // The page size is fixed while the dialog iterates, but pass it per page
       // anyway so a mid-export change can never mis-scale the remaining pages.

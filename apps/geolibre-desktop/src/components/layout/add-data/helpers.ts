@@ -7,6 +7,7 @@
  */
 
 import {
+  localFileName,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   hasSimpleStyleProperties,
@@ -18,6 +19,8 @@ import type { FeatureCollection } from "geojson";
 import type { TFunction } from "i18next";
 import { classifyFetchFailure } from "../../../lib/fetch-error";
 import { isTauri } from "../../../lib/is-tauri";
+import { GEOGRAPHIC_WMS_CRS } from "../../../lib/wms-geographic";
+import { charsetFromContentType, decodeXmlBytes } from "../../../lib/xml-decode";
 import {
   DELIMITED_TEXT_DELIMITERS,
   EOX_S2CLOUDLESS_ATTRIBUTION,
@@ -35,7 +38,7 @@ export function createLayerId(): string {
 }
 
 export function fileNameFromPath(path: string): string {
-  return path.split(/[/\\]/).pop() ?? path;
+  return localFileName(path);
 }
 
 export function layerNameFromPath(path: string, fallback: string): string {
@@ -195,6 +198,44 @@ export function normalizeWmsVersion(version: unknown): string {
   return typeof version === "string" && version.trim().startsWith("1.3") ? "1.3.0" : "1.1.1";
 }
 
+/**
+ * Normalizes the CRS a WMS layer requests its tiles in, mirroring
+ * `_normalize_wms_crs` in `python/src/geolibre/project.py`: EPSG:3857 (the
+ * default), a geographic CRS of {@link GEOGRAPHIC_WMS_CRS} or any other
+ * `EPSG:<code>`. The desktop tile protocol redraws the non-Web Mercator ones
+ * into Web Mercator; the web build sends them as they are.
+ *
+ * @throws Error when `crs` is none of these, or is CRS:84 with WMS 1.1.1
+ *   (CRS:84 is defined by WMS 1.3.0 and a 1.1.1 server rejects it).
+ */
+export function normalizeWmsCrs(crs: unknown, version: unknown): string {
+  if (crs === undefined || crs === null) return "EPSG:3857";
+  const code = typeof crs === "string" ? crs.trim().toUpperCase() : "";
+  if (code !== "EPSG:3857" && !GEOGRAPHIC_WMS_CRS.has(code) && !/^EPSG:\d{4,6}$/.test(code)) {
+    throw new Error(
+      `Unsupported WMS CRS "${String(crs)}": use EPSG:3857, CRS:84 or an EPSG code such as "EPSG:25832".`,
+    );
+  }
+  if (code === "CRS:84" && normalizeWmsVersion(version) !== "1.3.0") {
+    throw new Error('WMS CRS "CRS:84" needs version "1.3.0"; use EPSG:4326 with WMS 1.1.1.');
+  }
+  return code;
+}
+
+/**
+ * `crs` normalized by {@link normalizeWmsCrs} when `version` can request it,
+ * else undefined (Web Mercator): a saved or hand-edited service may pair
+ * CRS:84 with WMS 1.1.1, or carry a code that is not a CRS at all.
+ */
+export function usableWmsCrs(crs: string | undefined, version: unknown): string | undefined {
+  if (!crs) return undefined;
+  try {
+    return normalizeWmsCrs(crs, version);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createWmsTileUrl(options: {
   endpoint: string;
   layers: string;
@@ -204,11 +245,14 @@ export function createWmsTileUrl(options: {
   tileSize: number;
   /** WMS protocol version, "1.1.1" (default) or "1.3.0". */
   version?: string;
+  /** CRS of the requested tiles, already normalized (default "EPSG:3857"). */
+  crs?: string;
 }): string {
   // WMS 1.3.0 renames the SRS parameter to CRS; a 1.3.0-only server (e.g. the
   // IGN Géoplateforme raster endpoint) rejects a 1.1.1 request outright with
   // VersionNegotiationFailed. EPSG:3857 keeps easting/northing axis order in
-  // both versions, so the BBOX template is unchanged.
+  // both versions, so the BBOX template is unchanged. Any other CRS keeps the
+  // Web Mercator BBOX template too: the desktop tile protocol rewrites it.
   const version = normalizeWmsVersion(options.version);
   return appendQuery(options.endpoint, [
     ["SERVICE", "WMS"],
@@ -218,7 +262,7 @@ export function createWmsTileUrl(options: {
     ["STYLES", options.styles],
     ["FORMAT", options.format],
     ["TRANSPARENT", options.transparent ? "TRUE" : "FALSE"],
-    [version === "1.3.0" ? "CRS" : "SRS", "EPSG:3857"],
+    [version === "1.3.0" ? "CRS" : "SRS", options.crs ?? "EPSG:3857"],
     ["BBOX", "{bbox-epsg-3857}"],
     ["WIDTH", String(options.tileSize)],
     ["HEIGHT", String(options.tileSize)],
@@ -333,20 +377,25 @@ export function proxyFeedRequestUrl(url: string): string {
  * cross-origin restrictions that block a plain browser fetch of a WMS/WFS host
  * that omits CORS headers:
  * - Desktop (Tauri): fetched natively through the `fetch_url_bytes` command,
- *   which runs in Rust and is not subject to browser CORS, so any service works.
- * - Dev server (Vite): routed through the same-origin dev proxy.
- * - Hosted web build: a direct fetch, which only succeeds when the service
- *   sends `Access-Control-Allow-Origin`.
+ *   which runs in Rust and is not subject to browser CORS.
+ * - Dev server (Vite): absolute HTTP(S) URLs use the same-origin dev proxy;
+ *   relative URLs are fetched directly from the app's origin.
+ * - Hosted web build: a direct fetch. Cross-origin services must send
+ *   `Access-Control-Allow-Origin`; same-origin ones need none.
  *
- * @param requestUrl - The absolute GetCapabilities request URL.
+ * @param requestUrl - The GetCapabilities request URL, absolute or relative.
  * @param devProxyPath - The dev-server proxy path to use under Vite.
  * @param signal - Optional abort signal.
+ * @param maxBytes - Optional response ceiling, enforced while the body is read
+ *   in both branches. Callers that supply one get a rejection whose message
+ *   carries "download limit" from whichever branch ran.
  * @returns The response ok flag, status, and body text.
  */
-async function fetchCapabilitiesText(
+export async function fetchCapabilitiesText(
   requestUrl: string,
   devProxyPath: string,
   signal?: AbortSignal,
+  maxBytes?: number,
 ): Promise<{ ok: boolean; status: number; text: string }> {
   if (isTauri()) {
     // `fetch_url_bytes` rejects on a non-2xx status, so a resolved value is OK.
@@ -359,6 +408,7 @@ async function fetchCapabilitiesText(
     const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
     const bytesPromise = fetchUrlBytes(requestUrl, {
       context: "OGC GetCapabilities",
+      ...(maxBytes === undefined ? {} : { maxBytes }),
     });
     // If the abort/timeout wins the race, the native call is left unobserved;
     // swallow its later rejection so it does not surface as an unhandled
@@ -375,9 +425,10 @@ async function fetchCapabilitiesText(
       throw error;
     }
   }
-  const fetchUrl = isViteDevServer()
-    ? `${devProxyPath}?url=${encodeURIComponent(requestUrl)}`
-    : requestUrl;
+  const fetchUrl =
+    isViteDevServer() && /^https?:\/\//i.test(requestUrl)
+      ? `${devProxyPath}?url=${encodeURIComponent(requestUrl)}`
+      : requestUrl;
   let response: Response;
   try {
     response = await fetch(fetchUrl, {
@@ -398,13 +449,55 @@ async function fetchCapabilitiesText(
     }
     throw error;
   }
-  const buffer = new Uint8Array(await response.arrayBuffer());
+  const buffer =
+    maxBytes === undefined
+      ? new Uint8Array(await response.arrayBuffer())
+      : await readLimitedBody(response, maxBytes);
   const charset = charsetFromContentType(response.headers.get("content-type"));
   return {
     ok: response.ok,
     status: response.status,
     text: decodeXmlBytes(buffer, charset),
   };
+}
+
+/**
+ * Reads a response body, refusing one that runs past `maxBytes`. Mirrors the
+ * native `read_limited_body` helper, message included, so a capped fetch fails
+ * the same way in both builds: the advertised length is rejected before a byte
+ * is read, and the stream is counted as it arrives rather than buffered whole
+ * and measured afterwards.
+ */
+export async function readLimitedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const tooLarge = () => new Error(`Response exceeds the ${maxBytes}-byte download limit`);
+  if (Number(response.headers.get("content-length")) > maxBytes) throw tooLarge();
+  const reader = response.body?.getReader();
+  // A bodyless response (an empty 204, a stubbed fetch) has nothing to stream;
+  // `arrayBuffer` resolves it without reading past the ceiling.
+  if (!reader) return new Uint8Array(await response.arrayBuffer());
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw tooLarge();
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 /**
@@ -425,28 +518,29 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 }
 
 /**
- * Decodes capabilities bytes to text, honoring a non-UTF-8 charset. The HTTP
- * `Content-Type` charset (when present) wins; otherwise the charset declared in
- * the XML prolog (`<?xml … encoding="ISO-8859-1"?>`) is used, defaulting to
- * UTF-8. `Response.text()` only honors the HTTP header, so both the browser and
- * the Tauri byte paths run through this to avoid mojibake from a legacy Latin-1
- * service that declares its charset only in the prolog.
+ * Whether a service form value is a usable endpoint: an absolute HTTP(S) URL or
+ * a same-origin reference (root-relative `/wms` or route-relative `geoserver/wms`).
+ * Relative endpoints are how reverse-proxied deployments (e.g. GeoServer behind
+ * the app origin) express their services. Protocol-relative URLs (`//host/x`)
+ * are deliberately refused here — they are cross-origin, not same-origin — as
+ * are all scheme-bearing values that are not HTTP(S): javascript:, data:, ftp:
+ * and friends are never service endpoints.
  */
-function decodeXmlBytes(bytes: Uint8Array, httpCharset?: string): string {
-  // The prolog is ASCII, so decode a short head to read the declared charset.
-  const head = new TextDecoder("ascii").decode(bytes.subarray(0, 256));
-  const prologCharset = head.match(/encoding=["']([\w-]+)["']/i)?.[1];
-  const label = httpCharset || prologCharset || "utf-8";
-  try {
-    return new TextDecoder(label).decode(bytes);
-  } catch {
-    return new TextDecoder("utf-8").decode(bytes);
+export function isServiceFormUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed)) return false;
+  if (trimmed.startsWith("//")) return false;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    if (!/^https?:\/\//i.test(trimmed)) return false;
+    try {
+      // "https://" has a scheme but no host: reject scheme-only values here
+      // instead of letting new URL() throw down in the request builders.
+      return new URL(trimmed).hostname !== "";
+    } catch {
+      return false;
+    }
   }
-}
-
-/** Extracts the `charset` from a `Content-Type` header value, if any. */
-function charsetFromContentType(contentType: string | null): string | undefined {
-  return contentType?.match(/charset=["']?([\w-]+)/i)?.[1];
+  return true;
 }
 
 /**
@@ -503,12 +597,17 @@ function buildCapabilitiesUrl(
  * top, or the duplicated (and conflicting) `REQUEST` makes the server answer the
  * wrong operation (e.g. returning capabilities XML instead of features).
  *
+ * For WMS this also drops `outputFormat`, which a GetCapabilities URL may carry
+ * (`…&outputFormat=application/xml`) but GeoServer applies to GetMap too, where
+ * it answers every tile with an XML exception. {@link createWmsGetCapabilitiesUrl}
+ * keeps it: some portals publish their capabilities URLs with it.
+ *
  * @param endpoint - The service endpoint as entered by the user.
  * @param service - Which operation-parameter set to strip.
  * @returns The endpoint with its OGC operation parameters removed.
  */
 export function stripOgcOperationParams(endpoint: string, service: "WMS" | "WFS"): string {
-  const operationParams = service === "WMS" ? WMS_OPERATION_PARAMS : WFS_OPERATION_PARAMS;
+  const operationParams = service === "WMS" ? WMS_GETMAP_OPERATION_PARAMS : WFS_OPERATION_PARAMS;
   return rewriteEndpointQuery(endpoint, operationParams, []);
 }
 
@@ -518,6 +617,17 @@ export interface WmsLayerOption {
   name: string;
   /** The layer's human-readable `<Title>`; falls back to the name if absent. */
   title: string;
+  /**
+   * The CRS codes the layer advertises (`<CRS>` in 1.3.0, `<SRS>` in 1.1.1),
+   * its own plus those inherited from its parent layers, upper-cased.
+   */
+  crs?: string[];
+  /**
+   * False when the capabilities mark the layer `queryable="0"`, on the layer
+   * or, by WMS inheritance, on its nearest ancestor that sets the attribute.
+   * Undefined when none does.
+   */
+  queryable?: boolean;
 }
 
 /**
@@ -547,6 +657,17 @@ const WMS_OPERATION_PARAMS: ReadonlySet<string> = new Set([
 export function createWmsGetCapabilitiesUrl(endpoint: string): string {
   return buildCapabilitiesUrl(endpoint, "WMS", WMS_OPERATION_PARAMS);
 }
+
+/**
+ * The WMS parameters stripped from an endpoint before a GetMap request is built
+ * on it: everything {@link WMS_OPERATION_PARAMS} drops from a GetCapabilities
+ * request, plus `outputformat` (compared lower-cased), which only makes sense on
+ * the capabilities request.
+ */
+const WMS_GETMAP_OPERATION_PARAMS: ReadonlySet<string> = new Set([
+  ...WMS_OPERATION_PARAMS,
+  "outputformat",
+]);
 
 /** The parts of a WMS GetCapabilities document the Add Data dialog uses. */
 export interface WmsCapabilities {
@@ -598,9 +719,141 @@ export function parseWmsCapabilities(xmlText: string): WmsCapabilities {
     const name = directChildText(layer, "Name");
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    layers.push({ name, title: directChildText(layer, "Title") || name });
+    const queryable = layerQueryable(layer);
+    layers.push({
+      name,
+      title: directChildText(layer, "Title") || name,
+      crs: layerCrsCodes(layer),
+      ...(queryable === undefined ? {} : { queryable }),
+    });
   }
   return { layers, version: root.getAttribute("version") };
+}
+
+/**
+ * A `<Layer>`'s `queryable` attribute, or its nearest ancestor's: WMS child
+ * layers inherit it unless they set their own.
+ */
+function layerQueryable(layer: Element): boolean | undefined {
+  for (let node: Element | null = layer; node?.localName === "Layer"; node = node.parentElement) {
+    const value = node.getAttribute("queryable")?.trim();
+    if (value === "1" || value === "true") return true;
+    if (value === "0" || value === "false") return false;
+  }
+  return undefined;
+}
+
+/**
+ * False when every layer of a comma-separated LAYERS value is among `options`
+ * and marked not queryable: GetFeatureInfo on them cannot succeed. Undefined
+ * otherwise, including layers typed by hand, which identify keeps querying.
+ */
+export function wmsLayersQueryable(options: WmsLayerOption[], layers: string): false | undefined {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const notQueryable =
+    names.length > 0 &&
+    names.every((name) => options.find((option) => option.name === name)?.queryable === false);
+  return notQueryable ? false : undefined;
+}
+
+/**
+ * The CRS codes a `<Layer>` advertises: its own `<CRS>`/`<SRS>` elements plus
+ * those of its ancestor layers, which WMS child layers inherit. A 1.1.1 `<SRS>`
+ * may list several codes separated by spaces.
+ */
+function layerCrsCodes(layer: Element): string[] {
+  const codes = new Set<string>();
+  for (let node: Element | null = layer; node?.localName === "Layer"; node = node.parentElement) {
+    for (const child of Array.from(node.children)) {
+      if (child.localName !== "CRS" && child.localName !== "SRS") continue;
+      for (const code of (child.textContent ?? "").trim().split(/\s+/)) {
+        if (code) codes.add(code.toUpperCase());
+      }
+    }
+  }
+  return [...codes];
+}
+
+/**
+ * The CRS codes the Add WMS dialog can request for every layer of a
+ * comma-separated LAYERS value: those all the layers advertise, in the order
+ * of the first one, that {@link normalizeWmsCrs} accepts for `version`.
+ * EPSG:900913 is left out (an alias of EPSG:3857). Empty when a layer is not
+ * among `options` or advertises no CRS, e.g. layers typed by hand.
+ */
+export function wmsCrsChoices(
+  options: WmsLayerOption[],
+  layers: string,
+  version: string,
+): string[] {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return [];
+  let shared: string[] | null = null;
+  for (const name of names) {
+    const codes = options.find((option) => option.name === name)?.crs;
+    if (!codes || codes.length === 0) return [];
+    shared = shared ? shared.filter((code) => codes.includes(code)) : codes;
+  }
+  return (shared ?? []).filter((code) => {
+    if (code === "EPSG:900913") return false;
+    try {
+      normalizeWmsCrs(code, version);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * True when every layer of a comma-separated LAYERS value is among `options`
+ * with the CRS codes it advertises, i.e. the capabilities say which CRSs the
+ * selection supports, even when {@link wmsCrsChoices} finds none it can use.
+ * False for layers typed by hand or a saved service not retrieved again.
+ */
+export function wmsLayersAdvertiseCrs(options: WmsLayerOption[], layers: string): boolean {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return (
+    names.length > 0 &&
+    names.every((name) => (options.find((option) => option.name === name)?.crs?.length ?? 0) > 0)
+  );
+}
+
+/**
+ * The CRS the Add WMS dialog requests: the user's `pick` when `version` can
+ * request it and the selected layers offer it, or when their CRSs are unknown
+ * (`layersAdvertiseCrs` false: typed by hand, a saved service); otherwise the
+ * {@link defaultWmsCrs} of `choices`.
+ */
+export function pickWmsCrs(
+  choices: string[],
+  pick: string,
+  version: string,
+  layersAdvertiseCrs: boolean,
+): string {
+  const valid = usableWmsCrs(pick, version) ?? "EPSG:3857";
+  return choices.includes(valid) || (choices.length === 0 && !layersAdvertiseCrs)
+    ? valid
+    : defaultWmsCrs(choices);
+}
+
+/**
+ * The CRS the dialog picks by default among `choices`: EPSG:3857 when offered
+ * (no reprojection), else a geographic CRS, else the first one; EPSG:3857 when
+ * there are no choices, as before the dialog offered any.
+ */
+export function defaultWmsCrs(choices: string[]): string {
+  if (choices.length === 0 || choices.includes("EPSG:3857")) return "EPSG:3857";
+  return choices.find((code) => GEOGRAPHIC_WMS_CRS.has(code)) ?? choices[0];
 }
 
 /**

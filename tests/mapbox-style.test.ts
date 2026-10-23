@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
 import { getMapboxAccessToken } from "@geolibre/core";
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import {
   isMapboxStyleUrl,
   mapboxAccessTokenFromStyleUrl,

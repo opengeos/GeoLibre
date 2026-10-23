@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Context" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-120, 28],
+            [-72, 28],
+            [-72, 48],
+            [-120, 48],
+            [-120, 28]
+          ]
+        ]
+      }
+    }
+  ]
+}

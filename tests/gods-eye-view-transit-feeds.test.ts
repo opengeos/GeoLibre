@@ -1,0 +1,320 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  ENTUR_CLIENT_NAME,
+  ENTUR_TRANSIT_URL,
+  GTFS_MAX_ENTITIES,
+  GTFS_MAX_RESPONSE_BYTES,
+  TRANSIT_FEEDS,
+  TRANSIT_DEV_BASE,
+  TRANSIT_MAX_MERGED_VEHICLES,
+  decodeGtfsRealtimeVehicles,
+  decodeTransitFeed,
+  fetchTransitCzml,
+  transitRequestUrl,
+  transitVehiclesToCzml,
+  type TransitVehicle,
+} from "../packages/plugins/src/plugins/gods-eye-view-transit-feeds";
+import { TRANSIT_UPSTREAMS as DEV_TRANSIT_UPSTREAMS } from "../apps/geolibre-desktop/vite-proxy-guard";
+import { TRANSIT_UPSTREAMS as EDGE_TRANSIT_UPSTREAMS } from "../workers/tiles/src/allowlisted-fetch";
+
+interface FixtureVehicle {
+  entityId: string;
+  vehicleId?: string;
+  label?: string;
+  routeId?: string;
+  tripId?: string;
+  latitude: number;
+  longitude: number;
+  bearing?: number;
+  speed?: number;
+  timestamp?: number;
+}
+
+function varint(value: number): number[] {
+  const bytes: number[] = [];
+  let remaining = value;
+  while (remaining > 127) {
+    bytes.push((remaining % 128) | 128);
+    remaining = Math.floor(remaining / 128);
+  }
+  bytes.push(remaining);
+  return bytes;
+}
+
+function field(tag: number, wire: number, bytes: readonly number[]): number[] {
+  return [...varint(tag * 8 + wire), ...bytes];
+}
+
+function stringField(tag: number, value: string): number[] {
+  const bytes = [...new TextEncoder().encode(value)];
+  return field(tag, 2, [...varint(bytes.length), ...bytes]);
+}
+
+function floatField(tag: number, value: number): number[] {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setFloat32(0, value, true);
+  return field(tag, 5, [...bytes]);
+}
+
+function messageField(tag: number, bytes: readonly number[]): number[] {
+  return field(tag, 2, [...varint(bytes.length), ...bytes]);
+}
+
+function encodeFeed(vehicles: FixtureVehicle[]): Uint8Array {
+  const header = [...stringField(1, "2.0"), ...field(3, 0, varint(1_795_000_000))];
+  const bytes = [...messageField(1, header)];
+  for (const vehicle of vehicles) {
+    const trip = [
+      ...(vehicle.tripId ? stringField(1, vehicle.tripId) : []),
+      ...(vehicle.routeId ? stringField(5, vehicle.routeId) : []),
+    ];
+    const position = [
+      ...floatField(1, vehicle.latitude),
+      ...floatField(2, vehicle.longitude),
+      ...(vehicle.bearing !== undefined ? floatField(3, vehicle.bearing) : []),
+      ...(vehicle.speed !== undefined ? floatField(5, vehicle.speed) : []),
+    ];
+    const descriptor = [
+      ...(vehicle.vehicleId ? stringField(1, vehicle.vehicleId) : []),
+      ...(vehicle.label ? stringField(2, vehicle.label) : []),
+    ];
+    const vehiclePosition = [
+      ...messageField(1, trip),
+      ...messageField(2, position),
+      ...(vehicle.timestamp !== undefined ? field(5, 0, varint(vehicle.timestamp)) : []),
+      ...messageField(8, descriptor),
+    ];
+    const entity = [...stringField(1, vehicle.entityId), ...messageField(4, vehiclePosition)];
+    bytes.push(...messageField(2, entity));
+  }
+  return new Uint8Array(bytes);
+}
+
+function encodeEmptyEntities(count: number): Uint8Array {
+  const header = [...stringField(1, "2.0")];
+  const bytes = [...messageField(1, header)];
+  for (let index = 0; index < count; index += 1) bytes.push(...messageField(2, []));
+  return new Uint8Array(bytes);
+}
+
+const bus: TransitVehicle = {
+  id: "bus-1",
+  longitude: 10.75,
+  latitude: 59.91,
+  bearing: 90,
+  speedMps: 10,
+  observedAtMs: Date.parse("2026-09-20T12:00:00Z"),
+  routeId: "RUT:Line:31",
+  tripId: "trip-1",
+  label: "31",
+  stopId: null,
+  mode: "bus",
+};
+
+describe("God's Eye View transit feed", () => {
+  it("decodes and normalizes GTFS-Realtime VehiclePositions", () => {
+    const decoded = decodeGtfsRealtimeVehicles(
+      encodeFeed([
+        {
+          entityId: "entity-1",
+          vehicleId: "vehicle-1",
+          label: "R31",
+          routeId: "RUT:Line:31",
+          tripId: "trip-1",
+          latitude: 59.91,
+          longitude: 10.75,
+          bearing: 450,
+          speed: 12.5,
+          timestamp: 1_795_000_001,
+        },
+        {
+          entityId: "null-island",
+          latitude: 0,
+          longitude: 0,
+        },
+      ]),
+    );
+
+    assert.equal(decoded.version, "2.0");
+    assert.equal(decoded.timestampMs, 1_795_000_000_000);
+    assert.equal(decoded.decodedEntityCount, 2);
+    assert.equal(decoded.vehicles.length, 1);
+    assert.deepEqual(decoded.vehicles[0], {
+      id: "vehicle-1",
+      longitude: 10.75,
+      latitude: 59.90999984741211,
+      bearing: 90,
+      speedMps: 12.5,
+      observedAtMs: 1_795_000_001_000,
+      routeId: "RUT:Line:31",
+      tripId: "trip-1",
+      label: "R31",
+      stopId: null,
+      mode: "bus",
+    });
+  });
+
+  it("classifies known Entur rail codes and keeps the newest duplicate vehicle", () => {
+    const decoded = decodeGtfsRealtimeVehicles(
+      encodeFeed([
+        {
+          entityId: "old",
+          vehicleId: "train-1",
+          routeId: "VYG:Line:F4",
+          latitude: 60,
+          longitude: 11,
+          timestamp: 100,
+        },
+        {
+          entityId: "new",
+          vehicleId: "train-1",
+          routeId: "VYG:Line:F4",
+          latitude: 61,
+          longitude: 12,
+          timestamp: 200,
+        },
+      ]),
+    );
+    assert.equal(decoded.vehicles.length, 1);
+    assert.equal(decoded.vehicles[0].latitude, 61);
+    assert.equal(decoded.vehicles[0].mode, "rail");
+  });
+
+  it("creates short interpolated CZML paths and table attributes", () => {
+    const now = new Date("2026-09-20T12:00:10Z");
+    const payload = transitVehiclesToCzml([bus], now);
+    assert.equal(payload.packets.length, 2);
+    // The feed must not win CZML clock election: a refresh reuses the layer id,
+    // so a document clock here would clamp the globe to one coast window.
+    assert.equal(payload.packets[0].clock, undefined);
+    assert.equal(payload.attributes.features.length, 1);
+    assert.equal(payload.attributes.features[0].properties?.operator, "Entur");
+    const samples = (payload.packets[1].position as { cartographicDegrees: number[] })
+      .cartographicDegrees;
+    assert.deepEqual(
+      samples.filter((_, index) => index % 4 === 0),
+      [0, 45],
+    );
+    assert.ok(samples[5] > samples[1]);
+  });
+
+  it("identifies GeoLibre when fetching Entur", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return new Response(encodeFeed([]), {
+        status: 200,
+        headers: { "content-type": "application/octet-stream" },
+      });
+    }) as typeof fetch;
+
+    const payload = await fetchTransitCzml({
+      fetch: fetcher,
+      now: new Date("2026-09-20T12:00:00Z"),
+      dev: true,
+    });
+    assert.equal(payload.attributes.features.length, 0);
+    assert.equal(calls.length, TRANSIT_FEEDS.length);
+    const enturCall = calls.find((call) => call.url === ENTUR_TRANSIT_URL);
+    assert.equal(new Headers(enturCall?.init?.headers).get("ET-Client-Name"), ENTUR_CLIENT_NAME);
+    assert.ok(calls.some((call) => call.url === `${TRANSIT_DEV_BASE}/mbta`));
+  });
+
+  it("uses fixed proxy routes for non-CORS providers", () => {
+    assert.equal(transitRequestUrl(TRANSIT_FEEDS[0], true), "/transit/vehicles/mbta");
+    assert.equal(
+      transitRequestUrl(TRANSIT_FEEDS[0], false),
+      "https://tiles.geolibre.app/transit/vehicles/mbta",
+    );
+    assert.equal(transitRequestUrl(TRANSIT_FEEDS[5], true), ENTUR_TRANSIT_URL);
+  });
+
+  it("applies provider-specific route mode classification", () => {
+    const decoded = decodeTransitFeed(
+      encodeFeed([
+        {
+          entityId: "red-line",
+          vehicleId: "train-1",
+          routeId: "Red",
+          latitude: 42.36,
+          longitude: -71.06,
+        },
+      ]),
+      TRANSIT_FEEDS[0],
+    );
+    assert.equal(decoded.vehicles[0].mode, "subway");
+  });
+
+  it("keeps successful operators when one provider fails", async () => {
+    const fetcher = (async (input: string | URL | Request) => {
+      if (String(input).endsWith("/mbta")) return new Response("down", { status: 503 });
+      return new Response(encodeFeed([]), { status: 200 });
+    }) as typeof fetch;
+    const payload = await fetchTransitCzml({ fetch: fetcher, dev: true });
+    assert.equal(payload.packets.length, 1);
+  });
+
+  it("stops reading a headerless response at the byte limit", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(GTFS_MAX_RESPONSE_BYTES));
+        controller.enqueue(new Uint8Array(1));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetcher = (async () => new Response(body, { status: 200 })) as typeof fetch;
+
+    await assert.rejects(() => fetchTransitCzml({ fetch: fetcher }), /exceeds the 8 MiB limit/);
+    assert.equal(cancelled, true);
+  });
+
+  it("rejects a truncated entity snapshot instead of silently showing partial data", async () => {
+    const bytes = encodeEmptyEntities(GTFS_MAX_ENTITIES + 1);
+    const fetcher = (async () => new Response(bytes, { status: 200 })) as typeof fetch;
+
+    await assert.rejects(
+      () => fetchTransitCzml({ fetch: fetcher }),
+      new RegExp(`exceeds the ${GTFS_MAX_ENTITIES} entity limit`),
+    );
+  });
+
+  it("keeps the merged snapshot under the combined vehicle ceiling", async () => {
+    // Every provider returns a feed right at the per-feed cap, so each one is
+    // individually legal while the fan-out is 3.5x the merged ceiling.
+    const perFeed = Math.ceil(TRANSIT_MAX_MERGED_VEHICLES / 2);
+    const bytes = encodeFeed(
+      Array.from({ length: perFeed }, (_, index) => ({
+        entityId: `v${index}`,
+        latitude: 60,
+        longitude: 10,
+      })),
+    );
+    const fetcher = (async () => new Response(bytes, { status: 200 })) as typeof fetch;
+
+    const payload = await fetchTransitCzml({ fetch: fetcher, dev: true });
+    assert.ok(payload.attributes.features.length <= TRANSIT_MAX_MERGED_VEHICLES);
+    // Whole providers are kept, so the two that fit are both complete.
+    assert.equal(payload.attributes.features.length, perFeed * 2);
+  });
+});
+
+describe("transit relay registry parity", () => {
+  it("keeps both relay upstream maps in step with the feed registry", () => {
+    const relayed = TRANSIT_FEEDS.filter((feed) => !("directUrl" in feed))
+      .map((feed) => feed.id)
+      .sort();
+    assert.deepEqual(Object.keys(EDGE_TRANSIT_UPSTREAMS).sort(), relayed);
+    assert.deepEqual(Object.keys(DEV_TRANSIT_UPSTREAMS).sort(), relayed);
+    for (const id of relayed) {
+      assert.equal(
+        DEV_TRANSIT_UPSTREAMS[id as keyof typeof DEV_TRANSIT_UPSTREAMS],
+        EDGE_TRANSIT_UPSTREAMS[id as keyof typeof EDGE_TRANSIT_UPSTREAMS],
+        `the dev and edge relays disagree on the ${id} upstream`,
+      );
+    }
+  });
+});

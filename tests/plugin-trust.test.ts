@@ -79,4 +79,37 @@ describe("partitionProjectPluginManifestUrls", () => {
     assert.deepEqual(trusted, [url]);
     assert.deepEqual(untrusted, []);
   });
+
+  it("offers no trust prompt for project URLs when sideloading is disabled", () => {
+    const url = "https://third-party.example.com/plugin.json";
+    const result = partitionProjectPluginManifestUrls([url], [], [], {
+      version: 1,
+      plugins: { sideload: false },
+    });
+    assert.deepEqual(result, { trusted: [], untrusted: [] });
+  });
+
+  it("retains installed and bundled trust while withholding unknown project URLs", () => {
+    const installed = "https://plugins.example.com/installed/plugin.json";
+    const bundled = "https://geolibre.app/plugins/demo/plugin.json";
+    const unknown = "https://third-party.example.com/plugin.json";
+    const result = partitionProjectPluginManifestUrls(
+      [installed, bundled, unknown],
+      [installed],
+      [bundled],
+      { version: 1, plugins: { sideload: false } },
+    );
+    // Trust is not policy approval: the loader still validates installed URLs
+    // against the current registry and checks the fetched manifest's id.
+    assert.deepEqual(result, { trusted: [installed, bundled], untrusted: [] });
+  });
+
+  it("preserves explicit project trust when policy permits sideloading", () => {
+    const url = "https://third-party.example.com/plugin.json";
+    const result = partitionProjectPluginManifestUrls([url], [], [], {
+      version: 1,
+      plugins: { sideload: true },
+    });
+    assert.deepEqual(result, { trusted: [], untrusted: [url] });
+  });
 });

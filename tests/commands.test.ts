@@ -146,4 +146,16 @@ describe("filterCommands", () => {
       ["y", "x"],
     );
   });
+
+  it("ranks an exact title match ahead of title-prefix matches", () => {
+    const list: Command[] = [
+      command({ id: "x", title: "Slope Vs Aspect Plot", group: "G" }),
+      command({ id: "y", title: "Slope", group: "G" }),
+      command({ id: "z", title: "Max Slope", group: "G" }),
+    ];
+    assert.deepEqual(
+      filterCommands(list, "slope").map((c) => c.id),
+      ["y", "x", "z"],
+    );
+  });
 });

@@ -1,0 +1,45 @@
+{
+  "realm": "geolibre",
+  "enabled": true,
+  "groups": [{ "name": "gis-admins", "path": "/gis-admins" }],
+  "users": [
+    {
+      "username": "grace",
+      "enabled": true,
+      "email": "grace@example.org",
+      "emailVerified": true,
+      "firstName": "Grace",
+      "lastName": "Hopper",
+      "credentials": [{ "type": "password", "value": "e2e-password", "temporary": false }],
+      "groups": ["/gis-admins"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "geolibre-server",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "e2e-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8000/oauth/sso/callback"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ]
+}

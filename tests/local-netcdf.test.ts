@@ -8,8 +8,10 @@ import {
   buildInlineZarrStore,
   composeColormappedImage,
   composeRgbImage,
+  crossesAntimeridian,
   gridBounds,
   gridPixelAt,
+  gridValueAt,
   openLocalNetcdf,
   percentileClim,
   type InlineZarrGrid,
@@ -670,6 +672,199 @@ describe("readGrid (NetCDF-3)", () => {
       file.close();
     }
   });
+
+  it("crops to a window, and moves its coordinates with it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // The 2x3 plane is [[1,2,3],[4,5,6]]; take the last two columns of it.
+      const grid = file.readGrid("temp", {}, { row: 0, column: 1, rows: 2, columns: 2 });
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [2, 3, 5, 6]);
+      // Coordinates have to follow the crop, or the cropped grid would claim
+      // the full extent and land in the wrong place on the map.
+      assert.deepEqual(Array.from(grid.lat), [10, 20]);
+      assert.deepEqual(Array.from(grid.lon), [1, 2]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("decimates a window past maxSize by a whole-number stride", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // 3 columns capped to 2 gives a stride of 2: columns 0 and 2, rows 0 only.
+      const grid = file.readGrid(
+        "temp",
+        {},
+        { row: 0, column: 0, rows: 2, columns: 3, maxSize: 2 },
+      );
+      assert.equal(grid.nx, 2);
+      assert.equal(grid.ny, 1);
+      // Cells the file actually holds, not an average of neighbours: these may
+      // be packed integers or a fill value, and averaging either invents data.
+      assert.deepEqual(Array.from(grid.values), [1, 3]);
+      assert.deepEqual(Array.from(grid.lon), [0, 2]);
+      assert.deepEqual(Array.from(grid.lat), [10]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("clamps a window that runs past the grid", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // The map's view usually overhangs the scene, so an oversized window is
+      // the normal case rather than a caller error.
+      const grid = file.readGrid("temp", {}, { row: 1, column: 2, rows: 99, columns: 99 });
+      assert.equal(grid.ny, 1);
+      assert.equal(grid.nx, 1);
+      assert.deepEqual(Array.from(grid.values), [6]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("reads the whole plane when no window is given", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const grid = file.readGrid("temp");
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 3);
+      assert.deepEqual(Array.from(grid.lon), [0, 1, 2]);
+    } finally {
+      file.close();
+    }
+  });
+});
+
+/**
+ * The same windowing contract against the *other* backend.
+ *
+ * These matter more than the NetCDF-3 cases above, not less: NetCDF-3 crops an
+ * already-decoded array in JS, while HDF5 turns the window into a hyperslab and
+ * hands it to h5wasm — a separate implementation, and the one every real
+ * hyperspectral file (EMIT and friends, all NetCDF-4) actually takes. An
+ * off-by-one in those ranges would never be caught by a NetCDF-3 test.
+ *
+ * `sample-hdf5.h5` is a miniature cube: `reflectance(bands=2, lat=3, lon=4)`
+ * packed as int16 with `scale_factor` 0.5 and `add_offset` 1, band 0 holding
+ * 0..11 (with a fill at row 1, column 1) and band 1 holding 100..111.
+ */
+describe("readGrid windows (HDF5/NetCDF-4)", () => {
+  it("reads a whole plane, with its coordinates and packing", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid("reflectance");
+      assert.equal(grid.ny, 3);
+      assert.equal(grid.nx, 4);
+      assert.deepEqual(Array.from(grid.values), [0, 1, 2, 3, 4, -9999, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(Array.from(grid.lat), [30, 20, 10]);
+      assert.deepEqual(Array.from(grid.lon), [0, 1, 2, 3]);
+      assert.equal(grid.fillValue, -9999);
+      assert.equal(grid.scaleFactor, 0.5);
+      assert.equal(grid.addOffset, 1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("selects a band from the leading axis", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid("reflectance", { bands: 1 });
+      assert.deepEqual(Array.from(grid.values.slice(0, 4)), [100, 101, 102, 103]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("crops to a window, and moves its coordinates with it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // Rows 1-2, columns 2-3 of band 1: the hyperslab has to be offset on both
+      // spatial axes at once, which a full-plane read never exercises.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 1 },
+        { row: 1, column: 2, rows: 2, columns: 2 },
+      );
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [106, 107, 110, 111]);
+      assert.deepEqual(Array.from(grid.lat), [20, 10]);
+      assert.deepEqual(Array.from(grid.lon), [2, 3]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("decimates a window past maxSize by a whole-number stride", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // 4 columns capped to 2 gives a stride of 2: columns 0 and 2, rows 0 and 2.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 0, column: 0, rows: 3, columns: 4, maxSize: 2 },
+      );
+      assert.equal(grid.ny, 2);
+      assert.equal(grid.nx, 2);
+      assert.deepEqual(Array.from(grid.values), [0, 2, 8, 10]);
+      assert.deepEqual(Array.from(grid.lat), [30, 10]);
+      assert.deepEqual(Array.from(grid.lon), [0, 2]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("clamps a window that runs past the grid", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      // An oversized window is the normal case: a map view usually overhangs
+      // the scene. A hyperslab past the end would throw in h5wasm rather than
+      // clamp, so this is the case that most needs pinning down.
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 2, column: 3, rows: 99, columns: 99 },
+      );
+      assert.equal(grid.ny, 1);
+      assert.equal(grid.nx, 1);
+      assert.deepEqual(Array.from(grid.values), [11]);
+      assert.deepEqual(Array.from(grid.lat), [10]);
+      assert.deepEqual(Array.from(grid.lon), [3]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps the fill value inside a window, rather than reading past it", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const grid = file.readGrid(
+        "reflectance",
+        { bands: 0 },
+        { row: 1, column: 1, rows: 1, columns: 2 },
+      );
+      assert.deepEqual(Array.from(grid.values), [-9999, 6]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("reports the band axis with its wavelengths", async () => {
+    const file = await openLocalNetcdf(fixture("sample-hdf5.h5"));
+    try {
+      const [axis] = file.listAxes("reflectance");
+      assert.equal(axis.name, "bands");
+      assert.equal(axis.size, 2);
+      assert.deepEqual(axis.values, [450, 550]);
+      assert.equal(axis.units, "nm");
+    } finally {
+      file.close();
+    }
+  });
 });
 
 describe("gridPixelAt", () => {
@@ -714,6 +909,31 @@ describe("gridPixelAt", () => {
     // The extent runs half a cell past the last centre, so the very edge of the
     // drawn image must still resolve rather than reporting a miss.
     assert.equal(gridPixelAt(grid(), 2.4, 20)?.column, 2);
+  });
+
+  it("reads the same cell from a second grid without searching again", () => {
+    // What an RGB composite's identify does: the click locates the cell on one
+    // channel, and the other two are read straight off those indices.
+    const pixel = gridPixelAt(grid(), 1.1, 19.6);
+    assert.ok(pixel);
+    const green = { ...grid(), values: new Float32Array([10, 20, 30, 40, 50, 60]) };
+    assert.equal(gridValueAt(green, pixel.row, pixel.column), 20);
+  });
+
+  it("unpacks and masks the same way gridPixelAt does", () => {
+    assert.equal(gridValueAt({ ...grid(), scaleFactor: 2, addOffset: 1 }, 0, 0), 3);
+    const values = new Float32Array([-9999, 2, 3, 4, 5, 6]);
+    assert.equal(gridValueAt({ ...grid(), values }, 0, 0), null);
+  });
+
+  it("reports a miss rather than folding an out-of-range column into the next row", () => {
+    // `column === nx` would index the first cell of the following row, which
+    // reads as a perfectly ordinary value from the wrong place.
+    assert.equal(gridValueAt(grid(), 0, 3), null);
+    assert.equal(gridValueAt(grid(), 0, -1), null);
+    assert.equal(gridValueAt(grid(), 2, 0), null);
+    assert.equal(gridValueAt(grid(), -1, 0), null);
+    assert.equal(gridValueAt(grid(), 0.5, 1), null);
   });
 });
 
@@ -842,5 +1062,214 @@ describe("assertByteServing", () => {
         );
       },
     );
+  });
+});
+
+/** Read a store chunk as little-endian float64 values. */
+async function readFloat64(store: KerchunkReferenceStore, key: string): Promise<number[]> {
+  const chunk = await store.get(key);
+  assert.ok(chunk, `missing key ${key}`);
+  return Array.from(new Float64Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 8));
+}
+
+/** Round to a few decimals, so float32 fixture values compare exactly. */
+function rounded(values: number[]): number[] {
+  return values.map((value) => Math.round(value * 1000) / 1000);
+}
+
+/** A five-step grey image of a fixture's whole `air` plane, one stop per column. */
+async function fixtureImage(name: string) {
+  const file = await openLocalNetcdf(fixture(name));
+  try {
+    const grid = file.readGrid("air", {});
+    return composeColormappedImage({
+      ...grid,
+      colors: ["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"],
+      // The fixtures encode column c as +0.1c, so a 0..0.4 range over row 0
+      // makes the red channel a direct readout of which column landed where.
+      clim: [250, 250.4],
+    });
+  } finally {
+    file.close();
+  }
+}
+
+// The fixtures are written by netCDF4 in the NETCDF4 (HDF5) format, like the
+// NCEP air temperature file the bugs were reported against: `air` holds
+// 250 + 10*step + row + 0.1*column on lat [60, 40, 20].
+describe("0..360 and antimeridian-crossing longitudes", () => {
+  it("shifts a 0..360 grid wholly east of 180 into the western hemisphere", async () => {
+    // lon 200..300E. The extent used to read [187.5, ..., 180] — west past
+    // east — and the layer drew nothing.
+    const file = await openLocalNetcdf(fixture("netcdf-lon360.nc"));
+    try {
+      const { refs, bounds } = file.buildLayerRefs("air");
+      assert.deepEqual(bounds, [-172.5, 10, -47.5, 70]);
+      const store = new KerchunkReferenceStore(refs);
+      assert.deepEqual(await readFloat64(store, "lon/0"), [-160, -135, -110, -85, -60]);
+      // A shift, not a roll: the data columns keep their order.
+      assert.deepEqual(
+        rounded((await readFloat32(store, "air/0.0")).slice(0, 5)),
+        [250, 250.1, 250.2, 250.3, 250.4],
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("places the image of a 0..360 grid at the same western-hemisphere extent", async () => {
+    const image = await fixtureImage("netcdf-lon360.nc");
+    assert.deepEqual(image.bounds, [-172.5, 10, -47.5, 70]);
+    assert.deepEqual(image.coordinates, [
+      [-172.5, 70],
+      [-47.5, 70],
+      [-47.5, 10],
+      [-172.5, 10],
+    ]);
+    assert.equal(crossesAntimeridian(image.bounds), false);
+  });
+
+  it("keeps a regional grid across the antimeridian contiguous, centred on the map", async () => {
+    // lon 150E..250E. Rolling it about 180 used to split it into two halves at
+    // opposite edges of the map, stretched over the whole world. It is written
+    // as 210W..110W, not 150E..250E: MapLibre never draws an image source whose
+    // centre (here 200E) lies past 180.
+    const image = await fixtureImage("netcdf-antimeridian.nc");
+    assert.deepEqual(image.bounds, [-222.5, 10, -97.5, 70]);
+    assert.equal(crossesAntimeridian(image.bounds), true);
+    // Row 0 (north) still runs west to east: column 0 darkest, column 4 white.
+    const reds = [0, 1, 2, 3, 4].map((column) => image.pixels[column * 4]);
+    assert.deepEqual(reds, [0, 64, 128, 192, 255]);
+  });
+
+  it("reports the same crossing extent from the Zarr path", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-antimeridian.nc"));
+    try {
+      const { refs, bounds } = file.buildLayerRefs("air");
+      assert.deepEqual(bounds, [-222.5, 10, -97.5, 70]);
+      const store = new KerchunkReferenceStore(refs);
+      assert.deepEqual(await readFloat64(store, "lon/0"), [-210, -185, -160, -135, -110]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("unwraps a -180..180 axis that jumps across the antimeridian", () => {
+    // 165E, 175E, 175W, 165W: contiguous once the western half gets +360.
+    const image = composeColormappedImage({
+      ny: 1,
+      nx: 4,
+      values: new Float32Array([0, 1, 2, 3]),
+      lat: new Float64Array([0]),
+      lon: new Float64Array([165, 175, -175, -165]),
+      colors: ["#000000", "#555555", "#aaaaaa", "#ffffff"],
+      clim: [0, 3],
+    });
+    assert.deepEqual(image.bounds, [160, 0, 200, 0]);
+    const reds = [0, 1, 2, 3].map((column) => image.pixels[column * 4]);
+    assert.deepEqual(reds, [0, 85, 170, 255]);
+  });
+
+  it("still rolls a global 0..360 grid about 180", () => {
+    const { bounds } = buildInlineZarrStore({
+      ...sampleGrid(),
+      nx: 4,
+      data: new Float32Array(8),
+      lon: new Float64Array([0, 90, 180, 270]),
+    });
+    assert.deepEqual(bounds, [-180, 5, 135, 25]);
+  });
+});
+
+describe("buildLayerRefs with a kept time axis", () => {
+  it("names time, lat and lon as the variable's dimensions", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const [air] = file.listVariables();
+      assert.deepEqual(air.dims, ["time", "lat", "lon"]);
+      const [time] = file.listAxes("air");
+      assert.equal(time.name, "time");
+      assert.equal(time.units, "hours since 1800-01-01");
+      assert.equal(time.calendar, "standard");
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps the whole time axis selectable, one chunk per step", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const built = file.buildLayerRefs("air", { time: 2 }, { keepAxis: "time" });
+      // The renderer is told to show the requested step on the kept axis.
+      assert.deepEqual(built.selector, { time: 2 });
+      const store = new KerchunkReferenceStore(built.refs);
+
+      const zarray = await readJson(store, "air/.zarray");
+      assert.deepEqual(zarray.shape, [3, 3, 5]);
+      assert.deepEqual(zarray.chunks, [1, 3, 5]);
+      const zattrs = await readJson(store, "air/.zattrs");
+      // Without `time` here the renderer reported "Selectable dimensions: []".
+      assert.deepEqual(zattrs._ARRAY_DIMENSIONS, ["time", "lat", "lon"]);
+
+      // The CF attributes the Time Slider decodes the raw values with.
+      const timeAttrs = await readJson(store, "time/.zattrs");
+      assert.equal(timeAttrs.units, "hours since 1800-01-01");
+      assert.equal(timeAttrs.calendar, "standard");
+      assert.deepEqual(timeAttrs._ARRAY_DIMENSIONS, ["time"]);
+      assert.deepEqual(await readFloat64(store, "time/0"), [1866744, 1866750, 1866756]);
+
+      for (const step of [0, 1, 2]) {
+        const plane = await readFloat32(store, `air/${step}.0.0`);
+        assert.equal(plane.length, 15);
+        assert.equal(rounded(plane)[0], 250 + 10 * step);
+      }
+      // Color limits come from the step shown, not the whole cube.
+      assert.ok(built.clim);
+      assert.ok(built.clim[0] >= 270 && built.clim[1] <= 272.4);
+      // The cube's longitudes are shifted like a single plane's.
+      assert.deepEqual(built.bounds, [-172.5, 10, -47.5, 70]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("builds a plain 2-D store with an empty selector when no axis is kept", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const built = file.buildLayerRefs("air", { time: 1 });
+      assert.deepEqual(built.selector, {});
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "air/.zarray")).shape, [3, 5]);
+      assert.equal(rounded(await readFloat32(store, "air/0.0"))[0], 260);
+      assert.equal(await store.get("time/.zarray"), undefined);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("ignores a kept axis the variable does not have", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-lon360.nc"));
+    try {
+      const built = file.buildLayerRefs("air", {}, { keepAxis: "time" });
+      assert.deepEqual(built.selector, {});
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "air/.zarray")).shape, [3, 5]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps a NetCDF-3 time axis the same way", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const built = file.buildLayerRefs("temp", {}, { keepAxis: "time" });
+      assert.deepEqual(built.selector, { time: 0 });
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "temp/.zarray")).shape, [2, 2, 3]);
+      assert.deepEqual(await readFloat32(store, "temp/0.0.0"), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(await readFloat32(store, "temp/1.0.0"), [11, 12, 13, 14, 15, 16]);
+    } finally {
+      file.close();
+    }
   });
 });

@@ -7,7 +7,10 @@ import {
   type NasaEarthdataEventHandler,
 } from "maplibre-gl-nasa-earthdata";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { pluginDisplayTitle } from "../plugin-i18n";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -21,7 +24,7 @@ const SOURCE_KIND = "nasa-earthdata";
 // Matches the control's native source/layer id scheme (`nasa-gibs-<key>`).
 const NATIVE_ID_PREFIX = "nasa-gibs-";
 
-let nasaEarthdataPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "nasa-earthdata-panel";
 
 const NASA_EARTHDATA_OPTIONS = {
   collapsed: false,
@@ -32,6 +35,7 @@ const NASA_EARTHDATA_OPTIONS = {
 
 let nasaEarthdataControl: NasaEarthdataControl | null = null;
 let controlEventHandler: NasaEarthdataEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 // GIBS catalog entries seen in layeradd events, keyed by GIBS layer id. The
 // control state alone does not carry the catalog data needed to rebuild
@@ -154,43 +158,57 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-nasa-earthdata",
   name: "NASA Earthdata",
   version: "0.1.4",
+  // The control's raster layers are mirrored into store layers; on ArcGIS and
+  // the Cesium globe its style is only recorded and the engine draws those
+  // store layers.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }
 
-    const added = app.addMapControl(nasaEarthdataControl, nasaEarthdataPosition);
-    if (!added) {
+    const activeControl = nasaEarthdataControl;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: pluginDisplayTitle(app, "maplibre-gl-nasa-earthdata", "NASA Earthdata"),
+      dock: "replace-style",
+      defaultWidth: 360,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const unmount = mountMapControlInPanel(app, activeControl, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        nasaEarthdataStoreSync.attach(activeControl);
+        activeControl.expand();
+        return () => {
+          nasaEarthdataStoreSync.detach();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       nasaEarthdataControl = null;
       return false;
     }
-    nasaEarthdataStoreSync.attach(nasaEarthdataControl);
-    setTimeout(() => nasaEarthdataControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!nasaEarthdataControl) return;
     nasaEarthdataStoreSync.detach();
-    app.removeMapControl(nasaEarthdataControl);
+    unmountMapControlFromPanel(nasaEarthdataControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     nasaEarthdataControl = null;
-  },
-  getMapControlPosition: () => nasaEarthdataPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    nasaEarthdataPosition = position;
-    if (!nasaEarthdataControl) return;
-    app.removeMapControl(nasaEarthdataControl);
-    const added = app.addMapControl(nasaEarthdataControl, nasaEarthdataPosition);
-    if (!added) {
-      nasaEarthdataStoreSync.detach();
-      nasaEarthdataControl = null;
-      return false;
-    }
-    setTimeout(() => nasaEarthdataControl?.expand(), 0);
   },
 };
 
 function getNasaEarthdataControlOptions(): NasaEarthdataControlOptions {
   return {
     ...NASA_EARTHDATA_OPTIONS,
-    position: nasaEarthdataPosition,
+    position: "top-left",
   };
 }

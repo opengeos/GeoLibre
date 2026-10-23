@@ -9,6 +9,7 @@ import {
   renderRasterToPmtiles,
   tileVectorToPmtiles,
 } from "../packages/processing/src/wasm-convert";
+import { releaseIdleWasmToolWorkers } from "../packages/processing/src/wasm-tool-runner";
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))));
@@ -385,6 +386,13 @@ describe("wasm-convert", () => {
         this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
       }
 
+      removeEventListener(type: string, fn: (event: unknown) => void): void {
+        this.listeners.set(
+          type,
+          (this.listeners.get(type) ?? []).filter((it) => it !== fn),
+        );
+      }
+
       postMessage(message: unknown): void {
         if (FakeWorker.postMessageError) throw FakeWorker.postMessageError;
         this.posted.push(message);
@@ -408,8 +416,11 @@ describe("wasm-convert", () => {
     });
 
     afterEach(() => {
+      // A worker parked for reuse would otherwise be handed to the next case,
+      // which then spawns none and sees an empty `instances`.
+      releaseIdleWasmToolWorkers();
       // Leaving the stub installed would push the inline tests above onto the
-      // worker path, where `new URL("./wasm-convert.worker.ts")` cannot load.
+      // worker path, where `new URL("./wasm-tool.worker.ts")` cannot load.
       if (!hadWorker) delete (globalThis as { Worker?: unknown }).Worker;
     });
 
@@ -456,26 +467,91 @@ describe("wasm-convert", () => {
     });
 
     // Vite only bundles the worker when it can statically see this exact shape.
+    // The script is shared with the Whitebox toolbox runner (wasm-client.ts),
+    // which is why it is named for tools rather than for conversion.
     it("loads the worker as an ES module", () => {
       const { worker } = startRun();
-      assert.match(worker.url.href, /wasm-convert\.worker\.ts$/);
+      assert.match(worker.url.href, /wasm-tool\.worker\.ts$/);
       assert.deepEqual(worker.options, { type: "module" });
     });
 
-    it("resolves with the worker's result and terminates it", async () => {
+    it("resolves with the worker's result and parks it for reuse", async () => {
       const { promise, worker } = startRun();
       worker.emit("message", { data: { ok: true, result: okResult } });
       const result = await promise;
       assert.deepEqual(result.data, Uint8Array.from(PMTILES_MAGIC));
       assert.deepEqual(result.messages, ["packing PMTiles archive"]);
-      assert.equal(worker.terminated, true, "the worker should not leak");
+      // Parked, not terminated: a worker compiles the ~23 MB wasm in its own
+      // module scope, so discarding it makes the next run pay that again.
+      assert.equal(worker.terminated, false, "a healthy worker should be reused");
     });
 
-    it("rejects with the error the worker reports", async () => {
+    // The compile is per worker, so the second run must not spawn a second one.
+    it("reuses the parked worker for the next run", async () => {
+      const first = startRun();
+      first.worker.emit("message", { data: { ok: true, result: okResult } });
+      await first.promise;
+      const second = startRun();
+      assert.equal(FakeWorker.instances.length, 1, "the second run should reuse the first worker");
+      assert.equal(second.worker, first.worker);
+      // Its listeners are removed on the way out, so the reused worker answers
+      // the new run once rather than resolving the previous promise again.
+      assert.equal(second.worker.listeners.get("message")?.length, 1);
+      second.worker.emit("message", { data: { ok: true, result: okResult } });
+      await second.promise;
+    });
+
+    // A worker killed while parked fires no `error` and swallows postMessage, so
+    // without the ack the run would stay pending forever. It is replaced instead.
+    it("replaces a parked worker that never acknowledges the request", async (t) => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const first = startRun();
+      first.worker.emit("message", { data: { ok: true, result: okResult } });
+      await first.promise;
+
+      const second = startRun();
+      assert.equal(second.worker, first.worker, "it should try the parked worker first");
+      t.mock.timers.tick(10_000);
+
+      assert.equal(first.worker.terminated, true, "the silent worker should be terminated");
+      assert.equal(FakeWorker.instances.length, 2, "a replacement should be spawned");
+      const replacement = FakeWorker.instances[1];
+      assert.deepEqual(
+        replacement.posted,
+        [first.worker.posted[0]],
+        "the request should be re-sent",
+      );
+
+      // The replacement answers, and the run resolves as if nothing happened.
+      replacement.emit("message", { data: { ok: true, result: okResult } });
+      const result = await second.promise;
+      assert.deepEqual(result.data, Uint8Array.from(PMTILES_MAGIC));
+    });
+
+    // A live parked worker acks, so it is kept rather than replaced.
+    it("keeps a parked worker that acknowledges the request", async (t) => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const first = startRun();
+      first.worker.emit("message", { data: { ok: true, result: okResult } });
+      await first.promise;
+
+      const second = startRun();
+      second.worker.emit("message", { data: { ok: "ack" } });
+      t.mock.timers.tick(10_000);
+      assert.equal(FakeWorker.instances.length, 1, "no replacement should be spawned");
+      assert.equal(second.worker.terminated, false);
+
+      second.worker.emit("message", { data: { ok: true, result: okResult } });
+      await second.promise;
+    });
+
+    it("rejects with the error the worker reports and still parks it", async () => {
       const { promise, worker } = startRun();
       worker.emit("message", { data: { ok: false, error: "runner exploded" } });
       await assert.rejects(promise, /runner exploded/);
-      assert.equal(worker.terminated, true);
+      // A tool that failed inside a healthy worker says nothing about the
+      // worker: the runner caught it and answered, so it is still reusable.
+      assert.equal(worker.terminated, false);
     });
 
     it("rejects when the worker itself fails", async () => {

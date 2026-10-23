@@ -17,6 +17,7 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -42,6 +43,12 @@ interface HelpMenuProps {
   diagnosticsErrorCount: number;
   onOpenCommandPalette: () => void;
   onOpenShortcuts: () => void;
+  /**
+   * Open Settings → Interface (the UI profiles). Omitted where the Settings
+   * dialog is not mounted (the viewer preset, a deployment without
+   * `settings:manage`), which drops the entry.
+   */
+  onSimplifyInterface?: () => void;
   onOpenDiagnostics: () => void;
   onCheckForUpdates: () => void;
   onAbout: () => void;
@@ -54,6 +61,7 @@ export function HelpMenu({
   diagnosticsErrorCount,
   onOpenCommandPalette,
   onOpenShortcuts,
+  onSimplifyInterface,
   onOpenDiagnostics,
   onCheckForUpdates,
   onAbout,
@@ -96,9 +104,19 @@ export function HelpMenu({
             {t("toolbar.command.keyboardShortcuts")}
           </DropdownMenuItem>
         )}
-        {(show("help.commandPalette") || show("help.keyboardShortcuts")) && (
-          <DropdownMenuSeparator />
+        {/* Points at the UI profiles that hide menus and items. Not itself a
+            profile item (no MENU_ITEM_CATALOG entry): a profile must never hide
+            the way back to the profile UI, the same reason the Settings menu
+            and its Interface section cannot be hidden. */}
+        {onSimplifyInterface && (
+          <DropdownMenuItem onSelect={onSimplifyInterface}>
+            <SlidersHorizontal className="me-2 h-3.5 w-3.5" />
+            {t("toolbar.item.simplifyInterface")}
+          </DropdownMenuItem>
         )}
+        {(show("help.commandPalette") ||
+          show("help.keyboardShortcuts") ||
+          Boolean(onSimplifyInterface)) && <DropdownMenuSeparator />}
         {show("help.website") && (
           <DropdownMenuItem onSelect={() => void openExternalLink(WEBSITE_URL)}>
             <Globe className="me-2 h-3.5 w-3.5" />

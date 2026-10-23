@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  policyEnvOverlay,
   readDeploymentEnv,
   readDeploymentEnvValue,
+  setDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-env";
 
 const KEY = "VITE_GEOLIBRE_SHARE_URL";
@@ -55,6 +57,68 @@ describe("readDeploymentEnv", () => {
       assert.deepEqual(readDeploymentEnv(), { [KEY]: "https://maps.example.org" });
       assert.equal(readDeploymentEnvValue(KEY, undefined, {}), "https://maps.example.org");
     } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  });
+});
+
+describe("deployment policy overlay", () => {
+  it("maps each policy field to its env key", () => {
+    assert.deepEqual(policyEnvOverlay(null), {});
+    assert.deepEqual(
+      policyEnvOverlay({
+        version: 1,
+        sharing: { shareUrl: "off", collabUrl: "https://c.example" },
+        geolens: { url: "same-origin" },
+        branding: { appName: "Acme" },
+        services: { builtins: false, catalog: [] },
+        ai: { enabled: true },
+      }),
+      {
+        VITE_GEOLIBRE_SHARE_URL: "off",
+        VITE_GEOLIBRE_COLLAB_URL: "https://c.example",
+        VITE_GEOLENS_DEFAULT_URL: "same-origin",
+        VITE_GEOLIBRE_APP_NAME: "Acme",
+        VITE_GEOLIBRE_SERVICES: '{"services":[]}',
+        VITE_GEOLIBRE_BUILTIN_SERVICES: "off",
+        VITE_GEOLIBRE_AI_URL: "/ai",
+      },
+    );
+    assert.equal(
+      policyEnvOverlay({ version: 1, services: { builtins: true } }).VITE_GEOLIBRE_BUILTIN_SERVICES,
+      "on",
+    );
+  });
+
+  it("contributes nothing for fields a string cannot express", () => {
+    assert.deepEqual(
+      policyEnvOverlay({
+        version: 1,
+        ai: { enabled: false, model: "m" },
+        capabilities: [],
+      }),
+      {},
+    );
+  });
+
+  it("ranks policy over runtime env over build env", () => {
+    const runtime = { [KEY]: "https://runtime.example" };
+    (globalThis as { window?: unknown }).window = {
+      __GEOLIBRE_DEPLOYMENT_ENV__: runtime,
+    };
+    try {
+      const build = { [KEY]: "https://build.example" };
+      assert.equal(readDeploymentEnv(), runtime, "no policy: window record untouched");
+      assert.equal(readDeploymentEnvValue(KEY, undefined, build), "https://runtime.example");
+      setDeploymentPolicy({
+        version: 1,
+        sharing: { shareUrl: "https://policy.example" },
+      });
+      assert.equal(readDeploymentEnvValue(KEY, undefined, build), "https://policy.example");
+      setDeploymentPolicy({ version: 1, branding: { appName: "x" } });
+      assert.equal(readDeploymentEnvValue(KEY, undefined, build), "https://runtime.example");
+    } finally {
+      setDeploymentPolicy(null);
       delete (globalThis as { window?: unknown }).window;
     }
   });

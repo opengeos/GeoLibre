@@ -3,7 +3,7 @@
 [`build-portable.ps1`](build-portable.ps1) packages GeoLibre Desktop as a
 **portable Windows zip** from a finished Windows Tauri release build. The user
 unzips the folder anywhere and runs `geolibre-desktop.exe` directly: no
-installer, no admin rights, no registry changes.
+installer and no admin rights.
 
 Unlike the NSIS / MSI / MSIX targets, this is not an installer. It stages the
 plain release binary, any sidecar DLLs next to it, and the Python sidecar under
@@ -38,8 +38,19 @@ geolibre-desktop-<version>-x64/
   geolibre-desktop.exe
   *.dll                       # e.g. WebView2Loader, if the build emits it
   README.txt
+  portable.marker             # empty; tells the app it runs from this zip
   backend/geolibre_server/    # Python sidecar (tests / caches stripped)
 ```
+
+`portable.marker` tells the app it runs from this zip, so on launch it
+registers the `org.geolibre.desktop:` OAuth callback scheme for the current
+user under `HKCU\Software\Classes`, the job an installer does for NSIS / MSI
+and the package manifest does for MSIX. Without it, browser sign-in could
+never return to the app. That key is the only registry change. It points at
+the exe's current path and is rewritten on every launch, so moving the folder
+and starting the app again repairs it; deleting the folder leaves a stale key
+until it is removed by hand. HKCU takes precedence over an all-users install,
+so if both are present, the copy launched last handles sign-in links.
 
 ## Requirements for the end user
 

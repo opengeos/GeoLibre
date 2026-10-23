@@ -1,6 +1,8 @@
-import { geocodeReverse } from "@geolibre/core";
-import type { Map as MapLibreMap, MapMouseEvent, Popup } from "maplibre-gl";
+import { GeocoderServiceError, GeocoderUnsupportedError, geocodeReverse } from "@geolibre/core";
+import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type { MapPopup } from "./map-popup";
+import { getControlMap } from "./style-map";
 
 /**
  * Reverse geocoding: click the map to resolve a place/address, shown in a
@@ -17,7 +19,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  */
 export const REVERSE_GEOCODE_PLUGIN_ID = "maplibre-reverse-geocode";
 
-let popup: Popup | null = null;
+let popup: MapPopup | null = null;
 // The map the click handler is bound to, so restoreReverseGeocode can detect a
 // map re-initialization (a brand-new Map object) and rebind.
 let boundMap: MapLibreMap | null = null;
@@ -41,6 +43,12 @@ export interface ReverseGeocodeLabels {
   noAddress: string;
   copyAddress: string;
   failed: string;
+  /** The selected geocoder (a forward-only locator) cannot reverse-geocode. */
+  unsupported: string;
+  /** The geocoding service asked for a sign-in or refused the one it got. */
+  authRequired: string;
+  /** Accessible name of the popup's close button. */
+  closePopup: string;
 }
 
 let labels: ReverseGeocodeLabels = {
@@ -48,6 +56,9 @@ let labels: ReverseGeocodeLabels = {
   noAddress: "No address found.",
   copyAddress: "Copy address",
   failed: "Reverse geocoding failed.",
+  unsupported: "The selected geocoder does not support reverse geocoding.",
+  authRequired: "The geocoding service requires a sign-in that GeoLibre does not have.",
+  closePopup: "Close popup",
 };
 
 /** Override the popup strings (called from the app layer with translated text). */
@@ -60,8 +71,8 @@ function buildPopupContent(title: string, body: string, copyLabel: string): HTML
   // is set via textContent (never parsed as HTML) and the copy button's handler
   // can be bound directly.
   const container = document.createElement("div");
+  container.className = "geolibre-reverse-geocode-content";
   container.style.maxWidth = "260px";
-  container.style.font = "13px/1.4 system-ui, sans-serif";
 
   const text = document.createElement("div");
   text.textContent = body;
@@ -71,9 +82,8 @@ function buildPopupContent(title: string, body: string, copyLabel: string): HTML
   if (title) {
     const button = document.createElement("button");
     button.type = "button";
+    button.className = "geolibre-reverse-geocode-copy";
     button.textContent = copyLabel;
-    button.style.cursor = "pointer";
-    button.style.fontSize = "12px";
     button.addEventListener("click", () => {
       void navigator.clipboard?.writeText(title).then(
         () => {
@@ -91,11 +101,12 @@ function buildPopupContent(title: string, body: string, copyLabel: string): HTML
 }
 
 /**
- * Resolve and render the address for a clicked point. The maplibre-gl `Popup`
- * class is lazy-imported (mirroring how the Directions plugin defers its heavy
- * library) so this module stays free of a runtime maplibre-gl dependency; the
- * import resolves from cache instantly since the app already loaded maplibre-gl
- * for the map.
+ * Resolve and render the address for a clicked point. The popup module is
+ * lazy-imported (mirroring how the Directions plugin defers its heavy library)
+ * so this module stays free of a runtime maplibre-gl dependency; the import
+ * resolves from cache instantly since the app already loaded maplibre-gl for
+ * the map. `createMapPopup` picks MapLibre's own popup or one placed through
+ * `project()`, so the lookup works on every engine.
  */
 async function showReverseGeocodePopup(
   map: MapLibreMap,
@@ -104,11 +115,15 @@ async function showReverseGeocodePopup(
   requestToken: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const { Popup } = await import("maplibre-gl");
+  const { createMapPopup } = await import("./map-popup");
   // A teardown or a newer click during the import supersedes this lookup.
   if (requestToken !== lookupToken) return;
   popup?.remove();
-  popup = new Popup({ closeButton: true, closeOnClick: false })
+  popup = createMapPopup(map, {
+    closeButton: true,
+    closeButtonLabel: labels.closePopup,
+    className: "geolibre-reverse-geocode-popup",
+  })
     .setLngLat([lng, lat])
     .setText(labels.lookingUp)
     .addTo(map);
@@ -118,16 +133,22 @@ async function showReverseGeocodePopup(
     if (requestToken !== lookupToken || !popup) return;
     const label = resolved?.displayName ?? labels.noAddress;
     popup.setDOMContent(buildPopupContent(resolved?.displayName ?? "", label, labels.copyAddress));
-  } catch {
+  } catch (error) {
     // A superseded/aborted request fails the token check and is ignored; only a
     // still-current failure surfaces the error text.
     if (requestToken !== lookupToken || !popup) return;
-    popup.setText(labels.failed);
+    popup.setText(
+      error instanceof GeocoderUnsupportedError
+        ? labels.unsupported
+        : error instanceof GeocoderServiceError && error.isAuthError
+          ? labels.authRequired
+          : labels.failed,
+    );
   }
 }
 
 function attach(app: GeoLibreAppAPI): void {
-  const map = app.getMap?.();
+  const map = getControlMap(app);
   if (!map) return;
   if (boundMap === map && clickHandler) return; // already bound to this map
 
@@ -158,7 +179,7 @@ function teardown(app: GeoLibreAppAPI): void {
   // is disabled.
   currentAbortController?.abort();
   currentAbortController = null;
-  const map = boundMap ?? app.getMap?.() ?? null;
+  const map = boundMap ?? getControlMap(app) ?? null;
   if (map && clickHandler) {
     map.off("click", clickHandler);
     map.getCanvas().style.cursor = previousCursor;
@@ -179,7 +200,7 @@ export function restoreReverseGeocode(app: GeoLibreAppAPI, active: boolean): voi
     teardown(app);
     return;
   }
-  const map = app.getMap?.();
+  const map = getControlMap(app);
   if (boundMap && boundMap === map && clickHandler) return; // already bound
   teardown(app);
   attach(app);
@@ -189,6 +210,9 @@ export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
   id: REVERSE_GEOCODE_PLUGIN_ID,
   name: "Reverse Geocode",
   version: "1.0.0",
+  // A click handler and a popup, both of which every engine's map hosts (the
+  // popup through `createMapPopup`).
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };

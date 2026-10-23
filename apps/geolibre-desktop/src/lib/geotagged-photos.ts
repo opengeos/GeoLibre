@@ -25,25 +25,11 @@
 
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY } from "./field-collection";
+import { photoFileExtension as fileExtension } from "./photo-file-names";
 
-/** Image extensions the photo importer recognizes. */
-export const PHOTO_IMAGE_EXTENSIONS = [
-  "jpg",
-  "jpeg",
-  "png",
-  "tif",
-  "tiff",
-  "webp",
-  "heic",
-  "heif",
-] as const;
-
-/**
- * Image extensions safe to auto-detect on drag-and-drop. Excludes tif/tiff,
- * which the map already routes to the GeoTIFF raster loader; a geotagged TIFF
- * photo can still be imported through the explicit Add Data > Photos dialog.
- */
-const PHOTO_DROP_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "heic", "heif"]);
+// Re-exported so existing importers keep one entry point; code that must stay
+// off the boot path imports these from `./photo-file-names` directly.
+export { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "./photo-file-names";
 
 /** Extensions the browser cannot decode on a canvas (thumbnail is skipped). */
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
@@ -148,24 +134,6 @@ export function base64FromBytes(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
-}
-
-function fileExtension(name: string): string {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-/** Whether a filename looks like an image the photo importer can read. */
-export function isPhotoFileName(name: string): boolean {
-  return (PHOTO_IMAGE_EXTENSIONS as readonly string[]).includes(fileExtension(name));
-}
-
-/**
- * Whether a dropped filename should be auto-imported as a geotagged photo.
- * Narrower than {@link isPhotoFileName}: it omits TIFF so dropping a GeoTIFF
- * still loads as a raster.
- */
-export function isPhotoDropFileName(name: string): boolean {
-  return PHOTO_DROP_EXTENSIONS.has(fileExtension(name));
 }
 
 function isHeicFileName(name: string): boolean {
@@ -281,8 +249,8 @@ export function buildPhotoProperties(
 
 async function readPhotoExif(file: Blob): Promise<PhotoExif | null> {
   try {
-    // Lazy-loaded so importing the lightweight `isPhotoFileName` filter (used by
-    // the drag-and-drop router) doesn't pull the EXIF parser into that chunk.
+    // Lazy-loaded so the EXIF parser is fetched only when a photo is actually
+    // parsed, not whenever a module that imports this one loads.
     const { default: exifr } = await import("exifr");
     // Default segment selection parses the TIFF block (IFD0 + EXIF + GPS), which
     // yields Make/Model/DateTimeOriginal and the computed latitude/longitude;

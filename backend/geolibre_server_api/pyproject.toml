@@ -4,7 +4,13 @@ version = "0.1.0"
 description = "Reference GeoLibre projects and identity API"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115", "sqlalchemy>=2.0", "uvicorn[standard]>=0.32"]
+dependencies = [
+  "fastapi>=0.115",
+  "httpx>=0.27",
+  "joserfc>=1.0",
+  "sqlalchemy>=2.0",
+  "uvicorn[standard]>=0.32",
+]
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.2"]
@@ -23,3 +29,8 @@ packages = ["geolibre_server_api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "postgres: requires GEOLIBRE_TEST_POSTGRES_URL (disposable schema; identity concurrency gate)",
+  "oidc_interop: requires GEOLIBRE_TEST_OIDC_ISSUER (real IdP at that issuer; CI interop job)",
+]
+addopts = "-m 'not postgres and not oidc_interop'"

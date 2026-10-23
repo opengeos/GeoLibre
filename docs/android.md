@@ -28,12 +28,40 @@ Vector tools (Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace
 Tools that depend on a **local desktop process** are hidden on mobile, because
 Android has no Python sidecar or local helper binaries:
 
-- Processing → **Raster**, **Conversion**, **AI Segmentation**
-  (all need the Python sidecar)
-- Add Data → **PostgreSQL** (served by the local Martin tile server)
+- Processing → GeoLibre Toolbox → **Conversion**, **AI Segmentation**, and the
+  sidecar-backed **Raster** tools (all need the Python sidecar; the Raster
+  submenu keeps only the client-side **Download Global DEM** tool)
+- Add Data → **SQL Server**
 
-These are gated by a user-agent `isMobile()` check so they never appear and then
-fail. Everything else runs client-side.
+These are gated by a user-agent `isMobile()` check, so the Processing menu, the
+Add Data menu, and the Layer panel's add-data group never offer them. Everything
+else runs client-side.
+
+Add Data → **PostgreSQL** works differently on mobile. The app cannot launch
+the Martin tile server, so the database renders the vector tiles itself
+(`ST_AsMVT`, PostGIS 3.0 or later) and the app fetches them over a direct
+PostgreSQL connection. The database server must therefore be reachable from
+the device's network. Mobile layers are read-only: the editable mode needs the
+desktop app's Python sidecar.
+
+TLS follows libpq's `sslmode`. `prefer` (the default) tries TLS first but
+falls back to a plaintext connection when the server does not offer it; to
+make encryption mandatory, use `require`, `verify-ca` or `verify-full`.
+`require` encrypts without checking the server certificate, `verify-ca`
+checks the chain and `verify-full` also the host name, against the bundled
+public roots or the PEM file named by `sslrootcert`. Connections through PgBouncer and hosted poolers
+work: the 30-second query timeout is set after connecting, not as a startup
+parameter.
+
+The database sources have one entry point that check does not cover: the Browser
+panel keeps its **Databases** section on every platform for discovery, so its ＋
+still opens the connection dialog. The SQL Server dialog gates on
+`isDesktopRuntime()` (`isTauri() && !isMobile()`) rather than on `isTauri()`
+alone, so on Android it shows the "requires GeoLibre Desktop" notice and
+disables Connect instead of calling a helper that cannot exist (GeoLibre#2091).
+The PostgreSQL dialog opens its mobile form instead. Expanding a saved
+PostgreSQL connection in the Browser panel to list its tables still needs the
+desktop app.
 
 ## Toolchain setup (one time)
 
@@ -79,7 +107,7 @@ export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,comm
 ```
 
 > It has to be the `RUSTFLAGS` **environment variable**. Putting the same flags
-> in `target.<triple>.rustflags` in a `.cargo/config.toml` does *not* work: the
+> in `target.<triple>.rustflags` in a `.cargo/config.toml` does _not_ work: the
 > Tauri CLI sets `RUSTFLAGS` itself when it invokes cargo for Android, and an
 > env `RUSTFLAGS` overrides the config file outright. The config-file form is
 > silently ignored — it parses, it builds, and it ships 4 KB-aligned libraries
@@ -104,11 +132,19 @@ regression.
 ```bash
 cd apps/geolibre-desktop
 npx tauri android init                          # generate src-tauri/gen/android (once)
+cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
+cp src-tauri/android/MainActivity.kt \
+  src-tauri/gen/android/app/src/main/java/org/geolibre/app/MainActivity.kt
 npx tauri android build --apk --split-per-abi    # release APKs, one per ABI (~40 MB each)
 npx tauri android build --aab                    # universal AAB for Google Play
 ```
 
-- `gen/android` is generated (git-ignored) and regenerated on demand.
+- `gen/android` is generated (git-ignored) and regenerated on demand. After
+  `init`, copy in the GeoLibre launcher icons and `src-tauri/android/MainActivity.kt`
+  (as above; CI does the same). The template's `MainActivity` draws edge-to-edge
+  without insetting the content, so on WebViews that report
+  `env(safe-area-inset-*)` as 0 the toolbar ends up under the status bar and
+  stops taking taps (GeoLibre#3044).
 - Build **release**, not `--debug`: the stripped, size-optimized Cargo profile
   makes each APK ~40 MB; a debug build is ~200 MB (unstripped `.so` with
   debuginfo).
@@ -117,7 +153,7 @@ npx tauri android build --aab                    # universal AAB for Google Play
 - Output:
   `src-tauri/gen/android/app/build/outputs/apk/<abi>/release/app-<abi>-release-unsigned.apk`,
   where `<abi>` is Tauri's short name — **`arm64`**, `arm`, `x86`, `x86_64` —
-  *not* the Android ABI directory name (`arm64-v8a`, `armeabi-v7a`) that appears
+  _not_ the Android ABI directory name (`arm64-v8a`, `armeabi-v7a`) that appears
   inside the APK under `lib/`.
 
 - Sideload/GitHub-release path: the per-ABI **APKs**.
@@ -168,7 +204,11 @@ keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA \
 
 `.github/workflows/android.yml` builds **signed**, per-ABI release APKs on each
 published GitHub release (and on demand via the "Run workflow" button) and
-uploads them as the `geolibre-android-release-apks` artifact. It signs with your release keystore when these repository secrets are
+uploads them as the `geolibre-android-release-apks` artifact. On a published
+release the APKs are **also attached to that release** as downloadable assets —
+but only when they carry a real release signature; debug-signed APKs stay a CI
+artifact and the run logs a warning saying so. It signs with your release
+keystore when these repository secrets are
 set, and otherwise falls back to a throwaway debug key so the artifact is still
 installable for testing:
 
@@ -178,10 +218,15 @@ installable for testing:
 - `ANDROID_KEY_PASSWORD`
 
 It also builds a universal **AAB** and uploads it as the separate
-`geolibre-android-play-aab` artifact — but *only* on runs that have the real
+`geolibre-android-play-aab` artifact — but _only_ on runs that have the real
 release keystore, since Play rejects a debug-signed bundle. Without the keystore
-the AAB build is skipped entirely rather than built and discarded. The AAB is
-not attached to the GitHub Release (an `.aab` is not user-installable).
+the AAB build is skipped entirely rather than built and discarded. On a published
+release the `geolibre-android.aab` is attached to the release alongside the APKs,
+so the exact bundle submitted for a tag stays recoverable after the CI artifact
+expires.
+
+> Sideloading? Take an **`.apk`**. The `.aab` is the Google Play upload format
+> and cannot be installed on a device.
 
 ## Install / test
 
@@ -230,11 +275,12 @@ is one-time Play Console onboarding.
    2023-11-13 must run a closed test with **12 opted-in testers for 14
    consecutive days** before they can apply for production access. Organization
    accounts are exempt.
-2. **Play App Signing.** Upload `upload.jks` as the *upload* key; Google holds
+2. **Play App Signing.** Upload `upload.jks` as the _upload_ key; Google holds
    the actual app signing key and re-signs each bundle. The repository's
    `ANDROID_KEYSTORE_*` secrets are that upload key — keep the keystore backed
    up, since losing it requires a Play support reset.
-3. **Upload the AAB** from the `geolibre-android-play-aab` CI artifact. The
+3. **Upload the AAB** from the `geolibre-android-play-aab` CI artifact, or from
+   the release's `geolibre-android.aab` asset once that artifact has expired. The
    `versionCode` is derived from the version in `tauri.conf.json` and must
    increase on every upload.
 4. **Store listing assets:** 512×512 icon, a **1024×500 feature graphic**, and
@@ -244,11 +290,11 @@ is one-time Play Console onboarding.
 5. **Privacy policy URL** — point at the published [privacy policy](privacy.md).
 6. **Data safety form.** Declare each network destination honestly: geocoding,
    the AI assistant, basemap/tile fetches, and Google OAuth for Earth Engine.
-   Note which are *transmitted* versus *collected* — GeoLibre does not operate a
+   Note which are _transmitted_ versus _collected_ — GeoLibre does not operate a
    backend that retains user data, but the form asks per-purpose.
 7. **Content rating** questionnaire and target audience.
 
-Keep *Known limitations* below in mind for each update: several Add Data paths
+Keep _Known limitations_ below in mind for each update: several Add Data paths
 are still inert on Android. A user tapping one and getting nothing is a one-star
 review, so gate them on mobile the way the sidecar tools already are via
 `isMobile()`.
@@ -263,3 +309,35 @@ review, so gate them on mobile the way the sidecar tools already are via
   basemap caching (bundled/downloaded MBTiles/PMTiles) is a future enhancement.
 - Earth Engine OAuth uses a desktop loopback/multi-window flow; a mobile
   deep-link redirect is future work.
+
+## Open a location from another app
+
+GeoLibre handles Android `ACTION_VIEW` intents with the `geo:` scheme, both
+when launching the app and while it is already open. Supported forms include:
+
+- `geo:40.7128,-74.006`
+- `geo:40.7128,-74.006?z=12`
+- `geo:0,0?q=40.7128,-74.006(New%20York)&z=12`
+
+Coordinates use latitude, longitude order. Numeric `q` coordinates override
+the URI's placeholder coordinates; address-only queries are not supported.
+An optional third coordinate in a direct URI is altitude in meters; it is validated
+and ignored when positioning the map. Zoom defaults to 14 and must be between
+0 and 24. Invalid locations are ignored.
+A received location moves the map without replacing the current project's layers.
+
+The Tauri deep-link plugin generates the Android intent filter from
+`tauri.android.conf.json`, so it also applies when CI regenerates `gen/android`.
+To check both a cold launch and a running app on a connected device, run this
+command twice, panning the map between invocations:
+
+```bash
+adb shell am start -a android.intent.action.VIEW -d 'geo:0,0?q=40.7128,-74.006&z=12' org.geolibre.app
+```
+
+Web links can open the same location with
+`https://geolibre.app/?lat=40.7128&lon=-74.006&zoom=12` or the compact form
+`https://geolibre.app/?12/40.7128/-74.006`. A coordinate-only launch takes
+precedence over saved startup settings and skips onboarding. An explicit
+project or data link retains its existing camera/loading behavior when combined
+with coordinate parameters.

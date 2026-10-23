@@ -130,4 +130,92 @@ describe("openRemoteNetcdfFile startup", () => {
       file.close();
     });
   });
+
+  it("tells the worker where to load h5wasm from in the open request", async () => {
+    // A production worker build has no h5wasm of its own; it imports the main
+    // build's chunk from this URL (vite-plugins/shared-h5wasm.ts) and throws
+    // without it. Outside a build the URL is null and the worker imports h5wasm
+    // normally, but the field must still travel with `open`.
+    const sent: Array<Record<string, unknown>> = [];
+    class RecordingWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: { message: string }) => void) | null = null;
+      constructor() {
+        setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+      }
+      postMessage(message: Record<string, unknown> & { id: number }): void {
+        sent.push(message);
+        setTimeout(() => this.onmessage?.({ data: { id: message.id, ok: true, result: [] } }), 0);
+      }
+      terminate(): void {}
+    }
+
+    await withWorkerStub(RecordingWorker, async () => {
+      const file = await openRemoteNetcdfFile("https://example.com/scene.nc");
+      file.close();
+    });
+    const open = sent.find((message) => message.type === "open");
+    assert.ok(open, "no open request was sent");
+    assert.ok("h5wasmUrl" in open, "the open request does not carry h5wasmUrl");
+    assert.equal(open.h5wasmUrl, null);
+    assert.equal(open.url, "https://example.com/scene.nc");
+  });
+
+  it("fails the in-flight reads when the file is closed", async () => {
+    /** A worker that answers `open` but never replies to anything after it. */
+    class SilentWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: { message: string }) => void) | null = null;
+      terminated = false;
+      constructor() {
+        setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+      }
+      postMessage(message: { id: number; type: string }): void {
+        if (message.type !== "open") return;
+        setTimeout(() => this.onmessage?.({ data: { id: message.id, ok: true, result: [] } }), 0);
+      }
+      terminate(): void {
+        this.terminated = true;
+      }
+    }
+
+    await withWorkerStub(SilentWorker, async () => {
+      const file = await openRemoteNetcdfFile("https://example.com/scene.nc");
+      const inFlight = file.readGrid("reflectance");
+      // A cube read issues dozens of these in sequence, and closing the layer
+      // (or opening a second cube, which releases the first file) lands in the
+      // middle of one. `terminate()` drops the reply, so without rejecting here
+      // the awaiting read would hang forever with its progress bar frozen and
+      // its abort checks never reached.
+      file.close();
+      await assert.rejects(inFlight, /closed/);
+    });
+  });
+
+  it("fails a read that starts after the file is closed", async () => {
+    /** A worker that answers `open` but never replies to anything after it. */
+    class SilentWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: { message: string }) => void) | null = null;
+      constructor() {
+        setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+      }
+      postMessage(message: { id: number; type: string }): void {
+        if (message.type !== "open") return;
+        setTimeout(() => this.onmessage?.({ data: { id: message.id, ok: true, result: [] } }), 0);
+      }
+      terminate(): void {}
+    }
+
+    await withWorkerStub(SilentWorker, async () => {
+      const file = await openRemoteNetcdfFile("https://example.com/scene.nc");
+      file.close();
+      // Rejecting what was already pending is not enough on its own: a cube
+      // read yields to the event loop between planes, so a close lands in that
+      // gap and the next plane would register a fresh request against a worker
+      // that is already gone — the same hang, one plane later.
+      await assert.rejects(file.readGrid("reflectance"), /closed/);
+      await assert.rejects(file.listAxes("reflectance"), /closed/);
+    });
+  });
 });

@@ -81,3 +81,28 @@ export function sanitizeStoryHtml(html: string): string {
     ALLOWED_ATTR: ["href", "title", "target", "rel"],
   });
 }
+
+/**
+ * Sanitize a map attribution string fetched from a remote metadata document.
+ *
+ * Providers embed credit links in `attribution`, so the markup has to survive —
+ * but the document behind a pasted TileJSON/service URL is untrusted and its
+ * attribution is stored on the layer and persisted with the project. MapLibre's
+ * own `DOM.sanitize` already drops `script`/`iframe` and `on*` handlers before
+ * writing the control's `innerHTML`; this narrows the input further to a credit
+ * line's worth of tags, so a crafted document cannot smuggle a styled overlay
+ * or a tracking pixel into the attribution bar, and does not depend on that
+ * upstream behavior staying as it is.
+ *
+ * @param attribution Raw attribution markup from the remote document.
+ * @returns A sanitized attribution string safe to store and render.
+ */
+export function sanitizeAttributionHtml(attribution: string): string {
+  if (!DOMPurify.isSupported) {
+    return attribution.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  return DOMPurify.sanitize(attribution, {
+    ALLOWED_TAGS: ["a", "abbr", "b", "br", "em", "i", "span", "strong", "sub", "sup"],
+    ALLOWED_ATTR: ["href", "title", "target", "rel"],
+  });
+}

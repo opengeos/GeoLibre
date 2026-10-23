@@ -10,9 +10,12 @@ import {
 import {
   clearEditSessions,
   GEOLENS_FEATURES_SOURCE_KIND,
+  GEOLENS_SERVER_URL_STORAGE_KEY,
   GEOLENS_SAMPLE_SERVERS,
   pendingCountsFor,
+  readSavedGeoLensServerUrl,
   refreshLayerToExtent,
+  resolveGeoLensInitialServerUrl,
   saveLayerEdits,
   type GeoLensEditableLayer,
 } from "../packages/plugins/src/plugins/maplibre-geolens";
@@ -250,6 +253,81 @@ describe("GEOLENS_SAMPLE_SERVERS", () => {
       assert.equal(server.baseUrl, normalizeBaseUrl(server.baseUrl));
       assert.equal(seen.has(server.baseUrl), false, `duplicate ${server.baseUrl}`);
       seen.add(server.baseUrl);
+    }
+  });
+});
+
+describe("GeoLens server preference", () => {
+  it("prefers a saved server, then deployment config", () => {
+    assert.equal(
+      resolveGeoLensInitialServerUrl(
+        "https://saved.example/",
+        "https://configured.example",
+        "https://maps.example",
+      ),
+      "https://saved.example",
+    );
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", "https://configured.example/", "https://maps.example"),
+      "https://configured.example",
+    );
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", "same-origin", "https://maps.example/"),
+      "https://maps.example",
+    );
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", "SAME-ORIGIN", "https://maps.example/"),
+      "https://maps.example",
+    );
+    assert.equal(resolveGeoLensInitialServerUrl("", "", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", "off", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", "OFF", "https://maps.example/"), "");
+    assert.equal(resolveGeoLensInitialServerUrl("", " OFF ", "https://maps.example/"), "");
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", " SAME-ORIGIN ", "https://maps.example/"),
+      "https://maps.example",
+    );
+    assert.equal(resolveGeoLensInitialServerUrl("", "same-origin", "http://maps.example/"), "");
+    assert.equal(
+      resolveGeoLensInitialServerUrl("", "http://configured.example/", "https://maps.example/"),
+      "",
+    );
+    assert.equal(
+      resolveGeoLensInitialServerUrl("https://saved.example", "off", "https://maps.example/"),
+      "",
+    );
+  });
+
+  it("reads and normalizes the last successful server from local storage", () => {
+    const previous = globalThis.localStorage;
+    const storage = new Map([[GEOLENS_SERVER_URL_STORAGE_KEY, " https://saved.example/ "]]);
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+      },
+    });
+    try {
+      assert.equal(readSavedGeoLensServerUrl(), "https://saved.example");
+    } finally {
+      if (previous === undefined) delete (globalThis as { localStorage?: unknown }).localStorage;
+      else globalThis.localStorage = previous;
+    }
+  });
+
+  it("tolerates unavailable local storage", () => {
+    const previous = globalThis.localStorage;
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: () => {
+          throw new Error("blocked");
+        },
+      },
+    });
+    try {
+      assert.equal(readSavedGeoLensServerUrl(), "");
+    } finally {
+      if (previous === undefined) delete (globalThis as { localStorage?: unknown }).localStorage;
+      else globalThis.localStorage = previous;
     }
   });
 });

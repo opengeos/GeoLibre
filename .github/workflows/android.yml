@@ -14,9 +14,16 @@ on:
 permissions:
   contents: read
 
+# A release run must never be cancelled: it is the only producer of that tag's
+# release assets, and losing it mid-upload leaves the release incomplete with no
+# obvious sign of why. So the group separates release runs from manual ones (a
+# workflow_dispatch on the same tag would otherwise share the group and cancel
+# the release build), and cancel-in-progress is disabled for release runs
+# outright. Manual runs still supersede each other, which is what you want while
+# iterating.
 concurrency:
-  group: android-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 env:
   # Keep these in sync with docs/android.md and the local setup.
@@ -54,6 +61,7 @@ jobs:
   build:
     name: Build Android APK (release)
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     # Elevated here (not workflow-level) so only this job can write release
     # assets; workflow_dispatch runs never attach but the grant is harmless.
     permissions:
@@ -72,7 +80,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -81,7 +89,7 @@ jobs:
         # Third-party action pinned to a full commit SHA (v4.0.1) per the repo's
         # policy for non-official actions; a tag could be re-pointed. v4 runs on
         # Node.js 24 (v3 targeted the now-deprecated Node.js 20).
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       - name: Install Android NDK, platform, and build-tools
         run: |
@@ -103,7 +111,7 @@ jobs:
             x86_64-linux-android
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: apps/geolibre-desktop/src-tauri -> target
 
@@ -147,6 +155,18 @@ jobs:
         # mipmaps with the GeoLibre launcher icons checked in under src-tauri/icons.
         working-directory: apps/geolibre-desktop
         run: cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
+
+      - name: Apply GeoLibre MainActivity
+        # The generated MainActivity draws edge-to-edge without insetting the
+        # content, so the toolbar sits under the status bar on WebViews that
+        # report env(safe-area-inset-*) as 0 (GeoLibre#3044). Fail if the
+        # template moved the file rather than silently shipping the default.
+        working-directory: apps/geolibre-desktop
+        run: |
+          set -euo pipefail
+          target=src-tauri/gen/android/app/src/main/java/org/geolibre/app/MainActivity.kt
+          test -f "$target" || { echo "::error::$target not generated"; exit 1; }
+          cp src-tauri/android/MainActivity.kt "$target"
 
       - name: Build release APKs (per ABI)
         # Release (not --debug): the size-optimized + stripped Cargo profile keeps
@@ -546,9 +566,7 @@ jobs:
 
       - name: Upload Play AAB
         # Separate artifact from the APKs: this is the file you upload to the
-        # Play Console, and it only exists on release-keystore runs. Deliberately
-        # NOT attached to the GitHub Release — an .aab is not user-installable
-        # and would only confuse people looking for a sideload download.
+        # Play Console, and it only exists on release-keystore runs.
         if: steps.sign.outputs.signed == 'release'
         uses: actions/upload-artifact@v7
         with:
@@ -557,19 +575,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Attach APKs to GitHub Release
-        # Only on a published release, and only when the APKs were signed with the
-        # real release keystore — never publish debug-signed builds as official
-        # downloads. workflow_dispatch runs still get the CI artifact above.
+      - name: Attach APKs and AAB to GitHub Release
+        # Only on a published release, and only when the artifacts were signed
+        # with the real release keystore — never publish debug-signed builds as
+        # official downloads (and Play rejects a debug-signed bundle anyway).
+        # workflow_dispatch runs still get the CI artifacts above.
+        #
+        # The APKs are the sideload download. The .aab is *not* user-installable
+        # — it is the Play Console upload — but it is attached so the exact
+        # bundle submitted for a tag stays recoverable after the 14-day CI
+        # artifact expires. The `.aab` extension is what distinguishes them on
+        # the releases page; docs/android.md spells the difference out.
         if: github.event_name == 'release' && steps.sign.outputs.signed == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" "$RUNNER_TEMP"/apks/*.apk --clobber
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/apks/*.apk "$RUNNER_TEMP"/aab/*.aab --clobber
 
       - name: Note skipped release upload
         # Surface why a release run did not attach APKs (missing keystore secrets),
         # so it does not look like a silent failure.
         if: github.event_name == 'release' && steps.sign.outputs.signed != 'release'
         run: |
-          echo "::warning::APKs were debug-signed (no ANDROID_KEYSTORE_BASE64 secret) and were NOT attached to the release. They are available as the CI artifact for testing only."
+          echo "::warning::APKs were debug-signed (no ANDROID_KEYSTORE_BASE64 secret) and were NOT attached to the release; no AAB was built at all. The APKs are available as the CI artifact for testing only."

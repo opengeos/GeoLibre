@@ -1,10 +1,11 @@
-// Admin UI-profile config file (issue #500).
+// Legacy admin UI-profile config file (issue #500), still honoured as a fallback.
 //
-// Administrators can pre-configure (and optionally lock) the UI profile for a
-// deployment by providing an `admin-profile.json` file:
+// The primary deployment interface is `deployment.json`'s `interface` section.
+// Administrators can use this legacy `admin-profile.json` input when that
+// section is absent or empty:
 //   - Web / embed: served from the app root (e.g. nginx docroot). 404 ⇒ ignored.
 //   - Desktop: read from `<app_config_dir>/admin-profile.json` via the Tauri
-//     `read_admin_profile` command, which takes precedence over the bundled file.
+//     `read_admin_profile` command.
 // See `docs/ui-profiles.md`.
 
 import { invoke } from "@tauri-apps/api/core";
@@ -13,6 +14,7 @@ import {
   type ExperienceLevel,
   type UiProfileSettings,
 } from "../hooks/useDesktopSettings";
+import { getDeploymentPolicy } from "./deployment-env";
 import { OPTIONAL_RESOURCE_HEADER } from "./diagnostics";
 import { isTauri } from "./is-tauri";
 import { normalizeStringList } from "./string-lists";
@@ -43,6 +45,13 @@ interface AdminProfileFile {
 export async function loadAdminProfile(
   pluginIds: readonly string[],
 ): Promise<Partial<UiProfileSettings> | null> {
+  // A deployment.json `interface` section that configures something replaces
+  // admin-profile.json whole. An empty `{}` sets nothing, so it is treated as
+  // absent rather than silently discarding the admin profile.
+  const policyInterface = getDeploymentPolicy()?.interface;
+  if (policyInterface && Object.keys(policyInterface).length > 0) {
+    return resolveAdminProfile(policyInterface, pluginIds);
+  }
   const file = await readAdminProfileFile();
   if (!file) return null;
   return resolveAdminProfile(file, pluginIds);
@@ -82,7 +91,8 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
   try {
     // The admin file is optional; a 404 here is the normal "no admin profile"
     // case, so flag the request benign to keep it out of the error diagnostics.
-    const response = await fetch(`${import.meta.env.BASE_URL}admin-profile.json`, {
+    const base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL;
+    const response = await fetch(`${base ?? "/"}admin-profile.json`, {
       headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
     });
     if (!response.ok) return null;

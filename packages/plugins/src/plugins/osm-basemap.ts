@@ -6,6 +6,7 @@ export const osmBasemapPlugin: GeoLibrePlugin = {
   id: "osm-basemap",
   name: "OpenStreetMap Basemap",
   version: "0.1.0",
+  engines: ["maplibre", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     app.setBasemap(OSM_STYLE);
   },

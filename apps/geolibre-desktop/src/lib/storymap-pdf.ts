@@ -10,8 +10,11 @@
  * stays free of MapLibre and the DOM and can be unit tested with data-URL
  * images.
  */
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import { pageMm, resolvePageSize, type Orientation, type PaperSizeId } from "./print-layout";
+import { htmlToPlainText, singleLine } from "./storymap-text";
+
+export { htmlToPlainText, singleLine } from "./storymap-text";
 
 /** An image to embed: a canvas (app) or a PNG/JPEG data URL (tests), plus its
  * natural pixel dimensions so the aspect ratio can be preserved. */
@@ -19,6 +22,22 @@ export interface HandoutImage {
   data: HTMLCanvasElement | string;
   width: number;
   height: number;
+}
+
+/**
+ * A clickable pin drawn over a chapter's map image (#1839).
+ *
+ * The pin's tip sits at the centre of the drawn map image, which is the chapter
+ * camera's centre coordinate, and the pin carries a PDF link annotation so a
+ * reader viewing the handout on screen can open that location in an external
+ * map. The URL is built by the caller, so this module stays free of any
+ * particular mapping service.
+ */
+export interface HandoutMarker {
+  /** Link opened when the pin is clicked (a Google Maps place URL today). */
+  url: string;
+  /** Pin fill colour as CSS hex, e.g. the story's `markerColor`. */
+  color: string;
 }
 
 /** A single captured chapter to place on one handout page. */
@@ -31,6 +50,8 @@ export interface HandoutChapter {
   map: HandoutImage;
   /** The chapter's own photo, when it has one and it loaded successfully. */
   photo?: HandoutImage;
+  /** Clickable location pin to draw over the map image, when enabled (#1839). */
+  marker?: HandoutMarker;
   /**
    * Draw the map image edge-to-edge as a clean full-page screen with no title,
    * description, or running header/footer. Used for the start/closing slide
@@ -59,97 +80,28 @@ const MARGIN_MM = 12;
 const PAGE_NUM_SLOT_MM = 24;
 /** Points to millimetres (1 pt = 1/72 in). */
 const PT_TO_MM = 25.4 / 72;
+/** Overall height of a location pin, from its tip to the top of its head. */
+const PIN_HEIGHT_MM = 8;
+/** Radius of the pin's round head. */
+const PIN_HEAD_RADIUS_MM = 2.5;
+/**
+ * Width of the white outline drawn around the pin, so the marker stays legible
+ * over dark or busy imagery. It is a constant outset in every direction (a
+ * uniform scale would push the head off the tip and read as a white blob above
+ * the pin rather than as an outline around it), so the white shows as an even
+ * ring however large the pin is.
+ */
+const PIN_OUTLINE_MM = 0.4;
+/** Extra hit area around the pin for the PDF link annotation, per side. */
+const PIN_LINK_PADDING_MM = 1;
+/** Fallback pin colour (MapLibre's default marker blue) for an unparseable one. */
+const DEFAULT_PIN_RGB: [number, number, number] = [0x3f, 0xb1, 0xce];
 /** Line spacing multiplier applied to a font's point size. */
 const LINE_SPACING = 1.15;
 
 /** Convert a font point size to its rendered line height in millimetres. */
 function lineHeightMm(fontSizePt: number): number {
   return fontSizePt * PT_TO_MM * LINE_SPACING;
-}
-
-/**
- * Named HTML entities a WYSIWYG story editor commonly emits, mapped to their
- * characters. Numeric entities (`&#160;`, `&#xA0;`) are handled separately.
- * Runs in Node for tests too, so this cannot rely on the DOM to decode.
- */
-const HTML_ENTITIES: Record<string, string> = {
-  nbsp: " ",
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  mdash: "—",
-  ndash: "–",
-  hellip: "…",
-  ldquo: "“",
-  rdquo: "”",
-  lsquo: "‘",
-  rsquo: "’",
-  laquo: "«",
-  raquo: "»",
-  copy: "©",
-  reg: "®",
-  trade: "™",
-  deg: "°",
-};
-
-/** Decode the named and numeric HTML entities in a string to their characters. */
-function decodeEntities(text: string): string {
-  return text.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (match, body) => {
-    if (body[0] === "#") {
-      const code =
-        body[1] === "x" || body[1] === "X"
-          ? parseInt(body.slice(2), 16)
-          : parseInt(body.slice(1), 10);
-      // Guard the Unicode range: fromCodePoint throws (RangeError) above
-      // 0x10FFFF (which would abort the export), and a code point of 0 would
-      // insert a null byte that can corrupt the PDF text stream. Both are HTML
-      // "parse errors", so leave the token as-is.
-      return Number.isInteger(code) && code >= 1 && code <= 0x10ffff
-        ? String.fromCodePoint(code)
-        : match;
-    }
-    const named = HTML_ENTITIES[body.toLowerCase()];
-    return named ?? match;
-  });
-}
-
-/**
- * Reduce an HTML (or plain) chapter description to single-spaced plain text.
- *
- * Block-level tags become line breaks, remaining tags are dropped, and named
- * and numeric HTML entities are decoded so the handout reads cleanly. This is
- * presentation-only (the text is drawn, never parsed as HTML), so a permissive
- * strip is sufficient.
- *
- * @param html The chapter description, possibly containing HTML.
- * @returns Plain text with normalized whitespace.
- */
-export function htmlToPlainText(html: string): string {
-  return decodeEntities(
-    html
-      // Drop <script>/<style> blocks with their contents first; the generic tag
-      // strip below only removes delimiters and would leave their text behind.
-      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
-      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-      // Strip remaining tags, honouring quoted attribute values so a `>` inside
-      // an attribute (e.g. title="a > b") doesn't end the match early and leak
-      // the rest of the tag as text.
-      .replace(/<[^>"']*(?:"[^"]*"[^>"']*|'[^']*'[^>"']*)*>/g, ""),
-  )
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]*\n[ \t]*/g, "\n")
-    .trim();
-}
-
-/** Reduce HTML/multi-line text to a single line of plain text for headers. */
-export function singleLine(value: string): string {
-  return htmlToPlainText(value)
-    .replace(/\s*\n\s*/g, " ")
-    .trim();
 }
 
 /**
@@ -220,7 +172,20 @@ function drawImageCover(
   );
 }
 
-/** Draw an image centered within a box at `(x, y)` of size `boxW x boxH`. */
+/** The area an image actually occupies after being fitted into its box. */
+interface DrawnRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Draw an image centered within a box at `(x, y)` of size `boxW x boxH`.
+ *
+ * @returns The rectangle the image was drawn into, so callers can place
+ *   overlays (such as a location pin) relative to the image rather than the box.
+ */
 function drawImageInBox(
   pdf: jsPDF,
   image: HandoutImage,
@@ -228,17 +193,96 @@ function drawImageInBox(
   y: number,
   boxW: number,
   boxH: number,
-): void {
+): DrawnRect {
   const fit = fitInto(image.width, image.height, boxW, boxH);
+  const rect: DrawnRect = {
+    x: x + (boxW - fit.width) / 2,
+    y: y + (boxH - fit.height) / 2,
+    width: fit.width,
+    height: fit.height,
+  };
   pdf.addImage(
     image.data,
     imageFormat(image.data),
-    x + (boxW - fit.width) / 2,
-    y + (boxH - fit.height) / 2,
-    fit.width,
-    fit.height,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
     undefined,
     "FAST",
+  );
+  return rect;
+}
+
+/**
+ * Parse a CSS hex colour (`#rgb` or `#rrggbb`, with or without the `#`) into
+ * 0-255 channels. Parsing here rather than handing the string to jsPDF keeps
+ * the output deterministic and testable, and gives a defined fallback for a
+ * story file carrying something else in `markerColor`.
+ */
+export function hexToRgb(hex: string): [number, number, number] {
+  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return DEFAULT_PIN_RGB;
+  const body =
+    match[1].length === 3
+      ? match[1]
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : match[1];
+  return [
+    parseInt(body.slice(0, 2), 16),
+    parseInt(body.slice(2, 4), 16),
+    parseInt(body.slice(4, 6), 16),
+  ];
+}
+
+/**
+ * Fill one map-pin silhouette: a round head centred on `headCy` with a tapering
+ * tail down to `tipY`. The tail's top edge is a chord of the head circle, so the
+ * two shapes join without a seam and the pair reads as a single teardrop.
+ *
+ * The head centre and the tip are passed separately (rather than deriving both
+ * from an overall height) so the outline pass can outset the radius and the tip
+ * while keeping the head where the coloured pin's head is.
+ */
+function fillPinShape(pdf: jsPDF, cx: number, headCy: number, radius: number, tipY: number): void {
+  // Take the chord below the head's centre so the tail leaves the circle at its
+  // widest usable point; the offset and half-width satisfy the circle equation.
+  const chordOffset = radius * 0.6;
+  const halfChord = Math.sqrt(Math.max(0, radius * radius - chordOffset * chordOffset));
+  const chordY = headCy + chordOffset;
+  pdf.triangle(cx - halfChord, chordY, cx + halfChord, chordY, cx, tipY, "F");
+  pdf.circle(cx, headCy, radius, "F");
+}
+
+/**
+ * Draw a clickable location pin whose tip rests at `(cx, tipY)` and attach the
+ * marker's URL to it as a PDF link annotation (#1839).
+ */
+function drawMarkerPin(pdf: jsPDF, marker: HandoutMarker, cx: number, tipY: number): void {
+  const headCy = tipY - PIN_HEIGHT_MM + PIN_HEAD_RADIUS_MM;
+  // The outline keeps the coloured pin's head centre and grows outward by the
+  // same margin all round, so it reads as a ring rather than a white pin
+  // peeking out from behind the coloured one.
+  pdf.setFillColor(255, 255, 255);
+  fillPinShape(pdf, cx, headCy, PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM, tipY + PIN_OUTLINE_MM);
+  const [r, g, b] = hexToRgb(marker.color);
+  pdf.setFillColor(r, g, b);
+  fillPinShape(pdf, cx, headCy, PIN_HEAD_RADIUS_MM, tipY);
+  // A hollow centre, like MapLibre's own marker, so the pin reads as a pin
+  // rather than a blob at print size.
+  pdf.setFillColor(255, 255, 255);
+  pdf.circle(cx, headCy, PIN_HEAD_RADIUS_MM * 0.36, "F");
+
+  const linkW = (PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM) * 2 + PIN_LINK_PADDING_MM * 2;
+  const linkH = PIN_HEIGHT_MM + PIN_OUTLINE_MM * 2 + PIN_LINK_PADDING_MM * 2;
+  pdf.link(
+    cx - linkW / 2,
+    tipY - PIN_HEIGHT_MM - PIN_OUTLINE_MM - PIN_LINK_PADDING_MM,
+    linkW,
+    linkH,
+    { url: marker.url },
   );
 }
 
@@ -325,15 +369,34 @@ function drawChapterPage(
   const imageBandHeight = bottomLimit - y - reservedForText;
   const gap = 5;
   if (imageBandHeight >= 20) {
+    let mapRect: DrawnRect;
     if (chapter.photo) {
       // Map on the left, the chapter photo on the right, each fit into its own
       // half-width column and vertically centered within the band.
       const colWidth = (contentWidth - gap) / 2;
-      drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
+      mapRect = drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
       drawImageInBox(pdf, chapter.photo, MARGIN_MM + colWidth + gap, y, colWidth, imageBandHeight);
     } else {
       // No photo: the map view spans the full content width.
-      drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
+      mapRect = drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
+    }
+    // The capture is centered on the chapter camera, so the chapter coordinate
+    // is the middle of the drawn map image. Skip the pin when the image is too
+    // small to hold it, rather than letting it spill over the title (#1839).
+    // The bounds measure the outlined pin, which is the widest and tallest ink
+    // drawn; the tip sits at the image's midpoint, so the pin needs half the
+    // image height above it to stay inside.
+    if (
+      chapter.marker &&
+      mapRect.height >= (PIN_HEIGHT_MM + PIN_OUTLINE_MM) * 2 &&
+      mapRect.width >= (PIN_HEAD_RADIUS_MM + PIN_OUTLINE_MM) * 2
+    ) {
+      drawMarkerPin(
+        pdf,
+        chapter.marker,
+        mapRect.x + mapRect.width / 2,
+        mapRect.y + mapRect.height / 2,
+      );
     }
     y += imageBandHeight + 5;
   }

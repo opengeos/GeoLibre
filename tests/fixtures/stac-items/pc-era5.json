@@ -1,0 +1,208 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "era5-pds-2020-12-fc",
+      "bbox": [-180, -90, 180, 90],
+      "type": "Feature",
+      "links": [
+        {
+          "rel": "collection",
+          "type": "application/json",
+          "href": "https://planetarycomputer.microsoft.com/api/stac/v1/collections/era5-pds"
+        },
+        {
+          "rel": "parent",
+          "type": "application/json",
+          "href": "https://planetarycomputer.microsoft.com/api/stac/v1/collections/era5-pds"
+        },
+        {
+          "rel": "root",
+          "type": "application/json",
+          "href": "https://planetarycomputer.microsoft.com/api/stac/v1/"
+        },
+        {
+          "rel": "self",
+          "type": "application/geo+json",
+          "href": "https://planetarycomputer.microsoft.com/api/stac/v1/collections/era5-pds/items/era5-pds-2020-12-fc"
+        }
+      ],
+      "assets": {
+        "precipitation_amount_1hour_Accumulation": {
+          "href": "abfs://era5/ERA5/2020/12/precipitation_amount_1hour_Accumulation.zarr",
+          "type": "application/vnd+zarr",
+          "roles": ["data"],
+          "title": "Total precipitation",
+          "xarray:open_kwargs": {
+            "chunks": {},
+            "engine": "zarr",
+            "consolidated": true,
+            "storage_options": {
+              "account_name": "cpdataeuwest"
+            }
+          }
+        },
+        "air_temperature_at_2_metres_1hour_Maximum": {
+          "href": "abfs://era5/ERA5/2020/12/air_temperature_at_2_metres_1hour_Maximum.zarr",
+          "type": "application/vnd+zarr",
+          "roles": ["data"],
+          "title": "Maximum temperature at 2 metres since previous post-processing",
+          "xarray:open_kwargs": {
+            "chunks": {},
+            "engine": "zarr",
+            "consolidated": true,
+            "storage_options": {
+              "account_name": "cpdataeuwest"
+            }
+          }
+        },
+        "air_temperature_at_2_metres_1hour_Minimum": {
+          "href": "abfs://era5/ERA5/2020/12/air_temperature_at_2_metres_1hour_Minimum.zarr",
+          "type": "application/vnd+zarr",
+          "roles": ["data"],
+          "title": "Minimum temperature at 2 metres since previous post-processing",
+          "xarray:open_kwargs": {
+            "chunks": {},
+            "engine": "zarr",
+            "consolidated": true,
+            "storage_options": {
+              "account_name": "cpdataeuwest"
+            }
+          }
+        },
+        "integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation": {
+          "href": "abfs://era5/ERA5/2020/12/integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation.zarr",
+          "type": "application/vnd+zarr",
+          "roles": ["data"],
+          "title": "Surface solar radiation downwards",
+          "xarray:open_kwargs": {
+            "chunks": {},
+            "engine": "zarr",
+            "consolidated": true,
+            "storage_options": {
+              "account_name": "cpdataeuwest"
+            }
+          }
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [180, -90],
+            [180, 90],
+            [-180, 90],
+            [-180, -90],
+            [180, -90]
+          ]
+        ]
+      },
+      "collection": "era5-pds",
+      "properties": {
+        "datetime": null,
+        "era5:kind": "fc",
+        "end_datetime": "2020-12-31T23:00:00Z",
+        "cube:variables": {
+          "time1_bounds": {
+            "type": "data",
+            "attrs": {},
+            "shape": [744, 2],
+            "dimensions": ["time", "nv"]
+          },
+          "precipitation_amount_1hour_Accumulation": {
+            "type": "data",
+            "unit": "m",
+            "attrs": {
+              "units": "m",
+              "nameCDM": "Total_precipitation_1hour_Accumulation",
+              "long_name": "Total precipitation",
+              "nameECMWF": "Total precipitation",
+              "product_type": "forecast",
+              "standard_name": "precipitation_amount",
+              "shortNameECMWF": "tp"
+            },
+            "shape": [744, 721, 1440],
+            "dimensions": ["time", "lat", "lon"],
+            "description": "Total precipitation"
+          },
+          "air_temperature_at_2_metres_1hour_Maximum": {
+            "type": "data",
+            "unit": "K",
+            "attrs": {
+              "units": "K",
+              "nameCDM": "Maximum_temperature_at_2_metres_since_previous_post-processing_surface_1_Hour_2",
+              "long_name": "Maximum temperature at 2 metres since previous post-processing",
+              "nameECMWF": "Maximum temperature at 2 metres since previous post-processing",
+              "product_type": "forecast",
+              "standard_name": "air_temperature",
+              "shortNameECMWF": "mx2t"
+            },
+            "shape": [744, 721, 1440],
+            "dimensions": ["time", "lat", "lon"],
+            "description": "Maximum temperature at 2 metres since previous post-processing"
+          },
+          "air_temperature_at_2_metres_1hour_Minimum": {
+            "type": "data",
+            "unit": "K",
+            "attrs": {
+              "units": "K",
+              "nameCDM": "Minimum_temperature_at_2_metres_since_previous_post-processing_surface_1_Hour_2",
+              "long_name": "Minimum temperature at 2 metres since previous post-processing",
+              "nameECMWF": "Minimum temperature at 2 metres since previous post-processing",
+              "product_type": "forecast",
+              "standard_name": "air_temperature",
+              "shortNameECMWF": "mn2t"
+            },
+            "shape": [744, 721, 1440],
+            "dimensions": ["time", "lat", "lon"],
+            "description": "Minimum temperature at 2 metres since previous post-processing"
+          },
+          "integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation": {
+            "type": "data",
+            "unit": "J m**-2",
+            "attrs": {
+              "units": "J m**-2",
+              "nameCDM": "Surface_solar_radiation_downwards_surface_1_Hour_Accumulation",
+              "long_name": "Surface solar radiation downwards",
+              "nameECMWF": "Surface solar radiation downwards",
+              "product_type": "forecast",
+              "standard_name": "integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air",
+              "shortNameECMWF": "ssrd"
+            },
+            "shape": [744, 721, 1440],
+            "dimensions": ["time", "lat", "lon"],
+            "description": "Surface solar radiation downwards"
+          }
+        },
+        "start_datetime": "2020-12-01T00:00:00Z",
+        "cube:dimensions": {
+          "lat": {
+            "axis": "y",
+            "step": -0.25,
+            "type": "spatial",
+            "extent": [-90.0, 90.0],
+            "description": "latitude",
+            "reference_system": "epsg:4326"
+          },
+          "lon": {
+            "axis": "x",
+            "step": 0.25,
+            "type": "spatial",
+            "extent": [0.0, 359.75],
+            "description": "longitude",
+            "reference_system": "epsg:4326"
+          },
+          "time": {
+            "step": "P0DT1H0M0S",
+            "type": "temporal",
+            "extent": ["2020-12-01T00:00:00Z", "2020-12-31T23:00:00Z"]
+          }
+        }
+      },
+      "stac_extensions": ["https://stac-extensions.github.io/datacube/v2.0.0/schema.json"],
+      "stac_version": "1.0.0"
+    }
+  ],
+  "numberMatched": 1,
+  "links": []
+}

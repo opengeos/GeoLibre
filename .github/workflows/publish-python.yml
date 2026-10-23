@@ -8,8 +8,10 @@ on:
     paths:
       - "python/**"
       - "apps/geolibre-desktop/src/**"
+      - "apps/geolibre-mcp-app/**"
       - "packages/**"
       - "scripts/build-embed.mjs"
+      - "scripts/build-mcp-app.mjs"
       - ".github/workflows/publish-python.yml"
   workflow_dispatch:
 
@@ -24,6 +26,7 @@ jobs:
   test:
     name: Test Python package
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     strategy:
       matrix:
         # Cover the declared minimum (requires-python >= 3.11) and current
@@ -42,8 +45,16 @@ jobs:
 
       # Tests cover the pure-Python builders and do not need the bundled web
       # app, so install only the runtime/test deps and run against the sources.
+      # `mcp` (including its httpcore preview transport) and `dash` are optional
+      # extras, but tests/test_mcp_server.py skips
+      # itself without the former and test_dash_component.py only covers the
+      # missing-Dash fallback without the latter, so install both here or the
+      # MCP server and the Dash component ship untested. Likewise
+      # tests/test_pointcloud.py skips without laspy/whitebox-workflows (the
+      # `pointcloud` extra) and tests/test_spaceborne_lidar.py without h5py
+      # (the `spaceborne` extra).
       - name: Install test dependencies
-        run: python -m pip install anywidget traitlets pytest
+        run: python -m pip install anywidget traitlets pytest "mcp>=2.0" "httpcore[asyncio]>=1.0.9,<2" "dash>=2.16" "laspy[lazrs]>=2.5" numpy "whitebox-workflows>=2.0.2" "h5py>=3.8"
 
       - name: Run tests
         run: python -m pytest python/tests
@@ -53,6 +64,7 @@ jobs:
   publish:
     name: Build wheel and publish
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     needs: test
     if: github.event_name == 'release'
     environment: pypi

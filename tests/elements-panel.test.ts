@@ -10,6 +10,8 @@ import {
   updateElementProps,
   deleteElementById,
   reorderElements,
+  moveElementTo,
+  moveElementToLayer,
 } from "../packages/plugins/src/plugins/maplibre-annotations";
 import {
   registerRightPanel,
@@ -163,11 +165,20 @@ describe("Elements Panel & Map Elements", () => {
       id: "image-overlay-1",
       name: "Extent Image 1 Overlay",
       type: "image",
-      source: { type: "image", url: "https://example.com/img.png", coordinates: [] },
+      source: {
+        type: "image",
+        url: "https://example.com/img.png",
+        coordinates: [
+          [-123, 38],
+          [-121, 38],
+          [-121, 36],
+          [-123, 36],
+        ],
+      },
       visible: true,
       opacity: 1,
       style: DEFAULT_LAYER_STYLE,
-      metadata: {},
+      metadata: { bounds: [-123, 36, -121, 38] },
     });
 
     // Verify initial state.
@@ -190,7 +201,27 @@ describe("Elements Panel & Map Elements", () => {
       true,
     );
 
-    // 4. Test deletion cascading.
+    // 4. Test geometry movement cascading to the visible image corners.
+    moveElementTo("extent-img-1", new LngLat(0, 0));
+    assert.deepEqual(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.source,
+      {
+        type: "image",
+        url: "https://example.com/img.png",
+        coordinates: [
+          [-1, 1],
+          [1, 1],
+          [1, -1],
+          [-1, -1],
+        ],
+      },
+    );
+    assert.deepEqual(
+      useAppStore.getState().layers.find((l) => l.id === "image-overlay-1")?.metadata.bounds,
+      [-1, -1, 1, 1],
+    );
+
+    // 5. Test deletion cascading.
     deleteElementById("extent-img-1");
     // Verify both the overlay layer and tracking feature are removed.
     assert.equal(
@@ -242,5 +273,85 @@ describe("Elements Panel & Map Elements", () => {
     features = useAppStore.getState().layers[0].geojson?.features;
     assert.equal(features?.[0].properties?.annotationId, "elem-1");
     assert.equal(features?.[1].properties?.annotationId, "elem-2");
+  });
+
+  it("moves grouped annotation geometry together", () => {
+    const store = useAppStore.getState();
+    store.addLayer({
+      id: "annotation-layer-1",
+      name: "Annotations",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: DEFAULT_LAYER_STYLE,
+      metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [0, 0],
+                [2, 2],
+              ],
+            },
+            properties: { annotationId: "arrow-1", __annotation: "arrow" },
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [2, 2] },
+            properties: { annotationId: "arrow-1", __annotation: "arrowhead" },
+          },
+        ],
+      },
+    });
+
+    moveElementTo("arrow-1", new LngLat(11, 21));
+    const features = useAppStore.getState().layers[0].geojson!.features;
+    assert.deepEqual(features[0].geometry, {
+      type: "LineString",
+      coordinates: [
+        [10, 20],
+        [12, 22],
+      ],
+    });
+    assert.deepEqual(features[1].geometry, { type: "Point", coordinates: [12, 22] });
+  });
+
+  it("moves an annotation group between layers", () => {
+    const store = useAppStore.getState();
+    for (const [id, features] of [
+      ["source", [pinFeature(new LngLat(1, 2), "Pin")]],
+      ["target", []],
+    ] as const) {
+      store.addLayer({
+        id,
+        name: id,
+        type: "geojson",
+        source: { type: "geojson" },
+        visible: true,
+        opacity: 1,
+        style: DEFAULT_LAYER_STYLE,
+        metadata: { sourceKind: ANNOTATIONS_SOURCE_KIND },
+        geojson: { type: "FeatureCollection", features: [...features] },
+      });
+    }
+    const annotationId = String(
+      useAppStore.getState().layers[0].geojson!.features[0].properties!.annotationId,
+    );
+
+    moveElementToLayer(annotationId, "source", "target");
+
+    // The emptied source layer is removed rather than left behind as an
+    // orphaned, element-less annotation layer.
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 1);
+    const [target] = layers;
+    assert.equal(target.id, "target");
+    assert.equal(target.geojson!.features.length, 1);
+    assert.equal(target.geojson!.features[0].properties!.annotationId, annotationId);
   });
 });

@@ -7,6 +7,7 @@ import {
   a5RowsToFeatureCollection,
   buildA5BinSql,
   buildA5GridFromBboxSql,
+  buildA5GridFromBboxesSql,
   buildA5GridFromSourceSql,
   buildA5GridFromWktSql,
   estimateA5CellCount,
@@ -58,6 +59,17 @@ describe("a5 SQL builders", () => {
     const narrow = buildA5GridFromBboxSql([0, 0, 1, 1], 5);
     assert.doesNotMatch(narrow, /UNION ALL/);
     assert.doesNotMatch(narrow, /a5_get_res0_cells/);
+    // The CTE body must be a query, not a bare unnest(...) expression.
+    assert.match(narrow, /WITH cells AS \(SELECT unnest\(a5_uncompact/);
+
+    const split = buildA5GridFromBboxesSql(
+      [
+        [177, -18, 180, -16],
+        [-180, -18, -179, -16],
+      ],
+      5,
+    );
+    assert.match(split, /FROM \(SELECT unnest\(.+ AS cell UNION ALL SELECT unnest\(.+ AS cell\)/);
 
     const world = buildA5GridFromBboxSql([-180, -90, 180, 90], 4);
     assert.match(world, /a5_uncompact\(a5_get_res0_cells\(\), 4\)/);

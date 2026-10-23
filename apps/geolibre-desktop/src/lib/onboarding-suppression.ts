@@ -1,4 +1,9 @@
+import type { DeploymentPolicy } from "./deployment-policy";
+import { getDeploymentPolicy } from "./deployment-env";
 import { PROJECT_URL_PARAMS, projectUrlFromLocation } from "./project-url";
+
+import { coordinateTargetFromSearch } from "./coordinate-url";
+import { initialNativeCoordinateTarget } from "./native-coordinate-open";
 
 // Values of `?welcome=` that turn the first-launch wizard off.
 const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
@@ -33,19 +38,35 @@ const EMBED_ENABLED_VALUES = new Set(["1", "true"]);
  *   - an explicit `?welcome=0` (also `false`/`off`/`no`) opts out, for embeds
  *     that don't load a project URL but still want a clean first paint, or
  *   - the build baked in `VITE_WELCOME_DISABLED=1` (also `true`), for
- *     deployments (e.g. a self-built Docker image) that never want the wizard.
+ *     deployments (e.g. a self-built Docker image) that never want the wizard, or
+ *   - `branding.welcome: false` in deployment.json, which overrides the build
+ *     env in both directions (`true` re-enables the wizard).
  *
  * @param env - Build-time env to consult; defaults to `import.meta.env`.
  *   Injectable for tests, where the Vite env does not exist.
  * @returns True when the onboarding wizard should not be shown.
  */
-export function shouldSuppressOnboarding(env: OnboardingEnv = importMetaEnv()): boolean {
+export function shouldSuppressOnboarding(
+  env: OnboardingEnv = importMetaEnv(),
+  policy: DeploymentPolicy | null = getDeploymentPolicy(),
+): boolean {
   return (
-    welcomeDisabledByEnv(env) ||
+    (policy?.branding?.welcome !== undefined
+      ? !policy.branding.welcome
+      : welcomeDisabledByEnv(env)) ||
     hasProjectDeepLinkIntent() ||
+    hasDataDeepLinkIntent() ||
+    initialNativeCoordinateTarget() !== null ||
+    (typeof window !== "undefined" &&
+      coordinateTargetFromSearch(window.location.search) !== null) ||
     embeddedByParam() ||
     welcomeDisabledByParam()
   );
+}
+
+/** A remote data/API deep link should open directly onto its imported layer. */
+function hasDataDeepLinkIntent(): boolean {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("data");
 }
 
 /**

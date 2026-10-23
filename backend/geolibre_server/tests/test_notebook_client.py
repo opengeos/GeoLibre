@@ -98,6 +98,20 @@ def test_authenticates_with_the_server_token(relay, displays):
     assert relay.calls[0].get_header("Authorization") == "token s3cret"
 
 
+def test_model_builder_graph_is_sent_as_one_command(relay, displays):
+    graph = {"nodes": [{"id": "input", "kind": "input"}], "edges": []}
+
+    notebook_client.HostMap().run_model_builder(graph)
+
+    assert json.loads(relay.calls[0].data) == {
+        "type": "geolibre:command",
+        "requestId": "",
+        "method": "runModelBuilder",
+        "params": {"graph": graph},
+    }
+    assert displays == []
+
+
 def test_warns_when_no_window_is_listening(relay, displays):
     relay.listeners = 0
 

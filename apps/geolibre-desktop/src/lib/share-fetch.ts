@@ -1,16 +1,11 @@
-// The fetch used by the share.geolibre.app client: project upload
-// (`share-geolibre.ts`) and the gallery reads (`share-gallery.ts`).
-//
-// Defaults to the WebView's browser `fetch`. The desktop build swaps in a
-// native-HTTP-backed fetch (`installNativeShareFetch`) that bypasses the
-// WebView's CORS enforcement for the share host — the share server's CORS
-// policy allows the web origin but not the Tauri WebView origin
-// (`tauri://localhost` / `http://tauri.localhost`), so a plain browser `fetch`
-// from the desktop app throws a `TypeError` that surfaces to the user as
-// "Could not reach share.geolibre.app." This mirrors the geocoding fix in
-// `geocoding-fetch.ts`.
+// The share client uses browser fetch by default. Desktop uses native HTTP only
+// for the shipped share.geolibre.app origin, which is narrowly permitted by the
+// Tauri HTTP capability. Self-hosted servers must explicitly allow the desktop
+// WebView origin in CORS (tauri://localhost on macOS/Linux and
+// http://tauri.localhost on Windows); requests are never retried via native HTTP.
 
-import { resolveShareBaseUrl } from "./share-geolibre";
+import type { fetch as nativeHttpFetch } from "@tauri-apps/plugin-http";
+import { DEFAULT_SHARE_BASE_URL, resolveShareBaseUrl } from "./share-geolibre";
 
 /**
  * The active share fetch. Browser `fetch` by default; the desktop build
@@ -54,39 +49,53 @@ export function requestOrigin(input: RequestInfo | URL): string | null {
   }
 }
 
+// Resolve lazily: share-geolibre imports getShareFetch and can load first in
+// tests, before its DEFAULT_SHARE_BASE_URL export has initialized.
+let nativeShareOrigin: string | null = null;
+function shippedShareOrigin(): string {
+  return nativeShareOrigin ?? (nativeShareOrigin = new URL(DEFAULT_SHARE_BASE_URL).origin);
+}
+
+type NativeFetch = typeof nativeHttpFetch;
+
 /**
- * Route requests to the share host through Tauri's native HTTP client instead of
- * the WebView's `fetch`, bypassing browser CORS enforcement. Requests to any
- * other host keep the browser `fetch` unchanged, so the native, CORS-exempt
- * client stays scoped to the single share origin — which must also be listed in
- * the `http:default` capability scope (`src-tauri/capabilities/default.json`).
- *
- * The host is resolved from {@link resolveShareBaseUrl} (the configured or
- * production share URL) at install time, so a `VITE_GEOLIBRE_SHARE_URL` override
- * is honored. When it resolves to null — sharing disabled, or a configured host
- * that was rejected — no override is installed and every request keeps the
- * browser `fetch`.
- *
- * Note that a self-hosted host still has to be listed in the Tauri `http:default`
- * capability scope to be reachable from the desktop build; the web build (where
- * self-hosting is configured) has no such constraint.
- *
- * Loaded lazily and only in the desktop build so the web/embedded bundles never
- * pull in `@tauri-apps/plugin-http`.
+ * Route the shipped share origin through Tauri HTTP; all other origins use the
+ * WebView's fetch and its normal CORS enforcement. Redirects on credentialed
+ * native requests are disabled in reqwest, since the plugin ignores the web
+ * Request.redirect setting and could otherwise forward Authorization off-site.
+ */
+export function createNativeShareFetch(
+  tauriFetch: NativeFetch,
+  browserFetch: typeof fetch = (input, init) => globalThis.fetch(input, init),
+): typeof fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (requestOrigin(input) !== shippedShareOrigin()) return browserFetch(input, init);
+
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+    const protectedRequest =
+      headers.has("Authorization") ||
+      (init?.redirect ?? (input instanceof Request ? input.redirect : undefined)) === "error";
+    if (!protectedRequest) return tauriFetch(input, init);
+
+    return tauriFetch(input, { ...init, maxRedirections: 0 }).then((response) => {
+      if (response.status >= 300 && response.status < 400) {
+        throw new TypeError("Redirect refused for authenticated share request");
+      }
+      return response;
+    });
+  }) as typeof fetch;
+}
+
+/**
+ * Install native HTTP only when sharing targets the shipped origin. For a
+ * self-hosted deployment the browser fetch remains active and the server must
+ * allow the exact desktop WebView origin in its CORS policy. The plugin is
+ * imported lazily because the Tauri plugin is unavailable in web/embedded
+ * runtimes.
  */
 export async function installNativeShareFetch(): Promise<void> {
-  const baseUrl = resolveShareBaseUrl();
-  if (!baseUrl) return;
-  const shareOrigin = requestOrigin(baseUrl);
-  if (!shareOrigin) return;
+  if (requestOrigin(resolveShareBaseUrl() ?? "") !== shippedShareOrigin()) return;
   const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-  setShareFetch((input, init) => {
-    if (requestOrigin(input) !== shareOrigin) {
-      // Not the share origin (a third-party thumbnail, a project URL, or the same
-      // host over plaintext): keep the browser fetch, unchanged and outside the
-      // native capability scope.
-      return fetch(input, init);
-    }
-    return tauriFetch(input, init);
-  });
+  setShareFetch(createNativeShareFetch(tauriFetch));
 }

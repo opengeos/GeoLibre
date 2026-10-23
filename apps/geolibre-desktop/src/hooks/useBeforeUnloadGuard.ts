@@ -10,9 +10,9 @@ import { isTauri } from "../lib/is-tauri";
  * `isDirty`; an unchanged project closes without interruption.
  *
  * Mount once at the app root. The guard is a no-op under Tauri (a desktop
- * window close is a separate flow and does not raise a useful web prompt) and
- * in the Jupyter/embedded build (the host owns the page lifecycle, and a
- * confirm dialog inside an iframe is undesirable).
+ * window close raises no useful web prompt; `useWindowCloseGuard` asks there
+ * instead) and in the Jupyter/embedded build (the host owns the page
+ * lifecycle, and a confirm dialog inside an iframe is undesirable).
  */
 export function useBeforeUnloadGuard(): void {
   useEffect(() => {

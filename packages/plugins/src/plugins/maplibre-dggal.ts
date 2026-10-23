@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getControlMap } from "./style-map";
 
 export const DGGAL_PLUGIN_ID = "maplibre-dggal";
 
@@ -12,6 +13,9 @@ const LABEL_LAYER_ID = "geolibre-dggal-grid-label";
 const SELECTED_SOURCE_ID = "geolibre-dggal-selected-source";
 const SELECTED_FILL_LAYER_ID = "geolibre-dggal-selected-fill";
 const SELECTED_LINE_LAYER_ID = "geolibre-dggal-selected-line";
+const NEIGHBORS_SOURCE_ID = "geolibre-dggal-neighbors-source";
+const NEIGHBORS_FILL_LAYER_ID = "geolibre-dggal-neighbors-fill";
+const NEIGHBORS_LINE_LAYER_ID = "geolibre-dggal-neighbors-line";
 const PARENTS_SOURCE_ID = "geolibre-dggal-parents-source";
 const PARENTS_LINE_LAYER_ID = "geolibre-dggal-parents-line";
 
@@ -190,7 +194,10 @@ let panelContainer: HTMLElement | null = null;
 /** The selected zone's text ID (it encodes the zone's level, unlike DGGRID). */
 let selectedCell: string | null = null;
 
-let currentGrid: FeatureCollection<Polygon> = { type: "FeatureCollection", features: [] };
+let currentGrid: FeatureCollection<Polygon> = {
+  type: "FeatureCollection",
+  features: [],
+};
 let currentError: string | null = null;
 let cachedTextFont: string[] | null = null;
 let pendingRefresh: number | null = null;
@@ -526,6 +533,8 @@ function removeLayers(activeMap: MapLibreMap): void {
   for (const id of [
     SELECTED_LINE_LAYER_ID,
     SELECTED_FILL_LAYER_ID,
+    NEIGHBORS_LINE_LAYER_ID,
+    NEIGHBORS_FILL_LAYER_ID,
     PARENTS_LINE_LAYER_ID,
     LABEL_LAYER_ID,
     LINE_LAYER_ID,
@@ -533,7 +542,7 @@ function removeLayers(activeMap: MapLibreMap): void {
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
   }
-  for (const id of [SELECTED_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
+  for (const id of [SELECTED_SOURCE_ID, NEIGHBORS_SOURCE_ID, PARENTS_SOURCE_ID, SOURCE_ID]) {
     if (activeMap.getSource(id)) activeMap.removeSource(id);
   }
 }
@@ -546,13 +555,19 @@ function ensureLayers(): void {
       id: FILL_LAYER_ID,
       type: "fill",
       source: SOURCE_ID,
-      paint: { "fill-color": settings.fillColor, "fill-opacity": settings.fillOpacity },
+      paint: {
+        "fill-color": settings.fillColor,
+        "fill-opacity": settings.fillOpacity,
+      },
     });
     map.addLayer({
       id: LINE_LAYER_ID,
       type: "line",
       source: SOURCE_ID,
-      paint: { "line-color": settings.lineColor, "line-width": settings.lineWidth },
+      paint: {
+        "line-color": settings.lineColor,
+        "line-width": settings.lineWidth,
+      },
     });
     map.addLayer({
       id: LABEL_LAYER_ID,
@@ -572,8 +587,8 @@ function ensureLayers(): void {
       },
     });
   }
-  // Added before the selected layers so the selected zone stays on top of its
-  // (larger, overlapping) parents.
+  // Parents and neighbors are added before the selected layers so the clicked
+  // zone stays on top of its (larger) parent and neighbor outlines.
   if (!map.getSource(PARENTS_SOURCE_ID)) {
     map.addSource(PARENTS_SOURCE_ID, {
       type: "geojson",
@@ -584,8 +599,30 @@ function ensureLayers(): void {
       type: "line",
       source: PARENTS_SOURCE_ID,
       paint: {
-        "line-color": "#f59e0b",
+        "line-color": "#b45309",
         "line-width": SELECTED_LINE_WIDTH * 2,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  if (!map.getSource(NEIGHBORS_SOURCE_ID)) {
+    map.addSource(NEIGHBORS_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: NEIGHBORS_FILL_LAYER_ID,
+      type: "fill",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: { "fill-color": "#f59e0b", "fill-opacity": 0.15 },
+    });
+    map.addLayer({
+      id: NEIGHBORS_LINE_LAYER_ID,
+      type: "line",
+      source: NEIGHBORS_SOURCE_ID,
+      paint: {
+        "line-color": "#f59e0b",
+        "line-width": SELECTED_LINE_WIDTH,
         "line-dasharray": [2, 2],
       },
     });
@@ -715,13 +752,13 @@ function childZones(engine: DggalDggrs, cell: string): string[] {
   return [...children];
 }
 
-/** The zone plus its edge/vertex neighbors at the same level. */
+/** Edge/vertex neighbors at the same level (excludes the zone itself). */
 function neighborCells(cell: string): string[] {
   const engine = activeDggrs();
-  if (!engine) return [cell];
+  if (!engine) return [];
   const zone = engine.getZoneFromTextID(cell);
   const level = engine.getZoneLevel(zone);
-  const ids = new Set<string>([cell]);
+  const ids = new Set<string>();
   for (const { zone: neighbor } of engine.getZoneNeighbors(zone)) {
     try {
       if (engine.getZoneLevel(neighbor) === level) {
@@ -731,12 +768,8 @@ function neighborCells(cell: string): string[] {
       // Garbage padding entry — skip.
     }
   }
+  ids.delete(cell);
   return [...ids];
-}
-
-function selectedCells(): string[] {
-  if (!selectedCell) return [];
-  return settings.includeNeighbors ? neighborCells(selectedCell) : [selectedCell];
 }
 
 function updateSelectedSource(): void {
@@ -745,7 +778,15 @@ function updateSelectedSource(): void {
   const source = map?.getSource(SELECTED_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData({
     type: "FeatureCollection",
-    features: selectedCells().map((cell) => dggalZoneFeature(engine, cell)),
+    features: selectedCell ? [dggalZoneFeature(engine, selectedCell)] : [],
+  });
+  const neighborsSource = map?.getSource(NEIGHBORS_SOURCE_ID) as GeoJSONSource | undefined;
+  neighborsSource?.setData({
+    type: "FeatureCollection",
+    features:
+      settings.includeNeighbors && selectedCell
+        ? neighborCells(selectedCell).map((cell) => dggalZoneFeature(engine, cell))
+        : [],
   });
   const parentsSource = map?.getSource(PARENTS_SOURCE_ID) as GeoJSONSource | undefined;
   parentsSource?.setData({
@@ -968,7 +1009,7 @@ function renderPanel(container: HTMLElement): void {
     if (level < DGGAL_TYPES[settings.dggrsType]) {
       addDetail(labels.children, String(childZones(engine, selectedCell).length));
     }
-    addDetail(labels.neighbors, String(neighborCells(selectedCell).length - 1));
+    addDetail(labels.neighbors, String(neighborCells(selectedCell).length));
     section.appendChild(details);
   } else {
     const empty = document.createElement("div");
@@ -1048,8 +1089,13 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
   id: DGGAL_PLUGIN_ID,
   name: "DGGAL",
   version: "1.0.0",
+  // Draws the grid through the Style Spec surface both 2D engines share
+  // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
+  // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
+  // and the Cesium globe the host draws the same GeoJSON layers natively.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: async (app) => {
-    const activeMap = app.getMap?.();
+    const activeMap = getControlMap(app);
     if (!activeMap) return false;
     const generation = (activationGeneration += 1);
     // Await WASM before mutating map/panel state so a deactivate during the
@@ -1110,7 +1156,14 @@ export const maplibreDggalPlugin: GeoLibrePlugin = {
     if (map && clickHandler) map.off("click", clickHandler);
     unsubscribeBasemap?.();
     unregisterPanel?.();
-    if (map) removeLayers(map);
+    // A renderer swap deactivates this plugin after the old map was removed;
+    // a removed mapbox-gl map throws from getLayer (its style is gone), and
+    // there is nothing left to remove.
+    try {
+      if (map) removeLayers(map);
+    } catch {
+      // Already torn down with the map.
+    }
     moveHandler = null;
     clickHandler = null;
     unsubscribeBasemap = null;

@@ -18,6 +18,11 @@ name: PR preview deploy
 #   * No `npm ci`, no build, no `npm run`, no running a script out of `site/`.
 #     The artifact is inert data here -- static files pushed to a host.
 #   * Nothing from the artifact may be interpolated into a `run:` block.
+#   * The one exception, the `smoke` job, runs `npm ci` and Playwright from the
+#     DEFAULT BRANCH checkout against the deployed URL. The PR's code runs only
+#     inside that headless browser, as it would for any visitor. That job holds
+#     no secrets and a read-only token, and reports its result through the
+#     separate `smoke-status` job, which runs nothing at all.
 #
 # GitHub Pages and Cloudflare deploy in separate jobs. They share only the PR
 # resolution job, so a failure in either host cannot block the other.
@@ -32,9 +37,9 @@ name: PR preview deploy
 #   CLOUDFLARE_ACCOUNT_ID
 #   PREVIEW_DEPLOY_TOKEN   - fine-grained PAT scoped to opengeos/pages-preview
 #                            only, with Contents: Read and write + Pages: Read.
-#                            Pages read is required by wait-for-pages-deployment
-#                            below; without it the poll never sees a build and
-#                            the job times out with a misleading error.
+#                            Pages read is required by the publication verifier
+#                            below; without it the poll cannot match a build to
+#                            the deployed commit.
 
 on:
   workflow_run:
@@ -59,6 +64,7 @@ jobs:
   resolve:
     name: Resolve pull request
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Only for builds that came from a pull request and actually succeeded. A
     # `workflow_dispatch` build of pr-preview.yml is a build smoke test and
     # publishes nothing, matching the behaviour before the split.
@@ -123,6 +129,9 @@ jobs:
       needs.resolve.outputs.found == 'true' &&
       needs.resolve.outputs.action == 'deploy'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      url: ${{ steps.deploy.outputs.deployment-url }}
     steps:
       - name: Download the built site
         uses: actions/download-artifact@v8
@@ -188,11 +197,112 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
 
+  # Loads the deployed Cloudflare preview's app in a browser and fails on a map
+  # that never finishes loading, any console error, or any failed same-origin
+  # request (e2e/preview/preview-smoke.spec.ts). Catches what CI's `vite
+  # preview` at `/` cannot: the real host and the `/demo/` subpath (#2916,
+  # #2919). Only Cloudflare: the GitHub Pages preview publishes asynchronously
+  # and its own verifier already polls for it.
+  smoke:
+    name: Smoke-test Cloudflare preview
+    needs: cloudflare
+    if: needs.cloudflare.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # The default branch, never the PR (see the invariant at the top).
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Smoke-test the deployed app
+        run: npm run test:e2e:preview
+        env:
+          # Passed through env, never interpolated into the script. The config
+          # collapses the double slash a trailing-slash deployment URL would add.
+          PREVIEW_URL: ${{ needs.cloudflare.outputs.url }}/demo/
+
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-smoke-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # A `workflow_run` job does not show up in the PR's checks, so post the smoke
+  # result as a commit status on the PR's head commit instead.
+  smoke-status:
+    name: Report preview smoke status
+    needs: [cloudflare, smoke]
+    if: always() && needs.cloudflare.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Needed to post the "Preview smoke (Cloudflare)" commit status.
+      statuses: write
+    steps:
+      - name: Set the commit status
+        uses: actions/github-script@v9
+        env:
+          RESULT: ${{ needs.smoke.result }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const passed = process.env.RESULT === "success";
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.HEAD_SHA,
+              state: passed ? "success" : "failure",
+              context: "Preview smoke (Cloudflare)",
+              description: passed
+                ? "Map renders with a clean console"
+                : `Smoke test ${process.env.RESULT}: see the run for details`,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+
   github-pages:
     name: Deploy GitHub Pages preview
     needs: resolve
     if: needs.resolve.outputs.found == 'true'
     runs-on: ubuntu-latest
+    # The verifier below polls for up to 10 minutes on top of checkout,
+    # artifact download and the push.
+    timeout-minutes: 20
     # opengeos/pages-preview is a single GitHub Pages site, and Pages builds one
     # commit at a time per repository. Two preview deploys landing together make
     # the older build report `errored` even though its push succeeded, which the
@@ -257,7 +367,11 @@ jobs:
           # which is empty here.
           deploy-commit-message: Deploy preview for PR ${{ needs.resolve.outputs.number }} 🛫
           remove-commit-message: Remove preview for PR ${{ needs.resolve.outputs.number }} 🛬
-          wait-for-pages-deployment: true
+          # The action waits for a build of this exact commit. This shared Pages
+          # repository can coalesce pushes, so that exact build may never exist
+          # even though a later descendant build publishes the preview. Our
+          # verifier below handles that case without the redundant wait.
+          wait-for-pages-deployment: false
           comment: false
 
       # Decides whether the deploy really failed. A Pages build that another
@@ -265,8 +379,11 @@ jobs:
       # commit is already on gh-pages, so the very next build publishes it --
       # historically within about a minute. So rather than trusting the action's
       # outcome, wait for a Pages build that both succeeded and started after
-      # this deploy's commit landed (any such build necessarily contains it),
-      # then confirm the URL serves. Only if neither holds is the preview broken.
+      # this deploy's commit landed (any such build necessarily contains it).
+      # That build is authoritative: the public Pages edge can transiently
+      # return 403 after a successful build, so URL availability is reported as
+      # propagation state rather than making an otherwise successful deploy
+      # fail. Only the absence of both a fresh build and a serving URL is fatal.
       #
       # `deployed-commit-sha` is what separates the two failure modes. The
       # action sets it by reading gh-pages HEAD back *after* pushing, in a step
@@ -291,6 +408,7 @@ jobs:
           echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
           if [ -z "$DEPLOYED_SHA" ] && [ "$PAGES_OUTCOME" != "success" ]; then
             echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "available=false" >> "$GITHUB_OUTPUT"
             echo "::error::The preview was never pushed to opengeos/pages-preview -- the deploy failed before it reached gh-pages. See the deploy step's log."
             exit 1
           fi
@@ -320,37 +438,89 @@ jobs:
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$PREVIEW_URL" || echo 000)
 
             # A 200 alone could still be the previous deploy of this same PR, so
-            # also require a successful Pages build that started after the push.
+            # prefer a successful Pages build that started after the push.
             # per_page=100 because the default page of this shared, frequently
-            # built site can fill with other repositories' builds; the list is
-            # used rather than /builds/latest because the newest build is often
-            # another repository's, still in flight, while the build that
-            # published this deploy has already finished.
+            # built site can fill with other repositories' builds. A successful
+            # build is authoritative only when its commit is this deploy or a
+            # descendant of it; a merely newer build may come from an unrelated
+            # deployment that did not contain this push.
             # If the builds API is not readable with this token, do not block on
             # it -- fall back to the URL check rather than failing every run.
             if builds=$(gh api 'repos/opengeos/pages-preview/pages/builds?per_page=100' 2>/dev/null); then
-              built_at=$(printf '%s' "$builds" |
-                jq -r '[.[] | select(.status == "built")] | max_by(.created_at) | .created_at // empty')
-              if [ -n "$built_at" ] &&
-                 [ "$(date -u -d "$built_at" +%s 2>/dev/null || echo 0)" -ge "$ref_at" ]; then
+              built_at=
+              built_sha=
+              if [ -n "$DEPLOYED_SHA" ]; then
+                while IFS=$'\t' read -r candidate_at candidate_sha; do
+                  [ -n "$candidate_sha" ] || continue
+                  if [ "$candidate_sha" = "$DEPLOYED_SHA" ]; then
+                    contains=yes
+                  elif compare_status=$(gh api \
+                    "repos/opengeos/pages-preview/compare/${DEPLOYED_SHA}...${candidate_sha}" \
+                    --jq '.status' 2>/dev/null); then
+                    case "$compare_status" in
+                      ahead|identical) contains=yes ;;
+                      *) contains=no ;;
+                    esac
+                  else
+                    contains=no
+                  fi
+                  if [ "$contains" = "yes" ]; then
+                    built_at=$candidate_at
+                    built_sha=$candidate_sha
+                    break
+                  fi
+                done < <(printf '%s' "$builds" | jq -r --argjson ref "$ref_at" '
+                  [.[]
+                    | select(.status == "built")
+                    | select((.created_at | fromdateiso8601) >= $ref)]
+                  | sort_by(.created_at)
+                  | reverse[]
+                  | [.created_at, .commit]
+                  | @tsv')
+              fi
+              if [ -n "$built_sha" ]; then
                 fresh=yes
+              elif [ -z "$DEPLOYED_SHA" ]; then
+                # Without a commit to match, the build list cannot prove this
+                # deploy landed; retain the URL-only fallback.
+                fresh=unknown
               else
                 fresh=no
               fi
-              echo "Attempt $attempt: HTTP $code, latest successful build $built_at (fresh: $fresh)"
+              echo "Attempt $attempt: HTTP $code, matching successful build ${built_at:-none} (${built_sha:-no SHA}; fresh: $fresh)"
             else
               fresh=unknown
               echo "Attempt $attempt: HTTP $code, Pages builds API unreadable -- relying on the URL"
             fi
 
-            if [ "$code" = "200" ] && [ "$fresh" != "no" ]; then
+            if [ "$fresh" = "yes" ]; then
+              if [ "$code" = "200" ]; then
+                echo "published=true" >> "$GITHUB_OUTPUT"
+                echo "available=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              case "$code" in
+                401|402|403)
+                echo "published=true" >> "$GITHUB_OUTPUT"
+                echo "available=false" >> "$GITHUB_OUTPUT"
+                echo "unavailable_code=$code" >> "$GITHUB_OUTPUT"
+                echo "::warning::GitHub Pages built the preview successfully, but $PREVIEW_URL still returns HTTP $code. Treating the deploy as successful while the serving edge propagates."
+                exit 0
+                ;;
+              esac
+            fi
+
+            # If the builds API is unavailable, retain the URL-only fallback.
+            if [ "$code" = "200" ] && [ "$fresh" = "unknown" ]; then
               echo "published=true" >> "$GITHUB_OUTPUT"
+              echo "available=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             [ "$(date -u +%s)" -lt "$deadline" ] || break
             sleep 30
           done
           echo "published=false" >> "$GITHUB_OUTPUT"
+          echo "available=false" >> "$GITHUB_OUTPUT"
           echo "::error::The preview at $PREVIEW_URL did not publish within 10 minutes."
           exit 1
 
@@ -369,6 +539,8 @@ jobs:
         env:
           PAGES_URL: ${{ steps.verify.outputs.url }}
           PAGES_OUTCOME: ${{ steps.verify.outputs.published == 'true' && 'success' || 'failure' }}
+          PAGES_AVAILABLE: ${{ steps.verify.outputs.available }}
+          PAGES_UNAVAILABLE_CODE: ${{ steps.verify.outputs.unavailable_code }}
           PR_NUMBER: ${{ needs.resolve.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
@@ -380,7 +552,10 @@ jobs:
             const demo = succeeded
               ? `${pagesUrl}${pagesUrl.endsWith('/') ? '' : '/'}demo/`
               : 'Unavailable';
-            const body = `${marker}\n### 🔍 GitHub Pages PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${site} |\n| Demo app | ${demo} |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |`;
+            const propagation = succeeded && process.env.PAGES_AVAILABLE === 'false'
+              ? `\n\n> [!NOTE]\n> GitHub Pages built this preview successfully, but its serving edge returned HTTP ${process.env.PAGES_UNAVAILABLE_CODE} when checked. The links may still be propagating.`
+              : '';
+            const body = `${marker}\n### 🔍 GitHub Pages PR preview\n\n| Item | Value |\n| --- | --- |\n| Site | ${site} |\n| Demo app | ${demo} |\n| Commit | \`${process.env.HEAD_SHA.slice(0, 7)}\` |${propagation}`;
             const { owner, repo } = context.repo;
             const issue_number = Number(process.env.PR_NUMBER);
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });

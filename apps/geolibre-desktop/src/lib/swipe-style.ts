@@ -1,10 +1,11 @@
+// Deep import, not the package barrel: this module is a side-effect import from
+// the app entry, and the barrel would drag the MapLibre/Mapbox/Cesium canvases
+// into the boot chunk that each of them works to stay out of.
+import { BASEMAP_LABEL_KEY, type GeoLibreLayerLabelWindow } from "@geolibre/map/layer-labels";
+
 const SWIPE_STYLE_ID = "maplibre-gl-swipe-style-fixes";
 const SWIPE_SELECT_PROXY_CLASS = "swipe-select-proxy";
 const SWIPE_SELECT_MENU_CLASS = "swipe-select-menu";
-
-interface GeoLibreLayerLabelWindow extends Window {
-  __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
-}
 
 const SWIPE_SELECT_FIXES = `
 .swipe-control-panel .swipe-control-select {
@@ -128,6 +129,54 @@ const SWIPE_SELECT_FIXES = `
   background-position: center;
   background-repeat: no-repeat;
   background-size: 10px 10px;
+}
+
+/* Dark theme: retarget the light literals above onto the app's design tokens.
+   The menu is appended to <body>, so it is matched by .dark on <html>. */
+.dark .swipe-control-panel .swipe-control-select {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .swipe-control-panel .swipe-control-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  color-scheme: dark;
+}
+
+.dark .swipe-control-panel .swipe-select-proxy {
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%23cbd5e1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .swipe-select-menu {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .swipe-select-menu button {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .swipe-select-menu button:hover,
+.dark .swipe-select-menu button.is-active {
+  background: hsl(var(--accent));
+}
+
+.dark .swipe-select-menu button.is-selected {
+  background: #4a90d9;
+  color: #fff;
+}
+
+.dark .swipe-control-panel .swipe-layer-item input[type="checkbox"]:not(:checked) {
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--input));
 }
 `;
 
@@ -255,7 +304,7 @@ const SWIPE_BASEMAP_LABEL = "Background";
 
 const getSwipeLayerLabel = (layerId: string): string => {
   const labels = (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__;
-  if (layerId === "__basemap__") return labels?.[layerId] ?? SWIPE_BASEMAP_LABEL;
+  if (layerId === BASEMAP_LABEL_KEY) return labels?.[layerId] ?? SWIPE_BASEMAP_LABEL;
   return labels?.[layerId] ?? layerId;
 };
 
@@ -274,7 +323,7 @@ const syncSwipeLayerLabels = () => {
       if (!label) return;
 
       const displayName = getSwipeLayerLabel(layerId);
-      const title = layerId === "__basemap__" ? displayName : `${displayName} (${layerId})`;
+      const title = layerId === BASEMAP_LABEL_KEY ? displayName : `${displayName} (${layerId})`;
       if (label.textContent !== displayName) {
         label.textContent = displayName;
       }

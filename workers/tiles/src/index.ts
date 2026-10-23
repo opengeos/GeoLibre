@@ -35,7 +35,32 @@
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
 import * as UPNG from "upng-js";
-import { fetchAllowlistedUpstream, HDX_CKAN_SEARCH_UPSTREAM } from "./allowlisted-fetch";
+import {
+  ADSB_LOL_MILITARY_UPSTREAM,
+  ADSBDB_AIRCRAFT_UPSTREAM,
+  AUSTIN_CCTV_FRAME_UPSTREAM,
+  CALGARY_CCTV_FRAME_UPSTREAM,
+  CALTRANS_CCTV_UPSTREAM,
+  DRIVEBC_CCTV_CATALOG_UPSTREAM,
+  fetchAllowlistedUpstream,
+  HDX_CKAN_SEARCH_UPSTREAM,
+  NSW_CCTV_CATALOG_UPSTREAM,
+  NSW_CCTV_FRAME_UPSTREAM,
+  OPEN_SKY_STATES_UPSTREAM,
+  OVERPASS_API_UPSTREAM,
+  OVERPASS_API_FALLBACK_UPSTREAM,
+  ONTARIO_CCTV_CATALOG_UPSTREAM,
+  ONTARIO_CCTV_FRAME_UPSTREAM,
+  TRANSIT_UPSTREAMS,
+  FIRMS_UPSTREAMS,
+} from "./allowlisted-fetch";
+import {
+  EARTHDATA_CORS_HEADERS,
+  EARTHDATA_DOWNLOAD_PATH,
+  handleEarthdataDownload,
+} from "./earthdata";
+import { odpUpstream } from "./odp";
+import { isAllowedOverpassQuery } from "./overpass-query";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
 /** Allowlisted OpenPlanetaryMap tile datasets → their upstream base URL. */
@@ -82,6 +107,79 @@ const OAM_MAX_LIMIT = 100;
 // behavior, so GeoLibre reads this fixed upstream through a named route.
 const CKAN_SEARCH_PATH = "/ckan/search";
 const CKAN_MAX_ROWS = 50;
+
+// CelesTrak rejects browser-origin bulk TLE reads and requests that automated
+// clients identify themselves. This named, allowlisted relay is shared by the
+// hosted web and desktop builds; Vite provides the same route locally.
+const CELESTRAK_PATH = /^\/celestrak\/(stations|visual|gps-ops|glo-ops|galileo|geo|starlink)$/;
+const CELESTRAK_UPSTREAM = "https://celestrak.org/NORAD/elements/gp.php";
+const CELESTRAK_STARLINK_UPSTREAM = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
+const CELESTRAK_CACHE_CONTROL = "public, max-age=21600";
+
+// Launch Library 2 permits only 15 anonymous requests per hour. Keep its
+// rolling 30-day query behind one fixed, edge-cached route so clients share a
+// single upstream request instead of spending that allowance independently.
+const LAUNCH_LIBRARY_PATH = "/launch-library/recent";
+const LAUNCH_LIBRARY_UPSTREAM = "https://ll.thespacedevs.com/2.3.0/launches/";
+const LAUNCH_LIBRARY_CACHE_CONTROL = "public, max-age=900";
+
+// Fixed, shared relays keep browser clients off provider CORS boundaries and
+// collapse their polling into one edge-cached request per cadence window.
+const OPEN_SKY_PATH = "/opensky/states";
+const ADSB_LOL_MILITARY_PATH = "/adsb-lol/military";
+const ADSBDB_AIRCRAFT_PATH = /^\/adsbdb\/aircraft\/([0-9a-fA-F]{6})$/;
+const OPEN_SKY_CACHE_SECONDS = 30;
+const ADSB_LOL_CACHE_SECONDS = 15;
+const AIRCRAFT_FEED_MAX_BODY_BYTES = 25 * 1024 * 1024;
+const TRANSIT_PATH = /^\/transit\/vehicles\/([a-z0-9][a-z0-9-]{1,63})$/;
+const TRANSIT_MAX_BODY_BYTES = 8 * 1024 * 1024;
+const TRANSIT_CACHE_SECONDS = 15;
+const OVAPI_TRANSIT_CACHE_SECONDS = 60;
+// NASA regenerates the global 24 h VIIRS files a few times an hour. Half an
+// hour keeps the layer current while every client shares one ~6 MB fetch.
+const FIRMS_PATH = /^\/firms\/viirs\/([a-z0-9][a-z0-9-]{1,31})$/;
+const FIRMS_MAX_BODY_BYTES = 32 * 1024 * 1024;
+const FIRMS_CACHE_SECONDS = 30 * 60;
+const CALGARY_CCTV_PATH = /^\/cctv\/calgary\/(\d{1,4})\.jpg$/;
+const AUSTIN_CCTV_PATH = /^\/cctv\/austin\/(\d{1,4})\.jpg$/;
+const ONTARIO_CCTV_PATH = /^\/cctv\/ontario\/([A-Za-z0-9_.-]{1,64})$/;
+const NSW_CCTV_PATH = /^\/cctv\/nsw\/((?:[A-Za-z0-9_.-]|%[0-9A-Fa-f]{2}){1,300})$/;
+const CALTRANS_CCTV_PATH = /^\/cctv\/caltrans\/(3|4|7|11)\/([a-z0-9-]{1,100})\.jpg$/i;
+/**
+ * The catalogs this worker proxies. The one authoritative list: the route
+ * matcher and the provider type are both derived from it, so a new provider
+ * cannot reach {@link handleCctvCatalog} without an upstream declared for it.
+ */
+const CCTV_CATALOG_PROVIDERS = [
+  "ontario",
+  "drivebc",
+  "nsw",
+  "caltrans-3",
+  "caltrans-4",
+  "caltrans-7",
+  "caltrans-11",
+] as const;
+type CctvCatalogProvider = (typeof CCTV_CATALOG_PROVIDERS)[number];
+// Built rather than written out, so it cannot drift from the list above. Every
+// entry is a literal slug with no regex metacharacters, so no escaping is
+// needed, and each alternative is anchored by the `\.json$` that follows.
+const CCTV_CATALOG_PATH = new RegExp(
+  `^/cctv/catalog/(${CCTV_CATALOG_PROVIDERS.join("|")})\\.json$`,
+);
+const CCTV_FRAME_MAX_BODY_BYTES = 5 * 1024 * 1024;
+const CCTV_UPSTREAM_TIMEOUT_MS = 30_000;
+const CCTV_CATALOG_MAX_BODY_BYTES = 4 * 1024 * 1024;
+const CCTV_CATALOG_CACHE_SECONDS = 15 * 60;
+const NSW_CCTV_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// The public Overpass endpoint rejects some browser origins (notably Pages
+// previews) with a CORS-less 406. Relay only its fixed interpreter endpoint,
+// with a small request-body ceiling and the same origin gate as other service
+// proxies. Responses are never cached because OSM data changes continuously.
+const OVERPASS_PATH = "/overpass";
+const OVERPASS_MAX_BODY_BYTES = 20_000;
+const OVERPASS_UPSTREAM_TIMEOUT_MS = 65_000;
 
 // Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
 // at all, so a browser cannot read it; this route fetches it server-side and
@@ -207,9 +305,13 @@ const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-methods": "GET, OPTIONS",
   // Allow the Range request header (the /pmtiles route needs it) and expose the
   // response headers a range reader relies on. Harmless for the tile routes.
-  "access-control-allow-headers": "range",
+  "access-control-allow-headers": "content-type, range",
   "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
+};
+const OVERPASS_CORS_HEADERS: Record<string, string> = {
+  ...CORS_HEADERS,
+  "access-control-allow-methods": "POST, OPTIONS",
 };
 
 /** `/pmtiles/<name>.pmtiles` range-proxies the Protomaps daily planet builds,
@@ -314,8 +416,7 @@ const NEGATIVE_CACHE_CONTROL = "public, max-age=300";
  * Whether an `Origin` header may use the OpenAerialMap search proxy. Allowed:
  *
  *   - the production web app on `*.geolibre.app` (any subdomain, plus the apex)
- *   - Cloudflare Pages deploy previews (project `geolibre-preview`) and
- *     `*.workers.dev` preview deployments
+ *   - Cloudflare Pages deploy previews for the `geolibre-preview` project
  *   - local dev on `localhost` / `127.0.0.1`
  *
  * Everything else gets a 403 so the route can't be driven as an open proxy from
@@ -338,12 +439,16 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
     return false;
   }
   if (protocol === "tauri:" && hostname === "localhost") return true;
+  // The desktop webview's origin on Windows, where Tauri serves the app over
+  // http(s)://tauri.localhost rather than a custom scheme.
+  if ((protocol === "http:" || protocol === "https:") && hostname === "tauri.localhost") {
+    return true;
+  }
   if (protocol === "https:") {
     if (hostname === "geolibre.app" || hostname.endsWith(".geolibre.app")) {
       return true;
     }
     if (hostname.endsWith(".geolibre-preview.pages.dev")) return true;
-    if (hostname.endsWith(".workers.dev")) return true;
   }
   if (
     (protocol === "http:" || protocol === "https:") &&
@@ -352,6 +457,17 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Image elements use `no-cors` mode and normally send `Referer`, not `Origin`.
+ * Prefer Origin when present so an untrusted caller cannot hide behind a forged
+ * allowed referrer; only fall back for the header shape produced by `<img>`.
+ */
+function isAllowedProxyImageRequest(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (origin) return isAllowedProxyOrigin(origin);
+  return isAllowedProxyOrigin(request.headers.get("referer"));
 }
 
 /**
@@ -411,6 +527,170 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
     status: originResponse.status,
     headers,
   });
+}
+
+/**
+ * Proxies one Ocean Data Platform tile or feature page with CORS added.
+ *
+ * Origin-gated like `/source-coop/`, and anonymous: the Worker never forwards
+ * an `Authorization` header, so only publicly shared datasets pass through
+ * (ODP answers a private or unknown one with 401, which is relayed as is).
+ * The response streams through without being buffered.
+ */
+async function handleOdp(request: Request, url: URL): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const route = odpUpstream(url);
+  if (!route) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(route.upstream, {
+      headers: { "user-agent": "GeoLibre tiles proxy (+https://geolibre.app)" },
+      cf: {
+        cacheEverything: true,
+        cacheTtlByStatus: { "200-299": route.cacheSeconds, "300-599": -1 },
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  const contentType = originResponse.headers.get("content-type");
+  if (contentType) headers.set("content-type", contentType);
+  headers.set(
+    "cache-control",
+    originResponse.ok ? `public, max-age=${route.cacheSeconds}` : "no-store",
+  );
+  return new Response(originResponse.body, { status: originResponse.status, headers });
+}
+
+/** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
+async function readRequestBodyWithLimit(request: Request, limit: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > limit) {
+      await reader.cancel();
+      return null;
+    }
+    body += decoder.decode(value, { stream: true });
+  }
+  return body + decoder.decode();
+}
+
+/** Clear the upstream deadline only once its response body closes or is cancelled. */
+function streamWithTimeoutCleanup(body: ReadableStream, timeout: ReturnType<typeof setTimeout>) {
+  const reader = body.getReader();
+  const finish = () => clearTimeout(timeout);
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      await reader.cancel(reason);
+    },
+  });
+}
+
+async function handleOverpass(request: Request): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", {
+      status: 403,
+      headers: OVERPASS_CORS_HEADERS,
+    });
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > OVERPASS_MAX_BODY_BYTES) {
+    return new Response("Payload Too Large", {
+      status: 413,
+      headers: OVERPASS_CORS_HEADERS,
+    });
+  }
+  const body = await readRequestBodyWithLimit(request, OVERPASS_MAX_BODY_BYTES);
+  if (body === null) {
+    return new Response("Payload Too Large", {
+      status: 413,
+      headers: OVERPASS_CORS_HEADERS,
+    });
+  }
+  const params = new URLSearchParams(body);
+  const query = params.get("data");
+  if (
+    !query ||
+    params.getAll("data").length !== 1 ||
+    [...params.keys()].some((key) => key !== "data") ||
+    !isAllowedOverpassQuery(query)
+  ) {
+    return new Response("Bad Request", {
+      status: 400,
+      headers: OVERPASS_CORS_HEADERS,
+    });
+  }
+  let originResponse: Response | null = null;
+  let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
+  const upstreamDeadline = Date.now() + OVERPASS_UPSTREAM_TIMEOUT_MS;
+  for (const upstream of [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM]) {
+    const remainingMs = upstreamDeadline - Date.now();
+    if (remainingMs <= 0) break;
+    const upstreamController = new AbortController();
+    upstreamTimeout = setTimeout(() => upstreamController.abort(), remainingMs);
+    try {
+      originResponse = await fetchAllowlistedUpstream(upstream, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+          referer: "https://geolibre.app/",
+        },
+        body,
+        signal: upstreamController.signal,
+      });
+    } catch {
+      clearTimeout(upstreamTimeout);
+      upstreamTimeout = null;
+      break;
+    }
+    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) break;
+    clearTimeout(upstreamTimeout);
+    upstreamTimeout = null;
+    await originResponse?.body?.cancel().catch(() => undefined);
+    originResponse = null;
+  }
+  if (!originResponse) {
+    return new Response("Bad Gateway", {
+      status: 502,
+      headers: OVERPASS_CORS_HEADERS,
+    });
+  }
+  if (!originResponse.body && upstreamTimeout) clearTimeout(upstreamTimeout);
+  const headers = new Headers(OVERPASS_CORS_HEADERS);
+  headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
+  headers.set("cache-control", "no-store");
+  const responseBody = originResponse.body
+    ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout!)
+    : null;
+  return new Response(responseBody, { status: originResponse.status, headers });
 }
 
 interface Env {}
@@ -503,22 +783,394 @@ async function handlePmtilesRange(request: Request, name: string): Promise<Respo
   });
 }
 
-export default {
-  async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+async function handleAircraftFeed(
+  request: Request,
+  ctx: ExecutionContext,
+  upstream: string,
+  cacheSeconds: number,
+  arrayKey: "states" | "ac",
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "GeoLibre-Aircraft-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const body = await readResponseBytesWithLimit(originResponse, AIRCRAFT_FEED_MAX_BODY_BYTES);
+  if (!body) return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  if (originResponse.ok) {
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown>;
+      if (!payload || typeof payload !== "object" || !Array.isArray(payload[arrayKey])) {
+        throw new Error("Malformed aircraft feed");
+      }
+    } catch {
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
     }
-    // Only GET is proxied. MapLibre issues GET for every tile; supporting HEAD
-    // would just complicate the Cache API keying (which requires GET) for no
-    // real consumer.
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("cache-control", originResponse.ok ? `public, max-age=${cacheSeconds}` : "no-store");
+  const response = new Response(body, {
+    status: originResponse.status,
+    headers,
+  });
+  // Cache only after the bounded body has passed schema validation. Using the
+  // Cache API here (instead of `cf.cacheEverything` on the upstream fetch)
+  // prevents a malformed third-party response from being cached before the
+  // Worker can inspect it.
+  if (originResponse.ok && cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+async function handleTransitFeed(
+  request: Request,
+  ctx: ExecutionContext,
+  feedId: string,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  if (!Object.hasOwn(TRANSIT_UPSTREAMS, feedId)) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  const upstream = TRANSIT_UPSTREAMS[feedId as keyof typeof TRANSIT_UPSTREAMS];
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: {
+        accept: "application/x-protobuf,application/octet-stream",
+        "user-agent": "GeoLibre-Transit-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const body = await readResponseBytesWithLimit(originResponse, TRANSIT_MAX_BODY_BYTES);
+  if (!originResponse.ok || !body || body.byteLength === 0) {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", "application/x-protobuf");
+  const cacheSeconds = feedId === "ovapi-nl" ? OVAPI_TRANSIT_CACHE_SECONDS : TRANSIT_CACHE_SECONDS;
+  headers.set("cache-control", `public, max-age=${cacheSeconds}`);
+  const response = new Response(body, { status: 200, headers });
+  if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+/**
+ * Relay one of NASA FIRMS' fixed global 24 h VIIRS CSVs.
+ *
+ * The body is checked for the FIRMS header before it is cached, so an HTML
+ * maintenance page cannot be served from the edge for half an hour.
+ */
+async function handleFirmsFeed(
+  request: Request,
+  ctx: ExecutionContext,
+  satellite: string,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  if (!Object.hasOwn(FIRMS_UPSTREAMS, satellite)) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  const upstream = FIRMS_UPSTREAMS[satellite as keyof typeof FIRMS_UPSTREAMS];
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: {
+        accept: "text/csv",
+        "user-agent": "GeoLibre-FIRMS-Proxy/1.0 (+https://geolibre.org)",
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const body = await readResponseBytesWithLimit(originResponse, FIRMS_MAX_BODY_BYTES);
+  if (!originResponse.ok || !body || !isFirmsCsv(body)) {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", "text/csv; charset=utf-8");
+  headers.set("cache-control", `public, max-age=${FIRMS_CACHE_SECONDS}`);
+  const response = new Response(body, { status: 200, headers });
+  if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+/** True when a body starts with a FIRMS CSV header row. */
+function isFirmsCsv(body: Uint8Array): boolean {
+  const head = new TextDecoder().decode(body.subarray(0, 256)).trimStart().toLowerCase();
+  return head.startsWith("latitude,longitude,");
+}
+
+/** Read an upstream response defensively without letting stream errors escape. */
+async function readResponseBytesWithLimit(
+  response: Response,
+  limit: number,
+): Promise<Uint8Array | null> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const stream = response.body;
+  if (!stream) return new Uint8Array();
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > limit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return null;
+  }
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+async function handleAdsbdbAircraft(
+  request: Request,
+  ctx: ExecutionContext,
+  icao: string,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(
+      `${ADSBDB_AIRCRAFT_UPSTREAM}${icao.toLowerCase()}`,
+      {
+        headers: { accept: "application/json" },
+      },
+    );
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set("content-type", "application/json; charset=utf-8");
+  if (originResponse.status === 404) {
+    await originResponse.body?.cancel().catch(() => undefined);
+    headers.set("cache-control", "public, max-age=3600");
+    const response = new Response('{"response":{"aircraft":null}}', {
+      status: 200,
+      headers,
+    });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
+  }
+  const body = await readResponseBytesWithLimit(originResponse, 1024 * 1024);
+  if (!body) return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  if (originResponse.ok) {
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(body)) as {
+        response?: { aircraft?: unknown };
+      };
+      const aircraft = payload.response?.aircraft;
+      if (!aircraft || typeof aircraft !== "object" || Array.isArray(aircraft)) {
+        throw new Error("Malformed ADSBDB response");
+      }
+    } catch {
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
+    }
+  }
+  headers.set("cache-control", originResponse.ok ? "public, max-age=86400" : "no-store");
+  const response = new Response(body, {
+    status: originResponse.status,
+    headers,
+  });
+  if (originResponse.ok && cache) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+async function handleCctvFrame(
+  request: Request,
+  ctx: ExecutionContext,
+  upstream: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
+  if (!isAllowedProxyImageRequest(request)) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(() => upstreamController.abort(), CCTV_UPSTREAM_TIMEOUT_MS);
+  try {
+    const originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: { accept: "image/jpeg,image/png,image/*", ...extraHeaders },
+      signal: upstreamController.signal,
+    });
+    const contentType = originResponse.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
+    const body = await readResponseBytesWithLimit(originResponse, CCTV_FRAME_MAX_BODY_BYTES);
+    if (!originResponse.ok || !body || !["image/jpeg", "image/png"].includes(contentType)) {
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
+    }
+    const headers = new Headers(CORS_HEADERS);
+    headers.set("content-type", contentType);
+    headers.set("cache-control", "public, max-age=30");
+    const response = new Response(body, { status: 200, headers });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  } finally {
+    clearTimeout(upstreamTimeout);
+  }
+}
+
+/** Caltrans publishes one catalog per district, under a zero-padded file name. */
+function caltransCatalogUpstream(district: 3 | 4 | 7 | 11): string {
+  return `${CALTRANS_CCTV_UPSTREAM}d${district}/cctv/cctvStatusD${String(district).padStart(2, "0")}.json`;
+}
+
+async function handleCctvCatalog(
+  request: Request,
+  ctx: ExecutionContext,
+  provider: CctvCatalogProvider,
+): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+  // Exhaustive over the provider union on purpose: adding a district to
+  // `CctvCatalogProvider` without its upstream here is a build error rather
+  // than a runtime fetch of the string "undefined".
+  const upstreams: Record<CctvCatalogProvider, string> = {
+    ontario: `${ONTARIO_CCTV_CATALOG_UPSTREAM}?format=json&lang=en`,
+    drivebc: DRIVEBC_CCTV_CATALOG_UPSTREAM,
+    nsw: NSW_CCTV_CATALOG_UPSTREAM,
+    "caltrans-3": caltransCatalogUpstream(3),
+    "caltrans-4": caltransCatalogUpstream(4),
+    "caltrans-7": caltransCatalogUpstream(7),
+    "caltrans-11": caltransCatalogUpstream(11),
+  };
+  const upstream = upstreams[provider];
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(() => upstreamController.abort(), CCTV_UPSTREAM_TIMEOUT_MS);
+  try {
+    const originResponse = await fetchAllowlistedUpstream(upstream, {
+      headers: { accept: "application/json" },
+      signal: upstreamController.signal,
+    });
+    const body = await readResponseBytesWithLimit(originResponse, CCTV_CATALOG_MAX_BODY_BYTES);
+    if (!originResponse.ok || !body) {
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
+    }
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(body)) as
+        | { features?: unknown; data?: unknown }
+        | unknown[];
+      const features =
+        payload && typeof payload === "object" && !Array.isArray(payload) ? payload.features : null;
+      const valid =
+        provider === "nsw"
+          ? Array.isArray(features)
+          : provider.startsWith("caltrans-")
+            ? !Array.isArray(payload) && Array.isArray(payload.data)
+            : Array.isArray(payload);
+      if (!valid) throw new Error();
+    } catch {
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
+    }
+    const headers = new Headers(CORS_HEADERS);
+    headers.set("content-type", "application/json; charset=utf-8");
+    headers.set("cache-control", `public, max-age=${CCTV_CATALOG_CACHE_SECONDS}`);
+    const response = new Response(body, { status: 200, headers });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  } finally {
+    clearTimeout(upstreamTimeout);
+  }
+}
+
+export const tilesWorker = {
+  async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === "OPTIONS") {
+      const headers =
+        url.pathname === OVERPASS_PATH
+          ? OVERPASS_CORS_HEADERS
+          : url.pathname === EARTHDATA_DOWNLOAD_PATH
+            ? EARTHDATA_CORS_HEADERS
+            : CORS_HEADERS;
+      return new Response(null, { status: 204, headers });
+    }
+    if (url.pathname === OVERPASS_PATH && request.method === "POST") {
+      return handleOverpass(request);
+    }
+    // Only GET is proxied outside the explicitly bounded Overpass POST route.
+    // Supporting HEAD would complicate Cache API keying (which requires GET)
+    // for no real consumer.
     if (request.method !== "GET") {
+      const overpass = url.pathname === OVERPASS_PATH;
+      const allow = overpass ? "POST, OPTIONS" : "GET, OPTIONS";
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: { ...CORS_HEADERS, allow: "GET, OPTIONS" },
+        headers: {
+          ...(overpass ? OVERPASS_CORS_HEADERS : CORS_HEADERS),
+          allow,
+        },
       });
     }
 
-    const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "") {
       return new Response(
         "GeoLibre tile + service proxy.\n" +
@@ -527,11 +1179,24 @@ export default {
           "  Reprojected WMS: /wms/<dataset>/<z>/<x>/<y>.png\n" +
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
+          "  NASA Earthdata granule download: /earthdata/download?url=... (Authorization: Bearer)\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
+          "  CelesTrak TLE groups: /celestrak/<group>\n" +
+          "  Launch Library 2 recent missions: /launch-library/recent\n" +
+          "  OpenSky live flights: /opensky/states\n" +
+          "  adsb.lol military flights: /adsb-lol/military\n" +
+          "  ADSBDB aircraft details: /adsbdb/aircraft/<icao>\n" +
+          "  GTFS-Realtime transit: /transit/vehicles/<provider>\n" +
+          "  NASA FIRMS active fires (24 h): /firms/viirs/<satellite>\n" +
+          "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
+          "  Ocean Data Platform: /odp/tiles/<uuid>/<z>/<x>/<y>.pbf , /odp/features/<uuid>/items\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
-        { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
+        {
+          status: 200,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        },
       );
     }
 
@@ -542,6 +1207,16 @@ export default {
 
     // OpenAerialMap metadata search: forward the allowlisted query params to the
     // fixed upstream and re-emit the JSON with CORS (see OAM_META_PATH above).
+    // NASA Earthdata granule download for the Earthaccess plugin's web build
+    // (see workers/tiles/src/earthdata.ts). Origin-gated: the route forwards a
+    // user's Earthdata token, so only GeoLibre's own pages may drive it.
+    if (url.pathname === EARTHDATA_DOWNLOAD_PATH) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: EARTHDATA_CORS_HEADERS });
+      }
+      return handleEarthdataDownload(request);
+    }
+
     if (url.pathname === OAM_META_PATH) {
       // Abuse guard: this is a wildcard-CORS proxy to a fixed upstream, so
       // restrict it to GeoLibre's own origins (see isAllowedProxyOrigin) — every
@@ -550,7 +1225,10 @@ export default {
       // Worker. It is not a rate limiter — per-client throttling belongs in a
       // Cloudflare rate-limiting rule in front of tiles.geolibre.app.
       if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
-        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+        return new Response("Forbidden", {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
       }
       const upstream = new URL(OAM_META_UPSTREAM);
       for (const [key, value] of url.searchParams) {
@@ -593,12 +1271,18 @@ export default {
 
     if (url.pathname === CKAN_SEARCH_PATH) {
       if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
-        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+        return new Response("Forbidden", {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
       }
       const upstream = new URL(HDX_CKAN_SEARCH_UPSTREAM);
       const query = url.searchParams.get("q")?.trim().slice(0, 300);
       if (!query) {
-        return new Response("Missing query", { status: 400, headers: CORS_HEADERS });
+        return new Response("Missing query", {
+          status: 400,
+          headers: CORS_HEADERS,
+        });
       }
       const rowsParam = url.searchParams.get("rows");
       const requestedRows = rowsParam === null ? Number.NaN : Number(rowsParam);
@@ -620,12 +1304,202 @@ export default {
           cf: { cacheEverything: true, cacheTtl: 120 },
         });
       } catch {
-        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+        return new Response("Bad Gateway", {
+          status: 502,
+          headers: CORS_HEADERS,
+        });
       }
       const headers = new Headers(CORS_HEADERS);
       headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
       headers.set("cache-control", originResponse.ok ? "public, max-age=120" : "no-store");
-      return new Response(originResponse.body, { status: originResponse.status, headers });
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
+    }
+
+    const celestrakMatch = CELESTRAK_PATH.exec(url.pathname);
+    if (celestrakMatch) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
+      }
+      const group = celestrakMatch[1];
+      const starlink = group === "starlink";
+      const upstream = new URL(starlink ? CELESTRAK_STARLINK_UPSTREAM : CELESTRAK_UPSTREAM);
+      upstream.searchParams.set(starlink ? "FILE" : "GROUP", group);
+      upstream.searchParams.set("FORMAT", "tle");
+      let originResponse: Response;
+      try {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
+          headers: {
+            accept: "text/plain",
+            "user-agent": "GeoLibre-CelesTrak-Proxy/1.0 (+https://geolibre.org)",
+          },
+          cf: { cacheEverything: true, cacheTtl: 21_600 },
+        });
+      } catch {
+        return new Response("Bad Gateway", {
+          status: 502,
+          headers: CORS_HEADERS,
+        });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set("content-type", "text/plain; charset=utf-8");
+      headers.set("cache-control", originResponse.ok ? CELESTRAK_CACHE_CONTROL : "no-store");
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
+    }
+
+    if (url.pathname === LAUNCH_LIBRARY_PATH) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
+      }
+      const now = new Date(Math.floor(Date.now() / 900_000) * 900_000);
+      const upstream = new URL(LAUNCH_LIBRARY_UPSTREAM);
+      upstream.searchParams.set(
+        "net__gte",
+        new Date(now.getTime() - 30 * 86_400_000).toISOString(),
+      );
+      upstream.searchParams.set("net__lte", now.toISOString());
+      upstream.searchParams.set("limit", "100");
+      upstream.searchParams.set("mode", "detailed");
+      let originResponse: Response;
+      try {
+        originResponse = await fetchAllowlistedUpstream(upstream.toString(), {
+          headers: {
+            accept: "application/json",
+            "user-agent": "GeoLibre-Launch-Library-Proxy/1.0 (+https://geolibre.org)",
+          },
+          cf: {
+            cacheEverything: true,
+            cacheTtlByStatus: { "200-299": 900, "300-599": -1 },
+          },
+        });
+      } catch {
+        return new Response("Bad Gateway", {
+          status: 502,
+          headers: CORS_HEADERS,
+        });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set("content-type", "application/json; charset=utf-8");
+      headers.set("cache-control", originResponse.ok ? LAUNCH_LIBRARY_CACHE_CONTROL : "no-store");
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
+    }
+
+    if (url.pathname === OPEN_SKY_PATH) {
+      return handleAircraftFeed(
+        request,
+        ctx,
+        OPEN_SKY_STATES_UPSTREAM,
+        OPEN_SKY_CACHE_SECONDS,
+        "states",
+      );
+    }
+
+    if (url.pathname === ADSB_LOL_MILITARY_PATH) {
+      return handleAircraftFeed(
+        request,
+        ctx,
+        ADSB_LOL_MILITARY_UPSTREAM,
+        ADSB_LOL_CACHE_SECONDS,
+        "ac",
+      );
+    }
+
+    const adsbdbMatch = ADSBDB_AIRCRAFT_PATH.exec(url.pathname);
+    if (adsbdbMatch) {
+      return handleAdsbdbAircraft(request, ctx, adsbdbMatch[1]);
+    }
+
+    const transitMatch = TRANSIT_PATH.exec(url.pathname);
+    if (transitMatch) {
+      return handleTransitFeed(request, ctx, transitMatch[1]);
+    }
+
+    const firmsMatch = FIRMS_PATH.exec(url.pathname);
+    if (firmsMatch) {
+      return handleFirmsFeed(request, ctx, firmsMatch[1]);
+    }
+
+    const calgaryCctvMatch = CALGARY_CCTV_PATH.exec(url.pathname);
+    if (calgaryCctvMatch) {
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${CALGARY_CCTV_FRAME_UPSTREAM}loc${calgaryCctvMatch[1]}.jpg`,
+      );
+    }
+
+    const austinCctvMatch = AUSTIN_CCTV_PATH.exec(url.pathname);
+    if (austinCctvMatch) {
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${AUSTIN_CCTV_FRAME_UPSTREAM}${austinCctvMatch[1]}.jpg`,
+      );
+    }
+
+    const cctvCatalogMatch = CCTV_CATALOG_PATH.exec(url.pathname);
+    if (cctvCatalogMatch) {
+      // Sound because the matcher's alternatives *are* CCTV_CATALOG_PROVIDERS;
+      // a RegExp match is just opaque to the type system.
+      return handleCctvCatalog(request, ctx, cctvCatalogMatch[1] as CctvCatalogProvider);
+    }
+
+    const ontarioCctvMatch = ONTARIO_CCTV_PATH.exec(url.pathname);
+    if (ontarioCctvMatch) {
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${ONTARIO_CCTV_FRAME_UPSTREAM}${encodeURIComponent(ontarioCctvMatch[1])}`,
+      );
+    }
+
+    const nswCctvMatch = NSW_CCTV_PATH.exec(url.pathname);
+    if (nswCctvMatch) {
+      let frameId: string;
+      try {
+        frameId = decodeURIComponent(nswCctvMatch[1]);
+      } catch {
+        return new Response("Not Found", {
+          status: 404,
+          headers: CORS_HEADERS,
+        });
+      }
+      if (!/^[a-z0-9_.&-]{1,100}\.(?:jpe?g)$/i.test(frameId)) {
+        return new Response("Not Found", {
+          status: 404,
+          headers: CORS_HEADERS,
+        });
+      }
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${NSW_CCTV_FRAME_UPSTREAM}${encodeURIComponent(frameId)}`,
+        { "user-agent": NSW_CCTV_USER_AGENT },
+      );
+    }
+
+    const caltransCctvMatch = CALTRANS_CCTV_PATH.exec(url.pathname);
+    if (caltransCctvMatch) {
+      const [, district, slug] = caltransCctvMatch;
+      return handleCctvFrame(
+        request,
+        ctx,
+        `${CALTRANS_CCTV_UPSTREAM}d${district}/cctv/image/${slug}/${slug}.jpg`,
+      );
     }
 
     // Source Cooperative metadata: source.coop sends no CORS headers, so the
@@ -634,16 +1508,28 @@ export default {
       return handleSourceCoop(request, url.pathname);
     }
 
+    // Ocean Data Platform tiles and features: CORS-restricted upstream (see
+    // workers/tiles/src/odp.ts).
+    if (url.pathname.startsWith("/odp/")) {
+      return handleOdp(request, url);
+    }
+
     if (url.pathname === GITHUB_RAW_PATH) {
       if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
-        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+        return new Response("Forbidden", {
+          status: 403,
+          headers: CORS_HEADERS,
+        });
       }
       const source = url.searchParams.get("url");
       let upstream: URL;
       try {
         upstream = new URL(source ?? "");
       } catch {
-        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+        return new Response("Bad Request", {
+          status: 400,
+          headers: CORS_HEADERS,
+        });
       }
       if (
         upstream.protocol !== "https:" ||
@@ -651,7 +1537,10 @@ export default {
         upstream.search !== "" ||
         !GITHUB_RAW_REPOSITORY_PATH.test(upstream.pathname)
       ) {
-        return new Response("Bad Request", { status: 400, headers: CORS_HEADERS });
+        return new Response("Bad Request", {
+          status: 400,
+          headers: CORS_HEADERS,
+        });
       }
       let originResponse: Response;
       try {
@@ -663,7 +1552,10 @@ export default {
           headers: { accept: "application/octet-stream" },
         });
       } catch {
-        return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+        return new Response("Bad Gateway", {
+          status: 502,
+          headers: CORS_HEADERS,
+        });
       }
       const headers = new Headers(CORS_HEADERS);
       for (const key of ["content-type", "content-length", "content-disposition", "etag"]) {
@@ -719,7 +1611,10 @@ export default {
         cf: { cacheEverything: true, cacheTtl: 86400 },
       });
     } catch {
-      return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+      return new Response("Bad Gateway", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
     }
 
     // Pass upstream errors (e.g. 403/404 for tiles past a mosaic's native zoom)
@@ -743,6 +1638,8 @@ export default {
     return response;
   },
 };
+
+export default tilesWorker;
 
 /**
  * Serve one reprojected `/wms/<dataset>/<z>/<x>/<y>.png` tile: request the
@@ -810,7 +1707,9 @@ async function handleWmsTile(
     // here renders as a blank tile, so log it — otherwise a typo'd map/layer in
     // a WMS_DATASETS entry would fail silently as an all-blank basemap in prod.
     console.warn(
-      `WMS reproject miss: dataset=${dataset} status=${origin.status} content-type=${contentType || "?"}`,
+      `WMS reproject miss: dataset=${dataset} status=${
+        origin.status
+      } content-type=${contentType || "?"}`,
     );
     await origin.arrayBuffer().catch(() => undefined);
     const resp = pngResponse(transparentTile(), NEGATIVE_CACHE_CONTROL);

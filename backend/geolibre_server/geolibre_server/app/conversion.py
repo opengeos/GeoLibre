@@ -286,6 +286,13 @@ def quote_ident(value):
 
 con = duckdb.connect()
 con.execute("INSTALL spatial; LOAD spatial;")
+# DuckDB 2.0 refuses a GDAL COPY with an SRS until the axis order is chosen
+# explicitly. GEOMETRY is always [lon, lat] here (ST_Transform uses always_xy),
+# so tell GDAL the same; older DuckDB without the setting already behaves so.
+try:
+    con.execute("SET geometry_always_xy = true")
+except duckdb.Error:
+    pass
 
 if source_kind == "csv":
     lon = params["lon_column"]
@@ -454,6 +461,13 @@ def quote_ident(value):
 
 con = duckdb.connect()
 con.execute("INSTALL spatial; LOAD spatial;")
+# DuckDB 2.0 refuses a GDAL COPY with an SRS until the axis order is chosen
+# explicitly. GEOMETRY is always [lon, lat] here (ST_Transform uses always_xy),
+# so tell GDAL the same; older DuckDB without the setting already behaves so.
+try:
+    con.execute("SET geometry_always_xy = true")
+except duckdb.Error:
+    pass
 
 # Confirm the requested driver can actually be created by this spatial build so
 # an unsupported format fails with a clear, listed error instead of a raw GDAL
@@ -1063,6 +1077,41 @@ def _append_job_message(job_id: str, message: str) -> None:
         )
 
 
+# Running job subprocesses, so a job can be cancelled; and jobs cancelled
+# before their subprocess started.
+_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+_CANCELLED: set[str] = set()
+
+
+def _job_state(job_id: str) -> JobState | None:
+    """Return a job's current state, or None when it is unknown.
+
+    Args:
+        job_id: The job id.
+
+    Returns:
+        The job state, or None.
+    """
+    with _JOBS_LOCK:
+        return _JOBS.get(job_id)
+
+
+def _cancel_job(job_id: str) -> None:
+    """Stop a pending or running job; it then reports ``cancelled``.
+
+    Args:
+        job_id: The job id. A finished or unknown job is left as it is.
+    """
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None or job.status not in {"pending", "running"}:
+            return
+        _CANCELLED.add(job_id)
+        process = _PROCESSES.get(job_id)
+    if process is not None and process.poll() is None:
+        process.kill()
+
+
 def _count_in_flight_jobs_locked() -> int:
     """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
     return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
@@ -1072,7 +1121,8 @@ def _evict_finished_jobs_locked() -> None:
     """Drop the oldest finished jobs once the retention cap is exceeded.
 
     The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
-    evicted; only ``succeeded``/``failed`` jobs are removed, oldest first.
+    evicted; only ``succeeded``/``failed``/``cancelled`` jobs are removed,
+    oldest first.
     """
     excess = len(_JOBS) - MAX_RETAINED_JOBS
     if excess <= 0:
@@ -1083,11 +1133,27 @@ def _evict_finished_jobs_locked() -> None:
         (
             (job.created_at, job_id)
             for job_id, job in _JOBS.items()
-            if job.status in {"succeeded", "failed"}
+            if job.status in {"succeeded", "failed", "cancelled"}
         ),
     )
     for _created_at, job_id in finished[:excess]:
         _JOBS.pop(job_id, None)
+
+
+def _remove_partial_output(params: dict[str, Any]) -> None:
+    """Remove a failed or cancelled job's partial output.
+
+    So a retry starts clean and stale bytes do not confuse downstream tools.
+
+    Args:
+        params: The job's parameters (``output_path``, when it writes one).
+    """
+    output_path = params.get("output_path")
+    if output_path:
+        try:
+            Path(output_path).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _run_conversion_job(
@@ -1102,6 +1168,9 @@ def _run_conversion_job(
     # Set from a marker line when the script rejects the user's input; see
     # _SCRIPT_DRIVER. Anything else stays a generic failure.
     validation_error: str | None = None
+    # A cancelled job removes only an output it created, not a file that was
+    # already there when it started.
+    output_existed = bool(params.get("output_path")) and Path(params["output_path"]).exists()
     try:
         _job_update(job_id, status="running")
         python = _runtime_python()
@@ -1116,6 +1185,11 @@ def _run_conversion_job(
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
+        with _JOBS_LOCK:
+            _PROCESSES[job_id] = process
+            cancelled_early = job_id in _CANCELLED
+        if cancelled_early:
+            process.kill()
         # A watchdog kills the subprocess if it exceeds the deadline. Reading
         # process.stdout blocks until the pipe closes, so without this a hung
         # DuckDB or cog_translate call (one that emits no further output) would
@@ -1149,6 +1223,11 @@ def _run_conversion_job(
             watchdog.cancel()
         if timed_out.is_set():
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
+        if job_id in _CANCELLED:
+            _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            if not output_existed:
+                _remove_partial_output(params)
+            return
         if returncode != 0:
             if validation_error:
                 raise RuntimeError(validation_error)
@@ -1164,6 +1243,11 @@ def _run_conversion_job(
             outputs={output_name: {"path": output_path}} if output_path else {},
         )
     except Exception as exc:
+        if job_id in _CANCELLED:
+            _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            if not output_existed:
+                _remove_partial_output(params)
+            return
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
         # must not reach the browser-proxied /jobs/{id} response — including
@@ -1188,19 +1272,15 @@ def _run_conversion_job(
             error=validation_error or "Conversion failed. See the sidecar logs for details.",
             messages=[],
         )
-        # Remove a partial output so a retry starts clean and stale bytes do not
-        # confuse downstream tools.
-        output_path = params.get("output_path")
-        if output_path:
-            try:
-                Path(output_path).unlink(missing_ok=True)
-            except OSError:
-                pass
+        _remove_partial_output(params)
     finally:
         # Guard against leaking a still-running subprocess if an exception is
         # raised before it exits (e.g. during streaming or a job-state update).
         if process is not None and process.poll() is None:
             process.kill()
+        with _JOBS_LOCK:
+            _PROCESSES.pop(job_id, None)
+            _CANCELLED.discard(job_id)
 
 
 def _start_job(

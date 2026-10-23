@@ -4,27 +4,41 @@
 
 export type AddDataKind =
   | "xyz"
+  | "wcs"
   | "wms"
+  | "csw"
   | "wfs"
   | "wmts"
   | "ogc-features"
   | "ogc-vector-tiles"
   | "gpx"
+  | "landxml"
   | "georss"
+  | "geoboundaries"
   | "delimited-text"
   | "cad"
   | "gdb"
   | "photos"
+  | "raster"
+  | "zarr"
+  | "pmtiles"
   | "mbtiles"
+  | "polyline"
   | "arcgis"
   | "postgres"
+  | "mssql"
+  | "iceberg"
   | "deckgl-viz"
-  | "video";
+  | "video"
+  | "cesium-ion"
+  | "czml"
+  | "kml";
 
 /** A data source loadable either from a remote URL or a local file. */
 export type FeedMode = "url" | "file";
 export type GpxMode = FeedMode;
 export type GpxLayerKind = "waypoints" | "tracks" | "trackPoints" | "routes" | "routePoints";
+export type LandXmlMode = FeedMode;
 export type GeoRssMode = FeedMode;
 export type DelimitedTextMode = FeedMode;
 export type DelimitedTextDelimiter = "comma" | "tab" | "semicolon" | "pipe" | "custom";

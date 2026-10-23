@@ -72,6 +72,64 @@ describe("i18n catalogs", () => {
 
   const enStrings = flatStrings(loadCatalog("en"));
 
+  it("keeps optional Whitebox metadata out of bundled locale catalogs", () => {
+    for (const code of localeCodes) {
+      const processing = loadCatalog(code).processing as {
+        toolMeta?: Record<string, unknown>;
+        whitebox?: Record<string, unknown>;
+      };
+      assert.equal(processing.toolMeta?.whitebox, undefined, `${code}.json bundles Whitebox tools`);
+      assert.equal(processing.whitebox?.categories, undefined, `${code}.json bundles categories`);
+      assert.equal(processing.whitebox?.menuTool, undefined, `${code}.json bundles menu tools`);
+      assert.equal(
+        processing.whitebox?.menuSubcategory,
+        undefined,
+        `${code}.json bundles menu subcategories`,
+      );
+    }
+  });
+
+  it("covers the Processing vector toolbar keys in English and Chinese", () => {
+    const keys = [
+      "decodePolyline",
+      "encodePolyline",
+      "reproject",
+      "explode",
+      "aggregate",
+      "smooth",
+    ];
+    for (const code of ["en", "zh"]) {
+      const toolbar = loadCatalog(code).toolbar as {
+        vectorTool: Record<string, unknown>;
+      };
+      for (const key of keys) {
+        assert.equal(
+          typeof toolbar.vectorTool[key],
+          "string",
+          `${code}.json toolbar.vectorTool.${key}`,
+        );
+      }
+    }
+  });
+
+  // Non-English catalogs may lag behind en.json: a missing key falls back to
+  // English at runtime, and the catalogs are filled in before each release
+  // (the geolibre-i18n audit), so a PR that adds UI strings does not have to
+  // touch every catalog. This reports coverage rather than failing. Plural
+  // suffixes are normalized: a locale needs the base key in whatever plural
+  // forms its language uses (zh drops `_one`, ru adds `_few`/`_many`).
+  it("reports per-locale coverage vs the English baseline", () => {
+    for (const code of localeCodes.filter((c) => c !== "en")) {
+      const have = new Set(leafKeys(loadCatalog(code)).map(normalizePluralKey));
+      const missing = [...enBaseKeys].filter((k) => !have.has(k));
+      if (missing.length === 0) continue;
+      console.log(
+        `  ${code}: missing ${missing.length} key(s): ${missing.slice(0, 10).join(", ")}` +
+          (missing.length > 10 ? ", …" : ""),
+      );
+    }
+  });
+
   for (const code of localeCodes.filter((c) => c !== "en")) {
     it(`${code}: preserves interpolation placeholders for translated keys`, () => {
       const strings = flatStrings(loadCatalog(code));
@@ -94,21 +152,4 @@ describe("i18n catalogs", () => {
       assert.deepEqual(mismatches, [], mismatches.join("\n"));
     });
   }
-
-  // Non-English catalogs may be partial (missing keys fall back to en at
-  // runtime), so this reports coverage rather than asserting parity — it lets a
-  // reviewer see how complete each translation is without failing CI.
-  it("reports per-locale coverage vs the English baseline", () => {
-    const enBaseList = [...enBaseKeys];
-    for (const code of localeCodes.filter((c) => c !== "en")) {
-      const have = new Set(leafKeys(loadCatalog(code)).map(normalizePluralKey));
-      const missing = enBaseList.filter((k) => !have.has(k));
-      const pct = Math.round((1 - missing.length / enBaseList.length) * 100);
-      console.log(
-        `  ${code}: ${pct}% (${enBaseList.length - missing.length}/${enBaseList.length})` +
-          (missing.length ? ` — missing: ${missing.join(", ")}` : ""),
-      );
-    }
-    assert.ok(true);
-  });
 });

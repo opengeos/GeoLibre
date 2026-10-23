@@ -97,3 +97,20 @@ fixture asserts at the strongest tier the two engines *actually* share:
 `reproject`'s client `run` is a deliberate no-op that defers to the Python
 engine, so its fixtures are asserted by the Python harness only; the TS harness
 skips any tool whose registry entry sets `requiresSidecar`.
+
+## Known behavioral asymmetries
+
+Some differences between the two engines are deliberate rather than drift, and
+no fixture asserts them because the engines genuinely do not agree:
+
+- **`buffer` per-feature failure recovery is client-only.** The Turf engine
+  buffers feature by feature, so it wraps each one in a `try`/`catch`: a jsts
+  throw on a degenerate or self-intersecting geometry is counted and reported as
+  `Skipped N feature(s) the buffer could not process`, and the rest of the batch
+  still produces a layer. The GeoPandas engine buffers the whole `GeoSeries`
+  vectorized, so a GEOS/Shapely throw (uncommon — degenerate input normally
+  comes back as an empty geometry, which *is* handled identically as `Dropped`)
+  fails the whole request with no partial result and no `Skipped` message.
+  Per-feature Python buffering would give up the vectorized path's speed for a
+  case Shapely rarely produces, so the messages agree on `Dropped` and diverge
+  on `Skipped`.

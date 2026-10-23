@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { getLayerBounds } from "../packages/map/src/geojson-loader";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function layerWith(features: GeoLibreLayer["geojson"]): GeoLibreLayer {
   return {
@@ -39,13 +40,40 @@ describe("getLayerBounds", () => {
     assert.deepEqual(bounds, [-78.638, 35.779, -70, 40]);
   });
 
+  it("reduces a six-element 3D bbox carried by the source data", () => {
+    // RFC 7946 §5 allows a `bbox` member to carry elevation, in which case it
+    // holds six values: [west, south, minAltitude, east, north, maxAltitude].
+    // The USGS earthquake feeds ship exactly that, and `bbox()` returns a
+    // collection's own member verbatim instead of recomputing it.
+    const bounds = getLayerBounds(
+      layerWith({
+        type: "FeatureCollection",
+        bbox: [-179.9224, -61.5305, -3.6, 179.7358, 66.921, 621.93],
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-179.9224, -61.5305, 10] },
+            properties: {},
+          },
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [179.7358, 66.921, 621.93] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    assert.deepEqual(bounds, [-179.9224, -61.5305, 179.7358, 66.921]);
+  });
+
   it("returns null for a table layer whose features all have null geometry", () => {
     const bounds = getLayerBounds(
       layerWith({
         type: "FeatureCollection",
         features: [
-          { type: "Feature", geometry: null, properties: { code: "AVH" } },
-          { type: "Feature", geometry: null, properties: { code: "BDP" } },
+          { type: "Feature", geometry: NULL_GEOMETRY, properties: { code: "AVH" } },
+          { type: "Feature", geometry: NULL_GEOMETRY, properties: { code: "BDP" } },
         ],
       }),
     );
@@ -55,5 +83,37 @@ describe("getLayerBounds", () => {
 
   it("returns null when there is no geojson", () => {
     assert.equal(getLayerBounds(layerWith(undefined)), null);
+  });
+
+  it("uses stored source bounds for a non-GeoJSON layer", () => {
+    const layer = layerWith(undefined);
+    layer.type = "raster";
+    layer.source = { type: "raster", bounds: [-80, 30, -70, 40] };
+    assert.deepEqual(getLayerBounds(layer), [-80, 30, -70, 40]);
+  });
+
+  it("falls back to metadata bounds when source bounds are invalid", () => {
+    const layer = layerWith(undefined);
+    layer.source.bounds = [-80, Number.NaN, -70, 40];
+    layer.metadata.bounds = [-10, -5, 10, 5];
+    assert.deepEqual(getLayerBounds(layer), [-10, -5, 10, 5]);
+  });
+
+  it("prefers the stored extent of a viewport-loaded layer over its features", () => {
+    const layer = layerWith({
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: {} },
+      ],
+    });
+    layer.metadata.bounds = [-115.4, 36, -115, 36.3];
+    // An ordinary layer frames its features.
+    assert.deepEqual(getLayerBounds(layer), [1, 2, 1, 2]);
+    // A viewport-loaded layer holds only the features in view.
+    layer.metadata.viewportLoading = true;
+    assert.deepEqual(getLayerBounds(layer), [-115.4, 36, -115, 36.3]);
+    // With nothing stored, the loaded features still answer.
+    delete layer.metadata.bounds;
+    assert.deepEqual(getLayerBounds(layer), [1, 2, 1, 2]);
   });
 });

@@ -84,6 +84,11 @@ appstreamcli validate --no-net "%{buildroot}%{_metainfodir}/%{appid}.metainfo.xm
 # because of the space in the directory name.
 "/usr/lib/GeoLibre Desktop/"
 %{_datadir}/applications/%{appid}.desktop
+# Defines the .geolibre glob for the type the .desktop claims. It has to be
+# listed or rpmbuild fails on an unpackaged file, since %install unpacks the
+# whole upstream payload. Fedora's shared-mime-info file triggers refresh the
+# database, so no scriptlet is needed here.
+%{_datadir}/mime/packages/org.geolibre.project.xml
 %{_datadir}/icons/hicolor/*/apps/geolibre-desktop.png
 %{_metainfodir}/%{appid}.metainfo.xml
 

@@ -1,12 +1,54 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { parseHTML } from "linkedom";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
+  PANEL_CREDENTIAL_FIELDS,
   getActiveBasemapControl,
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
-import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import { isPluginEngineSupported } from "../packages/plugins/src/types";
+import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
+
+// The docked panel mounts the control's real DOM, so give the plugin a
+// minimal document for the duration of this file.
+const dom = parseHTML("<html><body></body></html>");
+const globals = globalThis as unknown as Record<string, unknown>;
+for (const key of ["document", "window", "HTMLElement", "Event"]) {
+  if (globals[key] === undefined) {
+    globals[key] =
+      key === "window"
+        ? dom.window
+        : ((dom as unknown as Record<string, unknown>)[key] ??
+          (dom.window as unknown as Record<string, unknown>)[key]);
+  }
+}
+// linkedom has no <select> value setter; the panel's filters use one.
+const selectProto = (dom.window as unknown as { HTMLSelectElement: { prototype: object } })
+  .HTMLSelectElement.prototype;
+Object.defineProperty(selectProto, "value", {
+  configurable: true,
+  get(this: Element) {
+    return this.getAttribute("data-test-value") ?? "";
+  },
+  set(this: Element, value: unknown) {
+    this.setAttribute("data-test-value", String(value));
+  },
+});
+globals.requestAnimationFrame ??= (callback: () => void) => setTimeout(callback, 0);
+globals.MutationObserver ??= class {
+  observe() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+};
+globals.ResizeObserver ??= class {
+  observe() {}
+  disconnect() {}
+  unobserve() {}
+};
 
 /** A raster basemap layer as the control leaves it in the store when stacked. */
 function stackedRasterBasemap(basemapId: string): GeoLibreLayer {
@@ -28,10 +70,30 @@ function stackedRasterBasemap(basemapId: string): GeoLibreLayer {
  * deactivate wiped the stacked basemaps or left them alone.
  */
 function fakeApp(unregistered: string[]): GeoLibreAppAPI {
+  const container = dom.document.createElement("div");
+  const map = {
+    getContainer: () => container,
+    on: () => {},
+    off: () => {},
+    once: () => {},
+  };
+  const panels = new Map<string, GeoLibreRightPanelRegistration>();
+  const cleanups = new Map<string, () => void>();
   return {
-    getMap: () => ({}),
-    addMapControl: () => true,
-    removeMapControl: () => {},
+    getMap: () => map,
+    registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
+      panels.set(registration.id, registration);
+      return () => panels.delete(registration.id);
+    },
+    openRightPanel: (id: string) => {
+      const cleanup = panels.get(id)?.render(dom.document.createElement("div"));
+      if (typeof cleanup === "function") cleanups.set(id, cleanup);
+      return panels.has(id);
+    },
+    closeRightPanel: (id: string) => {
+      cleanups.get(id)?.();
+      cleanups.delete(id);
+    },
     getActiveBasemap: () => "https://tiles.openfreemap.org/styles/liberty",
     unregisterExternalNativeLayer: (id: string) => {
       unregistered.push(id);
@@ -88,5 +150,99 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
     // basemap) and is back in overlay/stack mode.
     assert.ok(state.activeBasemapIds.includes("google-satellite"));
     assert.equal(state.allowMultiple, true);
+  });
+});
+
+describe("Mapbox basemap control", () => {
+  it("supports Mapbox and restores its native style selection", () => {
+    assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
+    const app = fakeApp([]);
+    const mapboxMap = app.getMap!() as unknown as NonNullable<
+      ReturnType<NonNullable<GeoLibreAppAPI["getMapboxMap"]>>
+    >;
+    app.getMapboxMap = () => mapboxMap;
+    app.getActiveBasemap = () => "mapbox://styles/mapbox/satellite-v9";
+    try {
+      plugin.activate(app);
+      const control = getActiveBasemapControl()!;
+      assert.equal(control.getState().activeBasemapId, "mapbox-satellite");
+      assert.ok(control.getBasemaps().some((b) => b.id === "mapbox-standard"));
+      assert.ok(control.getBasemaps().some((b) => b.id === "openfreemap-liberty"));
+    } finally {
+      plugin.deactivate?.(app);
+    }
+  });
+});
+
+describe("Basemap control API keys", () => {
+  /** A fake app with an in-memory `app.credentials`, plus the panel it renders into. */
+  function appWithCredentials(saved: Map<string, string>) {
+    const app = fakeApp([]);
+    let panel: HTMLElement | null = null;
+    const registerRightPanel = app.registerRightPanel!;
+    app.registerRightPanel = (registration) =>
+      registerRightPanel({
+        ...registration,
+        render: (container) => {
+          panel = container;
+          return registration.render(container);
+        },
+      });
+    app.credentials = {
+      get: (name) => saved.get(name) ?? "",
+      set: (name, value) => {
+        if (value) saved.set(name, value);
+        else saved.delete(name);
+        return true;
+      },
+      location: () => "browser",
+    };
+    return { app, getPanel: () => panel! };
+  }
+
+  /** Types `value` into the control's credential input wrapped by `className`. */
+  function typeInto(panel: HTMLElement, className: string, value: string): void {
+    const input = panel.querySelector<HTMLInputElement>(`.${className} input`);
+    assert.ok(input, `no input under .${className}`);
+    input.value = value;
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  }
+
+  afterEach(() => {
+    if (getActiveBasemapControl()) plugin.deactivate?.(fakeApp([]));
+  });
+
+  it("maps every upstream credential field", () => {
+    const saved = new Map<string, string>();
+    const { app, getPanel } = appWithCredentials(saved);
+    plugin.activate(app);
+    // Open the API keys view so every provider's field is rendered.
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    const upstream = [...getPanel().querySelectorAll(".basemap-control-input")]
+      .map((input) => input.parentElement?.className ?? "")
+      .filter((className) => /^basemap-control-[a-z-]+-(key|token|region)$/.test(className));
+    // A failed match (renamed wrappers, view not opened) fails here, not silently.
+    const mapped: string[] = PANEL_CREDENTIAL_FIELDS.map((field) => field.className);
+    assert.equal(upstream.length, mapped.length, `found ${upstream.join(", ")}`);
+    for (const className of upstream) assert.ok(mapped.includes(className), className);
+  });
+
+  it("saves a key typed in the panel and seeds it on reactivation", () => {
+    const saved = new Map<string, string>();
+    const { app, getPanel } = appWithCredentials(saved);
+    plugin.activate(app);
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    typeInto(getPanel(), "basemap-control-maptiler-key", " my-maptiler-key ");
+    assert.equal(saved.get("maptiler"), "my-maptiler-key");
+
+    plugin.deactivate?.(app);
+    plugin.activate(app);
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    const input = getPanel().querySelector<HTMLInputElement>(".basemap-control-maptiler-key input");
+    assert.equal(input?.value, "my-maptiler-key");
+
+    // Clearing the field deletes the saved key.
+    typeInto(getPanel(), "basemap-control-maptiler-key", "");
+    assert.equal(saved.has("maptiler"), false);
   });
 });

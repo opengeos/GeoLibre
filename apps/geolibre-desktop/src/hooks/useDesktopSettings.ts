@@ -1,8 +1,26 @@
-import { isAllowedPluginManifestUrl } from "@geolibre/core";
+import {
+  createDefaultMapView,
+  isAllowedPluginManifestUrl,
+  normalizeMapViewState,
+  normalizeLayerStyleEntries,
+  normalizeLayersFileContent,
+  type LayerGroup,
+  type GeoLibreLayer,
+  type LayerStyleFileEntry,
+} from "@geolibre/core";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { normalizeStringList } from "../lib/string-lists";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
+import {
+  credentialStorageLocation,
+  queueCredentialChanges,
+  reportCredentialStorageError,
+} from "../lib/credential-store";
+import {
+  mergeDesktopSettingsSecrets,
+  splitDesktopSettingsSecrets,
+} from "../lib/desktop-settings-secrets";
 import {
   DEFAULT_CUSTOM_COLOR,
   DEFAULT_THEME_SCHEME,
@@ -12,6 +30,11 @@ import {
 } from "../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../lib/updates";
 import { migrateLegacyAiEnv } from "../lib/assistant/profiles";
+import {
+  normalizeS3Connections,
+  normalizeS3DefaultLocation,
+  type S3Connection,
+} from "../lib/s3-connections";
 import { ASSISTANT_PROVIDER_IDS } from "../lib/assistant/provider";
 import type { AssistantProfile } from "../lib/assistant/provider";
 
@@ -34,30 +57,45 @@ export interface DesktopSettings {
   layout: DesktopLayoutSettings;
   pluginManifestUrls: string[];
   /**
-   * Personal API token for uploading projects to share.geolibre.app. Stored in
-   * the same localStorage-backed settings as everything else, so on the web
-   * build it shares the exposure surface of any other localStorage entry (a
-   * same-origin script could read it). This is the well-understood "PAT in local
-   * storage" trade-off; the token is short-lived/revocable and scoped to one
-   * service. Moving it to OS secure storage on desktop is a possible future
-   * hardening (see PR #190 review).
+   * Ids of external plugins whose top-level toolbar menus the user moved out of
+   * the banner (GeoLibre#2850). Such a menu renders inside the plugin's entry in
+   * Plugins → Installed instead. Device-local, like the rest of the plugin
+   * settings.
+   */
+  foldedPluginMenus: string[];
+  /**
+   * Personal API token for uploading projects to share.geolibre.app. The
+   * desktop build keeps it in the OS credential store (see
+   * `lib/credential-store.ts`) and writes only an empty string into this
+   * localStorage blob. The web build keeps it in this blob, where any
+   * same-origin script could read it: the well-understood "PAT in local
+   * storage" trade-off for a short-lived, revocable, single-service token.
    */
   shareToken: string;
   /**
    * Cesium Ion access token for the 3D-globe view (Cesium World Imagery +
-   * Terrain need one). Stored here — device-local localStorage, not the shared
-   * project file — so a personal credential is never serialized into a
-   * `.geolibre.json` a user shares. Projected into `VITE_CESIUM_TOKEN` at
-   * runtime by `useRuntimeEnvironmentVariables`, and resolved through
-   * `getCesiumIonToken`, so it overrides the build-time token with no rebuild.
-   * Same "token in localStorage" trade-off as {@link shareToken}.
+   * Terrain need one). Device-local, not the shared project file, so a personal
+   * credential is never serialized into a `.geolibre.json` a user shares.
+   * Projected into `VITE_CESIUM_TOKEN` at runtime by
+   * `useRuntimeEnvironmentVariables`, and resolved through `getCesiumIonToken`,
+   * so it overrides the build-time token with no rebuild. Stored like
+   * {@link shareToken}: OS credential store on desktop, this blob on the web.
    */
   cesiumIonToken: string;
+  /** Device-local Mapbox access token, excluded from shared project files. Stored like {@link shareToken}. */
+  mapboxAccessToken: string;
+  /**
+   * Device-local ArcGIS API key for the ArcGIS renderer, excluded from shared
+   * project files. Stored like {@link shareToken}.
+   */
+  arcgisApiKey: string;
   /**
    * AI Assistant provider profiles. Each profile bundles a provider, model, and
-   * credential values. Stored here — device-local localStorage, not the shared
-   * project file — so personal API keys survive app restarts yet are never
-   * serialized into a `.geolibre.json` a user shares.
+   * credential values. Device-local, not the shared project file, so personal
+   * API keys survive app restarts yet are never serialized into a
+   * `.geolibre.json` a user shares. On desktop the secret `fieldValues` (see
+   * `PROVIDER_FIELDS`) live in the OS credential store; on the web they stay in
+   * this blob.
    */
   aiProfiles: AssistantProfile[];
   /**
@@ -67,6 +105,18 @@ export interface DesktopSettings {
    * survives settings dialog Cancel without extra plumbing.
    */
   defaultAiProfileId: string | null;
+  /**
+   * S3 (and S3-compatible) connections used to read private buckets, matched
+   * by bucket name. Device-local, never in a project file. The secret key and
+   * session token of an access-key connection live in the OS credential store
+   * on desktop and in this blob on the web.
+   */
+  s3Connections: S3Connection[];
+  /**
+   * Where the S3 Browser opens (`s3://bucket/prefix/`), or "" for the last
+   * location browsed. Device-local like the connections.
+   */
+  s3DefaultLocation: string;
   /**
    * Appearance preferences (the accent color scheme). The light/dark mode is
    * handled separately by `useThemeMode` (it tracks the OS / embed preference).
@@ -83,6 +133,62 @@ export interface DesktopSettings {
    * desktop (Tauri) build; on the web these settings are inert.
    */
   updates: UpdateSettings;
+  /** Native-app project restoration policy. Browser builds ignore this setting. */
+  startup: StartupSettings;
+}
+
+export type StartupProjectMode = "default" | "last" | "specific";
+
+export interface StartupSettings {
+  mode: StartupProjectMode;
+  projectPath: string | null;
+  projectName: string | null;
+  /** Projection used when startup does not restore or receive a project. */
+  globeByDefault: boolean;
+  /** Center used for the untitled workspace when no project is provided. */
+  center: [number, number];
+  /** Zoom used for the untitled workspace when no project is provided. */
+  zoom: number;
+  /**
+   * Layer styles file whose styles are applied, by layer name, to every layer
+   * added to the map. Null when none is set.
+   */
+  layerStyles: StartupLayerStyles | null;
+  /**
+   * Layers file whose layers are added to every untitled workspace: the one
+   * shown at launch and each File → New. Null when none is set.
+   */
+  layers: StartupLayers | null;
+  /** Open the S3 Browser panel when the app starts (not in the read-only viewer). */
+  openS3Browser: boolean;
+}
+
+/**
+ * The layer styles file chosen in Startup settings. The parsed styles are
+ * kept here rather than re-read from `path` on each launch: the browser build
+ * never gets a readable path back from its picker, and on desktop the file may
+ * have moved. Choosing the file again picks up later edits to it.
+ */
+export interface StartupLayerStyles {
+  /** The file's name, for display. */
+  fileName: string;
+  /** The path (desktop) or file name (browser) it was read from. */
+  path: string;
+  entries: LayerStyleFileEntry[];
+}
+
+/**
+ * The layers file chosen in Startup settings, kept parsed for the same reasons
+ * as {@link StartupLayerStyles}. Its layers only reference their data, so the
+ * copy stays small.
+ */
+export interface StartupLayers {
+  /** The file's name, for display. */
+  fileName: string;
+  /** The path (desktop) or file name (browser) it was read from. */
+  path: string;
+  layers: GeoLibreLayer[];
+  layerGroups: LayerGroup[];
 }
 
 export interface ThemeSettings {
@@ -100,6 +206,31 @@ export interface UpdateSettings {
 }
 
 export interface DesktopLayoutSettings {
+  /**
+   * Whether the Browser (Data Source Manager) right panel is registered as
+   * visible. Unlike {@link layerPanelVisible} this does not describe a fixed
+   * dock slot: the Browser is a dockable right panel, so the flag is the
+   * persisted seed its registration hook applies on mount (open + collapsed onto
+   * its rail, or closed). Without it the panel reopened on every launch no
+   * matter what the Settings toggle said (#1935).
+   */
+  browserPanelVisible: boolean;
+  /**
+   * Keep the bottom panels (attribute table, dashboard, Python console, SQL
+   * workspace, AI Assistant) under the map column instead of spanning the whole
+   * window, so the left and right docks keep their full height while one is
+   * open (#3157).
+   */
+  bottomPanelsUnderMap: boolean;
+  /** Same as {@link browserPanelVisible}, for the Comments right panel. */
+  commentsPanelVisible: boolean;
+  /**
+   * Compact Layers panel: each row shows only its visibility toggle, swatch,
+   * and name, and the opacity slider and action buttons appear on the selected
+   * row alone. Keeps a project with hundreds of layers (e.g. a KMZ of
+   * placemarks) scannable, like the Places tree in Google Earth (#3045).
+   */
+  compactLayerList: boolean;
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
@@ -146,7 +277,32 @@ interface DesktopSettingsState {
   setDesktopSettings: (settings: DesktopSettings) => void;
 }
 
+let desktopSettingsAreTemporary = false;
+/**
+ * Legacy plaintext credentials whose migration into the OS credential store
+ * failed this session. They are written back into the blob unchanged, so a
+ * failed migration never loses them, and the next launch retries.
+ */
+let preservedLegacyCredentialSecrets: Record<string, string> | null = null;
+/**
+ * False after a failed settings hydration: edits then stay in memory, so new
+ * keychain writes never interleave with unmigrated legacy credentials.
+ */
+let settingsKeychainWritable = true;
+
+export function setPreservedLegacyCredentialSecrets(secrets: Record<string, string> | null): void {
+  preservedLegacyCredentialSecrets = secrets;
+}
+
+export function setSettingsKeychainWritable(writable: boolean): void {
+  settingsKeychainWritable = writable;
+}
+
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
+  browserPanelVisible: true,
+  bottomPanelsUnderMap: true,
+  commentsPanelVisible: true,
+  compactLayerList: false,
   layerPanelVisible: true,
   showProjectInfo: true,
   stylePanelVisible: true,
@@ -173,6 +329,18 @@ export const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
   notificationLevel: "all",
 };
 
+export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
+  mode: "default",
+  projectPath: null,
+  projectName: null,
+  globeByDefault: true,
+  center: [...createDefaultMapView().center],
+  zoom: createDefaultMapView().zoom,
+  layerStyles: null,
+  layers: null,
+  openS3Browser: false,
+};
+
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   scheme: DEFAULT_THEME_SCHEME,
   customColor: DEFAULT_CUSTOM_COLOR,
@@ -183,13 +351,19 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   language: "",
   layout: DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   pluginManifestUrls: [],
+  foldedPluginMenus: [],
   shareToken: "",
   cesiumIonToken: "",
+  mapboxAccessToken: "",
+  arcgisApiKey: "",
   aiProfiles: [],
   defaultAiProfileId: null,
+  s3Connections: [],
+  s3DefaultLocation: "",
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
+  startup: DEFAULT_STARTUP_SETTINGS,
 };
 
 /** The experience-level presets, in order. Single source of truth. */
@@ -214,7 +388,11 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     pluginManifestUrls: normalizeStringList(candidate.pluginManifestUrls).filter(
       isAllowedPluginManifestUrl,
     ),
+    foldedPluginMenus: normalizeStringList(candidate.foldedPluginMenus),
     shareToken: typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
+    mapboxAccessToken:
+      typeof candidate.mapboxAccessToken === "string" ? candidate.mapboxAccessToken.trim() : "",
+    arcgisApiKey: typeof candidate.arcgisApiKey === "string" ? candidate.arcgisApiKey.trim() : "",
     cesiumIonToken:
       typeof candidate.cesiumIonToken === "string" ? candidate.cesiumIonToken.trim() : "",
     aiProfiles: normalizeAssistantProfiles(
@@ -225,10 +403,71 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
       typeof candidate.defaultAiProfileId === "string" && candidate.defaultAiProfileId.trim()
         ? candidate.defaultAiProfileId.trim()
         : null,
+    s3Connections: normalizeS3Connections(candidate.s3Connections),
+    s3DefaultLocation: normalizeS3DefaultLocation(candidate.s3DefaultLocation),
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),
+    startup: normalizeStartupSettings(candidate.startup),
   };
+}
+
+function normalizeStartupSettings(startup: unknown): StartupSettings {
+  if (!startup || typeof startup !== "object") return DEFAULT_STARTUP_SETTINGS;
+  const candidate = startup as Partial<StartupSettings>;
+  const view = normalizeMapViewState({
+    center: candidate.center,
+    zoom: candidate.zoom,
+    bearing: 0,
+    pitch: 0,
+  });
+  const mode: StartupProjectMode =
+    candidate.mode === "last" || candidate.mode === "specific" ? candidate.mode : "default";
+  const projectPath =
+    typeof candidate.projectPath === "string" && candidate.projectPath.trim()
+      ? candidate.projectPath.trim()
+      : null;
+  const projectName =
+    typeof candidate.projectName === "string" && candidate.projectName.trim()
+      ? candidate.projectName.trim()
+      : null;
+  return {
+    mode: mode === "specific" && !projectPath ? "default" : mode,
+    projectPath,
+    projectName,
+    globeByDefault: typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
+    center: view.center,
+    zoom: view.zoom,
+    layerStyles: normalizeStartupLayerStyles(candidate.layerStyles),
+    layers: normalizeStartupLayers(candidate.layers),
+    openS3Browser: candidate.openS3Browser === true,
+  };
+}
+
+function normalizeStartupLayerStyles(value: unknown): StartupLayerStyles | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Record<keyof StartupLayerStyles, unknown>>;
+  const entries = normalizeLayerStyleEntries(candidate.entries);
+  if (entries.length === 0) return null;
+  const path = typeof candidate.path === "string" ? candidate.path : "";
+  const fileName =
+    typeof candidate.fileName === "string" && candidate.fileName.trim()
+      ? candidate.fileName.trim()
+      : path;
+  return { fileName, path, entries };
+}
+
+function normalizeStartupLayers(value: unknown): StartupLayers | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Record<keyof StartupLayers, unknown>>;
+  const content = normalizeLayersFileContent(candidate);
+  if (content.layers.length === 0) return null;
+  const path = typeof candidate.path === "string" ? candidate.path : "";
+  const fileName =
+    typeof candidate.fileName === "string" && candidate.fileName.trim()
+      ? candidate.fileName.trim()
+      : path;
+  return { fileName, path, ...content };
 }
 
 /**
@@ -372,6 +611,22 @@ function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings 
   // cannot smuggle non-boolean values into the layout settings.
   const candidate = layout as Partial<DesktopLayoutSettings>;
   return {
+    browserPanelVisible:
+      typeof candidate.browserPanelVisible === "boolean"
+        ? candidate.browserPanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.browserPanelVisible,
+    bottomPanelsUnderMap:
+      typeof candidate.bottomPanelsUnderMap === "boolean"
+        ? candidate.bottomPanelsUnderMap
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.bottomPanelsUnderMap,
+    commentsPanelVisible:
+      typeof candidate.commentsPanelVisible === "boolean"
+        ? candidate.commentsPanelVisible
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.commentsPanelVisible,
+    compactLayerList:
+      typeof candidate.compactLayerList === "boolean"
+        ? candidate.compactLayerList
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.compactLayerList,
     layerPanelVisible:
       typeof candidate.layerPanelVisible === "boolean"
         ? candidate.layerPanelVisible
@@ -403,13 +658,33 @@ function loadDesktopSettings(): DesktopSettings {
   }
 }
 
+/**
+ * The localStorage form of `settings`. On desktop the credentials are stripped
+ * (they live in the OS credential store), except legacy values whose migration
+ * failed this session.
+ */
+export function serializeDesktopSettingsForStorage(settings: DesktopSettings): string {
+  if (credentialStorageLocation() === "browser") return JSON.stringify(settings);
+  const { publicSettings } = splitDesktopSettingsSecrets(settings);
+  return JSON.stringify(
+    preservedLegacyCredentialSecrets
+      ? mergeDesktopSettingsSecrets(publicSettings, preservedLegacyCredentialSecrets)
+      : publicSettings,
+  );
+}
+
 function saveDesktopSettings(settings: DesktopSettings): void {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(DESKTOP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    // Persistence is best-effort; ignore quota or disabled-storage errors.
+    window.localStorage.setItem(
+      DESKTOP_SETTINGS_STORAGE_KEY,
+      serializeDesktopSettingsForStorage(settings),
+    );
+  } catch (error) {
+    // Web persistence is best-effort (quota or disabled storage). On desktop a
+    // failed write can leave legacy plaintext credentials behind, so say so.
+    if (credentialStorageLocation() === "keychain") reportCredentialStorageError(error);
   }
 }
 
@@ -418,13 +693,33 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
   setDesktopSettings: (settings) => set({ desktopSettings: normalizeDesktopSettings(settings) }),
 }));
 
+/** Apply settings supplied by an embed URL without replacing this browser's saved preferences. */
+export function applyTemporaryDesktopSettings(settings: unknown): void {
+  desktopSettingsAreTemporary = true;
+  useDesktopSettingsStore.getState().setDesktopSettings(normalizeDesktopSettings(settings));
+}
+
+export function shouldPersistDesktopSettings(): boolean {
+  return !desktopSettingsAreTemporary;
+}
+
 export function useDesktopSettingsPersistence() {
   useEffect(() => {
+    // Keep the entire shared-settings session ephemeral. Persisting a later
+    // user edit would serialize the remote baseline along with that edit and
+    // silently replace unrelated local preferences.
+    if (!shouldPersistDesktopSettings()) return;
     saveDesktopSettings(useDesktopSettingsStore.getState().desktopSettings);
 
     return useDesktopSettingsStore.subscribe((state, previous) => {
       if (state.desktopSettings !== previous.desktopSettings) {
         saveDesktopSettings(state.desktopSettings);
+        if (credentialStorageLocation() === "keychain" && settingsKeychainWritable) {
+          void queueCredentialChanges(
+            splitDesktopSettingsSecrets(previous.desktopSettings).secrets,
+            splitDesktopSettingsSecrets(state.desktopSettings).secrets,
+          );
+        }
       }
     });
   }, []);

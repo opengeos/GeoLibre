@@ -1,0 +1,667 @@
+.vantor-panel {
+  /* Layout */
+  --vantor-panel-width: 380px;
+  --vantor-panel-max-height: calc(100vh - 40px);
+
+  /* Light theme (default) */
+  --vantor-primary: #1976d2;
+  --vantor-primary-hover: #1565c0;
+  --vantor-success: #388e3c;
+  --vantor-success-hover: #2e7d32;
+  --vantor-warning: #f57c00;
+  --vantor-warning-hover: #ef6c00;
+  --vantor-error: #f44336;
+  --vantor-bg: #ffffff;
+  --vantor-bg-alt: #f5f5f5;
+  --vantor-text: #333333;
+  --vantor-text-muted: #707070;
+  --vantor-border: #e0e0e0;
+  --vantor-hover: #e0e0e0;
+  --vantor-row-hover: #e3f2fd;
+  --vantor-th-hover: #ebebeb;
+  --vantor-highlight-bg: #fff9c4;
+  --vantor-highlight-outline: #ffc107;
+  --vantor-disabled: #bdbdbd;
+}
+
+/* Tell the browser which color scheme native form controls (select option
+   popups, scrollbars) should use, so they match the panel theme instead of
+   inheriting a host app's color-scheme (e.g. GeoLibre's dark scheme would
+   otherwise render dropdown popups dark with the panel's dark text on them). */
+.vantor-panel {
+  color-scheme: light;
+}
+
+/* Dark theme — applied explicitly via theme: 'dark' */
+.vantor-panel--theme-dark {
+  color-scheme: dark;
+  --vantor-bg: #1e1e1e;
+  --vantor-bg-alt: #2a2a2a;
+  --vantor-text: #e6e6e6;
+  --vantor-text-muted: #9e9e9e;
+  --vantor-border: #3a3a3a;
+  --vantor-hover: #3a3a3a;
+  --vantor-row-hover: #2d3a4a;
+  --vantor-th-hover: #333333;
+  --vantor-highlight-bg: #4a4327;
+  --vantor-highlight-outline: #ffc107;
+  --vantor-disabled: #555555;
+}
+
+/* Dark theme — follow the OS preference when theme: 'auto' (default) */
+@media (prefers-color-scheme: dark) {
+  .vantor-panel--theme-auto {
+    color-scheme: dark;
+    --vantor-bg: #1e1e1e;
+    --vantor-bg-alt: #2a2a2a;
+    --vantor-text: #e6e6e6;
+    --vantor-text-muted: #9e9e9e;
+    --vantor-border: #3a3a3a;
+    --vantor-hover: #3a3a3a;
+    --vantor-row-hover: #2d3a4a;
+    --vantor-th-hover: #333333;
+    --vantor-highlight-bg: #4a4327;
+    --vantor-highlight-outline: #ffc107;
+    --vantor-disabled: #555555;
+  }
+}
+
+.maplibregl-ctrl-vantor {
+  max-width: none !important;
+  /* Sit above map raster overlays that share this control corner. In GeoLibre
+     the COG deck.gl overlay (#deckgl-overlay) is an absolutely positioned,
+     full-map canvas mounted as a sibling control at z-index 1, so a static
+     control paints under it. Give the panel a stacking context above it,
+     mirroring GeoLibre's own .geolibre-stac-search-control (z-index: 3). */
+  position: relative;
+  z-index: 3;
+}
+
+.vantor-panel {
+  /* Fit the viewport on narrow screens, never overflow horizontally */
+  width: min(var(--vantor-panel-width), calc(100vw - 20px));
+  max-height: var(--vantor-panel-max-height);
+  background: var(--vantor-bg);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: var(--vantor-text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.vantor-panel--collapsed .vantor-panel__content,
+.vantor-panel--collapsed .vantor-panel__toggle {
+  display: none;
+}
+
+/* Resizable: once the user drags a handle, the panel takes an explicit size
+   and the results table fills the remaining height instead of capping at its
+   default max-height. */
+.vantor-panel--resized {
+  height: var(--vantor-panel-height);
+  max-height: var(--vantor-panel-height);
+}
+
+.vantor-panel--resized .vantor-panel__table-container {
+  max-height: none;
+}
+
+.vantor-panel--resizing {
+  user-select: none;
+}
+
+.vantor-panel__resize-handle {
+  position: absolute;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  z-index: 5;
+  touch-action: none;
+}
+
+.vantor-panel--collapsed .vantor-panel__resize-handle {
+  display: none;
+}
+
+.vantor-panel__resize-handle--bl {
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.vantor-panel__resize-handle--br {
+  right: 0;
+  cursor: nwse-resize;
+}
+
+/* Subtle corner grip lines */
+.vantor-panel__resize-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  opacity: 0.5;
+}
+
+.vantor-panel__resize-handle--bl::after {
+  left: 3px;
+  border-left: 2px solid var(--vantor-text-muted);
+  border-bottom: 2px solid var(--vantor-text-muted);
+}
+
+.vantor-panel__resize-handle--br::after {
+  right: 3px;
+  border-right: 2px solid var(--vantor-text-muted);
+  border-bottom: 2px solid var(--vantor-text-muted);
+}
+
+.vantor-panel--collapsed {
+  width: auto;
+  max-height: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Open button (visible when collapsed) */
+.vantor-panel__open-btn {
+  display: none;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  border: 0;
+  background: var(--vantor-bg);
+  cursor: pointer;
+  border-radius: 4px;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Use an opaque, theme-aware hover shade. A translucent hover color let the
+   basemap show through the collapsed button, which made the icon disappear on
+   hover (e.g. a light icon over a light basemap in dark mode). */
+.maplibregl-ctrl-vantor .vantor-panel__open-btn:hover:not(:disabled) {
+  background-color: var(--vantor-bg-alt);
+}
+
+/* Dark theme: keep the collapsed icon button readable on a dark basemap —
+   light icon fill (below) plus a light ring so the button doesn't blend in. */
+.vantor-panel--theme-dark .vantor-panel__open-btn {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  .vantor-panel--theme-auto .vantor-panel__open-btn {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+  }
+}
+
+.vantor-panel__open-btn:focus {
+  outline: none;
+  box-shadow: 0 0 2px 2px #0096ff;
+}
+
+.vantor-panel--collapsed .vantor-panel__open-btn {
+  display: flex;
+}
+
+.vantor-panel__open-icon {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cg fill='%23333'%3E%3Cpath d='M10 11h9v7h-9z'/%3E%3Cpath d='M6 11h3v7H6z'/%3E%3Cpath d='M20 11h3v7h-3z'/%3E%3Cpath d='M13.2 8.5h2.6V10h-2.6z'/%3E%3Cpath d='M14.5 18.5 12 22h1.9l.6-.9h1l.6.9H17z'/%3E%3Ccircle cx='14.5' cy='14.5' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Lighter icon for dark theme (explicit) */
+.vantor-panel--theme-dark .vantor-panel__open-icon {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cg fill='%23e6e6e6'%3E%3Cpath d='M10 11h9v7h-9z'/%3E%3Cpath d='M6 11h3v7H6z'/%3E%3Cpath d='M20 11h3v7h-3z'/%3E%3Cpath d='M13.2 8.5h2.6V10h-2.6z'/%3E%3Cpath d='M14.5 18.5 12 22h1.9l.6-.9h1l.6.9H17z'/%3E%3Ccircle cx='14.5' cy='14.5' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Lighter icon for dark theme (auto / OS preference) */
+@media (prefers-color-scheme: dark) {
+  .vantor-panel--theme-auto .vantor-panel__open-icon {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cg fill='%23e6e6e6'%3E%3Cpath d='M10 11h9v7h-9z'/%3E%3Cpath d='M6 11h3v7H6z'/%3E%3Cpath d='M20 11h3v7h-3z'/%3E%3Cpath d='M13.2 8.5h2.6V10h-2.6z'/%3E%3Cpath d='M14.5 18.5 12 22h1.9l.6-.9h1l.6.9H17z'/%3E%3Ccircle cx='14.5' cy='14.5' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+/* Close button (visible when expanded) */
+.vantor-panel__toggle {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--vantor-text-muted);
+  z-index: 1;
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__toggle:hover:not(:disabled) {
+  background-color: var(--vantor-hover);
+  color: var(--vantor-text);
+}
+
+/* Header */
+.vantor-panel__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vantor-border);
+}
+
+.vantor-panel__header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Content */
+.vantor-panel__content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+/* Sections */
+.vantor-panel__search,
+.vantor-panel__results,
+.vantor-panel__actions {
+  padding: 10px 16px;
+}
+
+.vantor-panel__search {
+  border-bottom: 1px solid var(--vantor-border);
+}
+
+/* Labels */
+.vantor-panel__section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vantor-text-muted);
+  margin: 0 0 8px 0;
+}
+
+/* Fields */
+.vantor-panel__field {
+  margin-bottom: 8px;
+}
+
+.vantor-panel__field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 3px;
+  color: var(--vantor-text);
+}
+
+.vantor-panel__select-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.vantor-panel__select-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Select & Input styling. MapLibre ships `.maplibregl-ctrl select { color: #000
+   !important }`, which would force black text on the dark-theme dropdowns in a
+   host like GeoLibre. Match its `!important` and cover both the original map
+   control wrapper and GeoLibre's native dock-panel wrapper. */
+.maplibregl-ctrl-vantor .vantor-panel select,
+.maplibregl-ctrl-vantor .vantor-panel input[type="text"],
+.geolibre-docked-map-control .vantor-panel select,
+.geolibre-docked-map-control .vantor-panel input[type="text"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--vantor-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--vantor-bg);
+  color: var(--vantor-text) !important;
+  box-sizing: border-box;
+}
+
+.vantor-panel select option {
+  background-color: var(--vantor-bg);
+  color: var(--vantor-text);
+}
+
+.vantor-panel select:focus,
+.vantor-panel input[type="text"]:focus {
+  outline: none;
+  border-color: var(--vantor-primary);
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+}
+
+/* Checkbox */
+.vantor-panel__checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.vantor-panel__checkbox-label input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* BBox controls */
+.vantor-panel__bbox-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.vantor-panel__bbox-info {
+  font-size: 10px;
+  color: var(--vantor-text-muted);
+  word-break: break-all;
+  margin-bottom: 4px;
+  min-height: 14px;
+}
+
+/* Buttons */
+.vantor-panel__btn {
+  padding: 6px 12px;
+  border: 1px solid var(--vantor-border);
+  border-radius: 4px;
+  background: var(--vantor-bg);
+  color: var(--vantor-text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__btn:hover:not(:disabled) {
+  background-color: var(--vantor-hover);
+}
+
+.vantor-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vantor-panel__btn--primary {
+  background: var(--vantor-primary);
+  color: white;
+  border-color: var(--vantor-primary);
+  font-weight: 600;
+  width: 100%;
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__btn--primary:hover:not(:disabled) {
+  background-color: var(--vantor-primary-hover);
+}
+
+.vantor-panel__btn--primary:disabled {
+  background: var(--vantor-disabled);
+  border-color: var(--vantor-disabled);
+}
+
+.vantor-panel__btn--success {
+  background: var(--vantor-success);
+  color: white;
+  border-color: var(--vantor-success);
+  font-weight: 600;
+  flex: 1;
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__btn--success:hover:not(:disabled) {
+  background-color: var(--vantor-success-hover);
+}
+
+.vantor-panel__btn--success:disabled {
+  background: var(--vantor-disabled);
+  border-color: var(--vantor-disabled);
+}
+
+.vantor-panel__btn--warning {
+  background: var(--vantor-warning);
+  color: white;
+  border-color: var(--vantor-warning);
+  font-weight: 600;
+  flex: 1;
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__btn--warning:hover:not(:disabled) {
+  background-color: var(--vantor-warning-hover);
+}
+
+.vantor-panel__btn--warning:disabled {
+  background: var(--vantor-disabled);
+  border-color: var(--vantor-disabled);
+}
+
+.vantor-panel__btn--active {
+  background: var(--vantor-primary);
+  color: white;
+  border-color: var(--vantor-primary);
+}
+
+.maplibregl-ctrl-vantor .vantor-panel__btn--active:hover:not(:disabled) {
+  background-color: var(--vantor-primary-hover);
+  border-color: var(--vantor-primary-hover);
+}
+
+.vantor-panel__btn--small {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.vantor-panel__btn--refresh {
+  padding: 5px 8px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Results */
+.vantor-panel__results {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border-bottom: 1px solid var(--vantor-border);
+}
+
+.vantor-panel__results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.vantor-panel__count {
+  font-size: 12px;
+  color: var(--vantor-text-muted);
+}
+
+.vantor-panel__select-controls {
+  display: flex;
+  gap: 4px;
+}
+
+/* Table */
+.vantor-panel__table-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  min-height: 100px;
+  max-height: 300px;
+  border: 1px solid var(--vantor-border);
+  border-radius: 4px;
+}
+
+.vantor-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.vantor-panel__table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.vantor-panel__table th {
+  background: var(--vantor-bg-alt);
+  padding: 6px 4px;
+  text-align: start;
+  font-weight: 600;
+  font-size: 11px;
+  border-bottom: 2px solid var(--vantor-border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.vantor-panel__table th:hover {
+  background: var(--vantor-th-hover);
+}
+
+.vantor-panel__table th.vantor-sort-asc::after {
+  content: " \25B2";
+  font-size: 9px;
+}
+
+.vantor-panel__table th.vantor-sort-desc::after {
+  content: " \25BC";
+  font-size: 9px;
+}
+
+.vantor-panel__table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--vantor-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.vantor-panel__table tbody tr {
+  cursor: pointer;
+}
+
+.vantor-panel__table tbody tr:hover {
+  background: var(--vantor-row-hover);
+}
+
+.vantor-panel__table tbody tr:nth-child(even) {
+  background: var(--vantor-bg-alt);
+}
+
+.vantor-panel__table tbody tr:nth-child(even):hover {
+  background: var(--vantor-row-hover);
+}
+
+.vantor-panel__table-row--highlighted {
+  background: var(--vantor-highlight-bg) !important;
+  outline: 2px solid var(--vantor-highlight-outline);
+  outline-offset: -2px;
+}
+
+.vantor-panel__table td:first-child,
+.vantor-panel__table th:first-child {
+  width: 24px;
+  text-align: center;
+  padding: 4px 2px;
+}
+
+.vantor-panel__table input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Phase badge */
+.vantor-phase--pre {
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.vantor-phase--post {
+  color: #f44336;
+  font-weight: 500;
+}
+
+/* Actions */
+.vantor-panel__actions {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--vantor-border);
+}
+
+/* Progress */
+.vantor-panel__progress-container {
+  padding: 8px 16px;
+  display: none;
+}
+
+.vantor-panel__progress-container--visible {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.vantor-panel__progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--vantor-border);
+}
+
+.vantor-panel__progress-bar {
+  height: 100%;
+  background: var(--vantor-primary);
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+/* Status */
+.vantor-panel__status {
+  padding: 6px 16px 10px;
+  font-size: 11px;
+  color: var(--vantor-text-muted);
+  min-height: 18px;
+}
+
+.vantor-panel__status--info {
+  color: #5cabff;
+}
+
+.vantor-panel__status--success {
+  color: #4ccd6a;
+}
+
+.vantor-panel__status--warning {
+  color: #f0a030;
+}
+
+.vantor-panel__status--error {
+  color: #ff6b6b;
+}
+
+/* Responsive — the base `width: min(...)` already fits narrow screens and the
+   panel grows to its content (scrolling internally) up to the max-height. The
+   width override must NOT apply when collapsed, or the icon button stretches
+   full-width and floats over neighboring controls. */
+@media (max-width: 480px) {
+  .vantor-panel:not(.vantor-panel--collapsed) {
+    max-height: min(var(--vantor-panel-max-height), calc(100vh - 20px));
+  }
+}

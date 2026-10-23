@@ -155,13 +155,13 @@ describe("OLC plugin helpers", () => {
     assert.equal(olcChildCount(OpenLocationCode.encode(10.78, 106.7, 15)), 0);
 
     const neighbors = olcNeighborCells(cell);
-    assert.equal(neighbors.length, 9);
+    assert.equal(neighbors.length, 5);
     assert.ok(neighbors.includes(cell));
     for (const neighbor of neighbors) {
       assert.equal(OpenLocationCode.decode(neighbor).codeLength, 8);
     }
     // At the north pole row there are no neighbors above.
     const polar = OpenLocationCode.encode(89.9, 0, 4);
-    assert.equal(olcNeighborCells(polar).length, 6);
+    assert.equal(olcNeighborCells(polar).length, 4);
   });
 });

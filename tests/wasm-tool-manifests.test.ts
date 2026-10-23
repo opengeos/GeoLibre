@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   fileOutputTargetExtension,
+  lidarBytesExtension,
+  lidarOutputTargetExtension,
   manifestScalarDefaults,
   mergeWasmToolManifests,
   normalizeVectorOutputFormat,
+  outputTextFormatHint,
   type ToolManifest,
   type WhiteboxTool,
 } from "@geolibre/processing";
@@ -86,10 +89,10 @@ describe("mergeWasmToolManifests", () => {
     // greater_than_or_equal_to, less_than_or_equal_to). They run through the
     // WASM runner like any other, so dropping them left the dialog listing
     // fewer tools than the binary provides.
+    // Whitebox provenance is an unset `source` once a manifest is converted.
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "buffer_vector",
       display_name: "Buffer Vector",
-      source: "whitebox",
       params: [{ name: "input", data_kind: "vector", io_role: "input" }],
     };
     const merged = mergeWasmToolManifests(
@@ -247,6 +250,7 @@ describe("mergeWasmToolManifests", () => {
     // variogram/cokriging tools and the >=/<= comparisons, which the snapshot
     // has never listed. They execute through the WASM runner (buffer_vector
     // turns 2 points into 2 polygons), so dropping them hid working tools.
+    // Whitebox provenance is an unset `source` once a manifest is converted.
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "some_wasm_only_whitebox_tool",
       params: [{ name: "input", data_kind: "raster", io_role: "input" }],
@@ -255,6 +259,20 @@ describe("mergeWasmToolManifests", () => {
     assert.deepEqual(
       merged.map((tool) => tool.id),
       ["some_wasm_only_whitebox_tool"],
+    );
+  });
+
+  it("hides a locked WASM-only pro-tier tool", () => {
+    const merged = mergeWasmToolManifests(
+      [],
+      [
+        { id: "pro_tool", locked: true, params: [] },
+        { id: "free_tool", locked: false, params: [] },
+      ],
+    );
+    assert.deepEqual(
+      merged.map((tool) => tool.id),
+      ["free_tool"],
     );
   });
 
@@ -440,5 +458,123 @@ describe("fileOutputTargetExtension", () => {
   it("falls back to an opaque .dat for a non-table, non-text output", () => {
     const opaque = { name: "output", data_kind: "file", io_role: "output" };
     assert.equal(fileOutputTargetExtension(opaque, undefined), "dat");
+  });
+
+  it("honors a recommended extension in the description over the table default", () => {
+    // excel_to_table's output param, as the WASM manifest reports it: data_kind
+    // "table" would otherwise default to .csv, but the writer is the generic
+    // vector format dispatch (no CSV driver) and the description already names
+    // the extension that does work.
+    const excelToTable = {
+      name: "file_out",
+      description:
+        "Optional output table path (driver from its extension; GeoParquet .parquet recommended). If omitted, stored in memory.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(excelToTable, undefined), "parquet");
+    assert.equal(fileOutputTargetExtension(excelToTable, ""), "parquet");
+    // An explicit user-chosen path still wins.
+    assert.equal(fileOutputTargetExtension(excelToTable, "report.gpkg"), "gpkg");
+  });
+
+  it("ignores a decimal in the prose rather than reading it as an extension", () => {
+    const decimalProse = {
+      name: "file_out",
+      description: "Optional CSV output path; a tolerance of 0.5 recommended for noisy inputs.",
+      data_kind: "table",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(decimalProse, undefined), "csv");
+  });
+});
+
+describe("outputTextFormatHint name words", () => {
+  it("reads a format named by one word of a snake/kebab/camelCase name", () => {
+    // directional_variogram's `output_json`, as the WASM manifest reports it:
+    // its description never says JSON, and `_` is a word character, so the
+    // old `\bjson\b` rule missed the name and the tool wrote an opaque `.dat`.
+    const variogram = {
+      name: "output_json",
+      description: "Output file path for directional variogram results",
+      data_kind: "file",
+      io_role: "output",
+    };
+    assert.equal(outputTextFormatHint(variogram), "json");
+    assert.equal(fileOutputTargetExtension(variogram, undefined), "json");
+    assert.equal(outputTextFormatHint({ name: "report-html" }), "html");
+    assert.equal(outputTextFormatHint({ name: "summaryCsv" }), "csv");
+    assert.equal(outputTextFormatHint({ name: "CSVOutput" }), "csv");
+  });
+
+  it("does not match a format buried inside a longer word", () => {
+    assert.equal(outputTextFormatHint({ name: "csvlike_output" }), null);
+    assert.equal(outputTextFormatHint({ name: "jsonish" }), null);
+  });
+});
+
+describe("lidarOutputTargetExtension", () => {
+  it("honours a user-typed .laz path", () => {
+    assert.equal(lidarOutputTargetExtension("classified.laz"), "laz");
+    assert.equal(lidarOutputTargetExtension(" /data/OUT.LAZ "), "laz");
+  });
+
+  it("honours a user-typed .copc.laz path", () => {
+    assert.equal(lidarOutputTargetExtension("thinned.copc.laz"), "copc.laz");
+    assert.equal(lidarOutputTargetExtension(" /data/OUT.COPC.LAZ "), "copc.laz");
+  });
+
+  it("keeps uncompressed .las for anything else", () => {
+    assert.equal(lidarOutputTargetExtension("classified.las"), "las");
+    assert.equal(lidarOutputTargetExtension("classified.laz.bak"), "las");
+    assert.equal(lidarOutputTargetExtension(""), "las");
+    assert.equal(lidarOutputTargetExtension(undefined), "las");
+    assert.equal(lidarOutputTargetExtension(42), "las");
+  });
+});
+
+/**
+ * A minimal LAS 1.4 header (375 bytes) plus room for one VLR header.
+ *
+ * @param pointFormatByte - The point data format byte (offset 104).
+ * @param firstVlrUserId - The first VLR's user id, if any.
+ * @returns The header bytes.
+ */
+function lasHeader(pointFormatByte: number, firstVlrUserId = "", recordId = 0): Uint8Array {
+  const bytes = new Uint8Array(375 + 54);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0x4c, 0x41, 0x53, 0x46], 0); // "LASF"
+  view.setUint16(94, 375, true);
+  bytes[104] = pointFormatByte;
+  bytes.set(
+    Array.from(firstVlrUserId, (char) => char.charCodeAt(0)),
+    375 + 2,
+  );
+  view.setUint16(375 + 18, recordId, true);
+  return bytes;
+}
+
+describe("lidarBytesExtension", () => {
+  it("names uncompressed LAS records .las", () => {
+    assert.equal(lidarBytesExtension(lasHeader(6, "LASF_Projection")), "las");
+  });
+
+  it("names LASzip-compressed records .laz (bit 7, or bit 6 in old files)", () => {
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "laszip encoded")), "laz");
+    assert.equal(lidarBytesExtension(lasHeader(0x43)), "laz");
+  });
+
+  it("names a cloud whose first VLR is the COPC info .copc.laz", () => {
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc", 1)), "copc.laz");
+  });
+
+  it("does not mistake a look-alike first VLR for the COPC info", () => {
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc_custom", 1)), "laz");
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc", 1000)), "laz");
+  });
+
+  it("falls back to .las for bytes that are not LAS", () => {
+    assert.equal(lidarBytesExtension(new Uint8Array([0x49, 0x49, 0x2a, 0x00])), "las");
+    assert.equal(lidarBytesExtension(new Uint8Array()), "las");
   });
 });

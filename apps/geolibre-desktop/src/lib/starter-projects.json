@@ -1,0 +1,61 @@
+{
+  "$comment": "Starter projects listed under New Project → Examples. Each is a demo from opengeos/geolibre-assets (see scripts/demo-gallery.json). Keep it small; tests/starter-projects.test.ts validates every entry.",
+  "examples": [
+    {
+      "id": "the-vanishing-aral-sea",
+      "title": "The vanishing Aral Sea",
+      "description": "Swipe between water occurrence and 1984–2021 transitions",
+      "thumbnailUrl": "https://assets.geolibre.app/images/the-vanishing-aral-sea.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/the-vanishing-aral-sea.geolibre.json"
+    },
+    {
+      "id": "manhattan-buildings-through-time",
+      "title": "Manhattan buildings through time",
+      "description": "Buildings extruded at true height and replayed by construction year, 1850–2025, under the subway",
+      "thumbnailUrl": "https://assets.geolibre.app/images/manhattan-buildings-through-time.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/manhattan-buildings-through-time.geolibre.json"
+    },
+    {
+      "id": "earthquakes-last-30-days",
+      "title": "Earthquakes, last 30 days",
+      "description": "Every M2.5+ quake sized by magnitude and colored by depth, over plate boundaries",
+      "thumbnailUrl": "https://assets.geolibre.app/images/earthquakes-last-30-days.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/earthquakes-last-30-days.geolibre.json"
+    },
+    {
+      "id": "global-land-cover-2024",
+      "title": "Global land cover 2024",
+      "description": "10 m land use / land cover streamed from an ArcGIS ImageServer",
+      "thumbnailUrl": "https://assets.geolibre.app/images/global-land-cover-2024.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/global-land-cover-2024.geolibre.json"
+    },
+    {
+      "id": "the-global-flight-network",
+      "title": "The global flight network",
+      "description": "The 4,000 busiest air corridors as great circles, hubs sized by routes",
+      "thumbnailUrl": "https://assets.geolibre.app/images/the-global-flight-network.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/the-global-flight-network.geolibre.json"
+    },
+    {
+      "id": "aurora-forecast",
+      "title": "Aurora forecast",
+      "description": "The chance of seeing an aurora, a snapshot of the OVATION model",
+      "thumbnailUrl": "https://assets.geolibre.app/images/aurora-forecast.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/aurora-forecast.geolibre.json"
+    },
+    {
+      "id": "languages-of-the-world",
+      "title": "Languages of the world",
+      "description": "7,896 languages colored by family",
+      "thumbnailUrl": "https://assets.geolibre.app/images/languages-of-the-world.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/languages-of-the-world.geolibre.json"
+    },
+    {
+      "id": "roads-of-the-roman-empire",
+      "title": "Roads of the Roman Empire",
+      "description": "About 300,000 km of Roman roads by how certain the route is",
+      "thumbnailUrl": "https://assets.geolibre.app/images/roads-of-the-roman-empire.webp",
+      "projectUrl": "https://assets.geolibre.app/projects/roads-of-the-roman-empire.geolibre.json"
+    }
+  ]
+}

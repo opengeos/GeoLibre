@@ -7,10 +7,10 @@ import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
-export function WmtsSource() {
+export function WmtsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wmts.defaultName"));
-  const [wmtsUrl, setWmtsUrl] = useState("");
+  const [wmtsUrl, setWmtsUrl] = useState(initialUrl);
   const [wmtsTileSize, setWmtsTileSize] = useState("256");
 
   const getFields = (): ServiceFields => ({

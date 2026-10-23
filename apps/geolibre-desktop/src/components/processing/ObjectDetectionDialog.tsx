@@ -1,7 +1,8 @@
-import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import {
   detectObjects,
+  isOrtAvailable,
   readDetectionImage,
   readRasterData,
   type Detection,
@@ -30,7 +31,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
-import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
 import { readPhotoLocation } from "../../lib/geotagged-photos";
 import {
@@ -43,7 +43,7 @@ import {
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 interface ObjectDetectionDialogProps {
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 const IMAGE_EXTENSIONS = ["tif", "tiff", ...DETECTION_PHOTO_EXTENSIONS];
@@ -95,7 +95,7 @@ function classLabel(names: string[], index: number): string {
  *
  * Each box becomes a rectangular polygon in the raster's CRS (via the
  * geotransform), tagged with its class label and score, and a legacy `crs`
- * member so {@link reprojectFeatureCollectionToWgs84} can lift it to WGS84.
+ * member so `reprojectFeatureCollectionToWgs84` can lift it to WGS84.
  *
  * @param detections Boxes in source raster pixels.
  * @param raster The source raster (for the geotransform + CRS).
@@ -184,12 +184,23 @@ export function ObjectDetectionDialog({
 
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
+  // Inference always goes through onnxruntime-web, which cannot load in a
+  // no-external-CDN build — a user-supplied .onnx does not help.
+  const ortAvailable = isOrtAvailable();
+
   // Default to a built-in model so detection works out of the box with no file.
-  const [modelSource, setModelSource] = useState<"builtin" | "local">("builtin");
-  const [builtinModelId, setBuiltinModelId] = useState(BUILTIN_DETECTION_MODELS[0].id);
+  // A build with external CDNs disabled ships no built-ins (the weights are
+  // CDN-hosted), so fall back to a user-supplied model rather than indexing
+  // into an empty list.
+  const [modelSource, setModelSource] = useState<"builtin" | "local">(
+    BUILTIN_DETECTION_MODELS.length > 0 ? "builtin" : "local",
+  );
+  const [builtinModelId, setBuiltinModelId] = useState(BUILTIN_DETECTION_MODELS[0]?.id ?? "");
   const [modelBytes, setModelBytes] = useState<ArrayBuffer | null>(null);
   const [modelName, setModelName] = useState("");
-  const [classNames, setClassNames] = useState(BUILTIN_DETECTION_MODELS[0].classNames.join(", "));
+  const [classNames, setClassNames] = useState(
+    BUILTIN_DETECTION_MODELS[0]?.classNames.join(", ") ?? "",
+  );
   const [confidence, setConfidence] = useState(0.25);
   const [iou, setIou] = useState(0.45);
   const [inputSize, setInputSize] = useState(640);
@@ -380,7 +391,9 @@ export function ObjectDetectionDialog({
         .filter(Boolean);
       const fc = photoLocation
         ? detectionsToPhotoFeatureCollection(detections, photoLocation, names, imageName)
-        : await reprojectFeatureCollectionToWgs84(
+        : await (
+            await import("../../lib/duckdb-vector-loader")
+          ).reprojectFeatureCollectionToWgs84(
             detectionsToFeatureCollection(detections, raster, names),
           );
       // Split by class so each class becomes its own layer (issue #902:
@@ -423,7 +436,7 @@ export function ObjectDetectionDialog({
           }
         }
       }
-      if (Number.isFinite(minX)) {
+      if (Number.isFinite(minX) && shouldZoomToNewLayers()) {
         mapControllerRef.current?.fitBounds([minX, minY, maxX, maxY]);
       }
       setResultMessage(
@@ -495,6 +508,17 @@ export function ObjectDetectionDialog({
             {t("objectDetection.hint")}
           </p>
 
+          {/* Inference needs the ONNX Runtime WASM backend, which a
+              no-external-CDN build cannot load at all — so say so up front
+              rather than letting the user pick an image and a local model and
+              only fail at the end of the run. */}
+          {!ortAvailable && (
+            <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              {t("objectDetection.unavailableNoExternalCdn")}
+            </p>
+          )}
+
           {/* Image source */}
           <div className="grid gap-1.5">
             <Label htmlFor="det-image" className="text-xs">
@@ -539,7 +563,9 @@ export function ObjectDetectionDialog({
                 if (next === "builtin") selectBuiltinModel(builtinModelId);
               }}
             >
-              <option value="builtin">{t("objectDetection.modelSourceBuiltin")}</option>
+              {BUILTIN_DETECTION_MODELS.length > 0 ? (
+                <option value="builtin">{t("objectDetection.modelSourceBuiltin")}</option>
+              ) : null}
               <option value="local">{t("objectDetection.modelSourceLocal")}</option>
             </Select>
           </div>
@@ -676,7 +702,9 @@ export function ObjectDetectionDialog({
           <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleRun()}
-              disabled={running || !imageBytes || (modelSource === "local" && !modelBytes)}
+              disabled={
+                !ortAvailable || running || !imageBytes || (modelSource === "local" && !modelBytes)
+              }
               className="gap-2"
             >
               {running ? (

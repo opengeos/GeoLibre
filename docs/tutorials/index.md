@@ -5,7 +5,7 @@ These tutorials walk through common GeoLibre workflows end to end. Each one is s
 ## Before you start
 
 - You can follow most tutorials in the **live viewer** at [web.geolibre.app](https://web.geolibre.app/), which is the browser build of GeoLibre. No installation required.
-- A few steps need the **desktop app**: opening and saving project files, reading local MBTiles and rasters, and the Python sidecar tools (raster processing and sidecar conversions). These are called out where they appear. See [Downloads](../downloads.md) to install. The Whitebox geoprocessing toolbox is not among them — its 1,000+ tools run in the browser on WebAssembly.
+- A few steps need the **desktop app**: reading local MBTiles and rasters, and the Python sidecar tools (raster tools without a browser engine, such as Contour). These are called out where they appear. See [Downloads](../downloads.md) to install. The Whitebox geoprocessing toolbox is not among them — its 1,000+ tools run in the browser on WebAssembly.
 - The sample dataset used in several tutorials is a public GeoParquet file of world countries: `https://data.source.coop/giswqs/opengeos/countries.parquet`.
 
 ## The tutorials
@@ -25,3 +25,13 @@ Work through them in order for a guided tour, or jump to the one that matches yo
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
+- [Access Free High-Resolution Disaster Satellite Imagery in Your Browser](https://youtu.be/QQ9i5CTNh84)
+- [Regularize Building Footprints in the Browser with GeoLibre](https://youtu.be/xjfPYxgEEEc)
+- [GeoLibre + GeoLens: A Modern GIS Stack for Self-Hosting Geospatial Data](https://youtu.be/kQqgrxXGd4o)
+- [Create Reusable GIS Workflows with GeoLibre Model Builder and AI Assistant](https://youtu.be/dzjNKM6slgs)
+- [Mapping the 2026 Nepal Floods with Free High-Resolution Satellite Imagery](https://youtu.be/UDO1BCwOAAc)
+- [Building Cloud-Native GIS Workflows with GeoLibre](https://youtu.be/RgNoKsvZ5Hk)
+- [Image Georeferencing Using GeoLibre in the Browser](https://youtu.be/lbioujkDSG0)
+- [100 Interactive Maps from Open Data: Explore, Fork, and Build Your Own with GeoLibre](https://youtu.be/2r5OhvEa3AA)
+
+All of them, with chapters and summaries, are on [Video Tutorials](videos.md).

@@ -93,6 +93,51 @@ const BASEMAP_SELECT_FIXES = `
   background: #2563eb;
   color: #fff;
 }
+
+/* Dark theme: retarget the light literals above onto the app's design tokens.
+   The menu is appended to <body>, so it is matched by .dark on <html>. */
+.dark .basemap-control-panel .basemap-control-select,
+.dark .basemap-control-panel .basemap-control-select option {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .basemap-control-panel .basemap-select-proxy {
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%23cbd5e1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .basemap-control-panel .basemap-select-proxy:focus-visible,
+.dark .basemap-control-panel .basemap-select-proxy.is-open {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+}
+
+.dark .basemap-select-menu {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-select-menu button {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-select-menu button:hover,
+.dark .basemap-select-menu button:focus-visible {
+  background: hsl(var(--accent));
+  outline: none;
+}
+
+.dark .basemap-select-menu button.is-selected {
+  background: #2563eb;
+  color: #fff;
+}
 `;
 
 if (typeof document !== "undefined" && !document.getElementById(BASEMAP_STYLE_ID)) {

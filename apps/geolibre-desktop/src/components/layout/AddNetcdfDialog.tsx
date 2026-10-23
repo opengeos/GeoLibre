@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   addCloudNetcdfLayer,
   composeRgbImage,
+  crossesAntimeridian,
   listKerchunkVariables,
   loadKerchunkReference,
   openLocalNetcdf,
@@ -30,6 +31,13 @@ import {
 import { Boxes, FileUp } from "lucide-react";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
 import {
+  axisOptionLabel,
+  defaultRgbBands,
+  isTimeAxisName,
+  MAX_AXIS_OPTIONS,
+  pickBandAxis,
+} from "../../lib/netcdf-band-axis";
+import {
   isNetcdfFileUrl,
   openRemoteNetcdfFile,
   type RemoteNetcdfFile,
@@ -40,6 +48,7 @@ import {
   NETCDF_IMAGE_SOURCE_KIND,
   registerNetcdfLayer,
   warmNetcdfColormap,
+  type NetcdfLayerState,
 } from "../../lib/netcdf-image-symbology";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
@@ -60,45 +69,6 @@ const DEFAULT_SOURCE = "file" as const;
 
 /** Default single-band colormap, matching the Zarr panel's own default. */
 const DEFAULT_COLORMAP = "viridis";
-
-// Approximate red/green/blue band centres in nanometres. A hyperspectral cube's
-// band axis is a wavelength coordinate, so a natural-colour composite is the
-// three bands nearest these — which is what a user reaching for "band
-// combination" on an EMIT reflectance cube expects to see first.
-const NATURAL_COLOR_NM: [number, number, number] = [640, 550, 470];
-
-// Above this many entries an axis is offered as a number box rather than a
-// dropdown: a <select> with tens of thousands of options is unusable and slow
-// to build. A band axis (EMIT has 285) stays well under it.
-const MAX_AXIS_OPTIONS = 2000;
-
-// Wavelength units a spectral axis may declare, in the spellings CF files use.
-// Micrometres are the other common one; anything else (an index, a time, a
-// pressure level) is not a wavelength and gets evenly spread band defaults.
-const NANOMETRE_UNITS = new Set(["nm", "nanometer", "nanometers", "nanometre", "nanometres"]);
-const MICROMETRE_UNITS = new Set([
-  "um",
-  "µm",
-  "micron",
-  "microns",
-  "micrometer",
-  "micrometers",
-  "micrometre",
-  "micrometres",
-]);
-
-// Dimension names read as a time axis, mirroring `TIME_DIMENSION_NAMES` in
-// `zarr-time-axis.ts`. A cube with one of these keeps the Zarr render path so
-// the Time Slider can drive it; see `useImagePath`.
-const TIME_DIMENSION_NAMES = new Set([
-  "time",
-  "valid_time",
-  "datetime",
-  "date",
-  "t",
-  "forecast_time",
-  "period",
-]);
 
 /**
  * A renderable variable, shared shape across the cloud and local readers. The
@@ -133,21 +103,31 @@ async function datasetAxes(dataset: OpenDataset, variable: string): Promise<Loca
 }
 
 /**
- * A profile reader bound to one dataset, variable, and axis, for the layer
- * registry. Local reads resolve immediately; remote ones round trip to the
- * worker, which is why the registry stores a function rather than the file.
+ * The cube reads bound to one dataset, variable, and band axis, for the layer
+ * registry: a spectral profile at a pixel, and a single band's plane. Local
+ * reads resolve immediately; remote ones round trip to the worker, which is why
+ * the registry stores functions rather than the file.
  */
-function profileReader(
+function cubeReader(
   dataset: OpenDataset,
   variable: string,
-  axis: string,
+  axis: LocalNetcdfAxis,
   selector: Record<string, number>,
-): { read: (row: number, column: number) => Promise<LocalNetcdfProfile>; close: () => void } {
+): NonNullable<NetcdfLayerState["cube"]> {
   return {
-    read: (row, column) =>
+    axis,
+    readProfile: (row, column) =>
       dataset.kind === "local"
-        ? Promise.resolve(dataset.file.readProfile(variable, { axis, row, column, selector }))
-        : dataset.file.readProfile(variable, { axis, row, column, selector }),
+        ? Promise.resolve(
+            dataset.file.readProfile(variable, { axis: axis.name, row, column, selector }),
+          )
+        : dataset.file.readProfile(variable, { axis: axis.name, row, column, selector }),
+    readBand: (bandIndex, window) => {
+      const bandSelector = { ...selector, [axis.name]: bandIndex };
+      return dataset.kind === "local"
+        ? Promise.resolve(dataset.file.readGrid(variable, bandSelector, window))
+        : dataset.file.readGrid(variable, bandSelector, window);
+    },
     close: () => dataset.file.close(),
   };
 }
@@ -186,7 +166,8 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const addImageOverlayLayer = useAppStore((state) => state.addImageOverlayLayer);
   // The same catalogue the Style panel's Raster symbology offers, so the choice
   // made here and the choice made after the fact are drawn from one list.
-  const rampOptions = useColormapRamps();
+  // Sampled only while the dialog is open: it stays mounted while closed.
+  const rampOptions = useColormapRamps(open);
   // Local file first: it is the common case, and it is the path that renders the
   // pixels itself (see `useImagePath`) rather than through the Zarr control.
   const [source, setSource] = useState<"url" | "file">(DEFAULT_SOURCE);
@@ -247,14 +228,20 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // `axes` is empty when listAxes throws, but `leadingDims` comes from
   // listVariables and survives; without the fallback a time cube would quietly
   // lose the Time Slider by taking the baked-image path.
-  const hasTimeAxis =
-    axes.some((axis) => isTimeAxisName(axis.name)) || leadingDims.some(isTimeAxisName);
+  const timeAxisName =
+    axes.find((axis) => isTimeAxisName(axis.name))?.name ?? leadingDims.find(isTimeAxisName);
+  const hasTimeAxis = timeAxisName !== undefined;
   // Single-band grids from an opened dataset are colormapped on the CPU and
   // added as an image overlay rather than drawn by @carbonplan/zarr-layer, whose
   // `shift_x` uniform lookup throws on drivers that eliminate it (Mesa, so most
   // Linux Intel/AMD machines), leaving the layer permanently blank. See
-  // composeColormappedImage.
-  const useImagePath = dataset !== null && !rgbMode && !hasTimeAxis;
+  // composeColormappedImage. Local cubes with a time axis go through the Zarr
+  // control on both 2D engines (@carbonplan/zarr-layer hosts on Mapbox GL as
+  // well). A remote NetCDF/HDF file has no layer-refs builder — its reader
+  // serves grids, not a store — so a remote cube renders its selected time
+  // slice as an image; without this, submit had no branch for it and added
+  // nothing.
+  const useImagePath = dataset !== null && !rgbMode && (!hasTimeAxis || dataset.kind === "remote");
 
   const closeOpenFile = () => {
     const open = openFileRef.current;
@@ -496,7 +483,7 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             scaleFactor: channels[0].scaleFactor,
             addOffset: channels[0].addOffset,
           });
-          addImageOverlayLayer(
+          const layerId = addImageOverlayLayer(
             `${baseName} - ${variable} (RGB)`,
             {
               url: encodeImageOverlay(image),
@@ -507,73 +494,64 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
               // Without this the store defaults it to "kml-ground-overlay",
               // which every consumer of that marker would then act on.
               sourceKind: NETCDF_IMAGE_SOURCE_KIND,
-              metadata: { variable },
+              // Identify reads cell values, not features, exactly as the
+              // single-band path does; a composite reports all three channels.
+              metadata: { variable, pixelIdentify: true },
             },
           );
-          appApi.fitBounds?.(image.bounds);
-        } else if (useImagePath) {
-          // The grid itself, not just its pixels, so the Style panel can
-          // re-colormap the layer without re-reading the file.
-          const grid = await datasetGrid(dataset, variable, selector);
-          const symbology = {
-            colormap,
-            reversed: false,
-            clim: clim ?? grid.dataClim,
-          };
-          // The picker lists every ramp as soon as it opens, including sprite
-          // ramps the catalogue is still sampling; baking before one resolves
-          // would silently paint viridis under the chosen name.
-          await warmNetcdfColormap(colormap);
-          const image = bakeNetcdfImage(grid, symbology);
-          const layerId = addImageOverlayLayer(
-            `${baseName} - ${variable}`,
-            {
-              url: encodeImageOverlay(image),
-              coordinates: image.coordinates,
-            },
-            {
-              bounds: image.bounds,
-              sourceKind: NETCDF_IMAGE_SOURCE_KIND,
-              metadata: {
-                netcdfSymbology: symbology,
-                variable,
-                // Identify reads a cell value, not a feature, so the button's
-                // tooltip should say so — the same marker COG-backed Time
-                // Slider sources use.
-                pixelIdentify: true,
-              },
-            },
-          );
-          // The file stays open only for a cube, whose band axis is what a
-          // spectral signature walks; a plain 2-D grid needs nothing beyond the
-          // slice already read.
-          if (rgbAxis) retainedFileRef.current = dataset.file;
+          // A composite is by definition built on a band axis, so the file
+          // always stays open: it is what a click's spectral signature and the
+          // 3-D cube view are read from.
+          retainedFileRef.current = dataset.file;
           registerNetcdfLayer(layerId, {
-            grid,
+            grid: channels[0],
             variable,
             ...(selectedVar?.units ? { units: selectedVar.units } : {}),
-            ...(rgbAxis
-              ? { profile: profileReader(dataset, variable, rgbAxis.name, selector) }
-              : {}),
+            cube: cubeReader(dataset, variable, rgbAxis, selector),
+            rgb: {
+              bands: rgbBands,
+              channels: channels as [LocalNetcdfGrid, LocalNetcdfGrid, LocalNetcdfGrid],
+            },
           });
           appApi.fitBounds?.(image.bounds);
-        } else if (dataset.kind === "local") {
-          const built = dataset.file.buildLayerRefs(variable, selector);
-          await addCloudNetcdfLayer(appApi, {
-            // Encoded so a name with URL-special chars (#, ?, %) survives
-            // layerNameFromUrl's new URL(...) parse; that helper decodes it
-            // again for the display name.
-            url: `local:${encodeURIComponent(baseName)}`,
-            refs: built.refs,
-            variable,
-            // The renderer's stock 0-300 limits paint most real grids as a flat
-            // wash, so fall back to the slice's own robust range when the user
-            // left the fields blank.
-            clim: clim ?? built.clim ?? undefined,
-            colormap,
-            bounds: built.bounds,
-          });
-          appApi.fitBounds?.(built.bounds);
+        } else {
+          // A local time cube stays on the Zarr renderer, which the Time Slider
+          // can step, with the time axis kept in the store as a dimension.
+          const built =
+            !useImagePath && dataset.kind === "local"
+              ? dataset.file.buildLayerRefs(
+                  variable,
+                  selector,
+                  timeAxisName ? { keepAxis: timeAxisName } : {},
+                )
+              : null;
+          // The renderer cannot draw a grid across the antimeridian (it wraps
+          // the far edge back to the other side and stretches the data over the
+          // whole world), so such a cube is baked as an image of the selected
+          // step, like a remote one.
+          if (built && !crossesAntimeridian(built.bounds)) {
+            await addCloudNetcdfLayer(appApi, {
+              // Encoded so a name with URL-special chars (#, ?, %) survives
+              // layerNameFromUrl's new URL(...) parse; that helper decodes it
+              // again for the display name.
+              url: `local:${encodeURIComponent(baseName)}`,
+              refs: built.refs,
+              variable,
+              // Names the kept time axis, or nothing at all; never the
+              // per-dimension indices of the dialog, most of which the store
+              // no longer has.
+              selector: built.selector,
+              // The renderer's stock 0-300 limits paint most real grids as a
+              // flat wash, so fall back to the slice's own robust range when
+              // the user left the fields blank.
+              clim: clim ?? built.clim ?? undefined,
+              colormap,
+              bounds: built.bounds,
+            });
+            appApi.fitBounds?.(built.bounds);
+          } else {
+            await addSingleBandImage(dataset, baseName, selector, clim);
+          }
         }
       } else {
         // No opened dataset: a kerchunk manifest, streamed by the Zarr renderer.
@@ -595,6 +573,65 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     } finally {
       if (gen === opGen.current) setAdding(false);
     }
+  };
+
+  /**
+   * Add one slice of a single-band variable as a CPU-colormapped image layer.
+   *
+   * @param dataset - The opened local file or remote URL.
+   * @param baseName - The file name the layer is named after.
+   * @param selector - The index fixed on every leading dimension.
+   * @param clim - The user's color limits, if they entered any.
+   */
+  const addSingleBandImage = async (
+    dataset: OpenDataset,
+    baseName: string,
+    selector: Record<string, number>,
+    clim: [number, number] | undefined,
+  ): Promise<void> => {
+    // The grid itself, not just its pixels, so the Style panel can
+    // re-colormap the layer without re-reading the file.
+    const grid = await datasetGrid(dataset, variable, selector);
+    const symbology = {
+      colormap,
+      reversed: false,
+      clim: clim ?? grid.dataClim,
+    };
+    // The picker lists every ramp as soon as it opens, including sprite
+    // ramps the catalogue is still sampling; baking before one resolves
+    // would silently paint viridis under the chosen name.
+    await warmNetcdfColormap(colormap);
+    const image = bakeNetcdfImage(grid, symbology);
+    const layerId = addImageOverlayLayer(
+      `${baseName} - ${variable}`,
+      {
+        url: encodeImageOverlay(image),
+        coordinates: image.coordinates,
+      },
+      {
+        bounds: image.bounds,
+        sourceKind: NETCDF_IMAGE_SOURCE_KIND,
+        metadata: {
+          netcdfSymbology: symbology,
+          variable,
+          // Identify reads a cell value, not a feature, so the button's
+          // tooltip should say so — the same marker COG-backed Time
+          // Slider sources use.
+          pixelIdentify: true,
+        },
+      },
+    );
+    // The file stays open only for a cube, whose band axis is what a
+    // spectral signature walks; a plain 2-D grid needs nothing beyond the
+    // slice already read.
+    if (rgbAxis) retainedFileRef.current = dataset.file;
+    registerNetcdfLayer(layerId, {
+      grid,
+      variable,
+      ...(selectedVar?.units ? { units: selectedVar.units } : {}),
+      ...(rgbAxis ? { cube: cubeReader(dataset, variable, rgbAxis, selector) } : {}),
+    });
+    appApi.fitBounds?.(image.bounds);
   };
 
   return (
@@ -894,73 +931,4 @@ function AxisSelect({
       ))}
     </Select>
   );
-}
-
-/** `"650.41 nm (bands 47)"` — the coordinate value first, then where it sits. */
-function axisOptionLabel(axis: LocalNetcdfAxis, coordinate: number, index: number): string {
-  const rounded = Number.isInteger(coordinate) ? String(coordinate) : coordinate.toFixed(2);
-  const measure = axis.units ? `${rounded} ${axis.units}` : rounded;
-  return `${measure} (${axis.name} ${index})`;
-}
-
-/**
- * The three indices to open an RGB composite on.
- *
- * A wavelength axis (an EMIT `bands` coordinate in nm) gets the bands nearest
- * true red/green/blue, which is the composite a user actually wants to look at.
- * Anything else — an axis with no units, or units that are not a wavelength —
- * gets three evenly spread indices, since guessing colours from, say, a time
- * axis would be meaningless.
- */
-function defaultRgbBands(axis: LocalNetcdfAxis): [number, number, number] {
-  const wavelengths = wavelengthsInNanometres(axis);
-  if (wavelengths) {
-    return NATURAL_COLOR_NM.map((target) => nearestIndex(wavelengths, target)) as [
-      number,
-      number,
-      number,
-    ];
-  }
-  return [0, Math.floor((axis.size - 1) / 2), axis.size - 1];
-}
-
-/** Whether a dimension name reads as a time axis. */
-function isTimeAxisName(name: string): boolean {
-  return TIME_DIMENSION_NAMES.has(name.toLowerCase());
-}
-
-/**
- * The axis an RGB composite should draw its channels from: a wavelength axis if
- * the file declares one, else the first non-time axis with at least three
- * entries. Time is never a candidate (see `rgbAxis`).
- *
- * @param axes - The variable's leading axes.
- * @returns The band axis, or null when the variable has none.
- */
-function pickBandAxis(axes: LocalNetcdfAxis[]): LocalNetcdfAxis | null {
-  const candidates = axes.filter((axis) => axis.size >= 3 && !isTimeAxisName(axis.name));
-  return candidates.find((axis) => wavelengthsInNanometres(axis)) ?? candidates[0] ?? null;
-}
-
-/** The axis' values as nanometres, or null when it is not a wavelength axis. */
-function wavelengthsInNanometres(axis: LocalNetcdfAxis): number[] | null {
-  if (!axis.values || axis.values.length === 0) return null;
-  const units = axis.units?.trim().toLowerCase() ?? "";
-  if (NANOMETRE_UNITS.has(units)) return axis.values;
-  if (MICROMETRE_UNITS.has(units)) return axis.values.map((value) => value * 1000);
-  return null;
-}
-
-/** Index of the entry closest to `target`. */
-function nearestIndex(values: number[], target: number): number {
-  let best = 0;
-  let bestDistance = Infinity;
-  for (let i = 0; i < values.length; i++) {
-    const distance = Math.abs(values[i] - target);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = i;
-    }
-  }
-  return best;
 }

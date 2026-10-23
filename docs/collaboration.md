@@ -19,6 +19,8 @@ small teams.
   Bounded recent history is relayed to late joiners; never written to a project.
 - **Permissions** — the host's per-participant view-only / can-edit overrides
   (#754), broadcast on the participant list as `editOverride`.
+- **Comments** — map comment add / reply / resolve / delete actions, relayed as
+  `comment-mutation` frames and applied to each peer's store.
 
 ## Architecture
 
@@ -55,32 +57,48 @@ Limitations).
 
 ## Sync protocol
 
-All frames are JSON. `CollabMessage` is a discriminated union on `type`. See
-`apps/geolibre-desktop/src/lib/collab-protocol.ts` for the authoritative types
-(shared by client and worker).
+All frames are JSON, and each direction is a discriminated union on `type`
+(`ClientMessage` and `ServerMessage`). The relays' types live in
+`packages/collab-core/src/protocol.ts` (`@geolibre/collab-core/protocol`, with
+`project` typed as `unknown`); the frontend keeps a parallel copy in
+`apps/geolibre-desktop/src/lib/collab-protocol.ts` with `project` typed as
+`GeoLibreProject`. Keep the `type` discriminants and field names in sync.
 
 Client → server:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `join` | `displayName, color, hostToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
+| `join` | `displayName, color, hostToken?, inviteToken?, identityToken?` | first frame after connect; the relay assigns the `clientId` (returned in `welcome`) |
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
-| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754) |
+| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754; persisted per participant key, so it survives a reconnect only for identity/invite joins — see *Moderation*) |
+| `mint-invite` | `role, maxUses?` | host only; mint a co-edit or view-only invite link |
+| `revoke-invite` | `token` | host only; invalidate an active invite link |
+| `set-session-config` | `requireIdentity` | host only; mandate signed-in identity to join |
+| `set-layer-locks` | `lockedLayerIds` | host only; mark specific layer IDs read-only |
+| `kick-participant` | `clientId, reason?` | host only; disconnect a participant |
+| `block-participant` | `clientId, reason?` | host only; disconnect and bar that participant key from rejoining (see the caveat under *Moderation*) |
 | `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
+| `comment-mutation` | `action` | add / reply / toggle-resolve / delete a map comment; validated and rate-limited by the relay |
 
 Server → client:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev` | sent once on join; the late-joiner bootstrap |
+| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, identitySupported, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
 | `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
-| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` |
+| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` and `identity` |
 | `mode` | `mode` | host changed the session mode |
+| `invite-created` | `invite` | fan-out of a new invite link created by host |
+| `invite-revoked` | `token` | fan-out when host revokes an invite link |
+| `session-config` | `requireIdentity` | broadcast when session identity policy changes |
+| `layer-locks` | `lockedLayerIds` | broadcast when host locks/unlocks layer IDs |
+| `kicked` | `reason` | sent to a participant who was kicked or blocked by the host |
 | `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
-| `error` | `code, message` | e.g. `forbidden`, `too-large` |
+| `comment-mutation` | `action` | fan-out of a peer's comment change |
+| `error` | `code, message` | `forbidden`, `too-large`, `bad-message`, `not-found`, `identity-required`, `identity-unavailable`, or `layer-locked` |
 
 ### Echo / feedback-loop prevention
 
@@ -102,10 +120,15 @@ accepted MVP limitation; a coalesced-history option is a v2 item.
 ## Durable Object (`workers/collab`)
 
 - `POST /sessions` — host creates a session: generates a short base32 code, mints
-  a host token, stores `{ mode, hostToken }`, returns `{ sessionId, hostToken,
-  mode }` to the host only.
+  a host token, stores `{ mode, hostToken, requireIdentity }`, returns
+  `{ sessionId, hostToken, mode, requireIdentity }` to the host only. A
+  disallowed origin gets `403` and a rate-limited caller `429` (see the operator
+  note under *Chat*).
 - `GET /sessions/:id/ws` — WebSocket upgrade, routed to
   `env.COLLAB_SESSION.get(idFromName(id))`.
+- `GET /sessions/:id/log` / `DELETE /sessions/:id/log` — host-only download or
+  clear of the session log (`Authorization: Bearer <hostToken>`).
+- `GET /health` (also `/`) — `{ ok, service, identitySupported }`.
 
 `CollabSession` uses the **WebSocket Hibernation API** so idle sessions evict
 from memory while keeping sockets open. Per-socket participant metadata is kept
@@ -115,13 +138,18 @@ via `ws.serializeAttachment()` (survives hibernation). Durable storage holds the
 in-memory / per-socket attachment. Server-side enforcement: a `snapshot` from a
 guest who cannot edit (session `view-only`, or a host-set per-participant
 view-only override) is dropped with an `error: forbidden`; `set-mode` and
-`set-participant-mode` require the host token. Oversized snapshots (> ~1 MiB, the
-Cloudflare frame cap) are rejected with `error: too-large`. An empty session is
-reclaimed after a TTL via a storage alarm.
+`set-participant-mode` require the host token. Oversized snapshots (> 10 MB by
+default) are rejected with `error: too-large`; the cap sits under Cloudflare's
+32 MiB ceiling on a received WebSocket message. Hosted snapshots are stored in
+chunks across rows of a SQLite table, because a Durable Object caps both a
+key/value entry and a single SQLite string at 2 MB — well under what portable
+GeoJSON from local files and external plugins needs. An empty session is
+reclaimed after a TTL via a storage alarm, which drops the chunks with the rest
+of the database.
 
 ## Frontend
 
-- `lib/collab-protocol.ts` — shared message types.
+- `lib/collab-protocol.ts` — the frontend copy of the message types.
 - `lib/collab-client.ts` — WebSocket transport, `resolveCollabBaseUrl()` (wss/loopback
   validation, returns `null` when unset), exponential-backoff reconnect.
 - `hooks/useCollaboration.ts` — orchestration: subscribes to the store
@@ -161,10 +189,13 @@ field (`true` / `false`, or `null` to follow the session mode). Effective edit
 permission, computed identically on the client and the relay, is: the host
 always edits; otherwise the override wins; otherwise the session mode applies. A
 guest pinned to view-only has their `snapshot` pushes rejected with
-`error: forbidden`, exactly like the session-wide view-only path. Overrides are
-keyed to the per-socket `clientId`, so a guest who reconnects reverts to the
-session default (acceptable for the ephemeral MVP). The host roster surfaces a
-per-guest toggle; other participants see each guest's current permission read-only.
+`error: forbidden`, exactly like the session-wide view-only path. An override is
+also persisted against the guest's **participant key**, so it is reapplied when
+they rejoin — but only for identity- and invite-based joins, for the same reason
+a block is (see *Moderation* below): an anonymous guest arrives with a fresh
+`clientId` and therefore a fresh key, so their override reverts to the session
+default on reconnect. The host roster surfaces a per-guest toggle; other
+participants see each guest's current permission read-only.
 
 The host token (returned only to the creator) gates `set-mode` and
 `set-participant-mode`, so a guest can't escalate the session or another guest.
@@ -172,6 +203,53 @@ Codes are unguessable and sessions auto-expire. The relay assigns each
 participant's `clientId` server-side (the client-supplied value is ignored) so
 one participant can't claim another's identity, and it validates the `color` to
 a hex value before storing/broadcasting it.
+
+### Signed-in identity (optional)
+
+A joiner may present an `identityToken`. It is **not** self-reported JSON: the
+relay verifies an HMAC-SHA256 signature over the token's payload segment before
+it will populate `participant.identity`, so a client cannot mint an account,
+impersonate another user, or wear the roster's verified badge. The format is
+
+```
+<base64url(payloadJSON)>.<base64url(hmacSha256(base64url(payloadJSON)))>
+```
+
+with payload claims `{ userId, username, provider?, exp? }`. `verifyIdentityToken`
+in `@geolibre/collab-core` is the single implementation both relays call, and
+`signIdentityToken` alongside it mints one.
+
+Identity is **off unless a deployment opts in** by setting the signing secret
+shared with its issuer — `COLLAB_IDENTITY_SECRET` (a Worker secret for
+`workers/collab`, an environment variable for `workers/collab-node`). With no
+secret configured:
+
+- every `identityToken` verifies to null, so all joiners are anonymous;
+- `requireIdentity` cannot be turned on — `POST /sessions` answers `400` and
+  `set-session-config` answers `error: identity-unavailable`, rather than arming
+  a gate that would reject every guest including the host's own collaborators;
+- `GET /health` and every `welcome` report `identitySupported: false`, which is
+  how the Collaborate dialog decides to hide the "require a signed-in account"
+  option entirely.
+
+GeoLibre itself ships no sign-in flow yet, so the stock deployment leaves the
+secret unset and the whole identity path dormant. The protocol and relay support
+are in place for a deployment that fronts the relay with its own issuer.
+
+### Moderation
+
+`kick-participant` disconnects a participant. `block-participant` also records
+their **participant key** so the relay refuses the next join. That key is
+`user:<userId>` for a verified identity, `invite:<token>` for an invite-based
+join, and otherwise `anon:<clientId>` — where `clientId` is minted fresh on
+every join.
+
+The same key backs a persisted per-participant override, so both carry the same
+caveat: a block is durable only for identity- and invite-based joins. **An anonymous
+guest can rejoin simply by reconnecting**, since they arrive with a new
+`clientId` and therefore a new key. Blocking is a moderation convenience, not a
+security boundary; a session that needs an enforceable ban has to require an
+invite or a signed-in identity.
 
 ## Chat (#754)
 
@@ -189,10 +267,22 @@ clickable coordinate that recenters the recipient's map. Chat lives on the
 on-canvas status badge so it is reachable while working on the map; it is
 ephemeral and never written to a project file.
 
-> **Operator note:** `POST /sessions` is unauthenticated and currently responds
-> with `Access-Control-Allow-Origin: *`, so any page can create sessions. This is
-> acceptable for the experimental MVP but should be restricted to the app's own
-> origin(s) before a wider rollout to avoid capacity abuse.
+> **Operator note:** `POST /sessions` validates the request `Origin` (or
+> `Referer`) against `ALLOWED_ORIGINS` via `isAllowedOrigin` (defaults to the
+> hosted origins (`geolibre.app`, `web.geolibre.app`, its legacy
+> `viewer.geolibre.app` alias, `studio.geolibre.app`, and
+> `collab.geolibre.app`), single-label HTTPS deployment hosts under
+> `*.geolibre-preview.pages.dev`, loopback hosts (`localhost`, `*.localhost`,
+> and `127.0.0.1`), and `tauri://localhost`). Nested or custom-port preview hosts
+> and look-alike domains are rejected; the shared `opengeos.org` GitHub Pages
+> preview origin is deliberately not trusted) as browser-origin filtering
+> and defense-in-depth (not authentication or a general server-side access gate)
+> and enforces a per-IP `checkRateLimit` (10 requests / 60 s). `Access-Control-Allow-Origin: *` is
+> still sent on responses so non-browser clients (e.g. Tauri) are not blocked by
+> CORS; non-browser clients may omit these headers and remain supported, unless a
+> verifiable credential requirement is added. Configure `ALLOWED_ORIGINS`
+> (comma-separated list) to restrict which browser origins may create sessions in
+> production.
 
 ## Feature flag
 
@@ -230,7 +320,20 @@ core:
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
   is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (default 1,000,000) and `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  (relay default 10,000,000; the compose file defaults it to 1,000,000) and
+  `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+
+Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
+integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
+for example:
+
+```toml
+[vars]
+COLLAB_MAX_SNAPSHOT_BYTES = "10000000"
+```
+
+The configured value must remain below the deployment platform's WebSocket
+message-size limit.
 
 The hosted relay deploys to Cloudflare Workers the same way as `workers/viewer`:
 
@@ -257,8 +360,10 @@ environment. Until that env var is set, the feature stays dark.
   wins and the slower edit is overwritten. Presence helps users avoid colliding.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
-  in-memory/local-file layer can exceed the ~1 MiB frame cap and is rejected with
-  a clear error (share via URL instead). v2: diff / chunked layer sync.
+  in-memory/local-file layer can exceed the snapshot cap
+  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the relay, 1 MB in the
+  Docker Compose setup) and is rejected with
+  `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply
   history, richer permission/identity (tie to share.geolibre.app accounts).

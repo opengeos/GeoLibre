@@ -11,6 +11,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
+import { withNullGeometry } from "./helpers/null-geometry";
 
 function pointFeature(properties: Record<string, unknown>): Feature {
   return {
@@ -21,7 +22,7 @@ function pointFeature(properties: Record<string, unknown>): Feature {
 }
 
 function tableFeature(properties: Record<string, unknown>): Feature {
-  return { type: "Feature", geometry: null, properties };
+  return withNullGeometry({ type: "Feature", geometry: null, properties });
 }
 
 function collection(features: Feature[]): FeatureCollection {
@@ -51,6 +52,14 @@ describe("compileFeatureExpression", () => {
     assert.ok(compiled.evaluate);
     assert.equal(compiled.evaluate(states().features[0]), 95);
     assert.equal(compiled.evaluate(states().features[1]), 2);
+  });
+
+  it("evaluates against the compiled zoom unless a call overrides it", () => {
+    const source = '["step", ["zoom"], "far", 10, "near"]';
+    const compiled = compileFeatureExpression(source, { zoom: 12 });
+    assert.equal(compiled.evaluate!(states().features[0]), "near");
+    assert.equal(compiled.evaluate!(states().features[0], 3), "far");
+    assert.equal(compileFeatureExpression(source).evaluate!(states().features[0]), "far");
   });
 
   it("reports compile failures without an evaluator", () => {

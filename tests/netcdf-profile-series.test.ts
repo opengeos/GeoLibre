@@ -79,6 +79,44 @@ describe("netcdf profile series", () => {
     assert.deepEqual(niceTickValues(0, 23, 8), [0, 5, 10, 15, 20]);
   });
 
+  it("labels a short band axis on whole bands, not half bands", () => {
+    // A 4-band scene (RGB+NIR, the common Sentinel-2 subset) is narrow enough
+    // that the step targeting ~6 labels halves, and "1.5" names no band.
+    assert.deepEqual(niceTickValues(1, 4, 8, { integerOnly: true }), [1, 2, 3, 4]);
+    assert.deepEqual(niceTickValues(1, 3, 8, { integerOnly: true }), [1, 2, 3]);
+    // Left off, the same domain is free to halve — the wavelength behavior.
+    assert.ok(
+      niceTickValues(1, 4, 8).some((tick) => !Number.isInteger(tick)),
+      "a wavelength axis should keep its fractional steps",
+    );
+  });
+
+  it("never labels a whole-numbered axis with a fraction", () => {
+    // Includes the 2.5 multiplier's domains, where a step above 1 is still
+    // fractional, and hyperspectral band counts.
+    for (const [min, max] of [
+      [1, 2],
+      [1, 4],
+      [1, 12],
+      [1, 25],
+      [1, 224],
+      [0, 2],
+    ]) {
+      for (const tick of niceTickValues(min, max, 8, { integerOnly: true })) {
+        assert.ok(Number.isInteger(tick), `${tick} is not a whole band on ${min}..${max}`);
+      }
+    }
+  });
+
+  it("falls back to a fractional step when no whole one fits", () => {
+    // No whole-numbered step yields two ticks inside this domain, and an
+    // unlabelled axis would be worse than a fractionally labelled one.
+    assert.deepEqual(
+      niceTickValues(0.1, 0.5, 8, { integerOnly: true }),
+      niceTickValues(0.1, 0.5, 8),
+    );
+  });
+
   it("does not drift on a fractional step", () => {
     // Repeated addition would surface as "0.6000000000000001" in a label.
     assert.deepEqual(niceTickValues(0, 1, 8), [0, 0.2, 0.4, 0.6, 0.8, 1]);

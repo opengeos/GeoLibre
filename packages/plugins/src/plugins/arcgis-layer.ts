@@ -1,26 +1,216 @@
 /// <reference path="../arcgis-maplibre.d.ts" />
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type AttributeFormConfig,
+  type GeoLibreLayer,
+  shouldZoomToNewLayers,
+  useAppStore,
+} from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
-import type { FeatureCollection } from "geojson";
-import type maplibregl from "maplibre-gl";
+import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson";
+import type * as maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
+import {
+  arcGISEditCapabilities,
+  arcGISObjectId,
+  identifyArcGISFeatures,
+  describeArcGISEditError,
+  planArcGISEdits,
+  reconcileArcGISRefresh,
+  sameArcGISFeatures,
+  type ArcGISEditInfo,
+} from "./arcgis-edits";
+import {
+  arcGISDomainDiagnostics,
+  arcGISServiceAttributeForm,
+  arcGISSubtypeField,
+  type ArcGISDomainDiagnostic,
+} from "./arcgis-domains";
+import { ARCGIS_FEATURE_SOURCE_KIND } from "./arcgis-defaults";
+import {
+  arcgisQuantizationParams,
+  decodeArcGISQuantizedFeatures,
+  isArcGISQuantizedFeatureSet,
+  type ArcGISRecordIdentity,
+} from "./arcgis-quantized";
+import { getGeometryEditTargetLayerId } from "./maplibre-geo-editor";
+import { LocalizedError, localizedMessage } from "../localized-error";
 
-export type ArcGISLayerType = "feature" | "vector-tile";
+let arcGISFetchOverride: typeof globalThis.fetch | null = null;
+
+/** Install the desktop HTTP transport for ArcGIS REST requests; null restores browser fetch. */
+export function setArcGISFetch(fetchImpl: typeof globalThis.fetch | null): void {
+  arcGISFetchOverride = fetchImpl;
+}
+
+/** Resolve at request time so restored layers and refreshes use the installed transport. */
+function arcGISFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return (arcGISFetchOverride ?? globalThis.fetch)(input, init);
+}
+
+export type ArcGISLayerType = "feature" | "vector-tile" | "map-service" | "image-service";
 export type ArcGISSourceType = "url" | "portal-item";
+
+const MAX_ARCGIS_RING_REPAIR_PARTS = 64;
+
+/**
+ * Every {@link ArcGISLayerType}, as a runtime list so a stored value (a saved
+ * service-library entry, a hand-edited project) can be validated against it
+ * instead of being coerced to a default that silently loads the wrong service.
+ */
+export const ARCGIS_LAYER_TYPES: readonly ArcGISLayerType[] = [
+  "feature",
+  "vector-tile",
+  "map-service",
+  "image-service",
+];
+
+/**
+ * Narrow an untrusted string to an {@link ArcGISLayerType}.
+ *
+ * @param value - The stored or user-supplied layer type.
+ * @param fallback - The type to use when `value` is not a known layer type.
+ * @returns The matching layer type, or `fallback`.
+ */
+export function parseArcGISLayerType(
+  value: unknown,
+  fallback: ArcGISLayerType = "feature",
+): ArcGISLayerType {
+  return ARCGIS_LAYER_TYPES.find((layerType) => layerType === value) ?? fallback;
+}
+
+/**
+ * `metadata.sourceKind` for the two image-producing service types. A MapServer
+ * or ImageServer renders as ordinary raster tiles, so the layer these produce is
+ * a plain `raster` layer rather than an `arcgis` one; the source kind is what
+ * marks where it came from.
+ */
+export const ARCGIS_MAP_SERVICE_SOURCE_KIND = "arcgis-map-service";
+export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+export const ARCGIS_MAP_SERVICE_URL_ERROR = "Enter an ArcGIS MapServer URL.";
+export const ARCGIS_IMAGE_SERVICE_URL_ERROR = "Enter an ArcGIS ImageServer URL.";
+// Catalog namespace for the errors this module raises for the UI.
+const ERROR_KEY = "arcgisService.errors";
+
+/** Tile size requested from `/export` and `/exportImage`, in pixels. */
+const ARCGIS_EXPORT_TILE_SIZE = 256;
+
+/**
+ * The Web Mercator tiling scheme a cached ArcGIS service must use for its
+ * `/tile/{z}/{y}/{x}` endpoint to be an XYZ source MapLibre can consume: the
+ * top-left origin and the level-0 resolution of the standard scheme (a 256 px
+ * tile spanning the whole world).
+ */
+const WEB_MERCATOR_ORIGIN_X = -20037508.342787;
+const WEB_MERCATOR_ORIGIN_Y = 20037508.342787;
+const WEB_MERCATOR_LEVEL0_RESOLUTION = 156543.03392800014;
+
+/**
+ * Features requested per `/query` call when the service does not advertise a
+ * smaller `maxRecordCount`.
+ *
+ * Deliberately far below the 1000-50000 `maxRecordCount` services typically
+ * advertise: that ceiling is what the service will *return*, not what it can
+ * assemble without falling over. Asking a large layer for everything at once is
+ * exactly what fails (GeoLibre#1745 — a 41k-polygon FeatureServer answers the
+ * unbounded query with an HTTP 500 "Error performing query operation" while the
+ * same data pages back fine).
+ */
+const DEFAULT_ARCGIS_PAGE_SIZE = 1000;
+
+/**
+ * Runaway guard for the paging loops. At the default page size this is 5M
+ * features, well past any layer that belongs in an in-memory GeoJSON source, so
+ * it only ever trips on a service that keeps answering without making progress.
+ */
+const MAX_ARCGIS_PAGES = 5000;
+
+/**
+ * `metadata.sourceKind` on a feature layer loaded through the paged query path.
+ * `layer-refresh.ts` matches on it to replay the paging on refresh instead of
+ * re-fetching the stored URL, which would return only the first page.
+ */
+export { ARCGIS_FEATURE_SOURCE_KIND };
 
 export interface ArcGISLayerOptions {
   beforeLayerId?: string | null;
   itemId?: string;
   layerType: ArcGISLayerType;
+  /**
+   * Stop after this many features. Defaults to no cap (the whole layer).
+   *
+   * Only meaningful for `layerType: "feature"`, whose features are pulled into
+   * an in-memory GeoJSON source; a cap is the escape hatch for a layer too big
+   * to hold in the browser at all.
+   *
+   * In the interactive app a feature layer loads by viewport, so the cap
+   * applies to each viewport query rather than to the layer as a whole: every
+   * pan issues a fresh bounded download of up to this many features. Headless
+   * callers, which download the layer whole, get the total cap.
+   */
+  maxFeatures?: number;
   name?: string;
+  /**
+   * Called after each page of a feature layer's download, with the features
+   * loaded so far and the service's total count (`null` when the service would
+   * not answer `returnCountOnly`). Lets a caller show progress across what can
+   * be dozens of requests.
+   */
+  onProgress?: (loaded: number, total: number | null) => void;
+  /**
+   * Features to request per `/query` call (ArcGIS `resultRecordCount`).
+   * Defaults to the smaller of {@link DEFAULT_ARCGIS_PAGE_SIZE} and the
+   * service's advertised `maxRecordCount`. Lower it for a service that times
+   * out even on the default page.
+   */
+  pageSize?: number;
   portalUrl?: string;
+  /**
+   * ImageServer rendering rule, as the JSON ArcGIS expects for the
+   * `renderingRule` parameter (e.g. `{"rasterFunction":"Hillshade"}`).
+   *
+   * Only meaningful for `layerType: "image-service"`. Supplying one forces the
+   * dynamic `/exportImage` path: a cached service's tiles were rendered when
+   * the cache was built, so they cannot honor a rule chosen here.
+   */
+  renderingRule?: string;
   sourceType: ArcGISSourceType;
+  /**
+   * MapServer sublayers to draw, as the comma-separated id list ArcGIS takes in
+   * `layers=show:<ids>` (e.g. `0,2,5`). Blank draws the service's own default
+   * set of visible sublayers.
+   *
+   * Only meaningful for `layerType: "map-service"`. Supplying a list forces the
+   * dynamic `/export` path, because a cached service serves one fused image per
+   * tile that no longer has separable sublayers.
+   */
+  sublayers?: string;
+  /**
+   * Add each MapServer sublayer as its own raster layer inside a layer group
+   * named after the service, instead of one composite image, so every
+   * sublayer gets its own visibility toggle, opacity, and draw order.
+   *
+   * Only meaningful for `layerType: "map-service"`. One layer is added per id
+   * in `sublayers` when given, otherwise one per top-level service layer (see
+   * {@link planArcGISMapServiceSublayers}), each starting with the service's
+   * own default visibility. A service with a single drawable layer is added
+   * as one layer, with no group.
+   */
+  splitSublayers?: boolean;
   token?: string;
+  /**
+   * Supplies a current access token for this layer's later requests (edits,
+   * refresh), for a connection whose token expires and is renewed, such as an
+   * ArcGIS sign-in. Kept in memory with the layer's edit options and never
+   * persisted. Once set it replaces `token` entirely, so a provider that returns nothing (signed out) sends no token.
+   */
+  tokenProvider?: () => Promise<string | undefined>;
   url?: string;
   /**
    * Whether to fit the map to the layer once its bounds are known. Defaults to
-   * true, which is what an interactive Add Data flow wants.
+   * the project's "Zoom to newly added layers" map preference (on unless the
+   * user turned it off), which is what an interactive Add Data flow wants.
    *
    * Project import sets it false: the view has already been restored from the
    * project file, and fitting each imported service in turn would pan the map
@@ -30,11 +220,19 @@ export interface ArcGISLayerOptions {
   zoomTo?: boolean;
 }
 
-interface ArcGISFeatureLayerInfo {
+interface ArcGISFeatureLayerInfo extends ArcGISEditInfo {
+  advancedQueryCapabilities?: {
+    supportsOrderBy?: boolean;
+    supportsPagination?: boolean;
+  };
   copyrightText?: string;
   extent?: ArcGISExtent;
   geometryType?: string;
+  maxRecordCount?: number;
   name?: string;
+  objectIdField?: string;
+  /** Whether `/query` honors `quantizationParameters` (hosted services do). */
+  supportsCoordinatesQuantization?: boolean;
 }
 
 interface ArcGISFeatureServiceInfo {
@@ -48,6 +246,59 @@ interface ArcGISServiceInfo {
   extent?: ArcGISExtent;
   fullExtent?: ArcGISExtent;
   initialExtent?: ArcGISExtent;
+}
+
+/**
+ * The `?f=json` description of a MapServer or ImageServer, narrowed to what the
+ * raster path reads: the extent to fit, the credit line, and whether the service
+ * has a Web Mercator tile cache that can be consumed as XYZ tiles.
+ */
+interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
+  copyrightText?: string;
+  layers?: Array<{
+    defaultVisibility?: boolean;
+    id?: number;
+    name?: string;
+    subLayerIds?: number[] | null;
+  }>;
+  mapName?: string;
+  name?: string;
+  singleFusedMapCache?: boolean;
+  tileInfo?: ArcGISTileInfo;
+}
+
+/** One selectable layer advertised by an ArcGIS MapServer. */
+export interface ArcGISMapServiceSublayer {
+  id: number;
+  name: string;
+  /** Child layer ids when this is a group layer; absent or empty for a leaf. */
+  subLayerIds?: number[] | null;
+  /** Whether the service draws this layer by default (absent means yes). */
+  defaultVisibility?: boolean;
+}
+
+/** One raster function advertised by an ArcGIS ImageServer. */
+export interface ArcGISImageServiceRasterFunction {
+  description: string;
+  name: string;
+}
+
+interface ArcGISTileInfo {
+  cols?: number;
+  lods?: Array<{ level?: number; resolution?: number }>;
+  origin?: { x?: number; y?: number };
+  rows?: number;
+  spatialReference?: {
+    latestWkid?: number;
+    wkid?: number;
+  };
+}
+
+/** A cached service's tile endpoint, resolved to what a raster source needs. */
+interface ArcGISTileScheme {
+  maxzoom: number;
+  minzoom: number;
+  tileSize: number;
 }
 
 interface ArcGISPortalItemInfo {
@@ -79,6 +330,20 @@ let arcgisLayerSequence = 0;
 const arcgisLayerInstances = new Map<string, ArcGISRuntimeLayer>();
 let arcgisStoreUnsubscribe: (() => void) | null = null;
 
+/** A live viewport-bound FeatureServer download for one GeoJSON layer. */
+interface ArcGISViewportLoader {
+  /** The in-flight request, aborted when a newer viewport supersedes it. */
+  abort: AbortController | null;
+  /** Re-run the query for the map's current extent. */
+  load: () => Promise<FeatureCollection>;
+  map: maplibregl.Map;
+  /** The `moveend` handler, kept so it can be detached on removal. */
+  move: () => void;
+}
+
+const arcgisFeatureLoaders = new Map<string, ArcGISViewportLoader>();
+let arcgisFeatureLoaderUnsubscribe: (() => void) | null = null;
+
 export async function addArcGISLayer(
   app: GeoLibreAppAPI,
   options: ArcGISLayerOptions,
@@ -94,19 +359,36 @@ export async function addArcGISLayer(
     return addArcGISFeatureLayerAsGeoJson(app, options, input);
   }
 
-  const map = app.getMap?.();
-  if (!map) {
-    throw new Error("The map is not ready.");
+  // A MapServer or ImageServer hands back rendered images, not data, so it is
+  // loaded as an ordinary raster layer (cached tiles when the service has a Web
+  // Mercator cache, otherwise an `/export` request per tile). That keeps the
+  // whole raster surface — opacity, brightness/contrast, reordering, and project
+  // save/reload — working without a bespoke handler.
+  if (options.layerType === "map-service" && options.splitSublayers) {
+    return addArcGISMapServiceSublayerGroup(app, options, input);
   }
+  if (options.layerType === "map-service" || options.layerType === "image-service") {
+    return addArcGISImageServiceLayer(app, options, input);
+  }
+
+  // Deliberately MapLibre-only: the SDK's runtime layer is added natively here,
+  // while the store layer below carries the same sources and styles for the
+  // other engines (Mapbox compiles them itself, see arcgisVectorStyle).
+  // engine-audit-allow: getMap-mapbox
+  const map = app.getMap?.();
 
   const arcgis = await import("@esri/maplibre-arcgis");
   const hostedLayer = await createArcGISHostedLayer(arcgis, options, input);
   const id = createArcGISLayerId();
   const sourceIds = prefixArcGISSourceIds(hostedLayer, id);
-  const nativeLayerIds = prefixArcGISStyleLayerIds(hostedLayer, id);
+  // Snapshot the SDK style once it carries the prefixed source ids: the getters
+  // return fresh frozen copies on every read, so one snapshot feeds both the
+  // map and the store without assuming a stable order between reads.
+  const { sources, layers: styleLayers } = snapshotArcGISStyle(hostedLayer, id);
+  const nativeLayerIds = styleLayers.map((spec) => spec.id);
   const bounds = await resolveArcGISLayerBounds(input, options, hostedLayer);
 
-  addArcGISRuntimeLayerToMap(hostedLayer, map);
+  if (map) addArcGISRuntimeLayerToMap(sources, styleLayers, map);
   ensureArcGISStoreCleanup();
   arcgisLayerInstances.set(id, hostedLayer);
 
@@ -118,10 +400,81 @@ export async function addArcGISLayer(
     bounds,
     sourceIds,
   });
+  // Keep the resolved sources and style layers with the data so a second
+  // renderer (including the Cesium drape) can rebuild them without a control.
+  layer.source.arcgisSources = sources;
+  layer.source.arcgisLayers = styleLayers;
   const store = useAppStore.getState();
   store.addLayer(layer, options.beforeLayerId);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * Retrieve the named layer catalog exposed by an ArcGIS MapServer.
+ *
+ * Group layers are included because ArcGIS accepts their ids in the dynamic
+ * export `layers=show:` parameter and selecting one is a convenient way to
+ * draw all of its descendants.
+ */
+export async function fetchArcGISMapServiceSublayers(params: {
+  url: string;
+  token?: string;
+  signal?: AbortSignal;
+}): Promise<ArcGISMapServiceSublayer[]> {
+  const { serviceUrl } = resolveArcGISImageServiceUrl(params.url, "map-service");
+  const json = await fetchArcGISJson<{ layers?: unknown[] }>(
+    serviceUrl,
+    { layerType: "map-service", sourceType: "url", token: params.token },
+    undefined,
+    params.signal,
+  );
+  return Array.isArray(json.layers)
+    ? json.layers.filter(
+        (layer): layer is ArcGISMapServiceSublayer =>
+          typeof layer === "object" &&
+          layer !== null &&
+          Number.isSafeInteger((layer as Partial<ArcGISMapServiceSublayer>).id) &&
+          ((layer as Partial<ArcGISMapServiceSublayer>).id ?? -1) >= 0 &&
+          typeof (layer as Partial<ArcGISMapServiceSublayer>).name === "string",
+      )
+    : [];
+}
+
+/**
+ * Retrieve the named raster functions advertised by an ArcGIS ImageServer.
+ *
+ * @param params - ImageServer URL and optional request credentials/cancellation.
+ * @returns The service's valid named raster functions in advertised order.
+ */
+export async function fetchArcGISImageServiceRasterFunctions(params: {
+  url: string;
+  token?: string;
+  signal?: AbortSignal;
+}): Promise<ArcGISImageServiceRasterFunction[]> {
+  const { serviceUrl } = resolveArcGISImageServiceUrl(params.url, "image-service");
+  const json = await fetchArcGISJson<{ rasterFunctionInfos?: unknown[] }>(
+    serviceUrl,
+    { layerType: "image-service", sourceType: "url", token: params.token },
+    undefined,
+    params.signal,
+  );
+  if (!Array.isArray(json.rasterFunctionInfos)) return [];
+
+  const rasterFunctions: ArcGISImageServiceRasterFunction[] = [];
+  const names = new Set<string>();
+  for (const rasterFunction of json.rasterFunctionInfos) {
+    if (typeof rasterFunction !== "object" || rasterFunction === null) continue;
+    const candidate = rasterFunction as Partial<ArcGISImageServiceRasterFunction>;
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : undefined;
+    if (!name || names.has(name)) continue;
+    names.add(name);
+    rasterFunctions.push({
+      name,
+      description: typeof candidate.description === "string" ? candidate.description.trim() : "",
+    });
+  }
+  return rasterFunctions;
 }
 
 function ensureArcGISStoreCleanup(): void {
@@ -152,11 +505,9 @@ async function createArcGISHostedLayer(
 function getArcGISInput(options: ArcGISLayerOptions): string {
   const input = options.sourceType === "url" ? options.url?.trim() : options.itemId?.trim();
   if (!input) {
-    throw new Error(
-      options.sourceType === "url"
-        ? "Enter an ArcGIS service URL."
-        : "Enter an ArcGIS portal item ID.",
-    );
+    throw options.sourceType === "url"
+      ? new LocalizedError(`${ERROR_KEY}.enterServiceUrl`, "Enter an ArcGIS service URL.")
+      : new LocalizedError(`${ERROR_KEY}.enterPortalItemId`, "Enter an ArcGIS portal item ID.");
   }
   return input;
 }
@@ -170,25 +521,39 @@ function prefixArcGISSourceIds(hostedLayer: ArcGISRuntimeLayer, layerId: string)
   });
 }
 
-function prefixArcGISStyleLayerIds(hostedLayer: ArcGISRuntimeLayer, layerId: string): string[] {
-  const mutableLayers = hostedLayer.layers as maplibregl.LayerSpecification[];
-  return mutableLayers.map((styleLayer, index) => {
-    const nextLayerId = `${layerId}-layer-${index}-${sanitizeIdPart(styleLayer.id)}`;
-    styleLayer.id = nextLayerId;
-    return nextLayerId;
-  });
+function snapshotArcGISStyle(
+  hostedLayer: ArcGISRuntimeLayer,
+  layerId: string,
+): {
+  sources: Record<string, maplibregl.SourceSpecification>;
+  layers: maplibregl.LayerSpecification[];
+} {
+  // The SDK getters return frozen copies, so the prefixed ids go on our own
+  // mutable clone rather than back onto the runtime layer.
+  return {
+    sources: structuredClone(hostedLayer.sources),
+    layers: hostedLayer.layers.map((styleLayer, index) => ({
+      ...structuredClone(styleLayer),
+      id: `${layerId}-layer-${index}-${sanitizeIdPart(styleLayer.id)}`,
+    })),
+  };
 }
 
-function addArcGISRuntimeLayerToMap(hostedLayer: ArcGISRuntimeLayer, map: maplibregl.Map): void {
-  for (const [sourceId, source] of Object.entries(hostedLayer.sources)) {
+function addArcGISRuntimeLayerToMap(
+  sources: Record<string, maplibregl.SourceSpecification>,
+  layers: maplibregl.LayerSpecification[],
+  map: maplibregl.Map,
+): void {
+  // The map gets its own copies so it cannot mutate what the store persists.
+  for (const [sourceId, source] of Object.entries(sources)) {
     if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, source);
+      map.addSource(sourceId, structuredClone(source));
     }
   }
 
-  for (const layer of hostedLayer.layers) {
-    if (!map.getLayer(layer.id)) {
-      map.addLayer(layer);
+  for (const spec of layers) {
+    if (!map.getLayer(spec.id)) {
+      map.addLayer(structuredClone(spec));
     }
   }
 }
@@ -196,11 +561,12 @@ function addArcGISRuntimeLayerToMap(hostedLayer: ArcGISRuntimeLayer, map: maplib
 /**
  * Load an ArcGIS FeatureServer layer as a host-managed GeoJSON layer.
  *
- * The features are fetched up front (`/query?f=geojson`) and handed to the
- * store's GeoJSON layer path, so the layer is a first-class vector layer with
- * its attributes available — enabling labels and their formatting, the
- * attribute table, identify, symbology, and export. Vector tile layers keep the
- * external-native runtime path; only feature layers come through here.
+ * The features are fetched up front (`/query?f=geojson`, paged — see
+ * {@link fetchArcGISFeaturePages}) and handed to the store's GeoJSON layer path,
+ * so the layer is a first-class vector layer with its attributes available —
+ * enabling labels and their formatting, the attribute table, identify,
+ * symbology, and export. Vector tile layers keep the external-native runtime
+ * path; only feature layers come through here.
  *
  * @param app - The host app API (used to fit the view to the layer extent).
  * @param options - The ArcGIS layer options (source type, URL/item, token).
@@ -218,45 +584,1636 @@ async function addArcGISFeatureLayerAsGeoJson(
       : await resolvePortalFeatureLayerUrl(input, options, undefined);
   const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
   if (!layerInfo.geometryType) {
-    throw new Error("The ArcGIS feature layer metadata is missing geometry type.");
+    throw new LocalizedError(
+      `${ERROR_KEY}.missingGeometryType`,
+      "The ArcGIS feature layer metadata is missing geometry type.",
+    );
   }
 
   // The token is kept out of the persisted refresh URL so it is never written
-  // to a saved project; it is only appended to the one-off request below.
-  const refreshUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
+  // to a saved project; it is only appended to the live requests below.
+  const queryUrl = `${trimTrailingSlash(layerUrl)}/query`;
+  const refreshUrl = appendArcGISParams(queryUrl, {
     f: "geojson",
     outFields: "*",
     returnGeometry: "true",
     where: "1=1",
   });
-  const requestUrl = appendArcGISParams(refreshUrl, {
-    token: options.token?.trim(),
-  });
-  const geojson = await fetchArcGISGeoJson(requestUrl);
-
   const name =
     options.name?.trim() || layerInfo.name || layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
   const store = useAppStore.getState();
-  // Persist the GeoJSON query endpoint (not the service-description base URL) as
-  // the source path so the layer's GeoJSON refresh re-fetches valid features.
-  const id = store.addGeoJsonLayer(name, geojson, refreshUrl, options.beforeLayerId ?? null);
+  // Headless/API consumers have no viewport to query, so retain the complete
+  // paged download for them. The interactive app takes the bounded path below.
+  // A globe- or Mapbox-primary app has no MapLibre map either, so it takes the
+  // same path: a complete download rather than a silently unfiltered viewport
+  // query. (engine-audit-allow: getMap-mapbox)
+  const map = app.getMap?.();
+  const initialData: FeatureCollection = map
+    ? { type: "FeatureCollection", features: [] }
+    : identifyArcGISFeatures(
+        await fetchArcGISFeaturePages(queryUrl, options, layerInfo),
+        layerInfo.objectIdField,
+      );
+  // Add the layer before downloading features. Large services must not hold the
+  // Add Data dialog open while hundreds of thousands of records are fetched.
+  const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
+  // A viewport-loaded layer only ever holds the features in view, so Zoom to
+  // layer needs the service's extent stored on the layer to frame the data.
+  const bounds = arcgisExtentToBounds(layerInfo.extent);
 
-  // Preserve the service's copyright watermark in MapLibre's attribution
-  // control, matching the prior URL-source behavior.
-  const attribution = layerInfo.copyrightText?.trim();
-  if (attribution) {
-    store.updateLayer(id, { source: { type: "geojson", attribution } });
+  store.updateLayer(id, {
+    source: {
+      type: "geojson",
+      // Preserve the service's copyright watermark in MapLibre's attribution
+      // control, matching the prior URL-source behavior.
+      attribution: layerInfo.copyrightText?.trim() || undefined,
+      // What a refresh needs to replay the same paged download. Re-fetching the
+      // stored query URL on its own would shrink the layer back to a single
+      // page (the ArcGIS twin of the OGC API - Features case in layer-refresh).
+      // The token is deliberately absent: it is never persisted, so refreshing
+      // a token-protected layer fails the same way it does today.
+      arcgisQueryUrl: queryUrl,
+      maxFeatures: options.maxFeatures,
+      pageSize: options.pageSize,
+    },
+    metadata: {
+      sourceKind: ARCGIS_FEATURE_SOURCE_KIND,
+      viewportLoading: Boolean(map),
+      ...(bounds ? { bounds } : {}),
+      arcgisEditBaseline: structuredClone(initialData),
+      arcgisEditInfo: layerInfo,
+    },
+  });
+
+  arcgisEditOptions.set(id, { ...options, onProgress: undefined });
+  ensureArcGISFeatureLoaderCleanup();
+  const zoomTo = options.zoomTo ?? shouldZoomToNewLayers();
+  if (bounds && zoomTo) app.fitBounds?.(bounds);
+  if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
+  // Only a viewport-loaded layer reads its stored extent; one holding the
+  // complete download frames its features.
+  if (map && !bounds) {
+    // An extent in a local projected CRS is projected by the server. That is a
+    // round trip the layer does not wait on: the extent is patched in when it
+    // lands, if the layer is still there.
+    const viewAtAdd = viewportKey(map);
+    void fetchProjectedArcGISFeatureLayerBounds(queryUrl, options).then((projected) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === id);
+      if (!projected || !layer || layer.metadata.bounds) return;
+      useAppStore.getState().updateLayer(id, {
+        metadata: { ...layer.metadata, bounds: projected },
+      });
+      // A late fit must not pull the camera away from where the user went
+      // while the request was out.
+      // A map torn down meanwhile has no key, so it is never fitted.
+      const viewNow = viewportKey(map);
+      if (zoomTo && viewNow !== null && viewNow === viewAtAdd) app.fitBounds?.(projected);
+    });
+  }
+  return id;
+}
+
+/**
+ * Keep one FeatureServer layer synchronized with the settled map viewport.
+ *
+ * `resolveLayerInfo` is a thunk rather than a value so the restore path can
+ * register a loader before it has the service metadata: the fetch then happens
+ * on the first query, and a failed one is retried by the next.
+ */
+function startArcGISViewportLoader(
+  layerId: string,
+  map: maplibregl.Map,
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  resolveLayerInfo: () => Promise<ArcGISFeatureLayerInfo>,
+): void {
+  let abort: AbortController | null = null;
+  let requestSequence = 0;
+  // The Add Data dialog's progress callback belongs to the initial download. It
+  // is unmounted well before the first viewport query lands, so carrying it for
+  // the layer's lifetime would keep that closure alive to no purpose.
+  const queryOptions: ArcGISLayerOptions = { ...options, onProgress: undefined };
+  const maxFeatures = positiveInteger(options.maxFeatures);
+  const loader: ArcGISViewportLoader = {
+    abort: null,
+    load: () => Promise.resolve({ type: "FeatureCollection", features: [] }),
+    map,
+    move: () => undefined,
+  };
+
+  /**
+   * Query the map's current extent, publishing each page as it lands.
+   *
+   * Resolves with whatever the layer holds — never rejects, whatever the
+   * error — when a newer viewport supersedes the call: the replacement is
+   * already publishing, so a failure the superseded request happened to hit
+   * (an abort, or a request that failed just before its abort landed) is not
+   * this layer's problem. A refresh running concurrently with a pan must not be
+   * reported as a failed refresh (and, under an `onFailure` of `"clear"`, wipe
+   * a layer that is perfectly healthy).
+   */
+  const load = async (): Promise<FeatureCollection> => {
+    if (arcGISLayerHasPendingEdits(layerId)) return currentArcGISLayerGeojson(layerId);
+    abort?.abort();
+    const controller = new AbortController();
+    abort = controller;
+    loader.abort = controller;
+    const sequence = ++requestSequence;
+    let layerInfo: ArcGISFeatureLayerInfo;
+    try {
+      layerInfo = await resolveLayerInfo();
+    } catch (error) {
+      if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+      throw error;
+    }
+    // engine-audit-allow: getMap-bounds — this loader needs more than the
+    // extent (it binds `moveend` and reads `isMoving` below), and the plugin
+    // API has no camera-idle hook to answer those on the globe, so it cannot
+    // move to `app.getViewBounds()`. It only runs with a MapLibre map: without
+    // one the layer took the complete paged download above instead, so a null
+    // `getMap()` is a documented branch here, not a silent no-op.
+    const envelopes = arcgisViewportEnvelopes(map.getBounds());
+    // Zoomed out, a pixel hides detail the full geometry would spend megabytes
+    // on, so ask the service to generalize to the pixel grid instead.
+    const generalization = arcgisQuantizationParams(map.getZoom(), layerInfo);
+    // One bucket per envelope, so a viewport split across the antimeridian
+    // publishes both halves together instead of each replacing the other.
+    const pages: Feature[][] = envelopes.map(() => []);
+    const collect = (): FeatureCollection => {
+      const features = mergeArcGISViewportFeatures(pages, layerInfo.objectIdField);
+      // A split viewport issues one request per envelope, each honoring
+      // `maxFeatures` on its own, so the merge is trimmed to keep the option a
+      // bound on what the layer holds for one viewport rather than per half.
+      return {
+        type: "FeatureCollection",
+        features: maxFeatures === null ? features : features.slice(0, maxFeatures),
+      };
+    };
+    const publish = (): void => {
+      if (
+        sequence !== requestSequence ||
+        arcGISLayerHasPendingEdits(layerId) ||
+        !useAppStore.getState().layers.some((l) => l.id === layerId)
+      ) {
+        return;
+      }
+      const data = identifyArcGISFeatures(collect(), layerInfo.objectIdField);
+      const current = useAppStore.getState().layers.find((l) => l.id === layerId)!;
+      // Backfill the extent Zoom to layer reads for a layer restored from a
+      // project saved before it was stored.
+      const bounds = current.metadata.bounds ?? arcgisExtentToBounds(layerInfo.extent);
+      useAppStore.getState().updateLayer(layerId, {
+        geojson: data,
+        metadata: {
+          ...current.metadata,
+          ...(bounds ? { bounds } : {}),
+          arcgisEditBaseline: structuredClone(data),
+          // Generalized shapes must never be written back over the originals.
+          arcgisEditInfo: generalization ? { ...layerInfo, geometryGeneralized: true } : layerInfo,
+        },
+      });
+      // Clear as soon as the service answers at all, not when the whole walk
+      // finishes: a dense extent pages for tens of seconds, and leaving a stale
+      // "zoom in" on screen while its features stream in reads as a live error.
+      reportArcGISViewportError(layerId, null);
+    };
+    // `allSettled`, not `all`: a split viewport must not report a failure while
+    // its surviving half is still running, or that half's later pages would
+    // publish over an already-reported error with nothing to clear it.
+    const walk = async (envelope: ArcGISEnvelope, index: number, attempt = 0): Promise<void> => {
+      try {
+        const data = await fetchArcGISFeaturePages(
+          queryUrl,
+          await withFreshArcGISToken(queryOptions),
+          layerInfo,
+          {
+            params: {
+              geometry: envelope.join(","),
+              geometryType: "esriGeometryEnvelope",
+              inSR: "4326",
+              spatialRel: "esriSpatialRelIntersects",
+              ...generalization,
+            },
+            signal: controller.signal,
+            onPage: (features) => {
+              pages[index] = features;
+              publish();
+            },
+          },
+        );
+        pages[index] = data.features;
+        publish();
+      } catch (error) {
+        // The service timing out under load is the common failure on a wide
+        // extent, and it clears on a retry far more often than not, so one is
+        // worth the wait rather than leaving the user an empty layer.
+        if (attempt === 0 && !controller.signal.aborted && isArcGISTransientQueryError(error)) {
+          return walk(envelope, index, attempt + 1);
+        }
+        throw error;
+      }
+    };
+    const results = await Promise.allSettled(envelopes.map((e, index) => walk(e, index)));
+    if (sequence !== requestSequence) return currentArcGISLayerGeojson(layerId);
+    // One half failing still leaves the other's features on the map; the error
+    // says the view is incomplete rather than pretending it is whole.
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed && !arcGISLayerHasPendingEdits(layerId)) throw failed.reason;
+    reportArcGISViewportError(layerId, null);
+    return currentArcGISLayerGeojson(layerId);
+  };
+
+  const move = (): void => {
+    void load().catch((error: unknown) => {
+      // A timeout that survived its retry gets guidance the user can act on;
+      // ArcGIS's own wording for it blames the query parameters, which are fine.
+      if (isArcGISTransientQueryError(error)) {
+        console.error("[GeoLibre] ArcGIS viewport query timed out", error);
+        reportArcGISViewportError(layerId, ARCGIS_VIEWPORT_TIMEOUT);
+        return;
+      }
+      handleArcGISViewportError(layerId, error);
+    });
+  };
+  loader.load = load;
+  loader.move = move;
+  stopArcGISViewportLoader(layerId);
+  map.on("moveend", move);
+  arcgisFeatureLoaders.set(layerId, loader);
+  ensureArcGISFeatureLoaderCleanup();
+  // fitBounds may still be animating. Its moveend will replace this first query.
+  if (!map.isMoving()) move();
+}
+
+/**
+ * Re-run the viewport query for a layer that loads by extent.
+ *
+ * A refresh must not fall back to the unbounded paged download for these
+ * layers: that would pull the whole service into memory behind the user's
+ * back, which is the very thing viewport loading exists to avoid.
+ *
+ * @param layerId - The layer to reload.
+ * @returns The features for the map's current extent, or `null` when the layer
+ *   has no live loader (a project restored from disk, or a headless host).
+ */
+export function reloadArcGISViewportLayer(layerId: string): Promise<FeatureCollection> | null {
+  return arcgisFeatureLoaders.get(layerId)?.load() ?? null;
+}
+
+/**
+ * Re-attach viewport loaders after a project is loaded.
+ *
+ * {@link startArcGISViewportLoader} only runs in the Add Data flow, but
+ * `metadata.viewportLoading` round-trips through the saved project. Without
+ * this, a reopened project's feature layer is frozen on whichever extent was in
+ * view when it was saved: panning fetches nothing, and a refresh falls back to
+ * the unbounded download the viewport path exists to avoid.
+ *
+ * Loaders are registered synchronously, before the service metadata they need
+ * is fetched, so there is no window in which a refresh finds the layer
+ * unbound.
+ *
+ * @param app - The host app API, for the map the loaders bind to.
+ */
+export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
+  // Viewport loaders only exist on MapLibre (the other engines hold the
+  // complete download, see addArcGISFeatureLayer).
+  // engine-audit-allow: getMap-mapbox
+  const map = app.getMap?.();
+  if (!map) return;
+  for (const layer of useAppStore.getState().layers) {
+    // Skip only a loader already bound to *this* map: the restore effect also
+    // runs when the map is reinitialized, and a loader left on the old instance
+    // would listen to a dead map and query its stale bounds.
+    if (
+      layer.metadata.viewportLoading !== true ||
+      layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND ||
+      arcgisFeatureLoaders.get(layer.id)?.map === map
+    ) {
+      continue;
+    }
+    const source = layer.source as {
+      arcgisQueryUrl?: unknown;
+      maxFeatures?: unknown;
+      pageSize?: unknown;
+    };
+    const queryUrl = typeof source.arcgisQueryUrl === "string" ? source.arcgisQueryUrl.trim() : "";
+    if (!queryUrl) continue;
+    const options: ArcGISLayerOptions = {
+      layerType: "feature",
+      maxFeatures: typeof source.maxFeatures === "number" ? source.maxFeatures : undefined,
+      pageSize: typeof source.pageSize === "number" ? source.pageSize : undefined,
+      sourceType: "url",
+    };
+    // Re-read the service metadata rather than trusting a stored copy, the same
+    // reason refreshArcGISFeatureLayer does: paging capabilities and
+    // `maxRecordCount` are the service's to change between sessions. Fetched
+    // lazily on the first query and memoized, with a failure clearing the
+    // memo — so a blocked or flaky reopen retries on the next pan or refresh
+    // instead of leaving the layer permanently unbound.
+    let pending: Promise<ArcGISFeatureLayerInfo> | null = null;
+    const resolveLayerInfo = (): Promise<ArcGISFeatureLayerInfo> =>
+      (pending ??= fetchArcGISJson<ArcGISFeatureLayerInfo>(
+        trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+        options,
+        undefined,
+      ).catch((error: unknown) => {
+        pending = null;
+        throw error;
+      }));
+    startArcGISViewportLoader(layer.id, map, queryUrl, options, resolveLayerInfo);
+  }
+}
+
+/**
+ * Tear down viewport loaders for layers that have left the store.
+ *
+ * One shared subscription for every loader, matching
+ * {@link ensureArcGISStoreCleanup}: a subscription per layer would run a linear
+ * scan of `state.layers` on every unrelated store update for the life of the
+ * app, multiplied by however many such layers are open.
+ */
+function ensureArcGISFeatureLoaderCleanup(): void {
+  arcgisFeatureLoaderUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (arcgisFeatureLoaders.size === 0 && arcgisEditOptions.size === 0) return;
+    for (const layer of previous.layers) {
+      if (!state.layers.some((current) => current.id === layer.id)) {
+        stopArcGISViewportLoader(layer.id);
+        arcgisEditOptions.delete(layer.id);
+      }
+    }
+  });
+}
+
+/** Cancel a layer's viewport loader and detach its `moveend` handler. */
+function stopArcGISViewportLoader(layerId: string): void {
+  const loader = arcgisFeatureLoaders.get(layerId);
+  if (!loader) return;
+  loader.abort?.abort();
+  loader.map.off("moveend", loader.move);
+  arcgisFeatureLoaders.delete(layerId);
+}
+
+function handleArcGISViewportError(layerId: string, error: unknown): void {
+  if (isArcGISAbortError(error)) return;
+  console.error("[GeoLibre] ArcGIS viewport query failed", error);
+  reportArcGISViewportError(layerId, error instanceof Error ? error.message : String(error));
+}
+
+function isArcGISAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+/**
+ * Shown when the service gave up on a viewport query. Deliberately not the
+ * service's own wording: ArcGIS reports its timeout as a 400 blaming the query
+ * parameters, which are correct — the identical request succeeds on a retry.
+ */
+const ARCGIS_VIEWPORT_TIMEOUT =
+  "The ArcGIS service did not return features for this extent in time. Pan or zoom to try again, or zoom in to request fewer features.";
+
+/**
+ * Whether a failed query is worth retrying rather than reporting verbatim.
+ *
+ * A dense feature service can take tens of seconds to answer a geometry-bearing
+ * query over a wide envelope, and exceeds its own timeout when it is busy. It
+ * reports that either as a gateway/timeout status or — confusingly — as an
+ * error envelope with `code` 400 whose detail reads "Unable to perform query.
+ * Please check your parameters."
+ *
+ * Measured against Vicmap_Parcel (GeoLibre#1756): the same 0.25° envelope that
+ * failed six times running at ~56s later succeeded three times running in
+ * 19-34s. The failure is load, not the request.
+ */
+function isArcGISTransientQueryError(error: unknown): boolean {
+  if (!(error instanceof ArcGISQueryError)) return false;
+  if (error.status !== null) return [408, 429, 500, 502, 503, 504].includes(error.status);
+  return error.code === 400 && /unable to perform query/i.test(error.message);
+}
+
+/** The features a layer currently holds, for a query that has nothing newer. */
+function currentArcGISLayerGeojson(layerId: string): FeatureCollection {
+  const layer = useAppStore.getState().layers.find((entry) => entry.id === layerId);
+  return layer?.geojson ?? { type: "FeatureCollection", features: [] };
+}
+
+/**
+ * Record a viewport query's outcome on the layer's connection record, which is
+ * what the Layers panel already reads to show a synchronization error. Without
+ * it a failed pan leaves the previous extent's features on screen with nothing
+ * to say the query for the current one never landed.
+ */
+function reportArcGISViewportError(layerId: string, message: string | null): void {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  // Only written when the state actually changes, so a successful pan over a
+  // healthy layer does not dirty the project on every `moveend`.
+  if (!layer || (layer.connection?.lastError ?? null) === message) return;
+  useAppStore.getState().updateLayer(layerId, {
+    connection: {
+      interval: null,
+      lastSyncedAt: null,
+      onFailure: "keep-last",
+      ...layer.connection,
+      layerId,
+      lastError: message,
+    },
+  });
+}
+
+/** A `[west, south, east, north]` query envelope, in WGS84 degrees. */
+type ArcGISEnvelope = [number, number, number, number];
+
+/**
+ * The ArcGIS query envelopes covering a map viewport.
+ *
+ * MapLibre reports the viewport's raw longitudes, which run outside ±180 as
+ * soon as the view crosses the antimeridian or the user keeps panning around
+ * the globe. Clamping each edge on its own would either invert the envelope
+ * (west 170, east -170) or collapse it to zero width (west 200, east 210), and
+ * ArcGIS answers both with nothing for that part of the screen. So the span is
+ * normalized onto ±180 and, when it straddles the antimeridian, split into the
+ * two envelopes that cover it — the same treatment `splitAntimeridian` gives
+ * the offline tile download.
+ *
+ * @param bounds - The map's current bounds.
+ * @returns One envelope, or two when the viewport crosses the antimeridian.
+ */
+function arcgisViewportEnvelopes(bounds: {
+  getEast(): number;
+  getNorth(): number;
+  getSouth(): number;
+  getWest(): number;
+}): ArcGISEnvelope[] {
+  const south = Math.max(-90, Math.min(90, bounds.getSouth()));
+  const north = Math.min(90, Math.max(-90, bounds.getNorth()));
+  const rawWest = bounds.getWest();
+  const rawEast = bounds.getEast();
+  if (!Number.isFinite(rawWest) || !Number.isFinite(rawEast)) {
+    return [[-180, south, 180, north]];
+  }
+  // A wrapped viewport reports east < west; unwrap it before measuring the span.
+  const span = rawEast >= rawWest ? rawEast - rawWest : rawEast + 360 - rawWest;
+  if (span >= 360) return [[-180, south, 180, north]];
+  const west = wrapLongitude(rawWest);
+  const east = west + span;
+  return east > 180
+    ? [
+        [west, south, 180, north],
+        [-180, south, wrapLongitude(east), north],
+      ]
+    : [[west, south, east, north]];
+}
+
+/** Fold a longitude onto ±180, which the map's raw bounds may run past. */
+function wrapLongitude(longitude: number): number {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Concatenate the per-envelope results of one viewport query, dropping the
+ * duplicate a feature straddling the antimeridian produces by matching both
+ * halves. A feature the service gives no identifier for is kept as-is: showing
+ * it twice is better than guessing at identity by geometry.
+ */
+function mergeArcGISViewportFeatures(
+  pages: Feature[][],
+  objectIdField: string | undefined,
+): Feature[] {
+  if (pages.length === 1) return [...pages[0]];
+  const seen = new Set<string>();
+  const merged: Feature[] = [];
+  for (const page of pages) {
+    for (const feature of page) {
+      const key = arcgisFeatureKey(feature, objectIdField);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      merged.push(feature);
+    }
+  }
+  return merged;
+}
+
+function arcgisFeatureKey(feature: Feature, objectIdField: string | undefined): string | null {
+  if (typeof feature.id === "string" || typeof feature.id === "number") return String(feature.id);
+  const value = objectIdField ? feature.properties?.[objectIdField] : undefined;
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+}
+
+/**
+ * Load an ArcGIS MapServer or ImageServer as a raster tile layer.
+ *
+ * Both services answer with rendered images rather than data, so neither has a
+ * useful GeoJSON or vector-tile form. They become an ordinary `raster` layer,
+ * which is what makes the whole raster surface (opacity, the Style panel's
+ * raster adjustments, reordering, project save and reload) work on them with no
+ * dedicated handler anywhere else in the app.
+ *
+ * Two tile strategies, chosen from the service's own metadata:
+ *
+ * - **Cached tiles** (`/tile/{z}/{y}/{x}`) when the service advertises a fused
+ *   cache built on the standard Web Mercator scheme. These are pre-rendered and
+ *   CDN-friendly, so they are used whenever they are available and applicable.
+ * - **Dynamic export** (`/export` for MapServer, `/exportImage` for ImageServer)
+ *   otherwise, as a `{bbox-epsg-3857}` request template — the same mechanism
+ *   GeoLibre's WMS layers use. This is also forced when the caller picked
+ *   sublayers or a rendering rule, because a cache was rendered before either
+ *   choice existed and cannot honor it.
+ *
+ * @param app - The host app API (used to fit the view to the service extent).
+ * @param options - The ArcGIS layer options (source type, URL/item, token).
+ * @param input - The resolved service URL or portal item id from the options.
+ * @returns The new GeoLibre layer's id.
+ */
+/** A MapServer/ImageServer resolved to its root URL and `?f=json` description. */
+interface ArcGISImageProducingService {
+  info: ArcGISImageProducingServiceInfo;
+  serviceUrl: string;
+  /** A sublayer id read off a `.../MapServer/<id>` input URL. */
+  sublayers?: string;
+}
+
+/** Resolve a MapServer/ImageServer input and fetch its service description. */
+async function fetchArcGISImageProducingService(
+  options: ArcGISLayerOptions,
+  input: string,
+): Promise<ArcGISImageProducingService> {
+  const resolved =
+    options.sourceType === "url"
+      ? resolveArcGISImageServiceUrl(input, options.layerType)
+      : await resolvePortalArcGISImageServiceUrl(input, options);
+  const info = await fetchArcGISJson<ArcGISImageProducingServiceInfo>(
+    resolved.serviceUrl,
+    options,
+    undefined,
+  );
+  return { ...resolved, info };
+}
+
+/** One layer {@link addArcGISMapServiceSublayerGroup} adds for a MapServer. */
+interface ArcGISSublayerPlan {
+  name: string;
+  /** The `layers=show:` id list the layer draws. */
+  sublayers: string;
+  visible: boolean;
+}
+
+/**
+ * Plan one layer per top-level MapServer layer, in the service's order.
+ *
+ * Top-level rather than per leaf: services commonly wrap each feature class in
+ * a group with its label layer ("Storm Inlet" holding "Storm Inlet" and "Storm
+ * Inlet Label"), so a leaf split doubles the layer count with near-duplicate
+ * names and multiplies the `/export` requests per tile. A top-level group is
+ * drawn through its leaves rather than its own id, because ArcGIS draws every
+ * descendant of a group named in `show:`, including the ones the service hides
+ * by default; only when none is visible by default are all of them drawn.
+ *
+ * @param layers - The service's advertised layer list.
+ * @returns The layers to add, top of the service's drawing order first.
+ */
+export function planArcGISMapServiceSublayers(
+  layers: readonly {
+    defaultVisibility?: boolean;
+    id?: number;
+    name?: string;
+    subLayerIds?: number[] | null;
+  }[],
+): ArcGISSublayerPlan[] {
+  const valid = layers.filter(
+    (layer): layer is typeof layer & { id: number } =>
+      Number.isSafeInteger(layer.id) && (layer.id ?? -1) >= 0,
+  );
+  const byId = new Map(valid.map((layer) => [layer.id, layer]));
+  const childIds = new Set(valid.flatMap((layer) => layer.subLayerIds ?? []));
+
+  /** Leaf descendants of `id`, each flagged with its effective default visibility. */
+  const leaves = (id: number, visible: boolean, seen: Set<number>) => {
+    const layer = byId.get(id);
+    if (!layer || seen.has(id)) return [];
+    seen.add(id);
+    const shown = visible && layer.defaultVisibility !== false;
+    const subLayerIds = layer.subLayerIds ?? [];
+    if (subLayerIds.length === 0) return [{ id, visible: shown }];
+    return subLayerIds.flatMap(
+      (childId): Array<{ id: number; visible: boolean }> => leaves(childId, shown, seen),
+    );
+  };
+
+  const plans: ArcGISSublayerPlan[] = [];
+  for (const layer of valid) {
+    if (childIds.has(layer.id)) continue;
+    const descendants = leaves(layer.id, true, new Set());
+    if (descendants.length === 0) continue;
+    const shown = descendants.filter((leaf) => leaf.visible);
+    plans.push({
+      name: layer.name?.trim() || String(layer.id),
+      sublayers: (shown.length > 0 ? shown : descendants).map((leaf) => leaf.id).join(","),
+      visible: shown.length > 0,
+    });
+  }
+  return plans;
+}
+
+/**
+ * Add a MapServer as a layer group holding one raster layer per sublayer.
+ *
+ * Each child draws its own sublayers through the dynamic `/export` endpoint
+ * (`layers=show:<ids>`), so the layer panel can toggle, fade, and reorder them
+ * independently (GeoLibre#2779). The children are stacked in the
+ * service's own drawing order: ArcGIS draws sublayer 0 on top.
+ *
+ * @param app - The host app API, used to fit the map to the service.
+ * @param options - The add options; `sublayers` narrows which sublayers to add.
+ * @param input - The service URL or portal item id.
+ * @returns The id of the topmost added layer.
+ */
+async function addArcGISMapServiceSublayerGroup(
+  app: GeoLibreAppAPI,
+  options: ArcGISLayerOptions,
+  input: string,
+): Promise<string> {
+  const service = await fetchArcGISImageProducingService(options, input);
+  const requested = normalizeArcGISSublayers(options.sublayers) ?? service.sublayers;
+  const advertised = service.info.layers ?? [];
+  const names = new Map(advertised.map((layer) => [layer.id, layer.name?.trim()]));
+  const position = new Map(advertised.map((layer, index) => [layer.id, index]));
+  const children = requested
+    ? requested
+        .split(",")
+        // Stack a selection in the service's drawing order, not the order the
+        // ids were typed in; an id the service does not list keeps its place
+        // after the known ones.
+        .map((id, index) => ({ id, rank: position.get(Number(id)) ?? advertised.length + index }))
+        .sort((a, b) => a.rank - b.rank)
+        .map(({ id }) => ({ name: names.get(Number(id)) || id, sublayers: id, visible: true }))
+    : planArcGISMapServiceSublayers(advertised);
+
+  // Nothing to split: the service has no layers to draw separately.
+  if (children.length === 0) {
+    return addArcGISImageServiceLayer(app, { ...options, splitSublayers: false }, input, service);
+  }
+  // One layer reads better as a plain layer than as a group of one, but it
+  // still draws only its planned sublayers with their default visibility.
+  if (children.length === 1) {
+    const [child] = children;
+    return addArcGISImageServiceLayer(
+      app,
+      {
+        ...options,
+        name: options.name?.trim() || child.name,
+        splitSublayers: false,
+        sublayers: child.sublayers,
+      },
+      input,
+      service,
+      child.visible,
+    );
   }
 
-  const bounds = arcgisExtentToBounds(layerInfo.extent);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  const layerIds: string[] = [];
+  let bounds: [number, number, number, number] | undefined;
+  // `addLayer` stacks each new layer above the previous one, so walk the list
+  // bottom-up to leave sublayer 0 on top, as the service itself draws it.
+  for (const child of [...children].reverse()) {
+    const id = await addArcGISImageServiceLayer(
+      app,
+      {
+        ...options,
+        name: child.name,
+        splitSublayers: false,
+        sublayers: child.sublayers,
+        zoomTo: false,
+      },
+      input,
+      service,
+      child.visible,
+    );
+    layerIds.push(id);
+    const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
+      ?.source.bounds;
+    if (isGeoBounds(layerBounds)) {
+      bounds = bounds
+        ? [
+            Math.min(bounds[0], layerBounds[0]),
+            Math.min(bounds[1], layerBounds[1]),
+            Math.max(bounds[2], layerBounds[2]),
+            Math.max(bounds[3], layerBounds[3]),
+          ]
+        : layerBounds;
+    }
+  }
+
+  // `mapName` is usually the generic "Layers", so the URL's service folder
+  // name is the better fallback.
+  const groupName =
+    options.name?.trim() || layerNameFromArcGISInput(service.serviceUrl, "ArcGIS Layer");
+  useAppStore.getState().addLayerGroup(groupName, layerIds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
+  return layerIds[layerIds.length - 1];
+}
+
+async function addArcGISImageServiceLayer(
+  app: GeoLibreAppAPI,
+  options: ArcGISLayerOptions,
+  input: string,
+  prefetched?: ArcGISImageProducingService,
+  visible = true,
+): Promise<string> {
+  const resolved = prefetched ?? (await fetchArcGISImageProducingService(options, input));
+  const { serviceUrl, info } = resolved;
+
+  // Each option belongs to exactly one of the two service types, and the Add
+  // Data form keeps both field values when the layer type is switched (so the
+  // user's typing survives a change of mind). Reading only the applicable one
+  // keeps a leftover rendering rule from blocking a MapServer submission — or,
+  // when it happens to be valid JSON, from silently costing it its tile cache.
+  const sublayers =
+    options.layerType === "map-service"
+      ? // A sublayer id read off the pasted URL is a default: the explicit field
+        // wins when the user filled both in.
+        (normalizeArcGISSublayers(options.sublayers) ?? resolved.sublayers)
+      : undefined;
+  const renderingRule =
+    options.layerType === "image-service"
+      ? validArcGISRenderingRule(options.renderingRule)
+      : undefined;
+  const token = options.token?.trim() || undefined;
+
+  // Sublayers and rendering rules are dynamic-only, so the cache is only an
+  // option when neither was asked for.
+  const tileScheme = sublayers || renderingRule ? null : arcgisTileScheme(info);
+  const tiles = tileScheme
+    ? arcgisCachedTileUrl(serviceUrl, token)
+    : arcgisExportTileUrl(serviceUrl, {
+        layerType: options.layerType,
+        renderingRule,
+        sublayers,
+        token,
+      });
+
+  const bounds =
+    arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent) ??
+    (options.layerType === "map-service"
+      ? await resolveArcGISMapServiceBounds(serviceUrl, info, options, sublayers)
+      : undefined);
+  const attribution = info.copyrightText?.trim() || undefined;
+  const id = createArcGISLayerId();
+  const layer: GeoLibreLayer = {
+    id,
+    name: options.name?.trim() || layerNameFromArcGISInput(serviceUrl, "ArcGIS Layer"),
+    type: "raster",
+    source: {
+      type: "raster",
+      tiles: [tiles],
+      tileSize: tileScheme?.tileSize ?? ARCGIS_EXPORT_TILE_SIZE,
+      ...(bounds ? { bounds } : {}),
+      ...(attribution ? { attribution } : {}),
+      ...(tileScheme ? { minzoom: tileScheme.minzoom, maxzoom: tileScheme.maxzoom } : {}),
+    },
+    visible,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      arcgisLayerType: options.layerType,
+      arcgisSourceType: options.sourceType,
+      arcgisTiled: tileScheme !== null,
+      ...(bounds ? { bounds } : {}),
+      // The token has to travel in the tile URL for the tiles to render at all,
+      // unlike the feature path where it is only on the live requests. It is
+      // flagged here for the same reason the vector-tile path flags it, and
+      // `redactCredentials` (core) strips the `token` parameter from any project
+      // that leaves the app through sharing, embedding, or collaboration.
+      hasAccessToken: Boolean(token),
+      ...(options.sourceType === "portal-item" ? { itemId: input } : {}),
+      ...(options.portalUrl?.trim() ? { portalUrl: options.portalUrl.trim() } : {}),
+      ...(renderingRule ? { arcgisRenderingRule: renderingRule } : {}),
+      ...(sublayers ? { arcgisSublayers: sublayers } : {}),
+      sourceKind:
+        options.layerType === "image-service"
+          ? ARCGIS_IMAGE_SERVICE_SOURCE_KIND
+          : ARCGIS_MAP_SERVICE_SOURCE_KIND,
+    },
+    sourcePath: serviceUrl,
+  };
+
+  useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * The map's visible extent as a string, for telling whether the view moved.
+ *
+ * @returns The key, or null when the map can no longer answer (torn down).
+ */
+function viewportKey(map: maplibregl.Map): string | null {
+  try {
+    // engine-audit-allow: getMap-bounds — compared only against the same map's
+    // own earlier value; the caller holds a MapLibre map (viewport loading).
+    const bounds = map.getBounds();
+    return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+  } catch {
+    return null;
+  }
+}
+
+/** How long the server gets to project a feature layer's extent. */
+const ARCGIS_EXTENT_TIMEOUT_MS = 10_000;
+
+/**
+ * Ask the server for a FeatureServer layer's extent in WGS84.
+ *
+ * For a layer published in a local projected CRS, whose metadata `extent`
+ * {@link arcgisExtentToBounds} cannot convert (see
+ * {@link resolveArcGISMapServiceBounds}). Failure, including a timeout, is not
+ * fatal: the layer simply has no stored extent.
+ *
+ * @param queryUrl - The layer's `/query` endpoint.
+ * @param options - The ArcGIS layer options, for the token.
+ * @returns `[west, south, east, north]`, or undefined when unknown.
+ */
+async function fetchProjectedArcGISFeatureLayerBounds(
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+): Promise<[number, number, number, number] | undefined> {
+  try {
+    const result = await fetchArcGISJson<{ extent?: ArcGISExtent }>(
+      appendArcGISParams(queryUrl, {
+        f: "json",
+        outSR: "4326",
+        returnExtentOnly: "true",
+        where: "1=1",
+      }),
+      options,
+      undefined,
+      AbortSignal.timeout(ARCGIS_EXTENT_TIMEOUT_MS),
+    );
+    return arcgisExtentToBounds(result.extent);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Ask selected MapServer layers to project their data extents to WGS84.
+ *
+ * ArcGIS services frequently publish in a local projected CRS whose WKID is
+ * not built into the browser. The server already owns the datum transform, so
+ * `/query?returnExtentOnly=true&outSR=4326` is both more reliable and much
+ * cheaper than downloading features merely to derive a camera target.
+ */
+async function resolveArcGISMapServiceBounds(
+  serviceUrl: string,
+  info: ArcGISImageProducingServiceInfo,
+  options: ArcGISLayerOptions,
+  sublayers: string | undefined,
+): Promise<[number, number, number, number] | undefined> {
+  const requestedIds = sublayers?.split(",").map(Number);
+  const ids =
+    requestedIds ??
+    (info.layers ?? [])
+      .filter(
+        (layer) =>
+          layer.defaultVisibility !== false &&
+          (!Array.isArray(layer.subLayerIds) || layer.subLayerIds.length === 0),
+      )
+      .map((layer) => layer.id)
+      .filter((id): id is number => Number.isSafeInteger(id) && (id ?? -1) >= 0);
+  if (ids.length === 0) return undefined;
+
+  const extents: Array<[number, number, number, number]> = [];
+  // Keep request pressure modest for public ArcGIS servers with many layers.
+  for (let index = 0; index < ids.length; index += 6) {
+    const batch = await Promise.allSettled(
+      ids.slice(index, index + 6).map(async (id) => {
+        const queryUrl = appendArcGISParams(`${serviceUrl}/${id}/query`, {
+          f: "json",
+          outSR: "4326",
+          returnExtentOnly: "true",
+          where: "1=1",
+        });
+        const result = await fetchArcGISJson<{ extent?: ArcGISExtent }>(
+          queryUrl,
+          options,
+          undefined,
+        );
+        return arcgisExtentToBounds(result.extent);
+      }),
+    );
+    for (const result of batch) {
+      if (result.status === "fulfilled" && result.value) extents.push(result.value);
+    }
+  }
+  if (extents.length === 0) return undefined;
+  return extents.reduce<[number, number, number, number]>(
+    (union, bounds) => [
+      Math.min(union[0], bounds[0]),
+      Math.min(union[1], bounds[1]),
+      Math.max(union[2], bounds[2]),
+      Math.max(union[3], bounds[3]),
+    ],
+    [...extents[0]],
+  );
+}
+
+/**
+ * Validate a MapServer/ImageServer URL and split off a trailing sublayer id.
+ *
+ * `/export` and `/exportImage` live on the service root, so a URL that points at
+ * one MapServer sublayer (`.../MapServer/3`, which is what the REST directory
+ * links to) is rewritten to the root plus a `show:3` sublayer selection rather
+ * than rejected.
+ *
+ * @param input - The URL the caller supplied.
+ * @param layerType - Which of the two service types is expected.
+ * @returns The service root URL and any sublayer id read from the input.
+ */
+function resolveArcGISImageServiceUrl(
+  input: string,
+  layerType: ArcGISLayerType,
+): { serviceUrl: string; sublayers?: string } {
+  // A URL copied from the REST directory often carries `?f=html` (or a token);
+  // the query is rebuilt from scratch below, so drop whatever came in.
+  const url = trimTrailingSlash(stripArcGISUrlQuery(input));
+  if (layerType === "image-service") {
+    if (!/\/ImageServer$/i.test(url)) {
+      throw new LocalizedError(
+        "addData.arcgis.errorImageServiceUrl",
+        ARCGIS_IMAGE_SERVICE_URL_ERROR,
+      );
+    }
+    return { serviceUrl: url };
+  }
+
+  const match = /^(.*\/MapServer)(?:\/(\d+))?$/i.exec(url);
+  if (!match) {
+    throw new LocalizedError("addData.arcgis.errorMapServiceUrl", ARCGIS_MAP_SERVICE_URL_ERROR);
+  }
+  return { serviceUrl: match[1], ...(match[2] ? { sublayers: match[2] } : {}) };
+}
+
+/** Resolves a portal item to the MapServer/ImageServer URL it points at. */
+async function resolvePortalArcGISImageServiceUrl(
+  itemId: string,
+  options: ArcGISLayerOptions,
+): Promise<{ serviceUrl: string; sublayers?: string }> {
+  const itemInfo = await fetchArcGISPortalItemInfo(itemId, options, undefined);
+  if (!itemInfo.url) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.itemWithoutServiceUrl`,
+      "The ArcGIS portal item does not include a service URL.",
+    );
+  }
+  return resolveArcGISImageServiceUrl(itemInfo.url, options.layerType);
+}
+
+function stripArcGISUrlQuery(input: string): string {
+  const trimmed = input.trim();
+  const cut = trimmed.search(/[?#]/);
+  return cut === -1 ? trimmed : trimmed.slice(0, cut);
+}
+
+/**
+ * Normalize a sublayer selection to the comma-separated id list ArcGIS takes.
+ *
+ * A non-numeric entry throws rather than being dropped: silently ignoring it
+ * would draw the service's default sublayers, which looks like the selection
+ * was honored.
+ *
+ * @param value - The caller's raw `sublayers` input.
+ * @returns The normalized id list, or undefined when nothing was selected.
+ * @throws If the input contains anything that is not a sublayer id.
+ */
+function normalizeArcGISSublayers(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const ids = trimmed.split(/[\s,]+/).filter(Boolean);
+  if (!ids.every((id) => /^\d+$/.test(id))) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.sublayerIds`,
+      "Enter the MapServer sublayers as numeric ids, for example 0,2,5.",
+    );
+  }
+  return ids.join(",");
+}
+
+/**
+ * Validate an ImageServer rendering rule. ArcGIS answers an unparseable rule
+ * with an error image on every tile, so a bad rule is rejected up front where
+ * the message can still reach the dialog.
+ *
+ * @param value - The caller's raw `renderingRule` input.
+ * @returns The trimmed rule JSON, or undefined when none was supplied.
+ * @throws If the rule is not valid JSON.
+ */
+function validArcGISRenderingRule(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    JSON.parse(trimmed);
+  } catch {
+    throw new LocalizedError(
+      `${ERROR_KEY}.renderingRuleJson`,
+      'The rendering rule must be JSON, for example {"rasterFunction":"Hillshade"}.',
+    );
+  }
+  return trimmed;
+}
+
+/**
+ * The `/tile/{z}/{y}/{x}` template for a cached service.
+ *
+ * Built by hand rather than through `appendArcGISParams`: the WHATWG URL parser
+ * percent-encodes the braces, and MapLibre only substitutes literal `{z}`/`{x}`/
+ * `{y}` placeholders.
+ */
+function arcgisCachedTileUrl(serviceUrl: string, token: string | undefined): string {
+  const template = `${trimTrailingSlash(serviceUrl)}/tile/{z}/{y}/{x}`;
+  return token ? `${template}?token=${encodeURIComponent(token)}` : template;
+}
+
+/**
+ * The `/export` (MapServer) or `/exportImage` (ImageServer) request template for
+ * a service with no usable cache, as a MapLibre `{bbox-epsg-3857}` raster tile
+ * URL. `png32` with `transparent=true` keeps the service drawable as an overlay
+ * over the basemap rather than an opaque sheet.
+ */
+function arcgisExportTileUrl(
+  serviceUrl: string,
+  options: {
+    layerType: ArcGISLayerType;
+    renderingRule: string | undefined;
+    sublayers: string | undefined;
+    token: string | undefined;
+  },
+): string {
+  const isImageService = options.layerType === "image-service";
+  const size = `${ARCGIS_EXPORT_TILE_SIZE},${ARCGIS_EXPORT_TILE_SIZE}`;
+  const params: Array<[string, string]> = [
+    ["bbox", "{bbox-epsg-3857}"],
+    ["bboxSR", "3857"],
+    ["imageSR", "3857"],
+    ["size", size],
+    ["format", "png32"],
+    ["transparent", "true"],
+  ];
+  if (!isImageService) params.push(["dpi", "96"]);
+  if (!isImageService && options.sublayers) params.push(["layers", `show:${options.sublayers}`]);
+  if (isImageService && options.renderingRule) {
+    params.push(["renderingRule", options.renderingRule]);
+  }
+  if (options.token) params.push(["token", options.token]);
+  params.push(["f", "image"]);
+
+  const query = params
+    // The bbox placeholder is the one value MapLibre substitutes, so it has to
+    // survive as literal braces; everything else is encoded normally.
+    .map(
+      ([key, value]) =>
+        `${key}=${value === "{bbox-epsg-3857}" ? value : encodeURIComponent(value)}`,
+    )
+    .join("&");
+  return `${trimTrailingSlash(serviceUrl)}/${isImageService ? "exportImage" : "export"}?${query}`;
+}
+
+/**
+ * Read a service's tile cache as an XYZ scheme, when it is one.
+ *
+ * A fused cache is only usable as a MapLibre raster source if it was built on
+ * the standard Web Mercator scheme: the same projection, the same top-left
+ * origin, and resolutions that halve per level from the world-in-one-tile
+ * level 0. Caches in other projections or with custom LOD tables exist and would
+ * render misaligned, so anything that does not match falls back to `/export`,
+ * which is correct for every service.
+ *
+ * @param info - The service's `?f=json` description.
+ * @returns The tile size and zoom range, or null when the cache is not usable.
+ */
+function arcgisTileScheme(info: ArcGISImageProducingServiceInfo): ArcGISTileScheme | null {
+  const tileInfo = info.tileInfo;
+  if (info.singleFusedMapCache !== true || !tileInfo) return null;
+
+  const wkid = tileInfo.spatialReference?.latestWkid ?? tileInfo.spatialReference?.wkid;
+  if (wkid !== 3857 && wkid !== 102100 && wkid !== 102113) return null;
+
+  const tileSize = tileInfo.cols;
+  if (typeof tileSize !== "number" || tileSize !== tileInfo.rows) return null;
+  if (tileSize !== 256 && tileSize !== 512) return null;
+
+  // Both axes: a cache anchored at the correct left edge but a different top
+  // edge would line up horizontally and be off vertically, which reads as
+  // imagery that is subtly in the wrong place rather than as an obvious break.
+  // One metre of slack, since services round the origin to varying precision.
+  const originX = tileInfo.origin?.x;
+  const originY = tileInfo.origin?.y;
+  if (typeof originX !== "number" || Math.abs(originX - WEB_MERCATOR_ORIGIN_X) > 1) return null;
+  if (typeof originY !== "number" || Math.abs(originY - WEB_MERCATOR_ORIGIN_Y) > 1) return null;
+
+  const levels = (tileInfo.lods ?? []).filter(
+    (lod): lod is { level: number; resolution: number } =>
+      typeof lod.level === "number" &&
+      Number.isFinite(lod.level) &&
+      typeof lod.resolution === "number" &&
+      lod.resolution > 0,
+  );
+  if (levels.length === 0) return null;
+
+  // Compare against the standard resolution for each level rather than assuming
+  // the cache starts at level 0 — plenty of caches begin partway down.
+  const level0Resolution = WEB_MERCATOR_LEVEL0_RESOLUTION * (256 / tileSize);
+  const matchesScheme = levels.every((lod) => {
+    const expected = level0Resolution / 2 ** lod.level;
+    return Math.abs(lod.resolution - expected) / expected < 0.01;
+  });
+  if (!matchesScheme) return null;
+
+  return {
+    maxzoom: Math.max(...levels.map((lod) => lod.level)),
+    minzoom: Math.min(...levels.map((lod) => lod.level)),
+    tileSize,
+  };
+}
+
+/**
+ * Re-download an ArcGIS feature layer, replaying the paging it was added with.
+ *
+ * A refresh cannot just re-fetch the layer's stored `sourcePath`: that URL is
+ * the unbounded `where=1=1` query, which is the very request that truncates at
+ * `maxRecordCount` or fails outright on a large service (GeoLibre#1745). Going
+ * back through {@link fetchArcGISFeaturePages} keeps a refreshed layer the same
+ * size as the one that was added.
+ *
+ * @param params - The paging state persisted on the layer's source.
+ * @returns The re-downloaded features.
+ */
+export async function refreshArcGISFeatureLayer(params: {
+  layerId?: string;
+  maxFeatures?: number;
+  pageSize?: number;
+  queryUrl: string;
+}): Promise<FeatureCollection> {
+  if (params.layerId && arcGISLayerHasPendingEdits(params.layerId))
+    return currentArcGISLayerGeojson(params.layerId);
+  const queryUrl = trimTrailingSlash(params.queryUrl).replace(/\/query$/i, "");
+  const options: ArcGISLayerOptions = await withFreshArcGISToken({
+    ...(params.layerId ? arcgisEditOptions.get(params.layerId) : undefined),
+    layerType: "feature",
+    maxFeatures: params.maxFeatures,
+    pageSize: params.pageSize,
+    sourceType: "url",
+  });
+  // Re-read the metadata rather than trusting a stored copy: `maxRecordCount`
+  // and the paging capabilities are the service's to change between sessions.
+  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(queryUrl, options, undefined);
+  const data = identifyArcGISFeatures(
+    await fetchArcGISFeaturePages(`${queryUrl}/query`, options, layerInfo),
+    layerInfo.objectIdField,
+  );
+  if (params.layerId) {
+    if (arcGISLayerHasPendingEdits(params.layerId))
+      return currentArcGISLayerGeojson(params.layerId);
+    const layer = useAppStore.getState().layers.find((l) => l.id === params.layerId);
+    if (layer)
+      useAppStore.getState().updateLayer(layer.id, {
+        geojson: data,
+        metadata: {
+          ...layer.metadata,
+          arcgisEditInfo: layerInfo,
+          arcgisEditBaseline: structuredClone(data),
+        },
+      });
+  }
+  return data;
+}
+
+/**
+ * Everything the paging strategies need, resolved once from the layer metadata.
+ */
+interface ArcGISPagingPlan {
+  /** Hard cap on features to keep, or `null` for the whole layer. */
+  maxFeatures: number | null;
+  /** The layer's ObjectID field, when the service names one. */
+  objectIdField: string | undefined;
+  onProgress: ArcGISLayerOptions["onProgress"];
+  onPage?: (features: Feature[]) => void;
+  /** Features to request per `/query` call. */
+  pageSize: number;
+  /** Query params every page shares (including the token, if any). */
+  params: Record<string, string | undefined>;
+  /** The `/query` endpoint, without paging params. */
+  queryUrl: string;
+  signal?: AbortSignal;
+  /** Whether the service claims to honor `resultOffset`. */
+  supportsPagination: boolean;
+  /** Whether the service accepts `orderByFields` (needed for stable paging). */
+  supportsOrderBy: boolean;
+  /** The service's feature count, or `null` when it would not report one. */
+  total: number | null;
+}
+
+/**
+ * Download every feature of an ArcGIS feature layer, one page at a time.
+ *
+ * A single unbounded `where=1=1` query is what the old code sent, and it does
+ * not scale: past some layer size the service either truncates the result at
+ * `maxRecordCount` (loading a silently partial layer) or gives up entirely with
+ * an HTTP 500 (GeoLibre#1745). Paging keeps every individual request small
+ * enough for the service to answer, so the layer that used to fail outright now
+ * loads in full.
+ *
+ * Two strategies, because not every service supports the first:
+ *
+ * - `resultOffset`/`resultRecordCount` paging, when the layer advertises
+ *   `advancedQueryCapabilities.supportsPagination` (ArcGIS 10.3+). Cheapest —
+ *   no extra round trip.
+ * - ObjectID-range paging otherwise: ask for the layer's ObjectIDs
+ *   (`returnIdsOnly`), then walk them in sorted chunks with a
+ *   `<oidField> >= a AND <oidField> <= b` filter. Works on any service that can
+ *   run a query at all, which is what older ArcGIS Server deployments need.
+ *
+ * A service that advertises pagination but ignores `resultOffset` would page
+ * forever over the same rows, so that is detected (each page's first feature is
+ * compared with the previous page's) and falls back to the ObjectID walk.
+ *
+ * @param queryUrl - The layer's `/query` endpoint, with no query string.
+ * @param options - The ArcGIS layer options (token, page size, feature cap).
+ * @param layerInfo - The layer's `?f=json` metadata.
+ * @returns Every feature the service returned, as one FeatureCollection.
+ */
+async function fetchArcGISFeaturePages(
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  } = {},
+): Promise<FeatureCollection> {
+  const plan = await planArcGISPaging(queryUrl, options, layerInfo, request);
+
+  if (plan.supportsPagination) {
+    const paged = await fetchArcGISPagesByOffset(plan);
+    if (!paged.truncated) return finishArcGISPaging(plan, paged.features, false);
+    // The service advertised `supportsPagination` but handed back the same rows
+    // for a second offset. Walking ObjectIDs does not rely on that promise.
+    const byObjectId = await fetchArcGISPagesByObjectId(plan);
+    if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
+    return finishArcGISPaging(plan, paged.features, true);
+  }
+
+  const byObjectId = await fetchArcGISPagesByObjectId(plan);
+  if (byObjectId) return finishArcGISPaging(plan, byObjectId.features, byObjectId.truncated);
+  // No usable ObjectIDs either. Try offset paging anyway — plenty of services
+  // honor it without advertising it — and accept a single page if they do not.
+  const paged = await fetchArcGISPagesByOffset(plan);
+  return finishArcGISPaging(plan, paged.features, paged.truncated);
+}
+
+async function planArcGISPaging(
+  queryUrl: string,
+  options: ArcGISLayerOptions,
+  layerInfo: ArcGISFeatureLayerInfo,
+  request: {
+    params?: Record<string, string>;
+    signal?: AbortSignal;
+    onPage?: (features: Feature[]) => void;
+  },
+): Promise<ArcGISPagingPlan> {
+  const params = {
+    f: "geojson",
+    outFields: "*",
+    returnGeometry: "true",
+    where: "1=1",
+    token: options.token?.trim() || undefined,
+    ...request.params,
+  };
+  return {
+    maxFeatures: positiveInteger(options.maxFeatures),
+    objectIdField: layerInfo.objectIdField?.trim() || undefined,
+    onProgress: options.onProgress,
+    onPage: request.onPage,
+    pageSize: resolveArcGISPageSize(options.pageSize, layerInfo.maxRecordCount),
+    params,
+    queryUrl,
+    signal: request.signal,
+    supportsPagination: layerInfo.advancedQueryCapabilities?.supportsPagination === true,
+    supportsOrderBy: layerInfo.advancedQueryCapabilities?.supportsOrderBy !== false,
+    // Spatial counts can be as expensive as fetching the first page on large
+    // polygon services. Start rendering immediately for viewport queries.
+    total: request.params ? null : await fetchArcGISFeatureCount(queryUrl, params),
+  };
+}
+
+/**
+ * The page size to request.
+ *
+ * A caller-supplied size wins (that is the point of the Add Data field), but is
+ * still held under the service's own `maxRecordCount` — asking for more only
+ * gets the cap back, and would make a truncated page look like the last one.
+ *
+ * @param requested - The caller's `pageSize` option, if any.
+ * @param maxRecordCount - The service's advertised per-query ceiling, if any.
+ */
+function resolveArcGISPageSize(
+  requested: number | undefined,
+  maxRecordCount: number | undefined,
+): number {
+  const serviceCap = positiveInteger(maxRecordCount);
+  const wanted = positiveInteger(requested) ?? DEFAULT_ARCGIS_PAGE_SIZE;
+  return serviceCap ? Math.min(wanted, serviceCap) : wanted;
+}
+
+function positiveInteger(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : null;
+}
+
+/**
+ * The layer's feature count, used for progress reporting and as a stop
+ * condition. Best-effort: a service that will not answer `returnCountOnly`
+ * still pages fine, so any failure resolves to `null` rather than throwing.
+ *
+ * Takes no abort signal, and needs none: {@link planArcGISPaging} skips the
+ * count entirely for a viewport query (the only cancellable caller), because a
+ * spatial count can cost as much as the first page.
+ *
+ * @param queryUrl - The layer's `/query` endpoint.
+ * @param params - The query params every request in the plan shares.
+ */
+async function fetchArcGISFeatureCount(
+  queryUrl: string,
+  params: Record<string, string | undefined>,
+): Promise<number | null> {
+  try {
+    const response = await arcGISFetch(
+      appendArcGISParams(queryUrl, {
+        ...params,
+        f: "json",
+        returnCountOnly: "true",
+        where: "1=1",
+      }),
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as { count?: unknown };
+    return typeof json.count === "number" && Number.isFinite(json.count) && json.count >= 0
+      ? json.count
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Page with `resultOffset`/`resultRecordCount`.
+ *
+ * @param plan - The resolved paging plan.
+ * @returns The features collected, plus whether the walk stopped with rows the
+ *   service still had — either because it was caught ignoring `resultOffset`
+ *   (the features are then only the first page, and the caller should try
+ *   another strategy) or because the page guard tripped.
+ */
+async function fetchArcGISPagesByOffset(
+  plan: ArcGISPagingPlan,
+): Promise<{ features: Feature[]; truncated: boolean }> {
+  const features: Feature[] = [];
+  // Paging is only coherent over a stable sort. Services default to ObjectID
+  // order, but say so explicitly when the layer names an ObjectID field and
+  // accepts `orderByFields`, so pages cannot overlap or skip rows.
+  const orderByFields = plan.supportsOrderBy && plan.objectIdField ? plan.objectIdField : undefined;
+  let previousSignature: string | null = null;
+  let pageSize = plan.pageSize;
+  // Records the server has returned so far. Offsets and the short-page test
+  // count these, not the features kept: a generalized page drops the shapes
+  // that collapsed below the grid, so it can hold fewer features than records.
+  let records = 0;
+
+  for (let page = 0; ; page += 1) {
+    if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
+
+    const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
+    if (wanted <= 0) break;
+
+    const chunk = await fetchArcGISGeoJson(
+      appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
+        orderByFields,
+        resultOffset: String(records),
+        resultRecordCount: String(wanted),
+      }),
+      plan.signal,
+    );
+    if (chunk.recordCount === 0) break;
+    records += chunk.recordCount;
+
+    const signature = chunk.firstRecordSignature;
+    if (page > 0 && signature !== null && signature === previousSignature) {
+      // The same first row came back for a different offset: the service is
+      // ignoring `resultOffset`, so every further page would be this one again.
+      return { features: features.slice(0, plan.pageSize), truncated: true };
+    }
+    previousSignature = signature;
+
+    features.push(...chunk.features);
+    plan.onPage?.(features);
+    plan.onProgress?.(features.length, plan.total);
+
+    if (plan.total !== null && records >= plan.total) break;
+    if (chunk.recordCount >= wanted) continue;
+    // A short page normally means the last one — unless the service flagged the
+    // transfer limit, which means it capped the page below what was asked for.
+    // Adopt its cap and keep going rather than stopping on a partial dataset.
+    if (!chunk.exceededTransferLimit) break;
+    pageSize = chunk.recordCount;
+  }
+
+  return { features, truncated: false };
+}
+
+/**
+ * Page by walking the layer's ObjectIDs in sorted chunks.
+ *
+ * The chunks are expressed as an inclusive `>= a AND <= b` range rather than an
+ * `objectIds=` list so the request URL stays short whatever the page size.
+ * Because the range is cut from the service's own complete, sorted ID list, it
+ * selects exactly that chunk.
+ *
+ * @param plan - The resolved paging plan.
+ * @returns The features collected, plus whether the page guard stopped the walk
+ *   with ObjectIDs still unread; `null` when the service would not list its
+ *   ObjectIDs at all (so the caller can fall back).
+ */
+async function fetchArcGISPagesByObjectId(
+  plan: ArcGISPagingPlan,
+): Promise<{ features: Feature[]; truncated: boolean } | null> {
+  const idInfo = await fetchArcGISObjectIds(plan);
+  if (!idInfo || idInfo.objectIds.length === 0) return null;
+
+  const { field, objectIds } = idInfo;
+  const features: Feature[] = [];
+  let pageSize = plan.pageSize;
+  let start = 0;
+
+  for (let page = 0; start < objectIds.length; page += 1) {
+    // Stopping here leaves ObjectIDs unread, so say so: without a `total` to
+    // compare against, that is the only signal the layer is short.
+    if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
+
+    const wanted = remainingArcGISFeatures(plan, features.length, pageSize);
+    if (wanted <= 0) break;
+
+    const end = Math.min(start + wanted, objectIds.length);
+    const chunk = await fetchArcGISGeoJson(
+      appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
+        where: `${field} >= ${objectIds[start]} AND ${field} <= ${objectIds[end - 1]}`,
+      }),
+      plan.signal,
+    );
+
+    // The range spans `end - start` ObjectIDs, so a shorter capped page would
+    // silently drop the rest of them — the ids are consumed by advancing past
+    // the range, not by what came back. Reachable whenever the page size
+    // exceeds the service's real cap, which is what happens when the layer
+    // metadata omits `maxRecordCount`. Adopt the cap and redo this range at the
+    // smaller size rather than advancing over the ids that were not returned.
+    if (chunk.exceededTransferLimit && chunk.recordCount > 0) {
+      if (chunk.recordCount < end - start) {
+        pageSize = chunk.recordCount;
+        continue;
+      }
+    }
+
+    features.push(...chunk.features);
+    plan.onPage?.(features);
+    start = end;
+    plan.onProgress?.(features.length, plan.total ?? objectIds.length);
+  }
+  // Ran to the end of the id list, or stopped on the caller's `maxFeatures`
+  // cap — which `finishArcGISPaging` reports on its own.
+  return { features, truncated: false };
+}
+
+async function fetchArcGISObjectIds(
+  plan: ArcGISPagingPlan,
+): Promise<{ field: string; objectIds: number[] } | null> {
+  try {
+    const response = await arcGISFetch(
+      appendArcGISParams(plan.queryUrl, {
+        ...plan.params,
+        f: "json",
+        returnIdsOnly: "true",
+        where: "1=1",
+      }),
+      { signal: plan.signal },
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      objectIdFieldName?: unknown;
+      objectIds?: unknown;
+    };
+    if (!Array.isArray(json.objectIds)) return null;
+    const objectIds = json.objectIds
+      .filter((id): id is number => typeof id === "number" && Number.isFinite(id))
+      .sort((a, b) => a - b);
+    const field =
+      (typeof json.objectIdFieldName === "string" ? json.objectIdFieldName.trim() : "") ||
+      plan.objectIdField;
+    return field && objectIds.length > 0 ? { field, objectIds } : null;
+  } catch (error) {
+    if (plan.signal?.aborted) throw error;
+    return null;
+  }
+}
+
+/** Features still wanted for this page, honoring the caller's `maxFeatures`. */
+function remainingArcGISFeatures(plan: ArcGISPagingPlan, loaded: number, pageSize: number): number {
+  return plan.maxFeatures === null ? pageSize : Math.min(pageSize, plan.maxFeatures - loaded);
+}
+
+/**
+ * A cheap identity for a page's first feature, used to catch a service that
+ * ignores `resultOffset` and keeps replaying the same page. Prefers the GeoJSON
+ * `id` (which ArcGIS populates from the ObjectID); properties are the fallback
+ * because they are small next to a polygon's coordinates.
+ */
+function arcgisPageSignature(feature: Feature | undefined): string | null {
+  if (!feature) return null;
+  return (
+    arcgisRecordSignature({ id: feature.id ?? undefined, properties: feature.properties ?? {} }) ??
+    (feature.geometry ? `g:${JSON.stringify(feature.geometry)}` : null)
+  );
+}
+
+/** A record's signature from its id or attributes alone (see arcgisPageSignature). */
+function arcgisRecordSignature(record: ArcGISRecordIdentity | undefined): string | null {
+  if (!record) return null;
+  if (record.id !== undefined) return `id:${String(record.id)}`;
+  return Object.keys(record.properties).length > 0
+    ? `p:${JSON.stringify(record.properties)}`
+    : null;
+}
+
+/**
+ * Wrap the collected features and report anything the user should know about
+ * the result being short of the whole layer. A partial layer still loads — it
+ * is better than nothing, and matches what the single-query path used to do —
+ * but the shortfall is surfaced so a partial attribute table or export is not
+ * mistaken for the complete dataset.
+ *
+ * @param plan - The resolved paging plan.
+ * @param features - The features collected.
+ * @param truncated - Whether the walk gave up with rows still unread.
+ */
+function finishArcGISPaging(
+  plan: ArcGISPagingPlan,
+  features: Feature[],
+  truncated: boolean,
+): FeatureCollection {
+  if (plan.maxFeatures !== null && features.length >= plan.maxFeatures) {
+    console.warn(
+      `[GeoLibre] ArcGIS feature download stopped at the requested maximum of ` +
+        `${plan.maxFeatures} features (partial dataset).`,
+    );
+  } else if (truncated || (plan.total !== null && features.length < plan.total)) {
+    const of = plan.total === null ? "" : ` of ${plan.total}`;
+    console.warn(
+      `[GeoLibre] ArcGIS feature query was truncated: loaded ${features.length}${of} ` +
+        `features (partial dataset).`,
+    );
+  }
+  return { type: "FeatureCollection", features };
 }
 
 /** The JSON error envelope ArcGIS returns, usually with an HTTP 200 status. */
 interface ArcGISErrorEnvelope {
+  code?: unknown;
   message?: string;
   details?: unknown;
+}
+
+/**
+ * A `/query` the service answered with a failure, carrying enough of that
+ * failure to tell "this extent is too much for me" apart from a fault the user
+ * could act on differently. ArcGIS reports the former either as a gateway
+ * timeout or — confusingly — as an error envelope whose `code` is 400 and whose
+ * detail blames the parameters, which are in fact fine: the identical query
+ * over a smaller extent succeeds.
+ */
+class ArcGISQueryError extends Error {
+  /** HTTP status, when the transport itself failed. */
+  readonly status: number | null;
+  /** `error.code` from an ArcGIS error envelope returned with HTTP 200. */
+  readonly code: number | null;
+  constructor(message: string, source: { status?: number | null; code?: number | null } = {}) {
+    super(message);
+    this.name = "ArcGISQueryError";
+    this.status = source.status ?? null;
+    this.code = source.code ?? null;
+  }
 }
 
 /**
@@ -283,21 +2240,40 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
 }
 
 /**
- * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
+ * Fetch and validate one page of GeoJSON from an ArcGIS query URL.
  *
  * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
- * GeoJSON, so both the transport status and the payload shape are checked. A
- * result truncated at the service's `maxRecordCount` is loaded as-is but warned
- * about, so a partial attribute table or export is not mistaken for the full
- * dataset.
+ * GeoJSON, so both the transport status and the payload shape are checked.
  *
- * @param url - The fully-built `/query?f=geojson` request URL.
- * @returns The parsed FeatureCollection.
+ * @param url - The fully-built `/query` request URL: `f=geojson`, or `f=json`
+ *   with `quantizationParameters` for a generalized viewport query.
+ * @returns The parsed FeatureCollection, with the service's
+ *   `exceededTransferLimit` flag normalized onto it for the paging loop, and
+ *   `recordCount`, the number of records the server returned. That can exceed
+ *   `features.length` for a generalized query, whose collapsed shapes are
+ *   dropped; paging advances by records, not by the features kept.
  */
-async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
-  const response = await fetch(url);
+async function fetchArcGISGeoJson(
+  url: string,
+  signal?: AbortSignal,
+): Promise<
+  FeatureCollection & {
+    exceededTransferLimit: boolean;
+    recordCount: number;
+    /** Identifies the page's first record, for spotting a repeated page. */
+    firstRecordSignature: string | null;
+  }
+> {
+  const response = await arcGISFetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`ArcGIS feature query failed with ${response.status}.`);
+    throw new ArcGISQueryError(
+      localizedMessage(
+        `${ERROR_KEY}.featureQueryFailed`,
+        "ArcGIS feature query failed with {{status}}.",
+        { status: response.status },
+      ),
+      { status: response.status },
+    );
   }
   // ArcGIS Enterprise (and services behind a WAF) can answer 200 with an HTML
   // login/redirect page when a token is missing or expired. Read the body as
@@ -305,36 +2281,249 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
   // `SyntaxError: Unexpected token '<'` from JSON.parse.
   const text = await response.text();
   if (/^\s*</.test(text)) {
-    throw new Error(
+    throw new LocalizedError(
+      `${ERROR_KEY}.htmlInsteadOfGeojson`,
       "The ArcGIS service returned HTML instead of GeoJSON (the layer may require a token or sign-in).",
     );
   }
   let json: FeatureCollection & {
     error?: ArcGISErrorEnvelope;
     exceededTransferLimit?: boolean;
+    properties?: { exceededTransferLimit?: boolean };
   };
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
-  }
-  if (json.error) {
-    throw new Error(arcgisErrorMessage(json.error, "ArcGIS feature query failed."));
-  }
-  if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
-    throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
-  }
-  // ArcGIS caps a single query at the service's maxRecordCount and flags the
-  // shortfall with `exceededTransferLimit`. The partial data still loads (it is
-  // the same subset the previous URL-source path rendered), but the truncation
-  // is surfaced so the caller knows the layer is not the complete dataset.
-  if (json.exceededTransferLimit) {
-    console.warn(
-      `[GeoLibre] ArcGIS feature query was truncated at the service record ` +
-        `limit; loaded ${json.features.length} features (partial dataset).`,
+    throw new LocalizedError(
+      `${ERROR_KEY}.notGeojson`,
+      "The ArcGIS feature layer did not return GeoJSON features.",
     );
   }
-  return json;
+  if (json.error) {
+    throw new ArcGISQueryError(arcgisErrorMessage(json.error, "ArcGIS feature query failed."), {
+      code: typeof json.error.code === "number" ? json.error.code : null,
+    });
+  }
+  // A generalized viewport query asks for quantized Esri JSON, the only format
+  // hosted services generalize (see arcgis-quantized.ts).
+  if (isArcGISQuantizedFeatureSet(json)) {
+    const decoded = decodeArcGISQuantizedFeatures(json);
+    return { ...decoded, firstRecordSignature: arcgisRecordSignature(decoded.firstRecord) };
+  }
+  // An envelope that matches nothing answers the quantized query with a bare
+  // Esri JSON feature set: no `transform`, no `geometryType`, and no features.
+  // The default world view splits at the antimeridian, so one of its two
+  // envelopes over the US routinely comes back like this (issue #2948).
+  if (json.type === undefined && Array.isArray(json.features) && json.features.length === 0) {
+    return {
+      type: "FeatureCollection",
+      features: [],
+      exceededTransferLimit: Boolean(json.exceededTransferLimit),
+      recordCount: 0,
+      firstRecordSignature: null,
+    };
+  }
+  if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.notGeojson`,
+      "The ArcGIS feature layer did not return GeoJSON features.",
+    );
+  }
+  const features = json.features.map(repairArcGISNestedPolygonRings);
+  // ArcGIS caps a single query at the service's maxRecordCount and flags the
+  // shortfall with `exceededTransferLimit`. In `f=geojson` output that flag is
+  // not always where the `f=json` output puts it — some servers only nest it
+  // under `properties` (GeoJSON has no place for a top-level extension member),
+  // so both are read. The paging loop uses it to tell a capped page from the
+  // genuinely last one.
+  return {
+    ...json,
+    features,
+    exceededTransferLimit: Boolean(
+      json.exceededTransferLimit || json.properties?.exceededTransferLimit,
+    ),
+    recordCount: features.length,
+    firstRecordSignature: arcgisPageSignature(features[0]),
+  };
+}
+
+/**
+ * Reassemble rings that ArcGIS exported as separate one-ring polygons.
+ *
+ * ArcGIS determines shell/hole membership from its own winding convention. If
+ * a service contains rings wound the other way around, `f=geojson` can emit a
+ * MultiPolygon whose nested rings are all independent polygons. MapLibre then
+ * fills the intended holes. This guarded containment heuristic is limited to
+ * small all-one-ring exports; ordinary polygons, structured multipolygons,
+ * large multipart features, and boundary-touching rings pass through
+ * unchanged rather than risk destructive reclassification.
+ */
+function repairArcGISNestedPolygonRings(feature: Feature): Feature {
+  const geometry = feature.geometry;
+  if (
+    geometry?.type !== "MultiPolygon" ||
+    geometry.coordinates.length < 2 ||
+    geometry.coordinates.length > MAX_ARCGIS_RING_REPAIR_PARTS ||
+    geometry.coordinates.some((polygon) => polygon.length !== 1)
+  ) {
+    return feature;
+  }
+
+  const rings = geometry.coordinates.map(([ring]) => ({
+    area: signedRingArea(ring),
+    bounds: ringBounds(ring),
+    depth: 0,
+    parent: -1,
+    ring,
+  }));
+  // Planar containment is ambiguous across the antimeridian. Leave those
+  // geometries untouched rather than risk turning a separate polygon into a
+  // hole; MapLibre already handles their original GeoJSON representation.
+  if (rings.some(({ ring }) => ringCrossesAntimeridian(ring))) return feature;
+
+  for (let child = 0; child < rings.length; child += 1) {
+    let parentArea = Number.POSITIVE_INFINITY;
+    for (let candidate = 0; candidate < rings.length; candidate += 1) {
+      if (candidate === child || Math.abs(rings[candidate].area) <= Math.abs(rings[child].area)) {
+        continue;
+      }
+      if (
+        boundsContain(rings[candidate].bounds, rings[child].bounds) &&
+        Math.abs(rings[candidate].area) < parentArea &&
+        ringStrictlyContains(rings[candidate].ring, rings[child].ring)
+      ) {
+        rings[child].parent = candidate;
+        parentArea = Math.abs(rings[candidate].area);
+      }
+    }
+  }
+
+  if (!rings.some((ring) => ring.parent !== -1)) return feature;
+  const depthOf = (index: number): number => {
+    const parent = rings[index].parent;
+    return parent === -1 ? 0 : depthOf(parent) + 1;
+  };
+  rings.forEach((ring, index) => {
+    ring.depth = depthOf(index);
+  });
+
+  const coordinates: MultiPolygon["coordinates"] = [];
+  rings.forEach((entry, index) => {
+    if (entry.depth % 2 !== 0) return;
+    const polygon: Position[][] = [orientRing(entry.ring, true)];
+    rings.forEach((candidate) => {
+      if (candidate.parent === index && candidate.depth % 2 === 1) {
+        polygon.push(orientRing(candidate.ring, false));
+      }
+    });
+    coordinates.push(polygon);
+  });
+
+  return { ...feature, geometry: { ...geometry, coordinates } };
+}
+
+function signedRingArea(ring: Position[]): number {
+  let twiceArea = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    twiceArea += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
+  }
+  return twiceArea / 2;
+}
+
+type RingBounds = [west: number, south: number, east: number, north: number];
+
+function ringBounds(ring: Position[]): RingBounds {
+  return ring.reduce<RingBounds>(
+    (bounds, position) => [
+      Math.min(bounds[0], position[0]),
+      Math.min(bounds[1], position[1]),
+      Math.max(bounds[2], position[0]),
+      Math.max(bounds[3], position[1]),
+    ],
+    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, -Infinity, -Infinity],
+  );
+}
+
+function boundsContain(container: RingBounds, child: RingBounds): boolean {
+  return (
+    container[0] <= child[0] &&
+    container[1] <= child[1] &&
+    container[2] >= child[2] &&
+    container[3] >= child[3]
+  );
+}
+
+function ringCrossesAntimeridian(ring: Position[]): boolean {
+  return ring
+    .slice(0, -1)
+    .some((position, index) => Math.abs(position[0] - ring[index + 1][0]) > 180);
+}
+
+function orientRing(ring: Position[], counterClockwise: boolean): Position[] {
+  return signedRingArea(ring) > 0 === counterClockwise ? ring : [...ring].reverse();
+}
+
+function pointInRing(point: Position, ring: Position[]): boolean {
+  let inside = false;
+  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
+    const [x1, y1] = ring[current];
+    const [x2, y2] = ring[previous];
+    if (
+      y1 > point[1] !== y2 > point[1] &&
+      point[0] < ((x2 - x1) * (point[1] - y1)) / (y2 - y1) + x1
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function ringStrictlyContains(container: Position[], child: Position[]): boolean {
+  return (
+    child.slice(0, -1).every((point) => pointInRing(point, container)) &&
+    !ringsIntersect(container, child)
+  );
+}
+
+function ringsIntersect(first: Position[], second: Position[]): boolean {
+  for (let firstIndex = 0; firstIndex < first.length - 1; firstIndex += 1) {
+    for (let secondIndex = 0; secondIndex < second.length - 1; secondIndex += 1) {
+      if (
+        segmentsIntersect(
+          first[firstIndex],
+          first[firstIndex + 1],
+          second[secondIndex],
+          second[secondIndex + 1],
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function segmentsIntersect(a: Position, b: Position, c: Position, d: Position): boolean {
+  const cross = (start: Position, end: Position, point: Position): number =>
+    (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0]);
+  const abC = cross(a, b, c);
+  const abD = cross(a, b, d);
+  const cdA = cross(c, d, a);
+  const cdB = cross(c, d, b);
+  if (abC === 0 && pointOnSegment(c, a, b)) return true;
+  if (abD === 0 && pointOnSegment(d, a, b)) return true;
+  if (cdA === 0 && pointOnSegment(a, c, d)) return true;
+  if (cdB === 0 && pointOnSegment(b, c, d)) return true;
+  return abC > 0 !== abD > 0 && cdA > 0 !== cdB > 0;
+}
+
+function pointOnSegment(point: Position, start: Position, end: Position): boolean {
+  return (
+    point[0] >= Math.min(start[0], end[0]) &&
+    point[0] <= Math.max(start[0], end[0]) &&
+    point[1] >= Math.min(start[1], end[1]) &&
+    point[1] <= Math.max(start[1], end[1])
+  );
 }
 
 async function resolveFeatureLayerUrl(
@@ -344,15 +2533,23 @@ async function resolveFeatureLayerUrl(
 ): Promise<string> {
   if (/\/FeatureServer\/\d+\/?$/i.test(input)) return trimTrailingSlash(input);
   if (!/\/FeatureServer\/?$/i.test(input)) {
-    throw new Error("Enter an ArcGIS FeatureServer layer URL.", { cause });
+    throw new LocalizedError(
+      `${ERROR_KEY}.enterFeatureServerLayerUrl`,
+      "Enter an ArcGIS FeatureServer layer URL.",
+      undefined,
+      { cause },
+    );
   }
 
   const serviceInfo = await fetchArcGISJson<ArcGISFeatureServiceInfo>(input, options, cause);
   const layerId = serviceInfo.layers?.find((layer) => !layer.subLayerIds)?.id;
   if (layerId == null) {
-    throw new Error("The ArcGIS feature service does not list a feature layer.", {
-      cause,
-    });
+    throw new LocalizedError(
+      `${ERROR_KEY}.noFeatureLayer`,
+      "The ArcGIS feature service does not list a feature layer.",
+      undefined,
+      { cause },
+    );
   }
   return `${trimTrailingSlash(input)}/${layerId}`;
 }
@@ -364,10 +2561,18 @@ async function resolvePortalFeatureLayerUrl(
 ): Promise<string> {
   const itemInfo = await fetchArcGISPortalItemInfo(itemId, options, cause);
   if (!itemInfo.url) {
-    throw new Error("The ArcGIS portal item does not include a service URL.", {
-      cause,
-    });
+    throw new LocalizedError(
+      `${ERROR_KEY}.itemWithoutServiceUrl`,
+      "The ArcGIS portal item does not include a service URL.",
+      undefined,
+      { cause },
+    );
   }
+  // City and county ArcGIS Server sites often register a map service layer as
+  // a "Feature Service" item. Such a layer answers the same `/query` requests
+  // as a FeatureServer layer; the caller's geometry-type check still rejects
+  // one that is not a feature layer.
+  if (/\/MapServer\/\d+\/?$/i.test(itemInfo.url)) return trimTrailingSlash(itemInfo.url);
   return resolveFeatureLayerUrl(itemInfo.url, options, cause);
 }
 
@@ -381,11 +2586,14 @@ async function fetchArcGISPortalItemInfo(
     f: "json",
     token: options.token?.trim(),
   });
-  const response = await fetch(itemUrl);
+  const response = await arcGISFetch(itemUrl);
   if (!response.ok) {
-    throw new Error(`ArcGIS portal item request failed with ${response.status}.`, {
-      cause,
-    });
+    throw new LocalizedError(
+      `${ERROR_KEY}.portalItemRequestFailed`,
+      "ArcGIS portal item request failed with {{status}}.",
+      { status: response.status },
+      { cause },
+    );
   }
   return (await response.json()) as ArcGISPortalItemInfo;
 }
@@ -394,17 +2602,22 @@ async function fetchArcGISJson<T>(
   url: string,
   options: ArcGISLayerOptions,
   cause: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(
+  const response = await arcGISFetch(
     appendArcGISParams(url, {
       f: "json",
       token: options.token?.trim(),
     }),
+    { signal },
   );
   if (!response.ok) {
-    throw new Error(`ArcGIS service request failed with ${response.status}.`, {
-      cause,
-    });
+    throw new LocalizedError(
+      `${ERROR_KEY}.serviceRequestFailed`,
+      "ArcGIS service request failed with {{status}}.",
+      { status: response.status },
+      { cause },
+    );
   }
   const json = (await response.json()) as T & {
     error?: ArcGISErrorEnvelope;
@@ -471,6 +2684,26 @@ function arcgisPortalItemExtentToBounds(
   return isGeoBounds([west, south, east, north]) ? [west, south, east, north] : undefined;
 }
 
+/**
+ * Geographic CRSs numbered outside the ranges {@link isGeographicWkid} covers:
+ * JGD2011, GDA2020, NAD83(2011), NAD83(PA11) and NAD83(MA11).
+ */
+const ARCGIS_GEOGRAPHIC_WKIDS = new Set([6668, 7844, 6318, 6322, 6325]);
+
+/**
+ * Whether a WKID names a geographic (degree-based) CRS: the EPSG geographic
+ * block (4000-4999), Esri's geographic ranges, or a later EPSG geographic code.
+ * Any of them frames the map as-is, within metres of WGS84.
+ */
+function isGeographicWkid(wkid: number): boolean {
+  return (
+    (wkid >= 4000 && wkid <= 4999) ||
+    (wkid >= 37001 && wkid <= 37299) ||
+    (wkid >= 104000 && wkid <= 104999) ||
+    ARCGIS_GEOGRAPHIC_WKIDS.has(wkid)
+  );
+}
+
 function arcgisExtentToBounds(
   extent: ArcGISExtent | undefined,
 ): [number, number, number, number] | undefined {
@@ -484,6 +2717,9 @@ function arcgisExtentToBounds(
       mercatorYToLatitude(extent.ymax),
     ];
   }
+  // A projected extent near its false origin can fall inside the degree range,
+  // so a known non-geographic WKID is never read as longitude and latitude.
+  if (wkid !== undefined && !isGeographicWkid(wkid)) return undefined;
 
   const bounds: [number, number, number, number] = [
     extent.xmin,
@@ -584,7 +2820,9 @@ function layerNameFromArcGISInput(input: string, fallback: string): string {
   try {
     const url = new URL(input);
     const parts = url.pathname.split("/").filter(Boolean);
-    const serverIndex = parts.findIndex((part) => /^(FeatureServer|VectorTileServer)$/i.test(part));
+    const serverIndex = parts.findIndex((part) =>
+      /^(FeatureServer|VectorTileServer|MapServer|ImageServer)$/i.test(part),
+    );
     const namePart = serverIndex > 0 ? parts[serverIndex - 1] : parts[parts.length - 1];
     return decodeURIComponent(namePart ?? "").replaceAll("_", " ") || fallback;
   } catch {
@@ -599,4 +2837,400 @@ function sanitizeIdPart(value: string): string {
 function createArcGISLayerId(): string {
   arcgisLayerSequence += 1;
   return `arcgis-layer-${arcgisLayerSequence}`;
+}
+
+// Credentials belong to the live connection, never to project metadata.
+const arcgisEditOptions = new Map<string, ArcGISLayerOptions>();
+
+/** Resolve `options.tokenProvider` into `options.token`. */
+async function withFreshArcGISToken(options: ArcGISLayerOptions): Promise<ArcGISLayerOptions> {
+  if (!options.tokenProvider) return options;
+  // With a provider the token is the provider's alone: after a sign-out the
+  // initial token must not keep being sent while the service still accepts it.
+  return { ...options, token: await options.tokenProvider() };
+}
+const arcgisSavingLayers = new Set<string>();
+
+/** A feature layer's live REST connection, for requests beyond feature queries and edits. */
+export interface ArcGISFeatureLayerConnection {
+  /** The layer's REST URL, without `/query`. */
+  layerUrl: string;
+  /** A current access token, if the connection has one. */
+  token: string | undefined;
+  /** The installed transport: browser fetch, or the desktop's native one. */
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * Resolve the live connection of an ArcGIS feature layer: its REST URL and a
+ * current token. Credentials never leave the connection, so a layer restored
+ * from a project without one gets no token and the service decides access.
+ *
+ * @param layerId - A layer added through the ArcGIS feature path.
+ * @returns The connection, or `undefined` when the layer has no service URL.
+ */
+export async function arcGISFeatureLayerConnection(
+  layerId: string,
+): Promise<ArcGISFeatureLayerConnection | undefined> {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  const queryUrl = layer?.source.arcgisQueryUrl;
+  if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND || typeof queryUrl !== "string")
+    return undefined;
+  const options = await withFreshArcGISToken(
+    arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
+  );
+  return {
+    layerUrl: trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+    token: options.token?.trim() || undefined,
+    fetch: arcGISFetch,
+  };
+}
+
+function arcGISBaseline(layer: GeoLibreLayer): FeatureCollection | undefined {
+  const value = layer.metadata.arcgisEditBaseline as FeatureCollection | undefined;
+  return value?.type === "FeatureCollection" && Array.isArray(value.features) ? value : undefined;
+}
+
+export function isArcGISWritableLayer(layer: GeoLibreLayer): boolean {
+  if (layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND || !arcGISBaseline(layer))
+    return false;
+  const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
+  if (!info) return false;
+  const caps = arcGISEditCapabilities(info);
+  return caps.create || caps.update || caps.delete;
+}
+
+/** The domain constraints an ArcGIS feature layer's metadata imposes on attribute editing. */
+export interface ArcGISAttributeConstraints {
+  /** Constraints for one candidate record, resolved for its type/subtype. */
+  formFor: (
+    properties: Record<string, unknown> | null | undefined,
+  ) => AttributeFormConfig | undefined;
+  /** The type/subtype field whose value selects the dependent domains, if any. */
+  subtypeField?: string;
+  /** Metadata problems that leave some checks to the server. */
+  diagnostics: ArcGISDomainDiagnostic[];
+}
+
+/**
+ * The service-published domains of an ArcGIS feature layer, ready for the
+ * generic attribute editors, or `undefined` for other layers. Reads the
+ * metadata the layer already holds; nothing is requested.
+ *
+ * @param layer - Any layer.
+ * @returns The constraints, or `undefined` when the layer is not an ArcGIS feature layer.
+ */
+export function arcGISAttributeConstraints(
+  layer: GeoLibreLayer | null | undefined,
+): ArcGISAttributeConstraints | undefined {
+  if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
+  if (!info?.fields?.length) return undefined;
+  return {
+    formFor: (properties) => arcGISServiceAttributeForm(info, properties),
+    subtypeField: arcGISSubtypeField(info),
+    diagnostics: arcGISDomainDiagnostics(info),
+  };
+}
+
+/** Pause replacement downloads while edits are pending or an editor owns the features. */
+export function arcGISLayerHasPendingEdits(layerId: string): boolean {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  if (!layer || layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return false;
+  if (
+    arcgisSavingLayers.has(layerId) ||
+    layer.metadata.arcgisSaveUncertain === true ||
+    getGeometryEditTargetLayerId() === layerId
+  )
+    return true;
+  const baseline = arcGISBaseline(layer);
+  return Boolean(
+    baseline &&
+    layer.geojson &&
+    !sameArcGISFeatures(
+      baseline,
+      layer.geojson,
+      (layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined)?.objectIdField,
+    ),
+  );
+}
+
+/** Save one snapshot, retaining failed and concurrently changed features for the next save. */
+export async function saveArcGISLayerEdits(
+  layerId: string,
+): Promise<{ inserted: number; updated: number; deleted: number; errors: string[] }> {
+  if (arcgisSavingLayers.has(layerId)) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.saveInProgress`,
+      "An ArcGIS save is already in progress.",
+    );
+  }
+  if (getGeometryEditTargetLayerId() === layerId) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.finishGeometryEdit`,
+      "Finish editing geometry before saving to ArcGIS.",
+    );
+  }
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  if (!layer || !isArcGISWritableLayer(layer) || !layer.geojson)
+    throw new LocalizedError(
+      `${ERROR_KEY}.noWritableConnection`,
+      "This layer has no writable ArcGIS connection. Add the service again to establish one.",
+    );
+  if (layer.metadata.arcgisSaveUncertain === true)
+    throw new LocalizedError(
+      `${ERROR_KEY}.saveUnconfirmed`,
+      "The previous save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts.",
+    );
+  const queryUrl = layer.source.arcgisQueryUrl;
+  if (typeof queryUrl !== "string") {
+    throw new LocalizedError(`${ERROR_KEY}.missingServiceUrl`, "Missing ArcGIS service URL.");
+  }
+  const layerUrl = trimTrailingSlash(queryUrl).replace(/\/query$/i, "");
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(layerUrl);
+  } catch {
+    throw new LocalizedError(
+      `${ERROR_KEY}.invalidServiceUrl`,
+      "Invalid ArcGIS service URL. Add the service again with a valid Feature Service URL.",
+    );
+  }
+  if (parsedUrl.protocol !== "https:") {
+    throw new LocalizedError(`${ERROR_KEY}.writesRequireHttps`, "ArcGIS writes require HTTPS.");
+  }
+  arcgisSavingLayers.add(layerId);
+  // Abort a page walk started before the save; late pages also check the lock.
+  arcgisFeatureLoaders.get(layerId)?.abort?.abort();
+  try {
+    const options = await withFreshArcGISToken(
+      arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
+    );
+    const fetched = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
+    const current = useAppStore.getState().layers.find((l) => l.id === layerId);
+    if (!current?.geojson) {
+      throw new LocalizedError(`${ERROR_KEY}.layerRemoved`, "ArcGIS layer was removed.");
+    }
+    // The service's metadata knows nothing of how the features were loaded, so
+    // carry the generalized marker over from the layer: planning must refuse a
+    // reshaped simplified geometry, and the metadata written after the save
+    // must keep saying the loaded shapes are simplified.
+    const generalized =
+      (current.metadata.arcgisEditInfo as ArcGISEditInfo | undefined)?.geometryGeneralized === true;
+    const info: ArcGISFeatureLayerInfo = generalized
+      ? { ...fetched, geometryGeneralized: true }
+      : fetched;
+    const baseline = arcGISBaseline(current)!;
+    const submitted: FeatureCollection = {
+      ...current.geojson,
+      features: current.geojson.features.map((f) =>
+        f.id === undefined && arcGISObjectId(f, info.objectIdField!) === undefined
+          ? { ...f, id: `arcgis-new-${crypto.randomUUID()}` }
+          : f,
+      ),
+    };
+    useAppStore.getState().updateLayer(layerId, { geojson: submitted });
+    const plan = planArcGISEdits(baseline, submitted, info);
+    const caps = current.capabilities;
+    if (
+      (plan.adds.length && caps?.create === false) ||
+      (plan.updates.length && caps?.update === false) ||
+      (plan.deletes.length && caps?.delete === false)
+    )
+      throw new LocalizedError(
+        `${ERROR_KEY}.editsNotPermitted`,
+        "Layer permissions do not allow the requested edits.",
+      );
+    const result = { inserted: 0, updated: 0, deleted: 0, errors: [] as string[] };
+    if (!plan.adds.length && !plan.updates.length && !plan.deletes.length) return result;
+    const body = new URLSearchParams({
+      f: "json",
+      rollbackOnFailure: "false",
+      returnEditResults: "true",
+    });
+    if (options.token?.trim()) body.set("token", options.token.trim());
+    if (plan.adds.length) body.set("adds", JSON.stringify(plan.adds.map((e) => e.payload)));
+    if (plan.updates.length)
+      body.set("updates", JSON.stringify(plan.updates.map((e) => e.payload)));
+    if (plan.deletes.length) body.set("deletes", plan.deletes.join(","));
+    // Persist before dispatch. If the response is lost, a project reload must not retry inserts.
+    useAppStore
+      .getState()
+      .updateLayer(layerId, { metadata: { ...current.metadata, arcgisSaveUncertain: true } });
+    type EditResult = {
+      success?: boolean;
+      objectId?: number;
+      error?: { description?: string; code?: number };
+    };
+    let response: {
+      addResults?: EditResult[];
+      updateResults?: EditResult[];
+      deleteResults?: EditResult[];
+      error?: ArcGISErrorEnvelope;
+    };
+    try {
+      const http = await arcGISFetch(`${layerUrl}/applyEdits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        redirect: "error",
+      });
+      if (!http.ok) throw new Error(`HTTP ${http.status}`);
+      response = await http.json();
+      if (response.error) {
+        const latest = useAppStore.getState().layers.find((l) => l.id === layerId);
+        if (latest)
+          useAppStore
+            .getState()
+            .updateLayer(layerId, { metadata: { ...latest.metadata, arcgisSaveUncertain: false } });
+        throw new Error(arcgisErrorMessage(response.error, "ArcGIS rejected the edits."));
+      }
+      for (const [entries, count] of [
+        [response.addResults, plan.adds.length],
+        [response.updateResults, plan.updates.length],
+        [response.deleteResults, plan.deletes.length],
+      ] as const) {
+        if (
+          (entries?.length ?? 0) !== count ||
+          entries?.some((e) => typeof e.success !== "boolean")
+        )
+          throw new LocalizedError(
+            `${ERROR_KEY}.incompleteEditResults`,
+            "Incomplete ArcGIS edit results.",
+          );
+      }
+      if (
+        response.addResults?.some(
+          (e) => e.success && (!Number.isSafeInteger(e.objectId) || e.objectId! < 0),
+        )
+      )
+        throw new LocalizedError(
+          `${ERROR_KEY}.noInsertedObjectIds`,
+          "ArcGIS did not return inserted object IDs.",
+        );
+    } catch (error) {
+      const uncertain = useAppStore.getState().layers.find((l) => l.id === layerId)
+        ?.metadata.arcgisSaveUncertain;
+      if (uncertain)
+        throw new LocalizedError(
+          `${ERROR_KEY}.saveNotConfirmed`,
+          "ArcGIS save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts.",
+          undefined,
+          { cause: error },
+        );
+      throw error;
+    }
+    const latest = useAppStore.getState().layers.find((l) => l.id === layerId);
+    if (!latest?.geojson) return result;
+    const field = info.objectIdField!;
+    const nextBaseline = new Map(baseline.features.map((f) => [arcGISObjectId(f, field)!, f]));
+    let features = [...latest.geojson.features];
+    const saved = new Map<number, Feature>();
+    const failed = (entry: EditResult, operation: string, id: number): boolean => {
+      if (entry.success) return false;
+      result.errors.push(
+        `${operation} ${id}: ${entry.error?.description ? describeArcGISEditError(entry.error.description) : `ArcGIS error ${entry.error?.code ?? "unknown"}`}`,
+      );
+      return true;
+    };
+    response.addResults?.forEach((entry, i) => {
+      if (failed(entry, "Add", i + 1)) return;
+      const edit = plan.adds[i];
+      const id = entry.objectId!;
+      const stored = { ...edit.feature, properties: { ...edit.feature.properties, [field]: id } };
+      nextBaseline.set(id, stored);
+      saved.set(id, stored);
+      features = features.map((f) =>
+        f === edit.feature || (edit.feature.id !== undefined && f.id === edit.feature.id)
+          ? { ...f, properties: { ...f.properties, [field]: id } }
+          : f,
+      );
+      result.inserted++;
+    });
+    response.updateResults?.forEach((entry, i) => {
+      const edit = plan.updates[i];
+      if (failed(entry, "Update", edit.objectId)) return;
+      nextBaseline.set(edit.objectId, edit.feature);
+      saved.set(edit.objectId, edit.feature);
+      result.updated++;
+    });
+    response.deleteResults?.forEach((entry, i) => {
+      const id = plan.deletes[i];
+      if (failed(entry, "Delete", id)) return;
+      nextBaseline.delete(id);
+      result.deleted++;
+    });
+    useAppStore.getState().updateLayer(layerId, {
+      geojson: { ...latest.geojson, features },
+      metadata: {
+        ...latest.metadata,
+        arcgisEditBaseline: structuredClone({
+          type: "FeatureCollection",
+          features: [...nextBaseline.values()],
+        }),
+        arcgisEditInfo: info,
+        arcgisSaveUncertain: false,
+      },
+    });
+    // Capture defaults and server-calculated fields, without overwriting edits made during the save.
+    if (saved.size) {
+      try {
+        const fresh = await fetchArcGISFeaturePages(
+          queryUrl,
+          { ...options, maxFeatures: undefined },
+          info,
+          {
+            params: {
+              objectIds: [...saved.keys()].join(","),
+              // A generalized layer keeps the shapes it holds: full-resolution
+              // copies of just the saved features would leave the layer mixed
+              // until the next pan, so only the attributes are refreshed.
+              ...(info.geometryGeneralized ? { returnGeometry: "false" } : {}),
+            },
+          },
+        );
+        if (info.geometryGeneralized) {
+          fresh.features = fresh.features.map((f) => {
+            const id = arcGISObjectId(f, field);
+            const submitted = id === undefined ? undefined : saved.get(id);
+            return submitted ? { ...f, geometry: submitted.geometry } : f;
+          });
+        }
+        const now = useAppStore.getState().layers.find((l) => l.id === layerId);
+        if (now?.geojson) {
+          const refreshed = new Map(
+            fresh.features.map((f) => {
+              const id = arcGISObjectId(f, field)!;
+              // A new feature keeps its local identity after ArcGIS assigns its object ID.
+              return [id, { ...f, id: saved.get(id)?.id ?? f.id }];
+            }),
+          );
+          for (const [id, f] of refreshed) if (saved.has(id)) nextBaseline.set(id, f);
+          const reconciled = now.geojson.features.map((f) => {
+            const id = arcGISObjectId(f, field);
+            const prior = id === undefined ? undefined : saved.get(id);
+            const serverFeature = id === undefined ? undefined : refreshed.get(id);
+            return prior && serverFeature ? reconcileArcGISRefresh(f, prior, serverFeature) : f;
+          });
+          useAppStore.getState().updateLayer(layerId, {
+            geojson: { ...now.geojson, features: reconciled },
+            metadata: {
+              ...now.metadata,
+              arcgisEditBaseline: structuredClone({
+                type: "FeatureCollection",
+                features: [...nextBaseline.values()],
+              }),
+            },
+          });
+        }
+      } catch {
+        result.errors.push(
+          "Edits were saved, but server-calculated values could not be refreshed.",
+        );
+      }
+    }
+    return result;
+  } finally {
+    arcgisSavingLayers.delete(layerId);
+  }
 }

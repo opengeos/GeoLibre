@@ -103,3 +103,45 @@ export function getExternalNativePaintBridge(
 export function supportsBridgedOpacity(layerId: string): boolean {
   return typeof paintBridges.get(layerId)?.setOpacity === "function";
 }
+
+/**
+ * True when the primary renderer draws this plugin-painted layer itself, from
+ * the store record, and so applies `layer.opacity` without any plugin bridge.
+ *
+ * A Zarr layer is a MapLibre custom layer owned by the Zarr control on the 2D
+ * map, but the ArcGIS view and the Cesium globe render it natively (an ArcGIS
+ * layer's `opacity`, a Cesium `ImageryLayer.alpha`) and mount no control to
+ * register a bridge. Without this the Opacity slider would be hidden there
+ * although it works (opengeos/GeoLibre#2261).
+ *
+ * @param layer - A store layer.
+ * @param renderer - The primary renderer (`useAppStore().primaryRenderer`).
+ * @returns Whether an Opacity slider reaches the layer through the renderer.
+ */
+export function rendererAppliesOpacity(
+  layer: { type: string },
+  renderer: string | undefined,
+): boolean {
+  // @geolibre/core sits below @geolibre/map and cannot read its capabilities;
+  // these are the renderers whose `nativeZarr` is set, which a test pins.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- see above
+  return (renderer === "arcgis" || renderer === "cesium") && layer.type === "zarr";
+}
+
+/**
+ * Whether `layer` is an Add Vector Layer layer GeoLibre adopted
+ * (`maplibre-gl-vector-adopted`, ADOPTED_VECTOR_SOURCE_KIND in
+ * @geolibre/plugins) that has no features yet. A project saves a URL- or
+ * path-backed adopted layer without them, and the vector control reads them
+ * again on reopen. Until then its `source.url` may name GeoParquet or
+ * GeoPackage, so a renderer must wait rather than load that URL as GeoJSON.
+ *
+ * @param layer - A store layer.
+ * @returns True while the adopted layer awaits its features.
+ */
+export function isAdoptedVectorAwaitingFeatures(layer: {
+  metadata: Record<string, unknown>;
+  geojson?: unknown;
+}): boolean {
+  return layer.metadata.sourceKind === "maplibre-gl-vector-adopted" && !layer.geojson;
+}

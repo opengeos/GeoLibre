@@ -13,12 +13,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@geolibre/ui";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
 import { ChevronDown, ClipboardPaste, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { parseLatLon } from "../../lib/coordinates";
+import { parseLocationInput } from "../../lib/grid-reference";
 import {
   type DdmAxis,
   type DmsAxis,
@@ -31,7 +31,7 @@ import {
 interface SetViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 /**
@@ -249,7 +249,8 @@ export function SetViewDialog({ open, onOpenChange, mapControllerRef }: SetViewD
   // it before going. Unrecognized text is left in place and flagged below.
   const handleProcess = () => {
     if (paste.trim() === "") return;
-    const parsed = parseLatLon(paste);
+    // Accepts lat/lon in DD/DMS/DDM and grid references (MGRS, USNG, UTM).
+    const parsed = parseLocationInput(paste);
     if (!parsed) {
       setPasteStatus("error");
       return;

@@ -10,71 +10,90 @@ import {
   type EsriWaybackRelease,
 } from "maplibre-gl-esri-wayback";
 import type { LayerSpecification } from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { pluginDisplayTitle } from "../plugin-i18n";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 
-let esriWaybackPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "esri-wayback-panel";
 
 const ESRI_WAYBACK_OPTIONS = {
+  // Not used for layout (the dock owns placement); the control still reads it
+  // when it builds its hidden toggle.
+  position: "top-left",
   collapsed: false,
   title: "Esri Wayback",
   panelWidth: 340,
   className: "geolibre-esri-wayback-control",
   metadataOnClick: true,
-} satisfies Omit<EsriWaybackControlOptions, "position">;
+} satisfies EsriWaybackControlOptions;
 
 let esriWaybackControl: EsriWaybackControl | null = null;
 let releaseChangeHandler: EsriWaybackControlEventHandler | null = null;
 let stateChangeHandler: EsriWaybackControlEventHandler | null = null;
+let unregisterPanel: (() => void) | null = null;
 
 export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-esri-wayback",
   name: "Historical Imagery",
   version: "0.2.0",
+  // The upstream control adds raster sources/layers through the shared Style
+  // Spec API; the engine adopts them under their native ids on Mapbox. On
+  // ArcGIS and the Cesium globe the control's style is only recorded and the
+  // engine draws the store records, whose `url` is a tile template.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!esriWaybackControl) {
-      esriWaybackControl = new EsriWaybackControl(getEsriWaybackControlOptions());
-      attachStoreSync(esriWaybackControl);
-    }
-
-    const added = app.addMapControl(esriWaybackControl, esriWaybackPosition);
-    if (!added) {
-      detachStoreSync(esriWaybackControl);
-      esriWaybackControl = null;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: pluginDisplayTitle(app, "maplibre-gl-esri-wayback", "Historical Imagery"),
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const control = new EsriWaybackControl({ ...ESRI_WAYBACK_OPTIONS });
+        attachStoreSync(control);
+        const unmount = mountMapControlInPanel(app, control, container, () => {
+          detachStoreSync(control);
+          app.closeRightPanel?.(PANEL_ID);
+        });
+        if (!unmount) return;
+        esriWaybackControl = control;
+        control.expand();
+        // Defer past the control's first release load so the store mirrors the
+        // selected release rather than an empty state.
+        setTimeout(() => {
+          if (esriWaybackControl !== control) return;
+          syncCurrentWaybackLayer(control);
+          syncPersistentWaybackLayers(control);
+        }, 0);
+        return () => {
+          releaseControl();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       return false;
     }
-    setTimeout(() => {
-      esriWaybackControl?.expand();
-      syncCurrentWaybackLayer(esriWaybackControl);
-      syncPersistentWaybackLayers(esriWaybackControl);
-    }, 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
-    if (!esriWaybackControl) return;
-    detachStoreSync(esriWaybackControl);
-    app.removeMapControl(esriWaybackControl);
-    esriWaybackControl = null;
+    releaseControl();
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     removeCurrentWaybackStoreLayer();
-  },
-  getMapControlPosition: () => esriWaybackPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    esriWaybackPosition = position;
-    if (!esriWaybackControl) return;
-    app.removeMapControl(esriWaybackControl);
-    const added = app.addMapControl(esriWaybackControl, esriWaybackPosition);
-    if (!added) {
-      detachStoreSync(esriWaybackControl);
-      esriWaybackControl = null;
-      return false;
-    }
-    setTimeout(() => esriWaybackControl?.expand(), 0);
   },
 };
 
-function getEsriWaybackControlOptions(): EsriWaybackControlOptions {
-  return {
-    ...ESRI_WAYBACK_OPTIONS,
-    position: esriWaybackPosition,
-  };
+/** Detach the live control from the store sync and the docked panel. */
+function releaseControl(): void {
+  if (!esriWaybackControl) return;
+  detachStoreSync(esriWaybackControl);
+  unmountMapControlFromPanel(esriWaybackControl);
+  esriWaybackControl = null;
 }
 
 function attachStoreSync(control: EsriWaybackControl): void {

@@ -20,6 +20,28 @@ export const WKB_GEOMETRY_COLUMN_NAMES = new Set([
   "wkb",
 ]);
 
+// Column names a longitude / latitude pair is recognised under when a Parquet
+// file carries no geometry column at all — the shape a great many point
+// datasets are published in. The pair is synthesised into points with ST_Point
+// and assumed to be OGC:CRS84, which is what such tables invariably hold. The
+// CSV importer has always done this from user-picked columns; this is the same
+// idea, guessed from the schema. Ported from GeoPQ Workbench's `xy_columns`.
+export const LONGITUDE_COLUMN_NAMES = new Set(["lon", "longitude", "long", "lng", "x"]);
+export const LATITUDE_COLUMN_NAMES = new Set(["lat", "latitude", "y"]);
+
+// The column name reported for a geometry no column actually holds, so nothing
+// downstream strips a real attribute (the lon/lat columns stay readable as
+// properties) or tries to reference it in SQL.
+export const SYNTHESIZED_GEOMETRY_COLUMN = "__geolibre_synthesized_geometry";
+
+// The DuckDB floating-point column types a coordinate pair is accepted from: an
+// integer or string "lat" column is an identifier or a formatted value far more
+// often than it is a coordinate.
+const FLOAT_COLUMN_TYPE = /^(DOUBLE|FLOAT|REAL)$/i;
+
+// The DuckDB column types a WKB blob arrives as.
+const BINARY_COLUMN_TYPE = /^(BLOB|BINARY|VARBINARY)/i;
+
 export function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
@@ -184,20 +206,54 @@ export interface DetectedGeometry {
   requiresBase64WkbValidation?: boolean;
   /** Ranked string WKB candidates to value-probe before SQL generation. */
   base64WkbCandidates?: string[];
+  /**
+   * Set when there is no geometry column and points are synthesized from a
+   * longitude/latitude column pair. {@link DetectedGeometry.column} is then
+   * {@link SYNTHESIZED_GEOMETRY_COLUMN}, which no source column can be named.
+   */
+  coordinateColumns?: { x: string; y: string };
+}
+
+export interface GeometryDetectionOptions {
+  /**
+   * The `primary_column` a GeoParquet `geo` block declares, when the file
+   * carries one. It is checked first: the file itself is a better authority on
+   * which of several candidate columns holds the geometry than a name guess is.
+   */
+  primaryColumn?: string;
+  /**
+   * Allow synthesizing points from a longitude/latitude column pair when the
+   * file carries no geometry-capable column at all. Off by default so the paths
+   * that re-read GeoJSON (reprojection, export) cannot promote an ordinary
+   * `x`/`y` attribute pair into a geometry; the Parquet load path opts in.
+   */
+  allowCoordinateColumns?: boolean;
 }
 
 /**
- * Find the geometry column in a DESCRIBE result. Prefers a native GEOMETRY-typed
- * column; otherwise falls back to a well-known WKB blob column name so plain
- * Parquet files (and GeoParquet files DuckDB does not decode natively) load.
+ * Find the geometry column in a DESCRIBE result, best evidence first:
+ *
+ * 1. the column a GeoParquet `geo` block names as `primary_column`;
+ * 2. a native GEOMETRY-typed column (DuckDB surfaces the Parquet 2.0
+ *    GEOMETRY/GEOGRAPHY logical types as this type already);
+ * 3. a well-known WKB blob column name, then a base64 WKB string one, so plain
+ *    Parquet files (and GeoParquet files DuckDB does not decode natively) load;
+ * 4. with `allowCoordinateColumns`, and only in a file carrying no GEOMETRY and
+ *    no binary column at all, a longitude/latitude pair of float columns,
+ *    synthesized into points.
  *
  * @param description Rows from `DESCRIBE <query>` (column_name / column_type).
- * @returns The detected geometry column and whether it is a raw WKB blob, or
- *   null when no geometry column can be identified.
+ * @param options Extra evidence and opt-ins; see {@link GeometryDetectionOptions}.
+ * @returns The detected geometry column and how to read it, or null when no
+ *   geometry can be identified.
  */
 export function detectGeometryColumn(
   description: Record<string, unknown>[],
+  options: GeometryDetectionOptions = {},
 ): DetectedGeometry | null {
+  const declared = detectDeclaredColumn(description, options.primaryColumn);
+  if (declared) return declared;
+
   const native = description.find((row) => isGeometryColumnType(row.column_type))?.column_name;
   if (typeof native === "string") {
     return { column: native, isWkb: false };
@@ -216,8 +272,7 @@ export function detectGeometryColumn(
   // geometry, but WKB-style names are still user-authored attributes in some
   // loose Parquet files.
   const wkb = rankedWkbCandidates.find(
-    (row) =>
-      typeof row.column_type === "string" && /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type),
+    (row) => typeof row.column_type === "string" && BINARY_COLUMN_TYPE.test(row.column_type),
   )?.column_name;
   if (typeof wkb === "string") {
     return { column: wkb, isWkb: true };
@@ -238,7 +293,94 @@ export function detectGeometryColumn(
       base64WkbCandidates,
     };
   }
+
+  // Only a schema holding nothing that could itself be geometry may fall back to
+  // a coordinate pair. A WKB blob under a name this module does not know is
+  // still geometry, and promoting an unrelated `x`/`y` pair beside it would draw
+  // a layer of bogus points instead of reporting that the column was not read.
+  if (options.allowCoordinateColumns && !hasGeometryCandidateColumn(description)) {
+    const pair = detectCoordinateColumns(description);
+    if (pair) {
+      return {
+        column: SYNTHESIZED_GEOMETRY_COLUMN,
+        isWkb: false,
+        coordinateColumns: pair,
+      };
+    }
+  }
   return null;
+}
+
+/**
+ * Read the column a GeoParquet `geo` block declares as primary, classified by
+ * how DuckDB typed it. A declared column DuckDB typed as something no geometry
+ * reader accepts (an integer, say) returns null so detection falls through to
+ * the name-based candidates rather than failing the whole file on a metadata
+ * document that disagrees with the schema.
+ */
+function detectDeclaredColumn(
+  description: Record<string, unknown>[],
+  primaryColumn: string | undefined,
+): DetectedGeometry | null {
+  if (!primaryColumn) return null;
+  const row = description.find((entry) => entry.column_name === primaryColumn);
+  if (!row) return null;
+  const type = row.column_type;
+  if (isGeometryColumnType(type)) return { column: primaryColumn, isWkb: false };
+  if (typeof type !== "string") return null;
+  if (BINARY_COLUMN_TYPE.test(type)) return { column: primaryColumn, isWkb: true };
+  if (/^(VARCHAR|TEXT|STRING)/i.test(type)) {
+    // Still value-probed: a declared column is strong evidence of intent, not
+    // proof that its strings decode as base64 WKB.
+    return {
+      column: primaryColumn,
+      isWkb: true,
+      isBase64Wkb: true,
+      requiresBase64WkbValidation: true,
+      base64WkbCandidates: [primaryColumn],
+    };
+  }
+  return null;
+}
+
+/**
+ * True when the schema holds a column that could itself be the geometry: a
+ * native GEOMETRY type, or a binary column under *any* name. Such a file has a
+ * geometry the loader failed to recognise, not a table of plain coordinates, so
+ * it must not fall back to {@link detectCoordinateColumns}.
+ */
+function hasGeometryCandidateColumn(description: Record<string, unknown>[]): boolean {
+  return description.some(
+    (row) =>
+      isGeometryColumnType(row.column_type) ||
+      (typeof row.column_type === "string" && BINARY_COLUMN_TYPE.test(row.column_type)),
+  );
+}
+
+/**
+ * A longitude/latitude pair of float columns, matched case-insensitively
+ * against {@link LONGITUDE_COLUMN_NAMES} / {@link LATITUDE_COLUMN_NAMES}.
+ *
+ * The two must be different columns: `x`/`y` and `lon`/`lat` overlap in neither
+ * set, but a single column cannot be both halves of a point.
+ */
+export function detectCoordinateColumns(
+  description: Record<string, unknown>[],
+): { x: string; y: string } | null {
+  const find = (names: Set<string>): string | null => {
+    const row = description.find(
+      (entry) =>
+        typeof entry.column_name === "string" &&
+        names.has(entry.column_name.toLowerCase()) &&
+        typeof entry.column_type === "string" &&
+        FLOAT_COLUMN_TYPE.test(entry.column_type),
+    );
+    return typeof row?.column_name === "string" ? row.column_name : null;
+  };
+  const x = find(LONGITUDE_COLUMN_NAMES);
+  const y = find(LATITUDE_COLUMN_NAMES);
+  if (!x || !y || x === y) return null;
+  return { x, y };
 }
 
 function wkbColumnRank(name: string): number {
@@ -252,11 +394,16 @@ function wkbColumnRank(name: string): number {
 
 /**
  * Build a SQL expression that yields the geometry to read. A native GEOMETRY
- * column is referenced directly; a raw WKB blob is decoded with ST_GeomFromWKB.
+ * column is referenced directly; a raw WKB blob is decoded with ST_GeomFromWKB;
+ * a longitude/latitude pair is built into a point with ST_Point.
  */
 export function geometryExpr(detected: DetectedGeometry): string {
   if (detected.requiresBase64WkbValidation) {
     throw new Error("Base64 WKB geometry candidates must be validated before SQL generation.");
+  }
+  if (detected.coordinateColumns) {
+    const { x, y } = detected.coordinateColumns;
+    return `ST_Point(${quoteIdentifier(x)}, ${quoteIdentifier(y)})`;
   }
   const column = quoteIdentifier(detected.column);
   if (!detected.isWkb) return column;

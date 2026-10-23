@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Blend test" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-125, 25],
+            [-70, 25],
+            [-70, 52],
+            [-125, 52],
+            [-125, 25]
+          ]
+        ]
+      }
+    }
+  ]
+}

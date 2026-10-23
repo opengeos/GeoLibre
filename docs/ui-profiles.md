@@ -6,6 +6,12 @@ interface for beginners or to standardize a deployment across a team. Hiding is
 time. Profile preferences are stored locally in the browser/app and never travel
 inside a saved `.geolibre.json` project.
 
+!!! tip "Looking to lock a deployment down?"
+    Profiles declutter; the user can undo them. To pin what a deployment is
+    *permitted* to do — a kiosk, a classroom instance — see
+    [Deployment Capabilities](deployment-capabilities.md), which is never
+    surfaced in the UI. The two are independent and can be combined.
+
 ## For users
 
 ### Onboarding
@@ -18,8 +24,9 @@ level at any time from **Settings → Interface** (see below):
 - **Intermediate** — common data sources, services, and plugins.
 - **Advanced** — everything GeoLibre offers (the default).
 
-An administrator profile can pre-configure the interface for a whole deployment
-and lock these controls.
+An administrator can pre-configure the interface in the primary
+[`deployment.json` policy](deployment-policy.md), or use the legacy
+`admin-profile.json` fallback described below.
 
 ### Settings → Interface
 
@@ -36,28 +43,43 @@ Open **Settings → Interface** to:
 - Pick an **experience level**, which fills the checklists from each item's
   complexity and takes effect at once.
 - Check or uncheck individual **data sources**, **plugins**, whole **menus**
-  (Project, Edit, Add Data, Processing, Controls, Plugins, Help), and the items
-  within the Project, Edit, Processing, Controls, Settings, and Help menus.
+  (Project, Edit, View, Add Data, Processing, Controls, Plugins, Help), and the
+  items within the Project, Edit, View, Processing, Controls, Settings, and Help
+  menus.
   Editing any item switches the selector to **Custom**.
+- **Export** the profile, with the language, layout, and accent theme, to an
+  interface file, or **Import** one from a file or a URL to apply a colleague's
+  setup. See [Settings → Interface](user-guide/settings.md#interface).
 
 The **Settings** menu itself, and its Language / Layout / Interface entries, are
 always shown so the profile UI can never be hidden away.
 
 ## For administrators
 
-A deployment can be pre-configured (and optionally locked) with an
-`admin-profile.json` file. When present, it is applied on startup, the onboarding
-wizard is skipped, and — if `lock` is set — the Interface settings are read-only.
+Use the `interface` section in the primary deployment policy. For example:
 
-### File location
+```json
+{
+  "version": 1,
+  "interface": {
+    "enabled": true,
+    "level": "intermediate",
+    "lock": true,
+    "hiddenDataSources": ["postgres", "video"],
+    "hiddenPlugins": ["maplibre-gl-geoagent"]
+  }
+}
+```
 
-- **Web / embed:** serve `admin-profile.json` from the application root (for the
-  Docker/nginx build, the served document root). A missing file is ignored.
-- **Desktop:** place `admin-profile.json` in the app config directory
-  (`read_admin_profile` reads `<app_config_dir>/admin-profile.json`). The desktop
-  file takes precedence over a bundled web file.
+The `interface` field table below describes this section. Provision it at
+[`<base>/deployment.json` for web/embed](deployment-policy.md#loading),
+the [desktop config directory](deployment-policy.md#desktop), or as a
+[Docker source policy](deployment-policy.md#docker).
 
-### File format
+### Legacy: `admin-profile.json` — still honoured
+
+The legacy file remains a fallback when the selected deployment policy has no
+non-empty, valid `interface` section. Its unwrapped format is:
 
 ```json
 {
@@ -69,20 +91,32 @@ wizard is skipped, and — if `lock` is set — the Interface settings are read-
 }
 ```
 
+For web/embed, serve it from the application root. On desktop, the original
+file remains at `<app_config_dir>/admin-profile.json`; see the standard
+[Tauri config paths](deployment-policy.md#desktop). A present desktop file is
+authoritative even if malformed, and does not fall back to the bundled copy.
+Only an absent file or a failed read/command selects the web copy.
+
+### Interface fields
+
+The primary `interface` object and the legacy `admin-profile.json` file share
+these profile fields; the legacy file stores them at top level.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `enabled` | boolean | Whether filtering is active. Defaults to `true` for an admin file. |
+| `enabled` | boolean | Whether filtering is active. Defaults to `true`. |
 | `level` | `"beginner" \| "intermediate" \| "advanced"` | Seeds the hidden lists from each item's tier. Optional. |
-| `lock` | boolean | When `true`, users cannot change the profile from Settings. Removing the file (or serving one without `lock`) releases the lock on the next launch. |
+| `lock` | boolean | When `true`, users cannot change the profile from Settings. To release the lock on the next launch, remove or clear `interface.lock` in the selected deployment policy, or the top-level `lock` in the legacy profile. |
 | `hiddenDataSources` | string[] | Explicit data-source ids to hide. Overrides the preset when present. |
 | `hiddenPlugins` | string[] | Explicit plugin ids to hide. Overrides the preset when present. |
-| `hiddenMenus` | string[] | Top-level menu ids to hide (`project`, `edit`, `addData`, `processing`, `controls`, `plugins`, `help`). |
+| `hiddenMenus` | string[] | Top-level menu ids to hide (`project`, `edit`, `view`, `addData`, `processing`, `controls`, `plugins`, `help`). |
 | `hiddenMenuItems` | string[] | Menu-item ids to hide (e.g. `processing.raster`, `help.diagnostics`, `controls.minimap`). |
 
 Data-source ids are the catalog ids in
 `apps/geolibre-desktop/src/lib/ui-profile.ts` (e.g. `vector`, `xyz`, `mbtiles`,
 `postgres`). Plugin ids are the stable ids defined in
-`packages/plugins/src/plugins/*` (e.g. `maplibre-gl-geoagent`). Menu and
+`packages/plugins/src/plugins/*` and `packages/plugins/src/plugin-ids.ts`
+(e.g. `maplibre-gl-geoagent`). Menu and
 menu-item ids are the catalog ids in the same `ui-profile.ts`
 (`TOP_LEVEL_MENUS`, `MENU_ITEM_CATALOG`).
 

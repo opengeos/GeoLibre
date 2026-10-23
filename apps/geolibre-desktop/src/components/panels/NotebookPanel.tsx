@@ -17,7 +17,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useNotebookBridge } from "../../hooks/useNotebookBridge";
 import { useNotebookThemeSync } from "../../hooks/useNotebookThemeSync";
@@ -58,7 +58,9 @@ function externalClientUrl(server: JupyterServerInfo): string {
 
 interface NotebookPanelProps {
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
+  /** Bumped when a canvas publishes an engine; re-arms the notebook's map bridge. */
+  mapReadyGeneration: number;
   themeMode: ThemeMode;
 }
 
@@ -79,7 +81,12 @@ interface NotebookPanelProps {
  *   notebook scripting bridge so notebook cells can drive the map.
  * @param themeMode - The app's current theme, mirrored into the notebook.
  */
-export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: NotebookPanelProps) {
+export function NotebookPanel({
+  onResizeStart,
+  mapControllerRef,
+  mapReadyGeneration,
+  themeMode,
+}: NotebookPanelProps) {
   const { t } = useTranslation();
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const [isCollapsed, setIsCollapsed] = useState(getIsMobileViewport);
@@ -91,7 +98,7 @@ export function NotebookPanel({ onResizeStart, mapControllerRef, themeMode }: No
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Let notebook cells drive the live map via the shared scripting protocol.
-  useNotebookBridge(iframeRef, mapControllerRef);
+  useNotebookBridge(iframeRef, mapControllerRef, mapReadyGeneration);
   // Mirror the app's light/dark theme into the embedded notebook.
   useNotebookThemeSync(iframeRef, themeMode, loaded);
 

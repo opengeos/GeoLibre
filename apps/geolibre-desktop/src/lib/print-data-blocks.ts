@@ -6,7 +6,9 @@
  * walk, so the page shows exactly what those features hold. Framework-free and
  * unit-testable; the canvas drawing lives in `print-layout.ts`.
  */
-import type { FeatureCollection } from "geojson";
+import booleanIntersects from "@turf/boolean-intersects";
+import { feature, polygon } from "@turf/helpers";
+import type { FeatureCollection, Geometry, Position } from "geojson";
 import {
   computeBar,
   computeLine,
@@ -26,49 +28,162 @@ export const DEFAULT_TABLE_ROWS = 10;
 /** Columns shown when the user has not picked any explicitly. */
 export const DEFAULT_TABLE_COLUMNS = 4;
 
+/** How a data block narrows its rows to the current page extent. */
+export type PageFilterMode = "all" | "contained" | "intersecting";
+
 /** Reduce a feature collection to the property-bag rows the builders consume. */
 export function layerRows(collection: Pick<FeatureCollection, "features">): ChartRow[] {
-  return collection.features.map((feature) => ({
-    properties: (feature.properties ?? {}) as Record<string, unknown>,
+  return collection.features.map((f) => ({
+    properties: (f.properties ?? {}) as Record<string, unknown>,
   }));
 }
 
 /**
- * Whether two `[west, south, east, north]` boxes overlap (touching counts).
- * The two boxes need not share a longitude convention: `geometryBounds`
- * returns shifted boxes (east > 180) for antimeridian-crossing features, and
- * `map.getBounds()` can return unwrapped longitudes near the dateline, so the
- * test also tries `b` shifted by ±360° — the same ground box, one world copy
- * over. (A box that is degenerate `west > east` without being unwrapped is
- * not supported, matching the print-extent tool's documented limitation.)
+ * The three 360° shifts that can carry a feature's longitude box onto the same
+ * world copy as a page extent centred on `center`. A page extent comes from the
+ * map's unwrapped coordinates, so after panning east it can sit several world
+ * copies away from the canonical [-180, 180] range a feature is stored in;
+ * testing only `0`/`±360` would reject those before the geometry check runs.
  */
-export function boundsIntersect(a: AtlasBounds, b: AtlasBounds): boolean {
-  if (a[1] > b[3] || b[1] > a[3]) return false;
-  for (const offset of [0, -360, 360]) {
-    if (a[0] <= b[2] + offset && b[0] + offset <= a[2]) return true;
-  }
-  return false;
+function worldCopyOffsets(featureBounds: AtlasBounds, center: number): number[] {
+  const featureCenter = (featureBounds[0] + featureBounds[2]) / 2;
+  const nearest = Math.round((center - featureCenter) / 360) * 360;
+  return [nearest - 360, nearest, nearest + 360];
 }
 
 /**
- * The rows of the features whose geometry bounding box intersects `bounds` —
+ * Unwrap a page extent so `west <= east`, the convention `geometryBounds` uses
+ * for feature bounds. A page extent can come straight from `map.getBounds()`,
+ * which reports `west > east` for a view straddling the antimeridian (west≈170,
+ * east≈-170) — taken literally that is the ~340°-wide *other* side of the globe,
+ * so both filters would test the wrong strip and drop every dateline feature.
+ */
+function unwrapBounds(bounds: AtlasBounds): AtlasBounds {
+  const [west, south, east, north] = bounds;
+  return west > east ? [west, south, east + 360, north] : bounds;
+}
+
+/**
+ * The rows of the features whose geometry is fully within `bounds` —
  * the per-page filter for atlas data blocks. Takes {@link AtlasFeatureInfo}s
  * (from `collectAtlasFeatures`) rather than raw features so the per-vertex
  * geometry walk runs once per layer, not once per atlas page; features
  * without a usable geometry were already dropped there (they are nowhere on
- * the page). A bbox test (not an exact intersection) matches how atlas pages
- * themselves are framed.
+ * the page). Full containment intentionally excludes features that only clip
+ * the page edge, including features spanning multiple pages, which otherwise
+ * produces surprising table rows for geometry whose visible sliver is easy to
+ * miss.
  */
 export function rowsWithinBounds(
   features: readonly AtlasFeatureInfo[],
-  bounds: AtlasBounds,
+  pageBounds: AtlasBounds,
 ): ChartRow[] {
+  const bounds = unwrapBounds(pageBounds);
+  const center = (bounds[0] + bounds[2]) / 2;
   const rows: ChartRow[] = [];
   for (const info of features) {
-    if (!boundsIntersect(info.bounds, bounds)) continue;
+    let contained = false;
+    for (const offset of worldCopyOffsets(info.bounds, center)) {
+      if (
+        bounds[0] <= info.bounds[0] + offset &&
+        info.bounds[2] + offset <= bounds[2] &&
+        bounds[1] <= info.bounds[1] &&
+        info.bounds[3] <= bounds[3]
+      ) {
+        contained = true;
+        break;
+      }
+    }
+    if (!contained) continue;
     rows.push({ properties: info.properties });
   }
   return rows;
+}
+
+/** Shift longitudes onto the same world copy as an unwrapped page extent. */
+function geometryNearLongitude(geometry: Geometry, center: number): Geometry {
+  const shiftPosition = (position: Position): Position => {
+    const shifted = [...position];
+    while (shifted[0] - center > 180) shifted[0] -= 360;
+    while (shifted[0] - center < -180) shifted[0] += 360;
+    return shifted;
+  };
+  const shiftCoordinates = (coordinates: unknown): unknown =>
+    Array.isArray(coordinates) && typeof coordinates[0] === "number"
+      ? shiftPosition(coordinates as Position)
+      : (coordinates as unknown[]).map(shiftCoordinates);
+  if (geometry.type === "GeometryCollection") {
+    return {
+      ...geometry,
+      geometries: geometry.geometries.map((part) => geometryNearLongitude(part, center)),
+    };
+  }
+  return { ...geometry, coordinates: shiftCoordinates(geometry.coordinates) } as Geometry;
+}
+
+/** Rows whose geometry has any point in common with the page extent. */
+export function rowsIntersectingBounds(
+  features: readonly AtlasFeatureInfo[],
+  pageBounds: AtlasBounds,
+): ChartRow[] {
+  const [west, south, east, north] = unwrapBounds(pageBounds);
+  const extent = polygon([
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ]);
+  const center = (west + east) / 2;
+  return features
+    .filter((info) => {
+      const overlapOffset = worldCopyOffsets(info.bounds, center).find(
+        (offset) =>
+          info.bounds[0] + offset <= east &&
+          west <= info.bounds[2] + offset &&
+          info.bounds[1] <= north &&
+          south <= info.bounds[3],
+      );
+      if (overlapOffset === undefined) return false;
+      // The overwhelming common case needs no coordinate walk at all, but the
+      // shortcut has to prove the *raw* coordinates already sit in the extent's
+      // frame. `info.bounds` is unwrapped by `geometryBounds` (east past 180 for
+      // a dateline feature), so a match at offset 0 says nothing about the
+      // geometry it was derived from — a 179°→-179° line matches [180.25, 180.75]
+      // at offset 0 while its raw coordinates describe the far side of the world.
+      const alreadyInFrame =
+        overlapOffset === 0 &&
+        west >= -180 &&
+        east <= 180 &&
+        info.bounds[0] >= -180 &&
+        info.bounds[2] <= 180;
+      const geometry = alreadyInFrame
+        ? info.geometry
+        : geometryNearLongitude(info.geometry, center);
+      // Print Layout runs over arbitrary user-supplied vector data, and unlike
+      // the bbox-only filters `booleanIntersects` throws on degenerate geometry
+      // (a ring with fewer than four positions, non-finite coordinates). This
+      // predicate runs in a render-time `useMemo` on every pan/zoom, so one bad
+      // feature must be excluded, not taken down the whole preview.
+      try {
+        return booleanIntersects(feature(geometry), extent);
+      } catch {
+        return false;
+      }
+    })
+    .map((info) => ({ properties: info.properties }));
+}
+
+/**
+ * Select the attribute row belonging to the current atlas coverage feature.
+ * `AtlasPage.sourceIndex` is stable across filtering and sorting, and the row
+ * array preserves the source collection's order, so the two align directly.
+ */
+export function rowForAtlasFeature(rows: readonly ChartRow[], sourceIndex: number): ChartRow[] {
+  const row = rows[sourceIndex];
+  return row ? [row] : [];
 }
 
 /** Format one attribute value for a table cell (blank for null/undefined). */

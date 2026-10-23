@@ -1,9 +1,10 @@
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
-import { useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
+  getStyleMap,
   getGeometryEditTargetLayerId,
   hasViewImportBaseline,
   isGeoEditorAvailableForImport,
@@ -35,7 +36,7 @@ import { exportVectorLayer } from "../../lib/vector-export";
 interface LoadFeaturesIntoEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
   /** Store layer to preselect (set when opened from a layer's context menu). */
   initialLayerId: string | null;
 }
@@ -88,7 +89,9 @@ export function LoadFeaturesIntoEditorDialog({
   initialLayerId,
 }: LoadFeaturesIntoEditorDialogProps) {
   const { t } = useTranslation();
-  const storeLayers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open; closed, it stays mounted
+  // without re-rendering on layer edits.
+  const storeLayers = useLayersWhen(open);
   // While an in-place "Edit geometry" session is active the shared editor holds
   // that layer's geometry (not the loaded view features), so loading/saving here
   // would be wrong; the panel disables its actions and shows a note instead.
@@ -120,7 +123,7 @@ export function LoadFeaturesIntoEditorDialog({
   // Sketches layer (the editor's own output) is excluded. Recomputed when the
   // Layers panel changes or the dialog reopens.
   const computeEligible = useCallback((): EligibleLayer[] => {
-    const style = mapControllerRef.current?.getMap()?.getStyle();
+    const style = getStyleMap(mapControllerRef.current)?.getStyle();
     const result: EligibleLayer[] = [];
     for (const layer of storeLayers) {
       if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) continue;
@@ -143,10 +146,20 @@ export function LoadFeaturesIntoEditorDialog({
   // whenever the Layers panel changes), resetting the drag position, collapse
   // state, and any in-progress status while the panel is already open.
   const wasOpenRef = useRef(false);
+  // Bumped on every open and close, so a load click still waiting for the
+  // editor to activate can tell the panel was closed (or reopened) meanwhile.
+  const openGenerationRef = useRef(0);
+  // Set while a load click waits for the editor to activate, so a second click
+  // in that window cannot start another load.
+  const activatingRef = useRef(false);
 
   // On the open transition: repopulate the eligible list, preselect any
   // context-menu target, restore the saved editor name, and dock the panel at
   // the bottom-left of the map canvas.
+  useEffect(() => {
+    openGenerationRef.current += 1;
+  }, [open]);
+
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false;
@@ -167,7 +180,7 @@ export function LoadFeaturesIntoEditorDialog({
     // Open at the bottom-left of the map canvas by default (measured from the
     // map container, so it clears the left Layers panel), leaving a gap above
     // the status bar. Anchored by `bottom` so growing content extends upward.
-    const mapRect = mapControllerRef.current?.getMap()?.getContainer()?.getBoundingClientRect();
+    const mapRect = getStyleMap(mapControllerRef.current)?.getContainer()?.getBoundingClientRect();
     const left = mapRect ? mapRect.left + EDGE_MARGIN : EDGE_MARGIN;
     const bottomOffset = (mapRect ? window.innerHeight - mapRect.bottom : 0) + STATUS_BAR_GAP;
     setAnchor({ x: left, bottom: bottomOffset });
@@ -194,14 +207,17 @@ export function LoadFeaturesIntoEditorDialog({
     }
   };
 
-  /** Activate the GeoEditor plugin if needed; returns whether it is ready. */
-  const ensureEditorActive = useCallback((): boolean => {
+  /**
+   * Activate the GeoEditor plugin if needed; resolves to whether it is ready.
+   * The editor's packages load on first activation, so this can take a moment.
+   */
+  const ensureEditorActive = useCallback(async (): Promise<boolean> => {
     if (isGeoEditorAvailableForImport()) return true;
     const appAPI = createAppAPI(mapControllerRef);
     const manager = getPluginManager();
-    if (!manager.isActive("maplibre-gl-geo-editor")) {
-      manager.activate("maplibre-gl-geo-editor", appAPI);
-    }
+    // A manager that is already activating the editor hands back that pending
+    // result, so awaiting here also covers an activation started elsewhere.
+    await manager.activate("maplibre-gl-geo-editor", appAPI);
     return isGeoEditorAvailableForImport();
   }, [mapControllerRef]);
 
@@ -211,7 +227,7 @@ export function LoadFeaturesIntoEditorDialog({
       setBusy(true);
       setStatus({ message: t("loadEditorFeatures.loading"), kind: "info" });
       try {
-        if (!ensureEditorActive()) {
+        if (!(await ensureEditorActive())) {
           setStatus({
             message: t("loadEditorFeatures.editorUnavailable"),
             kind: "error",
@@ -256,8 +272,15 @@ export function LoadFeaturesIntoEditorDialog({
   // load immediately, or report that none are in view.
   const runLoad = useCallback(
     (replace: boolean) => {
-      const map = mapControllerRef.current?.getMap();
-      if (!map || !selectedLayer) {
+      const map = getStyleMap(mapControllerRef.current);
+      // The editor queries and draws through a MapLibre or Mapbox map; other
+      // renderers have none, which no layer choice can fix (the layer list is
+      // empty there too, and says so).
+      if (!map) {
+        setStatus({ message: t("renderer.pluginUnsupported"), kind: "error" });
+        return;
+      }
+      if (!selectedLayer) {
         setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
         return;
       }
@@ -343,14 +366,33 @@ export function LoadFeaturesIntoEditorDialog({
     [editorName, t],
   );
 
-  const handleLoadClick = () => {
+  const handleLoadClick = async () => {
     if (!selectedLayer) {
       setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
       return;
     }
+    if (activatingRef.current) return;
     setConfirmCount(null);
     setPendingLoad(null);
-    const count = ensureEditorActive() ? getGeoEditorFeatureCount() : 0;
+    const generation = openGenerationRef.current;
+    activatingRef.current = true;
+    setBusy(true);
+    let ready = false;
+    try {
+      ready = await ensureEditorActive();
+    } catch {
+      // The editor's package loads on first use; offline, activation rejects.
+      if (generation === openGenerationRef.current) {
+        setStatus({ message: t("loadEditorFeatures.editorUnavailable"), kind: "error" });
+      }
+      return;
+    } finally {
+      activatingRef.current = false;
+      setBusy(false);
+    }
+    // The panel was closed (or reopened) while the editor activated.
+    if (generation !== openGenerationRef.current) return;
+    const count = ready ? getGeoEditorFeatureCount() : 0;
     if (count > 0) {
       setConfirmCount(count);
     } else {
@@ -485,7 +527,13 @@ export function LoadFeaturesIntoEditorDialog({
             </Button>
           </div>
           {eligible.length === 0 && (
-            <p className="text-xs text-muted-foreground">{t("loadEditorFeatures.noLayers")}</p>
+            <p className="text-xs text-muted-foreground">
+              {/* Without a MapLibre/Mapbox map (the ArcGIS or globe renderer)
+                  nothing is queryable, and no pan or refresh will change that. */}
+              {getStyleMap(mapControllerRef.current)
+                ? t("loadEditorFeatures.noLayers")
+                : t("renderer.pluginUnsupported")}
+            </p>
           )}
         </div>
 
@@ -580,7 +628,7 @@ export function LoadFeaturesIntoEditorDialog({
             type="button"
             className="w-full"
             disabled={busy || !selectedId || geometryEditActive}
-            onClick={handleLoadClick}
+            onClick={() => void handleLoadClick()}
           >
             {t("loadEditorFeatures.loadFeatures")}
           </Button>

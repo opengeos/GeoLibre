@@ -63,6 +63,63 @@ function pointLayer(): GeoLibreLayer {
   };
 }
 
+function pointCollection(coords: [number, number][]): GeoLibreLayer["geojson"] {
+  return {
+    type: "FeatureCollection",
+    features: coords.map((position) => ({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: position },
+    })),
+  };
+}
+
+/** A point layer straddling the antimeridian, as Fiji's extent does. */
+function fijiLayer(): GeoLibreLayer {
+  return {
+    ...pointLayer(),
+    id: "fiji",
+    name: "Fiji",
+    geojson: pointCollection([
+      [177.5, -18],
+      [-179.5, -16],
+    ]),
+  };
+}
+
+/** A polygon layer straddling the antimeridian with vertices between the edges. */
+function fijiPolygonLayer(): GeoLibreLayer {
+  return {
+    ...pointLayer(),
+    id: "fiji-polygon",
+    name: "Fiji polygon",
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [177.2, -17.0],
+                [178.5, -16.4],
+                [179.9, -17.2],
+                [180, -18.5],
+                [-180, -18.9],
+                [-179.4, -17.2],
+                [-178.0, -16.8],
+                [177.2, -17.0],
+              ],
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 function mockDuckDb(): DuckDbCapability & {
   queries: string[];
   released: number[];
@@ -148,7 +205,7 @@ describe("dggs generator", () => {
     const typeParam = createDggsGridTool.parameters.find((p) => p.id === "dggsType");
     assert.ok(typeParam && typeParam.type === "select");
     assert.deepEqual(
-      typeParam.options.map((o) => o.value),
+      typeParam.options?.map((o) => o.value),
       ["h3", "s2", "a5", "dggrid", "dggal"],
     );
   });
@@ -382,6 +439,135 @@ describe("dggs generator", () => {
     await createDggsGridTool.run(ctx);
     assert.equal(added.length, 0);
     assert.ok(logs.some((l) => /antimeridian/i.test(l)));
+  });
+
+  it("fills only the dateline strip when a layer extent crosses ±180", async () => {
+    // Fiji spans 177.5E to 179.5W. Read as a plain bbox its longitude span is
+    // 357°, which used to collapse to the whole globe and hand back a grid
+    // wrapping the entire 357°-wide latitude band.
+    const { ctx, duckdb } = baseCtx([fijiLayer()], {
+      dggsType: "h3",
+      source: "extent",
+      layer: "fiji",
+      resolution: 4,
+    });
+    await createDggsGridTool.run(ctx);
+    // One query, both halves unioned in.
+    assert.equal(duckdb.queries.length, 1);
+    const sql = duckdb.queries[0]!;
+    assert.match(sql, /POLYGON\(\(177\.5 -18, 180 -18, 180 -16, 177\.5 -16/);
+    assert.match(sql, /POLYGON\(\(-180 -18, -179\.5 -18, -179\.5 -16, -180 -16/);
+    // The old behaviour unioned two whole hemispheres; no half-world ring
+    // should remain.
+    assert.doesNotMatch(sql, /-180 -18, 0 -18/);
+    assert.doesNotMatch(sql, /0 -18, 180 -18/);
+  });
+
+  it("splits a polygon layer whose vertices outnumber its two extremes", async () => {
+    // A real coastline or EEZ ring has far more vertices than the two that
+    // bound its box, so the split has to come from the whole coordinate set.
+    const { ctx, duckdb } = baseCtx([fijiPolygonLayer()], {
+      dggsType: "h3",
+      source: "extent",
+      layer: "fiji-polygon",
+      resolution: 4,
+    });
+    await createDggsGridTool.run(ctx);
+    assert.equal(duckdb.queries.length, 1);
+    const sql = duckdb.queries[0]!;
+    assert.match(sql, /POLYGON\(\(177\.2 -18\.9, 180 -18\.9, 180 -16\.4/);
+    assert.match(sql, /POLYGON\(\(-180 -18\.9, -178(\.0)? -18\.9/);
+  });
+
+  it("compacts a dateline split as one set, not one per half", async () => {
+    // A parent cell straddling ±180 has all its children in the union but in
+    // only one half, so compacting each half separately leaves the siblings
+    // unfolded. The two selects must reach h3_compact_cells together.
+    const { ctx, duckdb } = baseCtx([fijiLayer()], {
+      dggsType: "h3",
+      source: "extent",
+      layer: "fiji",
+      resolution: 4,
+      compactCells: true,
+    });
+    await createDggsGridTool.run(ctx);
+    assert.equal(duckdb.queries.length, 1);
+    const sql = duckdb.queries[0]!;
+    assert.match(sql, /SELECT DISTINCT cell FROM \(/);
+    assert.match(sql, /UNION ALL/);
+    assert.match(sql, /h3_compact_cells/);
+  });
+
+  it("keeps a globally spanning layer at full longitude", async () => {
+    // Same >180° bbox shape, but the 0°E station means the layer really does
+    // wrap the globe, so the whole-longitude path is the correct answer.
+    const layer: GeoLibreLayer = {
+      ...pointLayer(),
+      id: "world",
+      geojson: pointCollection([
+        [0, 0],
+        [100, 10],
+        [-100, -10],
+      ]),
+    };
+    const { ctx, duckdb } = baseCtx([layer], {
+      dggsType: "h3",
+      source: "extent",
+      layer: "world",
+      resolution: 2,
+    });
+    await createDggsGridTool.run(ctx);
+    assert.equal(duckdb.queries.length, 1);
+    assert.match(duckdb.queries[0], /POLYGON\(\(-180 -10, 0 -10, 0 10, -180 10/);
+    assert.match(duckdb.queries[0], /POLYGON\(\(0 -10, 180 -10, 180 10, 0 10/);
+  });
+
+  it("returns each cell once for a dateline split", async () => {
+    // A cell straddling ±180 belongs to both halves. The DuckDB path now gets
+    // its dedupe from `SELECT DISTINCT` over the union; the S2 path merges the
+    // two halves itself, so check that one here.
+    const results: GeoLibreLayer["geojson"][] = [];
+    const { ctx } = baseCtx([fijiLayer()], {
+      dggsType: "s2",
+      source: "extent",
+      layer: "fiji",
+      resolution: 6,
+    });
+    ctx.duckdb = undefined;
+    ctx.addResultLayer = (_name, fc) => results.push(fc);
+    await createDggsGridTool.run(ctx);
+    assert.equal(results.length, 1);
+    const ids = results[0]!.features.map((f) =>
+      String((f.properties as Record<string, unknown>).s2),
+    );
+    assert.ok(ids.length > 0);
+    assert.equal(new Set(ids).size, ids.length);
+  });
+
+  it("suggests the same bin resolution for a dateline layer as an equivalent one", async () => {
+    // The same 3°-wide strip, written once across the dateline and once shifted
+    // 160° west. Identical coverage, so the suggested resolution must match —
+    // before the fix the wrapped layer measured 357° wide and got a much
+    // coarser resolution.
+    const wrapped = baseCtx([fijiLayer()], { dggsType: "h3", source: "polyfill", layer: "fiji" });
+    const shiftedLayer: GeoLibreLayer = {
+      ...pointLayer(),
+      id: "shifted",
+      geojson: pointCollection([
+        [17.5, -18],
+        [20.5, -16],
+      ]),
+    };
+    const shifted = baseCtx([shiftedLayer], {
+      dggsType: "h3",
+      source: "polyfill",
+      layer: "shifted",
+    });
+    await dggsBinPointsTool.run(wrapped.ctx);
+    await dggsBinPointsTool.run(shifted.ctx);
+    const suggested = (logs: string[]) => logs.find((l) => /Using suggested resolution/.test(l));
+    assert.ok(suggested(wrapped.logs));
+    assert.equal(suggested(wrapped.logs), suggested(shifted.logs));
   });
 
   it("creates a grid from a manual bounding box", async () => {

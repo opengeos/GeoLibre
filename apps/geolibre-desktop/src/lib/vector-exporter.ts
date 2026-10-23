@@ -8,9 +8,18 @@ export interface BinaryVectorExportResult {
   mimeType: string;
 }
 
-async function exportGeoParquet(geojson: FeatureCollection): Promise<Uint8Array> {
+/** Format-specific extras for {@link exportBinaryVectorLayer}. */
+export interface BinaryVectorExportOptions {
+  /** Parquet footer key-value metadata, written by the GeoParquet export only. */
+  parquetKeyValueMetadata?: Record<string, string>;
+}
+
+async function exportGeoParquet(
+  geojson: FeatureCollection,
+  keyValueMetadata?: Record<string, string>,
+): Promise<Uint8Array> {
   const { exportDuckDbGeoParquet } = await import("./duckdb-vector-loader");
-  return exportDuckDbGeoParquet(geojson);
+  return exportDuckDbGeoParquet(geojson, keyValueMetadata);
 }
 
 // GeoPackage and Shapefile are assembled by pure-JS writers. Neither in-browser
@@ -64,11 +73,12 @@ export async function exportBinaryVectorLayer(
   format: BinaryVectorExportFormat,
   layerName: string,
   documentName = layerName,
+  options: BinaryVectorExportOptions = {},
 ): Promise<BinaryVectorExportResult> {
   switch (format) {
     case "geoparquet":
       return {
-        data: await exportGeoParquet(geojson),
+        data: await exportGeoParquet(geojson, options.parquetKeyValueMetadata),
         extension: "parquet",
         mimeType: "application/vnd.apache.parquet",
       };

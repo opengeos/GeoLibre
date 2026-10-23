@@ -29,6 +29,7 @@ def served(tmp_path, monkeypatch):
     monkeypatch.setattr(_server, "_base_url", None)
     monkeypatch.setattr(_server, "_port", None)
     monkeypatch.setattr(_server, "_local_files", {})
+    monkeypatch.setattr(_server, "_raster_tiles", {})
 
     bundle = tmp_path / "app"
     bundle.mkdir()
@@ -87,6 +88,16 @@ def test_open_ended_range(served):
     assert body == payload[10200:]
 
 
+def test_non_bytes_range_unit_serves_the_whole_file(served):
+    """An unparsable range unit falls back to a plain 200, with no Content-Range."""
+    status, headers, body = _get(served[0], {"Range": "items=0-99"})
+    assert status == 200
+    assert body == served[1]
+    # Content-Range belongs on 206/416 only; emitting it here would contradict
+    # the full-file body.
+    assert "Content-Range" not in headers
+
+
 def test_unsatisfiable_range_returns_416(served):
     url, payload = served
     with pytest.raises(urllib.error.HTTPError) as excinfo:
@@ -111,6 +122,52 @@ def test_register_same_file_reuses_token(served):
         next(p for tok, p in _server._local_files.items() if tok == path)
     )
     assert again == url
+    assert len(_server._local_files) == 1
+
+
+def test_registered_raster_tile_returns_png(served, tmp_path):
+    rasterio = pytest.importorskip("rasterio")
+    pytest.importorskip("rio_tiler")
+    np = pytest.importorskip("numpy")
+    from rasterio.transform import from_bounds
+
+    raster = tmp_path / "world.tif"
+    with rasterio.open(
+        raster,
+        "w",
+        driver="GTiff",
+        width=8,
+        height=8,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_bounds(-180, -85, 180, 85, 8, 8),
+    ) as dst:
+        dst.write(np.arange(64, dtype="float32").reshape(1, 8, 8))
+
+    template = _server.register_raster_tiles(raster, bands=[1], colormap="turbo", rescale=[[0, 63]])
+    status, headers, body = _get(template.format(z=0, x=0, y=0))
+    assert status == 200
+    assert headers["Content-Type"] == "image/png"
+    assert body.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_unregister_local_file_drops_the_token(served, tmp_path):
+    url, _payload = served
+    assert len(_server._local_files) == 1
+    registered = next(iter(_server._local_files.values()))
+
+    _server.unregister_local_file(registered)
+    assert _server._local_files == {}
+
+    # The route is gone once the token is dropped.
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _get(url)
+    assert excinfo.value.code == 404
+
+
+def test_unregister_unknown_file_is_a_no_op(served, tmp_path):
+    _server.unregister_local_file(tmp_path / "never-registered.tif")
     assert len(_server._local_files) == 1
 
 

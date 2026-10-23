@@ -54,20 +54,18 @@ const LIDAR_PANEL_LAYOUT_FIX = `
   min-height: 0;
   padding: 0 28px 0 8px;
   line-height: 28px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%231f2933' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: right 8px center;
   background-repeat: no-repeat;
   background-size: 12px 12px;
-  color: #111827;
-  color-scheme: light;
+  color: hsl(var(--foreground));
 }
 
 .lidar-control-panel .lidar-control-select option,
 .lidar-control-panel .lidar-colormap-select option {
-  background-color: #fff;
-  color: #111827;
-  color-scheme: light;
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
 }
 
 .lidar-control-panel .lidar-control-select.is-proxied,
@@ -77,15 +75,15 @@ const LIDAR_PANEL_LAYOUT_FIX = `
 
 .lidar-control-panel .lidar-select-proxy {
   align-items: center;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%231f2933' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: right 8px center;
   background-repeat: no-repeat;
   background-size: 12px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid hsl(var(--input));
   border-radius: 4px;
   box-sizing: border-box;
-  color: #111827;
+  color: hsl(var(--foreground));
   cursor: pointer;
   display: inline-flex;
   font-size: 12px;
@@ -109,19 +107,19 @@ const LIDAR_PANEL_LAYOUT_FIX = `
 
 .lidar-control-panel .lidar-select-proxy:focus-visible,
 .lidar-control-panel .lidar-select-proxy.is-open {
-  border-color: #159895;
-  box-shadow: 0 0 0 2px rgba(21, 152, 149, 0.15);
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.25);
   outline: none;
 }
 
 .lidar-select-menu {
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
   border-radius: 0;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--shadow-md);
   box-sizing: border-box;
-  color: #111827;
-  font-family: Arial, Helvetica, sans-serif;
+  color: hsl(var(--popover-foreground));
+  font-family: var(--font-sans);
   font-size: 12px;
   list-style: none;
   margin: 0;
@@ -133,10 +131,10 @@ const LIDAR_PANEL_LAYOUT_FIX = `
 }
 
 .lidar-select-menu button {
-  background: #fff;
+  background: hsl(var(--popover));
   border: 0;
   box-sizing: border-box;
-  color: #111827;
+  color: hsl(var(--popover-foreground));
   cursor: pointer;
   display: block;
   font: inherit;
@@ -149,12 +147,12 @@ const LIDAR_PANEL_LAYOUT_FIX = `
 
 .lidar-select-menu button:hover,
 .lidar-select-menu button.is-active {
-  background: #f3f4f6;
+  background: hsl(var(--accent));
 }
 
 .lidar-select-menu button.is-selected {
-  background: #159895;
-  color: #fff;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
 }
 
 .lidar-control-panel input[type="checkbox"] {
@@ -168,9 +166,9 @@ const LIDAR_PANEL_LAYOUT_FIX = `
   min-height: 13px;
   margin: 0 6px 0 0;
   flex: 0 0 13px;
-  border: 1px solid #c9d2df;
+  border: 1px solid hsl(var(--input));
   border-radius: 2px;
-  background: #fff;
+  background: hsl(var(--background));
   cursor: pointer;
   vertical-align: middle;
 }
@@ -181,13 +179,13 @@ const LIDAR_PANEL_LAYOUT_FIX = `
   content: "";
   transform: scale(0);
   transform-origin: center;
-  background: #fff;
+  background: hsl(var(--primary-foreground));
   clip-path: polygon(14% 44%, 0 58%, 39% 100%, 100% 15%, 86% 0, 37% 67%);
 }
 
 .lidar-control-panel input[type="checkbox"]:checked {
-  border-color: #159895;
-  background: #159895;
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
 }
 
 .lidar-control-panel input[type="checkbox"]:checked::before {
@@ -195,7 +193,7 @@ const LIDAR_PANEL_LAYOUT_FIX = `
 }
 
 .lidar-control-panel input[type="checkbox"]:focus-visible {
-  outline: 2px solid rgba(21, 152, 149, 0.35);
+  outline: 2px solid hsl(var(--ring) / 0.5);
   outline-offset: 1px;
 }
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import type { Feature, FeatureCollection } from "geojson";
-import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { Feature, FeatureCollection, Position } from "geojson";
+import * as maplibregl from "maplibre-gl";
+import type { MapEngine } from "@geolibre/map";
 import { useAppStore } from "@geolibre/core";
 import {
   Button,
@@ -71,11 +71,35 @@ import {
   type NmeaConnection,
 } from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
+import { engineMarkerMap } from "../../lib/engine-style-map";
+import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { appendDiagnostic, formatUnknown, type DiagnosticLevel } from "../../lib/diagnostics";
+
+/**
+ * Records a GPS failure in the diagnostics log. The dialog only shows the user
+ * a short translated message, so the underlying error would otherwise be lost.
+ *
+ * @param message What failed, in English, for the diagnostics panel.
+ * @param error The caught error.
+ * @param level Severity; defaults to "error".
+ */
+function logGpsFailure(message: string, error: unknown, level: DiagnosticLevel = "error"): void {
+  appendDiagnostic({
+    category: "runtime",
+    level,
+    message,
+    detail: formatUnknown(error),
+    source: "gps-tracking",
+  });
+}
 
 interface GpsTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Bumped when the map engine is (re)created, so map subscriptions re-attach. */
+  mapReadyGeneration?: number;
 }
 
 /** Transient map sources for the live position overlays (not store layers, so
@@ -132,6 +156,13 @@ function storeSettings(settings: GpsTrackingSettings): void {
   } catch {
     // Best-effort persistence; the session keeps the in-memory values.
   }
+}
+
+/** The track preview's line coordinates, for the overlay that draws them. */
+function neutralTrackLines(segments: GpsTrackSegments): Position[][] {
+  return trackPreview(segments).features.flatMap((feature) =>
+    feature.geometry.type === "LineString" ? [feature.geometry.coordinates] : [],
+  );
 }
 
 /** Position marker: a blue dot with a heading arrow, rotated per fix. */
@@ -259,6 +290,7 @@ export function GpsTrackingDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  mapReadyGeneration = 0,
 }: GpsTrackingDialogProps) {
   const { t } = useTranslation();
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -293,6 +325,15 @@ export function GpsTrackingDialog({
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
+  // Every other renderer: a projected DOM marker and an SVG overlay over the
+  // engine's render surface (#2477). `neutralMarkerRoot` is what rotates with
+  // the heading, inside the element the marker positions.
+  const neutralMarkerRef = useRef<AnnotationMarker | null>(null);
+  const neutralMarkerRoot = useRef<HTMLDivElement | null>(null);
+  const neutralOverlayRef = useRef<GpsOverlay | null>(null);
+  // The engine the overlay and marker were built on; a renderer swap during a
+  // session rebuilds them on the new one.
+  const neutralEngineRef = useRef<MapEngine | null>(null);
   // Logged track fixes as pause/resume segments; a ref so the high-frequency
   // watch callback appends in place without re-creating itself, with
   // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
@@ -323,14 +364,28 @@ export function GpsTrackingDialog({
    * Center the map on a fix. The first recenter of a session also zooms in;
    * later ones only pan, so following doesn't fight the user's chosen zoom.
    */
-  const recenterOnFix = useCallback((map: maplibregl.Map, fix: GpsFix) => {
-    map.easeTo({
-      center: [fix.lng, fix.lat],
-      duration: 500,
-      ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
-    });
-    zoomedRef.current = true;
-  }, []);
+  const recenterOnFix = useCallback(
+    (map: maplibregl.Map | null, fix: GpsFix) => {
+      if (map) {
+        map.easeTo({
+          center: [fix.lng, fix.lat],
+          duration: 500,
+          ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
+        });
+      } else {
+        const engine = mapControllerRef.current;
+        if (!engine) return;
+        const view = engine.readView();
+        engine.easeToView({
+          ...view,
+          center: [fix.lng, fix.lat],
+          zoom: zoomedRef.current ? view.zoom : Math.max(view.zoom, 15),
+        });
+      }
+      zoomedRef.current = true;
+    },
+    [mapControllerRef],
+  );
 
   /**
    * Toggle follow mode. The ref moves first so a fix arriving before the
@@ -343,9 +398,8 @@ export function GpsTrackingDialog({
       followRef.current = next;
       setFollow(next);
       if (!next) return;
-      const map = getMap();
       const fix = lastFixRef.current;
-      if (map && fix) recenterOnFix(map, fix);
+      if (fix) recenterOnFix(getMap(), fix);
     },
     [getMap, recenterOnFix],
   );
@@ -379,6 +433,17 @@ export function GpsTrackingDialog({
 
       const map = getMap();
       if (map) {
+        // A renderer swap from another engine leaves its overlay behind.
+        if (neutralEngineRef.current) {
+          neutralMarkerRef.current?.remove();
+          neutralMarkerRef.current = null;
+          neutralMarkerRoot.current = null;
+          neutralOverlayRef.current?.remove();
+          neutralOverlayRef.current = null;
+          neutralEngineRef.current = null;
+          // The new map's track source starts empty: draw the whole track.
+          logged = true;
+        }
         ensureGpsSources(map);
         setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
         // Redraw the track only when a fix was actually logged; the styledata
@@ -405,9 +470,59 @@ export function GpsTrackingDialog({
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
 
         if (followRef.current) recenterOnFix(map, fix);
+      } else {
+        const engine = mapControllerRef.current;
+        if (engine?.getRenderSurface()) {
+          if (neutralEngineRef.current !== engine) {
+            // Nor may a MapLibre marker from before a swap outlive its map.
+            markerRef.current?.remove();
+            markerRef.current = null;
+            neutralMarkerRef.current?.remove();
+            neutralMarkerRef.current = null;
+            neutralOverlayRef.current?.remove();
+            neutralOverlayRef.current = null;
+            neutralEngineRef.current = engine;
+            // The rebuilt overlay starts from the whole track, not this fix.
+            logged = true;
+          }
+          neutralOverlayRef.current ??= createGpsOverlay(engine, {
+            accuracy: GPS_COLOR,
+            track: TRACK_COLOR,
+          });
+          const overlay = neutralOverlayRef.current;
+          overlay?.setAccuracy(accuracyCircle(fix).geometry.coordinates[0]);
+          if (logged) overlay?.setTrack(neutralTrackLines(fixesRef.current));
+          if (!neutralMarkerRef.current) {
+            const host = engineMarkerMap(engine);
+            if (host) {
+              const { root, arrow } = createMarkerElement();
+              markerArrowRef.current = arrow;
+              neutralMarkerRoot.current = root;
+              const element = document.createElement("div");
+              // Above the track overlay, and transparent to the pointer so a
+              // drag that starts on it still pans the map.
+              element.style.zIndex = "5";
+              element.style.pointerEvents = "none";
+              element.append(root);
+              neutralMarkerRef.current = createAnnotationMarker(host, {
+                element,
+                anchor: "center",
+              });
+            }
+          }
+          neutralMarkerRef.current?.setLngLat([fix.lng, fix.lat]);
+          if (markerArrowRef.current)
+            markerArrowRef.current.style.display = fix.heading != null ? "block" : "none";
+          // The heading is a compass bearing; on screen it turns with the map.
+          const bearing = engine.getRenderSurface()?.getBearing() ?? 0;
+          if (neutralMarkerRoot.current)
+            neutralMarkerRoot.current.style.transform =
+              fix.heading != null ? `rotate(${fix.heading - bearing}deg)` : "";
+          if (followRef.current) recenterOnFix(null, fix);
+        }
       }
     },
-    [getMap, recenterOnFix, setGpsStatus],
+    [getMap, mapControllerRef, recenterOnFix, setGpsStatus],
   );
 
   // The first fix of every tracking session zooms in, whichever source it came
@@ -445,6 +560,9 @@ export function GpsTrackingDialog({
         else unsubscribe = unsub;
       })
       .catch((err) => {
+        // A denied permission is the user's choice; anything else is a real
+        // failure hidden behind the generic "no geolocation" message.
+        if (!err?.permissionDenied) logGpsFailure("GPS: starting the position watch failed", err);
         setError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
         setTracking(false);
       });
@@ -476,6 +594,7 @@ export function GpsTrackingDialog({
     };
     let map: maplibregl.Map | null = null;
     let timer: number | undefined;
+    let detachDrag = () => {};
     const attach = () => {
       map = getMap();
       if (map) {
@@ -483,20 +602,64 @@ export function GpsTrackingDialog({
         map.on("styledata", onStyleData);
         return;
       }
+      // Another renderer: a press that moves on the map is a drag.
+      const container = mapControllerRef.current?.getRenderSurface()?.getContainer();
+      if (container) {
+        let start: { x: number; y: number } | null = null;
+        // Only a press on the map itself, not on a control inside the same
+        // container (a zoom widget, a plugin panel's slider).
+        const canvas = mapControllerRef.current?.getRenderSurface()?.getCanvas();
+        // The canvas's own wrapper (the SDK's view surface) takes the press on
+        // some engines; the controls sit outside it.
+        const surfaceElement = canvas?.parentElement !== container ? canvas?.parentElement : null;
+        const onDown = (event: PointerEvent) => {
+          const target = event.target as Node | null;
+          const onMap =
+            target === canvas || (!!surfaceElement && !!target && surfaceElement.contains(target));
+          start = onMap ? { x: event.clientX, y: event.clientY } : null;
+        };
+        const onMove = (event: PointerEvent) => {
+          if (!start || !event.buttons) return;
+          if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) return;
+          start = null;
+          onDragStart();
+        };
+        const onUp = () => {
+          start = null;
+        };
+        container.addEventListener("pointerdown", onDown);
+        container.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        detachDrag = () => {
+          container.removeEventListener("pointerdown", onDown);
+          container.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        };
+        return;
+      }
       timer = window.setTimeout(attach, 500);
     };
     attach();
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
+      detachDrag();
       map?.off("dragstart", onDragStart);
       map?.off("styledata", onStyleData);
     };
-  }, [tracking, getMap, setFollowMode]);
+    // `mapReadyGeneration`: a renderer swap mid-session re-attaches to the new
+    // map, as the ref alone does not re-run this effect.
+  }, [tracking, getMap, mapControllerRef, setFollowMode, mapReadyGeneration]);
 
   const clearMapArtifacts = useCallback(() => {
     markerRef.current?.remove();
     markerRef.current = null;
     markerArrowRef.current = null;
+    neutralMarkerRef.current?.remove();
+    neutralMarkerRef.current = null;
+    neutralMarkerRoot.current = null;
+    neutralOverlayRef.current?.remove();
+    neutralOverlayRef.current = null;
+    neutralEngineRef.current = null;
     const map = getMap();
     if (map) removeGpsSources(map);
   }, [getMap]);
@@ -549,10 +712,12 @@ export function GpsTrackingDialog({
     setNmeaStats(null);
     try {
       await conn?.close();
-    } catch {
+    } catch (error) {
       // A device that will not release cleanly (unplugged mid-close, GATT
       // already gone) must not surface as an unhandled rejection from the
-      // `void disconnectNmea()` call sites. The readout is cleared regardless.
+      // `void disconnectNmea()` call sites. The readout is cleared regardless;
+      // keep a warning so a receiver that never releases can be diagnosed.
+      logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
     }
   }, []);
 
@@ -697,6 +862,7 @@ export function GpsTrackingDialog({
     setFixCount(0);
     const map = getMap();
     if (map) setSourceData(map, TRACK_SOURCE, EMPTY_FC);
+    neutralOverlayRef.current?.setTrack([]);
   }, [getMap]);
 
   const handleStartRecording = useCallback(() => {
@@ -771,7 +937,8 @@ export function GpsTrackingDialog({
           mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
         setNotice(path ? t("gps.trackExported") : t("gps.exportCancelled"));
-      } catch {
+      } catch (error) {
+        logGpsFailure(`GPS: exporting the track as ${format} failed`, error);
         setNotice(t("gps.exportFailed"));
       }
     },

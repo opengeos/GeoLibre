@@ -10,14 +10,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import {
   useAppStore,
   type StoryActiveSlideMode,
   type StoryChapter,
   type StoryMap,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
 import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
@@ -28,9 +28,11 @@ import {
   STORY_START_STEP_ID,
   storySlideCoverColor,
 } from "../../lib/storymap-constants";
+import { createStoryMapMarker, type StoryMapMarker } from "./storymap-engine";
 
 interface StoryMapPresenterProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
+  mapReadyGeneration: number;
 }
 
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */
@@ -94,7 +96,10 @@ const INSET_POSITION_CLASS: Record<string, string> = {
  * mirroring the standalone storytelling template. Rendering nothing unless a
  * presentation is active keeps it inert the rest of the time.
  */
-export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) {
+export function StoryMapPresenter({
+  mapControllerRef,
+  mapReadyGeneration,
+}: StoryMapPresenterProps) {
   const { t } = useTranslation();
   const presenting = useAppStore((s) => s.ui.storymapPresenting);
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
@@ -114,7 +119,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const insetRef = useRef<HTMLDivElement>(null);
   const insetMapRef = useRef<maplibregl.Map | null>(null);
   const insetMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const markerRef = useRef<StoryMapMarker | null>(null);
   // Active scroll step (chapters + slides); -1 before the first enter.
   const activeStepRef = useRef<number>(-1);
   // Last chapter entered (skipping slides), so layer-fade replay still steps
@@ -295,10 +300,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   useEffect(() => {
     if (!hasChapters) return;
     const controller = mapControllerRef.current;
-    const map = controller?.getMap();
     const container = scrollRef.current;
     const story = storymapRef.current;
-    if (!controller || !map || !container || !story) return;
+    if (!controller?.getRenderSurface() || !container || !story) return;
     // Frozen snapshot for this presentation run (edits are blocked while
     // presenting), shadowing the outer memoized `chapters`/`steps` deliberately.
     const chapters = story.chapters;
@@ -308,11 +312,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
     // Main-map marker, created once and moved per chapter.
     if (story.showMarkers) {
-      markerRef.current = new maplibregl.Marker({
-        color: story.markerColor,
-      })
-        .setLngLat(chapters[0].location.center)
-        .addTo(map);
+      markerRef.current = createStoryMapMarker(controller, story.markerColor);
+      markerRef.current?.setLngLat(chapters[0].location.center);
     }
 
     // Optional inset minimap.
@@ -333,9 +334,18 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         .addTo(insetMap);
     }
 
-    const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
+    // Apply a chapter's layer fades to the map and collect them into `pending`,
+    // which enterChapter commits to the store in one write once the replay is
+    // done (see `ui.storymapLayerOpacity`): deck.gl diagrams and the on-map
+    // Legend follow the fades from there, while MapLibre layers take them
+    // directly from the controller.
+    const applyEffects = (
+      changes: StoryChapter["onChapterEnter"],
+      pending: Record<string, number>,
+    ) => {
       for (const change of changes) {
         controller.setStoryLayerOpacity(change.layerId, change.opacity, change.duration);
+        pending[change.layerId] = change.opacity;
       }
     };
 
@@ -382,17 +392,19 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       // enter never ran. `previous` is -1 before the first chapter (e.g. jumping
       // straight from the start slide to chapter N), which replays 0..N-1 so the
       // skipped chapters' fades still run.
+      const pending: Record<string, number> = {};
       if (previous !== index) {
         // Chapter indices are always >= 0: a `previous` of -1 means "before
         // chapter 0", so the loop starts at i = 0 and only moves toward `index`.
         const dir = previous < index ? 1 : -1;
-        if (previous >= 0) applyEffects(chapters[previous]?.onChapterExit ?? []);
+        if (previous >= 0) applyEffects(chapters[previous]?.onChapterExit ?? [], pending);
         for (let i = previous + dir; i !== index; i += dir) {
-          applyEffects(chapters[i]?.onChapterEnter ?? []);
-          applyEffects(chapters[i]?.onChapterExit ?? []);
+          applyEffects(chapters[i]?.onChapterEnter ?? [], pending);
+          applyEffects(chapters[i]?.onChapterExit ?? [], pending);
         }
       }
-      applyEffects(chapter.onChapterEnter);
+      applyEffects(chapter.onChapterEnter, pending);
+      useAppStore.getState().setStorymapLayerOpacity(pending);
     };
 
     const enterSlide = (step: Extract<PresenterStep, { kind: "slide" }>) => {
@@ -480,16 +492,32 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       // Undo any direct opacity changes made during playback.
       controller.restoreLayerStyles();
     };
-  }, [hasChapters, mapControllerRef]);
+  }, [hasChapters, mapControllerRef, mapReadyGeneration]);
 
-  // Allow Escape to exit the presentation.
+  // Allow Escape to exit the presentation. The presenter owns the key while it
+  // is up: it listens in the capture phase and stops propagation, so on-map
+  // panels that also close on Escape (the Legend panel, for one) do not close
+  // themselves as a side effect of leaving the story (discussion #2326). An
+  // Escape aimed at an open dialog, menu, or an editable control (the Legend
+  // panel's inline rename and dictionary textarea handle Escape locally) is
+  // left alone so it still dismisses or reverts that surface first.
   useEffect(() => {
     if (!presenting) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") exitPresentation();
+      if (event.key !== "Escape") return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="combobox"], input, textarea, select, [contenteditable="true"]',
+        )
+      ) {
+        return;
+      }
+      event.stopPropagation();
+      exitPresentation();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [presenting, exitPresentation]);
 
   // A presentation with no chapters has nothing to show; close it (routing
@@ -500,11 +528,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
 
   if (!presenting || chapters.length === 0) return null;
 
-  // Render into the MapLibre container so the presentation is clipped to the
-  // map canvas instead of overlaying the toolbar and side panels. The container
-  // carries `.maplibregl-map { position: relative }`, so `absolute inset-0`
-  // lines the overlay up exactly with the map.
-  const container = mapControllerRef.current?.getMap()?.getContainer() ?? null;
+  // Render into the active engine's container so the presentation is clipped to the
+  // map canvas instead of overlaying the toolbar and side panels. Each engine
+  // positions its container relatively, so `absolute inset-0` lines the overlay
+  // up exactly with the map.
+  const container = mapControllerRef.current?.getRenderSurface()?.getContainer() ?? null;
   if (!container) return null;
 
   const theme = storymap?.theme ?? "dark";
@@ -544,7 +572,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       {navOpen ? (
         <nav
           aria-label={t("storymap.chapterNav")}
-          className="absolute left-3 top-14 z-[72] max-h-[calc(100%-4.5rem)] w-52 overflow-y-auto rounded-md border bg-background/85 p-1.5 shadow-lg backdrop-blur"
+          className="absolute left-3 top-14 z-[72] max-h-[calc(100%-4.5rem)] w-52 overflow-y-auto rounded-md border map-glass p-1.5 shadow-lg"
         >
           {chapters.map((chapter, index) => (
             <button

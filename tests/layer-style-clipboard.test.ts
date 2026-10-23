@@ -88,7 +88,7 @@ describe("extractCopiedLayerStyle", () => {
   it("deep-clones so later edits to the source do not mutate the clipboard", () => {
     const source = vectorLayer({ style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000" } });
     const copied = extractCopiedLayerStyle(source);
-    assert.ok(copied);
+    assert.ok(copied && copied.kind === "vector");
     source.style.fillColor = "#00ff00";
     assert.equal(copied.style.fillColor, "#ff0000");
   });
@@ -148,6 +148,24 @@ describe("applyCopiedLayerStyle", () => {
     assert.ok(patch);
     assert.equal(patch.style?.fillColor, "#123456");
     // Opacity is left to the target.
+    assert.equal("opacity" in patch, false);
+  });
+
+  it("carries the blend mode but still leaves opacity to the target", () => {
+    // The two sit side by side in the Layers panel but are treated differently
+    // on purpose: a blend mode is a cartographic decision that belongs to the
+    // look being copied (QGIS's Paste Style carries it too), while opacity is a
+    // transient per-layer knob. See the note on `CopiedLayerStyleBase`.
+    const copied = extractCopiedLayerStyle(
+      vectorLayer({ opacity: 0.4, style: { ...DEFAULT_LAYER_STYLE, blendMode: "multiply" } }),
+    );
+    assert.ok(copied);
+    const patch = applyCopiedLayerStyle(
+      vectorLayer({ id: "target", opacity: 1, style: { ...DEFAULT_LAYER_STYLE } }),
+      copied,
+    );
+    assert.ok(patch);
+    assert.equal(patch.style?.blendMode, "multiply");
     assert.equal("opacity" in patch, false);
   });
 
@@ -368,7 +386,9 @@ describe("store copy/paste actions", () => {
 
     store.copyLayerStyle("a");
     store.copyLayerStyle("x"); // xyz is not copyable
-    assert.equal(useAppStore.getState().copiedLayerStyle?.style.fillColor, "#abcdef");
+    const copied = useAppStore.getState().copiedLayerStyle;
+    assert.ok(copied?.kind === "vector");
+    assert.equal(copied.style.fillColor, "#abcdef");
   });
 
   it("does not paste across style families", () => {

@@ -136,6 +136,9 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       title,
       name,
       form,
+      // Pulled out so the swatch's own blur handler can flush a pending drag
+      // color before the caller's (often a commit) runs.
+      onBlur,
       ...props
     },
     ref,
@@ -167,6 +170,102 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       return () => abortRef.current?.abort();
     }, []);
 
+    // Dragging inside a native picker streams an `input` event per pointer
+    // move, and a caller that writes the app store on each one re-renders the
+    // whole app per event. Where the picker outpaces those renders (WebView2 on
+    // Windows), React never settles and aborts with "Maximum update depth
+    // exceeded" (issue #3162). So drag colors are held in a local `draft` that
+    // the swatch shows at once, and passed to `onChange` at most once per
+    // animation frame; the `change` event that ends the pick, and blur, deliver
+    // the final color immediately.
+    const [draft, setDraft] = React.useState<string | null>(null);
+    const pendingRef = React.useRef<string | null>(null);
+    // The last color the active drag handed to `onChange`, to tell the caller
+    // echoing it back from an independent change of `value`. Cleared when the
+    // drag ends or is superseded, so a later edit to the same color is not
+    // mistaken for an echo.
+    const lastSentRef = React.useRef<string | null>(null);
+    const frameRef = React.useRef<number | null>(null);
+    // Read through a ref so a frame scheduled before a re-render reports to
+    // the current handler.
+    const onChangeRef = React.useRef(onChange);
+    React.useEffect(() => {
+      onChangeRef.current = onChange;
+    }, [onChange]);
+
+    const cancelFrame = React.useCallback(() => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    }, []);
+
+    /** Hands any pending drag color to `onChange` now. */
+    const flushPending = React.useCallback(() => {
+      cancelFrame();
+      const next = pendingRef.current;
+      pendingRef.current = null;
+      if (next === null) return;
+      lastSentRef.current = next;
+      onChangeRef.current(next);
+    }, [cancelFrame]);
+
+    /** Ends a drag: delivers its last color and returns the swatch to `value`. */
+    const endDrag = React.useCallback(() => {
+      flushPending();
+      setDraft(null);
+    }, [flushPending]);
+
+    /** Drops an unsent drag color, for picks that replace it (eyedropper, transparent). */
+    const discardDrag = React.useCallback(() => {
+      cancelFrame();
+      pendingRef.current = null;
+      lastSentRef.current = null;
+      setDraft(null);
+    }, [cancelFrame]);
+
+    // A `value` the drag did not send (an undo, a pasted style) supersedes the
+    // drag: drop its unsent color so the next frame cannot overwrite it. An
+    // echo of the color it last sent keeps the drag going, and once nothing is
+    // left to send the drag is over and the swatch follows `value` again.
+    // React's change tracking usually swallows the native `change` that ends a
+    // drag, so this, not `endDrag`, is what normally clears the draft. A layout
+    // effect, so the invalidation lands before a pending frame can fire.
+    React.useLayoutEffect(() => {
+      const sent = lastSentRef.current;
+      // Case-insensitive, so a caller storing uppercase hex still reads as an echo.
+      if (sent === null || value.toLowerCase() !== sent.toLowerCase()) {
+        cancelFrame();
+        pendingRef.current = null;
+      }
+      if (pendingRef.current === null) {
+        lastSentRef.current = null;
+        setDraft(null);
+      }
+    }, [cancelFrame, value]);
+
+    // Deliver a drag color still waiting for its frame when the field unmounts
+    // (the panel closed mid-drag), so the user's last pick is not lost.
+    React.useEffect(() => flushPending, [flushPending]);
+
+    const handleSwatchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const next = event.target.value;
+      // React fires onChange for both events; a native `change` ends the pick.
+      if (event.nativeEvent.type === "change") {
+        pendingRef.current = next;
+        endDrag();
+        return;
+      }
+      setDraft(next);
+      pendingRef.current = next;
+      if (frameRef.current === null) {
+        frameRef.current = requestAnimationFrame(() => {
+          frameRef.current = null;
+          flushPending();
+        });
+      }
+    };
+
     const pickFromScreen = React.useCallback(async () => {
       if (typeof window === "undefined" || typeof window.EyeDropper !== "function") {
         return;
@@ -179,6 +278,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
           signal: controller.signal,
         });
         if (result?.sRGBHex) {
+          discardDrag();
           onChange(result.sRGBHex);
           onCommit?.();
         }
@@ -189,14 +289,15 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
         if (err instanceof DOMException && err.name === "AbortError") return;
         throw err;
       }
-    }, [onChange, onCommit]);
+    }, [discardDrag, onChange, onCommit]);
 
     const setTransparent = React.useCallback(
       (next: boolean) => {
+        discardDrag();
         onChange(next ? TRANSPARENT_COLOR : lastOpaqueRef.current);
         onCommit?.();
       },
-      [onChange, onCommit],
+      [discardDrag, onChange, onCommit],
     );
 
     return (
@@ -237,14 +338,18 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             type="color"
             name={transparent ? undefined : name}
             form={form}
-            value={transparent ? lastOpaqueRef.current : value}
+            value={draft ?? (transparent ? lastOpaqueRef.current : value)}
             disabled={disabled}
             title={transparent ? transparentSwatchLabel : title}
             // The swatch shows the remembered opaque color while transparent, so
             // give assistive tech an accessible name that conveys the "no color"
             // state instead of letting it announce that opaque value.
             aria-label={transparent ? transparentSwatchLabel : undefined}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={handleSwatchChange}
+            onBlur={(event) => {
+              endDrag();
+              onBlur?.(event);
+            }}
             // `peer` so the overlay (which covers the input's own
             // focus-visible border) can re-expose the focus ring below.
             className={cn("peer", fill && "w-full", className)}

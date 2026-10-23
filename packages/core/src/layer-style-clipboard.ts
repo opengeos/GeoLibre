@@ -47,6 +47,15 @@ export const RASTER_APPEARANCE_STATE_KEYS = [
  * `opacity` is deliberately excluded: like QGIS "Paste Style" and GeoLibre's
  * own Style Manager, copy/paste transfers symbology only and leaves the
  * target's opacity alone (opacity is a per-layer render setting, not style).
+ *
+ * {@link LayerStyle.blendMode} is deliberately *included*, even though the
+ * Layers panel puts the Blend menu beside the opacity slider. The two differ in
+ * kind despite sitting together: opacity is a transient "turn this down so I
+ * can see through it" knob, while a blend mode is a cartographic decision about
+ * how the layer reads against the map -- colour over a hillshade is a look, and
+ * copying a look should bring it. QGIS agrees; its layer style, and so its
+ * Paste Style, carries the blending mode. `tests/layer-style-clipboard.test.ts`
+ * pins both halves of this so neither is changed by accident.
  */
 interface CopiedLayerStyleBase {
   /** Source layer name, surfaced in the paste tooltip and status message. */

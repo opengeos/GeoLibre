@@ -17,8 +17,9 @@ import {
   type StoryLayerOpacityChange,
   type StoryMap,
   type StorySlideMode,
+  useLayersWhen,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   Button,
   ColorField,
@@ -56,11 +57,12 @@ import {
 } from "lucide-react";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
-import { buildStoryMapHtml } from "../../lib/storymap-export";
+import { buildStoryMapHtml, storyExportCandidates } from "../../lib/storymap-export";
+import { bakeStoryMarkerImages } from "../../lib/storymap-marker-images";
 import { StoryMapHandoutDialog } from "./StoryMapHandoutDialog";
 
 interface StoryMapPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 function createId(): string {
@@ -84,7 +86,8 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
   const setComposing = useAppStore((s) => s.setStorymapComposing);
   const storymap = useAppStore((s) => s.storymap);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open (it stays mounted closed).
+  const layers = useLayersWhen(open);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const projection = useAppStore((s) => s.preferences.map.projection);
 
@@ -360,6 +363,8 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         layers: layersForExport,
         projection,
         navToggleLabel: t("storymap.toggleNav"),
+        // Bake only the layers the export can include, not the whole project.
+        markerImages: await bakeStoryMarkerImages(storyExportCandidates(story, layersForExport)),
       });
       const slug =
         (story.title || "story-map")
@@ -850,7 +855,8 @@ function ChapterCard({
   onPreview,
   onCompose,
 }: ChapterCardProps) {
-  const { center, zoom, pitch, bearing } = chapter.location;
+  // A chapter without a pitch/bearing keeps the camera's; show those as 0.
+  const { center, zoom, pitch = 0, bearing = 0 } = chapter.location;
   return (
     <div className="rounded-md border">
       <div className="flex items-center gap-1 px-2 py-1.5">

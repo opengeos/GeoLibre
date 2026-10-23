@@ -1,0 +1,27 @@
+{
+  "name": "geolibre-mcp-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prebuild": "node scripts/bundle-maplibre-worker.mjs",
+    "build": "tsc --noEmit -p . && vite build"
+  },
+  "dependencies": {
+    "@geolibre/core": "*",
+    "@geolibre/map": "*",
+    "@geolibre/ui": "*",
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/core": "^2.3.1",
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
+    "i18next": "^26.4.7",
+    "lucide": "^1.58.0",
+    "maplibre-gl": "^6.15.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

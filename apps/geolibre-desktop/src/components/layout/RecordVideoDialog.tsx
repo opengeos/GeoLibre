@@ -1,4 +1,5 @@
-import type { MapController } from "@geolibre/map";
+import { useAppStore } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   Circle,
@@ -33,7 +34,7 @@ import { RegionSelectOverlay } from "./RegionSelectOverlay";
 interface RecordVideoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -52,7 +53,7 @@ const DEFAULT_FILE_NAME = "map-recording";
 // *rendered* overlays (`maplibre-gl-html-control` / `maplibre-gl-legend` /
 // `maplibre-gl-colorbar`), NOT the `*-gui-control` authoring editors -- we burn
 // the info in, not the editor chrome. Those class names mirror
-// maplibre-gl-components internals; see CLAUDE.md and re-check them when that
+// maplibre-gl-components internals; see docs/maintenance.md and re-check them when that
 // package is bumped.
 const MAP_PANEL_SELECTOR =
   ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar, .geolibre-legend-panel";
@@ -119,6 +120,10 @@ export function RecordVideoDialog({
   // The finished recording, held until the user names it and clicks Save.
   const [pendingRec, setPendingRec] = useState<MapRecording | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const renderer = useAppStore((state) => state.primaryRenderer);
+  useEffect(() => {
+    abortRef.current?.abort();
+  }, [renderer]);
   // Guards a second handleSave landing before "saving" has re-rendered (fast
   // double-click / Enter repeat), which would fire two save dialogs / downloads.
   const savingRef = useRef(false);
@@ -201,7 +206,7 @@ export function RecordVideoDialog({
   };
 
   const startRecording = async () => {
-    const map = mapControllerRef.current?.getMap();
+    const map = mapControllerRef.current?.getRenderSurface();
     if (!map || busy) return;
     if (mode === "region" && !region) {
       setError(t("recordVideo.needRegion"));
@@ -280,7 +285,7 @@ export function RecordVideoDialog({
   // recordings updates the checkbox without reopening the dialog.
   useEffect(() => {
     if (!open) return;
-    const container = mapControllerRef.current?.getMap()?.getContainer();
+    const container = mapControllerRef.current?.getRenderSurface()?.getContainer();
     // Observe the control container specifically (not the whole map) to avoid
     // tile/marker churn. A control's own internal DOM updates (e.g. legend
     // swatches) can still fire the callback, but refresh() is a cheap querySelector

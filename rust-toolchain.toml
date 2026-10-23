@@ -1,0 +1,5 @@
+# CI (ci.yml, release.yml and the mobile workflows) builds the Tauri crate
+# with the latest stable Rust, so local builds track the same channel.
+# Workflows that need extra targets (Android, iOS) add them on top of this.
+[toolchain]
+channel = "stable"

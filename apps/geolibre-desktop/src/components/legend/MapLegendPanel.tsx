@@ -5,19 +5,21 @@
  * entries, replace a layer's classes with hand-authored items — e.g. NLCD
  * land-cover names — or add standalone custom sections).
  *
- * Mounted as a MapLibre control (see useMapPanelControl) so it stacks with
- * the other corner controls and is captured by Record Video. All state lives
+ * Mounted as a native GL control (see useMapPanelControl) so it stacks with
+ * the other corner controls on MapLibre or Mapbox and is captured by Record Video. All state lives
  * in the store's LegendConfig, so edits persist in the project and are shared
  * with the Print Layout legend.
  */
 import {
   normalizeHexColor,
+  storyVisibleLayers,
   useAppStore,
   type LegendConfig,
   type LegendCustomEntry,
   type LegendPanelPosition,
+  useLayersWhen,
 } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
 import { cn } from "@geolibre/ui";
 import {
@@ -64,6 +66,7 @@ import {
   toggleLegendItemHidden,
 } from "../../lib/print-legend";
 import { useMapPanelControl } from "../../hooks/useMapPanelControl";
+import { graduatedSchemeLabelKey } from "../panels/style-panel/classification-helpers";
 import { GeometrySwatch, GradientBar, MarkerSwatch } from "./LegendSwatch";
 
 /** Class the recorder's MAP_PANEL_SELECTOR matches to burn the panel into videos. */
@@ -174,11 +177,23 @@ export function MapLegendPanel({
   mapControllerRef,
   mapReadyGeneration,
 }: {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
   mapReadyGeneration: number;
 }) {
   const { t, i18n } = useTranslation();
-  const layers = useAppStore((state) => state.layers);
+  // Layers are only read while the legend panel is shown; hidden (the default),
+  // it stays mounted without re-rendering on layer edits.
+  const legendPanelVisible = useAppStore((state) => state.legend.panelVisible === true);
+  const storeLayers = useLayersWhen(legendPanelVisible);
+  const storyPresenting = useAppStore((state) => state.ui.storymapPresenting);
+  const storyOpacity = useAppStore((state) => state.ui.storymapLayerOpacity);
+  // During a story presentation the legend follows the chapters: a layer the
+  // current chapter has faded fully out drops from the legend as well, so
+  // the reader sees only the symbology on screen (discussion #2326).
+  const layers = useMemo(
+    () => storyVisibleLayers(storeLayers, storyPresenting, storyOpacity),
+    [storeLayers, storyPresenting, storyOpacity],
+  );
   const legend = useAppStore((state) => state.legend);
   const setLegend = useAppStore((state) => state.setLegend);
   const [editing, setEditing] = useState(false);
@@ -193,7 +208,10 @@ export function MapLegendPanel({
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
   const maxHeightRef = useRef<number | null>(null);
   // Live size while a corner handle is being dragged (committed on release).
-  const [dragSize, setDragSize] = useState<{ width: number; height: number } | null>(null);
+  const [dragSize, setDragSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   const visible = legend.panelVisible === true;
   const position = legend.panelPosition ?? "top-left";
@@ -209,7 +227,7 @@ export function MapLegendPanel({
   // never past the map (minus a margin for the corner controls' spacing).
   useEffect(() => {
     if (!host) return;
-    const mapElement = host.closest(".maplibregl-map");
+    const mapElement = host.closest(".maplibregl-map, .mapboxgl-map");
     if (!mapElement) return;
     const update = () => {
       const available = Math.max(MIN_PANEL_HEIGHT, mapElement.clientHeight - 24);
@@ -258,6 +276,12 @@ export function MapLegendPanel({
       buildAutoLegend(layers, legend, {
         locale: i18n.language,
         resolveColormapColors: colormapColors,
+        geometryGeneratorLabels: {
+          centroid: t("style.generator.typeCentroid"),
+          "bounding-box": t("style.generator.typeBoundingBox"),
+          "convex-hull": t("style.generator.typeConvexHull"),
+          buffer: t("style.generator.typeBuffer"),
+        },
       }),
     // colormapGeneration re-derives once an async colormap sample lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,7 +494,7 @@ export function MapLegendPanel({
     // a flex column keeps header/footer fixed while the entry list scrolls.
     <div
       ref={panelRef}
-      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 bg-background/95 text-foreground shadow-lg backdrop-blur-md"
+      className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 map-glass text-foreground shadow-lg"
       style={{
         maxHeight: maxHeight ?? undefined,
         ...(width !== undefined ? { width: clamp(width, MIN_PANEL_WIDTH, MAX_PANEL_WIDTH) } : {}),
@@ -533,7 +557,12 @@ export function MapLegendPanel({
       {panelCollapsed ? null : displayed.length === 0 ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">{t("legendPanel.empty")}</p>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
+        <ul
+          // Opt the entries (not the header or edit controls) into View →
+          // Color vision preview, so swatches match the filtered map.
+          data-cvd-filter=""
+          className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto"
+        >
           {displayed.map((entry) => (
             <LegendEntryRow
               key={entry.id}
@@ -624,7 +653,10 @@ export function MapLegendPanel({
             <select
               value={position}
               onChange={(event) =>
-                commit({ ...legend, panelPosition: event.target.value as LegendPanelPosition })
+                commit({
+                  ...legend,
+                  panelPosition: event.target.value as LegendPanelPosition,
+                })
               }
               className="h-6 flex-1 rounded-sm border border-input bg-background px-1 text-xs text-foreground focus-visible:outline-none"
             >
@@ -715,8 +747,22 @@ function LegendEntryRow({
     0,
   );
   const editingCustom = editing && entry.custom && customEntry;
+  const schemeLabelKey = entry.classification
+    ? graduatedSchemeLabelKey(entry.classification.scheme)
+    : null;
+  const classificationLabel =
+    entry.classification && schemeLabelKey
+      ? t("legendPanel.classification", {
+          method: t(schemeLabelKey),
+          count: entry.classification.classCount,
+        })
+      : null;
   const hasBody = Boolean(
-    entry.fieldLabel || entry.gradient || editingCustom || visibleRows.length > 0,
+    entry.fieldLabel ||
+    classificationLabel ||
+    entry.gradient ||
+    editingCustom ||
+    visibleRows.length > 0,
   );
   // Sections collapse in edit mode only, to keep long legends manageable
   // while rearranging; display mode always shows everything.
@@ -741,12 +787,17 @@ function LegendEntryRow({
           <InlineEdit
             value={entry.name}
             placeholder={entry.defaultName}
-            ariaLabel={t("legendPanel.renameEntry", { name: entry.defaultName })}
+            ariaLabel={t("legendPanel.renameEntry", {
+              name: entry.defaultName,
+            })}
             className="text-sm"
             onCommit={(next) => {
               if (entry.custom && customEntry) {
                 // A custom entry's name lives on the entry itself.
-                onUpdateCustom((current) => ({ ...current, title: next.trim() || undefined }));
+                onUpdateCustom((current) => ({
+                  ...current,
+                  title: next.trim() || undefined,
+                }));
               } else {
                 onCommit(setLegendItemLabel(legend, entry.id, next, entry.defaultName));
               }
@@ -804,6 +855,17 @@ function LegendEntryRow({
       {!bodyCollapsed && entry.fieldLabel && (
         <div className="ms-6 mt-1 truncate text-[10px] font-medium text-muted-foreground">
           {entry.fieldLabel}
+        </div>
+      )}
+
+      {!bodyCollapsed && classificationLabel && (
+        <div
+          className={cn(
+            "ms-6 truncate text-[10px] text-muted-foreground",
+            !entry.fieldLabel && "mt-1",
+          )}
+        >
+          {classificationLabel}
         </div>
       )}
 
@@ -931,7 +993,12 @@ function LegendClassRow({
       )}
       <div className="flex items-center gap-1.5">
         {row.marker ? (
-          <MarkerSwatch marker={row.marker} opacity={entry.opacity} />
+          <MarkerSwatch
+            marker={row.marker}
+            size={row.size}
+            maxSize={maxRowSize > 0 ? maxRowSize : undefined}
+            opacity={entry.opacity}
+          />
         ) : (
           <GeometrySwatch
             shape={row.shape}

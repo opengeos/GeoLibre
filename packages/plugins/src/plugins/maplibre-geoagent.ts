@@ -2,12 +2,10 @@
 
 import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import {
-  authenticateWithOAuth,
-  renderEeLayer,
-  type VisualizeOptions,
-} from "maplibre-gl-earth-engine";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { VisualizeOptions } from "maplibre-gl-earth-engine";
+import { createPluginTranslator, pluginDisplayTitle, type PluginTranslate } from "../plugin-i18n";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import {
   removeGeoAgentStoreLayers,
   syncGeoAgentOverlaysToStore,
@@ -29,7 +27,9 @@ import {
   projectValue as earthEngineProjectValue,
   shouldUseTauriEarthEngineOAuth,
 } from "./earth-engine-auth";
+import { geoAgentMapEngine } from "./geoagent-map-engine";
 import { GEOAGENT_PLUGIN_ID } from "../plugin-ids";
+import { getControlMap } from "./style-map";
 
 const STORAGE_PREFIX = "geolibre.geoagent";
 
@@ -56,7 +56,9 @@ type GeoAgentControlInternals = {
   invalidateAgent?: () => void;
 };
 
-let geoAgentPosition: GeoLibreMapControlPosition = "top-left";
+type GeoAgentModule = typeof import("maplibre-gl-geoagent");
+
+const PANEL_ID = "geoagent-panel";
 
 const GEOAGENT_OPTIONS = {
   title: "GeoAgent + Earth Engine",
@@ -70,14 +72,16 @@ const GEOAGENT_OPTIONS = {
     projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID),
     includeCommunityCatalog: true,
   },
-} satisfies Omit<GeoAgentControlOptions, "position">;
+} satisfies GeoAgentControlOptions;
 
 let geoAgentControl: GeoAgentControl | null = null;
-let geoAgentControlPromise: Promise<GeoAgentControl> | null = null;
+/** The dynamic import, shared across activations: the module is engine-neutral. */
+let geoAgentModulePromise: Promise<GeoAgentModule> | null = null;
+let unregisterPanel: (() => void) | null = null;
 let geoAgentActive = false;
-// Bumped on every (re)mount so a slow async mount from an earlier
-// activate/deactivate cycle cannot resume and mount over a newer one. Only the
-// continuation whose generation still matches the latest is allowed to apply.
+// Bumped on every activation so a slow chunk load from an earlier
+// activate/deactivate cycle cannot resume and open a panel over a newer one.
+// Only the continuation whose generation still matches the latest may apply.
 let geoAgentActivationGeneration = 0;
 let earthEngineAccessTokenOverride = "";
 let earthEngineTokenTypeOverride = "Bearer";
@@ -86,73 +90,53 @@ let geoAgentEarthEngineFunctionInfo: unknown;
 
 export { GEOAGENT_PLUGIN_ID };
 
+/**
+ * GeoAgent, hosted in GeoLibre's dockable side panel. The upstream
+ * `GeoAgentControl` still drives the agent and its map tools, but its floating
+ * shell and toolbar button are replaced by the host-owned dock (see
+ * {@link mountMapControlInPanel}).
+ */
 export const maplibreGeoAgentPlugin: GeoLibrePlugin = {
   id: GEOAGENT_PLUGIN_ID,
   name: "GeoAgent",
-  version: "0.4.2",
+  version: "0.5.0",
+  // Both 2D engines: the tools that cannot stay on the shared Style Spec
+  // surface follow `mapEngine` (see geoAgentMapEngine). A renderer swap tears
+  // every active plugin down and re-activates it, so the rebuilt control is
+  // told the engine that is now primary.
+  engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     geoAgentActive = true;
-    // Return the mount promise so the host can roll back the Plugins menu when
+    // Return the load promise so the host can roll back the Plugins menu when
     // the GeoAgent chunk fails to load (e.g. a stale chunk after a web
-    // redeploy). It resolves false when the control never mounts, instead of
+    // redeploy). It resolves false when the panel never opens, instead of
     // leaving GeoAgent marked active with no visible panel.
-    return mountGeoAgentControl(app, ++geoAgentActivationGeneration);
+    return openGeoAgentPanel(app, ++geoAgentActivationGeneration);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     geoAgentActive = false;
-    unwireGeoAgentStoreSync();
-    if (geoAgentControl) {
-      app.removeMapControl(geoAgentControl);
-      geoAgentControl = null;
-    }
-    // The control's teardown already cleared its overlays from the map; drop
-    // the matching store entries so the layer panel does not list dead layers.
-    removeGeoAgentStoreLayers();
-  },
-  getMapControlPosition: () => geoAgentPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    geoAgentPosition = position;
-    if (!geoAgentControl) {
-      // Only kick off a mount if one is not already in flight. A mount started
-      // by activate() reads the updated geoAgentPosition when it adds the
-      // control, so starting a second (generation-bumping) mount here would
-      // needlessly invalidate that in-flight attempt and make its host-side
-      // rollback tear the freshly added control back down.
-      if (geoAgentActive && !geoAgentControlPromise) {
-        void mountGeoAgentControl(app, ++geoAgentActivationGeneration);
-      }
-      return;
-    }
-    app.removeMapControl(geoAgentControl);
-    const added = app.addMapControl(geoAgentControl, geoAgentPosition);
-    if (!added) {
-      // removeMapControl already tore the tools (and their overlays) down;
-      // drop the now-stale sync wiring and store layers with them.
-      unwireGeoAgentStoreSync();
-      removeGeoAgentStoreLayers();
-      return false;
-    }
-    patchGeoAgentToolRunner(geoAgentControl);
-    setTimeout(() => geoAgentControl?.expand(), 0);
-    setTimeout(enhanceEarthEngineSignIn, 0);
+    if (geoAgentControl) unmountMapControlFromPanel(geoAgentControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
+    releaseGeoAgentControl();
   },
 };
 
-async function mountGeoAgentControl(
+async function openGeoAgentPanel(
   app: GeoLibreAppAPI,
   activationGeneration: number,
 ): Promise<boolean> {
-  let control: GeoAgentControl;
+  let module: GeoAgentModule;
   try {
-    control = await loadGeoAgentControl();
+    module = await loadGeoAgentModule();
   } catch (error) {
     // The dynamic import failed (offline, or a chunk orphaned by a web
     // redeploy). Clear the active flag and report the failure so the host can
     // revert the Plugins menu rather than leaving GeoAgent stuck on "active"
-    // with no panel. The stale-chunk recovery (host side) decides whether to
-    // reload; here we only need to surface that the mount did not happen. Only
-    // clear the flag for the latest attempt so a stale failure does not
-    // deactivate a newer activation that is already in flight.
+    // with no panel. Only clear the flag for the latest attempt so a stale
+    // failure does not deactivate a newer activation that is already in flight.
     if (activationGeneration === geoAgentActivationGeneration) {
       geoAgentActive = false;
     }
@@ -163,41 +147,95 @@ async function mountGeoAgentControl(
     return false;
   }
   // Ignore a continuation superseded by a later activate/deactivate cycle so it
-  // cannot mount a stale control on top of the current one.
+  // cannot open a stale panel on top of the current one.
   if (!geoAgentActive || activationGeneration !== geoAgentActivationGeneration) {
     return false;
   }
+  if (!app.registerRightPanel || !app.openRightPanel) return false;
 
-  const added = app.addMapControl(control, geoAgentPosition);
-  if (!added) {
-    if (geoAgentControl === control) geoAgentControl = null;
+  unregisterPanel?.();
+  unregisterPanel = app.registerRightPanel({
+    id: PANEL_ID,
+    title: pluginDisplayTitle(app, GEOAGENT_PLUGIN_ID, "GeoAgent"),
+    dock: "replace-style",
+    defaultWidth: 400,
+    deactivatePluginOnClose: true,
+    render: (container) => {
+      // Built per render rather than cached: the control bakes in the engine
+      // drawing the map when it is constructed and cannot be re-pointed, and a
+      // renderer swap re-activates the plugin and so re-renders the panel.
+      const control = new module.GeoAgentControl(getGeoAgentOptions(app));
+      // The map's own removal unmounts the control without closing the panel,
+      // and a swap to an engine that never mounts (Mapbox with no token) does
+      // not re-activate the plugin either; release the store sync and layer
+      // rows then too.
+      const release = () => {
+        if (geoAgentControl === control) releaseGeoAgentControl();
+      };
+      const unmount = mountMapControlInPanel(
+        app,
+        control,
+        container,
+        () => app.closeRightPanel?.(PANEL_ID),
+        release,
+      );
+      if (!unmount) return;
+      // The dock owns collapsing and closing; the control's own close button
+      // would otherwise hide the panel content inside an open dock.
+      control.collapse = () => {};
+      geoAgentControl = control;
+      patchGeoAgentToolRunner(control);
+      control.expand();
+      const stopSignInRelabel = enhanceEarthEngineSignIn(container, app);
+      preloadEarthEngineAuthLibrary();
+      return () => {
+        stopSignInRelabel();
+        // Unmounting runs the control's onRemove, which clears its overlays
+        // from the map; drop the matching store entries with them.
+        unmount();
+        release();
+      };
+    },
+  });
+  if (!app.openRightPanel(PANEL_ID)) {
+    unregisterPanel();
+    unregisterPanel = null;
+    geoAgentActive = false;
     return false;
   }
-  patchGeoAgentToolRunner(control);
-  setTimeout(() => geoAgentControl?.expand(), 0);
-  setTimeout(enhanceEarthEngineSignIn, 0);
-  preloadEarthEngineAuthLibrary();
   return true;
 }
 
-async function loadGeoAgentControl(): Promise<GeoAgentControl> {
-  if (geoAgentControl) return geoAgentControl;
-  installEarthEngineFunctionInfoFallback();
-  geoAgentControlPromise ??= import("maplibre-gl-geoagent")
-    .then(({ GeoAgentControl }) => {
-      geoAgentControl ??= new GeoAgentControl(getGeoAgentOptions());
-      return geoAgentControl;
-    })
-    .finally(() => {
-      geoAgentControlPromise = null;
-    });
-  return geoAgentControlPromise;
+/** Drop the mounted control along with its store sync and Layers-panel rows. */
+function releaseGeoAgentControl(): void {
+  unwireGeoAgentStoreSync();
+  geoAgentControl = null;
+  removeGeoAgentStoreLayers();
 }
 
-function getGeoAgentOptions(): GeoAgentControlOptions {
+/**
+ * Import the GeoAgent chunk, sharing one import across activations.
+ *
+ * @returns The `maplibre-gl-geoagent` module.
+ */
+function loadGeoAgentModule(): Promise<GeoAgentModule> {
+  installEarthEngineFunctionInfoFallback();
+  geoAgentModulePromise ??= import("maplibre-gl-geoagent").catch((error: unknown) => {
+    // A rejected promise is cached like any other, so without this an import
+    // that failed once (offline, or a chunk orphaned by a redeploy) would keep
+    // rejecting every later activation until the page reloads. Forget it and
+    // the next activation retries — which is what the caller's catch, and the
+    // host-side rollback it drives, assume happens.
+    geoAgentModulePromise = null;
+    throw error;
+  });
+  return geoAgentModulePromise;
+}
+
+function getGeoAgentOptions(app: GeoLibreAppAPI | null): GeoAgentControlOptions {
   return {
     ...GEOAGENT_OPTIONS,
-    position: geoAgentPosition,
+    mapEngine: geoAgentMapEngine(app),
   };
 }
 
@@ -260,6 +298,8 @@ async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
     accessToken = earthEngineAccessTokenOverride;
   }
 
+  // Loaded on first use: the package is about 1.7 MB and not needed at startup.
+  const { authenticateWithOAuth, renderEeLayer } = await import("maplibre-gl-earth-engine");
   clearEarthEngineFunctionInfo();
   await authenticateWithOAuth({
     accessToken: accessToken || undefined,
@@ -373,8 +413,17 @@ function projectValue(envValue: unknown): string {
   return earthEngineProjectValue(envValue, STORAGE_PREFIX);
 }
 
-function enhanceEarthEngineSignIn(): void {
-  const details = document.querySelector<HTMLElement>(".geoagent-earth-engine");
+/**
+ * Add the Earth Engine Sign in button to GeoAgent's settings, labelled in the
+ * active language and re-labelled when the language changes.
+ *
+ * @param root - The panel container.
+ * @param app - The host API, for translation and locale changes.
+ * @returns A function that stops following the language.
+ */
+function enhanceEarthEngineSignIn(root: ParentNode, app: GeoLibreAppAPI): () => void {
+  const tr: PluginTranslate = createPluginTranslator(app, GEOAGENT_PLUGIN_ID);
+  const details = root.querySelector<HTMLElement>(".geoagent-earth-engine");
   const status = details?.querySelector<HTMLElement>(".geoagent-earth-engine-status");
   const clientIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-client-id");
   const projectIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-project-id");
@@ -385,7 +434,7 @@ function enhanceEarthEngineSignIn(): void {
   // GeoAgent counterpart of the ProcessingMenu/TopToolbar gates.
   if (details && !isEarthEngineAvailable()) {
     details.hidden = true;
-    return;
+    return () => {};
   }
   if (
     !details ||
@@ -394,23 +443,23 @@ function enhanceEarthEngineSignIn(): void {
     !projectIdInput ||
     details.querySelector(".geolibre-ee-sign-in")
   ) {
-    return;
+    return () => {};
   }
 
   const button = document.createElement("button");
   button.className = "geolibre-ee-sign-in secondary";
   button.type = "button";
-  button.textContent = "Sign in";
+  button.textContent = tr("signIn", "Sign in");
   button.addEventListener("click", async () => {
     const oauthClientId = oauthClientIdValue(clientIdInput.value);
     clientIdInput.value = oauthClientId;
     button.disabled = true;
-    status.textContent = "Opening Google sign-in...";
+    status.textContent = tr("signInOpening", "Opening Google sign-in...");
     try {
       await authenticateEarthEngine(oauthClientId);
       await applyEarthEngineAccessToken(oauthClientId, projectValue(projectIdInput.value));
       void closeTauriOauthPopups();
-      status.textContent = "Earth Engine sign-in complete.";
+      status.textContent = tr("signInComplete", "Earth Engine sign-in complete.");
     } catch (error) {
       status.textContent = errorMessage(error);
     } finally {
@@ -419,6 +468,13 @@ function enhanceEarthEngineSignIn(): void {
   });
 
   status.insertAdjacentElement("beforebegin", button);
+  // The button is plain DOM built once per panel render, so a live language
+  // change would otherwise leave it in the previous language.
+  return (
+    app.onLocaleChange?.(() => {
+      button.textContent = tr("signIn", "Sign in");
+    }) ?? (() => {})
+  );
 }
 
 async function applyEarthEngineAccessToken(

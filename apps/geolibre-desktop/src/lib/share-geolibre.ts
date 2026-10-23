@@ -1,6 +1,6 @@
 // Uploads a serialized GeoLibre project to a share server via its
-// `POST /api/projects` endpoint, authenticated with a personal API token the
-// user created on that server. Used by the Project > Share action.
+// `POST /api/projects` endpoint, authenticated with an OAuth access token or
+// a personal API token. Used by the Project > Share action.
 //
 // The host is share.geolibre.app unless the deployment names another one; see
 // `resolveShareHost` for the precedence and for why a rejected value disables
@@ -13,17 +13,19 @@ import {
   serializeProject,
 } from "@geolibre/core";
 import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
+import { isSerializationTooLargeError } from "./project-serialization-limits";
 import { getShareFetch } from "./share-fetch";
 
-export type ShareVisibility = "public" | "unlisted" | "private";
+/** `organization` is readable by every signed-in member of the owning organization. */
+export type ShareVisibility = "public" | "unlisted" | "private" | "organization";
 
 /**
  * Machine-readable cause for an upload failure the dialog can react to. Only
  * conditions that warrant dedicated UI (beyond showing the message) get a code.
- * `username-required` means the account has no username yet, which the user must
- * set on the share.geolibre.app website before any upload can succeed.
+ * `username-required` directs the user to account settings; `unauthorized`
+ * prompts a fresh sign-in or replacement personal token.
  */
-export type ShareUploadErrorCode = "username-required";
+export type ShareUploadErrorCode = "username-required" | "unauthorized";
 
 /**
  * Error thrown by {@link uploadProjectToShare}. Carries a human-readable message
@@ -49,23 +51,91 @@ export class ShareUploadError extends Error {
 // point to the server's error vocabulary is obvious and easy to update.
 const USERNAME_REQUIRED_PATTERN = /username required/i;
 
+export type ShareRole = "view" | "comment" | "edit";
+export type ShareExpiry = "24h" | "7d" | "30d" | "never";
+
+export interface ActiveShare {
+  id: string;
+  projectSlug: string;
+  title?: string;
+  visibility: ShareVisibility;
+  role: ShareRole;
+  expiresAt: string | null;
+  hasPassword: boolean;
+  createdAt: string;
+  projectUrl: string;
+  viewerUrl: string;
+}
+
 export interface ShareUploadResult {
+  id?: string;
   username: string;
   slug: string;
   projectUrl: string;
   viewerUrl: string;
   rawJsonUrl: string;
+  role?: ShareRole;
+  expiresAt?: string | null;
+  hasPassword?: boolean;
+  /**
+   * Link settings the caller requested but the server's response did not
+   * confirm. A server that predates these settings ignores the fields and
+   * returns a plain link, so the UI must not present them as applied.
+   */
+  unconfirmedSettings: ShareLinkSetting[];
 }
+
+/** A link setting whose application the server must confirm in its response. */
+export type ShareLinkSetting = "role" | "expiry" | "password";
 
 export interface ShareUploadOptions {
   token: string;
   filename: string;
   content: string;
   visibility: ShareVisibility;
+  /** Optional owning organization. Required by the server for `organization` visibility. */
+  organizationId?: string;
+  /** Groups that may read this project even when it is private. */
+  groupIds?: string[];
+  role?: ShareRole;
+  expiresIn?: ShareExpiry;
+  password?: string;
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;
   signal?: AbortSignal;
   /** Injected for testing; defaults to the share fetch (see share-fetch.ts). */
+  fetchImpl?: typeof fetch;
+}
+
+export interface SharedProjectUpdateOptions {
+  token: string;
+  projectId: string;
+  content: string;
+  expectedVersion: number;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export interface SharedProjectUpdateResult {
+  version: number;
+  versionCount: number;
+  warning: string | null;
+  /** Exact sanitized project content sent in the PUT request. */
+  savedContent: string;
+}
+
+export interface SharedProjectVersion {
+  number: number;
+  createdAt: string;
+  rawUrl: string;
+}
+
+export interface FetchSharedProjectVersionsOptions {
+  token: string;
+  projectId: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
 
@@ -99,6 +169,20 @@ export function isShareableTitle(title: string): boolean {
   );
 }
 
+/** Canonicalize and redact project content exactly as the share write path does. */
+export function sanitizeSharedProjectContent(content: string): string {
+  return serializeProject(redactCredentials(parseProject(content)));
+}
+
+/** True only when the live project still equals the exact content sent remotely. */
+export function sharedProjectContentMatches(savedContent: string, liveContent: string): boolean {
+  try {
+    return sanitizeSharedProjectContent(savedContent) === sanitizeSharedProjectContent(liveContent);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Deployment variable naming the share host. Settable at build time or, on a
  * prebuilt Docker image, with `-e GEOLIBRE_SHARE_URL=…` (the entrypoint copies it
@@ -130,20 +214,17 @@ export interface ShareHost {
 
 /**
  * Whether a URL is safe to send a Bearer token to: HTTPS anywhere, or HTTP on
- * loopback for local development, and never with credentials in the URL.
+ * loopback for local development. Share base URLs cannot include credentials,
+ * query strings, or fragments.
  *
  * The hostname is matched exactly rather than by prefix — `startsWith(
  * "http://localhost")` would also accept `http://localhost.evil.com`. A
  * self-hosted server on a private network therefore needs TLS; see
  * `docs/getting-started.md`.
- *
- * Embedded credentials are rejected regardless of scheme, mirroring the
- * `service_url()` validator in `docker/entrypoint.sh`: a `https://user:pass@host`
- * base would send Basic Auth alongside the Bearer token on every request, and
- * the value reaches log output and error messages.
  */
 function isSafeShareUrl(url: URL): boolean {
-  if (url.username || url.password) return false;
+  if (url.username || url.password || url.href.includes("?") || url.href.includes("#"))
+    return false;
   if (url.protocol === "https:") return true;
   return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
 }
@@ -166,7 +247,11 @@ export function resolveShareHost(configured?: unknown, deploymentEnv?: EnvRecord
   const raw =
     configured !== undefined ? configured : readDeploymentEnvValue(SHARE_URL_ENV, deploymentEnv);
   if (typeof raw !== "string" || !raw.trim()) {
-    return { status: "default", baseUrl: DEFAULT_SHARE_BASE_URL, configured: null };
+    return {
+      status: "default",
+      baseUrl: DEFAULT_SHARE_BASE_URL,
+      configured: null,
+    };
   }
   const trimmed = raw.trim().replace(/\/+$/, "");
   if (trimmed.toLowerCase() === SHARE_DISABLED_VALUE) {
@@ -229,11 +314,15 @@ export function shareHostLabel(): string {
 
 interface ShareProjectResponse {
   project?: {
+    id?: string;
     username?: string;
     slug?: string;
     projectUrl?: string;
     viewerUrl?: string;
     rawJsonUrl?: string;
+    role?: ShareRole;
+    expiresAt?: string | null;
+    hasPassword?: boolean;
   };
 }
 
@@ -268,10 +357,28 @@ export async function uploadProjectToShare(
 
   let safeContent: string;
   try {
-    safeContent = serializeProject(redactCredentials(parseProject(options.content)));
-  } catch {
+    safeContent = sanitizeSharedProjectContent(options.content);
+  } catch (error) {
+    // A project past the engine's string cap is a size problem the dialog
+    // explains, not a validation failure.
+    if (isSerializationTooLargeError(error)) throw error;
     throw new Error("The project could not be validated before sharing.");
   }
+
+  // Built before the request rather than inline: the content is escaped into a
+  // JSON string, so the body is longer than the project text and can pass the
+  // engine's string cap on its own. Thrown inside the request's try block, that
+  // read as a network failure (GeoLibre#3025).
+  const body = JSON.stringify({
+    filename: options.filename,
+    content: safeContent,
+    visibility: options.visibility,
+    ...(options.organizationId ? { organizationId: options.organizationId } : {}),
+    ...(options.groupIds?.length ? { groupIds: options.groupIds } : {}),
+    ...(options.role ? { role: options.role } : {}),
+    ...(options.expiresIn ? { expiresIn: options.expiresIn } : {}),
+    ...(options.password ? { password: options.password } : {}),
+  });
 
   let response: Response;
   try {
@@ -281,11 +388,7 @@ export async function uploadProjectToShare(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        filename: options.filename,
-        content: safeContent,
-        visibility: options.visibility,
-      }),
+      body,
       signal,
     });
   } catch (error) {
@@ -309,20 +412,358 @@ export async function uploadProjectToShare(
   if (!project?.projectUrl || !project.rawJsonUrl) {
     throw new Error(`${hostLabel} returned an unexpected response.`);
   }
+  // Normalized like the Active Shares list, so an unknown role from the server
+  // fails closed to "view" rather than flowing through unchecked.
+  const role = project.role === undefined ? undefined : normalizeShareRole(project.role);
+  // "edit" is the full-access default, so a server that ignores the role field
+  // still honors it; a restricted role, an expiry, or a password must be echoed.
+  const unconfirmedSettings: ShareLinkSetting[] = [];
+  // Compared on the raw value: an unknown role normalizes to "view", which
+  // must not read as confirming a requested "view".
+  if (options.role && options.role !== "edit" && project.role !== options.role) {
+    unconfirmedSettings.push("role");
+  }
+  if (options.expiresIn && !project.expiresAt) unconfirmedSettings.push("expiry");
+  if (options.password && project.hasPassword !== true) unconfirmedSettings.push("password");
   return {
+    id: project.id,
     username: project.username ?? "",
     slug: project.slug ?? "",
     projectUrl: project.projectUrl,
     viewerUrl: project.viewerUrl ?? "",
     rawJsonUrl: project.rawJsonUrl,
+    role,
+    expiresAt: project.expiresAt,
+    hasPassword: project.hasPassword,
+    unconfirmedSettings,
   };
+}
+
+export function normalizeShareRole(value: unknown): ShareRole {
+  return value === "view" || value === "comment" || value === "edit" ? value : "view";
+}
+
+export interface FetchSharesOptions {
+  token: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * The share server has no share-link management API. The hosted
+ * share.geolibre.app publishes projects but only the self-hosted GeoLibre
+ * server lists and revokes share links, so a 404 here means "not supported",
+ * not "your links are gone".
+ */
+export class ShareLinksUnsupportedError extends Error {
+  readonly host: string;
+
+  constructor(host: string) {
+    super(`${host} does not manage share links.`);
+    this.name = "ShareLinksUnsupportedError";
+    this.host = host;
+  }
+}
+
+export async function fetchProjectShares(options: FetchSharesOptions): Promise<ActiveShare[]> {
+  const token = options.token.trim();
+  if (!token) {
+    throw new Error("Add a share API token in Settings before managing shares.");
+  }
+
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) {
+    throw new Error("No share server is configured for this deployment.");
+  }
+  const base = resolved.replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base}/api/shares`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Invalid or expired API token.");
+  }
+  if (response.status === 404) {
+    throw new ShareLinksUnsupportedError(hostOf(base));
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to fetch shares (HTTP ${response.status}).`);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as { shares?: unknown[] };
+  const rawShares = Array.isArray(payload.shares) ? payload.shares : [];
+  return rawShares
+    .map((raw) => {
+      const item = (raw ?? {}) as Record<string, unknown>;
+      // Unparseable access-control metadata fails closed to the least
+      // privileged role, so a server that adds a role this build doesn't know
+      // never gets displayed as full edit access.
+      const role = normalizeShareRole(item.role);
+      const visibility: ShareVisibility =
+        item.visibility === "public" ||
+        item.visibility === "private" ||
+        item.visibility === "organization"
+          ? item.visibility
+          : "unlisted";
+      const projectUrl = String(
+        item.projectUrl || `${base}/u/${encodeURIComponent(String(item.slug ?? ""))}`,
+      );
+      return {
+        id: String(item.id || ""),
+        projectSlug: String(item.projectSlug || item.slug || ""),
+        title: String(item.title || ""),
+        visibility,
+        role,
+        expiresAt: item.expiresAt ? String(item.expiresAt) : null,
+        hasPassword: Boolean(item.hasPassword || item.passwordProtected),
+        createdAt: String(item.createdAt || ""),
+        projectUrl,
+        // The project URL becomes a query *value* here, so it has to be
+        // percent-encoded: a raw `&` or `#` in it would otherwise truncate the
+        // viewer link at that character.
+        viewerUrl: String(item.viewerUrl || `${base}/viewer?url=${encodeURIComponent(projectUrl)}`),
+      };
+    })
+    .filter((s) => s.id !== "");
+}
+
+export interface RevokeShareOptions {
+  token: string;
+  shareId: string;
+  baseUrl?: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export async function revokeShare(options: RevokeShareOptions): Promise<void> {
+  const token = options.token.trim();
+  if (!token) {
+    throw new Error("API token required to revoke share.");
+  }
+
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) {
+    throw new Error("No share server is configured for this deployment.");
+  }
+  const base = resolved.replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base}/api/shares/${encodeURIComponent(options.shareId)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error(`Could not reach ${hostOf(base)} to revoke share.`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Invalid or expired API token.");
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to revoke share (HTTP ${response.status}).`);
+  }
+}
+
+export interface VerifySharePasswordOptions {
+  shareUrl: string;
+  password: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+export async function verifySharePassword(
+  options: VerifySharePasswordOptions,
+): Promise<{ projectContent: string; role?: ShareRole }> {
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${options.shareUrl.replace(/\/+$/, "")}/access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      // The password travels in the request body only. Sending it a second time
+      // as a custom header would widen its exposure for nothing: proxy and
+      // logging layers routinely capture headers separately from bodies.
+      body: JSON.stringify({ password: options.password }),
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Could not reach share server.");
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Incorrect password.");
+  }
+  if (!response.ok) {
+    throw new Error(`Password verification failed (HTTP ${response.status}).`);
+  }
+
+  const data = (await response.json()) as { content?: string; role?: unknown };
+  return {
+    projectContent: typeof data.content === "string" ? data.content : JSON.stringify(data),
+    role: data.role === undefined ? undefined : normalizeShareRole(data.role),
+  };
+}
+
+/** Save a new version of an editable project already hosted by the share server. */
+export async function updateSharedProjectContent(
+  options: SharedProjectUpdateOptions,
+): Promise<SharedProjectUpdateResult> {
+  const token = options.token.trim();
+  if (!token) throw new Error("Add a share API token in Settings before saving.");
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) throw new Error("No share server is configured for this deployment.");
+  const base = resolved.replace(/\/+$/, "");
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let safeContent: string;
+  try {
+    safeContent = sanitizeSharedProjectContent(options.content);
+  } catch (error) {
+    if (isSerializationTooLargeError(error)) throw error;
+    throw new Error("The project could not be validated before saving.");
+  }
+  // Built outside the request's try block, as in uploadProjectToShare, so a
+  // body past the string cap is not reported as a network failure.
+  const body = JSON.stringify({
+    content: safeContent,
+    expectedVersion: options.expectedVersion,
+  });
+
+  let response: Response;
+  try {
+    response = await fetchImpl(
+      `${base}/api/projects/${encodeURIComponent(options.projectId)}/content`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body,
+        signal,
+      },
+    );
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new Error("Save timed out. Please try again.");
+    }
+    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  }
+  if (!response.ok) {
+    const { message, code } = await uploadErrorInfo(response);
+    throw new ShareUploadError(message, code);
+  }
+  const payload = (await response.json().catch(() => null)) as {
+    project?: { versionCount?: unknown };
+    version?: unknown;
+    warning?: unknown;
+  } | null;
+  if (typeof payload?.version !== "number" || !Number.isFinite(payload.version)) {
+    throw new Error(`${hostOf(base)} returned an unexpected response.`);
+  }
+  return {
+    version: payload.version,
+    versionCount:
+      typeof payload.project?.versionCount === "number" &&
+      Number.isFinite(payload.project.versionCount)
+        ? payload.project.versionCount
+        : payload.version,
+    warning: typeof payload.warning === "string" && payload.warning ? payload.warning : null,
+    savedContent: safeContent,
+  };
+}
+
+/** Fetch the authoritative version history retained by the share server. */
+export async function fetchSharedProjectVersions(
+  options: FetchSharedProjectVersionsOptions,
+): Promise<SharedProjectVersion[]> {
+  const token = options.token.trim();
+  if (!token) throw new Error("Add a share API token in Settings before loading versions.");
+  const resolved = options.baseUrl ?? resolveShareBaseUrl();
+  if (!resolved) throw new Error("No share server is configured for this deployment.");
+  const base = resolved.replace(/\/+$/, "");
+  const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const url = `${base}/api/projects/${encodeURIComponent(options.projectId)}/versions`;
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? getShareFetch())(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new Error("Load timed out. Please try again.");
+    }
+    throw new Error(`Could not reach ${hostOf(base)}. Check your internet connection.`);
+  }
+  if (!response.ok) {
+    const { message, code } = await uploadErrorInfo(response);
+    throw new ShareUploadError(message, code);
+  }
+  const payload = (await response.json().catch(() => null)) as { versions?: unknown } | null;
+  if (!Array.isArray(payload?.versions)) {
+    throw new Error(`${hostOf(base)} returned an unexpected response.`);
+  }
+  return payload.versions
+    .map((value): SharedProjectVersion | null => {
+      if (!value || typeof value !== "object") return null;
+      const raw = value as Record<string, unknown>;
+      const number =
+        typeof raw.number === "number"
+          ? raw.number
+          : typeof raw.version === "number"
+            ? raw.version
+            : null;
+      if (number === null || !Number.isFinite(number)) return null;
+      return {
+        number,
+        createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
+        rawUrl: `${url}/${number}`,
+      };
+    })
+    .filter((version): version is SharedProjectVersion => version !== null)
+    .sort((a, b) => b.number - a.number);
 }
 
 async function uploadErrorInfo(
   response: Response,
 ): Promise<{ message: string; code?: ShareUploadErrorCode }> {
   if (response.status === 401) {
-    return { message: "Invalid or expired API token. Update it in Settings." };
+    return { message: "unauthorized", code: "unauthorized" };
   }
   if (response.status === 403) {
     return { message: "This API token is not allowed to upload projects." };
@@ -330,7 +771,9 @@ async function uploadErrorInfo(
   if (response.status === 429) {
     return { message: "Too many uploads. Please wait a while and try again." };
   }
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
   // Cap the server-provided string so a misconfigured host or MITM on a
   // non-HTTPS share URL cannot render a wall of text in the dialog. Slice by
   // code point so the cap can't orphan a UTF-16 surrogate pair.

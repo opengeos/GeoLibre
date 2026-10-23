@@ -2,6 +2,7 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
 import type { Layer } from "@deck.gl/core";
 import type { GeoLibreAppAPI, GeoLibreDeckGL, GeoLibrePlugin } from "../types";
+import { getStyleMap } from "./style-map";
 import { colorToRgba } from "./deck-style-utils";
 import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import {
@@ -11,6 +12,7 @@ import {
   sliceLineAtDistance,
   sliceRouteAtDistance,
 } from "./route-animation-geometry";
+import { LocalizedError } from "../localized-error";
 
 /**
  * How the selected route layer is being drawn, so the animated marker/trail can
@@ -298,6 +300,12 @@ class RouteAnimationEngine {
     this.handleStyleData = this.handleStyleData.bind(this);
     this.tick = this.tick.bind(this);
     map.on("styledata", this.handleStyleData);
+    // `isStyleLoaded()` is also false while any source is still fetching
+    // tiles, and neither engine promises a later `styledata` once those land
+    // (mapbox-gl emits none), so a layer added mid-load would never appear.
+    // Sources report their own completion; the handler is a no-op once the
+    // marker source exists.
+    map.on("sourcedata", this.handleStyleData);
     // setRoute() starts the animation loop itself when settings.playing and the
     // route has length, so no extra play() call is needed here.
     this.setRoute(coords, elevations);
@@ -350,7 +358,15 @@ class RouteAnimationEngine {
     this.destroyed = true;
     this.pause();
     this.map.off("styledata", this.handleStyleData);
-    this.removeLayers();
+    this.map.off("sourcedata", this.handleStyleData);
+    // A renderer swap tears the map down before the host rebinds the engine,
+    // and a removed mapbox-gl map throws from `getLayer` (its style is gone);
+    // there is nothing left to remove from it either way.
+    try {
+      this.removeLayers();
+    } catch {
+      // Already torn down with the map.
+    }
     this.clearDeck();
   }
 
@@ -755,7 +771,7 @@ function ensureDeck(app: GeoLibreAppAPI): void {
 }
 
 function attachEngine(app: GeoLibreAppAPI): boolean {
-  const map = app.getMap?.();
+  const map = getStyleMap(app);
   if (!map) return false;
   if (engine && engine.getMapInstance() !== map) detachEngine();
   if (!engine) {
@@ -1133,10 +1149,16 @@ export async function recordRouteAnimation({
   onProgress,
 }: RecordRouteAnimationOptions = {}): Promise<RouteAnimationRecording> {
   if (!engine) {
-    throw new Error("The route animation is not active.");
+    throw new LocalizedError(
+      "toolbar.routeAnimation.errors.notActive",
+      "The route animation is not active.",
+    );
   }
   if (measureLine(routeCoords).totalMeters <= 0) {
-    throw new Error("Select a line layer with length before recording.");
+    throw new LocalizedError(
+      "toolbar.routeAnimation.errors.selectLineLayer",
+      "Select a line layer with length before recording.",
+    );
   }
   const mimeType = pickRouteVideoMimeType();
   if (!mimeType) throw new RouteVideoUnsupportedError();
@@ -1271,7 +1293,13 @@ export async function recordRouteAnimation({
   // Guard against a browser that never fires onstop leaving this await hung.
   const timeout = new Promise<never>((_, reject) => {
     const timer = window.setTimeout(
-      () => reject(new Error("Recording timed out waiting for the encoder.")),
+      () =>
+        reject(
+          new LocalizedError(
+            "toolbar.routeAnimation.errors.encoderTimeout",
+            "Recording timed out waiting for the encoder.",
+          ),
+        ),
       ROUTE_VIDEO_STOP_TIMEOUT_MS,
     );
     void finished.then(
@@ -1287,6 +1315,11 @@ export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
   id: ROUTE_ANIMATION_PLUGIN_ID,
   name: "Route Animation",
   version: "1.0.0",
+  // The marker, trail and follow camera use `addImage`/`updateImage`,
+  // GeoJSON sources, `jumpTo` and `triggerRepaint`, which mapbox-gl shares, and
+  // the 3D marker rides the shared deck.gl overlay that already binds to the
+  // Mapbox map; the video export captures whichever canvas hosts the map.
+  engines: ["maplibre", "mapbox"],
   activeByDefault: false,
   activate: (app: GeoLibreAppAPI) => openRouteAnimationPanel(app),
   deactivate: (app: GeoLibreAppAPI) => closeRouteAnimationPanel(app),

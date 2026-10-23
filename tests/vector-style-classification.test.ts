@@ -7,6 +7,13 @@ import {
   MAX_MANUAL_CATEGORIZED_VALUES,
   proportionalSizeBounds,
 } from "../apps/geolibre-desktop/src/lib/vector-style-classification";
+import {
+  GRADUATED_CLASSIFICATION_SCHEMES,
+  graduatedSchemeLabelKey,
+  MANUAL_CLASSIFICATION_SCHEME,
+  normalizeClassificationScheme,
+  regeneratingClassificationScheme,
+} from "../apps/geolibre-desktop/src/components/panels/style-panel/classification-helpers";
 
 const tiledLayer = {};
 
@@ -165,5 +172,44 @@ describe("proportionalSizeBounds", () => {
 
   it("accepts separately loaded property values", () => {
     assert.deepEqual(proportionalSizeBounds({}, "height", [1, 5, 9]), { min: 1, max: 9 });
+  });
+});
+
+describe("graduated classification schemes", () => {
+  it("offers standard deviation, geometric interval and manual in the Style panel", () => {
+    for (const scheme of ["standard-deviation", "geometric-interval", "manual"]) {
+      assert.ok(
+        GRADUATED_CLASSIFICATION_SCHEMES.some((option) => option.value === scheme),
+        scheme,
+      );
+      assert.equal(normalizeClassificationScheme("graduated", scheme), scheme);
+    }
+    // Graduated-only schemes are not categorized ones.
+    assert.equal(normalizeClassificationScheme("categorized", "manual"), "top-values");
+  });
+
+  it("regenerates hand-edited breaks by equal interval and leaves other schemes alone", () => {
+    assert.equal(regeneratingClassificationScheme(MANUAL_CLASSIFICATION_SCHEME), "equal-interval");
+    assert.equal(regeneratingClassificationScheme("quantile"), "quantile");
+  });
+
+  it("resolves the legend label key of a graduated scheme", () => {
+    assert.equal(graduatedSchemeLabelKey("quantile"), "style.symbology.schemeQuantile");
+    assert.equal(graduatedSchemeLabelKey("manual"), "style.symbology.schemeManual");
+    assert.equal(graduatedSchemeLabelKey("top-values"), null);
+  });
+
+  it("classifies graduated stops with the new schemes", () => {
+    const values = [1, 10, 100, 1000];
+    const stops = createGraduatedStops(
+      tiledLayer,
+      "pop",
+      3,
+      "viridis",
+      "geometric-interval",
+      values,
+    );
+    assert.equal(stops.length, 3);
+    assert.ok(Math.abs(Number(stops[1].value) - 10) < 1e-9);
   });
 });

@@ -1,4 +1,4 @@
-import type maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * Lazily-generated MapLibre sprite images (fill-pattern tiles and marker icons).
@@ -6,12 +6,11 @@ import type maplibregl from "maplibre-gl";
  * GeoLibre has no static sprite sheet, so recolorable pattern/marker images are
  * drawn on a canvas on demand. A layer references an image by a deterministic id
  * (which encodes everything needed to regenerate it: shape/pattern + color +
- * size). When MapLibre cannot find that id it fires `styleimagemissing`; the
- * handler installed here looks up the registered factory, generates the image,
- * and calls `map.addImage`. This is the idiomatic MapLibre lazy-image pattern
- * and, because the handler lives on the map (not the style), it survives basemap
- * `setStyle` swaps that clear all images: the next render re-requests the id and
- * the image is regenerated.
+ * size). The missing-image resolver looks up the registered factory, generates
+ * the image, and calls `map.addImage` before MapLibre collects the images for a
+ * tile. Older GL engines use `styleimagemissing` instead. Both hooks live on the
+ * map (not the style), surviving basemap `setStyle` swaps that clear all images:
+ * the next render re-requests the id and the image is regenerated.
  */
 
 /**
@@ -34,45 +33,10 @@ export function hashText(text: string): string {
   return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
 }
 
-// Remote SVG sources we have already warned about, so the console message below
-// fires once per distinct URL instead of on every image regeneration.
-const warnedRemoteSvgSources = new Set<string>();
-
-/**
- * Resolve user-supplied SVG input to an `Image.src`: inline markup (starting
- * with `<`) is encoded as a data URL; otherwise only `data:` and `http(s):`
- * URLs are accepted. Returns null for empty input or an unsupported scheme
- * (e.g. `file:`), which the caller treats as "no image" rather than letting an
- * arbitrary URL be loaded.
- *
- * Remote `http(s):` URLs are supported intentionally (custom marker/pattern
- * SVGs) but trigger a cross-origin request when rendered. Because a shared
- * `.geolibre.json` can carry such a URL, we log a one-time warning so the
- * outbound request is visible; prefer inline `<svg>` or `data:` in shared
- * projects.
- */
-export function resolveSvgSource(markup: string): string | null {
-  const trimmed = markup.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("<")) {
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`;
-  }
-  if (/^https?:\/\//i.test(trimmed)) {
-    if (!warnedRemoteSvgSources.has(trimmed)) {
-      warnedRemoteSvgSources.add(trimmed);
-      console.warn(
-        `[geolibre] Loading a custom SVG from a remote URL triggers a ` +
-          `cross-origin request: ${trimmed}. Prefer inline <svg> markup or a ` +
-          `data: URL in shared projects.`,
-      );
-    }
-    return trimmed;
-  }
-  if (trimmed.startsWith("data:")) {
-    return trimmed;
-  }
-  return null;
-}
+// The custom-SVG source resolver lives in @geolibre/core so the map's sprite
+// baker and the two legend renderers cannot disagree about what a marker's
+// `markerSvg` means; re-exported here for the existing call sites.
+export { resolveSvgSource } from "@geolibre/core";
 
 /** A bitmap accepted by `map.addImage`. */
 export type GeneratedImage = Parameters<maplibregl.Map["addImage"]>[1];
@@ -84,6 +48,52 @@ export interface GeneratedImageResult {
 }
 
 /** Produces an image synchronously, or asynchronously (e.g. rasterizing SVG). */
+/**
+ * Materialise a generated image as a canvas, for renderers that take an
+ * element rather than MapLibre's `addImage` payload (the globe's billboards
+ * and polygon materials). Resolves `null` when the factory produced nothing
+ * or the payload is a shape a canvas cannot be drawn from.
+ */
+export async function generatedImageToCanvas(
+  produced: ReturnType<GeneratedImageFactory>,
+): Promise<{ canvas: HTMLCanvasElement; pixelRatio: number } | null> {
+  const result = await produced;
+  if (!result) return null;
+  const { image, pixelRatio } = result;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  if (typeof ImageData !== "undefined" && image instanceof ImageData) {
+    canvas.width = image.width;
+    canvas.height = image.height;
+    context.putImageData(image, 0, 0);
+    return { canvas, pixelRatio };
+  }
+  const drawable = image as { width?: number; height?: number; data?: unknown };
+  if (drawable.data instanceof Uint8ClampedArray || drawable.data instanceof Uint8Array) {
+    const width = drawable.width ?? 0;
+    const height = drawable.height ?? 0;
+    if (!width || !height) return null;
+    canvas.width = width;
+    canvas.height = height;
+    const pixels = new Uint8ClampedArray(drawable.data.length);
+    pixels.set(drawable.data as Uint8ClampedArray);
+    context.putImageData(new ImageData(pixels, width, height), 0, 0);
+    return { canvas, pixelRatio };
+  }
+  if (typeof drawable.width === "number" && typeof drawable.height === "number") {
+    canvas.width = drawable.width;
+    canvas.height = drawable.height;
+    try {
+      context.drawImage(image as CanvasImageSource, 0, 0);
+      return { canvas, pixelRatio };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export type GeneratedImageFactory = () =>
   | GeneratedImageResult
   | Promise<GeneratedImageResult | null>
@@ -99,6 +109,18 @@ const activeMaps = new Set<WeakRef<maplibregl.Map>>();
 // markup hashes to a new id) can't grow it without limit. Built-in shapes and
 // patterns have low cardinality and stay well under this.
 const MAX_GENERATED_IMAGE_FACTORIES = 512;
+
+/**
+ * The registered factory for a generated image id, for renderers that bake
+ * their own sprite sheet (the ArcGIS vector tile layer) instead of answering
+ * MapLibre's `styleimagemissing`.
+ *
+ * @param id - A generated image id.
+ * @returns The factory, or `undefined` when the id is not a generated image.
+ */
+export function generatedImageFactory(id: string): GeneratedImageFactory | undefined {
+  return factories.get(id);
+}
 
 /**
  * Register the factory that generates the image for `id`. Idempotent: re-running
@@ -123,13 +145,23 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
         activeMaps.delete(ref);
         continue;
       }
-      if (map.hasImage(id)) {
+      // mapbox-gl's image manager has no image scope until its style has
+      // loaded, so `hasImage` throws there instead of answering false. A map
+      // that is not ready holds no stale placeholder to replace, and asks for
+      // the image through `styleimagemissing` once it is.
+      let stale = false;
+      try {
+        stale = map.hasImage(id);
+      } catch {
+        continue;
+      }
+      if (stale) {
         try {
           map.removeImage(id);
         } catch {
           // Ignore
         }
-        addGeneratedImage(map, id);
+        void addGeneratedImage(map, id);
       }
     }
   }
@@ -137,7 +169,7 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
 
 const TRANSPARENT_1X1 = new Uint8Array([0, 0, 0, 0]);
 
-function addGeneratedImage(map: maplibregl.Map, id: string): void {
+function addGeneratedImage(map: maplibregl.Map, id: string): void | Promise<void> {
   if (map.hasImage(id)) return;
   const factory = factories.get(id);
   if (!factory) {
@@ -156,7 +188,7 @@ function addGeneratedImage(map: maplibregl.Map, id: string): void {
     return;
   }
   if (result instanceof Promise) {
-    result
+    return result
       .then((resolved) => {
         if (resolved && !map.hasImage(id)) {
           map.addImage(id, resolved.image, { pixelRatio: resolved.pixelRatio });
@@ -169,13 +201,12 @@ function addGeneratedImage(map: maplibregl.Map, id: string): void {
           map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
         }
       });
-    return;
   }
   map.addImage(id, result.image, { pixelRatio: result.pixelRatio });
 }
 
 /**
- * Install the one-time `styleimagemissing` handler that materializes generated
+ * Install the one-time missing-image hook that materializes generated
  * images for this map. Safe to call on every sync; it wires the map only once.
  */
 export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
@@ -184,7 +215,24 @@ export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
   if (typeof map.on !== "function") return;
   wiredMaps.add(map);
   activeMaps.add(new WeakRef(map));
-  map.on("styleimagemissing", (event) => {
-    addGeneratedImage(map, event.id);
-  });
+  if (typeof map.setMissingStyleImageResolver === "function") {
+    // MapLibre 6 fires styleimagemissing after collecting a tile's images.
+    // Resolve beforehand, awaiting SVG rasterization as well as built-in tiles.
+    // The map holds a single resolver, so hand ids that are not generated
+    // images to whichever one was installed before ours (MapLibre exposes no
+    // getter; the field is read defensively).
+    const previous = (map as { _missingStyleImageResolver?: unknown })._missingStyleImageResolver;
+    const fallback =
+      typeof previous === "function"
+        ? (previous as (id: string) => void | Promise<void>)
+        : undefined;
+    map.setMissingStyleImageResolver((id) =>
+      factories.has(id) ? addGeneratedImage(map, id) : fallback?.(id),
+    );
+  } else {
+    // Mapbox GL and older MapLibre versions still request images by event.
+    map.on("styleimagemissing", (event) => {
+      void addGeneratedImage(map, event.id);
+    });
+  }
 }

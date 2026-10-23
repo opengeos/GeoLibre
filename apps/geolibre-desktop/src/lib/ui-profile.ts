@@ -12,7 +12,7 @@ import type { ExperienceLevel, UiProfileSettings } from "../hooks/useDesktopSett
 export type ComplexityTier = "basic" | "intermediate" | "advanced";
 
 /**
- * Plugins toggled from other menus (Effects/Directions/Reverse Geocode via the
+ * Plugins toggled from other menus (Effects/Directions/Reverse Geocode/Layer Control via the
  * Controls menu, deck.gl viz via Add Data), so they are excluded from the
  * Plugins menu and from the UI-profile plugin lists. Keep in sync with
  * `PluginsMenu`'s skip list. Literal ids (mirroring `EFFECTS_PLUGIN_ID` etc.
@@ -24,6 +24,7 @@ export const MENU_MANAGED_PLUGIN_IDS = new Set<string>([
   "maplibre-gl-directions", // DIRECTIONS_PLUGIN_ID
   "maplibre-reverse-geocode", // REVERSE_GEOCODE_PLUGIN_ID
   "maplibre-deckgl-viz", // DECK_VIZ_PLUGIN_ID
+  "maplibre-layer-control", // LAYER_CONTROL_PLUGIN_ID
 ]);
 
 /** The plugin ids that participate in the UI profile (excludes the menu-managed
@@ -82,11 +83,31 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "gdb", section: "files", labelKey: "toolbar.item.gdbLayer", tier: "intermediate" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
+  {
+    id: "landxml",
+    section: "files",
+    labelKey: "toolbar.layerType.landxml",
+    tier: "advanced",
+  },
+  {
+    id: "polyline",
+    section: "files",
+    labelKey: "toolbar.layerType.polyline",
+    tier: "intermediate",
+  },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },
   { id: "osm-pbf", section: "files", labelKey: "toolbar.item.osmPbfLayer", tier: "advanced" },
+  {
+    id: "spaceborne-lidar",
+    section: "files",
+    labelKey: "toolbar.item.spaceborneLidarLayer",
+    tier: "advanced",
+  },
   // Web services
   { id: "xyz", section: "webServices", labelKey: "toolbar.layerType.xyz", tier: "basic" },
+  { id: "wcs", section: "webServices", labelKey: "toolbar.layerType.wcs", tier: "basic" },
   { id: "wms", section: "webServices", labelKey: "toolbar.layerType.wms", tier: "basic" },
+  { id: "csw", section: "webServices", labelKey: "toolbar.layerType.csw", tier: "intermediate" },
   { id: "wfs", section: "webServices", labelKey: "toolbar.layerType.wfs", tier: "intermediate" },
   { id: "wmts", section: "webServices", labelKey: "toolbar.layerType.wmts", tier: "intermediate" },
   {
@@ -112,6 +133,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     section: "webServices",
     labelKey: "toolbar.layerType.georss",
     tier: "intermediate",
+  },
+  {
+    id: "geoboundaries",
+    section: "webServices",
+    labelKey: "toolbar.layerType.geoBoundaries",
+    tier: "basic",
   },
   { id: "stac", section: "webServices", labelKey: "toolbar.item.stacLayer", tier: "advanced" },
   { id: "video", section: "webServices", labelKey: "toolbar.layerType.video", tier: "advanced" },
@@ -142,6 +169,19 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     tier: "advanced",
   },
   {
+    id: "cesium-ion",
+    section: "threeD",
+    labelKey: "toolbar.layerType.cesiumIon",
+    tier: "advanced",
+  },
+  {
+    id: "czml",
+    section: "threeD",
+    labelKey: "toolbar.layerType.czml",
+    tier: "advanced",
+  },
+  { id: "kml", section: "threeD", labelKey: "addData.kind.kml.label", tier: "advanced" },
+  {
     id: "gltf-model",
     section: "threeD",
     labelKey: "toolbar.layerType.gltfModel",
@@ -158,6 +198,18 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     id: "postgres",
     section: "databases",
     labelKey: "toolbar.layerType.postgres",
+    tier: "advanced",
+  },
+  {
+    id: "mssql",
+    section: "databases",
+    labelKey: "toolbar.layerType.mssql",
+    tier: "advanced",
+  },
+  {
+    id: "iceberg",
+    section: "databases",
+    labelKey: "toolbar.layerType.iceberg",
     tier: "advanced",
   },
 ];
@@ -183,11 +235,20 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-enviroatlas": "advanced",
   "maplibre-gl-national-map": "advanced",
   "maplibre-gl-arcgis-hub": "advanced",
+  "geolibre-tennessee-gis": "advanced",
+  "geolibre-us-federal-gis": "advanced",
+  "geolibre-us-state-gis": "advanced",
+  "geolibre-us-local-gis": "advanced",
   "maplibre-gl-source-coop": "advanced",
+  "geolibre-s3-browser": "advanced",
   "maplibre-gl-huggingface": "advanced",
+  "maplibre-gl-vantor": "advanced",
+  "maplibre-gl-usgs-dem": "advanced",
   "maplibre-gl-esri-wayback": "advanced",
   "maplibre-gl-geoagent": "advanced",
+  "maplibre-samgeo": "advanced",
   "maplibre-gl-usgs-lidar": "advanced",
+  "geolibre-point-cloud-annotation": "advanced",
   "maplibre-gl-overture-maps": "advanced",
   "maplibre-gl-time-slider": "advanced",
   "maplibre-gl-components": "advanced",
@@ -301,6 +362,18 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "project.exportLayerStyles",
+    menuId: "project",
+    labelKey: "toolbar.item.exportLayerStylesEllipsis",
+    tier: "intermediate",
+  },
+  {
+    id: "project.exportLayers",
+    menuId: "project",
+    labelKey: "toolbar.item.exportLayersEllipsis",
+    tier: "intermediate",
+  },
+  {
     id: "project.collaborate",
     menuId: "project",
     labelKey: "toolbar.item.collaborateEllipsis",
@@ -392,6 +465,27 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "view.colorVision",
+    menuId: "view",
+    labelKey: "toolbar.item.colorVisionPreview",
+    tier: "intermediate",
+  },
+  {
+    // "basic", not "advanced": this is the only control that switches the
+    // primary map back to MapLibre, and a preset *hides* items above its tier
+    // rather than disabling them. A beginner opening a project saved with
+    // `primaryRenderer: "cesium"` would otherwise land on the globe with the
+    // MapLibre-only tools greyed out and no visible way back (#2217 review).
+    // Two overrides back this up while the globe is active, covering the two
+    // ways a hand-edited profile could hide the escape hatch: ViewMenu forces
+    // this submenu visible past `hiddenMenuItems`, and TopToolbar mounts
+    // ViewMenu at all past `hiddenMenus: ["view"]`.
+    id: "view.renderingEngine",
+    menuId: "view",
+    labelKey: "toolbar.item.renderingEngine",
+    tier: "basic",
+  },
+  {
     id: "view.googleMaps",
     menuId: "view",
     labelKey: "toolbar.item.viewInGoogleMaps",
@@ -407,7 +501,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // also governs the per-category Whitebox submenus, so those categories have no
   // separate entries here. The conversion/vector/network/statistics/raster,
   // geocode, model-builder, and segmentation toggles drive GeoLibre's own
-  // client-side tools (grouped under the "GeoLibre" submenu).
+  // client-side tools (grouped under the "GeoLibre Toolbox" submenu).
   {
     id: "processing.assistant",
     menuId: "processing",
@@ -417,7 +511,10 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   {
     id: "processing.whitebox",
     menuId: "processing",
-    labelKey: "toolbar.item.whitebox",
+    // Same key the Processing menu item uses, so this toggle and the item it
+    // controls read alike. A bare "Whitebox" here would send a user looking for
+    // "Whitebox Toolbox" in the visibility list past the row that hides it.
+    labelKey: "processing.whitebox.toolbox",
     tier: "advanced",
   },
   {
@@ -457,9 +554,21 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "processing.batchTools",
+    menuId: "processing",
+    labelKey: "toolbar.item.batchTools",
+    tier: "advanced",
+  },
+  {
     id: "processing.modelBuilder",
     menuId: "processing",
     labelKey: "toolbar.item.modelBuilder",
+    tier: "advanced",
+  },
+  {
+    id: "processing.obiaWorkbench",
+    menuId: "processing",
+    labelKey: "toolbar.item.obiaWorkbench",
     tier: "advanced",
   },
   {
@@ -523,6 +632,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "advanced",
   },
   // Controls — built-in map controls
+  {
+    id: "controls.layerControl",
+    menuId: "controls",
+    labelKey: "toolbar.plugin.maplibre-layer-control",
+    tier: "basic",
+  },
   {
     id: "controls.mapControl.navigation",
     menuId: "controls",
@@ -622,6 +737,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     labelKey: "toolbar.item.graticule",
     tier: "intermediate",
   },
+  {
+    id: "controls.pointerElevation",
+    menuId: "controls",
+    labelKey: "toolbar.item.pointerElevation",
+    tier: "intermediate",
+  },
   // Id kept as `controls.clouds` (not renamed to `controls.weather`) so a
   // persisted `hiddenMenuItems: ["controls.clouds"]` from before the Clouds →
   // Weather rename keeps hiding this (now Weather) submenu instead of silently
@@ -636,6 +757,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     id: "controls.directions",
     menuId: "controls",
     labelKey: "toolbar.item.directions",
+    tier: "intermediate",
+  },
+  {
+    id: "controls.navigation",
+    menuId: "controls",
+    labelKey: "toolbar.item.navigation",
     tier: "intermediate",
   },
   {
@@ -658,6 +785,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   { id: "controls.html", menuId: "controls", labelKey: "toolbar.item.html", tier: "advanced" },
+  { id: "controls.image", menuId: "controls", labelKey: "toolbar.item.image", tier: "advanced" },
   {
     id: "controls.measure",
     menuId: "controls",
@@ -725,6 +853,13 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     menuId: "settings",
     labelKey: "settings.menu.environmentVariables",
     tier: "intermediate",
+  },
+  // S3 connections; advanced like the S3 Browser that uses them.
+  {
+    id: "settings.cloudStorage",
+    menuId: "settings",
+    labelKey: "settings.menu.cloudStorage",
+    tier: "advanced",
   },
   {
     id: "settings.managePlugins",

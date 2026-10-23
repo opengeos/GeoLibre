@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
@@ -107,4 +107,48 @@ test("long layer names truncate without widening the layer panel", async ({ page
   await expect
     .poll(() => name.evaluate((element) => element.scrollWidth > element.clientWidth))
     .toBe(true);
+});
+
+test("opens the selected layer in the Style panel from its card", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 720 });
+  await waitForMap(page);
+  await dropGeoJson(page, "first", FIXTURE_TEXT);
+  await expect(layerRow(page, "first")).toBeVisible();
+  await dropGeoJson(page, "second", FIXTURE_TEXT);
+  await expect(layerRow(page, "second")).toBeVisible();
+
+  // Exact, so the collapsed rail ("Layer style (collapsed)") cannot satisfy the
+  // default substring match.
+  const stylePanel = page.getByRole("complementary", { name: "Layer style", exact: true });
+  await expect(stylePanel).toHaveCount(0);
+
+  await layerRow(page, "first").getByRole("button", { name: "Open Style panel" }).click();
+
+  await expect(stylePanel).toBeVisible();
+  await expect(stylePanel.getByText("Style - first", { exact: true })).toBeVisible();
+});
+
+test("opens the Style panel from the layer card by keyboard", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 720 });
+  await waitForMap(page);
+  await dropGeoJson(page, "first", FIXTURE_TEXT);
+  await expect(layerRow(page, "first")).toBeVisible();
+  await dropGeoJson(page, "second", FIXTURE_TEXT);
+  await expect(layerRow(page, "second")).toBeVisible();
+
+  const stylePanel = page.getByRole("complementary", { name: "Layer style", exact: true });
+  const styleButton = (name: string) =>
+    layerRow(page, name).getByRole("button", { name: "Open Style panel" });
+
+  // Each action button on the card must activate from the keyboard on its own
+  // (the card used to be a role="button" wrapper whose key handler could
+  // swallow it; it is a plain listitem now).
+  await styleButton("first").focus();
+  await page.keyboard.press("Enter");
+  await expect(stylePanel).toBeVisible();
+  await expect(stylePanel.getByText("Style - first", { exact: true })).toBeVisible();
+
+  await styleButton("second").focus();
+  await page.keyboard.press("Space");
+  await expect(stylePanel.getByText("Style - second", { exact: true })).toBeVisible();
 });

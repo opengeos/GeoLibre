@@ -6,6 +6,15 @@ whose work makes GeoLibre possible. If we have inadvertently left someone out,
 please [open an issue](https://github.com/opengeos/GeoLibre/issues) so we can
 correct it.
 
+!!! note "Disclaimer"
+
+    GeoLibre is primarily built with
+    [Claude Opus 5.5](https://www.anthropic.com/claude), an AI model by
+    Anthropic, working under human direction and review. Its results are tested,
+    but check them for your own use, and please
+    [report](https://github.com/opengeos/GeoLibre/issues) anything that looks
+    wrong.
+
 ## Open-source projects
 
 GeoLibre is built almost entirely on free and open-source software. We are
@@ -15,6 +24,7 @@ many transitive dependencies they rely on).
 ### Mapping and rendering
 
 - [MapLibre GL JS](https://maplibre.org/) — the core map rendering engine.
+- [CesiumJS](https://cesium.com/platform/cesiumjs/) — the 3D globe rendering engine.
 - [deck.gl](https://deck.gl/) and the [vis.gl](https://vis.gl/) / Open Visualization toolkit — raster, point-cloud, and 3D overlays.
 - [Three.js](https://threejs.org/) — 3D rendering used by globe and atmosphere effects.
 - [PMTiles](https://github.com/protomaps/PMTiles) and [Protomaps](https://protomaps.com/) — single-file tile archives.
@@ -30,6 +40,7 @@ many transitive dependencies they rely on).
 - [GeoParquet](https://geoparquet.org/) and the [Apache Arrow](https://arrow.apache.org/) / Parquet ecosystem.
 - [STAC](https://stacspec.org/) — the SpatioTemporal Asset Catalog specification and tooling.
 - [Zarr](https://zarr.dev/) and [CarbonPlan](https://carbonplan.org/) — cloud-native multidimensional array access.
+- [Icechunk](https://icechunk.io/) and [icechunk-js](https://github.com/EarthyScience/icechunk-js) — transactional storage for Zarr, read in the browser.
 - [H3](https://h3geo.org/) — hexagonal hierarchical spatial indexing.
 
 ### Python sidecar and notebooks
@@ -78,3 +89,6 @@ a discussion, or shared GeoLibre with their community.
 Want to see your name here? Contributions of every size are welcome — from
 filing a well-described bug report to writing a plugin. See the
 [Contributing guide](contributing.md) to get started.
+
+If you would rather support the project financially, see
+[Become a Sponsor](sponsor.md).

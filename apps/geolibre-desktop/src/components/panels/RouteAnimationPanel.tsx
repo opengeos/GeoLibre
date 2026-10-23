@@ -1,5 +1,5 @@
 import { geojsonHasZCoordinates, styleValue, useAppStore } from "@geolibre/core";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
@@ -8,6 +8,7 @@ import {
   ROUTE_FOLLOW_ZOOM_MAX,
   ROUTE_FOLLOW_ZOOM_MIN,
   ROUTE_MARKER_STYLES,
+  LocalizedError,
   RouteVideoUnsupportedError,
   type RouteMarkerStyle,
   closeRouteAnimationPanel,
@@ -78,7 +79,7 @@ interface LineLayerOption {
 }
 
 interface RouteAnimationPanelProps {
-  mapControllerRef: RefObject<MapController | null>;
+  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /**
@@ -343,7 +344,10 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       setVideoError(
         err instanceof RouteVideoUnsupportedError
           ? t("toolbar.routeAnimation.videoUnsupported")
-          : t("toolbar.routeAnimation.videoError"),
+          : err instanceof LocalizedError
+            ? // An actionable failure (no line layer, encoder timeout), already translated.
+              err.message
+            : t("toolbar.routeAnimation.videoError"),
       );
       setRecordStatus("idle");
     } finally {
@@ -356,7 +360,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
 
   return (
     <div
-      className="absolute z-30 rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur"
+      className="absolute z-30 rounded-lg border border-border map-glass shadow-lg"
       style={{ left: position.x, top: position.y, width: PANEL_WIDTH }}
       role="dialog"
       aria-label={t("toolbar.routeAnimation.title")}

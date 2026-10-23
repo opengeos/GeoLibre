@@ -15,6 +15,10 @@ interface RoutingConsentDialogProps {
   onCancel: () => void;
   /** Acknowledged: the caller records consent and proceeds. */
   onConfirm: () => void;
+  /** Heading override, for a tool other than Network analysis. */
+  title?: string;
+  /** Description override, for a tool other than Network analysis. */
+  description?: string;
 }
 
 /**
@@ -26,7 +30,13 @@ interface RoutingConsentDialogProps {
  * drive/walk-time actions on the map context menu (#1523). A second, hand-rolled
  * copy of this notice would be the easy way for the two to drift.
  */
-export function RoutingConsentDialog({ open, onCancel, onConfirm }: RoutingConsentDialogProps) {
+export function RoutingConsentDialog({
+  open,
+  onCancel,
+  onConfirm,
+  title,
+  description,
+}: RoutingConsentDialogProps) {
   const { t } = useTranslation();
   const routingEndpoint = getRoutingConfig().endpoint;
   const usingDefaultRouting = routingEndpoint === DEFAULT_ROUTING_ENDPOINT;
@@ -42,8 +52,10 @@ export function RoutingConsentDialog({ open, onCancel, onConfirm }: RoutingConse
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("toolbar.item.networkNoticeTitle")}</DialogTitle>
-          <DialogDescription>{t("toolbar.item.networkNoticeDesc")}</DialogDescription>
+          <DialogTitle>{title ?? t("toolbar.item.networkNoticeTitle")}</DialogTitle>
+          <DialogDescription>
+            {description ?? t("toolbar.item.networkNoticeDesc")}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">

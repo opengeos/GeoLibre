@@ -9,6 +9,7 @@ import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getAttributePropertyNames } from "../../lib/expression-inputs";
+import { JoinTableFileInput } from "./JoinTableFileInput";
 
 interface LayerJoinsSectionProps {
   layer: GeoLibreLayer;
@@ -24,7 +25,7 @@ function newJoinId(): string {
  * The Joins section of the layer style panel (QGIS Layer Properties → Joins):
  * lists the layer's persistent attribute joins with their match statistics and
  * an add form. Joins attach columns from another layer — typically a
- * geometry-less table added via Delimited Text with no coordinate fields — by
+ * geometry-less table imported here or via Delimited Text — by
  * matching key fields, live: the columns re-derive when either side's data
  * changes and the definitions persist with the project.
  */
@@ -214,6 +215,14 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
               ))}
             </Select>
           </div>
+          <JoinTableFileInput
+            targetLayerId={layer.id}
+            onImport={(id) => {
+              setDraftJoinLayerId(id);
+              setDraftJoinField("");
+              setDraftFields(null);
+            }}
+          />
           <div className="space-y-1">
             <Label htmlFor={`join-field-${layer.id}`}>{t("style.joins.joinField")}</Label>
             <Select
@@ -297,13 +306,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
           </div>
         </div>
       ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFormOpen(true)}
-          disabled={candidateLayers.length === 0}
-          title={candidateLayers.length === 0 ? t("style.joins.noCandidates") : undefined}
-        >
+        <Button variant="outline" size="sm" onClick={() => setFormOpen(true)}>
           <Plus className="me-1 h-3.5 w-3.5" />
           {t("style.joins.addJoin")}
         </Button>

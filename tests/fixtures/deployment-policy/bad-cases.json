@@ -1,0 +1,293 @@
+{
+  "version-2": {
+    "input": {
+      "version": 2
+    },
+    "container": "version must be the integer 1",
+    "schema": "reject",
+    "parser": "null"
+  },
+  "version-missing": {
+    "input": {
+      "capabilities": ["data:add"]
+    },
+    "container": "version must be the integer 1",
+    "schema": "reject",
+    "parser": "null"
+  },
+  "version-string": {
+    "input": {
+      "version": "1"
+    },
+    "container": "version must be the integer 1",
+    "schema": "reject",
+    "parser": "null"
+  },
+  "not-object": {
+    "input": [],
+    "container": "must contain a JSON object",
+    "schema": "reject",
+    "parser": "null"
+  },
+  "unknown-top-level-key": {
+    "input": {
+      "version": 1,
+      "theme": "dark"
+    },
+    "container": "theme is not a known key",
+    "schema": "reject",
+    "parser": {
+      "dropped": []
+    }
+  },
+  "capabilities-unknown": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add", "data:delete"]
+    },
+    "container": "capabilities[1] must be one of: project:edit",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["capabilities"]
+    }
+  },
+  "capabilities-duplicate": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add", "data:add"]
+    },
+    "container": "capabilities[1] is a duplicate",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["capabilities"]
+    }
+  },
+  "plugins-sideload-string": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "sideload": "no"
+      }
+    },
+    "container": "plugins.sideload must be a boolean",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-allowed-trimmed-duplicate": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "allowed": ["a", " a"]
+      }
+    },
+    "container": "plugins.allowed[1] is a duplicate after trimming",
+    "schema": "accept",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "interface-token-key": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "interface": {
+        "lock": true,
+        "token": "x"
+      }
+    },
+    "container": "interface.token is not a known key",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["interface"]
+    }
+  },
+  "interface-bad-level": {
+    "input": {
+      "version": 1,
+      "interface": {
+        "level": "expert"
+      }
+    },
+    "container": "interface.level must be one of: beginner, intermediate, advanced",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["interface"]
+    }
+  },
+  "services-duplicate-trimmed-id": {
+    "input": {
+      "version": 1,
+      "services": {
+        "catalog": [
+          {
+            "id": "a",
+            "name": "S a",
+            "kind": "wms",
+            "fields": {
+              "url": "https://example.com/wms"
+            }
+          },
+          {
+            "id": "a ",
+            "name": "S a ",
+            "kind": "wms",
+            "fields": {
+              "url": "https://example.com/wms"
+            }
+          }
+        ]
+      }
+    },
+    "container": "services.catalog[1].id is a duplicate after trimming",
+    "schema": "accept",
+    "parser": {
+      "dropped": ["services"]
+    }
+  },
+  "services-empty-fields": {
+    "input": {
+      "version": 1,
+      "services": {
+        "catalog": [
+          {
+            "id": "a",
+            "name": "S a",
+            "kind": "wms",
+            "fields": {}
+          }
+        ]
+      }
+    },
+    "container": "services.catalog[0].fields must be a nonempty object",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["services"]
+    }
+  },
+  "services-bad-kind": {
+    "input": {
+      "version": 1,
+      "services": {
+        "catalog": [
+          {
+            "id": "a",
+            "name": "S a",
+            "kind": "wcs",
+            "fields": {
+              "url": "https://example.com/wms"
+            }
+          }
+        ]
+      }
+    },
+    "container": "services.catalog[0].kind must be one of: wms",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["services"]
+    }
+  },
+  "services-unsafe-integer": {
+    "input": {
+      "version": 1,
+      "services": {
+        "catalog": [
+          {
+            "id": "a",
+            "name": "S a",
+            "kind": "wms",
+            "fields": {
+              "big": "__UNSAFE__"
+            }
+          }
+        ]
+      }
+    },
+    "container": "services.catalog[0].fields must be a nonempty object",
+    "schema": "accept",
+    "parser": {
+      "dropped": ["services"]
+    }
+  },
+  "sharing-ftp-share-url": {
+    "input": {
+      "version": 1,
+      "sharing": {
+        "shareUrl": "ftp://x"
+      }
+    },
+    "container": "sharing.shareUrl must be a https:// URL",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["sharing"]
+    }
+  },
+  "sharing-https-collab-url": {
+    "input": {
+      "version": 1,
+      "sharing": {
+        "collabUrl": "https://relay.example.com"
+      }
+    },
+    "container": "sharing.collabUrl must be a wss:// URL",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["sharing"]
+    }
+  },
+  "geolens-bad-value": {
+    "input": {
+      "version": 1,
+      "geolens": {
+        "url": "on"
+      }
+    },
+    "container": "geolens.url must be",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["geolens"]
+    }
+  },
+  "ai-token-key": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "ai": {
+        "enabled": true,
+        "token": "x"
+      }
+    },
+    "container": "ai.token is not a known key",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["ai"]
+    }
+  },
+  "branding-appname-61": {
+    "input": {
+      "version": 1,
+      "branding": {
+        "appName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    "container": "branding.appName must be at most 60 characters",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["branding"]
+    }
+  },
+  "branding-not-object": {
+    "input": {
+      "version": 1,
+      "branding": "Acme"
+    },
+    "container": "branding must be an object",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["branding"]
+    }
+  }
+}

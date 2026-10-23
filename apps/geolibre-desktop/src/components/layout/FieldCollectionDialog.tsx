@@ -1,10 +1,14 @@
+import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import maplibregl from "maplibre-gl";
-import type { MapController } from "@geolibre/map";
+import type { MapEngine } from "@geolibre/map";
 import {
+  currentEditorIdentity,
+  editorTrackingFieldNames,
   getAttributeFormField,
   isAttributeFormFieldVisible,
+  stampFeatureEditorTracking,
   useAppStore,
   validateAttributeFormValues,
   type AttributeFormConfig,
@@ -42,10 +46,11 @@ import {
   appendFeature,
   buildGeometryFeature,
   buildPropertiesWithForm,
+  buildPhotoProperties,
+  type CollectionPhoto,
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
-  drawPreview,
   emptyFeatureCollection,
   type FieldType,
   getGeometryType,
@@ -55,10 +60,17 @@ import {
   MAX_PHOTO_BYTES,
   minVertices,
   parseOptions,
-  PHOTO_PROPERTY,
+  resolveTargetLayer,
   validateForm,
   type Vertex,
 } from "../../lib/field-collection";
+import {
+  createFieldCollectionMarker,
+  createFieldCollectionPreview,
+  listenForFieldCollectionClicks,
+  type FieldCollectionMarker,
+  type FieldCollectionPreview,
+} from "../../lib/field-collection-map";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
 import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
@@ -67,14 +79,14 @@ import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 interface FieldCollectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mapControllerRef: React.RefObject<MapController | null>;
+  mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Bumped by the shell whenever the map controller (re)initialises. */
+  mapReadyGeneration: number;
 }
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
 const GEOMETRY_TYPES: GeometryType[] = ["point", "line", "polygon"];
 
-/** Transient map source/layers used to preview an in-progress line/polygon. */
-const DRAW_SOURCE = "__fc_draw__";
 const DRAW_COLOR = "#ef4444";
 
 interface DraftField {
@@ -93,50 +105,6 @@ function formatLatLng(lng: number, lat: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
-/** Add/update the transient drawing preview on the map. */
-function syncDrawPreview(map: maplibregl.Map, geometry: GeometryType, verts: Vertex[]): void {
-  const data = drawPreview(geometry, verts);
-  const src = map.getSource(DRAW_SOURCE) as maplibregl.GeoJSONSource | undefined;
-  if (src) {
-    src.setData(data);
-    return;
-  }
-  map.addSource(DRAW_SOURCE, { type: "geojson", data });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-fill`,
-    type: "fill",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": DRAW_COLOR, "fill-opacity": 0.2 },
-  });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-line`,
-    type: "line",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": DRAW_COLOR, "line-width": 2, "line-dasharray": [2, 1] },
-  });
-  map.addLayer({
-    id: `${DRAW_SOURCE}-pt`,
-    type: "circle",
-    source: DRAW_SOURCE,
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: {
-      "circle-radius": 4,
-      "circle-color": DRAW_COLOR,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1,
-    },
-  });
-}
-
-function removeDrawPreview(map: maplibregl.Map): void {
-  for (const id of [`${DRAW_SOURCE}-fill`, `${DRAW_SOURCE}-line`, `${DRAW_SOURCE}-pt`]) {
-    if (map.getLayer(id)) map.removeLayer(id);
-  }
-  if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
-}
-
 /**
  * Field Collection: capture point, line, or polygon observations against a
  * custom attribute form, placing geometry by GPS or by tapping the map. Captures
@@ -148,16 +116,31 @@ export function FieldCollectionDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  mapReadyGeneration,
 }: FieldCollectionDialogProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const projectGeneration = useAppStore((s) => s.projectGeneration);
 
   const collectionLayers = useMemo(() => layers.filter((l) => isCollectionLayer(l)), [layers]);
 
+  // Field Collection runs as a *session* that is deliberately separate from
+  // whether the dialog is open, and from whether collection layers exist: a
+  // project can hold many collection layers long after the field work is done.
+  // Opening the tool starts (or resumes) the session, dismissing the dialog (X,
+  // Esc, overlay) leaves it running so the quick-open pill stays available, and
+  // only Done ends it. Ending a session never touches the layers or features.
+  const [sessionActive, setSessionActive] = useState(() =>
+    readControlPreference("field-collection", false),
+  );
+
   // Target layer: "" means "create a new layer" (the setup step is shown).
   const [layerId, setLayerId] = useState<string>("");
+  // Ties the target-layer <Label> to its <Select>; they are siblings, so the
+  // association has to be explicit.
+  const targetLayerId = useId();
   const [layerName, setLayerName] = useState("");
   const [geometry, setGeometry] = useState<GeometryType>("point");
   const [drafts, setDrafts] = useState<DraftField[]>([]);
@@ -165,7 +148,9 @@ export function FieldCollectionDialog({
   // Capture state. `pending` holds the captured coordinate(s) awaiting attributes.
   const [pending, setPending] = useState<Vertex[] | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
-  const [photo, setPhoto] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<CollectionPhoto[]>([]);
+  // Count batches: separate file selections can read concurrently.
+  const [photoReads, setPhotoReads] = useState(0);
   const [picking, setPicking] = useState(false); // point: one-shot map click
   const [drawing, setDrawing] = useState(false); // line/polygon: multi-vertex
   const [vertices, setVertices] = useState<Vertex[]>([]);
@@ -177,9 +162,11 @@ export function FieldCollectionDialog({
   // bumping it neither re-renders nor runs a side effect inside a state updater.
   const savedCountRef = useRef(0);
 
-  const markerRef = useRef<maplibregl.Marker | null>(null);
-  // Set just before we reopen the dialog after a map capture, so the open-reset
-  // effect below doesn't wipe the freshly captured geometry/form.
+  const markerRef = useRef<FieldCollectionMarker | null>(null);
+  const previewRef = useRef<FieldCollectionPreview | null>(null);
+  // "The next open must keep what is already captured." Set just before the
+  // dialog reopens itself after a map capture, and on a dismissal that leaves a
+  // capture in hand, so the open-reset effect doesn't wipe the geometry/form.
   const suppressResetRef = useRef(false);
   // True while the tool is in use; gates async GPS callbacks so a fix that
   // arrives after the dialog is dismissed doesn't mutate the map/state.
@@ -191,13 +178,36 @@ export function FieldCollectionDialog({
   const makeDraft = useCallback(() => newDraftField((draftIdRef.current += 1)), []);
   // Mirrors `vertices` so the map double-click handler can finish synchronously.
   const verticesRef = useRef<Vertex[]>([]);
-  // Bumped on each GPS request and on any other capture, so a slow GPS fix that
-  // resolves after a newer capture is ignored instead of overwriting it.
+  // The renderer-reinitialization effect needs the capture as it exists at the
+  // instant a new surface arrives without re-running for every form edit.
+  const pendingRef = useRef<Vertex[] | null>(null);
+  // Capture generation. Bumped on each GPS request and on anything that
+  // supersedes the capture in progress, including actions *within* one capture
+  // (repositioning a point, starting a drawing), so a slow GPS fix is dropped
+  // rather than overwriting a newer capture.
   const gpsSeqRef = useRef(0);
+  // Context generation: bumped only when the capture's *context* turns over —
+  // a different target layer/project, a saved capture, or an ended session.
+  // Async work that belongs to the capture rather than to one placement (the
+  // photo read) pins itself to this, so repositioning a point mid-read keeps
+  // the photo instead of silently discarding it.
+  const contextSeqRef = useRef(0);
+  // Distinguishes "this session has no target yet" from "the user deliberately
+  // chose the new-layer setup step"; the dialog shows both as `layerId === ""`.
+  const targetChosenRef = useRef(false);
 
   useEffect(() => {
     activeRef.current = open || picking || drawing;
   }, [open, picking, drawing]);
+
+  // Opening the dialog from anywhere (Controls menu, command palette, the pill)
+  // starts or resumes the session.
+  useEffect(() => {
+    if (open) {
+      setSessionActive(true);
+      writeControlPreference("field-collection", true);
+    }
+  }, [open]);
 
   // Allow creating again after returning to the "new layer" setup step.
   useEffect(() => {
@@ -207,6 +217,9 @@ export function FieldCollectionDialog({
   const activeLayer = layerId ? (layers.find((l) => l.id === layerId) ?? null) : null;
   const schema: CollectionSchema | null = activeLayer ? getSchema(activeLayer) : null;
   const activeGeometry: GeometryType = activeLayer ? getGeometryType(activeLayer) : geometry;
+  const activeGeometryRef = useRef(activeGeometry);
+  activeGeometryRef.current = activeGeometry;
+  pendingRef.current = pending;
   // The layer's Attribute Form designer config, narrowed to the collection
   // schema's own fields: a config for a field this form does not capture must
   // not block a save (its required/constraint rules have nothing to bind to).
@@ -220,7 +233,7 @@ export function FieldCollectionDialog({
     return fields.length > 0 ? { fields } : undefined;
   }, [activeLayer, schema]);
 
-  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
+  const getEngine = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
   const clearMarker = useCallback(() => {
     markerRef.current?.remove();
@@ -229,27 +242,60 @@ export function FieldCollectionDialog({
 
   const clearPreview = useCallback(() => {
     clearMarker();
-    const map = getMap();
-    if (map) removeDrawPreview(map);
-  }, [clearMarker, getMap]);
+    previewRef.current?.remove();
+    previewRef.current = null;
+  }, [clearMarker]);
 
-  // Reset everything when the dialog opens; default to the first existing
-  // collection layer if there is one, otherwise the "new layer" setup step.
+  // Portal host for the on-map controls. Resolved into state rather than read
+  // at render time, because the controller lives in a plain ref: a map that
+  // initialises after this component first renders would otherwise leave the
+  // controls unmounted until some unrelated re-render happened to recompute it.
+  // `mapReadyGeneration` is the shell's "the controller (re)initialised"
+  // signal, the same dependency `useMapPanelControl` takes.
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    if (!open) return;
-    // Reopened after a map capture — keep the captured state, skip the reset.
-    if (suppressResetRef.current) {
-      suppressResetRef.current = false;
+    const engine = getEngine();
+    setPortalHost(engine?.getRenderSurface()?.getContainer() ?? null);
+    markerRef.current?.remove();
+    markerRef.current = null;
+    previewRef.current?.remove();
+    previewRef.current = null;
+    if (!engine) return;
+    const captured = pendingRef.current;
+    const captureGeometry = activeGeometryRef.current;
+    if (captureGeometry === "point" && captured?.[0]) {
+      markerRef.current = createFieldCollectionMarker(engine, DRAW_COLOR);
+      markerRef.current?.setLngLat(captured[0]);
       return;
     }
-    const first = collectionLayers[0]?.id ?? "";
-    setLayerId(first);
-    setLayerName("");
-    setGeometry("point");
-    setDrafts(first ? [] : [makeDraft()]);
+    const previewVertices = captured ?? verticesRef.current;
+    if (captureGeometry !== "point" && previewVertices.length > 0) {
+      previewRef.current = createFieldCollectionPreview(engine, DRAW_COLOR);
+      previewRef.current?.setGeometry(captureGeometry, previewVertices);
+    }
+  }, [getEngine, mapReadyGeneration]);
+
+  // Supersede both the placement in progress and the capture it belongs to, so
+  // no async work survives into a context it wasn't started in.
+  const invalidateCapture = useCallback(() => {
+    gpsSeqRef.current += 1;
+    contextSeqRef.current += 1;
+    setPhotoReads(0);
+  }, []);
+
+  // Everything one capture owns: the placed geometry, the form, the photo, the
+  // map preview, and the async work behind them. The saved count goes too — it
+  // belongs to the layer being left, so without this the first save into a new
+  // target reads as the Nth. Split out from `resetCapture` so switching the
+  // target layer can drop a capture without also discarding a half-composed
+  // layer on the setup step.
+  const clearCapture = useCallback(() => {
+    invalidateCapture();
     setPending(null);
     setValues({});
-    setPhoto(null);
+    setPhotos([]);
+    setPicking(false);
+    setDrawing(false);
     setVertices([]);
     verticesRef.current = [];
     setLocating(false);
@@ -257,40 +303,135 @@ export function FieldCollectionDialog({
     setErrors({});
     setNotice(null);
     savedCountRef.current = 0;
-    // collectionLayers is derived from layers; intentionally snapshot on open.
+    clearPreview();
+  }, [clearPreview, invalidateCapture]);
+
+  // Drop the capture and point the form at `target`, taking the setup step back
+  // to a blank new-layer form. A non-empty target becomes the session's own:
+  // the pill names it from here on, so a later layer reorder must not move the
+  // target out from under what the user is being shown.
+  const resetCapture = useCallback(
+    (target: string) => {
+      clearCapture();
+      setLayerId(target);
+      if (target) targetChosenRef.current = true;
+      setLayerName("");
+      setGeometry("point");
+      setDrafts(target ? [] : [makeDraft()]);
+    },
+    [clearCapture, makeDraft],
+  );
+
+  // Switching the capture target mid-session drops the in-progress capture: a
+  // point picked for Culverts must not be saved into Water Sources, and the
+  // invalidation makes sure a GPS fix still in flight for the old target can't
+  // land on the new one either. Unlike `resetCapture` this keeps the setup
+  // step's fields, so toggling to a layer and back doesn't lose a layer being
+  // composed — the step just needs a row to type into.
+  const handleTargetChange = useCallback(
+    (nextId: string) => {
+      clearCapture();
+      targetChosenRef.current = true;
+      setLayerId(nextId);
+      if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
+    },
+    [clearCapture, drafts.length, makeDraft],
+  );
+
+  // Reset the capture form when the dialog opens. The capture *target* is not
+  // form state: it belongs to the session, so a target chosen earlier survives
+  // closing and reopening the dialog (the whole point of switching layers from
+  // the pill). Fall back to the first collection layer, or to the "new layer"
+  // setup step when the project has none.
+  useEffect(() => {
+    if (!open) return;
+    // Reopened after a map capture — keep the captured state, skip the reset.
+    if (suppressResetRef.current) {
+      suppressResetRef.current = false;
+      return;
+    }
+    resetCapture(
+      resolveTargetLayer(
+        collectionLayers.map((l) => l.id),
+        targetChosenRef.current ? layerId : null,
+      ),
+    );
+    // collectionLayers and layerId are snapshotted on open, by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Tear down any preview when the dialog fully closes (not while drawing with
-  // it intentionally hidden) and on unmount.
+  // Project changes discard capture drafts and re-resolve the target. Only the
+  // device-local shortcut preference survives: it never restores an unfinished
+  // capture or starts a GPS request. Projects without collection layers still
+  // hide the shortcut.
   useEffect(() => {
-    if (!open && !picking && !drawing) clearPreview();
+    setSessionActive(open || readControlPreference("field-collection", false));
+    targetChosenRef.current = false;
+    // A capture finishing in the same tick as the switch would otherwise have
+    // its suppress flag consumed by the open-reset effect below, leaving the
+    // old project's pending geometry in the new project's session.
+    suppressResetRef.current = false;
+    resetCapture(
+      resolveTargetLayer(
+        collectionLayers.map((l) => l.id),
+        null,
+      ),
+    );
+    // Everything but projectGeneration is snapshotted; only a project switch
+    // should reset here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectGeneration]);
+
+  // Keep the session's target honest while the dialog is closed: if the target
+  // layer is deleted from the Layers panel, fall back to another collection
+  // layer so the pill keeps naming a real destination. The capture goes with
+  // the layer rather than being retargeted — including one preserved across a
+  // dismissal, which was made for the layer that just disappeared.
+  //
+  // Only while the tool is put away, though. With the dialog open, or hidden
+  // behind a placement, retargeting would swap the schema and geometry out from
+  // under a capture the user is still working on; that case ends the capture on
+  // the setup step instead (the effect further down).
+  useEffect(() => {
+    if (open || picking || drawing || !layerId) return;
+    if (collectionLayers.some((l) => l.id === layerId)) return;
+    const fallback = collectionLayers[0]?.id ?? "";
+    // Landing on "" here is the project running out of collection layers, not
+    // the user asking for the setup step, so don't record it as a choice.
+    if (!fallback) targetChosenRef.current = false;
+    suppressResetRef.current = false;
+    resetCapture(fallback);
+  }, [open, picking, drawing, layerId, collectionLayers, resetCapture]);
+
+  // Tear down any preview when the dialog fully closes (not while drawing with
+  // it intentionally hidden) and on unmount. A capture being kept across a
+  // dismissal keeps its marker too: the reason to dismiss is to look at the
+  // map, which is not the moment to hide where the pending point is.
+  useEffect(() => {
+    if (!open && !picking && !drawing && !suppressResetRef.current) clearPreview();
   }, [open, picking, drawing, clearPreview]);
   useEffect(() => () => clearPreview(), [clearPreview]);
 
   const showMarker = useCallback(
     (lng: number, lat: number) => {
-      const map = getMap();
-      if (!map) return;
-      if (markerRef.current) {
-        markerRef.current.setLngLat([lng, lat]);
-      } else {
-        markerRef.current = new maplibregl.Marker({ color: DRAW_COLOR })
-          .setLngLat([lng, lat])
-          .addTo(map);
-      }
+      const engine = getEngine();
+      if (!engine) return;
+      markerRef.current ??= createFieldCollectionMarker(engine, DRAW_COLOR);
+      markerRef.current?.setLngLat([lng, lat]);
     },
-    [getMap],
+    [getEngine],
   );
 
   const recenter = useCallback(
     (lng: number, lat: number) => {
-      mapControllerRef.current?.flyTo({
+      const engine = mapControllerRef.current;
+      if (!engine) return;
+      engine.flyTo({
         center: [lng, lat],
-        zoom: Math.max(getMap()?.getZoom() ?? 0, 15),
+        zoom: Math.max(engine.readView().zoom, 15),
       });
     },
-    [mapControllerRef, getMap],
+    [mapControllerRef],
   );
 
   // ---- Point capture (single coordinate) -------------------------------------
@@ -307,21 +448,73 @@ export function FieldCollectionDialog({
     [showMarker, recenter],
   );
 
-  // Closing cancels any in-flight GPS fix so its async callback can't act on a
-  // dismissed dialog (the activeRef effect lags a render behind the close).
-  const handleClose = useCallback(() => {
-    gpsSeqRef.current += 1;
+  // Done ends the session: the dialog closes and the quick-open pill goes away,
+  // while the collection layers and everything captured into them stay
+  // untouched. It also cancels any in-flight GPS fix so its async callback
+  // can't act on a dismissed dialog (the activeRef effect lags a render behind
+  // the close).
+  const handleDone = useCallback(() => {
+    invalidateCapture();
+    setSessionActive(false);
+    writeControlPreference("field-collection", false);
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [invalidateCapture, onOpenChange]);
+
+  // Anything a dismissal would be a shame to throw away: a placed geometry, an
+  // attached photo, or a new layer being composed on the setup step. The empty
+  // draft field the setup step starts with doesn't count — only one the user
+  // has actually named.
+  const hasWorkInProgress =
+    pending !== null ||
+    vertices.length > 0 ||
+    photos.length > 0 ||
+    layerName.trim() !== "" ||
+    drafts.some((d) => d.label.trim() !== "");
+
+  // Radix routes the X, Escape, and an overlay click through here. Dismissing
+  // the dialog keeps the session running, and a capture already in hand
+  // survives with it: dismissing to check something on the map and coming back
+  // through the pill is a normal move now, so the suppress flag keeps the
+  // reopen from wiping a placed point, a half-filled form, or a layer being
+  // composed on the setup step.
+  //
+  // Only the placement-scoped work is superseded, not the whole capture
+  // context. A GPS fix must not resolve into a dropped marker and a camera fly
+  // while the dialog is away (`activeRef` gates those callbacks for the same
+  // reason), but a photo still being read belongs to the capture being kept, so
+  // it is allowed to land on it — dropping it would lose the photo silently.
+  // Nothing can leak into a *later* capture either way: the next open resets
+  // unless the capture was preserved.
+  //
+  // Dismissing before any collection layer exists is the one case that ends the
+  // session instead: the pill's whole job is to name the capture target, so a
+  // session with nothing to capture into would be unreachable. That abandons
+  // the capture, so there the whole context goes.
+  const handleDialogOpenChange = useCallback(
+    (next: boolean) => {
+      if (!next) {
+        if (collectionLayers.length === 0) {
+          invalidateCapture();
+          setSessionActive(false);
+          writeControlPreference("field-collection", false);
+        } else {
+          gpsSeqRef.current += 1;
+          if (hasWorkInProgress) suppressResetRef.current = true;
+        }
+      }
+      onOpenChange(next);
+    },
+    [collectionLayers.length, hasWorkInProgress, invalidateCapture, onOpenChange],
+  );
 
   const handlePickOnMap = useCallback(() => {
-    if (!getMap()) return;
+    if (!getEngine()?.getRenderSurface()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
     setLastGpsFix(null);
     setPicking(true);
     onOpenChange(false);
-  }, [getMap, onOpenChange]);
+  }, [getEngine, onOpenChange]);
 
   // Cancel an active point-pick from the placement banner. Mirrors the Escape
   // path in the picking effect: stop picking and reopen the dialog without
@@ -335,21 +528,24 @@ export function FieldCollectionDialog({
 
   useEffect(() => {
     if (!picking) return;
-    const map = getMap();
-    if (!map) {
+    const engine = getEngine();
+    if (!engine?.getRenderSurface()) {
       setPicking(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    const handler = (e: maplibregl.MapMouseEvent) => {
-      capturePoint(e.lngLat.lng, e.lngLat.lat, false);
-      setPicking(false);
-      suppressResetRef.current = true;
-      onOpenChange(true);
-    };
+    let captured = false;
+    const stopListening = listenForFieldCollectionClicks(engine, {
+      onClick: ([lng, lat]) => {
+        if (captured) return;
+        captured = true;
+        capturePoint(lng, lat, false);
+        setPicking(false);
+        suppressResetRef.current = true;
+        onOpenChange(true);
+      },
+    });
     // Escape aborts picking and restores the dialog without capturing.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -357,15 +553,13 @@ export function FieldCollectionDialog({
       suppressResetRef.current = true;
       onOpenChange(true);
     };
-    map.once("click", handler);
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", handler);
+      stopListening();
       window.removeEventListener("keydown", onKey);
-      map.getCanvas().style.cursor = prevCursor;
     };
-  }, [picking, getMap, onOpenChange, capturePoint]);
+  }, [picking, getEngine, mapReadyGeneration, onOpenChange, capturePoint]);
 
   // ---- Line / polygon drawing (multi-vertex) ---------------------------------
 
@@ -373,10 +567,12 @@ export function FieldCollectionDialog({
     (next: Vertex[]) => {
       verticesRef.current = next;
       setVertices(next);
-      const map = getMap();
-      if (map) syncDrawPreview(map, activeGeometry, next);
+      const engine = getEngine();
+      if (!engine) return;
+      previewRef.current ??= createFieldCollectionPreview(engine, DRAW_COLOR);
+      previewRef.current?.setGeometry(activeGeometry, next);
     },
-    [getMap, activeGeometry],
+    [getEngine, activeGeometry],
   );
 
   const pushVertex = useCallback(
@@ -387,7 +583,7 @@ export function FieldCollectionDialog({
   );
 
   const handleStartDrawing = useCallback(() => {
-    if (!getMap()) return;
+    if (!getEngine()?.getRenderSurface()) return;
     gpsSeqRef.current += 1; // invalidate any in-flight GPS fix
     setLocating(false); // its callback bails, so clear the spinner here
     setLastGpsFix(null);
@@ -396,15 +592,18 @@ export function FieldCollectionDialog({
     setNotice(null);
     setDrawing(true);
     onOpenChange(false);
-  }, [getMap, onOpenChange, setVerticesSynced]);
+  }, [getEngine, onOpenChange, setVerticesSynced]);
 
   // Finish the current geometry: keep the preview visible (so the user sees the
   // finished shape while filling the form) and reopen the dialog.
   const finishDrawing = useCallback(
     (verts: Vertex[]) => {
       if (verts.length < minVertices(activeGeometry)) return;
-      const map = getMap();
-      if (map) syncDrawPreview(map, activeGeometry, verts);
+      const engine = getEngine();
+      if (engine) {
+        previewRef.current ??= createFieldCollectionPreview(engine, DRAW_COLOR);
+        previewRef.current?.setGeometry(activeGeometry, verts);
+      }
       verticesRef.current = verts;
       setVertices(verts);
       setPending(verts);
@@ -414,7 +613,7 @@ export function FieldCollectionDialog({
       suppressResetRef.current = true;
       onOpenChange(true);
     },
-    [activeGeometry, getMap, onOpenChange],
+    [activeGeometry, getEngine, onOpenChange],
   );
 
   const handleCancelDrawing = useCallback(() => {
@@ -422,50 +621,82 @@ export function FieldCollectionDialog({
     setLastGpsFix(null);
     setVerticesSynced([]);
     setNotice(null);
-    const map = getMap();
-    if (map) removeDrawPreview(map);
+    previewRef.current?.remove();
+    previewRef.current = null;
     suppressResetRef.current = true;
     onOpenChange(true);
-  }, [getMap, onOpenChange, setVerticesSynced]);
+  }, [onOpenChange, setVerticesSynced]);
+
+  // The target layer deleted out from under a live capture — the dialog open,
+  // or hidden behind a placement. Either way the capture has nowhere to land,
+  // and mid-placement `activeGeometry` would quietly fall back to the setup
+  // step's geometry, changing the vertex threshold, the preview, and what
+  // `finishDrawing` builds underneath a draw already in progress. End the
+  // capture, drop to the setup step, and say why. Clearing `layerId` matters
+  // for the dialog-open case on its own: the form moves to the setup step as
+  // soon as `activeLayer` goes null, but the target Select would be left
+  // pointing at an id with no matching option.
+  //
+  // The dialog-closed case is the fallback effect above instead, which keeps
+  // the session pointed at a layer that still exists.
+  useEffect(() => {
+    if (!open && !picking && !drawing) return;
+    if (!layerId || collectionLayers.some((l) => l.id === layerId)) return;
+    const placing = picking || drawing;
+    resetCapture("");
+    targetChosenRef.current = false;
+    // After resetCapture, which clears the notice.
+    setNotice(t("fieldCollection.layerGone"));
+    if (placing) {
+      // Kept across the reopen by the suppress flag. With the dialog already
+      // open there is no reopen to survive, and setting the flag would leave it
+      // armed for an unrelated later open.
+      suppressResetRef.current = true;
+      onOpenChange(true);
+    }
+  }, [open, picking, drawing, layerId, collectionLayers, resetCapture, onOpenChange, t]);
 
   useEffect(() => {
     if (!drawing) return;
-    const map = getMap();
-    if (!map) {
+    const engine = getEngine();
+    if (!engine?.getRenderSurface()) {
       setDrawing(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    // Double-click finishes the geometry; disable the default zoom-on-dblclick
-    // and drop the extra vertex the dblclick's second click added.
-    map.doubleClickZoom.disable();
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      setLastGpsFix(null);
-      pushVertex(e.lngLat.lng, e.lngLat.lat);
-    };
-    const onDblClick = (e: maplibregl.MapMouseEvent) => {
-      e.preventDefault();
-      finishDrawing(verticesRef.current.slice(0, -1));
-    };
+    const stopListening = listenForFieldCollectionClicks(engine, {
+      onClick: ([lng, lat]) => {
+        setLastGpsFix(null);
+        pushVertex(lng, lat);
+      },
+      // The browser emits the double-click's second click first, so drop that
+      // extra vertex just as the previous MapLibre event path did.
+      onDoubleClick: () => {
+        const withoutExtraClick = verticesRef.current.slice(0, -1);
+        setVerticesSynced(withoutExtraClick);
+        finishDrawing(withoutExtraClick);
+      },
+    });
     // Escape aborts drawing (mirrors point-pick mode and the toolbar's Cancel).
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleCancelDrawing();
     };
-    map.on("click", onClick);
-    map.on("dblclick", onDblClick);
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", onClick);
-      map.off("dblclick", onDblClick);
+      stopListening();
       window.removeEventListener("keydown", onKey);
-      map.doubleClickZoom.enable();
-      map.getCanvas().style.cursor = prevCursor;
     };
-  }, [drawing, getMap, pushVertex, finishDrawing, handleCancelDrawing]);
+  }, [
+    drawing,
+    getEngine,
+    mapReadyGeneration,
+    pushVertex,
+    setVerticesSynced,
+    finishDrawing,
+    handleCancelDrawing,
+  ]);
 
   const handleUndoVertex = useCallback(() => {
     setLastGpsFix(null);
@@ -514,11 +745,11 @@ export function FieldCollectionDialog({
     [t, pushVertex, capturePoint, recenter],
   );
 
-  const handlePhoto = useCallback(
+  const handlePhotos = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+      const files = Array.from(e.target.files ?? []);
       e.target.value = "";
-      if (!file) return;
+      if (files.length === 0) return;
       const tooLarge = () =>
         setNotice(
           t("fieldCollection.photoTooLarge", {
@@ -528,26 +759,46 @@ export function FieldCollectionDialog({
       // Fast-reject before reading: the stored value is a base64 data URL (~4/3
       // the file size), so a file already over the cap can't fit. The exact
       // check is on the encoded length below.
-      if (file.size > MAX_PHOTO_BYTES) {
+      if (files.some((file) => file.size > MAX_PHOTO_BYTES)) {
         tooLarge();
         return;
       }
-      const reader = new FileReader();
-      reader.onerror = () => setNotice(t("fieldCollection.photoReadError"));
-      reader.onload = () => {
-        const dataUrl = typeof reader.result === "string" ? reader.result : "";
-        if (!dataUrl) {
-          setNotice(t("fieldCollection.photoReadError"));
-          return;
-        }
-        if (dataUrl.length > MAX_PHOTO_BYTES) {
-          tooLarge();
-          return;
-        }
-        setPhoto(dataUrl);
-        setNotice(null);
-      };
-      reader.readAsDataURL(file);
+      // Reading a large photo takes long enough for the capture underneath to
+      // change (a new target layer, a project switch, the tool being closed),
+      // so the read is pinned to its capture context. Deliberately not the GPS
+      // sequence: repositioning the point or adding a vertex stays inside the
+      // same capture and must not throw the photo away.
+      const seq = contextSeqRef.current;
+      setPhotoReads((count) => count + 1);
+      Promise.all(
+        files.map(
+          (file) =>
+            new Promise<CollectionPhoto>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onerror = reject;
+              reader.onload = () => {
+                const src = typeof reader.result === "string" ? reader.result : "";
+                if (!src) reject(new Error("empty photo"));
+                else if (src.length > MAX_PHOTO_BYTES) reject(new RangeError());
+                else resolve({ src, name: file.name });
+              };
+              reader.readAsDataURL(file);
+            }),
+        ),
+      )
+        .then((next) => {
+          if (contextSeqRef.current !== seq) return;
+          setPhotos((current) => [...current, ...next]);
+          setNotice(null);
+        })
+        .catch((error) => {
+          if (contextSeqRef.current !== seq) return;
+          if (error instanceof RangeError) tooLarge();
+          else setNotice(t("fieldCollection.photoReadError"));
+        })
+        .finally(() => {
+          if (contextSeqRef.current === seq) setPhotoReads((count) => count - 1);
+        });
     },
     [t],
   );
@@ -568,12 +819,13 @@ export function FieldCollectionDialog({
     const name = layerName.trim() || t("fieldCollection.layerNamePlaceholder");
     const id = addGeoJsonLayer(name, emptyFeatureCollection());
     updateLayer(id, { metadata: collectionMetadata(collectionSchema, geometry) });
+    targetChosenRef.current = true;
     setLayerId(id);
     setNotice(null);
   }, [drafts, layerName, geometry, addGeoJsonLayer, updateLayer, t]);
 
   const handleSave = useCallback(() => {
-    if (!activeLayer || !schema || !pending) return;
+    if (!activeLayer || !schema || !pending || photoReads > 0) return;
     // Fields hidden by a visibility expression never block a save, so the
     // schema's own required/type checks run against the visible subset only.
     const candidate = buildPropertiesWithForm(schema, values, attributeForm);
@@ -594,9 +846,12 @@ export function FieldCollectionDialog({
       setErrors(mergedErrors);
       return;
     }
-    const extra: Record<string, unknown> = {};
-    if (photo) extra[PHOTO_PROPERTY] = photo;
-    const props = buildPropertiesWithForm(schema, values, attributeForm, extra);
+    const props = buildPropertiesWithForm(
+      schema,
+      values,
+      attributeForm,
+      buildPhotoProperties(photos),
+    );
     const feature = buildGeometryFeature(activeGeometry, pending, props);
 
     const current = useAppStore.getState().layers.find((l) => l.id === activeLayer.id);
@@ -607,7 +862,16 @@ export function FieldCollectionDialog({
       return;
     }
     const fc = current.geojson ?? emptyFeatureCollection();
-    updateLayer(activeLayer.id, { geojson: appendFeature(fc, feature) });
+    // Read the tracking config off `current`, not the render-time layer: the
+    // form can sit open across a configuration change.
+    const tracked = editorTrackingFieldNames(current.editorTracking)
+      ? stampFeatureEditorTracking(feature, "create", {
+          config: current.editorTracking,
+          userIdentity: currentEditorIdentity(),
+        })
+      : feature;
+    updateLayer(activeLayer.id, { geojson: appendFeature(fc, tracked) });
+    invalidateCapture();
 
     savedCountRef.current += 1;
     setNotice(
@@ -617,9 +881,10 @@ export function FieldCollectionDialog({
       }),
     );
     setPending(null);
+    setLocating(false);
     setLastGpsFix(null);
     setValues({});
-    setPhoto(null);
+    setPhotos([]);
     setVertices([]);
     verticesRef.current = [];
     setErrors({});
@@ -630,7 +895,9 @@ export function FieldCollectionDialog({
     attributeForm,
     pending,
     values,
-    photo,
+    photos,
+    photoReads,
+    invalidateCapture,
     activeGeometry,
     updateLayer,
     t,
@@ -655,22 +922,42 @@ export function FieldCollectionDialog({
 
   const inSetup = !activeLayer;
 
-  // Quick-access control on the map: once a collection layer exists, surface a
-  // floating button so users can reopen the tool without the Controls menu
-  // during a collection session. Hidden while capturing (dialog reopens itself).
-  const showQuickOpen = !open && !picking && !drawing && collectionLayers.length > 0;
+  // Quick-access control on the map: while a session is running and a
+  // collection layer exists, surface a floating pill so users can reopen the
+  // tool without the Controls menu. Hidden while capturing (the dialog reopens
+  // itself), and hidden once Done ends the session — the layers stay put.
+  const showQuickOpen =
+    sessionActive && !open && !picking && !drawing && collectionLayers.length > 0;
 
-  return (
+  // The on-map controls render into the MapLibre container rather than the
+  // viewport, so they sit inside the map instead of over the app's bottom
+  // chrome (status bar, comments bar) — which is what a viewport-anchored
+  // `fixed bottom-6` did. The container carries `.maplibregl-map { position:
+  // relative }`, so `absolute bottom-6` is measured from the map's own edge and
+  // follows it as the shell's panels open and close.
+  const overlays = (
     <>
+      {/* `w-max` on the pill: a `left-1/2` absolute box otherwise shrink-to-fits
+          into the half-width left over after the offset, clipping the layer
+          name long before it needs to be. */}
       {showQuickOpen && (
         <button
           type="button"
           onClick={() => onOpenChange(true)}
-          aria-label={t("fieldCollection.reopen")}
-          className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
+          aria-label={
+            activeLayer
+              ? t("fieldCollection.reopenLayer", { layer: activeLayer.name })
+              : t("fieldCollection.reopen")
+          }
+          className="absolute bottom-6 left-1/2 z-40 flex w-max max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-lg transition-colors hover:bg-accent"
         >
-          <ClipboardList className="h-4 w-4 text-primary" />
-          {t("fieldCollection.title")}
+          <ClipboardList className="h-4 w-4 shrink-0 text-primary" />
+          <span className="shrink-0">{t("fieldCollection.title")}</span>
+          {/* The capture target, so the pill says which layer the next
+              observation lands in rather than just naming the tool. */}
+          {activeLayer && (
+            <span className="min-w-0 truncate text-muted-foreground">{activeLayer.name}</span>
+          )}
         </button>
       )}
 
@@ -689,8 +976,14 @@ export function FieldCollectionDialog({
       )}
 
       {picking && <PickBanner onCancel={handleCancelPick} />}
+    </>
+  );
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
+  return (
+    <>
+      {portalHost ? createPortal(overlays, portalHost) : null}
+
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("fieldCollection.title")}</DialogTitle>
@@ -705,37 +998,29 @@ export function FieldCollectionDialog({
             </DialogDescription>
           </DialogHeader>
 
+          {/* The capture target sits above the scroll area, not inside it: with
+              a long form (or many collection layers) it would otherwise scroll
+              out of view, and on a phone that is exactly when a user needs to
+              see, and switch, which layer the next observation lands in.
+              Switching here keeps the dialog open. */}
+          <div className="space-y-1.5">
+            <Label htmlFor={targetLayerId}>{t("fieldCollection.targetLayer")}</Label>
+            <Select
+              id={targetLayerId}
+              value={layerId}
+              onChange={(e) => handleTargetChange(e.target.value)}
+            >
+              {collectionLayers.map((l: GeoLibreLayer) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+              <option value="">{t("fieldCollection.newLayer")}</option>
+            </Select>
+          </div>
+
           <ScrollArea className="max-h-[60vh] pe-3">
             <div className="space-y-4 py-1">
-              <div className="space-y-1.5">
-                <Label>{t("fieldCollection.targetLayer")}</Label>
-                <Select
-                  value={layerId}
-                  onChange={(e) => {
-                    setLayerId(e.target.value);
-                    setPending(null);
-                    setLastGpsFix(null);
-                    setValues({});
-                    setPhoto(null);
-                    setVertices([]);
-                    verticesRef.current = [];
-                    clearPreview();
-                    setErrors({});
-                    setNotice(null);
-                    if (!e.target.value && drafts.length === 0) {
-                      setDrafts([makeDraft()]);
-                    }
-                  }}
-                >
-                  {collectionLayers.map((l: GeoLibreLayer) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                  <option value="">{t("fieldCollection.newLayer")}</option>
-                </Select>
-              </div>
-
               {inSetup ? (
                 <SetupStep
                   layerName={layerName}
@@ -757,9 +1042,12 @@ export function FieldCollectionDialog({
                   setValue={setValue}
                   errors={errors}
                   errorText={errorText}
-                  photo={photo}
-                  onPhoto={handlePhoto}
-                  onRemovePhoto={() => setPhoto(null)}
+                  photos={photos}
+                  readingPhotos={photoReads > 0}
+                  onPhotos={handlePhotos}
+                  onRemovePhoto={(index) =>
+                    setPhotos((current) => current.filter((_, i) => i !== index))
+                  }
                   locating={locating}
                   gpsFix={lastGpsFix}
                   onUseGps={() => handleUseGps(false)}
@@ -780,9 +1068,12 @@ export function FieldCollectionDialog({
             </div>
           </ScrollArea>
 
+          {/* Done, not Close: the dialog's own X (and Esc) just hides the
+              dialog and leaves the session running, so this button is the one
+              that ends the session and retires the on-map pill. */}
           <div className="flex justify-end">
-            <Button variant="outline" onClick={handleClose}>
-              {t("common.close")}
+            <Button variant="outline" onClick={handleDone}>
+              {t("common.done")}
             </Button>
           </div>
         </DialogContent>
@@ -818,7 +1109,7 @@ function DrawToolbar({
   const { t } = useTranslation();
   const ready = count >= minCount;
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+    <div className="absolute bottom-6 left-1/2 z-50 flex w-max max-w-[95%] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
       <div className="flex items-center gap-2 text-sm">
         <Pencil className="h-4 w-4 text-primary" />
         <span className="font-medium">{t(`fieldCollection.geom.${geometry}`)}</span>
@@ -866,7 +1157,7 @@ function PickBanner({ onCancel }: { onCancel: () => void }) {
   // banner is ever mounted at once (#720 review).
   const hintId = useId();
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex max-w-[95vw] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
+    <div className="absolute bottom-6 left-1/2 z-50 flex w-max max-w-[95%] -translate-x-1/2 flex-col gap-2 rounded-lg border bg-card p-3 shadow-xl">
       {/* Only the non-interactive status text is the live region, with the
           Cancel button as a sibling, so screen readers don't re-read the button
           on region mutations (ARIA APG). The button also takes focus on mount
@@ -1026,9 +1317,10 @@ interface CaptureStepProps {
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
-  photo: string | null;
-  onPhoto: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemovePhoto: () => void;
+  photos: CollectionPhoto[];
+  readingPhotos: boolean;
+  onPhotos: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemovePhoto: (index: number) => void;
   locating: boolean;
   gpsFix: GpsFix | null;
   onUseGps: () => void;
@@ -1046,8 +1338,9 @@ function CaptureStep({
   setValue,
   errors,
   errorText,
-  photo,
-  onPhoto,
+  photos,
+  readingPhotos,
+  onPhotos,
   onRemovePhoto,
   locating,
   gpsFix,
@@ -1205,49 +1498,56 @@ function CaptureStep({
           {/* Save sits above the optional photo so the primary action is
               reachable without scrolling past the upload, and the photo reads
               as the optional extra it is (#711). */}
-          <Button className="w-full" onClick={onSave}>
+          <Button className="w-full" onClick={onSave} disabled={readingPhotos}>
             <Save className="me-2 h-4 w-4" />
             {t(`fieldCollection.save.${geometry}`)}
           </Button>
 
           <div className="space-y-1.5">
             <Label htmlFor="fc-photo">{t("fieldCollection.photoOptional")}</Label>
-            {photo ? (
-              <div className="flex items-center gap-2">
-                <img
-                  src={photo}
-                  alt={t("fieldCollection.photo")}
-                  className="h-16 w-16 rounded-md object-cover"
-                />
-                <Button variant="ghost" size="sm" onClick={onRemovePhoto}>
-                  <X className="me-1 h-3.5 w-3.5" />
-                  {t("fieldCollection.removePhoto")}
-                </Button>
+            {photos.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {photos.map((photo, index) => (
+                  <div key={`${photo.src}-${index}`} className="relative">
+                    <img
+                      src={photo.src}
+                      alt={photo.name || t("fieldCollection.photo")}
+                      className="h-16 w-16 rounded-md object-cover"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="absolute end-0 top-0 h-6 w-6"
+                      aria-label={`${t("fieldCollection.removePhoto")} (${index + 1}${photo.name ? `: ${photo.name}` : ""})`}
+                      onClick={() => onRemovePhoto(index)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <>
-                {/* No `capture` attribute: let the user pick an existing photo
-                    or take a new one (capture="environment" forces the camera
-                    on iOS). Hidden; the button below is the visible trigger. */}
-                <input
-                  ref={photoInputRef}
-                  id="fc-photo"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={onPhoto}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => photoInputRef.current?.click()}
-                >
-                  <ImagePlus className="me-2 h-4 w-4" />
-                  {t("fieldCollection.choosePhoto")}
-                </Button>
-              </>
             )}
+            {/* No `capture` attribute: let the user pick existing photos or take
+                a new one (capture="environment" forces the camera on iOS). */}
+            <input
+              ref={photoInputRef}
+              id="fc-photo"
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={onPhotos}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => photoInputRef.current?.click()}
+            >
+              <ImagePlus className="me-2 h-4 w-4" />
+              {t("fieldCollection.choosePhoto")}
+            </Button>
           </div>
         </>
       )}

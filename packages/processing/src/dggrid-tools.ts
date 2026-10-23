@@ -1,6 +1,6 @@
 import type { FeatureCollection, Geometry } from "geojson";
 import { unwrapAntimeridianGeometry } from "./antimeridian";
-import { sqlIdent, sqlStr } from "./h3-tools";
+import { bboxToWktPolygon, sqlIdent, sqlStr } from "./h3-tools";
 
 /**
  * Default DGGRID orientation (ISEA/FULLER pole) used by duck_dggs examples:
@@ -376,6 +376,22 @@ export function buildDggridGridFromWktSql(
     `${cellsCteFromGeom(`SELECT ST_GeomFromText(${sqlStr(wkt)}) AS g`, res, gridType)} ` +
     gridSelect(res, gridType)
   );
+}
+
+/**
+ * Grid SQL covering several lon/lat boxes — a layer extent cut in two at the
+ * dateline. Each box becomes a row of the sampled area, so the `cells` CTE's
+ * `DISTINCT` returns a cell straddling ±180 once.
+ */
+export function buildDggridGridFromBboxesSql(
+  boxes: [number, number, number, number][],
+  res: number,
+  gridType: DggridGridType = DEFAULT_DGGRID_GRID_TYPE,
+): string {
+  const area = boxes
+    .map((box) => `SELECT ST_GeomFromText(${sqlStr(bboxToWktPolygon(box))}) AS g`)
+    .join(" UNION ALL ");
+  return `${cellsCteFromGeom(area, res, gridType)} ` + gridSelect(res, gridType);
 }
 
 /**

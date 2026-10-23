@@ -27,9 +27,30 @@ describe("classifyFetchFailure", () => {
     const result = classifyFetchFailure(new TypeError("Failed to fetch"));
     assert.equal(result.kind, "network");
     assert.equal(result.label, "network/TLS/CORS");
-    // The browser hint keeps the CORS / "try the desktop app" advice.
+    // On the web the hint keeps the CORS / "try the desktop app" advice.
     assert.ok(result.hint?.includes("CORS"));
     assert.ok(result.hint?.includes("desktop app"));
+  });
+
+  it("drops the 'try the desktop app' advice when already in the desktop app", () => {
+    // The desktop WebView's plain `fetch()` is subject to CORS just like the
+    // browser's, so it hits this same branch, but telling a desktop user to
+    // try the desktop app is a dead end (issue #1834).
+    const globals = globalThis as { window?: unknown };
+    const hadWindow = "window" in globals;
+    const previousWindow = globals.window;
+    globals.window = { __TAURI_INTERNALS__: {} };
+    try {
+      const result = classifyFetchFailure(new TypeError("Failed to fetch"));
+      assert.equal(result.kind, "network");
+      assert.equal(result.label, "network/TLS/CORS");
+      // The CORS explanation stays; only the "switch apps" advice goes.
+      assert.ok(result.hint?.includes("CORS"));
+      assert.ok(!result.hint?.includes("desktop app"));
+    } finally {
+      if (hadWindow) globals.window = previousWindow;
+      else delete globals.window;
+    }
   });
 
   it("classifies the WebKit 'Load failed' TypeError as network", () => {

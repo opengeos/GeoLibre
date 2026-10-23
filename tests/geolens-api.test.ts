@@ -22,15 +22,18 @@ import {
   itemsUrl,
   mintTileToken,
   normalizeBaseUrl,
+  normalizeTileColumns,
   parseDataset,
   rasterTemplatesForServer,
-  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
   stacCatalogUrl,
   stacCollectionsUrl,
+  tileColumnsOf,
+  tileTableName,
   tileUrlPrefix,
   vectorTileTemplate,
+  withTileColumns,
   withTileVersion,
   type GeoLensFetch,
   type GeoLensHttpResponse,
@@ -51,8 +54,16 @@ describe("normalizeBaseUrl", () => {
   it("trims, defaults to https, and strips trailing slashes", () => {
     assert.equal(normalizeBaseUrl("  demo.getgeolens.com/  "), "https://demo.getgeolens.com");
     assert.equal(normalizeBaseUrl("http://localhost:8080///"), "http://localhost:8080");
+    assert.equal(normalizeBaseUrl("http://127.0.0.1:8080/"), "http://127.0.0.1:8080");
+    assert.equal(normalizeBaseUrl("http://[::1]:8080/"), "http://[::1]:8080");
     assert.equal(normalizeBaseUrl("https://x.example"), "https://x.example");
     assert.equal(normalizeBaseUrl(""), "");
+  });
+
+  it("rejects plaintext remote and non-HTTP URLs", () => {
+    assert.equal(normalizeBaseUrl("http://demo.getgeolens.com"), "");
+    assert.equal(normalizeBaseUrl("ftp://demo.getgeolens.com"), "");
+    assert.equal(normalizeBaseUrl("not a URL"), "");
   });
 });
 
@@ -152,6 +163,122 @@ describe("vectorTileTemplate", () => {
     assert.ok(out.tiles.includes("sig=abc123"));
     assert.ok(out.tiles.includes("exp=1784668500"));
     assert.ok(out.tiles.includes("scope=world_countries"));
+    // No columns requested: the parameter is absent rather than empty, so the
+    // URL matches what GeoLens caches for a plain tile request.
+    assert.ok(!out.tiles.includes("cols="));
+  });
+
+  it("stamps requested attribute columns onto the signed template", () => {
+    const out = vectorTileTemplate(
+      { baseUrl: "http://localhost:8080" },
+      { kind: "vector", sig: "abc123", exp: 1784668500, scope: "tracks", expiresIn: 465 },
+      ["year", "nature", "year"],
+    );
+    assert.ok(out.tiles.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
+    assert.deepEqual(tileColumnsOf(out.tiles), ["nature", "year"]);
+    assert.ok(out.tiles.includes("sig=abc123"));
+  });
+
+  it("keeps a partitioned scope out of the path but verbatim in the query", () => {
+    // GeoLens 1.20+ mints `{table}:{partition}` scopes. `:` is not a legal
+    // PostgreSQL identifier, so leaving it in the path makes the tile service
+    // answer `400 Invalid table name`.
+    const out = vectorTileTemplate(
+      { baseUrl: "https://demo.getgeolens.com" },
+      {
+        kind: "vector",
+        sig: "abc123",
+        exp: 1790046000,
+        scope: "nyc_subway_lines_mta:p0",
+        expiresIn: 720,
+      },
+    );
+    assert.equal(out.sourceLayer, "data.nyc_subway_lines_mta");
+    assert.ok(
+      out.tiles.startsWith(
+        "https://demo.getgeolens.com/api/tiles/data.nyc_subway_lines_mta/{z}/{x}/{y}.pbf?",
+      ),
+    );
+    assert.ok(!out.tiles.slice(0, out.tiles.indexOf("?")).includes(":p0"));
+    // The signature was minted over the full scope, so the query keeps it.
+    assert.equal(
+      new URLSearchParams(out.tiles.slice(out.tiles.indexOf("?") + 1)).get("scope"),
+      "nyc_subway_lines_mta:p0",
+    );
+  });
+});
+
+describe("tileTableName", () => {
+  it("strips a partition suffix and leaves a plain scope alone", () => {
+    assert.equal(tileTableName("nyc_subway_lines_mta:p0"), "nyc_subway_lines_mta");
+    assert.equal(tileTableName("world_countries"), "world_countries");
+    assert.equal(tileTableName("tracks:p12"), "tracks");
+    assert.equal(tileTableName(""), "");
+  });
+});
+
+describe("normalizeTileColumns", () => {
+  it("sorts and deduplicates so one tile keeps one URL", () => {
+    // GeoLens sorts and dedupes server-side for its tile cache key, so an
+    // unsorted client would spend two cache entries on the same tile.
+    assert.deepEqual(normalizeTileColumns(["year", "nature", "year"]), ["nature", "year"]);
+    assert.deepEqual(normalizeTileColumns(["b", "a"]), normalizeTileColumns(["a", "b"]));
+  });
+
+  it("drops names GeoLens would reject", () => {
+    assert.deepEqual(
+      normalizeTileColumns(["ok_1", "1bad", "also bad", "", "  spaced  ", "geom;drop"]),
+      ["ok_1", "spaced"],
+    );
+  });
+});
+
+describe("withTileColumns / tileColumnsOf", () => {
+  const template =
+    "https://demo.example.com/api/tiles/data.b/{z}/{x}/{y}.pbf?sig=abc&exp=1&scope=b";
+
+  it("reads back nothing when the template opts into no columns", () => {
+    assert.deepEqual(tileColumnsOf(template), []);
+    assert.deepEqual(tileColumnsOf("https://h/api/tiles/t/{z}/{x}/{y}.pbf"), []);
+  });
+
+  it("stamps columns while leaving the signature and placeholders intact", () => {
+    const out = withTileColumns(template, ["nature", "year"]);
+    assert.ok(out.includes("/{z}/{x}/{y}.pbf?"), "placeholders must stay literal");
+    assert.ok(out.includes("sig=abc"));
+    assert.ok(out.includes("exp=1"));
+    assert.deepEqual(tileColumnsOf(out), ["nature", "year"]);
+  });
+
+  it("replaces a previous opt-in rather than appending a second one", () => {
+    const once = withTileColumns(template, ["nature"]);
+    const twice = withTileColumns(once, ["year", "month"]);
+    assert.equal(twice.match(/cols=/g)?.length, 1);
+    assert.deepEqual(tileColumnsOf(twice), ["month", "year"]);
+  });
+
+  it("clears the parameter when nothing is requested", () => {
+    const stamped = withTileColumns(template, ["nature"]);
+    const cleared = withTileColumns(stamped, []);
+    assert.ok(!cleared.includes("cols="));
+    assert.ok(cleared.includes("sig=abc"));
+  });
+
+  it("handles a template that carries no query at all", () => {
+    assert.equal(
+      withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["a"]),
+      "https://h/api/tiles/t/{z}/{x}/{y}.pbf?cols=a",
+    );
+    // That branch builds its query separately from the one above, so a
+    // multi-column case pins them to one serialization: the URL is the tile
+    // cache key, and `cols` has to look the same however it was added.
+    const noQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf", ["b", "a"]);
+    const withQuery = withTileColumns("https://h/api/tiles/t/{z}/{x}/{y}.pbf?sig=abc", ["b", "a"]);
+    assert.equal(
+      noQuery.slice(noQuery.indexOf("cols=")),
+      withQuery.slice(withQuery.indexOf("cols=")),
+    );
+    assert.deepEqual(tileColumnsOf(noQuery), ["a", "b"]);
   });
 });
 
@@ -454,43 +581,6 @@ describe("tileUrlPrefix", () => {
 
   it("returns a template without placeholders unchanged", () => {
     assert.equal(tileUrlPrefix("https://h/tiles.png"), "https://h/tiles.png");
-  });
-});
-
-describe("rasterTileAuthHeaders", () => {
-  const keys = new Map([
-    ["https://demo.example.com/raster-tiles/abc/tiles/", "key-abc"],
-    ["https://other.example.com/raster-tiles/xyz/tiles/", "key-xyz"],
-  ]);
-
-  it("attaches the key registered for that tile endpoint", () => {
-    assert.deepEqual(
-      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/abc/tiles/3/2/1.png", keys),
-      { "X-Api-Key": "key-abc" },
-    );
-  });
-
-  it("picks the matching server when several are registered", () => {
-    assert.deepEqual(
-      rasterTileAuthHeaders("https://other.example.com/raster-tiles/xyz/tiles/0/0/0.png", keys),
-      { "X-Api-Key": "key-xyz" },
-    );
-  });
-
-  it("does not leak the key to a basemap or another host", () => {
-    assert.equal(rasterTileAuthHeaders("https://tiles.openfreemap.org/1/2/3.pbf", keys), null);
-    assert.equal(rasterTileAuthHeaders("https://demo.example.com.evil.test/x", keys), null);
-  });
-
-  it("does not attach a key to a different dataset on the same server", () => {
-    assert.equal(
-      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/zzz/tiles/1/1/1.png", keys),
-      null,
-    );
-  });
-
-  it("returns null when nothing is registered", () => {
-    assert.equal(rasterTileAuthHeaders("https://demo.example.com/x", new Map()), null);
   });
 });
 

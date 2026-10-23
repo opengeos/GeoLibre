@@ -1,4 +1,12 @@
-import type { WhiteboxToolParameter } from "@geolibre/processing";
+import {
+  identifierWords,
+  isMultipleWhiteboxDatasetParameter,
+  type WhiteboxToolParameter,
+} from "@geolibre/processing";
+
+// Re-exported so the dialog helpers keep one import site for parameter
+// classification; the implementation is shared with the WASM runner.
+export { identifierWords };
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
   if (["raster", "vector", "lidar", "file"].includes(dataKind)) {
@@ -42,3 +50,39 @@ export function parameterKind(param: WhiteboxToolParameter): string {
   }
   return "string";
 }
+
+/** Whether a dataset input accepts a stack/list rather than one dataset. */
+export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolean {
+  return parameterKind(param).endsWith("_in") && isMultipleWhiteboxDatasetParameter(param);
+}
+
+/**
+ * Whether a path parameter names a folder, so its browse button opens a folder
+ * picker (desktop) and skips the read-a-file fallback (web).
+ *
+ * A typed dataset parameter (`raster_in`, `file_out`, …) is a file unless a
+ * segment of its own name is `folder` or `directory` (`output_directory`). Its
+ * description is not consulted: many LiDAR inputs read "If omitted, runs in
+ * batch mode over LiDAR files in current directory", and matching that made
+ * every such browse button do nothing in the browser (and open a folder picker
+ * on desktop). The `dir` abbreviation is left out of the name rule because
+ * hydrology tools use it for flow *direction* (`flow_dir_output_path`). An
+ * untyped parameter has only its wording to go on, so the description still
+ * counts there, as does a `folder`/`directory` word of a snake_case, kebab-case
+ * or camelCase name (`output_folder`).
+ *
+ * @param param - A tool parameter from either catalog.
+ * @returns True when the parameter expects a directory path.
+ */
+export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
+  const namedFolder = identifierWords(param.name ?? "").some((word) => FOLDER_NAME_WORDS.has(word));
+  if (/^(raster|vector|lidar|file)_(in|out)$/.test(parameterKind(param))) return namedFolder;
+  if (namedFolder) return true;
+  const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
+  return /\b(folder|directory|dir)\b/.test(text);
+}
+
+// Name words that mark a parameter as a folder. `dir` counts only as a whole
+// name (`dir`), never as one word of a longer one: hydrology tools use it for
+// flow *direction* (`flow_dir`).
+const FOLDER_NAME_WORDS = new Set(["folder", "folders", "directory", "directories"]);
