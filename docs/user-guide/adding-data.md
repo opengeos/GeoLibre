@@ -12,7 +12,7 @@ The **Add Data** menu is the main way to bring layers into GeoLibre. It groups s
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
 | **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
-| **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
+| **MBTiles Layer** | Loads a local MBTiles tile archive. The desktop app reads it from disk; the browser build opens it in memory with SQLite/WASM (sql.js), so it is not kept after a reload. |
 
 Vector files are reprojected to EPSG:4326 on load. In the browser, vector import relies on DuckDB-WASM Spatial, with direct handling for GeoJSON, zipped Shapefiles, and KMZ archives.
 
@@ -85,4 +85,4 @@ Three of them, grouped under **Plugins → Web Services**, search public dataset
 Each panel shows how many of the total results you are looking at and offers **Load more** to page further.
 
 !!! note "Browser vs desktop"
-    URL-based sources work in both the browser and the desktop app. Local file dialogs, local MBTiles, local raster reads, and PostgreSQL require the desktop app. See [Getting Started](../getting-started.md).
+    URL-based sources work in both the browser and the desktop app. Local file dialogs, local raster reads, and PostgreSQL require the desktop app. See [Getting Started](../getting-started.md).

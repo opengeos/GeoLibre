@@ -1,14 +1,16 @@
 import { Button, Input, Label } from "@geolibre/ui";
 import { FileUp } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   mbtilesTileUrl,
+  openBrowserMbtiles,
   readMbtilesMetadata,
   registerMbtilesProtocol,
+  releaseBrowserMbtiles,
   type MbtilesMetadata,
 } from "../../../../lib/mbtiles";
-import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
+import { isTauri, openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { createBaseLayer, errorMessage, fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
@@ -23,10 +25,24 @@ export function MbtilesSource() {
     path: string;
   } | null>(null);
   const [mbtilesSourceLayers, setMbtilesSourceLayers] = useState("");
+  // In the browser the file is opened into an in-memory sql.js database keyed
+  // by a synthetic path. Track the one not yet added to the map so it is freed
+  // when the user picks another file or closes the dialog; once a layer uses it
+  // the key is cleared and the database lives on with the layer.
+  const pendingBrowserKey = useRef<string | null>(null);
+
+  const discardPendingBrowserFile = () => {
+    if (pendingBrowserKey.current) releaseBrowserMbtiles(pendingBrowserKey.current);
+    pendingBrowserKey.current = null;
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the cleanup only touches a ref and a module function
+  useEffect(() => discardPendingBrowserFile, []);
 
   const handleChooseMbtilesFile = async () => {
     source.setError(null);
     try {
+      const desktop = isTauri();
       const result = await openLocalDataFileWithFallback({
         filters: [
           {
@@ -35,10 +51,26 @@ export function MbtilesSource() {
           },
         ],
         accept: ".mbtiles",
+        // Desktop reads tiles straight from disk by path; the browser has no
+        // path, so it needs the bytes to open with sql.js.
+        readBinary: !desktop,
       });
       if (!result) return;
-      const metadata = await readMbtilesMetadata(result.path);
-      setSelectedMbtiles({ metadata, path: result.path });
+
+      let metadata: MbtilesMetadata;
+      let path = result.path;
+      if (desktop) {
+        metadata = await readMbtilesMetadata(result.path);
+      } else {
+        if (!result.data) throw new Error(t("addData.mbtiles.readError"));
+        const opened = await openBrowserMbtiles(result.data, result.path);
+        discardPendingBrowserFile();
+        pendingBrowserKey.current = opened.key;
+        metadata = opened.metadata;
+        path = opened.key;
+      }
+
+      setSelectedMbtiles({ metadata, path });
       setMbtilesSourceLayers(metadata.sourceLayers.join(", "));
       source.setLayerName((current) =>
         current.trim() && current !== defaultName
@@ -66,6 +98,8 @@ export function MbtilesSource() {
 
     const minzoom = metadata.minZoom ?? undefined;
     const maxzoom = metadata.maxZoom ?? undefined;
+    // The layer now owns the in-memory database; don't free it on unmount.
+    if (pendingBrowserKey.current === path) pendingBrowserKey.current = null;
     source.addAndClose(
       createBaseLayer(
         name,

@@ -276,7 +276,7 @@ layer), falling back to `style.textColor` when a feature does not set it.
 | `wms`            | Supported as tiled WMS GetMap layers                                                               |
 | `raster`         | Supported for raster tile templates                                                                |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
-| `mbtiles`        | Supported in the desktop app through a local MapLibre protocol                                     |
+| `mbtiles`        | Desktop: local MapLibre protocol over Tauri. Browser: in-memory sql.js, not restored on reopen    |
 | `arcgis`         | Supported for ArcGIS FeatureServer and VectorTileServer layers                                     |
 | `pmtiles`        | Supported through the Components plugin                                                            |
 | `cog`            | Supported for COG and GeoTIFF raster layers                                                        |

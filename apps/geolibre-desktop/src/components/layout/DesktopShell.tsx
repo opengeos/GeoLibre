@@ -1022,8 +1022,11 @@ export function DesktopShell({
     // Super-Overlay tile URLs must resolve in a session that only reopens it,
     // which is exactly when nothing has called registerKmlSuperOverlay yet.
     void registerKmlSuperOverlayProtocol();
+    // MBTiles also run in the browser (sql.js), so its protocol is not
+    // desktop-gated; a reopened project then gets a clear "add it again" tile
+    // error instead of an unknown-protocol failure.
+    registerMbtilesProtocol();
     if (isTauri()) {
-      registerMbtilesProtocol();
       registerXyzTileProtocol();
     }
   }, []);
