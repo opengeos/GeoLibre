@@ -73,12 +73,7 @@ export function RemoveLayerDialog({ layer, onClose }: RemoveLayerDialogProps) {
           <Button type="button" variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button
-            ref={removeButtonRef}
-            type="button"
-            variant="destructive"
-            onClick={handleRemove}
-          >
+          <Button ref={removeButtonRef} type="button" variant="destructive" onClick={handleRemove}>
             {t("common.remove")}
           </Button>
         </div>
