@@ -367,6 +367,60 @@ describe("LayerPanel", () => {
     assert.deepEqual(rowNames(), ["Rivers", "Parks"]);
   });
 
+  it("deletes the active layer with Delete and confirms the removal prompt with Delete", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "parks", name: "Parks" })],
+      selectedLayerId: "parks",
+    });
+    renderLayerPanel();
+
+    fireEvent.keyDown(within(row("Parks")).getByRole("button", { name: "Parks" }), {
+      key: "Delete",
+    });
+    const dialog = screen.getByRole("dialog", { name: "Remove layer?" });
+    assert.equal(layer("parks")?.name, "Parks");
+    assert.equal(document.activeElement, within(dialog).getByRole("button", { name: "Remove" }));
+
+    fireEvent.keyDown(dialog, { key: "Delete" });
+    assert.equal(layer("parks"), undefined);
+    assert.equal(screen.queryByRole("dialog", { name: "Remove layer?" }), null);
+  });
+
+  it("requires an unmodified, non-repeating Delete to confirm layer removal", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "parks", name: "Parks" })],
+      selectedLayerId: "parks",
+    });
+    renderLayerPanel();
+
+    fireEvent.keyDown(within(row("Parks")).getByRole("button", { name: "Parks" }), {
+      key: "Delete",
+    });
+    const dialog = screen.getByRole("dialog", { name: "Remove layer?" });
+
+    fireEvent.keyDown(dialog, { key: "Delete", repeat: true });
+    fireEvent.keyDown(dialog, { key: "Delete", shiftKey: true });
+    assert.equal(layer("parks")?.name, "Parks");
+
+    fireEvent.keyDown(dialog, { key: "Delete" });
+    assert.equal(layer("parks"), undefined);
+  });
+
+  it("does not open the removal prompt while typing in a text field", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "parks", name: "Parks" })],
+      selectedLayerId: "parks",
+    });
+    renderLayerPanel();
+    const input = document.createElement("input");
+    document.body.append(input);
+
+    fireEvent.keyDown(input, { key: "Delete" });
+
+    assert.equal(screen.queryByRole("dialog", { name: "Remove layer?" }), null);
+    input.remove();
+  });
+
   it("keeps the metadata dialog in step with the live layer", () => {
     useAppStore.setState({
       layers: [geojsonLayer({ id: "parks", name: "Parks", metadata: { featureCount: 3 } })],

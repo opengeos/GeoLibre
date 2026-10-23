@@ -306,6 +306,37 @@ export function LayerPanel({
   }, [autoCollapse, internalCollapsed, isControlled]);
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
   const selection = useLayerSelection({ layers, visibleLayers, selectedLayerId, selectLayer });
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Delete" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(
+          '[role="dialog"], input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+        )
+      ) {
+        // Guard against deleting layers when focus is inside a dialog or form element
+        return;
+      }
+      const layer = layers.find((candidate) => candidate.id === selectedLayerId);
+      if (!layer || !canEditLayer(layer.id)) return;
+      event.preventDefault();
+      setLayerPendingRemoval(layer);
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [layers, selectedLayerId, canEditLayer]);
   const drag = useLayerDragAndDrop({
     layers,
     visibleLayers,
