@@ -41,8 +41,14 @@ export function MbtilesSource() {
     pendingBrowserKey.current = null;
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the cleanup only touches a ref and a module function
-  useEffect(() => discardPendingBrowserFile, []);
+  // Free a picked-but-never-added file when the dialog closes.
+  useEffect(
+    () => () => {
+      if (pendingBrowserKey.current) releaseBrowserMbtiles(pendingBrowserKey.current);
+      pendingBrowserKey.current = null;
+    },
+    [],
+  );
 
   const handleChooseMbtilesFile = async () => {
     source.setError(null);

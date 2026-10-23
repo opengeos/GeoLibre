@@ -25,6 +25,29 @@ export const MAX_BROWSER_MBTILES_BYTES = 1024 * 1024 * 1024;
  */
 export const BROWSER_MBTILES_KEY_PREFIX = "browser-mbtiles-";
 
+function randomSessionId(): string {
+  // getRandomValues (unlike randomUUID) also exists on insecure origins.
+  const bytes = new Uint8Array(6);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Create a generator of browser-database keys. Each key carries a random id for
+ * the page session plus a counter. The counter alone is not enough: it restarts
+ * at 1 on every load, so a saved project's `browser-mbtiles-1/a.mbtiles` layer
+ * would match whatever different `a.mbtiles` is opened first in a later session
+ * and quietly show the wrong tiles instead of reporting its file as unavailable.
+ *
+ * @param sessionId - Override for tests; defaults to a fresh random id.
+ */
+export function createBrowserMbtilesKeyGenerator(
+  sessionId: string = randomSessionId(),
+): (fileName: string) => string {
+  let counter = 0;
+  return (fileName) => `${BROWSER_MBTILES_KEY_PREFIX}${sessionId}-${++counter}/${fileName}`;
+}
+
 /** The browser-database key a tile URL points at, or null for any other URL. */
 export function browserMbtilesKeyFromTileUrl(url: string): string | null {
   const query = url.indexOf("?");
@@ -265,10 +288,18 @@ export function createMbtilesTileReader(db: Database, scheme: string): MbtilesTi
       const row = isXyz ? y : rowCount - 1 - y;
       if (row < 0) return new Uint8Array(0);
 
-      statement.bind([z, x, row]);
       let value: SqlValue | undefined;
-      if (statement.step()) value = statement.get()[0];
-      statement.reset();
+      try {
+        statement.bind([z, x, row]);
+        if (statement.step()) value = statement.get()[0];
+      } finally {
+        // Always release the cursor, so a failed step cannot leave the shared
+        // statement mid-iteration for the next tile.
+        statement.reset();
+      }
+      // Inflated after the statement is reset. A corrupt gzip tile throws, which
+      // rejects that one tile request (as the desktop command does) rather than
+      // rendering silently blank.
       return value instanceof Uint8Array ? decompressTileData(value) : new Uint8Array(0);
     },
     close() {

@@ -8,6 +8,7 @@ import {
   BROWSER_MBTILES_KEY_PREFIX,
   browserMbtilesKeyFromTileUrl,
   browserMbtilesKeysInLayers,
+  createBrowserMbtilesKeyGenerator,
   createMbtilesTileReader,
   decompressTileData,
   readMbtilesMetadataFromDb,
@@ -172,6 +173,22 @@ describe("createMbtilesTileReader", () => {
     reader.close();
   });
 
+  it("rejects a corrupt gzip tile but keeps serving the others", () => {
+    const good = new Uint8Array([1, 2, 3]);
+    const corrupt = new Uint8Array([0x1f, 0x8b, 8, 0, 0xde, 0xad, 0xbe, 0xef, 1, 2, 3]);
+    const db = buildMbtiles({
+      tiles: [
+        { z: 0, x: 0, row: 0, data: corrupt },
+        { z: 1, x: 0, row: 0, data: good },
+      ],
+    });
+    const reader = createMbtilesTileReader(db, "tms");
+    assert.throws(() => reader.readTile(0, 0, 0));
+    // The shared statement was reset, so the next lookup is unaffected.
+    assert.deepEqual(reader.readTile(1, 0, 1), good);
+    reader.close();
+  });
+
   it("inflates gzip-compressed vector tiles", () => {
     const payload = new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2, 1]);
     const db = buildMbtiles({ tiles: [{ z: 0, x: 0, row: 0, data: gzipSync(payload) }] });
@@ -213,6 +230,31 @@ describe("browser database keys in layers", () => {
     assert.equal(browserMbtilesKeyFromTileUrl(tileUrl("C:\\data\\world.mbtiles")), null);
     assert.equal(browserMbtilesKeyFromTileUrl("https://example.com/{z}/{x}/{y}.png"), null);
     assert.equal(browserMbtilesKeyFromTileUrl("not a url"), null);
+  });
+
+  it("generates keys that differ per file, and per session for the same file name", () => {
+    const sessionA = createBrowserMbtilesKeyGenerator("aaaaaaaaaaaa");
+    const sessionB = createBrowserMbtilesKeyGenerator("bbbbbbbbbbbb");
+
+    // Two same-named files in one session must not share a database.
+    assert.notEqual(sessionA("a.mbtiles"), sessionA("a.mbtiles"));
+    // A saved key from an earlier session must not match the same file name
+    // opened first in a later one (both counters start at 1).
+    const saved = createBrowserMbtilesKeyGenerator("aaaaaaaaaaaa")("a.mbtiles");
+    assert.notEqual(saved, sessionB("a.mbtiles"));
+
+    // Still recognised as a browser key, with the file name kept for display.
+    const key = sessionA("my map.mbtiles");
+    assert.ok(key.startsWith(BROWSER_MBTILES_KEY_PREFIX));
+    assert.ok(key.endsWith("/my map.mbtiles"));
+    assert.equal(browserMbtilesKeyFromTileUrl(tileUrl(key)), key);
+  });
+
+  it("gives each default generator its own random session id", () => {
+    const first = createBrowserMbtilesKeyGenerator()("a.mbtiles");
+    const second = createBrowserMbtilesKeyGenerator()("a.mbtiles");
+    assert.notEqual(first, second);
+    assert.match(first, /^browser-mbtiles-[0-9a-f]{12}-1\/a\.mbtiles$/);
   });
 
   it("collects keys across live layers and history snapshots", () => {

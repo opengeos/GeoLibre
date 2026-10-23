@@ -5,8 +5,8 @@ import { addProtocol, type RequestParameters } from "maplibre-gl";
 import type { Database } from "sql.js";
 import { loadSqlJs } from "./gpkg-ogr-contents";
 import {
-  BROWSER_MBTILES_KEY_PREFIX,
   browserMbtilesKeysInLayers,
+  createBrowserMbtilesKeyGenerator,
   createMbtilesTileReader,
   readMbtilesMetadataFromDb,
   type MbtilesMetadata,
@@ -25,7 +25,7 @@ interface BrowserMbtilesEntry {
 // Databases opened from in-memory bytes (the web build). Tiles are served from
 // here by the protocol handler; desktop files go through the Tauri commands.
 const browserMbtiles = new Map<string, BrowserMbtilesEntry>();
-let browserMbtilesCounter = 0;
+const nextBrowserMbtilesKey = createBrowserMbtilesKeyGenerator();
 
 // Keys that a layer has referenced at least once. Only these are pruned: a file
 // opened in the Add Data form is not on any layer yet, and the form frees it
@@ -74,8 +74,9 @@ export async function openBrowserMbtiles(
   try {
     const metadata = readMbtilesMetadataFromDb(db, stemOf(fileName));
     reader = createMbtilesTileReader(db, metadata.scheme);
-    // The counter keeps two files with the same name from sharing a database.
-    const key = `${BROWSER_MBTILES_KEY_PREFIX}${++browserMbtilesCounter}/${fileName}`;
+    // Unique per file and per page session, so neither two same-named files nor
+    // a saved project's key from an earlier session can resolve to this database.
+    const key = nextBrowserMbtilesKey(fileName);
     browserMbtiles.set(key, { db, reader });
     ensurePruneSubscription();
     return { key, metadata };
