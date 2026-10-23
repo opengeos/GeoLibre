@@ -450,7 +450,7 @@ export function MapContextMenu({
           `open`), so a normal close leaves the key stable and Radix can play
           its exit animation; only the next right-click forces the remount that
           repositions the popup. */}
-      <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen}>
+      <DropdownMenu key={menu?.id ?? "init"} open={open} onOpenChange={setOpen} modal={false}>
         <DropdownMenuTrigger asChild>
           <span
             aria-hidden
