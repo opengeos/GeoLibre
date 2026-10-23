@@ -5,6 +5,9 @@ import { gzipSync, zlibSync } from "fflate";
 import initSqlJs from "sql.js";
 import type { Database, SqlJsStatic } from "sql.js";
 import {
+  BROWSER_MBTILES_KEY_PREFIX,
+  browserMbtilesKeyFromTileUrl,
+  browserMbtilesKeysInLayers,
   createMbtilesTileReader,
   decompressTileData,
   readMbtilesMetadataFromDb,
@@ -194,5 +197,40 @@ describe("decompressTileData / sniffTileFormat", () => {
     assert.equal(sniffTileFormat(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0])), "webp");
     assert.equal(sniffTileFormat(new Uint8Array([0x1f, 0x8b, 8, 0])), "pbf");
     assert.equal(sniffTileFormat(null), "pbf");
+  });
+});
+
+describe("browser database keys in layers", () => {
+  // Mirrors mbtilesTileUrl() in mbtiles.ts (not importable here: it pulls in MapLibre).
+  const tileUrl = (path: string) =>
+    `geolibre-mbtiles://tile/{z}/{x}/{y}?path=${encodeURIComponent(path)}`;
+  const layer = (...tiles: unknown[]) => ({ source: { tiles } });
+
+  it("extracts the key from a browser tile URL and ignores everything else", () => {
+    const key = `${BROWSER_MBTILES_KEY_PREFIX}3/my map.mbtiles`;
+    assert.equal(browserMbtilesKeyFromTileUrl(tileUrl(key)), key);
+    // A desktop file path is not a browser key.
+    assert.equal(browserMbtilesKeyFromTileUrl(tileUrl("C:\\data\\world.mbtiles")), null);
+    assert.equal(browserMbtilesKeyFromTileUrl("https://example.com/{z}/{x}/{y}.png"), null);
+    assert.equal(browserMbtilesKeyFromTileUrl("not a url"), null);
+  });
+
+  it("collects keys across live layers and history snapshots", () => {
+    const live = `${BROWSER_MBTILES_KEY_PREFIX}1/a.mbtiles`;
+    const undoable = `${BROWSER_MBTILES_KEY_PREFIX}2/b.mbtiles`;
+    const keys = browserMbtilesKeysInLayers([
+      [layer(tileUrl(live)), layer("https://example.com/{z}/{x}/{y}.png")],
+      // A removed layer still referenced by an undo snapshot stays reachable.
+      [layer(tileUrl(undoable))],
+      [layer(tileUrl(live))],
+    ]);
+    assert.deepEqual([...keys].sort(), [live, undoable]);
+  });
+
+  it("tolerates layers without tile arrays", () => {
+    const keys = browserMbtilesKeysInLayers([
+      [{ source: {} }, { source: { tiles: "nope" } }, layer(42, null)],
+    ]);
+    assert.equal(keys.size, 0);
   });
 });

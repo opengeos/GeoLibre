@@ -6,8 +6,54 @@
 //
 // Kept free of Tauri / MapLibre imports so it can be unit-tested under Node.
 
+import type { GeoLibreLayer } from "@geolibre/core";
 import { gunzipSync, unzlibSync } from "fflate";
 import type { Database, SqlValue, Statement } from "sql.js";
+
+/**
+ * Largest `.mbtiles` the browser will open. The whole file is read into an
+ * ArrayBuffer and then copied into sql.js's WebAssembly heap, so it is briefly
+ * held twice; past about this size tabs run out of memory (and WASM memory is
+ * capped at 2 GiB regardless). Desktop reads tiles from disk and has no limit.
+ */
+export const MAX_BROWSER_MBTILES_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * Prefix of the synthetic "path" a browser-opened MBTiles file is addressed by.
+ * A browser file has no filesystem path, so the tile URL's `path` query holds
+ * a key into the in-memory database registry instead.
+ */
+export const BROWSER_MBTILES_KEY_PREFIX = "browser-mbtiles-";
+
+/** The browser-database key a tile URL points at, or null for any other URL. */
+export function browserMbtilesKeyFromTileUrl(url: string): string | null {
+  const query = url.indexOf("?");
+  if (query === -1) return null;
+  const path = new URLSearchParams(url.slice(query + 1)).get("path");
+  return path?.startsWith(BROWSER_MBTILES_KEY_PREFIX) ? path : null;
+}
+
+/**
+ * Every browser-database key referenced by the tile URLs of the given layer
+ * sets (the live layers plus any undo/redo snapshots, which can bring a removed
+ * layer back).
+ */
+export function browserMbtilesKeysInLayers(
+  layerSets: Iterable<readonly Pick<GeoLibreLayer, "source">[]>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const layers of layerSets) {
+    for (const layer of layers) {
+      const tiles: unknown = layer.source?.tiles;
+      if (!Array.isArray(tiles)) continue;
+      for (const tile of tiles) {
+        const key = typeof tile === "string" ? browserMbtilesKeyFromTileUrl(tile) : null;
+        if (key !== null) keys.add(key);
+      }
+    }
+  }
+  return keys;
+}
 
 export interface MbtilesMetadata {
   name: string;
@@ -36,7 +82,8 @@ const TILES_COLUMNS = "zoom_level, tile_column, tile_row, tile_data";
 
 function tableOrViewExists(db: Database, name: string): boolean {
   const result = db.exec(
-    `SELECT name FROM sqlite_master WHERE name = '${name}' AND type IN ('table', 'view') LIMIT 1`,
+    "SELECT name FROM sqlite_master WHERE name = ? AND type IN ('table', 'view') LIMIT 1",
+    [name],
   );
   return result.length > 0 && result[0].values.length > 0;
 }

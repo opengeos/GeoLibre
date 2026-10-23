@@ -10,7 +10,12 @@ import {
   releaseBrowserMbtiles,
   type MbtilesMetadata,
 } from "../../../../lib/mbtiles";
-import { isTauri, openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
+import { MAX_BROWSER_MBTILES_BYTES } from "../../../../lib/mbtiles-sqljs";
+import {
+  FileTooLargeError,
+  openLocalDataFileWithFallback,
+} from "../../../../lib/file-io/file-dialogs";
+import { isTauri } from "../../../../lib/tauri-io";
 import { createBaseLayer, errorMessage, fileNameFromPath, layerNameFromPath } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
@@ -54,6 +59,9 @@ export function MbtilesSource() {
         // Desktop reads tiles straight from disk by path; the browser has no
         // path, so it needs the bytes to open with sql.js.
         readBinary: !desktop,
+        // Only the browser loads the whole file into memory; desktop reads
+        // tiles from disk, so it has no size limit.
+        maxBytes: desktop ? undefined : MAX_BROWSER_MBTILES_BYTES,
       });
       if (!result) return;
 
@@ -78,7 +86,14 @@ export function MbtilesSource() {
           : metadata.name || layerNameFromPath(result.path, defaultName),
       );
     } catch (err) {
-      source.setError(errorMessage(err, t("addData.mbtiles.readError")));
+      source.setError(
+        err instanceof FileTooLargeError
+          ? t("addData.mbtiles.errorTooLarge", {
+              size: Math.ceil(err.size / 1_048_576),
+              limit: Math.floor(MAX_BROWSER_MBTILES_BYTES / 1_048_576),
+            })
+          : errorMessage(err, t("addData.mbtiles.readError")),
+      );
     }
   };
 
