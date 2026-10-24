@@ -47,11 +47,10 @@ export function openMinimapPanel(app: GeoLibreAppAPI, options?: GeoLibreMinimapO
     }
     next[key] = value;
   }
-  if (minimapOptionKeys.some((key) => next[key] !== minimapOptions[key])) {
-    removeMinimapControl(app);
-    minimapOptions = next;
-  }
-  void openStandaloneMinimapControl(app, ++minimapRequest);
+  const optionsChanged = minimapOptionKeys.some((key) => next[key] !== minimapOptions[key]);
+  if (!optionsChanged && (minimapPanelVisible || minimapControlMounted)) return;
+  minimapOptions = next;
+  void openStandaloneMinimapControl(app, ++minimapRequest, optionsChanged);
 }
 
 export function closeMinimapPanel(app: GeoLibreAppAPI): void {
@@ -70,16 +69,29 @@ export function subscribeMinimapPanel(listener: () => void): () => void {
 async function openStandaloneMinimapControl(
   app: GeoLibreAppAPI,
   request: number,
+  optionsChanged: boolean,
 ): Promise<boolean> {
   const { MinimapControl: MinimapControlClass } = await getComponentsConstructors();
   if (request !== minimapRequest) return false;
 
-  minimapControl ??= createMinimapControl(MinimapControlClass, app.getActiveBasemap());
+  // Reconfigure in place after loading the constructor. Keep the visibility
+  // store and the user's collapsed state steady while replacing the control.
+  const wasCollapsed = optionsChanged && minimapControl?.getState().collapsed === true;
+  if (optionsChanged && minimapControl && minimapControlMounted) {
+    app.removeMapControl(minimapControl);
+    minimapControl = null;
+    minimapControlMounted = false;
+  }
+  minimapControl ??= createMinimapControl(
+    MinimapControlClass,
+    app.getActiveBasemap(),
+    wasCollapsed,
+  );
 
   if (!minimapControlMounted) {
     const added = app.addMapControl(minimapControl, minimapControlPosition);
     if (!added) {
-      minimapControl = null;
+      removeMinimapControl(app);
       return false;
     }
     minimapControlMounted = true;
@@ -95,7 +107,7 @@ async function openStandaloneMinimapControl(
   setTimeout(() => {
     if (request !== minimapRequest || minimapControl !== control) return;
     control.show();
-    control.expand();
+    if (!wasCollapsed) control.expand();
     setMinimapPanelVisible(true);
   }, 0);
   return true;
@@ -120,7 +132,7 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
   const wasCollapsed = minimapControl.getState().collapsed;
 
   app.removeMapControl(minimapControl);
-  minimapControl = createMinimapControl(MinimapControlClass, app.getActiveBasemap());
+  minimapControl = createMinimapControl(MinimapControlClass, app.getActiveBasemap(), wasCollapsed);
   const added = app.addMapControl(minimapControl, minimapControlPosition);
   if (!added) {
     // Also drop the basemap subscription: minimapControlMounted is now false,
@@ -145,10 +157,12 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
 function createMinimapControl(
   MinimapControlClass: MinimapControlConstructor,
   basemapStyleUrl: string,
+  collapsed = false,
 ): MinimapControl {
   const control = new MinimapControlClass({
     ...MINIMAP_OPTIONS,
     ...minimapOptions,
+    collapsed,
     style: basemapStyleUrl,
   });
   return control;

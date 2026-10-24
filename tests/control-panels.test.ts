@@ -9,12 +9,16 @@ import {
   __setComponentsModuleLoaderForTests,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/components/constructors";
-import { subscribeMinimapPanel } from "../packages/plugins/src/plugins/components/minimap";
+import {
+  openMinimapPanel,
+  subscribeMinimapPanel,
+} from "../packages/plugins/src/plugins/components/minimap";
 import type { GeoLibreAppAPI, GeoLibreControlPanelId } from "../packages/plugins/src/types";
 
 class Overview {
-  collapsed = true;
+  collapsed: boolean;
   constructor(readonly options: Record<string, unknown>) {
+    this.collapsed = options.collapsed === true;
     created.push(this);
   }
   show() {
@@ -100,11 +104,21 @@ describe("built-in control panel API", () => {
   it("updates an open overview and keeps its options and collapsed state across basemap changes", async () => {
     openControlPanel(app, "minimap", { zoomOffset: -6, width: 320 });
     await settle();
-    openControlPanel(app, "minimap", { height: 240 });
-    await settle();
-    assert.equal(mounted.size, 1);
-    assert.equal(created.length, 2);
-    created[1].collapsed = true;
+    created[0].collapsed = true;
+    const visibilityChanges: boolean[] = [];
+    const unsubscribe = subscribeMinimapPanel(() =>
+      visibilityChanges.push(isControlPanelVisible("minimap")),
+    );
+    try {
+      openControlPanel(app, "minimap", { height: 240 });
+      await settle();
+      assert.equal(mounted.size, 1);
+      assert.equal(created.length, 2);
+      assert.equal(created[1].collapsed, true);
+      assert.deepEqual(visibilityChanges, []);
+    } finally {
+      unsubscribe();
+    }
     basemap = "https://example.com/next.json";
     onBasemapChange?.();
     await settle();
@@ -116,6 +130,17 @@ describe("built-in control panel API", () => {
     assert.equal(latest.options.width, 320);
     assert.equal(latest.options.height, 240);
     assert.equal(latest.collapsed, true);
+  });
+
+  it("keeps a collapsed overview collapsed on a repeated direct menu open", async () => {
+    openMinimapPanel(app);
+    openMinimapPanel(app);
+    await settle();
+    created[0].collapsed = true;
+    openMinimapPanel(app);
+    await settle();
+    assert.equal(created.length, 1);
+    assert.equal(created[0].collapsed, true);
   });
 
   it("resets options after close so a later menu open uses the defaults", async () => {
