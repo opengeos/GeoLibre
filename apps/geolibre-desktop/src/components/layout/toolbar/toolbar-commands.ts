@@ -119,6 +119,7 @@ export interface ToolbarCommandContext {
   addLayer: AddLayerHandlers;
   openAddDataKind: (kind: AddDataKind) => void;
   osmPbf: { setDialogOpen: (open: boolean) => void };
+  tilePackage: { setDialogOpen: (open: boolean) => void };
   handleOpenPlanetaryComputer: () => void;
   panels: ToolbarPanels;
   consent: { handleToggleDirections: () => void };
@@ -191,6 +192,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     addLayer,
     openAddDataKind,
     osmPbf,
+    tilePackage,
     handleOpenPlanetaryComputer,
     panels,
     consent,
@@ -344,6 +346,12 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       title: t("toolbar.command.addOsmPbfLayer"),
       group: t("toolbar.commandGroup.addData"),
       run: () => osmPbf.setDialogOpen(true),
+    },
+    {
+      id: "add.vtpk",
+      title: t("toolbar.command.addVtpkLayer"),
+      group: t("toolbar.commandGroup.addData"),
+      run: () => tilePackage.setDialogOpen(true),
     },
     // Sources the Mac App Store build hides in the Add Data menu must not be
     // reachable through the palette either.
