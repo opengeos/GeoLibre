@@ -29,6 +29,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
+import { openExternalLink } from "../../lib/open-external";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
 import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { isSendKey } from "../../lib/assistant/send-key";
@@ -407,6 +408,23 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const el = outputRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
+
+  // A link in a reply would navigate the app's own webview: on the desktop the
+  // page replaces GeoLibre with no way back, on the web the tab leaves it. Open
+  // links outside instead (system browser or new tab, http(s) only).
+  useEffect(() => {
+    const el = outputRef.current;
+    if (!el) return;
+    const onClick = (event: MouseEvent) => {
+      const link =
+        event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!link) return;
+      event.preventDefault();
+      void openExternalLink(link.href);
+    };
+    el.addEventListener("click", onClick);
+    return () => el.removeEventListener("click", onClick);
+  }, []);
 
   /**
    * Runs one prompt through the agent and streams it into the transcript.
