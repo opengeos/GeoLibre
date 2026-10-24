@@ -48,6 +48,7 @@ describe("assistant reply links", () => {
       { target: null, preventDefault: () => (prevented = true) },
       () => {},
     );
-    assert.equal(handled || prevented, false);
+    assert.equal(handled, false);
+    assert.equal(prevented, false);
   });
 });
