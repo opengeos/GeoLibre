@@ -648,7 +648,7 @@ under `geolibre:metadata`, beside the `geo` key.
 | `wmts`           | Supported for WMTS raster tile templates                                                           |
 | `raster`         | Supported for raster tile templates; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion imagery asset the 3D globe loads with the app's Ion token (3D only) |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
-| `mbtiles`        | Supported in the desktop app through a local MapLibre protocol                                     |
+| `mbtiles`        | Desktop: local MapLibre protocol over Tauri. Browser: in-memory sql.js, not restored on reopen    |
 | `arcgis`         | Supported for ArcGIS VectorTileServer layers (FeatureServer layers are saved as `geojson`, and MapServer/ImageServer layers as `raster`) |
 | `pmtiles`        | Supported through the Components plugin                                                            |
 | `cog`            | Supported for COG and GeoTIFF raster layers                                                        |
