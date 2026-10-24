@@ -333,18 +333,25 @@ describe("GeoArrow core data structures and conversions", () => {
     };
     const initialFc: FeatureCollection = {
       type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: {} }],
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: {} },
+      ],
     };
 
     const layerId = store.addGeoJsonLayer("test-layer", initialFc, undefined, null, {
       geoarrow: initialBatch,
     });
-    assert.equal(useAppStore.getState().layers.find((l) => l.id === layerId)?.geoarrow, initialBatch);
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === layerId)?.geoarrow,
+      initialBatch,
+    );
 
     // Scenario 1: Replacing geojson without providing geoarrow clears existing geoarrow
     const updatedFc: FeatureCollection = {
       type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [100, 200] }, properties: {} }],
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [100, 200] }, properties: {} },
+      ],
     };
     store.updateLayer(layerId, { geojson: updatedFc });
     assert.equal(
@@ -370,7 +377,11 @@ describe("GeoArrow core data structures and conversions", () => {
     store.updateLayer(layerId, { opacity: 0.5 });
     const finalLayer = useAppStore.getState().layers.find((l) => l.id === layerId);
     assert.equal(finalLayer?.opacity, 0.5);
-    assert.equal(finalLayer?.geoarrow, replacementBatch, "unrelated patch must preserve existing geoarrow");
+    assert.equal(
+      finalLayer?.geoarrow,
+      replacementBatch,
+      "unrelated patch must preserve existing geoarrow",
+    );
 
     // Clean up
     store.removeLayer(layerId);
@@ -395,7 +406,9 @@ describe("GeoArrow core data structures and conversions", () => {
       metadata: {},
       geojson: {
         type: "FeatureCollection",
-        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} }],
+        features: [
+          { type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} },
+        ],
       },
       geoarrow: batch,
     });
@@ -405,14 +418,22 @@ describe("GeoArrow core data structures and conversions", () => {
     const serializedLayer = parsedRaw.layers.find((l: any) => l.id === "lyr-test-serialize");
 
     assert.ok(serializedLayer, "layer must be serialized");
-    assert.equal(serializedLayer.geoarrow, undefined, "runtime geoarrow must be omitted from project JSON");
+    assert.equal(
+      serializedLayer.geoarrow,
+      undefined,
+      "runtime geoarrow must be omitted from project JSON",
+    );
     assert.ok(serializedLayer.geojson, "geojson must be preserved in project JSON");
 
     // Hydration check via parseProject
     const restored = parseProject(json);
     const restoredLayer = restored.layers.find((l) => l.id === "lyr-test-serialize");
     assert.ok(restoredLayer);
-    assert.equal(restoredLayer.geoarrow, undefined, "restored layer without geoarrow is safe GeoJSON-only layer");
+    assert.equal(
+      restoredLayer.geoarrow,
+      undefined,
+      "restored layer without geoarrow is safe GeoJSON-only layer",
+    );
 
     // Corrupted non-GeoArrowBatch value is discarded during normalize
     const corruptedJson = JSON.stringify({
@@ -421,6 +442,10 @@ describe("GeoArrow core data structures and conversions", () => {
     });
     const restoredCorrupted = parseProject(corruptedJson);
     const normalizedCorrupted = restoredCorrupted.layers.find((l) => l.id === "lyr-test-serialize");
-    assert.equal(normalizedCorrupted?.geoarrow, undefined, "invalid geoarrow must be discarded during hydration");
+    assert.equal(
+      normalizedCorrupted?.geoarrow,
+      undefined,
+      "invalid geoarrow must be discarded during hydration",
+    );
   });
 });

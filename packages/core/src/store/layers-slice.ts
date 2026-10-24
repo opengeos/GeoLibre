@@ -482,7 +482,8 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
     const id = uuidv4();
     const shouldBatch = shouldUseTiledRendering(geojson);
     const geoarrow =
-      extra?.geoarrow ?? (shouldBatch ? featureCollectionToGeoArrow(geojson) ?? undefined : undefined);
+      extra?.geoarrow ??
+      (shouldBatch ? (featureCollectionToGeoArrow(geojson) ?? undefined) : undefined);
     const layer: GeoLibreLayer = {
       id,
       name,

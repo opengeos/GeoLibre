@@ -440,7 +440,7 @@ export function SqlWorkspacePanel() {
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
     const geoarrow = shouldCreateGeoArrowBatch(featureCount)
-      ? featureCollectionToGeoArrow(result.geojson) ?? undefined
+      ? (featureCollectionToGeoArrow(result.geojson) ?? undefined)
       : undefined;
     addGeoJsonLayer(name, result.geojson, undefined, null, { geoarrow });
     setNotice(t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }));
@@ -458,7 +458,7 @@ export function SqlWorkspacePanel() {
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL query ${new Date().toLocaleTimeString()}`;
     const geoarrow = shouldCreateGeoArrowBatch(featureCount)
-      ? featureCollectionToGeoArrow(result.geojson) ?? undefined
+      ? (featureCollectionToGeoArrow(result.geojson) ?? undefined)
       : undefined;
     addGeoJsonLayer(name, result.geojson, undefined, null, {
       geoarrow,

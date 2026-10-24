@@ -1,6 +1,9 @@
 import { performance } from "perf_hooks";
 import v8 from "v8";
-import { featureCollectionToGeoArrow, geoArrowToFeatureCollection } from "../packages/core/src/geoarrow.ts";
+import {
+  featureCollectionToGeoArrow,
+  geoArrowToFeatureCollection,
+} from "../packages/core/src/geoarrow.ts";
 import { buildTileIndex, buildTileIndexFromBinary } from "../packages/map/src/geojson-vt-index.ts";
 
 function getMemoryMB() {
@@ -188,15 +191,21 @@ async function runAll() {
     const res = await benchmarkWorkload(w.name, w.fc, w.reps);
     summary.push(res);
     console.log(`\n[${res.name}]`);
-    console.log(`  Baseline Total: ${res.baselineMedianTotal} ms | Transfer: ${res.baselineMedianTransfer} ms | Heap: ${res.baselineMedianHeap} MB`);
-    console.log(`  GeoArrow Total (End-to-End incl. conversion): ${res.geoarrowMedianTotal} ms (Prep: ${res.geoarrowMedianPrep} ms) | Transfer: ${res.geoarrowMedianTransfer} ms | Heap: ${res.geoarrowMedianHeap} MB`);
+    console.log(
+      `  Baseline Total: ${res.baselineMedianTotal} ms | Transfer: ${res.baselineMedianTransfer} ms | Heap: ${res.baselineMedianHeap} MB`,
+    );
+    console.log(
+      `  GeoArrow Total (End-to-End incl. conversion): ${res.geoarrowMedianTotal} ms (Prep: ${res.geoarrowMedianPrep} ms) | Transfer: ${res.geoarrowMedianTransfer} ms | Heap: ${res.geoarrowMedianHeap} MB`,
+    );
     console.log(`  Overall Speedup: ${res.speedup} (Worker Transfer: ${res.transferSpeedup})`);
   }
 
   // Churn / Repeated Updates test (10 repeated loads of 20,000 features)
   console.log("\n=== REPEATED UPDATE / MEMORY LEAK TEST (10 cycles x 20,000 features) ===");
   if (!global.gc) {
-    console.warn("Notice: global.gc is unavailable; memory measurements require node --expose-gc for deterministic garbage collection.");
+    console.warn(
+      "Notice: global.gc is unavailable; memory measurements require node --expose-gc for deterministic garbage collection.",
+    );
   }
   const testBatch = featureCollectionToGeoArrow(generatePoints(20000));
   const initMem = getMemoryMB();
@@ -208,13 +217,19 @@ async function runAll() {
   const finalMem = getMemoryMB();
   const deltaMB = finalMem - initMem;
   const RETENTION_THRESHOLD_MB = 50.0;
-  console.log(`Initial Heap: ${initMem.toFixed(2)} MB -> Final Heap: ${finalMem.toFixed(2)} MB (Delta: ${deltaMB.toFixed(2)} MB, Threshold: ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+  console.log(
+    `Initial Heap: ${initMem.toFixed(2)} MB -> Final Heap: ${finalMem.toFixed(2)} MB (Delta: ${deltaMB.toFixed(2)} MB, Threshold: ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`,
+  );
 
   if (deltaMB > RETENTION_THRESHOLD_MB) {
-    console.error(`Memory retention test: FAILED (Delta ${deltaMB.toFixed(2)} MB exceeded threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+    console.error(
+      `Memory retention test: FAILED (Delta ${deltaMB.toFixed(2)} MB exceeded threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`,
+    );
     process.exitCode = 1;
   } else {
-    console.log(`Memory retention test: PASSED (Delta ${deltaMB.toFixed(2)} MB within threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+    console.log(
+      `Memory retention test: PASSED (Delta ${deltaMB.toFixed(2)} MB within threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`,
+    );
   }
 
   console.log("\n=== FINAL BENCHMARK SUMMARY TABLE ===");

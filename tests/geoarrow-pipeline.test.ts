@@ -188,7 +188,13 @@ describe("GeoArrow Desktop Pipeline", () => {
 
   it("does not falsely infer Point fast path when last geometry is Point in mixed batch (B2)", () => {
     const poly: [number, number][][] = [
-      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
     ];
     // Case 1: Polygon first, Point second (previously dominantCode ended up as 1!)
     const rowsPolygonFirst = [
@@ -210,7 +216,13 @@ describe("GeoArrow Desktop Pipeline", () => {
 
   it("handles conversion failures in createOptimizedVectorLayerData by falling back to GeoJSON-only (B1)", () => {
     const poly: [number, number][][] = [
-      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
     ];
     const incompatibleRows = [
       { id: 1, geom: makeWkbPolygon(poly) },
