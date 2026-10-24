@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyJoinsToLayer,
+  DEFAULT_LAYER_STYLE,
   computeGeoArrowBBox,
   createEmptyProject,
   featureCollectionToGeoArrow,
+  excludeHiddenFieldsFromProject,
   geoArrowToFeatureCollection,
   isGeoArrowBatch,
   parseProject,
@@ -44,6 +46,106 @@ describe("GeoArrow core data structures and conversions", () => {
       geomOffsets: [0, 1], // not Int32Array
     };
     assert.equal(isGeoArrowBatch(invalidOffsets), false);
+  });
+
+  it("rejects invalid batch geometry types, counts and offset ranges", () => {
+    const point = {
+      geometryType: "Point",
+      coordinates: new Float64Array([1, 2]),
+      coordDimensions: 2,
+      featureCount: 1,
+    };
+    assert.equal(isGeoArrowBatch({ ...point, geometryType: "Unknown" }), false);
+    assert.equal(isGeoArrowBatch({ ...point, featureCount: 0.5 }), false);
+    assert.equal(isGeoArrowBatch({ ...point, featureCount: 2 }), false);
+    assert.equal(
+      isGeoArrowBatch({
+        ...point,
+        geometryType: "LineString",
+        geomOffsets: new Int32Array([0, 2]),
+      }),
+      false,
+    );
+    assert.equal(isGeoArrowBatch({ ...point, properties: [] }), false);
+  });
+
+  it("clears stale batches when excluded fields replace project GeoJSON", () => {
+    const project = createEmptyProject();
+    const geojson: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [1, 2] },
+          properties: { secret: "hidden" },
+        },
+      ],
+    };
+    const id = useAppStore.getState().addGeoJsonLayer("excluded", geojson);
+    const layer = useAppStore.getState().layers.find((candidate) => candidate.id === id)!;
+    project.layers = [
+      {
+        ...layer,
+        geoarrow: featureCollectionToGeoArrow(geojson)!,
+        fieldVisibility: { secret: "excluded" },
+      },
+    ];
+    const result = excludeHiddenFieldsFromProject(project);
+    assert.equal(result.layers[0].geoarrow, undefined);
+    assert.deepEqual(result.layers[0].geojson?.features[0].properties, {});
+    useAppStore.getState().removeLayer(id);
+  });
+
+  it("detects Z after the first line vertex and does not invent missing XY ordinates", () => {
+    const batch = featureCollectionToGeoArrow({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [[1, 2], [3, 4, 5], []] },
+        },
+      ],
+    });
+    assert.ok(batch);
+    assert.equal(batch.coordDimensions, 3);
+    assert.equal(batch.coordinates[5], 5);
+    assert.ok(Number.isNaN(batch.coordinates[6]));
+    assert.ok(Number.isNaN(batch.coordinates[7]));
+  });
+
+  it("falls back immediately for unsupported multi geometries", () => {
+    for (const geometry of [
+      {
+        type: "MultiLineString",
+        coordinates: [
+          [
+            [0, 0],
+            [1, 1],
+          ],
+        ],
+      },
+      {
+        type: "MultiPolygon",
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [1, 0],
+              [0, 0],
+            ],
+          ],
+        ],
+      },
+    ]) {
+      assert.equal(
+        featureCollectionToGeoArrow({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: {}, geometry: geometry as Geometry }],
+        }),
+        null,
+      );
+    }
   });
 
   it("computes accurate 2D bounding boxes in a single pass", () => {
@@ -405,7 +507,7 @@ describe("GeoArrow core data structures and conversions", () => {
       source: { type: "geojson" },
       visible: true,
       opacity: 1,
-      style: {} as any,
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
       geojson: {
         type: "FeatureCollection",
@@ -418,7 +520,9 @@ describe("GeoArrow core data structures and conversions", () => {
 
     const json = serializeProject(project);
     const parsedRaw = JSON.parse(json);
-    const serializedLayer = parsedRaw.layers.find((l: any) => l.id === "lyr-test-serialize");
+    const serializedLayer = parsedRaw.layers.find(
+      (l: { id: string }) => l.id === "lyr-test-serialize",
+    );
 
     assert.ok(serializedLayer, "layer must be serialized");
     assert.equal(
@@ -460,16 +564,19 @@ describe("GeoArrow core data structures and conversions", () => {
       features: new Array(60_000).fill(null).map((_, i) => ({
         type: "Feature",
         id: i,
-        geometry: { type: "Point", coordinates: [10, 20] },
+        // A malformed ring throws during coordinate inspection.
+        geometry: { type: "Polygon", coordinates: [null] } as unknown as Polygon,
         properties: {},
       })),
     };
+    assert.throws(() => featureCollectionToGeoArrow(largeFc), TypeError);
 
     // Layer creation succeeds without throwing
     const layerId = store.addGeoJsonLayer("test-large-layer", largeFc);
     const created = useAppStore.getState().layers.find((l) => l.id === layerId);
     assert.ok(created, "layer must be created even with large payload");
-    assert.ok(created.geojson, "geojson must be intact");
+    assert.equal(created.geojson, largeFc, "geojson must be intact");
+    assert.equal(created.geoarrow, undefined, "failed conversion must not attach a batch");
 
     // Clean up
     store.removeLayer(layerId);
@@ -490,7 +597,7 @@ describe("GeoArrow core data structures and conversions", () => {
       source: { type: "geojson" as const },
       visible: true,
       opacity: 1,
-      style: {} as any,
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
       geojson: {
         type: "FeatureCollection" as const,

@@ -169,8 +169,8 @@ export class TileWorkerHost {
   }
 
   /**
-   * Send a GeoArrow batch to be indexed in a single fast binary message,
-   * avoiding chunked structured clone overhead.
+   * Send geometry buffers once, then clone row properties and IDs in yielding
+   * chunks. The store owns the buffers, so they must not be detached.
    */
   async buildBinary(
     layerId: string,
@@ -180,7 +180,23 @@ export class TileWorkerHost {
     isCurrent: () => boolean,
   ): Promise<void> {
     if (!isCurrent()) return;
-    this.post({ type: "binary", layerId, generation, options, batch });
+    const { properties, featureIds, ...geometry } = batch;
+    if (!this.post({ type: "binary-begin", layerId, generation, options, batch: geometry })) return;
+    for (let start = 0; start < batch.featureCount; start += TILE_WORKER_CHUNK_FEATURES) {
+      if (
+        !this.post({
+          type: "binary-properties",
+          layerId,
+          generation,
+          properties: properties?.slice(start, start + TILE_WORKER_CHUNK_FEATURES),
+          featureIds: featureIds?.slice(start, start + TILE_WORKER_CHUNK_FEATURES),
+        })
+      )
+        return;
+      await yieldToEventLoop();
+      if (!isCurrent()) return;
+    }
+    this.post({ type: "build", layerId, generation });
   }
 
   /**

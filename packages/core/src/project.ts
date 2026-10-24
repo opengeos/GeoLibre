@@ -84,7 +84,6 @@ import {
   scrubCommentsForRemovedLayers,
   scrubLegendForRemovedLayers,
 } from "./layer-ref-scrub";
-import { isGeoArrowBatch } from "./geoarrow";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -1881,7 +1880,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     capabilities: rawCapabilities,
     filterExpression: rawFilterExpression,
     descriptiveMetadata: rawDescriptiveMetadata,
-    geoarrow: rawGeoarrow,
+    geoarrow: _rawGeoarrow,
     ...rest
   } = layer;
   const capabilities = normalizeLayerCapabilities(rawCapabilities);
@@ -1894,8 +1893,8 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
-  // Discard invalid or non-GeoArrowBatch values during hydration; safe GeoJSON layer retained
-  const geoarrow = isGeoArrowBatch(rawGeoarrow) ? rawGeoarrow : undefined;
+  // Batches are runtime caches. A hydrated batch cannot be verified against
+  // the saved GeoJSON, so always discard it to avoid rendering stale data.
   return {
     ...rest,
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
@@ -1906,7 +1905,6 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     ...(capabilities ? { capabilities } : {}),
     ...(filterExpression ? { filterExpression } : {}),
     ...(descriptiveMetadata ? { descriptiveMetadata } : {}),
-    ...(geoarrow ? { geoarrow } : {}),
   };
 }
 

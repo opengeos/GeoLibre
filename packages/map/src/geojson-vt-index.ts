@@ -149,6 +149,20 @@ export type TileWorkerRequest =
       options: GeoJsonVtSourceOptions;
       batch: GeoArrowBatch;
     }
+  | {
+      type: "binary-begin";
+      layerId: string;
+      generation: number;
+      options: GeoJsonVtSourceOptions;
+      batch: GeoArrowBatch;
+    }
+  | {
+      type: "binary-properties";
+      layerId: string;
+      generation: number;
+      properties?: GeoArrowBatch["properties"];
+      featureIds?: GeoArrowBatch["featureIds"];
+    }
   | { type: "build"; layerId: string; generation: number }
   | { type: "drop"; layerId: string }
   | { type: "tile"; requestId: number; layerId: string; z: number; x: number; y: number }
@@ -181,7 +195,15 @@ export function createTileIndexSession(
   const indexes = new Map<string, TileIndex>();
   const building = new Map<
     string,
-    { generation: number; options: GeoJsonVtSourceOptions; features: GeoJSON.Feature[] }
+    {
+      generation: number;
+      options: GeoJsonVtSourceOptions;
+      features: GeoJSON.Feature[];
+      batch?: Omit<GeoArrowBatch, "properties" | "featureIds"> & {
+        properties?: Record<string, unknown>[];
+        featureIds?: (string | number | undefined)[];
+      };
+    }
   >();
   const queue = new Map<number, { layerId: string; z: number; x: number; y: number }>();
   let draining = false;
@@ -212,6 +234,29 @@ export function createTileIndexSession(
           features: [],
         });
         return;
+      case "binary-begin": {
+        const { properties: _properties, featureIds: _featureIds, ...geometry } = request.batch;
+        building.set(request.layerId, {
+          generation: request.generation,
+          options: request.options,
+          features: [],
+          batch: geometry,
+        });
+        return;
+      }
+      case "binary-properties": {
+        const pending = building.get(request.layerId);
+        if (pending?.generation !== request.generation || !pending.batch) return;
+        if (request.properties) {
+          const properties = (pending.batch.properties ??= []);
+          for (const value of request.properties) properties.push(value);
+        }
+        if (request.featureIds) {
+          const ids = (pending.batch.featureIds ??= []);
+          for (const id of request.featureIds) ids.push(id);
+        }
+        return;
+      }
       case "features": {
         const pending = building.get(request.layerId);
         if (pending?.generation !== request.generation) return;
@@ -225,10 +270,12 @@ export function createTileIndexSession(
         try {
           indexes.set(
             request.layerId,
-            buildTileIndex(
-              { type: "FeatureCollection", features: pending.features },
-              pending.options,
-            ),
+            pending.batch
+              ? buildTileIndexFromBinary(pending.batch, pending.options)
+              : buildTileIndex(
+                  { type: "FeatureCollection", features: pending.features },
+                  pending.options,
+                ),
           );
         } catch (err) {
           // A layer that cannot be indexed serves empty tiles rather than

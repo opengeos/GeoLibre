@@ -480,9 +480,10 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null, extra) => {
     const id = uuidv4();
-    const shouldBatch = shouldUseTiledRendering(geojson);
+    // GeoJSON remains authoritative for editing. The optional batch adds
+    // coordinate storage; it does not reduce the memory held by this layer.
     let geoarrow = extra?.geoarrow;
-    if (!geoarrow && shouldBatch) {
+    if (!geoarrow && shouldUseTiledRendering(geojson)) {
       try {
         geoarrow = featureCollectionToGeoArrow(geojson) ?? undefined;
       } catch (err) {

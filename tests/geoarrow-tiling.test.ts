@@ -16,6 +16,8 @@ import {
   buildTileIndexFromBinary,
   encodeTile,
   createTileIndexSession,
+  TILE_WORKER_CHUNK_FEATURES,
+  type TileWorkerRequest,
 } from "../packages/map/src/geojson-vt-index";
 
 interface DecodedTile {
@@ -62,6 +64,59 @@ function pointGridBatch(count: number): GeoArrowBatch {
 }
 
 describe("GeoArrow binary vector tiling integration", () => {
+  it("chunks binary properties and IDs while preserving tiles and cancelling superseded builds", async () => {
+    const messages: TileWorkerRequest[] = [];
+    let response: ArrayBuffer | undefined;
+    const session = createTileIndexSession(
+      (message) => {
+        response = message.data;
+      },
+      (run) => run(),
+    );
+    const worker = {
+      addEventListener() {},
+      postMessage(message: TileWorkerRequest) {
+        messages.push(message);
+        session(message);
+      },
+      terminate() {},
+    } as unknown as Worker;
+    const host = new TileWorkerHost(worker);
+    const options = { cluster: false, clusterRadius: 50, clusterMaxZoom: 14 };
+    const batch = pointGridBatch(TILE_WORKER_CHUNK_FEATURES * 2 + 1);
+    const withIds = {
+      ...batch,
+      featureIds: Array.from({ length: batch.featureCount }, (_, i) => i),
+    };
+    await host.buildBinary("chunked", 1, withIds, options, () => true);
+    assert.equal(messages[0].type, "binary-begin");
+    if (messages[0].type === "binary-begin") {
+      assert.equal(messages[0].batch.properties, undefined);
+      assert.equal(messages[0].batch.featureIds, undefined);
+    }
+    const chunks = messages.filter((message) => message.type === "binary-properties");
+    assert.deepEqual(
+      chunks.map((chunk) => chunk.properties?.length),
+      [2000, 2000, 1],
+    );
+    assert.deepEqual(
+      chunks.map((chunk) => chunk.featureIds?.length),
+      [2000, 2000, 1],
+    );
+    assert.equal(messages.at(-1)?.type, "build");
+    session({ type: "tile", requestId: 1, layerId: "chunked", z: 0, x: 0, y: 0 });
+    assert.deepEqual(response, encodeTile(buildTileIndexFromBinary(withIds, options), 0, 0, 0));
+    assert.equal(batch.coordinates.length, batch.featureCount * 2, "store buffers remain attached");
+
+    messages.length = 0;
+    let checks = 0;
+    await host.buildBinary("cancelled", 2, withIds, options, () => ++checks === 1);
+    assert.deepEqual(
+      messages.map((message) => message.type),
+      ["binary-begin", "binary-properties"],
+    );
+  });
+
   it("builds tile index from GeoArrowBatch with identical tiles to GeoJSONVT", () => {
     const batch = pointGridBatch(500);
     const fc: GeoJSON.FeatureCollection = {

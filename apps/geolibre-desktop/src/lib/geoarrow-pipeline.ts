@@ -1,12 +1,8 @@
 // High-performance GeoArrow binary vector pipeline for GeoLibre.
 //
-// Replaces ST_AsGeoJSON string serialization and JSON.parse with direct binary
-// extraction from Arrow tables and WKB buffers into contiguous GeoArrowBatch typed arrays.
-//
-// Measured performance:
-// - WKB binary decode is ~80x faster than ST_AsGeoJSON stringification + JSON.parse.
-// - Flat Float64Array transfer is >200x faster than structured-cloning feature object trees.
-// - Memory allocation drops by >95% for 50k-500k feature datasets.
+// Experimental WKB conversion helpers, currently used by tests and benchmarks.
+// Hybrid results retain GeoJSON alongside typed arrays, increasing resident memory.
+// Worker tiling still reconstructs GeoJSON; only coordinate buffers avoid object cloning.
 
 import {
   computeGeoArrowBBox,
@@ -131,7 +127,7 @@ export function wkbRowsToGeoArrowBatch(
         if (coordOffset + 16 <= bytes.length) {
           coordinates[o] = view.getFloat64(coordOffset, little);
           coordinates[o + 1] = view.getFloat64(coordOffset + 8, little);
-          if (dim === 3 && coordOffset + 24 <= bytes.length) {
+          if (dim === 3 && inspectWkbHeader(bytes)?.hasZ && coordOffset + 24 <= bytes.length) {
             coordinates[o + 2] = view.getFloat64(coordOffset + 16, little);
           }
         } else {
@@ -206,9 +202,8 @@ export function decodeWkbRowsToFeatures(
  * Build a hybrid layer result that holds both a fast binary {@link GeoArrowBatch}
  * and a standard GeoJSON {@link FeatureCollection}.
  *
- * This enables:
- * 1. Zero-copy / low-allocation Web Worker vector tiling via MapLibre.
- * 2. Instant Attribute Table, Selection, and Cesium rendering using the GeoJSON view.
+ * Retains the decoded GeoJSON for attribute tables, selection and other renderers.
+ * The binary representation is additional storage, not a replacement for GeoJSON.
  */
 export function createOptimizedVectorLayerData(
   rows: ReadonlyArray<Record<string, unknown>>,
@@ -217,7 +212,9 @@ export function createOptimizedVectorLayerData(
   const cached: { features?: Feature<Geometry | null>[] } = {};
   const geoarrow = wkbRowsToGeoArrowBatch(rows, wkbColumn, undefined, cached);
   if (geoarrow) {
-    const geojson = geoArrowToFeatureCollection(geoarrow);
+    const geojson: FeatureCollection<Geometry | null> = cached.features
+      ? { type: "FeatureCollection", features: cached.features }
+      : geoArrowToFeatureCollection(geoarrow);
     return { geoarrow, geojson };
   }
 

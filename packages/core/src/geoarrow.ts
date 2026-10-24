@@ -9,8 +9,8 @@
 // - Coordinates are stored in a single contiguous Float64Array ([x0, y0, (z0), x1, y1, (z1), ...])
 // - Offsets (Int32Array) define boundaries for parts, lines, and polygon rings
 // - Properties can be passed as a columnar dictionary or row records
-// - The flat buffer can be transferred across Web Worker boundaries in 0ms (Transferable Objects)
-//   or cloned via a single raw memory copy (0.5ms for 100k points vs 140ms structured clone).
+// - Typed arrays can be transferred or cloned as buffers, but row properties and IDs
+//   still require structured cloning. The tiler currently reconstructs GeoJSON.
 
 import type {
   Feature,
@@ -81,10 +81,16 @@ export interface GeoArrowBatch {
 export function isGeoArrowBatch(value: unknown): value is GeoArrowBatch {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GeoArrowBatch>;
-  if (typeof candidate.geometryType !== "string") return false;
+  if (
+    !["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon"].includes(
+      candidate.geometryType ?? "",
+    )
+  )
+    return false;
   if (!(candidate.coordinates instanceof Float64Array)) return false;
   if (candidate.coordDimensions !== 2 && candidate.coordDimensions !== 3) return false;
-  if (typeof candidate.featureCount !== "number" || candidate.featureCount < 0) return false;
+  if (!Number.isSafeInteger(candidate.featureCount) || candidate.featureCount! < 0) return false;
+  if (candidate.coordinates.length % candidate.coordDimensions !== 0) return false;
 
   if (candidate.geomOffsets !== undefined && !(candidate.geomOffsets instanceof Int32Array)) {
     return false;
@@ -95,6 +101,39 @@ export function isGeoArrowBatch(value: unknown): value is GeoArrowBatch {
   if (candidate.polygonOffsets !== undefined && !(candidate.polygonOffsets instanceof Int32Array)) {
     return false;
   }
+
+  const vertexCount = candidate.coordinates.length / candidate.coordDimensions;
+  const validOffsets = (offsets: Int32Array | undefined, length: number, end: number) => {
+    if (!offsets || offsets.length !== length || offsets[0] !== 0) return false;
+    for (let i = 1; i < offsets.length; i++) {
+      if (offsets[i] < offsets[i - 1] || offsets[i] > end) return false;
+    }
+    return offsets[offsets.length - 1] === end;
+  };
+  const count = candidate.featureCount!;
+  if (candidate.geometryType === "Point") {
+    if (vertexCount !== count) return false;
+  } else if (candidate.geometryType === "LineString" || candidate.geometryType === "MultiPoint") {
+    if (!validOffsets(candidate.geomOffsets, count + 1, vertexCount)) return false;
+  } else {
+    const rings = (candidate.ringOffsets?.length ?? 0) - 1;
+    if (!validOffsets(candidate.ringOffsets, rings + 1, vertexCount)) return false;
+    if (candidate.geometryType === "MultiPolygon") {
+      const polygons = (candidate.geomOffsets?.length ?? 0) - 1;
+      if (!validOffsets(candidate.geomOffsets, polygons + 1, rings)) return false;
+      if (!validOffsets(candidate.polygonOffsets, count + 1, polygons)) return false;
+    } else if (!validOffsets(candidate.geomOffsets, count + 1, rings)) return false;
+  }
+  if (
+    candidate.properties !== undefined &&
+    (!Array.isArray(candidate.properties) || candidate.properties.length !== count)
+  )
+    return false;
+  if (
+    candidate.featureIds !== undefined &&
+    (!Array.isArray(candidate.featureIds) || candidate.featureIds.length !== count)
+  )
+    return false;
 
   return true;
 }
@@ -299,11 +338,6 @@ export function geoArrowToFeatureCollection(
   };
 }
 
-/**
- * Flattens a GeoJSON {@link FeatureCollection} into a contiguous {@link GeoArrowBatch}.
- * Returns null if the collection is empty, has mixed heterogeneous geometry types,
- * or contains unsupported GeometryCollections.
- */
 function extractVerticesForLineOrMultiPoint(
   geometry: Geometry | null | undefined,
   primaryType: "LineString" | "MultiPoint",
@@ -328,6 +362,10 @@ function extractVerticesForLineOrMultiPoint(
   return null;
 }
 
+/**
+ * Flatten supported Point, MultiPoint, LineString and Polygon collections.
+ * Empty collections produce an empty Point batch; unsupported geometries return null.
+ */
 export function featureCollectionToGeoArrow(
   collection: FeatureCollection<Geometry | null>,
 ): GeoArrowBatch | null {
@@ -354,9 +392,7 @@ export function featureCollectionToGeoArrow(
         g.type === "Point" ||
         g.type === "MultiPoint" ||
         g.type === "LineString" ||
-        g.type === "MultiLineString" ||
-        g.type === "Polygon" ||
-        g.type === "MultiPolygon"
+        g.type === "Polygon"
       ) {
         primaryType = g.type;
       } else {
@@ -369,30 +405,20 @@ export function featureCollectionToGeoArrow(
         (primaryType === "MultiPoint" && g.type === "Point")
       ) {
         primaryType = "MultiPoint";
-      } else if (
-        (primaryType === "LineString" && g.type === "MultiLineString") ||
-        (primaryType === "MultiLineString" && g.type === "LineString")
-      ) {
-        primaryType = "MultiLineString";
-      } else if (
-        (primaryType === "Polygon" && g.type === "MultiPolygon") ||
-        (primaryType === "MultiPolygon" && g.type === "Polygon")
-      ) {
-        primaryType = "MultiPolygon";
       } else {
         return null; // Incompatible mixed types
       }
     }
 
-    // Check Z
-    if (!hasZ && g.coordinates) {
-      const sample = Array.isArray(g.coordinates[0])
-        ? Array.isArray(g.coordinates[0][0])
-          ? g.coordinates[0][0]
-          : g.coordinates[0]
-        : g.coordinates;
-      if (Array.isArray(sample) && sample.length > 2 && Number.isFinite(sample[2])) {
-        hasZ = true;
+    // Inspect every vertex: Z may first appear later in a line or ring.
+    if (!hasZ) {
+      const positionHasZ = (position: Position) =>
+        position.length > 2 && Number.isFinite(position[2]);
+      if (g.type === "Point") hasZ = positionHasZ(g.coordinates);
+      else if (g.type === "Polygon") {
+        hasZ = g.coordinates.some((ring) => ring.some(positionHasZ));
+      } else if (g.type === "LineString" || g.type === "MultiPoint") {
+        hasZ = g.coordinates.some(positionHasZ);
       }
     }
   }
@@ -460,8 +486,8 @@ export function featureCollectionToGeoArrow(
       if (vertices) {
         for (const coord of vertices) {
           const o = vIdx * dim;
-          coordinates[o] = Number(coord[0] ?? 0);
-          coordinates[o + 1] = Number(coord[1] ?? 0);
+          coordinates[o] = Number(coord[0] ?? NaN);
+          coordinates[o + 1] = Number(coord[1] ?? NaN);
           if (dim === 3) coordinates[o + 2] = Number(coord[2] ?? 0);
           vIdx++;
         }
@@ -511,8 +537,8 @@ export function featureCollectionToGeoArrow(
           ringOffsets[rIdx++] = vIdx;
           for (const coord of ring) {
             const o = vIdx * dim;
-            coordinates[o] = Number(coord[0] ?? 0);
-            coordinates[o + 1] = Number(coord[1] ?? 0);
+            coordinates[o] = Number(coord[0] ?? NaN);
+            coordinates[o + 1] = Number(coord[1] ?? NaN);
             if (dim === 3) coordinates[o + 2] = Number(coord[2] ?? 0);
             vIdx++;
           }

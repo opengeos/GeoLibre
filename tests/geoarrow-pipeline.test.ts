@@ -261,3 +261,29 @@ describe("GeoArrow Desktop Pipeline", () => {
     assert.equal(features[1].geometry?.type, "Point");
   });
 });
+
+describe("GeoArrow decoded feature preservation", () => {
+  it("keeps empty polygon rings in the GeoJSON view", () => {
+    const rows = [{ name: "empty ring", geom: makeWkbPolygon([[]]) }];
+    const expected = decodeWkbRowsToFeatures(rows, "geom");
+    const result = createOptimizedVectorLayerData(rows, "geom");
+    assert.ok(result.geoarrow);
+    assert.deepEqual(result.geojson.features, expected);
+  });
+});
+
+describe("Point WKB dimensional headers", () => {
+  it("keeps M out of Z and reads ISO ZM ordinates correctly", () => {
+    const m = makeWkbPoint(10, 20, true, 99);
+    new DataView(m.buffer).setUint32(1, 0x40000001, true);
+    const zm = new Uint8Array(37);
+    const view = new DataView(zm.buffer);
+    view.setUint8(0, 1);
+    view.setUint32(1, 3001, true);
+    [30, 40, 50, 999].forEach((value, index) => view.setFloat64(5 + index * 8, value, true));
+    const batch = wkbRowsToGeoArrowBatch([{ geom: m }, { geom: zm }], "geom");
+    assert.ok(batch);
+    assert.equal(batch.coordDimensions, 3);
+    assert.deepEqual(Array.from(batch.coordinates), [10, 20, 0, 30, 40, 50]);
+  });
+});
