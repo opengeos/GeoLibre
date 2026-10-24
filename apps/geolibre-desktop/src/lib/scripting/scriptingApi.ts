@@ -15,26 +15,7 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import {
-  SKETCHES_SOURCE_KIND,
-  addRasterToMap,
-  closeBookmarkPanel,
-  closeMeasurePanel,
-  closeMinimapPanel,
-  closePrintPanel,
-  closeSearchPlacesPanel,
-  isBookmarkPanelVisible,
-  isMeasurePanelVisible,
-  isMinimapPanelVisible,
-  isPrintPanelVisible,
-  isSearchPlacesPanelVisible,
-  openBookmarkPanel,
-  openMeasurePanel,
-  openMinimapPanel,
-  openPrintPanel,
-  openSearchPlacesPanel,
-  type GeoLibreAppAPI,
-} from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
@@ -56,7 +37,6 @@ import {
   recordScriptMapControl,
   setScriptIdentify,
   type ScriptMapControlDetail,
-  type ScriptablePanel,
 } from "./ui-controls";
 
 // The scripting command surface, shared by every programmatic entry point: the
@@ -115,30 +95,6 @@ function addWhiteboxRasterOutput(
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
   return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, { name });
 }
-
-/** Open/close/read handlers for each scriptable toolbar panel. */
-const PANEL_TOGGLES: Record<
-  ScriptablePanel,
-  {
-    isVisible: () => boolean;
-    open: (app: GeoLibreAppAPI) => void;
-    close: (app: GeoLibreAppAPI) => void;
-  }
-> = {
-  bookmark: {
-    isVisible: isBookmarkPanelVisible,
-    open: openBookmarkPanel,
-    close: closeBookmarkPanel,
-  },
-  search: {
-    isVisible: isSearchPlacesPanelVisible,
-    open: openSearchPlacesPanel,
-    close: () => closeSearchPlacesPanel(),
-  },
-  measure: { isVisible: isMeasurePanelVisible, open: openMeasurePanel, close: closeMeasurePanel },
-  minimap: { isVisible: isMinimapPanelVisible, open: openMinimapPanel, close: closeMinimapPanel },
-  print: { isVisible: isPrintPanelVisible, open: openPrintPanel, close: closePrintPanel },
-};
 
 function whiteboxToolName(tool: WhiteboxTool): string {
   return tool.display_name || tool.id.replace(/_/g, " ");
@@ -313,13 +269,11 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const control = params.control;
       const visible = Boolean(params.visible);
       if (isScriptablePanel(control)) {
-        const panel = PANEL_TOGGLES[control];
-        // Opening an open panel would remount it; closing a closed one is a
-        // no-op either way, but skip it so the two branches read the same.
-        if (panel.isVisible() === visible) return visible;
+        // The shared helpers make opens idempotent. Always forward a close
+        // so it can cancel initialization before a panel becomes visible.
         const app = createAppAPI(controllerRefFrom(getController));
-        if (visible) panel.open(app);
-        else panel.close(app);
+        if (visible) app.openControlPanel(control);
+        else app.closeControlPanel(control);
         return visible;
       }
       if (isScriptableMapControl(control)) {

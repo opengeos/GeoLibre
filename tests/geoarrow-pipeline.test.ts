@@ -104,8 +104,15 @@ describe("GeoArrow Desktop Pipeline", () => {
   });
 
   it("decodes WKB LineString rows with offsets", () => {
-    const line1: [number, number][] = [[0, 0], [1, 1], [2, 2]];
-    const line2: [number, number][] = [[10, 10], [20, 20]];
+    const line1: [number, number][] = [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ];
+    const line2: [number, number][] = [
+      [10, 10],
+      [20, 20],
+    ];
     const rows = [
       { route: "RouteA", geom: makeWkbLineString(line1) },
       { route: "RouteB", geom: makeWkbLineString(line2) },
@@ -120,11 +127,21 @@ describe("GeoArrow Desktop Pipeline", () => {
   });
 
   it("decodes WKB Polygon rows with outer ring and inner hole", () => {
-    const outer: [number, number][] = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
-    const hole: [number, number][] = [[2, 2], [4, 2], [4, 4], [2, 4], [2, 2]];
-    const rows = [
-      { name: "Donut", geom: makeWkbPolygon([outer, hole]) },
+    const outer: [number, number][] = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+      [0, 0],
     ];
+    const hole: [number, number][] = [
+      [2, 2],
+      [4, 2],
+      [4, 4],
+      [2, 4],
+      [2, 2],
+    ];
+    const rows = [{ name: "Donut", geom: makeWkbPolygon([outer, hole]) }];
 
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
     assert.ok(batch);

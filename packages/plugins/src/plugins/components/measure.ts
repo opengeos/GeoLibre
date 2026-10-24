@@ -44,6 +44,7 @@ let measureRadiusUnsubscribe: (() => void) | null = null;
 let measureEllipsoidId: string | null = null;
 let measureControlMounted = false;
 let measurePanelVisible = false;
+let measureRequest = 0;
 const measurePanelListeners = new Set<() => void>();
 setMeasureControlReader(() => measureControl);
 
@@ -65,8 +66,12 @@ export function subscribeMeasurePanel(listener: () => void): () => void {
   return () => measurePanelListeners.delete(listener);
 }
 
-async function openStandaloneMeasureControl(app: GeoLibreAppAPI): Promise<boolean> {
+async function openStandaloneMeasureControl(
+  app: GeoLibreAppAPI,
+  request = ++measureRequest,
+): Promise<boolean> {
   const { MeasureControl: MeasureControlClass } = await getComponentsConstructors();
+  if (request !== measureRequest) return false;
 
   measureControl ??= createMeasureControl(MeasureControlClass);
 
@@ -91,13 +96,14 @@ async function openStandaloneMeasureControl(app: GeoLibreAppAPI): Promise<boolea
   }
   refreshLidarMeasureMirror(app);
 
+  const control = measureControl;
   setTimeout(() => {
     // Guard against a teardown that nulled measureControl between addMapControl
     // succeeding and this deferred callback firing, which would otherwise mark
     // the panel visible even though the control no longer exists.
-    if (!measureControl) return;
-    measureControl.show();
-    measureControl.expand();
+    if (request !== measureRequest || measureControl !== control) return;
+    control.show();
+    control.expand();
     setMeasurePanelVisible(true);
   }, 0);
   return true;
@@ -153,6 +159,7 @@ function makeMeasurePanelResizable(control: MeasureControl): void {
 }
 
 export function teardownMeasureControl(app: GeoLibreAppAPI): void {
+  ++measureRequest;
   measureTerrainDetach?.();
   measureTerrainDetach = null;
   measureRadiusUnsubscribe?.();

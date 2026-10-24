@@ -153,7 +153,9 @@ export function geoArrowToFeatureCollection(
 
   function readPosition(vertexIdx: number): Position {
     const o = vertexIdx * dim;
-    return dim === 3 ? [coordinates[o], coordinates[o + 1], coordinates[o + 2]] : [coordinates[o], coordinates[o + 1]];
+    return dim === 3
+      ? [coordinates[o], coordinates[o + 1], coordinates[o + 2]]
+      : [coordinates[o], coordinates[o + 1]];
   }
 
   function readLine(startVertex: number, endVertex: number): Position[] {
@@ -174,7 +176,11 @@ export function geoArrowToFeatureCollection(
     switch (geometryType) {
       case "Point": {
         const o = i * dim;
-        if (o + 1 < coordinates.length && Number.isFinite(coordinates[o]) && Number.isFinite(coordinates[o + 1])) {
+        if (
+          o + 1 < coordinates.length &&
+          Number.isFinite(coordinates[o]) &&
+          Number.isFinite(coordinates[o + 1])
+        ) {
           geometry = {
             type: "Point",
             coordinates: readPosition(i),
@@ -380,7 +386,11 @@ export function featureCollectionToGeoArrow(
 
     // Check Z
     if (!hasZ && g.coordinates) {
-      const sample = Array.isArray(g.coordinates[0]) ? (Array.isArray(g.coordinates[0][0]) ? g.coordinates[0][0] : g.coordinates[0]) : g.coordinates;
+      const sample = Array.isArray(g.coordinates[0])
+        ? Array.isArray(g.coordinates[0][0])
+          ? g.coordinates[0][0]
+          : g.coordinates[0]
+        : g.coordinates;
       if (Array.isArray(sample) && sample.length > 2 && Number.isFinite(sample[2])) {
         hasZ = true;
       }

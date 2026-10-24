@@ -7,10 +7,7 @@ import {
   isGeoArrowBatch,
   type GeoArrowBatch,
 } from "@geolibre/core";
-import {
-  buildTileIndexFromBinary,
-  encodeTile,
-} from "../packages/map/src/geojson-vt-index";
+import { buildTileIndexFromBinary, encodeTile } from "../packages/map/src/geojson-vt-index";
 import {
   registerGeoJsonVtSource,
   unregisterGeoJsonVtSource,
@@ -32,7 +29,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     const fc = geoArrowToFeatureCollection(emptyBatch);
     assert.equal(fc.features.length, 0);
 
-    const index = buildTileIndexFromBinary(emptyBatch, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+    const index = buildTileIndexFromBinary(emptyBatch, {
+      cluster: false,
+      clusterRadius: 50,
+      clusterMaxZoom: 16,
+    });
     const tile = encodeTile(index, 0, 0, 0);
     assert.equal(tile.byteLength, 0);
   });
@@ -73,7 +74,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     assert.equal(geom.type, "LineString");
     assert.equal(geom.coordinates.length, VERTEX_COUNT);
 
-    const index = buildTileIndexFromBinary(largeLine, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+    const index = buildTileIndexFromBinary(largeLine, {
+      cluster: false,
+      clusterRadius: 50,
+      clusterMaxZoom: 16,
+    });
     const tile = encodeTile(index, 0, 0, 0);
     assert.ok(tile.byteLength > 0);
   });
@@ -90,7 +95,13 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     let v = 0;
     // Outer ring: 0..100
     ringOffsets[0] = 0;
-    const outer: [number, number][] = [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]];
+    const outer: [number, number][] = [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+      [0, 0],
+    ];
     for (const [x, y] of outer) {
       coordinates[v * 2] = x;
       coordinates[v * 2 + 1] = y;
@@ -132,7 +143,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     const poly = fc.features[0].geometry as GeoJSON.Polygon;
     assert.equal(poly.coordinates.length, TOTAL_RINGS);
 
-    const index = buildTileIndexFromBinary(complexPoly, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+    const index = buildTileIndexFromBinary(complexPoly, {
+      cluster: false,
+      clusterRadius: 50,
+      clusterMaxZoom: 16,
+    });
     const tile = encodeTile(index, 0, 0, 0);
     assert.ok(tile.byteLength > 0);
   });
@@ -178,11 +193,7 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
   });
 
   it("Scenario 14 & 15: Invalid (NaN/Inf) and large coordinate magnitudes", () => {
-    const extremeCoords = new Float64Array([
-      NaN, Infinity,
-      1e15, -1e15,
-      -180.0, 90.0,
-    ]);
+    const extremeCoords = new Float64Array([NaN, Infinity, 1e15, -1e15, -180.0, 90.0]);
     const batch: GeoArrowBatch = {
       geometryType: "Point",
       coordinates: extremeCoords,
@@ -196,7 +207,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     assert.equal(bbox[2], 1e15);
 
     // Tile builder does not throw
-    const index = buildTileIndexFromBinary(batch, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+    const index = buildTileIndexFromBinary(batch, {
+      cluster: false,
+      clusterRadius: 50,
+      clusterMaxZoom: 16,
+    });
     assert.ok(index);
   });
 
@@ -246,7 +261,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
         coordDimensions: 2,
         featureCount: 1,
       };
-      registerGeoJsonVtSource(layerId, batch, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+      registerGeoJsonVtSource(layerId, batch, {
+        cluster: false,
+        clusterRadius: 50,
+        clusterMaxZoom: 16,
+      });
     }
     // Final drop
     unregisterGeoJsonVtSource(layerId);
@@ -262,7 +281,11 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
       geomOffsets: new Int32Array([0, 2]),
       featureCount: 1,
     };
-    const index = buildTileIndexFromBinary(crossingLine, { cluster: false, clusterRadius: 50, clusterMaxZoom: 16 });
+    const index = buildTileIndexFromBinary(crossingLine, {
+      cluster: false,
+      clusterRadius: 50,
+      clusterMaxZoom: 16,
+    });
     assert.ok(index);
     const tileWest = encodeTile(index, 1, 0, 0);
     const tileEast = encodeTile(index, 1, 1, 0);

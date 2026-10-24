@@ -19,7 +19,6 @@ import { normalizePropertyValue } from "./duckdb-geometry";
 import { decodeWkb } from "./geometry-wkb";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 
-
 function wkbCellToBytes(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) return value.length > 0 ? value : null;
   if (typeof value === "string" && value.length > 0) {
@@ -225,4 +224,3 @@ export function createOptimizedVectorLayerData(
   }
   return { geojson: { type: "FeatureCollection", features } };
 }
-

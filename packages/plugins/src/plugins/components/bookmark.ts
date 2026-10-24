@@ -154,6 +154,7 @@ let syncedGroups: ProjectBookmarkGroup[] | null = null;
 let unsubscribeStore: (() => void) | null = null;
 let bookmarkControlMounted = false;
 let bookmarkPanelVisible = false;
+let bookmarkRequest = 0;
 const bookmarkPanelListeners = new Set<() => void>();
 
 // Standalone Bookmark panel, opened on demand from the Controls menu.
@@ -174,8 +175,12 @@ export function subscribeBookmarkPanel(listener: () => void): () => void {
   return () => bookmarkPanelListeners.delete(listener);
 }
 
-async function openStandaloneBookmarkControl(app: GeoLibreAppAPI): Promise<boolean> {
+async function openStandaloneBookmarkControl(
+  app: GeoLibreAppAPI,
+  request = ++bookmarkRequest,
+): Promise<boolean> {
   const { BookmarkControl: BookmarkControlClass } = await getComponentsConstructors();
+  if (request !== bookmarkRequest) return false;
 
   migrateLegacyBookmarks();
   bookmarkControl ??= createBookmarkControl(BookmarkControlClass, app);
@@ -189,10 +194,11 @@ async function openStandaloneBookmarkControl(app: GeoLibreAppAPI): Promise<boole
     bookmarkControlMounted = true;
   }
 
+  const control = bookmarkControl;
   setTimeout(() => {
-    if (!bookmarkControl) return;
-    bookmarkControl.show();
-    bookmarkControl.expand();
+    if (request !== bookmarkRequest || bookmarkControl !== control) return;
+    control.show();
+    control.expand();
     setBookmarkPanelVisible(true);
   }, 0);
   return true;
@@ -417,6 +423,7 @@ function routeBookmarkFileIoThroughHost(control: BookmarkControl, app: GeoLibreA
 }
 
 export function teardownBookmarkControl(app: GeoLibreAppAPI): void {
+  ++bookmarkRequest;
   if (bookmarkControl && bookmarkControlMounted) {
     app.removeMapControl(bookmarkControl);
   }

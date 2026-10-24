@@ -23,4 +23,3 @@ export type { GeoLibreProject } from "./types";
 export { parseProject } from "./project";
 export { diffProjects, type ProjectDiff } from "./project-diff";
 export * from "./geoarrow";
-

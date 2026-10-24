@@ -15,14 +15,14 @@ function generatePoints(n) {
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [-122.4194 + (Math.random() - 0.5) * 2, 37.7749 + (Math.random() - 0.5) * 2]
+        coordinates: [-122.4194 + (Math.random() - 0.5) * 2, 37.7749 + (Math.random() - 0.5) * 2],
       },
       properties: {
         id: i,
         name: `Location #${i}`,
         val: i * 1.5,
-        active: i % 2 === 0
-      }
+        active: i % 2 === 0,
+      },
     };
   }
   return { type: "FeatureCollection", features };
@@ -51,13 +51,13 @@ function generateComplexPolygons(n) {
       type: "Feature",
       geometry: {
         type: "Polygon",
-        coordinates: [outer, inner]
+        coordinates: [outer, inner],
       },
       properties: {
         id: i,
         area: 0.12,
-        zone: `Zone-${i % 5}`
-      }
+        zone: `Zone-${i % 5}`,
+      },
     };
   }
   return { type: "FeatureCollection", features };
@@ -73,8 +73,20 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
   const results = {
     name,
     featureCount: fc.features.length,
-    baseline: { serializeTime: [], workerTransferTime: [], tileIndexTime: [], totalTime: [], heapMB: [] },
-    geoarrow: { binaryPrepTime: [], workerTransferTime: [], tileIndexTime: [], totalTime: [], heapMB: [] }
+    baseline: {
+      serializeTime: [],
+      workerTransferTime: [],
+      tileIndexTime: [],
+      totalTime: [],
+      heapMB: [],
+    },
+    geoarrow: {
+      binaryPrepTime: [],
+      workerTransferTime: [],
+      tileIndexTime: [],
+      totalTime: [],
+      heapMB: [],
+    },
   };
 
   for (let r = 0; r < repetitions; r++) {
@@ -145,8 +157,12 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
     geoarrowMedianPrep: median(results.geoarrow.binaryPrepTime).toFixed(2),
     geoarrowMedianTransfer: median(results.geoarrow.workerTransferTime).toFixed(2),
     geoarrowMedianHeap: median(results.geoarrow.heapMB).toFixed(1),
-    speedup: (median(results.baseline.totalTime) / median(results.geoarrow.totalTime)).toFixed(2) + "x",
-    transferSpeedup: (median(results.baseline.workerTransferTime) / median(results.geoarrow.workerTransferTime)).toFixed(2) + "x"
+    speedup:
+      (median(results.baseline.totalTime) / median(results.geoarrow.totalTime)).toFixed(2) + "x",
+    transferSpeedup:
+      (
+        median(results.baseline.workerTransferTime) / median(results.geoarrow.workerTransferTime)
+      ).toFixed(2) + "x",
   };
 }
 
@@ -160,7 +176,11 @@ async function runAll() {
     { name: "Medium dataset (10k Points)", fc: generatePoints(10000), reps: 7 },
     { name: "Large dataset (50k Points)", fc: generatePoints(50000), reps: 5 },
     { name: "Extra-large dataset (100k Points)", fc: generatePoints(100000), reps: 5 },
-    { name: "Complex geometry (2k Polygons with Holes)", fc: generateComplexPolygons(2000), reps: 5 }
+    {
+      name: "Complex geometry (2k Polygons with Holes)",
+      fc: generateComplexPolygons(2000),
+      reps: 5,
+    },
   ];
 
   const summary = [];
@@ -201,7 +221,7 @@ async function runAll() {
   console.table(summary);
 }
 
-runAll().catch(err => {
+runAll().catch((err) => {
   console.error("Benchmark failed:", err);
   process.exit(1);
 });

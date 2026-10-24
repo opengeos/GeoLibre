@@ -40,7 +40,6 @@ export function detectGeometryProfile(
   return profile;
 }
 
-
 /**
  * Record a geometry's kinds on a profile, descending into (nested) collections.
  *

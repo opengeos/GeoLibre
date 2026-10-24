@@ -422,7 +422,6 @@ async function geojsonVtProtocolHandler(
   return { data: encodeTile(entry.index, z, x, y) };
 }
 
-
 // Parse `geolibre-gjvt://<layerId>/<z>/<x>/<y>`, or null when malformed.
 function parseTileUrl(url: string): { layerId: string; z: number; x: number; y: number } | null {
   const path = url.slice(`${GEOJSONVT_PROTOCOL}://`.length);

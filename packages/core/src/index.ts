@@ -281,4 +281,3 @@ export {
 } from "./cog-jpeg-tables";
 
 export * from "./geoarrow";
-
