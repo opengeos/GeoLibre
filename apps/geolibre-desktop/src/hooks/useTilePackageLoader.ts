@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createLayerId } from "../components/layout/add-data/helpers";
 import { type AppApi } from "../components/layout/toolbar/constants";
-import { createTilePackageLayer, openTilePackage } from "../lib/tilepackage";
+import { createTilePackageLayer, openTilePackage, releaseTilePackage } from "../lib/tilepackage";
 import { isHttpUrl } from "../lib/tauri-io";
 
 /**
@@ -49,8 +49,18 @@ export function useTilePackageLoader(
     setLoading(true);
     try {
       const opened = await openTilePackage(input);
-      if (mine !== attempt.current) return;
-      const layer = createTilePackageLayer(opened, createLayerId());
+      if (mine !== attempt.current) {
+        // Dismissed while opening: nothing will ever use it.
+        releaseTilePackage(opened.key);
+        return;
+      }
+      let layer;
+      try {
+        layer = createTilePackageLayer(opened, createLayerId());
+      } catch (err) {
+        releaseTilePackage(opened.key);
+        throw err;
+      }
       useAppStore.getState().addLayer(layer);
       const bounds = layer.source.bounds as [number, number, number, number] | undefined;
       if (bounds && shouldZoomToNewLayers()) appApi.fitBounds?.(bounds);

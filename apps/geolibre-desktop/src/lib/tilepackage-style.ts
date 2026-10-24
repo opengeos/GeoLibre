@@ -65,8 +65,45 @@ export function createLocalTilePackageKeyGenerator(
   return (fileName: string) => {
     counter += 1;
     const safe = fileName.replace(/[^A-Za-z0-9._-]+/g, "_");
-    return `local-${sessionId}-${counter}-${safe}`;
+    return `${LOCAL_TILEPACKAGE_KEY_PREFIX}${sessionId}-${counter}-${safe}`;
   };
+}
+
+/** Prefix of the key a package opened from a local file is registered under. */
+const LOCAL_TILEPACKAGE_KEY_PREFIX = "local-";
+
+/** Whether a registered key names a package opened from a local file. */
+export function isLocalTilePackageKey(key: string): boolean {
+  return key.startsWith(LOCAL_TILEPACKAGE_KEY_PREFIX);
+}
+
+/**
+ * The local-file package key a `tilepackage://` request names, or null for any
+ * other request (a package at a URL names the URL itself, which the protocol
+ * can open again on demand).
+ */
+export function localTilePackageKeyFromUrl(url: string): string | null {
+  const match = new RegExp(
+    `^${TILEPACKAGE_PROTOCOL}://(${LOCAL_TILEPACKAGE_KEY_PREFIX}[A-Za-z0-9._-]+)(?:/|$)`,
+  ).exec(url);
+  return match ? (match[1] ?? null) : null;
+}
+
+/**
+ * Every local-file package key referenced by the given layer sets (the live
+ * layers plus any undo/redo snapshots, which can bring a removed layer back).
+ */
+export function localTilePackageKeysInLayers(
+  layerSets: Iterable<readonly { metadata?: Record<string, unknown> }[]>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const layers of layerSets) {
+    for (const layer of layers) {
+      const key = layer.metadata?.packageKey;
+      if (typeof key === "string" && isLocalTilePackageKey(key)) keys.add(key);
+    }
+  }
+  return keys;
 }
 
 function isLonLatBounds(bounds: number[]): boolean {
@@ -164,7 +201,15 @@ type LooseLayer = LayerSpecification & {
   source?: unknown;
 };
 
-const SPRITE_PAINT_PROPERTIES = ["fill-pattern", "line-pattern", "fill-extrusion-pattern"];
+/**
+ * Paint properties that read an image from the package's sprite, each mapped to
+ * the flat colour property that can stand in for it.
+ */
+const SPRITE_PAINT_PROPERTIES: Record<string, string> = {
+  "fill-pattern": "fill-color",
+  "line-pattern": "line-color",
+  "fill-extrusion-pattern": "fill-extrusion-color",
+};
 
 /**
  * Rewrite a package's own style (`p12/resources/styles/root.json`) so it can be
@@ -179,8 +224,10 @@ const SPRITE_PAINT_PROPERTIES = ["fill-pattern", "line-pattern", "fill-extrusion
  *   other non-vector layer are dropped.
  * - Its glyphs and sprite are style-level and the project's basemap supplies
  *   those. Text labels are kept but moved to a font the basemap serves, and
- *   anything that needs the package's sprite (icons, fill/line patterns) is
- *   dropped, because the basemap's sprite does not contain those images.
+ *   anything that needs the package's sprite is handled because the basemap's
+ *   sprite does not contain those images. Icons are removed (an icon-only
+ *   layer is dropped). A fill/line/extrusion pattern is replaced by the layer's
+ *   own flat colour when it has one, and the layer is dropped when it has not.
  *
  * @param style - The style returned by `TilePackage.getStyle()`.
  * @param layerId - The id of the GeoLibre layer the style will belong to.
@@ -234,7 +281,22 @@ export function prepareVtpkStyle(
 
     const layout: Record<string, unknown> = { ...spec.layout };
     const paint: Record<string, unknown> = { ...spec.paint };
-    for (const property of SPRITE_PAINT_PROPERTIES) delete paint[property];
+
+    // A pattern needs the package's sprite, which the basemap does not have.
+    // Strip it; if the layer also sets its own flat colour, that colour stands
+    // in for the pattern. Without one the layer would fall back to MapLibre's
+    // default paint (a faint black fill, a black line), which is not what the
+    // package intended, so the layer is dropped instead.
+    let lostPattern = false;
+    for (const [pattern, color] of Object.entries(SPRITE_PAINT_PROPERTIES)) {
+      if (!(pattern in paint)) continue;
+      if (paint[color] === undefined) lostPattern = true;
+      delete paint[pattern];
+    }
+    if (lostPattern) {
+      droppedLayerIds.push(spec.id);
+      continue;
+    }
 
     if (spec.type === "symbol") {
       // An icon-only symbol layer has nothing left to draw once its sprite

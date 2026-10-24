@@ -62,6 +62,8 @@ declare module "maplibre-tilepackage-protocol" {
     constructor(options?: { metadata?: boolean; errorOnMissingTile?: boolean; debug?: boolean });
     /** The MapLibre `addProtocol` handler (the callback and promise forms). */
     readonly package: AddProtocolAction;
+    /** The registered packages by key; the only way to forget one (there is no `remove`). */
+    readonly tiles: Map<string, TilePackage>;
     add(tilePackage: TilePackage): void;
     get(url: string): TilePackage | undefined;
   }

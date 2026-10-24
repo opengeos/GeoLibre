@@ -4,7 +4,10 @@ import type { StyleSpecification } from "maplibre-gl";
 import {
   TILEPACKAGE_PROTOCOL,
   createLocalTilePackageKeyGenerator,
+  isLocalTilePackageKey,
   isTilePackageFileName,
+  localTilePackageKeyFromUrl,
+  localTilePackageKeysInLayers,
   prepareVtpkStyle,
   tilePackageBaseName,
   tilePackageBounds,
@@ -108,6 +111,47 @@ describe("createLocalTilePackageKeyGenerator", () => {
     const key = createLocalTilePackageKeyGenerator("s")("New Zealand (2024)/map #1.vtpk");
     assert.match(key, /^[A-Za-z0-9._-]+$/);
   });
+
+  it("makes keys that are recognised as local, unlike a URL", () => {
+    const key = createLocalTilePackageKeyGenerator("s")("map.vtpk");
+    assert.equal(isLocalTilePackageKey(key), true);
+    assert.equal(isLocalTilePackageKey("https://example.com/local-map.vtpk"), false);
+  });
+});
+
+describe("localTilePackageKeyFromUrl", () => {
+  it("reads the key out of a tile, style or glyph request for a local file", () => {
+    const key = createLocalTilePackageKeyGenerator("s")("map.vtpk");
+    assert.equal(localTilePackageKeyFromUrl(tilePackageTileUrl(key)), key);
+    assert.equal(localTilePackageKeyFromUrl(`tilepackage://${key}/3/4/5`), key);
+    assert.equal(localTilePackageKeyFromUrl(`tilepackage://${key}`), key);
+  });
+
+  it("ignores requests for a package at a URL and for other protocols", () => {
+    assert.equal(localTilePackageKeyFromUrl(TILE_URL), null);
+    assert.equal(localTilePackageKeyFromUrl("https://example.com/local-x/1/2/3"), null);
+  });
+});
+
+describe("localTilePackageKeysInLayers", () => {
+  const next = createLocalTilePackageKeyGenerator("s");
+  const first = next("a.vtpk");
+  const second = next("b.tpkx");
+
+  it("collects local keys across live layers and history snapshots", () => {
+    const keys = localTilePackageKeysInLayers([
+      [{ metadata: { packageKey: first } }],
+      [{ metadata: { packageKey: second } }, { metadata: {} }, {}],
+    ]);
+    assert.deepEqual([...keys].sort(), [first, second].sort());
+  });
+
+  it("skips packages at a URL, which the protocol reopens on demand", () => {
+    const keys = localTilePackageKeysInLayers([
+      [{ metadata: { packageKey: "https://example.com/leon.vtpk" } }],
+    ]);
+    assert.equal(keys.size, 0);
+  });
 });
 
 describe("tilePackageBounds", () => {
@@ -197,11 +241,51 @@ describe("prepareVtpkStyle", () => {
     assert.deepEqual(prepared.droppedLayerIds, ["Land", "Poi/Icon", "Hillshade", "NoSourceLayer"]);
   });
 
-  it("drops sprite-backed patterns but keeps the layer's colour", () => {
+  it("replaces a sprite-backed pattern with the layer's own colour", () => {
     const water = prepared.layers.find((layer) => layer.id === "layer-1-Water");
     assert.deepEqual(water?.paint, { "fill-color": "#0af" });
     const road = prepared.layers.find((layer) => layer.id === "layer-1-Road/Line");
     assert.deepEqual(road?.paint, { "line-color": "#333" });
+  });
+
+  it("drops a pattern-only layer rather than drawing MapLibre's default paint", () => {
+    const style = {
+      version: 8,
+      sources: { esri: { type: "vector", tiles: ["x/{z}/{x}/{y}"] } },
+      layers: [
+        {
+          id: "Fill",
+          type: "fill",
+          source: "esri",
+          "source-layer": "A",
+          paint: { "fill-pattern": "p" },
+        },
+        {
+          id: "Line",
+          type: "line",
+          source: "esri",
+          "source-layer": "B",
+          paint: { "line-pattern": "p" },
+        },
+        {
+          id: "Extrusion",
+          type: "fill-extrusion",
+          source: "esri",
+          "source-layer": "C",
+          paint: { "fill-extrusion-pattern": "p" },
+        },
+        {
+          id: "Plain",
+          type: "fill",
+          source: "esri",
+          "source-layer": "D",
+          paint: { "fill-color": "#fff" },
+        },
+      ],
+    } as StyleSpecification;
+    const result = prepareVtpkStyle(style, "layer-2", { tileUrl: TILE_URL });
+    assert.deepEqual(result.droppedLayerIds, ["Fill", "Line", "Extrusion"]);
+    assert.deepEqual(result.nativeLayerIds, ["layer-2-Plain"]);
   });
 
   it("keeps labels, moves them to a basemap font and drops their icon", () => {

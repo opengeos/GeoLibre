@@ -1,9 +1,12 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import { addProtocol, type StyleSpecification } from "maplibre-gl";
 import type { Protocol, TilePackage, TilePackageHeader } from "maplibre-tilepackage-protocol";
 import {
   TILEPACKAGE_PROTOCOL,
   createLocalTilePackageKeyGenerator,
+  isLocalTilePackageKey,
+  localTilePackageKeyFromUrl,
+  localTilePackageKeysInLayers,
   prepareVtpkStyle,
   tilePackageBaseName,
   tilePackageBounds,
@@ -23,7 +26,18 @@ interface TilePackageRuntime {
 }
 
 let runtime: Promise<TilePackageRuntime> | null = null;
+// The live protocol, for the synchronous release paths below.
+let activeProtocol: Protocol | null = null;
 const nextLocalKey = createLocalTilePackageKeyGenerator();
+
+// Local keys that a layer has referenced at least once. Only these are pruned:
+// a package that is open but not yet on a layer is released by whoever opened it.
+const claimedLocalKeys = new Set<string>();
+let pruneSubscriptionInstalled = false;
+let pruneScheduled = false;
+
+const LOCAL_PACKAGE_GONE_MESSAGE =
+  "This tile package file is no longer loaded. Add it again to view its tiles.";
 
 /**
  * Load the tile-package reader and register its `tilepackage://` protocol with
@@ -35,7 +49,17 @@ export function registerTilePackageProtocol(): Promise<TilePackageRuntime> {
   runtime ??= import("maplibre-tilepackage-protocol")
     .then((lib) => {
       const protocol = new lib.Protocol();
-      addProtocol(TILEPACKAGE_PROTOCOL, protocol.package);
+      activeProtocol = protocol;
+      // The protocol opens an unknown key as if it were a URL. A local file has
+      // no URL, so a reopened project (or a released file) would fail with a
+      // confusing network error; say what happened instead.
+      addProtocol(TILEPACKAGE_PROTOCOL, (request, abortController) => {
+        const localKey = localTilePackageKeyFromUrl(request.url);
+        if (localKey !== null && !protocol.tiles.has(localKey)) {
+          return Promise.reject(new Error(LOCAL_PACKAGE_GONE_MESSAGE));
+        }
+        return protocol.package(request, abortController);
+      });
       return { lib, protocol };
     })
     .catch((error: unknown) => {
@@ -91,10 +115,14 @@ export async function openTilePackage(input: string | File): Promise<OpenedTileP
     source.getKey = () => key;
     pkg = new lib.TilePackage(source);
   }
-  protocol.add(pkg);
 
+  // Read before registering: a package that cannot be opened (not a package,
+  // unreachable, no range support) must not stay registered, and for a local
+  // file registering is what keeps the `File` alive.
   const header = await pkg.getHeader();
   const style = await pkg.getStyle();
+  protocol.add(pkg);
+  if (typeof input !== "string") ensurePruneSubscription();
   return {
     key,
     header,
@@ -103,6 +131,66 @@ export async function openTilePackage(input: string | File): Promise<OpenedTileP
     local: typeof input !== "string",
     sourcePath,
   };
+}
+
+/**
+ * Forget a package opened from a local file, so its `File` can be freed. Does
+ * nothing for a package at a URL: those are keyed by the URL, which two layers
+ * can share, and the protocol simply opens one again if it is asked for.
+ */
+export function releaseTilePackage(key: string): void {
+  claimedLocalKeys.delete(key);
+  if (isLocalTilePackageKey(key)) activeProtocol?.tiles.delete(key);
+}
+
+/**
+ * Release every local package that a layer used to reference but no layer
+ * references any more. "Referenced" includes the undo/redo snapshots, so undoing
+ * a layer removal still finds its tiles; a package is released only once the
+ * history has let go of the layer as well.
+ */
+export function pruneTilePackages(): void {
+  if (!activeProtocol) return;
+  const { pastStates, futureStates } = useAppStore.temporal.getState();
+  const live = localTilePackageKeysInLayers([
+    useAppStore.getState().layers,
+    ...pastStates.map((state) => state.layers ?? []),
+    ...futureStates.map((state) => state.layers ?? []),
+  ]);
+  for (const key of live) {
+    if (activeProtocol.tiles.has(key)) claimedLocalKeys.add(key);
+  }
+  for (const key of [...claimedLocalKeys]) {
+    if (!live.has(key)) releaseTilePackage(key);
+  }
+}
+
+// A layer can vanish through paths that never touch the layer panel (the
+// scripting API, plugin teardown, New Project), and undo history can later drop
+// the snapshots that kept it alive, so watch the store and its history. The
+// prune is deferred to a microtask because zundo records the previous state
+// *after* subscribers are notified: pruning synchronously would free a package
+// whose removal is about to become an undo entry.
+function schedulePrune(): void {
+  if (pruneScheduled) return;
+  pruneScheduled = true;
+  queueMicrotask(() => {
+    pruneScheduled = false;
+    pruneTilePackages();
+  });
+}
+
+function ensurePruneSubscription(): void {
+  if (pruneSubscriptionInstalled) return;
+  pruneSubscriptionInstalled = true;
+  useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) schedulePrune();
+  });
+  useAppStore.temporal.subscribe((state, previous) => {
+    if (state.pastStates !== previous.pastStates || state.futureStates !== previous.futureStates) {
+      schedulePrune();
+    }
+  });
 }
 
 /**
