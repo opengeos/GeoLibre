@@ -23,6 +23,19 @@ import type { GeoLibreToolbarLabel } from "./toolbar-menu-label";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
+/** Built-in panels shared by plugins and the scripting API. */
+export type GeoLibreControlPanelId = "bookmark" | "search" | "measure" | "minimap" | "print";
+
+/** Options for the host's overview map. */
+export interface GeoLibreMinimapOptions {
+  /** Zoom relative to the main map; negative values show more context. Default -4. */
+  zoomOffset?: number;
+  /** Width in pixels. Must be positive. Default 250. */
+  width?: number;
+  /** Height in pixels. Must be positive. Default 180. */
+  height?: number;
+}
+
 export type GeoLibreBuiltInMapControl =
   | "navigation"
   | "fullscreen"
@@ -1178,6 +1191,20 @@ export interface GeoLibreAppAPI {
   unregisterExternalNativeLayer?: (id: string) => void;
   addMapControl: (control: IControl, position?: GeoLibreMapControlPosition) => boolean;
   removeMapControl: (control: IControl) => void;
+  /**
+   * Open a built-in panel using the host's existing control. Idempotent; the
+   * menu checkmark follows. Minimap options also update an already open map
+   * and survive basemap changes until it is closed. Controls initialize
+   * asynchronously. Optional on older hosts.
+   */
+  openControlPanel?: {
+    (id: "minimap", options: GeoLibreMinimapOptions): void;
+    (id: GeoLibreControlPanelId): void;
+  };
+  /** Close a built-in panel, as its menu toggle does. Optional on older hosts. */
+  closeControlPanel?: (id: GeoLibreControlPanelId) => void;
+  /** Read the built-in panel's menu visibility state. Optional on older hosts. */
+  isControlPanelVisible?: (id: GeoLibreControlPanelId) => boolean;
   setBuiltInMapControlVisible: (control: GeoLibreBuiltInMapControl, visible: boolean) => boolean;
   getBuiltInMapControlPosition: (control: GeoLibreBuiltInMapControl) => GeoLibreMapControlPosition;
   setBuiltInMapControlPosition: (
