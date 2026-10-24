@@ -303,7 +303,8 @@ describe("prepareVtpkStyle", () => {
       textFont: ["Open Sans Regular"],
     });
     const label = custom.layers.find((layer) => layer.id === "layer-1-Road/Label");
-    assert.deepEqual(label?.layout?.["text-font"], ["Open Sans Regular"]);
+    const layout = label?.layout as Record<string, unknown> | undefined;
+    assert.deepEqual(layout?.["text-font"], ["Open Sans Regular"]);
   });
 
   it("does not mutate the style it was given", () => {
