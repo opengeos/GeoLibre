@@ -23,6 +23,7 @@ const PRINT_OPTIONS = {
 let printControl: PrintControl | null = null;
 let printControlMounted = false;
 let printPanelVisible = false;
+let printRequest = 0;
 const printPanelListeners = new Set<() => void>();
 let printThemeObserver: MutationObserver | null = null;
 
@@ -49,8 +50,12 @@ export function subscribePrintPanel(listener: () => void): () => void {
   return () => printPanelListeners.delete(listener);
 }
 
-async function openStandalonePrintControl(app: GeoLibreAppAPI): Promise<boolean> {
+async function openStandalonePrintControl(
+  app: GeoLibreAppAPI,
+  request = ++printRequest,
+): Promise<boolean> {
   const { PrintControl: PrintControlClass } = await getComponentsConstructors();
+  if (request !== printRequest) return false;
 
   printControl ??= createPrintControl(PrintControlClass);
 
@@ -64,13 +69,14 @@ async function openStandalonePrintControl(app: GeoLibreAppAPI): Promise<boolean>
     startPrintThemeSync();
   }
 
+  const control = printControl;
   setTimeout(() => {
     // Guard against a teardown that nulled printControl between addMapControl
     // succeeding and this deferred callback firing, which would otherwise mark
     // the panel visible even though the control no longer exists.
-    if (!printControl) return;
-    printControl.show();
-    printControl.expand();
+    if (request !== printRequest || printControl !== control) return;
+    control.show();
+    control.expand();
     setPrintPanelVisible(true);
   }, 0);
   return true;
@@ -121,6 +127,7 @@ function stopPrintThemeSync(): void {
 }
 
 export function teardownPrintControl(app: GeoLibreAppAPI): void {
+  ++printRequest;
   stopPrintThemeSync();
   if (printControl && printControlMounted) {
     app.removeMapControl(printControl);
@@ -131,6 +138,7 @@ export function teardownPrintControl(app: GeoLibreAppAPI): void {
 }
 
 function hidePrintControl(): void {
+  ++printRequest;
   printControl?.hide();
   setPrintPanelVisible(false);
 }

@@ -296,6 +296,13 @@ export interface GeoLibreAppAPI {
     position?: GeoLibreMapControlPosition
   ) => boolean;
   removeMapControl: (control: IControl) => void;
+  // The host's existing menu panels. See "Built-in control panels" below.
+  openControlPanel?: {
+    (id: "minimap", options: GeoLibreMinimapOptions): void;
+    (id: GeoLibreControlPanelId): void;
+  };
+  closeControlPanel?: (id: GeoLibreControlPanelId) => void;
+  isControlPanelVisible?: (id: GeoLibreControlPanelId) => boolean;
   // Note: showing the "terrain" control (visible: true) also switches 3D
   // terrain on, mirroring the Controls menu so the user doesn't have to click
   // the control button as a second step. Hiding it turns terrain back off.
@@ -1303,6 +1310,35 @@ app.registerExternalNativeLayer?.({
 - The setters are called only when the value changes, not on every layer sync, and they are held outside the layer record (functions cannot be serialized into a project file). Re-register the layer after a project reload to restore the bridge, and call `unregisterExternalNativeLayer(id)` from `deactivate`.
 
 For Zarr specifically, prefer `addZarrLayer` above: the host's renderer already integrates with the panels, so no custom layer or bridge is needed.
+
+## Built-in control panels
+
+Plugins can open GeoLibre's existing `bookmark`, `search`, `measure`, `minimap`,
+and `print` panels through the host API. The Controls menu checkmarks follow
+the shared visibility state for bookmark, search, measure, and minimap, so a
+plugin does not need to create a second control. `print` opens the scripting
+API's Print control, which is separate from Project > Print Layout. Opening an
+open panel is a no-op; controls initialize asynchronously.
+These methods are optional on older hosts, so use optional chaining:
+
+```ts
+activate(app) {
+  app.openControlPanel?.("minimap", { zoomOffset: -6, width: 320, height: 220 });
+}
+
+// Later, read or close the same panel the menus control.
+const visible = app.isControlPanelVisible?.("minimap");
+app.closeControlPanel?.("minimap");
+app.openControlPanel?.("bookmark");
+```
+
+Only `minimap` accepts options. `zoomOffset` is relative to the main map: a more
+negative value gives a wider overview. It defaults to `-4`; `width` and `height`
+default to `250` and `180` pixels and must be positive finite numbers. The zoom
+offset must also be finite. Calling `openControlPanel("minimap", options)` again
+updates the existing overview, retaining omitted options. The options survive
+basemap changes and reset when the Minimap is closed. Panel visibility and
+these options are session UI state and are not saved with the project.
 
 ## Right sidebar panels
 

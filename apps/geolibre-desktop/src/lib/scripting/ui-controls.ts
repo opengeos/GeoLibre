@@ -1,4 +1,5 @@
 import { IDENTIFY_ALL_LAYERS_ID, resolveIdentifyTarget, useAppStore } from "@geolibre/core";
+import type { GeoLibreControlPanelId } from "@geolibre/plugins";
 import type { BuiltInMapControl } from "@geolibre/map";
 
 // Scripted control of UI state that is not part of the project: which layer
@@ -30,7 +31,13 @@ export const SCRIPTABLE_MAP_CONTROLS = [
 export type ScriptableMapControl = (typeof SCRIPTABLE_MAP_CONTROLS)[number];
 
 /** Toolbar panels (Controls menu) a script may open or close. */
-export const SCRIPTABLE_PANELS = ["bookmark", "search", "measure", "minimap", "print"] as const;
+export const SCRIPTABLE_PANELS = [
+  "bookmark",
+  "search",
+  "measure",
+  "minimap",
+  "print",
+] as const satisfies readonly GeoLibreControlPanelId[];
 
 export type ScriptablePanel = (typeof SCRIPTABLE_PANELS)[number];
 
