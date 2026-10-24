@@ -527,7 +527,9 @@ describe("GeoArrow core data structures and conversions", () => {
       "stable-ref-layer",
       {
         type: "FeatureCollection",
-        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} }],
+        features: [
+          { type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} },
+        ],
       },
       undefined,
       null,

@@ -239,7 +239,13 @@ describe("GeoArrow Desktop Pipeline", () => {
 
   it("decodeWkbRowsToFeatures extracts properties and decodes WKB rows directly into GeoJSON features", () => {
     const poly: [number, number][][] = [
-      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
     ];
     const rows = [
       { id: 101, name: "Alpha", geom: makeWkbPolygon(poly) },
