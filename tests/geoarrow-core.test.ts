@@ -77,7 +77,10 @@ describe("GeoArrow core data structures and conversions", () => {
       coordDimensions: 2,
       featureCount: 2,
       featureIds: ["feat-1", 42],
-      properties: [{ name: "Alpha", val: 100 }, { name: "Beta", val: null }],
+      properties: [
+        { name: "Alpha", val: 100 },
+        { name: "Beta", val: null },
+      ],
     };
 
     const fc = geoArrowToFeatureCollection(batch);
@@ -146,8 +149,7 @@ describe("GeoArrow core data structures and conversions", () => {
     // outer: (0,0), (10,0), (10,10), (0,10), (0,0)
     // hole:  (2,2), (4,2), (4,4), (2,4), (2,2)
     const coordinates = new Float64Array([
-      0, 0, 10, 0, 10, 10, 0, 10, 0, 0,
-      2, 2, 4, 2, 4, 4, 2, 4, 2, 2,
+      0, 0, 10, 0, 10, 10, 0, 10, 0, 0, 2, 2, 4, 2, 4, 4, 2, 4, 2, 2,
     ]);
     const ringOffsets = new Int32Array([0, 5, 10]); // 2 rings
     const geomOffsets = new Int32Array([0, 2]); // 1 polygon having 2 rings

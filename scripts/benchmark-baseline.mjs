@@ -80,12 +80,12 @@ function measureWorkload(name, generator, counts) {
 
     console.log(
       `Count: ${count.toLocaleString().padStart(8)} | ` +
-      `Gen: ${tDataGen.toFixed(1).padStart(6)}ms | ` +
-      `Clone: ${tClone.toFixed(1).padStart(6)}ms | ` +
-      `Index: ${tIndex.toFixed(1).padStart(6)}ms | ` +
-      `Encode: ${tEncode.toFixed(2).padStart(6)}ms | ` +
-      `Mem: ${((memEnd - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB | ` +
-      `Pbf: ${(pbfLength / 1024).toFixed(1)} KB`
+        `Gen: ${tDataGen.toFixed(1).padStart(6)}ms | ` +
+        `Clone: ${tClone.toFixed(1).padStart(6)}ms | ` +
+        `Index: ${tIndex.toFixed(1).padStart(6)}ms | ` +
+        `Encode: ${tEncode.toFixed(2).padStart(6)}ms | ` +
+        `Mem: ${((memEnd - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB | ` +
+        `Pbf: ${(pbfLength / 1024).toFixed(1)} KB`,
     );
   }
 }
@@ -110,8 +110,8 @@ function measureJsonParse(count) {
 
   console.log(
     `Count: ${count.toLocaleString().padStart(8)} | ` +
-    `JSON.parse Time: ${tParse.toFixed(1).padStart(6)}ms | ` +
-    `Heap Allocated: ${((memAfter - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB`
+      `JSON.parse Time: ${tParse.toFixed(1).padStart(6)}ms | ` +
+      `Heap Allocated: ${((memAfter - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB`,
   );
 }
 
@@ -142,15 +142,17 @@ function measureWkbDecode(count) {
 
   console.log(
     `Count: ${count.toLocaleString().padStart(8)} | ` +
-    `Binary Decode Time: ${tDecode.toFixed(1).padStart(6)}ms | ` +
-    `Heap Allocated: ${((memAfter - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB`
+      `Binary Decode Time: ${tDecode.toFixed(1).padStart(6)}ms | ` +
+      `Heap Allocated: ${((memAfter - memBefore) / 1024 / 1024).toFixed(1).padStart(5)} MB`,
   );
 
   // Measure clone/transfer of the flat coords
   const tClone0 = performance.now();
   const cloned = structuredClone(coords);
   const tClone = performance.now() - tClone0;
-  console.log(`Count: ${count.toLocaleString().padStart(8)} | Flat Array structuredClone: ${tClone.toFixed(2)}ms (${(cloned.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(
+    `Count: ${count.toLocaleString().padStart(8)} | Flat Array structuredClone: ${tClone.toFixed(2)}ms (${(cloned.byteLength / 1024 / 1024).toFixed(2)} MB)`,
+  );
 }
 
 console.log("Starting Baseline Vector Pipeline Benchmark...");
@@ -164,5 +166,3 @@ measureWkbDecode(100_000);
 
 measureWorkload("Points Grid", pointGrid, [1_000, 10_000, 50_000, 100_000]);
 measureWorkload("Polygon Grid", polygonGrid, [1_000, 10_000, 50_000]);
-
-

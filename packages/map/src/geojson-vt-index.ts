@@ -99,7 +99,6 @@ export function buildTileIndexFromBinary(
   return buildTileIndex(geojson as GeoJSON.FeatureCollection, options);
 }
 
-
 /**
  * Encode one tile of an index to MVT bytes.
  *
@@ -154,7 +153,6 @@ export type TileWorkerRequest =
   | { type: "drop"; layerId: string }
   | { type: "tile"; requestId: number; layerId: string; z: number; x: number; y: number }
   | { type: "cancel"; requestId: number };
-
 
 /**
  * Worker → main thread: a tile request's encoded bytes (empty when the tile
@@ -243,10 +241,7 @@ export function createTileIndexSession(
       case "binary": {
         building.delete(request.layerId);
         try {
-          indexes.set(
-            request.layerId,
-            buildTileIndexFromBinary(request.batch, request.options),
-          );
+          indexes.set(request.layerId, buildTileIndexFromBinary(request.batch, request.options));
         } catch (err) {
           indexes.delete(request.layerId);
           console.warn("[GeoLibre] geojson-vt binary index build failed", err);

@@ -113,7 +113,11 @@ describe("GeoArrow Regression Suite — Golden Baseline Parity", () => {
     const legacyIndex = buildTileIndex(fc, options);
     const geoArrowIndex = buildTileIndexFromBinary(batch, options);
 
-    for (const [z, x, y] of [[0, 0, 0], [1, 1, 0], [2, 2, 1]]) {
+    for (const [z, x, y] of [
+      [0, 0, 0],
+      [1, 1, 0],
+      [2, 2, 1],
+    ]) {
       const legacyTile = encodeTile(legacyIndex, z, x, y);
       const geoArrowTile = encodeTile(geoArrowIndex, z, x, y);
       assert.equal(

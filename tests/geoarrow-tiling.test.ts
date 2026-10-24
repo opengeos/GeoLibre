@@ -3,10 +3,7 @@ import { describe, it } from "node:test";
 import { createRequire } from "node:module";
 import { config } from "maplibre-gl";
 import Pbf from "pbf";
-import {
-  featureCollectionToGeoArrow,
-  type GeoArrowBatch,
-} from "@geolibre/core";
+import { featureCollectionToGeoArrow, type GeoArrowBatch } from "@geolibre/core";
 import {
   ensureGeoJsonVtProtocol,
   GEOJSONVT_PROTOCOL,
@@ -133,8 +130,7 @@ describe("GeoArrow binary vector tiling integration", () => {
   it("handles polygon GeoArrow batch with inner holes", () => {
     // 1 polygon with 2 rings
     const coordinates = new Float64Array([
-      0, 0, 10, 0, 10, 10, 0, 10, 0, 0,
-      2, 2, 4, 2, 4, 4, 2, 4, 2, 2,
+      0, 0, 10, 0, 10, 10, 0, 10, 0, 0, 2, 2, 4, 2, 4, 4, 2, 4, 2, 2,
     ]);
     const ringOffsets = new Int32Array([0, 5, 10]);
     const geomOffsets = new Int32Array([0, 2]);

@@ -451,7 +451,8 @@ export function SqlWorkspacePanel() {
     // metadata addGeoJsonLayer initialised (read synchronously from the store)
     // rather than overwriting it.
     const created = useAppStore.getState().layers.find((layer) => layer.id === id);
-    const geoarrow = featureCount > 10_000 ? featureCollectionToGeoArrow(result.geojson) : undefined;
+    const geoarrow =
+      featureCount > 10_000 ? featureCollectionToGeoArrow(result.geojson) : undefined;
     updateLayer(id, {
       ...(geoarrow ? { geoarrow } : {}),
       metadata: {
