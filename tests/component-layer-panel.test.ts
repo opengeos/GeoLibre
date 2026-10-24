@@ -381,7 +381,7 @@ describe("LayerPanel", () => {
     assert.equal(layer("parks")?.name, "Parks");
     assert.equal(document.activeElement, within(dialog).getByRole("button", { name: "Remove" }));
 
-    fireEvent.keyDown(dialog, { key: "Delete" });
+    fireEvent.keyDown(within(dialog).getByRole("button", { name: "Remove" }), { key: "Delete" });
     assert.equal(layer("parks"), undefined);
     assert.equal(screen.queryByRole("dialog", { name: "Remove layer?" }), null);
   });
@@ -397,13 +397,29 @@ describe("LayerPanel", () => {
       key: "Delete",
     });
     const dialog = screen.getByRole("dialog", { name: "Remove layer?" });
+    const remove = within(dialog).getByRole("button", { name: "Remove" });
 
-    fireEvent.keyDown(dialog, { key: "Delete", repeat: true });
-    fireEvent.keyDown(dialog, { key: "Delete", shiftKey: true });
+    fireEvent.keyDown(remove, { key: "Delete", repeat: true });
+    fireEvent.keyDown(remove, { key: "Delete", shiftKey: true });
+    fireEvent.keyDown(within(dialog).getByRole("button", { name: "Cancel" }), { key: "Delete" });
+    fireEvent.keyDown(dialog, { key: "Delete" });
     assert.equal(layer("parks")?.name, "Parks");
 
-    fireEvent.keyDown(dialog, { key: "Delete" });
+    fireEvent.keyDown(remove, { key: "Delete" });
     assert.equal(layer("parks"), undefined);
+  });
+
+  it("ignores Delete pressed outside the layer panel", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "parks", name: "Parks" })],
+      selectedLayerId: "parks",
+    });
+    renderLayerPanel();
+
+    fireEvent.keyDown(document.body, { key: "Delete" });
+
+    assert.equal(screen.queryByRole("dialog", { name: "Remove layer?" }), null);
+    assert.equal(layer("parks")?.name, "Parks");
   });
 
   it("does not open the removal prompt while typing in a text field", () => {

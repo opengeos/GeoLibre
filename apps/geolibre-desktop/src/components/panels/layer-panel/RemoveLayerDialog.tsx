@@ -45,7 +45,10 @@ export function RemoveLayerDialog({ layer, onClose }: RemoveLayerDialogProps) {
           removeButtonRef.current.focus();
         }}
         onKeyDown={(event) => {
+          // Only the focused Remove button confirms, so Delete on Cancel or
+          // the close button never removes the layer.
           if (
+            event.target !== removeButtonRef.current ||
             event.key !== "Delete" ||
             event.defaultPrevented ||
             event.repeat ||

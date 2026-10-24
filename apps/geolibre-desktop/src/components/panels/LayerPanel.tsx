@@ -1,4 +1,5 @@
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
   Fragment,
@@ -306,37 +307,36 @@ export function LayerPanel({
   }, [autoCollapse, internalCollapsed, isControlled]);
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
   const selection = useLayerSelection({ layers, visibleLayers, selectedLayerId, selectLayer });
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Delete" ||
-        event.defaultPrevented ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey
-      ) {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest(
-          '[role="dialog"], input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
-        )
-      ) {
-        // Guard against deleting layers when focus is inside a dialog or form element
-        return;
-      }
-      const layer = layers.find((candidate) => candidate.id === selectedLayerId);
-      if (!layer || !canEditLayer(layer.id)) return;
-      event.preventDefault();
-      setLayerPendingRemoval(layer);
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [layers, selectedLayerId, canEditLayer]);
+  // Delete opens the removal prompt for the selected layer. Bound to the
+  // expanded panel (not the document) so the key only acts while focus is in
+  // the layer list, never on the map, the attribute table or other panels.
+  // React keydowns bubble through portals, so menus and dialogs opened from
+  // the panel are excluded alongside text fields.
+  const handlePanelKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (
+      event.key !== "Delete" ||
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (
+      target.closest(
+        '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="combobox"], input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+      )
+    ) {
+      return;
+    }
+    const layer = layers.find((candidate) => candidate.id === selectedLayerId);
+    if (!layer || !canEditLayer(layer.id)) return;
+    event.preventDefault();
+    setLayerPendingRemoval(layer);
+  };
   const drag = useLayerDragAndDrop({
     layers,
     visibleLayers,
@@ -533,6 +533,7 @@ export function LayerPanel({
     // second in-flow position.
     <aside
       aria-label={t("sharedRail.layers")}
+      onKeyDown={handlePanelKeyDown}
       className="relative grid max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 grid-rows-[auto_minmax(0,1fr)] border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
     >
       <div
