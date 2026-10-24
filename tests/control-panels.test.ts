@@ -7,6 +7,7 @@ import {
 } from "../packages/plugins/src/control-panels";
 import {
   __setComponentsModuleLoaderForTests,
+  getComponentsConstructors,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/components/constructors";
 import {
@@ -14,6 +15,23 @@ import {
   subscribeMinimapPanel,
 } from "../packages/plugins/src/plugins/components/minimap";
 import type { GeoLibreAppAPI, GeoLibreControlPanelId } from "../packages/plugins/src/types";
+import { teardownPrintControl } from "../packages/plugins/src/plugins/components/print";
+import { teardownSearchControl } from "../packages/plugins/src/plugins/components/search";
+
+class Panel {
+  on() {
+    return this;
+  }
+  show() {
+    return this;
+  }
+  hide() {
+    return this;
+  }
+  expand() {
+    return this;
+  }
+}
 
 class Overview {
   collapsed: boolean;
@@ -54,7 +72,16 @@ const app = {
   },
 } as unknown as GeoLibreAppAPI;
 
-const modules = [{ MinimapControl: Overview }, null] as unknown as ComponentsModules;
+const modules = [
+  {
+    MinimapControl: Overview,
+    BookmarkControl: Panel,
+    SearchControl: Panel,
+    MeasureControl: Panel,
+    PrintControl: Panel,
+  },
+  null,
+] as unknown as ComponentsModules;
 // Flush the lazy import and the control's deferred show/expand callback.
 async function settle() {
   await new Promise<void>((resolve) => setImmediate(resolve));
@@ -70,7 +97,10 @@ describe("built-in control panel API", () => {
     __setComponentsModuleLoaderForTests(() => Promise.resolve(modules));
   });
   afterEach(() => {
-    closeControlPanel(app, "minimap");
+    for (const id of ["bookmark", "search", "measure", "minimap", "print"] as const)
+      closeControlPanel(app, id);
+    teardownPrintControl(app);
+    teardownSearchControl(app);
     __setComponentsModuleLoaderForTests(null);
   });
 
@@ -171,6 +201,33 @@ describe("built-in control panel API", () => {
     assert.equal(mounted.size, 0);
     assert.equal(isControlPanelVisible("minimap"), false);
   });
+
+  for (const id of ["bookmark", "search", "measure", "print"] as const) {
+    it(`cancels ${id} when closed before its constructors load`, async () => {
+      let resolve!: (value: ComponentsModules) => void;
+      __setComponentsModuleLoaderForTests(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      openControlPanel(app, id);
+      closeControlPanel(app, id);
+      resolve(modules);
+      await settle();
+      assert.equal(mounted.size, 0);
+      assert.equal(isControlPanelVisible(id), false);
+    });
+
+    it(`does not show ${id} after close between mounting and its deferred show`, async () => {
+      openControlPanel(app, id);
+      await getComponentsConstructors();
+      assert.equal(mounted.size, 1);
+      closeControlPanel(app, id);
+      await settle();
+      assert.equal(isControlPanelVisible(id), false);
+    });
+  }
 
   it("lets the latest configuration win during concurrent opens", async () => {
     openControlPanel(app, "minimap", { zoomOffset: -5 });

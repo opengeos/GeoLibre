@@ -15,7 +15,7 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND, isControlPanelVisible, addRasterToMap } from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
@@ -269,9 +269,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const control = params.control;
       const visible = Boolean(params.visible);
       if (isScriptablePanel(control)) {
-        // Opening an open panel would remount it; closing a closed one is a
-        // no-op either way, but skip it so the two branches read the same.
-        if (isControlPanelVisible(control) === visible) return visible;
+        // The shared helpers make opens idempotent. Always forward a close
+        // so it can cancel initialization before a panel becomes visible.
         const app = createAppAPI(controllerRefFrom(getController));
         if (visible) app.openControlPanel(control);
         else app.closeControlPanel(control);

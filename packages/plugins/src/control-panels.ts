@@ -65,7 +65,7 @@ export function openControlPanel(
   }
 }
 
-/** Close a built-in panel. Also cancels a pending Minimap open. */
+/** Close a built-in panel and cancel its pending initialization. */
 export function closeControlPanel(app: GeoLibreAppAPI, id: GeoLibreControlPanelId): void {
   panelToggle(id).close(app);
 }
