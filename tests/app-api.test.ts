@@ -165,6 +165,9 @@ function fakeHost(overrides: Partial<AppApiHost> = {}): { host: AppApiHost; call
     },
     getPrimaryCesiumControlHost: () => null,
     addRasterToMap: unused("addRasterToMap"),
+    openControlPanel: unused("openControlPanel"),
+    closeControlPanel: unused("closeControlPanel"),
+    isControlPanelVisible: () => false,
     readRasterWindow: unused("readRasterWindow"),
     setRasterRenderEngine: unused("setRasterRenderEngine"),
     addZarrRasterLayer: unused("addZarrRasterLayer"),
@@ -266,6 +269,37 @@ describe("plugin app API contract", () => {
     const api = createAppAPI(engineRef(), fakeHost().host);
     const extra = Object.keys(api).filter((name) => !declared.has(name));
     assert.deepEqual(extra, []);
+  });
+});
+
+describe("plugin app API built-in control panels", () => {
+  it("opens, closes, and queries every panel through the host with the live app", () => {
+    const calls: unknown[][] = [];
+    const visible = new Set<string>();
+    const { host } = fakeHost({
+      openControlPanel: (app, id, options) => {
+        calls.push(["open", app, id, options]);
+        visible.add(id);
+      },
+      closeControlPanel: (app, id) => {
+        calls.push(["close", app, id]);
+        visible.delete(id);
+      },
+      isControlPanelVisible: (id) => visible.has(id),
+    });
+    const api = createAppAPI(engineRef(), host);
+    for (const id of ["bookmark", "search", "measure", "minimap", "print"] as const) {
+      assert.equal(api.isControlPanelVisible(id), false);
+      api.openControlPanel(id);
+      assert.equal(api.isControlPanelVisible(id), true);
+      assert.deepEqual(calls.at(-1), ["open", api, id, undefined]);
+      api.closeControlPanel(id);
+      assert.equal(api.isControlPanelVisible(id), false);
+      assert.deepEqual(calls.at(-1), ["close", api, id]);
+    }
+    const options = { zoomOffset: -6, width: 320, height: 220 };
+    api.openControlPanel("minimap", options);
+    assert.deepEqual(calls.at(-1), ["open", api, "minimap", options]);
   });
 });
 

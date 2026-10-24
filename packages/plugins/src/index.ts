@@ -12,6 +12,7 @@ export {
   type AssistantToolEntry,
 } from "./assistant-tool-registry";
 export * from "./types";
+export { openControlPanel, closeControlPanel, isControlPanelVisible } from "./control-panels";
 export { PluginManager } from "./plugin-manager";
 export {
   registerRightPanel,

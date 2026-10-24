@@ -20,6 +20,7 @@ const SEARCH_OPTIONS = {
 let searchControl: SearchControl | null = null;
 let searchControlMounted = false;
 let searchPlacesPanelVisible = false;
+let searchRequest = 0;
 const searchPlacesPanelListeners = new Set<() => void>();
 
 // The standalone Search panel is intentionally independent from the
@@ -41,8 +42,12 @@ export function subscribeSearchPlacesPanel(listener: () => void): () => void {
   return () => searchPlacesPanelListeners.delete(listener);
 }
 
-async function openStandaloneSearchControl(app: GeoLibreAppAPI): Promise<boolean> {
+async function openStandaloneSearchControl(
+  app: GeoLibreAppAPI,
+  request = ++searchRequest,
+): Promise<boolean> {
   const { SearchControl: SearchControlClass } = await getComponentsConstructors();
+  if (request !== searchRequest) return false;
 
   searchControl ??= createSearchControl(SearchControlClass);
 
@@ -55,9 +60,11 @@ async function openStandaloneSearchControl(app: GeoLibreAppAPI): Promise<boolean
     searchControlMounted = true;
   }
 
+  const control = searchControl;
   setTimeout(() => {
-    searchControl?.show();
-    searchControl?.expand();
+    if (request !== searchRequest || searchControl !== control) return;
+    control.show();
+    control.expand();
     setSearchPlacesPanelVisible(true);
   }, 0);
   return true;
@@ -74,6 +81,7 @@ function createSearchControl(SearchControlClass: SearchControlConstructor): Sear
 }
 
 export function teardownSearchControl(app: GeoLibreAppAPI): void {
+  ++searchRequest;
   if (searchControl && searchControlMounted) {
     app.removeMapControl(searchControl);
   }
@@ -83,6 +91,7 @@ export function teardownSearchControl(app: GeoLibreAppAPI): void {
 }
 
 function hideSearchControl(): void {
+  ++searchRequest;
   searchControl?.hide();
   setSearchPlacesPanelVisible(false);
 }

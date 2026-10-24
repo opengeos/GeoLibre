@@ -27,6 +27,8 @@ import type {
   GeoLibreActiveMapTool,
   GeoLibreCogLayerOptions,
   GeoLibreCogRenderEngine,
+  GeoLibreControlPanelId,
+  GeoLibreMinimapOptions,
   GeoLibreDeckGL,
   GeoLibreDownloadFolder,
   GeoLibreEditSessionChange,
@@ -109,6 +111,9 @@ type PluginsModule = typeof GeoLibrePlugins;
 export interface AppApiHost extends Pick<
   PluginsModule,
   | "addRasterToMap"
+  | "openControlPanel"
+  | "closeControlPanel"
+  | "isControlPanelVisible"
   | "readRasterWindow"
   | "setRasterRenderEngine"
   | "addZarrRasterLayer"
@@ -818,6 +823,10 @@ export function createAppAPI(
         state.removeLayer(id);
       }
     },
+    openControlPanel: (id: GeoLibreControlPanelId, options?: GeoLibreMinimapOptions): void =>
+      host.openControlPanel(api, id, options),
+    closeControlPanel: (id: GeoLibreControlPanelId): void => host.closeControlPanel(api, id),
+    isControlPanelVisible: host.isControlPanelVisible,
     addMapControl: (
       control: Parameters<MapEngine["addControl"]>[0],
       position?: Parameters<MapEngine["addControl"]>[1],
