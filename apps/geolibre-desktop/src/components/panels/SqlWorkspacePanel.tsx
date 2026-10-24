@@ -1,8 +1,4 @@
-import {
-  featureCollectionToGeoArrow,
-  LARGE_VECTOR_FEATURE_THRESHOLD,
-  useAppStore,
-} from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { Button, Input, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -423,14 +419,6 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   };
 
-  /**
-   * Decide whether a vector result should generate a GeoArrow batch.
-   * Uses {@link LARGE_VECTOR_FEATURE_THRESHOLD} as the single source of truth.
-   */
-  const shouldCreateGeoArrowBatch = (count: number): boolean => {
-    return count > LARGE_VECTOR_FEATURE_THRESHOLD;
-  };
-
   // Each click adds the current result to the map as a new layer. Re-adds are
   // intentional (e.g. to add the same result again under a different name), so
   // the action is not one-shot; the notice updates on every add for feedback.
@@ -439,10 +427,7 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
-    const geoarrow = shouldCreateGeoArrowBatch(featureCount)
-      ? (featureCollectionToGeoArrow(result.geojson) ?? undefined)
-      : undefined;
-    addGeoJsonLayer(name, result.geojson, undefined, null, { geoarrow });
+    addGeoJsonLayer(name, result.geojson);
     setNotice(t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }));
   };
 
@@ -457,11 +442,7 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL query ${new Date().toLocaleTimeString()}`;
-    const geoarrow = shouldCreateGeoArrowBatch(featureCount)
-      ? (featureCollectionToGeoArrow(result.geojson) ?? undefined)
-      : undefined;
     addGeoJsonLayer(name, result.geojson, undefined, null, {
-      geoarrow,
       metadata: sqlQueryLayerMetadata(lastRun.sql),
     });
 

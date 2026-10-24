@@ -67,6 +67,7 @@ export function wkbRowsToGeoArrowBatch(
   rows: ReadonlyArray<Record<string, unknown>>,
   wkbColumn: string,
   preferredType?: GeoArrowGeometryType,
+  outFeatures?: { features?: Feature<Geometry | null>[] },
 ): GeoArrowBatch | null {
   const featureCount = rows.length;
   if (featureCount === 0) {
@@ -155,11 +156,35 @@ export function wkbRowsToGeoArrowBatch(
     return bbox ? { ...batch, bbox } : batch;
   }
 
-  // For LineString or Polygon, decode using decodeWkb and flatten into GeoArrowBatch
+  // For LineString or Polygon, decode using decodeWkbRowsToFeatures and flatten into GeoArrowBatch
   // This guarantees complete support for holes, MultiPolygons, mixed endianness, and surface types
+  const features = decodeWkbRowsToFeatures(rows, wkbColumn);
+  if (outFeatures) {
+    outFeatures.features = features;
+  }
+
+  const fc = { type: "FeatureCollection" as const, features };
+  return featureCollectionToGeoArrow(fc as FeatureCollection<Geometry | null>);
+}
+
+/**
+ * Decode an array of SQL/DuckDB row records into standard GeoJSON features.
+ * Shared between the GeoArrow conversion pipeline and the GeoJSON fallback.
+ */
+export function decodeWkbRowsToFeatures(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  wkbColumn: string,
+): Feature<Geometry | null>[] {
+  const featureCount = rows.length;
   const features: Feature<Geometry | null>[] = new Array(featureCount);
   for (let i = 0; i < featureCount; i++) {
-    const bytes = wkbBytesList[i];
+    const row = rows[i];
+    const props: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key === wkbColumn || value instanceof Uint8Array) continue;
+      props[key] = normalizePropertyValue(value);
+    }
+    const bytes = wkbCellToBytes(row[wkbColumn]);
     let geometry: Geometry | null = null;
     if (bytes) {
       try {
@@ -171,12 +196,10 @@ export function wkbRowsToGeoArrowBatch(
     features[i] = {
       type: "Feature",
       geometry,
-      properties: properties[i],
+      properties: props,
     };
   }
-
-  const fc = { type: "FeatureCollection" as const, features };
-  return featureCollectionToGeoArrow(fc as FeatureCollection);
+  return features;
 }
 
 /**
@@ -191,36 +214,15 @@ export function createOptimizedVectorLayerData(
   rows: ReadonlyArray<Record<string, unknown>>,
   wkbColumn: string,
 ): { geoarrow?: GeoArrowBatch; geojson: FeatureCollection<Geometry | null> } {
-  const geoarrow = wkbRowsToGeoArrowBatch(rows, wkbColumn);
+  const cached: { features?: Feature<Geometry | null>[] } = {};
+  const geoarrow = wkbRowsToGeoArrowBatch(rows, wkbColumn, undefined, cached);
   if (geoarrow) {
     const geojson = geoArrowToFeatureCollection(geoarrow);
     return { geoarrow, geojson };
   }
 
   // If GeoArrow conversion returned null (e.g. unsupported geometry or failure),
-  // decode rows into standard GeoJSON and retain the safe GeoJSON-only rendering path.
-  const features: Feature<Geometry | null>[] = new Array(rows.length);
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const props: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(row)) {
-      if (key === wkbColumn || value instanceof Uint8Array) continue;
-      props[key] = normalizePropertyValue(value);
-    }
-    const bytes = wkbCellToBytes(row[wkbColumn]);
-    let geometry: Geometry | null = null;
-    if (bytes) {
-      try {
-        geometry = decodeWkb(bytes);
-      } catch (err) {
-        console.warn("[GeoLibre] Skipped an undecodable WKB geometry", err);
-      }
-    }
-    features[i] = {
-      type: "Feature",
-      geometry,
-      properties: props,
-    };
-  }
+  // retain already-decoded features from the non-Point attempt or decode rows once.
+  const features = cached.features ?? decodeWkbRowsToFeatures(rows, wkbColumn);
   return { geojson: { type: "FeatureCollection", features } };
 }

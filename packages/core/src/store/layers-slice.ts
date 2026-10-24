@@ -481,9 +481,14 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null, extra) => {
     const id = uuidv4();
     const shouldBatch = shouldUseTiledRendering(geojson);
-    const geoarrow =
-      extra?.geoarrow ??
-      (shouldBatch ? (featureCollectionToGeoArrow(geojson) ?? undefined) : undefined);
+    let geoarrow = extra?.geoarrow;
+    if (!geoarrow && shouldBatch) {
+      try {
+        geoarrow = featureCollectionToGeoArrow(geojson) ?? undefined;
+      } catch (err) {
+        console.warn("[GeoLibre] GeoArrow batch conversion failed; falling back to GeoJSON", err);
+      }
+    }
     const layer: GeoLibreLayer = {
       id,
       name,

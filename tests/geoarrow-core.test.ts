@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  applyJoinsToLayer,
   computeGeoArrowBBox,
   createEmptyProject,
   featureCollectionToGeoArrow,
@@ -13,6 +14,8 @@ import {
   type GeoArrowBatch,
 } from "@geolibre/core";
 import type { FeatureCollection, Geometry, Polygon } from "geojson";
+import { partializeHistory } from "../packages/core/src/store/undo-history";
+import { shallow } from "zustand/shallow";
 
 describe("GeoArrow core data structures and conversions", () => {
   it("validates GeoArrowBatch structures with isGeoArrowBatch", () => {
@@ -447,5 +450,102 @@ describe("GeoArrow core data structures and conversions", () => {
       undefined,
       "invalid geoarrow must be discarded during hydration",
     );
+  });
+
+  it("addGeoJsonLayer safely falls back to GeoJSON-only layer when featureCollectionToGeoArrow throws (C)", () => {
+    const store = useAppStore.getState();
+    // Create a feature collection with >50k items so shouldUseTiledRendering is true
+    const largeFc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: new Array(60_000).fill(null).map((_, i) => ({
+        type: "Feature",
+        id: i,
+        geometry: { type: "Point", coordinates: [10, 20] },
+        properties: {},
+      })),
+    };
+
+    // Layer creation succeeds without throwing
+    const layerId = store.addGeoJsonLayer("test-large-layer", largeFc);
+    const created = useAppStore.getState().layers.find((l) => l.id === layerId);
+    assert.ok(created, "layer must be created even with large payload");
+    assert.ok(created.geojson, "geojson must be intact");
+
+    // Clean up
+    store.removeLayer(layerId);
+  });
+
+  it("applyJoinsToLayer strips stale geoarrow when layer geojson is updated (D)", () => {
+    const batch: GeoArrowBatch = {
+      geometryType: "Point",
+      coordinates: new Float64Array([10, 20]),
+      coordDimensions: 2,
+      featureCount: 1,
+      properties: [{ baseVal: "initial" }],
+    };
+    const layer = {
+      id: "lyr-join-test",
+      name: "Join Test Layer",
+      type: "geojson" as const,
+      source: { type: "geojson" as const },
+      visible: true,
+      opacity: 1,
+      style: {} as any,
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection" as const,
+        features: [
+          {
+            type: "Feature" as const,
+            id: 1,
+            geometry: { type: "Point" as const, coordinates: [10, 20] },
+            properties: { id: 1, baseVal: "initial" },
+          },
+        ],
+      },
+      geoarrow: batch,
+    };
+
+    const joinedLayer = applyJoinsToLayer(layer, [layer], []);
+    assert.equal(
+      joinedLayer.geoarrow,
+      undefined,
+      "stale geoarrow must be removed when applyJoinsToLayer updates geojson",
+    );
+    assert.ok(joinedLayer.geojson, "new geojson must be preserved");
+  });
+
+  it("partializeHistory preserves layer references and immutable geoarrow across calls (E)", () => {
+    const batch: GeoArrowBatch = {
+      geometryType: "Point",
+      coordinates: new Float64Array([10, 20]),
+      coordDimensions: 2,
+      featureCount: 1,
+    };
+    const state = useAppStore.getState();
+    const layerId = state.addGeoJsonLayer(
+      "stable-ref-layer",
+      {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} }],
+      },
+      undefined,
+      null,
+      { geoarrow: batch },
+    );
+
+    const currentState = useAppStore.getState();
+    const snap1 = partializeHistory(currentState);
+    const snap2 = partializeHistory(currentState);
+
+    // Layer references must be stable across calls so shallow equality passes
+    assert.equal(snap1.layers, snap2.layers);
+    assert.ok(shallow(snap1.layers, snap2.layers));
+
+    // GeoArrow is preserved in history snapshot
+    const snapLayer = snap1.layers.find((l) => l.id === layerId);
+    assert.equal(snapLayer?.geoarrow, batch, "geoarrow must be preserved in history snapshot");
+
+    state.removeLayer(layerId);
   });
 });

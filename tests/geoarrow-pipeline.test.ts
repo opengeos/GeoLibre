@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   wkbRowsToGeoArrowBatch,
   createOptimizedVectorLayerData,
+  decodeWkbRowsToFeatures,
 } from "../apps/geolibre-desktop/src/lib/geoarrow-pipeline";
 
 function makeWkbPoint(x: number, y: number, hasZ = false, z = 0): Uint8Array {
@@ -234,5 +235,23 @@ describe("GeoArrow Desktop Pipeline", () => {
     assert.equal(result.geojson.features.length, 2);
     assert.equal(result.geojson.features[0].geometry?.type, "Polygon");
     assert.equal(result.geojson.features[1].geometry?.type, "Point");
+  });
+
+  it("decodeWkbRowsToFeatures extracts properties and decodes WKB rows directly into GeoJSON features", () => {
+    const poly: [number, number][][] = [
+      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+    ];
+    const rows = [
+      { id: 101, name: "Alpha", geom: makeWkbPolygon(poly) },
+      { id: 102, name: "Beta", geom: makeWkbPoint(5, 15) },
+    ];
+    const features = decodeWkbRowsToFeatures(rows, "geom");
+    assert.equal(features.length, 2);
+    assert.equal(features[0].properties?.id, 101);
+    assert.equal(features[0].properties?.name, "Alpha");
+    assert.equal(features[0].geometry?.type, "Polygon");
+    assert.equal(features[1].properties?.id, 102);
+    assert.equal(features[1].properties?.name, "Beta");
+    assert.equal(features[1].geometry?.type, "Point");
   });
 });
