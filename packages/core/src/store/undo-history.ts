@@ -150,7 +150,11 @@ function pruneHistoryBySize(): void {
  */
 export function partializeHistory(s: AppState): HistoryState {
   return {
-    layers: s.layers,
+    layers: s.layers.map((l) => {
+      if (l.geoarrow === undefined) return l;
+      const { geoarrow: _geoarrow, ...rest } = l;
+      return rest;
+    }),
     layerGroups: s.layerGroups,
     basemapStyleUrl: s.basemapStyleUrl,
     basemapVisible: s.basemapVisible,

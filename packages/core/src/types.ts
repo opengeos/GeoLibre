@@ -1,5 +1,6 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoArrowBatch } from "./geoarrow";
+export type { GeoArrowBatch };
 import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [

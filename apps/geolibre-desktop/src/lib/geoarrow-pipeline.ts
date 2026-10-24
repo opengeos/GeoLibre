@@ -68,7 +68,7 @@ export function wkbRowsToGeoArrowBatch(
   rows: ReadonlyArray<Record<string, unknown>>,
   wkbColumn: string,
   preferredType?: GeoArrowGeometryType,
-): GeoArrowBatch {
+): GeoArrowBatch | null {
   const featureCount = rows.length;
   if (featureCount === 0) {
     return {
@@ -84,7 +84,8 @@ export function wkbRowsToGeoArrowBatch(
   const properties: Record<string, unknown>[] = new Array(featureCount);
   const wkbBytesList: (Uint8Array | null)[] = new Array(featureCount);
 
-  let dominantCode = 1; // 1 = Point, 2 = LineString, 3 = Polygon, 4 = MultiPoint, 5 = MultiLineString, 6 = MultiPolygon
+  let hasValidGeom = false;
+  let isAllPoints = true;
   let hasZ = false;
 
   for (let i = 0; i < featureCount; i++) {
@@ -102,7 +103,10 @@ export function wkbRowsToGeoArrowBatch(
     if (bytes) {
       const header = inspectWkbHeader(bytes);
       if (header) {
-        if (header.code > 0) dominantCode = header.code;
+        hasValidGeom = true;
+        if (header.code !== 1) {
+          isAllPoints = false;
+        }
         if (header.hasZ) hasZ = true;
       }
     }
@@ -110,8 +114,8 @@ export function wkbRowsToGeoArrowBatch(
 
   const dim: 2 | 3 = hasZ ? 3 : 2;
 
-  // Handle Point geometries (most common, O(1) per point without nested offsets)
-  if (dominantCode === 1) {
+  // Handle Point geometries only when all non-null geometry headers have code 1
+  if (hasValidGeom && isAllPoints) {
     const coordinates = new Float64Array(featureCount * dim);
     for (let i = 0; i < featureCount; i++) {
       const bytes = wkbBytesList[i];
@@ -148,7 +152,8 @@ export function wkbRowsToGeoArrowBatch(
       featureCount,
       properties,
     };
-    return { ...batch, bbox: computeGeoArrowBBox(batch) };
+    const bbox = computeGeoArrowBBox(batch);
+    return bbox ? { ...batch, bbox } : batch;
   }
 
   // For LineString or Polygon, decode using decodeWkb and flatten into GeoArrowBatch
@@ -172,17 +177,7 @@ export function wkbRowsToGeoArrowBatch(
   }
 
   const fc = { type: "FeatureCollection" as const, features };
-  const batch = featureCollectionToGeoArrow(fc as FeatureCollection);
-  if (batch) return batch;
-
-  // Fallback to Point batch if conversion fails
-  return {
-    geometryType: "Point",
-    coordinates: new Float64Array(0),
-    coordDimensions: 2,
-    featureCount,
-    properties,
-  };
+  return featureCollectionToGeoArrow(fc as FeatureCollection);
 }
 
 /**
@@ -196,9 +191,38 @@ export function wkbRowsToGeoArrowBatch(
 export function createOptimizedVectorLayerData(
   rows: ReadonlyArray<Record<string, unknown>>,
   wkbColumn: string,
-): { geoarrow: GeoArrowBatch; geojson: FeatureCollection<Geometry | null> } {
+): { geoarrow?: GeoArrowBatch; geojson: FeatureCollection<Geometry | null> } {
   const geoarrow = wkbRowsToGeoArrowBatch(rows, wkbColumn);
-  const geojson = geoArrowToFeatureCollection(geoarrow);
-  return { geoarrow, geojson };
+  if (geoarrow) {
+    const geojson = geoArrowToFeatureCollection(geoarrow);
+    return { geoarrow, geojson };
+  }
+
+  // If GeoArrow conversion returned null (e.g. unsupported geometry or failure),
+  // decode rows into standard GeoJSON and retain the safe GeoJSON-only rendering path.
+  const features: Feature<Geometry | null>[] = new Array(rows.length);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const props: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key === wkbColumn || value instanceof Uint8Array) continue;
+      props[key] = normalizePropertyValue(value);
+    }
+    const bytes = wkbCellToBytes(row[wkbColumn]);
+    let geometry: Geometry | null = null;
+    if (bytes) {
+      try {
+        geometry = decodeWkb(bytes);
+      } catch (err) {
+        console.warn("[GeoLibre] Skipped an undecodable WKB geometry", err);
+      }
+    }
+    features[i] = {
+      type: "Feature",
+      geometry,
+      properties: props,
+    };
+  }
+  return { geojson: { type: "FeatureCollection", features } };
 }
 

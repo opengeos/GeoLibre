@@ -102,11 +102,12 @@ export function isGeoArrowBatch(value: unknown): value is GeoArrowBatch {
 /**
  * Computes a 2D bounding box [minX, minY, maxX, maxY] for a {@link GeoArrowBatch}
  * in a single fast, vectorized pass over the flat coordinates buffer.
+ * Returns null if the batch contains no finite coordinates.
  */
-export function computeGeoArrowBBox(batch: GeoArrowBatch): [number, number, number, number] {
+export function computeGeoArrowBBox(batch: GeoArrowBatch): [number, number, number, number] | null {
   if (batch.bbox) return [...batch.bbox];
   const { coordinates, coordDimensions } = batch;
-  if (coordinates.length === 0) return [0, 0, 0, 0];
+  if (coordinates.length === 0) return null;
 
   let minX = Infinity;
   let minY = Infinity;
@@ -125,7 +126,7 @@ export function computeGeoArrowBBox(batch: GeoArrowBatch): [number, number, numb
     }
   }
 
-  return minX === Infinity ? [0, 0, 0, 0] : [minX, minY, maxX, maxY];
+  return minX === Infinity ? null : [minX, minY, maxX, maxY];
 }
 
 /**
@@ -297,8 +298,32 @@ export function geoArrowToFeatureCollection(
  * Returns null if the collection is empty, has mixed heterogeneous geometry types,
  * or contains unsupported GeometryCollections.
  */
+function extractVerticesForLineOrMultiPoint(
+  geometry: Geometry | null | undefined,
+  primaryType: "LineString" | "MultiPoint",
+): ReadonlyArray<Position> | null {
+  if (!geometry) return null;
+  if (primaryType === "LineString") {
+    if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
+      return geometry.coordinates;
+    }
+    return null;
+  }
+  if (primaryType === "MultiPoint") {
+    if (geometry.type === "MultiPoint" && Array.isArray(geometry.coordinates)) {
+      return geometry.coordinates;
+    }
+    if (geometry.type === "Point" && Array.isArray(geometry.coordinates)) {
+      // Point promoted to MultiPoint: exactly one vertex
+      return [geometry.coordinates];
+    }
+    return null;
+  }
+  return null;
+}
+
 export function featureCollectionToGeoArrow(
-  collection: FeatureCollection,
+  collection: FeatureCollection<Geometry | null>,
 ): GeoArrowBatch | null {
   const { features } = collection;
   if (!features || features.length === 0) {
@@ -399,7 +424,8 @@ export function featureCollectionToGeoArrow(
       properties,
       featureIds,
     };
-    return { ...batch, bbox: computeGeoArrowBBox(batch) };
+    const bbox = computeGeoArrowBBox(batch);
+    return bbox ? { ...batch, bbox } : batch;
   }
 
   // Handle LineString / MultiPoint (1 level of offsets)
@@ -409,9 +435,9 @@ export function featureCollectionToGeoArrow(
 
     for (let i = 0; i < featureCount; i++) {
       geomOffsets[i] = totalVertices;
-      const g = features[i].geometry;
-      if (g && (g.type === "LineString" || g.type === "MultiPoint") && Array.isArray(g.coordinates)) {
-        totalVertices += g.coordinates.length;
+      const vertices = extractVerticesForLineOrMultiPoint(features[i].geometry, primaryType);
+      if (vertices) {
+        totalVertices += vertices.length;
       }
     }
     geomOffsets[featureCount] = totalVertices;
@@ -420,9 +446,9 @@ export function featureCollectionToGeoArrow(
     let vIdx = 0;
 
     for (let i = 0; i < featureCount; i++) {
-      const g = features[i].geometry;
-      if (g && (g.type === "LineString" || g.type === "MultiPoint") && Array.isArray(g.coordinates)) {
-        for (const coord of g.coordinates) {
+      const vertices = extractVerticesForLineOrMultiPoint(features[i].geometry, primaryType);
+      if (vertices) {
+        for (const coord of vertices) {
           const o = vIdx * dim;
           coordinates[o] = Number(coord[0] ?? 0);
           coordinates[o + 1] = Number(coord[1] ?? 0);
@@ -441,7 +467,8 @@ export function featureCollectionToGeoArrow(
       properties,
       featureIds,
     };
-    return { ...batch, bbox: computeGeoArrowBBox(batch) };
+    const bbox = computeGeoArrowBBox(batch);
+    return bbox ? { ...batch, bbox } : batch;
   }
 
   // Handle Polygon (2 levels of offsets: geomOffsets -> ringOffsets -> coordinates)
@@ -494,7 +521,8 @@ export function featureCollectionToGeoArrow(
       properties,
       featureIds,
     };
-    return { ...batch, bbox: computeGeoArrowBBox(batch) };
+    const bbox = computeGeoArrowBBox(batch);
+    return bbox ? { ...batch, bbox } : batch;
   }
 
   return null;

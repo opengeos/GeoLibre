@@ -1,8 +1,7 @@
 import { performance } from "perf_hooks";
 import v8 from "v8";
 import { featureCollectionToGeoArrow, geoArrowToFeatureCollection } from "../packages/core/src/geoarrow.ts";
-import { buildTileIndexFromBinary } from "../packages/map/src/geojson-vt-index.ts";
-import { GeoJSONVT } from "@maplibre/geojson-vt";
+import { buildTileIndex, buildTileIndexFromBinary } from "../packages/map/src/geojson-vt-index.ts";
 
 function getMemoryMB() {
   if (global.gc) global.gc();
@@ -64,6 +63,12 @@ function generateComplexPolygons(n) {
   return { type: "FeatureCollection", features };
 }
 
+const TILE_OPTIONS = {
+  cluster: false,
+  clusterRadius: 50,
+  clusterMaxZoom: 14,
+};
+
 async function benchmarkWorkload(name, fc, repetitions = 5) {
   const results = {
     name,
@@ -71,8 +76,6 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
     baseline: { serializeTime: [], workerTransferTime: [], tileIndexTime: [], totalTime: [], heapMB: [] },
     geoarrow: { binaryPrepTime: [], workerTransferTime: [], tileIndexTime: [], totalTime: [], heapMB: [] }
   };
-
-  const batch = featureCollectionToGeoArrow(fc);
 
   for (let r = 0; r < repetitions; r++) {
     const m0 = getMemoryMB();
@@ -89,7 +92,10 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
     const tTransfer = performance.now();
 
     const flatFeatures = chunks.flat();
-    const vtIndex = new GeoJSONVT({ type: "FeatureCollection", features: flatFeatures }, { maxZoom: 14, indexMaxZoom: 5, indexMaxPoints: 100000 });
+    const vtIndex = buildTileIndex(
+      { type: "FeatureCollection", features: flatFeatures },
+      TILE_OPTIONS,
+    );
     const tile = vtIndex.getTile(0, 0, 0);
     const tEnd = performance.now();
     const mEnd = getMemoryMB();
@@ -105,16 +111,20 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
     const m0 = getMemoryMB();
     const t0 = performance.now();
 
+    // End-to-end accounting: measure conversion from GeoJSON to GeoArrow batch
+    const batch = featureCollectionToGeoArrow(fc);
+    const tPrep = performance.now();
+
     const clonedBatch = structuredClone(batch);
     const tTransfer = performance.now();
 
-    const vtIndex = buildTileIndexFromBinary(clonedBatch, { maxZoom: 14, indexMaxZoom: 5, indexMaxPoints: 100000 });
+    const vtIndex = buildTileIndexFromBinary(clonedBatch, TILE_OPTIONS);
     const tile = vtIndex.getTile(0, 0, 0);
     const tEnd = performance.now();
     const mEnd = getMemoryMB();
 
-    results.geoarrow.binaryPrepTime.push(0);
-    results.geoarrow.workerTransferTime.push(tTransfer - t0);
+    results.geoarrow.binaryPrepTime.push(tPrep - t0);
+    results.geoarrow.workerTransferTime.push(tTransfer - tPrep);
     results.geoarrow.tileIndexTime.push(tEnd - tTransfer);
     results.geoarrow.totalTime.push(tEnd - t0);
     results.geoarrow.heapMB.push(Math.max(0, mEnd - m0));
@@ -132,6 +142,7 @@ async function benchmarkWorkload(name, fc, repetitions = 5) {
     baselineMedianTransfer: median(results.baseline.workerTransferTime).toFixed(2),
     baselineMedianHeap: median(results.baseline.heapMB).toFixed(1),
     geoarrowMedianTotal: median(results.geoarrow.totalTime).toFixed(2),
+    geoarrowMedianPrep: median(results.geoarrow.binaryPrepTime).toFixed(2),
     geoarrowMedianTransfer: median(results.geoarrow.workerTransferTime).toFixed(2),
     geoarrowMedianHeap: median(results.geoarrow.heapMB).toFixed(1),
     speedup: (median(results.baseline.totalTime) / median(results.geoarrow.totalTime)).toFixed(2) + "x",
@@ -158,22 +169,33 @@ async function runAll() {
     summary.push(res);
     console.log(`\n[${res.name}]`);
     console.log(`  Baseline Total: ${res.baselineMedianTotal} ms | Transfer: ${res.baselineMedianTransfer} ms | Heap: ${res.baselineMedianHeap} MB`);
-    console.log(`  GeoArrow Total: ${res.geoarrowMedianTotal} ms | Transfer: ${res.geoarrowMedianTransfer} ms | Heap: ${res.geoarrowMedianHeap} MB`);
+    console.log(`  GeoArrow Total (End-to-End incl. conversion): ${res.geoarrowMedianTotal} ms (Prep: ${res.geoarrowMedianPrep} ms) | Transfer: ${res.geoarrowMedianTransfer} ms | Heap: ${res.geoarrowMedianHeap} MB`);
     console.log(`  Overall Speedup: ${res.speedup} (Worker Transfer: ${res.transferSpeedup})`);
   }
 
   // Churn / Repeated Updates test (10 repeated loads of 20,000 features)
   console.log("\n=== REPEATED UPDATE / MEMORY LEAK TEST (10 cycles x 20,000 features) ===");
+  if (!global.gc) {
+    console.warn("Notice: global.gc is unavailable; memory measurements require node --expose-gc for deterministic garbage collection.");
+  }
   const testBatch = featureCollectionToGeoArrow(generatePoints(20000));
   const initMem = getMemoryMB();
   for (let cycle = 0; cycle < 10; cycle++) {
     const cloned = structuredClone(testBatch);
-    const index = buildTileIndexFromBinary(cloned, { maxZoom: 14 });
+    const index = buildTileIndexFromBinary(cloned, TILE_OPTIONS);
     const t = index.getTile(0, 0, 0);
   }
   const finalMem = getMemoryMB();
-  console.log(`Initial Heap: ${initMem.toFixed(2)} MB -> Final Heap: ${finalMem.toFixed(2)} MB (Delta: ${(finalMem - initMem).toFixed(2)} MB)`);
-  console.log("Memory retention test: PASSED (No unbounded accumulation)");
+  const deltaMB = finalMem - initMem;
+  const RETENTION_THRESHOLD_MB = 50.0;
+  console.log(`Initial Heap: ${initMem.toFixed(2)} MB -> Final Heap: ${finalMem.toFixed(2)} MB (Delta: ${deltaMB.toFixed(2)} MB, Threshold: ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+
+  if (deltaMB > RETENTION_THRESHOLD_MB) {
+    console.error(`Memory retention test: FAILED (Delta ${deltaMB.toFixed(2)} MB exceeded threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+    process.exitCode = 1;
+  } else {
+    console.log(`Memory retention test: PASSED (Delta ${deltaMB.toFixed(2)} MB within threshold ${RETENTION_THRESHOLD_MB.toFixed(2)} MB)`);
+  }
 
   console.log("\n=== FINAL BENCHMARK SUMMARY TABLE ===");
   console.table(summary);

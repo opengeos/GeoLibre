@@ -1,4 +1,8 @@
-import { featureCollectionToGeoArrow, useAppStore } from "@geolibre/core";
+import {
+  featureCollectionToGeoArrow,
+  LARGE_VECTOR_FEATURE_THRESHOLD,
+  useAppStore,
+} from "@geolibre/core";
 import { Button, Input, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -419,6 +423,14 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   };
 
+  /**
+   * Decide whether a vector result should generate a GeoArrow batch.
+   * Uses {@link LARGE_VECTOR_FEATURE_THRESHOLD} as the single source of truth.
+   */
+  const shouldCreateGeoArrowBatch = (count: number): boolean => {
+    return count > LARGE_VECTOR_FEATURE_THRESHOLD;
+  };
+
   // Each click adds the current result to the map as a new layer. Re-adds are
   // intentional (e.g. to add the same result again under a different name), so
   // the action is not one-shot; the notice updates on every add for feedback.
@@ -427,11 +439,10 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
-    const id = addGeoJsonLayer(name, result.geojson);
-    if (featureCount > 10_000) {
-      const geoarrow = featureCollectionToGeoArrow(result.geojson);
-      if (geoarrow) updateLayer(id, { geoarrow });
-    }
+    const geoarrow = shouldCreateGeoArrowBatch(featureCount)
+      ? featureCollectionToGeoArrow(result.geojson) ?? undefined
+      : undefined;
+    addGeoJsonLayer(name, result.geojson, undefined, null, { geoarrow });
     setNotice(t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }));
   };
 
@@ -446,18 +457,12 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL query ${new Date().toLocaleTimeString()}`;
-    const id = addGeoJsonLayer(name, result.geojson);
-    // updateLayer replaces `metadata` wholesale, so merge onto whatever base
-    // metadata addGeoJsonLayer initialised (read synchronously from the store)
-    // rather than overwriting it.
-    const created = useAppStore.getState().layers.find((layer) => layer.id === id);
-    const geoarrow = featureCount > 10_000 ? featureCollectionToGeoArrow(result.geojson) : undefined;
-    updateLayer(id, {
-      ...(geoarrow ? { geoarrow } : {}),
-      metadata: {
-        ...created?.metadata,
-        ...sqlQueryLayerMetadata(lastRun.sql),
-      },
+    const geoarrow = shouldCreateGeoArrowBatch(featureCount)
+      ? featureCollectionToGeoArrow(result.geojson) ?? undefined
+      : undefined;
+    addGeoJsonLayer(name, result.geojson, undefined, null, {
+      geoarrow,
+      metadata: sqlQueryLayerMetadata(lastRun.sql),
     });
 
     setNotice(

@@ -65,6 +65,7 @@ describe("GeoArrow Desktop Pipeline", () => {
     ];
 
     const batch = wkbRowsToGeoArrowBatch(rows, "geom_wkb");
+    assert.ok(batch);
     assert.equal(batch.geometryType, "Point");
     assert.equal(batch.featureCount, 3);
     assert.equal(batch.coordDimensions, 2);
@@ -92,6 +93,7 @@ describe("GeoArrow Desktop Pipeline", () => {
       { name: "P2", geom: makeWkbPoint(3, 4, true, -50) },
     ];
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
+    assert.ok(batch);
     assert.equal(batch.coordDimensions, 3);
     assert.equal(batch.coordinates[0], 1);
     assert.equal(batch.coordinates[1], 2);
@@ -110,6 +112,7 @@ describe("GeoArrow Desktop Pipeline", () => {
     ];
 
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
+    assert.ok(batch);
     assert.equal(batch.geometryType, "LineString");
     assert.equal(batch.featureCount, 2);
     assert.deepEqual(Array.from(batch.geomOffsets ?? []), [0, 3, 5]);
@@ -124,6 +127,7 @@ describe("GeoArrow Desktop Pipeline", () => {
     ];
 
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
+    assert.ok(batch);
     assert.equal(batch.geometryType, "Polygon");
     assert.equal(batch.featureCount, 1);
     assert.ok(batch.geomOffsets);
@@ -137,6 +141,7 @@ describe("GeoArrow Desktop Pipeline", () => {
       { id: 20, geom: makeWkbPoint(6, 16) },
     ];
     const { geoarrow, geojson } = createOptimizedVectorLayerData(rows, "geom");
+    assert.ok(geoarrow);
     assert.equal(geoarrow.featureCount, 2);
     assert.equal(geojson.features.length, 2);
     assert.deepEqual(geojson.features[0].geometry, { type: "Point", coordinates: [5, 15] });
@@ -158,8 +163,47 @@ describe("GeoArrow Desktop Pipeline", () => {
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
     const elapsed = performance.now() - t0;
 
+    assert.ok(batch);
     assert.equal(batch.featureCount, COUNT);
     assert.equal(batch.coordinates.length, COUNT * 2);
     assert.ok(elapsed < 200, `10k points should decode in <200ms, took ${elapsed.toFixed(1)}ms`);
+  });
+
+  it("does not falsely infer Point fast path when last geometry is Point in mixed batch (B2)", () => {
+    const poly: [number, number][][] = [
+      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+    ];
+    // Case 1: Polygon first, Point second (previously dominantCode ended up as 1!)
+    const rowsPolygonFirst = [
+      { id: 1, geom: makeWkbPolygon(poly) },
+      { id: 2, geom: makeWkbPoint(10, 20) },
+    ];
+    const batch1 = wkbRowsToGeoArrowBatch(rowsPolygonFirst, "geom");
+    // Incompatible mixed types Polygon + Point should return null (or non-Point), NOT an invalid Point batch
+    assert.equal(batch1, null);
+
+    // Case 2: Point first, Polygon second
+    const rowsPointFirst = [
+      { id: 1, geom: makeWkbPoint(10, 20) },
+      { id: 2, geom: makeWkbPolygon(poly) },
+    ];
+    const batch2 = wkbRowsToGeoArrowBatch(rowsPointFirst, "geom");
+    assert.equal(batch2, null);
+  });
+
+  it("handles conversion failures in createOptimizedVectorLayerData by falling back to GeoJSON-only (B1)", () => {
+    const poly: [number, number][][] = [
+      [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+    ];
+    const incompatibleRows = [
+      { id: 1, geom: makeWkbPolygon(poly) },
+      { id: 2, geom: makeWkbPoint(10, 20) },
+    ];
+    const result = createOptimizedVectorLayerData(incompatibleRows, "geom");
+    assert.equal(result.geoarrow, undefined, "geoarrow must be undefined on conversion failure");
+    assert.ok(result.geojson, "geojson must be preserved");
+    assert.equal(result.geojson.features.length, 2);
+    assert.equal(result.geojson.features[0].geometry?.type, "Polygon");
+    assert.equal(result.geojson.features[1].geometry?.type, "Point");
   });
 });

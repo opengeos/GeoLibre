@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   computeGeoArrowBBox,
+  createEmptyProject,
   featureCollectionToGeoArrow,
   geoArrowToFeatureCollection,
   isGeoArrowBatch,
+  parseProject,
+  serializeProject,
   shouldUseTiledRendering,
+  useAppStore,
   type GeoArrowBatch,
 } from "@geolibre/core";
-import type { FeatureCollection, Polygon } from "geojson";
+import type { FeatureCollection, Geometry, Polygon } from "geojson";
 
 describe("GeoArrow core data structures and conversions", () => {
   it("validates GeoArrowBatch structures with isGeoArrowBatch", () => {
@@ -50,17 +54,28 @@ describe("GeoArrow core data structures and conversions", () => {
     assert.deepEqual(bbox, [-122.5, 37.6, -122.2, 37.8]);
 
     // Handles empty coordinates
-    assert.deepEqual(
+    assert.equal(
       computeGeoArrowBBox({
         geometryType: "Point",
         coordinates: new Float64Array(0),
         coordDimensions: 2,
         featureCount: 0,
       }),
-      [0, 0, 0, 0],
+      null,
     );
 
-    // Ignores NaNs and Infinities
+    // All-invalid coordinates return null
+    assert.equal(
+      computeGeoArrowBBox({
+        geometryType: "Point",
+        coordinates: new Float64Array([NaN, NaN, Infinity, -Infinity]),
+        coordDimensions: 2,
+        featureCount: 2,
+      }),
+      null,
+    );
+
+    // Ignores NaNs and Infinities when finite coordinates are present
     const withNans: GeoArrowBatch = {
       geometryType: "Point",
       coordinates: new Float64Array([NaN, Infinity, 10, 20, -Infinity, NaN]),
@@ -240,5 +255,170 @@ describe("GeoArrow core data structures and conversions", () => {
     assert.equal(shouldUseTiledRendering(smallFc), false);
     const largeFc: FeatureCollection = { type: "FeatureCollection", features: new Array(60_000) };
     assert.equal(shouldUseTiledRendering(largeFc), true);
+  });
+
+  it("converts promoted Point and MultiPoint geometries with consistent vertex offsets", () => {
+    // Collection with a Point promoted to MultiPoint and an actual MultiPoint
+    const fc: FeatureCollection<Geometry | null> = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: "p1",
+          geometry: { type: "Point", coordinates: [10, 20] },
+          properties: { name: "Single" },
+        },
+        {
+          type: "Feature",
+          id: "mp1",
+          geometry: {
+            type: "MultiPoint",
+            coordinates: [
+              [30, 40],
+              [50, 60],
+            ],
+          },
+          properties: { name: "Multi" },
+        },
+        {
+          type: "Feature",
+          id: "null1",
+          geometry: null,
+          properties: { name: "Null" },
+        },
+      ],
+    };
+
+    const batch = featureCollectionToGeoArrow(fc);
+    assert.ok(batch);
+    assert.equal(batch.geometryType, "MultiPoint");
+    assert.equal(batch.featureCount, 3);
+    assert.ok(batch.geomOffsets);
+
+    // Feature 0 (Point) -> 1 vertex [0, 1]
+    // Feature 1 (MultiPoint) -> 2 vertices [1, 3]
+    // Feature 2 (null) -> 0 vertices [3, 3]
+    assert.deepEqual(Array.from(batch.geomOffsets), [0, 1, 3, 3]);
+
+    // Total emitted coordinates must be 3 vertices * 2 dimensions = 6 numbers
+    assert.equal(batch.coordinates.length, 6);
+    assert.deepEqual(Array.from(batch.coordinates), [10, 20, 30, 40, 50, 60]);
+
+    // Lossless round trip
+    const roundTripped = geoArrowToFeatureCollection(batch);
+    assert.equal(roundTripped.features.length, 3);
+    assert.deepEqual(roundTripped.features[0].geometry, {
+      type: "MultiPoint",
+      coordinates: [[10, 20]],
+    });
+    assert.deepEqual(roundTripped.features[1].geometry, {
+      type: "MultiPoint",
+      coordinates: [
+        [30, 40],
+        [50, 60],
+      ],
+    });
+    assert.equal(roundTripped.features[2].geometry, null);
+  });
+
+  it("handles updateLayer correctly: clears stale geoarrow on geojson replacement unless explicitly provided", () => {
+    const store = useAppStore.getState();
+    const initialBatch: GeoArrowBatch = {
+      geometryType: "Point",
+      coordinates: new Float64Array([1, 2]),
+      coordDimensions: 2,
+      featureCount: 1,
+    };
+    const initialFc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: {} }],
+    };
+
+    const layerId = store.addGeoJsonLayer("test-layer", initialFc, undefined, null, {
+      geoarrow: initialBatch,
+    });
+    assert.equal(useAppStore.getState().layers.find((l) => l.id === layerId)?.geoarrow, initialBatch);
+
+    // Scenario 1: Replacing geojson without providing geoarrow clears existing geoarrow
+    const updatedFc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [100, 200] }, properties: {} }],
+    };
+    store.updateLayer(layerId, { geojson: updatedFc });
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === layerId)?.geoarrow,
+      undefined,
+      "stale geoarrow should be cleared when geojson is replaced without supplying new geoarrow",
+    );
+
+    // Scenario 2: Providing both geojson and geoarrow updates both
+    const replacementBatch: GeoArrowBatch = {
+      geometryType: "Point",
+      coordinates: new Float64Array([100, 200]),
+      coordDimensions: 2,
+      featureCount: 1,
+    };
+    store.updateLayer(layerId, { geojson: updatedFc, geoarrow: replacementBatch });
+    assert.equal(
+      useAppStore.getState().layers.find((l) => l.id === layerId)?.geoarrow,
+      replacementBatch,
+    );
+
+    // Scenario 3: Patching unrelated fields (opacity) preserves existing geoarrow
+    store.updateLayer(layerId, { opacity: 0.5 });
+    const finalLayer = useAppStore.getState().layers.find((l) => l.id === layerId);
+    assert.equal(finalLayer?.opacity, 0.5);
+    assert.equal(finalLayer?.geoarrow, replacementBatch, "unrelated patch must preserve existing geoarrow");
+
+    // Clean up
+    store.removeLayer(layerId);
+  });
+
+  it("omits runtime geoarrow during project serialization and safely normalizes during hydration", () => {
+    const batch: GeoArrowBatch = {
+      geometryType: "Point",
+      coordinates: new Float64Array([10, 20]),
+      coordDimensions: 2,
+      featureCount: 1,
+    };
+    const project = createEmptyProject();
+    project.layers.push({
+      id: "lyr-test-serialize",
+      name: "Vector Layer",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: {} as any,
+      metadata: {},
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: {} }],
+      },
+      geoarrow: batch,
+    });
+
+    const json = serializeProject(project);
+    const parsedRaw = JSON.parse(json);
+    const serializedLayer = parsedRaw.layers.find((l: any) => l.id === "lyr-test-serialize");
+
+    assert.ok(serializedLayer, "layer must be serialized");
+    assert.equal(serializedLayer.geoarrow, undefined, "runtime geoarrow must be omitted from project JSON");
+    assert.ok(serializedLayer.geojson, "geojson must be preserved in project JSON");
+
+    // Hydration check via parseProject
+    const restored = parseProject(json);
+    const restoredLayer = restored.layers.find((l) => l.id === "lyr-test-serialize");
+    assert.ok(restoredLayer);
+    assert.equal(restoredLayer.geoarrow, undefined, "restored layer without geoarrow is safe GeoJSON-only layer");
+
+    // Corrupted non-GeoArrowBatch value is discarded during normalize
+    const corruptedJson = JSON.stringify({
+      ...parsedRaw,
+      layers: [{ ...serializedLayer, geoarrow: { corrupted: true } }],
+    });
+    const restoredCorrupted = parseProject(corruptedJson);
+    const normalizedCorrupted = restoredCorrupted.layers.find((l) => l.id === "lyr-test-serialize");
+    assert.equal(normalizedCorrupted?.geoarrow, undefined, "invalid geoarrow must be discarded during hydration");
   });
 });

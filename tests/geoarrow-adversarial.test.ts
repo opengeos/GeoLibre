@@ -27,7 +27,7 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
       properties: [],
     };
     assert.equal(isGeoArrowBatch(emptyBatch), true);
-    assert.deepEqual(computeGeoArrowBBox(emptyBatch), [0, 0, 0, 0]);
+    assert.equal(computeGeoArrowBBox(emptyBatch), null);
 
     const fc = geoArrowToFeatureCollection(emptyBatch);
     assert.equal(fc.features.length, 0);
@@ -162,6 +162,7 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
       { id: 2, geom: "invalid-base64-!@#" },
     ];
     const batch = wkbRowsToGeoArrowBatch(rows, "geom");
+    assert.ok(batch);
     assert.equal(batch.featureCount, 2);
     // Malformed WKB results in NaN coordinates, not a fatal crash
     assert.ok(Number.isNaN(batch.coordinates[0]));
@@ -171,6 +172,7 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
   it("Scenario 10: Missing geometry column in WKB rows", () => {
     const rows = [{ id: 1, name: "NoGeom" }];
     const batch = wkbRowsToGeoArrowBatch(rows, "non_existent_column");
+    assert.ok(batch);
     assert.equal(batch.featureCount, 1);
     assert.ok(Number.isNaN(batch.coordinates[0]));
   });
@@ -189,6 +191,7 @@ describe("GeoArrow Adversarial & Failure-Injection Test Matrix", () => {
     };
 
     const bbox = computeGeoArrowBBox(batch);
+    assert.ok(bbox);
     assert.equal(bbox[0], -180.0);
     assert.equal(bbox[2], 1e15);
 
