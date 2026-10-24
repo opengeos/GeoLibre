@@ -29,6 +29,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
+import { openReplyLink } from "../../lib/assistant/reply-links";
 import { openExternalLink } from "../../lib/open-external";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
 import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
@@ -409,18 +410,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
-  // A link in a reply would navigate the app's own webview: on the desktop the
-  // page replaces GeoLibre with no way back, on the web the tab leaves it. Open
-  // links outside instead (system browser or new tab, http(s) only).
+  // Links in a reply open outside the app instead of navigating its webview
+  // (system browser on the desktop, new tab on the web); see openReplyLink.
   useEffect(() => {
     const el = outputRef.current;
     if (!el) return;
     const onClick = (event: MouseEvent) => {
-      const link =
-        event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
-      if (!link) return;
-      event.preventDefault();
-      void openExternalLink(link.href);
+      openReplyLink(event, (url) => void openExternalLink(url));
     };
     el.addEventListener("click", onClick);
     return () => el.removeEventListener("click", onClick);
