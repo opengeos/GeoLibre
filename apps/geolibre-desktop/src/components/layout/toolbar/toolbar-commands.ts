@@ -119,7 +119,7 @@ export interface ToolbarCommandContext {
   addLayer: AddLayerHandlers;
   openAddDataKind: (kind: AddDataKind) => void;
   osmPbf: { setDialogOpen: (open: boolean) => void };
-  tilePackage: { setDialogOpen: (open: boolean) => void };
+  tilePackage: { busy: boolean; setDialogOpen: (open: boolean) => void };
   handleOpenPlanetaryComputer: () => void;
   panels: ToolbarPanels;
   consent: { handleToggleDirections: () => void };
@@ -351,7 +351,12 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       id: "add.vtpk",
       title: t("toolbar.command.addVtpkLayer"),
       group: t("toolbar.commandGroup.addData"),
-      run: () => tilePackage.setDialogOpen(true),
+      run: () => {
+        // Same guard as the Add Data menu entry: a second open would supersede
+        // the first, which would then never add its layer.
+        if (tilePackage.busy) return;
+        tilePackage.setDialogOpen(true);
+      },
     },
     // Sources the Mac App Store build hides in the Add Data menu must not be
     // reachable through the palette either.

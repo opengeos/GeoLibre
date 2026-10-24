@@ -134,13 +134,22 @@ export async function openTilePackage(input: string | File): Promise<OpenedTileP
 }
 
 /**
- * Forget a package opened from a local file, so its `File` can be freed. Does
- * nothing for a package at a URL: those are keyed by the URL, which two layers
- * can share, and the protocol simply opens one again if it is asked for.
+ * Forget a package that was opened but will not be used (the open was
+ * cancelled, or no layer could be built from it), so its reader and cached
+ * directory, and for a local file the `File` itself, can be freed.
+ *
+ * A package at a URL is keyed by the URL, which another layer may share, so it
+ * is kept while any layer on the map uses it. The protocol simply opens it
+ * again if it is asked for later.
  */
 export function releaseTilePackage(key: string): void {
   claimedLocalKeys.delete(key);
-  if (isLocalTilePackageKey(key)) activeProtocol?.tiles.delete(key);
+  if (!activeProtocol) return;
+  if (!isLocalTilePackageKey(key)) {
+    const inUse = useAppStore.getState().layers.some((layer) => layer.metadata?.packageKey === key);
+    if (inUse) return;
+  }
+  activeProtocol.tiles.delete(key);
 }
 
 /**
