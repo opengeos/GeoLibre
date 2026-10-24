@@ -93,6 +93,31 @@ export const GITHUB_URL = "https://github.com/opengeos/GeoLibre";
 // out of the box on both the desktop and web builds.
 export const DEFAULT_OSM_PBF_URL = "https://data.source.coop/giswqs/opengeos/LasVegas.osm.pbf";
 
+/**
+ * Sample ArcGIS tile packages for the Add VTPK/TPKX dialog: vector `.vtpk` and
+ * raster `.tpkx` files on Source Cooperative, which serves them with the range
+ * requests and CORS headers the in-browser reader needs. `labelKey` is a
+ * `toolbar.item` i18n key.
+ */
+export const TILE_PACKAGE_SAMPLES = [
+  {
+    labelKey: "toolbar.item.vtpkSampleLeon",
+    url: "https://data.source.coop/gishub/vtpk/leon.vtpk",
+  },
+  {
+    labelKey: "toolbar.item.vtpkSampleWorld",
+    url: "https://data.source.coop/gishub/vtpk/world.vtpk",
+  },
+  {
+    labelKey: "toolbar.item.vtpkSampleSanFrancisco",
+    url: "https://data.source.coop/gishub/vtpk/sanfrancisco.tpkx",
+  },
+  {
+    labelKey: "toolbar.item.vtpkSampleUsa",
+    url: "https://data.source.coop/gishub/vtpk/usa.tpkx",
+  },
+] as const;
+
 // Static command metadata for the menus that map a single id to a label. These
 // drive the command palette so it stays in sync with the menus without each
 // action being defined twice. The `run` closures are built in the component

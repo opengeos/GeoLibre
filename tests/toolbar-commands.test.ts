@@ -68,6 +68,7 @@ const FULL_REGISTRY_IDS = [
   "add.vector",
   "add.raster",
   "add.osm-pbf",
+  "add.vtpk",
   "add.delimited-text",
   "add.cad",
   "add.gpx",
