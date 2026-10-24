@@ -17,8 +17,11 @@ export function useTileProtocols(): void {
     // Super-Overlay tile URLs must resolve in a session that only reopens it,
     // which is exactly when nothing has called registerKmlSuperOverlay yet.
     void registerKmlSuperOverlayProtocol();
-    if (!isTauri()) return;
+    // MBTiles also run in the browser (sql.js), so its protocol is not
+    // desktop-gated; a reopened project then gets a clear "add it again" tile
+    // error instead of an unknown-protocol failure.
     registerMbtilesProtocol();
+    if (!isTauri()) return;
     // A reopened project's PostGIS tile layers resolve their connection from
     // the saved list, so the protocol must exist before any Add Data visit.
     registerPostgisTilesProtocol();

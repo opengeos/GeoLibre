@@ -221,8 +221,8 @@ explains which is which and when to use each.
 ## Desktop-only features in the browser
 
 Some capabilities require the desktop app and are unavailable in the browser
-build: local filesystem dialogs, local MBTiles, local raster file reads, and
-project save/open. If one of these is missing, you are likely running GeoLibre
+build: local filesystem dialogs, local raster file reads, and project
+save/open. If one of these is missing, you are likely running GeoLibre
 Web rather than the desktop app. See [Getting Started](../getting-started.md)
 for how the web, desktop, and Jupyter builds differ.
 

@@ -948,6 +948,7 @@
       "readError": "Could not read MBTiles file.",
       "errorChooseFile": "Choose an MBTiles file.",
       "errorSourceLayers": "Enter at least one vector source layer.",
+      "errorTooLarge": "This MBTiles file is {{size}} MB, which is more than the {{limit}} MB the browser can open. Use GeoLibre Desktop for larger files.",
       "tileType": "Tile type",
       "sourceLayers": "Source layers",
       "sourceLayersPlaceholder": "building, place, water"
