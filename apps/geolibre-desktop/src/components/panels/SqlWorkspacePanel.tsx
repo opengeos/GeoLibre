@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { featureCollectionToGeoArrow, useAppStore } from "@geolibre/core";
 import { Button, Input, ScrollArea, Select, cn } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -427,7 +427,11 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
-    addGeoJsonLayer(name, result.geojson);
+    const id = addGeoJsonLayer(name, result.geojson);
+    if (featureCount > 10_000) {
+      const geoarrow = featureCollectionToGeoArrow(result.geojson);
+      if (geoarrow) updateLayer(id, { geoarrow });
+    }
     setNotice(t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }));
   };
 
@@ -447,12 +451,15 @@ export function SqlWorkspacePanel() {
     // metadata addGeoJsonLayer initialised (read synchronously from the store)
     // rather than overwriting it.
     const created = useAppStore.getState().layers.find((layer) => layer.id === id);
+    const geoarrow = featureCount > 10_000 ? featureCollectionToGeoArrow(result.geojson) : undefined;
     updateLayer(id, {
+      ...(geoarrow ? { geoarrow } : {}),
       metadata: {
         ...created?.metadata,
         ...sqlQueryLayerMetadata(lastRun.sql),
       },
     });
+
     setNotice(
       t("toolbar.sqlWorkspace.addedAsQueryLayer", {
         count: featureCount,

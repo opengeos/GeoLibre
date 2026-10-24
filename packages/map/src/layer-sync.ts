@@ -511,7 +511,7 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
       // The tiled path cuts Web Mercator tiles on the main thread; in another
       // map CRS only MapLibre's own GeoJSON source, which projects in the
       // workers, lands features in the right place.
-      if (shouldUseTiledRendering(layer.geojson) && !getActiveMapCrs(map)) {
+      if (shouldUseTiledRendering(layer.geoarrow ?? layer.geojson) && !getActiveMapCrs(map)) {
         syncGeoJsonVtLayer(map, layer, beforeId);
       } else {
         syncGeoJsonLayer(map, layer, beforeId);
@@ -1808,19 +1808,20 @@ function syncGeoJsonLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
  */
 function syncGeoJsonVtLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
-  const profile = detectGeometryProfile(layer.geojson!);
+  const data = layer.geoarrow ?? layer.geojson!;
+  const profile = detectGeometryProfile(data);
   const { renderer, wantCluster, clusterRadius, clusterMaxZoom } = resolveVectorRenderMode(
     layer,
     profile,
   );
-  const sourceGeoJson = wantCluster ? authoredClusterInput(layer, map.getZoom()) : layer.geojson!;
+  const sourceData = wantCluster ? authoredClusterInput(layer, map.getZoom()) : data;
 
   ensureGeoJsonVtProtocol();
 
   // (Re)build the tile index when the data or clustering config changed. A
   // rebuild also means cached tiles are stale, so drop the source to force
   // MapLibre to refetch them.
-  const rebuilt = registerGeoJsonVtSource(layer.id, sourceGeoJson, {
+  const rebuilt = registerGeoJsonVtSource(layer.id, sourceData, {
     cluster: wantCluster,
     clusterRadius,
     clusterMaxZoom,

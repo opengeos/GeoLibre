@@ -279,3 +279,6 @@ export {
   patchJpegCogSource,
   withJpegTablesPatch,
 } from "./cog-jpeg-tables";
+
+export * from "./geoarrow";
+
