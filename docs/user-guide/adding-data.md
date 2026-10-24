@@ -21,7 +21,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **LandXML Layer** | Loads a LandXML file or URL and imports selected TIN surfaces, horizontal alignments, vertical profile metadata, and survey points. Projected coordinates are reprojected from the selected or embedded source CRS. |
 | **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
-| **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
+| **MBTiles Layer** | Loads a local MBTiles tile archive. The desktop app reads it from disk; the browser build opens it in memory with SQLite/WASM (sql.js), so it is not kept after a reload. Files over 1 GB are refused in the browser; use the desktop app for those. |
 | **OSM PBF Layer** | Reads an OpenStreetMap `.osm.pbf` extract and adds the features you select from it. |
 | **ICESat-2 / GEDI** | Spaceborne LiDAR footprints from an ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) HDF5 granule, or ICESat-2 ATL03 photons (read from the file on demand for the current map view, so multi-gigabyte granules need no download into memory; pick the surface, the lowest signal confidence and a photon cap), from a local file or the sample granules on Source Cooperative (or found and downloaded with [NASA Earthaccess](web-services.md#nasa-earthaccess)), added as a point layer colored by the product's main field. Open **Layer actions → Along-track profile** for distance along a beam against ground and canopy top (ICESat-2 ATL08, GEDI L2A/L2B) or any field; it is linked to the map, so hovering marks the footprint and clicking selects it. |
 
@@ -199,4 +199,4 @@ Three of them, grouped under **Plugins → Web Services**, search public dataset
 Each panel shows how many of the total results you are looking at and offers **Load more** to page further. See [Web Services](web-services.md) for the other browsers in that submenu.
 
 !!! note "Browser vs desktop"
-    URL-based sources work in both the browser and the desktop app. Local file dialogs, local MBTiles, local raster reads, File Geodatabases, PostgreSQL, and SQL Server require the desktop app. See [Getting Started](../getting-started.md).
+    URL-based sources work in both the browser and the desktop app. Local file dialogs, local raster reads, File Geodatabases, PostgreSQL, and SQL Server require the desktop app. See [Getting Started](../getting-started.md).
