@@ -1,4 +1,6 @@
 import type { FeatureCollection } from "geojson";
+import type { GeoArrowBatch } from "./geoarrow";
+export type { GeoArrowBatch };
 import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [
@@ -783,15 +785,24 @@ export function styleValue<K extends keyof LayerStyle>(style: LayerStyle, key: K
 export const LARGE_VECTOR_FEATURE_THRESHOLD = 50_000;
 
 /**
- * Decide whether a GeoJSON layer should use the tiled rendering path.
+ * Decide whether a vector layer should use the tiled rendering path.
  *
- * @param geojson - The layer's feature collection (may be undefined for
+ * @param data - The layer's feature collection or GeoArrow batch (may be undefined for
  *   non-vector layers).
- * @returns `true` when the collection exceeds
- *   {@link LARGE_VECTOR_FEATURE_THRESHOLD} features.
+ * @returns `true` when the feature count exceeds
+ *   {@link LARGE_VECTOR_FEATURE_THRESHOLD}.
  */
-export function shouldUseTiledRendering(geojson: GeoJSON.FeatureCollection | undefined): boolean {
-  return (geojson?.features.length ?? 0) > LARGE_VECTOR_FEATURE_THRESHOLD;
+export function shouldUseTiledRendering(
+  data: GeoJSON.FeatureCollection | GeoArrowBatch | undefined,
+): boolean {
+  if (!data) return false;
+  if ("featureCount" in data && typeof data.featureCount === "number") {
+    return data.featureCount > LARGE_VECTOR_FEATURE_THRESHOLD;
+  }
+  if ("features" in data && Array.isArray(data.features)) {
+    return data.features.length > LARGE_VECTOR_FEATURE_THRESHOLD;
+  }
+  return false;
 }
 
 /**
@@ -1281,6 +1292,11 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Optional binary GeoArrow representation for high-performance vector rendering,
+   * zero-copy Web Worker vector tiling, and compact in-memory storage.
+   */
+  geoarrow?: GeoArrowBatch;
   /** A SQL Server write needs a successful table reread before it may be submitted again. */
   mssqlWritebackPending?: boolean;
   /**

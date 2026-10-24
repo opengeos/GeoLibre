@@ -1,6 +1,12 @@
 import bbox from "@turf/bbox";
 import type { FeatureCollection, Geometry } from "geojson";
-import { type GeoLibreLayer, horizontalBbox } from "@geolibre/core";
+import {
+  type GeoLibreLayer,
+  horizontalBbox,
+  isGeoArrowBatch,
+  computeGeoArrowBBox,
+  type GeoArrowBatch,
+} from "@geolibre/core";
 
 export type GeometryKind = "point" | "line" | "polygon";
 
@@ -10,13 +16,25 @@ export interface GeometryProfile {
   hasPolygon: boolean;
 }
 
-export function detectGeometryProfile(fc: FeatureCollection): GeometryProfile {
+export function detectGeometryProfile(
+  data: FeatureCollection | GeoArrowBatch | undefined,
+): GeometryProfile {
   const profile: GeometryProfile = {
     hasPoint: false,
     hasLine: false,
     hasPolygon: false,
   };
-  for (const feature of fc.features) {
+  if (!data) return profile;
+
+  if (isGeoArrowBatch(data)) {
+    const t = data.geometryType;
+    if (t === "Point" || t === "MultiPoint") profile.hasPoint = true;
+    if (t === "LineString" || t === "MultiLineString") profile.hasLine = true;
+    if (t === "Polygon" || t === "MultiPolygon") profile.hasPolygon = true;
+    return profile;
+  }
+
+  for (const feature of data.features ?? []) {
     if (feature.geometry) addGeometryToProfile(profile, feature.geometry);
   }
   return profile;
@@ -45,6 +63,10 @@ export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, n
   if (layer.metadata.viewportLoading === true) {
     const stored = storedLayerBounds(layer);
     if (stored) return stored;
+  }
+  if (layer.geoarrow) {
+    const box = computeGeoArrowBBox(layer.geoarrow);
+    if (box) return box;
   }
   if (layer.geojson?.features?.length) {
     // A collection whose features all carry a null geometry (e.g. a delimited

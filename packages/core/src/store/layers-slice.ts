@@ -26,6 +26,7 @@ import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
 import { identifyStateWithoutLayers } from "./session-slice";
 import {
   DEFAULT_LAYER_STYLE,
+  shouldUseTiledRendering,
   type AddTileLayerOptions,
   type AttributeFormConfig,
   type EditorTrackingConfig,
@@ -37,6 +38,7 @@ import {
   type LayerStyle,
   type LayerVirtualField,
 } from "../types";
+import { featureCollectionToGeoArrow, type GeoArrowBatch } from "../geoarrow";
 import { hasSimpleStyleProperties } from "../vector-color";
 import {
   cascadeJoinRefreshForRemoved,
@@ -164,6 +166,7 @@ export interface LayersSlice {
     geojson: FeatureCollection,
     sourcePath?: string,
     beforeLayerId?: string | null,
+    extra?: { geoarrow?: GeoArrowBatch; metadata?: Record<string, unknown> },
   ) => string;
   /**
    * Add a georeferenced image overlay (a MapLibre `image` source rendered as a
@@ -292,7 +295,22 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   updateLayer: (id, patch) =>
     set((s) => {
-      let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
+      let layers = s.layers.map((l) => {
+        if (l.id !== id) return l;
+        const updated = { ...l, ...patch };
+        // If a patch explicitly replaces geojson but does not explicitly supply geoarrow,
+        // clear the existing GeoArrow batch to avoid retaining stale geometry.
+        if (patch.geojson !== undefined && !("geoarrow" in patch)) {
+          delete updated.geoarrow;
+        } else if ("geoarrow" in patch) {
+          if (patch.geoarrow === null || patch.geoarrow === undefined) {
+            delete updated.geoarrow;
+          } else {
+            updated.geoarrow = patch.geoarrow;
+          }
+        }
+        return updated;
+      });
       // A geojson replacement re-derives the layer's derived columns
       // (persistent joins, then virtual fields): on the layer itself
       // (file reload, attribute edits, processing writes — derived
@@ -460,8 +478,17 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       return { layers: normalized, isDirty: true };
     }),
 
-  addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null) => {
+  addGeoJsonLayer: (name, geojson, sourcePath, beforeLayerId = null, extra) => {
     const id = uuidv4();
+    const shouldBatch = shouldUseTiledRendering(geojson);
+    let geoarrow = extra?.geoarrow;
+    if (!geoarrow && shouldBatch) {
+      try {
+        geoarrow = featureCollectionToGeoArrow(geojson) ?? undefined;
+      } catch (err) {
+        console.warn("[GeoLibre] GeoArrow batch conversion failed; falling back to GeoJSON", err);
+      }
+    }
     const layer: GeoLibreLayer = {
       id,
       name,
@@ -478,8 +505,9 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
           simpleStyleEnabled: hasSimpleStyleProperties(geojson),
         },
       }),
-      metadata: {},
+      metadata: { ...extra?.metadata },
       geojson,
+      ...(geoarrow ? { geoarrow } : {}),
       sourcePath,
     };
     get().addLayer(layer, beforeLayerId);

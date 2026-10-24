@@ -84,6 +84,7 @@ import {
   scrubCommentsForRemovedLayers,
   scrubLegendForRemovedLayers,
 } from "./layer-ref-scrub";
+import { isGeoArrowBatch } from "./geoarrow";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -1853,6 +1854,12 @@ function withoutZarrHeaders(layer: GeoLibreLayer): GeoLibreLayer {
   return { ...layer, source };
 }
 
+function withoutRuntimeGeoArrow(layer: GeoLibreLayer): GeoLibreLayer {
+  if (layer.geoarrow === undefined) return layer;
+  const { geoarrow: _geoarrow, ...rest } = layer;
+  return rest;
+}
+
 /**
  * Strip the session-only state every serializer must leave out, whether or not
  * the project came through `projectFromStore`.
@@ -1861,7 +1868,7 @@ function withoutZarrHeaders(layer: GeoLibreLayer): GeoLibreLayer {
  * @returns The layer as it may be written to a project file.
  */
 function portableLayer(layer: GeoLibreLayer): GeoLibreLayer {
-  return withoutZarrHeaders(withoutLocalRasterBytes(layer));
+  return withoutRuntimeGeoArrow(withoutZarrHeaders(withoutLocalRasterBytes(layer)));
 }
 
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
@@ -1874,6 +1881,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     capabilities: rawCapabilities,
     filterExpression: rawFilterExpression,
     descriptiveMetadata: rawDescriptiveMetadata,
+    geoarrow: rawGeoarrow,
     ...rest
   } = layer;
   const capabilities = normalizeLayerCapabilities(rawCapabilities);
@@ -1886,6 +1894,8 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
+  // Discard invalid or non-GeoArrowBatch values during hydration; safe GeoJSON layer retained
+  const geoarrow = isGeoArrowBatch(rawGeoarrow) ? rawGeoarrow : undefined;
   return {
     ...rest,
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
@@ -1896,6 +1906,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     ...(capabilities ? { capabilities } : {}),
     ...(filterExpression ? { filterExpression } : {}),
     ...(descriptiveMetadata ? { descriptiveMetadata } : {}),
+    ...(geoarrow ? { geoarrow } : {}),
   };
 }
 

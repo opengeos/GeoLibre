@@ -442,17 +442,10 @@ export function SqlWorkspacePanel() {
     setError(null);
     const featureCount = result.geojson.features.length;
     const name = layerName.trim() || `SQL query ${new Date().toLocaleTimeString()}`;
-    const id = addGeoJsonLayer(name, result.geojson);
-    // updateLayer replaces `metadata` wholesale, so merge onto whatever base
-    // metadata addGeoJsonLayer initialised (read synchronously from the store)
-    // rather than overwriting it.
-    const created = useAppStore.getState().layers.find((layer) => layer.id === id);
-    updateLayer(id, {
-      metadata: {
-        ...created?.metadata,
-        ...sqlQueryLayerMetadata(lastRun.sql),
-      },
+    addGeoJsonLayer(name, result.geojson, undefined, null, {
+      metadata: sqlQueryLayerMetadata(lastRun.sql),
     });
+
     setNotice(
       t("toolbar.sqlWorkspace.addedAsQueryLayer", {
         count: featureCount,
