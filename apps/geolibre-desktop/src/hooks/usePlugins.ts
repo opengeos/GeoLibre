@@ -4,6 +4,9 @@ import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
 import { ensurePluginBlocklistLoaded, hasPluginBlocklistEntries } from "../lib/plugin-blocklist";
 import {
   addRasterToMap,
+  openControlPanel,
+  closeControlPanel,
+  isControlPanelVisible,
   readRasterWindow,
   setRasterRenderEngine,
   addZarrRasterLayer,
@@ -1195,6 +1198,9 @@ export function useTimeSliderAutoClose(mapControllerRef: RefObject<MapEngine | n
  * engine hooks.
  */
 const appApiHost: AppApiHost = {
+  openControlPanel,
+  closeControlPanel,
+  isControlPanelVisible,
   plugins: manager,
   projectPluginStateSnapshot,
   persistProjectPluginState,

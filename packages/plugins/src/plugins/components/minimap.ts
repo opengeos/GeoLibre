@@ -2,10 +2,15 @@
 // Split out of maplibre-components.ts (opengeos/GeoLibre#2633).
 
 import type { MinimapControl, MinimapControlOptions } from "maplibre-gl-components";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreMapControlPosition,
+  GeoLibreMinimapOptions,
+} from "../../types";
 import { getComponentsConstructors, type MinimapControlConstructor } from "./constructors";
 
 const minimapControlPosition: GeoLibreMapControlPosition = "bottom-left";
+const minimapOptionKeys = ["zoomOffset", "width", "height"] as const;
 
 const MINIMAP_OPTIONS = {
   className: "geolibre-minimap-control",
@@ -21,11 +26,32 @@ let minimapControl: MinimapControl | null = null;
 let minimapControlMounted = false;
 let minimapBasemapUnsubscribe: (() => void) | null = null;
 let minimapPanelVisible = false;
+let minimapRequest = 0;
+let minimapOptions = defaultMinimapOptions();
 const minimapPanelListeners = new Set<() => void>();
 
 // Standalone Minimap control, toggled from the Controls menu.
-export function openMinimapPanel(app: GeoLibreAppAPI): void {
-  void openStandaloneMinimapControl(app);
+export function openMinimapPanel(app: GeoLibreAppAPI, options?: GeoLibreMinimapOptions): void {
+  const next = { ...minimapOptions };
+  for (const key of minimapOptionKeys) {
+    const value = options?.[key];
+    if (value === undefined) continue;
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      (key !== "zoomOffset" && value <= 0)
+    ) {
+      throw new Error(
+        `Minimap ${key} must be a finite ${key === "zoomOffset" ? "number" : "positive number"}`,
+      );
+    }
+    next[key] = value;
+  }
+  if (minimapOptionKeys.some((key) => next[key] !== minimapOptions[key])) {
+    removeMinimapControl(app);
+    minimapOptions = next;
+  }
+  void openStandaloneMinimapControl(app, ++minimapRequest);
 }
 
 export function closeMinimapPanel(app: GeoLibreAppAPI): void {
@@ -41,8 +67,12 @@ export function subscribeMinimapPanel(listener: () => void): () => void {
   return () => minimapPanelListeners.delete(listener);
 }
 
-async function openStandaloneMinimapControl(app: GeoLibreAppAPI): Promise<boolean> {
+async function openStandaloneMinimapControl(
+  app: GeoLibreAppAPI,
+  request: number,
+): Promise<boolean> {
   const { MinimapControl: MinimapControlClass } = await getComponentsConstructors();
+  if (request !== minimapRequest) return false;
 
   minimapControl ??= createMinimapControl(MinimapControlClass, app.getActiveBasemap());
 
@@ -61,10 +91,11 @@ async function openStandaloneMinimapControl(app: GeoLibreAppAPI): Promise<boolea
     });
   }
 
+  const control = minimapControl;
   setTimeout(() => {
-    if (!minimapControl) return;
-    minimapControl.show();
-    minimapControl.expand();
+    if (request !== minimapRequest || minimapControl !== control) return;
+    control.show();
+    control.expand();
     setMinimapPanelVisible(true);
   }, 0);
   return true;
@@ -103,10 +134,11 @@ async function refreshMinimapBasemap(app: GeoLibreAppAPI): Promise<void> {
     return;
   }
 
+  const control = minimapControl;
   setTimeout(() => {
-    if (!minimapControl) return;
-    minimapControl.show();
-    if (!wasCollapsed) minimapControl.expand();
+    if (minimapControl !== control) return;
+    control.show();
+    if (!wasCollapsed) control.expand();
   }, 0);
 }
 
@@ -116,12 +148,27 @@ function createMinimapControl(
 ): MinimapControl {
   const control = new MinimapControlClass({
     ...MINIMAP_OPTIONS,
+    ...minimapOptions,
     style: basemapStyleUrl,
   });
   return control;
 }
 
 export function teardownMinimapControl(app: GeoLibreAppAPI): void {
+  ++minimapRequest;
+  removeMinimapControl(app);
+  minimapOptions = defaultMinimapOptions();
+}
+
+function defaultMinimapOptions(): Required<GeoLibreMinimapOptions> {
+  return {
+    zoomOffset: MINIMAP_OPTIONS.zoomOffset,
+    width: MINIMAP_OPTIONS.width,
+    height: MINIMAP_OPTIONS.height,
+  };
+}
+
+function removeMinimapControl(app: GeoLibreAppAPI): void {
   minimapBasemapUnsubscribe?.();
   minimapBasemapUnsubscribe = null;
   if (minimapControl && minimapControlMounted) {
