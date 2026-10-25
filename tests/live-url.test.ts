@@ -225,3 +225,47 @@ test("failed or declined activation preserves untouched inbound URL parameters f
     assert.equal(url.params().has("inbound"), false, "explicit deactivation clears the link");
   }
 });
+
+test("replacing a plugin retains retired names until host cleanup without granting writes to them", async () => {
+  for (const cleanup of ["deactivate", "unregister", "publish"] as const) {
+    const url = address("?other=keep");
+    const manager = new PluginManager();
+    const host = { setUrlParameters: setPluginUrlParameters } as GeoLibreAppAPI;
+    let scoped!: GeoLibreAppAPI;
+    const plugin: GeoLibrePlugin = {
+      id: "replace",
+      name: "Replace",
+      version: "1.0.0",
+      urlParameterNames: ["old"],
+      activate(app) {
+        scoped = app;
+      },
+      deactivate() {},
+    };
+    manager.register(plugin);
+    await manager.activate(plugin.id, host);
+    scoped.setUrlParameters?.(new URLSearchParams("old=1"));
+    manager.register({
+      ...plugin,
+      urlParameterNames: ["new"],
+      handleUrlParameters(app) {
+        scoped = app;
+      },
+    });
+    assert.equal(url.params().get("old"), "1", "registration has no host for cleanup");
+    if (cleanup === "publish") {
+      await manager.handleUrlParameters(new URLSearchParams("new=initial"), host);
+      scoped.setUrlParameters?.(new URLSearchParams("old=forbidden&new=2"));
+      assert.equal(url.params().get("new"), "2");
+    } else {
+      manager[cleanup](plugin.id, host);
+    }
+    assert.equal(url.params().has("old"), false, cleanup);
+    assert.equal(url.params().get("other"), "keep");
+    // Cleanup released the retired claim so a different plugin can own it.
+    manager.register({ ...plugin, id: "next" });
+    await manager.activate("next", host);
+    scoped.setUrlParameters?.(new URLSearchParams("old=next"));
+    assert.equal(url.params().get("old"), "next");
+  }
+});

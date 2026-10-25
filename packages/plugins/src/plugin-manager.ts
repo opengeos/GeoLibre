@@ -98,7 +98,18 @@ export class PluginManager {
     const write = app.setUrlParameters as
       | ((params: URLSearchParams, names: readonly string[]) => void)
       | undefined;
-    write?.(params, this.writableUrlParameterNamesById.get(id) ?? []);
+    if (!write) return;
+    const ownedNames = this.writableUrlParameterNamesById.get(id) ?? [];
+    const declaredNames = new Set(this.urlParameterNamesById.get(id) ?? []);
+    const currentNames = ownedNames.filter((name) => declaredNames.has(name));
+    // Retired names remain reserved until this host-backed write clears them,
+    // but a replacement may only publish its current declarations.
+    const currentParams = new URLSearchParams();
+    for (const name of currentNames) {
+      for (const value of params.getAll(name)) currentParams.append(name, value);
+    }
+    write(currentParams, ownedNames);
+    this.writableUrlParameterNamesById.set(id, currentNames);
   }
 
   private clearUrlParameters(id: string, app: GeoLibreAppAPI, publishedOnly = false): void {
@@ -152,10 +163,12 @@ export class PluginManager {
         `Plugin '${plugin.id}' cannot own URL parameters already declared by another plugin: ${conflictingNames.join(", ")}`,
       );
     }
-    this.writableUrlParameterNamesById.set(
-      plugin.id,
-      requestedNames.filter((name) => !claimed.has(name)),
-    );
+    this.writableUrlParameterNamesById.set(plugin.id, [
+      ...new Set([
+        ...(this.writableUrlParameterNamesById.get(plugin.id) ?? []),
+        ...requestedNames.filter((name) => !claimed.has(name)),
+      ]),
+    ]);
     const defaultPosition = plugin.getMapControlPosition?.();
     if (defaultPosition) {
       this.defaultMapControlPositions.set(plugin.id, defaultPosition);
