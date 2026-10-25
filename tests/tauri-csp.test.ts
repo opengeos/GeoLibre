@@ -281,11 +281,9 @@ describe("desktop CSP style-src (tauri.conf.json)", () => {
     const conf = JSON.parse(
       readFileSync(path.join(ROOT, "apps/geolibre-desktop/src-tauri/tauri.conf.json"), "utf8"),
     ) as { app: { security: { dangerousDisableAssetCspModification?: boolean | string[] } } };
-    const disabled = conf.app.security.dangerousDisableAssetCspModification;
-    assert.ok(
-      disabled === true || (Array.isArray(disabled) && disabled.includes("style-src")),
-      "dangerousDisableAssetCspModification must include style-src",
-    );
+    // Exactly style-src: `true` or a wider list would also drop the nonces and
+    // hashes Tauri adds to script-src.
+    assert.deepEqual(conf.app.security.dangerousDisableAssetCspModification, ["style-src"]);
     const styleSrc = cspDirective("style-src");
     assert.ok(styleSrc.includes("'unsafe-inline'"));
     assert.ok(
