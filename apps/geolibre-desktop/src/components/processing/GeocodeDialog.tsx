@@ -215,6 +215,7 @@ export function GeocodeDialog({ mapControllerRef }: GeocodeDialogProps): ReactEl
             signal,
             config,
             limit: 1,
+            attributes: providerId === "arcgis-locator" && keepAttributes,
           });
           const feature = results[0]
             ? geocodeMatchToFeature(results[0], request.row, {

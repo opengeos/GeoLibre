@@ -241,12 +241,16 @@ export function GeocodingLocatorsEditor() {
         const status = statuses[locator.id];
         const checked = locator.reverse !== undefined;
         const urlValid = !locator.url.trim() || normalizeArcGISLocatorUrl(locator.url) !== null;
-        // The published inputs a search string can go to.
+        // The published inputs a search string can go to, plus the one in use
+        // when it is not among them (ArcGIS's conventional SingleLine), so the
+        // selector always shows what requests send.
         const searchFields = [
           ...new Set(
-            [locator.singleLineField, ...(locator.addressFields ?? [])].filter(
-              (field): field is string => !!field,
-            ),
+            [
+              arcgisLocatorInputField(locator),
+              locator.singleLineField,
+              ...(locator.addressFields ?? []),
+            ].filter((field): field is string => !!field),
           ),
         ];
         return (

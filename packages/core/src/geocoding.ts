@@ -132,6 +132,8 @@ export interface ForwardRequestOptions {
   limit?: number;
   /** A suggestion's key, so the locator resolves exactly that suggestion. */
   magicKey?: string;
+  /** Ask for each candidate's own attributes (see {@link GeocodeMatch.attributes}). */
+  attributes?: boolean;
 }
 
 /** Per-request options passed to a provider's reverse URL builder. */
@@ -880,8 +882,9 @@ const arcgisLocatorProvider: GeocodingProvider = {
     // Locators often work in a projected system; ask for WGS 84 and check the
     // spatial reference the response reports (see arcgisCandidatePosition).
     url.searchParams.set("outSR", "4326");
-    // The candidate's own fields (parcel or asset IDs, address type, ...).
-    url.searchParams.set("outFields", "*");
+    // The candidate's own fields (parcel or asset IDs, address type, ...),
+    // only when wanted: a locator can return dozens of them.
+    if (options.attributes) url.searchParams.set("outFields", "*");
     if (options.magicKey) url.searchParams.set("magicKey", options.magicKey);
     if (options.limit) url.searchParams.set("maxLocations", String(options.limit));
     return url.toString();
@@ -1571,7 +1574,7 @@ export function parseArcGISSuggestions(data: unknown): GeocodeSuggestion[] {
   return suggestions.flatMap((entry) => {
     const text = readString(entry, "text")?.trim();
     const magicKey = readString(entry, "magicKey");
-    const collection = (entry as { isCollection?: unknown }).isCollection === true;
+    const collection = (entry as { isCollection?: unknown } | null)?.isCollection === true;
     return text && magicKey && !collection ? [{ text, magicKey }] : [];
   });
 }
@@ -1692,6 +1695,8 @@ export async function geocodeForward(
     limit?: number;
     /** A {@link GeocodeSuggestion}'s key, to resolve that suggestion. */
     magicKey?: string;
+    /** Ask for each candidate's own attributes, where the provider supports it. */
+    attributes?: boolean;
   } = {},
 ): Promise<GeocodeMatch[]> {
   const config = options.config ?? getGeocoderConfig();
@@ -1701,6 +1706,7 @@ export async function geocodeForward(
       email: config.email,
       limit: options.limit,
       magicKey: options.magicKey,
+      attributes: options.attributes,
     }),
     config,
   );

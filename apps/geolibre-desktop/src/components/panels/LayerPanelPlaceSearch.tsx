@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import {
   type GeocodeMatch,
   type GeocodeSuggestion,
+  type GeocoderConfig,
   geocodeForward,
   geocodeSuggest,
   geocoderMinIntervalMs,
@@ -66,7 +67,12 @@ type SearchStatus = "idle" | "loading" | "error" | "empty";
  */
 type SearchRow =
   | { kind: "place"; match: GeocodeMatch }
-  | { kind: "suggestion"; suggestion: GeocodeSuggestion }
+  | {
+      kind: "suggestion";
+      suggestion: GeocodeSuggestion;
+      /** The geocoder that suggested it, which must also resolve it. */
+      config: GeocoderConfig;
+    }
   | { kind: "coordinate"; match: GeocodeMatch }
   | { kind: "h3"; match: GeocodeMatch; cell: H3CellMatch }
   | { kind: "feature"; match: FeatureSearchMatch };
@@ -169,7 +175,7 @@ export function LayerPanelPlaceSearch({
                 config,
                 limit: MAX_RESULTS,
               })
-            ).map((suggestion) => ({ kind: "suggestion", suggestion }))
+            ).map((suggestion) => ({ kind: "suggestion", suggestion, config }))
           : (
               await geocodeForward(text, {
                 signal: controller.signal,
@@ -358,12 +364,13 @@ export function LayerPanelPlaceSearch({
         // Resolve the picked suggestion to its location, then show it as a
         // place. The box settles on the suggestion right away; a lookup that
         // fails or finds nothing reopens the dropdown to say so.
+        // settle() aborts the search in flight, so it cannot land after this.
         settle(row.suggestion.text);
         const controller = new AbortController();
         abortRef.current = controller;
         geocodeForward(row.suggestion.text, {
           signal: controller.signal,
-          config: resolveGeocoderConfig(geocodingPrefs),
+          config: row.config,
           magicKey: row.suggestion.magicKey,
           limit: 1,
         }).then(
@@ -457,7 +464,7 @@ export function LayerPanelPlaceSearch({
       }
       settle(row.match.displayName);
     },
-    [clearSearchResult, geocodingPrefs, mapControllerRef, settle],
+    [clearSearchResult, mapControllerRef, settle],
   );
   // The resolved suggestion re-enters the latest handler, not the one captured
   // when the lookup started.

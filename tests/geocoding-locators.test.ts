@@ -581,6 +581,7 @@ describe("locator suggestions (#3123)", () => {
         { text: "222 W Hargett St, Raleigh, NC, 27601", magicKey: "abc", isCollection: false },
         { text: "Coffee shop", magicKey: "cat", isCollection: true },
         { text: "", magicKey: "empty" },
+        null,
       ],
     });
     const suggestions = await geocodeSuggest("222 W Harg", {
@@ -686,8 +687,11 @@ describe("locator candidate attributes (#3123)", () => {
         },
       ],
     });
-    const [match] = await geocodeForward("1703", { config: locatorConfig() });
+    const [match] = await geocodeForward("1703", { config: locatorConfig(), attributes: true });
     assert.equal(new URL(urls[0]).searchParams.get("outFields"), "*");
+    await geocodeForward("1703", { config: locatorConfig() });
+    // The search box does not ask for them.
+    assert.equal(new URL(urls[1]).searchParams.get("outFields"), null);
     assert.deepEqual(match.attributes, { PIN: "1703", Addr_type: "Parcel", Rank: 20 });
   });
 
@@ -726,5 +730,8 @@ describe("revoking locator approvals (#3123)", () => {
     ]);
     revokeLocatorPortalApproval({ portalHost: "gis.example.org", locatorHost: "maps.example.org" });
     assert.deepEqual(listLocatorPortalApprovals(), []);
+    // Approving it again (checking and saving) restores it.
+    approveLocatorPortalToken(federated.url, federated.portalUrl);
+    assert.equal(listLocatorPortalApprovals().length, 1);
   });
 });

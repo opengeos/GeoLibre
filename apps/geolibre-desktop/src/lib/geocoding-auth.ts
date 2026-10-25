@@ -26,6 +26,11 @@ const federation = new Map<string, Promise<boolean>>();
 const APPROVALS_STORAGE_KEY = "geolibre.geocoding.locatorTokenHosts";
 /** Approvals kept for this session when storage is unavailable. */
 const sessionApprovals = new Set<string>();
+/**
+ * Approvals revoked this session. They stay revoked even if removing them from
+ * storage failed, so a stale stored copy can never re-grant them.
+ */
+const revokedApprovals = new Set<string>();
 /** Checks that passed in the open Settings dialog, granted only when it saves. */
 const stagedApprovals = new Set<string>();
 
@@ -62,6 +67,7 @@ function readApprovals(): Set<string> {
   } catch {
     // Storage unavailable or corrupt: only this session's approvals count.
   }
+  for (const key of revokedApprovals) approvals.delete(key);
   return approvals;
 }
 
@@ -75,6 +81,7 @@ function readApprovals(): Set<string> {
 export function approveLocatorPortalToken(locatorUrl: string, portalUrl: string | undefined): void {
   const key = approvalKey(locatorUrl, portalUrl);
   if (!key) return;
+  revokedApprovals.delete(key);
   sessionApprovals.add(key);
   try {
     localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify([...readApprovals()]));
@@ -116,6 +123,7 @@ export function listLocatorPortalApprovals(): LocatorPortalApproval[] {
  */
 export function revokeLocatorPortalApproval(approval: LocatorPortalApproval): void {
   const key = `${approval.portalHost} ${approval.locatorHost}`;
+  revokedApprovals.add(key);
   sessionApprovals.delete(key);
   stagedApprovals.delete(key);
   try {
@@ -250,6 +258,7 @@ export function resetLocatorFederationCache(): void {
   federation.clear();
   sessionApprovals.clear();
   stagedApprovals.clear();
+  revokedApprovals.clear();
   try {
     localStorage.removeItem(APPROVALS_STORAGE_KEY);
   } catch {
