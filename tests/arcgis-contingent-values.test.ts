@@ -694,7 +694,9 @@ describe("nonhosted Enterprise contingent values", () => {
       fields: [...fields, { name: "KIND", type: "esriFieldTypeInteger" }],
     };
     const sets = enterpriseValueSets();
-    const group = sets.contingentValueSets[0].fieldGroups[0];
+    const group = sets.contingentValueSets[0].fieldGroups[0] as {
+      contingencies: Array<Record<string, unknown>>;
+    };
     group.contingencies = group.contingencies.map((entry, index) => ({
       ...entry,
       subtypeCode: index < 2 ? 1 : 2,

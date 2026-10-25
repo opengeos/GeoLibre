@@ -2648,6 +2648,8 @@ async function fetchArcGISJson<T>(
  * @param options - The connection, including its token.
  * @param cause - Attached to request errors.
  * @param signal - Aborts both requests.
+ * @param lookup - `fresh`: ask about contingent values even when the service
+ *   was found to have none for this layer before (a save checks current rules).
  * @returns The metadata.
  */
 async function fetchArcGISFeatureLayerInfo(
@@ -2655,15 +2657,28 @@ async function fetchArcGISFeatureLayerInfo(
   options: ArcGISLayerOptions,
   cause: unknown,
   signal?: AbortSignal,
+  { fresh = false }: { fresh?: boolean } = {},
 ): Promise<ArcGISFeatureLayerInfo> {
   const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, cause, signal);
-  return withArcGISContingentValues(
-    trimTrailingSlash(layerUrl),
+  const url = trimTrailingSlash(layerUrl);
+  // A layer that does not advertise contingent values is only found to have
+  // none after asking its service; remember that for refreshes, so a layer on
+  // an automatic refresh does not ask again every time. A save always asks.
+  const advertised = info.hasContingentValuesDefinition !== undefined;
+  if (!fresh && !advertised && layersWithoutContingentValues.has(url)) return info;
+  const result = await withArcGISContingentValues(
+    url,
     info,
-    (url) => fetchArcGISJson<unknown>(url, options, cause, signal),
+    (resource) => fetchArcGISJson<unknown>(resource, options, cause, signal),
     signal,
   );
+  if (!advertised && !result.contingentValues) layersWithoutContingentValues.add(url);
+  else layersWithoutContingentValues.delete(url);
+  return result;
 }
+
+/** Layers whose service was asked and has no contingent values for them. */
+const layersWithoutContingentValues = new Set<string>();
 
 async function resolveArcGISLayerBounds(
   input: string,
@@ -3067,7 +3082,9 @@ export async function saveArcGISLayerEdits(
     );
     // Re-read the contingent values too, so the edits are checked against the
     // rules the service holds now rather than the ones loaded with the layer.
-    const fetched = await fetchArcGISFeatureLayerInfo(layerUrl, options, undefined);
+    const fetched = await fetchArcGISFeatureLayerInfo(layerUrl, options, undefined, undefined, {
+      fresh: true,
+    });
     const current = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!current?.geojson) {
       throw new LocalizedError(`${ERROR_KEY}.layerRemoved`, "ArcGIS layer was removed.");

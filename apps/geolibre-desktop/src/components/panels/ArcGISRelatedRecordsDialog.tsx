@@ -494,8 +494,8 @@ export function ArcGISRelatedRecordsDialog({
         </div>
         {groupNotices.length ? (
           <div className="space-y-1 text-xs text-amber-600" role="status">
-            {groupNotices.map((notice) => (
-              <div key={notice}>{notice}</div>
+            {groupNotices.map((notice, index) => (
+              <div key={`${index}:${notice}`}>{notice}</div>
             ))}
           </div>
         ) : null}
