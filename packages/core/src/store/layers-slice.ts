@@ -22,6 +22,7 @@ import {
 import { matchLayerStyleEntry, type LayerStyleFileEntry } from "../layer-style-file";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh } from "../joins";
 import { normalizeLayerDescriptiveMetadata } from "../layer-descriptive-metadata";
+import { withRasterSourceDefaults } from "../raster-source-defaults";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
 import { identifyStateWithoutLayers } from "./session-slice";
 import {
@@ -219,6 +220,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   addLayer: (layer, beforeLayerId = null) =>
     set((s) => {
+      layer = withRasterSourceDefaults(layer);
       const layers = [...s.layers];
       // Plugin source identifiers (for example pmtiles://) are not local files.
       const { sourcePath } = layer;

@@ -68,6 +68,7 @@ import {
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
 import { normalizeLayerCapabilities } from "./capabilities";
+import { withRasterSourceDefaults } from "./raster-source-defaults";
 import { validateMapExpression } from "./expressions";
 import { normalizeLayerDescriptiveMetadata } from "./layer-descriptive-metadata";
 import {
@@ -1871,7 +1872,7 @@ function portableLayer(layer: GeoLibreLayer): GeoLibreLayer {
 }
 
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
-  layer = withoutLocalRasterBytes(layer);
+  layer = withRasterSourceDefaults(withoutLocalRasterBytes(layer));
   // `capabilities` is split off the spread rather than overwritten: a raw value
   // that normalizes to nothing (`{}`, an array, a string, an object with no
   // boolean flag) must not survive into the normalized layer and be written
@@ -2404,6 +2405,7 @@ export function hydrateProjectLayer(
   project: Pick<GeoLibreProject, "styles">,
   layer: GeoLibreLayer,
 ): GeoLibreLayer {
+  layer = withRasterSourceDefaults(layer);
   const topLevel = project.styles?.[layer.id];
   return {
     ...layer,
