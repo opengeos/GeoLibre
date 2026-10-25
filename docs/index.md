@@ -213,15 +213,13 @@ see the [Roadmap](roadmap.md).
 
 ### Recently added
 
-Newest capabilities, still settling in. The v3.4 release added an
-[Object-Based Image Analysis](user-guide/obia.md) workbench with eCognition
-rule-set import, ICESat-2 and GEDI spaceborne LiDAR footprints and photons, a
-[NASA Earthaccess](user-guide/web-services.md#nasa-earthaccess) plugin,
-[Dynamical](user-guide/web-services.md#dynamical) weather forecasts, turn-by-turn
-navigation with voice guidance, domain-, attachment-, and related-record-aware
-[ArcGIS editing](arcgis-editing.md) behind Sign in with ArcGIS, Spilhaus and
-other projections on the ArcGIS engine, and plugin panels, point clouds, and
-Street View on the Cesium globe.
+Newest capabilities, still settling in. The v3.5 release draws the MapLibre map
+in other coordinate systems, including planetary grids, adds published feature
+templates and contingent values to [ArcGIS editing](arcgis-editing.md), brings
+your organization's ArcGIS GeocodeServer locators to every geocoding tool, and
+adds interactive [story map](user-guide/storymaps.md) presentations, ArcGIS
+VTPK and TPKX packages, MBTiles on the web, PostGIS on Android and iOS, and an
+AI Assistant that can switch on an installed plugin to use its tools.
 
 The [roadmap](roadmap.md) tracks every release, version by version.
 
