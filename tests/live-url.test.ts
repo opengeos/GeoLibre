@@ -375,3 +375,52 @@ test("a failed publication does not mark inbound parameters for failed-activatio
   assert.equal(url.params().get("own"), "inbound");
   assert.equal(writes, 1, "failed publication does not trigger a second clearing write");
 });
+
+test("failed URL cleanup retains publication state until a later activation failure clears it", async () => {
+  for (const failure of ["decline", "throw", "reject"] as const) {
+    let url = address("?other=keep");
+    const manager = new PluginManager();
+    let failWrite = false;
+    let attempts = 0;
+    const host = {
+      setUrlParameters(params: URLSearchParams, names: readonly string[] = []) {
+        if (failWrite) throw new Error("temporary history failure");
+        setPluginUrlParameters(params, names);
+      },
+    } as GeoLibreAppAPI;
+    manager.register({
+      id: "retry",
+      name: "Retry",
+      version: "1.0.0",
+      urlParameterNames: ["own"],
+      activate(app) {
+        if (++attempts === 1) {
+          app.setUrlParameters?.(new URLSearchParams("own=stale"));
+          failWrite = true;
+        }
+        if (failure === "decline") return false;
+        if (failure === "throw") throw new Error("activation failed");
+        return Promise.reject(new Error("activation failed"));
+      },
+      deactivate() {},
+    });
+    const attempt = async () => {
+      try {
+        await manager.activate("retry", host);
+      } catch {
+        /* synchronous failure */
+      }
+      assert.equal(manager.isActive("retry"), false);
+    };
+    await attempt();
+    assert.equal(url.params().get("own"), "stale");
+    failWrite = false;
+    await attempt();
+    assert.equal(url.params().has("own"), false, failure);
+    assert.equal(url.params().get("other"), "keep");
+    // Once cleanup succeeds, a fresh inbound link must remain retryable.
+    url = address("?own=fresh");
+    await attempt();
+    assert.equal(url.params().get("own"), "fresh");
+  }
+});

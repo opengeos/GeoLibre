@@ -120,10 +120,12 @@ export class PluginManager {
   }
 
   private clearUrlParameters(id: string, app: GeoLibreAppAPI, publishedOnly = false): void {
-    const published = this.urlPublishingPlugins.delete(id);
     // An activation that never published must leave its inbound link intact
     // so a declined or failed activation can be retried with the same input.
-    if (!publishedOnly || published) this.writeUrlParameters(id, app, new URLSearchParams());
+    if (publishedOnly && !this.urlPublishingPlugins.has(id)) return;
+    if (this.writeUrlParameters(id, app, new URLSearchParams())) {
+      this.urlPublishingPlugins.delete(id);
+    }
   }
 
   private plugins = new Map<string, GeoLibrePlugin>();
@@ -231,6 +233,7 @@ export class PluginManager {
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
     this.writableUrlParameterNamesById.delete(id);
+    this.urlPublishingPlugins.delete(id);
     // Invalidate any watcher retained by an activation Promise from the old
     // plugin instance. Keep the counter monotonic so a re-registered plugin
     // cannot reuse the same generation identity.
