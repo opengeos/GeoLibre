@@ -883,6 +883,16 @@ service URLs from arbitrary hosts (XYZ, WMS/WMTS, ArcGIS, STAC, PMTiles), and
 some of those hosts are plain-HTTP servers on a LAN, so no fixed host list can
 cover them. `img-src` keeps `https:` for the same reason.
 
+**`style-src` is exempt from Tauri's asset CSP rewrite.** At build time Tauri
+hashes every inline `<style>` in `index.html` into `style-src` and adds a
+nonce. A hash or nonce makes the browser ignore `'unsafe-inline'`, so the
+`<style>` elements that external plugins and several libraries inject at
+runtime are blocked, and only in the packaged app (#3210, after the startup
+placeholder style landed in `index.html`). `"dangerousDisableAssetCspModification":
+["style-src"]` keeps the policy as written; `'unsafe-inline'` already allows
+the inline style, so nothing is loosened. `tests/tauri-csp.test.ts` fails if
+the setting is dropped.
+
 ### `httpx` (`backend/geolibre_server_api/pyproject.toml`) — private transport pool
 
 The projects server's protection against identity-provider requests to internal
