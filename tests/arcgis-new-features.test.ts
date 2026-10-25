@@ -359,6 +359,23 @@ describe("arcGISCreationTemplates", () => {
     assert.notEqual(templates[0].selection.fingerprint, templates[1].selection.fingerprint);
   });
 
+  it("tolerates names and descriptions that are not text", () => {
+    const odd = {
+      ...base,
+      templates: [
+        { name: 7, description: { html: "x" }, prototype: { attributes: {} } },
+        { name: null, prototype: { attributes: {} } },
+      ],
+    } as unknown as ArcGISEditInfo;
+    assert.deepEqual(
+      arcGISCreationTemplates(odd).map(({ name, description }) => ({ name, description })),
+      [
+        { name: "", description: undefined },
+        { name: "", description: undefined },
+      ],
+    );
+  });
+
   it("asks for a choice only on a creatable ArcGIS layer with several templates", () => {
     const layer = (metadata: Record<string, unknown>) => ({ metadata }) as unknown as GeoLibreLayer;
     const arcgis = { sourceKind: ARCGIS_FEATURE_SOURCE_KIND };

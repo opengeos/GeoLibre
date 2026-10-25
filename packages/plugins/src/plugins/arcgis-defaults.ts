@@ -164,6 +164,11 @@ export interface ArcGISCreationTemplateSelection {
   fingerprint: string;
 }
 
+/** Trimmed text from service JSON, or "" when the service published something else. */
+function serviceText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 /**
  * The feature templates a layer publishes that can be chosen for new
  * features: layer-level `templates[]` and every `types[].templates[]`, in
@@ -178,13 +183,14 @@ export function arcGISCreationTemplates(info: ArcGISEditInfo): ArcGISCreationTem
   return templateChoices(info).flatMap((choice, index) => {
     if (contradictoryTemplate(info, choice, selector)) return [];
     const typeValue = templateTypeValue(info, choice, selector);
-    const description = choice.template.description?.trim();
+    const description = serviceText(choice.template.description);
+    const typeName = serviceText(choice.typeName);
     return [
       {
         selection: { index, fingerprint: templateFingerprint(choice) },
-        name: choice.template.name?.trim() ?? "",
+        name: serviceText(choice.template.name),
         ...(description ? { description } : {}),
-        ...(choice.typeName?.trim() ? { typeName: choice.typeName.trim() } : {}),
+        ...(typeName ? { typeName } : {}),
         ...(typeValue != null ? { typeValue } : {}),
       },
     ];
