@@ -543,6 +543,7 @@ function solveLinear(m: number[][], b: number[]): number[] | null {
  */
 class EffectsEngine {
   private readonly map: MapLibreMap;
+  private globeProjection: boolean;
   private readonly mapRoot: HTMLElement | null;
   private readonly spaceCanvas: HTMLCanvasElement;
   private readonly starsCanvas: HTMLCanvasElement;
@@ -580,6 +581,7 @@ class EffectsEngine {
 
   constructor(map: MapLibreMap, settings: EffectsSettings) {
     this.map = map;
+    this.globeProjection = isGlobeProjection(map);
     this.settings = settings;
     this.mapCanvas = map.getCanvas();
     // Either 2D engine: mapbox-gl names the same elements with its own prefix,
@@ -616,6 +618,7 @@ class EffectsEngine {
     this.handleResize = this.handleResize.bind(this);
     this.handleVisibility = this.handleVisibility.bind(this);
     this.handleMapChange = this.handleMapChange.bind(this);
+    this.handleRender = this.handleRender.bind(this);
     this.tick = this.tick.bind(this);
 
     map.on("resize", this.handleResize);
@@ -624,6 +627,7 @@ class EffectsEngine {
     map.on("move", this.handleMapChange);
     // Direct setProjection calls do not emit a camera move.
     map.on("projectiontransition", this.handleMapChange);
+    map.on("render", this.handleRender);
     document.addEventListener("visibilitychange", this.handleVisibility);
 
     this.handleResize();
@@ -654,6 +658,7 @@ class EffectsEngine {
     this.map.off("resize", this.handleResize);
     this.map.off("move", this.handleMapChange);
     this.map.off("projectiontransition", this.handleMapChange);
+    this.map.off("render", this.handleRender);
     document.removeEventListener("visibilitychange", this.handleVisibility);
     this.mapCanvas.style.zIndex = this.previousMapCanvasZIndex;
     if (this.controlContainer) {
@@ -706,6 +711,16 @@ class EffectsEngine {
     this.starsDirty = true;
     this.haloDirty = true;
     if (!document.hidden) this.start();
+  }
+
+  private handleRender(): void {
+    // Mapbox has no projectiontransition event, but setProjection schedules a
+    // render. Only a changed projection wakes the effects, so unrelated map
+    // frames never invalidate the cached canvases.
+    const globe = isGlobeProjection(this.map);
+    if (globe === this.globeProjection) return;
+    this.globeProjection = globe;
+    this.handleMapChange();
   }
 
   private handleResize(): void {

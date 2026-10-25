@@ -101,13 +101,21 @@ for (const theme of ["light", "dark"] as const) {
     await expect
       .poll(
         () =>
-          page.locator('[data-effects-layer="space"]').evaluate((canvas) => {
-            const element = canvas as HTMLCanvasElement;
-            return element
-              .getContext("2d")!
-              .getImageData(0, 0, element.width, element.height)
-              .data.some((value) => value !== 0);
-          }),
+          page
+            .locator(
+              '[data-effects-layer="space"], [data-effects-layer="stars"], [data-effects-layer="halo"]',
+            )
+            .evaluateAll(
+              (canvases) =>
+                canvases.length === 3 &&
+                canvases.every((canvas) => {
+                  const element = canvas as HTMLCanvasElement;
+                  return element
+                    .getContext("2d")!
+                    .getImageData(0, 0, element.width, element.height)
+                    .data.some((value) => value !== 0);
+                }),
+            ),
         { message: "globe effects return after a direct projection change" },
       )
       .toBe(true);
