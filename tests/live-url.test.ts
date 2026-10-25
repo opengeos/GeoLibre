@@ -269,3 +269,109 @@ test("replacing a plugin retains retired names until host cleanup without granti
     assert.equal(url.params().get("old"), "next");
   }
 });
+
+test("URL writer failures do not interrupt plugin deactivation or unregistration", async () => {
+  for (const cleanup of ["deactivate", "unregister"] as const) {
+    address("?other=keep");
+    const manager = new PluginManager();
+    let fail = false;
+    let writes = 0;
+    const host = {
+      setUrlParameters(params: URLSearchParams, names: readonly string[] = []) {
+        writes++;
+        if (fail) throw new Error("history unavailable");
+        setPluginUrlParameters(params, names);
+      },
+    } as GeoLibreAppAPI;
+    let scoped!: GeoLibreAppAPI;
+    manager.register({
+      id: "failure",
+      name: "Failure",
+      version: "1.0.0",
+      urlParameterNames: ["own"],
+      activate(app) {
+        scoped = app;
+      },
+      deactivate() {},
+    });
+    await manager.activate("failure", host);
+    scoped.setUrlParameters?.(new URLSearchParams("own=1"));
+    let notifications = 0;
+    manager.subscribe(() => notifications++);
+    fail = true;
+    assert.doesNotThrow(() => manager[cleanup]("failure", host));
+    assert.equal(manager.isActive("failure"), false);
+    assert.equal(notifications, 1);
+    assert.equal(
+      manager.list().some((plugin) => plugin.id === "failure"),
+      cleanup !== "unregister",
+    );
+    const completedWrites = writes;
+    scoped.setUrlParameters?.(new URLSearchParams("own=stale"));
+    assert.equal(writes, completedWrites, "callbacks retained after cleanup cannot write");
+  }
+});
+
+test("a failed host write keeps retired names reserved for the next cleanup attempt", async () => {
+  const url = address("");
+  const manager = new PluginManager();
+  let fail = false;
+  const host = {
+    setUrlParameters(params: URLSearchParams, names: readonly string[] = []) {
+      if (fail) throw new Error("history unavailable");
+      setPluginUrlParameters(params, names);
+    },
+  } as GeoLibreAppAPI;
+  let scoped!: GeoLibreAppAPI;
+  const plugin: GeoLibrePlugin = {
+    id: "replace",
+    name: "Replace",
+    version: "1.0.0",
+    urlParameterNames: ["old"],
+    activate(app) {
+      scoped = app;
+    },
+    deactivate() {},
+    handleUrlParameters(app) {
+      scoped = app;
+    },
+  };
+  manager.register(plugin);
+  await manager.activate(plugin.id, host);
+  scoped.setUrlParameters?.(new URLSearchParams("old=1"));
+  manager.register({ ...plugin, urlParameterNames: ["new"] });
+  await manager.handleUrlParameters(new URLSearchParams("new=initial"), host);
+  fail = true;
+  assert.doesNotThrow(() => scoped.setUrlParameters?.(new URLSearchParams("new=2")));
+  assert.equal(url.params().get("old"), "1");
+  fail = false;
+  scoped.setUrlParameters?.(new URLSearchParams("new=3"));
+  assert.equal(url.params().has("old"), false);
+  assert.equal(url.params().get("new"), "3");
+});
+
+test("a failed publication does not mark inbound parameters for failed-activation cleanup", async () => {
+  const url = address("?own=inbound");
+  const manager = new PluginManager();
+  let writes = 0;
+  const host = {
+    setUrlParameters(params: URLSearchParams, names: readonly string[] = []) {
+      if (++writes === 1) throw new Error("temporary history failure");
+      setPluginUrlParameters(params, names);
+    },
+  } as GeoLibreAppAPI;
+  manager.register({
+    id: "failure",
+    name: "Failure",
+    version: "1.0.0",
+    urlParameterNames: ["own"],
+    activate(app) {
+      app.setUrlParameters?.(new URLSearchParams("own=changed"));
+      return false;
+    },
+    deactivate() {},
+  });
+  assert.equal(await manager.activate("failure", host), false);
+  assert.equal(url.params().get("own"), "inbound");
+  assert.equal(writes, 1, "failed publication does not trigger a second clearing write");
+});

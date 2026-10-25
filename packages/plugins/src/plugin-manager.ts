@@ -86,19 +86,18 @@ export class PluginManager {
           (app.getMapRenderer?.() ?? "maplibre") !== renderer
         )
           return;
-        this.writeUrlParameters(id, app, params);
-        this.urlPublishingPlugins.add(id);
+        if (this.writeUrlParameters(id, app, params)) this.urlPublishingPlugins.add(id);
       };
     }
     return scoped;
   }
 
-  private writeUrlParameters(id: string, app: GeoLibreAppAPI, params: URLSearchParams): void {
+  private writeUrlParameters(id: string, app: GeoLibreAppAPI, params: URLSearchParams): boolean {
     // The trailing argument is host-only. Plugins only receive the scoped API.
     const write = app.setUrlParameters as
       | ((params: URLSearchParams, names: readonly string[]) => void)
       | undefined;
-    if (!write) return;
+    if (!write) return false;
     const ownedNames = this.writableUrlParameterNamesById.get(id) ?? [];
     const declaredNames = new Set(this.urlParameterNamesById.get(id) ?? []);
     const currentNames = ownedNames.filter((name) => declaredNames.has(name));
@@ -108,8 +107,16 @@ export class PluginManager {
     for (const name of currentNames) {
       for (const value of params.getAll(name)) currentParams.append(name, value);
     }
-    write(currentParams, ownedNames);
-    this.writableUrlParameterNamesById.set(id, currentNames);
+    try {
+      write(currentParams, ownedNames);
+      this.writableUrlParameterNamesById.set(id, currentNames);
+      return true;
+    } catch (error) {
+      // Address-bar updates must not interrupt plugin lifecycle cleanup. Keep
+      // retired claims until a later successful write can clear their values.
+      console.warn(`Failed to update URL parameters for plugin '${id}'.`, error);
+      return false;
+    }
   }
 
   private clearUrlParameters(id: string, app: GeoLibreAppAPI, publishedOnly = false): void {
