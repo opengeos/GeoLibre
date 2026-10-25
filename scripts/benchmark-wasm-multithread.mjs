@@ -68,8 +68,8 @@ function computeSlopeScalar(dem, width, height, cellSize = 10.0) {
       const h = dem[nextRow + x];
       const i = dem[nextRow + (x + 1)];
 
-      const dzdx = ((c + 2.0 * f + i) - (a + 2.0 * d + g)) / factor;
-      const dzdy = ((g + 2.0 * h + i) - (a + 2.0 * b + c)) / factor;
+      const dzdx = (c + 2.0 * f + i - (a + 2.0 * d + g)) / factor;
+      const dzdy = (g + 2.0 * h + i - (a + 2.0 * b + c)) / factor;
 
       output[rowOffset + x] = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * radToDeg;
     }
@@ -106,8 +106,8 @@ function computeSlopeSimd(dem, width, height, cellSize = 10.0) {
         const b = dem[prevRow + curX];
         const h = dem[nextRow + curX];
 
-        const dzdx = ((c + 2.0 * f + i) - (a + 2.0 * d + g)) * invFactor;
-        const dzdy = ((g + 2.0 * h + i) - (a + 2.0 * b + c)) * invFactor;
+        const dzdx = (c + 2.0 * f + i - (a + 2.0 * d + g)) * invFactor;
+        const dzdy = (g + 2.0 * h + i - (a + 2.0 * b + c)) * invFactor;
         output[rowOffset + curX] = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * radToDeg;
       }
     }
@@ -123,8 +123,8 @@ function computeSlopeSimd(dem, width, height, cellSize = 10.0) {
       const b = dem[prevRow + x];
       const h = dem[nextRow + x];
 
-      const dzdx = ((c + 2.0 * f + i) - (a + 2.0 * d + g)) * invFactor;
-      const dzdy = ((g + 2.0 * h + i) - (a + 2.0 * b + c)) * invFactor;
+      const dzdx = (c + 2.0 * f + i - (a + 2.0 * d + g)) * invFactor;
+      const dzdy = (g + 2.0 * h + i - (a + 2.0 * b + c)) * invFactor;
       output[rowOffset + x] = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * radToDeg;
     }
   }
@@ -134,7 +134,14 @@ function computeSlopeSimd(dem, width, height, cellSize = 10.0) {
 // ---------------------------------------------------------
 // Multi-threaded Chunked Parallel Execution (Strips with 1px halo)
 // ---------------------------------------------------------
-function computeSlopeParallel(dem, width, height, cellSize = 10.0, threadCount = 4, useSimd = true) {
+function computeSlopeParallel(
+  dem,
+  width,
+  height,
+  cellSize = 10.0,
+  threadCount = 4,
+  useSimd = true,
+) {
   const output = new Float32Array(width * height);
   const rowsPerThread = Math.ceil((height - 2) / threadCount);
 
@@ -158,10 +165,7 @@ function computeSlopeParallel(dem, width, height, cellSize = 10.0, threadCount =
     const subOut = fn(subDem, width, chunkHeight, cellSize);
 
     // Copy back into shared output buffer
-    output.set(
-      subOut.subarray(width, subOut.length - width),
-      chunk.startY * width
-    );
+    output.set(subOut.subarray(width, subOut.length - width), chunk.startY * width);
   }
 
   return output;
@@ -273,10 +277,18 @@ function runBenchmark() {
     });
 
     console.log(`  - Baseline (Portable 1T):   ${baselineMedian.toFixed(2)} ms`);
-    console.log(`  - SIMD Single-Thread:       ${simdMedian.toFixed(2)} ms (${simdSpeedup.toFixed(2)}x, -${simdReduction.toFixed(1)}%)`);
-    console.log(`  - Multi-Threaded (4T):      ${mt4Median.toFixed(2)} ms (${mt4Speedup.toFixed(2)}x, -${mt4Reduction.toFixed(1)}%)`);
-    console.log(`  - Multi-Threaded SIMD (4T): ${mt4SimdMedian.toFixed(2)} ms (${mt4SimdSpeedup.toFixed(2)}x, -${mt4SimdReduction.toFixed(1)}%)`);
-    console.log(`  - Output Numerical Check:   Max diff = ${maxDiffMt.toExponential(2)} [${maxDiffMt < 1e-4 ? "PASS" : "FAIL"}]\n`);
+    console.log(
+      `  - SIMD Single-Thread:       ${simdMedian.toFixed(2)} ms (${simdSpeedup.toFixed(2)}x, -${simdReduction.toFixed(1)}%)`,
+    );
+    console.log(
+      `  - Multi-Threaded (4T):      ${mt4Median.toFixed(2)} ms (${mt4Speedup.toFixed(2)}x, -${mt4Reduction.toFixed(1)}%)`,
+    );
+    console.log(
+      `  - Multi-Threaded SIMD (4T): ${mt4SimdMedian.toFixed(2)} ms (${mt4SimdSpeedup.toFixed(2)}x, -${mt4SimdReduction.toFixed(1)}%)`,
+    );
+    console.log(
+      `  - Output Numerical Check:   Max diff = ${maxDiffMt.toExponential(2)} [${maxDiffMt < 1e-4 ? "PASS" : "FAIL"}]\n`,
+    );
   }
 
   console.log("--------------------------------------------------------------------------------");
@@ -320,7 +332,7 @@ function runBenchmark() {
       const r = computeSlopeSimd(tileDem, 500, 500);
       poolResults.push(r);
       return performance.now() - t0;
-    })
+    }),
   );
   // Add 1.2ms realistic Web Worker postMessage / transfer overhead
   const poolDuration = simWorkerDuration + 1.2;
@@ -332,10 +344,14 @@ function runBenchmark() {
   console.log(`Adaptive 4-Worker Pool (Threaded-SIMD):   ${poolDuration.toFixed(2)} ms`);
   console.log(`Measured Speedup:                         ${poolSpeedup.toFixed(2)}x`);
   console.log(`Runtime Reduction:                        ${poolReduction.toFixed(1)}%`);
-  console.log(`Target Achieved (60-80% reduction):       ${poolReduction >= 60.0 ? "YES" : "PARTIAL"}`);
+  console.log(
+    `Target Achieved (60-80% reduction):       ${poolReduction >= 60.0 ? "YES" : "PARTIAL"}`,
+  );
 
-  return { singleTile: resultsTable, concurrentBatch: { seqDuration, poolDuration, poolSpeedup, poolReduction } };
+  return {
+    singleTile: resultsTable,
+    concurrentBatch: { seqDuration, poolDuration, poolSpeedup, poolReduction },
+  };
 }
 
 runBenchmark();
-

@@ -31,7 +31,10 @@ class MockWorker {
   public terminated = false;
   private listeners = new Map<string, Array<(event: unknown) => void>>();
 
-  constructor(public url: URL, public options?: { type?: string }) {
+  constructor(
+    public url: URL,
+    public options?: { type?: string },
+  ) {
     MockWorker.instances.push(this);
   }
 
@@ -295,7 +298,11 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
     worker1.emit("message", {
       data: {
         ok: true,
-        result: { exitCode: 0, stdout: ["done"], files: { "slope.tif": new Uint8Array([4, 5, 6]) } },
+        result: {
+          exitCode: 0,
+          stdout: ["done"],
+          files: { "slope.tif": new Uint8Array([4, 5, 6]) },
+        },
       },
     });
 
@@ -315,7 +322,11 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
     worker1.emit("message", {
       data: {
         ok: true,
-        result: { exitCode: 0, stdout: ["done aspect"], files: { "aspect.tif": new Uint8Array([7, 8]) } },
+        result: {
+          exitCode: 0,
+          stdout: ["done aspect"],
+          files: { "aspect.tif": new Uint8Array([7, 8]) },
+        },
       },
     });
 
@@ -417,51 +428,44 @@ describe("Numerical Correctness & Invariant Validation", () => {
 
     const cellSize = 10.0;
     // Flat terrain: elevation = 100 everywhere
-    const flatDem = [
-      100, 100, 100,
-      100, 100, 100,
-      100, 100, 100,
-    ];
+    const flatDem = [100, 100, 100, 100, 100, 100, 100, 100, 100];
 
     const dzdxFlat =
-      ((flatDem[2] + 2 * flatDem[5] + flatDem[8]) - (flatDem[0] + 2 * flatDem[3] + flatDem[6])) /
+      (flatDem[2] + 2 * flatDem[5] + flatDem[8] - (flatDem[0] + 2 * flatDem[3] + flatDem[6])) /
       (8 * cellSize);
     const dzdyFlat =
-      ((flatDem[6] + 2 * flatDem[7] + flatDem[8]) - (flatDem[0] + 2 * flatDem[1] + flatDem[2])) /
+      (flatDem[6] + 2 * flatDem[7] + flatDem[8] - (flatDem[0] + 2 * flatDem[1] + flatDem[2])) /
       (8 * cellSize);
-    const slopeFlat = Math.atan(Math.sqrt(dzdxFlat * dzdxFlat + dzdyFlat * dzdyFlat)) * (180 / Math.PI);
+    const slopeFlat =
+      Math.atan(Math.sqrt(dzdxFlat * dzdxFlat + dzdyFlat * dzdyFlat)) * (180 / Math.PI);
     assert.equal(slopeFlat, 0.0, "Flat terrain slope must be exactly 0 degrees");
 
     // 45-degree slope ramp downhill towards the East:
     // elevation decreases by 10m per 10m cell from West to East
-    const rampDem = [
-      20, 10, 0,
-      20, 10, 0,
-      20, 10, 0,
-    ];
+    const rampDem = [20, 10, 0, 20, 10, 0, 20, 10, 0];
     const dzdxRamp =
-      ((rampDem[2] + 2 * rampDem[5] + rampDem[8]) - (rampDem[0] + 2 * rampDem[3] + rampDem[6])) /
+      (rampDem[2] + 2 * rampDem[5] + rampDem[8] - (rampDem[0] + 2 * rampDem[3] + rampDem[6])) /
       (8 * cellSize);
     const dzdyRamp =
-      ((rampDem[6] + 2 * rampDem[7] + rampDem[8]) - (rampDem[0] + 2 * rampDem[1] + rampDem[2])) /
+      (rampDem[6] + 2 * rampDem[7] + rampDem[8] - (rampDem[0] + 2 * rampDem[1] + rampDem[2])) /
       (8 * cellSize);
-    const slopeRamp = Math.atan(Math.sqrt(dzdxRamp * dzdxRamp + dzdyRamp * dzdyRamp)) * (180 / Math.PI);
+    const slopeRamp =
+      Math.atan(Math.sqrt(dzdxRamp * dzdxRamp + dzdyRamp * dzdyRamp)) * (180 / Math.PI);
     assert.ok(Math.abs(slopeRamp - 45.0) < 1e-4, `Expected 45 deg slope, got ${slopeRamp}`);
 
     // Compass aspect (North = 0, East = 90, South = 180, West = 270)
     let aspectRamp = 90.0 - 57.29578 * Math.atan2(dzdyRamp, -dzdxRamp);
     if (aspectRamp < 0) aspectRamp += 360;
     if (aspectRamp >= 360) aspectRamp -= 360;
-    assert.ok(Math.abs(aspectRamp - 90.0) < 1e-4, `Expected 90 deg aspect (East), got ${aspectRamp}`);
+    assert.ok(
+      Math.abs(aspectRamp - 90.0) < 1e-4,
+      `Expected 90 deg aspect (East), got ${aspectRamp}`,
+    );
   });
 
   it("handles NoData boundary cells without contaminating interior cells", () => {
     const NODATA = -9999.0;
-    const grid = [
-      NODATA, 10, 20,
-      NODATA, 10, 20,
-      NODATA, 10, 20,
-    ];
+    const grid = [NODATA, 10, 20, NODATA, 10, 20, NODATA, 10, 20];
 
     // Neighborhood operation check: any stencil containing NoData returns NoData
     function mean3x3(dem: number[], centerIdx: number): number {
@@ -471,7 +475,11 @@ describe("Numerical Correctness & Invariant Validation", () => {
       return dem.reduce((a, b) => a + b, 0) / dem.length;
     }
 
-    assert.equal(mean3x3(grid, 4), NODATA, "Cell with NoData in 3x3 kernel must evaluate to NoData");
+    assert.equal(
+      mean3x3(grid, 4),
+      NODATA,
+      "Cell with NoData in 3x3 kernel must evaluate to NoData",
+    );
   });
 
   it("preserves topological drainage invariants in D8 flow accumulation", () => {
@@ -479,11 +487,7 @@ describe("Numerical Correctness & Invariant Validation", () => {
     // [10, 12, 10]
     // [ 8,  9,  8]
     // [ 4,  2,  4]  <- lowest point is (2, 1) = elevation 2
-    const dem = [
-      10, 12, 10,
-      8,  9,  8,
-      4,  2,  4,
-    ];
+    const dem = [10, 12, 10, 8, 9, 8, 4, 2, 4];
 
     // Steepest descent from center (idx 4, elevation 9):
     // Neighbors:

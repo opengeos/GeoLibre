@@ -209,8 +209,7 @@ const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 // for multi-threaded WebAssembly with SharedArrayBuffer. Preserves standard embed
 // and third-party iframe compatibility when left unset or "0".
 const CROSS_ORIGIN_ISOLATION =
-  process.env.VITE_CROSS_ORIGIN_ISOLATION === "1" ||
-  process.env.CROSS_ORIGIN_ISOLATION === "1";
+  process.env.VITE_CROSS_ORIGIN_ISOLATION === "1" || process.env.CROSS_ORIGIN_ISOLATION === "1";
 
 // ---------------------------------------------------------------------------
 // Build-time env exposed to the bundle.

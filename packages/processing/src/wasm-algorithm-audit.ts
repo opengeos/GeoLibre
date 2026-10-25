@@ -35,7 +35,8 @@ export const ALGORITHM_PROFILES: Record<string, AlgorithmProfile> = {
     supportsThreading: true,
     supportsSimd: true,
     haloPixels: 1,
-    notes: "Horn's 3x3 finite-difference gradient. Embarrassingly parallel with 1-pixel border halo.",
+    notes:
+      "Horn's 3x3 finite-difference gradient. Embarrassingly parallel with 1-pixel border halo.",
   },
   aspect: {
     id: "aspect",
@@ -45,7 +46,8 @@ export const ALGORITHM_PROFILES: Record<string, AlgorithmProfile> = {
     supportsThreading: true,
     supportsSimd: true,
     haloPixels: 1,
-    notes: "Horn's 3x3 finite-difference gradient with trigonometric atan2. Parallel across strips.",
+    notes:
+      "Horn's 3x3 finite-difference gradient with trigonometric atan2. Parallel across strips.",
   },
   hillshade: {
     id: "hillshade",
@@ -116,7 +118,8 @@ export const ALGORITHM_PROFILES: Record<string, AlgorithmProfile> = {
     pattern: "topological-dag",
     supportsThreading: false,
     supportsSimd: false,
-    notes: "Multiple flow direction dispersion on triangular facets. Requires topological DAG traversal.",
+    notes:
+      "Multiple flow direction dispersion on triangular facets. Requires topological DAG traversal.",
   },
   fill_depressions: {
     id: "fill_depressions",
@@ -149,7 +152,8 @@ export const ALGORITHM_PROFILES: Record<string, AlgorithmProfile> = {
     pattern: "vector-batch",
     supportsThreading: true,
     supportsSimd: false,
-    notes: "Independent polygon offset calculations. Feature chunks can be distributed across workers.",
+    notes:
+      "Independent polygon offset calculations. Feature chunks can be distributed across workers.",
   },
 };
 
@@ -175,5 +179,3 @@ export function isAlgorithmSimdEligible(toolId: string): boolean {
   const profile = ALGORITHM_PROFILES[toolId];
   return profile ? profile.supportsSimd : false;
 }
-
-

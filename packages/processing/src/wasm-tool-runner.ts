@@ -288,7 +288,15 @@ function acquireAndExecute(job: QueuedJob): void {
   const capacity = getWasmToolPoolCapacity();
   if (busyWorkers.size < capacity) {
     const spawned = spawnWorker();
-    executeOnWorker(spawned, false, job.request, job.signal, job.resolve, job.reject, job.startTime);
+    executeOnWorker(
+      spawned,
+      false,
+      job.request,
+      job.signal,
+      job.resolve,
+      job.reject,
+      job.startTime,
+    );
     return;
   }
 
