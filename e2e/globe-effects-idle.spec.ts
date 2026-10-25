@@ -67,9 +67,9 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.locator(".geolibre-effects-canvas")).toHaveCount(4);
     await bindMapLibreMap(page);
     await page.waitForFunction(() => !window.__geolibreTestMap?.isMoving());
-    // Allow the effects' camera invalidation to be drawn before measuring idle work.
-    await page.waitForTimeout(200);
-    expect(await staticDraws(page)).toBe(0);
+    // A slow frame may land in the first window. Continuous idle repainting
+    // never produces a zero-write window, so polling still catches the bug.
+    await expect.poll(() => staticDraws(page), { timeout: 15_000 }).toBe(0);
     const before = await page
       .locator('[data-effects-layer="stars"], [data-effects-layer="halo"]')
       .evaluateAll((canvases) =>
@@ -78,7 +78,7 @@ for (const theme of ["light", "dark"] as const) {
 
     // Camera changes must still repaint the stars and halo, then become idle again.
     await page.evaluate(() => window.__geolibreTestMap?.jumpTo({ center: [130, -25], zoom: 3.7 }));
-    await page.waitForTimeout(200);
+    await expect.poll(() => staticDraws(page), { timeout: 15_000 }).toBe(0);
     const after = await page
       .locator('[data-effects-layer="stars"], [data-effects-layer="halo"]')
       .evaluateAll((canvases) =>
@@ -86,24 +86,24 @@ for (const theme of ["light", "dark"] as const) {
       );
     expect(after[0] !== before[0], "stars follow the camera").toBe(true);
     expect(after[1] !== before[1], "halo follows the globe's projected edge").toBe(true);
-    expect(await staticDraws(page)).toBe(0);
 
     await page.getByRole("button", { name: "Disable globe", exact: true }).click();
-    await page.waitForTimeout(200);
-    expect(
-      await page.locator(".geolibre-effects-canvas").evaluateAll((canvases) =>
-        canvases.every((canvas) => {
-          const element = canvas as HTMLCanvasElement;
-          const pixels = element
-            .getContext("2d")!
-            .getImageData(0, 0, element.width, element.height).data;
-          return pixels.every((value) => value === 0);
-        }),
-      ),
-      "Mercator clears every effects canvas",
-    ).toBe(true);
+    await expect
+      .poll(
+        () =>
+          page.locator(".geolibre-effects-canvas").evaluateAll((canvases) =>
+            canvases.every((canvas) => {
+              const element = canvas as HTMLCanvasElement;
+              const pixels = element
+                .getContext("2d")!
+                .getImageData(0, 0, element.width, element.height).data;
+              return pixels.every((value) => value === 0);
+            }),
+          ),
+        { message: "Mercator clears every effects canvas" },
+      )
+      .toBe(true);
     await page.getByRole("button", { name: "Enable globe", exact: true }).click();
-    await page.waitForTimeout(500);
-    expect(await staticDraws(page)).toBe(0);
+    await expect.poll(() => staticDraws(page), { timeout: 15_000 }).toBe(0);
   });
 }
