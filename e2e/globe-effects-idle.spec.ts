@@ -4,13 +4,18 @@ import { bindMapLibreMap, waitForMap } from "./helpers";
 /** Count writes to the static effects, excluding the intentionally animated comet canvas. */
 async function staticDraws(page: Page): Promise<number> {
   return page.evaluate(async () => {
-    const canvases = document.querySelectorAll<HTMLCanvasElement>(".geolibre-effects-canvas");
-    const staticCanvases = new Set([canvases[0], canvases[1], canvases[3]]);
+    const staticCanvases = new Set(
+      document.querySelectorAll<HTMLCanvasElement>(
+        '.geolibre-effects-canvas:not([data-effects-layer="comets"])',
+      ),
+    );
     const prototype = CanvasRenderingContext2D.prototype;
     const clear = prototype.clearRect;
     const fill = prototype.fill;
     const fillRect = prototype.fillRect;
     const drawImage = prototype.drawImage;
+    const stroke = prototype.stroke;
+    const putImageData = prototype.putImageData;
     let writes = 0;
     prototype.clearRect = function (...args) {
       if (staticCanvases.has(this.canvas)) writes++;
@@ -28,6 +33,14 @@ async function staticDraws(page: Page): Promise<number> {
       if (staticCanvases.has(this.canvas)) writes++;
       return drawImage.apply(this, args);
     };
+    prototype.stroke = function (...args: Parameters<typeof stroke>) {
+      if (staticCanvases.has(this.canvas)) writes++;
+      return stroke.apply(this, args);
+    };
+    prototype.putImageData = function (...args: Parameters<typeof putImageData>) {
+      if (staticCanvases.has(this.canvas)) writes++;
+      return putImageData.apply(this, args);
+    };
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return writes;
@@ -36,6 +49,8 @@ async function staticDraws(page: Page): Promise<number> {
       prototype.fill = fill;
       prototype.fillRect = fillRect;
       prototype.drawImage = drawImage;
+      prototype.stroke = stroke;
+      prototype.putImageData = putImageData;
     }
   });
 }
@@ -56,18 +71,18 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(200);
     expect(await staticDraws(page)).toBe(0);
     const before = await page
-      .locator(".geolibre-effects-canvas")
+      .locator('[data-effects-layer="stars"], [data-effects-layer="halo"]')
       .evaluateAll((canvases) =>
-        [1, 3].map((index) => (canvases[index] as HTMLCanvasElement).toDataURL()),
+        canvases.map((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
       );
 
     // Camera changes must still repaint the stars and halo, then become idle again.
     await page.evaluate(() => window.__geolibreTestMap?.jumpTo({ center: [130, -25], zoom: 3.7 }));
     await page.waitForTimeout(200);
     const after = await page
-      .locator(".geolibre-effects-canvas")
+      .locator('[data-effects-layer="stars"], [data-effects-layer="halo"]')
       .evaluateAll((canvases) =>
-        [1, 3].map((index) => (canvases[index] as HTMLCanvasElement).toDataURL()),
+        canvases.map((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
       );
     expect(after[0] !== before[0], "stars follow the camera").toBe(true);
     expect(after[1] !== before[1], "halo follows the globe's projected edge").toBe(true);

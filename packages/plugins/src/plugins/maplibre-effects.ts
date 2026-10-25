@@ -593,10 +593,10 @@ class EffectsEngine {
       ) ?? null;
     this.previousControlContainerZIndex = this.controlContainer?.style.zIndex ?? "";
     this.overlayStyle = this.ensureOverlayStyle();
-    this.spaceCanvas = this.createCanvas(0);
-    this.starsCanvas = this.createCanvas(1);
-    this.cometCanvas = this.createCanvas(2);
-    this.haloCanvas = this.createCanvas(3);
+    this.spaceCanvas = this.createCanvas(0, "space");
+    this.starsCanvas = this.createCanvas(1, "stars");
+    this.cometCanvas = this.createCanvas(2, "comets");
+    this.haloCanvas = this.createCanvas(3, "halo");
     this.spaceCtx = this.spaceCanvas.getContext("2d")!;
     this.starsCtx = this.starsCanvas.getContext("2d")!;
     this.cometCtx = this.cometCanvas.getContext("2d")!;
@@ -675,9 +675,10 @@ class EffectsEngine {
     return style;
   }
 
-  private createCanvas(zIndex: number): HTMLCanvasElement {
+  private createCanvas(zIndex: number, layer: string): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.className = "geolibre-effects-canvas";
+    canvas.dataset.effectsLayer = layer;
     canvas.style.position = "absolute";
     canvas.style.top = "0";
     canvas.style.left = "0";
