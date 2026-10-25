@@ -36,6 +36,14 @@ describe("Wayback tile source zoom limits", () => {
     }
   });
 
+  it("ignores string minzoom as the renderers do", () => {
+    const project = {
+      ...createEmptyProject(),
+      layers: [imagery({ tiles: [tile], minzoom: "20" })],
+    };
+    assert.equal(parseProject(JSON.stringify(project)).layers[0].source.maxzoom, 19);
+  });
+
   it("preserves explicit limits and unrelated sources", () => {
     const sources = [
       { tiles: [tile], maxzoom: 17 },
@@ -55,7 +63,11 @@ describe("Wayback tile source zoom limits", () => {
   });
 
   it("recognizes URL-only Wayback templates and subdomains", () => {
-    for (const url of [tile, tile.replace("wayback.", "wayback-a.")]) {
+    for (const url of [
+      tile,
+      tile.replace("wayback.", "wayback-a."),
+      tile.replace("/MapServer/", "/WMTS/1.0.0/default028mm/MapServer/"),
+    ]) {
       const project = { ...createEmptyProject(), layers: [imagery({ url })] };
       assert.equal(parseProject(JSON.stringify(project)).layers[0].source.maxzoom, 19);
     }

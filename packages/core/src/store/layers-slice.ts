@@ -218,9 +218,9 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   layers: [],
   copiedLayerStyle: null,
 
-  addLayer: (layer, beforeLayerId = null) =>
+  addLayer: (inputLayer, beforeLayerId = null) =>
     set((s) => {
-      layer = withRasterSourceDefaults(layer);
+      let layer = withRasterSourceDefaults(inputLayer);
       const layers = [...s.layers];
       // Plugin source identifiers (for example pmtiles://) are not local files.
       const { sourcePath } = layer;
