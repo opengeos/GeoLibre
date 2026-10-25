@@ -10,47 +10,27 @@ async function staticDraws(page: Page): Promise<number> {
       ),
     );
     const prototype = CanvasRenderingContext2D.prototype;
-    const clear = prototype.clearRect;
-    const fill = prototype.fill;
-    const fillRect = prototype.fillRect;
-    const drawImage = prototype.drawImage;
-    const stroke = prototype.stroke;
-    const putImageData = prototype.putImageData;
+    const methods = [
+      "clearRect",
+      "fill",
+      "fillRect",
+      "drawImage",
+      "stroke",
+      "putImageData",
+    ] as const;
+    const originals = methods.map((name) => [name, prototype[name]] as const);
     let writes = 0;
-    prototype.clearRect = function (...args) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return clear.apply(this, args);
-    };
-    prototype.fill = function (...args: Parameters<typeof fill>) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return fill.apply(this, args);
-    };
-    prototype.fillRect = function (...args) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return fillRect.apply(this, args);
-    };
-    prototype.drawImage = function (...args: Parameters<typeof drawImage>) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return drawImage.apply(this, args);
-    };
-    prototype.stroke = function (...args: Parameters<typeof stroke>) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return stroke.apply(this, args);
-    };
-    prototype.putImageData = function (...args: Parameters<typeof putImageData>) {
-      if (staticCanvases.has(this.canvas)) writes++;
-      return putImageData.apply(this, args);
-    };
+    for (const [name, original] of originals) {
+      Reflect.set(prototype, name, function (this: CanvasRenderingContext2D, ...args: unknown[]) {
+        if (staticCanvases.has(this.canvas)) writes++;
+        return Reflect.apply(original, this, args);
+      });
+    }
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return writes;
     } finally {
-      prototype.clearRect = clear;
-      prototype.fill = fill;
-      prototype.fillRect = fillRect;
-      prototype.drawImage = drawImage;
-      prototype.stroke = stroke;
-      prototype.putImageData = putImageData;
+      for (const [name, original] of originals) Reflect.set(prototype, name, original);
     }
   });
 }
@@ -87,7 +67,15 @@ for (const theme of ["light", "dark"] as const) {
     expect(after[0] !== before[0], "stars follow the camera").toBe(true);
     expect(after[1] !== before[1], "halo follows the globe's projected edge").toBe(true);
 
-    await page.getByRole("button", { name: "Disable globe", exact: true }).click();
+    // Direct API changes do not emit a camera move. The toolbar also updates
+    // preferences, whose camera clamp would otherwise hide this regression.
+    await page.evaluate(() => {
+      const map = window.__geolibreTestMap;
+      if (!map || !("setProjection" in map) || typeof map.setProjection !== "function") {
+        throw new Error("MapLibre projection API is unavailable");
+      }
+      map.setProjection({ type: "mercator" });
+    });
     await expect
       .poll(
         () =>
@@ -103,7 +91,26 @@ for (const theme of ["light", "dark"] as const) {
         { message: "Mercator clears every effects canvas" },
       )
       .toBe(true);
-    await page.getByRole("button", { name: "Enable globe", exact: true }).click();
+    await page.evaluate(() => {
+      const map = window.__geolibreTestMap;
+      if (!map || !("setProjection" in map) || typeof map.setProjection !== "function") {
+        throw new Error("MapLibre projection API is unavailable");
+      }
+      map.setProjection({ type: "globe" });
+    });
+    await expect
+      .poll(
+        () =>
+          page.locator('[data-effects-layer="space"]').evaluate((canvas) => {
+            const element = canvas as HTMLCanvasElement;
+            return element
+              .getContext("2d")!
+              .getImageData(0, 0, element.width, element.height)
+              .data.some((value) => value !== 0);
+          }),
+        { message: "globe effects return after a direct projection change" },
+      )
+      .toBe(true);
     await expect.poll(() => staticDraws(page), { timeout: 15_000 }).toBe(0);
   });
 }

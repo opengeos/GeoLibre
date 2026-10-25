@@ -622,6 +622,8 @@ class EffectsEngine {
     // "move" already fires for pan, zoom, pitch, and rotate, so it covers every
     // camera change; no separate "zoom" listener is needed.
     map.on("move", this.handleMapChange);
+    // Direct setProjection calls do not emit a camera move.
+    map.on("projectiontransition", this.handleMapChange);
     document.addEventListener("visibilitychange", this.handleVisibility);
 
     this.handleResize();
@@ -651,6 +653,7 @@ class EffectsEngine {
     this.stop();
     this.map.off("resize", this.handleResize);
     this.map.off("move", this.handleMapChange);
+    this.map.off("projectiontransition", this.handleMapChange);
     document.removeEventListener("visibilitychange", this.handleVisibility);
     this.mapCanvas.style.zIndex = this.previousMapCanvasZIndex;
     if (this.controlContainer) {
