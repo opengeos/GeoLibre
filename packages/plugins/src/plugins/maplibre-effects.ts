@@ -569,9 +569,12 @@ class EffectsEngine {
   private height = 0;
   private dpr = 1;
   private starsDirty = true;
+  private spaceDirty = true;
+  private haloDirty = true;
   private settings: EffectsSettings;
 
   private rafId: number | null = null;
+  private cometTimer: number | null = null;
   private lastFrameTime = -Infinity;
   private destroyed = false;
 
@@ -632,13 +635,14 @@ class EffectsEngine {
 
   /**
    * Swap in new appearance settings. The space gradient is size-cached, so drop
-   * it to rebuild with the new color on the next frame; the halo is rebuilt
-   * every frame already. Restart the loop in case it idled (a settings change
-   * can arrive while the map sits still in globe mode).
+   * it to rebuild with the new color on the next frame. Restart the loop in
+   * case it idled (settings can change while the map sits still in globe mode).
    */
   applySettings(settings: EffectsSettings): void {
     this.settings = settings;
     this.spaceGradient = null;
+    this.spaceDirty = true;
+    this.haloDirty = true;
     if (!document.hidden) this.start();
   }
 
@@ -692,10 +696,11 @@ class EffectsEngine {
     }
   }
 
-  // A move restarts a loop that stopped because the map was not in globe mode.
+  // A move invalidates the camera-dependent layers and wakes the idle loop.
   // MapLibre's "move" fires for pan, zoom, pitch, and rotate.
   private handleMapChange(): void {
     this.starsDirty = true;
+    this.haloDirty = true;
     if (!document.hidden) this.start();
   }
 
@@ -717,6 +722,9 @@ class EffectsEngine {
     this.starfield = null; // regenerate at the new size on the next frame
     this.spaceGradient = null; // rebuild for the new dimensions
     this.starsDirty = true;
+    this.spaceDirty = true;
+    this.haloDirty = true;
+    if (!document.hidden) this.start();
   }
 
   private start(): void {
@@ -725,9 +733,24 @@ class EffectsEngine {
   }
 
   private stop(): void {
-    if (this.rafId === null) return;
-    window.cancelAnimationFrame(this.rafId);
+    if (this.rafId !== null) window.cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    if (this.cometTimer !== null) window.clearTimeout(this.cometTimer);
+    this.cometTimer = null;
+    this.lastFrameTime = -Infinity;
+  }
+
+  private scheduleComet(): void {
+    if (this.cometTimer !== null) return;
+    // Same geometric waiting-time distribution as a 0.5% chance per 60 Hz
+    // frame, without polling or touching any canvases between comets.
+    const frames = Math.floor(Math.log(1 - Math.random()) / Math.log(0.995)) + 1;
+    this.cometTimer = window.setTimeout(() => {
+      this.cometTimer = null;
+      if (this.destroyed || document.hidden || !isGlobeProjection(this.map)) return;
+      this.comets.push(this.spawnComet());
+      this.start();
+    }, frames * EFFECTS_FRAME_MS);
   }
 
   private clear(): void {
@@ -814,12 +837,6 @@ class EffectsEngine {
   }
 
   private updateAndDrawComets(frameScale: number): void {
-    // Preserve the original ~0.5% chance per 60 Hz frame when frames are skipped.
-    const spawnChance = 1 - Math.pow(1 - 0.005, frameScale);
-    if (this.comets.length === 0 && Math.random() < spawnChance) {
-      this.comets.push(this.spawnComet());
-    }
-
     const ctx = this.cometCtx;
     const survivors: Comet[] = [];
     for (const comet of this.comets) {
@@ -940,29 +957,45 @@ class EffectsEngine {
       : EFFECTS_FRAME_MS;
     this.lastFrameTime = nextFrameTime;
 
-    this.clear();
-
     if (!isGlobeProjection(this.map)) {
+      this.clear();
       this.starsCtx.clearRect(0, 0, this.width, this.height);
+      this.spaceDirty = this.starsDirty = this.haloDirty = true;
+      this.comets = [];
+      this.stop();
       // Not globe: idle without burning frames. A later move (handleMapChange)
       // restarts the loop when the globe comes back.
       return;
     }
 
-    this.drawSpaceBackground();
+    if (this.spaceDirty) {
+      this.drawSpaceBackground();
+      this.spaceDirty = false;
+    }
     if (this.starsDirty) {
       this.drawStarfield();
       this.starsDirty = false;
     }
-    this.updateAndDrawComets(elapsed / EFFECTS_FRAME_MS);
+    if (this.comets.length > 0) {
+      this.cometCtx.clearRect(0, 0, this.width, this.height);
+      this.updateAndDrawComets(elapsed / EFFECTS_FRAME_MS);
+    }
     // The atmospheric halo is Earth-only — other celestial bodies (Moon, Mars,
     // Pluto, …) are airless or don't share Earth's blue glow, so we keep the
     // space backdrop, starfield, and comets but skip the halo for them.
-    if (getActiveEllipsoid().id === "earth") {
-      this.drawHalo(getGeoglifyGlobeCircle(this.map));
+    if (this.haloDirty) {
+      this.haloCtx.clearRect(0, 0, this.width, this.height);
+      if (getActiveEllipsoid().id === "earth") {
+        this.drawHalo(getGeoglifyGlobeCircle(this.map));
+      }
+      this.haloDirty = false;
     }
 
-    this.start();
+    if (this.comets.length > 0) this.start();
+    else {
+      this.lastFrameTime = -Infinity;
+      this.scheduleComet();
+    }
   }
 }
 
