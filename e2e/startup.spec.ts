@@ -29,6 +29,10 @@ test.describe("without JavaScript", () => {
   test("keeps refresh guidance readable", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Loading GeoLibre" })).toBeVisible();
+    // Playwright's generic text matching skips noscript; target its paragraph.
+    const scriptDisabledMessage = page.locator("#startup-placeholder noscript p");
+    await expect(scriptDisabledMessage).toHaveText("JavaScript must be enabled to use GeoLibre.");
+    await expect(scriptDisabledMessage).toBeVisible();
     await expect(page.getByText(/hard refresh/)).toBeVisible();
     await expect(page.getByRole("link", { name: "Refresh page" })).toBeVisible();
   });
