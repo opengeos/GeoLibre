@@ -143,8 +143,10 @@ and deletions and shape-only changes still go through. If they are retrieved
 but cannot be read with confidence (a format GeoLibre does not decode, a text
 code that cannot be looked up, a code outside its domain, or more than 50,000
 combinations), GeoLibre says so and leaves the check to the server, as it does
-for layers without contingent values. A nonhosted service that cannot describe
-its data elements is treated as having no contingent values.
+for layers without contingent values. A nonhosted service that does not support
+`queryDataElements`, or whose own metadata cannot be read, is treated as having
+no contingent values; one that supports it but fails to answer is treated as
+unavailable.
 
 ## New features
 

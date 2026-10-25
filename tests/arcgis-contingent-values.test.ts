@@ -746,6 +746,17 @@ describe("nonhosted Enterprise contingent values", () => {
     };
     assert.equal(await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson), undefined);
 
+    // The service says it can describe its data elements but the call fails:
+    // field groups may exist, so the rules are unavailable.
+    const elementsKey = `${service}/queryDataElements?layers=[0]`;
+    const elements = responses[elementsKey];
+    delete responses[elementsKey];
+    assert.equal(
+      (await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson))?.status,
+      "unavailable",
+    );
+    responses[elementsKey] = elements;
+
     // Field groups exist but their combinations cannot be read: hold edits.
     responses[`${service}/queryDataElements?layers=[0]`] = enterpriseDataElements();
     delete responses[`${service}/queryContingentValues?layers=[0]`];

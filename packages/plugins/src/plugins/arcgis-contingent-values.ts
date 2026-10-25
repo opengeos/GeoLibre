@@ -455,9 +455,9 @@ function decodeEnterpriseSets(
  * Retrieve and decode a nonhosted service's contingent values. Such a layer
  * does not advertise them, so the service is asked whether it can describe
  * its data elements; a layer whose data element has no field groups has no
- * contingent values. Only a failure after field groups were found reports the
- * rules `unavailable`: a service that cannot be asked is treated as having
- * none, as before.
+ * contingent values. A service that cannot be described at all is treated as
+ * having none, as before; once it says it supports `queryDataElements`, a
+ * failure to read them or their combinations reports the rules `unavailable`.
  *
  * @param layerUrl - The layer's REST URL, ending in its numeric ID.
  * @param info - The layer's `?f=json` metadata.
@@ -477,17 +477,27 @@ export async function loadArcGISEnterpriseContingentValues(
   const match = /^(.*)\/(\d+)$/.exec(layerUrl.replace(/\/+$/, ""));
   if (!match) return undefined;
   const [, serviceUrl, layerId] = match;
+  let service: unknown;
+  try {
+    service = await fetchJson(serviceUrl);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    // The service cannot even be described: nothing says it has any.
+    return undefined;
+  }
+  if (!isRecord(service) || service.supportsQueryDataElements !== true) {
+    onConfirmedAbsent?.();
+    return undefined;
+  }
   let dataElements: unknown;
   try {
-    const service = await fetchJson(serviceUrl);
-    if (!isRecord(service) || service.supportsQueryDataElements !== true) {
-      onConfirmedAbsent?.();
-      return undefined;
-    }
     dataElements = await fetchJson(`${serviceUrl}/queryDataElements?layers=[${layerId}]`);
   } catch (error) {
     if (signal?.aborted) throw error;
-    return undefined;
+    // The service says it can describe its field groups but did not: they may
+    // exist, so the rules are unavailable (edits they could affect are held)
+    // rather than taken to be absent.
+    return { status: "unavailable", reason: messageOf(error) };
   }
   let groups: DataElementFieldGroup[];
   try {
