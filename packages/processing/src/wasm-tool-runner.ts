@@ -62,17 +62,18 @@ const REUSED_WORKER_ACK_MS = 10_000;
 /**
  * Determine how many workers may run at once.
  *
- * Only `threaded-simd` bounds the pool. In every other mode each concurrent
- * run gets its own worker, as before the pool existed: a WASI run is
- * synchronous inside its worker, and independent workers need neither
- * SharedArrayBuffer nor cross-origin isolation, so capping them at one would
- * queue every short tool behind a minutes-long tiling job.
+ * The pool is bounded only when the caller opts in by requesting
+ * `executionMode: "threaded-simd"` and that mode is active. Otherwise, auto
+ * mode included, each concurrent run gets its own worker, as before the pool
+ * existed: a WASI run is synchronous inside its worker and the workers share
+ * no memory, so a cap would only queue every short tool behind a minutes-long
+ * tiling job.
  *
  * @returns The number of workers allowed to run at once (may be Infinity).
  */
 export function getWasmToolPoolCapacity(): number {
   const diag = getWasmDiagnostics();
-  if (diag.activeMode === "threaded-simd") {
+  if (diag.requestedMode === "threaded-simd" && diag.activeMode === "threaded-simd") {
     return Math.max(1, Math.min(16, diag.activeThreads));
   }
   return Number.POSITIVE_INFINITY;
@@ -85,8 +86,10 @@ const MAX_IDLE_WORKERS = 1;
 
 /** How many idle workers the pool may keep parked in the current mode. */
 function idleWorkerLimit(): number {
-  const capacity = getWasmToolPoolCapacity();
-  return Number.isFinite(capacity) ? capacity : MAX_IDLE_WORKERS;
+  const diag = getWasmDiagnostics();
+  return diag.activeMode === "threaded-simd"
+    ? Math.max(1, Math.min(16, diag.activeThreads))
+    : MAX_IDLE_WORKERS;
 }
 
 /**

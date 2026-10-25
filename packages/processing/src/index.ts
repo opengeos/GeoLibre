@@ -559,8 +559,6 @@ export {
   detectSharedMemorySupport,
   resetWasmCapabilitiesCache,
   getWasmCapabilities,
-  getWasmCapabilities as probeWasmCapabilities,
-  setMockWasmCapabilities,
   resolveExecutionMode,
 } from "./wasm-capabilities";
 

@@ -155,21 +155,21 @@ The **desktop** build ships no service worker, so none of this runtime caching a
 
 A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background and takes control (`skipWaiting` + `clientsClaim`), so its fresh precache serves subsequent requests. Workbox's default force-reload-on-activation is deliberately suppressed via `onNeedReload` in `src/main.tsx` — on the relative-base `/demo/` subpath that reload fired spuriously and discarded in-progress map state. Instead, a `controllerchange` listener calls `offerReloadIfNewBuild()`, which offers the user a reload when the deployed `index.html` loads a different build than the running page (screening out the first install and those spurious activations). `installStaleChunkReload` stays the on-demand recovery path, reloading only when an orphaned lazy chunk 404s before the user acts (cooldown-guarded; if `sessionStorage` is blocked it skips the reload and lets the preload error surface). Precached chunks are served from cache and never 404, so the page is no longer reloaded out from under the user.
 
-## Multi-Threaded WebAssembly Geoprocessing (SIMD128 & Pthreads/SharedArrayBuffer)
+## WebAssembly Geoprocessing Worker Pool
 
 GeoLibre executes client-side geospatial analysis and Whitebox tools via WebAssembly. The engine architecture supports three execution tiers with automatic capability detection, progressive fallback, and observable diagnostics.
 
 ### Toolchain & Runtime Architecture
 
-- **Source & Compiler Target**: The geospatial processing CLI (`geolibre-cli.wasm`, ~24.1 MB) is built from Rust ([`opengeos/geolibre-rust`](https://github.com/opengeos/geolibre-rust), forked from Whitebox Next Gen) targeted at `wasm32-wasip1`. The compiled binary incorporates 14,505 WebAssembly SIMD (`0xfd`) vectorization instructions.
+- **Source & Compiler Target**: The geospatial processing CLI (`geolibre-cli.wasm`, ~24.1 MB) is built from Rust ([`opengeos/geolibre-rust`](https://github.com/opengeos/geolibre-rust), forked from Whitebox Next Gen) targeted at `wasm32-wasip1`.
 - **In-Browser Execution**: Executed via `@bjorn3/browser_wasi_shim` inside dedicated Web Workers (`wasm-tool.worker.ts`) using an in-memory virtual `/work` filesystem for zero-disk, secure file staging and result capture.
-- **Worker Pool**: Managed by `@geolibre/processing` (`wasm-tool-runner.ts`), which maintains an adaptive pool of workers. Every mode runs the same `geolibre-cli.wasm` binary with private (non-shared) memory: the mode only sets how many workers may run at once. `threaded-simd` bounds concurrent runs to the resolved thread count; the other modes give each concurrent run its own worker and keep one warm. Parked workers are kept warm to avoid repeating the ~24 MB WASM compilation on subsequent jobs. A dead-worker acknowledgement protocol (`REUSED_WORKER_ACK_MS = 10,000 ms`) automatically replaces unresponsive or discarded workers.
+- **Worker Pool**: Managed by `@geolibre/processing` (`wasm-tool-runner.ts`), which maintains an adaptive pool of workers. Every mode runs the same `geolibre-cli.wasm` binary with private (non-shared) memory: the mode only sets how many workers may run at once. Each concurrent run gets its own worker unless the caller explicitly requests `executionMode: "threaded-simd"`, which bounds concurrent runs to the resolved thread count; in `threaded-simd` up to that many workers stay warm, otherwise one. Parked workers are kept warm to avoid repeating the ~24 MB WASM compilation on subsequent jobs. A dead-worker acknowledgement protocol (`REUSED_WORKER_ACK_MS = 10,000 ms`) automatically replaces unresponsive or discarded workers.
 
 ### Three Execution Modes
 
 | Execution Mode | Requirements | Concurrent runs | Best Used For |
 |---|---|---|---|
-| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | Bounded pool of 1–16 workers (resolved thread count, from `hardwareConcurrency` or `maxThreads`) | Multi-tile batch processing via `runParallelWasmTools` |
+| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | One worker per concurrent run; bounded to 1–16 (from `hardwareConcurrency` or `maxThreads`) only when explicitly requested | Multi-tile batch processing via `runParallelWasmTools` |
 | `simd-single-thread` | Browser SIMD128 supported | One worker per concurrent run, one kept warm | Standard non-isolated environments, public web deployments without COOP/COEP |
 | `portable-single-thread` | Baseline WebAssembly support | One worker per concurrent run, one kept warm | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
 
@@ -216,23 +216,14 @@ To enable `SharedArrayBuffer` and `threaded-simd` mode in browser deployments, s
 
 ### Algorithm Parallelization Classification
 
-Geospatial algorithms are classified by data dependency in `packages/processing/src/wasm-algorithm-audit.ts`:
+`packages/processing/src/wasm-algorithm-audit.ts` classifies selected tools by data dependency. The classification is advisory: the runner does not consume it, and no tool is split across workers today.
 
-- **Tileable Stencil (`tileable-stencil`)**:
-  - *Tools*: `slope`, `aspect`, `hillshade`, `gaussian_filter`, `mean_filter`, `focal_statistics`.
-  - *Strategy*: Embarrassingly parallel across horizontal strips or tiles with a 1-pixel halo overlap. Benefited by SIMD vectorization.
-- **Pixel-Independent (`pixel-independent`)**:
-  - *Tools*: `raster_calculator`, `reclass`, `is_nodata`.
-  - *Strategy*: Fully parallel point-wise arithmetic. Highly optimized by SIMD128.
-- **Topological DAG (`topological-dag`)**:
-  - *Tools*: `d8_flow_accumulation`, `d_inf_flow_accumulation`.
-  - *Limitation*: Cannot be naively partitioned across tiles due to global drainage network topological sorting dependencies. Executed on a dedicated single worker with topologically resolved inputs.
-- **Priority Queue (`priority-queue`)**:
-  - *Tools*: `fill_depressions`, `breach_depressions`.
-  - *Limitation*: Wang & Liu priority-flood algorithm relies on a global min-heap.
-- **Radial Raymarch (`radial-raymarch`)**:
-  - *Tools*: `viewshed`.
-  - *Strategy*: Can be partitioned radially or by angular quadrant across workers.
+- **Tileable Stencil (`tileable-stencil`)**: `slope`, `aspect`, `hillshade`, `gaussian_filter`, `mean_filter`, `focal_statistics` — could be partitioned into strips or tiles with a 1-pixel halo.
+- **Pixel-Independent (`pixel-independent`)**: `raster_calculator` — point-wise, fully partitionable.
+- **Topological DAG (`topological-dag`)**: `d8_flow_accumulation`, `d_inf_flow_accumulation` — cannot be naively partitioned because of global drainage-network ordering.
+- **Priority Queue (`priority-queue`)**: `fill_depressions` — the priority-flood algorithm relies on a global min-heap.
+- **Radial Raymarch (`radial-raymarch`)**: `viewshed` — could be partitioned by angular sector.
+- **Vector Batch (`vector-batch`)**: `buffer_vector` — feature chunks could be distributed across workers; not SIMD-eligible.
 
 ## Container image
 

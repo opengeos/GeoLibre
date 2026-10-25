@@ -10,20 +10,21 @@ import {
   getWasmToolWorkerPoolStats,
   isAlgorithmParallelizable,
   isAlgorithmSimdEligible,
-  probeWasmCapabilities,
+  getWasmCapabilities,
   releaseIdleWasmToolWorkers,
   resetWasmCapabilitiesCache,
   resetWasmRuntimeConfig,
   resolveExecutionMode,
   runParallelWasmTools,
   runWasmToolInBackground,
-  setMockWasmCapabilities,
   setWasmRuntimeConfig,
   terminateAllWasmToolWorkers,
   type WasmExecutionMode,
   type WasmToolRequest,
   type WasmToolResponse,
 } from "../packages/processing/src/index";
+// Test-only override, deliberately not part of the package's public API.
+import { setMockWasmCapabilities } from "../packages/processing/src/wasm-capabilities";
 
 // Mock worker for pool and concurrency testing
 class MockWorker {
@@ -73,7 +74,7 @@ class MockWorker {
 
 describe("WebAssembly Capability Detection & Mode Resolution", () => {
   it("probes SIMD128, SharedArrayBuffer and hardware concurrency safely", () => {
-    const caps = probeWasmCapabilities();
+    const caps = getWasmCapabilities();
     assert.equal(typeof caps.hasSimd, "boolean");
     assert.equal(typeof caps.hasSharedMemory, "boolean");
     assert.equal(typeof caps.isCrossOriginIsolated, "boolean");
@@ -312,6 +313,20 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
     void runWasmToolInBackground({ tool: "short", args: [], input: {} }).catch(() => {});
     assert.equal(MockWorker.instances.length, 2, "the second run must not queue");
     assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 0);
+  });
+
+  it("does not bound the pool in auto mode even when threaded-simd is available", () => {
+    setMockWasmCapabilities({
+      hasSimd: true,
+      hasSharedArrayBuffer: true,
+      hasSharedMemory: true,
+      isCrossOriginIsolated: true,
+    });
+    setWasmRuntimeConfig({ executionMode: "auto", maxThreads: 1 });
+    assert.equal(getWasmDiagnostics().activeMode, "threaded-simd");
+    void runWasmToolInBackground({ tool: "long", args: [], input: {} }).catch(() => {});
+    void runWasmToolInBackground({ tool: "short", args: [], input: {} }).catch(() => {});
+    assert.equal(MockWorker.instances.length, 2, "the short run must not queue");
   });
 
   it("scales pool capacity when threaded-simd mode is active", () => {
