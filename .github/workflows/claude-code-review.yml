@@ -262,6 +262,65 @@ jobs:
 
           echo "Staged pr-context/: $(wc -c < pr-context/diff.patch) bytes of diff, $(wc -l < pr-context/changed-files.txt) changed files"
 
+      # Change stats for the summary table: the whole PR against its base
+      # branch (as GitHub's "Files changed" tab shows it), not the latest push.
+      # Files changed and the total size change, from the git trees at the
+      # merge base with the base branch and at the PR head (blob sizes in
+      # bytes). Best effort, in its own step so `set -e` holds: the fallback
+      # is written first and only replaced once every call has succeeded.
+      - name: Stage change stats for the reviewer
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo '{"unavailable": "the change stats could not be computed"}' > pr-context/stats.json
+          base="$(jq -r .baseRefName pr-context/metadata.json)"
+          base_sha="$(gh api "repos/$REPO/compare/$base...$HEAD_SHA" --jq .merge_base_commit.sha)"
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[] | {filename, status, previous_filename}' > "$RUNNER_TEMP/files.json"
+          # The file list stops at 3000 files; a longer PR keeps the fallback
+          # rather than reporting partial counts.
+          expected="$(jq -r .changedFiles pr-context/metadata.json)"
+          listed="$(jq -s length "$RUNNER_TEMP/files.json")"
+          if [ "$expected" != "$listed" ]; then
+            echo "::warning::PR file list has $listed of $expected files; change stats unavailable"
+            exit 1
+          fi
+          for side in base head; do
+            sha="$base_sha"
+            if [ "$side" = head ]; then sha="$HEAD_SHA"; fi
+            gh api "repos/$REPO/git/trees/$sha?recursive=1" \
+              --jq '{truncated, sizes: ([.tree[] | select(.type == "blob") | {key: .path, value: .size}] | from_entries)}' \
+              > "$RUNNER_TEMP/$side.json"
+          done
+          jq -n --arg base "$base" --arg base_sha "$base_sha" --arg head_sha "$HEAD_SHA" \
+            --slurpfile f "$RUNNER_TEMP/files.json" \
+            --slurpfile b "$RUNNER_TEMP/base.json" --slurpfile h "$RUNNER_TEMP/head.json" '
+            $b[0].sizes as $B | $h[0].sizes as $H | $f as $F |
+            { compared: "the whole PR against \($base) (merge base \($base_sha[0:7]) to PR head \($head_sha[0:7]))",
+              files_changed: ($F | length),
+              added: ([$F[] | select(.status == "added")] | length),
+              modified: ([$F[] | select(.status == "modified" or .status == "changed")] | length),
+              removed: ([$F[] | select(.status == "removed")] | length),
+              renamed: ([$F[] | select(.status == "renamed" or .status == "copied")] | length),
+              bytes_before: ([$F[] | select(.status != "added") | $B[.previous_filename // .filename] // 0] | add // 0),
+              bytes_after: ([$F[] | select(.status != "removed") | $H[.filename] // 0] | add // 0),
+              trees_truncated: ($b[0].truncated or $h[0].truncated),
+              # The 20 files whose size changed most, largest change first.
+              largest_changes: ([$F[]
+                | { path: .filename,
+                    before: (if .status == "added" then 0 else ($B[.previous_filename // .filename] // 0) end),
+                    after: (if .status == "removed" then 0 else ($H[.filename] // 0) end) }
+                | .change = .after - .before]
+                | sort_by(-(if .change < 0 then -.change else .change end)) | .[:20]) }
+            | .bytes_change = .bytes_after - .bytes_before' > "$RUNNER_TEMP/stats.json"
+          mv "$RUNNER_TEMP/stats.json" pr-context/stats.json
+          cat pr-context/stats.json
+
       - name: Run Claude Code Review
         id: claude-review
         # Pinned to a full commit SHA, not the mutable `v1` tag. This workflow's
@@ -300,6 +359,7 @@ jobs:
               - `pr-context/diff.patch` — the full PR diff (read it first; it may be large, so page through it with Read's offset/limit)
               - `pr-context/changed-files.txt` — changed files with added/removed line counts
               - `pr-context/metadata.json` — PR number, title, body, author, base and head refs
+              - `pr-context/stats.json` — the whole PR compared with its base branch: files changed (added, modified, removed, renamed), the total size of the changed files before and after, and the files whose size changed most, all in bytes
 
             When the diff alone is not enough to judge correctness, read the surrounding source files for context.
 
@@ -317,6 +377,8 @@ jobs:
             After posting inline comments, end your run by writing the summary as your FINAL MESSAGE. Do not try to post it yourself — you have no tool that can, and a workflow step publishes your final message as the PR comment verbatim. So your final message must be the comment body and nothing else: no preamble, no "I've completed the review", no meta-commentary about the tools you used.
 
             That final message must start with the heading "## Code review" and list the findings grouped by category (Bugs, Security, Performance, Quality, CLAUDE.md), each with a one-line description and confidence. If you genuinely find nothing worth raising, say so and note what you checked.
+
+            End the final message with a "### Change size" table built from `pr-context/stats.json`. It covers the whole PR compared with the base branch, not the latest push, so put its `compared` text in a line under the heading. The table has one row each for files changed (with the added, modified, removed and renamed counts), size before, size after, and the total size change (signed, e.g. "+12.3 KB"). Under it, add a second table from `largest_changes` with one row per file: path, size before, size after and size change. Show sizes in B, KB or MB as fits. Both tables report file sizes, not line counts: never substitute the diff's added or removed lines for a size. If the stats file says they are unavailable, or `trees_truncated` is true, say so under the table instead of estimating.
 
             Do not approve, merge, or modify any code. Only review and comment.
 
