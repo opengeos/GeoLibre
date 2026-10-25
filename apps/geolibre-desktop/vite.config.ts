@@ -1585,8 +1585,6 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 4173,
-    host: "127.0.0.1",
     ...(CROSS_ORIGIN_ISOLATION
       ? {
           headers: {

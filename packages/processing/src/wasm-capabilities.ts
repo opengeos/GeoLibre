@@ -129,14 +129,15 @@ export function getWasmCapabilities(): WasmCapabilities {
   const hasSharedMemory = hasWasm && detectSharedMemorySupport();
   const isCrossOriginIsolated = Boolean(globalThis.crossOriginIsolated);
 
-  let rawConcurrency = 4;
+  // Without navigator (non-browser hosts) assume no parallelism.
+  let rawConcurrency = 1;
   if (typeof navigator === "object" && typeof navigator.hardwareConcurrency === "number") {
     rawConcurrency = navigator.hardwareConcurrency;
   }
   // Clamp hardwareConcurrency: at least 1, conservative upper bound of 16
   const hardwareConcurrency = Math.max(1, Math.min(16, rawConcurrency));
-  // Default recommendation: use up to 4 threads or half of available cores
-  const recommendedThreads = Math.max(1, Math.min(8, Math.min(hardwareConcurrency, 4)));
+  // Default recommendation: one thread per core, capped at 4
+  const recommendedThreads = Math.max(1, Math.min(hardwareConcurrency, 4));
 
   const base: WasmCapabilities = {
     hasWasm,

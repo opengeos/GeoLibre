@@ -163,15 +163,15 @@ GeoLibre executes client-side geospatial analysis and Whitebox tools via WebAsse
 
 - **Source & Compiler Target**: The geospatial processing CLI (`geolibre-cli.wasm`, ~24.1 MB) is built from Rust ([`opengeos/geolibre-rust`](https://github.com/opengeos/geolibre-rust), forked from Whitebox Next Gen) targeted at `wasm32-wasip1`. The compiled binary incorporates 14,505 WebAssembly SIMD (`0xfd`) vectorization instructions.
 - **In-Browser Execution**: Executed via `@bjorn3/browser_wasi_shim` inside dedicated Web Workers (`wasm-tool.worker.ts`) using an in-memory virtual `/work` filesystem for zero-disk, secure file staging and result capture.
-- **Worker Pool**: Managed by `@geolibre/processing` (`wasm-tool-runner.ts`), which maintains an adaptive pool of workers. Parked workers are kept warm to avoid repeating the ~24 MB WASM compilation on subsequent jobs. A dead-worker acknowledgement protocol (`REUSED_WORKER_ACK_MS = 10,000 ms`) automatically replaces unresponsive or discarded workers.
+- **Worker Pool**: Managed by `@geolibre/processing` (`wasm-tool-runner.ts`), which maintains an adaptive pool of workers. Every mode runs the same `geolibre-cli.wasm` binary with private (non-shared) memory: the mode only sets how many workers may run at once. `threaded-simd` bounds concurrent runs to the resolved thread count; the other modes give each concurrent run its own worker and keep one warm. Parked workers are kept warm to avoid repeating the ~24 MB WASM compilation on subsequent jobs. A dead-worker acknowledgement protocol (`REUSED_WORKER_ACK_MS = 10,000 ms`) automatically replaces unresponsive or discarded workers.
 
 ### Three Execution Modes
 
-| Execution Mode | Requirements | Concurrency | Vectorization | Best Used For |
-|---|---|---|---|---|
-| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | Multi-Worker (2–16 workers based on `hardwareConcurrency`) | SIMD128 (128-bit vector loops) | High-performance interactive raster analysis, multi-tile batch processing |
-| `simd-single-thread` | Browser SIMD128 supported | 1 Worker | SIMD128 (128-bit vector loops) | Standard non-isolated environments, public web deployments without COOP/COEP |
-| `portable-single-thread` | Baseline WebAssembly support | 1 Worker | Scalar loops | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
+| Execution Mode | Requirements | Concurrent runs | Best Used For |
+|---|---|---|---|
+| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | Bounded pool of 1–16 workers (resolved thread count, from `hardwareConcurrency` or `maxThreads`) | Multi-tile batch processing via `runParallelWasmTools` |
+| `simd-single-thread` | Browser SIMD128 supported | One worker per concurrent run, one kept warm | Standard non-isolated environments, public web deployments without COOP/COEP |
+| `portable-single-thread` | Baseline WebAssembly support | One worker per concurrent run, one kept warm | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
 
 ### Capability Detection & Mode Selection
 
@@ -207,12 +207,12 @@ To enable `SharedArrayBuffer` and `threaded-simd` mode in browser deployments, s
   Cross-Origin-Embedder-Policy: require-corp
   ```
 - **Production Nginx (`docker/nginx.conf`)**:
-  When deploying in isolated environments:
+  The shipped config does **not** send these headers. To opt in, add:
   ```nginx
   add_header Cross-Origin-Opener-Policy "same-origin" always;
   add_header Cross-Origin-Embedder-Policy "require-corp" always;
   ```
-  *Note*: When COEP `require-corp` is active, any cross-origin tile, basemap, or font resources fetched by the browser must support CORS or include `Cross-Origin-Resource-Policy: cross-origin`.
+  **Warning**: with `VITE_CROSS_ORIGIN_ISOLATION=1` or these headers, COEP `require-corp` is active, so any cross-origin tile, basemap, or font resources fetched by the browser must support CORS or include `Cross-Origin-Resource-Policy: cross-origin`.
 
 ### Algorithm Parallelization Classification
 

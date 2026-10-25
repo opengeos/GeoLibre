@@ -286,6 +286,7 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
 
   afterEach(() => {
     terminateAllWasmToolWorkers();
+    setMockWasmCapabilities(null);
     if (originalWorker === undefined) {
       delete (globalThis as { Worker?: typeof Worker }).Worker;
     } else {
@@ -294,11 +295,31 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
     resetWasmRuntimeConfig();
   });
 
+  /** Bound the pool to a single worker so later runs queue behind the first. */
+  function useSingleSlotPool(): void {
+    setMockWasmCapabilities({
+      hasSimd: true,
+      hasSharedArrayBuffer: true,
+      hasSharedMemory: true,
+      isCrossOriginIsolated: true,
+    });
+    setWasmRuntimeConfig({ executionMode: "threaded-simd", maxThreads: 1 });
+  }
+
+  it("runs concurrent requests on separate workers outside threaded-simd", () => {
+    setWasmRuntimeConfig({ executionMode: "portable-single-thread" });
+    void runWasmToolInBackground({ tool: "long", args: [], input: {} }).catch(() => {});
+    void runWasmToolInBackground({ tool: "short", args: [], input: {} }).catch(() => {});
+    assert.equal(MockWorker.instances.length, 2, "the second run must not queue");
+    assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 0);
+  });
+
   it("scales pool capacity when threaded-simd mode is active", () => {
     setWasmRuntimeConfig({
       executionMode: "portable-single-thread",
     });
-    assert.equal(getWasmToolPoolCapacity(), 1);
+    // Outside threaded-simd every concurrent run gets its own worker.
+    assert.equal(getWasmToolPoolCapacity(), Number.POSITIVE_INFINITY);
 
     // Set custom config with maxThreads = 4
     setWasmRuntimeConfig({
@@ -428,6 +449,7 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
   });
 
   it("cleans up all idle and active workers on terminateAllWasmToolWorkers", async () => {
+    useSingleSlotPool();
     const run = runWasmToolInBackground({ tool: "task", args: [], input: {} });
     const queued = runWasmToolInBackground({ tool: "queued", args: [], input: {} });
 
@@ -458,6 +480,7 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
   });
 
   it("dispatches the next queued job when postMessage throws", async () => {
+    useSingleSlotPool();
     const first = runWasmToolInBackground({ tool: "first", args: [], input: {} });
     const second = runWasmToolInBackground({ tool: "second", args: [], input: {} });
     const third = runWasmToolInBackground({ tool: "third", args: [], input: {} });
@@ -480,6 +503,7 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
   });
 
   it("rejects a queued job as soon as its signal aborts", async () => {
+    useSingleSlotPool();
     const running = runWasmToolInBackground({ tool: "running", args: [], input: {} });
     const controller = new AbortController();
     const queued = runWasmToolInBackground(
@@ -496,6 +520,33 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
       data: { ok: true, result: { exitCode: 0, stdout: [], files: {} } },
     });
     assert.equal((await running).exitCode, 0);
+  });
+
+  it("keeps dispatching past a queued job that settles without a worker", async () => {
+    useSingleSlotPool();
+    const shared = new AbortController();
+    const running = runWasmToolInBackground(
+      { tool: "running", args: [], input: {} },
+      { signal: shared.signal },
+    );
+    // Queued behind `running` on the same signal, then an unrelated job.
+    const sibling = runWasmToolInBackground(
+      { tool: "sibling", args: [], input: {} },
+      { signal: shared.signal },
+    );
+    const other = runWasmToolInBackground({ tool: "other", args: [], input: {} });
+    assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 2);
+
+    shared.abort();
+    await assert.rejects(running, (err: Error) => err.name === "AbortError");
+    await assert.rejects(sibling, (err: Error) => err.name === "AbortError");
+    // `other` must take the freed slot rather than wait for a run that never comes.
+    assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 0);
+    assert.equal(MockWorker.instances.length, 2);
+    MockWorker.instances[1].emit("message", {
+      data: { ok: true, result: { exitCode: 0, stdout: [], files: {} } },
+    });
+    assert.equal((await other).exitCode, 0);
   });
 
   it("cancels the rest of a parallel batch when one run fails", async () => {

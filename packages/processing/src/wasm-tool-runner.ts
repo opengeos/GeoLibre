@@ -60,16 +60,33 @@ const pendingQueue: QueuedJob[] = [];
 const REUSED_WORKER_ACK_MS = 10_000;
 
 /**
- * Determine the maximum active worker pool size based on current execution mode.
+ * Determine how many workers may run at once.
  *
- * @returns The number of workers allowed to run at once.
+ * Only `threaded-simd` bounds the pool. In every other mode each concurrent
+ * run gets its own worker, as before the pool existed: a WASI run is
+ * synchronous inside its worker, and independent workers need neither
+ * SharedArrayBuffer nor cross-origin isolation, so capping them at one would
+ * queue every short tool behind a minutes-long tiling job.
+ *
+ * @returns The number of workers allowed to run at once (may be Infinity).
  */
 export function getWasmToolPoolCapacity(): number {
   const diag = getWasmDiagnostics();
   if (diag.activeMode === "threaded-simd") {
     return Math.max(1, Math.min(16, diag.activeThreads));
   }
-  return 1;
+  return Number.POSITIVE_INFINITY;
+}
+
+// How many idle workers to keep warm outside `threaded-simd`. Each holds its
+// compiled module (tens of MB), and real usage is one tool at a time, so one
+// warm worker captures nearly all of the benefit.
+const MAX_IDLE_WORKERS = 1;
+
+/** How many idle workers the pool may keep parked in the current mode. */
+function idleWorkerLimit(): number {
+  const capacity = getWasmToolPoolCapacity();
+  return Number.isFinite(capacity) ? capacity : MAX_IDLE_WORKERS;
 }
 
 /**
@@ -103,10 +120,10 @@ function unparkWorker(worker: Worker): void {
 
 /** Park a healthy worker for reuse, or terminate it if the pool is full. */
 function parkWorker(worker: Worker): void {
-  // Capacity can shrink between runs (setWasmRuntimeConfig), so trim the pool
+  // The limit can shrink between runs (setWasmRuntimeConfig), so trim the pool
   // to leave room for this worker within it, dropping the oldest first.
-  const capacity = getWasmToolPoolCapacity();
-  while (idleWorkers.length >= capacity) {
+  const limit = idleWorkerLimit();
+  while (idleWorkers.length >= limit) {
     const extra = idleWorkers.shift()!;
     unparkWorker(extra);
     extra.terminate();
@@ -163,12 +180,20 @@ function abortError(tool: string): DOMException {
   return new DOMException(`${tool} was cancelled.`, "AbortError");
 }
 
-/** Start the next queued job, if any, now that a worker slot is free. */
+/**
+ * Start queued jobs while a worker slot is free. A dequeued job can settle
+ * without taking the slot (already aborted, or the spawn throws), so keep
+ * going rather than leaving the jobs behind it stranded.
+ */
 function dispatchNext(): void {
-  const nextJob = pendingQueue.shift();
-  if (!nextJob) return;
-  nextJob.detachQueuedAbort?.();
-  acquireAndExecute(nextJob);
+  while (
+    pendingQueue.length > 0 &&
+    (idleWorkers.length > 0 || busyWorkers.size < getWasmToolPoolCapacity())
+  ) {
+    const nextJob = pendingQueue.shift()!;
+    nextJob.detachQueuedAbort?.();
+    acquireAndExecute(nextJob);
+  }
 }
 
 /**
