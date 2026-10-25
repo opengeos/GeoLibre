@@ -10,7 +10,7 @@ export function withRasterSourceDefaults(layer: GeoLibreLayer): GeoLibreLayer {
   if (
     !["raster", "xyz", "wmts"].includes(layer.type) ||
     !layer.source ||
-    layer.source.maxzoom !== undefined ||
+    (typeof layer.source.maxzoom === "number" && Number.isFinite(layer.source.maxzoom)) ||
     (typeof layer.source.minzoom === "number" && layer.source.minzoom > 19)
   ) {
     return layer;

@@ -29,6 +29,13 @@ describe("Wayback tile source zoom limits", () => {
     useAppStore.getState().removeLayer(layer.id);
   });
 
+  it("repairs null and non-numeric limits in saved JSON", () => {
+    for (const maxzoom of [null, "19"]) {
+      const project = { ...createEmptyProject(), layers: [imagery({ tiles: [tile], maxzoom })] };
+      assert.equal(parseProject(JSON.stringify(project)).layers[0].source.maxzoom, 19);
+    }
+  });
+
   it("preserves explicit limits and unrelated sources", () => {
     const sources = [
       { tiles: [tile], maxzoom: 17 },
