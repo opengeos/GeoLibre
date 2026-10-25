@@ -463,6 +463,8 @@ function decodeEnterpriseSets(
  * @param info - The layer's `?f=json` metadata.
  * @param fetchJson - Requests a URL as JSON through the layer's connection; rejects on errors.
  * @param signal - Aborts the retrieval.
+ * @param onConfirmedAbsent - Called when the service shows the layer has none
+ *   (as opposed to a request that failed, which may succeed later).
  * @returns The definition, or `undefined` when the layer has none.
  */
 export async function loadArcGISEnterpriseContingentValues(
@@ -470,6 +472,7 @@ export async function loadArcGISEnterpriseContingentValues(
   info: ArcGISEditInfo,
   fetchJson: (url: string) => Promise<unknown>,
   signal?: AbortSignal,
+  onConfirmedAbsent?: () => void,
 ): Promise<ArcGISContingentValues | undefined> {
   const match = /^(.*)\/(\d+)$/.exec(layerUrl.replace(/\/+$/, ""));
   if (!match) return undefined;
@@ -477,7 +480,10 @@ export async function loadArcGISEnterpriseContingentValues(
   let dataElements: unknown;
   try {
     const service = await fetchJson(serviceUrl);
-    if (!isRecord(service) || service.supportsQueryDataElements !== true) return undefined;
+    if (!isRecord(service) || service.supportsQueryDataElements !== true) {
+      onConfirmedAbsent?.();
+      return undefined;
+    }
     dataElements = await fetchJson(`${serviceUrl}/queryDataElements?layers=[${layerId}]`);
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -491,7 +497,10 @@ export async function loadArcGISEnterpriseContingentValues(
       return { status: "unsupported", reason: error.reason, detail: error.detail };
     throw error;
   }
-  if (!groups.length) return undefined;
+  if (!groups.length) {
+    onConfirmedAbsent?.();
+    return undefined;
+  }
   let contingentValues: unknown;
   try {
     contingentValues = await fetchJson(`${serviceUrl}/queryContingentValues?layers=[${layerId}]`);
@@ -764,6 +773,9 @@ export function arcGISContingencyError(check: ArcGISContingencyCheck): string {
  * @param info - Its `?f=json` metadata.
  * @param fetchJson - Requests a URL as JSON through the connection; rejects on errors.
  * @param signal - Aborts the retrieval.
+ * @param lookup - `knownAbsent`: layer URLs whose service confirmed they have
+ *   none, skipped unless `fresh` (a save checks current rules). Only a
+ *   confirmed answer is remembered, never a request that failed.
  * @returns The metadata, with `contingentValues` set when there are any.
  */
 export async function withArcGISContingentValues<T extends ArcGISEditInfo>(
@@ -771,6 +783,7 @@ export async function withArcGISContingentValues<T extends ArcGISEditInfo>(
   info: T,
   fetchJson: (url: string) => Promise<unknown>,
   signal?: AbortSignal,
+  lookup: { knownAbsent?: Set<string>; fresh?: boolean } = {},
 ): Promise<T> {
   const url = layerUrl.replace(/\/+$/, "");
   if (info.hasContingentValuesDefinition === true)
@@ -781,6 +794,15 @@ export async function withArcGISContingentValues<T extends ArcGISEditInfo>(
   const caps = arcGISEditCapabilities(info);
   if (info.hasContingentValuesDefinition !== undefined || !(caps.create || caps.update))
     return info;
-  const contingentValues = await loadArcGISEnterpriseContingentValues(url, info, fetchJson, signal);
+  const { knownAbsent, fresh = false } = lookup;
+  if (!fresh && knownAbsent?.has(url)) return info;
+  const contingentValues = await loadArcGISEnterpriseContingentValues(
+    url,
+    info,
+    fetchJson,
+    signal,
+    () => knownAbsent?.add(url),
+  );
+  if (contingentValues) knownAbsent?.delete(url);
   return contingentValues ? { ...info, contingentValues } : info;
 }

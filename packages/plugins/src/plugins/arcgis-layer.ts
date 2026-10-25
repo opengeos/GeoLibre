@@ -2660,24 +2660,19 @@ async function fetchArcGISFeatureLayerInfo(
   { fresh = false }: { fresh?: boolean } = {},
 ): Promise<ArcGISFeatureLayerInfo> {
   const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, cause, signal);
-  const url = trimTrailingSlash(layerUrl);
-  // A layer that does not advertise contingent values is only found to have
-  // none after asking its service; remember that for refreshes, so a layer on
-  // an automatic refresh does not ask again every time. A save always asks.
-  const advertised = info.hasContingentValuesDefinition !== undefined;
-  if (!fresh && !advertised && layersWithoutContingentValues.has(url)) return info;
-  const result = await withArcGISContingentValues(
-    url,
+  // A nonhosted layer is only found to have no contingent values by asking its
+  // service; a confirmed answer is remembered, so a layer on an automatic
+  // refresh does not ask again every time. A save always asks.
+  return withArcGISContingentValues(
+    trimTrailingSlash(layerUrl),
     info,
     (resource) => fetchArcGISJson<unknown>(resource, options, cause, signal),
     signal,
+    { knownAbsent: layersWithoutContingentValues, fresh },
   );
-  if (!advertised && !result.contingentValues) layersWithoutContingentValues.add(url);
-  else layersWithoutContingentValues.delete(url);
-  return result;
 }
 
-/** Layers whose service was asked and has no contingent values for them. */
+/** Layers whose service confirmed it has no contingent values for them. */
 const layersWithoutContingentValues = new Set<string>();
 
 async function resolveArcGISLayerBounds(

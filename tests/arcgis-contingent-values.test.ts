@@ -784,3 +784,39 @@ describe("withArcGISContingentValues", () => {
     assert.deepEqual(urls, []);
   });
 });
+
+describe("remembering nonhosted layers without contingent values", () => {
+  const layerUrl = "https://gis.example.com/server/rest/services/S/FeatureServer/0";
+  const nonhosted = { ...base, hasContingentValuesDefinition: undefined };
+
+  it("skips a confirmed absence on refresh, but asks again for a save", async () => {
+    const urls: string[] = [];
+    const fetchJson = async (url: string) => {
+      urls.push(url);
+      return { supportsQueryDataElements: false };
+    };
+    const knownAbsent = new Set<string>();
+    await withArcGISContingentValues(layerUrl, nonhosted, fetchJson, undefined, { knownAbsent });
+    assert.equal(urls.length, 1);
+    await withArcGISContingentValues(layerUrl, nonhosted, fetchJson, undefined, { knownAbsent });
+    assert.equal(urls.length, 1);
+    await withArcGISContingentValues(layerUrl, nonhosted, fetchJson, undefined, {
+      knownAbsent,
+      fresh: true,
+    });
+    assert.equal(urls.length, 2);
+  });
+
+  it("does not remember a lookup that failed", async () => {
+    let calls = 0;
+    const fetchJson = async () => {
+      calls++;
+      throw new Error("HTTP 502");
+    };
+    const knownAbsent = new Set<string>();
+    await withArcGISContingentValues(layerUrl, nonhosted, fetchJson, undefined, { knownAbsent });
+    await withArcGISContingentValues(layerUrl, nonhosted, fetchJson, undefined, { knownAbsent });
+    assert.equal(calls, 2);
+    assert.equal(knownAbsent.size, 0);
+  });
+});
