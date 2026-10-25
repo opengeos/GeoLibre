@@ -341,7 +341,8 @@ function messageOf(error: unknown): string {
 /** A value as the field stores it: a drafted numeric field may still hold decimal text. */
 function storedValue(info: ArcGISEditInfo, field: string, value: unknown): unknown {
   if (value === undefined || value === null) return null;
-  const type = info.fields?.find((entry) => entry.name === field)?.type;
+  const lower = field.toLowerCase();
+  const type = info.fields?.find((entry) => entry.name.toLowerCase() === lower)?.type;
   if (
     type &&
     NUMERIC_FIELD_TYPES.has(type) &&
@@ -473,6 +474,40 @@ export function arcGISContingentChoices(
   if (!groups.length) return undefined;
   const selector = arcGISSubtypeField(info);
   const subtype = selector ? storedValue(info, selector, candidate[selector]) : undefined;
+  // The answer depends only on the subtype and the values of the governing
+  // groups' fields, so cells that share them (every unedited row with the
+  // same values, every re-render) share one scan of the combinations.
+  const related = new Set(
+    groups.filter((group) => group.fields.includes(field)).flatMap((g) => g.fields),
+  );
+  const key = JSON.stringify([
+    field,
+    codeKey(subtype),
+    [...related].map((name) => codeKey(storedValue(info, name, candidate[name]))),
+  ]);
+  let cache = choiceCache.get(info);
+  if (!cache) choiceCache.set(info, (cache = new Map()));
+  if (cache.has(key)) return cache.get(key);
+  // Bounded: a table with many distinct combinations must not grow it forever.
+  if (cache.size >= MAX_CACHED_CHOICES) cache.clear();
+  const choice = computeChoices(info, groups, candidate, field, subtype);
+  cache.set(key, choice);
+  return choice;
+}
+
+const MAX_CACHED_CHOICES = 2_000;
+const choiceCache = new WeakMap<
+  ArcGISEditInfo,
+  Map<string, ((value: unknown) => boolean) | undefined>
+>();
+
+function computeChoices(
+  info: ArcGISEditInfo,
+  groups: ArcGISFieldGroup[],
+  candidate: Record<string, unknown>,
+  field: string,
+  subtype: unknown,
+): ((value: unknown) => boolean) | undefined {
   const governing: Array<{ index: number; rows: ArcGISContingency[] }> = [];
   for (const group of groups) {
     const index = group.fields.indexOf(field);
