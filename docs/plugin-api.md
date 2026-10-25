@@ -2165,3 +2165,26 @@ control that trips it fails to mount rather than taking plugin activation down
 with it. A plugin whose control needs those methods should keep the default
 `engines: ["maplibre"]` and, if the globe matters, add a Cesium branch through
 `app.getCesiumScene()`.
+
+### Updating the browser address
+
+The web host keeps `lat`, `lon`, and `zoom` synchronized with the primary map
+view, debounced with `history.replaceState` so movement does not add Back
+history entries. When a project URL also carries coordinates, that view overrides
+the project's saved center and zoom. Plugins can publish their current search state through the
+optional, plugin-scoped API:
+
+```typescript
+app.setUrlParameters?.(new URLSearchParams({ ingvTime: "30d", ingvMag: "3,8" }));
+```
+
+Declare each writable name in `urlParameterNames`. Each call replaces all of
+that plugin's declared parameters: omitted names are removed, and repeated
+values are preserved. Other query parameters, the fragment, and history state
+are retained. Host parameters such as `url`, `plugin`, `lat`, `lon`, and `zoom`
+are reserved, even if declared by a plugin. Use plugin-specific names to avoid
+collisions with other plugins. These calls do not dispatch URL handlers again.
+Deactivation, unregistration, and failed activation remove the plugin's
+parameters; callbacks from an older activation cannot republish them.
+Desktop hosts accept the API but leave the address unchanged. Older hosts may
+omit it, so plugins should use optional chaining.

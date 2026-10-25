@@ -63,7 +63,7 @@ export class PluginManager {
     queueMicrotask(() => {
       synchronous = false;
     });
-    return scopeAppToPlugin(app, id, {
+    const scoped = scopeAppToPlugin(app, id, {
       ...options,
       pluginName: plugin?.name,
       isLive: () => this.activating.has(id) || this.active.has(id),
@@ -77,6 +77,27 @@ export class PluginManager {
           (!options.assistantTools &&
             (synchronous || (restorePass !== undefined && restorePass === this.restorePass)))),
     });
+    if (app.setUrlParameters) {
+      scoped.setUrlParameters = (params) => {
+        if (
+          this.plugins.get(id) !== plugin ||
+          this.activationGenerations.get(id) !== generation ||
+          (!this.active.has(id) && !this.activating.has(id)) ||
+          (app.getMapRenderer?.() ?? "maplibre") !== renderer
+        )
+          return;
+        this.writeUrlParameters(id, app, params);
+      };
+    }
+    return scoped;
+  }
+
+  private writeUrlParameters(id: string, app: GeoLibreAppAPI, params: URLSearchParams): void {
+    // The trailing argument is host-only. Plugins only receive the scoped API.
+    const write = app.setUrlParameters as
+      | ((params: URLSearchParams, names: readonly string[]) => void)
+      | undefined;
+    write?.(params, this.urlParameterNamesById.get(id) ?? []);
   }
 
   private plugins = new Map<string, GeoLibrePlugin>();
@@ -154,6 +175,7 @@ export class PluginManager {
       this.active.delete(id);
     }
     releaseOwnedRegistrations(id);
+    this.writeUrlParameters(id, app, new URLSearchParams());
     this.plugins.delete(id);
     this.deferredActive.delete(id);
     this.defaultActive.delete(id);
@@ -286,6 +308,7 @@ export class PluginManager {
       activated = plugin.activate(scopedApp);
     } catch (error) {
       releaseOwnedRegistrations(id);
+      this.writeUrlParameters(id, app, new URLSearchParams());
       restoreDisplaced();
       throw error;
     } finally {
@@ -293,18 +316,13 @@ export class PluginManager {
     }
     if (activated === false) {
       releaseOwnedRegistrations(id);
+      this.writeUrlParameters(id, app, new URLSearchParams());
       restoreDisplaced();
       return false;
     }
     this.active.add(id);
     this.notify();
-    const result = this.watchAsyncActivation(
-      id,
-      activated,
-      scopedApp,
-      generation,
-      restoreDisplaced,
-    );
+    const result = this.watchAsyncActivation(id, activated, app, generation, restoreDisplaced);
     if (!result) return true;
     this.trackActivationResult(id, result);
     return result;
@@ -373,12 +391,13 @@ export class PluginManager {
       try {
         // Tear down any partial mount. Plugin teardown is written to be safe to
         // run even when nothing was mounted.
-        plugin.deactivate(app);
+        plugin.deactivate(this.scopeAppToPlugin(app, id));
       } catch (deactivateError) {
         console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
     releaseOwnedRegistrations(id);
+    this.writeUrlParameters(id, app, new URLSearchParams());
     this.notify();
     return true;
   }
@@ -397,6 +416,7 @@ export class PluginManager {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
       releaseOwnedRegistrations(id);
+      this.writeUrlParameters(id, app, new URLSearchParams());
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
@@ -693,12 +713,14 @@ export class PluginManager {
         activated = plugin.activate(scopedApp);
       } catch (error) {
         releaseOwnedRegistrations(id);
+        this.writeUrlParameters(id, app, new URLSearchParams());
         throw error;
       } finally {
         this.activating.delete(id);
       }
       if (activated === false) {
         releaseOwnedRegistrations(id);
+        this.writeUrlParameters(id, app, new URLSearchParams());
         continue;
       }
       this.active.add(id);
@@ -706,7 +728,7 @@ export class PluginManager {
       // Restoring a saved project re-activates plugins the same way the user
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
-      const result = this.watchAsyncActivation(id, activated, scopedApp, generation);
+      const result = this.watchAsyncActivation(id, activated, app, generation);
       if (result) this.trackActivationResult(id, result);
     }
 

@@ -625,6 +625,12 @@ export interface GeoLibrePluginCredentials {
 }
 
 export interface GeoLibreAppAPI {
+  /** Replace this plugin's declared URL parameters, removing omitted names.
+   * Other plugins' parameters and host parameters are preserved. Web only;
+   * inactive or stale plugin instances cannot write. Older hosts may omit it.
+   */
+  setUrlParameters?: (params: URLSearchParams) => void;
+
   /** Register an SDK Tool. The host scopes ownership to the calling plugin.
    * Returns a disposer; the host also removes tools on plugin deactivation.
    */

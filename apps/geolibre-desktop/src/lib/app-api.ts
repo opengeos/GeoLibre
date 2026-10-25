@@ -62,6 +62,7 @@ import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
 import { resolvePluginAssetUrlForLoadedPlugin } from "./external-plugins";
 import { startGeometryEditSession } from "./geometry-edit-session";
+import { setPluginUrlParameters } from "./live-url";
 import { isDesktopRuntime } from "./is-mobile";
 import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
@@ -262,6 +263,7 @@ export function createAppAPI(
   // itself (e.g. addCogLayer -> addRasterToMap) can pass `api`. Only read
   // when those methods are called, which is always after assignment.
   const api = {
+    setUrlParameters: setPluginUrlParameters,
     setBasemap: (url: string) => {
       const state = useAppStore.getState();
       // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL

@@ -1,3 +1,4 @@
+import { useLiveMapUrl } from "../../hooks/useLiveMapUrl";
 // @refresh reset
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
@@ -389,6 +390,7 @@ export function DesktopShell({
     editFeatureGeometry: handleEditFeatureGeometry,
     viewer: layoutOptions.viewer,
   });
+  useLiveMapUrl();
   useTileProtocols();
   useRasterFileHandlers(mapControllerRef, t);
   // Fetching the registry also tells the credential redaction which external
