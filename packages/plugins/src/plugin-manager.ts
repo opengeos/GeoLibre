@@ -87,6 +87,7 @@ export class PluginManager {
         )
           return;
         this.writeUrlParameters(id, app, params);
+        this.urlPublishingPlugins.add(id);
       };
     }
     return scoped;
@@ -97,7 +98,14 @@ export class PluginManager {
     const write = app.setUrlParameters as
       | ((params: URLSearchParams, names: readonly string[]) => void)
       | undefined;
-    write?.(params, this.urlParameterNamesById.get(id) ?? []);
+    write?.(params, this.writableUrlParameterNamesById.get(id) ?? []);
+  }
+
+  private clearUrlParameters(id: string, app: GeoLibreAppAPI, publishedOnly = false): void {
+    const published = this.urlPublishingPlugins.delete(id);
+    // An activation that never published must leave its inbound link intact
+    // so a declined or failed activation can be retried with the same input.
+    if (!publishedOnly || published) this.writeUrlParameters(id, app, new URLSearchParams());
   }
 
   private plugins = new Map<string, GeoLibrePlugin>();
@@ -107,6 +115,8 @@ export class PluginManager {
   private handledUrlParametersByContext = new Map<string, Set<string>>();
   private inFlightUrlContexts = new Map<string, number>();
   private urlParameterNamesById = new Map<string, string[]>();
+  private writableUrlParameterNamesById = new Map<string, string[]>();
+  private urlPublishingPlugins = new Set<string>();
   private listeners = new Set<() => void>();
   private activationGenerations = new Map<string, number>();
   private activationResults = new Map<string, Promise<boolean>>();
@@ -126,7 +136,26 @@ export class PluginManager {
       }
     }
     this.plugins.set(plugin.id, plugin);
-    this.urlParameterNamesById.set(plugin.id, normalizeUrlParameterNames(plugin.urlParameterNames));
+    // Keep the first registration's claim so another plugin cannot overwrite
+    // or clear its published state, even when that owner is inactive.
+    const claimed = new Set(
+      [...this.writableUrlParameterNamesById]
+        .filter(([id]) => id !== plugin.id)
+        .flatMap(([, names]) => names),
+    );
+    const requestedNames = normalizeUrlParameterNames(plugin.urlParameterNames);
+    // URL reads remain shareable for backwards-compatible dispatch semantics.
+    this.urlParameterNamesById.set(plugin.id, requestedNames);
+    const conflictingNames = requestedNames.filter((name) => claimed.has(name));
+    if (conflictingNames.length > 0) {
+      console.warn(
+        `Plugin '${plugin.id}' cannot own URL parameters already declared by another plugin: ${conflictingNames.join(", ")}`,
+      );
+    }
+    this.writableUrlParameterNamesById.set(
+      plugin.id,
+      requestedNames.filter((name) => !claimed.has(name)),
+    );
     const defaultPosition = plugin.getMapControlPosition?.();
     if (defaultPosition) {
       this.defaultMapControlPositions.set(plugin.id, defaultPosition);
@@ -175,12 +204,13 @@ export class PluginManager {
       this.active.delete(id);
     }
     releaseOwnedRegistrations(id);
-    this.writeUrlParameters(id, app, new URLSearchParams());
+    this.clearUrlParameters(id, app);
     this.plugins.delete(id);
     this.deferredActive.delete(id);
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
+    this.writableUrlParameterNamesById.delete(id);
     // Invalidate any watcher retained by an activation Promise from the old
     // plugin instance. Keep the counter monotonic so a re-registered plugin
     // cannot reuse the same generation identity.
@@ -308,7 +338,7 @@ export class PluginManager {
       activated = plugin.activate(scopedApp);
     } catch (error) {
       releaseOwnedRegistrations(id);
-      this.writeUrlParameters(id, app, new URLSearchParams());
+      this.clearUrlParameters(id, app, true);
       restoreDisplaced();
       throw error;
     } finally {
@@ -316,7 +346,7 @@ export class PluginManager {
     }
     if (activated === false) {
       releaseOwnedRegistrations(id);
-      this.writeUrlParameters(id, app, new URLSearchParams());
+      this.clearUrlParameters(id, app, true);
       restoreDisplaced();
       return false;
     }
@@ -397,7 +427,7 @@ export class PluginManager {
       }
     }
     releaseOwnedRegistrations(id);
-    this.writeUrlParameters(id, app, new URLSearchParams());
+    this.clearUrlParameters(id, app, true);
     this.notify();
     return true;
   }
@@ -416,7 +446,7 @@ export class PluginManager {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
       releaseOwnedRegistrations(id);
-      this.writeUrlParameters(id, app, new URLSearchParams());
+      this.clearUrlParameters(id, app);
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
@@ -713,14 +743,14 @@ export class PluginManager {
         activated = plugin.activate(scopedApp);
       } catch (error) {
         releaseOwnedRegistrations(id);
-        this.writeUrlParameters(id, app, new URLSearchParams());
+        this.clearUrlParameters(id, app, true);
         throw error;
       } finally {
         this.activating.delete(id);
       }
       if (activated === false) {
         releaseOwnedRegistrations(id);
-        this.writeUrlParameters(id, app, new URLSearchParams());
+        this.clearUrlParameters(id, app, true);
         continue;
       }
       this.active.add(id);

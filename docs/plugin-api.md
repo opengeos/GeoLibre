@@ -2183,8 +2183,12 @@ that plugin's declared parameters: omitted names are removed, and repeated
 values are preserved. Other query parameters, the fragment, and history state
 are retained. Host parameters such as `url`, `plugin`, `lat`, `lon`, and `zoom`
 are reserved, even if declared by a plugin. Use plugin-specific names to avoid
-collisions with other plugins. These calls do not dispatch URL handlers again.
-Deactivation, unregistration, and failed activation remove the plugin's
-parameters; callbacks from an older activation cannot republish them.
+collisions with other plugins. A query name belongs to the first plugin that
+registers it for writes; later plugins can still read it through URL dispatch,
+but cannot write or clear it through this API. The host logs a registration
+warning for conflicting declarations. These calls do not dispatch URL handlers again.
+Deactivation and unregistration remove the plugin's parameters. Failed activation
+clears parameters only if that activation published them, preserving untouched
+inbound deep links for retries. Callbacks from an older activation cannot republish them.
 Desktop hosts accept the API but leave the address unchanged. Older hosts may
 omit it, so plugins should use optional chaining.

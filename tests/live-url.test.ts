@@ -147,3 +147,81 @@ test("plugin declarations cannot overwrite host launch and layout parameters", (
   assert.deepEqual([...url.params()], [...initial]);
   assert.equal(url.writes(), 0);
 });
+
+test("conflicting plugin declarations cannot overwrite or clear another plugin's parameters", async () => {
+  const url = address("?shared=initial");
+  const manager = new PluginManager();
+  const host = { setUrlParameters: setPluginUrlParameters } as GeoLibreAppAPI;
+  let first!: GeoLibreAppAPI;
+  let second!: GeoLibreAppAPI;
+  let secondHandled = false;
+  manager.register({
+    id: "first",
+    name: "First",
+    version: "1.0.0",
+    urlParameterNames: ["shared"],
+    activate(app) {
+      first = app;
+    },
+    deactivate() {},
+  });
+  manager.register({
+    id: "second",
+    name: "Second",
+    version: "1.0.0",
+    urlParameterNames: ["shared", "second"],
+    activate(app) {
+      second = app;
+    },
+    deactivate() {},
+    handleUrlParameters() {
+      secondHandled = true;
+    },
+  });
+  await manager.activate("first", host);
+  await manager.activate("second", host);
+  first.setUrlParameters?.(new URLSearchParams("shared=first"));
+  second.setUrlParameters?.(new URLSearchParams("shared=second&second=own"));
+  assert.equal(url.params().get("shared"), "first");
+  assert.equal(url.params().get("second"), "own");
+  await manager.handleUrlParameters(new URLSearchParams("shared=deep-link"), host);
+  assert.equal(secondHandled, true);
+  manager.deactivate("second", host);
+  assert.equal(url.params().get("shared"), "first");
+  assert.equal(url.params().has("second"), false);
+  manager.unregister("second", host);
+  assert.equal(url.params().get("shared"), "first");
+  manager.deactivate("first", host);
+  assert.equal(url.params().has("shared"), false);
+});
+
+test("failed or declined activation preserves untouched inbound URL parameters for retry", async () => {
+  for (const failure of ["decline", "throw", "reject"] as const) {
+    const url = address("?inbound=keep");
+    const manager = new PluginManager();
+    const host = { setUrlParameters: setPluginUrlParameters } as GeoLibreAppAPI;
+    const plugin: GeoLibrePlugin = {
+      id: "retry",
+      name: "Retry",
+      version: "1.0.0",
+      urlParameterNames: ["inbound"],
+      activate() {
+        if (failure === "decline") return false;
+        if (failure === "throw") throw new Error("retry later");
+        return Promise.reject(new Error("retry later"));
+      },
+      deactivate() {},
+    };
+    manager.register(plugin);
+    try {
+      await manager.activate(plugin.id, host);
+    } catch {
+      /* synchronous failure */
+    }
+    assert.equal(url.params().get("inbound"), "keep", failure);
+    manager.register({ ...plugin, activate() {} });
+    await manager.activate(plugin.id, host);
+    manager.deactivate(plugin.id, host);
+    assert.equal(url.params().has("inbound"), false, "explicit deactivation clears the link");
+  }
+});
