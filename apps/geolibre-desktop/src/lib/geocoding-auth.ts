@@ -83,6 +83,50 @@ export function approveLocatorPortalToken(locatorUrl: string, portalUrl: string 
   }
 }
 
+/** One device-local approval to send a portal's sign-in to a locator server. */
+export interface LocatorPortalApproval {
+  /** The portal whose sign-in is sent. */
+  portalHost: string;
+  /** The server that receives it. */
+  locatorHost: string;
+}
+
+/**
+ * The approvals granted on this device, for review in Settings.
+ *
+ * @returns The approvals, sorted by portal then server.
+ */
+export function listLocatorPortalApprovals(): LocatorPortalApproval[] {
+  return [...readApprovals()]
+    .flatMap((entry) => {
+      const [portalHost, locatorHost] = entry.split(" ");
+      return portalHost && locatorHost ? [{ portalHost, locatorHost }] : [];
+    })
+    .sort(
+      (a, b) =>
+        a.portalHost.localeCompare(b.portalHost) || a.locatorHost.localeCompare(b.locatorHost),
+    );
+}
+
+/**
+ * Withdraw an approval: the portal's sign-in is no longer sent to that server
+ * until a locator on it is checked and saved again.
+ *
+ * @param approval - The approval to remove.
+ */
+export function revokeLocatorPortalApproval(approval: LocatorPortalApproval): void {
+  const key = `${approval.portalHost} ${approval.locatorHost}`;
+  sessionApprovals.delete(key);
+  stagedApprovals.delete(key);
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(APPROVALS_STORAGE_KEY) ?? "[]");
+    const kept = Array.isArray(stored) ? stored.filter((entry) => entry !== key) : [];
+    localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage unavailable: the session copy is already gone.
+  }
+}
+
 /**
  * Note that the user checked a locator with its portal while signed in. The
  * approval is only granted by {@link commitLocatorPortalApprovals} when the

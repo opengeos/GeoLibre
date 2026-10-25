@@ -1847,6 +1847,12 @@ export interface GeocodingLocator {
   reverse?: boolean;
   /** Whether the service advertises `suggest`. */
   suggest?: boolean;
+  /**
+   * The published input field a search string goes to, chosen by the user for
+   * a locator whose inputs are structured (an asset or parcel ID field, say).
+   * Unset means the single-line field, or the only published field.
+   */
+  searchField?: string;
 }
 
 export interface ProjectPreferences {

@@ -11,8 +11,11 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   type GeocodeMatch,
+  type GeocodeSuggestion,
   geocodeForward,
+  geocodeSuggest,
   geocoderMinIntervalMs,
+  geocoderSupportsSuggest,
   resolveGeocoderConfig,
   useAppStore,
   useLayersWhen,
@@ -63,6 +66,7 @@ type SearchStatus = "idle" | "loading" | "error" | "empty";
  */
 type SearchRow =
   | { kind: "place"; match: GeocodeMatch }
+  | { kind: "suggestion"; suggestion: GeocodeSuggestion }
   | { kind: "coordinate"; match: GeocodeMatch }
   | { kind: "h3"; match: GeocodeMatch; cell: H3CellMatch }
   | { kind: "feature"; match: FeatureSearchMatch };
@@ -156,14 +160,26 @@ export function LayerPanelPlaceSearch({
       setOpen(true);
       try {
         const config = resolveGeocoderConfig(geocodingPrefs);
-        const matches = await geocodeForward(text, {
-          signal: controller.signal,
-          config,
-          limit: MAX_RESULTS,
-        });
+        // A locator that suggests answers partial text cheaply; a suggestion is
+        // resolved to a location only when it is picked (see handleSelect).
+        const rows: SearchRow[] = geocoderSupportsSuggest(config)
+          ? (
+              await geocodeSuggest(text, {
+                signal: controller.signal,
+                config,
+                limit: MAX_RESULTS,
+              })
+            ).map((suggestion) => ({ kind: "suggestion", suggestion }))
+          : (
+              await geocodeForward(text, {
+                signal: controller.signal,
+                config,
+                limit: MAX_RESULTS,
+              })
+            ).map((match) => ({ kind: "place", match }));
         if (controller.signal.aborted) return;
-        setPlaceRows(matches.map((match) => ({ kind: "place", match })));
-        setStatus(matches.length ? "idle" : "empty");
+        setPlaceRows(rows);
+        setStatus(rows.length ? "idle" : "empty");
       } catch {
         if (controller.signal.aborted) return;
         setPlaceRows([]);
@@ -338,6 +354,35 @@ export function LayerPanelPlaceSearch({
 
   const handleSelect = useCallback(
     (row: SearchRow) => {
+      if (row.kind === "suggestion") {
+        // Resolve the picked suggestion to its location, then show it as a
+        // place. The box settles on the suggestion right away; a lookup that
+        // fails or finds nothing reopens the dropdown to say so.
+        settle(row.suggestion.text);
+        const controller = new AbortController();
+        abortRef.current = controller;
+        geocodeForward(row.suggestion.text, {
+          signal: controller.signal,
+          config: resolveGeocoderConfig(geocodingPrefs),
+          magicKey: row.suggestion.magicKey,
+          limit: 1,
+        }).then(
+          (matches) => {
+            if (controller.signal.aborted) return;
+            if (matches[0]) handleSelectRef.current({ kind: "place", match: matches[0] });
+            else {
+              setStatus("empty");
+              setOpen(true);
+            }
+          },
+          () => {
+            if (controller.signal.aborted) return;
+            setStatus("error");
+            setOpen(true);
+          },
+        );
+        return;
+      }
       const engine = mapControllerRef.current;
       // Drop the previous marker and cell outline unconditionally so neither is
       // ever orphaned when the map is briefly unavailable (mount/teardown/
@@ -412,8 +457,14 @@ export function LayerPanelPlaceSearch({
       }
       settle(row.match.displayName);
     },
-    [clearSearchResult, mapControllerRef, settle],
+    [clearSearchResult, geocodingPrefs, mapControllerRef, settle],
   );
+  // The resolved suggestion re-enters the latest handler, not the one captured
+  // when the lookup started.
+  const handleSelectRef = useRef(handleSelect);
+  useEffect(() => {
+    handleSelectRef.current = handleSelect;
+  }, [handleSelect]);
 
   const handleClear = useCallback(() => {
     abortRef.current?.abort();
@@ -470,7 +521,9 @@ export function LayerPanelPlaceSearch({
       ) : (
         <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       )}
-      {row.kind === "feature" ? (
+      {row.kind === "suggestion" ? (
+        <span className="line-clamp-2">{row.suggestion.text}</span>
+      ) : row.kind === "feature" ? (
         <span className="min-w-0 flex-1">
           <span className="line-clamp-2 block">{row.match.value}</span>
           <span className="block truncate text-[10px] text-muted-foreground">

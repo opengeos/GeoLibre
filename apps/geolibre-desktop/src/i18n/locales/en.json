@@ -3207,7 +3207,7 @@
         "remove": "Remove {{name}}",
         "check": "Check service",
         "unchecked": "Not checked yet.",
-        "capabilities": "Search field: {{field}} · Reverse geocoding: {{reverse}} · Suggestions: {{suggest}}",
+        "capabilities": "Published input: {{field}} · Reverse geocoding: {{reverse}} · Suggestions: {{suggest}}",
         "yes": "yes",
         "no": "no",
         "noReverse": "This locator does not support reverse geocoding, so Reverse Geocode will report that instead of an address.",
@@ -3216,7 +3216,13 @@
         "errorPortal": "This locator is not on the portal's host or on a server federated with it, so the portal sign-in will not be sent to it.",
         "errorUnsupported": "This service does not support geocoding.",
         "errorService": "The service reported an error: {{detail}}",
-        "errorNetwork": "Could not reach the service. It may be offline, or it may not allow requests from this app (CORS)."
+        "errorNetwork": "Could not reach the service. It may be offline, or it may not allow requests from this app (CORS).",
+        "searchField": "Search field",
+        "searchFieldHint": "The published input that the search box, Geocode Addresses and address import fill. Pick a structured field, such as a parcel or asset ID, to search by it. Suggestions are offered only for the single-line field.",
+        "approvalsTitle": "Servers allowed to receive a portal sign-in",
+        "approvalsDescription": "Approved on this device when a locator was checked while signed in and Settings was saved. Revoking stops sending the sign-in until the locator is checked and saved again.",
+        "approvalEntry": "{{portalHost}} sign-in to {{locatorHost}}",
+        "revoke": "Revoke"
       }
     },
     "ai": {
@@ -4485,6 +4491,7 @@
     "apiKeyRequired": "{{provider}} needs an API key. Add one in Settings to get results.",
     "corsNote": "Google does not officially allow browser requests to its Geocoding API; requests may be blocked unless served through a same-origin proxy.",
     "addressColumn": "Address column",
+    "keepLocatorAttributes": "Add the locator's result fields (such as parcel or asset IDs) as geocode_attr_* columns",
     "run": "Start Geocoding",
     "cancel": "Cancel",
     "outputPlaceholder": "Progress will appear here.",
