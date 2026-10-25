@@ -18,6 +18,8 @@ const HOST_PARAMETERS = new Set([
   "serviceLayer",
   "style",
   "dataType",
+  "data",
+  "stac",
   "role",
   "shareRole",
   "embed",
@@ -47,6 +49,11 @@ const HOST_PARAMETERS = new Set([
   "settingsUrl",
   "settingUrl",
   "screenshot",
+  "iframe",
+  "hidePanels",
+  "maponly",
+  "welcome",
+  "loading",
 ]);
 
 /** Merge against the address at write time so camera and plugin writes compose. */

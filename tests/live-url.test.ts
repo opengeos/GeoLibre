@@ -109,3 +109,41 @@ test("plugin ownership, deactivation, stale callbacks and failed activation", as
   assert.equal(await manager.activate(plugin.id, host), false);
   assert.equal(url.params().has("own"), false);
 });
+
+test("plugin declarations cannot overwrite host launch and layout parameters", () => {
+  // Keep these cases aligned with the launch links in data-url.ts,
+  // desktop-settings-url.ts, useLayoutOptions.ts and screenshot-readiness.ts.
+  const names = [
+    "data",
+    "stac",
+    "style",
+    "dataType",
+    "add",
+    "serviceUrl",
+    "serviceStyle",
+    "serviceLayer",
+    "projectUrl",
+    "project_url",
+    "settingsUrl",
+    "settingUrl",
+    "tool",
+    "layout",
+    "panels",
+    "toolbar",
+    "iframe",
+    "hidePanels",
+    "maponly",
+    "draw",
+    "welcome",
+    "loading",
+    "locale",
+    "lang",
+    "collab",
+  ];
+  const initial = new URLSearchParams(names.map((name) => [name, "keep"]));
+  const url = address(`?${initial}`);
+  const patch = new URLSearchParams(names.map((name) => [name, "bad"]));
+  setPluginUrlParameters(patch, [...names, "own"]);
+  assert.deepEqual([...url.params()], [...initial]);
+  assert.equal(url.writes(), 0);
+});
