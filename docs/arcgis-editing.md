@@ -72,6 +72,67 @@ appears in the attribute table toolbar while editing:
 Range domains on date fields and coded-value domains on date or GUID fields
 keep the generic editor; the save check still validates them.
 
+## Contingent values
+
+A layer can also publish contingent values: field groups that list which
+combinations of values are allowed across several fields, overall or per
+subtype. Each field may hold a valid domain code while the combination is not
+one the organization permits. When a layer reports
+`hasContingentValuesDefinition`, GeoLibre reads the definition with the layer's
+metadata, from the layer's `contingentValues` resource or, failing that, the
+service's `queryContingentValues` operation, through the same signed-in
+connection. It is read again before every save, so edits are checked against
+the rules the service holds at that moment.
+
+While editing in the attribute table:
+
+- A coded-value cell governed by a field group lists the values that fit the
+  rest of the row first, under **Fits the other values**, and the remaining
+  domain values under **Other values**. Nothing is hidden, so a row never gets
+  stuck: correct any field first. Empty fields of the row count as not yet
+  entered when the choices are worked out. Retired combinations are not
+  offered.
+- A drafted row whose values break a **restrictive** group is marked on every
+  field of the group, and the edit cannot be saved until it is corrected. The
+  values are never cleared or replaced for you.
+- A **non-restrictive** group only warns, in the toolbar notice; the edit can be
+  saved.
+- The notice also reports a drafted row whose stored combination is already
+  outside a group (or uses a retired one). Edits to other fields of that row
+  can still be saved: only an edit that changes a group's values, or the
+  record's subtype, has to leave that group in an allowed combination.
+
+The same rules are applied when the edits are sent to the service, whichever
+editor produced them. New features (drawn, copied or created from a template)
+must fit every restrictive group they have values in. GeoLibre's rules, where
+Esri's documentation leaves them open:
+
+- A combination is matched whole: values are never mixed from different
+  combinations, and a field in several groups must satisfy each of them.
+- `Any` accepts any value, an empty one included; `Null` requires the field to
+  be empty. A contingency never relaxes the field's own type, nullability or
+  domain checks.
+- A group whose fields are all empty is not evaluated (nothing has been entered
+  for it). If any of its fields has a value, an empty field must be matched by
+  an `Any` or `Null` entry.
+- Text codes are compared exactly, so `"1"`, `"01"` and `"0"` stay distinct, and
+  a numeric field compares numbers. Ranges are inclusive, and a value between
+  two allowed ranges is rejected.
+- A retired combination stays valid on a record that already holds it, but an
+  edit cannot introduce it.
+- Combinations defined per subtype leave other subtypes unconstrained by that
+  group.
+
+If the rules cannot be retrieved (a request failed), new features and attribute
+changes are held, with a notice in the attribute table; saving again retries,
+and deletions and shape-only changes still go through. If they are retrieved
+but cannot be read with confidence (a format GeoLibre does not decode, a text
+code that cannot be looked up, a code outside its domain, or more than 50,000
+combinations), GeoLibre says so and leaves the check to the server, as it does
+for layers without contingent values. Nonhosted ArcGIS Enterprise services
+(11.1 and earlier) return their field groups through `queryDataElements`, which
+GeoLibre does not read yet, so their rules are left to the server.
+
 ## New features
 
 Features drawn with **Edit geometry** start with the service's creation
@@ -286,7 +347,8 @@ that default is explicitly enabled. Otherwise every vertex must supply a finite 
 Object IDs must remain unchanged. New fields and changes to server-managed fields
 cannot be written through feature editing. GeoLibre validates basic field types,
 nullability, string lengths, and coded-value and range domains, including those
-a type or subtype overrides.
+a type or subtype overrides, and the contingent values of hosted services.
+Related-table rows are not checked against their table's contingent values yet.
 
 Versioned services, M coordinates, dates in an unknown timezone, and offline
 synchronization are outside this implementation. Related records cover existing

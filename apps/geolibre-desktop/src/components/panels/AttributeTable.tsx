@@ -3,6 +3,7 @@ import {
   isReadOnlyAttributeLayer,
   isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
@@ -28,6 +29,8 @@ import {
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
   arcGISAttributeConstraints,
+  blocksArcGISEdit,
+  type ArcGISContingencyCheck,
   arcGISLayerHasPendingEdits,
   arcGISRelatedParentObjectId,
   arcGISRelationships,
@@ -99,6 +102,7 @@ import {
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type RefObject,
   useEffect,
   useMemo,
@@ -300,6 +304,38 @@ function toRowForm(
 }
 
 /**
+ * The options of a coded-value cell. When field groups govern the field, the
+ * values that fit the rest of the row come first and the others follow in a
+ * second group: nothing is hidden, so a row is never stuck without a way to
+ * correct another field first.
+ */
+function valueMapOptions(
+  valueMap: NonNullable<AttributeFormFieldConfig["valueMap"]>,
+  fits: ((value: unknown) => boolean) | undefined,
+  t: TFunction,
+): ReactNode {
+  const option = (entry: (typeof valueMap)[number]) => (
+    <option key={entry.value} value={entry.value}>
+      {entry.label ?? entry.value}
+    </option>
+  );
+  if (!fits) return valueMap.map(option);
+  const fitting = valueMap.filter((entry) => fits(entry.value));
+  if (fitting.length === valueMap.length) return valueMap.map(option);
+  const others = valueMap.filter((entry) => !fits(entry.value));
+  return (
+    <>
+      {fitting.length ? (
+        <optgroup label={t("attributeTable.contingentValues.fitting")}>
+          {fitting.map(option)}
+        </optgroup>
+      ) : null}
+      <optgroup label={t("attributeTable.contingentValues.others")}>{others.map(option)}</optgroup>
+    </>
+  );
+}
+
+/**
  * Build the per-record form resolver. Without service constraints every row
  * shares the designer form. Otherwise rows are merged once per distinct
  * service form, which the ArcGIS adapter memoizes per type/subtype value.
@@ -410,6 +446,7 @@ function computeFormDraftErrors(
   formForRow: RowFormResolver,
   drafts: AttributeDrafts,
   featureById: Map<string, Feature> | null,
+  contingencies?: ContingencyContext,
 ): Record<string, Record<string, AttributeFormFieldError>> {
   const result: Record<string, Record<string, AttributeFormFieldError>> = {};
   if (!featureById || !hasDraftEdits(drafts)) {
@@ -423,6 +460,15 @@ function computeFormDraftErrors(
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
 
     const { candidate, rowForm } = draftCandidate(properties, rowDrafts, formForRow);
+    // A restrictive field group the draft changed must hold an active
+    // combination; the error marks every field of the group, since any of
+    // them can be the one to correct.
+    const groupErrors: Record<string, AttributeFormFieldError> = {};
+    for (const check of contingencies?.checks(candidate, properties) ?? [])
+      if (blocksArcGISEdit(check))
+        for (const field of check.fields)
+          groupErrors[field] ??= { code: "constraint", message: contingencies!.message(check) };
+    if (Object.keys(groupErrors).length) result[featureId] = groupErrors;
     const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
       serviceForm: rowForm.serviceForm,
@@ -450,9 +496,40 @@ function computeFormDraftErrors(
         rowErrors[field] = error;
       }
     }
-    if (Object.keys(rowErrors).length > 0) result[featureId] = rowErrors;
+    if (Object.keys(rowErrors).length > 0)
+      result[featureId] = { ...result[featureId], ...rowErrors };
   }
   return result;
+}
+
+/** The layer's contingent values, as the draft validation consumes them. */
+interface ContingencyContext {
+  checks: NonNullable<ReturnType<typeof arcGISAttributeConstraints>>["contingencyChecks"];
+  message: (check: ArcGISContingencyCheck) => string;
+}
+
+/**
+ * Field groups the drafts leave outside their combinations without blocking
+ * the save: advisory groups the drafts changed, and existing combinations of
+ * the drafted rows that the drafts did not touch.
+ */
+function contingencyNotices(
+  drafts: AttributeDrafts,
+  featureById: Map<string, Feature> | null,
+  formForRow: RowFormResolver,
+  checks: ContingencyContext["checks"],
+): Array<{ featureId: string; check: ArcGISContingencyCheck }> {
+  const notices: Array<{ featureId: string; check: ArcGISContingencyCheck }> = [];
+  if (!featureById) return notices;
+  for (const [featureId, rowDrafts] of Object.entries(drafts)) {
+    const feature = featureById.get(featureId);
+    if (!feature || Object.keys(rowDrafts).length === 0) continue;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    const { candidate } = draftCandidate(properties, rowDrafts, formForRow);
+    for (const check of checks(candidate, properties))
+      if (check.status !== "ok" && !blocksArcGISEdit(check)) notices.push({ featureId, check });
+  }
+  return notices;
 }
 
 function duckDBRowsToAttributeRows(rows: DuckDBAttributeRow[]): AttributeTableRow[] {
@@ -767,10 +844,52 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       ]),
     );
   }, [hasRowForms, layer?.geojson]);
+  const contingencyContext = useMemo((): ContingencyContext | undefined => {
+    if (!serviceConstraints) return undefined;
+    return {
+      checks: serviceConstraints.contingencyChecks,
+      message: (check) =>
+        t(
+          check.status === "retired"
+            ? "attributeTable.contingentValues.retired"
+            : "attributeTable.contingentValues.violation",
+          { fields: check.fields.join(", "), group: check.group },
+        ),
+    };
+  }, [serviceConstraints, t]);
   const formDraftErrors = useMemo(
-    () => computeFormDraftErrors(formForRow, drafts, formFeatureIndex),
-    [formForRow, drafts, formFeatureIndex],
+    () => computeFormDraftErrors(formForRow, drafts, formFeatureIndex, contingencyContext),
+    [formForRow, drafts, formFeatureIndex, contingencyContext],
   );
+  // Advisory field groups and untouched existing combinations: reported, not blocking.
+  const contingencyNotice = useMemo(() => {
+    const problem = serviceConstraints?.contingentValuesProblem;
+    const lines = problem
+      ? [
+          problem.status === "unavailable"
+            ? t("attributeTable.contingentValues.unavailable", { reason: problem.reason })
+            : t("attributeTable.contingentValues.unsupported"),
+        ]
+      : [];
+    if (contingencyContext)
+      for (const { featureId, check } of contingencyNotices(
+        drafts,
+        formFeatureIndex,
+        formForRow,
+        contingencyContext.checks,
+      ))
+        lines.push(
+          t(
+            check.affected
+              ? "attributeTable.contingentValues.advisory"
+              : check.status === "retired"
+                ? "attributeTable.contingentValues.existingRetired"
+                : "attributeTable.contingentValues.existing",
+            { row: featureId, fields: check.fields.join(", "), group: check.group },
+          ),
+        );
+    return lines.join(" ");
+  }, [serviceConstraints, contingencyContext, drafts, formFeatureIndex, formForRow, t]);
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
@@ -1845,6 +1964,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             {domainNotice}
           </span>
         ) : null}
+        {isEditing && contingencyNotice ? (
+          <span
+            className="max-w-64 truncate text-xs text-amber-600"
+            title={contingencyNotice}
+            role="status"
+          >
+            {contingencyNotice}
+          </span>
+        ) : null}
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
@@ -2270,9 +2398,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   const rowDrafts = drafts[featureId];
                   // Follows a drafted type/subtype, so dependent dropdowns
                   // and bounds update as soon as the selector changes.
-                  const rowForm = rowDrafts
-                    ? draftCandidate(properties, rowDrafts, formForRow).rowForm
-                    : formForRow(properties);
+                  const drafted = rowDrafts
+                    ? draftCandidate(properties, rowDrafts, formForRow)
+                    : undefined;
+                  const rowForm = drafted?.rowForm ?? formForRow(properties);
+                  const rowCandidate = drafted?.candidate ?? properties;
                   return (
                     <TableRow
                       key={featureId}
@@ -2363,11 +2493,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                                     !config.valueMap.some((entry) => entry.value === current) && (
                                       <option value={current}>{current}</option>
                                     )}
-                                  {config.valueMap.map((entry) => (
-                                    <option key={entry.value} value={entry.value}>
-                                      {entry.label ?? entry.value}
-                                    </option>
-                                  ))}
+                                  {valueMapOptions(
+                                    config.valueMap,
+                                    serviceConstraints?.contingentChoices(rowCandidate, col),
+                                    t,
+                                  )}
                                 </Select>
                               ) : config?.widget === "checkbox" ? (
                                 <input

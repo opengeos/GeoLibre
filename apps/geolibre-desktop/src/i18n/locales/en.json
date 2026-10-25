@@ -8183,6 +8183,17 @@
       "subtypeFieldMissing": "The service's subtype field {{field}} is not in its field list, so the server checks subtype-specific values.",
       "subtypeConflict": "The service's types and subtypes for {{field}} disagree, so the server checks subtype-specific values."
     },
+    "contingentValues": {
+      "violation": "{{fields}} are not an allowed combination in field group {{group}}.",
+      "retired": "{{fields}} are a retired combination in field group {{group}}: existing records keep it, but edits cannot introduce it.",
+      "advisory": "Row {{row}}: {{fields}} are not a recommended combination in field group {{group}}.",
+      "existing": "Row {{row}}: the stored {{fields}} are outside field group {{group}}; edits to other fields can still be saved.",
+      "existingRetired": "Row {{row}}: the stored {{fields}} are a retired combination of field group {{group}}, which the record may keep.",
+      "unavailable": "This layer's contingent value rules could not be loaded ({{reason}}). New features and attribute changes are held until they load; saving retries.",
+      "unsupported": "This layer's contingent value rules use a format GeoLibre cannot read, so the server checks them.",
+      "fitting": "Fits the other values",
+      "others": "Other values"
+    },
     "refresh": "Refresh features",
     "refreshTitle": "Re-read features from the source to pick up changes made elsewhere",
     "refreshTitleLocalFile": "Reload features from the file on disk",
