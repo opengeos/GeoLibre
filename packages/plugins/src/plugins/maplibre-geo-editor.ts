@@ -38,6 +38,7 @@ import {
   ARCGIS_FEATURE_SOURCE_KIND,
   arcGISCopiedFeatureProperties,
   arcGISNewFeatureProperties,
+  type ArcGISCreationTemplateSelection,
 } from "./arcgis-defaults";
 import type { ArcGISEditInfo } from "./arcgis-edits";
 import {
@@ -259,6 +260,11 @@ let editTargetOriginalGeometries: ReadonlyMap<string, string> | null = null;
  * so a save hands back numeric ids (such as ArcGIS object IDs) unchanged.
  */
 let editTargetOriginalIds: EditedFeatureIds | null = null;
+/**
+ * The ArcGIS feature template the user picked for features drawn in this
+ * session (#3179), or null for defaults only. Pinned for the whole session.
+ */
+let editTargetCreationTemplate: ArcGISCreationTemplateSelection | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 /**
@@ -1195,7 +1201,8 @@ function syncEditTargetToStore(): boolean {
  * How features created in a session start out on a data source that needs it:
  * on an ArcGIS feature layer a copy drops the server-assigned object ID (so it
  * saves as a new feature) and a drawn feature gets the service's creation
- * defaults. Other layers keep what the editor produced.
+ * defaults, from the template picked for the session when there is one. Other
+ * layers keep what the editor produced.
  */
 function newFeaturePreparer(
   layer: GeoLibreLayer,
@@ -1203,10 +1210,11 @@ function newFeaturePreparer(
   if (layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
   const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
   if (!info?.fields?.length) return undefined;
+  const template = editTargetCreationTemplate ?? undefined;
   return (properties, kind) =>
     kind === "copied"
       ? arcGISCopiedFeatureProperties(info, properties)
-      : arcGISNewFeatureProperties(info, properties);
+      : arcGISNewFeatureProperties(info, properties, { template });
 }
 
 /**
@@ -1298,10 +1306,15 @@ function warnUnlessGeomanNotReady(context: string, error: unknown): void {
  *
  * `_app` is accepted for API symmetry with the other plugin entry points but is
  * not used: this function operates through the module-level `appApi`/store.
+ *
+ * `options.creationTemplate` pins the ArcGIS feature template that features
+ * drawn in this session start from (#3179). It applies to the new session
+ * only: a session already open on the layer keeps its own.
  */
 export async function startLayerGeometryEdit(
   _app: GeoLibreAppAPI,
   layerId: string,
+  options: { creationTemplate?: ArcGISCreationTemplateSelection } = {},
 ): Promise<boolean> {
   if (!pluginActive || !geoEditorControl) return false;
   // A session ended elsewhere (the toolbar's Save or Cancel) may still be
@@ -1337,6 +1350,7 @@ export async function startLayerGeometryEdit(
   // The store layer is left untouched until save, so Cancel simply discards the
   // editor's copy and the original geojson is still in the store.
   editTargetLayerId = layerId;
+  editTargetCreationTemplate = options.creationTemplate ?? null;
   unionSketchesWithStoreOnNextSync = false;
 
   // Hide the target's normal rendering through the store, not via a map-layer
@@ -1383,6 +1397,7 @@ export async function startLayerGeometryEdit(
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
     editTargetOriginalIds = null;
+    editTargetCreationTemplate = null;
     editTargetOriginalGeometries = null;
     editTargetLayerId = null;
     await restoreSketchesAfterSession();
@@ -1448,6 +1463,7 @@ export async function endLayerGeometryEdit(
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
     editTargetOriginalIds = null;
+    editTargetCreationTemplate = null;
     editTargetOriginalGeometries = null;
     unionSketchesWithStoreOnNextSync = false;
     notifyGeometryEdit();
@@ -1472,6 +1488,7 @@ export async function endLayerGeometryEdit(
     // The snapshot only describes the session that just ended.
     editTargetOriginalProperties = null;
     editTargetOriginalIds = null;
+    editTargetCreationTemplate = null;
     editTargetOriginalGeometries = null;
     // Await the sketches restore so a caller switching sessions does not start a
     // new edit while the previous restore is still clearing/loading the editor.
@@ -1497,6 +1514,7 @@ function abortGeometryEditSession(): void {
   editTargetOriginalVisible = null;
   editTargetOriginalProperties = null;
   editTargetOriginalIds = null;
+  editTargetCreationTemplate = null;
   editTargetOriginalGeometries = null;
   editTargetLayerId = null;
   unionSketchesWithStoreOnNextSync = false;

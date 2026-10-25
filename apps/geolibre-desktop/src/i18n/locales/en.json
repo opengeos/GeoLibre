@@ -301,6 +301,18 @@
     "description": "Enter a file name. The file downloads to your browser's downloads folder.",
     "label": "File name"
   },
+  "creationTemplatePrompt": {
+    "title": "Choose a feature template",
+    "description": "{{layer}} publishes several templates for new features. Features you draw in this editing session start from the one you choose.",
+    "groupLabel": "Feature template",
+    "defaultsOnly": "No template",
+    "defaultsOnlyDescription": "Start new features from the layer's subtype and field defaults only.",
+    "unnamed": "Unnamed template",
+    "duplicateName": "{{name}} ({{n}})",
+    "typeLabel": "Type: {{type}}",
+    "editingNote": "Editing existing features does not use a template. To use a different template, finish this session and start a new one.",
+    "start": "Start editing"
+  },
   "newProject": {
     "basemapDescription": "Choose an OpenFreeMap or Protomaps basemap, a blank background, or a MapLibre style URL.",
     "sectionOpenFreeMap": "OpenFreeMap",
@@ -9237,6 +9249,7 @@
     "editGeometry": "Edit geometry",
     "editGeometryActivateFailed": "Could not activate the geometry editor. Try again once the map has fully loaded.",
     "editGeometryStartFailed": "Could not start geometry editing for this layer. Its data may still be loading.",
+    "editGeometryTemplateActive": "New features in this session start from the template \"{{name}}\".",
     "openAttributeTable": "Open attribute table",
     "openRasterAttributeTable": "Open raster attribute table",
     "export": "Export",

@@ -77,18 +77,36 @@ keep the generic editor; the save check still validates them.
 Features drawn with **Edit geometry** start with the service's creation
 defaults, filling only attributes that are empty. Most specific first:
 
-1. The type or subtype field takes the type of the only template the layer
-   publishes, otherwise `defaultSubtypeCode`, otherwise the field's
-   `defaultValue`.
+1. The type or subtype field takes the type of the template picked for the
+   session, or of the only template the layer publishes, otherwise
+   `defaultSubtypeCode`, otherwise the field's `defaultValue`.
 2. Other editable fields take the prototype value of the template for that
    type, otherwise the subtype's `defaultValues`, otherwise the field's
    `defaultValue`.
 
-A template is used only when the choice is unambiguous: the layer, or the
-feature's type, publishes exactly one. With several templates none is picked,
-and only subtype and field defaults apply. Change the type in the attribute
-table afterwards if needed; defaults are not reapplied, and existing features
-never receive them. Values the service assigns (object ID, global ID, editor
+When the layer publishes several feature templates (layer-level `templates[]`
+and `types[].templates[]` together), **Edit geometry** first asks which one new
+features should start from. The picker lists each template's name, the type it
+creates and its description; templates that share a name are numbered. Choose
+**No template** to keep the subtype and field defaults only. The choice is
+pinned for the whole session: every feature drawn in it starts from that
+template, and to use another one, finish the session and start a new one.
+Features drawn in earlier sessions keep the attributes they already have. A
+template listed under one type whose prototype sets the type field to another
+is not offered, since GeoLibre cannot tell which the publisher meant. Opening
+**Edit geometry** from an Identify result does not ask, because that session
+is for reshaping an existing feature; features drawn in it get the defaults
+only. The editor's own drawing tools are used whatever drawing tool a template
+suggests.
+
+Without a picked template, one is used only when the choice is unambiguous:
+the layer, or the feature's type, publishes exactly one. With several
+templates none is picked automatically, and only subtype and field defaults
+apply. A picked template that no longer matches the layer's metadata when the
+session is saved (the service changed it in the meantime) is ignored the same
+way rather than matched to a different template. Change the type in the
+attribute table afterwards if needed; defaults are not reapplied, and existing
+features never receive them. Values the service assigns (object ID, global ID, editor
 tracking and other read-only fields) are left to the server, which also fills
 any field default GeoLibre did not, and the saved record is read back after
 the save.

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
+import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  ARCGIS_FEATURE_SOURCE_KIND,
   arcGISCopiedFeatureProperties,
+  arcGISCreationTemplates,
+  arcGISLayerCreationTemplates,
   arcGISNewFeatureProperties,
   arcGISServerManagedFields,
 } from "../packages/plugins/src/plugins/arcgis-defaults";
@@ -163,6 +167,89 @@ describe("arcGISNewFeatureProperties", () => {
       assert.equal(arcGISNewFeatureProperties(single, {}).ASSET_TYPE, 1);
       assert.equal(arcGISNewFeatureProperties(single, {}).MANUFACTURER, "MU");
     });
+
+    describe("with a selected template (#3179)", () => {
+      const [, avk, mueller] = arcGISCreationTemplates(typed);
+
+      it("applies the selected template and the type it belongs to", () => {
+        assert.deepEqual(arcGISNewFeatureProperties(typed, {}, { template: mueller.selection }), {
+          ASSET_TYPE: 2,
+          STATUS: 1,
+          MANUFACTURER: "MU",
+          NOTES: "none",
+        });
+        assert.equal(
+          arcGISNewFeatureProperties(typed, {}, { template: avk.selection }).MANUFACTURER,
+          "AV",
+        );
+      });
+
+      it("never replaces values on the feature or refills a cleared one", () => {
+        const template = mueller.selection;
+        assert.equal(
+          arcGISNewFeatureProperties(typed, { MANUFACTURER: "XX" }, { template }).MANUFACTURER,
+          "XX",
+        );
+        const cleared = arcGISNewFeatureProperties(
+          typed,
+          { MANUFACTURER: null },
+          { template, keepGiven: true },
+        );
+        assert.equal(cleared.MANUFACTURER, null);
+        assert.equal(cleared.ASSET_TYPE, 2);
+      });
+
+      it("does not apply a template of another type than the feature already has", () => {
+        const result = arcGISNewFeatureProperties(
+          typed,
+          { ASSET_TYPE: 1 },
+          { template: avk.selection },
+        );
+        // Type 1's own (only) template applies instead.
+        assert.equal(result.ASSET_TYPE, 1);
+        assert.equal(result.MANUFACTURER, "MU");
+      });
+
+      it("finds the template again in reloaded metadata, by content not position", () => {
+        const reordered: ArcGISEditInfo = {
+          ...structuredClone(typed),
+          types: [structuredClone(typed.types![1]), structuredClone(typed.types![0])],
+        };
+        assert.equal(
+          arcGISNewFeatureProperties(reordered, {}, { template: mueller.selection }).MANUFACTURER,
+          "MU",
+        );
+      });
+
+      it("ignores a selection whose template changed, keeping the defaults", () => {
+        const changed = structuredClone(typed);
+        changed.types![1].templates![1].prototype!.attributes!.MANUFACTURER = "CL";
+        const result = arcGISNewFeatureProperties(changed, {}, { template: mueller.selection });
+        assert.equal(result.ASSET_TYPE, 2);
+        assert.equal(result.MANUFACTURER, undefined);
+      });
+
+      it("never fills server-managed fields from a template", () => {
+        const managed: ArcGISEditInfo = {
+          ...typed,
+          types: [
+            {
+              id: 3,
+              name: "Meter",
+              templates: [
+                { name: "M1", prototype: { attributes: { created_user: "me", OBJECTID: 7 } } },
+                { name: "M2", prototype: { attributes: {} } },
+              ],
+            },
+          ],
+        };
+        const [m1] = arcGISCreationTemplates(managed);
+        const result = arcGISNewFeatureProperties(managed, {}, { template: m1.selection });
+        assert.equal(result.ASSET_TYPE, 3);
+        assert.equal(result.created_user, undefined);
+        assert.equal(result.OBJECTID, undefined);
+      });
+    });
   });
 
   describe("with subtypes", () => {
@@ -208,6 +295,70 @@ describe("arcGISNewFeatureProperties", () => {
       };
       assert.equal(arcGISNewFeatureProperties(withTemplate, {}).PRESSURE, 99);
     });
+  });
+});
+
+describe("arcGISCreationTemplates", () => {
+  const info: ArcGISEditInfo = {
+    ...base,
+    typeIdField: "ASSET_TYPE",
+    types: [
+      {
+        id: 1,
+        name: "Hydrant",
+        templates: [
+          { name: " Standard ", description: "Permanent install", prototype: { attributes: {} } },
+          { name: "Standard", prototype: { attributes: { STATUS: 2 } } },
+          // Listed under type 1 but its prototype says type 2: not offered.
+          { name: "Broken", prototype: { attributes: { asset_type: 2 } } },
+        ],
+      },
+    ],
+    templates: [{ prototype: { attributes: { MANUFACTURER: "MU" } } }],
+  };
+
+  it("lists type and layer templates in metadata order, minus contradictory ones", () => {
+    const templates = arcGISCreationTemplates(info);
+    assert.deepEqual(
+      templates.map(({ name, description, typeName, typeValue }) => ({
+        name,
+        description,
+        typeName,
+        typeValue,
+      })),
+      [
+        { name: "Standard", description: "Permanent install", typeName: "Hydrant", typeValue: 1 },
+        { name: "Standard", description: undefined, typeName: "Hydrant", typeValue: 1 },
+        { name: "", description: undefined, typeName: undefined, typeValue: undefined },
+      ],
+    );
+    assert.deepEqual(
+      templates.map((template) => template.selection.index),
+      [0, 1, 3],
+    );
+    // Same names, different templates: the selections stay distinct.
+    assert.notEqual(templates[0].selection.fingerprint, templates[1].selection.fingerprint);
+  });
+
+  it("asks for a choice only on a creatable ArcGIS layer with several templates", () => {
+    const layer = (metadata: Record<string, unknown>) => ({ metadata }) as unknown as GeoLibreLayer;
+    const arcgis = { sourceKind: ARCGIS_FEATURE_SOURCE_KIND };
+    assert.equal(
+      arcGISLayerCreationTemplates(layer({ ...arcgis, arcgisEditInfo: info })).length,
+      3,
+    );
+    assert.deepEqual(arcGISLayerCreationTemplates(layer({ arcgisEditInfo: info })), []);
+    assert.deepEqual(
+      arcGISLayerCreationTemplates(
+        layer({ ...arcgis, arcgisEditInfo: { ...info, capabilities: "Query,Update" } }),
+      ),
+      [],
+    );
+    const single = { ...info, types: [], templates: info.templates };
+    assert.deepEqual(
+      arcGISLayerCreationTemplates(layer({ ...arcgis, arcgisEditInfo: single })),
+      [],
+    );
   });
 });
 
