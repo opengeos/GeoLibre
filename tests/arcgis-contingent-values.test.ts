@@ -5,7 +5,10 @@ import {
   arcGISContingentChoices,
   blocksArcGISEdit,
   loadArcGISContingentValues,
+  loadArcGISEnterpriseContingentValues,
   normalizeArcGISContingentValues,
+  normalizeArcGISEnterpriseContingentValues,
+  withArcGISContingentValues,
 } from "../packages/plugins/src/plugins/arcgis-contingent-values";
 import {
   arcGISEditAttributes,
@@ -603,5 +606,179 @@ describe("arcGISEditAttributes with contingent values", () => {
         ZONE: "1",
       },
     );
+  });
+});
+
+/**
+ * The same rules as a nonhosted ArcGIS Enterprise service publishes them: the
+ * field groups in the layer's data element, and value sets whose text codes
+ * index one shared `stringDictionary` (shape per Esri's JavaScript SDK).
+ */
+function enterpriseDataElements() {
+  return {
+    layerDataElements: [
+      {
+        layerId: 0,
+        dataElement: {
+          name: "Assets",
+          fieldGroups: [
+            {
+              name: "zone_status",
+              isEditingRestrictive: true,
+              fieldNames: { names: ["status", "zone"] },
+            },
+            {
+              name: "zone_pressure",
+              isEditingRestrictive: false,
+              fieldNames: { names: ["ZONE", "PRESSURE"] },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function enterpriseValueSets() {
+  return {
+    contingentValueSets: [
+      {
+        // Not the domain's order: positions are read from this list.
+        stringDictionary: ["01", "1", "0"],
+        fieldGroups: [
+          {
+            name: "zone_status",
+            contingencies: [
+              { id: 1, isRetired: false, values: [1, 1] },
+              { id: 2, isRetired: false, values: [2, 0] },
+              { id: 3, isRetired: false, values: [true, 2] },
+              { id: 4, isRetired: true, values: [1, 0] },
+            ],
+          },
+          {
+            name: "zone_pressure",
+            contingencies: [
+              { id: 5, values: [1, { minValue: 0, maxValue: 50 }] },
+              { id: 6, values: [1, { minValue: 100, maxValue: 150 }] },
+              { id: 7, values: [0, null] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("nonhosted Enterprise contingent values", () => {
+  it("decode to the same model as the hosted format", () => {
+    const hosted = normalizeArcGISContingentValues(liveResponse(), base, 0);
+    const enterprise = normalizeArcGISEnterpriseContingentValues(
+      enterpriseDataElements(),
+      enterpriseValueSets(),
+      base,
+    );
+    // Ids aside (the hosted response numbers them too), the rules are identical.
+    const strip = (value: typeof hosted) =>
+      JSON.parse(JSON.stringify(value, (key, entry) => (key === "id" ? undefined : entry)));
+    assert.deepEqual(strip(enterprise), strip(hosted));
+  });
+
+  it("group combinations by subtype code on a layer with subtypes", () => {
+    const info: ArcGISEditInfo = {
+      ...base,
+      subtypeField: "KIND",
+      subtypes: [
+        { code: 1, name: "A" },
+        { code: 2, name: "B" },
+      ],
+      fields: [...fields, { name: "KIND", type: "esriFieldTypeInteger" }],
+    };
+    const sets = enterpriseValueSets();
+    const group = sets.contingentValueSets[0].fieldGroups[0];
+    group.contingencies = group.contingencies.map((entry, index) => ({
+      ...entry,
+      subtypeCode: index < 2 ? 1 : 2,
+    }));
+    const decoded = normalizeArcGISEnterpriseContingentValues(enterpriseDataElements(), sets, info);
+    assert.ok(decoded.status === "ready");
+    assert.deepEqual(
+      decoded.groups[0].lists.map((list) => [list.subtype, list.contingencies.length]),
+      [
+        [1, 2],
+        [2, 2],
+      ],
+    );
+  });
+
+  it("report undecodable value sets", () => {
+    const sets = enterpriseValueSets();
+    sets.contingentValueSets[0].stringDictionary = [];
+    const decoded = normalizeArcGISEnterpriseContingentValues(enterpriseDataElements(), sets, base);
+    assert.equal(decoded.status === "unsupported" && decoded.reason, "format");
+  });
+
+  it("load through the data element, and treat a service that cannot describe it as having none", async () => {
+    const layerUrl = "https://gis.example.com/server/rest/services/S/FeatureServer/0";
+    const service = "https://gis.example.com/server/rest/services/S/FeatureServer";
+    const urls: string[] = [];
+    const responses: Record<string, unknown> = {
+      [service]: { supportsQueryDataElements: true, supportsQueryContingentValues: true },
+      [`${service}/queryDataElements?layers=[0]`]: enterpriseDataElements(),
+      [`${service}/queryContingentValues?layers=[0]`]: enterpriseValueSets(),
+    };
+    const fetchJson = async (url: string) => {
+      urls.push(url);
+      if (!(url in responses)) throw new Error(`Unexpected ${url}`);
+      return responses[url];
+    };
+    const loaded = await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson);
+    assert.equal(loaded?.status, "ready");
+    assert.equal(urls.length, 3);
+
+    responses[service] = { supportsQueryDataElements: false };
+    assert.equal(await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson), undefined);
+
+    responses[service] = { supportsQueryDataElements: true };
+    responses[`${service}/queryDataElements?layers=[0]`] = {
+      layerDataElements: [{ layerId: 0, dataElement: { fieldGroups: [] } }],
+    };
+    assert.equal(await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson), undefined);
+
+    // Field groups exist but their combinations cannot be read: hold edits.
+    responses[`${service}/queryDataElements?layers=[0]`] = enterpriseDataElements();
+    delete responses[`${service}/queryContingentValues?layers=[0]`];
+    const failed = await loadArcGISEnterpriseContingentValues(layerUrl, base, fetchJson);
+    assert.equal(failed?.status, "unavailable");
+  });
+});
+
+describe("withArcGISContingentValues", () => {
+  const layerUrl = "https://example.com/rest/services/S/FeatureServer/0";
+
+  it("reads the layer resource of a hosted layer", async () => {
+    const info = await withArcGISContingentValues(layerUrl, base, async () => liveResponse());
+    assert.equal(info.contingentValues?.status, "ready");
+  });
+
+  it("asks a nonhosted service only for an editable layer", async () => {
+    const urls: string[] = [];
+    const fetchJson = async (url: string) => {
+      urls.push(url);
+      return {};
+    };
+    const nonhosted = { ...base, hasContingentValuesDefinition: undefined };
+    await withArcGISContingentValues(layerUrl, { ...nonhosted, capabilities: "Query" }, fetchJson);
+    assert.deepEqual(urls, []);
+    const editable = await withArcGISContingentValues(layerUrl, nonhosted, fetchJson);
+    assert.deepEqual(urls, ["https://example.com/rest/services/S/FeatureServer"]);
+    assert.equal(editable.contingentValues, undefined);
+    // A hosted layer that says it has none is not asked at all.
+    urls.length = 0;
+    await withArcGISContingentValues(
+      layerUrl,
+      { ...base, hasContingentValuesDefinition: false },
+      fetchJson,
+    );
+    assert.deepEqual(urls, []);
   });
 });

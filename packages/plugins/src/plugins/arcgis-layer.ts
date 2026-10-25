@@ -31,7 +31,7 @@ import { ARCGIS_FEATURE_SOURCE_KIND } from "./arcgis-defaults";
 import {
   arcGISContingencyChecks,
   arcGISContingentChoices,
-  loadArcGISContingentValues,
+  withArcGISContingentValues,
   type ArcGISContingencyCheck,
   type ArcGISContingentValues,
 } from "./arcgis-contingent-values";
@@ -2657,14 +2657,12 @@ async function fetchArcGISFeatureLayerInfo(
   signal?: AbortSignal,
 ): Promise<ArcGISFeatureLayerInfo> {
   const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, cause, signal);
-  if (info.hasContingentValuesDefinition !== true) return info;
-  const contingentValues = await loadArcGISContingentValues(
+  return withArcGISContingentValues(
     trimTrailingSlash(layerUrl),
     info,
     (url) => fetchArcGISJson<unknown>(url, options, cause, signal),
     signal,
   );
-  return { ...info, contingentValues };
 }
 
 async function resolveArcGISLayerBounds(

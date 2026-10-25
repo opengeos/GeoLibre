@@ -138,6 +138,8 @@ export {
 } from "./plugins/arcgis-layer";
 export type { ArcGISDomainDiagnostic } from "./plugins/arcgis-domains";
 export {
+  arcGISContingencyChecks,
+  arcGISContingentChoices,
   blocksArcGISEdit,
   type ArcGISContingencyCheck,
   type ArcGISContingentValues,

@@ -77,12 +77,20 @@ keep the generic editor; the save check still validates them.
 A layer can also publish contingent values: field groups that list which
 combinations of values are allowed across several fields, overall or per
 subtype. Each field may hold a valid domain code while the combination is not
-one the organization permits. When a layer reports
-`hasContingentValuesDefinition`, GeoLibre reads the definition with the layer's
-metadata, from the layer's `contingentValues` resource or, failing that, the
-service's `queryContingentValues` operation, through the same signed-in
-connection. It is read again before every save, so edits are checked against
-the rules the service holds at that moment.
+one the organization permits. GeoLibre reads the definition with the layer's
+metadata, through the same signed-in connection, and reads it again before
+every save, so edits are checked against the rules the service holds at that
+moment:
+
+- A hosted layer (ArcGIS Online, or ArcGIS Enterprise 11.2 and later) reports
+  `hasContingentValuesDefinition`; its definition comes from the layer's
+  `contingentValues` resource or, failing that, the service's
+  `queryContingentValues` operation.
+- A nonhosted ArcGIS Enterprise service does not report them on the layer. For
+  an editable layer only, GeoLibre asks the service for the layer's data
+  element (`queryDataElements`, when the service supports it), which lists its
+  field groups, and then reads their combinations with
+  `queryContingentValues`. Read-only layers are not asked.
 
 While editing in the attribute table:
 
@@ -123,15 +131,20 @@ Esri's documentation leaves them open:
 - Combinations defined per subtype leave other subtypes unconstrained by that
   group.
 
+Related records follow the related table's own contingent values, read with
+its metadata when the **Related records** dialog opens. The form lists fitting
+values first, marks a restrictive group the row breaks, and disables **Save**
+until it is corrected; the relationship's key is set to the parent's before the
+row is checked, as it is when the row is saved.
+
 If the rules cannot be retrieved (a request failed), new features and attribute
 changes are held, with a notice in the attribute table; saving again retries,
 and deletions and shape-only changes still go through. If they are retrieved
 but cannot be read with confidence (a format GeoLibre does not decode, a text
 code that cannot be looked up, a code outside its domain, or more than 50,000
 combinations), GeoLibre says so and leaves the check to the server, as it does
-for layers without contingent values. Nonhosted ArcGIS Enterprise services
-(11.1 and earlier) return their field groups through `queryDataElements`, which
-GeoLibre does not read yet, so their rules are left to the server.
+for layers without contingent values. A nonhosted service that cannot describe
+its data elements is treated as having no contingent values.
 
 ## New features
 
@@ -347,8 +360,8 @@ that default is explicitly enabled. Otherwise every vertex must supply a finite 
 Object IDs must remain unchanged. New fields and changes to server-managed fields
 cannot be written through feature editing. GeoLibre validates basic field types,
 nullability, string lengths, and coded-value and range domains, including those
-a type or subtype overrides, and the contingent values of hosted services.
-Related-table rows are not checked against their table's contingent values yet.
+a type or subtype overrides, and contingent values, including those of related
+tables.
 
 Versioned services, M coordinates, dates in an unknown timezone, and offline
 synchronization are outside this implementation. Related records cover existing

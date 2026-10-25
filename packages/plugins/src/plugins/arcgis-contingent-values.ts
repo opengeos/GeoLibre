@@ -15,8 +15,14 @@
  * code itself), and every decoded code must belong to the field's domain.
  * Anything that cannot be decoded with confidence makes the whole definition
  * `unsupported` instead of a guessed model.
+ *
+ * Nonhosted ArcGIS Enterprise services publish an older format instead: the
+ * field groups are part of the layer's data element (`queryDataElements`),
+ * and `queryContingentValues` returns `contingentValueSets` whose text codes
+ * index one shared `stringDictionary`. That format is decoded the way Esri's
+ * own JavaScript SDK reads it.
  */
-import type { ArcGISEditInfo } from "./arcgis-edits";
+import { arcGISEditCapabilities, type ArcGISEditInfo } from "./arcgis-edits";
 import { arcGISSubtypeField } from "./arcgis-domains";
 
 /** One slot of a permitted combination. */
@@ -298,6 +304,204 @@ function decodeDefinition(
   });
 }
 
+/** One field group as a nonhosted service's data element describes it. */
+interface DataElementFieldGroup {
+  name: string;
+  restrictive: boolean;
+  fields: Array<NonNullable<ArcGISEditInfo["fields"]>[number]>;
+}
+
+/**
+ * Decode a nonhosted service's contingent values: the field groups of the
+ * layer's data element and the `contingentValueSets` of its
+ * `queryContingentValues` response, whose values follow the group's field
+ * order (a number or text is a code, a text field's code being a position in
+ * `stringDictionary`; `{ minValue, maxValue }` is a range; `null` is Null;
+ * any other value is Any).
+ *
+ * @param dataElements - The `queryDataElements` response for the layer.
+ * @param contingentValues - The `queryContingentValues` response for the layer.
+ * @param info - The layer's `?f=json` metadata.
+ * @returns The definition, or why it cannot be evaluated.
+ */
+export function normalizeArcGISEnterpriseContingentValues(
+  dataElements: unknown,
+  contingentValues: unknown,
+  info: ArcGISEditInfo,
+): ArcGISContingentValues {
+  try {
+    const groups = dataElementFieldGroups(dataElements, info);
+    return { status: "ready", groups: decodeEnterpriseSets(contingentValues, groups, info) };
+  } catch (error) {
+    if (error instanceof UnsupportedDefinition)
+      return {
+        status: "unsupported",
+        reason: error.reason,
+        ...(error.detail ? { detail: error.detail } : {}),
+      };
+    throw error;
+  }
+}
+
+/** The field groups a `queryDataElements` response defines for its (single) layer. */
+function dataElementFieldGroups(json: unknown, info: ArcGISEditInfo): DataElementFieldGroup[] {
+  const format = (detail: string) => new UnsupportedDefinition("format", detail);
+  const layers = isRecord(json) ? json.layerDataElements : undefined;
+  const element = Array.isArray(layers) && isRecord(layers[0]) ? layers[0].dataElement : undefined;
+  if (!isRecord(element)) throw format("The data element response has no layer.");
+  const raw = element.fieldGroups ?? [];
+  if (!Array.isArray(raw)) throw format("The data element's field groups are not a list.");
+  const fieldsByName = new Map(
+    (info.fields ?? []).map((field) => [field.name.toLowerCase(), field]),
+  );
+  return raw.map((group) => {
+    const names =
+      isRecord(group) && isRecord(group.fieldNames) ? group.fieldNames.names : undefined;
+    if (!isRecord(group) || typeof group.name !== "string" || !Array.isArray(names))
+      throw format("A field group of the data element is malformed.");
+    const fields = names.map((name) => {
+      const field = typeof name === "string" ? fieldsByName.get(name.toLowerCase()) : undefined;
+      if (!field) throw format(`Field group ${group.name} names a field the layer does not have.`);
+      return field;
+    });
+    return { name: group.name, restrictive: group.isEditingRestrictive === true, fields };
+  });
+}
+
+function decodeEnterpriseSets(
+  json: unknown,
+  groups: DataElementFieldGroup[],
+  info: ArcGISEditInfo,
+): ArcGISFieldGroup[] {
+  const format = (detail: string) => new UnsupportedDefinition("format", detail);
+  const sets = isRecord(json) ? json.contingentValueSets : undefined;
+  const set = Array.isArray(sets) ? sets[0] : undefined;
+  if (!isRecord(set) || !Array.isArray(set.fieldGroups))
+    throw format("The contingent values response has no value set.");
+  const dictionary = Array.isArray(set.stringDictionary) ? set.stringDictionary : [];
+  const hasSubtypes = Boolean(info.subtypes?.length || info.types?.length);
+  const codesByField = new Map<string, Set<string> | undefined>();
+  let total = 0;
+  const result: ArcGISFieldGroup[] = [];
+  for (const group of groups) {
+    const raw = set.fieldGroups.find((entry) => isRecord(entry) && entry.name === group.name);
+    // A field group no combination uses constrains nothing.
+    if (!isRecord(raw)) continue;
+    if (!Array.isArray(raw.contingencies))
+      throw format(`Field group ${group.name} has no combination list.`);
+    total += raw.contingencies.length;
+    if (total > MAX_ARCGIS_CONTINGENCIES) throw new UnsupportedDefinition("tooLarge");
+    const bySubtype = new Map<string, ArcGISContingencyList>();
+    for (const entry of raw.contingencies) {
+      if (
+        !isRecord(entry) ||
+        !Array.isArray(entry.values) ||
+        entry.values.length !== group.fields.length
+      )
+        throw format(`A combination of field group ${group.name} does not cover every field.`);
+      const values = entry.values.map((value, index): ArcGISContingentValue => {
+        const field = group.fields[index];
+        if (value === null || value === undefined) return { kind: "null" };
+        if (isRecord(value)) {
+          const { minValue: min, maxValue: max } = value;
+          if (typeof min !== "number" || typeof max !== "number" || !(min <= max))
+            throw format(`A range of field group ${group.name} is malformed.`);
+          return { kind: "range", min, max };
+        }
+        if (typeof value !== "number" && typeof value !== "string") return { kind: "any" };
+        let code: unknown = value;
+        if (field.type === "esriFieldTypeString") {
+          code =
+            typeof value === "number" && Number.isInteger(value) ? dictionary[value] : undefined;
+          if (typeof code !== "string")
+            throw format(`A text code of field ${field.name} cannot be looked up.`);
+        } else if (field.type === "esriFieldTypeDate") {
+          code = typeof value === "string" ? Date.parse(`${value}+00:00`) : value;
+          if (typeof code !== "number" || !Number.isFinite(code))
+            throw format(`A date code of field ${field.name} cannot be read.`);
+        } else if (!NUMERIC_FIELD_TYPES.has(field.type) || typeof code !== "number") {
+          throw format(`A code of field ${field.name} does not have the field's type.`);
+        }
+        if (!codesByField.has(field.name))
+          codesByField.set(field.name, publishedCodes(info, field.name));
+        const published = codesByField.get(field.name);
+        if (published && !published.has(codeKey(code)))
+          throw format(`A code of field ${field.name} is not in its domain.`);
+        return { kind: "code", code: code as string | number };
+      });
+      const subtype = entry.subtypeCode;
+      const keyed = hasSubtypes && (typeof subtype === "number" || typeof subtype === "string");
+      const key = keyed ? codeKey(subtype) : "";
+      let list = bySubtype.get(key);
+      if (!list)
+        bySubtype.set(key, (list = keyed ? { subtype, contingencies: [] } : { contingencies: [] }));
+      list.contingencies.push({
+        ...(typeof entry.id === "number" ? { id: entry.id } : {}),
+        retired: entry.isRetired === true,
+        values,
+      });
+    }
+    result.push({
+      name: group.name,
+      restrictive: group.restrictive,
+      fields: group.fields.map((field) => field.name),
+      lists: [...bySubtype.values()],
+    });
+  }
+  return result;
+}
+
+/**
+ * Retrieve and decode a nonhosted service's contingent values. Such a layer
+ * does not advertise them, so the service is asked whether it can describe
+ * its data elements; a layer whose data element has no field groups has no
+ * contingent values. Only a failure after field groups were found reports the
+ * rules `unavailable`: a service that cannot be asked is treated as having
+ * none, as before.
+ *
+ * @param layerUrl - The layer's REST URL, ending in its numeric ID.
+ * @param info - The layer's `?f=json` metadata.
+ * @param fetchJson - Requests a URL as JSON through the layer's connection; rejects on errors.
+ * @param signal - Aborts the retrieval.
+ * @returns The definition, or `undefined` when the layer has none.
+ */
+export async function loadArcGISEnterpriseContingentValues(
+  layerUrl: string,
+  info: ArcGISEditInfo,
+  fetchJson: (url: string) => Promise<unknown>,
+  signal?: AbortSignal,
+): Promise<ArcGISContingentValues | undefined> {
+  const match = /^(.*)\/(\d+)$/.exec(layerUrl.replace(/\/+$/, ""));
+  if (!match) return undefined;
+  const [, serviceUrl, layerId] = match;
+  let dataElements: unknown;
+  try {
+    const service = await fetchJson(serviceUrl);
+    if (!isRecord(service) || service.supportsQueryDataElements !== true) return undefined;
+    dataElements = await fetchJson(`${serviceUrl}/queryDataElements?layers=[${layerId}]`);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return undefined;
+  }
+  let groups: DataElementFieldGroup[];
+  try {
+    groups = dataElementFieldGroups(dataElements, info);
+  } catch (error) {
+    if (error instanceof UnsupportedDefinition)
+      return { status: "unsupported", reason: error.reason, detail: error.detail };
+    throw error;
+  }
+  if (!groups.length) return undefined;
+  let contingentValues: unknown;
+  try {
+    contingentValues = await fetchJson(`${serviceUrl}/queryContingentValues?layers=[${layerId}]`);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { status: "unavailable", reason: messageOf(error) };
+  }
+  return normalizeArcGISEnterpriseContingentValues(dataElements, contingentValues, info);
+}
+
 /**
  * Retrieve and decode a layer's contingent values: the layer's
  * `contingentValues` resource, else the service's `queryContingentValues`
@@ -546,4 +750,37 @@ export function arcGISContingencyError(check: ArcGISContingencyCheck): string {
   return check.status === "retired"
     ? `The values of ${fields} are a retired combination in field group ${check.group}, which existing records may keep but edits cannot introduce.`
     : `The values of ${fields} are not an allowed combination in field group ${check.group}.`;
+}
+
+/**
+ * A layer or table's metadata with its contingent values attached, when it
+ * publishes any: hosted services advertise them on the layer
+ * (`hasContingentValuesDefinition`); nonhosted services do not, so an
+ * editable resource's service is asked for its data elements instead (a
+ * read-only resource never needs them). Every request goes through the
+ * caller's connection.
+ *
+ * @param layerUrl - The layer or table's REST URL, ending in its numeric ID.
+ * @param info - Its `?f=json` metadata.
+ * @param fetchJson - Requests a URL as JSON through the connection; rejects on errors.
+ * @param signal - Aborts the retrieval.
+ * @returns The metadata, with `contingentValues` set when there are any.
+ */
+export async function withArcGISContingentValues<T extends ArcGISEditInfo>(
+  layerUrl: string,
+  info: T,
+  fetchJson: (url: string) => Promise<unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const url = layerUrl.replace(/\/+$/, "");
+  if (info.hasContingentValuesDefinition === true)
+    return {
+      ...info,
+      contingentValues: await loadArcGISContingentValues(url, info, fetchJson, signal),
+    };
+  const caps = arcGISEditCapabilities(info);
+  if (info.hasContingentValuesDefinition !== undefined || !(caps.create || caps.update))
+    return info;
+  const contingentValues = await loadArcGISEnterpriseContingentValues(url, info, fetchJson, signal);
+  return contingentValues ? { ...info, contingentValues } : info;
 }

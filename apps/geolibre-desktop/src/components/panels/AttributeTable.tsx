@@ -326,11 +326,9 @@ function valueMapOptions(
   return (
     <>
       {fitting.length ? (
-        <optgroup label={t("attributeTable.contingentValues.fitting")}>
-          {fitting.map(option)}
-        </optgroup>
+        <optgroup label={t("contingentValues.fitting")}>{fitting.map(option)}</optgroup>
       ) : null}
-      <optgroup label={t("attributeTable.contingentValues.others")}>{others.map(option)}</optgroup>
+      <optgroup label={t("contingentValues.others")}>{others.map(option)}</optgroup>
     </>
   );
 }
@@ -849,12 +847,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     return {
       checks: serviceConstraints.contingencyChecks,
       message: (check) =>
-        t(
-          check.status === "retired"
-            ? "attributeTable.contingentValues.retired"
-            : "attributeTable.contingentValues.violation",
-          { fields: check.fields.join(", "), group: check.group },
-        ),
+        t(check.status === "retired" ? "contingentValues.retired" : "contingentValues.violation", {
+          fields: check.fields.join(", "),
+          group: check.group,
+        }),
     };
   }, [serviceConstraints, t]);
   const formDraftErrors = useMemo(
@@ -867,8 +863,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     const lines = problem
       ? [
           problem.status === "unavailable"
-            ? t("attributeTable.contingentValues.unavailable", { reason: problem.reason })
-            : t("attributeTable.contingentValues.unsupported"),
+            ? t("contingentValues.unavailable", { reason: problem.reason })
+            : t("contingentValues.unsupported"),
         ]
       : [];
     if (contingencyContext)
@@ -881,10 +877,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         lines.push(
           t(
             check.affected
-              ? "attributeTable.contingentValues.advisory"
+              ? "contingentValues.advisory"
               : check.status === "retired"
-                ? "attributeTable.contingentValues.existingRetired"
-                : "attributeTable.contingentValues.existing",
+                ? "contingentValues.existingRetired"
+                : "contingentValues.existing",
             { row: featureId, fields: check.fields.join(", "), group: check.group },
           ),
         );

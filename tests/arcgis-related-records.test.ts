@@ -139,7 +139,13 @@ afterEach(() => {
 async function load({
   paging = true,
   parentInfo = hydrantInfo as Record<string, unknown>,
-}: { paging?: boolean; parentInfo?: Record<string, unknown> } = {}) {
+  resources = {},
+}: {
+  paging?: boolean;
+  parentInfo?: Record<string, unknown>;
+  /** Extra GET responses by path, consulted first. */
+  resources?: Record<string, unknown>;
+} = {}) {
   const rows: Row[] = [
     { OBJECTID: 1, HydrantAssetID: "H-001", Status: 1, Pressure: 62.5, Inspector: "A. Lee" },
     { OBJECTID: 2, HydrantAssetID: "H-001", Status: 9, Pressure: 41, Inspector: "B. Diaz" },
@@ -194,6 +200,7 @@ async function load({
       return Response.json({ deleteResults: [{ objectId: id, success: true }] });
     }
     gets.push(url);
+    if (Object.hasOwn(resources, path)) return Response.json(resources[path]);
     if (path === "/0/query") return Response.json(fc(hydrant(7, "H-001"), hydrant(8, "H-002")));
     if (path === "/0" || path === "/0/") return Response.json(parent);
     if (path === "/1") return Response.json(inspectionInfo);
@@ -463,6 +470,58 @@ describe("related record writes", () => {
       /exceeds its maximum length/,
     );
     assert.equal(posts.length, 0);
+  });
+
+  it("applies the related table's own contingent values, with the parent key in place (#3180)", async () => {
+    const withRules = { ...inspectionInfo, hasContingentValuesDefinition: true };
+    const { layer, posts } = await load({
+      resources: {
+        "/1": withRules,
+        "/1/contingentValues": {
+          typeCodes: ["Unknown", "Any", "Null", "Code", "Range"],
+          contingentValuesDefinition: {
+            layerID: 1,
+            hasSubType: false,
+            fieldGroups: [
+              {
+                name: "status_pressure",
+                restrictive: true,
+                fields: [
+                  { name: "Status", fieldType: "esriFieldTypeInteger" },
+                  { name: "Pressure", fieldType: "esriFieldTypeDouble" },
+                ],
+                contingentValues: [
+                  { id: 1, types: [3, 4], values: [1, { range: [40, 100] }] },
+                  { id: 2, types: [3, 1], values: [2] },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+    const [inspections] = arcGISRelationships(layer);
+    const related = await fetchArcGISRelatedTableInfo(layer.id, inspections);
+    assert.equal(related.contingentValues?.status, "ready");
+    const support = arcGISRelatedEditSupport(layer, inspections, related);
+    // Pass (the default status) only allows 40 to 100.
+    await assert.rejects(
+      addArcGISRelatedRecord(layer.id, inspections, related, support, "H-002", { Pressure: 150 }),
+      /not an allowed combination in field group status_pressure/,
+    );
+    assert.equal(posts.length, 0);
+    await addArcGISRelatedRecord(layer.id, inspections, related, support, "H-002", {
+      Status: 2,
+      Pressure: 150,
+    });
+    assert.equal(JSON.parse(posts[0].body.get("adds")!)[0].attributes.HydrantAssetID, "H-002");
+    // Row 1 passed at 62.5; an update moving its pressure to 20 leaves Pass's range.
+    const { records } = await queryArcGISRelatedRecords(layer.id, 7, inspections, related);
+    const row = records.find((record) => record.objectId === 1)!;
+    await assert.rejects(
+      updateArcGISRelatedRecord(layer.id, inspections, related, support, row, { Pressure: 20 }),
+      /status_pressure/,
+    );
   });
 
   it("keeps a field the user cleared instead of refilling it from a template (#3122)", async () => {
