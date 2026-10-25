@@ -6,15 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@geolibre/ui";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   creationTemplateLabels,
   useCreationTemplatePrompt,
 } from "../../hooks/useCreationTemplatePrompt";
-
-/** The radio value for starting without a template. */
-const DEFAULTS_ONLY = "defaults";
 
 /**
  * App-wide "choose a feature template" dialog backing
@@ -27,16 +24,20 @@ export function CreationTemplateDialog() {
   const request = useCreationTemplatePrompt((state) => state.request);
   const choose = useCreationTemplatePrompt((state) => state.choose);
   const cancel = useCreationTemplatePrompt((state) => state.cancel);
-  const [selected, setSelected] = useState(DEFAULTS_ONLY);
+  // The picked template's index, tied to the request it was picked in, so
+  // every new prompt starts on today's behavior (defaults only, `null`).
+  const [picked, setPicked] = useState<{
+    request: typeof request;
+    index: number | null;
+  }>({ request: null, index: null });
+  const selected = picked.request === request ? picked.index : null;
+  const select = (index: number | null) => setPicked({ request, index });
   const labels = useMemo(() => creationTemplateLabels(request?.templates ?? []), [request]);
-
-  // Every prompt starts on today's behavior: defaults only.
-  useEffect(() => setSelected(DEFAULTS_ONLY), [request]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const template = request?.templates[Number(selected)];
-    choose(selected === DEFAULTS_ONLY || !template ? {} : { template: template.selection });
+    const template = selected === null ? undefined : request?.templates[selected];
+    choose(template ? { template: template.selection } : {});
   };
 
   const optionClass =
@@ -63,9 +64,9 @@ export function CreationTemplateDialog() {
               <input
                 type="radio"
                 name="creation-template"
-                value={DEFAULTS_ONLY}
-                checked={selected === DEFAULTS_ONLY}
-                onChange={() => setSelected(DEFAULTS_ONLY)}
+                value="defaults"
+                checked={selected === null}
+                onChange={() => select(null)}
                 className="mt-1"
               />
               <span className="min-w-0">
@@ -86,8 +87,8 @@ export function CreationTemplateDialog() {
                     type="radio"
                     name="creation-template"
                     value={String(index)}
-                    checked={selected === String(index)}
-                    onChange={() => setSelected(String(index))}
+                    checked={selected === index}
+                    onChange={() => select(index)}
                     className="mt-1"
                   />
                   <span className="min-w-0">
