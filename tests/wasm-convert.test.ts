@@ -9,7 +9,7 @@ import {
   renderRasterToPmtiles,
   tileVectorToPmtiles,
 } from "../packages/processing/src/wasm-convert";
-import { releaseIdleWasmToolWorkers } from "../packages/processing/src/wasm-tool-runner";
+import { terminateAllWasmToolWorkers } from "../packages/processing/src/wasm-tool-runner";
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))));
@@ -417,8 +417,9 @@ describe("wasm-convert", () => {
 
     afterEach(() => {
       // A worker parked for reuse would otherwise be handed to the next case,
-      // which then spawns none and sees an empty `instances`.
-      releaseIdleWasmToolWorkers();
+      // which then spawns none and sees an empty `instances`; a run a case left
+      // in flight would hold the pool's only slot and queue the next case's run.
+      terminateAllWasmToolWorkers();
       // Leaving the stub installed would push the inline tests above onto the
       // worker path, where `new URL("./wasm-tool.worker.ts")` cannot load.
       if (!hadWorker) delete (globalThis as { Worker?: unknown }).Worker;

@@ -59,7 +59,7 @@ const SIMD128_TEST_BYTECODE = new Uint8Array([
 
 // Minimal valid WebAssembly module with shared memory declaration (memory 1 2 shared)
 const SHARED_MEMORY_TEST_BYTECODE = new Uint8Array([
-  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x05, 0x05, 0x01, 0x03, 0x01, 0x02, 0x07, 0x0a,
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x05, 0x04, 0x01, 0x03, 0x01, 0x02, 0x07, 0x0a,
   0x01, 0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00,
 ]);
 
@@ -166,7 +166,12 @@ export function resolveExecutionMode(
   const requested = config.executionMode ?? "auto";
   const enableSIMD = config.enableSIMD ?? true;
   const enableThreads = config.enableThreads ?? true;
-  const maxThreads = Math.max(1, Math.min(16, config.maxThreads ?? caps.recommendedThreads));
+  // A non-finite thread count (NaN from a bad config or capability) would make
+  // the pool capacity NaN and stall every queued job, so fall back to 1.
+  const rawThreads = config.maxThreads ?? caps.recommendedThreads;
+  const maxThreads = Number.isFinite(rawThreads)
+    ? Math.max(1, Math.min(16, Math.floor(rawThreads)))
+    : 1;
 
   const canThread =
     enableThreads &&

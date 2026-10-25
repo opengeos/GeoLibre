@@ -153,7 +153,7 @@ Two engines have no such escape hatch. **Pyodide** is always fetched: `VITE_PYOD
 
 The **desktop** build ships no service worker, so none of this runtime caching applies there: it re-fetches every CDN-loaded engine on first use per install, unless PGlite/PostGIS and CereusDB are bundled with the flags above.
 
-A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background and takes control (`skipWaiting` + `clientsClaim`), so its fresh precache serves subsequent requests. Workbox's default force-reload-on-activation is deliberately suppressed via `onNeedReload` in `src/main.tsx` — on the relative-base `/demo/` subpath that reload fired spuriously and discarded in-progress map state. Page recovery is delegated to `installStaleChunkReload`, which reloads on-demand only when an orphaned lazy chunk 404s (cooldown-guarded; if `sessionStorage` is blocked it skips the reload and lets the preload error surface).
+A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background and takes control (`skipWaiting` + `clientsClaim`), so its fresh precache serves subsequent requests. Workbox's default force-reload-on-activation is deliberately suppressed via `onNeedReload` in `src/main.tsx` — on the relative-base `/demo/` subpath that reload fired spuriously and discarded in-progress map state. Instead, a `controllerchange` listener calls `offerReloadIfNewBuild()`, which offers the user a reload when the deployed `index.html` loads a different build than the running page (screening out the first install and those spurious activations). `installStaleChunkReload` stays the on-demand recovery path, reloading only when an orphaned lazy chunk 404s before the user acts (cooldown-guarded; if `sessionStorage` is blocked it skips the reload and lets the preload error surface). Precached chunks are served from cache and never 404, so the page is no longer reloaded out from under the user.
 
 ## Multi-Threaded WebAssembly Geoprocessing (SIMD128 & Pthreads/SharedArrayBuffer)
 
@@ -178,7 +178,7 @@ GeoLibre executes client-side geospatial analysis and Whitebox tools via WebAsse
 `packages/processing/src/wasm-capabilities.ts` probes the host environment safely using bytecode validation without triggering runtime exceptions:
 
 1. **SIMD128 Probe**: Validates a minimal 43-byte WebAssembly module containing `v128.const`.
-2. **Shared Memory Probe**: Validates a minimal WebAssembly module declaring shared memory (`memory 1 1 shared`).
+2. **Shared Memory Probe**: Validates a minimal WebAssembly module declaring shared memory (`memory 1 2 shared`).
 3. **Isolation & Concurrency**: Checks `globalThis.crossOriginIsolated === true`, `typeof SharedArrayBuffer !== "undefined"`, and clamps `navigator.hardwareConcurrency` between 1 and 16.
 4. **Resolution**: `resolveExecutionMode()` resolves the active tier and surfaces exact fallback reasons through structured diagnostics:
    ```ts
@@ -233,21 +233,6 @@ Geospatial algorithms are classified by data dependency in `packages/processing/
 - **Radial Raymarch (`radial-raymarch`)**:
   - *Tools*: `viewshed`.
   - *Strategy*: Can be partitioned radially or by angular quadrant across workers.
-
-### Performance Benchmarks
-
-Measured using `scripts/benchmark-wasm-multithread.mjs` on an Intel Core Ultra 5 245K (14 logical cores, Node v24):
-
-- **Single-Tile Stencil (Horn's 3x3 Slope & Aspect)**:
-  - 10k cells (100x100): ~0.16 ms (SIMD gives 1.14x speedup)
-  - 250k cells (500x500): ~3.48 ms
-  - 1M cells (1000x1000): ~13.29 ms
-  - Max numerical divergence vs baseline: `0.00e+0` (100% numerically exact).
-- **Concurrent Geoprocessing Pool (4 Tile Operations Batch)**:
-  - Sequential Baseline (1-Worker Queue): 14.24 ms
-  - Adaptive 4-Worker Pool (Threaded-SIMD): 4.67 ms
-  - **Speedup**: **3.05x**
-  - **Runtime Reduction**: **67.2%** (exceeds the 60–80% target).
 
 ## Container image
 

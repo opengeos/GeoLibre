@@ -25,13 +25,26 @@ interface QueuedJob {
   resolve: (result: ToolResult) => void;
   reject: (error: Error) => void;
   startTime: number;
+  /** Removes the abort listener attached while the job waits in the queue. */
+  detachQueuedAbort?: () => void;
 }
 
 // Workers currently parked and warm, ready to take work immediately.
 const idleWorkers: Worker[] = [];
 
-// Workers currently executing a job.
-const busyWorkers = new Set<Worker>();
+// Idle-expiry timers for parked workers beyond the first. One warm worker is
+// kept for the session, as before the pool existed; the extras a threaded
+// batch leaves behind each hold their own compiled module and linear memory
+// (which never shrinks), so they are terminated once they sit unused.
+const idleTimers = new Map<Worker, ReturnType<typeof setTimeout>>();
+
+/** How long a parked worker beyond the first stays warm before it is terminated. */
+export const WASM_TOOL_WORKER_IDLE_MS = 30_000;
+
+// Workers currently executing a job, each mapped to the function that fails
+// that job: terminating a worker fires no event, so whoever tears the pool down
+// has to settle the run itself.
+const busyWorkers = new Map<Worker, (error: Error) => void>();
 
 // Pending job queue waiting for an available worker slot.
 const pendingQueue: QueuedJob[] = [];
@@ -48,6 +61,8 @@ const REUSED_WORKER_ACK_MS = 10_000;
 
 /**
  * Determine the maximum active worker pool size based on current execution mode.
+ *
+ * @returns The number of workers allowed to run at once.
  */
 export function getWasmToolPoolCapacity(): number {
   const diag = getWasmDiagnostics();
@@ -59,6 +74,8 @@ export function getWasmToolPoolCapacity(): number {
 
 /**
  * Return current pool metrics and diagnostics.
+ *
+ * @returns Busy, idle and queued counts plus the pool capacity and mode.
  */
 export function getWasmToolWorkerPoolStats(): {
   activeWorkers: number;
@@ -77,6 +94,38 @@ export function getWasmToolWorkerPoolStats(): {
   };
 }
 
+/** Take a worker out of the idle pool, cancelling its expiry timer. */
+function unparkWorker(worker: Worker): void {
+  const timer = idleTimers.get(worker);
+  if (timer !== undefined) clearTimeout(timer);
+  idleTimers.delete(worker);
+}
+
+/** Park a healthy worker for reuse, or terminate it if the pool is full. */
+function parkWorker(worker: Worker): void {
+  // Capacity can shrink between runs (setWasmRuntimeConfig), so trim the pool
+  // to leave room for this worker within it, dropping the oldest first.
+  const capacity = getWasmToolPoolCapacity();
+  while (idleWorkers.length >= capacity) {
+    const extra = idleWorkers.shift()!;
+    unparkWorker(extra);
+    extra.terminate();
+  }
+  if (idleWorkers.length > 0) {
+    const timer = setTimeout(() => {
+      const index = idleWorkers.indexOf(worker);
+      if (index === -1) return;
+      idleWorkers.splice(index, 1);
+      idleTimers.delete(worker);
+      worker.terminate();
+    }, WASM_TOOL_WORKER_IDLE_MS);
+    // Node's timers keep the process alive; a parked worker must not (tests).
+    (timer as { unref?: () => void }).unref?.();
+    idleTimers.set(worker, timer);
+  }
+  idleWorkers.push(worker);
+}
+
 /**
  * Terminate every parked worker and forget them, freeing the compiled module
  * each one holds. Runs in flight are unaffected — they own their worker until
@@ -84,26 +133,25 @@ export function getWasmToolWorkerPoolStats(): {
  * by one case is not handed to the next.
  */
 export function releaseIdleWasmToolWorkers(): void {
-  for (const worker of idleWorkers.splice(0)) worker.terminate();
-  for (const worker of busyWorkers) worker.terminate();
-  busyWorkers.clear();
-  pendingQueue.length = 0;
+  for (const worker of idleWorkers.splice(0)) {
+    unparkWorker(worker);
+    worker.terminate();
+  }
 }
 
 /**
- * Terminate all workers (busy and idle) and reject any queued jobs.
+ * Terminate all workers (busy and idle), rejecting queued and in-flight runs.
+ *
+ * @param reason - The message the rejected runs settle with.
  */
 export function terminateAllWasmToolWorkers(reason = "Worker pool terminated."): void {
   for (const job of pendingQueue.splice(0)) {
+    job.detachQueuedAbort?.();
     job.reject(new Error(reason));
   }
-  for (const worker of idleWorkers.splice(0)) {
-    worker.terminate();
-  }
-  for (const worker of busyWorkers) {
-    worker.terminate();
-  }
-  busyWorkers.clear();
+  // Each fail() removes its own entry, so iterate over a snapshot.
+  for (const fail of [...busyWorkers.values()]) fail(new Error(reason));
+  releaseIdleWasmToolWorkers();
 }
 
 function spawnWorker(): Worker {
@@ -113,6 +161,14 @@ function spawnWorker(): Worker {
 /** The rejection a cancelled run settles with. */
 function abortError(tool: string): DOMException {
   return new DOMException(`${tool} was cancelled.`, "AbortError");
+}
+
+/** Start the next queued job, if any, now that a worker slot is free. */
+function dispatchNext(): void {
+  const nextJob = pendingQueue.shift();
+  if (!nextJob) return;
+  nextJob.detachQueuedAbort?.();
+  acquireAndExecute(nextJob);
 }
 
 /**
@@ -127,7 +183,6 @@ function executeOnWorker(
   reject: (err: Error) => void,
   startTime: number,
 ): void {
-  busyWorkers.add(worker);
   let currentWorker = worker;
   let isCurrentReused = isReused;
   let ackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -137,6 +192,19 @@ function executeOnWorker(
   const disarmAck = () => {
     if (ackTimer !== undefined) clearTimeout(ackTimer);
     ackTimer = undefined;
+  };
+
+  // Settle the run as failed: the worker is no longer trustworthy, so it is
+  // terminated rather than parked, and its slot goes to the next queued job.
+  // The run is rejected before the next job is dispatched so that a throw
+  // while starting that job cannot leave this one pending.
+  const fail = (error: Error) => {
+    disarmAck();
+    cleanup();
+    busyWorkers.delete(currentWorker);
+    currentWorker.terminate();
+    reject(error);
+    dispatchNext();
   };
 
   const armAck = () => {
@@ -149,7 +217,7 @@ function executeOnWorker(
       currentWorker.terminate();
       currentWorker = spawnWorker();
       isCurrentReused = false;
-      busyWorkers.add(currentWorker);
+      busyWorkers.set(currentWorker, fail);
       attach();
       post();
     }, REUSED_WORKER_ACK_MS);
@@ -161,32 +229,27 @@ function executeOnWorker(
     busyWorkers.delete(currentWorker);
 
     // If there is another job in the queue, hand this warm worker off directly.
-    const nextJob = pendingQueue.shift();
+    let nextJob = pendingQueue.shift();
+    while (nextJob?.signal?.aborted) {
+      nextJob.detachQueuedAbort?.();
+      nextJob.reject(abortError(nextJob.request.tool));
+      nextJob = pendingQueue.shift();
+    }
     if (nextJob) {
-      if (nextJob.signal?.aborted) {
-        nextJob.reject(abortError(nextJob.request.tool));
-        onDone();
-      } else {
-        executeOnWorker(
-          currentWorker,
-          true,
-          nextJob.request,
-          nextJob.signal,
-          nextJob.resolve,
-          nextJob.reject,
-          nextJob.startTime,
-        );
-      }
+      nextJob.detachQueuedAbort?.();
+      executeOnWorker(
+        currentWorker,
+        true,
+        nextJob.request,
+        nextJob.signal,
+        nextJob.resolve,
+        nextJob.reject,
+        nextJob.startTime,
+      );
       return;
     }
 
-    // Otherwise, park it if we have capacity; else terminate.
-    const capacity = getWasmToolPoolCapacity();
-    if (idleWorkers.length < capacity) {
-      idleWorkers.push(currentWorker);
-    } else {
-      currentWorker.terminate();
-    }
+    parkWorker(currentWorker);
   };
 
   const onMessage = (event: MessageEvent<WasmToolResponse>) => {
@@ -204,40 +267,15 @@ function executeOnWorker(
   };
 
   const onError = (event: ErrorEvent) => {
-    disarmAck();
-    cleanup();
-    busyWorkers.delete(currentWorker);
-    currentWorker.terminate();
-    // Dispatch next queued item if any
-    const nextJob = pendingQueue.shift();
-    if (nextJob) {
-      acquireAndExecute(nextJob);
-    }
-    reject(new Error(event.message || `The ${request.tool} worker failed.`));
+    fail(new Error(event.message || `The ${request.tool} worker failed.`));
   };
 
   const onMessageError = () => {
-    disarmAck();
-    cleanup();
-    busyWorkers.delete(currentWorker);
-    currentWorker.terminate();
-    const nextJob = pendingQueue.shift();
-    if (nextJob) {
-      acquireAndExecute(nextJob);
-    }
-    reject(new Error(`The ${request.tool} worker posted an undeserializable message.`));
+    fail(new Error(`The ${request.tool} worker posted an undeserializable message.`));
   };
 
   const onAbort = () => {
-    disarmAck();
-    cleanup();
-    busyWorkers.delete(currentWorker);
-    currentWorker.terminate();
-    const nextJob = pendingQueue.shift();
-    if (nextJob) {
-      acquireAndExecute(nextJob);
-    }
-    reject(abortError(request.tool));
+    fail(abortError(request.tool));
   };
 
   const cleanup = () => {
@@ -259,14 +297,11 @@ function executeOnWorker(
       currentWorker.postMessage(request);
       armAck();
     } catch (error) {
-      disarmAck();
-      cleanup();
-      busyWorkers.delete(currentWorker);
-      currentWorker.terminate();
-      reject(error instanceof Error ? error : new Error(String(error)));
+      fail(error instanceof Error ? error : new Error(String(error)));
     }
   };
 
+  busyWorkers.set(currentWorker, fail);
   attach();
   post();
 }
@@ -280,6 +315,7 @@ function acquireAndExecute(job: QueuedJob): void {
   // 1. Try to take an already-parked warm worker
   const parked = idleWorkers.pop();
   if (parked) {
+    unparkWorker(parked);
     executeOnWorker(parked, true, job.request, job.signal, job.resolve, job.reject, job.startTime);
     return;
   }
@@ -287,7 +323,13 @@ function acquireAndExecute(job: QueuedJob): void {
   // 2. Check if we can spawn a new worker within pool capacity
   const capacity = getWasmToolPoolCapacity();
   if (busyWorkers.size < capacity) {
-    const spawned = spawnWorker();
+    let spawned: Worker;
+    try {
+      spawned = spawnWorker();
+    } catch (error) {
+      job.reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
     executeOnWorker(
       spawned,
       false,
@@ -300,7 +342,19 @@ function acquireAndExecute(job: QueuedJob): void {
     return;
   }
 
-  // 3. Pool is saturated; queue the job for next available slot
+  // 3. Pool is saturated; queue the job for next available slot. Aborting it
+  // while it waits settles it now rather than when a slot frees, which with no
+  // run timeout could be never.
+  const { signal } = job;
+  if (signal) {
+    const onQueuedAbort = () => {
+      const index = pendingQueue.indexOf(job);
+      if (index !== -1) pendingQueue.splice(index, 1);
+      job.reject(abortError(job.request.tool));
+    };
+    signal.addEventListener("abort", onQueuedAbort, { once: true });
+    job.detachQueuedAbort = () => signal.removeEventListener("abort", onQueuedAbort);
+  }
   pendingQueue.push(job);
 }
 
@@ -355,6 +409,11 @@ export async function runWasmToolInBackground(
 /**
  * Execute multiple tool requests in parallel across the worker pool,
  * preserving input-to-output array indexing.
+ *
+ * @param requests - The tool runs to execute.
+ * @param options - `signal` cancels every run in the batch.
+ * @returns One result per request, in request order. Rejects with the first
+ *   failure, after cancelling the batch's remaining runs.
  */
 export async function runParallelWasmTools(
   requests: WasmToolRequest[],
@@ -363,5 +422,21 @@ export async function runParallelWasmTools(
   if (options.signal?.aborted) {
     throw abortError(requests[0]?.tool ?? "batch");
   }
-  return Promise.all(requests.map((req) => runWasmToolInBackground(req, options)));
+  // One failure makes the batch's result unusable, so stop its siblings
+  // instead of letting them keep workers and queue slots busy.
+  const batch = new AbortController();
+  const onOuterAbort = () => batch.abort();
+  options.signal?.addEventListener("abort", onOuterAbort, { once: true });
+  try {
+    return await Promise.all(
+      requests.map((req) =>
+        runWasmToolInBackground(req, { signal: batch.signal }).catch((error: unknown) => {
+          batch.abort();
+          throw error;
+        }),
+      ),
+    );
+  } finally {
+    options.signal?.removeEventListener("abort", onOuterAbort);
+  }
 }

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   auditAlgorithm,
+  detectSharedMemorySupport,
+  detectSimdSupport,
   getWasmDiagnostics,
   getWasmRuntimeConfig,
   getWasmToolPoolCapacity,
@@ -10,6 +12,7 @@ import {
   isAlgorithmSimdEligible,
   probeWasmCapabilities,
   releaseIdleWasmToolWorkers,
+  resetWasmCapabilitiesCache,
   resetWasmRuntimeConfig,
   resolveExecutionMode,
   runParallelWasmTools,
@@ -77,6 +80,29 @@ describe("WebAssembly Capability Detection & Mode Resolution", () => {
     assert.equal(typeof caps.hardwareConcurrency, "number");
     assert.ok(caps.hardwareConcurrency >= 1);
     assert.ok(caps.recommendedThreads >= 1);
+  });
+
+  it("detects WebAssembly shared memory with the real probe", () => {
+    resetWasmCapabilitiesCache();
+    // Node has supported threads/shared memory since v16; a malformed probe
+    // module fails validation and silently disables threaded-simd everywhere.
+    assert.equal(detectSharedMemorySupport(), true);
+    assert.equal(detectSimdSupport(), true);
+  });
+
+  it("falls back to one thread for a non-finite maxThreads", () => {
+    const mockCaps = {
+      hasWasm: true,
+      hasSimd: true,
+      hasSharedArrayBuffer: true,
+      hasSharedMemory: true,
+      isCrossOriginIsolated: true,
+      hardwareConcurrency: 8,
+      recommendedThreads: 4,
+    };
+    const resolution = resolveExecutionMode({ maxThreads: Number.NaN }, mockCaps);
+    assert.equal(resolution.mode, "threaded-simd");
+    assert.equal(resolution.threads, 1);
   });
 
   it("resolves to simd-single-thread when SIMD is present but crossOriginIsolated is false", () => {
@@ -401,108 +427,97 @@ describe("Multi-Worker Concurrent Pool Architecture", () => {
     assert.equal(worker.terminated, true, "Cancelled worker must be terminated");
   });
 
-  it("cleans up all idle and active workers on terminateAllWasmToolWorkers", () => {
+  it("cleans up all idle and active workers on terminateAllWasmToolWorkers", async () => {
     const run = runWasmToolInBackground({ tool: "task", args: [], input: {} });
-    run.catch(() => {});
+    const queued = runWasmToolInBackground({ tool: "queued", args: [], input: {} });
 
     assert.equal(MockWorker.instances.length, 1);
     const worker = MockWorker.instances[0];
 
-    terminateAllWasmToolWorkers();
+    terminateAllWasmToolWorkers("pool closed");
     assert.equal(worker.terminated, true);
+    // terminate() fires no worker event, so the pool must settle both runs itself.
+    await assert.rejects(run, /pool closed/);
+    await assert.rejects(queued, /pool closed/);
 
     const stats = getWasmToolWorkerPoolStats();
     assert.equal(stats.activeWorkers, 0);
     assert.equal(stats.idleWorkers, 0);
     assert.equal(stats.queuedRequests, 0);
   });
-});
 
-describe("Numerical Correctness & Invariant Validation", () => {
-  it("computes 3x3 Horn slope stencil accurately on synthetic DEM", () => {
-    // 3x3 DEM grid with 10m cell resolution
-    // Horn's slope formula:
-    // dz/dx = ((c + 2f + i) - (a + 2d + g)) / (8 * cell_size)
-    // dz/dy = ((g + 2h + i) - (a + 2b + c)) / (8 * cell_size)
-    // slope_deg = atan(sqrt(dz/dx^2 + dz/dy^2)) * 180 / PI
+  it("leaves in-flight runs alone in releaseIdleWasmToolWorkers", async () => {
+    const run = runWasmToolInBackground({ tool: "task", args: [], input: {} });
+    const worker = MockWorker.instances[0];
 
-    const cellSize = 10.0;
-    // Flat terrain: elevation = 100 everywhere
-    const flatDem = [100, 100, 100, 100, 100, 100, 100, 100, 100];
+    releaseIdleWasmToolWorkers();
+    assert.equal(worker.terminated, false, "a busy worker is not idle");
 
-    const dzdxFlat =
-      (flatDem[2] + 2 * flatDem[5] + flatDem[8] - (flatDem[0] + 2 * flatDem[3] + flatDem[6])) /
-      (8 * cellSize);
-    const dzdyFlat =
-      (flatDem[6] + 2 * flatDem[7] + flatDem[8] - (flatDem[0] + 2 * flatDem[1] + flatDem[2])) /
-      (8 * cellSize);
-    const slopeFlat =
-      Math.atan(Math.sqrt(dzdxFlat * dzdxFlat + dzdyFlat * dzdyFlat)) * (180 / Math.PI);
-    assert.equal(slopeFlat, 0.0, "Flat terrain slope must be exactly 0 degrees");
-
-    // 45-degree slope ramp downhill towards the East:
-    // elevation decreases by 10m per 10m cell from West to East
-    const rampDem = [20, 10, 0, 20, 10, 0, 20, 10, 0];
-    const dzdxRamp =
-      (rampDem[2] + 2 * rampDem[5] + rampDem[8] - (rampDem[0] + 2 * rampDem[3] + rampDem[6])) /
-      (8 * cellSize);
-    const dzdyRamp =
-      (rampDem[6] + 2 * rampDem[7] + rampDem[8] - (rampDem[0] + 2 * rampDem[1] + rampDem[2])) /
-      (8 * cellSize);
-    const slopeRamp =
-      Math.atan(Math.sqrt(dzdxRamp * dzdxRamp + dzdyRamp * dzdyRamp)) * (180 / Math.PI);
-    assert.ok(Math.abs(slopeRamp - 45.0) < 1e-4, `Expected 45 deg slope, got ${slopeRamp}`);
-
-    // Compass aspect (North = 0, East = 90, South = 180, West = 270)
-    let aspectRamp = 90.0 - 57.29578 * Math.atan2(dzdyRamp, -dzdxRamp);
-    if (aspectRamp < 0) aspectRamp += 360;
-    if (aspectRamp >= 360) aspectRamp -= 360;
-    assert.ok(
-      Math.abs(aspectRamp - 90.0) < 1e-4,
-      `Expected 90 deg aspect (East), got ${aspectRamp}`,
-    );
+    worker.emit("message", { data: { ok: true, result: { exitCode: 0, stdout: [], files: {} } } });
+    assert.equal((await run).exitCode, 0);
   });
 
-  it("handles NoData boundary cells without contaminating interior cells", () => {
-    const NODATA = -9999.0;
-    const grid = [NODATA, 10, 20, NODATA, 10, 20, NODATA, 10, 20];
+  it("dispatches the next queued job when postMessage throws", async () => {
+    const first = runWasmToolInBackground({ tool: "first", args: [], input: {} });
+    const second = runWasmToolInBackground({ tool: "second", args: [], input: {} });
+    const third = runWasmToolInBackground({ tool: "third", args: [], input: {} });
+    const worker = MockWorker.instances[0];
 
-    // Neighborhood operation check: any stencil containing NoData returns NoData
-    function mean3x3(dem: number[], centerIdx: number): number {
-      for (const val of dem) {
-        if (val === NODATA) return NODATA;
-      }
-      return dem.reduce((a, b) => a + b, 0) / dem.length;
-    }
+    // `first` finishes and hands its worker to `second`, whose post fails.
+    worker.postMessage = () => {
+      throw new Error("DataCloneError");
+    };
+    worker.emit("message", { data: { ok: true, result: { exitCode: 0, stdout: [], files: {} } } });
 
-    assert.equal(
-      mean3x3(grid, 4),
-      NODATA,
-      "Cell with NoData in 3x3 kernel must evaluate to NoData",
-    );
+    assert.equal((await first).exitCode, 0);
+    await assert.rejects(second, /DataCloneError/);
+    // `third` must not be stranded in the queue: a fresh worker picks it up.
+    assert.equal(MockWorker.instances.length, 2);
+    MockWorker.instances[1].emit("message", {
+      data: { ok: true, result: { exitCode: 0, stdout: ["third"], files: {} } },
+    });
+    assert.deepEqual((await third).stdout, ["third"]);
   });
 
-  it("preserves topological drainage invariants in D8 flow accumulation", () => {
-    // 3x3 elevation model representing a valley draining south
-    // [10, 12, 10]
-    // [ 8,  9,  8]
-    // [ 4,  2,  4]  <- lowest point is (2, 1) = elevation 2
-    const dem = [10, 12, 10, 8, 9, 8, 4, 2, 4];
+  it("rejects a queued job as soon as its signal aborts", async () => {
+    const running = runWasmToolInBackground({ tool: "running", args: [], input: {} });
+    const controller = new AbortController();
+    const queued = runWasmToolInBackground(
+      { tool: "queued", args: [], input: {} },
+      { signal: controller.signal },
+    );
+    assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 1);
 
-    // Steepest descent from center (idx 4, elevation 9):
-    // Neighbors:
-    // (0): 10, (1): 12, (2): 10
-    // (3): 8,  (4): 9,  (5): 8
-    // (6): 4,  (7): 2,  (8): 4
-    // Lowest neighbor is index 7 (elevation 2).
-    let lowestIdx = 4;
-    let minElev = dem[4];
-    for (let i = 0; i < 9; i++) {
-      if (dem[i] < minElev) {
-        minElev = dem[i];
-        lowestIdx = i;
-      }
+    controller.abort();
+    await assert.rejects(queued, (err: Error) => err.name === "AbortError");
+    assert.equal(getWasmToolWorkerPoolStats().queuedRequests, 0);
+
+    MockWorker.instances[0].emit("message", {
+      data: { ok: true, result: { exitCode: 0, stdout: [], files: {} } },
+    });
+    assert.equal((await running).exitCode, 0);
+  });
+
+  it("cancels the rest of a parallel batch when one run fails", async () => {
+    setMockWasmCapabilities({
+      hasSimd: true,
+      hasSharedArrayBuffer: true,
+      hasSharedMemory: true,
+      isCrossOriginIsolated: true,
+      recommendedThreads: 2,
+    });
+    try {
+      setWasmRuntimeConfig({ executionMode: "auto", maxThreads: 2 });
+      const batch = runParallelWasmTools([
+        { tool: "a", args: [], input: {} },
+        { tool: "b", args: [], input: {} },
+      ]);
+      assert.equal(MockWorker.instances.length, 2);
+      MockWorker.instances[0].emit("message", { data: { ok: false, error: "a broke" } });
+      await assert.rejects(batch, /a broke/);
+      assert.equal(MockWorker.instances[1].terminated, true, "sibling run is cancelled");
+    } finally {
+      setMockWasmCapabilities(null);
     }
-    assert.equal(lowestIdx, 7, "Center cell must drain to index 7 (elevation 2)");
   });
 });
