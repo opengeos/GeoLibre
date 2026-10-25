@@ -1,4 +1,3 @@
-import { useLiveMapUrl } from "../../hooks/useLiveMapUrl";
 // @refresh reset
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
@@ -31,6 +30,7 @@ import { AddCommentDialog } from "../comments/AddCommentDialog";
 import { openRightPanel } from "@geolibre/plugins";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
+import { useLiveMapUrl } from "../../hooks/useLiveMapUrl";
 import { useProjectHistory } from "../../hooks/useProjectHistory";
 import { useScreenshotReadiness } from "../../hooks/useScreenshotReadiness";
 import i18n from "../../i18n";

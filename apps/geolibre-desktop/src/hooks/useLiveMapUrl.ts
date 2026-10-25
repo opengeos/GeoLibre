@@ -9,6 +9,13 @@ export function useLiveMapUrl(): void {
   useEffect(() => {
     if (isTauri()) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      if (timer === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      setMapViewUrl(useAppStore.getState().mapView);
+    };
+    window.addEventListener("pagehide", flush);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       const view = state.mapView;
       const old = previous.mapView;
@@ -19,11 +26,12 @@ export function useLiveMapUrl(): void {
       )
         return;
       clearTimeout(timer);
-      timer = setTimeout(() => setMapViewUrl(useAppStore.getState().mapView), 300);
+      timer = setTimeout(flush, 300);
     });
     return () => {
       unsubscribe();
-      clearTimeout(timer);
+      window.removeEventListener("pagehide", flush);
+      flush();
     };
   }, []);
 }
