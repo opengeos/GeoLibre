@@ -205,6 +205,13 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// Opt-in cross-origin isolation (COOP same-origin + COEP require-corp)
+// for multi-threaded WebAssembly with SharedArrayBuffer. Preserves standard embed
+// and third-party iframe compatibility when left unset or "0".
+const CROSS_ORIGIN_ISOLATION =
+  process.env.VITE_CROSS_ORIGIN_ISOLATION === "1" ||
+  process.env.CROSS_ORIGIN_ISOLATION === "1";
+
 // ---------------------------------------------------------------------------
 // Build-time env exposed to the bundle.
 //
@@ -257,6 +264,7 @@ const BUILD_ENV_KEYS = [
   "VITE_AMAZON_LOCATION_API_KEY",
   "VITE_AMAZON_LOCATION_AWS_REGION",
   "VITE_CESIUM_TOKEN",
+  "VITE_CROSS_ORIGIN_ISOLATION",
   "VITE_DUCKDB_SPATIAL_EXTENSION_PATH",
   "VITE_GEE_OAUTH_CLIENT_ID",
   "VITE_GEE_PROJECT_ID",
@@ -1554,6 +1562,14 @@ export default defineConfig({
     // answered with "Blocked request". `.ts.net` names are only resolvable
     // inside the tailnet, so allowing them does not widen public exposure.
     allowedHosts: [".ts.net"],
+    ...(CROSS_ORIGIN_ISOLATION
+      ? {
+          headers: {
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Embedder-Policy": "require-corp",
+          },
+        }
+      : {}),
     watch: {
       // Never watch the Rust side. `tauri dev` runs this dev server as its
       // `beforeDevCommand` and then starts cargo in the same tree, so the
@@ -1568,6 +1584,18 @@ export default defineConfig({
       // defaults (node_modules, .git), not a replacement for them.
       ignored: ["**/src-tauri/**"],
     },
+  },
+  preview: {
+    port: 4173,
+    host: "127.0.0.1",
+    ...(CROSS_ORIGIN_ISOLATION
+      ? {
+          headers: {
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Embedder-Policy": "require-corp",
+          },
+        }
+      : {}),
   },
   worker: {
     format: "es",

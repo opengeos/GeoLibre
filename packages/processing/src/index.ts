@@ -549,3 +549,44 @@ export {
   type ObiaSegmentation,
   type RegionGrowingParams,
 } from "./obia";
+
+export {
+  type WasmExecutionMode,
+  type WasmCapabilities,
+  type WasmRuntimeConfig,
+  type WasmDiagnostics,
+  detectSimdSupport,
+  detectSharedMemorySupport,
+  resetWasmCapabilitiesCache,
+  getWasmCapabilities,
+  getWasmCapabilities as probeWasmCapabilities,
+  setMockWasmCapabilities,
+  resolveExecutionMode,
+} from "./wasm-capabilities";
+
+export {
+  setWasmRuntimeConfig,
+  getWasmRuntimeConfig,
+  resetWasmRuntimeConfig,
+  getWasmDiagnostics,
+} from "./wasm-config";
+
+export {
+  runWasmToolInBackground,
+  runParallelWasmTools,
+  releaseIdleWasmToolWorkers,
+  terminateAllWasmToolWorkers,
+  getWasmToolPoolCapacity,
+  getWasmToolWorkerPoolStats,
+  type WasmToolRequest,
+  type WasmToolResponse,
+} from "./wasm-tool-runner";
+
+export {
+  ALGORITHM_PROFILES,
+  auditAlgorithm,
+  isAlgorithmParallelizable,
+  isAlgorithmSimdEligible,
+  type AlgorithmParallelPattern,
+  type AlgorithmProfile,
+} from "./wasm-algorithm-audit";
