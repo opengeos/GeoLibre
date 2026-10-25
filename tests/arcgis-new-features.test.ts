@@ -229,6 +229,25 @@ describe("arcGISNewFeatureProperties", () => {
         assert.equal(result.MANUFACTURER, undefined);
       });
 
+      it("does not fall back to the only template left when the selection is stale", () => {
+        const shrunk: ArcGISEditInfo = {
+          ...structuredClone(typed),
+          types: [structuredClone(typed.types![0])],
+        };
+        const result = arcGISNewFeatureProperties(shrunk, {}, { template: mueller.selection });
+        assert.equal(result.MANUFACTURER, undefined);
+        assert.equal(
+          arcGISNewFeatureProperties(
+            shrunk,
+            { ASSET_TYPE: 1 },
+            {
+              template: mueller.selection,
+            },
+          ).MANUFACTURER,
+          undefined,
+        );
+      });
+
       it("never fills server-managed fields from a template", () => {
         const managed: ArcGISEditInfo = {
           ...typed,

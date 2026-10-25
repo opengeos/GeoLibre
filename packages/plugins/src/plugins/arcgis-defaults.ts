@@ -289,6 +289,9 @@ export function arcGISNewFeatureProperties(
   let typeValue = selector ? result[selector] : undefined;
 
   const pinned = options.template ? resolveTemplateSelection(info, options.template) : undefined;
+  // A picked template that no longer matches the metadata means "defaults only":
+  // never fall back to whichever template happens to be left.
+  const stale = options.template !== undefined && !pinned;
   if (pinned) {
     const pinnedType = templateTypeValue(info, pinned, selector);
     // A type the feature already has wins; a template for another type does not apply.
@@ -297,13 +300,13 @@ export function arcGISNewFeatureProperties(
     if (!conflicts) chosen = pinned;
   }
   if (selector && !supplied(selector)) {
-    if (!chosen && choices.length === 1) chosen = choices[0];
+    if (!chosen && !stale && choices.length === 1) chosen = choices[0];
     if (chosen) typeValue = templateTypeValue(info, chosen, selector);
     if (typeValue == null && info.defaultSubtypeCode != null) typeValue = info.defaultSubtypeCode;
     if (typeValue == null) typeValue = fieldDefaults.get(selector);
     if (typeValue != null && !managed.has(selector.toLowerCase())) result[selector] = typeValue;
   }
-  if (!chosen) {
+  if (!chosen && !stale) {
     const candidates = !selector
       ? choices
       : typeValue == null
