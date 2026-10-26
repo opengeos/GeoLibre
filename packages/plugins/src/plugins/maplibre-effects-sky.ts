@@ -85,7 +85,14 @@ export function loadSky(onLoad: () => void): void {
       loading = false;
       const callbacks = [...pending];
       pending.clear();
-      for (const callback of callbacks) callback();
+      for (const callback of callbacks) {
+        // One caller failing must not stop the rest from redrawing.
+        try {
+          callback();
+        } catch (error) {
+          console.error("Night-sky redraw failed", error);
+        }
+      }
     })
     .catch(() => {
       loading = false;
