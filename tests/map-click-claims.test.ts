@@ -48,4 +48,17 @@ describe("map click claims", () => {
       release();
     }
   });
+
+  it("keeps two registrations of one predicate independent", () => {
+    const shared = () => true;
+    const releaseFirst = registerMapClickClaim(shared);
+    const releaseSecond = registerMapClickClaim(shared);
+    try {
+      releaseFirst();
+      assert.equal(isMapClickClaimed(), true);
+    } finally {
+      releaseSecond();
+    }
+    assert.equal(isMapClickClaimed(), false);
+  });
 });

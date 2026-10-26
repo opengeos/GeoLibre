@@ -737,6 +737,33 @@ describe("maplibre-gl-raster", () => {
       message("the gamma curve changed"),
     );
   });
+
+  it("binds the pixel inspector's click through the `_onClick` property", () => {
+    // Text check: PixelInspector is module-private. guardRasterInspectorClicks
+    // wraps `_inspector._onClick` once, which only takes if enable() and
+    // disable() both read the property rather than a bound copy.
+    const text = readPublishedText("maplibre-gl-raster", { workspace: "packages/plugins" });
+    const message = (detail: string) =>
+      contractMessage(
+        "maplibre-gl-raster",
+        "`maplibre-gl-raster` — pixel inspector click guard",
+        detail,
+        "packages/plugins",
+      );
+    assert.ok(
+      text.includes("this._inspector = new PixelInspector("),
+      message("RasterControl no longer keeps its inspector in `_inspector`"),
+    );
+    assert.match(text, /\b_onClick = \(/, message("`_onClick` is no longer an instance property"));
+    assert.ok(
+      text.includes('this._map.on("click", this._onClick)'),
+      message("enable() no longer binds `this._onClick`"),
+    );
+    assert.ok(
+      text.includes('this._map.off("click", this._onClick)'),
+      message("disable() no longer unbinds `this._onClick`"),
+    );
+  });
 });
 
 describe("cesium / @cesium/widgets", () => {

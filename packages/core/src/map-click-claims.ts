@@ -21,9 +21,12 @@ const claims = new Set<() => boolean>();
  *   A function that removes the claim.
  */
 export function registerMapClickClaim(isClaiming: () => boolean): () => void {
-  claims.add(isClaiming);
+  // A fresh entry per registration, so two tools sharing one predicate keep
+  // independent claims and releasing one leaves the other in place.
+  const entry = () => isClaiming();
+  claims.add(entry);
   return () => {
-    claims.delete(isClaiming);
+    claims.delete(entry);
   };
 }
 

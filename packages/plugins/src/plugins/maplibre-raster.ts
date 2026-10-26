@@ -156,7 +156,7 @@ function guardRasterInspectorClicks(control: RasterControl): void {
   if (!inspector || typeof onClick !== "function") return;
   inspector._onClick = (event: unknown) => {
     if (isMapClickClaimed()) return;
-    onClick(event);
+    onClick.call(inspector, event);
   };
 }
 

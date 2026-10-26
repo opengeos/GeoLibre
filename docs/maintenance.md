@@ -579,6 +579,19 @@ two stretch inverses above) and run `tests/raster-symbology.test.ts`.
 curves out of the published chunk and fails if the order, a curve or the
 strength changes.
 
+### `maplibre-gl-raster` — pixel inspector click guard
+
+`guardRasterInspectorClicks` (`packages/plugins/src/plugins/maplibre-raster.ts`)
+wraps the private `RasterControl._inspector._onClick` once after mount, so the
+pixel inspector ignores a click that a drawing map tool (Measure, the Geo
+Editor) has claimed through `isMapClickClaimed` (#3237). It works only because
+the inspector's `enable()` and `disable()` both read `this._onClick` at call
+time; if upstream binds a copy instead, the guard is skipped (the inspector
+opens on measure clicks again) or, worse, `disable()` stops unbinding it.
+`tests/upstream-contracts.test.ts` reads the published chunk and fails if the
+field, the arrow property or either binding moves. Better still, upstream a
+click-filter option and delete the wrap.
+
 ### `maplibre-gl-raster` — checked by the compiler
 
 `GeoLibreCogRenderEngine` (`packages/plugins/src/types.ts`) mirrors the
