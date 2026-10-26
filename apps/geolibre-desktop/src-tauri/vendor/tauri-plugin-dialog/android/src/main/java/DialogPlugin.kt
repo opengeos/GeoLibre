@@ -7,6 +7,7 @@ package app.tauri.dialog
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.webkit.MimeTypeMap
@@ -49,8 +50,11 @@ class SaveFileDialogOptions {
   lateinit var filters: Array<Filter>
 }
 
-/** Persisted document grants kept, below Android's lowest per-app cap (128). */
-private const val MAX_PERSISTED_GRANTS = 100
+/**
+ * Persisted document grants kept, a margin below Android's per-app cap: 128
+ * persisted grants before Android 11, 512 from it.
+ */
+private val MAX_PERSISTED_GRANTS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) 500 else 120
 
 @TauriPlugin
 class DialogPlugin(private val activity: Activity): Plugin(activity) {
@@ -71,13 +75,9 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
         args.pickerMode == "media"
       val intent = Intent(if (isMediaPick) Intent.ACTION_GET_CONTENT else Intent.ACTION_OPEN_DOCUMENT)
       intent.addCategory(Intent.CATEGORY_OPENABLE)
-      if (!isMediaPick) {
-        intent.addFlags(
-          Intent.FLAG_GRANT_READ_URI_PERMISSION or
-            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-        )
-      }
+      // No grant flags on the request: the document picker itself returns
+      // read, persistable, and (only for a writable document) write grants, so
+      // asking for write here could only narrow what it offers.
 
       if (args.pickerMode == "image") {
         intent.type = "image/*"
@@ -131,7 +131,10 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
    * and ACTION_CREATE_DOCUMENT results; never ACTION_GET_CONTENT), and a
    * provider may still refuse, so a failure leaves the session-long grant the
    * result already carries. Android caps persisted grants per app (128, or 512
-   * from Android 11), so the oldest are released first to stay under it.
+   * from Android 11), so the oldest are released first to stay under it. Every
+   * document pick persists (data files too, not only projects), so on a device
+   * past that many distinct picks a long-unused project can lose its grant;
+   * the app then falls back to its stored copy and says so.
    */
   private fun takePersistableGrants(data: Intent?) {
     // Best effort throughout: the pick or save has already succeeded, so a
