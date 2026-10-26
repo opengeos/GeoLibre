@@ -1297,6 +1297,38 @@ describe("Model Builder Review Comments Regression Tests", () => {
     assert.equal(out.geojson.features.length, 2);
   });
 
+  it("reads an iterator's source from parameters.layer, as the assistant writes it", async () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "iter", kind: "iterate-features", x: 0, y: 0, parameters: { layer: "pts" } },
+        { id: "buf", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "collect", kind: "collect-results", x: 0, y: 0 },
+        { id: "out", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [
+        { id: "e1", from: "iter", fromPort: "feature", to: "buf", toPort: "layer" },
+        { id: "e2", from: "buf", fromPort: "out", to: "collect", toPort: "item" },
+        { id: "e3", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+    assert.deepEqual(validateModelGraph(graph, resolve), []);
+    const asked: string[] = [];
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: resolve,
+      resolveInput: (layerId) => {
+        asked.push(layerId);
+        return makeVectorValue([
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+        ]);
+      },
+      executeTool: async ({ inputs }) => ({ out: inputs.layer }),
+      emitOutput: () => {},
+      log: () => {},
+    });
+    assert.equal(result.error, undefined);
+    assert.deepEqual(asked, ["pts"]);
+  });
+
   it("rejects a loop nested inside a collector-driven loop body", () => {
     const graph: ProcessingModelGraph = {
       nodes: [

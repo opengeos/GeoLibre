@@ -1005,27 +1005,11 @@ export function ModelBuilderPanel({
             } else {
               appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
             }
-          } else if (value.kind === "raster-collection") {
-            if (onAddRaster) {
-              for (let i = 0; i < value.items.length; i++) {
-                const item = value.items[i];
-                const itemName = `${name}_${i + 1}`;
-                pendingAdds.push(
-                  Promise.resolve(
-                    onAddRaster(item.bytes, itemName, `${itemName.replace(/\s+/g, "_")}.tif`),
-                  ).catch((err: unknown) => {
-                    failedOutputs.push(itemName);
-                    appendLog(
-                      `${t("processing.modelBuilder.outputAddFailed", { name: itemName })}: ${
-                        err instanceof Error ? err.message : String(err)
-                      }`,
-                    );
-                  }),
-                );
-              }
-            } else {
-              appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
-            }
+          } else {
+            // runModelGraph already splits a raster collection into one call
+            // per raster; anything else (a count, a string) has no map form.
+            failedOutputs.push(name);
+            appendLog(t("processing.modelBuilder.outputUnsupported", { name, kind: value.kind }));
           }
         },
         log: (message) => {

@@ -5945,6 +5945,7 @@
       "importInvalid": "That file does not contain a model graph.",
       "importUnsupported": "That file is not a GeoLibre model.",
       "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map.",
+      "outputUnsupported": "\"{{name}}\" is a {{kind}} value, which cannot be added to the map.",
       "portNeedsVector": "\"{{port}}\" needs vector data, but a raster arrived.",
       "portCannotTake": "\"{{port}}\" cannot take a {{kind}} value.",
       "toolNoOutput": "\"{{tool}}\" produced no output.",

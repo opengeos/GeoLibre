@@ -624,9 +624,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
           const isVector = layer?.type === "geojson" && layer.geojson;
           const cond = evaluateCondition({
+            // A raster condition reads only the name (and metadata), so the
+            // layer's bytes are not fetched here.
             inputValue: isVector
               ? { kind: "vector", geojson: layer.geojson as FeatureCollection }
-              : undefined,
+              : layer
+                ? { kind: "raster", bytes: new Uint8Array(), name: layer.name }
+                : undefined,
             parameters: node.parameters,
           });
           if (cond) {

@@ -677,7 +677,10 @@ export function validateModelGraph(
       if (filled.get(node.id)?.has(port.id)) continue;
       const typed = node.parameters?.[port.id];
       if (typed !== undefined && typed !== null && typed !== "") continue;
-      if (node.layerId && (port.id === "collection" || port.id === "input" || port.id === "layer"))
+      if (
+        sourceLayerId(node) &&
+        (port.id === "collection" || port.id === "input" || port.id === "layer")
+      )
         continue;
       issues.push({
         code: "missing-input",
@@ -876,6 +879,19 @@ export interface ModelGraphRunResult {
   outputs: Record<string, ModelValue>;
   /** Set when the run stopped early; names the failing node when there is one. */
   error?: { nodeId?: string; message: string };
+}
+
+/**
+ * The layer a control node reads when nothing is wired in: its `layerId`, or a
+ * layer id in `parameters.layer` (which the AI Assistant writes).
+ *
+ * @param node The node.
+ * @returns The layer id, or `undefined` when neither is set.
+ */
+function sourceLayerId(node: ModelGraphNode): string | undefined {
+  if (node.layerId) return node.layerId;
+  const layer = node.parameters?.layer;
+  return typeof layer === "string" && layer ? layer : undefined;
 }
 
 /**
@@ -1194,8 +1210,9 @@ export async function runModelGraph(
       if (node.kind === "iterate-features") {
         options.onNodeStatus?.(node.id, "running");
         let collectionVal = inputs[ITERATE_FEATURES_INPUT_PORT];
-        if (!collectionVal && node.layerId) {
-          const resolved = await options.resolveInput(node.layerId);
+        const layerSource = sourceLayerId(node);
+        if (!collectionVal && layerSource) {
+          const resolved = await options.resolveInput(layerSource);
           if (resolved) collectionVal = resolved;
         }
         if (!collectionVal || collectionVal.kind !== "vector") {
