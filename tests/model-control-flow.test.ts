@@ -443,6 +443,66 @@ describe("Model Builder Control Flow - Conditional Branch Execution", () => {
     assert.ok(result.outputs["out"], "Output must receive result from false branch");
   });
 
+  it("skips a tool fed by an unselected branch even when another input is live", async () => {
+    const clipTool: ModelToolDescriptor = {
+      key: "vector:clip",
+      provider: "vector",
+      toolId: "clip",
+      name: "Clip",
+      group: "Overlay",
+      inputs: [
+        { id: "layer", label: "Input", kind: "vector", required: true },
+        { id: "overlay", label: "Overlay", kind: "vector", required: true },
+      ],
+      outputs: [{ id: "out", label: "Output", kind: "vector" }],
+      parameters: [],
+    };
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in", kind: "input", x: 0, y: 0, layerId: "a" },
+        { id: "mask", kind: "input", x: 0, y: 0, layerId: "b" },
+        {
+          id: "switch",
+          kind: "conditional-switch",
+          x: 0,
+          y: 0,
+          parameters: { conditionType: "boolean", value: false },
+        },
+        { id: "clip", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "clip" },
+        { id: "out", kind: "output", x: 0, y: 0, name: "Clipped" },
+        { id: "out_false", kind: "output", x: 0, y: 0, name: "Unclipped" },
+      ],
+      edges: [
+        { id: "e1", from: "in", fromPort: "out", to: "switch", toPort: "input" },
+        { id: "e2", from: "switch", fromPort: "true", to: "clip", toPort: "layer" },
+        { id: "e3", from: "mask", fromPort: "out", to: "clip", toPort: "overlay" },
+        { id: "e4", from: "clip", fromPort: "out", to: "out", toPort: "in" },
+        { id: "e5", from: "switch", fromPort: "false", to: "out_false", toPort: "in" },
+      ],
+    };
+    const statuses: Record<string, string> = {};
+    let ran = false;
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: (prov, id) =>
+        prov === "vector" && id === "clip" ? clipTool : resolve(prov, id),
+      resolveInput: () => makeVectorValue([]),
+      executeTool: async () => {
+        ran = true;
+        return {};
+      },
+      emitOutput: () => {},
+      log: () => {},
+      onNodeStatus: (nodeId, status) => {
+        statuses[nodeId] = status;
+      },
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(ran, false, "clip sits on the unselected True branch");
+    assert.equal(statuses.clip, "skipped");
+    assert.ok(result.outputs.out_false);
+  });
+
   it("skips downstream output nodes that belong to an unselected branch", async () => {
     const graph: ProcessingModelGraph = {
       nodes: [

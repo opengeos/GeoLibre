@@ -2430,10 +2430,15 @@ function NodeInspector({
               value={String(node.parameters?.conditionType || "compare")}
               onChange={(event) => {
                 onParamChange("conditionType", event.target.value);
-                // A null check needs a null/empty operator; the node starts on "==".
+                // A null check needs a null/empty operator (the node starts on
+                // "=="), and a comparison must not keep one, or it would still
+                // run as a null check and ignore the target value.
                 const operator = String(node.parameters?.operator ?? "");
-                if (event.target.value === "null_check" && !NULL_CHECK_OPERATORS.has(operator)) {
+                const nullOperator = NULL_CHECK_OPERATORS.has(operator);
+                if (event.target.value === "null_check" && !nullOperator) {
                   onParamChange("operator", "is_null");
+                } else if (event.target.value === "compare" && nullOperator) {
+                  onParamChange("operator", "==");
                 }
               }}
             >
@@ -2487,6 +2492,9 @@ function NodeInspector({
               </option>
               <option value="starts_with">
                 {t("processing.modelBuilder.controlFlow.switch.opStartsWith")}
+              </option>
+              <option value="ends_with">
+                {t("processing.modelBuilder.controlFlow.switch.opEndsWith")}
               </option>
               <option value="is_empty">
                 {t("processing.modelBuilder.controlFlow.switch.opIsEmpty")}

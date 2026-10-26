@@ -558,11 +558,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       for (const node of ordered) {
         const incomingEdges = incoming.get(node.id) ?? [];
         let anyReal = false;
+        let anySkipped = false;
         let allSkipped = incomingEdges.length > 0;
         for (const edge of incomingEdges) {
           const lId = produced.get(edge.from)?.get(edge.fromPort);
           if (lId === SKIPPED) {
-            // skipped
+            anySkipped = true;
           } else if (lId !== undefined) {
             anyReal = true;
             allSkipped = false;
@@ -570,8 +571,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             allSkipped = false;
           }
         }
-        if (node.kind === "conditional-merge" && anyReal) {
-          allSkipped = false;
+        // Any input from an unselected branch puts the node on that branch
+        // (as in runModelGraph); only a merge takes one live branch of two.
+        if (node.kind === "conditional-merge") {
+          if (anyReal) allSkipped = false;
+        } else if (anySkipped) {
+          allSkipped = true;
         }
         if (allSkipped) {
           const desc = node.kind === "tool" ? resolve(node.provider, node.toolId) : undefined;

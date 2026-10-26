@@ -5986,6 +5986,7 @@
           "opGreaterOrEqual": ">= (Greater Than or Equal)",
           "opContains": "contains",
           "opStartsWith": "starts with",
+          "opEndsWith": "ends with",
           "opIsEmpty": "is empty",
           "opNotEmpty": "is not empty",
           "opIsNull": "is null",

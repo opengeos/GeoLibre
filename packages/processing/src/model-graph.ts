@@ -880,11 +880,12 @@ async function executeSingleNode(
   const incoming = graph.edges.filter((e) => e.to === node.id);
   const inputs: Record<string, ModelValue> = {};
   let anyInputReal = false;
+  let anyInputSkipped = false;
   let allIncomingSkipped = incoming.length > 0;
   for (const edge of incoming) {
     const val = produced.get(edge.from)?.[edge.fromPort];
     if (val === SKIPPED) {
-      // branch skipped
+      anyInputSkipped = true;
     } else if (val !== undefined) {
       inputs[edge.toPort] = val;
       anyInputReal = true;
@@ -894,8 +895,12 @@ async function executeSingleNode(
     }
   }
 
-  if (node.kind === "conditional-merge" && anyInputReal) {
-    allIncomingSkipped = false;
+  // A node fed by an unselected branch sits on that branch, even when another
+  // input is live; only a merge exists to take one live branch out of two.
+  if (node.kind === "conditional-merge") {
+    if (anyInputReal) allIncomingSkipped = false;
+  } else if (anyInputSkipped) {
+    allIncomingSkipped = true;
   }
 
   if (allIncomingSkipped) {
@@ -1021,11 +1026,12 @@ export async function runModelGraph(
     const incomingEdges = incoming.get(node.id) ?? [];
     const inputs: Record<string, ModelValue> = {};
     let anyInputReal = false;
+    let anyInputSkipped = false;
     let allIncomingSkipped = incomingEdges.length > 0;
     for (const edge of incomingEdges) {
       const value = produced.get(edge.from)?.[edge.fromPort];
       if (value === SKIPPED) {
-        // skipped branch
+        anyInputSkipped = true;
       } else if (value !== undefined) {
         inputs[edge.toPort] = value;
         anyInputReal = true;
@@ -1035,8 +1041,12 @@ export async function runModelGraph(
       }
     }
 
-    if (node.kind === "conditional-merge" && anyInputReal) {
-      allIncomingSkipped = false;
+    // A node fed by an unselected branch sits on that branch, even when another
+    // input is live; only a merge exists to take one live branch out of two.
+    if (node.kind === "conditional-merge") {
+      if (anyInputReal) allIncomingSkipped = false;
+    } else if (anyInputSkipped) {
+      allIncomingSkipped = true;
     }
 
     if (allIncomingSkipped) {
