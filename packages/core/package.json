@@ -51,11 +51,11 @@
     "@maplibre/maplibre-gl-style-spec": "^26.2.1",
     "uuid": "^14.0.3",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "tsdown": "^0.23.1",
+    "tsdown": "^0.23.2",
     "typescript": "^7.0.2"
   }
 }
