@@ -31,6 +31,8 @@ const MILKY_STEP = 4;
 
 let sky: Sky | null = null;
 let loading = false;
+// Redraw callbacks from every caller that asked while the data was loading.
+const pending = new Set<() => void>();
 let milkyTexture: Float32Array | null = null;
 let milkyCanvas: HTMLCanvasElement | null = null;
 
@@ -57,9 +59,10 @@ function pathOf(flat: readonly number[]): Float32Array {
   return v;
 }
 
-/** Load the sky data once; `onLoad` redraws when it arrives. Until then the sky is empty. */
+/** Load the sky data once; every `onLoad` asked meanwhile redraws when it arrives. Until then the sky is empty. */
 export function loadSky(onLoad: () => void): void {
   if (sky) return onLoad();
+  pending.add(onLoad);
   if (loading) return;
   loading = true;
   void import("./maplibre-effects-sky-data")
@@ -79,10 +82,14 @@ export function loadSky(onLoad: () => void): void {
         figures: FIGURES.map(pathOf),
         milkyWay: MILKY_WAY.map((level) => level.map(pathOf)),
       };
-      onLoad();
+      loading = false;
+      const callbacks = [...pending];
+      pending.clear();
+      for (const callback of callbacks) callback();
     })
     .catch(() => {
       loading = false;
+      pending.clear();
     });
 }
 
