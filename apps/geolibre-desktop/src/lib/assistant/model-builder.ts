@@ -263,6 +263,14 @@ export function buildAssistantModel(
       const nodePorts = portsFor({ id, kind, x: 0, y: 0 }, undefined);
       const inputPorts = new Map(nodePorts.inputs.map((port) => [port.id, port]));
       const parameters = { ...(step.parameters ?? {}) };
+      // The runner also accepts a comma-separated string; split it here so
+      // each name is resolved to a layer id like the array form.
+      if (typeof parameters.layers === "string") {
+        parameters.layers = parameters.layers
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
       if (Array.isArray(parameters.layers)) {
         parameters.layers = parameters.layers.map((entry) => {
           if (typeof entry !== "string" || !entry) return entry;

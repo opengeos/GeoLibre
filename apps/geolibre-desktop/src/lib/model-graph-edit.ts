@@ -222,6 +222,19 @@ export function setNodeParameter(
   };
 }
 
+/**
+ * Parse the iterator inspector's "Maximum Iterations Limit" field. Only a
+ * positive whole number is kept; blank, zero, negative or non-numeric text
+ * returns `undefined` so the runner falls back to its default limit instead of
+ * silently running nothing (or more than the field shows).
+ */
+export function parseMaxIterations(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return undefined;
+  const num = Number(trimmed);
+  return Number.isFinite(num) && num >= 1 ? Math.floor(num) : undefined;
+}
+
 /** Set an `input` node's source layer, or an `output` node's result name. */
 export function setNodeField(
   graph: ProcessingModelGraph,

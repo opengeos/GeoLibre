@@ -33,6 +33,7 @@ import {
 } from "../packages/processing/src/model-graph";
 import { modelGraphToPython } from "../apps/geolibre-desktop/src/lib/model-python-script";
 import { buildAssistantModel } from "../apps/geolibre-desktop/src/lib/assistant/model-builder";
+import { parseMaxIterations } from "../apps/geolibre-desktop/src/lib/model-graph-edit";
 import { ModelBuilderPanel } from "../apps/geolibre-desktop/src/components/processing/model-builder/ModelBuilderPanel";
 
 const BUFFER_TOOL: ModelToolDescriptor = {
@@ -922,13 +923,12 @@ describe("Model Builder Panel & Component", () => {
 describe("Model Builder Review Comments Regression Tests", () => {
   // A. ModelBuilderPanel maxIterations parameter handling
   it("correctly handles maxIterations parameter values (empty, zero, numeric)", () => {
-    const handleParamChange = (valStr: string) => {
-      const val = valStr.trim();
-      return val === "" ? undefined : Number(val);
-    };
-    assert.equal(handleParamChange(""), undefined);
-    assert.equal(handleParamChange("0"), 0);
-    assert.equal(handleParamChange("50"), 50);
+    assert.equal(parseMaxIterations(""), undefined);
+    assert.equal(parseMaxIterations("abc"), undefined);
+    assert.equal(parseMaxIterations("0"), undefined);
+    assert.equal(parseMaxIterations("-3"), undefined);
+    assert.equal(parseMaxIterations("2.7"), 2);
+    assert.equal(parseMaxIterations(" 50 "), 50);
   });
 
   // B. Assistant model-builder control node layer resolution
@@ -963,6 +963,40 @@ describe("Model Builder Review Comments Regression Tests", () => {
 
     assert.ok(model.graph);
     const loopNode = model.graph.nodes.find((n) => n.kind === "iterate-rasters");
+    assert.ok(loopNode);
+    assert.deepEqual(loopNode.parameters?.layers, ["layer-dem-north", "layer-dem-south"]);
+  });
+
+  it("resolves a comma-separated layers string in control node parameters", () => {
+    const layers = [
+      { id: "layer-dem-north", name: "DEM North", type: "raster" },
+      { id: "layer-dem-south", name: "DEM South", type: "raster" },
+    ] as GeoLibreLayer[];
+
+    const model = buildAssistantModel(
+      {
+        name: "Raster Loop Workflow",
+        inputs: [],
+        steps: [
+          {
+            key: "loop",
+            algorithm: "iterate-rasters",
+            inputs: {},
+            parameters: { layers: "DEM North, DEM South" },
+          },
+          {
+            key: "collect",
+            algorithm: "collect-results",
+            inputs: { item: "loop.raster" },
+          },
+        ],
+        outputs: [{ source: "collect.collection", name: "Result" }],
+      },
+      layers,
+      TOOLS,
+    );
+
+    const loopNode = model.graph?.nodes.find((n) => n.kind === "iterate-rasters");
     assert.ok(loopNode);
     assert.deepEqual(loopNode.parameters?.layers, ["layer-dem-north", "layer-dem-south"]);
   });
@@ -1085,6 +1119,87 @@ describe("Model Builder Review Comments Regression Tests", () => {
     assert.equal(result.error, undefined);
     assert.equal(executionOrder[0], "ext_poly");
     assert.equal(executionOrder.filter((id) => id === "body_clip").length, 2);
+  });
+
+  it("finishes a loop before a later loop whose body reads its collector", async () => {
+    const clipTool: ModelToolDescriptor = {
+      key: "vector:clip",
+      provider: "vector",
+      toolId: "clip",
+      name: "Clip",
+      group: "Overlay",
+      inputs: [
+        { id: "layer", label: "Input", kind: "vector", required: true },
+        { id: "overlay", label: "Overlay", kind: "vector", required: true },
+      ],
+      outputs: [{ id: "out", label: "Output", kind: "vector" }],
+      parameters: [],
+    };
+    const localTools = [...TOOLS, clipTool];
+    const localResolve = (prov?: string, id?: string) =>
+      localTools.find((t) => t.provider === prov && t.toolId === id);
+    const point = (id: string, x: number): Feature => ({
+      type: "Feature",
+      id,
+      properties: {},
+      geometry: { type: "Point", coordinates: [x, 0] },
+    });
+
+    // The second loop is listed first, so a plain topological order visits
+    // iter2 before iter1 has filled collect1.
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in_a", kind: "input", x: 0, y: 0, layerId: "a" },
+        { id: "iter2", kind: "iterate-features", x: 0, y: 0 },
+        { id: "clip2", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "clip" },
+        { id: "collect2", kind: "collect-results", x: 0, y: 0 },
+        { id: "out", kind: "output", x: 0, y: 0, name: "Clipped" },
+        { id: "in_b", kind: "input", x: 0, y: 0, layerId: "b" },
+        { id: "iter1", kind: "iterate-features", x: 0, y: 0 },
+        { id: "buf1", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "collect1", kind: "collect-results", x: 0, y: 0 },
+      ],
+      edges: [
+        { id: "e1", from: "in_a", fromPort: "out", to: "iter2", toPort: "collection" },
+        { id: "e2", from: "iter2", fromPort: "feature", to: "clip2", toPort: "layer" },
+        { id: "e3", from: "collect1", fromPort: "collection", to: "clip2", toPort: "overlay" },
+        { id: "e4", from: "clip2", fromPort: "out", to: "collect2", toPort: "item" },
+        { id: "e5", from: "collect2", fromPort: "collection", to: "out", toPort: "in" },
+        { id: "e6", from: "in_b", fromPort: "out", to: "iter1", toPort: "collection" },
+        { id: "e7", from: "iter1", fromPort: "feature", to: "buf1", toPort: "layer" },
+        { id: "e8", from: "buf1", fromPort: "out", to: "collect1", toPort: "item" },
+      ],
+    };
+    assert.deepEqual(validateModelGraph(graph, localResolve), []);
+
+    const overlaySizes: number[] = [];
+    let bufRuns = 0;
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: localResolve,
+      resolveInput: (layerId) =>
+        layerId === "a"
+          ? makeVectorValue([point("a1", 0), point("a2", 1)])
+          : makeVectorValue([point("b1", 5), point("b2", 6), point("b3", 7)]),
+      executeTool: async ({ node, inputs }): Promise<Record<string, ModelValue>> => {
+        if (node.id === "buf1") {
+          bufRuns++;
+          return { out: inputs.layer };
+        }
+        const overlay = inputs.overlay;
+        assert.ok(overlay?.kind === "vector", "collect1 must be produced before clip2 runs");
+        overlaySizes.push(overlay.geojson.features.length);
+        return { out: inputs.layer };
+      },
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(bufRuns, 3);
+    assert.deepEqual(overlaySizes, [3, 3]);
+    const out = result.outputs.out;
+    assert.ok(out?.kind === "vector");
+    assert.equal(out.geojson.features.length, 2);
   });
 
   it("validates that body nodes cannot feed external non-collector nodes", () => {

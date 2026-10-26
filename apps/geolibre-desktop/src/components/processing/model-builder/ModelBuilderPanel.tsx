@@ -96,6 +96,7 @@ import {
   graphsEqual,
   layoutGraph,
   moveNode,
+  parseMaxIterations,
   portFeedsOutput,
   removeEdge,
   removeNode,
@@ -2502,21 +2503,17 @@ function NodeInspector({
             <Input
               id="iter-max"
               type="number"
+              min={1}
+              step={1}
               placeholder="1000"
               value={
                 node.parameters?.maxIterations !== undefined
                   ? String(node.parameters.maxIterations)
                   : ""
               }
-              onChange={(event) => {
-                const val = event.target.value.trim();
-                if (val === "") {
-                  onParamChange("maxIterations", undefined);
-                } else {
-                  const num = Number(val);
-                  onParamChange("maxIterations", Number.isNaN(num) ? undefined : num);
-                }
-              }}
+              onChange={(event) =>
+                onParamChange("maxIterations", parseMaxIterations(event.target.value))
+              }
             />
           </div>
           <div className="flex items-center justify-between pt-1">

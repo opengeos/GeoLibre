@@ -519,6 +519,40 @@ function findExternalAncestors(
 }
 
 /**
+ * The order {@link runModelGraph} visits nodes in: the topological order, with
+ * every node a collector-driven loop body reads from outside the loop placed
+ * before that loop's iterator. Without this, a ready node that appears earlier
+ * in `graph.nodes` (say a second loop fed by the first loop's collector) can be
+ * visited first and its body would run against inputs nobody produced yet.
+ *
+ * @param graph The graph to order.
+ * @returns Nodes in run order, or `null` when the graph contains a cycle.
+ */
+function executionOrder(graph: ProcessingModelGraph): ModelGraphNode[] | null {
+  const base = topologicalOrder(graph);
+  if (!base) return null;
+  const extra: ProcessingModelGraph["edges"] = [];
+  for (const node of graph.nodes) {
+    if (node.kind !== "iterate-features" && node.kind !== "iterate-rasters") continue;
+    if (node.body) continue;
+    const collector = findDownstreamCollector(graph, node.id);
+    if (!collector) continue;
+    const bodyIds = new Set(findNodesBetween(graph, node.id, collector.id).map((n) => n.id));
+    for (const anc of findExternalAncestors(graph, bodyIds, node.id, new Set())) {
+      extra.push({
+        id: `order:${anc.id}:${node.id}`,
+        from: anc.id,
+        fromPort: "",
+        to: node.id,
+        toPort: "",
+      });
+    }
+  }
+  if (extra.length === 0) return base;
+  return topologicalOrder({ ...graph, edges: [...graph.edges, ...extra] }) ?? base;
+}
+
+/**
  * Check a graph for everything that would make a run fail, so the canvas can
  * mark the offending node before the user presses Run.
  *
@@ -939,7 +973,7 @@ export async function runModelGraph(
   graph: ProcessingModelGraph,
   options: RunModelGraphOptions,
 ): Promise<ModelGraphRunResult> {
-  const ordered = topologicalOrder(graph);
+  const ordered = executionOrder(graph);
   const outputs: Record<string, ModelValue> = {};
   if (!ordered) {
     return { outputs, error: { message: "The model contains a loop." } };
@@ -1167,7 +1201,7 @@ export async function runModelGraph(
             graph,
             new Set(bodyNodes.map((n) => n.id)),
             node.id,
-            new Set(produced.keys()),
+            new Set([...produced.keys(), ...handledNodes]),
           );
           for (const anc of extAncestors) {
             const ancRes = await executeSingleNode(anc, graph, produced, options, descriptors);
@@ -1425,7 +1459,7 @@ export async function runModelGraph(
             graph,
             new Set(bodyNodes.map((n) => n.id)),
             node.id,
-            new Set(produced.keys()),
+            new Set([...produced.keys(), ...handledNodes]),
           );
           for (const anc of extAncestors) {
             const ancRes = await executeSingleNode(anc, graph, produced, options, descriptors);
