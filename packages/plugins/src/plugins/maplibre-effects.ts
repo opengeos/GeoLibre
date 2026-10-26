@@ -138,6 +138,8 @@ export function effectsOverlayCss(): string {
 const HALO_SAMPLE_COUNT = 16;
 // Keep decorative canvas work from competing with MapLibre on high-refresh displays.
 const EFFECTS_FRAME_MS = 1000 / 60;
+// How often a still globe redraws the sky to follow sidereal time.
+const SKY_REFRESH_MS = 60_000;
 
 export function nextEffectsFrameTime(timestamp: number, lastFrameTime: number): number | null {
   return timestamp - lastFrameTime + 0.1 < EFFECTS_FRAME_MS ? null : timestamp;
@@ -585,6 +587,7 @@ class EffectsEngine {
 
   private rafId: number | null = null;
   private cometTimer: number | null = null;
+  private skyTimer: number | null = null;
   private lastFrameTime = -Infinity;
   private destroyed = false;
 
@@ -765,7 +768,23 @@ class EffectsEngine {
     this.rafId = null;
     if (this.cometTimer !== null) window.clearTimeout(this.cometTimer);
     this.cometTimer = null;
+    if (this.skyTimer !== null) window.clearTimeout(this.skyTimer);
+    this.skyTimer = null;
     this.lastFrameTime = -Infinity;
+  }
+
+  /**
+   * The real sky turns with sidereal time (a quarter degree a minute), so a
+   * globe left still redraws the stars once a minute rather than freezing them.
+   */
+  private scheduleSkyRefresh(): void {
+    if (this.skyTimer !== null) return;
+    this.skyTimer = window.setTimeout(() => {
+      this.skyTimer = null;
+      if (this.destroyed || document.hidden || !isGlobeProjection(this.map)) return;
+      this.starsDirty = true;
+      this.start();
+    }, SKY_REFRESH_MS);
   }
 
   private scheduleComet(): void {
@@ -964,6 +983,7 @@ class EffectsEngine {
     else {
       this.lastFrameTime = -Infinity;
       this.scheduleComet();
+      this.scheduleSkyRefresh();
     }
   }
 }
