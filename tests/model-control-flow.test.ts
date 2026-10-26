@@ -1273,6 +1273,28 @@ describe("Model Builder Review Comments Regression Tests", () => {
     assert.equal(out.geojson.features.length, 2);
   });
 
+  it("rejects a loop nested inside a collector-driven loop body", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "outer", kind: "iterate-features", x: 0, y: 0 },
+        { id: "inner", kind: "iterate-features", x: 0, y: 0 },
+        { id: "buf", kind: "tool", x: 0, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "collect", kind: "collect-results", x: 0, y: 0 },
+        { id: "out", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [
+        { id: "e1", from: "in", fromPort: "out", to: "outer", toPort: "collection" },
+        { id: "e2", from: "outer", fromPort: "feature", to: "inner", toPort: "collection" },
+        { id: "e3", from: "inner", fromPort: "feature", to: "buf", toPort: "layer" },
+        { id: "e4", from: "buf", fromPort: "out", to: "collect", toPort: "item" },
+        { id: "e5", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+    const issues = validateModelGraph(graph, resolve);
+    assert.ok(issues.some((i) => i.code === "invalid-iterator" && i.nodeId === "inner"));
+  });
+
   it("validates that body nodes cannot feed external non-collector nodes", () => {
     const graph: ProcessingModelGraph = {
       nodes: [

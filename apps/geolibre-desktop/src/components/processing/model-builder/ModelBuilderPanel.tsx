@@ -2022,10 +2022,34 @@ function descriptorName(
 }
 
 /** Display name for a port, translating the two synthetic node ports. */
+// Control-flow nodes' port labels come from @geolibre/processing, which has no
+// i18n; map their English labels to catalog keys.
+const CONTROL_FLOW_PORT_KEYS: Record<string, ParseKeys> = {
+  "Feature Collection": "processing.modelBuilder.controlFlow.ports.featureCollection",
+  "Current Feature": "processing.modelBuilder.controlFlow.ports.currentFeature",
+  Index: "processing.modelBuilder.controlFlow.ports.index",
+  "Total Count": "processing.modelBuilder.controlFlow.ports.totalCount",
+  "Raster Collection": "processing.modelBuilder.controlFlow.ports.rasterCollection",
+  "Current Raster": "processing.modelBuilder.controlFlow.ports.currentRaster",
+  "Raster Name": "processing.modelBuilder.controlFlow.ports.rasterName",
+  "Item to Collect": "processing.modelBuilder.controlFlow.ports.itemToCollect",
+  "Collected Results": "processing.modelBuilder.controlFlow.ports.collectedResults",
+  Count: "processing.modelBuilder.controlFlow.ports.count",
+  "Condition Value": "processing.modelBuilder.controlFlow.ports.conditionValue",
+  "True Branch": "processing.modelBuilder.controlFlow.ports.trueBranch",
+  "False Branch": "processing.modelBuilder.controlFlow.ports.falseBranch",
+  "True Result": "processing.modelBuilder.controlFlow.ports.trueResult",
+  "False Result": "processing.modelBuilder.controlFlow.ports.falseResult",
+  "Active Output": "processing.modelBuilder.controlFlow.ports.activeOutput",
+};
+
 function portLabel(t: TFunction, label: string): string {
   if (label === INPUT_NODE_PORT) return t("processing.modelBuilder.outputNode");
   if (label === OUTPUT_NODE_PORT) return t("processing.modelBuilder.inputNode");
-  return label;
+  const key = Object.hasOwn(CONTROL_FLOW_PORT_KEYS, label)
+    ? CONTROL_FLOW_PORT_KEYS[label]
+    : undefined;
+  return key ? t(key) : label;
 }
 
 /** SVG layer drawing every connection, plus the in-progress link. */
@@ -2810,6 +2834,15 @@ async function executeModelTool({
       layerInputs[portId] = { name: portId, kind: "vector_in", geojson: value.geojson };
     } else if (value.kind === "raster") {
       layerInputs[portId] = { name: portId, kind: "raster_in", bytes: value.bytes };
+    } else {
+      // A raster collection, number or string has no Whitebox input form;
+      // say so here rather than fail later as a missing input.
+      throw new Error(
+        t("processing.modelBuilder.portCannotTake", {
+          port: portLabel(t, portId),
+          kind: value.kind,
+        }),
+      );
     }
   }
   const job = await runWhiteboxToolWasm({

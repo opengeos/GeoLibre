@@ -5946,6 +5946,7 @@
       "importUnsupported": "That file is not a GeoLibre model.",
       "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map.",
       "portNeedsVector": "\"{{port}}\" needs vector data, but a raster arrived.",
+      "portCannotTake": "\"{{port}}\" cannot take a {{kind}} value.",
       "toolNoOutput": "\"{{tool}}\" produced no output.",
       "toolNoUsableOutput": "\"{{tool}}\" produced no usable output.",
       "controlFlow": {
@@ -6001,7 +6002,25 @@
           "stopOnError": "Stop On Error"
         },
         "collectDescription": "Gathers and flattens results produced by each loop iteration into a final collection.",
-        "mergeDescription": "Converges True and False branch outputs back into a single active data flow."
+        "mergeDescription": "Converges True and False branch outputs back into a single active data flow.",
+        "ports": {
+          "featureCollection": "Feature Collection",
+          "currentFeature": "Current Feature",
+          "index": "Index",
+          "totalCount": "Total Count",
+          "rasterCollection": "Raster Collection",
+          "currentRaster": "Current Raster",
+          "rasterName": "Raster Name",
+          "itemToCollect": "Item to Collect",
+          "collectedResults": "Collected Results",
+          "count": "Count",
+          "conditionValue": "Condition Value",
+          "trueBranch": "True Branch",
+          "falseBranch": "False Branch",
+          "trueResult": "True Result",
+          "falseResult": "False Result",
+          "activeOutput": "Active Output"
+        }
       }
     },
     "parameterField": {

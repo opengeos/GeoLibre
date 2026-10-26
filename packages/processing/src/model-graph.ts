@@ -705,6 +705,16 @@ export function validateModelGraph(
       } else if (collector) {
         const bodyNodes = findNodesBetween(graph, node.id, collector.id);
         const bodyIds = new Set(bodyNodes.map((bn) => bn.id));
+        for (const bn of bodyNodes) {
+          if (bn.kind === "iterate-features" || bn.kind === "iterate-rasters") {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: bn.id,
+              message:
+                "A loop inside a Collect Results loop body is not supported; use an iteration body.",
+            });
+          }
+        }
         for (const edge of graph.edges) {
           if (bodyIds.has(edge.from) && edge.to !== collector.id && !bodyIds.has(edge.to)) {
             issues.push({
@@ -752,6 +762,16 @@ export function validateModelGraph(
       } else if (collector) {
         const bodyNodes = findNodesBetween(graph, node.id, collector.id);
         const bodyIds = new Set(bodyNodes.map((bn) => bn.id));
+        for (const bn of bodyNodes) {
+          if (bn.kind === "iterate-features" || bn.kind === "iterate-rasters") {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: bn.id,
+              message:
+                "A loop inside a Collect Results loop body is not supported; use an iteration body.",
+            });
+          }
+        }
         for (const edge of graph.edges) {
           if (bodyIds.has(edge.from) && edge.to !== collector.id && !bodyIds.has(edge.to)) {
             issues.push({
@@ -970,7 +990,10 @@ async function executeSingleNode(
     }
   }
 
-  return {};
+  // Inputs and outputs never sit inside a loop body, and a nested loop or an
+  // extra collector would otherwise be a silent no-op that leaves the real
+  // collector empty.
+  return { error: `A "${node.kind}" node cannot run inside a loop body.` };
 }
 
 /**
