@@ -4064,6 +4064,7 @@
       "navigation": "Turn-by-Turn Navigation…",
       "navigationTooltip": "Turn-by-turn navigation: plan a route, then follow it with voice guidance.",
       "search": "Search",
+      "searchPlacesPlaceholder": "Search places…",
       "colorbar": "Colorbar",
       "legend": "Legend",
       "html": "HTML",
@@ -4303,7 +4304,15 @@
       "bothRasterLayers_one": "{{count}} raster layer",
       "bothRasterLayers_other": "{{count}} raster layers",
       "savePromptTitle": "Save current project?",
-      "savePromptDescription": "The current project has unsaved changes. Save them before opening the dropped project?"
+      "savePromptDescription": "The current project has unsaved changes. Save them before opening the dropped project?",
+      "importing": "Importing data…",
+      "parsing": "Parsing {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} is about {{sizeMb}} MB. Parsing it may use a lot of memory. Continue?",
+      "addedOsmPbfLayers_one": "Added {{count}} layer from {{name}}.",
+      "addedOsmPbfLayers_other": "Added {{count}} layers from {{name}}.",
+      "osmPbfNoFeatures": "No features found in {{name}}.",
+      "couldNotParse": "Could not parse {{name}}: {{message}}",
+      "couldNotImport": "Could not import files."
     },
     "windowClose": {
       "savePromptTitle": "Save changes before closing?",
@@ -5420,7 +5429,10 @@
     "noElements": "No map elements yet.",
     "moveUp": "Move Up",
     "moveDown": "Move Down",
-    "deleteElement": "Delete"
+    "deleteElement": "Delete",
+    "titlePrompt": "Title",
+    "pinDescPlaceholder": "Optional description…",
+    "stickyNotePlaceholder": "Type note details…"
   },
   "dimensions": {
     "toolbar": "Dimension tools",

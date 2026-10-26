@@ -224,8 +224,12 @@ export interface AnnotationLabels {
   moveToLayer: string;
   textPlaceholder: string;
   pinTitlePrompt: string;
+  /** Title label for the sticky-note and placed-image editors. */
+  titlePrompt: string;
   pinDescPrompt: string;
+  pinDescPlaceholder: string;
   stickyNotePrompt: string;
+  stickyNotePlaceholder: string;
   imageUrlPrompt: string;
   cancel: string;
   saveElement: string;
@@ -267,8 +271,11 @@ let labels: AnnotationLabels = {
   moveToLayer: "Move to layer",
   textPlaceholder: "Type label, Enter to place",
   pinTitlePrompt: "Pin title:",
+  titlePrompt: "Title",
   pinDescPrompt: "Pin description (optional):",
+  pinDescPlaceholder: "Optional description…",
   stickyNotePrompt: "Sticky note text:",
+  stickyNotePlaceholder: "Type note details…",
   imageUrlPrompt: "Image URL or Data URI:",
   cancel: "Cancel",
   saveElement: "Save Element",
@@ -1192,7 +1199,7 @@ function openElementDialog(
   const titleLabel = document.createElement("label");
   titleLabel.style.cssText =
     "display: block; font-size: 11px; font-weight: 500; margin-bottom: 3px; color: var(--geolibre-fg-muted, #6b7280);";
-  titleLabel.textContent = type === "pin" ? labels.pinTitlePrompt : "Title";
+  titleLabel.textContent = type === "pin" ? labels.pinTitlePrompt : labels.titlePrompt;
   container.appendChild(titleLabel);
 
   const titleInput = document.createElement("input");
@@ -1265,7 +1272,8 @@ function openElementDialog(
 
     descInput = document.createElement("textarea");
     descInput.rows = 3;
-    descInput.placeholder = type === "pin" ? "Optional description…" : "Type note details…";
+    descInput.placeholder =
+      type === "pin" ? labels.pinDescPlaceholder : labels.stickyNotePlaceholder;
     descInput.style.cssText =
       "width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--geolibre-border, #d1d5db); background: var(--geolibre-bg-subtle, #f9fafb); color: inherit; font-size: 12px; resize: vertical; margin-bottom: 8px;";
     container.appendChild(descInput);
