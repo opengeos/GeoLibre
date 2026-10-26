@@ -35,6 +35,8 @@ let loading = false;
 const pending = new Set<() => void>();
 let milkyTexture: Float32Array | null = null;
 let milkyCanvas: HTMLCanvasElement | null = null;
+// Reused across redraws (the starfield redraws during camera motion); rebuilt when the size changes.
+let milkyImage: ImageData | null = null;
 
 function unitFrom(raDeg: number, decDeg: number, out: Float32Array, i: number): void {
   const a = raDeg * RAD;
@@ -94,7 +96,8 @@ export function loadSky(onLoad: () => void): void {
         }
       }
     })
-    .catch(() => {
+    .catch((error) => {
+      console.error("Night-sky data failed to load", error);
       loading = false;
       pending.clear();
     });
@@ -138,14 +141,18 @@ function skyFrame(
   };
 }
 
-/** The Milky Way painted once in right ascension / declination: 0..1 brightness per texel. */
-function buildMilkyTexture(data: Sky): Float32Array {
-  const out = new Float32Array(TEX_W * TEX_H);
+/**
+ * The Milky Way painted once in right ascension / declination: 0..1 brightness
+ * per texel, or `null` when no 2D context is available (so it is retried, not
+ * cached as an empty texture).
+ */
+function buildMilkyTexture(data: Sky): Float32Array | null {
   const canvas = document.createElement("canvas");
   canvas.width = TEX_W;
   canvas.height = TEX_H;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return out;
+  if (!ctx) return null;
+  const out = new Float32Array(TEX_W * TEX_H);
   ctx.globalCompositeOperation = "lighter";
   data.milkyWay.forEach((rings, level) => {
     ctx.beginPath();
@@ -193,6 +200,7 @@ function drawMilkyWay(
 ): void {
   milkyTexture ??= buildMilkyTexture(data);
   const tex = milkyTexture;
+  if (!tex) return;
   const cw = Math.max(1, Math.ceil(w / MILKY_STEP));
   const ch = Math.max(1, Math.ceil(h / MILKY_STEP));
   milkyCanvas ??= document.createElement("canvas");
@@ -202,7 +210,10 @@ function drawMilkyWay(
   }
   const mctx = milkyCanvas.getContext("2d");
   if (!mctx) return;
-  const img = mctx.createImageData(cw, ch);
+  if (!milkyImage || milkyImage.width !== cw || milkyImage.height !== ch) {
+    milkyImage = mctx.createImageData(cw, ch);
+  }
+  const img = milkyImage;
   const px = img.data;
   for (let j = 0; j < ch; j++) {
     const b = (h / 2 - (j + 0.5) * MILKY_STEP) / focal;

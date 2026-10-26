@@ -572,6 +572,13 @@ class EffectsEngine {
   private height = 0;
   private dpr = 1;
   private starsDirty = true;
+  // One stable callback, so the redraws asked for while the sky data loads
+  // collapse into one entry in loadSky's pending set.
+  private readonly onSkyLoaded = (): void => {
+    if (this.destroyed) return;
+    this.starsDirty = true;
+    if (!document.hidden) this.start();
+  };
   private spaceDirty = true;
   private haloDirty = true;
   private settings: EffectsSettings;
@@ -794,11 +801,7 @@ class EffectsEngine {
     if (!layers.stars && !layers.milkyWay && !layers.constellations) return;
     const center = this.map.getCenter();
     if (!drawRealSky(ctx, this.width, this.height, center, this.map.getBearing(), layers)) {
-      loadSky(() => {
-        if (this.destroyed) return;
-        this.starsDirty = true;
-        if (!document.hidden) this.start();
-      });
+      loadSky(this.onSkyLoaded);
     }
   }
 
