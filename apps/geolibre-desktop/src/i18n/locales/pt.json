@@ -2946,7 +2946,7 @@
       "selectError": "Não foi possível ler o projeto selecionado.",
       "restoring": "Abrindo o seu projeto de inicialização…",
       "loadWarning": "O projeto de inicialização não está disponível. O GeoLibre abriu o espaço de trabalho padrão.",
-      "storedCopyWarning": "O GeoLibre não conseguiu ler o ficheiro do projeto e abriu a cópia guardada da última vez que o projeto foi aberto ou guardado. As alterações feitas ao ficheiro desde então podem estar em falta. Abra novamente o ficheiro com «Abrir projeto de arquivo» para carregar o seu conteúdo atual."
+      "storedCopyWarning": "O GeoLibre não conseguiu ler o arquivo do projeto e abriu a cópia mantida da última vez que o projeto foi aberto ou salvo. Alterações feitas no arquivo desde então podem estar faltando. Abra o arquivo novamente com «Abrir projeto a partir de arquivo» para carregar o conteúdo atual."
     },
     "map": {
       "constraintsTitle": "Restrições do mapa",
@@ -3603,7 +3603,7 @@
     "command": {
       "projectNew": "Novo projeto",
       "projectStarterExamples": "Abrir exemplos iniciais",
-      "projectOpenFile": "Abrir projeto de arquivo",
+      "projectOpenFile": "Abrir projeto a partir de arquivo",
       "projectOpenUrl": "Abrir projeto de URL",
       "projectSave": "Salvar projeto",
       "projectSaveAs": "Salvar projeto como…",
