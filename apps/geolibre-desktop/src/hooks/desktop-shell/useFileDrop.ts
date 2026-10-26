@@ -420,7 +420,7 @@ export function useFileDrop({
             const sizeMb = Math.round(file.size / (1024 * 1024));
             if (
               !window.confirm(
-                `${file.name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
+                t("toolbar.fileDrop.largeOsmPbfConfirm", { name: file.name, sizeMb }),
               )
             ) {
               continue;
