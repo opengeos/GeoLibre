@@ -332,7 +332,7 @@ jobs:
         # does not strand us on an old version. When it bumps, re-read the
         # action's release notes for changes to the scrub, MCP wiring, or the
         # `execution_file` contract that the summary step below parses.
-        uses: anthropics/claude-code-action@f27be6b65a4652f08a2ba3cff79114829b588967 # v1 (Claude Code 2.1.220)
+        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1 (Claude Code 2.1.220)
         with:
           # Use the workflow's GITHUB_TOKEN for GitHub API calls instead of the
           # default OIDC -> Claude GitHub App token exchange. That exchange
@@ -388,6 +388,7 @@ jobs:
           # comes from the checkout plus `pr-context/`; output goes through the
           # inline-comment MCP server and the final message. See the header.
           claude_args: |
+            --model claude-haiku-5-5
             --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
