@@ -5947,7 +5947,61 @@
       "rasterOutputUnsupported": "\"{{name}}\" is a raster result, which this build cannot add to the map.",
       "portNeedsVector": "\"{{port}}\" needs vector data, but a raster arrived.",
       "toolNoOutput": "\"{{tool}}\" produced no output.",
-      "toolNoUsableOutput": "\"{{tool}}\" produced no usable output."
+      "toolNoUsableOutput": "\"{{tool}}\" produced no usable output.",
+      "controlFlow": {
+        "heading": "Control Flow",
+        "add": {
+          "iterateFeatures": "Iterate Feat",
+          "iterateFeaturesTitle": "Iterate Features: Execute workflow for each vector feature",
+          "iterateRasters": "Iterate Rast",
+          "iterateRastersTitle": "Iterate Rasters: Execute workflow for each raster",
+          "switch": "If/Else Switch",
+          "switchTitle": "Conditional Switch: If/Else conditional branching",
+          "merge": "Branch Merge",
+          "mergeTitle": "Conditional Merge: Converge alternative branches",
+          "collect": "Collect Results",
+          "collectTitle": "Collect Results: Gather outputs from loop iterations"
+        },
+        "kinds": {
+          "iterateFeatures": "Iterate Features",
+          "iterateRasters": "Iterate Rasters",
+          "collectResults": "Collect Results",
+          "conditionalSwitch": "Conditional Switch",
+          "conditionalMerge": "Conditional Merge"
+        },
+        "switch": {
+          "description": "Evaluates a condition and routes data to the True or False branch.",
+          "conditionType": "Condition Type",
+          "typeCompare": "Value / Property Comparison",
+          "typeBoolean": "Boolean Check",
+          "typeNullCheck": "Null / Empty Check",
+          "property": "Feature Property / Metadata Key (Optional)",
+          "propertyPlaceholder": "e.g. category, feature_count, or area",
+          "operator": "Operator",
+          "opEqual": "== (Equal)",
+          "opNotEqual": "!= (Not Equal)",
+          "opLess": "< (Less Than)",
+          "opLessOrEqual": "<= (Less Than or Equal)",
+          "opGreater": "> (Greater Than)",
+          "opGreaterOrEqual": ">= (Greater Than or Equal)",
+          "opContains": "contains",
+          "opStartsWith": "starts with",
+          "opIsEmpty": "is empty",
+          "opNotEmpty": "is not empty",
+          "opIsNull": "is null",
+          "opNotNull": "is not null",
+          "value": "Target Value",
+          "valuePlaceholder": "e.g. 50 or urban or true"
+        },
+        "iterate": {
+          "featuresDescription": "Iterates over each feature in the vector collection.",
+          "rastersDescription": "Iterates over each raster dataset in the collection.",
+          "maxIterations": "Maximum Iterations Limit",
+          "stopOnError": "Stop On Error"
+        },
+        "collectDescription": "Gathers and flattens results produced by each loop iteration into a final collection.",
+        "mergeDescription": "Converges True and False branch outputs back into a single active data flow."
+      }
     },
     "parameterField": {
       "selectLayer": "Select a layer...",

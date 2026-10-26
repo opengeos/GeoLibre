@@ -366,6 +366,9 @@ export function evaluateCondition(options: ConditionEvaluationOptions): boolean 
         if (typeof left === "object") return Object.keys(left).length > 0;
         return true;
     }
+    // A null check left on a comparison operator (the node's default is "==")
+    // means "is null"; never fall through to an equality test.
+    return left === null || left === undefined;
   }
 
   switch (operator) {
@@ -851,6 +854,19 @@ export interface ModelGraphRunResult {
   error?: { nodeId?: string; message: string };
 }
 
+/**
+ * An iterator's iteration cap: a positive whole `maxIterations`, else 1000.
+ * Matches the inspector, which stores only positive whole numbers, so a zero or
+ * negative value in a hand-edited project never silently runs nothing.
+ *
+ * @param node The iterator node.
+ * @returns The maximum number of iterations to run.
+ */
+function iterationLimit(node: ModelGraphNode): number {
+  const value = Number(node.parameters?.maxIterations);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1000;
+}
+
 const SKIPPED = Symbol("SKIPPED");
 type ValueOrSkipped = ModelValue | typeof SKIPPED;
 
@@ -1136,7 +1152,7 @@ export async function runModelGraph(
           return { outputs, error: { nodeId: node.id, message } };
         }
         const features = collectionVal.geojson.features;
-        const maxIterations = Math.max(0, Number(node.parameters?.maxIterations) || 1000);
+        const maxIterations = iterationLimit(node);
         const stopOnError = node.parameters?.stopOnError !== false;
         const count = Math.min(features.length, maxIterations);
         options.log(
@@ -1187,7 +1203,7 @@ export async function runModelGraph(
           };
           produced.set(node.id, {
             [ITERATE_FEATURES_OUTPUT_FEATURE]: resVal,
-            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count },
+            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
             [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
           });
           options.onNodeStatus?.(node.id, "done");
@@ -1231,7 +1247,7 @@ export async function runModelGraph(
             iterProduced.set(node.id, {
               [ITERATE_FEATURES_OUTPUT_FEATURE]: { kind: "vector", geojson: singleFC },
               [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: i },
-              [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: count },
+              [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
             });
             let iterFailed = false;
             for (const bn of bodyNodes) {
@@ -1315,7 +1331,7 @@ export async function runModelGraph(
 
           produced.set(node.id, {
             [ITERATE_FEATURES_OUTPUT_FEATURE]: resVal,
-            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count },
+            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
             [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
           });
           options.onNodeStatus?.(node.id, "done");
@@ -1373,7 +1389,7 @@ export async function runModelGraph(
           }
         }
 
-        const maxIterations = Math.max(0, Number(node.parameters?.maxIterations) || 1000);
+        const maxIterations = iterationLimit(node);
         const stopOnError = node.parameters?.stopOnError !== false;
         const count = Math.min(rasterItems.length, maxIterations);
         options.log(
@@ -1445,7 +1461,7 @@ export async function runModelGraph(
               kind: "string",
               value: collectedRasters[0]?.name ?? "",
             },
-            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count },
+            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
             [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
           });
           options.onNodeStatus?.(node.id, "done");
@@ -1495,7 +1511,7 @@ export async function runModelGraph(
               [ITERATE_RASTERS_OUTPUT_RASTER]: singleRasterVal,
               [ITERATE_RASTERS_OUTPUT_NAME]: { kind: "string", value: rItem.name ?? "" },
               [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: i },
-              [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: count },
+              [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
             });
             let iterFailed = false;
             for (const bn of bodyNodes) {
@@ -1583,7 +1599,7 @@ export async function runModelGraph(
               kind: "string",
               value: collectedRasters[0]?.name ?? "",
             },
-            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count },
+            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
             [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
           });
           options.onNodeStatus?.(node.id, "done");

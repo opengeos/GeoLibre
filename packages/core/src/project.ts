@@ -874,6 +874,9 @@ const MODEL_NODE_KINDS = new Set<ModelGraphNodeKind>([
 ]);
 const MODEL_TOOL_PROVIDERS = new Set<ModelToolProvider>(["vector", "whitebox"]);
 
+/** Deepest loop-body nesting a loaded model keeps; anything deeper is dropped. */
+const MAX_MODEL_BODY_DEPTH = 16;
+
 /** Coerce an untrusted number to a finite canvas coordinate. */
 function normalizeCoordinate(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -890,9 +893,10 @@ function normalizeCoordinate(value: unknown): number {
  * project layer deliberately does not import.
  *
  * @param value Raw `graph` value from the project JSON.
+ * @param depth How many loop bodies deep this graph sits (internal).
  * @returns The normalized graph, or `null` when it has no usable nodes.
  */
-export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null {
+export function normalizeModelGraph(value: unknown, depth = 0): ProcessingModelGraph | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<ProcessingModelGraph>;
   const nodes: ModelGraphNode[] = [];
@@ -908,7 +912,10 @@ export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null
     const toolId = normalizeString(node.toolId).trim();
     const name = normalizeString(node.name).trim();
     const provider = node.provider as ModelToolProvider;
-    const body = node.body ? normalizeModelGraph(node.body) : null;
+    // Loop bodies nest; cap the depth so a crafted project cannot overflow the
+    // stack here or in runModelGraph, which recurses the same way.
+    const body =
+      node.body && depth < MAX_MODEL_BODY_DEPTH ? normalizeModelGraph(node.body, depth + 1) : null;
     nodes.push({
       id: nodeId,
       kind,

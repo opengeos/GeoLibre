@@ -66,7 +66,7 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+import type { ParseKeys, TFunction } from "i18next";
 import { clamp } from "../../../lib/clamp";
 import { createDuckDbCapability } from "../../../lib/duckdb-processing";
 import { modelGraphToPython } from "../../../lib/model-python-script";
@@ -115,6 +115,15 @@ const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
 /** Identifies an exported Model Builder file, so a stray JSON is rejected. */
 const MODEL_SCHEMA = "https://geolibre.app/schemas/model-graph-v1.json";
 const MODEL_VERSION = "1.0.0";
+const NULL_CHECK_OPERATORS = new Set(["is_null", "not_null", "is_empty", "not_empty"]);
+// Catalog key for each control-flow node's card title.
+const CONTROL_FLOW_TITLE_KEYS: Partial<Record<ModelGraphNodeKind, ParseKeys>> = {
+  "iterate-features": "processing.modelBuilder.controlFlow.kinds.iterateFeatures",
+  "iterate-rasters": "processing.modelBuilder.controlFlow.kinds.iterateRasters",
+  "collect-results": "processing.modelBuilder.controlFlow.kinds.collectResults",
+  "conditional-switch": "processing.modelBuilder.controlFlow.kinds.conditionalSwitch",
+  "conditional-merge": "processing.modelBuilder.controlFlow.kinds.conditionalMerge",
+};
 /** Bounds on the draggable palette and inspector columns, in pixels. */
 const MIN_SIDE_WIDTH = 140;
 const MAX_SIDE_WIDTH = 480;
@@ -1606,7 +1615,7 @@ export function ModelBuilderPanel({
                 <div className="pt-1">
                   <div className="flex items-center justify-between pb-1">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Control Flow
+                      {t("processing.modelBuilder.controlFlow.heading")}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-1">
@@ -1615,45 +1624,45 @@ export function ModelBuilderPanel({
                       variant="outline"
                       className="h-6 justify-start px-1.5 text-[10px] truncate"
                       onClick={() => addControlFlowNode("iterate-features")}
-                      title="Iterate Features: Execute workflow for each vector feature"
+                      title={t("processing.modelBuilder.controlFlow.add.iterateFeaturesTitle")}
                     >
-                      Iterate Feat
+                      {t("processing.modelBuilder.controlFlow.add.iterateFeatures")}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-6 justify-start px-1.5 text-[10px] truncate"
                       onClick={() => addControlFlowNode("iterate-rasters")}
-                      title="Iterate Rasters: Execute workflow for each raster"
+                      title={t("processing.modelBuilder.controlFlow.add.iterateRastersTitle")}
                     >
-                      Iterate Rast
+                      {t("processing.modelBuilder.controlFlow.add.iterateRasters")}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-6 justify-start px-1.5 text-[10px] truncate"
                       onClick={() => addControlFlowNode("conditional-switch")}
-                      title="Conditional Switch: If/Else conditional branching"
+                      title={t("processing.modelBuilder.controlFlow.add.switchTitle")}
                     >
-                      If/Else Switch
+                      {t("processing.modelBuilder.controlFlow.add.switch")}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-6 justify-start px-1.5 text-[10px] truncate"
                       onClick={() => addControlFlowNode("conditional-merge")}
-                      title="Conditional Merge: Converge alternative branches"
+                      title={t("processing.modelBuilder.controlFlow.add.mergeTitle")}
                     >
-                      Branch Merge
+                      {t("processing.modelBuilder.controlFlow.add.merge")}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="col-span-2 h-6 justify-center px-1.5 text-[10px] truncate"
                       onClick={() => addControlFlowNode("collect-results")}
-                      title="Collect Results: Gather outputs from loop iterations"
+                      title={t("processing.modelBuilder.controlFlow.add.collectTitle")}
                     >
-                      Collect Results
+                      {t("processing.modelBuilder.controlFlow.add.collect")}
                     </Button>
                   </div>
                 </div>
@@ -2147,20 +2156,8 @@ const GraphNodeCard = memo(function GraphNodeCard({
   const ports = portsOf(node, descriptor);
   const layout = cardLayout(ports, node.kind);
 
-  const isControlFlow =
-    node.kind === "iterate-features" ||
-    node.kind === "iterate-rasters" ||
-    node.kind === "collect-results" ||
-    node.kind === "conditional-switch" ||
-    node.kind === "conditional-merge";
-
-  const controlFlowTitles: Record<string, string> = {
-    "iterate-features": "Iterate Features",
-    "iterate-rasters": "Iterate Rasters",
-    "collect-results": "Collect Results",
-    "conditional-switch": "Conditional Switch",
-    "conditional-merge": "Conditional Merge",
-  };
+  const controlFlowTitleKey = CONTROL_FLOW_TITLE_KEYS[node.kind];
+  const isControlFlow = controlFlowTitleKey !== undefined;
 
   const title =
     node.kind === "input"
@@ -2169,7 +2166,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
       : node.kind === "output"
         ? node.name?.trim() || t("processing.modelBuilder.outputNode")
         : isControlFlow
-          ? controlFlowTitles[node.kind]
+          ? t(controlFlowTitleKey)
           : descriptorName(t, descriptor, node.toolId ?? "");
 
   return (
@@ -2212,7 +2209,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
             ? t("processing.modelBuilder.inputNode")
             : node.kind === "output"
               ? t("processing.modelBuilder.outputNode")
-              : "Control Flow"}
+              : t("processing.modelBuilder.controlFlow.heading")}
       </p>
       <p className="truncate text-xs font-medium" title={title}>
         {title}
@@ -2421,38 +2418,51 @@ function NodeInspector({
       {node.kind === "conditional-switch" && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Evaluates a condition and routes data to the True or False branch.
+            {t("processing.modelBuilder.controlFlow.switch.description")}
           </p>
           <div className="space-y-1">
             <Label htmlFor="switch-condition-type" className="text-[11px]">
-              Condition Type
+              {t("processing.modelBuilder.controlFlow.switch.conditionType")}
             </Label>
             <Select
               id="switch-condition-type"
               className="h-7 w-full text-xs"
               value={String(node.parameters?.conditionType || "compare")}
-              onChange={(event) => onParamChange("conditionType", event.target.value)}
+              onChange={(event) => {
+                onParamChange("conditionType", event.target.value);
+                // A null check needs a null/empty operator; the node starts on "==".
+                const operator = String(node.parameters?.operator ?? "");
+                if (event.target.value === "null_check" && !NULL_CHECK_OPERATORS.has(operator)) {
+                  onParamChange("operator", "is_null");
+                }
+              }}
             >
-              <option value="compare">Value / Property Comparison</option>
-              <option value="boolean">Boolean Check</option>
-              <option value="null_check">Null / Empty Check</option>
+              <option value="compare">
+                {t("processing.modelBuilder.controlFlow.switch.typeCompare")}
+              </option>
+              <option value="boolean">
+                {t("processing.modelBuilder.controlFlow.switch.typeBoolean")}
+              </option>
+              <option value="null_check">
+                {t("processing.modelBuilder.controlFlow.switch.typeNullCheck")}
+              </option>
             </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="switch-property" className="text-[11px]">
-              Feature Property / Metadata Key (Optional)
+              {t("processing.modelBuilder.controlFlow.switch.property")}
             </Label>
             <Input
               id="switch-property"
               className="h-7 text-xs"
               value={String(node.parameters?.property ?? "")}
               onChange={(event) => onParamChange("property", event.target.value)}
-              placeholder="e.g. category, feature_count, or area"
+              placeholder={t("processing.modelBuilder.controlFlow.switch.propertyPlaceholder")}
             />
           </div>
           <div className="space-y-1">
             <Label htmlFor="switch-operator" className="text-[11px]">
-              Operator
+              {t("processing.modelBuilder.controlFlow.switch.operator")}
             </Label>
             <Select
               id="switch-operator"
@@ -2460,30 +2470,48 @@ function NodeInspector({
               value={String(node.parameters?.operator || "==")}
               onChange={(event) => onParamChange("operator", event.target.value)}
             >
-              <option value="==">== (Equal)</option>
-              <option value="!=">!= (Not Equal)</option>
-              <option value="<">&lt; (Less Than)</option>
-              <option value="<=">&lt;= (Less Than or Equal)</option>
-              <option value=">">&gt; (Greater Than)</option>
-              <option value=">=">&gt;= (Greater Than or Equal)</option>
-              <option value="contains">contains</option>
-              <option value="starts_with">starts with</option>
-              <option value="is_empty">is empty</option>
-              <option value="not_empty">is not empty</option>
-              <option value="is_null">is null</option>
-              <option value="not_null">is not null</option>
+              <option value="==">{t("processing.modelBuilder.controlFlow.switch.opEqual")}</option>
+              <option value="!=">
+                {t("processing.modelBuilder.controlFlow.switch.opNotEqual")}
+              </option>
+              <option value="<">{t("processing.modelBuilder.controlFlow.switch.opLess")}</option>
+              <option value="<=">
+                {t("processing.modelBuilder.controlFlow.switch.opLessOrEqual")}
+              </option>
+              <option value=">">{t("processing.modelBuilder.controlFlow.switch.opGreater")}</option>
+              <option value=">=">
+                {t("processing.modelBuilder.controlFlow.switch.opGreaterOrEqual")}
+              </option>
+              <option value="contains">
+                {t("processing.modelBuilder.controlFlow.switch.opContains")}
+              </option>
+              <option value="starts_with">
+                {t("processing.modelBuilder.controlFlow.switch.opStartsWith")}
+              </option>
+              <option value="is_empty">
+                {t("processing.modelBuilder.controlFlow.switch.opIsEmpty")}
+              </option>
+              <option value="not_empty">
+                {t("processing.modelBuilder.controlFlow.switch.opNotEmpty")}
+              </option>
+              <option value="is_null">
+                {t("processing.modelBuilder.controlFlow.switch.opIsNull")}
+              </option>
+              <option value="not_null">
+                {t("processing.modelBuilder.controlFlow.switch.opNotNull")}
+              </option>
             </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="switch-value" className="text-[11px]">
-              Target Value
+              {t("processing.modelBuilder.controlFlow.switch.value")}
             </Label>
             <Input
               id="switch-value"
               className="h-7 text-xs"
               value={String(node.parameters?.value ?? "")}
               onChange={(event) => onParamChange("value", event.target.value)}
-              placeholder="e.g. 50 or urban or true"
+              placeholder={t("processing.modelBuilder.controlFlow.switch.valuePlaceholder")}
             />
           </div>
         </div>
@@ -2493,12 +2521,12 @@ function NodeInspector({
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
             {node.kind === "iterate-features"
-              ? "Iterates over each feature in the vector collection."
-              : "Iterates over each raster dataset in the collection."}
+              ? t("processing.modelBuilder.controlFlow.iterate.featuresDescription")
+              : t("processing.modelBuilder.controlFlow.iterate.rastersDescription")}
           </p>
           <div className="space-y-1">
             <Label htmlFor="iter-max" className="text-[11px]">
-              Maximum Iterations Limit
+              {t("processing.modelBuilder.controlFlow.iterate.maxIterations")}
             </Label>
             <Input
               id="iter-max"
@@ -2518,7 +2546,7 @@ function NodeInspector({
           </div>
           <div className="flex items-center justify-between pt-1">
             <Label htmlFor="iter-stop-on-error" className="text-[11px]">
-              Stop On Error
+              {t("processing.modelBuilder.controlFlow.iterate.stopOnError")}
             </Label>
             <input
               id="iter-stop-on-error"
@@ -2534,7 +2562,7 @@ function NodeInspector({
       {node.kind === "collect-results" && (
         <div className="space-y-1">
           <p className="text-[11px] text-muted-foreground">
-            Gathers and flattens results produced by each loop iteration into a final collection.
+            {t("processing.modelBuilder.controlFlow.collectDescription")}
           </p>
         </div>
       )}
@@ -2542,7 +2570,7 @@ function NodeInspector({
       {node.kind === "conditional-merge" && (
         <div className="space-y-1">
           <p className="text-[11px] text-muted-foreground">
-            Converges True and False branch outputs back into a single active data flow.
+            {t("processing.modelBuilder.controlFlow.mergeDescription")}
           </p>
         </div>
       )}

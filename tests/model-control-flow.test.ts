@@ -290,6 +290,17 @@ describe("Model Builder Control Flow - Condition Evaluation", () => {
     );
   });
 
+  it("treats a null check left on a comparison operator as is-null", () => {
+    // addControlNode seeds operator "==", so switching only the condition type
+    // must not fall through to an equality test against the target value.
+    const params = { conditionType: "null_check", operator: "==", value: "" };
+    assert.equal(evaluateCondition({ parameters: params }), true);
+    assert.equal(
+      evaluateCondition({ parameters: params, inputValue: { kind: "number", value: 0 } }),
+      false,
+    );
+  });
+
   it("evaluates null and empty checks correctly", () => {
     assert.equal(
       evaluateCondition({
