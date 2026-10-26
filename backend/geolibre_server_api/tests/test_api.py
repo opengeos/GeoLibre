@@ -190,6 +190,20 @@ def test_accounts_login_current_user_and_hashed_secrets(client):
     assert client.get("/api/account", headers=auth(token)).status_code == 401
 
 
+def test_openapi_documents_bearer_auth_for_protected_routes(client):
+    schema = client.get("/openapi.json").json()
+
+    assert schema["components"]["securitySchemes"]["HTTPBearer"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    assert schema["paths"]["/api/account"]["get"]["security"] == [{"HTTPBearer": []}]
+    assert schema["paths"]["/api/projects"]["post"]["security"] == [{"HTTPBearer": []}]
+    assert "security" not in schema["paths"]["/api/projects"]["get"]
+    assert "security" not in schema["paths"]["/api/accounts"]["post"]
+    assert "security" not in schema["paths"]["/api/auth/token"]["post"]
+
+
 def test_project_crud_visibility_listing_and_raw_views(client):
     owner = account(client)
     other = account(client, "grace")
