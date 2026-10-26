@@ -302,6 +302,11 @@ async function render({ model, el }) {
       params,
     });
   };
+  // Options last sent per control, as JSON. `change:_ui` replays every
+  // control, and re-sending `collapsed` would fold a panel the viewer has since
+  // opened (GeoLibre#3241), so a setting with options is sent only when it
+  // changed. Cleared on `geolibre:ready`: a reloaded iframe starts from scratch.
+  const sentControlOptions = new Map();
   function pushUiState({ identify = true, controls = true } = {}) {
     if (!ready) return;
     const ui = model.get("_ui") || {};
@@ -320,8 +325,12 @@ async function render({ model, el }) {
         if (Object.keys(options).length > 0 && (control === "measure" || control === "minimap")) {
           params.options = options;
         }
+        const key = JSON.stringify(params);
+        if (sentControlOptions.get(control) === key) continue;
+        sentControlOptions.set(control, key);
         postUiCommand("setControlVisible", params);
       } else {
+        sentControlOptions.delete(control);
         postUiCommand("setControlVisible", { control, visible: Boolean(setting) });
       }
     }
@@ -345,6 +354,7 @@ async function render({ model, el }) {
     if (!data || typeof data !== "object") return;
     if (data.type === "geolibre:ready") {
       ready = true;
+      sentControlOptions.clear();
       pushProject();
       // pushProject already re-armed Identify.
       pushUiState({ identify: false });
