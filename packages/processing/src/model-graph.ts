@@ -677,7 +677,10 @@ export function validateModelGraph(
       if (filled.get(node.id)?.has(port.id)) continue;
       const typed = node.parameters?.[port.id];
       if (typed !== undefined && typed !== null && typed !== "") continue;
+      // Only control nodes read a layer named in their settings; a tool's
+      // unwired port must still be connected or typed.
       if (
+        node.kind !== "tool" &&
         sourceLayerId(node) &&
         (port.id === "collection" || port.id === "input" || port.id === "layer")
       )

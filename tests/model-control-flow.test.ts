@@ -1356,6 +1356,35 @@ describe("Model Builder Review Comments Regression Tests", () => {
     assert.ok(result.outputs.out);
   });
 
+  it("still requires a tool's input when the tool has a layer parameter", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        {
+          id: "buf",
+          kind: "tool",
+          x: 0,
+          y: 0,
+          provider: "vector",
+          toolId: "buffer",
+          parameters: { layer: "" },
+        },
+        {
+          id: "clip",
+          kind: "tool",
+          x: 0,
+          y: 0,
+          provider: "whitebox",
+          toolId: "threshold",
+          parameters: { layer: "pts" },
+        },
+        { id: "out", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [{ id: "e1", from: "clip", fromPort: "output", to: "out", toPort: "in" }],
+    };
+    const issues = validateModelGraph(graph, resolve);
+    assert.ok(issues.some((i) => i.code === "missing-input" && i.nodeId === "clip"));
+  });
+
   it("rejects a loop nested inside a collector-driven loop body", () => {
     const graph: ProcessingModelGraph = {
       nodes: [
