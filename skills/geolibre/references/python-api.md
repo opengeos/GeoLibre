@@ -121,7 +121,10 @@ every visible layer, `m.set_identify("Sites")` on one, `m.set_identify(["Sites",
 "Roads"])` on only those, `m.set_identify(None)` turns it off. Hover tips pause
 while it is armed. `m.show_control("bookmark")`,
 `m.show_control("search")` and `m.hide_control("globe")` toggle panels and map
-controls, and `m.set_projection("mercator")` draws a flat map instead of a globe.
+controls; `m.show_control("measure", collapsed=True, distance_unit="feet",
+area_unit="acres")` shows Measure as just its ruler button (tool idle) in US
+units, and `collapsed=True` does the same for `"minimap"`.
+`m.set_projection("mercator")` draws a flat map instead of a globe.
 `save_project`, `to_project` and `to_html` keep the Identify and control choices
 (the project's `interaction` block).
 

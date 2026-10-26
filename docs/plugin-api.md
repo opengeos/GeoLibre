@@ -305,6 +305,7 @@ export interface GeoLibreAppAPI {
   // The host's existing menu panels. See "Built-in control panels" below.
   openControlPanel?: {
     (id: "minimap", options: GeoLibreMinimapOptions): void;
+    (id: "measure", options: GeoLibreMeasureOptions): void;
     (id: GeoLibreControlPanelId): void;
   };
   closeControlPanel?: (id: GeoLibreControlPanelId) => void;
@@ -1338,13 +1339,28 @@ app.closeControlPanel?.("minimap");
 app.openControlPanel?.("bookmark");
 ```
 
-Only `minimap` accepts options. `zoomOffset` is relative to the main map: a more
-negative value gives a wider overview. It defaults to `-4`; `width` and `height`
-default to `250` and `180` pixels and must be positive finite numbers. The zoom
-offset must also be finite. Calling `openControlPanel("minimap", options)` again
-updates the existing overview, retaining omitted options. The options survive
-basemap changes and reset when the Minimap is closed. Panel visibility and
-these options are session UI state and are not saved with the project.
+Only `minimap` and `measure` accept options. `zoomOffset` is relative to the
+main map: a more negative value gives a wider overview. It defaults to `-4`;
+`width` and `height` default to `250` and `180` pixels and must be positive
+finite numbers. The zoom offset must also be finite. Calling
+`openControlPanel("minimap", options)` again updates the existing overview,
+retaining omitted options. The options survive basemap changes and reset when
+the Minimap is closed.
+
+Both take `collapsed: true` to show only the control's on-map button. For
+Measure that also leaves the tool idle, so map clicks do not place points until
+the viewer opens it. Measure also takes `distanceUnit` (`meters`, `kilometers`,
+`miles`, `feet`, `yards`, `nautical-miles`; default `kilometers`) and `areaUnit`
+(`square-meters`, `square-kilometers`, `square-miles`, `hectares`, `acres`,
+`square-feet`; default `square-kilometers`). New units rebuild an open Measure
+control, which clears its measurements; they reset when it is closed.
+
+```ts
+app.openControlPanel?.("measure", { collapsed: true, distanceUnit: "feet", areaUnit: "acres" });
+```
+
+Panel visibility and these options are session UI state and are not saved with
+the project.
 
 ## Right sidebar panels
 

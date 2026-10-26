@@ -52,6 +52,39 @@ export interface GeoLibreMinimapOptions {
   width?: number;
   /** Height in pixels. Must be positive. Default 180. */
   height?: number;
+  /** Open as its on-map button only, with the overview hidden. Default false. */
+  collapsed?: boolean;
+}
+
+/** Distance units the host's Measure panel can report. */
+export type GeoLibreMeasureDistanceUnit =
+  | "meters"
+  | "kilometers"
+  | "miles"
+  | "feet"
+  | "yards"
+  | "nautical-miles";
+
+/** Area units the host's Measure panel can report. */
+export type GeoLibreMeasureAreaUnit =
+  | "square-meters"
+  | "square-kilometers"
+  | "square-miles"
+  | "hectares"
+  | "acres"
+  | "square-feet";
+
+/** Options for the host's Measure panel. */
+export interface GeoLibreMeasureOptions {
+  /**
+   * Open as its on-map ruler button only, with the panel closed and the tool
+   * idle until the viewer clicks it. Default false.
+   */
+  collapsed?: boolean;
+  /** Unit for distances. Default `"kilometers"`. */
+  distanceUnit?: GeoLibreMeasureDistanceUnit;
+  /** Unit for areas. Default `"square-kilometers"`. */
+  areaUnit?: GeoLibreMeasureAreaUnit;
 }
 
 export type GeoLibreBuiltInMapControl =
@@ -1237,11 +1270,13 @@ export interface GeoLibreAppAPI {
   /**
    * Open a built-in panel using the host's existing control. Idempotent; the
    * menu checkmark follows. Minimap options also update an already open map
-   * and survive basemap changes until it is closed. Controls initialize
-   * asynchronously. Optional on older hosts.
+   * and survive basemap changes until it is closed; Measure options update an
+   * already open panel. Controls initialize asynchronously. Optional on older
+   * hosts.
    */
   openControlPanel?: {
     (id: "minimap", options: GeoLibreMinimapOptions): void;
+    (id: "measure", options: GeoLibreMeasureOptions): void;
     (id: GeoLibreControlPanelId): void;
   };
   /** Close a built-in panel, as its menu toggle does. Optional on older hosts. */

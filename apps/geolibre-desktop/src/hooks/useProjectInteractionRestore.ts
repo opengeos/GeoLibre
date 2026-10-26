@@ -44,12 +44,21 @@ export function useProjectInteractionRestore(
         dedupeKey: `project-control:${control}`,
       });
     };
-    for (const [control, visible] of Object.entries(controls)) {
+    for (const [control, setting] of Object.entries(controls)) {
       if (!isScriptablePanel(control) && !isScriptableMapControl(control)) continue;
+      // `{ visible, ...options }` carries the control's options (issue #3241).
+      // Only Measure and Minimap take any; other controls ignore them, so a
+      // stray option cannot stop the control itself from being applied.
+      const visible = typeof setting === "boolean" ? setting : setting.visible;
+      const params: Record<string, unknown> = { control, visible };
+      if (typeof setting !== "boolean" && (control === "measure" || control === "minimap")) {
+        const { visible: _visible, ...options } = setting;
+        if (Object.keys(options).length > 0) params.options = options;
+      }
       try {
         // The handler is async, so its failure is a rejection, not a throw.
-        void Promise.resolve(handlers.setControlVisible({ control, visible })).catch(
-          (error: unknown) => report(control, error),
+        void Promise.resolve(handlers.setControlVisible(params)).catch((error: unknown) =>
+          report(control, error),
         );
       } catch (error) {
         report(control, error);
