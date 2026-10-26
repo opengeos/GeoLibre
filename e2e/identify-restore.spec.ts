@@ -173,7 +173,7 @@ async function setUpIdentifyOverContextSelection(page: Page): Promise<Camera> {
   // Free the full map surface: the Layers panel overlays the side the Identify
   // click has to reach. Collapse it before the camera is read, so its resize
   // cannot be mistaken for a fit.
-  await page.getByRole("button", { name: "Collapse layers", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse Layers", exact: true }).click();
 
   await page.getByLabel("Zoom to selection").check();
   await attributeRows(page).first().click();

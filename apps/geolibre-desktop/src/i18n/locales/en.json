@@ -9160,8 +9160,8 @@
   },
   "layers": {
     "panelCollapsedLabel": "Layers (collapsed)",
-    "expand": "Expand layers",
-    "collapse": "Collapse layers",
+    "expand": "Expand Layers",
+    "collapse": "Collapse Layers",
     "resizePanel": "Resize Layers panel",
     "dragToReorder": "Drag to reorder",
     "saveGeometryEdits": "Save geometry edits",
