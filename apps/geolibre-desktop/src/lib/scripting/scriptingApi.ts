@@ -599,7 +599,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             incoming.get(node.id)?.find((e) => e.toPort === "input") ?? incoming.get(node.id)?.[0];
           const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
           if (!layerId || layerId === SKIPPED) {
-            produced.set(node.id, new Map([["true", SKIPPED], ["false", SKIPPED]]));
+            produced.set(
+              node.id,
+              new Map([
+                ["true", SKIPPED],
+                ["false", SKIPPED],
+              ]),
+            );
             continue;
           }
           const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
@@ -611,9 +617,21 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             parameters: node.parameters,
           });
           if (cond) {
-            produced.set(node.id, new Map([["true", layerId], ["false", SKIPPED]]));
+            produced.set(
+              node.id,
+              new Map([
+                ["true", layerId],
+                ["false", SKIPPED],
+              ]),
+            );
           } else {
-            produced.set(node.id, new Map([["true", SKIPPED], ["false", layerId]]));
+            produced.set(
+              node.id,
+              new Map([
+                ["true", SKIPPED],
+                ["false", layerId],
+              ]),
+            );
           }
           continue;
         }
@@ -622,7 +640,9 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           const trueEdge = incoming.get(node.id)?.find((e) => e.toPort === "true");
           const falseEdge = incoming.get(node.id)?.find((e) => e.toPort === "false");
           const trueId = trueEdge ? produced.get(trueEdge.from)?.get(trueEdge.fromPort) : undefined;
-          const falseId = falseEdge ? produced.get(falseEdge.from)?.get(falseEdge.fromPort) : undefined;
+          const falseId = falseEdge
+            ? produced.get(falseEdge.from)?.get(falseEdge.fromPort)
+            : undefined;
           const activeId =
             trueId && trueId !== SKIPPED
               ? trueId

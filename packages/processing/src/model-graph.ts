@@ -313,7 +313,10 @@ export function evaluateCondition(options: ConditionEvaluationOptions): boolean 
       } else if (options.inputValue.kind === "raster") {
         const meta = options.inputValue.metadata as Record<string, unknown> | undefined;
         const cleanPath = propPath.startsWith("metadata.") ? propPath.slice(9) : propPath;
-        left = meta?.[cleanPath] ?? meta?.[propPath] ?? (propPath === "name" ? options.inputValue.name : undefined);
+        left =
+          meta?.[cleanPath] ??
+          meta?.[propPath] ??
+          (propPath === "name" ? options.inputValue.name : undefined);
       } else if ("value" in options.inputValue) {
         left = options.inputValue.value;
       }
@@ -520,7 +523,8 @@ export function validateModelGraph(
       if (filled.get(node.id)?.has(port.id)) continue;
       const typed = node.parameters?.[port.id];
       if (typed !== undefined && typed !== null && typed !== "") continue;
-      if (node.layerId && (port.id === "collection" || port.id === "input" || port.id === "layer")) continue;
+      if (node.layerId && (port.id === "collection" || port.id === "input" || port.id === "layer"))
+        continue;
       issues.push({
         code: "missing-input",
         nodeId: node.id,
@@ -537,7 +541,7 @@ export function validateModelGraph(
           code: "missing-input",
           nodeId: node.id,
           detail: "collection",
-          message: 'Iterate Features requires an input collection connection or layer.',
+          message: "Iterate Features requires an input collection connection or layer.",
         });
       }
       if (node.body) {
@@ -550,15 +554,18 @@ export function validateModelGraph(
     if (node.kind === "iterate-rasters") {
       const hasCollectionEdge = filled.get(node.id)?.has(ITERATE_RASTERS_INPUT_PORT);
       const hasLayers =
-        (Array.isArray(node.parameters?.layers) && (node.parameters.layers as unknown[]).length > 0) ||
-        (typeof node.parameters?.layers === "string" && (node.parameters.layers as string).trim().length > 0) ||
+        (Array.isArray(node.parameters?.layers) &&
+          (node.parameters.layers as unknown[]).length > 0) ||
+        (typeof node.parameters?.layers === "string" &&
+          (node.parameters.layers as string).trim().length > 0) ||
         !!node.layerId;
       if (!hasCollectionEdge && !hasLayers) {
         issues.push({
           code: "missing-input",
           nodeId: node.id,
           detail: "collection",
-          message: 'Iterate Rasters requires an input collection connection or configured raster layers.',
+          message:
+            "Iterate Rasters requires an input collection connection or configured raster layers.",
         });
       }
       if (node.body) {
@@ -574,17 +581,21 @@ export function validateModelGraph(
           code: "missing-input",
           nodeId: node.id,
           detail: "item",
-          message: 'Collect Results requires an incoming connection to collect.',
+          message: "Collect Results requires an incoming connection to collect.",
         });
       }
     }
     if (node.kind === "conditional-switch") {
-      if (!filled.get(node.id)?.has(SWITCH_INPUT_PORT) && !node.parameters?.input && !node.layerId) {
+      if (
+        !filled.get(node.id)?.has(SWITCH_INPUT_PORT) &&
+        !node.parameters?.input &&
+        !node.layerId
+      ) {
         issues.push({
           code: "missing-input",
           nodeId: node.id,
           detail: "input",
-          message: 'Conditional Switch requires an incoming data connection to route.',
+          message: "Conditional Switch requires an incoming data connection to route.",
         });
       }
     }
@@ -595,7 +606,7 @@ export function validateModelGraph(
         issues.push({
           code: "missing-input",
           nodeId: node.id,
-          message: 'Conditional Merge requires at least one branch input connection.',
+          message: "Conditional Merge requires at least one branch input connection.",
         });
       }
     }
@@ -787,7 +798,8 @@ async function executeSingleNode(
   if (node.kind === "conditional-merge") {
     options.onNodeStatus?.(node.id, "running");
     const activeVal = inputs[MERGE_TRUE_PORT] ?? inputs[MERGE_FALSE_PORT];
-    if (!activeVal) return { error: `Conditional Merge "${node.id}" received no active branch result.` };
+    if (!activeVal)
+      return { error: `Conditional Merge "${node.id}" received no active branch result.` };
     produced.set(node.id, { [MERGE_OUTPUT_PORT]: activeVal });
     options.onNodeStatus?.(node.id, "done");
     return {};
@@ -853,7 +865,8 @@ export async function runModelGraph(
 
   const descriptors = new Map<string, ModelToolDescriptor | undefined>();
   for (const node of graph.nodes) {
-    if (node.kind === "tool") descriptors.set(node.id, options.resolveDescriptor(node.provider, node.toolId));
+    if (node.kind === "tool")
+      descriptors.set(node.id, options.resolveDescriptor(node.provider, node.toolId));
   }
 
   const produced = new Map<string, Record<string, ValueOrSkipped>>();
@@ -933,7 +946,11 @@ export async function runModelGraph(
         if (value.kind === "raster-collection") {
           value.items.forEach((item, idx) => {
             const subName = item.name ? `${name} - ${item.name}` : `${name} ${idx + 1}`;
-            options.emitOutput(subName, { kind: "raster", bytes: item.bytes, name: item.name, metadata: item.metadata }, node);
+            options.emitOutput(
+              subName,
+              { kind: "raster", bytes: item.bytes, name: item.name, metadata: item.metadata },
+              node,
+            );
           });
         } else {
           options.emitOutput(name, value, node);
@@ -1006,19 +1023,27 @@ export async function runModelGraph(
         const maxIterations = Math.max(0, Number(node.parameters?.maxIterations) || 1000);
         const stopOnError = node.parameters?.stopOnError !== false;
         const count = Math.min(features.length, maxIterations);
-        options.log(`Iterate Features "${node.id}": running iteration over ${count} features (total: ${features.length}).`);
+        options.log(
+          `Iterate Features "${node.id}": running iteration over ${count} features (total: ${features.length}).`,
+        );
 
         if (node.body) {
           const collected: FeatureCollection["features"] = [];
           for (let i = 0; i < count; i++) {
-            if (options.signal?.aborted) return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
             const feature = features[i];
             options.onIterationProgress?.(node.id, i + 1, count);
             const singleFC: FeatureCollection = { type: "FeatureCollection", features: [feature] };
             const subResult = await runModelGraph(node.body, {
               ...options,
               resolveInput: (layerId) => {
-                if (layerId === "current" || layerId === "item" || layerId === "feature" || !layerId) {
+                if (
+                  layerId === "current" ||
+                  layerId === "item" ||
+                  layerId === "feature" ||
+                  !layerId
+                ) {
                   return { kind: "vector", geojson: singleFC };
                 }
                 return options.resolveInput(layerId);
@@ -1058,7 +1083,8 @@ export async function runModelGraph(
           const bodyNodes = findNodesBetween(graph, node.id, collector.id);
           const collected: FeatureCollection["features"] = [];
           for (let i = 0; i < count; i++) {
-            if (options.signal?.aborted) return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
             const feature = features[i];
             options.onIterationProgress?.(node.id, i + 1, count);
             const singleFC: FeatureCollection = { type: "FeatureCollection", features: [feature] };
@@ -1070,7 +1096,13 @@ export async function runModelGraph(
             });
             let iterFailed = false;
             for (const bn of bodyNodes) {
-              const stepRes = await executeSingleNode(bn, graph, iterProduced, options, descriptors);
+              const stepRes = await executeSingleNode(
+                bn,
+                graph,
+                iterProduced,
+                options,
+                descriptors,
+              );
               if (stepRes.error) {
                 iterFailed = true;
                 const message = `Iteration ${i + 1}/${count} failed at "${bn.id}": ${stepRes.error}`;
@@ -1127,18 +1159,31 @@ export async function runModelGraph(
 
       if (node.kind === "iterate-rasters") {
         options.onNodeStatus?.(node.id, "running");
-        let rasterItems: Array<{ bytes: Uint8Array; name?: string; metadata?: Record<string, unknown> }> = [];
+        let rasterItems: Array<{
+          bytes: Uint8Array;
+          name?: string;
+          metadata?: Record<string, unknown>;
+        }> = [];
         const incomingColl = inputs[ITERATE_RASTERS_INPUT_PORT];
         if (incomingColl) {
           if (incomingColl.kind === "raster-collection") {
             rasterItems = incomingColl.items;
           } else if (incomingColl.kind === "raster") {
-            rasterItems = [{ bytes: incomingColl.bytes, name: incomingColl.name, metadata: incomingColl.metadata }];
+            rasterItems = [
+              {
+                bytes: incomingColl.bytes,
+                name: incomingColl.name,
+                metadata: incomingColl.metadata,
+              },
+            ];
           }
         } else if (node.parameters?.layers) {
           const layerList = Array.isArray(node.parameters.layers)
             ? (node.parameters.layers as string[])
-            : String(node.parameters.layers).split(",").map((s) => s.trim()).filter(Boolean);
+            : String(node.parameters.layers)
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
           for (const lid of layerList) {
             const res = await options.resolveInput(lid);
             if (res && res.kind === "raster") {
@@ -1148,19 +1193,30 @@ export async function runModelGraph(
         } else if (node.layerId) {
           const res = await options.resolveInput(node.layerId);
           if (res && res.kind === "raster") {
-            rasterItems.push({ bytes: res.bytes, name: res.name ?? node.layerId, metadata: res.metadata });
+            rasterItems.push({
+              bytes: res.bytes,
+              name: res.name ?? node.layerId,
+              metadata: res.metadata,
+            });
           }
         }
 
         const maxIterations = Math.max(0, Number(node.parameters?.maxIterations) || 1000);
         const stopOnError = node.parameters?.stopOnError !== false;
         const count = Math.min(rasterItems.length, maxIterations);
-        options.log(`Iterate Rasters "${node.id}": running iteration over ${count} rasters (total: ${rasterItems.length}).`);
+        options.log(
+          `Iterate Rasters "${node.id}": running iteration over ${count} rasters (total: ${rasterItems.length}).`,
+        );
 
         if (node.body) {
-          const collectedRasters: Array<{ bytes: Uint8Array; name?: string; metadata?: Record<string, unknown> }> = [];
+          const collectedRasters: Array<{
+            bytes: Uint8Array;
+            name?: string;
+            metadata?: Record<string, unknown>;
+          }> = [];
           for (let i = 0; i < count; i++) {
-            if (options.signal?.aborted) return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
             const rItem = rasterItems[i];
             options.onIterationProgress?.(node.id, i + 1, count);
             const singleRasterVal: ModelValue = {
@@ -1172,7 +1228,12 @@ export async function runModelGraph(
             const subResult = await runModelGraph(node.body, {
               ...options,
               resolveInput: (layerId) => {
-                if (layerId === "current" || layerId === "item" || layerId === "raster" || !layerId) {
+                if (
+                  layerId === "current" ||
+                  layerId === "item" ||
+                  layerId === "raster" ||
+                  !layerId
+                ) {
                   return singleRasterVal;
                 }
                 return options.resolveInput(layerId);
@@ -1191,7 +1252,11 @@ export async function runModelGraph(
             } else {
               for (const outVal of Object.values(subResult.outputs)) {
                 if (outVal.kind === "raster") {
-                  collectedRasters.push({ bytes: outVal.bytes, name: outVal.name ?? rItem.name, metadata: outVal.metadata });
+                  collectedRasters.push({
+                    bytes: outVal.bytes,
+                    name: outVal.name ?? rItem.name,
+                    metadata: outVal.metadata,
+                  });
                 } else if (outVal.kind === "raster-collection") {
                   collectedRasters.push(...outVal.items);
                 }
@@ -1203,8 +1268,13 @@ export async function runModelGraph(
             items: collectedRasters,
           };
           produced.set(node.id, {
-            [ITERATE_RASTERS_OUTPUT_RASTER]: collectedRasters[0] ? { kind: "raster", ...collectedRasters[0] } : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
-            [ITERATE_RASTERS_OUTPUT_NAME]: { kind: "string", value: collectedRasters[0]?.name ?? "" },
+            [ITERATE_RASTERS_OUTPUT_RASTER]: collectedRasters[0]
+              ? { kind: "raster", ...collectedRasters[0] }
+              : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
+            [ITERATE_RASTERS_OUTPUT_NAME]: {
+              kind: "string",
+              value: collectedRasters[0]?.name ?? "",
+            },
             [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count },
             [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
           });
@@ -1215,9 +1285,14 @@ export async function runModelGraph(
         const collector = findDownstreamCollector(graph, node.id);
         if (collector) {
           const bodyNodes = findNodesBetween(graph, node.id, collector.id);
-          const collectedRasters: Array<{ bytes: Uint8Array; name?: string; metadata?: Record<string, unknown> }> = [];
+          const collectedRasters: Array<{
+            bytes: Uint8Array;
+            name?: string;
+            metadata?: Record<string, unknown>;
+          }> = [];
           for (let i = 0; i < count; i++) {
-            if (options.signal?.aborted) return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
             const rItem = rasterItems[i];
             options.onIterationProgress?.(node.id, i + 1, count);
             const singleRasterVal: ModelValue = {
@@ -1235,7 +1310,13 @@ export async function runModelGraph(
             });
             let iterFailed = false;
             for (const bn of bodyNodes) {
-              const stepRes = await executeSingleNode(bn, graph, iterProduced, options, descriptors);
+              const stepRes = await executeSingleNode(
+                bn,
+                graph,
+                iterProduced,
+                options,
+                descriptors,
+              );
               if (stepRes.error) {
                 iterFailed = true;
                 const message = `Iteration ${i + 1}/${count} failed at "${bn.id}": ${stepRes.error}`;
@@ -1254,7 +1335,11 @@ export async function runModelGraph(
                 const val = iterProduced.get(edge.from)?.[edge.fromPort];
                 if (val && val !== SKIPPED) {
                   if (val.kind === "raster") {
-                    collectedRasters.push({ bytes: val.bytes, name: val.name ?? rItem.name, metadata: val.metadata });
+                    collectedRasters.push({
+                      bytes: val.bytes,
+                      name: val.name ?? rItem.name,
+                      metadata: val.metadata,
+                    });
                   } else if (val.kind === "raster-collection") {
                     collectedRasters.push(...val.items);
                   }
@@ -1277,8 +1362,13 @@ export async function runModelGraph(
             [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: collectedRasters.length },
           });
           produced.set(node.id, {
-            [ITERATE_RASTERS_OUTPUT_RASTER]: collectedRasters[0] ? { kind: "raster", ...collectedRasters[0] } : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
-            [ITERATE_RASTERS_OUTPUT_NAME]: { kind: "string", value: collectedRasters[0]?.name ?? "" },
+            [ITERATE_RASTERS_OUTPUT_RASTER]: collectedRasters[0]
+              ? { kind: "raster", ...collectedRasters[0] }
+              : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
+            [ITERATE_RASTERS_OUTPUT_NAME]: {
+              kind: "string",
+              value: collectedRasters[0]?.name ?? "",
+            },
             [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count },
             [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
           });
@@ -1287,7 +1377,9 @@ export async function runModelGraph(
         }
 
         produced.set(node.id, {
-          [ITERATE_RASTERS_OUTPUT_RASTER]: rasterItems[0] ? { kind: "raster", ...rasterItems[0] } : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
+          [ITERATE_RASTERS_OUTPUT_RASTER]: rasterItems[0]
+            ? { kind: "raster", ...rasterItems[0] }
+            : (inputs[ITERATE_RASTERS_INPUT_PORT] ?? { kind: "raster", bytes: new Uint8Array() }),
           [ITERATE_RASTERS_OUTPUT_NAME]: { kind: "string", value: rasterItems[0]?.name ?? "" },
           [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: 0 },
           [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },

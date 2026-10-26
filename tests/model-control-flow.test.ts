@@ -474,9 +474,21 @@ describe("Model Builder Control Flow - Conditional Branch Execution", () => {
 describe("Model Builder Control Flow - Feature Iterator Execution", () => {
   it("iterates over features one by one with isolated context and collects results", async () => {
     const features: Feature[] = [
-      { type: "Feature", geometry: { type: "Point", coordinates: [10, 20] }, properties: { id: 1 } },
-      { type: "Feature", geometry: { type: "Point", coordinates: [30, 40] }, properties: { id: 2 } },
-      { type: "Feature", geometry: { type: "Point", coordinates: [50, 60] }, properties: { id: 3 } },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [10, 20] },
+        properties: { id: 1 },
+      },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [30, 40] },
+        properties: { id: 2 },
+      },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [50, 60] },
+        properties: { id: 3 },
+      },
     ];
     const inputVec = makeVectorValue(features);
 
@@ -602,9 +614,21 @@ describe("Model Builder Control Flow - Feature Iterator Execution", () => {
 
   it("handles iteration failure with stopOnError: true", async () => {
     const features: Feature[] = [
-      { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: { fail: false } },
-      { type: "Feature", geometry: { type: "Point", coordinates: [1, 1] }, properties: { fail: true } },
-      { type: "Feature", geometry: { type: "Point", coordinates: [2, 2] }, properties: { fail: false } },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { fail: false },
+      },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [1, 1] },
+        properties: { fail: true },
+      },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [2, 2] },
+        properties: { fail: false },
+      },
     ];
     const inputVec = makeVectorValue(features);
 
@@ -739,8 +763,22 @@ describe("Model Builder Control Flow - Raster Iterator Execution", () => {
 describe("Model Builder Control Flow - Nested Control Flow", () => {
   it("executes a conditional switch inside an iteration body", async () => {
     const features: Feature[] = [
-      { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: { type: "point" } },
-      { type: "Feature", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] }, properties: { type: "line" } },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [0, 0] },
+        properties: { type: "point" },
+      },
+      {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+        properties: { type: "line" },
+      },
     ];
     const inputVec = makeVectorValue(features);
 
@@ -757,7 +795,14 @@ describe("Model Builder Control Flow - Nested Control Flow", () => {
           parameters: { property: "type", operator: "==", value: "point" },
         },
         { id: "buffer_pts", kind: "tool", x: 300, y: -50, provider: "vector", toolId: "buffer" },
-        { id: "centroid_lines", kind: "tool", x: 300, y: 50, provider: "vector", toolId: "centroid" },
+        {
+          id: "centroid_lines",
+          kind: "tool",
+          x: 300,
+          y: 50,
+          provider: "vector",
+          toolId: "centroid",
+        },
         { id: "merge", kind: "conditional-merge", x: 400, y: 0 },
         { id: "collect", kind: "collect-results", x: 500, y: 0 },
         { id: "out", kind: "output", x: 600, y: 0, name: "Harmonized" },

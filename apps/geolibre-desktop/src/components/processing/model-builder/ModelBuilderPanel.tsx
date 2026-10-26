@@ -321,7 +321,9 @@ export function ModelBuilderPanel({
   const [running, setRunning] = useState(false);
   /** Script for the last graph that completed successfully, not later canvas edits. */
   const [pythonScript, setPythonScript] = useState<string | null>(null);
-  const [nodeStatus, setNodeStatus] = useState<Record<string, "running" | "done" | "error" | "skipped">>({});
+  const [nodeStatus, setNodeStatus] = useState<
+    Record<string, "running" | "done" | "error" | "skipped">
+  >({});
   /**
    * The output port a keyboard/click user has armed, waiting for an input port
    * to complete the connection. Null during pointer drags, which carry their
@@ -767,12 +769,7 @@ export function ModelBuilderPanel({
         | "conditional-switch"
         | "conditional-merge",
     ) => {
-      const next = addControlNode(
-        graph,
-        kind,
-        { x: 24 + NODE_WIDTH + 36, y: 48 },
-        createId,
-      );
+      const next = addControlNode(graph, kind, { x: 24 + NODE_WIDTH + 36, y: 48 }, createId);
       setGraph(next.graph);
       setSelectedNodeId(next.nodeId);
     },
@@ -2506,8 +2503,14 @@ function NodeInspector({
               id="iter-max"
               type="number"
               className="h-7 text-xs"
-              value={node.parameters?.maxIterations !== undefined ? String(node.parameters.maxIterations) : "1000"}
-              onChange={(event) => onParamChange("maxIterations", Number(event.target.value) || 1000)}
+              value={
+                node.parameters?.maxIterations !== undefined
+                  ? String(node.parameters.maxIterations)
+                  : "1000"
+              }
+              onChange={(event) =>
+                onParamChange("maxIterations", Number(event.target.value) || 1000)
+              }
             />
           </div>
           <div className="flex items-center justify-between pt-1">

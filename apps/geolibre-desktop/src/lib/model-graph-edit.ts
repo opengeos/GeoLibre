@@ -91,7 +91,11 @@ export function addControlNode(
   graph: ProcessingModelGraph,
   kind: Extract<
     ModelGraphNodeKind,
-    "iterate-features" | "iterate-rasters" | "collect-results" | "conditional-switch" | "conditional-merge"
+    | "iterate-features"
+    | "iterate-rasters"
+    | "collect-results"
+    | "conditional-switch"
+    | "conditional-merge"
   >,
   position: { x: number; y: number },
   createId: () => string,
