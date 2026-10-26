@@ -2945,7 +2945,8 @@
       "viewUnavailable": "The current map view is unavailable.",
       "selectError": "The selected project could not be read.",
       "restoring": "Opening your startup project…",
-      "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead."
+      "loadWarning": "The startup project is unavailable. GeoLibre opened the default workspace instead.",
+      "storedCopyWarning": "GeoLibre could not read the project file and opened the copy it kept when the project was last opened or saved. Changes made to the file since are missing. Open the file again with Open Project from File to load its current contents."
     },
     "map": {
       "constraintsTitle": "Map constraints",

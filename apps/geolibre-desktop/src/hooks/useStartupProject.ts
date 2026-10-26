@@ -265,6 +265,14 @@ export function useStartupProject(): {
         const { projectGeneration, isDirty } = useAppStore.getState();
         if (projectGeneration !== restoringOver || isDirty) return;
         useAppStore.getState().loadProject(project, result.path);
+        // Kept on screen: the project may be missing changes made to the file
+        // since, and the user should not keep working without knowing.
+        if (result.fromStoredCopy) {
+          notify.warning(t("settings.startup.storedCopyWarning"), {
+            dedupeKey: "stored-project-copy",
+            durationMs: null,
+          });
+        }
       } catch (error) {
         if (cancelled) return;
         if (error instanceof RecentProjectGoneError) {
