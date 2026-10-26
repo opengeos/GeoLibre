@@ -315,7 +315,11 @@ async function render({ model, el }) {
       if (setting && typeof setting === "object") {
         const { visible, ...options } = setting;
         const params = { control, visible: Boolean(visible) };
-        if (Object.keys(options).length > 0) params.options = options;
+        // Only Measure and Minimap take options; the app rejects them elsewhere,
+        // which would leave that panel closed.
+        if (Object.keys(options).length > 0 && (control === "measure" || control === "minimap")) {
+          params.options = options;
+        }
         postUiCommand("setControlVisible", params);
       } else {
         postUiCommand("setControlVisible", { control, visible: Boolean(setting) });

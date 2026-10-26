@@ -116,9 +116,13 @@ export function openMeasurePanel(app: GeoLibreAppAPI, options?: GeoLibreMeasureO
   }
   const unitsChanged =
     next.distanceUnit !== measureUnits.distanceUnit || next.areaUnit !== measureUnits.areaUnit;
+  // Nothing to change on an open control: keep the viewer's collapsed state.
+  if (!unitsChanged && collapsed === undefined && measureControlMounted) return;
+  // A rebuild for new units keeps a folded ruler folded unless told otherwise.
+  const wasCollapsed = measureControl?.getState().collapsed === true;
   if (unitsChanged && measureControl) removeMeasureControl(app);
   measureUnits = next;
-  void openStandaloneMeasureControl(app, collapsed ?? false);
+  void openStandaloneMeasureControl(app, collapsed ?? (unitsChanged && wasCollapsed));
 }
 
 export function closeMeasurePanel(app: GeoLibreAppAPI): void {

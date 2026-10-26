@@ -371,6 +371,19 @@ describe("built-in control panel API", () => {
     assert.equal(rulers[2].options.distanceUnit, "kilometers");
   });
 
+  it("keeps a folded ruler folded when only its units change or nothing does", async () => {
+    openControlPanel(app, "measure", { collapsed: true });
+    await settle();
+    openControlPanel(app, "measure", {});
+    await settle();
+    assert.equal(rulers.length, 1);
+    assert.equal(rulers[0].collapsed, true);
+    openControlPanel(app, "measure", { distanceUnit: "feet" });
+    await settle();
+    assert.equal(rulers.length, 2);
+    assert.equal(rulers[1].collapsed, true);
+  });
+
   it("rejects invalid Measure options before touching an open panel", async () => {
     openControlPanel(app, "measure");
     await settle();

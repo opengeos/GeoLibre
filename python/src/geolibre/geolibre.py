@@ -3776,7 +3776,9 @@ class Map(anywidget.AnyWidget):
         if collapsed is not None:
             if name not in _COLLAPSIBLE_PANELS:
                 raise ValueError(f"collapsed applies only to {sorted(_COLLAPSIBLE_PANELS)}")
-            options["collapsed"] = bool(collapsed)
+            if not isinstance(collapsed, bool):
+                raise ValueError("collapsed must be a boolean")
+            options["collapsed"] = collapsed
         for key, value, units in (
             ("distanceUnit", distance_unit, MEASURE_DISTANCE_UNITS),
             ("areaUnit", area_unit, MEASURE_AREA_UNITS),

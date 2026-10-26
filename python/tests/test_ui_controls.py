@@ -116,6 +116,7 @@ def test_show_control_measure_options(m):
         ("minimap", {"distance_unit": "feet"}, "applies only to 'measure'"),
         ("measure", {"distance_unit": "furlongs"}, "Unknown distanceUnit"),
         ("measure", {"area_unit": "feet"}, "Unknown areaUnit"),
+        ("measure", {"collapsed": "false"}, "collapsed must be a boolean"),
     ],
 )
 def test_show_control_rejects_bad_options(m, name, kwargs, match):

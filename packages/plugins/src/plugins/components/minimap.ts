@@ -118,6 +118,10 @@ async function openStandaloneMinimapControl(
   }
 
   const control = minimapControl;
+  // Apply an explicit request now, not only in the deferred callback: a
+  // basemap refresh in between reads this state to rebuild the overview.
+  if (collapsed === true) control.collapse();
+  else if (collapsed === false) control.expand();
   setTimeout(() => {
     if (request !== minimapRequest || minimapControl !== control) return;
     control.show();
