@@ -419,9 +419,7 @@ export function useFileDrop({
           if (file.size >= OSM_PBF_SIZE_WARN_BYTES) {
             const sizeMb = Math.round(file.size / (1024 * 1024));
             if (
-              !window.confirm(
-                t("toolbar.fileDrop.largeOsmPbfConfirm", { name: file.name, sizeMb }),
-              )
+              !window.confirm(t("toolbar.fileDrop.largeOsmPbfConfirm", { name: file.name, sizeMb }))
             ) {
               continue;
             }
