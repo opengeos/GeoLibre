@@ -199,14 +199,23 @@ def test_openapi_documents_bearer_auth_for_protected_routes(client):
     }
     assert schema["paths"]["/api/account"]["get"]["security"] == [{"HTTPBearer": []}]
     assert schema["paths"]["/api/projects"]["post"]["security"] == [{"HTTPBearer": []}]
-    assert schema["paths"]["/api/projects"]["get"]["security"] == [
-        {"HTTPBearer": []},
-        {},
+    optional_security = [{"HTTPBearer": []}, {}]
+    optional_routes = [
+        ("/api/groups/{group_id}/thumbnail", "get"),
+        ("/api/users/{username}/projects", "get"),
+        ("/api/projects", "get"),
+        ("/api/projects/{project_id}", "get"),
+        ("/api/projects/{project_id}/versions/{number}", "get"),
+        ("/api/projects/{project_id}/thumbnail", "get"),
+        ("/org/{organization_slug}/{slug}.geolibre.json", "get"),
+        ("/org/{organization_slug}/{slug}", "get"),
+        ("/{username}/{slug}.geolibre.json", "get"),
+        ("/org/{organization_slug}/{slug}/access", "post"),
+        ("/{username}/{slug}/access", "post"),
+        ("/{username}/{slug}", "get"),
     ]
-    assert schema["paths"]["/api/groups/{group_id}/thumbnail"]["get"]["security"] == [
-        {"HTTPBearer": []},
-        {},
-    ]
+    for path, method in optional_routes:
+        assert schema["paths"][path][method]["security"] == optional_security
     assert "security" not in schema["paths"]["/api/accounts"]["post"]
     assert "security" not in schema["paths"]["/api/auth/token"]["post"]
 
