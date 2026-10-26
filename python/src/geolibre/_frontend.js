@@ -309,8 +309,17 @@ async function render({ model, el }) {
       postUiCommand("setIdentify", { layerId: ui.identify ?? null });
     }
     if (!controls) return;
-    for (const [control, visible] of Object.entries(ui.controls || {})) {
-      postUiCommand("setControlVisible", { control, visible: Boolean(visible) });
+    for (const [control, setting] of Object.entries(ui.controls || {})) {
+      // `show_control(..., collapsed=..., distance_unit=...)` stores
+      // `{ visible, ...options }` instead of a plain boolean.
+      if (setting && typeof setting === "object") {
+        const { visible, ...options } = setting;
+        const params = { control, visible: Boolean(visible) };
+        if (Object.keys(options).length > 0) params.options = options;
+        postUiCommand("setControlVisible", params);
+      } else {
+        postUiCommand("setControlVisible", { control, visible: Boolean(setting) });
+      }
     }
   }
 

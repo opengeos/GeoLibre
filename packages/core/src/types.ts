@@ -2632,9 +2632,23 @@ export interface ProjectInteraction {
   identify?: string | string[] | null;
   /**
    * Map control or toolbar panel name (`"search"`, `"bookmark"`, `"globe"`,
-   * ...) to whether it starts shown. Unknown names are ignored on open.
+   * ...) to whether it starts shown, or to a {@link ProjectControlSetting}
+   * that also carries the control's options. Unknown names are ignored on open.
    */
-  controls?: Record<string, boolean>;
+  controls?: Record<string, boolean | ProjectControlSetting>;
+}
+
+/**
+ * A control's startup state with options, for example
+ * `{ "visible": true, "collapsed": true, "distanceUnit": "feet" }` for the
+ * Measure panel (issue #3241). Measure takes `collapsed`, `distanceUnit` and
+ * `areaUnit`; Minimap takes `collapsed`, `zoomOffset`, `width` and `height`.
+ */
+export interface ProjectControlSetting {
+  /** Whether the control starts shown. */
+  visible: boolean;
+  /** Control-specific options; the app validates them when it applies them. */
+  [option: string]: string | number | boolean;
 }
 
 export type CommentAnchor =

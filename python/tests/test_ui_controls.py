@@ -91,6 +91,50 @@ def test_show_control_rejects_unknown_name(m):
         m.show_control("terrain")
 
 
+def test_show_control_measure_options(m):
+    """Measure options are stored with the visibility (issue #3241)."""
+    m.show_control("measure", collapsed=True, distance_unit="feet", area_unit="acres")
+    assert m._ui["controls"]["measure"] == {
+        "visible": True,
+        "collapsed": True,
+        "distanceUnit": "feet",
+        "areaUnit": "acres",
+    }
+    m.show_control("minimap", collapsed=True)
+    assert m._ui["controls"]["minimap"] == {"visible": True, "collapsed": True}
+    # A plain call keeps the boolean form, and hiding drops the options.
+    m.show_control("measure")
+    assert m._ui["controls"]["measure"] is True
+    m.show_control("minimap", False, collapsed=True)
+    assert m._ui["controls"]["minimap"] is False
+
+
+@pytest.mark.parametrize(
+    ("name", "kwargs", "match"),
+    [
+        ("search", {"collapsed": True}, "collapsed applies only"),
+        ("minimap", {"distance_unit": "feet"}, "applies only to 'measure'"),
+        ("measure", {"distance_unit": "furlongs"}, "Unknown distanceUnit"),
+        ("measure", {"area_unit": "feet"}, "Unknown areaUnit"),
+    ],
+)
+def test_show_control_rejects_bad_options(m, name, kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        m.show_control(name, **kwargs)
+
+
+def test_measure_options_round_trip(m, tmp_path):
+    """Control options survive save_project and load_project."""
+    m.show_control("measure", collapsed=True, distance_unit="miles")
+    expected = {"controls": {"measure": {"visible": True, "collapsed": True, "distanceUnit": "miles"}}}
+    assert m.to_project()["interaction"] == expected
+    out = tmp_path / "map.geolibre.json"
+    m.save_project(str(out))
+    other = Map()
+    other.load_project(str(out))
+    assert other._ui["controls"] == expected["controls"]
+
+
 def test_set_projection_writes_project_preferences(m):
     assert m.projection == "globe"
     m.set_projection("mercator")

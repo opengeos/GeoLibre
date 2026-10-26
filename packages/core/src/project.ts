@@ -63,6 +63,7 @@ import {
   type CommentAuthor,
   type CommentReply,
   type ProjectComment,
+  type ProjectControlSetting,
   type ProjectInteraction,
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
@@ -1509,9 +1510,29 @@ export function normalizeProjectInteraction(value: unknown): ProjectInteraction 
     if (ids.length > 0) result.identify = ids;
   }
   if (raw.controls && typeof raw.controls === "object" && !Array.isArray(raw.controls)) {
-    const controls: Record<string, boolean> = {};
+    const controls: Record<string, boolean | ProjectControlSetting> = {};
     for (const [name, shown] of Object.entries(raw.controls)) {
-      if (name && typeof shown === "boolean") controls[name] = shown;
+      if (!name) continue;
+      if (typeof shown === "boolean") {
+        controls[name] = shown;
+        continue;
+      }
+      // `{ visible, ...options }` (issue #3241). Options are kept as written,
+      // like the names: the app validates them when it applies them.
+      if (!shown || typeof shown !== "object" || Array.isArray(shown)) continue;
+      const setting = shown as Record<string, unknown>;
+      if (typeof setting.visible !== "boolean") continue;
+      const kept: ProjectControlSetting = { visible: setting.visible };
+      for (const [option, value] of Object.entries(setting)) {
+        if (
+          typeof value === "string" ||
+          typeof value === "boolean" ||
+          (typeof value === "number" && Number.isFinite(value))
+        ) {
+          kept[option] = value;
+        }
+      }
+      controls[name] = kept;
     }
     if (Object.keys(controls).length > 0) result.controls = controls;
   }

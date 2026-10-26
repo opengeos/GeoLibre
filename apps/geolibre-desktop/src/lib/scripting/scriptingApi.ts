@@ -271,13 +271,26 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     setControlVisible: (params) => {
       const control = params.control;
       const visible = Boolean(params.visible);
+      const options = params.options;
+      if (
+        options !== undefined &&
+        (options === null || typeof options !== "object" || Array.isArray(options))
+      ) {
+        throw new Error("setControlVisible: options must be an object");
+      }
       if (isScriptablePanel(control)) {
         // The shared helpers make opens idempotent. Always forward a close
         // so it can cancel initialization before a panel becomes visible.
+        // Options (Measure's collapsed state and units, Minimap's size) are
+        // validated by the panel itself (GeoLibre#3241).
         const app = createAppAPI(controllerRefFrom(getController));
-        if (visible) app.openControlPanel(control);
-        else app.closeControlPanel(control);
+        if (!visible) app.closeControlPanel(control);
+        else if (options === undefined) app.openControlPanel(control);
+        else app.openControlPanel(control, options);
         return visible;
+      }
+      if (options !== undefined) {
+        throw new Error("setControlVisible: options are only supported for measure and minimap");
       }
       if (isScriptableMapControl(control)) {
         // Record before applying. The controller is created asynchronously, so a
