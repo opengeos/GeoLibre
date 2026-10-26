@@ -2502,15 +2502,21 @@ function NodeInspector({
             <Input
               id="iter-max"
               type="number"
-              className="h-7 text-xs"
+              placeholder="1000"
               value={
                 node.parameters?.maxIterations !== undefined
                   ? String(node.parameters.maxIterations)
-                  : "1000"
+                  : ""
               }
-              onChange={(event) =>
-                onParamChange("maxIterations", Number(event.target.value) || 1000)
-              }
+              onChange={(event) => {
+                const val = event.target.value.trim();
+                if (val === "") {
+                  onParamChange("maxIterations", undefined);
+                } else {
+                  const num = Number(val);
+                  onParamChange("maxIterations", Number.isNaN(num) ? undefined : num);
+                }
+              }}
             />
           </div>
           <div className="flex items-center justify-between pt-1">

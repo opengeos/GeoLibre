@@ -11,6 +11,7 @@ import {
   topologicalOrder,
   validateModelGraph,
   evaluateCondition,
+  portsFor,
   type ProcessingAlgorithm,
   type ProcessingContext,
   type WhiteboxLayerInput,
@@ -529,6 +530,17 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const byKey = new Map(catalog.map((descriptor) => [descriptor.key, descriptor]));
       const resolve = (provider: string | undefined, toolId: string | undefined) =>
         provider && toolId ? byKey.get(`${provider}:${toolId}`) : undefined;
+      for (const node of graph.nodes) {
+        if (
+          node.kind === "iterate-features" ||
+          node.kind === "iterate-rasters" ||
+          node.kind === "collect-results"
+        ) {
+          throw new Error(
+            `runModelBuilder: Iteration nodes ("${node.kind}") are not supported via scripting API execution; run this model in Model Builder to execute iterators.`,
+          );
+        }
+      }
       const issues = validateModelGraph(graph, resolve);
       if (issues.length) throw new Error(issues.map((issue) => issue.message).join("\n"));
       const ordered = topologicalOrder(graph);
@@ -562,17 +574,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           allSkipped = false;
         }
         if (allSkipped) {
-          produced.set(
-            node.id,
-            new Map([
-              ["true", SKIPPED],
-              ["false", SKIPPED],
-              ["out", SKIPPED],
-              ["feature", SKIPPED],
-              ["raster", SKIPPED],
-              ["collection", SKIPPED],
-            ]),
-          );
+          const desc = node.kind === "tool" ? resolve(node.provider, node.toolId) : undefined;
+          const nodePorts = portsFor(node, desc);
+          const skippedOutputs = new Map<string, string>();
+          for (const outPort of nodePorts.outputs) {
+            skippedOutputs.set(outPort.id, SKIPPED);
+          }
+          produced.set(node.id, skippedOutputs);
           continue;
         }
 
@@ -654,25 +662,6 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           } else {
             produced.set(node.id, new Map([["out", activeId]]));
           }
-          continue;
-        }
-
-        if (
-          node.kind === "iterate-features" ||
-          node.kind === "collect-results" ||
-          node.kind === "iterate-rasters"
-        ) {
-          const edge = incoming.get(node.id)?.[0];
-          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : (node.layerId ?? "");
-          produced.set(
-            node.id,
-            new Map([
-              ["feature", layerId ?? ""],
-              ["raster", layerId ?? ""],
-              ["collection", layerId ?? ""],
-              ["out", layerId ?? ""],
-            ]),
-          );
           continue;
         }
 

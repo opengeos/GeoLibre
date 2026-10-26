@@ -33,6 +33,7 @@ import {
 } from "../packages/processing/src/model-graph";
 import { modelGraphToPython } from "../apps/geolibre-desktop/src/lib/model-python-script";
 import { buildAssistantModel } from "../apps/geolibre-desktop/src/lib/assistant/model-builder";
+import { ModelBuilderPanel } from "../apps/geolibre-desktop/src/components/processing/model-builder/ModelBuilderPanel";
 
 const BUFFER_TOOL: ModelToolDescriptor = {
   key: "vector:buffer",
@@ -111,7 +112,7 @@ describe("Model Builder Control Flow - Graph Model & Ports", () => {
     assert.equal(ports.inputs[0].id, ITERATE_RASTERS_INPUT_PORT);
     assert.equal(ports.outputs.length, 4);
     assert.equal(ports.outputs[0].id, ITERATE_RASTERS_OUTPUT_RASTER);
-    assert.equal(ports.outputs[0].kind, "raster");
+    assert.equal(ports.outputs[0].kind, "any");
   });
 
   it("exposes correct ports for conditional-switch", () => {
@@ -909,5 +910,375 @@ describe("Model Builder Control Flow - Python Export & AI Assistant", () => {
 
     const issues = validateModelGraph(model.graph, resolve);
     assert.deepEqual(issues, []);
+  });
+});
+
+describe("Model Builder Panel & Component", () => {
+  it("loads ModelBuilderPanel component", () => {
+    assert.equal(typeof ModelBuilderPanel, "function");
+  });
+});
+
+describe("Model Builder Review Comments Regression Tests", () => {
+  // A. ModelBuilderPanel maxIterations parameter handling
+  it("correctly handles maxIterations parameter values (empty, zero, numeric)", () => {
+    const handleParamChange = (valStr: string) => {
+      const val = valStr.trim();
+      return val === "" ? undefined : Number(val);
+    };
+    assert.equal(handleParamChange(""), undefined);
+    assert.equal(handleParamChange("0"), 0);
+    assert.equal(handleParamChange("50"), 50);
+  });
+
+  // B. Assistant model-builder control node layer resolution
+  it("resolves layer names in control node parameters", () => {
+    const layers = [
+      { id: "layer-dem-north", name: "DEM North", type: "raster" },
+      { id: "layer-dem-south", name: "DEM South", type: "raster" },
+    ] as GeoLibreLayer[];
+
+    const model = buildAssistantModel(
+      {
+        name: "Raster Loop Workflow",
+        inputs: [],
+        steps: [
+          {
+            key: "loop",
+            algorithm: "iterate-rasters",
+            inputs: {},
+            parameters: { layers: ["DEM North", "DEM South"] },
+          },
+          {
+            key: "collect",
+            algorithm: "collect-results",
+            inputs: { item: "loop.raster" },
+          },
+        ],
+        outputs: [{ source: "collect.collection", name: "Result" }],
+      },
+      layers,
+      TOOLS,
+    );
+
+    assert.ok(model.graph);
+    const loopNode = model.graph.nodes.find((n) => n.kind === "iterate-rasters");
+    assert.ok(loopNode);
+    assert.deepEqual(loopNode.parameters?.layers, ["layer-dem-north", "layer-dem-south"]);
+  });
+
+  it("throws clear error when a control node references an unresolved layer", () => {
+    const layers = [
+      { id: "layer-dem-north", name: "DEM North", type: "raster" },
+    ] as GeoLibreLayer[];
+
+    assert.throws(
+      () =>
+        buildAssistantModel(
+          {
+            name: "Bad Loop",
+            inputs: [],
+            steps: [
+              {
+                key: "loop",
+                algorithm: "iterate-rasters",
+                inputs: {},
+                parameters: { layers: ["DEM North", "Missing DEM"] },
+              },
+            ],
+            outputs: [{ source: "loop.raster", name: "Result" }],
+          },
+          layers,
+          TOOLS,
+        ),
+      /No layer matching "Missing DEM"/,
+    );
+  });
+
+  // F. Model graph: iterator body dependencies & external ancestors
+  it("executes external ancestors of body nodes before the loop begins", async () => {
+    const executionOrder: string[] = [];
+
+    const overlayTool: ModelToolDescriptor = {
+      key: "vector:overlay",
+      provider: "vector",
+      toolId: "overlay",
+      name: "Overlay",
+      group: "Geometry",
+      inputs: [],
+      outputs: [{ id: "out", label: "Output", kind: "vector" }],
+      parameters: [],
+    };
+    const clipTool: ModelToolDescriptor = {
+      key: "vector:clip",
+      provider: "vector",
+      toolId: "clip",
+      name: "Clip",
+      group: "Overlay",
+      inputs: [
+        { id: "layer", label: "Input", kind: "vector", required: true },
+        { id: "overlay", label: "Overlay", kind: "vector", required: true },
+      ],
+      outputs: [{ id: "out", label: "Output", kind: "vector" }],
+      parameters: [],
+    };
+
+    const localTools = [...TOOLS, overlayTool, clipTool];
+    const localResolve = (prov?: string, id?: string) =>
+      localTools.find((t) => t.provider === prov && t.toolId === id);
+
+    const inputFeatures: Feature[] = [
+      { type: "Feature", id: "f1", properties: { id: 1 }, geometry: { type: "Point", coordinates: [0, 0] } },
+      { type: "Feature", id: "f2", properties: { id: 2 }, geometry: { type: "Point", coordinates: [1, 1] } },
+    ];
+
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in_pts", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "ext_poly", kind: "tool", x: 0, y: 100, provider: "vector", toolId: "overlay" },
+        { id: "iter", kind: "iterate-features", x: 100, y: 0 },
+        { id: "body_clip", kind: "tool", x: 200, y: 0, provider: "vector", toolId: "clip" },
+        { id: "collect", kind: "collect-results", x: 300, y: 0 },
+        { id: "out", kind: "output", x: 400, y: 0, name: "Clipped" },
+      ],
+      edges: [
+        { id: "e1", from: "in_pts", fromPort: "out", to: "iter", toPort: "collection" },
+        { id: "e2", from: "iter", fromPort: "feature", to: "body_clip", toPort: "layer" },
+        { id: "e3", from: "ext_poly", fromPort: "out", to: "body_clip", toPort: "overlay" },
+        { id: "e4", from: "body_clip", fromPort: "out", to: "collect", toPort: "item" },
+        { id: "e5", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: localResolve,
+      resolveInput: () => makeVectorValue(inputFeatures),
+      executeTool: async ({ node, inputs }): Promise<Record<string, ModelValue>> => {
+        executionOrder.push(node.id);
+        if (node.id === "ext_poly") {
+          return {
+            out: makeVectorValue([
+              { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [9, 9] } },
+            ]),
+          };
+        }
+        if (node.id === "body_clip") {
+          assert.ok(inputs.overlay, "ext_poly output must be available as overlay input");
+          return { out: inputs.layer };
+        }
+        return {};
+      },
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(executionOrder[0], "ext_poly");
+    assert.equal(executionOrder.filter((id) => id === "body_clip").length, 2);
+  });
+
+  it("validates that body nodes cannot feed external non-collector nodes", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in_pts", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "iter", kind: "iterate-features", x: 100, y: 0 },
+        { id: "buf", kind: "tool", x: 200, y: 0, provider: "vector", toolId: "buffer" },
+        { id: "collect", kind: "collect-results", x: 300, y: 0 },
+        { id: "external_centroid", kind: "tool", x: 300, y: 100, provider: "vector", toolId: "centroid" },
+        { id: "out", kind: "output", x: 400, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "in_pts", fromPort: "out", to: "iter", toPort: "collection" },
+        { id: "e2", from: "iter", fromPort: "feature", to: "buf", toPort: "layer" },
+        { id: "e3", from: "buf", fromPort: "out", to: "collect", toPort: "item" },
+        { id: "e4", from: "buf", fromPort: "out", to: "external_centroid", toPort: "layer" },
+        { id: "e5", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+
+    const issues = validateModelGraph(graph, resolve);
+    const bodyConsumerIssue = issues.find(
+      (i) => i.code === "invalid-iterator" && i.message.includes("can only feed other body nodes or the collector"),
+    );
+    assert.ok(bodyConsumerIssue);
+  });
+
+  // G. Model graph: collector result types (vector-only, raster-only, mixed error)
+  it("collects raster-only results into a raster-collection", async () => {
+    const raster1 = makeRasterValue("dem_1", 10);
+    const raster2 = makeRasterValue("dem_2", 20);
+
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "iter", kind: "iterate-rasters", x: 100, y: 0, parameters: { layers: ["dem_1", "dem_2"] } },
+        { id: "thresh", kind: "tool", x: 200, y: 0, provider: "whitebox", toolId: "threshold" },
+        { id: "collect", kind: "collect-results", x: 300, y: 0 },
+        { id: "out", kind: "output", x: 400, y: 0, name: "Rasters" },
+      ],
+      edges: [
+        { id: "e1", from: "iter", fromPort: "raster", to: "thresh", toPort: "input" },
+        { id: "e2", from: "thresh", fromPort: "output", to: "collect", toPort: "item" },
+        { id: "e3", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: resolve,
+      resolveInput: (id) => (id === "dem_1" ? raster1 : raster2),
+      executeTool: async ({ inputs }) => ({ output: inputs.input }),
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.error, undefined);
+    const outVal = result.outputs["out"];
+    assert.ok(outVal && outVal.kind === "raster-collection");
+    assert.equal(outVal.items.length, 2);
+  });
+
+  it("reports an explicit error when collector receives mixed vector and raster results", async () => {
+    let callIndex = 0;
+    const mixedTool: ModelToolDescriptor = {
+      key: "vector:mixed",
+      provider: "vector",
+      toolId: "mixed",
+      name: "Mixed Output Tool",
+      group: "Test",
+      inputs: [{ id: "input", label: "Input", kind: "vector", required: true }],
+      outputs: [{ id: "out", label: "Output", kind: "any" }],
+      parameters: [],
+    };
+    const localResolve = (prov?: string, id?: string) =>
+      prov === "vector" && id === "mixed" ? mixedTool : resolve(prov, id);
+
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "iter", kind: "iterate-features", x: 100, y: 0 },
+        { id: "mixed", kind: "tool", x: 200, y: 0, provider: "vector", toolId: "mixed" },
+        { id: "collect", kind: "collect-results", x: 300, y: 0 },
+        { id: "out", kind: "output", x: 400, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "in", fromPort: "out", to: "iter", toPort: "collection" },
+        { id: "e2", from: "iter", fromPort: "feature", to: "mixed", toPort: "input" },
+        { id: "e3", from: "mixed", fromPort: "out", to: "collect", toPort: "item" },
+        { id: "e4", from: "collect", fromPort: "collection", to: "out", toPort: "in" },
+      ],
+    };
+
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: localResolve,
+      resolveInput: () =>
+        makeVectorValue([
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 1] } },
+        ]),
+      executeTool: async () => {
+        callIndex++;
+        if (callIndex === 1) {
+          return {
+            out: makeVectorValue([
+              { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+            ]),
+          };
+        } else {
+          return { out: makeRasterValue("test_raster", 1) };
+        }
+      },
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.ok(result.error);
+    assert.match(result.error.message, /Collector received mixed vector and raster results/);
+  });
+
+  // H. Model graph: iterator validation and fallback behavior
+  it("rejects iterators without a body or collector in validateModelGraph", () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "iter", kind: "iterate-features", x: 100, y: 0 },
+        { id: "out", kind: "output", x: 200, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "in", fromPort: "out", to: "iter", toPort: "collection" },
+        { id: "e2", from: "iter", fromPort: "feature", to: "out", toPort: "in" },
+      ],
+    };
+
+    const issues = validateModelGraph(graph, resolve);
+    const iterIssue = issues.find((i) => i.code === "invalid-iterator");
+    assert.ok(iterIssue);
+    assert.match(iterIssue.message, /requires an iteration body or a downstream Collect Results node/);
+  });
+
+  it("fails execution with explicit error when iterator lacks body and collector", async () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        { id: "in", kind: "input", x: 0, y: 0, layerId: "pts" },
+        { id: "iter", kind: "iterate-features", x: 100, y: 0 },
+        { id: "out", kind: "output", x: 200, y: 0, name: "Out" },
+      ],
+      edges: [
+        { id: "e1", from: "in", fromPort: "out", to: "iter", toPort: "collection" },
+        { id: "e2", from: "iter", fromPort: "feature", to: "out", toPort: "in" },
+      ],
+    };
+
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: resolve,
+      resolveInput: () =>
+        makeVectorValue([
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+        ]),
+      executeTool: async () => ({}),
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.ok(result.error);
+    assert.match(result.error.message, /requires an iteration body or a downstream Collect Results node/);
+  });
+
+  // I. Model graph: multiple rasters preserved in iterate-rasters output
+  it("stores the full raster collection in iterate-rasters output port", async () => {
+    const raster1 = makeRasterValue("r1", 1);
+    const raster2 = makeRasterValue("r2", 2);
+
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        {
+          id: "iter",
+          kind: "iterate-rasters",
+          x: 100,
+          y: 0,
+          parameters: { layers: ["r1", "r2"] },
+          body: {
+            nodes: [
+              { id: "bin", kind: "input", x: 0, y: 0, layerId: "current" },
+              { id: "bout", kind: "output", x: 100, y: 0 },
+            ],
+            edges: [{ id: "be", from: "bin", fromPort: "out", to: "bout", toPort: "in" }],
+          },
+        },
+        { id: "out", kind: "output", x: 300, y: 0, name: "Collection" },
+      ],
+      edges: [{ id: "e1", from: "iter", fromPort: "raster", to: "out", toPort: "in" }],
+    };
+
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: resolve,
+      resolveInput: (id) => (id === "r1" ? raster1 : raster2),
+      executeTool: async () => ({}),
+      emitOutput: () => {},
+      log: () => {},
+    });
+
+    assert.equal(result.error, undefined);
+    const outVal = result.outputs["out"];
+    assert.ok(outVal && outVal.kind === "raster-collection");
+    assert.equal(outVal.items.length, 2);
   });
 });

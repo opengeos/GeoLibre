@@ -91,8 +91,12 @@ red in its settings panel:
 - **Add an output node to keep a result.**
 - **Unknown tool "tool".**, or a connection to a node or port that no longer
   exists.
-- **Missing condition.** on a Conditional Switch node.
-- **Incompatible branch connections.**
+- **Iterate Features requires an input collection connection or layer.**
+- **Iterate Rasters requires an input collection connection or configured raster layers.**
+- **Iterator node requires an iteration body or a downstream Collect Results node.**
+- **Collect Results requires an incoming connection to collect.**
+- **Conditional Switch requires an incoming data connection to route.**
+- **Conditional Merge requires at least one branch input connection.**
 
 **Run** stays disabled until the model has no problems.
 
@@ -113,8 +117,12 @@ Iterators execute a downstream subworkflow repeatedly across each element in a c
   - Each iteration runs with an isolated context, preventing temporary data or variables from leaking between iterations.
   - If the input collection is empty, the iteration completes cleanly without executing the body.
 - **Iterate Rasters (`iterate-rasters`)**:
-  - Accepts a collection of raster datasets on its `collection` port.
-  - Exposes `raster`, `index`, and `count` ports to the iteration body.
+  - Accepts a collection of raster datasets on its `collection` port (or configured raster layers in settings).
+  - The node provides four outputs for the iteration body:
+    - `raster`: The current raster dataset.
+    - `name`: The current raster's layer name or identifier.
+    - `index`: The 0-based iteration index.
+    - `count`: Total number of rasters in the collection.
 - **Collect Results (`collect-results`)**:
   - Closes an iteration loop by accumulating results across all iterations.
   - Produces a unified `FeatureCollection` (for vector tools) or `RasterCollection` (for raster tools) that can connect directly to an **Output** node or subsequent tools.
@@ -122,7 +130,8 @@ Iterators execute a downstream subworkflow repeatedly across each element in a c
 #### Bounded Execution and Error Handling
 
 Iterators provide execution safeguards in their settings panel:
-- **Max iterations (`maxIterations`)**: Upper bound on the number of items to process (default: unlimited).
+
+- **Max iterations (`maxIterations`)**: Upper bound on the number of items to process (defaults to 1000 when omitted).
 - **Stop on error (`stopOnError`)**: When checked (default), any error in an iteration immediately halts execution and reports the failure with the failing iteration index.
 - **Cancellation**: Pressing **Cancel** immediately stops processing between iterations, safely releasing temporary resources.
 
@@ -138,7 +147,7 @@ Conditional branching lets models execute different processing paths depending o
   - Only the selected branch executes. The unselected branch is marked as **skipped** (`opacity-60` on canvas).
   - Heavy raster or WASM processing tools on the unselected branch are completely skipped without consuming CPU or memory.
 - **Branch Merge (`conditional-merge`)**:
-  - Accepts incoming connections on both `true_in` and `false_in`.
+  - Accepts incoming connections on both `true` and `false` input ports.
   - Automatically outputs whichever branch was actively executed, providing a single seamless output stream for subsequent tools.
 
 #### Condition Evaluation System

@@ -263,6 +263,23 @@ export function buildAssistantModel(
       const nodePorts = portsFor({ id, kind, x: 0, y: 0 }, undefined);
       const inputPorts = new Map(nodePorts.inputs.map((port) => [port.id, port]));
       const parameters = { ...(step.parameters ?? {}) };
+      if (Array.isArray(parameters.layers)) {
+        parameters.layers = parameters.layers.map((entry) => {
+          if (typeof entry !== "string" || !entry) return entry;
+          const layer = resolveLayer(entry);
+          if (!layer) {
+            throw new Error(`No layer matching "${entry}" for "layers" of "${step.algorithm}".`);
+          }
+          return layer.id;
+        });
+      }
+      if (typeof parameters.layer === "string" && parameters.layer) {
+        const layer = resolveLayer(parameters.layer);
+        if (!layer) {
+          throw new Error(`No layer matching "${parameters.layer}" for "layer" of "${step.algorithm}".`);
+        }
+        parameters.layer = layer.id;
+      }
       for (const [portId, sourceKey] of Object.entries(step.inputs)) {
         if (!inputPorts.has(portId)) {
           throw new Error(`Control node "${step.algorithm}" has no input port "${portId}".`);
