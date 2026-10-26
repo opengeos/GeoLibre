@@ -564,6 +564,9 @@ def verify_password_login(
     return account
 
 
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
 def optional_principal(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
@@ -757,11 +760,10 @@ def cleanup_expired_security_rows(session: Session, now_ts: int, *, batch_size: 
         session.commit()
 
 
-_bearer_scheme = HTTPBearer(auto_error=False)
-
-
 def required_principal(
     principal: AuthPrincipal | None = Depends(optional_principal),
+    # Declares the HTTPBearer scheme for OpenAPI/Swagger only; token resolution
+    # and validation remain in optional_principal above.
     _credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
 ) -> AuthPrincipal:
     """Resolve a Bearer PAT, or reject the request with a Bearer challenge."""

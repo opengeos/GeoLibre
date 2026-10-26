@@ -199,7 +199,14 @@ def test_openapi_documents_bearer_auth_for_protected_routes(client):
     }
     assert schema["paths"]["/api/account"]["get"]["security"] == [{"HTTPBearer": []}]
     assert schema["paths"]["/api/projects"]["post"]["security"] == [{"HTTPBearer": []}]
-    assert "security" not in schema["paths"]["/api/projects"]["get"]
+    assert schema["paths"]["/api/projects"]["get"]["security"] == [
+        {"HTTPBearer": []},
+        {},
+    ]
+    assert schema["paths"]["/api/groups/{group_id}/thumbnail"]["get"]["security"] == [
+        {"HTTPBearer": []},
+        {},
+    ]
     assert "security" not in schema["paths"]["/api/accounts"]["post"]
     assert "security" not in schema["paths"]["/api/auth/token"]["post"]
 
