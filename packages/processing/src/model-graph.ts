@@ -895,6 +895,28 @@ function sourceLayerId(node: ModelGraphNode): string | undefined {
 }
 
 /**
+ * The layer id a Conditional Switch routes when no data edge is wired in: its
+ * `layerId`, or a layer id in `parameters.input` (validation accepts both).
+ *
+ * @param node The switch node.
+ * @returns The layer id, or `undefined` when neither is set.
+ */
+export function switchSourceLayerId(node: ModelGraphNode): string | undefined {
+  if (node.layerId) return node.layerId;
+  const input = node.parameters?.input;
+  return typeof input === "string" && input ? input : undefined;
+}
+
+/** Resolve a Conditional Switch's unwired data input from its layer, if it names one. */
+async function resolveSwitchLayer(
+  node: ModelGraphNode,
+  options: RunModelGraphOptions,
+): Promise<ModelValue | undefined> {
+  const layerId = switchSourceLayerId(node);
+  return layerId ? ((await options.resolveInput(layerId)) ?? undefined) : undefined;
+}
+
+/**
  * Read a value as a boolean when it plainly is one: a boolean, or the text
  * "true"/"false"/"1"/"0" (any case). Anything else returns `undefined`.
  *
@@ -971,7 +993,7 @@ async function executeSingleNode(
 
   if (node.kind === "conditional-switch") {
     options.onNodeStatus?.(node.id, "running");
-    const inputVal = inputs[SWITCH_INPUT_PORT];
+    const inputVal = inputs[SWITCH_INPUT_PORT] ?? (await resolveSwitchLayer(node, options));
     if (!inputVal) return { error: `Conditional Switch "${node.id}" has no incoming data input.` };
     const condVal = inputs[SWITCH_CONDITION_PORT];
     const cond = evaluateCondition({
@@ -1163,7 +1185,7 @@ export async function runModelGraph(
 
       if (node.kind === "conditional-switch") {
         options.onNodeStatus?.(node.id, "running");
-        const inputVal = inputs[SWITCH_INPUT_PORT];
+        const inputVal = inputs[SWITCH_INPUT_PORT] ?? (await resolveSwitchLayer(node, options));
         if (!inputVal) {
           const message = `Conditional Switch "${node.id}" has no incoming data input.`;
           options.log(`Error: ${message}`);

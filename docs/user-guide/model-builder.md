@@ -125,7 +125,7 @@ Iterators execute a downstream subworkflow repeatedly across each element in a c
     - `count`: Total number of rasters in the collection.
 - **Collect Results (`collect-results`)**:
   - Closes an iteration loop by accumulating results across all iterations.
-  - Produces a unified `FeatureCollection` (for vector tools) or `RasterCollection` (for raster tools) that can connect directly to an **Output** node or subsequent tools.
+  - Produces a unified `FeatureCollection` (for vector tools) or `RasterCollection` (for raster tools) that can connect directly to an **Output** node. A vector collection can also feed subsequent tools; a raster collection cannot, because tools take one raster at a time.
 
 #### Bounded Execution and Error Handling
 

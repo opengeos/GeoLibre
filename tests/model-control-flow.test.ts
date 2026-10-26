@@ -1329,6 +1329,33 @@ describe("Model Builder Review Comments Regression Tests", () => {
     assert.deepEqual(asked, ["pts"]);
   });
 
+  it("routes the layer an unwired switch names", async () => {
+    const graph: ProcessingModelGraph = {
+      nodes: [
+        {
+          id: "switch",
+          kind: "conditional-switch",
+          x: 0,
+          y: 0,
+          layerId: "pts",
+          parameters: { conditionType: "boolean", value: "true" },
+        },
+        { id: "out", kind: "output", x: 0, y: 0 },
+      ],
+      edges: [{ id: "e1", from: "switch", fromPort: "true", to: "out", toPort: "in" }],
+    };
+    assert.deepEqual(validateModelGraph(graph, resolve), []);
+    const result = await runModelGraph(graph, {
+      resolveDescriptor: resolve,
+      resolveInput: () => makeVectorValue([]),
+      executeTool: async () => ({}),
+      emitOutput: () => {},
+      log: () => {},
+    });
+    assert.equal(result.error, undefined);
+    assert.ok(result.outputs.out);
+  });
+
   it("rejects a loop nested inside a collector-driven loop body", () => {
     const graph: ProcessingModelGraph = {
       nodes: [

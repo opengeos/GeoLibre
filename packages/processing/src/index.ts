@@ -485,6 +485,7 @@ export {
   MERGE_FALSE_PORT,
   MERGE_OUTPUT_PORT,
   evaluateCondition,
+  switchSourceLayerId,
   portsFor,
   graphToLinearSteps,
   portKindsCompatible,

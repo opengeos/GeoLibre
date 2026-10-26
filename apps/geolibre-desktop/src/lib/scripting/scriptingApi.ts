@@ -11,6 +11,7 @@ import {
   topologicalOrder,
   validateModelGraph,
   evaluateCondition,
+  switchSourceLayerId,
   portsFor,
   type ProcessingAlgorithm,
   type ProcessingContext,
@@ -610,7 +611,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (node.kind === "conditional-switch") {
           const edge =
             incoming.get(node.id)?.find((e) => e.toPort === "input") ?? incoming.get(node.id)?.[0];
-          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          // Like runModelGraph: an unwired switch routes the layer it names.
+          const layerId = edge
+            ? produced.get(edge.from)?.get(edge.fromPort)
+            : switchSourceLayerId(node);
           if (!layerId || layerId === SKIPPED) {
             produced.set(
               node.id,
