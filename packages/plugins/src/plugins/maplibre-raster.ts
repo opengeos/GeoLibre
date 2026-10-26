@@ -1035,11 +1035,14 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     }
     rasterControlMounted = true;
     rasterHostApp = app;
+    // Before the first await: setRasterPixelInspect can enable the inspector
+    // as soon as the control is mounted, and an enable that binds the
+    // unwrapped handler would leave it attached after disable().
+    guardRasterInspectorClicks(rasterControl);
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
     patchCogTilerJpegTables(rasterControl);
-    guardRasterInspectorClicks(rasterControl);
     defaultRasterZoomToPreference(rasterControl);
     await warmTauriWasmEngine(rasterControl);
     // On web the control renders interleaved, which shares deck.gl's per-map
