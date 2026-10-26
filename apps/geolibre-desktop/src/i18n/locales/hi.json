@@ -2945,7 +2945,8 @@
       "viewUnavailable": "मौजूदा मानचित्र दृश्य उपलब्ध नहीं है।",
       "selectError": "चयनित प्रोजेक्ट पढ़ा नहीं जा सका।",
       "restoring": "आपका स्टार्टअप प्रोजेक्ट खोला जा रहा है…",
-      "loadWarning": "स्टार्टअप प्रोजेक्ट उपलब्ध नहीं है। GeoLibre ने इसके बजाय डिफ़ॉल्ट वर्कस्पेस खोला।"
+      "loadWarning": "स्टार्टअप प्रोजेक्ट उपलब्ध नहीं है। GeoLibre ने इसके बजाय डिफ़ॉल्ट वर्कस्पेस खोला।",
+      "storedCopyWarning": "GeoLibre प्रोजेक्ट फ़ाइल नहीं पढ़ सका और उसने वह प्रति खोली जो प्रोजेक्ट को पिछली बार खोलते या सहेजते समय रखी गई थी। उसके बाद फ़ाइल में किए गए बदलाव गायब हो सकते हैं। फ़ाइल की वर्तमान सामग्री लोड करने के लिए उसे \"फ़ाइल से प्रोजेक्ट खोलें\" से फिर से खोलें।"
     },
     "map": {
       "constraintsTitle": "मानचित्र बाधाएँ",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "वायुमंडलीय चमक ग्लोब से कितनी दूर तक फैलती है। कम मान डेटा को सतह के करीब रखता है; अधिक मान एक विस्तृत, हल्की हेलो देता है।",
       "haloOpacity": "हेलो तीव्रता",
       "spaceColor": "अंतरिक्ष रंग",
+      "showStars": "तारे",
+      "showMilkyWay": "आकाशगंगा",
+      "showConstellations": "नक्षत्र रेखाएँ",
       "reset": "डिफ़ॉल्ट पर रीसेट करें",
       "globeOnly": "वायुमंडलीय प्रभाव तभी उपलब्ध हैं जब ग्लोब दृश्य सक्षम हो।"
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "उस फ़ाइल में मॉडल ग्राफ़ नहीं है।",
       "importUnsupported": "वह फ़ाइल GeoLibre मॉडल नहीं है।",
       "rasterOutputUnsupported": "\"{{name}}\" एक रास्टर परिणाम है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।",
+      "outputUnsupported": "\"{{name}}\" एक {{kind}} मान है, जिसे मानचित्र में नहीं जोड़ा जा सकता।",
       "portNeedsVector": "\"{{port}}\" को वेक्टर डेटा चाहिए, लेकिन रास्टर मिला।",
+      "portCannotTake": "\"{{port}}\" {{kind}} मान स्वीकार नहीं कर सकता।",
       "toolNoOutput": "\"{{tool}}\" ने कोई आउटपुट नहीं बनाया।",
-      "toolNoUsableOutput": "\"{{tool}}\" ने कोई उपयोगी आउटपुट नहीं बनाया।"
+      "toolNoUsableOutput": "\"{{tool}}\" ने कोई उपयोगी आउटपुट नहीं बनाया।",
+      "controlFlow": {
+        "heading": "नियंत्रण प्रवाह",
+        "add": {
+          "iterateFeatures": "फ़ीचर लूप",
+          "iterateFeaturesTitle": "फ़ीचर पर पुनरावृत्ति: प्रत्येक वेक्टर फ़ीचर के लिए वर्कफ़्लो चलाएँ",
+          "iterateRasters": "रास्टर लूप",
+          "iterateRastersTitle": "रास्टर पर पुनरावृत्ति: प्रत्येक रास्टर के लिए वर्कफ़्लो चलाएँ",
+          "switch": "If/Else",
+          "switchTitle": "सशर्त स्विच: If/Else सशर्त शाखाकरण",
+          "merge": "शाखा मर्ज",
+          "mergeTitle": "सशर्त मर्ज: वैकल्पिक शाखाओं को एक करें",
+          "collect": "परिणाम एकत्र",
+          "collectTitle": "परिणाम एकत्र करें: लूप पुनरावृत्तियों के आउटपुट इकट्ठा करें"
+        },
+        "kinds": {
+          "iterateFeatures": "फ़ीचर पर पुनरावृत्ति",
+          "iterateRasters": "रास्टर पर पुनरावृत्ति",
+          "collectResults": "परिणाम एकत्र करें",
+          "conditionalSwitch": "सशर्त स्विच",
+          "conditionalMerge": "सशर्त मर्ज"
+        },
+        "switch": {
+          "description": "एक शर्त का मूल्यांकन करता है और डेटा को True या False शाखा में भेजता है।",
+          "conditionType": "शर्त प्रकार",
+          "typeCompare": "मान / गुण तुलना",
+          "typeBoolean": "बूलियन जाँच",
+          "typeNullCheck": "Null / खाली जाँच",
+          "property": "फ़ीचर गुण / मेटाडेटा कुंजी (वैकल्पिक)",
+          "propertyPlaceholder": "उदा. category, feature_count या area",
+          "operator": "ऑपरेटर",
+          "opEqual": "== (बराबर)",
+          "opNotEqual": "!= (बराबर नहीं)",
+          "opLess": "< (से छोटा)",
+          "opLessOrEqual": "<= (से छोटा या बराबर)",
+          "opGreater": "> (से बड़ा)",
+          "opGreaterOrEqual": ">= (से बड़ा या बराबर)",
+          "opContains": "शामिल है",
+          "opStartsWith": "इससे शुरू होता है",
+          "opEndsWith": "इससे समाप्त होता है",
+          "opIsEmpty": "खाली है",
+          "opNotEmpty": "खाली नहीं है",
+          "opIsNull": "null है",
+          "opNotNull": "null नहीं है",
+          "value": "लक्ष्य मान",
+          "valuePlaceholder": "उदा. 50 या urban या true"
+        },
+        "iterate": {
+          "featuresDescription": "वेक्टर संग्रह के प्रत्येक फ़ीचर पर पुनरावृत्ति करता है।",
+          "rastersDescription": "संग्रह के प्रत्येक रास्टर डेटासेट पर पुनरावृत्ति करता है।",
+          "maxIterations": "अधिकतम पुनरावृत्ति सीमा",
+          "stopOnError": "त्रुटि पर रुकें"
+        },
+        "collectDescription": "प्रत्येक लूप पुनरावृत्ति से बने परिणामों को इकट्ठा करके एक अंतिम संग्रह में समतल करता है।",
+        "mergeDescription": "True और False शाखा के आउटपुट को वापस एक सक्रिय डेटा प्रवाह में मिलाता है।",
+        "ports": {
+          "featureCollection": "फ़ीचर संग्रह",
+          "currentFeature": "वर्तमान फ़ीचर",
+          "index": "सूचकांक",
+          "totalCount": "कुल गणना",
+          "rasterCollection": "रास्टर संग्रह",
+          "currentRaster": "वर्तमान रास्टर",
+          "rasterName": "रास्टर नाम",
+          "itemToCollect": "एकत्र करने योग्य आइटम",
+          "collectedResults": "एकत्रित परिणाम",
+          "count": "गणना",
+          "conditionValue": "शर्त मान",
+          "trueBranch": "True शाखा",
+          "falseBranch": "False शाखा",
+          "trueResult": "True परिणाम",
+          "falseResult": "False परिणाम",
+          "activeOutput": "सक्रिय आउटपुट"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "एक लेयर चुनें...",

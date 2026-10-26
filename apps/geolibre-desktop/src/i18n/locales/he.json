@@ -3004,7 +3004,8 @@
       "viewUnavailable": "תצוגת המפה הנוכחית אינה זמינה.",
       "selectError": "לא ניתן לקרוא את הפרויקט שנבחר.",
       "restoring": "פותח את פרויקט ההפעלה…",
-      "loadWarning": "פרויקט ההפעלה אינו זמין. GeoLibre פתח במקומו את סביבת העבודה שהיא ברירת המחדל."
+      "loadWarning": "פרויקט ההפעלה אינו זמין. GeoLibre פתח במקומו את סביבת העבודה שהיא ברירת המחדל.",
+      "storedCopyWarning": "ל-GeoLibre לא הייתה אפשרות לקרוא את קובץ הפרויקט, ולכן נפתח העותק שנשמר בפעם האחרונה שהפרויקט נפתח או נשמר. ייתכן ששינויים שבוצעו בקובץ מאז חסרים. פתח את הקובץ שוב באמצעות \"פתיחת פרויקט מקובץ\" כדי לטעון את התוכן הנוכחי שלו."
     },
     "map": {
       "constraintsTitle": "מגבלות מפה",
@@ -3520,6 +3521,9 @@
       "haloExtentHint": "עד כמה הזוהר האטמוספרי מתפרש מעבר לגלובוס. ערך נמוך שומר את הנתונים צמודים לפני השטח; ערך גבוה יוצר הילה רחבה ואוורירית.",
       "haloOpacity": "עוצמת ההילה",
       "spaceColor": "צבע החלל",
+      "showStars": "כוכבים",
+      "showMilkyWay": "שביל החלב",
+      "showConstellations": "קווי קבוצות כוכבים",
       "reset": "אפס לברירות המחדל",
       "globeOnly": "אפקטים אטמוספריים זמינים רק כשתצוגת הגלובוס מופעלת."
     },
@@ -6033,9 +6037,84 @@
       "importInvalid": "הקובץ אינו מכיל גרף מודל.",
       "importUnsupported": "הקובץ אינו מודל GeoLibre.",
       "rasterOutputUnsupported": "\"{{name}}\" הוא תוצאת רסטר, וגרסה זו אינה יכולה להוסיף אותה למפה.",
+      "outputUnsupported": "\"{{name}}\" הוא ערך מסוג {{kind}}, שלא ניתן להוסיף למפה.",
       "portNeedsVector": "\"{{port}}\" דורש נתוני וקטור, אך התקבל רסטר.",
+      "portCannotTake": "\"{{port}}\" אינו יכול לקבל ערך מסוג {{kind}}.",
       "toolNoOutput": "\"{{tool}}\" לא הפיק פלט.",
-      "toolNoUsableOutput": "\"{{tool}}\" לא הפיק פלט שמיש."
+      "toolNoUsableOutput": "\"{{tool}}\" לא הפיק פלט שמיש.",
+      "controlFlow": {
+        "heading": "בקרת זרימה",
+        "add": {
+          "iterateFeatures": "איטרציה ישויות",
+          "iterateFeaturesTitle": "איטרציה על ישויות: הרץ את זרימת העבודה עבור כל ישות וקטורית",
+          "iterateRasters": "איטרציה רסטרים",
+          "iterateRastersTitle": "איטרציה על רסטרים: הרץ את זרימת העבודה עבור כל רסטר",
+          "switch": "אם/אחרת",
+          "switchTitle": "מתג מותנה: הסתעפות מותנית אם/אחרת",
+          "merge": "מיזוג ענפים",
+          "mergeTitle": "מיזוג מותנה: איחוד ענפים חלופיים",
+          "collect": "איסוף תוצאות",
+          "collectTitle": "איסוף תוצאות: אסוף פלטים מאיטרציות הלולאה"
+        },
+        "kinds": {
+          "iterateFeatures": "איטרציה על ישויות",
+          "iterateRasters": "איטרציה על רסטרים",
+          "collectResults": "איסוף תוצאות",
+          "conditionalSwitch": "מתג מותנה",
+          "conditionalMerge": "מיזוג מותנה"
+        },
+        "switch": {
+          "description": "מעריך תנאי ומנתב את הנתונים לענף True או לענף False.",
+          "conditionType": "סוג התנאי",
+          "typeCompare": "השוואת ערך / מאפיין",
+          "typeBoolean": "בדיקה בוליאנית",
+          "typeNullCheck": "בדיקת null / ריק",
+          "property": "מאפיין ישות / מפתח מטא-נתונים (אופציונלי)",
+          "propertyPlaceholder": "לדוגמה category, feature_count או area",
+          "operator": "אופרטור",
+          "opEqual": "== (שווה)",
+          "opNotEqual": "!= (לא שווה)",
+          "opLess": "< (קטן מ-)",
+          "opLessOrEqual": "<= (קטן מ- או שווה)",
+          "opGreater": "> (גדול מ-)",
+          "opGreaterOrEqual": ">= (גדול מ- או שווה)",
+          "opContains": "מכיל",
+          "opStartsWith": "מתחיל ב-",
+          "opEndsWith": "מסתיים ב-",
+          "opIsEmpty": "ריק",
+          "opNotEmpty": "אינו ריק",
+          "opIsNull": "הוא null",
+          "opNotNull": "אינו null",
+          "value": "ערך יעד",
+          "valuePlaceholder": "לדוגמה 50 או urban או true"
+        },
+        "iterate": {
+          "featuresDescription": "עובר על כל ישות באוסף הווקטורי.",
+          "rastersDescription": "עובר על כל מערך נתוני רסטר באוסף.",
+          "maxIterations": "מגבלת מספר איטרציות מרבי",
+          "stopOnError": "עצור בשגיאה"
+        },
+        "collectDescription": "אוסף ומשטח את התוצאות שהפיקה כל איטרציה של הלולאה לאוסף סופי.",
+        "mergeDescription": "מאחד את הפלטים של ענף True וענף False חזרה לזרימת נתונים פעילה אחת.",
+        "ports": {
+          "featureCollection": "אוסף ישויות",
+          "currentFeature": "ישות נוכחית",
+          "index": "אינדקס",
+          "totalCount": "ספירה כוללת",
+          "rasterCollection": "אוסף רסטרים",
+          "currentRaster": "רסטר נוכחי",
+          "rasterName": "שם הרסטר",
+          "itemToCollect": "פריט לאיסוף",
+          "collectedResults": "תוצאות שנאספו",
+          "count": "ספירה",
+          "conditionValue": "ערך התנאי",
+          "trueBranch": "ענף True",
+          "falseBranch": "ענף False",
+          "trueResult": "תוצאת True",
+          "falseResult": "תוצאת False",
+          "activeOutput": "פלט פעיל"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "בחירת שכבה...",

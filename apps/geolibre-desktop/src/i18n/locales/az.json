@@ -2945,7 +2945,8 @@
       "viewUnavailable": "Cari xəritə görünüşü əlçatan deyil.",
       "selectError": "Seçilmiş layihəni oxumaq mümkün olmadı.",
       "restoring": "Başlanğıc layihəniz açılır…",
-      "loadWarning": "Başlanğıc layihəsi əlçatan deyil. GeoLibre əvəzinə standart iş sahəsini açdı."
+      "loadWarning": "Başlanğıc layihəsi əlçatan deyil. GeoLibre əvəzinə standart iş sahəsini açdı.",
+      "storedCopyWarning": "GeoLibre layihə faylını oxuya bilmədi və layihə sonuncu dəfə açılanda və ya saxlananda saxladığı nüsxəni açdı. Bundan sonra faylda edilən dəyişikliklər əskik ola bilər. Faylın cari məzmununu yükləmək üçün onu Layihəni fayldan aç əmri ilə yenidən açın."
     },
     "map": {
       "constraintsTitle": "Xəritə məhdudiyyətləri",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Atmosfer parıltısının qlobusdan kənara nə qədər yayıldığını müəyyən edir. Aşağı dəyər verilənləri səthə yaxın saxlayır, yüksək dəyər isə geniş, yüngül işıq haləsi yaradır.",
       "haloOpacity": "İşıq haləsinin gücü",
       "spaceColor": "Kosmosun rəngi",
+      "showStars": "Ulduzlar",
+      "showMilkyWay": "Süd Yolu",
+      "showConstellations": "Bürc xətləri",
       "reset": "Standart dəyərləri bərpa et",
       "globeOnly": "Atmosfer effektləri yalnız Qlobus görünüşü aktiv olduqda əlçatandır."
     },
@@ -5945,9 +5949,84 @@
       "importInvalid": "Bu faylda model qrafı yoxdur.",
       "importUnsupported": "Bu fayl GeoLibre modeli deyil.",
       "rasterOutputUnsupported": "\"{{name}}\" rastr nəticəsidir və bu versiyada xəritəyə əlavə edilə bilmir.",
+      "outputUnsupported": "\"{{name}}\" növü {{kind}} olan dəyərdir və xəritəyə əlavə edilə bilməz.",
       "portNeedsVector": "\"{{port}}\" üçün vektor verilənləri lazımdır, lakin rastr daxil olub.",
+      "portCannotTake": "\"{{port}}\" növü {{kind}} olan dəyəri qəbul edə bilməz.",
       "toolNoOutput": "\"{{tool}}\" heç bir nəticə yaratmadı.",
-      "toolNoUsableOutput": "\"{{tool}}\" istifadəyə yararlı nəticə yaratmadı."
+      "toolNoUsableOutput": "\"{{tool}}\" istifadəyə yararlı nəticə yaratmadı.",
+      "controlFlow": {
+        "heading": "İdarəetmə axını",
+        "add": {
+          "iterateFeatures": "Obyekt dövrü",
+          "iterateFeaturesTitle": "Obyektlər üzrə iterasiya: İş axınını hər vektor obyekti üçün icra edir",
+          "iterateRasters": "Rastr dövrü",
+          "iterateRastersTitle": "Rastrlar üzrə iterasiya: İş axınını hər rastr üçün icra edir",
+          "switch": "Əgər/Yoxsa",
+          "switchTitle": "Şərti keçid: Əgər/Yoxsa şərti budaqlanma",
+          "merge": "Birləşdir",
+          "mergeTitle": "Şərti birləşmə: Alternativ budaqları birləşdirir",
+          "collect": "Topla",
+          "collectTitle": "Nəticələri topla: Dövr iterasiyalarının çıxışlarını toplayır"
+        },
+        "kinds": {
+          "iterateFeatures": "Obyektlər üzrə iterasiya",
+          "iterateRasters": "Rastrlar üzrə iterasiya",
+          "collectResults": "Nəticələri topla",
+          "conditionalSwitch": "Şərti keçid",
+          "conditionalMerge": "Şərti birləşmə"
+        },
+        "switch": {
+          "description": "Şərti qiymətləndirir və verilənləri Doğru və ya Yanlış budağına yönləndirir.",
+          "conditionType": "Şərt növü",
+          "typeCompare": "Dəyər / Xassə müqayisəsi",
+          "typeBoolean": "Məntiqi yoxlama",
+          "typeNullCheck": "Null / Boş yoxlaması",
+          "property": "Obyekt xassəsi / Metaverilənlər açarı (istəyə bağlı)",
+          "propertyPlaceholder": "məs. category, feature_count və ya area",
+          "operator": "Operator",
+          "opEqual": "== (Bərabər)",
+          "opNotEqual": "!= (Bərabər deyil)",
+          "opLess": "< (Kiçik)",
+          "opLessOrEqual": "<= (Kiçik və ya bərabər)",
+          "opGreater": "> (Böyük)",
+          "opGreaterOrEqual": ">= (Böyük və ya bərabər)",
+          "opContains": "ehtiva edir",
+          "opStartsWith": "ilə başlayır",
+          "opEndsWith": "ilə bitir",
+          "opIsEmpty": "boşdur",
+          "opNotEmpty": "boş deyil",
+          "opIsNull": "null-dur",
+          "opNotNull": "null deyil",
+          "value": "Hədəf dəyər",
+          "valuePlaceholder": "məs. 50 və ya urban və ya true"
+        },
+        "iterate": {
+          "featuresDescription": "Vektor kolleksiyasındakı hər obyekt üzrə iterasiya edir.",
+          "rastersDescription": "Kolleksiyadakı hər rastr verilənlər dəsti üzrə iterasiya edir.",
+          "maxIterations": "Maksimum iterasiya limiti",
+          "stopOnError": "Xətada dayandır"
+        },
+        "collectDescription": "Hər dövr iterasiyasının nəticələrini toplayır və yekun kolleksiyada birləşdirir.",
+        "mergeDescription": "Doğru və Yanlış budaqlarının çıxışlarını yenidən vahid aktiv verilənlər axınında birləşdirir.",
+        "ports": {
+          "featureCollection": "Obyekt kolleksiyası",
+          "currentFeature": "Cari obyekt",
+          "index": "İndeks",
+          "totalCount": "Ümumi say",
+          "rasterCollection": "Rastr kolleksiyası",
+          "currentRaster": "Cari rastr",
+          "rasterName": "Rastr adı",
+          "itemToCollect": "Toplanacaq element",
+          "collectedResults": "Toplanmış nəticələr",
+          "count": "Say",
+          "conditionValue": "Şərt dəyəri",
+          "trueBranch": "Doğru budağı",
+          "falseBranch": "Yanlış budağı",
+          "trueResult": "Doğru nəticəsi",
+          "falseResult": "Yanlış nəticəsi",
+          "activeOutput": "Aktiv çıxış"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Lay seçin...",

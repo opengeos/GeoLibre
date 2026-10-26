@@ -3180,7 +3180,8 @@
       "viewUnavailable": "عرض الخريطة الحالي غير متاح.",
       "selectError": "تعذر قراءة المشروع المحدد.",
       "restoring": "جارٍ فتح مشروع بدء التشغيل…",
-      "loadWarning": "مشروع بدء التشغيل غير متاح. فتح GeoLibre مساحة العمل الافتراضية بدلاً منه."
+      "loadWarning": "مشروع بدء التشغيل غير متاح. فتح GeoLibre مساحة العمل الافتراضية بدلاً منه.",
+      "storedCopyWarning": "تعذّر على GeoLibre قراءة ملف المشروع، ففتح النسخة التي احتفظ بها عند آخر فتح للمشروع أو حفظه. قد تكون التغييرات التي أُجريت على الملف منذ ذلك الحين مفقودة. افتح الملف مرة أخرى باستخدام «فتح مشروع من ملف» لتحميل محتواه الحالي."
     },
     "map": {
       "constraintsTitle": "قيود الخريطة",
@@ -3702,6 +3703,9 @@
       "haloExtentHint": "مدى امتداد التوهج الجوي خارج حدود الكرة الأرضية. القيمة المنخفضة تُبقي التوهج قريبًا من السطح، والقيمة المرتفعة تعطي هالة واسعة ومنتشرة.",
       "haloOpacity": "قوة الهالة",
       "spaceColor": "لون الفضاء",
+      "showStars": "النجوم",
+      "showMilkyWay": "درب التبانة",
+      "showConstellations": "خطوط الأبراج",
       "reset": "إعادة التعيين إلى القيم الافتراضية",
       "globeOnly": "تأثيرات الغلاف الجوي متاحة فقط عند تفعيل عرض الكرة الأرضية."
     },
@@ -6232,9 +6236,84 @@
       "importInvalid": "هذا الملف لا يحتوي على مخطط نموذج.",
       "importUnsupported": "هذا الملف ليس نموذج GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» نتيجة راستر لا يمكن لهذه النسخة إضافتها إلى الخريطة.",
+      "outputUnsupported": "«{{name}}» قيمة من نوع {{kind}}، ولا يمكن إضافتها إلى الخريطة.",
       "portNeedsVector": "«{{port}}» يحتاج إلى بيانات متجهة، لكن وصلت بيانات راستر.",
+      "portCannotTake": "لا يمكن أن يستقبل «{{port}}» قيمة من نوع {{kind}}.",
       "toolNoOutput": "«{{tool}}» لم تُنتج أي مخرجات.",
-      "toolNoUsableOutput": "«{{tool}}» لم تُنتج مخرجات قابلة للاستخدام."
+      "toolNoUsableOutput": "«{{tool}}» لم تُنتج مخرجات قابلة للاستخدام.",
+      "controlFlow": {
+        "heading": "التحكم في التدفق",
+        "add": {
+          "iterateFeatures": "تكرار المعالم",
+          "iterateFeaturesTitle": "تكرار المعالم: تنفيذ سير العمل لكل معلم متجه",
+          "iterateRasters": "تكرار الراستر",
+          "iterateRastersTitle": "تكرار الراستر: تنفيذ سير العمل لكل راستر",
+          "switch": "إذا/وإلا",
+          "switchTitle": "المبدّل الشرطي: تفرّع شرطي إذا/وإلا",
+          "merge": "دمج الفروع",
+          "mergeTitle": "الدمج الشرطي: دمج الفروع البديلة",
+          "collect": "جمع النتائج",
+          "collectTitle": "جمع النتائج: تجميع مخرجات تكرارات الحلقة"
+        },
+        "kinds": {
+          "iterateFeatures": "تكرار المعالم",
+          "iterateRasters": "تكرار الراستر",
+          "collectResults": "جمع النتائج",
+          "conditionalSwitch": "المبدّل الشرطي",
+          "conditionalMerge": "الدمج الشرطي"
+        },
+        "switch": {
+          "description": "يقيّم شرطًا ويوجّه البيانات إلى الفرع الصحيح أو الخاطئ.",
+          "conditionType": "نوع الشرط",
+          "typeCompare": "مقارنة قيمة / خاصية",
+          "typeBoolean": "فحص منطقي",
+          "typeNullCheck": "فحص القيمة الفارغة",
+          "property": "خاصية المعلم / مفتاح البيانات الوصفية (اختياري)",
+          "propertyPlaceholder": "مثال: category أو feature_count أو area",
+          "operator": "العامل",
+          "opEqual": "== (يساوي)",
+          "opNotEqual": "!= (لا يساوي)",
+          "opLess": "< (أصغر من)",
+          "opLessOrEqual": "<= (أصغر من أو يساوي)",
+          "opGreater": "> (أكبر من)",
+          "opGreaterOrEqual": ">= (أكبر من أو يساوي)",
+          "opContains": "يحتوي على",
+          "opStartsWith": "يبدأ بـ",
+          "opEndsWith": "ينتهي بـ",
+          "opIsEmpty": "فارغ",
+          "opNotEmpty": "غير فارغ",
+          "opIsNull": "قيمة فارغة (null)",
+          "opNotNull": "ليس null",
+          "value": "القيمة المستهدفة",
+          "valuePlaceholder": "مثال: 50 أو urban أو true"
+        },
+        "iterate": {
+          "featuresDescription": "يكرر على كل معلم في المجموعة المتجهة.",
+          "rastersDescription": "يكرر على كل مجموعة بيانات راستر في المجموعة.",
+          "maxIterations": "الحد الأقصى لعدد التكرارات",
+          "stopOnError": "التوقف عند الخطأ"
+        },
+        "collectDescription": "يجمع النتائج الناتجة عن كل تكرار للحلقة ويسطّحها في مجموعة نهائية.",
+        "mergeDescription": "يدمج مخرجات الفرعين الصحيح والخاطئ في تدفق بيانات نشط واحد.",
+        "ports": {
+          "featureCollection": "مجموعة المعالم",
+          "currentFeature": "المعلم الحالي",
+          "index": "الفهرس",
+          "totalCount": "العدد الإجمالي",
+          "rasterCollection": "مجموعة الراستر",
+          "currentRaster": "الراستر الحالي",
+          "rasterName": "اسم الراستر",
+          "itemToCollect": "العنصر المراد جمعه",
+          "collectedResults": "النتائج المجمّعة",
+          "count": "العدد",
+          "conditionValue": "قيمة الشرط",
+          "trueBranch": "الفرع الصحيح",
+          "falseBranch": "الفرع الخاطئ",
+          "trueResult": "النتيجة الصحيحة",
+          "falseResult": "النتيجة الخاطئة",
+          "activeOutput": "المخرج النشط"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "حدد طبقة...",

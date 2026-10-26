@@ -2886,7 +2886,8 @@
       "viewUnavailable": "現在の地図表示は利用できません。",
       "selectError": "選択したプロジェクトを読み取れませんでした。",
       "restoring": "起動時のプロジェクトを開いています…",
-      "loadWarning": "起動時のプロジェクトを利用できません。GeoLibreは代わりに既定のワークスペースを開きました。"
+      "loadWarning": "起動時のプロジェクトを利用できません。GeoLibreは代わりに既定のワークスペースを開きました。",
+      "storedCopyWarning": "GeoLibre はプロジェクトファイルを読み込めなかったため、前回プロジェクトを開いたか保存したときに保持したコピーを開きました。それ以降にファイルに加えた変更は含まれていない可能性があります。現在の内容を読み込むには、「ファイルからプロジェクトを開く」でファイルを開き直してください。"
     },
     "map": {
       "constraintsTitle": "地図の制約",
@@ -3398,6 +3399,9 @@
       "haloExtentHint": "大気の輝きが地球儀の外側にどれだけ広がるかを設定します。値を小さくすると表面に沿った輪郭になり、大きくすると幅広く柔らかいハローになります。",
       "haloOpacity": "ハローの強さ",
       "spaceColor": "宇宙の色",
+      "showStars": "星",
+      "showMilkyWay": "天の川",
+      "showConstellations": "星座線",
       "reset": "既定値にリセット",
       "globeOnly": "大気効果は地球儀ビューが有効な場合のみ使用できます。"
     },
@@ -5793,9 +5797,84 @@
       "importInvalid": "このファイルにはモデルグラフが含まれていません。",
       "importUnsupported": "このファイルは GeoLibre のモデルではありません。",
       "rasterOutputUnsupported": "「{{name}}」はラスター結果のため、このビルドでは地図に追加できません。",
+      "outputUnsupported": "「{{name}}」は {{kind}} 値のため、地図に追加できません。",
       "portNeedsVector": "「{{port}}」にはベクターデータが必要ですが、ラスターが渡されました。",
+      "portCannotTake": "「{{port}}」は {{kind}} 値を受け取れません。",
       "toolNoOutput": "「{{tool}}」は出力を生成しませんでした。",
-      "toolNoUsableOutput": "「{{tool}}」は利用できる出力を生成しませんでした。"
+      "toolNoUsableOutput": "「{{tool}}」は利用できる出力を生成しませんでした。",
+      "controlFlow": {
+        "heading": "制御フロー",
+        "add": {
+          "iterateFeatures": "フィーチャ反復",
+          "iterateFeaturesTitle": "フィーチャを反復: ベクターの各フィーチャに対してワークフローを実行します",
+          "iterateRasters": "ラスター反復",
+          "iterateRastersTitle": "ラスターを反復: 各ラスターに対してワークフローを実行します",
+          "switch": "If/Else 分岐",
+          "switchTitle": "条件分岐: If/Else による条件分岐",
+          "merge": "分岐マージ",
+          "mergeTitle": "条件マージ: 分岐した経路を合流させます",
+          "collect": "結果を収集",
+          "collectTitle": "結果を収集: ループの各反復の出力をまとめます"
+        },
+        "kinds": {
+          "iterateFeatures": "フィーチャを反復",
+          "iterateRasters": "ラスターを反復",
+          "collectResults": "結果を収集",
+          "conditionalSwitch": "条件分岐",
+          "conditionalMerge": "条件マージ"
+        },
+        "switch": {
+          "description": "条件を評価し、データを True 分岐または False 分岐に送ります。",
+          "conditionType": "条件の種類",
+          "typeCompare": "値 / 属性の比較",
+          "typeBoolean": "ブール値のチェック",
+          "typeNullCheck": "null / 空のチェック",
+          "property": "フィーチャ属性 / メタデータキー (任意)",
+          "propertyPlaceholder": "例: category、feature_count、area",
+          "operator": "演算子",
+          "opEqual": "== (等しい)",
+          "opNotEqual": "!= (等しくない)",
+          "opLess": "< (より小さい)",
+          "opLessOrEqual": "<= (以下)",
+          "opGreater": "> (より大きい)",
+          "opGreaterOrEqual": ">= (以上)",
+          "opContains": "含む",
+          "opStartsWith": "先頭が一致",
+          "opEndsWith": "末尾が一致",
+          "opIsEmpty": "空である",
+          "opNotEmpty": "空でない",
+          "opIsNull": "null である",
+          "opNotNull": "null でない",
+          "value": "対象の値",
+          "valuePlaceholder": "例: 50、urban、true"
+        },
+        "iterate": {
+          "featuresDescription": "ベクターコレクション内の各フィーチャを反復処理します。",
+          "rastersDescription": "コレクション内の各ラスターデータセットを反復処理します。",
+          "maxIterations": "最大反復回数",
+          "stopOnError": "エラー時に停止"
+        },
+        "collectDescription": "ループの各反復で生成された結果をまとめて平坦化し、最終的なコレクションにします。",
+        "mergeDescription": "True 分岐と False 分岐の出力を 1 つのアクティブなデータフローに合流させます。",
+        "ports": {
+          "featureCollection": "フィーチャコレクション",
+          "currentFeature": "現在のフィーチャ",
+          "index": "インデックス",
+          "totalCount": "総数",
+          "rasterCollection": "ラスターコレクション",
+          "currentRaster": "現在のラスター",
+          "rasterName": "ラスター名",
+          "itemToCollect": "収集する項目",
+          "collectedResults": "収集した結果",
+          "count": "件数",
+          "conditionValue": "条件値",
+          "trueBranch": "True 分岐",
+          "falseBranch": "False 分岐",
+          "trueResult": "True の結果",
+          "falseResult": "False の結果",
+          "activeOutput": "アクティブな出力"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "レイヤーを選択...",

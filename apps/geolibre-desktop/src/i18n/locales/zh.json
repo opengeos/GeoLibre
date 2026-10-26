@@ -2886,7 +2886,8 @@
       "viewUnavailable": "当前地图视图不可用。",
       "selectError": "无法读取所选项目。",
       "restoring": "正在打开启动项目…",
-      "loadWarning": "启动项目不可用。GeoLibre 已改为打开默认工作区。"
+      "loadWarning": "启动项目不可用。GeoLibre 已改为打开默认工作区。",
+      "storedCopyWarning": "GeoLibre 无法读取项目文件，已改为打开上次打开或保存项目时保留的副本。此后对文件所做的更改可能会丢失。请使用“从文件打开项目”重新打开该文件，以加载其当前内容。"
     },
     "map": {
       "constraintsTitle": "地图约束",
@@ -3398,6 +3399,9 @@
       "haloExtentHint": "大气光晕超出地球表面的延伸程度。数值越低，数据越贴近表面；数值越高，光晕越宽广、越轻盈。",
       "haloOpacity": "光晕强度",
       "spaceColor": "太空颜色",
+      "showStars": "恒星",
+      "showMilkyWay": "银河",
+      "showConstellations": "星座连线",
       "reset": "恢复默认设置",
       "globeOnly": "大气效果仅在启用地球视图时可用。"
     },
@@ -5793,9 +5797,84 @@
       "importInvalid": "该文件不包含模型图。",
       "importUnsupported": "该文件不是 GeoLibre 模型。",
       "rasterOutputUnsupported": "“{{name}}”是栅格结果，此版本无法将其添加到地图。",
+      "outputUnsupported": "“{{name}}”是 {{kind}} 值，无法添加到地图。",
       "portNeedsVector": "“{{port}}”需要矢量数据，但收到的是栅格。",
+      "portCannotTake": "“{{port}}”不能接收 {{kind}} 值。",
       "toolNoOutput": "“{{tool}}”没有产生输出。",
-      "toolNoUsableOutput": "“{{tool}}”没有产生可用的输出。"
+      "toolNoUsableOutput": "“{{tool}}”没有产生可用的输出。",
+      "controlFlow": {
+        "heading": "控制流",
+        "add": {
+          "iterateFeatures": "迭代要素",
+          "iterateFeaturesTitle": "迭代要素：对每个矢量要素执行工作流",
+          "iterateRasters": "迭代栅格",
+          "iterateRastersTitle": "迭代栅格：对每个栅格执行工作流",
+          "switch": "If/Else 分支",
+          "switchTitle": "条件分支：If/Else 条件分支",
+          "merge": "分支合并",
+          "mergeTitle": "条件合并：汇合备选分支",
+          "collect": "收集结果",
+          "collectTitle": "收集结果：汇总各次循环迭代的输出"
+        },
+        "kinds": {
+          "iterateFeatures": "迭代要素",
+          "iterateRasters": "迭代栅格",
+          "collectResults": "收集结果",
+          "conditionalSwitch": "条件分支",
+          "conditionalMerge": "条件合并"
+        },
+        "switch": {
+          "description": "评估条件，并将数据路由到真分支或假分支。",
+          "conditionType": "条件类型",
+          "typeCompare": "值 / 属性比较",
+          "typeBoolean": "布尔检查",
+          "typeNullCheck": "空值 / 空检查",
+          "property": "要素属性 / 元数据键（可选）",
+          "propertyPlaceholder": "例如 category、feature_count 或 area",
+          "operator": "运算符",
+          "opEqual": "== (等于)",
+          "opNotEqual": "!= (不等于)",
+          "opLess": "< (小于)",
+          "opLessOrEqual": "<= (小于或等于)",
+          "opGreater": "> (大于)",
+          "opGreaterOrEqual": ">= (大于或等于)",
+          "opContains": "包含",
+          "opStartsWith": "开头为",
+          "opEndsWith": "结尾为",
+          "opIsEmpty": "为空",
+          "opNotEmpty": "不为空",
+          "opIsNull": "为 null",
+          "opNotNull": "不为 null",
+          "value": "目标值",
+          "valuePlaceholder": "例如 50、urban 或 true"
+        },
+        "iterate": {
+          "featuresDescription": "遍历矢量集合中的每个要素。",
+          "rastersDescription": "遍历集合中的每个栅格数据集。",
+          "maxIterations": "最大迭代次数",
+          "stopOnError": "出错时停止"
+        },
+        "collectDescription": "将每次循环迭代产生的结果汇总并展平为最终集合。",
+        "mergeDescription": "将真分支和假分支的输出汇合回单一的活动数据流。",
+        "ports": {
+          "featureCollection": "要素集合",
+          "currentFeature": "当前要素",
+          "index": "索引",
+          "totalCount": "总数",
+          "rasterCollection": "栅格集合",
+          "currentRaster": "当前栅格",
+          "rasterName": "栅格名称",
+          "itemToCollect": "待收集项",
+          "collectedResults": "已收集的结果",
+          "count": "计数",
+          "conditionValue": "条件值",
+          "trueBranch": "真分支",
+          "falseBranch": "假分支",
+          "trueResult": "真结果",
+          "falseResult": "假结果",
+          "activeOutput": "活动输出"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "选择一个图层...",

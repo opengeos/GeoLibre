@@ -2945,7 +2945,8 @@
       "viewUnavailable": "La vista corrente della mappa non è disponibile.",
       "selectError": "Impossibile leggere il progetto selezionato.",
       "restoring": "Apertura del progetto di avvio…",
-      "loadWarning": "Il progetto di avvio non è disponibile. GeoLibre ha aperto l'area di lavoro predefinita."
+      "loadWarning": "Il progetto di avvio non è disponibile. GeoLibre ha aperto l'area di lavoro predefinita.",
+      "storedCopyWarning": "GeoLibre non è riuscito a leggere il file del progetto e ha aperto la copia conservata l'ultima volta che il progetto è stato aperto o salvato. Le modifiche apportate al file da allora potrebbero mancare. Riapri il file con «Apri progetto da file» per caricarne il contenuto attuale."
     },
     "map": {
       "constraintsTitle": "Vincoli della mappa",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Quanto si estende il bagliore atmosferico oltre il globo. Un valore più basso mantiene i dati vicini alla superficie; un valore più alto crea un alone ampio e leggero.",
       "haloOpacity": "Intensità dell'alone",
       "spaceColor": "Colore dello spazio",
+      "showStars": "Stelle",
+      "showMilkyWay": "Via Lattea",
+      "showConstellations": "Linee delle costellazioni",
       "reset": "Ripristina valori predefiniti",
       "globeOnly": "Gli effetti atmosferici sono disponibili solo quando la visualizzazione Globo è attiva."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Quel file non contiene un grafo di modello.",
       "importUnsupported": "Quel file non è un modello GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» è un risultato raster che questa build non può aggiungere alla mappa.",
+      "outputUnsupported": "«{{name}}» è un valore {{kind}}, che non può essere aggiunto alla mappa.",
       "portNeedsVector": "«{{port}}» richiede dati vettoriali, ma è arrivato un raster.",
+      "portCannotTake": "«{{port}}» non accetta un valore {{kind}}.",
       "toolNoOutput": "«{{tool}}» non ha prodotto alcun risultato.",
-      "toolNoUsableOutput": "«{{tool}}» non ha prodotto alcun risultato utilizzabile."
+      "toolNoUsableOutput": "«{{tool}}» non ha prodotto alcun risultato utilizzabile.",
+      "controlFlow": {
+        "heading": "Flusso di controllo",
+        "add": {
+          "iterateFeatures": "Itera elem.",
+          "iterateFeaturesTitle": "Itera elementi: esegue il flusso di lavoro per ogni elemento vettoriale",
+          "iterateRasters": "Itera raster",
+          "iterateRastersTitle": "Itera raster: esegue il flusso di lavoro per ogni raster",
+          "switch": "Se/Altrimenti",
+          "switchTitle": "Diramazione condizionale: diramazione se/altrimenti",
+          "merge": "Unisci rami",
+          "mergeTitle": "Unione condizionale: ricongiunge i rami alternativi",
+          "collect": "Raccogli",
+          "collectTitle": "Raccogli risultati: raccoglie le uscite delle iterazioni del ciclo"
+        },
+        "kinds": {
+          "iterateFeatures": "Itera elementi",
+          "iterateRasters": "Itera raster",
+          "collectResults": "Raccogli risultati",
+          "conditionalSwitch": "Diramazione condizionale",
+          "conditionalMerge": "Unione condizionale"
+        },
+        "switch": {
+          "description": "Valuta una condizione e instrada i dati al ramo Vero o Falso.",
+          "conditionType": "Tipo di condizione",
+          "typeCompare": "Confronto di valore / proprietà",
+          "typeBoolean": "Verifica booleana",
+          "typeNullCheck": "Verifica nullo / vuoto",
+          "property": "Proprietà dell'elemento / chiave dei metadati (facoltativo)",
+          "propertyPlaceholder": "es. category, feature_count o area",
+          "operator": "Operatore",
+          "opEqual": "== (uguale)",
+          "opNotEqual": "!= (diverso)",
+          "opLess": "< (minore di)",
+          "opLessOrEqual": "<= (minore o uguale)",
+          "opGreater": "> (maggiore di)",
+          "opGreaterOrEqual": ">= (maggiore o uguale)",
+          "opContains": "contiene",
+          "opStartsWith": "inizia con",
+          "opEndsWith": "termina con",
+          "opIsEmpty": "è vuoto",
+          "opNotEmpty": "non è vuoto",
+          "opIsNull": "è nullo",
+          "opNotNull": "non è nullo",
+          "value": "Valore di destinazione",
+          "valuePlaceholder": "es. 50, urban o true"
+        },
+        "iterate": {
+          "featuresDescription": "Itera su ogni elemento della raccolta vettoriale.",
+          "rastersDescription": "Itera su ogni dataset raster della raccolta.",
+          "maxIterations": "Limite massimo di iterazioni",
+          "stopOnError": "Interrompi in caso di errore"
+        },
+        "collectDescription": "Raccoglie e appiattisce i risultati prodotti da ogni iterazione del ciclo in una raccolta finale.",
+        "mergeDescription": "Ricongiunge le uscite dei rami Vero e Falso in un unico flusso di dati attivo.",
+        "ports": {
+          "featureCollection": "Raccolta di elementi",
+          "currentFeature": "Elemento corrente",
+          "index": "Indice",
+          "totalCount": "Conteggio totale",
+          "rasterCollection": "Raccolta di raster",
+          "currentRaster": "Raster corrente",
+          "rasterName": "Nome del raster",
+          "itemToCollect": "Elemento da raccogliere",
+          "collectedResults": "Risultati raccolti",
+          "count": "Conteggio",
+          "conditionValue": "Valore della condizione",
+          "trueBranch": "Ramo Vero",
+          "falseBranch": "Ramo Falso",
+          "trueResult": "Risultato Vero",
+          "falseResult": "Risultato Falso",
+          "activeOutput": "Uscita attiva"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Seleziona un layer...",

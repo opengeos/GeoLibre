@@ -2945,7 +2945,8 @@
       "viewUnavailable": "De huidige kaartweergave is niet beschikbaar.",
       "selectError": "Het geselecteerde project kon niet worden gelezen.",
       "restoring": "Uw opstartproject wordt geopend…",
-      "loadWarning": "Het opstartproject is niet beschikbaar. GeoLibre heeft in plaats daarvan de standaardwerkruimte geopend."
+      "loadWarning": "Het opstartproject is niet beschikbaar. GeoLibre heeft in plaats daarvan de standaardwerkruimte geopend.",
+      "storedCopyWarning": "GeoLibre kon het projectbestand niet lezen en heeft de kopie geopend die werd bewaard toen het project voor het laatst werd geopend of opgeslagen. Wijzigingen die sindsdien in het bestand zijn aangebracht, kunnen ontbreken. Open het bestand opnieuw met Project openen vanuit bestand om de huidige inhoud te laden."
     },
     "map": {
       "constraintsTitle": "Kaartbeperkingen",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Hoe ver de atmosferische gloed voorbij de globe reikt. Lager houdt de gegevens dicht bij het oppervlak; hoger geeft een brede, ijle halo.",
       "haloOpacity": "Halosterkte",
       "spaceColor": "Ruimtekleur",
+      "showStars": "Sterren",
+      "showMilkyWay": "Melkweg",
+      "showConstellations": "Sterrenbeeldlijnen",
       "reset": "Standaardwaarden herstellen",
       "globeOnly": "Atmosferische effecten zijn alleen beschikbaar wanneer de Globe-weergave is ingeschakeld."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Dat bestand bevat geen modelgraaf.",
       "importUnsupported": "Dat bestand is geen GeoLibre-model.",
       "rasterOutputUnsupported": "“{{name}}” is een rasterresultaat dat deze build niet aan de kaart kan toevoegen.",
+      "outputUnsupported": "“{{name}}” is een waarde van het type {{kind}}, die niet aan de kaart kan worden toegevoegd.",
       "portNeedsVector": "“{{port}}” heeft vectorgegevens nodig, maar er kwam een raster binnen.",
+      "portCannotTake": "“{{port}}” kan geen waarde van het type {{kind}} aannemen.",
       "toolNoOutput": "“{{tool}}” heeft geen uitvoer opgeleverd.",
-      "toolNoUsableOutput": "“{{tool}}” heeft geen bruikbare uitvoer opgeleverd."
+      "toolNoUsableOutput": "“{{tool}}” heeft geen bruikbare uitvoer opgeleverd.",
+      "controlFlow": {
+        "heading": "Besturingsstroom",
+        "add": {
+          "iterateFeatures": "Itereer feat.",
+          "iterateFeaturesTitle": "Features itereren: workflow uitvoeren voor elke vectorfeature",
+          "iterateRasters": "Itereer rast.",
+          "iterateRastersTitle": "Rasters itereren: workflow uitvoeren voor elk raster",
+          "switch": "Als/anders",
+          "switchTitle": "Voorwaardelijke schakelaar: als/anders-vertakking",
+          "merge": "Samenvoegen",
+          "mergeTitle": "Voorwaardelijk samenvoegen: alternatieve takken samenbrengen",
+          "collect": "Verzamelen",
+          "collectTitle": "Resultaten verzamelen: uitvoer van lusiteraties bijeenbrengen"
+        },
+        "kinds": {
+          "iterateFeatures": "Features itereren",
+          "iterateRasters": "Rasters itereren",
+          "collectResults": "Resultaten verzamelen",
+          "conditionalSwitch": "Voorwaardelijke schakelaar",
+          "conditionalMerge": "Voorwaardelijk samenvoegen"
+        },
+        "switch": {
+          "description": "Evalueert een voorwaarde en stuurt gegevens naar de waar- of onwaar-tak.",
+          "conditionType": "Type voorwaarde",
+          "typeCompare": "Waarde-/eigenschapsvergelijking",
+          "typeBoolean": "Booleaanse controle",
+          "typeNullCheck": "Null-/leegcontrole",
+          "property": "Feature-eigenschap / metadatasleutel (optioneel)",
+          "propertyPlaceholder": "bijv. category, feature_count of area",
+          "operator": "Operator",
+          "opEqual": "== (gelijk aan)",
+          "opNotEqual": "!= (niet gelijk aan)",
+          "opLess": "< (kleiner dan)",
+          "opLessOrEqual": "<= (kleiner dan of gelijk aan)",
+          "opGreater": "> (groter dan)",
+          "opGreaterOrEqual": ">= (groter dan of gelijk aan)",
+          "opContains": "bevat",
+          "opStartsWith": "begint met",
+          "opEndsWith": "eindigt op",
+          "opIsEmpty": "is leeg",
+          "opNotEmpty": "is niet leeg",
+          "opIsNull": "is null",
+          "opNotNull": "is niet null",
+          "value": "Doelwaarde",
+          "valuePlaceholder": "bijv. 50 of urban of true"
+        },
+        "iterate": {
+          "featuresDescription": "Itereert over elke feature in de vectorverzameling.",
+          "rastersDescription": "Itereert over elke rasterdataset in de verzameling.",
+          "maxIterations": "Maximaal aantal iteraties",
+          "stopOnError": "Stoppen bij fout"
+        },
+        "collectDescription": "Verzamelt de resultaten van elke lusiteratie en voegt ze samen tot één eindverzameling.",
+        "mergeDescription": "Voegt de uitvoer van de waar- en onwaar-tak weer samen tot één actieve gegevensstroom.",
+        "ports": {
+          "featureCollection": "Featureverzameling",
+          "currentFeature": "Huidige feature",
+          "index": "Index",
+          "totalCount": "Totaal aantal",
+          "rasterCollection": "Rasterverzameling",
+          "currentRaster": "Huidig raster",
+          "rasterName": "Rasternaam",
+          "itemToCollect": "Te verzamelen item",
+          "collectedResults": "Verzamelde resultaten",
+          "count": "Aantal",
+          "conditionValue": "Voorwaardewaarde",
+          "trueBranch": "Waar-tak",
+          "falseBranch": "Onwaar-tak",
+          "trueResult": "Waar-resultaat",
+          "falseResult": "Onwaar-resultaat",
+          "activeOutput": "Actieve uitvoer"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Selecteer een laag...",

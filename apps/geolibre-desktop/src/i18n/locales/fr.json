@@ -2945,7 +2945,8 @@
       "viewUnavailable": "La vue actuelle de la carte n'est pas disponible.",
       "selectError": "Impossible de lire le projet sélectionné.",
       "restoring": "Ouverture de votre projet de démarrage…",
-      "loadWarning": "Le projet de démarrage est indisponible. GeoLibre a ouvert l'espace de travail par défaut à la place."
+      "loadWarning": "Le projet de démarrage est indisponible. GeoLibre a ouvert l'espace de travail par défaut à la place.",
+      "storedCopyWarning": "GeoLibre n'a pas pu lire le fichier du projet et a ouvert la copie conservée lors de la dernière ouverture ou du dernier enregistrement du projet. Les modifications apportées au fichier depuis peuvent manquer. Rouvrez le fichier avec « Ouvrir le projet depuis un fichier » pour charger son contenu actuel."
     },
     "map": {
       "constraintsTitle": "Contraintes de carte",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Distance à laquelle la lueur atmosphérique s'étend au-delà du globe. Une valeur plus basse garde les données proches de la surface ; une valeur plus haute donne un halo large et aérien.",
       "haloOpacity": "Intensité du halo",
       "spaceColor": "Couleur de l'espace",
+      "showStars": "Étoiles",
+      "showMilkyWay": "Voie lactée",
+      "showConstellations": "Lignes des constellations",
       "reset": "Réinitialiser les valeurs par défaut",
       "globeOnly": "Les effets atmosphériques ne sont disponibles que lorsque la vue Globe est activée."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Ce fichier ne contient pas de graphe de modèle.",
       "importUnsupported": "Ce fichier n'est pas un modèle GeoLibre.",
       "rasterOutputUnsupported": "« {{name}} » est un résultat raster que cette version ne peut pas ajouter à la carte.",
+      "outputUnsupported": "« {{name}} » est une valeur {{kind}}, qui ne peut pas être ajoutée à la carte.",
       "portNeedsVector": "« {{port}} » nécessite des données vectorielles, mais un raster est arrivé.",
+      "portCannotTake": "« {{port}} » n'accepte pas une valeur {{kind}}.",
       "toolNoOutput": "« {{tool}} » n'a produit aucun résultat.",
-      "toolNoUsableOutput": "« {{tool}} » n'a produit aucun résultat exploitable."
+      "toolNoUsableOutput": "« {{tool}} » n'a produit aucun résultat exploitable.",
+      "controlFlow": {
+        "heading": "Flux de contrôle",
+        "add": {
+          "iterateFeatures": "Itérer ent.",
+          "iterateFeaturesTitle": "Itérer sur les entités : exécuter le workflow pour chaque entité vectorielle",
+          "iterateRasters": "Itérer rast.",
+          "iterateRastersTitle": "Itérer sur les rasters : exécuter le workflow pour chaque raster",
+          "switch": "Si/Sinon",
+          "switchTitle": "Aiguillage conditionnel : branchement conditionnel si/sinon",
+          "merge": "Fusion",
+          "mergeTitle": "Fusion conditionnelle : réunir les branches alternatives",
+          "collect": "Collecter",
+          "collectTitle": "Collecter les résultats : rassembler les sorties des itérations de la boucle"
+        },
+        "kinds": {
+          "iterateFeatures": "Itérer sur les entités",
+          "iterateRasters": "Itérer sur les rasters",
+          "collectResults": "Collecter les résultats",
+          "conditionalSwitch": "Aiguillage conditionnel",
+          "conditionalMerge": "Fusion conditionnelle"
+        },
+        "switch": {
+          "description": "Évalue une condition et oriente les données vers la branche Vrai ou Faux.",
+          "conditionType": "Type de condition",
+          "typeCompare": "Comparaison de valeur / propriété",
+          "typeBoolean": "Test booléen",
+          "typeNullCheck": "Test de nullité / vide",
+          "property": "Propriété de l'entité / clé de métadonnées (facultatif)",
+          "propertyPlaceholder": "p. ex. category, feature_count ou area",
+          "operator": "Opérateur",
+          "opEqual": "== (égal à)",
+          "opNotEqual": "!= (différent de)",
+          "opLess": "< (inférieur à)",
+          "opLessOrEqual": "<= (inférieur ou égal à)",
+          "opGreater": "> (supérieur à)",
+          "opGreaterOrEqual": ">= (supérieur ou égal à)",
+          "opContains": "contient",
+          "opStartsWith": "commence par",
+          "opEndsWith": "se termine par",
+          "opIsEmpty": "est vide",
+          "opNotEmpty": "n'est pas vide",
+          "opIsNull": "est nul",
+          "opNotNull": "n'est pas nul",
+          "value": "Valeur cible",
+          "valuePlaceholder": "p. ex. 50, urban ou true"
+        },
+        "iterate": {
+          "featuresDescription": "Parcourt chaque entité de la collection vectorielle.",
+          "rastersDescription": "Parcourt chaque jeu de données raster de la collection.",
+          "maxIterations": "Nombre maximal d'itérations",
+          "stopOnError": "Arrêter en cas d'erreur"
+        },
+        "collectDescription": "Rassemble et aplatit les résultats produits par chaque itération de la boucle en une collection finale.",
+        "mergeDescription": "Réunit les sorties des branches Vrai et Faux en un seul flux de données actif.",
+        "ports": {
+          "featureCollection": "Collection d'entités",
+          "currentFeature": "Entité courante",
+          "index": "Index",
+          "totalCount": "Nombre total",
+          "rasterCollection": "Collection de rasters",
+          "currentRaster": "Raster courant",
+          "rasterName": "Nom du raster",
+          "itemToCollect": "Élément à collecter",
+          "collectedResults": "Résultats collectés",
+          "count": "Nombre",
+          "conditionValue": "Valeur de la condition",
+          "trueBranch": "Branche Vrai",
+          "falseBranch": "Branche Faux",
+          "trueResult": "Résultat Vrai",
+          "falseResult": "Résultat Faux",
+          "activeOutput": "Sortie active"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Sélectionner une couche...",

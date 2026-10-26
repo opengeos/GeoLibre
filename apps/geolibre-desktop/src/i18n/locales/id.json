@@ -2886,7 +2886,8 @@
       "viewUnavailable": "Tampilan peta saat ini tidak tersedia.",
       "selectError": "Proyek yang dipilih tidak dapat dibaca.",
       "restoring": "Membuka proyek saat memulai Anda…",
-      "loadWarning": "Proyek saat memulai tidak tersedia. GeoLibre membuka ruang kerja bawaan sebagai gantinya."
+      "loadWarning": "Proyek saat memulai tidak tersedia. GeoLibre membuka ruang kerja bawaan sebagai gantinya.",
+      "storedCopyWarning": "GeoLibre tidak dapat membaca berkas proyek dan membuka salinan yang disimpannya saat proyek terakhir dibuka atau disimpan. Perubahan pada berkas sejak saat itu mungkin hilang. Buka berkas itu lagi dengan Buka Proyek dari File untuk memuat isinya saat ini."
     },
     "map": {
       "constraintsTitle": "Batasan peta",
@@ -3398,6 +3399,9 @@
       "haloExtentHint": "Seberapa jauh cahaya atmosfer menjangkau melampaui bola dunia. Lebih rendah menjaga data tetap dekat dengan permukaan; lebih tinggi memberikan halo yang lebar dan lapang.",
       "haloOpacity": "Kekuatan halo",
       "spaceColor": "Warna ruang angkasa",
+      "showStars": "Bintang",
+      "showMilkyWay": "Bima Sakti",
+      "showConstellations": "Garis rasi bintang",
       "reset": "Atur ulang ke default",
       "globeOnly": "Efek atmosfer hanya tersedia saat tampilan Bola dunia diaktifkan."
     },
@@ -5793,9 +5797,84 @@
       "importInvalid": "Berkas itu tidak berisi graf model.",
       "importUnsupported": "Berkas itu bukan model GeoLibre.",
       "rasterOutputUnsupported": "\"{{name}}\" adalah hasil raster yang tidak dapat ditambahkan ke peta oleh versi ini.",
+      "outputUnsupported": "\"{{name}}\" adalah nilai {{kind}} yang tidak dapat ditambahkan ke peta.",
       "portNeedsVector": "\"{{port}}\" memerlukan data vektor, tetapi yang datang adalah raster.",
+      "portCannotTake": "\"{{port}}\" tidak dapat menerima nilai {{kind}}.",
       "toolNoOutput": "\"{{tool}}\" tidak menghasilkan keluaran.",
-      "toolNoUsableOutput": "\"{{tool}}\" tidak menghasilkan keluaran yang dapat digunakan."
+      "toolNoUsableOutput": "\"{{tool}}\" tidak menghasilkan keluaran yang dapat digunakan.",
+      "controlFlow": {
+        "heading": "Alur Kontrol",
+        "add": {
+          "iterateFeatures": "Iterasi Fitur",
+          "iterateFeaturesTitle": "Iterasi Fitur: Jalankan alur kerja untuk setiap fitur vektor",
+          "iterateRasters": "Iterasi Raster",
+          "iterateRastersTitle": "Iterasi Raster: Jalankan alur kerja untuk setiap raster",
+          "switch": "If/Else",
+          "switchTitle": "Sakelar Bersyarat: Percabangan bersyarat If/Else",
+          "merge": "Gabung Cabang",
+          "mergeTitle": "Penggabungan Bersyarat: Satukan cabang alternatif",
+          "collect": "Kumpulkan",
+          "collectTitle": "Kumpulkan Hasil: Himpun keluaran dari setiap iterasi perulangan"
+        },
+        "kinds": {
+          "iterateFeatures": "Iterasi Fitur",
+          "iterateRasters": "Iterasi Raster",
+          "collectResults": "Kumpulkan Hasil",
+          "conditionalSwitch": "Sakelar Bersyarat",
+          "conditionalMerge": "Penggabungan Bersyarat"
+        },
+        "switch": {
+          "description": "Mengevaluasi kondisi dan mengarahkan data ke cabang True atau False.",
+          "conditionType": "Jenis Kondisi",
+          "typeCompare": "Perbandingan Nilai / Properti",
+          "typeBoolean": "Pemeriksaan Boolean",
+          "typeNullCheck": "Pemeriksaan Null / Kosong",
+          "property": "Properti Fitur / Kunci Metadata (Opsional)",
+          "propertyPlaceholder": "mis. category, feature_count, atau area",
+          "operator": "Operator",
+          "opEqual": "== (Sama Dengan)",
+          "opNotEqual": "!= (Tidak Sama Dengan)",
+          "opLess": "< (Lebih Kecil Dari)",
+          "opLessOrEqual": "<= (Lebih Kecil Dari atau Sama Dengan)",
+          "opGreater": "> (Lebih Besar Dari)",
+          "opGreaterOrEqual": ">= (Lebih Besar Dari atau Sama Dengan)",
+          "opContains": "memuat",
+          "opStartsWith": "diawali dengan",
+          "opEndsWith": "diakhiri dengan",
+          "opIsEmpty": "kosong",
+          "opNotEmpty": "tidak kosong",
+          "opIsNull": "null",
+          "opNotNull": "tidak null",
+          "value": "Nilai Target",
+          "valuePlaceholder": "mis. 50 atau urban atau true"
+        },
+        "iterate": {
+          "featuresDescription": "Melakukan iterasi pada setiap fitur dalam koleksi vektor.",
+          "rastersDescription": "Melakukan iterasi pada setiap dataset raster dalam koleksi.",
+          "maxIterations": "Batas Iterasi Maksimum",
+          "stopOnError": "Berhenti Saat Galat"
+        },
+        "collectDescription": "Menghimpun dan meratakan hasil dari setiap iterasi perulangan menjadi satu koleksi akhir.",
+        "mergeDescription": "Menyatukan kembali keluaran cabang True dan False menjadi satu alur data aktif.",
+        "ports": {
+          "featureCollection": "Koleksi Fitur",
+          "currentFeature": "Fitur Saat Ini",
+          "index": "Indeks",
+          "totalCount": "Jumlah Total",
+          "rasterCollection": "Koleksi Raster",
+          "currentRaster": "Raster Saat Ini",
+          "rasterName": "Nama Raster",
+          "itemToCollect": "Item untuk Dikumpulkan",
+          "collectedResults": "Hasil Terkumpul",
+          "count": "Jumlah",
+          "conditionValue": "Nilai Kondisi",
+          "trueBranch": "Cabang True",
+          "falseBranch": "Cabang False",
+          "trueResult": "Hasil True",
+          "falseResult": "Hasil False",
+          "activeOutput": "Keluaran Aktif"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Pilih layer...",

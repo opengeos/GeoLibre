@@ -2945,7 +2945,8 @@
       "viewUnavailable": "La vista actual del mapa no está disponible.",
       "selectError": "No se pudo leer el proyecto seleccionado.",
       "restoring": "Abriendo su proyecto de inicio…",
-      "loadWarning": "El proyecto de inicio no está disponible. GeoLibre abrió el espacio de trabajo predeterminado en su lugar."
+      "loadWarning": "El proyecto de inicio no está disponible. GeoLibre abrió el espacio de trabajo predeterminado en su lugar.",
+      "storedCopyWarning": "GeoLibre no pudo leer el archivo del proyecto y abrió la copia que guardó la última vez que el proyecto se abrió o se guardó. Es posible que falten los cambios hechos en el archivo desde entonces. Vuelva a abrir el archivo con «Abrir proyecto desde archivo» para cargar su contenido actual."
     },
     "map": {
       "constraintsTitle": "Restricciones del mapa",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Hasta dónde llega el resplandor atmosférico más allá del globo. Un valor más bajo mantiene los datos ajustados a la superficie; un valor más alto produce un halo amplio y etéreo.",
       "haloOpacity": "Intensidad del halo",
       "spaceColor": "Color del espacio",
+      "showStars": "Estrellas",
+      "showMilkyWay": "Vía Láctea",
+      "showConstellations": "Líneas de constelaciones",
       "reset": "Restablecer valores predeterminados",
       "globeOnly": "Los efectos atmosféricos solo están disponibles cuando la vista de globo está activada."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Ese archivo no contiene un grafo de modelo.",
       "importUnsupported": "Ese archivo no es un modelo de GeoLibre.",
       "rasterOutputUnsupported": "«{{name}}» es un resultado ráster que esta versión no puede añadir al mapa.",
+      "outputUnsupported": "«{{name}}» es un valor de tipo {{kind}}, que no se puede añadir al mapa.",
       "portNeedsVector": "«{{port}}» necesita datos vectoriales, pero llegó un ráster.",
+      "portCannotTake": "«{{port}}» no admite un valor de tipo {{kind}}.",
       "toolNoOutput": "«{{tool}}» no produjo ningún resultado.",
-      "toolNoUsableOutput": "«{{tool}}» no produjo ningún resultado utilizable."
+      "toolNoUsableOutput": "«{{tool}}» no produjo ningún resultado utilizable.",
+      "controlFlow": {
+        "heading": "Flujo de control",
+        "add": {
+          "iterateFeatures": "Iterar ent.",
+          "iterateFeaturesTitle": "Iterar entidades: ejecuta el flujo de trabajo para cada entidad vectorial",
+          "iterateRasters": "Iterar rást.",
+          "iterateRastersTitle": "Iterar rásteres: ejecuta el flujo de trabajo para cada ráster",
+          "switch": "Si/Si no",
+          "switchTitle": "Bifurcación condicional: ramificación condicional si/si no",
+          "merge": "Unir ramas",
+          "mergeTitle": "Unión condicional: une ramas alternativas",
+          "collect": "Recopilar",
+          "collectTitle": "Recopilar resultados: reúne las salidas de las iteraciones del bucle"
+        },
+        "kinds": {
+          "iterateFeatures": "Iterar entidades",
+          "iterateRasters": "Iterar rásteres",
+          "collectResults": "Recopilar resultados",
+          "conditionalSwitch": "Bifurcación condicional",
+          "conditionalMerge": "Unión condicional"
+        },
+        "switch": {
+          "description": "Evalúa una condición y envía los datos a la rama Verdadero o Falso.",
+          "conditionType": "Tipo de condición",
+          "typeCompare": "Comparación de valor / propiedad",
+          "typeBoolean": "Comprobación booleana",
+          "typeNullCheck": "Comprobación de nulo / vacío",
+          "property": "Propiedad de la entidad / clave de metadatos (opcional)",
+          "propertyPlaceholder": "p. ej., category, feature_count o area",
+          "operator": "Operador",
+          "opEqual": "== (igual a)",
+          "opNotEqual": "!= (distinto de)",
+          "opLess": "< (menor que)",
+          "opLessOrEqual": "<= (menor o igual que)",
+          "opGreater": "> (mayor que)",
+          "opGreaterOrEqual": ">= (mayor o igual que)",
+          "opContains": "contiene",
+          "opStartsWith": "empieza por",
+          "opEndsWith": "termina en",
+          "opIsEmpty": "está vacío",
+          "opNotEmpty": "no está vacío",
+          "opIsNull": "es nulo",
+          "opNotNull": "no es nulo",
+          "value": "Valor objetivo",
+          "valuePlaceholder": "p. ej., 50, urban o true"
+        },
+        "iterate": {
+          "featuresDescription": "Itera sobre cada entidad de la colección vectorial.",
+          "rastersDescription": "Itera sobre cada conjunto de datos ráster de la colección.",
+          "maxIterations": "Límite máximo de iteraciones",
+          "stopOnError": "Detener en caso de error"
+        },
+        "collectDescription": "Reúne y aplana los resultados de cada iteración del bucle en una colección final.",
+        "mergeDescription": "Une las salidas de las ramas Verdadero y Falso en un único flujo de datos activo.",
+        "ports": {
+          "featureCollection": "Colección de entidades",
+          "currentFeature": "Entidad actual",
+          "index": "Índice",
+          "totalCount": "Recuento total",
+          "rasterCollection": "Colección de rásteres",
+          "currentRaster": "Ráster actual",
+          "rasterName": "Nombre del ráster",
+          "itemToCollect": "Elemento a recopilar",
+          "collectedResults": "Resultados recopilados",
+          "count": "Recuento",
+          "conditionValue": "Valor de la condición",
+          "trueBranch": "Rama Verdadero",
+          "falseBranch": "Rama Falso",
+          "trueResult": "Resultado Verdadero",
+          "falseResult": "Resultado Falso",
+          "activeOutput": "Salida activa"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Seleccionar una capa...",

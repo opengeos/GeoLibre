@@ -2945,7 +2945,8 @@
       "viewUnavailable": "نمای کنونی نقشه در دسترس نیست.",
       "selectError": "پروژهٔ برگزیده خوانده نشد.",
       "restoring": "در حال گشودن پروژهٔ آغازین شما…",
-      "loadWarning": "پروژهٔ آغازین در دسترس نیست. GeoLibre به‌جای آن فضای کاری پیش‌فرض را گشود."
+      "loadWarning": "پروژهٔ آغازین در دسترس نیست. GeoLibre به‌جای آن فضای کاری پیش‌فرض را گشود.",
+      "storedCopyWarning": "GeoLibre نتوانست پروندهٔ پروژه را بخواند و نسخه‌ای را باز کرد که هنگام آخرین باز یا ذخیره شدن پروژه نگه داشته بود. ممکن است تغییراتی که از آن زمان در پرونده داده شده‌اند موجود نباشند. برای بارگذاری محتوای کنونی پرونده، آن را دوباره با «باز کردن پروژه از فایل» باز کنید."
     },
     "map": {
       "constraintsTitle": "قیدهای نقشه",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "درخشش جوّی تا چه فاصله‌ای فراتر از کره می‌رود. مقدار کمتر داده را نزدیک سطح نگه می‌دارد؛ مقدار بیشتر هاله‌ای پهن و لطیف می‌دهد.",
       "haloOpacity": "شدت هاله",
       "spaceColor": "رنگ فضا",
+      "showStars": "ستارگان",
+      "showMilkyWay": "کهکشان راه شیری",
+      "showConstellations": "خطوط صورت‌های فلکی",
       "reset": "بازنشانی به پیش‌فرض‌ها",
       "globeOnly": "جلوه‌های جوّی تنها هنگام فعال بودن نمای کروی در دسترس‌اند."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "این پرونده شامل گراف مدل نیست.",
       "importUnsupported": "این پرونده یک مدل GeoLibre نیست.",
       "rasterOutputUnsupported": "«{{name}}» یک نتیجهٔ رستری است که این نسخه نمی‌تواند به نقشه بیفزاید.",
+      "outputUnsupported": "«{{name}}» یک مقدار {{kind}} است که نمی‌توان آن را به نقشه افزود.",
       "portNeedsVector": "«{{port}}» به دادهٔ برداری نیاز دارد، اما یک رستر دریافت شد.",
+      "portCannotTake": "«{{port}}» نمی‌تواند مقدار {{kind}} بپذیرد.",
       "toolNoOutput": "«{{tool}}» هیچ خروجی تولید نکرد.",
-      "toolNoUsableOutput": "«{{tool}}» خروجی قابل‌استفاده‌ای تولید نکرد."
+      "toolNoUsableOutput": "«{{tool}}» خروجی قابل‌استفاده‌ای تولید نکرد.",
+      "controlFlow": {
+        "heading": "کنترل جریان",
+        "add": {
+          "iterateFeatures": "تکرار عوارض",
+          "iterateFeaturesTitle": "تکرار روی عوارض: اجرای گردش کار برای هر عارضهٔ برداری",
+          "iterateRasters": "تکرار رسترها",
+          "iterateRastersTitle": "تکرار روی رسترها: اجرای گردش کار برای هر رستر",
+          "switch": "اگر/وگرنه",
+          "switchTitle": "سوئیچ شرطی: انشعاب شرطی اگر/وگرنه",
+          "merge": "ادغام شاخه‌ها",
+          "mergeTitle": "ادغام شرطی: همگرا کردن شاخه‌های جایگزین",
+          "collect": "گردآوری نتایج",
+          "collectTitle": "گردآوری نتایج: جمع‌آوری خروجی‌های تکرارهای حلقه"
+        },
+        "kinds": {
+          "iterateFeatures": "تکرار روی عوارض",
+          "iterateRasters": "تکرار روی رسترها",
+          "collectResults": "گردآوری نتایج",
+          "conditionalSwitch": "سوئیچ شرطی",
+          "conditionalMerge": "ادغام شرطی"
+        },
+        "switch": {
+          "description": "یک شرط را ارزیابی می‌کند و داده را به شاخهٔ True یا False می‌فرستد.",
+          "conditionType": "نوع شرط",
+          "typeCompare": "مقایسهٔ مقدار / ویژگی",
+          "typeBoolean": "بررسی بولی",
+          "typeNullCheck": "بررسی null / خالی",
+          "property": "ویژگی عارضه / کلید فراداده (اختیاری)",
+          "propertyPlaceholder": "مثال: category، feature_count یا area",
+          "operator": "عملگر",
+          "opEqual": "== (برابر)",
+          "opNotEqual": "!= (نابرابر)",
+          "opLess": "< (کوچک‌تر از)",
+          "opLessOrEqual": "<= (کوچک‌تر یا برابر)",
+          "opGreater": "> (بزرگ‌تر از)",
+          "opGreaterOrEqual": ">= (بزرگ‌تر یا برابر)",
+          "opContains": "شامل",
+          "opStartsWith": "آغاز می‌شود با",
+          "opEndsWith": "پایان می‌یابد با",
+          "opIsEmpty": "خالی است",
+          "opNotEmpty": "خالی نیست",
+          "opIsNull": "null است",
+          "opNotNull": "null نیست",
+          "value": "مقدار هدف",
+          "valuePlaceholder": "مثال: 50 یا urban یا true"
+        },
+        "iterate": {
+          "featuresDescription": "روی هر عارضه در مجموعهٔ برداری تکرار می‌کند.",
+          "rastersDescription": "روی هر مجموعه‌دادهٔ رستری در مجموعه تکرار می‌کند.",
+          "maxIterations": "حداکثر تعداد تکرارها",
+          "stopOnError": "توقف هنگام خطا"
+        },
+        "collectDescription": "نتایج تولیدشده در هر تکرار حلقه را گردآوری و در یک مجموعهٔ نهایی تخت می‌کند.",
+        "mergeDescription": "خروجی‌های شاخهٔ True و False را دوباره در یک جریان دادهٔ فعال واحد همگرا می‌کند.",
+        "ports": {
+          "featureCollection": "مجموعهٔ عوارض",
+          "currentFeature": "عارضهٔ کنونی",
+          "index": "اندیس",
+          "totalCount": "شمار کل",
+          "rasterCollection": "مجموعهٔ رسترها",
+          "currentRaster": "رستر کنونی",
+          "rasterName": "نام رستر",
+          "itemToCollect": "مورد برای گردآوری",
+          "collectedResults": "نتایج گردآوری‌شده",
+          "count": "شمارش",
+          "conditionValue": "مقدار شرط",
+          "trueBranch": "شاخهٔ True",
+          "falseBranch": "شاخهٔ False",
+          "trueResult": "نتیجهٔ True",
+          "falseResult": "نتیجهٔ False",
+          "activeOutput": "خروجی فعال"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "یک لایه برگزینید...",

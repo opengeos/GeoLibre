@@ -2886,7 +2886,8 @@
       "viewUnavailable": "Chế độ xem bản đồ hiện tại không khả dụng.",
       "selectError": "Không thể đọc được dự án đã chọn.",
       "restoring": "Đang mở dự án khởi động của bạn…",
-      "loadWarning": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định."
+      "loadWarning": "Dự án khởi động không có sẵn. Thay vào đó, GeoLibre đã mở không gian làm việc mặc định.",
+      "storedCopyWarning": "GeoLibre không thể đọc tệp dự án nên đã mở bản sao được lưu giữ khi dự án được mở hoặc lưu lần gần nhất. Các thay đổi thực hiện trên tệp kể từ đó có thể bị thiếu. Hãy mở lại tệp bằng \"Mở dự án từ tệp\" để tải nội dung hiện tại của nó."
     },
     "map": {
       "constraintsTitle": "Hạn chế về bản đồ",
@@ -3395,9 +3396,12 @@
     "atmosphere": {
       "haloColor": "Màu hào quang",
       "haloExtent": "phạm vi hào quang",
-      "haloExtentHint": "Tạm dừng",
+      "haloExtentHint": "Khoảng vầng sáng khí quyển lan ra ngoài quả địa cầu. Giá trị thấp giữ dữ liệu sát bề mặt; giá trị cao tạo vầng sáng rộng, thoáng.",
       "haloOpacity": "Sức mạnh hào quang",
       "spaceColor": "Màu không gian",
+      "showStars": "Các vì sao",
+      "showMilkyWay": "Dải Ngân Hà",
+      "showConstellations": "Đường chòm sao",
       "reset": "Đặt lại về mặc định",
       "globeOnly": "Hiệu ứng khí quyển chỉ khả dụng khi bật chế độ xem Quả cầu."
     },
@@ -3580,7 +3584,7 @@
       "toggleColorbar": "Thêm lớp raster",
       "projectNew": "Thêm lớp PBF OSM",
       "projectStarterExamples": "Mở ví dụ khởi đầu",
-      "projectOpenFile": "Phút",
+      "projectOpenFile": "Mở dự án từ tệp",
       "projectOpenUrl": "Mở dự án từ URL",
       "projectSave": "Lưu dự án",
       "projectSaveAs": "Lưu dự án dưới dạng…",
@@ -5793,9 +5797,84 @@
       "importInvalid": "Tệp đó không chứa đồ thị mô hình.",
       "importUnsupported": "Tệp đó không phải là mô hình GeoLibre.",
       "rasterOutputUnsupported": "\"{{name}}\" là kết quả raster mà bản dựng này không thể thêm vào bản đồ.",
+      "outputUnsupported": "\"{{name}}\" là giá trị {{kind}}, không thể thêm vào bản đồ.",
       "portNeedsVector": "\"{{port}}\" cần dữ liệu vector, nhưng lại nhận được raster.",
+      "portCannotTake": "\"{{port}}\" không thể nhận giá trị {{kind}}.",
       "toolNoOutput": "\"{{tool}}\" không tạo ra kết quả nào.",
-      "toolNoUsableOutput": "\"{{tool}}\" không tạo ra kết quả dùng được nào."
+      "toolNoUsableOutput": "\"{{tool}}\" không tạo ra kết quả dùng được nào.",
+      "controlFlow": {
+        "heading": "Luồng điều khiển",
+        "add": {
+          "iterateFeatures": "Lặp đối tượng",
+          "iterateFeaturesTitle": "Lặp đối tượng: Chạy quy trình cho từng đối tượng vector",
+          "iterateRasters": "Lặp raster",
+          "iterateRastersTitle": "Lặp raster: Chạy quy trình cho từng raster",
+          "switch": "If/Else",
+          "switchTitle": "Rẽ nhánh có điều kiện: Rẽ nhánh theo điều kiện If/Else",
+          "merge": "Gộp nhánh",
+          "mergeTitle": "Gộp có điều kiện: Hợp nhất các nhánh thay thế",
+          "collect": "Thu kết quả",
+          "collectTitle": "Thu thập kết quả: Gom đầu ra từ các lần lặp"
+        },
+        "kinds": {
+          "iterateFeatures": "Lặp đối tượng",
+          "iterateRasters": "Lặp raster",
+          "collectResults": "Thu thập kết quả",
+          "conditionalSwitch": "Rẽ nhánh có điều kiện",
+          "conditionalMerge": "Gộp có điều kiện"
+        },
+        "switch": {
+          "description": "Đánh giá một điều kiện và chuyển dữ liệu tới nhánh True hoặc False.",
+          "conditionType": "Loại điều kiện",
+          "typeCompare": "So sánh giá trị / thuộc tính",
+          "typeBoolean": "Kiểm tra Boolean",
+          "typeNullCheck": "Kiểm tra null / rỗng",
+          "property": "Thuộc tính đối tượng / Khóa siêu dữ liệu (Tùy chọn)",
+          "propertyPlaceholder": "ví dụ. category, feature_count hoặc area",
+          "operator": "Toán tử",
+          "opEqual": "== (Bằng)",
+          "opNotEqual": "!= (Khác)",
+          "opLess": "< (Nhỏ hơn)",
+          "opLessOrEqual": "<= (Nhỏ hơn hoặc bằng)",
+          "opGreater": "> (Lớn hơn)",
+          "opGreaterOrEqual": ">= (Lớn hơn hoặc bằng)",
+          "opContains": "chứa",
+          "opStartsWith": "bắt đầu bằng",
+          "opEndsWith": "kết thúc bằng",
+          "opIsEmpty": "rỗng",
+          "opNotEmpty": "không rỗng",
+          "opIsNull": "là null",
+          "opNotNull": "không phải null",
+          "value": "Giá trị đích",
+          "valuePlaceholder": "ví dụ. 50 hoặc urban hoặc true"
+        },
+        "iterate": {
+          "featuresDescription": "Lặp qua từng đối tượng trong tập hợp vector.",
+          "rastersDescription": "Lặp qua từng tập dữ liệu raster trong tập hợp.",
+          "maxIterations": "Giới hạn số lần lặp tối đa",
+          "stopOnError": "Dừng khi có lỗi"
+        },
+        "collectDescription": "Thu thập và làm phẳng kết quả của từng lần lặp thành một tập hợp cuối cùng.",
+        "mergeDescription": "Hợp nhất đầu ra của nhánh True và False trở lại một luồng dữ liệu đang hoạt động duy nhất.",
+        "ports": {
+          "featureCollection": "Tập hợp đối tượng",
+          "currentFeature": "Đối tượng hiện tại",
+          "index": "Chỉ mục",
+          "totalCount": "Tổng số",
+          "rasterCollection": "Tập hợp raster",
+          "currentRaster": "Raster hiện tại",
+          "rasterName": "Tên raster",
+          "itemToCollect": "Mục cần thu thập",
+          "collectedResults": "Kết quả đã thu thập",
+          "count": "Số lượng",
+          "conditionValue": "Giá trị điều kiện",
+          "trueBranch": "Nhánh True",
+          "falseBranch": "Nhánh False",
+          "trueResult": "Kết quả True",
+          "falseResult": "Kết quả False",
+          "activeOutput": "Đầu ra đang hoạt động"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Sao chép liên kết có thể chia sẻ để mở công cụ này với cài đặt hiện tại",

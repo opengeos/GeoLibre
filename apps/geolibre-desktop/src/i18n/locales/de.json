@@ -2945,7 +2945,8 @@
       "viewUnavailable": "Die aktuelle Kartenansicht ist nicht verfügbar.",
       "selectError": "Das ausgewählte Projekt konnte nicht gelesen werden.",
       "restoring": "Ihr Startprojekt wird geöffnet…",
-      "loadWarning": "Das Startprojekt ist nicht verfügbar. GeoLibre hat stattdessen den Standardarbeitsbereich geöffnet."
+      "loadWarning": "Das Startprojekt ist nicht verfügbar. GeoLibre hat stattdessen den Standardarbeitsbereich geöffnet.",
+      "storedCopyWarning": "GeoLibre konnte die Projektdatei nicht lesen und hat die Kopie geöffnet, die beim letzten Öffnen oder Speichern des Projekts angelegt wurde. Seitdem an der Datei vorgenommene Änderungen fehlen möglicherweise. Öffnen Sie die Datei erneut mit „Projekt aus Datei öffnen“, um ihren aktuellen Inhalt zu laden."
     },
     "map": {
       "constraintsTitle": "Kartenbeschränkungen",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Wie weit der atmosphärische Schein über den Globus hinausreicht. Niedrigere Werte halten die Daten nah an der Oberfläche, höhere Werte erzeugen einen weiten, luftigen Heiligenschein.",
       "haloOpacity": "Halostärke",
       "spaceColor": "Weltraumfarbe",
+      "showStars": "Sterne",
+      "showMilkyWay": "Milchstraße",
+      "showConstellations": "Sternbildlinien",
       "reset": "Auf Standard zurücksetzen",
       "globeOnly": "Atmosphärische Effekte sind nur verfügbar, wenn die Globusansicht aktiviert ist."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Diese Datei enthält kein Modelldiagramm.",
       "importUnsupported": "Diese Datei ist kein GeoLibre-Modell.",
       "rasterOutputUnsupported": "„{{name}}“ ist ein Rasterergebnis, das dieser Build nicht zur Karte hinzufügen kann.",
+      "outputUnsupported": "„{{name}}“ ist ein {{kind}}-Wert, der nicht zur Karte hinzugefügt werden kann.",
       "portNeedsVector": "„{{port}}“ benötigt Vektordaten, es kam aber ein Raster an.",
+      "portCannotTake": "„{{port}}“ kann keinen {{kind}}-Wert annehmen.",
       "toolNoOutput": "„{{tool}}“ hat keine Ausgabe erzeugt.",
-      "toolNoUsableOutput": "„{{tool}}“ hat keine verwendbare Ausgabe erzeugt."
+      "toolNoUsableOutput": "„{{tool}}“ hat keine verwendbare Ausgabe erzeugt.",
+      "controlFlow": {
+        "heading": "Ablaufsteuerung",
+        "add": {
+          "iterateFeatures": "Obj. iterieren",
+          "iterateFeaturesTitle": "Objekte iterieren: Workflow für jedes Vektorobjekt ausführen",
+          "iterateRasters": "Raster iter.",
+          "iterateRastersTitle": "Raster iterieren: Workflow für jedes Raster ausführen",
+          "switch": "Wenn/Sonst",
+          "switchTitle": "Bedingte Verzweigung: Wenn/Sonst-Verzweigung",
+          "merge": "Zusammenf.",
+          "mergeTitle": "Bedingte Zusammenführung: Alternative Zweige zusammenführen",
+          "collect": "Sammeln",
+          "collectTitle": "Ergebnisse sammeln: Ausgaben der Schleifendurchläufe zusammenführen"
+        },
+        "kinds": {
+          "iterateFeatures": "Objekte iterieren",
+          "iterateRasters": "Raster iterieren",
+          "collectResults": "Ergebnisse sammeln",
+          "conditionalSwitch": "Bedingte Verzweigung",
+          "conditionalMerge": "Bedingte Zusammenführung"
+        },
+        "switch": {
+          "description": "Wertet eine Bedingung aus und leitet die Daten an den Wahr- oder Falsch-Zweig weiter.",
+          "conditionType": "Bedingungstyp",
+          "typeCompare": "Wert-/Eigenschaftsvergleich",
+          "typeBoolean": "Boolesche Prüfung",
+          "typeNullCheck": "Null-/Leer-Prüfung",
+          "property": "Objekteigenschaft / Metadatenschlüssel (optional)",
+          "propertyPlaceholder": "z. B. category, feature_count oder area",
+          "operator": "Operator",
+          "opEqual": "== (gleich)",
+          "opNotEqual": "!= (ungleich)",
+          "opLess": "< (kleiner als)",
+          "opLessOrEqual": "<= (kleiner oder gleich)",
+          "opGreater": "> (größer als)",
+          "opGreaterOrEqual": ">= (größer oder gleich)",
+          "opContains": "enthält",
+          "opStartsWith": "beginnt mit",
+          "opEndsWith": "endet mit",
+          "opIsEmpty": "ist leer",
+          "opNotEmpty": "ist nicht leer",
+          "opIsNull": "ist null",
+          "opNotNull": "ist nicht null",
+          "value": "Zielwert",
+          "valuePlaceholder": "z. B. 50, urban oder true"
+        },
+        "iterate": {
+          "featuresDescription": "Durchläuft jedes Objekt der Vektorsammlung.",
+          "rastersDescription": "Durchläuft jeden Rasterdatensatz der Sammlung.",
+          "maxIterations": "Maximale Anzahl an Durchläufen",
+          "stopOnError": "Bei Fehler anhalten"
+        },
+        "collectDescription": "Sammelt die Ergebnisse jedes Schleifendurchlaufs und fasst sie flach zu einer Gesamtsammlung zusammen.",
+        "mergeDescription": "Führt die Ausgaben des Wahr- und des Falsch-Zweigs wieder zu einem einzigen aktiven Datenfluss zusammen.",
+        "ports": {
+          "featureCollection": "Objektsammlung",
+          "currentFeature": "Aktuelles Objekt",
+          "index": "Index",
+          "totalCount": "Gesamtanzahl",
+          "rasterCollection": "Rastersammlung",
+          "currentRaster": "Aktuelles Raster",
+          "rasterName": "Rastername",
+          "itemToCollect": "Zu sammelndes Element",
+          "collectedResults": "Gesammelte Ergebnisse",
+          "count": "Anzahl",
+          "conditionValue": "Bedingungswert",
+          "trueBranch": "Wahr-Zweig",
+          "falseBranch": "Falsch-Zweig",
+          "trueResult": "Wahr-Ergebnis",
+          "falseResult": "Falsch-Ergebnis",
+          "activeOutput": "Aktive Ausgabe"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Ebene auswählen …",

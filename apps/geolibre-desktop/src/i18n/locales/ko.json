@@ -2886,7 +2886,8 @@
       "viewUnavailable": "현재 지도 보기를 사용할 수 없습니다.",
       "selectError": "선택한 프로젝트를 읽을 수 없습니다.",
       "restoring": "시작 프로젝트를 여는 중…",
-      "loadWarning": "시작 프로젝트를 사용할 수 없습니다. GeoLibre가 대신 기본 작업 공간을 열었습니다."
+      "loadWarning": "시작 프로젝트를 사용할 수 없습니다. GeoLibre가 대신 기본 작업 공간을 열었습니다.",
+      "storedCopyWarning": "GeoLibre가 프로젝트 파일을 읽을 수 없어, 프로젝트를 마지막으로 열거나 저장할 때 보관해 둔 사본을 열었습니다. 그 이후 파일에 적용된 변경 사항이 누락되었을 수 있습니다. 현재 내용을 불러오려면 \"파일에서 프로젝트 열기\"로 파일을 다시 여세요."
     },
     "map": {
       "constraintsTitle": "지도 제약 조건",
@@ -3398,6 +3399,9 @@
       "haloExtentHint": "대기광이 지구 표면 너머로 퍼지는 정도입니다. 값이 낮으면 데이터가 표면에 가깝게 유지되고, 값이 높으면 넓고 은은한 헤일로가 나타납니다.",
       "haloOpacity": "헤일로 강도",
       "spaceColor": "우주 색상",
+      "showStars": "별",
+      "showMilkyWay": "은하수",
+      "showConstellations": "별자리 선",
       "reset": "기본값으로 재설정",
       "globeOnly": "대기 효과는 지구본 보기가 활성화된 경우에만 사용할 수 있습니다."
     },
@@ -5793,9 +5797,84 @@
       "importInvalid": "해당 파일에는 모델 그래프가 없습니다.",
       "importUnsupported": "해당 파일은 GeoLibre 모델이 아닙니다.",
       "rasterOutputUnsupported": "\"{{name}}\"은(는) 래스터 결과이며 이 빌드에서는 지도에 추가할 수 없습니다.",
+      "outputUnsupported": "\"{{name}}\"은(는) {{kind}} 값이므로 지도에 추가할 수 없습니다.",
       "portNeedsVector": "\"{{port}}\"에는 벡터 데이터가 필요하지만 래스터가 전달되었습니다.",
+      "portCannotTake": "\"{{port}}\"은(는) {{kind}} 값을 받을 수 없습니다.",
       "toolNoOutput": "\"{{tool}}\"이(가) 출력을 생성하지 않았습니다.",
-      "toolNoUsableOutput": "\"{{tool}}\"이(가) 사용할 수 있는 출력을 생성하지 않았습니다."
+      "toolNoUsableOutput": "\"{{tool}}\"이(가) 사용할 수 있는 출력을 생성하지 않았습니다.",
+      "controlFlow": {
+        "heading": "제어 흐름",
+        "add": {
+          "iterateFeatures": "피처 반복",
+          "iterateFeaturesTitle": "피처 반복: 각 벡터 피처에 대해 워크플로를 실행합니다",
+          "iterateRasters": "래스터 반복",
+          "iterateRastersTitle": "래스터 반복: 각 래스터에 대해 워크플로를 실행합니다",
+          "switch": "If/Else 분기",
+          "switchTitle": "조건 분기: If/Else 조건 분기",
+          "merge": "분기 병합",
+          "mergeTitle": "조건 병합: 대체 분기를 하나로 합칩니다",
+          "collect": "결과 수집",
+          "collectTitle": "결과 수집: 루프 반복의 출력을 모읍니다"
+        },
+        "kinds": {
+          "iterateFeatures": "피처 반복",
+          "iterateRasters": "래스터 반복",
+          "collectResults": "결과 수집",
+          "conditionalSwitch": "조건 분기",
+          "conditionalMerge": "조건 병합"
+        },
+        "switch": {
+          "description": "조건을 평가하여 데이터를 True 또는 False 분기로 보냅니다.",
+          "conditionType": "조건 유형",
+          "typeCompare": "값 / 속성 비교",
+          "typeBoolean": "부울 검사",
+          "typeNullCheck": "null / 빈 값 검사",
+          "property": "피처 속성 / 메타데이터 키 (선택 사항)",
+          "propertyPlaceholder": "예: category, feature_count 또는 area",
+          "operator": "연산자",
+          "opEqual": "== (같음)",
+          "opNotEqual": "!= (같지 않음)",
+          "opLess": "< (보다 작음)",
+          "opLessOrEqual": "<= (작거나 같음)",
+          "opGreater": "> (보다 큼)",
+          "opGreaterOrEqual": ">= (크거나 같음)",
+          "opContains": "포함함",
+          "opStartsWith": "다음으로 시작",
+          "opEndsWith": "다음으로 끝남",
+          "opIsEmpty": "비어 있음",
+          "opNotEmpty": "비어 있지 않음",
+          "opIsNull": "null임",
+          "opNotNull": "null이 아님",
+          "value": "대상 값",
+          "valuePlaceholder": "예: 50, urban 또는 true"
+        },
+        "iterate": {
+          "featuresDescription": "벡터 컬렉션의 각 피처를 반복합니다.",
+          "rastersDescription": "컬렉션의 각 래스터 데이터셋을 반복합니다.",
+          "maxIterations": "최대 반복 횟수",
+          "stopOnError": "오류 시 중지"
+        },
+        "collectDescription": "각 루프 반복에서 생성된 결과를 모아 평탄화하여 최종 컬렉션으로 만듭니다.",
+        "mergeDescription": "True 분기와 False 분기의 출력을 하나의 활성 데이터 흐름으로 다시 합칩니다.",
+        "ports": {
+          "featureCollection": "피처 컬렉션",
+          "currentFeature": "현재 피처",
+          "index": "인덱스",
+          "totalCount": "전체 개수",
+          "rasterCollection": "래스터 컬렉션",
+          "currentRaster": "현재 래스터",
+          "rasterName": "래스터 이름",
+          "itemToCollect": "수집할 항목",
+          "collectedResults": "수집된 결과",
+          "count": "개수",
+          "conditionValue": "조건 값",
+          "trueBranch": "True 분기",
+          "falseBranch": "False 분기",
+          "trueResult": "True 결과",
+          "falseResult": "False 결과",
+          "activeOutput": "활성 출력"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "레이어 선택...",

@@ -2886,7 +2886,8 @@
       "viewUnavailable": "มุมมองแผนที่ปัจจุบันใช้ไม่ได้",
       "selectError": "ไม่สามารถอ่านโปรเจกต์ที่เลือกได้",
       "restoring": "กำลังเปิดโปรเจกต์เมื่อเริ่มโปรแกรมของคุณ…",
-      "loadWarning": "โปรเจกต์เมื่อเริ่มโปรแกรมไม่พร้อมใช้งาน GeoLibre จึงเปิดพื้นที่ทำงานเริ่มต้นแทน"
+      "loadWarning": "โปรเจกต์เมื่อเริ่มโปรแกรมไม่พร้อมใช้งาน GeoLibre จึงเปิดพื้นที่ทำงานเริ่มต้นแทน",
+      "storedCopyWarning": "GeoLibre อ่านไฟล์โปรเจกต์ไม่ได้ จึงเปิดสำเนาที่เก็บไว้เมื่อเปิดหรือบันทึกโปรเจกต์ครั้งล่าสุดแทน การเปลี่ยนแปลงที่ทำกับไฟล์หลังจากนั้นอาจหายไป เปิดไฟล์อีกครั้งด้วย \"เปิดโปรเจกต์จากไฟล์\" เพื่อโหลดเนื้อหาปัจจุบัน"
     },
     "map": {
       "constraintsTitle": "ข้อจำกัดของแผนที่",
@@ -3398,6 +3399,9 @@
       "haloExtentHint": "ระยะที่แสงเรืองของชั้นบรรยากาศแผ่ออกไปพ้นลูกโลก ค่าต่ำจะทำให้ข้อมูลแนบชิดผิวโลก ค่าสูงจะให้รัศมีกว้างและโปร่ง",
       "haloOpacity": "ความเข้มของรัศมี",
       "spaceColor": "สีอวกาศ",
+      "showStars": "ดวงดาว",
+      "showMilkyWay": "ทางช้างเผือก",
+      "showConstellations": "เส้นกลุ่มดาว",
       "reset": "คืนค่าเริ่มต้น",
       "globeOnly": "เอฟเฟกต์ชั้นบรรยากาศใช้ได้เฉพาะเมื่อเปิดมุมมองลูกโลกเท่านั้น"
     },
@@ -5793,9 +5797,84 @@
       "importInvalid": "ไฟล์นั้นไม่มีกราฟของแบบจำลอง",
       "importUnsupported": "ไฟล์นั้นไม่ใช่แบบจำลองของ GeoLibre",
       "rasterOutputUnsupported": "\"{{name}}\" เป็นผลลัพธ์แรสเตอร์ซึ่งรุ่นนี้ไม่สามารถเพิ่มลงในแผนที่ได้",
+      "outputUnsupported": "\"{{name}}\" เป็นค่า {{kind}} ซึ่งไม่สามารถเพิ่มลงในแผนที่ได้",
       "portNeedsVector": "\"{{port}}\" ต้องการข้อมูลเวกเตอร์ แต่ได้รับแรสเตอร์",
+      "portCannotTake": "\"{{port}}\" ไม่สามารถรับค่า {{kind}} ได้",
       "toolNoOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์",
-      "toolNoUsableOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์ที่ใช้งานได้"
+      "toolNoUsableOutput": "\"{{tool}}\" ไม่ได้สร้างผลลัพธ์ที่ใช้งานได้",
+      "controlFlow": {
+        "heading": "โฟลว์ควบคุม",
+        "add": {
+          "iterateFeatures": "วนฟีเจอร์",
+          "iterateFeaturesTitle": "วนซ้ำฟีเจอร์: เรียกใช้เวิร์กโฟลว์กับฟีเจอร์เวกเตอร์แต่ละรายการ",
+          "iterateRasters": "วนแรสเตอร์",
+          "iterateRastersTitle": "วนซ้ำแรสเตอร์: เรียกใช้เวิร์กโฟลว์กับแรสเตอร์แต่ละรายการ",
+          "switch": "If/Else",
+          "switchTitle": "การแยกตามเงื่อนไข: การแยกสาขาแบบ If/Else",
+          "merge": "รวมสาขา",
+          "mergeTitle": "การรวมตามเงื่อนไข: รวมสาขาทางเลือกเข้าด้วยกัน",
+          "collect": "รวบรวมผล",
+          "collectTitle": "รวบรวมผลลัพธ์: รวมเอาต์พุตจากการวนซ้ำแต่ละรอบ"
+        },
+        "kinds": {
+          "iterateFeatures": "วนซ้ำฟีเจอร์",
+          "iterateRasters": "วนซ้ำแรสเตอร์",
+          "collectResults": "รวบรวมผลลัพธ์",
+          "conditionalSwitch": "การแยกตามเงื่อนไข",
+          "conditionalMerge": "การรวมตามเงื่อนไข"
+        },
+        "switch": {
+          "description": "ประเมินเงื่อนไขและส่งข้อมูลไปยังสาขา True หรือ False",
+          "conditionType": "ชนิดเงื่อนไข",
+          "typeCompare": "เปรียบเทียบค่า / คุณสมบัติ",
+          "typeBoolean": "ตรวจสอบค่าบูลีน",
+          "typeNullCheck": "ตรวจสอบค่า null / ว่าง",
+          "property": "คุณสมบัติของฟีเจอร์ / คีย์เมทาดาทา (ไม่บังคับ)",
+          "propertyPlaceholder": "เช่น category, feature_count หรือ area",
+          "operator": "ตัวดำเนินการ",
+          "opEqual": "== (เท่ากับ)",
+          "opNotEqual": "!= (ไม่เท่ากับ)",
+          "opLess": "< (น้อยกว่า)",
+          "opLessOrEqual": "<= (น้อยกว่าหรือเท่ากับ)",
+          "opGreater": "> (มากกว่า)",
+          "opGreaterOrEqual": ">= (มากกว่าหรือเท่ากับ)",
+          "opContains": "มีคำว่า",
+          "opStartsWith": "ขึ้นต้นด้วย",
+          "opEndsWith": "ลงท้ายด้วย",
+          "opIsEmpty": "ว่างเปล่า",
+          "opNotEmpty": "ไม่ว่างเปล่า",
+          "opIsNull": "เป็น null",
+          "opNotNull": "ไม่เป็น null",
+          "value": "ค่าเป้าหมาย",
+          "valuePlaceholder": "เช่น 50 หรือ urban หรือ true"
+        },
+        "iterate": {
+          "featuresDescription": "วนซ้ำผ่านฟีเจอร์แต่ละรายการในคอลเลกชันเวกเตอร์",
+          "rastersDescription": "วนซ้ำผ่านชุดข้อมูลแรสเตอร์แต่ละรายการในคอลเลกชัน",
+          "maxIterations": "จำนวนรอบการวนซ้ำสูงสุด",
+          "stopOnError": "หยุดเมื่อเกิดข้อผิดพลาด"
+        },
+        "collectDescription": "รวบรวมและแผ่ผลลัพธ์ที่ได้จากการวนซ้ำแต่ละรอบให้เป็นคอลเลกชันสุดท้าย",
+        "mergeDescription": "รวมเอาต์พุตจากสาขา True และ False กลับเป็นโฟลว์ข้อมูลที่ใช้งานอยู่เพียงโฟลว์เดียว",
+        "ports": {
+          "featureCollection": "คอลเลกชันฟีเจอร์",
+          "currentFeature": "ฟีเจอร์ปัจจุบัน",
+          "index": "ลำดับ",
+          "totalCount": "จำนวนทั้งหมด",
+          "rasterCollection": "คอลเลกชันแรสเตอร์",
+          "currentRaster": "แรสเตอร์ปัจจุบัน",
+          "rasterName": "ชื่อแรสเตอร์",
+          "itemToCollect": "รายการที่จะรวบรวม",
+          "collectedResults": "ผลลัพธ์ที่รวบรวมแล้ว",
+          "count": "จำนวน",
+          "conditionValue": "ค่าเงื่อนไข",
+          "trueBranch": "สาขา True",
+          "falseBranch": "สาขา False",
+          "trueResult": "ผลลัพธ์ True",
+          "falseResult": "ผลลัพธ์ False",
+          "activeOutput": "เอาต์พุตที่ใช้งานอยู่"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "เลือกเลเยอร์...",

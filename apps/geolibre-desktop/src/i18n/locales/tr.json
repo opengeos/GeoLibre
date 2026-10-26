@@ -2945,7 +2945,8 @@
       "viewUnavailable": "Geçerli harita görünümü kullanılamıyor.",
       "selectError": "Seçilen proje okunamadı.",
       "restoring": "Başlangıç projeniz açılıyor…",
-      "loadWarning": "Başlangıç projesi kullanılamıyor. GeoLibre bunun yerine varsayılan çalışma alanını açtı."
+      "loadWarning": "Başlangıç projesi kullanılamıyor. GeoLibre bunun yerine varsayılan çalışma alanını açtı.",
+      "storedCopyWarning": "GeoLibre proje dosyasını okuyamadı ve projenin en son açıldığı veya kaydedildiği sırada sakladığı kopyayı açtı. O zamandan beri dosyada yapılan değişiklikler eksik olabilir. Dosyanın güncel içeriğini yüklemek için dosyayı Dosyadan Proje Aç ile yeniden açın."
     },
     "map": {
       "constraintsTitle": "Harita kısıtlamaları",
@@ -3459,6 +3460,9 @@
       "haloExtentHint": "Atmosferik parıltının küreyi ne kadar aştığı. Düşük değer verileri yüzeye yakın tutar; yüksek değer geniş, havadar bir hâle verir.",
       "haloOpacity": "Hâle gücü",
       "spaceColor": "Uzay rengi",
+      "showStars": "Yıldızlar",
+      "showMilkyWay": "Samanyolu",
+      "showConstellations": "Takımyıldız çizgileri",
       "reset": "Varsayılanlara sıfırla",
       "globeOnly": "Atmosferik efektler yalnızca Küre görünümü etkinken kullanılabilir."
     },
@@ -5881,9 +5885,84 @@
       "importInvalid": "Bu dosya bir model grafiği içermiyor.",
       "importUnsupported": "Bu dosya bir GeoLibre modeli değil.",
       "rasterOutputUnsupported": "\"{{name}}\" bir raster sonucudur; bu sürüm bunu haritaya ekleyemez.",
+      "outputUnsupported": "\"{{name}}\" türü {{kind}} olan bir değerdir ve haritaya eklenemez.",
       "portNeedsVector": "\"{{port}}\" vektör verisi gerektiriyor ancak bir raster geldi.",
+      "portCannotTake": "\"{{port}}\" türü {{kind}} olan bir değer alamaz.",
       "toolNoOutput": "\"{{tool}}\" hiçbir çıktı üretmedi.",
-      "toolNoUsableOutput": "\"{{tool}}\" kullanılabilir bir çıktı üretmedi."
+      "toolNoUsableOutput": "\"{{tool}}\" kullanılabilir bir çıktı üretmedi.",
+      "controlFlow": {
+        "heading": "Akış Denetimi",
+        "add": {
+          "iterateFeatures": "Öğe yinele",
+          "iterateFeaturesTitle": "Öğeleri Yinele: İş akışını her vektör öğesi için çalıştırır",
+          "iterateRasters": "Raster yinele",
+          "iterateRastersTitle": "Rasterleri Yinele: İş akışını her raster için çalıştırır",
+          "switch": "Eğer/Değilse",
+          "switchTitle": "Koşullu Anahtar: Eğer/Değilse koşullu dallanma",
+          "merge": "Dal birleştir",
+          "mergeTitle": "Koşullu Birleştirme: Alternatif dalları birleştirir",
+          "collect": "Topla",
+          "collectTitle": "Sonuçları Topla: Döngü yinelemelerinin çıktılarını bir araya getirir"
+        },
+        "kinds": {
+          "iterateFeatures": "Öğeleri Yinele",
+          "iterateRasters": "Rasterleri Yinele",
+          "collectResults": "Sonuçları Topla",
+          "conditionalSwitch": "Koşullu Anahtar",
+          "conditionalMerge": "Koşullu Birleştirme"
+        },
+        "switch": {
+          "description": "Bir koşulu değerlendirir ve verileri Doğru veya Yanlış dalına yönlendirir.",
+          "conditionType": "Koşul Türü",
+          "typeCompare": "Değer / Özellik Karşılaştırması",
+          "typeBoolean": "Mantıksal Denetim",
+          "typeNullCheck": "Null / Boş Denetimi",
+          "property": "Öğe Özelliği / Meta Veri Anahtarı (İsteğe Bağlı)",
+          "propertyPlaceholder": "örn. category, feature_count veya area",
+          "operator": "İşleç",
+          "opEqual": "== (Eşit)",
+          "opNotEqual": "!= (Eşit Değil)",
+          "opLess": "< (Küçüktür)",
+          "opLessOrEqual": "<= (Küçük veya Eşit)",
+          "opGreater": "> (Büyüktür)",
+          "opGreaterOrEqual": ">= (Büyük veya Eşit)",
+          "opContains": "içerir",
+          "opStartsWith": "ile başlar",
+          "opEndsWith": "ile biter",
+          "opIsEmpty": "boştur",
+          "opNotEmpty": "boş değildir",
+          "opIsNull": "null'dır",
+          "opNotNull": "null değildir",
+          "value": "Hedef Değer",
+          "valuePlaceholder": "örn. 50 veya urban veya true"
+        },
+        "iterate": {
+          "featuresDescription": "Vektör koleksiyonundaki her öğe üzerinde yineler.",
+          "rastersDescription": "Koleksiyondaki her raster veri kümesi üzerinde yineler.",
+          "maxIterations": "En Fazla Yineleme Sınırı",
+          "stopOnError": "Hatada Durdur"
+        },
+        "collectDescription": "Her döngü yinelemesinin ürettiği sonuçları toplayıp düzleştirerek son bir koleksiyon oluşturur.",
+        "mergeDescription": "Doğru ve Yanlış dallarının çıktılarını yeniden tek bir etkin veri akışında birleştirir.",
+        "ports": {
+          "featureCollection": "Öğe Koleksiyonu",
+          "currentFeature": "Geçerli Öğe",
+          "index": "Dizin",
+          "totalCount": "Toplam Sayı",
+          "rasterCollection": "Raster Koleksiyonu",
+          "currentRaster": "Geçerli Raster",
+          "rasterName": "Raster Adı",
+          "itemToCollect": "Toplanacak Öğe",
+          "collectedResults": "Toplanan Sonuçlar",
+          "count": "Sayı",
+          "conditionValue": "Koşul Değeri",
+          "trueBranch": "Doğru Dalı",
+          "falseBranch": "Yanlış Dalı",
+          "trueResult": "Doğru Sonucu",
+          "falseResult": "Yanlış Sonucu",
+          "activeOutput": "Etkin Çıktı"
+        }
+      }
     },
     "parameterField": {
       "selectLayer": "Bir katman seçin...",
