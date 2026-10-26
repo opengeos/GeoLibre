@@ -27,7 +27,7 @@ test("capabilities restrict the toolbar before first paint", async ({ page }) =>
   await serveDeployment(page, { version: 1, capabilities: ["data:add"] });
   await waitForMap(page);
 
-  await expect(toolbarButton(page, "Add Data")).toBeVisible();
+  await expect(toolbarButton(page, "Add data")).toBeVisible();
   await expect(toolbarButton(page, "Processing")).toHaveCount(0);
   await expect(toolbarButton(page, "Plugins")).toHaveCount(0);
   expect(
@@ -39,7 +39,7 @@ test("an empty capabilities list grants nothing", async ({ page }) => {
   await serveDeployment(page, { version: 1, capabilities: [] });
   await waitForMap(page);
 
-  for (const name of ["Add Data", "Processing", "Plugins"]) {
+  for (const name of ["Add data", "Processing", "Plugins"]) {
     await expect(toolbarButton(page, name)).toHaveCount(0);
   }
 });
@@ -54,7 +54,7 @@ test("a missing deployment.json leaves the app unchanged and quiet", async ({ pa
   await page.route("**/deployment.json", (route) => route.fulfill({ status: 404, body: "" }));
   await waitForMap(page);
 
-  for (const name of ["Add Data", "Processing", "Plugins"]) {
+  for (const name of ["Add data", "Processing", "Plugins"]) {
     await expect(toolbarButton(page, name)).toBeVisible();
   }
   expect(errors).toEqual([]);

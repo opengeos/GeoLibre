@@ -302,7 +302,7 @@ test("Escape respects an editable control and still exits back to the story edit
   await openPresentation(page, baseURL!);
   await page.getByRole("button", { name: "Exit", exact: true }).click();
   await page.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Story Map…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Story map…", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Present", exact: true }).click();
   await page.getByRole("button", { name: "Presentation tools", exact: true }).click();
   const search = page.getByRole("textbox", { name: "Search a place or latitude, longitude" });
@@ -314,7 +314,7 @@ test("Escape respects an editable control and still exits back to the story edit
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("story-presentation")).toBeHidden();
   await expect(
-    page.getByRole("dialog").getByRole("heading", { name: "Story Map", exact: true }),
+    page.getByRole("dialog").getByRole("heading", { name: "Story map", exact: true }),
   ).toBeVisible();
 });
 
@@ -325,7 +325,7 @@ test("chapter duration stays editable until blur and then normalizes", async ({
   await openPresentation(page, baseURL!);
   await page.getByRole("button", { name: "Exit", exact: true }).click();
   await page.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Story Map…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Story map…", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /1 City overview/ }).click();
   const duration = dialog.getByRole("spinbutton", { name: "Stay duration (seconds)" });

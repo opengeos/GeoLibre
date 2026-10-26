@@ -12,7 +12,7 @@ test.skip(!process.env.MAPBOX_TOKEN, "Set MAPBOX_TOKEN to exercise real Mapbox d
 test.use({ actionTimeout: 30_000 });
 
 async function openSource(page: Page, name: string) {
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
@@ -70,13 +70,13 @@ for (const theme of ["light", "dark"] as const) {
       { key: DESKTOP_SETTINGS_STORAGE_KEY, token: process.env.MAPBOX_TOKEN! },
     );
     await page.goto("/");
-    if (theme === "dark") await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+    if (theme === "dark") await page.getByRole("button", { name: "Switch to dark mode" }).click();
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
     await page.getByRole("menuitemradio", { name: "Mapbox", exact: true }).click();
     await bindEngine(page);
 
-    await openSource(page, "PMTiles Layer");
+    await openSource(page, "PMTiles layer");
     await page
       .getByRole("textbox", { name: "https://example.com/tiles.pmtiles", exact: true })
       .fill(PMTILES);
@@ -95,7 +95,7 @@ for (const theme of ["light", "dark"] as const) {
     });
     await page.screenshot({ path: info.outputPath(`pmtiles-${theme}.png`) });
 
-    await openSource(page, "3D Tiles Layer");
+    await openSource(page, "3D Tiles layer");
     await page.getByRole("textbox", { name: "Tileset URL", exact: true }).fill(TILES);
     await page.getByRole("textbox", { name: "Layer name", exact: true }).fill("AGI HQ");
     await page.getByRole("spinbutton", { name: "Altitude offset", exact: true }).fill("-300");
@@ -119,7 +119,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(1000); // Allow the newly selected 3D tiles to draw after the camera jump.
     await page.screenshot({ path: info.outputPath(`tiles-${theme}.png`) });
 
-    await openSource(page, "LiDAR Layer");
+    await openSource(page, "LiDAR layer");
     await page
       .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
       .fill(COPC);
@@ -163,7 +163,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.reload();
     const choosing = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "Open from" }).click();
     await page.getByRole("menuitem", { name: "File…", exact: true }).click();
     await (
       await choosing
@@ -176,7 +176,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(layerRow(page, "Earthquakes PMTiles")).toBeVisible();
     await expect(layerRow(page, "AGI HQ")).toBeVisible();
     await expect(layerRow(page, "1.2-with-color.copc.laz")).toBeVisible({ timeout: 60_000 });
-    await openSource(page, "LiDAR Layer");
+    await openSource(page, "LiDAR layer");
     await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
     await page.evaluate(() =>
@@ -201,10 +201,10 @@ for (const theme of ["light", "dark"] as const) {
       await expect(
         page.locator(renderer === "Mapbox" ? ".mapboxgl-canvas" : ".maplibregl-canvas").first(),
       ).toBeVisible();
-      await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
     }
     await bindEngine(page);
-    await openSource(page, "LiDAR Layer");
+    await openSource(page, "LiDAR layer");
     await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
     await page.evaluate(() =>
@@ -257,12 +257,12 @@ for (const theme of ["light", "dark"]) {
       { key: DESKTOP_SETTINGS_STORAGE_KEY, token: process.env.MAPBOX_TOKEN! },
     );
     await page.goto("/");
-    if (theme === "dark") await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+    if (theme === "dark") await page.getByRole("button", { name: "Switch to dark mode" }).click();
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
     await page.getByRole("menuitemradio", { name: "Mapbox", exact: true }).click();
     await bindEngine(page);
-    await openSource(page, "PMTiles Layer");
+    await openSource(page, "PMTiles layer");
     await page
       .getByRole("textbox", { name: "https://example.com/tiles.pmtiles", exact: true })
       .fill("https://r2-public.protomaps.com/protomaps-sample-datasets/tilezen.pmtiles");
@@ -331,7 +331,7 @@ for (const theme of ["light", "dark"]) {
       { key: DESKTOP_SETTINGS_STORAGE_KEY, token: process.env.MAPBOX_TOKEN! },
     );
     await page.goto("/");
-    if (theme === "dark") await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+    if (theme === "dark") await page.getByRole("button", { name: "Switch to dark mode" }).click();
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
     await page.getByRole("menuitemradio", { name: "Mapbox", exact: true }).click();
@@ -393,7 +393,7 @@ for (const theme of ["light", "dark"]) {
       "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json",
     );
     expect(response.ok()).toBeTruthy();
-    await openSource(page, "Vector Layer");
+    await openSource(page, "Vector layer");
     await page.locator('input[type="file"]').setInputFiles({
       name: "US states.geojson",
       mimeType: "application/geo+json",

@@ -50,14 +50,14 @@ test("adds, restyles and exports a GeoJSON layer with the keyboard alone", async
   await waitForMap(page);
 
   // Add Data → OGC API - Features, reached by Tab and menu type-ahead.
-  await tabTo(page, page.getByRole("button", { name: "Add Data", exact: true }));
+  await tabTo(page, page.getByRole("button", { name: "Add data", exact: true }));
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("menu", { name: "Add Data" })).toBeVisible();
+  await expect(page.getByRole("menu", { name: "Add data" })).toBeVisible();
   await page.keyboard.type("OGC A");
   await expect(page.getByRole("menuitem", { name: "OGC API - Features" })).toBeFocused();
   await page.keyboard.press("Enter");
 
-  const dialog = page.getByRole("dialog", { name: "Add OGC API - Features Layer" });
+  const dialog = page.getByRole("dialog", { name: "Add OGC API - Features layer" });
   await expect(dialog).toBeVisible();
   await tabTo(page, dialog.getByRole("textbox", { name: "Layer name" }));
   await page.keyboard.press("ControlOrMeta+A");
@@ -151,13 +151,13 @@ test("moves across the top menus with the arrow keys (#3232)", async ({ page }) 
 
   // On a submenu trigger, Right/Left open and close the submenu instead of
   // switching top-level menus.
-  const splitView = viewMenu.getByRole("menuitem", { name: "Split View" });
+  const splitView = viewMenu.getByRole("menuitem", { name: "Split view" });
   await splitView.focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("menu", { name: "Split View" })).toBeVisible();
+  await expect(page.getByRole("menu", { name: "Split view" })).toBeVisible();
   await expect(viewMenu).toBeVisible();
   await page.keyboard.press("ArrowLeft");
-  await expect(page.getByRole("menu", { name: "Split View" })).toHaveCount(0);
+  await expect(page.getByRole("menu", { name: "Split view" })).toHaveCount(0);
   await expect(viewMenu).toBeVisible();
   await expect(splitView).toBeFocused();
 

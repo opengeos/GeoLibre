@@ -93,25 +93,25 @@ test("ArcGIS renderer draws the project basemap, a dropped GeoJSON layer and ide
   await page.getByRole("button", { name: "ArcGIS Streets", exact: true }).click();
 
   // Sources without an SDK adapter are greyed out while ArcGIS is primary.
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
-  for (const name of ["Gaussian Splatting", "Cesium Ion Asset", "CZML Dynamic 3D Scene"]) {
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
+  for (const name of ["Gaussian splatting", "Cesium Ion asset", "CZML dynamic 3D scene"]) {
     await expect(page.getByRole("menuitem", { name, exact: true })).toBeDisabled();
   }
   for (const name of [
-    "Vector Layer",
-    "Raster Layer",
-    "PMTiles Layer",
-    "Deck.gl Layer",
-    "MBTiles Layer",
-    "Zarr Layer",
+    "Vector layer",
+    "Raster layer",
+    "PMTiles layer",
+    "Deck.gl layer",
+    "MBTiles layer",
+    "Zarr layer",
     "NetCDF / HDF",
-    "LiDAR Layer",
-    "DuckDB Layer",
-    "3D Tiles Layer",
+    "LiDAR layer",
+    "DuckDB layer",
+    "3D Tiles layer",
   ]) {
     await expect(page.getByRole("menuitem", { name, exact: true })).toBeEnabled();
   }
-  await expect(page.getByRole("menuitem", { name: "XYZ Layer", exact: true })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "XYZ layer", exact: true })).toBeEnabled();
   await page.keyboard.press("Escape");
 
   // Drop a GeoJSON file the way a user would; the host importer materializes

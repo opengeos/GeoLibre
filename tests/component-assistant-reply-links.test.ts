@@ -25,7 +25,7 @@ describe("AssistantPanel reply links", () => {
       );
       // With no provider the transcript holds the setup card; a reply's links
       // are rendered into the same container.
-      const card = await screen.findByText("Set up the AI Assistant");
+      const card = await screen.findByText("Set up the AI assistant");
       const transcript = card.closest(".overflow-auto");
       assert.ok(transcript, "transcript container");
       const link = document.createElement("a");

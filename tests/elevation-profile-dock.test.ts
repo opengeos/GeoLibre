@@ -216,7 +216,7 @@ describe("Elevation Profile docked panel", () => {
       assert.notEqual(plugin.activate(host), false);
       // The registry re-runs the title getter on every read.
       const title = () => host.panel!.title;
-      assert.equal(title(), "Elevation Profile");
+      assert.equal(title(), "Elevation profile");
       const dock = document.createElement("div");
       host.panel!.render(dock);
       const buttons = () =>

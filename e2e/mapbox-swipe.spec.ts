@@ -240,7 +240,7 @@ async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "
   await page.goto(`/?project=${baseURL}${PROJECT_PATH}${theme === "dark" ? "&theme=dark" : ""}`);
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
   await bindEngine(page);
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 }
 
 for (const theme of ["light", "dark"] as const) {
@@ -273,7 +273,7 @@ for (const theme of ["light", "dark"] as const) {
       // Plugins → Layer Swipe. The entry was greyed out on this renderer
       // before the plugin declared Mapbox.
       await page.getByRole("button", { name: "Plugins", exact: true }).click();
-      const item = page.getByRole("menuitem", { name: "Layer Swipe", exact: true });
+      const item = page.getByRole("menuitem", { name: "Layer swipe", exact: true });
       await expect(item).toBeEnabled();
       await item.click();
 
@@ -448,7 +448,7 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
   await openMapboxProject(page, info.project.use.baseURL!, "light");
 
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Layer Swipe", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Layer swipe", exact: true }).click();
   await expect(page.locator(".swipe-comparison-map .mapboxgl-canvas")).toBeAttached();
 
   // Put East on the right side only, so each rebuild has a non-default

@@ -49,8 +49,8 @@ async function waitForStyleLoaded(page: Page): Promise<void> {
 
 /** Adds an XYZ raster layer through its Add Data dialog. */
 async function addXyzLayer(page: Page, name: string, template: string): Promise<void> {
-  await openMenuItem(page, "Add Data", "XYZ Layer");
-  const dialog = page.getByRole("dialog", { name: "Add XYZ Layer" });
+  await openMenuItem(page, "Add data", "XYZ layer");
+  const dialog = page.getByRole("dialog", { name: "Add XYZ layer" });
   await dialog.getByRole("textbox", { name: "Layer name" }).fill(name);
   await dialog.getByRole("textbox", { name: "XYZ template or TileJSON URL" }).fill(template);
   await dialog.getByRole("button", { name: "Add layer" }).click();
@@ -73,22 +73,22 @@ test("Add Data dialogs", async ({ page }, testInfo) => {
   await waitForStyleLoaded(page);
 
   // The vector and raster entries open map-control panels, not dialogs.
-  await openMenuItem(page, "Add Data", "Vector Layer");
+  await openMenuItem(page, "Add data", "Vector layer");
   await expect(page.locator(".geolibre-vector-panel")).toBeVisible();
   await expectAccessible(page, "add-vector-panel", testInfo);
   await page.locator(".geolibre-vector-panel").getByRole("button", { name: "Close panel" }).click();
   await expect(page.locator(".geolibre-vector-panel")).toBeHidden();
 
-  await openMenuItem(page, "Add Data", "Raster Layer");
+  await openMenuItem(page, "Add data", "Raster layer");
   await expect(page.locator(".geolibre-raster-panel")).toBeVisible();
   await expectAccessible(page, "add-raster-panel", testInfo);
 
   for (const [item, title] of [
-    ["XYZ Layer", "Add XYZ Layer"],
-    ["WMS Layer", "Add WMS Layer"],
-    ["OGC API - Features", "Add OGC API - Features Layer"],
+    ["XYZ layer", "Add XYZ layer"],
+    ["WMS layer", "Add WMS layer"],
+    ["OGC API - Features", "Add OGC API - Features layer"],
   ] as const) {
-    await openMenuItem(page, "Add Data", item);
+    await openMenuItem(page, "Add data", item);
     await expect(page.getByRole("dialog", { name: title })).toBeVisible();
     await expectAccessible(page, `add-data-${item.toLowerCase().replace(/\W+/g, "-")}`, testInfo);
     await closeDialog(page, title);
@@ -106,12 +106,12 @@ test("Processing toolbox", async ({ page }, testInfo) => {
   await page.getByRole("menuitem", { name: "Vector", exact: true }).click();
   await page.getByRole("menuitem", { name: "Geometry Processing", exact: true }).click();
   await page.getByRole("menuitem", { name: "Centroid Vector", exact: true }).click();
-  const toolbox = page.getByRole("dialog", { name: "Whitebox Toolbox" });
+  const toolbox = page.getByRole("dialog", { name: "Whitebox toolbox" });
   await expect(toolbox.getByRole("heading", { name: "Centroid Vector" })).toBeVisible();
   await expectAccessible(page, "processing-vector-tool", testInfo);
-  await closeDialog(page, "Whitebox Toolbox");
+  await closeDialog(page, "Whitebox toolbox");
 
-  await openMenuItem(page, "Processing", "Whitebox Toolbox");
+  await openMenuItem(page, "Processing", "Whitebox toolbox");
   // "Search tools or describe a task" only when an AI endpoint is configured
   // (useWhiteboxSemanticSearch); CI builds have none, so match either label.
   await expect(toolbox.getByRole("textbox", { name: /^Search tools/ })).toBeVisible();
@@ -137,7 +137,7 @@ test("Style panel for a vector and a raster layer", async ({ page }, testInfo) =
 test("Settings sections", async ({ page }, testInfo) => {
   test.setTimeout(240_000);
   await waitForMap(page);
-  await openMenuItem(page, "Settings", "Map Preferences");
+  await openMenuItem(page, "Settings", "Map preferences");
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
   const nav = dialog.getByRole("navigation");
@@ -148,9 +148,9 @@ test("Settings sections", async ({ page }, testInfo) => {
     "Appearance",
     "Interface",
     "Geocoding",
-    "AI Providers",
+    "AI providers",
     "Environment",
-    "Cloud Storage",
+    "Cloud storage",
     "Startup",
   ]) {
     await nav.getByRole("button", { name: section, exact: true }).click();
@@ -178,16 +178,16 @@ test("Project dialogs: New Project, History, Print Layout", async ({ page }, tes
   await closeDialog(page, "New project");
 
   await openMenuItem(page, "Project", "History…");
-  await expect(page.getByRole("dialog", { name: "Project History" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Project history" })).toBeVisible();
   await expectAccessible(page, "project-history", testInfo);
-  await closeDialog(page, "Project History");
+  await closeDialog(page, "Project history");
 
-  await openMenuItem(page, "Project", "Print Layout…");
-  await expect(page.getByRole("dialog", { name: "Print Layout" })).toBeVisible();
+  await openMenuItem(page, "Project", "Print layout…");
+  await expect(page.getByRole("dialog", { name: "Print layout" })).toBeVisible();
   await expectAccessible(page, "print-layout", testInfo);
 });
 
-test("Manage Plugins", async ({ page }, testInfo) => {
+test("Manage plugins", async ({ page }, testInfo) => {
   test.setTimeout(240_000);
   await page.route("https://plugins.geolibre.app/plugin-registry.json", (route) =>
     route.fulfill({
@@ -206,8 +206,8 @@ test("Manage Plugins", async ({ page }, testInfo) => {
     }),
   );
   await waitForMap(page);
-  await openMenuItem(page, "Settings", "Manage Plugins");
-  const dialog = page.getByRole("dialog", { name: "Manage Plugins" });
+  await openMenuItem(page, "Settings", "Manage plugins");
+  const dialog = page.getByRole("dialog", { name: "Manage plugins" });
   await expect(dialog.getByRole("button", { name: "Install Sample Plugin" })).toBeVisible();
   await expectAccessible(page, "manage-plugins", testInfo);
 });

@@ -16,9 +16,9 @@ async function waitForMap(page: Page, path = "/"): Promise<void> {
 /** Opens Project → Story Map and returns the dialog locator. */
 async function openStoryMapPanel(page: Page) {
   await page.getByRole("button", { name: "Project" }).click();
-  await page.getByRole("menuitem", { name: "Story Map…" }).click();
+  await page.getByRole("menuitem", { name: "Story map…" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Story map" })).toBeVisible();
   return dialog;
 }
 
@@ -79,7 +79,7 @@ test("persists a story map across save and reopen", async ({ page }) => {
   await waitForMap(page);
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Project" }).click();
-  await page.getByRole("menuitem", { name: "Open From" }).click();
+  await page.getByRole("menuitem", { name: "Open from" }).click();
   await page.getByRole("menuitem", { name: "File…" }).click();
   const chooser = await chooserPromise;
   await chooser.setFiles(savedPath);
@@ -147,7 +147,7 @@ test("returns to the editor after exiting a presentation", async ({ page }) => {
 
   // Exit the presentation; the editor must reopen (#918).
   await page.getByRole("button", { name: "Exit" }).click();
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Story map" })).toBeVisible();
 });
 
 test("presents and composes a story on Mapbox", async ({ page }) => {
@@ -183,14 +183,14 @@ test("presents and composes a story on Mapbox", async ({ page }) => {
 
   await page.getByRole("button", { name: "Exit" }).click();
   dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Story map" })).toBeVisible();
   await dialog.getByRole("combobox").first().selectOption({ label: "Light" });
   await dialog.getByRole("button", { name: "Present" }).click();
   await expect(page.locator(".glsm-light").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Exit" }).click();
   dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "Story Map" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Story map" })).toBeVisible();
   await dialog.getByRole("button", { name: "Compose on map" }).first().click();
   const compose = page.getByTestId("storymap-compose-bar");
   await expect(compose).toBeVisible();

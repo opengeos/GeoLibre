@@ -35,7 +35,7 @@ test("reopens a project saved on the web from Open Recent via the file picker", 
 
     const chooserPromise = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project" }).click();
-    await page.getByRole("menuitem", { name: "Open Recent" }).click();
+    await page.getByRole("menuitem", { name: "Open recent" }).click();
     await page.getByRole("menuitem").filter({ hasText: fileName }).first().click();
     const chooser = await chooserPromise;
     await chooser.setFiles(savedPath);

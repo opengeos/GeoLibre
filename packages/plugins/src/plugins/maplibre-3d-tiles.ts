@@ -108,7 +108,7 @@ const threeDTilesOptions = (defaultTilesetUrl: string) =>
     collapseOnClickOutside: false,
     layerId: THREE_D_TILES_LAYER_ID,
     panelWidth: 365,
-    title: "Add 3D Tiles Layer",
+    title: "Add 3D Tiles layer",
     // Empty input; the sample tileset is the explicit, opt-in way to load one.
     tilesetUrl: "",
     sampleData: [

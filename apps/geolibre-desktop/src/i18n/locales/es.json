@@ -3992,7 +3992,7 @@
       "netcdfHdf": "NetCDF / HDF",
       "spaceborneLidarLayer": "ICESat-2 / GEDI",
       "lidarLayer": "Capa LiDAR",
-      "splattingLayer": "Gaussian Splatting",
+      "splattingLayer": "Gaussian splatting",
       "threeDTilesLayer": "Capa 3D Tiles",
       "duckdbLayer": "Capa DuckDB",
       "whitebox": "Whitebox",

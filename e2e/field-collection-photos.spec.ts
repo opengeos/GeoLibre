@@ -25,8 +25,8 @@ test("field collection appends, removes, validates and saves multiple photos", a
   });
   await waitForMap(page, "/?lang=en");
   await page.getByRole("button", { name: "Controls", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Field Collection" }).click();
-  const dialog = page.getByRole("dialog", { name: "Field Collection" });
+  await page.getByRole("menuitem", { name: "Field collection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Field collection" });
   await dialog.getByLabel("Layer name", { exact: true }).fill("Photos");
   await dialog.getByRole("button", { name: "Create layer", exact: true }).click();
   await dialog.getByRole("button", { name: "Pick on map", exact: true }).click();

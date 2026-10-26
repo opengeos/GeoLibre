@@ -161,7 +161,7 @@ async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "
   await page.goto(`/?project=${baseURL}${PROJECT_PATH}${theme === "dark" ? "&theme=dark" : ""}`);
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
   await bindEngine(page);
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 }
 
 for (const theme of ["light", "dark"] as const) {
@@ -196,8 +196,8 @@ for (const theme of ["light", "dark"] as const) {
       // Controls → Flight Simulator opens the panel on the Mapbox renderer; it
       // was hidden there until the plugin declared the engine.
       await page.getByRole("button", { name: "Controls", exact: true }).click();
-      await page.getByRole("menuitem", { name: "Flight Simulator" }).click();
-      const panel = page.getByRole("dialog", { name: "Flight Simulator" });
+      await page.getByRole("menuitem", { name: "Flight simulator" }).click();
+      const panel = page.getByRole("dialog", { name: "Flight simulator" });
       await expect(panel).toBeVisible();
 
       // mapbox-gl 3 has no camera roll, so the bank setting cannot tilt the

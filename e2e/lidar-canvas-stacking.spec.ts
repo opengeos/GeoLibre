@@ -28,8 +28,8 @@ test.describe("LiDAR point-cloud canvas stacking", () => {
   }) => {
     await waitForMap(page);
 
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "LiDAR layer", exact: true }).click();
     await expect(page.locator(WRAPPER)).toHaveCount(1);
 
     const stack = await page.evaluate((wrapper) => {

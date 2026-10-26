@@ -20,7 +20,7 @@ test("Reverse Geocode results remain readable in both themes", async ({ page }) 
 
   await waitForMap(page, "/?theme=dark");
   await page.getByRole("button", { name: "Controls", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Reverse Geocode", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Reverse geocode", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
   const canvas = page.locator(".maplibregl-canvas");
@@ -38,7 +38,7 @@ test("Reverse Geocode results remain readable in both themes", async ({ page }) 
   await expect(content).toContainText(firstAddress);
   await expectPopupContrast(page);
 
-  await page.getByRole("button", { name: "Switch to Light Mode", exact: true }).click();
+  await page.getByRole("button", { name: "Switch to light mode", exact: true }).click();
   await expect(page.locator("html")).not.toHaveClass(/(^|\s)dark(\s|$)/);
   await expectPopupContrast(page);
 

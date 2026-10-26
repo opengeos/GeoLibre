@@ -32,44 +32,44 @@ GeoLibre registers 70 built-in plugins.
 
 | Plugin | Where | Link name | What it adds |
 | --- | --- | --- | --- |
-| **Layer Control** | Controls → Layer Control | `layer-control` | The on-map layer list. On by default. |
+| **Layer control** | Controls → Layer control | `layer-control` | The on-map layer list. On by default. |
 | **GeoEditor** | Plugins | `geo-editor` | Drawing, vertex editing, snapping, and deletion tools for GeoJSON layers. |
 | **Annotations** | Plugins | `annotations` | The map-annotation toolbar (text, arrows, highlights, pins, sticky notes, images) and the Elements panel. See [Annotations](map-controls.md#annotations-and-the-elements-panel). |
 | **Dimensions** | Plugins | `dimensions` | CAD-style linear and angular dimension features with vertex snapping, stored in the project as a GeoJSON layer. |
-| **FEMA NFHL** | Plugins → Web Services | `fema-wms` | FEMA National Flood Hazard Layer WMS layers. See [FEMA NFHL](web-services.md#fema-nfhl). |
-| **NASA Earthdata** | Plugins → Web Services | `nasa-earthdata` | Over 1,100 pre-rendered global NASA GIBS imagery layers, by date. See [NASA Earthdata](web-services.md#nasa-earthdata). |
-| **US EPA EnviroAtlas** | Plugins → Web Services | `enviroatlas` | US EPA environmental and ecosystem map services. See [US EPA EnviroAtlas](web-services.md#us-epa-enviroatlas). |
-| **USGS National Map** | Plugins → Web Services | `national-map` | USGS topo, imagery, hydrography, elevation, and index services. See [USGS National Map](web-services.md#usgs-national-map). |
-| **USGS NLDI** | Plugins → Web Services | `usgs-nldi` | Flowline tracing, hydrolocation, upstream basins, and network navigation. See [USGS NLDI](usgs-nldi.md). |
-| **USGS 3DEP** | Plugins → Web Services | `usgs-dem` | USGS 3DEP digital elevation models (1 m, 1/3 and 1 arc-second, and more). See [USGS 3DEP](web-services.md#usgs-3dep). |
-| **USGS LiDAR** | Plugins → Web Services | `usgs-lidar` | Clip a USGS 3DEP point cloud to an area of interest and download the result as COPC. |
-| **Vantor Open Data** | Plugins → Web Services | `vantor` | Vantor disaster-event satellite imagery (COG). See [Vantor Open Data](web-services.md#vantor-open-data). |
-| **Planet Open Data** | Plugins → Web Services | `planet-open-data` | Planet's disaster data releases, through the STAC browser. See [Planet Open Data](web-services.md#planet-open-data). |
-| **Portolan** | Plugins → Web Services | `portolan` | Browse the public Portolan Registry of catalogs, or connect to a publisher's catalog URL, and add assets through the STAC loaders. |
-| **Earthdata GIS** | Plugins → Web Services | `earthdata-gis` | NASA EOSDIS ArcGIS image, map, and feature services, and published web maps. See [Earthdata GIS](web-services.md#earthdata-gis). |
-| **NASA Earthaccess** | Plugins → Web Services | `earthaccess` | Search NASA Earthdata (CMR) for datasets and granules over the map view and download them with an Earthdata Login; ICESat-2 and GEDI granules open onto the map. See [NASA Earthaccess](web-services.md#nasa-earthaccess). |
-| **OpenAerialMap** | Plugins → Web Services | `openaerialmap` | Openly licensed drone and aerial imagery. See [OpenAerialMap](web-services.md#openaerialmap). |
-| **OSM Downloader** | Plugins → Web Services | `osm-downloader` | Download OpenStreetMap buildings, roads, amenities, waterways, land use, or custom tags through Overpass. See [OSM Downloader](web-services.md#osm-downloader). |
-| **IGN LiDAR HD** | Plugins → Web Services | `ign-lidar-hd` | Search France's IGN LiDAR HD tile coverage and download COPC point clouds. |
-| **ArcGIS Portal** | Plugins → Web Services | `arcgis-portal` | Browse and add the content of your ArcGIS Online organization or ArcGIS Enterprise portal after signing in. See [ArcGIS Portal](web-services.md#arcgis-portal). |
-| **ArcGIS Hub** | Plugins → Web Services | `arcgis-hub` | Public datasets published to ArcGIS Hub. See [ArcGIS Hub](web-services.md#arcgis-hub). |
-| **Tennessee GIS** | Plugins → Web Services | `tennessee-gis` | The geodata.tn.gov open GIS data portal. See [Tennessee GIS](web-services.md#tennessee-gis). |
-| **US Federal GIS** | Plugins → Web Services | `us-federal-gis` | The public GIS portals of 24 US federal agencies. See [US Federal GIS](web-services.md#us-federal-gis). |
-| **US State GIS** | Plugins → Web Services | `us-state-gis` | The public GIS data portals of all 50 states and DC. See [US State GIS](web-services.md#us-state-gis). |
-| **US Local GIS** | Plugins → Web Services | `us-local-gis` | The GIS and open-data portals of about 150 large US cities, counties, and regional agencies. See [US Local GIS](web-services.md#us-local-gis). |
-| **Socrata** | Plugins → Web Services | `socrata` | Search government Socrata open-data portals. See [Socrata](web-services.md#socrata). |
-| **CKAN** | Plugins → Web Services | `ckan` | Humanitarian Data Exchange (CKAN) resources. See [CKAN](web-services.md#ckan). |
-| **STAC Catalogs** | Plugins → Web Services | `stac-catalogs` | Any STAC API or static catalog, via STAC Index. See [STAC Catalogs](web-services.md#stac-catalogs). |
-| **Source Cooperative** | Plugins → Web Services | `source-coop` | Cloud-native products (PMTiles, GeoParquet, COG) on Source Cooperative. See [Source Cooperative](web-services.md#source-cooperative). |
-| **S3 Browser** | Plugins → Web Services | `s3-browser` | Browse any Amazon S3 or S3-compatible bucket, public or private, and add its files. See [S3 Browser](web-services.md#s3-browser). |
-| **Natural Earth** | Plugins → Web Services | `natural-earth` | The Natural Earth vector and raster themes. See [Natural Earth](web-services.md#natural-earth). |
-| **Hugging Face** | Plugins → Web Services | `huggingface` | Geospatial files in Hugging Face dataset repos, and uploads to them. See [Hugging Face](web-services.md#hugging-face). |
-| **Satellite Embeddings** | Plugins → Web Services | `satellite-embeddings` | Pre-computed foundation-model embeddings such as AlphaEarth, Tessera, and Earth Index. See [Satellite Embeddings](web-services.md#satellite-embeddings). |
-| **Fields of the World** | Plugins → Web Services | `fields-of-the-world` | Global agricultural field boundaries for 2017–2025, colored by model score. See [Fields of the World](web-services.md#fields-of-the-world). |
-| **Sentinel-2 Explorer** | Plugins → Web Services | `sentinel2-explorer` | Sentinel-2 imagery search and viewer over static STAC-GeoParquet, with no API. See [Sentinel-2 Explorer](web-services.md#sentinel-2-explorer). |
-| **Ocean Data Platform** | Plugins → Web Services | `ocean-data-platform` | HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations. See [Ocean Data Platform](web-services.md#ocean-data-platform). |
-| **Dynamical** | Plugins → Web Services | `dynamical` | dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers. See [Dynamical](web-services.md#dynamical). |
-| **GeoLens** | Plugins → Web Services | `geolens` | A self-hosted GeoLens spatial catalog. See [GeoLens](web-services.md#geolens). |
+| **FEMA NFHL** | Plugins → Web services | `fema-wms` | FEMA National Flood Hazard Layer WMS layers. See [FEMA NFHL](web-services.md#fema-nfhl). |
+| **NASA Earthdata** | Plugins → Web services | `nasa-earthdata` | Over 1,100 pre-rendered global NASA GIBS imagery layers, by date. See [NASA Earthdata](web-services.md#nasa-earthdata). |
+| **US EPA EnviroAtlas** | Plugins → Web services | `enviroatlas` | US EPA environmental and ecosystem map services. See [US EPA EnviroAtlas](web-services.md#us-epa-enviroatlas). |
+| **USGS National Map** | Plugins → Web services | `national-map` | USGS topo, imagery, hydrography, elevation, and index services. See [USGS National Map](web-services.md#usgs-national-map). |
+| **USGS NLDI** | Plugins → Web services | `usgs-nldi` | Flowline tracing, hydrolocation, upstream basins, and network navigation. See [USGS NLDI](usgs-nldi.md). |
+| **USGS 3DEP** | Plugins → Web services | `usgs-dem` | USGS 3DEP digital elevation models (1 m, 1/3 and 1 arc-second, and more). See [USGS 3DEP](web-services.md#usgs-3dep). |
+| **USGS LiDAR** | Plugins → Web services | `usgs-lidar` | Clip a USGS 3DEP point cloud to an area of interest and download the result as COPC. |
+| **Vantor Open Data** | Plugins → Web services | `vantor` | Vantor disaster-event satellite imagery (COG). See [Vantor Open Data](web-services.md#vantor-open-data). |
+| **Planet Open Data** | Plugins → Web services | `planet-open-data` | Planet's disaster data releases, through the STAC browser. See [Planet Open Data](web-services.md#planet-open-data). |
+| **Portolan** | Plugins → Web services | `portolan` | Browse the public Portolan Registry of catalogs, or connect to a publisher's catalog URL, and add assets through the STAC loaders. |
+| **Earthdata GIS** | Plugins → Web services | `earthdata-gis` | NASA EOSDIS ArcGIS image, map, and feature services, and published web maps. See [Earthdata GIS](web-services.md#earthdata-gis). |
+| **NASA Earthaccess** | Plugins → Web services | `earthaccess` | Search NASA Earthdata (CMR) for datasets and granules over the map view and download them with an Earthdata Login; ICESat-2 and GEDI granules open onto the map. See [NASA Earthaccess](web-services.md#nasa-earthaccess). |
+| **OpenAerialMap** | Plugins → Web services | `openaerialmap` | Openly licensed drone and aerial imagery. See [OpenAerialMap](web-services.md#openaerialmap). |
+| **OSM downloader** | Plugins → Web services | `osm-downloader` | Download OpenStreetMap buildings, roads, amenities, waterways, land use, or custom tags through Overpass. See [OSM downloader](web-services.md#osm-downloader). |
+| **IGN LiDAR HD** | Plugins → Web services | `ign-lidar-hd` | Search France's IGN LiDAR HD tile coverage and download COPC point clouds. |
+| **ArcGIS Portal** | Plugins → Web services | `arcgis-portal` | Browse and add the content of your ArcGIS Online organization or ArcGIS Enterprise portal after signing in. See [ArcGIS Portal](web-services.md#arcgis-portal). |
+| **ArcGIS Hub** | Plugins → Web services | `arcgis-hub` | Public datasets published to ArcGIS Hub. See [ArcGIS Hub](web-services.md#arcgis-hub). |
+| **Tennessee GIS** | Plugins → Web services | `tennessee-gis` | The geodata.tn.gov open GIS data portal. See [Tennessee GIS](web-services.md#tennessee-gis). |
+| **US federal GIS** | Plugins → Web services | `us-federal-gis` | The public GIS portals of 24 US federal agencies. See [US federal GIS](web-services.md#us-federal-gis). |
+| **US state GIS** | Plugins → Web services | `us-state-gis` | The public GIS data portals of all 50 states and DC. See [US state GIS](web-services.md#us-state-gis). |
+| **US local GIS** | Plugins → Web services | `us-local-gis` | The GIS and open-data portals of about 150 large US cities, counties, and regional agencies. See [US local GIS](web-services.md#us-local-gis). |
+| **Socrata** | Plugins → Web services | `socrata` | Search government Socrata open-data portals. See [Socrata](web-services.md#socrata). |
+| **CKAN** | Plugins → Web services | `ckan` | Humanitarian Data Exchange (CKAN) resources. See [CKAN](web-services.md#ckan). |
+| **STAC catalogs** | Plugins → Web services | `stac-catalogs` | Any STAC API or static catalog, via STAC Index. See [STAC catalogs](web-services.md#stac-catalogs). |
+| **Source Cooperative** | Plugins → Web services | `source-coop` | Cloud-native products (PMTiles, GeoParquet, COG) on Source Cooperative. See [Source Cooperative](web-services.md#source-cooperative). |
+| **S3 browser** | Plugins → Web services | `s3-browser` | Browse any Amazon S3 or S3-compatible bucket, public or private, and add its files. See [S3 browser](web-services.md#s3-browser). |
+| **Natural Earth** | Plugins → Web services | `natural-earth` | The Natural Earth vector and raster themes. See [Natural Earth](web-services.md#natural-earth). |
+| **Hugging Face** | Plugins → Web services | `huggingface` | Geospatial files in Hugging Face dataset repos, and uploads to them. See [Hugging Face](web-services.md#hugging-face). |
+| **Satellite embeddings** | Plugins → Web services | `satellite-embeddings` | Pre-computed foundation-model embeddings such as AlphaEarth, Tessera, and Earth Index. See [Satellite embeddings](web-services.md#satellite-embeddings). |
+| **Fields of the World** | Plugins → Web services | `fields-of-the-world` | Global agricultural field boundaries for 2017–2025, colored by model score. See [Fields of the World](web-services.md#fields-of-the-world). |
+| **Sentinel-2 explorer** | Plugins → Web services | `sentinel2-explorer` | Sentinel-2 imagery search and viewer over static STAC-GeoParquet, with no API. See [Sentinel-2 explorer](web-services.md#sentinel-2-explorer). |
+| **Ocean Data Platform** | Plugins → Web services | `ocean-data-platform` | HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations. See [Ocean Data Platform](web-services.md#ocean-data-platform). |
+| **Dynamical** | Plugins → Web services | `dynamical` | dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers. See [Dynamical](web-services.md#dynamical). |
+| **GeoLens** | Plugins → Web services | `geolens` | A self-hosted GeoLens spatial catalog. See [GeoLens](web-services.md#geolens). |
 | **Street View** | Plugins | `streetview` | Google Street View panoramas at a clicked point. |
 | **Mapillary** | Plugins | `mapillary` | Mapillary street-level imagery. |
 | **H3** | Plugins → DGGS | `h3-grid` | The H3 hexagonal grid over the current view; identify a cell and export the grid or selection. |
@@ -81,26 +81,26 @@ GeoLibre registers 70 built-in plugins.
 | **Geohash** | Plugins → DGGS | `geohash` | The Geohash grid over the current view; identify a cell and export the grid or selection. |
 | **Tilecode** | Plugins → DGGS | `tilecode` | The web-map tile grid (z/x/y tile codes) over the current view; identify a cell and export the grid or selection. |
 | **Basemaps** | Plugins | `basemap-control` | A basemap gallery for switching the background map, from the same catalog as the Change background dialog. |
-| **Historical Imagery** | Plugins | `esri-wayback` | Browse historical aerial and satellite imagery (Esri World Imagery Wayback) for a location. |
-| **Time Slider** | Plugins | `time-slider` | Filter a temporal layer by a date or number field, or step a time-enabled raster or Zarr cube through its time axis. |
+| **Historical imagery** | Plugins | `esri-wayback` | Browse historical aerial and satellite imagery (Esri World Imagery Wayback) for a location. |
+| **Time slider** | Plugins | `time-slider` | Filter a temporal layer by a date or number field, or step a time-enabled raster or Zarr cube through its time axis. |
 | **Timelapse** | Plugins | `timelapse` | Animate annual cloudless basemaps (EOX Sentinel-2, NASA GIBS Landsat/WELD and MODIS land cover) and record them to video. |
 | **Overture Maps** | Plugins | `overture-maps` | Browse and add Overture Maps themes. |
 | **GeoAgent** | Plugins | `geoagent` | An in-map AI agent panel. |
-| **Elevation Profile** | Plugins | `elevation-profile` | A terrain profile along a drawn line, or along the selected line features of a layer. |
-| **Layer Swipe** | Plugins | `swipe` | A swipe bar comparing two layers. |
+| **Elevation profile** | Plugins | `elevation-profile` | A terrain profile along a drawn line, or along the selected line features of a layer. |
+| **Layer swipe** | Plugins | `swipe` | A swipe bar comparing two layers. |
 | **Gridlines** | Controls → Gridlines | `graticule` | A coordinate grid with edge labels, including UTM easting/northing and MGRS/USNG modes. |
 | **Clouds** | Controls → Weather | `clouds` | Near-realtime NASA cloud imagery, animated day by day. |
 | **Precipitation** | Controls → Weather | `precipitation` | RainViewer precipitation radar, animated over roughly the last two hours. |
-| **Atmospheric Effects** | Controls → Atmospheric Effects | `atmosphere-effects` | A deep-space backdrop, starfield, comets, and an atmospheric halo at low zoom. |
-| **Sun Simulation** | Controls → Sun | `sun` | The sun's position and the day/night terminator for any date and time. |
-| **Route Animation** | Controls → Route Animation | `route-animation` | Animate a marker along a line layer with play/pause, speed, a trail, and camera follow. |
-| **Flight Simulator** | Plugins; also Controls → Flight Simulator | `flight-simulator` | Fly over terrain and 3D layers with keyboard controls. |
-| **God's Eye View** | Plugins | `gods-eye-view` | Live earthquakes, satellite orbits, flights, transit, public cameras, and more on the Cesium globe. See [God's Eye View](#gods-eye-view). |
+| **Atmospheric effects** | Controls → Atmospheric effects | `atmosphere-effects` | A deep-space backdrop, starfield, comets, and an atmospheric halo at low zoom. |
+| **Sun simulation** | Controls → Sun | `sun` | The sun's position and the day/night terminator for any date and time. |
+| **Route animation** | Controls → Route animation | `route-animation` | Animate a marker along a line layer with play/pause, speed, a trail, and camera follow. |
+| **Flight simulator** | Plugins; also Controls → Flight simulator | `flight-simulator` | Fly over terrain and 3D layers with keyboard controls. |
+| **God's eye view** | Plugins | `gods-eye-view` | Live earthquakes, satellite orbits, flights, transit, public cameras, and more on the Cesium globe. See [God's eye view](#gods-eye-view). |
 | **SamGeo** | Plugins | `samgeo` | Segment imagery into vector features. See [SamGeo](segmentation.md). |
-| **Point Cloud Annotation** | Plugins | `point-cloud-annotation` | Select LiDAR points with a box or lasso, assign ASPRS classes, and export LAS 1.4 or a Segments.ai label. See [Point Cloud Annotation](point-cloud-annotation.md). |
+| **Point cloud annotation** | Plugins | `point-cloud-annotation` | Select LiDAR points with a box or lasso, assign ASPRS classes, and export LAS 1.4 or a Segments.ai label. See [Point cloud annotation](point-cloud-annotation.md). |
 | **Directions** | Controls → Directions | menu only | Click the map to add waypoints and get a route from the public OSRM demo server. |
-| **Reverse Geocode** | Controls → Reverse Geocode | menu only | Click the map to look up the address at that point through the configured geocoding provider. |
-| **Deck.gl Layer** | Add Data → Deck.gl Layer | `deckgl-viz` | The deck.gl overlay that renders layers built in the Deck.gl Layer dialog. |
+| **Reverse geocode** | Controls → Reverse geocode | menu only | Click the map to look up the address at that point through the configured geocoding provider. |
+| **Deck.gl layer** | Add data → Deck.gl layer | `deckgl-viz` | The deck.gl overlay that renders layers built in the Deck.gl Layer dialog. |
 | **Components** | Controls (Search, Legend, Measure, …) | `components` | The component panels; each is toggled from the Controls menu rather than as one plugin. See [Components](map-controls.md#component-tools). |
 <!-- plugin-reference:end -->
 

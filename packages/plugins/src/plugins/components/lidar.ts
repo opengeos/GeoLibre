@@ -41,7 +41,7 @@ const LIDAR_EPT_SAMPLE_URL =
   "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/USGS_LPC_IL_4County_Cook_2017_LAS_2019/ept.json";
 
 const LIDAR_OPTIONS = {
-  title: "Add LiDAR Layer",
+  title: "Add LiDAR layer",
   collapsed: false,
   className: "geolibre-lidar-layer-control",
   panelWidth: 365,

@@ -66,8 +66,8 @@ function readLas(buffer: Buffer): { count: number; format: number; classes: Map<
 }
 
 async function loadCopc(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
-  await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
+  await page.getByRole("menuitem", { name: "LiDAR layer", exact: true }).click();
   await page
     .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
     .fill(COPC_URL);
@@ -81,12 +81,12 @@ async function startSession(page: Page, options: { restored?: boolean } = {}) {
   if (options.restored) {
     // A restored project re-activates the plugin with its panel collapsed to
     // the right rail; the Plugins menu entry would toggle it off instead.
-    const rail = page.getByRole("button", { name: "Expand Point Cloud Annotation" });
+    const rail = page.getByRole("button", { name: "Expand Point cloud annotation" });
     await expect(rail).toBeVisible({ timeout: 30_000 });
     await rail.click();
   } else {
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Point Cloud Annotation", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Point cloud annotation", exact: true }).click();
   }
   const start = page.getByTestId("pc-annotation-start");
   await expect(start).toBeEnabled({ timeout: 30_000 });
@@ -101,8 +101,8 @@ test.describe("point cloud annotation", () => {
     await captureSavedFiles(page);
     await waitForMap(page);
 
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "LiDAR layer", exact: true }).click();
     await page
       .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
       .fill(COPC_URL);
@@ -111,7 +111,7 @@ test.describe("point cloud annotation", () => {
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
 
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Point Cloud Annotation", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Point cloud annotation", exact: true }).click();
     const start = page.getByTestId("pc-annotation-start");
     await expect(start).toBeEnabled({ timeout: 15_000 });
     await start.click();
@@ -297,7 +297,7 @@ test.describe("point cloud annotation", () => {
     await waitForMap(page);
     const chooserPromise = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project" }).click();
-    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "Open from" }).click();
     await page.getByRole("menuitem", { name: "File…" }).click();
     await (await chooserPromise).setFiles(projectPath);
     await expect(
@@ -312,8 +312,8 @@ test.describe("point cloud annotation", () => {
     // The exported LAZ opens in GeoLibre again (LAS 1.4, LASzip-compressed).
     const lazPath = join(dir, "annotated.laz");
     await writeFile(lazPath, laz!);
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "LiDAR layer", exact: true }).click();
     await page.locator('input[type="file"][accept*=".laz"]').first().setInputFiles(lazPath);
     await expect(
       page.getByText(`${exported.toLocaleString("en-US")} points`, { exact: true }).first(),
@@ -401,7 +401,7 @@ test.describe("point cloud annotation", () => {
     await waitForMap(page);
     const chooserPromise = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project" }).click();
-    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "Open from" }).click();
     await page.getByRole("menuitem", { name: "File…" }).click();
     await (await chooserPromise).setFiles(projectPath);
     await startSession(page, { restored: true });
@@ -824,7 +824,7 @@ test.describe("point cloud annotation", () => {
     await waitForMap(page);
     await loadCopc(page);
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Point Cloud Annotation", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Point cloud annotation", exact: true }).click();
     // The fitted view streams a coarse level of detail; full detail loads
     // every node in view (here, the whole 1,065-point test cloud) and pins it.
     await page.getByTestId("pc-annotation-full-detail").click();

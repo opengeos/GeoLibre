@@ -4235,7 +4235,7 @@
       "netcdfHdf": "NetCDF / HDF",
       "spaceborneLidarLayer": "ICESat-2 / GEDI",
       "lidarLayer": "طبقة LiDAR",
-      "splattingLayer": "Gaussian Splatting",
+      "splattingLayer": "Gaussian splatting",
       "threeDTilesLayer": "طبقة 3D Tiles",
       "duckdbLayer": "طبقة DuckDB",
       "whitebox": "Whitebox",

@@ -3351,7 +3351,7 @@
           "talk": "Débats",
           "weather": "Météo / Urgences",
           "publicSafety": "Sécurité publique",
-          "aviationMarine": "Aviation / Marine",
+          "aviationMarine": "Aviation / marine",
           "trafficTransit": "Circulation / Transports",
           "music": "Musique",
           "other": "Autres"
@@ -3979,7 +3979,7 @@
       "georeferencing": "Géoréférencement",
       "vectorLayer": "Couche vectorielle",
       "cadLayer": "Couche CAO (DXF/DWG)",
-      "gdbLayer": "File Geodatabase (GDB)",
+      "gdbLayer": "File geodatabase (GDB)",
       "rasterLayer": "Couche raster",
       "osmPbfLayer": "Couche OSM PBF",
       "vtpkLayer": "Couche ArcGIS VTPK/TPKX",
@@ -3992,7 +3992,7 @@
       "netcdfHdf": "NetCDF / HDF",
       "spaceborneLidarLayer": "ICESat-2 / GEDI",
       "lidarLayer": "Couche LiDAR",
-      "splattingLayer": "Gaussian Splatting",
+      "splattingLayer": "Gaussian splatting",
       "threeDTilesLayer": "Couche 3D Tiles",
       "duckdbLayer": "Couche DuckDB",
       "whitebox": "Whitebox",
@@ -5555,7 +5555,7 @@
     }
   },
   "storymap": {
-    "title": "Story Map",
+    "title": "Story map",
     "description": "Créez un récit piloté par le défilement à partir de chapitres cartographiques. Chaque chapitre capture une vue de caméra et un texte.",
     "chapters": "Chapitres ({{count}})",
     "addChapter": "Ajouter un chapitre",

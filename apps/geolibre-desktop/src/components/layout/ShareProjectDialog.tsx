@@ -859,7 +859,7 @@ export function ShareProjectDialog({
                 }`}
                 onClick={() => setTab("create")}
               >
-                {t("share.createShare", "New Share")}
+                {t("share.createShare", "New share")}
               </button>
               <button
                 type="button"
@@ -870,7 +870,7 @@ export function ShareProjectDialog({
                 }`}
                 onClick={() => setTab("manage")}
               >
-                {t("share.activeShares", "Active Shares")}
+                {t("share.activeShares", "Active shares")}
                 {activeShares.length > 0 && (
                   <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-xs">
                     {activeShares.length}

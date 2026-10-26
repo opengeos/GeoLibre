@@ -95,7 +95,7 @@ test("groups a layer and persists the folder across save and reopen", async ({ p
     await waitForMap(page);
     const chooserPromise = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Project" }).click();
-    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "Open from" }).click();
     await page.getByRole("menuitem", { name: "File…" }).click();
     const chooser = await chooserPromise;
     await chooser.setFiles(savedPath);

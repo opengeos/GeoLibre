@@ -1743,7 +1743,7 @@ export const maplibreSentinel2ExplorerPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: () => tr("title", "Sentinel-2 Explorer"),
+        title: () => tr("title", "Sentinel-2 explorer"),
         dock: "replace-style",
         defaultWidth: 360,
         render: (container) => {

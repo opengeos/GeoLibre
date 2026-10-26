@@ -332,7 +332,7 @@ export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: () => tr(app, "title", "OSM Downloader"),
+        title: () => tr(app, "title", "OSM downloader"),
         dock: "replace-style",
         defaultWidth: 340,
         render: (container) => {

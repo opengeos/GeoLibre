@@ -67,7 +67,7 @@ test("signs in to the gallery through the organization's identity provider", asy
   await waitForMap(page);
 
   await page.getByRole("button", { name: "Project", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Open From" }).click();
+  await page.getByRole("menuitem", { name: "Open from" }).click();
   await page.getByRole("menuitem", { name: "Gallery…" }).click();
   const gallery = page.getByRole("dialog", { name: "Project gallery" });
   await expect(gallery).toBeVisible();

@@ -3691,7 +3691,7 @@
       "wfs": "Camada WFS",
       "wmts": "Camada WMTS",
       "ogcFeatures": "OGC API - Features",
-      "ogcVectorTiles": "OGC Vector Tiles",
+      "ogcVectorTiles": "OGC vector tiles",
       "arcgis": "Camada ArcGIS",
       "georss": "Camada GeoRSS",
       "geoBoundaries": "Limites administrativos",
@@ -3979,7 +3979,7 @@
       "georeferencing": "Georreferenciamento",
       "vectorLayer": "Camada vetorial",
       "cadLayer": "Camada CAD (DXF/DWG)",
-      "gdbLayer": "File Geodatabase (GDB)",
+      "gdbLayer": "File geodatabase (GDB)",
       "rasterLayer": "Camada raster",
       "osmPbfLayer": "Camada OSM PBF",
       "vtpkLayer": "Camada ArcGIS VTPK/TPKX",
@@ -3992,7 +3992,7 @@
       "netcdfHdf": "NetCDF / HDF",
       "spaceborneLidarLayer": "ICESat-2 / GEDI",
       "lidarLayer": "Camada LiDAR",
-      "splattingLayer": "Gaussian Splatting",
+      "splattingLayer": "Gaussian splatting",
       "threeDTilesLayer": "Camada 3D Tiles",
       "duckdbLayer": "Camada DuckDB",
       "whitebox": "Whitebox",
@@ -5555,7 +5555,7 @@
     }
   },
   "storymap": {
-    "title": "Story Map",
+    "title": "Story map",
     "description": "Crie uma história com rolagem a partir de capítulos do mapa. Cada capítulo captura uma visualização de câmera e texto.",
     "chapters": "Capítulos ({{count}})",
     "addChapter": "Adicionar capítulo",
@@ -10153,7 +10153,7 @@
       "toggleLayerAria": "Alternar {{name}}"
     },
     "geolibre-osm-downloader": {
-      "title": "OSM Downloader",
+      "title": "OSM downloader",
       "hint": "Baixe recursos do OpenStreetMap da área atual do mapa usando a Overpass API pública.",
       "attribution": "Dados © colaboradores do OpenStreetMap, disponíveis sob a licença ODbL.",
       "featureType": "Tipo de recurso",
