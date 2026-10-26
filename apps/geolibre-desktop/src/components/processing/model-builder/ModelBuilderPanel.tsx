@@ -20,6 +20,7 @@ import {
   runModelGraph,
   INPUT_NODE_PORT,
   OUTPUT_NODE_PORT,
+  portsFor,
   runWhiteboxToolWasm,
   validateModelGraph,
   graphToLinearSteps,
@@ -86,6 +87,7 @@ import {
   NODE_HEIGHT,
   NODE_WIDTH,
   addDataNode,
+  addControlNode,
   addOutputForPort,
   addToolNode,
   autoLayout,
@@ -319,7 +321,7 @@ export function ModelBuilderPanel({
   const [running, setRunning] = useState(false);
   /** Script for the last graph that completed successfully, not later canvas edits. */
   const [pythonScript, setPythonScript] = useState<string | null>(null);
-  const [nodeStatus, setNodeStatus] = useState<Record<string, "running" | "done" | "error">>({});
+  const [nodeStatus, setNodeStatus] = useState<Record<string, "running" | "done" | "error" | "skipped">>({});
   /**
    * The output port a keyboard/click user has armed, waiting for an input port
    * to complete the connection. Null during pointer drags, which carry their
@@ -756,6 +758,27 @@ export function ModelBuilderPanel({
     [graph],
   );
 
+  const addControlFlowNode = useCallback(
+    (
+      kind:
+        | "iterate-features"
+        | "iterate-rasters"
+        | "collect-results"
+        | "conditional-switch"
+        | "conditional-merge",
+    ) => {
+      const next = addControlNode(
+        graph,
+        kind,
+        { x: 24 + NODE_WIDTH + 36, y: 48 },
+        createId,
+      );
+      setGraph(next.graph);
+      setSelectedNodeId(next.nodeId);
+    },
+    [graph],
+  );
+
   // Node dragging.
   const handleNodePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>, node: ModelGraphNode) => {
@@ -956,23 +979,44 @@ export function ModelBuilderPanel({
           if (controller.signal.aborted) return;
           if (value.kind === "vector") {
             addGeoJsonLayer(name, value.geojson);
-          } else if (onAddRaster) {
-            pendingAdds.push(
-              Promise.resolve(
-                onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
-              ).catch((err: unknown) => {
-                // Otherwise this is an unhandled rejection and the run still
-                // reports success for an output that never reached the map.
-                failedOutputs.push(name);
-                appendLog(
-                  `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
-                    err instanceof Error ? err.message : String(err)
-                  }`,
+          } else if (value.kind === "raster") {
+            if (onAddRaster) {
+              pendingAdds.push(
+                Promise.resolve(
+                  onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
+                ).catch((err: unknown) => {
+                  failedOutputs.push(name);
+                  appendLog(
+                    `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
+                      err instanceof Error ? err.message : String(err)
+                    }`,
+                  );
+                }),
+              );
+            } else {
+              appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
+            }
+          } else if (value.kind === "raster-collection") {
+            if (onAddRaster) {
+              for (let i = 0; i < value.items.length; i++) {
+                const item = value.items[i];
+                const itemName = `${name}_${i + 1}`;
+                pendingAdds.push(
+                  Promise.resolve(
+                    onAddRaster(item.bytes, itemName, `${itemName.replace(/\s+/g, "_")}.tif`),
+                  ).catch((err: unknown) => {
+                    failedOutputs.push(itemName);
+                    appendLog(
+                      `${t("processing.modelBuilder.outputAddFailed", { name: itemName })}: ${
+                        err instanceof Error ? err.message : String(err)
+                      }`,
+                    );
+                  }),
                 );
-              }),
-            );
-          } else {
-            appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
+              }
+            } else {
+              appendLog(t("processing.modelBuilder.rasterOutputUnsupported", { name }));
+            }
           }
         },
         log: (message) => {
@@ -1561,6 +1605,60 @@ export function ModelBuilderPanel({
                     {t("processing.modelBuilder.addOutputNode")}
                   </Button>
                 </div>
+                <div className="pt-1">
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Control Flow
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 justify-start px-1.5 text-[10px] truncate"
+                      onClick={() => addControlFlowNode("iterate-features")}
+                      title="Iterate Features: Execute workflow for each vector feature"
+                    >
+                      Iterate Feat
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 justify-start px-1.5 text-[10px] truncate"
+                      onClick={() => addControlFlowNode("iterate-rasters")}
+                      title="Iterate Rasters: Execute workflow for each raster"
+                    >
+                      Iterate Rast
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 justify-start px-1.5 text-[10px] truncate"
+                      onClick={() => addControlFlowNode("conditional-switch")}
+                      title="Conditional Switch: If/Else conditional branching"
+                    >
+                      If/Else Switch
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 justify-start px-1.5 text-[10px] truncate"
+                      onClick={() => addControlFlowNode("conditional-merge")}
+                      title="Conditional Merge: Converge alternative branches"
+                    >
+                      Branch Merge
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="col-span-2 h-6 justify-center px-1.5 text-[10px] truncate"
+                      onClick={() => addControlFlowNode("collect-results")}
+                      title="Collect Results: Gather outputs from loop iterations"
+                    >
+                      Collect Results
+                    </Button>
+                  </div>
+                </div>
               </div>
               <ScrollArea className="min-h-0 flex-1 p-2">
                 {catalog.length === 0 ? (
@@ -2006,15 +2104,7 @@ function portsOf(
   node: ModelGraphNode,
   descriptor: ModelToolDescriptor | undefined,
 ): { inputs: { id: string; label: string }[]; outputs: { id: string; label: string }[] } {
-  // Stable ids, matching the engine's own portsFor: portLabel() resolves these
-  // for display, and a hardcoded English word here would slip past it.
-  if (node.kind === "input") {
-    return { inputs: [], outputs: [{ id: INPUT_NODE_PORT, label: INPUT_NODE_PORT }] };
-  }
-  if (node.kind === "output") {
-    return { inputs: [{ id: OUTPUT_NODE_PORT, label: OUTPUT_NODE_PORT }], outputs: [] };
-  }
-  return { inputs: descriptor?.inputs ?? [], outputs: descriptor?.outputs ?? [] };
+  return portsFor(node, descriptor);
 }
 
 /**
@@ -2042,7 +2132,7 @@ const GraphNodeCard = memo(function GraphNodeCard({
   descriptor: ModelToolDescriptor | undefined;
   layers: GeoLibreLayer[];
   selected: boolean;
-  status?: "running" | "done" | "error";
+  status?: "running" | "done" | "error" | "skipped";
   hasIssue: boolean;
   /** The output port on this node armed for a keyboard connection, if any. */
   armedPortId?: string;
@@ -2058,13 +2148,31 @@ const GraphNodeCard = memo(function GraphNodeCard({
   const { t } = useTranslation();
   const ports = portsOf(node, descriptor);
   const layout = cardLayout(ports, node.kind);
+
+  const isControlFlow =
+    node.kind === "iterate-features" ||
+    node.kind === "iterate-rasters" ||
+    node.kind === "collect-results" ||
+    node.kind === "conditional-switch" ||
+    node.kind === "conditional-merge";
+
+  const controlFlowTitles: Record<string, string> = {
+    "iterate-features": "Iterate Features",
+    "iterate-rasters": "Iterate Rasters",
+    "collect-results": "Collect Results",
+    "conditional-switch": "Conditional Switch",
+    "conditional-merge": "Conditional Merge",
+  };
+
   const title =
     node.kind === "input"
       ? (layers.find((layer) => layer.id === node.layerId)?.name ??
         t("processing.modelBuilder.inputNode"))
       : node.kind === "output"
         ? node.name?.trim() || t("processing.modelBuilder.outputNode")
-        : descriptorName(t, descriptor, node.toolId ?? "");
+        : isControlFlow
+          ? controlFlowTitles[node.kind]
+          : descriptorName(t, descriptor, node.toolId ?? "");
 
   return (
     // Focusable with a role, so the card can be reached and selected from the
@@ -2078,10 +2186,6 @@ const GraphNodeCard = memo(function GraphNodeCard({
       aria-label={title}
       onPointerDown={(event) => onPointerDown(event, node)}
       onKeyDown={(event) => {
-        // Only the card's own activation. A keydown on one of the port buttons
-        // bubbles up here, and preventDefault() on that would stop the browser
-        // synthesizing the port's `click` — which is the whole keyboard wiring
-        // path.
         if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
@@ -2090,17 +2194,16 @@ const GraphNodeCard = memo(function GraphNodeCard({
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: layout.height }}
       className={cn(
         "absolute cursor-grab select-none border p-2 shadow-sm active:cursor-grabbing",
-        // A tool is a square-cornered card; the model's own inputs and outputs
-        // are rounded and tinted, so the data flowing in and out reads apart
-        // from the processing between it at a glance — the same split ArcGIS
-        // ModelBuilder and QGIS draw as ovals versus rectangles. Safe for
-        // exactly these two kinds: each has a single, vertically centred port,
-        // so no port dot ever lands on the rounded part of the edge.
-        node.kind === "tool" ? "rounded-md bg-card" : "rounded-xl border-primary/40 bg-primary/10",
+        isControlFlow
+          ? "rounded-md border-amber-500/40 bg-amber-500/10"
+          : node.kind === "tool"
+            ? "rounded-md bg-card"
+            : "rounded-xl border-primary/40 bg-primary/10",
         selected && "border-primary ring-2 ring-primary/30",
         hasIssue && !selected && "border-destructive",
         status === "running" && "ring-2 ring-primary",
         status === "done" && "border-primary/60",
+        status === "skipped" && "opacity-60 border-muted-foreground/30 bg-muted/40",
         status === "error" && "border-destructive ring-2 ring-destructive/40",
       )}
     >
@@ -2109,7 +2212,9 @@ const GraphNodeCard = memo(function GraphNodeCard({
           ? (node.provider ?? "")
           : node.kind === "input"
             ? t("processing.modelBuilder.inputNode")
-            : t("processing.modelBuilder.outputNode")}
+            : node.kind === "output"
+              ? t("processing.modelBuilder.outputNode")
+              : "Control Flow"}
       </p>
       <p className="truncate text-xs font-medium" title={title}>
         {title}
@@ -2312,6 +2417,127 @@ function NodeInspector({
             onChange={(event) => onFieldChange("name", event.target.value)}
             placeholder={t("processing.modelBuilder.resultNamePlaceholder")}
           />
+        </div>
+      )}
+
+      {node.kind === "conditional-switch" && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Evaluates a condition and routes data to the True or False branch.
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="switch-condition-type" className="text-[11px]">
+              Condition Type
+            </Label>
+            <Select
+              id="switch-condition-type"
+              className="h-7 w-full text-xs"
+              value={String(node.parameters?.conditionType || "compare")}
+              onChange={(event) => onParamChange("conditionType", event.target.value)}
+            >
+              <option value="compare">Value / Property Comparison</option>
+              <option value="boolean">Boolean Check</option>
+              <option value="null_check">Null / Empty Check</option>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="switch-property" className="text-[11px]">
+              Feature Property / Metadata Key (Optional)
+            </Label>
+            <Input
+              id="switch-property"
+              className="h-7 text-xs"
+              value={String(node.parameters?.property ?? "")}
+              onChange={(event) => onParamChange("property", event.target.value)}
+              placeholder="e.g. category, feature_count, or area"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="switch-operator" className="text-[11px]">
+              Operator
+            </Label>
+            <Select
+              id="switch-operator"
+              className="h-7 w-full text-xs"
+              value={String(node.parameters?.operator || "==")}
+              onChange={(event) => onParamChange("operator", event.target.value)}
+            >
+              <option value="==">== (Equal)</option>
+              <option value="!=">!= (Not Equal)</option>
+              <option value="<">&lt; (Less Than)</option>
+              <option value="<=">&lt;= (Less Than or Equal)</option>
+              <option value=">">&gt; (Greater Than)</option>
+              <option value=">=">&gt;= (Greater Than or Equal)</option>
+              <option value="contains">contains</option>
+              <option value="starts_with">starts with</option>
+              <option value="is_empty">is empty</option>
+              <option value="not_empty">is not empty</option>
+              <option value="is_null">is null</option>
+              <option value="not_null">is not null</option>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="switch-value" className="text-[11px]">
+              Target Value
+            </Label>
+            <Input
+              id="switch-value"
+              className="h-7 text-xs"
+              value={String(node.parameters?.value ?? "")}
+              onChange={(event) => onParamChange("value", event.target.value)}
+              placeholder="e.g. 50 or urban or true"
+            />
+          </div>
+        </div>
+      )}
+
+      {(node.kind === "iterate-features" || node.kind === "iterate-rasters") && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            {node.kind === "iterate-features"
+              ? "Iterates over each feature in the vector collection."
+              : "Iterates over each raster dataset in the collection."}
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="iter-max" className="text-[11px]">
+              Maximum Iterations Limit
+            </Label>
+            <Input
+              id="iter-max"
+              type="number"
+              className="h-7 text-xs"
+              value={node.parameters?.maxIterations !== undefined ? String(node.parameters.maxIterations) : "1000"}
+              onChange={(event) => onParamChange("maxIterations", Number(event.target.value) || 1000)}
+            />
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <Label htmlFor="iter-stop-on-error" className="text-[11px]">
+              Stop On Error
+            </Label>
+            <input
+              id="iter-stop-on-error"
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              checked={node.parameters?.stopOnError !== false}
+              onChange={(event) => onParamChange("stopOnError", event.target.checked)}
+            />
+          </div>
+        </div>
+      )}
+
+      {node.kind === "collect-results" && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            Gathers and flattens results produced by each loop iteration into a final collection.
+          </p>
+        </div>
+      )}
+
+      {node.kind === "conditional-merge" && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            Converges True and False branch outputs back into a single active data flow.
+          </p>
         </div>
       )}
 
@@ -2538,10 +2764,11 @@ async function executeModelTool({
 
   const layerInputs: Record<string, WhiteboxLayerInput> = {};
   for (const [portId, value] of Object.entries(inputs)) {
-    layerInputs[portId] =
-      value.kind === "vector"
-        ? { name: portId, kind: "vector_in", geojson: value.geojson }
-        : { name: portId, kind: "raster_in", bytes: value.bytes };
+    if (value.kind === "vector") {
+      layerInputs[portId] = { name: portId, kind: "vector_in", geojson: value.geojson };
+    } else if (value.kind === "raster") {
+      layerInputs[portId] = { name: portId, kind: "raster_in", bytes: value.bytes };
+    }
   }
   const job = await runWhiteboxToolWasm({
     tool_id: descriptor.toolId,

@@ -10,6 +10,7 @@ import {
   runWhiteboxToolWasm,
   topologicalOrder,
   validateModelGraph,
+  evaluateCondition,
   type ProcessingAlgorithm,
   type ProcessingContext,
   type WhiteboxLayerInput,
@@ -539,9 +540,42 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         list.push(edge);
         incoming.set(edge.to, list);
       }
+      const SKIPPED = "__SKIPPED__";
       const produced = new Map<string, Map<string, string>>();
       const outputLayerIds: string[] = [];
       for (const node of ordered) {
+        const incomingEdges = incoming.get(node.id) ?? [];
+        let anyReal = false;
+        let allSkipped = incomingEdges.length > 0;
+        for (const edge of incomingEdges) {
+          const lId = produced.get(edge.from)?.get(edge.fromPort);
+          if (lId === SKIPPED) {
+            // skipped
+          } else if (lId !== undefined) {
+            anyReal = true;
+            allSkipped = false;
+          } else {
+            allSkipped = false;
+          }
+        }
+        if (node.kind === "conditional-merge" && anyReal) {
+          allSkipped = false;
+        }
+        if (allSkipped) {
+          produced.set(
+            node.id,
+            new Map([
+              ["true", SKIPPED],
+              ["false", SKIPPED],
+              ["out", SKIPPED],
+              ["feature", SKIPPED],
+              ["raster", SKIPPED],
+              ["collection", SKIPPED],
+            ]),
+          );
+          continue;
+        }
+
         if (node.kind === "input") {
           const layerId = node.layerId ?? "";
           if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
@@ -553,9 +587,72 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (node.kind === "output") {
           const edge = incoming.get(node.id)?.[0];
           const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          if (layerId === SKIPPED) continue;
           if (!layerId) throw new Error(`No result reached output "${node.name ?? node.id}"`);
           if (node.name?.trim()) useAppStore.getState().updateLayer(layerId, { name: node.name });
           outputLayerIds.push(layerId);
+          continue;
+        }
+
+        if (node.kind === "conditional-switch") {
+          const edge =
+            incoming.get(node.id)?.find((e) => e.toPort === "input") ?? incoming.get(node.id)?.[0];
+          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          if (!layerId || layerId === SKIPPED) {
+            produced.set(node.id, new Map([["true", SKIPPED], ["false", SKIPPED]]));
+            continue;
+          }
+          const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+          const isVector = layer?.type === "geojson" && layer.geojson;
+          const cond = evaluateCondition({
+            inputValue: isVector
+              ? { kind: "vector", geojson: layer.geojson as FeatureCollection }
+              : undefined,
+            parameters: node.parameters,
+          });
+          if (cond) {
+            produced.set(node.id, new Map([["true", layerId], ["false", SKIPPED]]));
+          } else {
+            produced.set(node.id, new Map([["true", SKIPPED], ["false", layerId]]));
+          }
+          continue;
+        }
+
+        if (node.kind === "conditional-merge") {
+          const trueEdge = incoming.get(node.id)?.find((e) => e.toPort === "true");
+          const falseEdge = incoming.get(node.id)?.find((e) => e.toPort === "false");
+          const trueId = trueEdge ? produced.get(trueEdge.from)?.get(trueEdge.fromPort) : undefined;
+          const falseId = falseEdge ? produced.get(falseEdge.from)?.get(falseEdge.fromPort) : undefined;
+          const activeId =
+            trueId && trueId !== SKIPPED
+              ? trueId
+              : falseId && falseId !== SKIPPED
+                ? falseId
+                : undefined;
+          if (!activeId) {
+            produced.set(node.id, new Map([["out", SKIPPED]]));
+          } else {
+            produced.set(node.id, new Map([["out", activeId]]));
+          }
+          continue;
+        }
+
+        if (
+          node.kind === "iterate-features" ||
+          node.kind === "collect-results" ||
+          node.kind === "iterate-rasters"
+        ) {
+          const edge = incoming.get(node.id)?.[0];
+          const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : (node.layerId ?? "");
+          produced.set(
+            node.id,
+            new Map([
+              ["feature", layerId ?? ""],
+              ["raster", layerId ?? ""],
+              ["collection", layerId ?? ""],
+              ["out", layerId ?? ""],
+            ]),
+          );
           continue;
         }
 

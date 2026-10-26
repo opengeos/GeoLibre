@@ -79,6 +79,44 @@ export function addDataNode(
 }
 
 /**
+ * Add a control flow node (iterator, switch, merge, or collector) at a canvas position.
+ *
+ * @param graph The current graph.
+ * @param kind Which control-flow node kind to add.
+ * @param position Canvas coordinates for the new node.
+ * @param createId Id factory.
+ * @returns The updated graph and the new node's id.
+ */
+export function addControlNode(
+  graph: ProcessingModelGraph,
+  kind: Extract<
+    ModelGraphNodeKind,
+    "iterate-features" | "iterate-rasters" | "collect-results" | "conditional-switch" | "conditional-merge"
+  >,
+  position: { x: number; y: number },
+  createId: () => string,
+): { graph: ProcessingModelGraph; nodeId: string } {
+  const nodeId = createId();
+  const free = findFreePosition(graph, position);
+  const parameters: Record<string, unknown> = {};
+  if (kind === "iterate-features" || kind === "iterate-rasters") {
+    parameters.maxIterations = 1000;
+    parameters.stopOnError = true;
+  } else if (kind === "conditional-switch") {
+    parameters.conditionType = "compare";
+    parameters.operator = "==";
+  }
+  const node: ModelGraphNode = {
+    id: nodeId,
+    kind,
+    x: free.x,
+    y: free.y,
+    parameters,
+  };
+  return { graph: { ...graph, nodes: [...graph.nodes, node] }, nodeId };
+}
+
+/**
  * Add a tool node, seeded with the descriptor's documented parameter defaults so
  * a freshly dropped node is runnable without opening every field first.
  *

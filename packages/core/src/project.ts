@@ -862,7 +862,16 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
   return models.length > 0 ? models : null;
 }
 
-const MODEL_NODE_KINDS = new Set<ModelGraphNodeKind>(["input", "tool", "output"]);
+const MODEL_NODE_KINDS = new Set<ModelGraphNodeKind>([
+  "input",
+  "tool",
+  "output",
+  "iterate-features",
+  "iterate-rasters",
+  "collect-results",
+  "conditional-switch",
+  "conditional-merge",
+]);
 const MODEL_TOOL_PROVIDERS = new Set<ModelToolProvider>(["vector", "whitebox"]);
 
 /** Coerce an untrusted number to a finite canvas coordinate. */
@@ -899,6 +908,7 @@ export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null
     const toolId = normalizeString(node.toolId).trim();
     const name = normalizeString(node.name).trim();
     const provider = node.provider as ModelToolProvider;
+    const body = node.body ? normalizeModelGraph(node.body) : null;
     nodes.push({
       id: nodeId,
       kind,
@@ -911,6 +921,7 @@ export function normalizeModelGraph(value: unknown): ProcessingModelGraph | null
         ? { parameters: node.parameters as Record<string, unknown> }
         : {}),
       ...(name ? { name } : {}),
+      ...(body ? { body } : {}),
     });
   }
   if (nodes.length === 0) return null;
