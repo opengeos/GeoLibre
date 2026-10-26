@@ -126,7 +126,9 @@ def test_show_control_rejects_bad_options(m, name, kwargs, match):
 def test_measure_options_round_trip(m, tmp_path):
     """Control options survive save_project and load_project."""
     m.show_control("measure", collapsed=True, distance_unit="miles")
-    expected = {"controls": {"measure": {"visible": True, "collapsed": True, "distanceUnit": "miles"}}}
+    expected = {
+        "controls": {"measure": {"visible": True, "collapsed": True, "distanceUnit": "miles"}}
+    }
     assert m.to_project()["interaction"] == expected
     out = tmp_path / "map.geolibre.json"
     m.save_project(str(out))

@@ -3789,7 +3789,9 @@ class Map(anywidget.AnyWidget):
                 raise ValueError(f"Unknown {key} {value!r}; expected one of {sorted(units)}")
             options[key] = value
         shown = bool(visible)
-        setting: bool | dict[str, Any] = {"visible": shown, **options} if options and shown else shown
+        setting: bool | dict[str, Any] = (
+            {"visible": shown, **options} if options and shown else shown
+        )
         self._set_ui(controls={**self._ui.get("controls", {}), name: setting})
 
     def hide_control(self, name: str) -> None:

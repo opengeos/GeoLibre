@@ -103,9 +103,7 @@ export function openMeasurePanel(app: GeoLibreAppAPI, options?: GeoLibreMeasureO
   const distanceUnit = options?.distanceUnit;
   if (distanceUnit !== undefined) {
     if (!(MEASURE_DISTANCE_UNITS as readonly unknown[]).includes(distanceUnit)) {
-      throw new Error(
-        `Measure distanceUnit must be one of ${MEASURE_DISTANCE_UNITS.join(", ")}`,
-      );
+      throw new Error(`Measure distanceUnit must be one of ${MEASURE_DISTANCE_UNITS.join(", ")}`);
     }
     next.distanceUnit = distanceUnit;
   }
@@ -192,10 +190,7 @@ function attachMeasurePanelAddons(app: GeoLibreAppAPI, control: MeasureControl):
     // `engines`); the read is reached from the STAC plugin's audit closure, and
     // the readouts depend on MapLibre's terrain either way.
     // engine-audit-allow: getMap-mapbox
-    detach = attachTerrainMeasure(
-      control,
-      () => (app.getMap?.() ?? null) as TerrainMapLike | null,
-    );
+    detach = attachTerrainMeasure(control, () => (app.getMap?.() ?? null) as TerrainMapLike | null);
     makeMeasurePanelResizable(control);
   };
   if (!control.getState().collapsed) {

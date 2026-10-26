@@ -57,8 +57,8 @@ export function useProjectInteractionRestore(
       }
       try {
         // The handler is async, so its failure is a rejection, not a throw.
-        void Promise.resolve(handlers.setControlVisible(params)).catch(
-          (error: unknown) => report(control, error),
+        void Promise.resolve(handlers.setControlVisible(params)).catch((error: unknown) =>
+          report(control, error),
         );
       } catch (error) {
         report(control, error);

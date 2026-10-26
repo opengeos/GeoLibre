@@ -834,8 +834,7 @@ export function createAppAPI(
     openControlPanel: (
       id: GeoLibreControlPanelId,
       options?: GeoLibreMinimapOptions | GeoLibreMeasureOptions,
-    ): void =>
-      host.openControlPanel(api, id, options),
+    ): void => host.openControlPanel(api, id, options),
     closeControlPanel: (id: GeoLibreControlPanelId): void => host.closeControlPanel(api, id),
     isControlPanelVisible: host.isControlPanelVisible,
     addMapControl: (
