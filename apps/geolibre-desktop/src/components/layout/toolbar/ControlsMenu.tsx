@@ -752,6 +752,26 @@ function AtmosphereEffectsSubmenu({
           />
         </div>
         <DropdownMenuSeparator />
+        {(
+          [
+            ["showStars", "toolbar.atmosphere.showStars"],
+            ["showMilkyWay", "toolbar.atmosphere.showMilkyWay"],
+            ["showConstellations", "toolbar.atmosphere.showConstellations"],
+          ] as const
+        ).map(([key, label]) => (
+          <DropdownMenuItem
+            key={key}
+            onSelect={(e: Event) => {
+              e.preventDefault();
+              preview({ [key]: !settings[key] });
+              onCommit();
+            }}
+          >
+            {t(label)}
+            {settings[key] ? " ✓" : ""}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           // onSelect fires for mouse and keyboard alike. A discrete action:
           // preview the defaults, then commit immediately. preventDefault keeps

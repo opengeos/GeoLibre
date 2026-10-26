@@ -3459,6 +3459,9 @@
       "haloExtentHint": "How far the atmospheric glow reaches past the globe. Lower keeps data tight to the surface; higher gives a wide, airy halo.",
       "haloOpacity": "Halo strength",
       "spaceColor": "Space color",
+      "showStars": "Stars",
+      "showMilkyWay": "Milky Way",
+      "showConstellations": "Constellation lines",
       "reset": "Reset to defaults",
       "globeOnly": "Atmospheric effects are only available when Globe view is enabled."
     },
