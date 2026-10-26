@@ -260,6 +260,12 @@ export interface GeoLibreAppAPI {
   getMap?: () => import("maplibre-gl").Map | null;
   // The active primary renderer, including while its canvas is being replaced.
   getMapRenderer?: () => "maplibre" | "mapbox" | "cesium" | "arcgis";
+  // The CRS the map is drawn in ({ id, code, wmsSrs? }), or null on the default
+  // Web Mercator map or globe, and the change notice. See "Reading the map CRS".
+  getMapCrs?: () => { id: string; code: string; wmsSrs?: string } | null;
+  onMapCrsChange?: (
+    listener: (crs: { id: string; code: string; wmsSrs?: string } | null) => void,
+  ) => () => void;
   // The native mapbox-gl map, only while Mapbox is the primary renderer; null
   // otherwise. Built-in plugins read the 2D map through getStyleMap(app), which
   // falls back to this when getMap() is null — see "Supporting the Mapbox
@@ -1037,7 +1043,7 @@ const layerId = await app.addWfsLayer?.("Roads", {
 
 `options.engine` picks the renderer (`"maplibre-gl-raster"` for the GPU/deck.gl path, `"cog-tiler-wasm"` for the WebAssembly tiler, `"titiler"` for a TiTiler server). Unlike the other options it is **not per layer**: the raster control holds one engine for every raster it manages, so naming one re-renders the rasters already on the map. Pass `"auto"` to leave whatever the control is on alone; omit it and the GPU renderer is used. The GPU renderer requires a Mercator projection, so a plugin that expects to work on the globe should ask for `"cog-tiler-wasm"`.
 
-`addWmsLayer` requests Web Mercator tiles unless `crs` names another CRS, for a server whose capabilities do not list EPSG:3857. Pick one the layer lists, preferably geographic (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version: "1.3.0"`), otherwise a projected `EPSG:<code>` such as `EPSG:25832`. Only the desktop app redraws those tiles into Web Mercator: the web build still sends the Web Mercator BBOX, so such a layer stays blank there. An unsupported value, or `CRS:84` with WMS 1.1.1, throws.
+`addWmsLayer` requests Web Mercator tiles unless `crs` names another CRS, for a server whose capabilities do not list EPSG:3857. Pick one the layer lists, preferably geographic (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version: "1.3.0"`), otherwise a projected `EPSG:<code>` such as `EPSG:25832`. Only the desktop app redraws those tiles into Web Mercator: the web build still sends the Web Mercator BBOX, so such a layer stays blank there. The exception is a map drawn in that CRS (`app.getMapCrs()?.code`, see [Reading the map CRS](#reading-the-map-crs)): the host then asks every WMS layer for its tiles in the map's CRS, so a layer the server lists in it lines up on both builds. An unsupported value, or `CRS:84` with WMS 1.1.1, throws.
 
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 
@@ -1957,6 +1963,42 @@ parameters, project restoration, and delayed control registration, as well as
 by the Plugins menu and command palette. Renderer changes suspend unsupported
 plugins and retain their saved settings and activation for the return trip.
 Compatible plugins remount their controls on the replacement renderer.
+
+### Reading the map CRS
+
+A MapLibre map can be drawn in a CRS other than Web Mercator (**Settings → Map →
+Map coordinate reference system**, see [Other coordinate reference
+systems](maplibre-renderer.md#other-coordinate-reference-systems)).
+`app.getMapCrs()` returns which one, or `null` on the default Web Mercator map
+or globe and on the other renderers:
+
+- `id` is the `preferences.map.mapCrs` value, a preset id or `"EPSG:<code>"`.
+- `code` is the authority code the map is registered under.
+- `wmsSrs` is set only when servers are asked for a different label than
+  `code` (the planetary presets, whose IAU codes servers do not read).
+
+On such a map the host asks WMS and ArcGIS `export` layers for each tile's box
+in `wmsSrs ?? code`, and does not draw XYZ, vector tile or MBTiles layers. So
+match a WMS server's capabilities against `wmsSrs ?? code` before adding a
+layer: one that lists it lines up even when it lacks EPSG:3857, and one that
+does not stays blank. A plugin's own tiles and deck.gl overlays are not adapted,
+so switch them off or warn the user while the value is non-null.
+
+`app.onMapCrsChange(listener)` calls back when the value changes: the user picks
+another CRS or leaves one, or switches renderer. It does not call back
+immediately, and the value moves only once a newly picked CRS has resolved (an
+EPSG code loads the EPSG tables first).
+Switching CRS rebuilds the style, which drops the sources and layers a plugin
+added to the map itself; re-add them on the map's next `style.load`. Unsubscribe
+in `deactivate`:
+
+```ts
+const describe = (crs: { code: string; wmsSrs?: string } | null) =>
+  crs ? `Map drawn in ${crs.wmsSrs ?? crs.code}` : "Web Mercator map";
+status.textContent = describe(app.getMapCrs?.() ?? null);
+const stop = app.onMapCrsChange?.((crs) => (status.textContent = describe(crs)));
+// in deactivate: stop?.();
+```
 
 ### Reading the viewport
 

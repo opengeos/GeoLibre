@@ -8,6 +8,7 @@
 
 import {
   adaptBboxTemplateToCrs,
+  MAP_CRS_CHANGE_EVENT,
   type MapCrsBasemap,
   type MapCrsTileMatrixSet,
 } from "@geolibre/core";
@@ -40,6 +41,12 @@ export interface ResolvedMapCrs {
 
 const activeCrsByMap = new WeakMap<maplibregl.Map, ResolvedMapCrs>();
 
+/** Tell `MAP_CRS_CHANGE_EVENT` listeners a map's CRS changed. A no-op off the browser (node, workers). */
+export function notifyMapCrsChange(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(MAP_CRS_CHANGE_EVENT));
+}
+
 /**
  * Record the CRS a map is drawn in, for layer sync to read.
  *
@@ -48,8 +55,10 @@ const activeCrsByMap = new WeakMap<maplibregl.Map, ResolvedMapCrs>();
  *   crs: Its CRS, or `null` for the default Web Mercator map or globe.
  */
 export function setActiveMapCrs(map: maplibregl.Map, crs: ResolvedMapCrs | null): void {
+  const previous = activeCrsByMap.get(map) ?? null;
   if (crs) activeCrsByMap.set(map, crs);
   else activeCrsByMap.delete(map);
+  if (previous !== crs) notifyMapCrsChange();
 }
 
 /**

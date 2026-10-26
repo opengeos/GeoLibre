@@ -75,6 +75,7 @@ import { createPluginLayerQueries } from "./plugin-layer-queries";
 import { createPluginLayerStyleActions } from "./plugin-layer-style";
 import { createPluginLayerVisibilityActions } from "./plugin-layer-visibility";
 import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
+import { createPluginMapCrsApi } from "./plugin-map-crs";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
 import { authorizeInPopup, getPluginOAuthRedirectUri } from "./plugin-oauth";
 import { openProjectFromUrlForPlugin } from "./plugin-open-project";
@@ -608,6 +609,10 @@ export function createAppAPI(
     readRasterWindow: (layerId: string, options: GeoLibreRasterWindowOptions) =>
       host.readRasterWindow(layerId, options),
     getMapRenderer: () => useAppStore.getState().primaryRenderer,
+    ...createPluginMapCrsApi({
+      getEngine: () => mapControllerRef?.current,
+      eventTarget: typeof window === "undefined" ? undefined : window,
+    }),
     getArcgisView: () => {
       const engine = mapControllerRef?.current;
       // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
