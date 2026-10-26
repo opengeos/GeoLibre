@@ -37,9 +37,11 @@ export function isMapClickClaimed(): boolean {
   for (const isClaiming of claims) {
     try {
       if (isClaiming()) return true;
-    } catch {
+    } catch (error) {
       // A tool torn down mid-read reports no claim rather than breaking
-      // Identify for every other click.
+      // Identify for every other click; warn so a broken predicate (an
+      // upstream API change, say) does not fail silently.
+      console.warn("[GeoLibre] A map click claim could not be read", error);
     }
   }
   return false;

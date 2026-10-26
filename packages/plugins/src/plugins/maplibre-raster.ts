@@ -1,6 +1,7 @@
 import {
   effectiveLayerRenderState,
   explainS3ReadError,
+  isMapClickClaimed,
   resolveReadableUrl,
   shouldZoomToNewLayers,
   styleValue,
@@ -137,7 +138,27 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
 export type RasterControlInternals = {
   _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
+  _inspector?: { _onClick?: (event: unknown) => void };
 };
+
+/**
+ * Keep the pixel inspector from reading a click that a drawing map tool
+ * (Measure, the Geo Editor) owns, the way the host's Identify handlers stand
+ * down (GeoLibre#3237). The inspector binds its click handler through the
+ * `_onClick` instance property on both enable and disable, so wrapping it once,
+ * after onAdd creates the inspector, keeps on/off symmetric.
+ *
+ * @param control - The mounted raster control.
+ */
+function guardRasterInspectorClicks(control: RasterControl): void {
+  const inspector = (control as unknown as RasterControlInternals)._inspector;
+  const onClick = inspector?._onClick;
+  if (!inspector || typeof onClick !== "function") return;
+  inspector._onClick = (event: unknown) => {
+    if (isMapClickClaimed()) return;
+    onClick(event);
+  };
+}
 
 type RasterControlConstructor = typeof RasterControl;
 type OverlayFactoryOptions = {
@@ -1018,6 +1039,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
     patchCogTilerJpegTables(rasterControl);
+    guardRasterInspectorClicks(rasterControl);
     defaultRasterZoomToPreference(rasterControl);
     await warmTauriWasmEngine(rasterControl);
     // On web the control renders interleaved, which shares deck.gl's per-map
