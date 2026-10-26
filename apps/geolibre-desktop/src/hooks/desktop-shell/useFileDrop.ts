@@ -151,7 +151,7 @@ export function useFileDrop({
           // Matches the browser drop handler: a warning about a previous file
           // must not linger over an unrelated drop.
           setCrsWarning(null);
-          setDropMessage("Importing data…");
+          setDropMessage(t("toolbar.fileDrop.importing"));
 
           try {
             const paths = event.payload.paths;
@@ -201,14 +201,12 @@ export function useFileDrop({
                     // few webview builds may suppress JS dialogs, in which case
                     // it returns false and the file is skipped.
                     if (
-                      !window.confirm(
-                        `${name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
-                      )
+                      !window.confirm(t("toolbar.fileDrop.largeOsmPbfConfirm", { name, sizeMb }))
                     ) {
                       continue;
                     }
                   }
-                  setDropMessage(`Parsing ${name}…`);
+                  setDropMessage(t("toolbar.fileDrop.parsing", { name }));
                   const bytes = await readFile(path);
                   // Guard against a subview Uint8Array: .buffer would include
                   // extra bytes and corrupt the parse, so slice to the exact view.
@@ -231,8 +229,8 @@ export function useFileDrop({
                   }
                   setDropMessage(
                     added > 0
-                      ? `Added ${added} layer${added === 1 ? "" : "s"} from ${name}.`
-                      : `No features found in ${name}.`,
+                      ? t("toolbar.fileDrop.addedOsmPbfLayers", { count: added, name })
+                      : t("toolbar.fileDrop.osmPbfNoFeatures", { name }),
                   );
                 } catch (err) {
                   // Isolate per-file failures so one bad PBF doesn't abandon the
@@ -241,9 +239,10 @@ export function useFileDrop({
                   setDropError(
                     err instanceof OsmPbfTooLargeError
                       ? t("toolbar.error.osmPbfTooLarge")
-                      : `Could not parse ${name}: ${
-                          err instanceof Error ? err.message : String(err)
-                        }`,
+                      : t("toolbar.fileDrop.couldNotParse", {
+                          name,
+                          message: err instanceof Error ? err.message : String(err),
+                        }),
                   );
                 }
               }
@@ -294,7 +293,9 @@ export function useFileDrop({
             }
           } catch (error) {
             setDropMessage(null);
-            setDropError(error instanceof Error ? error.message : "Could not import files.");
+            setDropError(
+              error instanceof Error ? error.message : t("toolbar.fileDrop.couldNotImport"),
+            );
           } finally {
             clearDropMessageLater();
           }
@@ -381,7 +382,7 @@ export function useFileDrop({
       // so it is cleared here instead: a warning about a previous file must not
       // linger over an unrelated drop.
       setCrsWarning(null);
-      setDropMessage("Importing data…");
+      setDropMessage(t("toolbar.fileDrop.importing"));
 
       try {
         const allFiles = Array.from(event.dataTransfer.files);
@@ -418,14 +419,12 @@ export function useFileDrop({
           if (file.size >= OSM_PBF_SIZE_WARN_BYTES) {
             const sizeMb = Math.round(file.size / (1024 * 1024));
             if (
-              !window.confirm(
-                `${file.name} is about ${sizeMb} MB. Parsing it may use a lot of memory. Continue?`,
-              )
+              !window.confirm(t("toolbar.fileDrop.largeOsmPbfConfirm", { name: file.name, sizeMb }))
             ) {
               continue;
             }
           }
-          setDropMessage(`Parsing ${file.name}…`);
+          setDropMessage(t("toolbar.fileDrop.parsing", { name: file.name }));
           let layers;
           try {
             layers = await loadOsmPbf(await file.arrayBuffer());
@@ -436,9 +435,10 @@ export function useFileDrop({
             setDropError(
               err instanceof OsmPbfTooLargeError
                 ? t("toolbar.error.osmPbfTooLarge")
-                : `Could not parse ${file.name}: ${
-                    err instanceof Error ? err.message : String(err)
-                  }`,
+                : t("toolbar.fileDrop.couldNotParse", {
+                    name: file.name,
+                    message: err instanceof Error ? err.message : String(err),
+                  }),
             );
             continue;
           }
@@ -453,8 +453,8 @@ export function useFileDrop({
           }
           setDropMessage(
             added > 0
-              ? `Added ${added} layer${added === 1 ? "" : "s"} from ${file.name}.`
-              : `No features found in ${file.name}.`,
+              ? t("toolbar.fileDrop.addedOsmPbfLayers", { count: added, name: file.name })
+              : t("toolbar.fileDrop.osmPbfNoFeatures", { name: file.name }),
           );
         }
 
@@ -508,7 +508,7 @@ export function useFileDrop({
         }
       } catch (error) {
         setDropMessage(null);
-        setDropError(error instanceof Error ? error.message : "Could not import files.");
+        setDropError(error instanceof Error ? error.message : t("toolbar.fileDrop.couldNotImport"));
       } finally {
         clearDropMessageLater();
       }
