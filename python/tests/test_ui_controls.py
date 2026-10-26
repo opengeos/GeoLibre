@@ -9,7 +9,13 @@ import re
 import pytest
 
 import geolibre.geolibre as gmod
-from geolibre.geolibre import MAP_CONTROLS, MAP_PANELS, Map
+from geolibre.geolibre import (
+    MAP_CONTROLS,
+    MAP_PANELS,
+    MEASURE_AREA_UNITS,
+    MEASURE_DISTANCE_UNITS,
+    Map,
+)
 
 
 @pytest.fixture
@@ -298,8 +304,8 @@ def _ts_string_set(source: str, name: str) -> set[str]:
     Raises:
         AssertionError: If the constant is not found.
     """
-    match = re.search(rf"export const {name} = \[(.*?)\]", source, re.DOTALL)
-    assert match, f"{name} not found in ui-controls.ts"
+    match = re.search(rf"(?:export )?const {name} = \[(.*?)\]", source, re.DOTALL)
+    assert match, f"{name} not found in the TypeScript source"
     return set(re.findall(r'"([^"]+)"', match.group(1)))
 
 
@@ -318,3 +324,16 @@ def test_control_lists_match_the_typescript_source():
     source = ts_path.read_text(encoding="utf-8")
     assert _ts_string_set(source, "SCRIPTABLE_PANELS") == set(MAP_PANELS)
     assert _ts_string_set(source, "SCRIPTABLE_MAP_CONTROLS") == set(MAP_CONTROLS)
+
+
+def test_measure_units_match_the_typescript_source():
+    """The Measure unit sets mirror ``measure.ts`` by hand; catch the drift."""
+    ts_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "packages/plugins/src/plugins/components/measure.ts"
+    )
+    if not ts_path.exists():
+        pytest.skip("frontend source not present in this checkout")
+    source = ts_path.read_text(encoding="utf-8")
+    assert _ts_string_set(source, "MEASURE_DISTANCE_UNITS") == set(MEASURE_DISTANCE_UNITS)
+    assert _ts_string_set(source, "MEASURE_AREA_UNITS") == set(MEASURE_AREA_UNITS)
