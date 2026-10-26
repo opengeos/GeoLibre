@@ -1028,8 +1028,18 @@ describe("Model Builder Review Comments Regression Tests", () => {
       localTools.find((t) => t.provider === prov && t.toolId === id);
 
     const inputFeatures: Feature[] = [
-      { type: "Feature", id: "f1", properties: { id: 1 }, geometry: { type: "Point", coordinates: [0, 0] } },
-      { type: "Feature", id: "f2", properties: { id: 2 }, geometry: { type: "Point", coordinates: [1, 1] } },
+      {
+        type: "Feature",
+        id: "f1",
+        properties: { id: 1 },
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      {
+        type: "Feature",
+        id: "f2",
+        properties: { id: 2 },
+        geometry: { type: "Point", coordinates: [1, 1] },
+      },
     ];
 
     const graph: ProcessingModelGraph = {
@@ -1084,7 +1094,14 @@ describe("Model Builder Review Comments Regression Tests", () => {
         { id: "iter", kind: "iterate-features", x: 100, y: 0 },
         { id: "buf", kind: "tool", x: 200, y: 0, provider: "vector", toolId: "buffer" },
         { id: "collect", kind: "collect-results", x: 300, y: 0 },
-        { id: "external_centroid", kind: "tool", x: 300, y: 100, provider: "vector", toolId: "centroid" },
+        {
+          id: "external_centroid",
+          kind: "tool",
+          x: 300,
+          y: 100,
+          provider: "vector",
+          toolId: "centroid",
+        },
         { id: "out", kind: "output", x: 400, y: 0, name: "Out" },
       ],
       edges: [
@@ -1098,7 +1115,9 @@ describe("Model Builder Review Comments Regression Tests", () => {
 
     const issues = validateModelGraph(graph, resolve);
     const bodyConsumerIssue = issues.find(
-      (i) => i.code === "invalid-iterator" && i.message.includes("can only feed other body nodes or the collector"),
+      (i) =>
+        i.code === "invalid-iterator" &&
+        i.message.includes("can only feed other body nodes or the collector"),
     );
     assert.ok(bodyConsumerIssue);
   });
@@ -1110,7 +1129,13 @@ describe("Model Builder Review Comments Regression Tests", () => {
 
     const graph: ProcessingModelGraph = {
       nodes: [
-        { id: "iter", kind: "iterate-rasters", x: 100, y: 0, parameters: { layers: ["dem_1", "dem_2"] } },
+        {
+          id: "iter",
+          kind: "iterate-rasters",
+          x: 100,
+          y: 0,
+          parameters: { layers: ["dem_1", "dem_2"] },
+        },
         { id: "thresh", kind: "tool", x: 200, y: 0, provider: "whitebox", toolId: "threshold" },
         { id: "collect", kind: "collect-results", x: 300, y: 0 },
         { id: "out", kind: "output", x: 400, y: 0, name: "Rasters" },
@@ -1211,7 +1236,10 @@ describe("Model Builder Review Comments Regression Tests", () => {
     const issues = validateModelGraph(graph, resolve);
     const iterIssue = issues.find((i) => i.code === "invalid-iterator");
     assert.ok(iterIssue);
-    assert.match(iterIssue.message, /requires an iteration body or a downstream Collect Results node/);
+    assert.match(
+      iterIssue.message,
+      /requires an iteration body or a downstream Collect Results node/,
+    );
   });
 
   it("fails execution with explicit error when iterator lacks body and collector", async () => {
@@ -1239,7 +1267,10 @@ describe("Model Builder Review Comments Regression Tests", () => {
     });
 
     assert.ok(result.error);
-    assert.match(result.error.message, /requires an iteration body or a downstream Collect Results node/);
+    assert.match(
+      result.error.message,
+      /requires an iteration body or a downstream Collect Results node/,
+    );
   });
 
   // I. Model graph: multiple rasters preserved in iterate-rasters output

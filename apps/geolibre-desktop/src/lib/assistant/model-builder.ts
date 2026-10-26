@@ -276,7 +276,9 @@ export function buildAssistantModel(
       if (typeof parameters.layer === "string" && parameters.layer) {
         const layer = resolveLayer(parameters.layer);
         if (!layer) {
-          throw new Error(`No layer matching "${parameters.layer}" for "layer" of "${step.algorithm}".`);
+          throw new Error(
+            `No layer matching "${parameters.layer}" for "layer" of "${step.algorithm}".`,
+          );
         }
         parameters.layer = layer.id;
       }
