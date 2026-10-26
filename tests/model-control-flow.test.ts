@@ -211,6 +211,30 @@ describe("Model Builder Control Flow - Condition Evaluation", () => {
     );
   });
 
+  it("reads boolean text from the inspector as a boolean", () => {
+    assert.equal(
+      evaluateCondition({ parameters: { conditionType: "boolean", value: "false" } }),
+      false,
+    );
+    assert.equal(
+      evaluateCondition({ parameters: { conditionType: "boolean", value: "true" } }),
+      true,
+    );
+    assert.equal(
+      evaluateCondition({
+        parameters: { conditionType: "boolean", property: "flag" },
+        inputValue: makeVectorValue([
+          {
+            type: "Feature",
+            properties: { flag: "false" },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ]),
+      }),
+      false,
+    );
+  });
+
   it("evaluates numeric comparisons correctly", () => {
     assert.equal(
       evaluateCondition({

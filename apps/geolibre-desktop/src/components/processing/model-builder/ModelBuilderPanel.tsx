@@ -992,6 +992,8 @@ export function ModelBuilderPanel({
                 Promise.resolve(
                   onAddRaster(value.bytes, name, `${name.replace(/\s+/g, "_")}.tif`),
                 ).catch((err: unknown) => {
+                  // Otherwise this is an unhandled rejection and the run still
+                  // reports success for an output that never reached the map.
                   failedOutputs.push(name);
                   appendLog(
                     `${t("processing.modelBuilder.outputAddFailed", { name })}: ${
@@ -2021,7 +2023,6 @@ function descriptorName(
   });
 }
 
-/** Display name for a port, translating the two synthetic node ports. */
 // Control-flow nodes' port labels come from @geolibre/processing, which has no
 // i18n; map their English labels to catalog keys.
 const CONTROL_FLOW_PORT_KEYS: Record<string, ParseKeys> = {
@@ -2043,6 +2044,7 @@ const CONTROL_FLOW_PORT_KEYS: Record<string, ParseKeys> = {
   "Active Output": "processing.modelBuilder.controlFlow.ports.activeOutput",
 };
 
+/** Display name for a port, translating the synthetic node ports and the control-flow ports. */
 function portLabel(t: TFunction, label: string): string {
   if (label === INPUT_NODE_PORT) return t("processing.modelBuilder.outputNode");
   if (label === OUTPUT_NODE_PORT) return t("processing.modelBuilder.inputNode");
@@ -2205,6 +2207,10 @@ const GraphNodeCard = memo(function GraphNodeCard({
       aria-label={title}
       onPointerDown={(event) => onPointerDown(event, node)}
       onKeyDown={(event) => {
+        // Only the card's own activation. A keydown on one of the port buttons
+        // bubbles up here, and preventDefault() on that would stop the browser
+        // synthesizing the port's `click` — which is the whole keyboard wiring
+        // path.
         if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
@@ -2213,6 +2219,13 @@ const GraphNodeCard = memo(function GraphNodeCard({
       style={{ left: node.x, top: node.y, width: NODE_WIDTH, height: layout.height }}
       className={cn(
         "absolute cursor-grab select-none border p-2 shadow-sm active:cursor-grabbing",
+        // A tool is a square-cornered card (control-flow nodes too, tinted
+        // amber); the model's own inputs and outputs are rounded and tinted, so
+        // the data flowing in and out reads apart from the processing between
+        // it at a glance — the same split ArcGIS ModelBuilder and QGIS draw as
+        // ovals versus rectangles. Safe for exactly these two kinds: each has a
+        // single, vertically centred port, so no port dot ever lands on the
+        // rounded part of the edge.
         isControlFlow
           ? "rounded-md border-amber-500/40 bg-amber-500/10"
           : node.kind === "tool"

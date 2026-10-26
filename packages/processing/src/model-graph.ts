@@ -334,8 +334,12 @@ export function evaluateCondition(options: ConditionEvaluationOptions): boolean 
   }
 
   if (condType === "boolean") {
-    if (typeof left === "boolean") return left;
-    if (typeof targetVal === "boolean") return targetVal;
+    // The inspector stores the target value as text, so "true"/"false" (and a
+    // "false" property value) must read as booleans, not as non-empty strings.
+    const leftBool = booleanLike(left);
+    if (leftBool !== undefined) return leftBool;
+    const targetBool = booleanLike(targetVal);
+    if (targetBool !== undefined) return targetBool;
     return Boolean(left);
   }
 
@@ -875,6 +879,22 @@ export interface ModelGraphRunResult {
 }
 
 /**
+ * Read a value as a boolean when it plainly is one: a boolean, or the text
+ * "true"/"false"/"1"/"0" (any case). Anything else returns `undefined`.
+ *
+ * @param value The value to read.
+ * @returns The boolean, or `undefined` when the value is not boolean-like.
+ */
+function booleanLike(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const text = value.trim().toLowerCase();
+  if (text === "true" || text === "1") return true;
+  if (text === "false" || text === "0") return false;
+  return undefined;
+}
+
+/**
  * An iterator's iteration cap: a positive whole `maxIterations`, else 1000.
  * Matches the inspector, which stores only positive whole numbers, so a zero or
  * negative value in a hand-edited project never silently runs nothing.
@@ -1397,6 +1417,12 @@ export async function runModelGraph(
                 metadata: incomingColl.metadata,
               },
             ];
+          } else {
+            // Otherwise the loop would run zero times and "succeed" empty.
+            const message = `Iterate Rasters "${node.id}" requires rasters, but received ${incomingColl.kind} data.`;
+            options.log(`Error: ${message}`);
+            options.onNodeStatus?.(node.id, "error");
+            return { outputs, error: { nodeId: node.id, message } };
           }
         } else if (node.parameters?.layers) {
           const layerList = Array.isArray(node.parameters.layers)
