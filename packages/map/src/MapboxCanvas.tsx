@@ -8,6 +8,7 @@ import {
   IDENTIFY_ALL_LAYERS_ID,
   identifyAllIncludes,
   isDuckDBQueryLayer,
+  isMapClickClaimed,
   isPopupClickEnabled,
   isPopupHoverEnabled,
   NETCDF_IMAGE_SOURCE_KIND,
@@ -951,7 +952,8 @@ export function MapboxCanvas({
           return false;
         };
         const handleClick = (e: MapEventOf<"click">) => {
-          if (viewId || featureSelection.active.current) return;
+          // A drawing map tool (Measure, the Geo Editor) owns the click.
+          if (viewId || featureSelection.active.current || isMapClickClaimed()) return;
           const next = useAppStore.getState();
           if (!next.identifyLayerId) {
             showPhotoAt(e.lngLat.toArray());

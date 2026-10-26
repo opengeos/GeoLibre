@@ -2,6 +2,7 @@ import {
   effectiveLayerRenderState,
   IDENTIFY_ALL_LAYERS_ID,
   identifyAllIncludes,
+  isMapClickClaimed,
   isPopupClickEnabled,
   isPopupHoverEnabled,
   resolvePopupMaxWidth,
@@ -185,7 +186,8 @@ export function installCesiumInteractions(
     clearPopup();
     const state = useAppStore.getState();
     const target = state.identifyLayerId;
-    if (!target) return;
+    // A drawing map tool (Measure) owns the click: it is a vertex, not a pick.
+    if (!target || isMapClickClaimed()) return;
     const hits = engine.identifyAtScreen(
       event.position,
       target && target !== IDENTIFY_ALL_LAYERS_ID ? target : undefined,

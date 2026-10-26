@@ -2,6 +2,7 @@ import {
   currentEditorIdentity,
   editorTrackingFieldNames,
   lineWidthValue,
+  registerMapClickClaim,
   styleValue,
   useAppStore,
   type GeoLibreLayer,
@@ -1703,6 +1704,10 @@ function isGeoEditorInteractionMode(): boolean {
   const { activeDrawMode, activeEditMode } = geoEditorControl.getState();
   return activeDrawMode !== null || activeEditMode !== null;
 }
+
+// A draw or edit mode's clicks place or pick vertices; Identify must not also
+// open a popup for the layer underneath (GeoLibre#3237).
+registerMapClickClaim(isGeoEditorInteractionMode);
 
 /**
  * The map layers a store GeoJSON layer is drawn with, under both 2D engines'

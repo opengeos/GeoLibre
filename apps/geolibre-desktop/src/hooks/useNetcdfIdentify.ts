@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { isMapClickClaimed, useAppStore } from "@geolibre/core";
 import type { TFunction } from "i18next";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
@@ -170,6 +170,8 @@ export function useNetcdfIdentify(
     const profileTimeouts = new Set<number>();
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
+      // A drawing map tool (Measure, the Geo Editor) owns the click.
+      if (isMapClickClaimed()) return;
       const state = getNetcdfLayerState(activeLayerId);
       if (!state) return;
       const pixel = gridPixelAt(state.grid, event.lngLat.lng, event.lngLat.lat);

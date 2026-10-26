@@ -5,6 +5,7 @@ import {
   getActiveMeanRadiusMeters,
   getEllipsoid,
   meanRadiusMeters,
+  registerMapClickClaim,
   useAppStore,
 } from "@geolibre/core";
 import type { MeasureControl, MeasureControlOptions } from "maplibre-gl-components";
@@ -47,6 +48,11 @@ let measurePanelVisible = false;
 let measureRequest = 0;
 const measurePanelListeners = new Set<() => void>();
 setMeasureControlReader(() => measureControl);
+// While the panel is open the control is drawing, and its clicks place
+// vertices; Identify must not also open a popup for them (GeoLibre#3237).
+registerMapClickClaim(
+  () => measureControlMounted && (measureControl?.getState().isDrawing ?? false),
+);
 
 // Standalone Measure panel, opened on demand from the Controls menu.
 export function openMeasurePanel(app: GeoLibreAppAPI): void {
