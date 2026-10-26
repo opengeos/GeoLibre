@@ -220,7 +220,10 @@ async function loadBrowserVectorFile(
         data: await parseGeoJsonText(await file.text()),
         path: file.name,
       };
-    } catch {
+    } catch (error) {
+      // A malformed .geojson cannot be repaired by GDAL. Surface its parse
+      // error immediately instead of loading DuckDB and its spatial extension.
+      if (extension === "geojson" && error instanceof SyntaxError) throw error;
       // Some GDAL-backed vector formats use .json but are not GeoJSON
       // FeatureCollections. Let DuckDB Spatial try them before failing.
     }
@@ -476,7 +479,9 @@ async function loadTauriVectorFile(
         data: await parseGeoJsonText(await readLocalFileText(path)),
         path,
       };
-    } catch {
+    } catch (error) {
+      // Match the browser path: malformed GeoJSON needs no DuckDB fallback.
+      if (extension === "geojson" && error instanceof SyntaxError) throw error;
       // Some GDAL-backed vector formats use .json but are not GeoJSON
       // FeatureCollections. Let DuckDB Spatial try them before failing.
     }
