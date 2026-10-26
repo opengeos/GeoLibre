@@ -121,11 +121,11 @@ export class PanelUI extends EventTarget {
     // Open button — only visible when collapsed
     const openBtn = this.el("button", "vantor-panel__open-btn");
     openBtn.type = "button";
-    this.localizeAttribute(openBtn, "aria-label", "vantor.openPanel", "Open Vantor STAC Explorer");
+    this.localizeAttribute(openBtn, "aria-label", "vantor.openPanel", "Open Vantor STAC explorer");
     const openIcon = this.el("span", "maplibregl-ctrl-icon vantor-panel__open-icon");
     openIcon.setAttribute("aria-hidden", "true");
     openBtn.appendChild(openIcon);
-    this.localizeAttribute(openBtn, "title", "vantor.openPanel", "Open Vantor STAC Explorer");
+    this.localizeAttribute(openBtn, "title", "vantor.openPanel", "Open Vantor STAC explorer");
     openBtn.addEventListener("click", () => {
       this.collapsed = false;
       this.panelDiv.classList.remove("vantor-panel--collapsed");
