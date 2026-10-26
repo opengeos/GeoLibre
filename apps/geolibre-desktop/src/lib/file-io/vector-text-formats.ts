@@ -221,7 +221,7 @@ export async function parseDelimitedTextFile(
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection | null> {
   const name = browserSafeFileName(path);
-  const pickColumns = `Use Add Data → Delimited Text to choose the coordinate columns for ${name}.`;
+  const pickColumns = `Use Add data → Delimited text layer to choose the coordinate columns for ${name}.`;
   // Detect the delimiter and the coordinate columns from the header alone, so
   // this preflight neither parses nor even reads the body. parseDelimitedText-
   // Layer re-reads the header internally, so recovering the column names by
