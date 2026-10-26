@@ -28,7 +28,6 @@ import type {
   GeoLibreCogLayerOptions,
   GeoLibreCogRenderEngine,
   GeoLibreControlPanelId,
-  GeoLibreMeasureOptions,
   GeoLibreMinimapOptions,
   GeoLibreDeckGL,
   GeoLibreDownloadFolder,
@@ -831,10 +830,8 @@ export function createAppAPI(
         state.removeLayer(id);
       }
     },
-    openControlPanel: (
-      id: GeoLibreControlPanelId,
-      options?: GeoLibreMinimapOptions | GeoLibreMeasureOptions,
-    ): void => host.openControlPanel(api, id, options),
+    openControlPanel: (id: GeoLibreControlPanelId, options?: GeoLibreMinimapOptions): void =>
+      host.openControlPanel(api, id, options),
     closeControlPanel: (id: GeoLibreControlPanelId): void => host.closeControlPanel(api, id),
     isControlPanelVisible: host.isControlPanelVisible,
     addMapControl: (
