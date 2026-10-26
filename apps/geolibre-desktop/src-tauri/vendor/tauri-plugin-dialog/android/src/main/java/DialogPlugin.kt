@@ -134,39 +134,52 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
    * from Android 11), so the oldest are released first to stay under it.
    */
   private fun takePersistableGrants(data: Intent?) {
-    if (data == null) return
-    if (data.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION == 0) return
-    val modeFlags = data.flags and
-      (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-    if (modeFlags == 0) return
-    val uris: MutableList<Uri> = ArrayList()
-    val clipData = data.clipData
-    if (clipData == null) {
-      data.data?.let { uris.add(it) }
-    } else {
-      for (i in 0 until clipData.itemCount) uris.add(clipData.getItemAt(i).uri)
-    }
-    val resolver = activity.contentResolver
+    // Best effort throughout: the pick or save has already succeeded, so a
+    // failure here must not turn it into a rejection.
     try {
-      val persisted = resolver.persistedUriPermissions
-      val excess = persisted.size + uris.size - MAX_PERSISTED_GRANTS
-      if (excess > 0) {
-        for (old in persisted.sortedBy { it.persistedTime }.take(excess)) {
-          var oldFlags = 0
-          if (old.isReadPermission) oldFlags = oldFlags or Intent.FLAG_GRANT_READ_URI_PERMISSION
-          if (old.isWritePermission) oldFlags = oldFlags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-          resolver.releasePersistableUriPermission(old.uri, oldFlags)
+      if (data == null) return
+      if (data.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION == 0) return
+      val modeFlags = data.flags and
+        (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+      if (modeFlags == 0) return
+      val uris: MutableList<Uri> = ArrayList()
+      val clipData = data.clipData
+      if (clipData == null) {
+        data.data?.let { uris.add(it) }
+      } else {
+        for (i in 0 until clipData.itemCount) clipData.getItemAt(i).uri?.let { uris.add(it) }
+      }
+      if (uris.isEmpty()) return
+      val resolver = activity.contentResolver
+      try {
+        // Re-picking a document already persisted takes no new slot, and a
+        // document in this pick must never be released to make room.
+        val picked = uris.toSet()
+        val persisted = resolver.persistedUriPermissions
+        val persistedUris = persisted.map { it.uri }.toSet()
+        val added = picked.count { it !in persistedUris }
+        val excess = persisted.size + added - MAX_PERSISTED_GRANTS
+        if (excess > 0) {
+          val releasable = persisted.filter { it.uri !in picked }.sortedBy { it.persistedTime }
+          for (old in releasable.take(excess)) {
+            var oldFlags = 0
+            if (old.isReadPermission) oldFlags = oldFlags or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            if (old.isWritePermission) oldFlags = oldFlags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            resolver.releasePersistableUriPermission(old.uri, oldFlags)
+          }
+        }
+      } catch (ex: Exception) {
+        Logger.error("Failed to release old document grants: ${ex.message}")
+      }
+      for (uri in uris) {
+        try {
+          resolver.takePersistableUriPermission(uri, modeFlags)
+        } catch (ex: Exception) {
+          Logger.error("Could not keep access to $uri after restart: ${ex.message}")
         }
       }
     } catch (ex: Exception) {
-      Logger.error("Failed to release old document grants: ${ex.message}")
-    }
-    for (uri in uris) {
-      try {
-        resolver.takePersistableUriPermission(uri, modeFlags)
-      } catch (ex: Exception) {
-        Logger.error("Could not keep access to $uri after restart: ${ex.message}")
-      }
+      Logger.error("Failed to keep document grants: ${ex.message}")
     }
   }
 
