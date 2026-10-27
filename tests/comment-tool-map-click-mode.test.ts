@@ -77,6 +77,8 @@ it("leaves a Directions-mode map click to Directions instead of opening the comm
   // click; Directions turns it into a waypoint, so no comment card opens.
   act(() => click());
   assert.equal(current().pendingComment, null);
+  // The ignored click leaves the tool armed for after Directions ends.
+  assert.equal(current().isActive, true);
 
   // Leaving Directions hands clicks back to the armed comment tool.
   directionsActive = false;
