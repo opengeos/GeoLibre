@@ -180,6 +180,9 @@ export function useCollaboration(
       });
     } else {
       const applied = applyProjectToStore(merged);
+      // Keep the layers update and the (deferred) generation bump separate:
+      // bindNetcdfProfileSamplesToProject treats a bump that lands together
+      // with new layers as a project switch and clears the inspected samples.
       useAppStore.setState({ ...applied });
       clearHistory();
       scheduleRestore();
