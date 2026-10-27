@@ -84,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The AUTOFIX_TOKEN secret isn't set. Add a maintainer's token with contents and pull-requests write access to this repository."
+            echo "::error::The AUTOFIX_TOKEN secret isn't set. Add a maintainer's token with contents and pull-requests write access to this repository, and the workflow scope (Workflows: write) so a merge that brings in workflow changes can be pushed."
             exit 1
           fi
           perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$SENDER/permission" --jq .permission)
@@ -218,8 +218,11 @@ jobs:
           test -s .autofix/conflicts.txt || { echo "::error::The merge failed without conflicts."; exit 1; }
           echo "conflicts=$(wc -l < .autofix/conflicts.txt)" >> "$GITHUB_OUTPUT"
           echo "Conflicts with $BASE:"; cat .autofix/conflicts.txt
-          if grep -qiE '^\.github/|(^|/)(agents|claude)\.md$|^\.claude/|^CLAUDE\.local\.md$|^\.mcp\.json$' \
-              .autofix/conflicts.txt; then
+          # Checked on the NUL-separated list: git still quotes a path with `"`, `\` or a control
+          # character even with quotePath off, and a quoted name would slip past the pattern.
+          git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/conflicts.z"
+          if grep -zqiE '^\.github/|(^|/)(agents|claude)\.md$|^\.claude/|^CLAUDE\.local\.md$|^\.mcp\.json$' \
+              "$RUNNER_TEMP/conflicts.z"; then
             echo "::error::A conflict in .github/ or an instruction file needs a person."
             exit 1
           fi
