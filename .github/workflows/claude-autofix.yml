@@ -201,7 +201,7 @@ jobs:
               "$root/.git" | "$root/.git/"*) ;;
               "$root"/*) continue ;;
             esac
-            echo "::error::$l links outside the checkout or into .git ($t), so autofix doesn't run on it."
+            echo "::error::$(printf %q "$l") links outside the checkout or into .git ($t), so autofix doesn't run on it."
             exit 1
           done < "$RUNNER_TEMP/links.z"
           gh api graphql --paginate \
@@ -322,7 +322,7 @@ jobs:
               # npm could otherwise change it. The steps that run git keep only GIT_CONFIG_GLOBAL
               # (/dev/null) and GIT_CONFIG_NOSYSTEM of git's variables, so no other config layer
               # counts.
-              [ "$(/usr/bin/bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
+              [ -n "$SAVED_SUM" ] && [ "$(/usr/bin/bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
             aside-sum)
@@ -332,7 +332,7 @@ jobs:
               /usr/bin/bash "$0" reset-git
               # The head's instruction files go back as they were set aside: code a same-repo branch
               # runs through its build tools could otherwise have changed them on the way.
-              [ "$(/usr/bin/bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
+              [ -n "$ASIDE_SUM" ] && [ "$(/usr/bin/bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
@@ -418,7 +418,7 @@ jobs:
             git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/unmerged.z"
             while IFS= read -r f; do
               [ -n "$f" ] || continue
-              grep -zqxF -- "$f" "$RUNNER_TEMP/unmerged.z" || { echo "::error::$f had no conflict."; exit 1; }
+              grep -zqxF -- "$f" "$RUNNER_TEMP/unmerged.z" || { echo "::error::$(printf %q "$f") had no conflict."; exit 1; }
               git rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
@@ -428,8 +428,8 @@ jobs:
           while IFS= read -r -d '' f; do
             rc=0
             grep -qE '^(<<<<<<<|>>>>>>>)( |$)' -- "$f" || rc=$?
-            [ "$rc" != 0 ] || { echo "::error::Claude left conflicts for a person: $f"; exit 1; }
-            [ "$rc" = 1 ] || { echo "::error::Couldn't check $f for conflict markers."; exit 1; }
+            [ "$rc" != 0 ] || { echo "::error::Claude left conflicts for a person: $(printf %q "$f")"; exit 1; }
+            [ "$rc" = 1 ] || { echo "::error::Couldn't check $(printf %q "$f") for conflict markers."; exit 1; }
           done < "$RUNNER_TEMP/left.z"
           git add -A -- . ':!.autofix'
           test -z "$(git diff --cached --name-only --diff-filter=U)"
@@ -493,6 +493,7 @@ jobs:
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
+          SHA: ${{ github.event.pull_request.head.sha }}
           ASIDE_SUM: ${{ steps.commitmerge.outputs.aside || steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
@@ -515,7 +516,9 @@ jobs:
                 and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string" and (.reply | length) > 0
                              and (.status | IN("fixed", "addressed", "declined", "unclear")))
                 and (map(.id) | sort) == ($ids | sort))' .autofix/report.json > /dev/null; then
-            if ! missed=$(jq -rs --argjson ids "$IDS" '(.[0] // []) as $r | if ($r | type) == "array"
+            if [ ! -s .autofix/report.json ]; then
+              missed="Claude wrote no report"
+            elif ! missed=$(jq -rs --argjson ids "$IDS" '(.[0] // []) as $r | if ($r | type) == "array"
                 then [$ids[] | select(. as $i | [$r[] | objects | .id] | index($i) | not)] | join(", ")
                 else "the report isn'"'"'t an array" end' .autofix/report.json 2> /dev/null); then
               missed="the report isn't valid JSON"
@@ -553,6 +556,7 @@ jobs:
           BASHOPTS: ""
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
+          SHA: ${{ github.event.pull_request.head.sha }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
@@ -609,7 +613,7 @@ jobs:
           # Everything Claude wrote that leaves this job: the replies, each commit's message and patch
           # (the bundle carries every commit, not just the net diff), and the diff.
           { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
-            git log -p --text --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
+            git log -p -m --text --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
           if [ -e .autofix/autofix.bundle ]; then
             heads=$(git bundle list-heads .autofix/autofix.bundle | cut -d' ' -f1)
             [ "$heads" = "$(git rev-parse HEAD)" ] || { echo "::error::The bundle doesn't hold HEAD."; exit 1; }
@@ -685,7 +689,7 @@ jobs:
           git diff --name-only -z "$SHA" "$new" -- .github/ > "$RUNNER_TEMP/github.z"
           while IFS= read -r -d '' f; do
             if [ -z "$allowed" ] || ! git diff --quiet "$allowed" "$new" -- ":(literal)$f"; then
-              echo "::error::The commits change $f, which autofix doesn't push."
+              echo "::error::The commits change $(printf %q "$f"), which autofix doesn't push."
               exit 1
             fi
           done < "$RUNNER_TEMP/github.z"
