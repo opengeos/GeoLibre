@@ -199,9 +199,9 @@ jobs:
             t=$(realpath -m -- "$l")
             case "$t" in
               "$root/.git" | "$root/.git/"*) ;;
-              "$root"/*) continue ;;
+              "$root" | "$root"/*) continue ;;
             esac
-            echo "::error::$(printf %q "$l") links outside the checkout or into .git ($t), so autofix doesn't run on it."
+            echo "::error::$(printf %q "$l") links outside the checkout or into .git ($(printf %q "$t")), so autofix doesn't run on it."
             exit 1
           done < "$RUNNER_TEMP/links.z"
           gh api graphql --paginate \
@@ -419,7 +419,7 @@ jobs:
             while IFS= read -r f; do
               [ -n "$f" ] || continue
               grep -zqxF -- "$f" "$RUNNER_TEMP/unmerged.z" || { echo "::error::$(printf %q "$f") had no conflict."; exit 1; }
-              git rm -q --ignore-unmatch -- "$f"
+              git --literal-pathspecs rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
           # Every still-unmerged file must be readable and free of markers: grep's "error" (a file
@@ -493,7 +493,6 @@ jobs:
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
-          SHA: ${{ github.event.pull_request.head.sha }}
           ASIDE_SUM: ${{ steps.commitmerge.outputs.aside || steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
@@ -543,7 +542,6 @@ jobs:
           git log -1 --stat
 
       - name: Bundle the commits
-        id: bundle
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         shell: /usr/bin/bash --noprofile --norc -p -e {0}
         env:
