@@ -136,9 +136,8 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
  * @param liveLayerIds - The ids of the layers the project still holds.
  */
 export function pruneNetcdfProfileSamples(liveLayerIds: ReadonlySet<string>): void {
-  const orphaned = samples.find((item) => !liveLayerIds.has(item.layerId));
   // The list holds one layer at a time, so one orphan means they all are.
-  if (orphaned) clearNetcdfProfileSamplesForLayer(orphaned.layerId);
+  if (samples.some((item) => !liveLayerIds.has(item.layerId))) clearNetcdfProfileSamples();
 }
 
 /** The slice of the app store `bindNetcdfProfileSamplesToProject` reads. */
@@ -153,9 +152,10 @@ interface ProfileSampleProjectState {
  * Samples are module state, not project state, so nothing in New or Open
  * reaches them: without this the numbered markers and the spectral profile
  * survive into the next project. A project switch (New, Open, a collaboration
- * join) clears them outright, even when the incoming project reuses the
- * inspected layer's id; removing the inspected layer drops only that layer's
- * samples.
+ * join, including a reconnect whose welcome re-sends the snapshot through
+ * `loadProject`) clears them outright, even when the incoming project reuses
+ * the inspected layer's id; removing the inspected layer drops only that
+ * layer's samples.
  *
  * A switch is a `projectGeneration` bump that lands in the same update as a new
  * `layers` list. A collaborator's live edit also bumps the generation, but on
