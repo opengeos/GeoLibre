@@ -14,6 +14,7 @@ import {
   createThreeDTilesGlobeStoreLayer,
   deferThreeDTilesRestoreUntilMapIdle,
   restoreThreeDTilesLayers,
+  threeDTilesSampleLayerName,
 } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
 
 // Shared 3D-Tiles header resolution: Google Photorealistic tiles keep their
@@ -21,6 +22,38 @@ import {
 // the MapLibre and Cesium render paths must resolve it the same way.
 
 const GOOGLE = "https://tile.googleapis.com/v1/3dtiles/root.json";
+
+describe("threeDTilesSampleLayerName", () => {
+  const SAMPLES = ["AGI HQ", "Google Photorealistic 3D Tiles", "3D BAG Netherlands (LoD 2.2)"];
+
+  it("names the layer after the sample when the field is blank or the default", () => {
+    assert.equal(threeDTilesSampleLayerName("", "AGI HQ", SAMPLES), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("  ", "AGI HQ", SAMPLES), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("3D Tiles", "AGI HQ", SAMPLES), "AGI HQ");
+  });
+
+  it("replaces a name an earlier sample pick filled in (#3258)", () => {
+    assert.equal(
+      threeDTilesSampleLayerName(
+        "Google Photorealistic 3D Tiles",
+        "3D BAG Netherlands (LoD 2.2)",
+        SAMPLES,
+      ),
+      "3D BAG Netherlands (LoD 2.2)",
+    );
+  });
+
+  it("keeps a name the user typed", () => {
+    assert.equal(
+      threeDTilesSampleLayerName("My buildings", "3D BAG Netherlands (LoD 2.2)", SAMPLES),
+      "My buildings",
+    );
+  });
+
+  it("leaves the field alone when the picked sample has no label", () => {
+    assert.equal(threeDTilesSampleLayerName("AGI HQ", "", SAMPLES), "AGI HQ");
+  });
+});
 
 describe("deferThreeDTilesRestoreUntilMapIdle", () => {
   it("continues immediately when the style is ready", () => {

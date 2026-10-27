@@ -1065,12 +1065,54 @@ function installGooglePhotorealisticTilesPanelHandlers(
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const option = target.closest<HTMLButtonElement>(".three-d-tiles-sample-option");
-    if (option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL) {
-      deferApplyDefaults();
+    if (!option) return;
+    // The library's own option handler (on the option itself, so it ran
+    // first) only fills the URL and altitude; name the layer after the sample
+    // too, unless the user typed a name of their own (#3258).
+    const layerNameInput = panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]');
+    if (layerNameInput) {
+      const sampleLabels = Array.from(
+        panel.querySelectorAll<HTMLElement>(".three-d-tiles-sample-option"),
+        (entry) => entry.textContent ?? "",
+      );
+      layerNameInput.value = threeDTilesSampleLayerName(
+        layerNameInput.value,
+        option.textContent ?? "",
+        sampleLabels,
+      );
     }
+    // Run the URL defaults for every pick, not only the Google one: the
+    // library sets the URL without an input event, so switching from the
+    // Google sample to another would otherwise keep its masked
+    // X-GOOG-API-KEY header.
+    deferApplyDefaults();
   });
 
   applyDefaults();
+}
+
+/**
+ * The Layer name to show after a sample tileset is picked. A blank name, the
+ * "3D Tiles" default, or a name an earlier sample pick filled in is replaced
+ * by the picked sample's label, so switching samples renames the layer; a name
+ * the user typed is kept.
+ *
+ * @param currentName - The Layer name field's current value.
+ * @param sampleLabel - The label of the sample that was just picked.
+ * @param sampleLabels - Labels of every sample the panel offers.
+ * @returns The Layer name to put in the field.
+ */
+export function threeDTilesSampleLayerName(
+  currentName: string,
+  sampleLabel: string,
+  sampleLabels: readonly string[],
+): string {
+  const label = sampleLabel.trim();
+  if (!label) return currentName;
+  const current = currentName.trim();
+  const replaceable =
+    !current || current === "3D Tiles" || sampleLabels.some((entry) => entry.trim() === current);
+  return replaceable ? label : currentName;
 }
 
 /**
