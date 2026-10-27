@@ -27,11 +27,11 @@ name: Claude autofix
 #     saved before Claude ran (after checking the saved copy), and ignore the global and system
 #     git config. The steps after Claude run privileged bash with the loader and shell variables
 #     cleared, a fixed PATH and no stray GIT_* variables.
-#   - The limit: on a same-repo branch, the code Claude runs through its build tools runs as the
-#     runner user next to the Claude process, so it could read that process's token (for example
-#     from /proc). The deny rules, the env scrub and the leaked-token check don't cover that; it
-#     rests on the branch's code being as trusted as the people who can push it. Fork branches
-#     never run code.
+#   - The limit: on a same-repo branch Claude runs its build tools, and through them any code it
+#     writes (a test, a build script, a cargo --config runner) runs as the runner user next to the
+#     Claude process, so it could read that process's token (for example from /proc). The deny
+#     rules, the env scrub and the leaked-token check don't cover that; it rests on trusting what
+#     reaches Claude on a branch only people who can push wrote to. Fork branches never run code.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -196,10 +196,11 @@ jobs:
           root=$(realpath .)
           find . -path ./.git -prune -o -type l -print0 > "$RUNNER_TEMP/links.z"
           while IFS= read -r -d '' l; do
-            t=$(realpath -m -- "$l")
+            t=$(realpath -m -- "$l") || { echo "::error::$(printf %q "$l") can't be resolved (a symlink loop?), so autofix doesn't run on it."; exit 1; }
             case "$t" in
-              "$root/.git" | "$root/.git/"*) ;;
-              "$root" | "$root"/*) continue ;;
+              # Into .git, or the root itself (x/.git/config would then name the git config): refused.
+              "$root" | "$root/.git" | "$root/.git/"*) ;;
+              "$root"/*) continue ;;
             esac
             echo "::error::$(printf %q "$l") links outside the checkout or into .git ($(printf %q "$t")), so autofix doesn't run on it."
             exit 1
@@ -322,28 +323,28 @@ jobs:
               # npm could otherwise change it. The steps that run git keep only GIT_CONFIG_GLOBAL
               # (/dev/null) and GIT_CONFIG_NOSYSTEM of git's variables, so no other config layer
               # counts.
-              [ -n "$SAVED_SUM" ] && [ "$(/usr/bin/bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
+              [ -n "$SAVED_SUM" ] && [ "$(/usr/bin/bash -p "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
             aside-sum)
               { find "$aside" -printf '%m %P\n' | sort; find "$aside" -type f -print0 | sort -z | xargs -0 -r sha256sum; } \
                 | sha256sum | cut -d' ' -f1 ;;
             restore)
-              /usr/bin/bash "$0" reset-git
+              /usr/bin/bash -p "$0" reset-git
               # The head's instruction files go back as they were set aside: code a same-repo branch
               # runs through its build tools could otherwise have changed them on the way.
-              [ -n "$ASIDE_SUM" ] && [ "$(/usr/bin/bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
+              [ -n "$ASIDE_SUM" ] && [ "$(/usr/bin/bash -p "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
           esac
           EOF
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" hide
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" save
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" hide
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" save
           {
             echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
-            echo "saved=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" saved-sum)"
-            echo "aside=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" aside-sum)"
+            echo "saved=$(/usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" saved-sum)"
+            echo "aside=$(/usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" aside-sum)"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -403,8 +404,6 @@ jobs:
           ASIDE_SUM: ${{ steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          GIT_CONFIG_COUNT: "0"
-          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
@@ -412,7 +411,7 @@ jobs:
             case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
           done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
             # The index's unmerged paths, not conflicts.txt, which Claude could have edited.
             git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/unmerged.z"
@@ -436,8 +435,8 @@ jobs:
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
           # The merge may have changed the instruction files, so the aside is summed again.
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" hide
-          echo "aside=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" aside-sum)" >> "$GITHUB_OUTPUT"
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" hide
+          echo "aside=$(/usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" aside-sum)" >> "$GITHUB_OUTPUT"
 
       # After the merge commit, since package-lock.json may have been the conflict.
       - name: Install dependencies
@@ -496,8 +495,6 @@ jobs:
           ASIDE_SUM: ${{ steps.commitmerge.outputs.aside || steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          GIT_CONFIG_COUNT: "0"
-          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
@@ -505,7 +502,7 @@ jobs:
             case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
           done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" restore
           # A report counts only when it answers every staged thread exactly once: a partial one would
           # commit edits that no reply explains.
           # Slurped, so a file with two JSON values (only the last of which jq -e would judge) fails.
@@ -557,8 +554,6 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          GIT_CONFIG_COUNT: "0"
-          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
@@ -566,7 +561,7 @@ jobs:
             case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
           done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" reset-git
+          /usr/bin/bash -p "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
           if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
             git branch -f autofix HEAD
@@ -595,8 +590,6 @@ jobs:
           BASHOPTS: ""
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          GIT_CONFIG_COUNT: "0"
-          GIT_CONFIG_PARAMETERS: ""
           GIT_EXEC_PATH: ""
           SHA: ${{ github.event.pull_request.head.sha }}
           # Claude's commits are the ones the base doesn't have; the net diff below covers the rest.
