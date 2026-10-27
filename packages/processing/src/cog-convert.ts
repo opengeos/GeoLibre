@@ -224,7 +224,9 @@ export interface ConvertRasterDataToCogOptions {
    * -9374). The renderer takes its auto stretch and histogram from the
    * coarsest overview, so those outliers flatten the whole layer (#3255). NaN
    * propagates through the average instead, so an overview pixel that touches
-   * NoData stays NoData, and the renderer already treats NaN as NoData. Use it
+   * NoData stays NoData, and the renderer already treats NaN as NoData. The
+   * trade-off: coarse overviews drop valid pixels along NoData edges, so the
+   * NoData footprint grows by up to one overview block at low zoom. Use it
    * for a COG that is only drawn on the map; keep the sentinel for one that
    * feeds tools which compare against it.
    */
@@ -279,6 +281,9 @@ export async function convertRasterDataToCog(
     // With nanNodata, the sentinel and any non-finite sample (an Infinity
     // would blend into the overviews just like -9999) are written as NaN.
     const toNaN = options.nanNodata === true;
+    // Samples are Float32, so match the sentinel in that precision (-9999.9
+    // is stored as -9999.900390625).
+    const nodata32 = nodata == null ? null : Math.fround(nodata);
     if (toNaN && nodata != null) {
       builder.set_nodata(Number.NaN);
     } else if (nodata != null && Number.isFinite(nodata)) {
@@ -294,7 +299,7 @@ export async function convertRasterDataToCog(
       for (let band = 0; band < raster.bands.length; band += 1) {
         const value = raster.bands[band][pixel];
         values[pixel * raster.bands.length + band] =
-          toNaN && (value === nodata || !Number.isFinite(value)) ? Number.NaN : value;
+          toNaN && (value === nodata32 || !Number.isFinite(value)) ? Number.NaN : value;
       }
     }
     return builder.write_f32(values);

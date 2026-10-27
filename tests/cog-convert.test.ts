@@ -141,16 +141,44 @@ describe("convertGeoTiffToCog", () => {
       const image = await tiff.getImage(index);
       const [values] = (await image.readRasters()) as unknown as Float32Array[];
       let masked = 0;
+      let valid = 0;
       for (const value of values) {
         if (isNoData(value)) {
           masked += 1;
           continue;
         }
+        valid += 1;
         // Before the fix the coarsest level held blends such as -9374 and
         // -624, and the renderer's auto stretch read them as data.
         assert.ok(value >= -0.5 && value <= 0.5, `level ${index} holds ${value}`);
       }
       assert.ok(masked > 0, `level ${index} keeps its NoData border`);
+      assert.ok(valid > 0, `level ${index} keeps valid data`);
+    }
+  });
+
+  it("matches a fractional NoData sentinel in Float32 precision under nanNodata", async () => {
+    const cog = await convertRasterDataToCog(
+      {
+        bands: [Float32Array.from([-9999.9, 0.5])],
+        width: 2,
+        height: 1,
+        originX: 0,
+        originY: 1,
+        resX: 1,
+        resY: 1,
+        nodata: -9999.9,
+        geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+      },
+      { nanNodata: true },
+    );
+    const reader = new GeoTiffReader(cog);
+    try {
+      const band = reader.read_band_f32(0);
+      assert.ok(Number.isNaN(band[0]));
+      assert.equal(band[1], 0.5);
+    } finally {
+      reader.free();
     }
   });
 
