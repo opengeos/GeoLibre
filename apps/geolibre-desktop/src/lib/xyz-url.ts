@@ -376,8 +376,6 @@ export function parseXyzTileJson(value: unknown): XyzTileJsonSource {
     if (!isHttpUrl(url) || !hasXyzTilePlaceholders(url)) {
       throw new Error("TileJSON tile URLs must use HTTP(S) and contain {z}, {x}, and {y} or {-y}.");
     }
-    // {-y} flips the row at draw time. It does not change `scheme`.
-    resolveTileAddress([url]);
     // Check syntax as well as the protocol prefix.
     try {
       new URL(url);
@@ -386,6 +384,8 @@ export function parseXyzTileJson(value: unknown): XyzTileJsonSource {
     }
     return url;
   });
+  // One scheme covers every template, so the list cannot mix {y} and {-y}.
+  resolveTileAddress(tiles, record.scheme === "tms" ? "tms" : "xyz");
   const source: XyzTileJsonSource = { tiles };
   const bounds = record.bounds;
   if (

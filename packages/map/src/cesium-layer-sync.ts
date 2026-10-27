@@ -22,7 +22,7 @@ import {
   ruleBasedVisibilityFilter,
   transformGeojsonElevation,
   resolveProjectHeaderReferences,
-  resolveTileAddress,
+  resolveLayerTileAddress,
   useAppStore,
   type GeoLibreLayer,
   type LayerStyle,
@@ -1228,14 +1228,9 @@ function tileTemplateImageryProvider(
 ): ImageryProvider {
   const rawUrl = firstTile(layer);
   if (!rawUrl) throw new Error("no tile URL template");
-  // Same row rule as the MapLibre XYZ source: {-y} flips once, and scheme
-  // "tms" flips once, so both together request an XYZ row.
-  const addressed =
-    layer.type === "xyz"
-      ? resolveTileAddress([rawUrl], layer.source.scheme === "tms" ? "tms" : "xyz")
-      : null;
-  const url = addressed?.tiles[0] ?? rawUrl;
-  const tileScheme = addressed?.scheme ?? (layer.source.scheme === "tms" ? "tms" : "xyz");
+  const addressed = resolveLayerTileAddress(layer, [rawUrl]);
+  const url = addressed.tiles[0] ?? rawUrl;
+  const tileScheme = addressed.scheme;
   const maxLevel = Number(layer.source.maxzoom);
   const minLevel = Number(layer.source.minzoom);
   const scheme = protocolScheme(url);

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type * as maplibregl from "maplibre-gl";
-import { DEFAULT_LAYER_STYLE, resolveTileAddress, type GeoLibreLayer } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  resolveLayerTileAddress,
+  resolveTileAddress,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
 import { compileMapboxLayer } from "../packages/map/src/gl-style-compiler";
 import { syncLayer } from "../packages/map/src/layer-sync";
@@ -28,6 +33,30 @@ describe("resolveTileAddress", () => {
       scheme: "xyz",
     });
     assert.throws(() => resolveTileAddress(["https://t/{z}/{x}/{y}/{-y}.png"]), /not both/);
+    assert.throws(
+      () =>
+        resolveTileAddress(["https://a/{z}/{x}/{y}.png", "https://b/{z}/{x}/{-y}.png"]),
+      /not both/,
+    );
+    assert.deepEqual(
+      resolveTileAddress(["https://a/{z}/{x}/{-y}.png", "https://b/{z}/{x}/{-y}.png"]),
+      {
+        tiles: ["https://a/{z}/{x}/{y}.png", "https://b/{z}/{x}/{y}.png"],
+        scheme: "tms",
+      },
+    );
+  });
+
+  it("applies the row rule only to XYZ layers", () => {
+    const tiles = [NIGHT];
+    assert.deepEqual(resolveLayerTileAddress({ type: "xyz", source: { scheme: "tms" } }, tiles), {
+      tiles: ["https://www.nightearth.com/nightmap/nightmap2012/{z}/{x}/{y}.webp"],
+      scheme: "xyz",
+    });
+    assert.deepEqual(resolveLayerTileAddress({ type: "wms", source: { scheme: "tms" } }, tiles), {
+      tiles,
+      scheme: "tms",
+    });
   });
 });
 

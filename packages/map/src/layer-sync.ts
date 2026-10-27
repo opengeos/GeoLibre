@@ -17,7 +17,7 @@ import {
   type LabelStyle,
   type LayerStyle,
   documentLocale,
-  resolveTileAddress,
+  resolveLayerTileAddress,
 } from "@geolibre/core";
 import {
   normalizePMTilesUrl,
@@ -2850,12 +2850,7 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
   const rawTiles = getRenderableRasterTiles(map, layer);
   const tileSize = numberSource(layer.source.tileSize) ?? 256;
   if (rawTiles.length === 0) return;
-  // {-y} flips the row and does not select TMS. Combined with scheme "tms"
-  // the two flips cancel. MapLibre only flips {y} when scheme is tms.
-  const addressed =
-    layer.type === "xyz"
-      ? resolveTileAddress(rawTiles, layer.source.scheme === "tms" ? "tms" : "xyz")
-      : { tiles: rawTiles, scheme: layer.source.scheme === "tms" ? "tms" : ("xyz" as const) };
+  const addressed = resolveLayerTileAddress(layer, rawTiles);
   if (!map.getSource(src)) {
     const bounds = boundsSource(layer.source.bounds);
     const minzoom = numberSource(layer.source.minzoom);

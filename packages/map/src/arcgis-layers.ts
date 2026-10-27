@@ -14,7 +14,7 @@ import {
   labelFieldTextField,
   normalizeHexColor,
   ruleBasedVisibilityFilter,
-  resolveTileAddress,
+  resolveLayerTileAddress,
   styleValue,
   transformGeojsonElevation,
   type GeoLibreLayer,
@@ -2129,18 +2129,9 @@ export function compileArcgisLayer(
   if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]) && proxied[0] === tiles[0])
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };
   if (classifyLayer(layer) === "raster-tiles" && (tiles.length || url)) {
-    let templates = proxied.length ? proxied : [url!];
-    // {-y} flips an XYZ row and does not select TMS. scheme "tms" is the
-    // other flip, so both together are drawn as XYZ.
-    let schemeOverride: "xyz" | "tms" | undefined;
-    if (layer.type === "xyz") {
-      const addressed = resolveTileAddress(
-        templates,
-        layer.source.scheme === "tms" ? "tms" : "xyz",
-      );
-      templates = addressed.tiles;
-      schemeOverride = addressed.scheme;
-    }
+    const addressed = resolveLayerTileAddress(layer, proxied.length ? proxied : [url!]);
+    const templates = addressed.tiles;
+    const schemeOverride = addressed.scheme;
     // `geolibre-wms://` (the desktop's CORS-exempt WMS fetcher), `cog://` and
     // friends are MapLibre protocol handlers. The template-tile layer asks the
     // registered handler for each tile, as the globe does; a scheme with no

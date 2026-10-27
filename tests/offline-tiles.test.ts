@@ -108,6 +108,20 @@ describe("expandTileUrl", () => {
     );
   });
 
+  it("uses the same row as the map when scheme and {-y} combine", () => {
+    const tile = { z: 3, x: 2, y: 1 };
+    // scheme "tms" flips {y}. {-y} alone flips too.
+    assert.equal(
+      expandTileUrl("https://h/{z}/{x}/{y}.png", tile, undefined, "tms"),
+      "https://h/3/2/6.png",
+    );
+    // Both flips cancel, so the download requests the XYZ row.
+    assert.equal(
+      expandTileUrl("https://h/{z}/{x}/{-y}.png", tile, undefined, "tms"),
+      "https://h/3/2/1.png",
+    );
+  });
+
   it("computes {quadkey}", () => {
     assert.equal(
       expandTileUrl("https://h/{quadkey}", { z: 3, x: 3, y: 5 }),

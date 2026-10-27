@@ -37,7 +37,7 @@ import {
   type LayerStyle,
   type LayerVirtualField,
 } from "../types";
-import { resolveTileAddress } from "../tile-address";
+import { resolveLayerTileAddress } from "../tile-address";
 import { hasSimpleStyleProperties } from "../vector-color";
 import {
   cascadeJoinRefreshForRemoved,
@@ -540,9 +540,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
     }
     // {-y} is accepted on XYZ templates. Reject a template that names both
     // row tokens before the layer is stored.
-    if (type === "xyz") {
-      resolveTileAddress(tiles, options.scheme === "tms" ? "tms" : "xyz");
-    }
+    resolveLayerTileAddress({ type, source: { scheme: options.scheme } }, tiles);
     // MapLibre's addSource throws synchronously when maxzoom < minzoom, and
     // syncRasterTileLayer does not catch it, which would strand a layer in
     // the store with no rendered source. Reject the bad range up front.

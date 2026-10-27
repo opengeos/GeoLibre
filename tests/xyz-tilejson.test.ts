@@ -304,6 +304,17 @@ describe("TileJSON validation", () => {
         }),
       /not both/,
     );
+    assert.throws(
+      () =>
+        parseXyzTileJson({
+          ...manifest(),
+          tiles: [
+            "https://tiles.example/{z}/{x}/{y}.png",
+            "https://tiles.example/replica/{z}/{x}/{-y}.png",
+          ],
+        }),
+      /not both/,
+    );
   });
 
   it("rejects missing endpoints, invalid URLs, and vector TileJSON", () => {

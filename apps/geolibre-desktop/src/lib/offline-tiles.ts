@@ -15,6 +15,7 @@
  * fetched too but will not persist (no matching SW route); callers should warn.
  */
 
+import { asTileScheme, resolveTileAddress, type TileScheme } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
 
 /** The active style object, as returned by MapLibre's `map.getStyle()`. */
@@ -213,15 +214,24 @@ export function tileToQuadkey({ z, x, y }: TileCoord): string {
  * stable URL; when no subdomains are given, `{s}` is dropped together with its
  * trailing `.` separator so `https://{s}.host/…` becomes `https://host/…`
  * rather than the invalid `https://.host/…`.
+ *
+ * `{-y}` flips the row and does not select TMS. `scheme: "tms"` is a second
+ * flip, so a template that has both requests the XYZ row. This is the same
+ * rule the map uses, so an offline download warms the tiles the map draws.
  */
-export function expandTileUrl(template: string, tile: TileCoord, subdomains?: string[]): string {
-  const tmsY = 2 ** tile.z - 1 - tile.y;
+export function expandTileUrl(
+  template: string,
+  tile: TileCoord,
+  subdomains?: string[],
+  scheme: TileScheme = "xyz",
+): string {
+  const addressed = resolveTileAddress([template], scheme);
+  const row = addressed.scheme === "tms" ? 2 ** tile.z - 1 - tile.y : tile.y;
   const sub = subdomains?.[0];
-  return template
+  return (addressed.tiles[0] ?? template)
     .replace(/\{z\}/g, String(tile.z))
     .replace(/\{x\}/g, String(tile.x))
-    .replace(/\{y\}/g, String(tile.y))
-    .replace(/\{-y\}/g, String(tmsY))
+    .replace(/\{y\}/g, String(row))
     .replace(/\{quadkey\}/g, tileToQuadkey(tile))
     .replace(/\{s\}\.?/g, (match) => (sub ? (match.endsWith(".") ? `${sub}.` : sub) : ""));
 }
@@ -239,6 +249,7 @@ interface RasterTileJson {
   tiles?: string[];
   minzoom?: number;
   maxzoom?: number;
+  scheme?: string;
 }
 
 interface ResolvedTileSource {
@@ -247,6 +258,7 @@ interface ResolvedTileSource {
   /** Source coverage bounds; undefined when the source/TileJSON omits them. */
   minzoom?: number;
   maxzoom?: number;
+  scheme: TileScheme;
 }
 
 /**
@@ -299,12 +311,14 @@ async function resolveTileSources(
       subdomains?: string[];
       minzoom?: number;
       maxzoom?: number;
+      scheme?: string;
     };
     if (spec.type !== "vector" && spec.type !== "raster") continue;
 
     let templates = spec.tiles;
     let minzoom = spec.minzoom;
     let maxzoom = spec.maxzoom;
+    let scheme = asTileScheme(spec.scheme);
     if ((!templates || templates.length === 0) && spec.url) {
       try {
         const res = await fetch(absolute(spec.url), { signal });
@@ -314,6 +328,7 @@ async function resolveTileSources(
           // The style spec wins; fall back to the TileJSON's declared bounds.
           if (minzoom === undefined) minzoom = tilejson.minzoom;
           if (maxzoom === undefined) maxzoom = tilejson.maxzoom;
+          if (spec.scheme !== "xyz" && spec.scheme !== "tms") scheme = asTileScheme(tilejson.scheme);
         }
       } catch {
         // Unreachable TileJSON: skip this source rather than abort the whole run.
@@ -325,6 +340,7 @@ async function resolveTileSources(
       subdomains: spec.subdomains,
       minzoom,
       maxzoom,
+      scheme,
     });
   }
   return resolved;
@@ -350,7 +366,7 @@ async function collectTileUrls(
     const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
     if (!range) continue;
     for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
-      urls.add(absolute(expandTileUrl(src.template, tile, src.subdomains)));
+      urls.add(absolute(expandTileUrl(src.template, tile, src.subdomains, src.scheme)));
     }
   }
   return urls;
