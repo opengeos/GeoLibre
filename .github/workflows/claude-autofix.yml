@@ -432,7 +432,10 @@ jobs:
             [ "$rc" != 0 ] || { echo "::error::Claude left conflicts for a person: $(printf %q "$f")"; exit 1; }
             [ "$rc" = 1 ] || { echo "::error::Couldn't check $(printf %q "$f") for conflict markers."; exit 1; }
           done < "$RUNNER_TEMP/left.z"
-          git add -A -- . ':!.autofix'
+          # .autofix is excluded in .git/info/exclude; a pathspec naming it (even ':!.autofix') makes
+          # git add fail on the ignored path, so it is unstaged afterwards instead.
+          git add -A -- .
+          git rm -r -q --cached --ignore-unmatch -- .autofix
           test -z "$(git diff --cached --name-only --diff-filter=U)"
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
@@ -528,7 +531,8 @@ jobs:
             exit 0
           fi
           echo "reported=true" >> "$GITHUB_OUTPUT"
-          git add -A -- . ':!.autofix'
+          git add -A -- .
+          git rm -r -q --cached --ignore-unmatch -- .autofix
           if git diff --cached --quiet; then
             echo "No code changes."
             exit 0
