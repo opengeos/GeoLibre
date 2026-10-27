@@ -10,6 +10,7 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { findGibsFallbackDate } from "./nasa-earthdata-date-fallback";
 import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
@@ -41,6 +42,46 @@ let unregisterPanel: (() => void) | null = null;
 // control state alone does not carry the catalog data needed to rebuild
 // tile URLs, so the payloads are cached for the reconciler.
 const gibsLayerCache = new Map<string, GibsLayer>();
+
+// A tile probe that takes longer than this adds the layer at its default date.
+const DATE_PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * Makes a panel "Add" of a time-enabled layer start at a date GIBS has imagery
+ * for (issue #3259). GIBS sometimes advertises a default (latest) date whose
+ * tiles are all 404s, which drew nothing and raised a "No tiles found" toast.
+ * The control's Add button calls `addLayer(id)` with no date; that call now
+ * probes one tile first and adds the layer at the newest date that has
+ * imagery. Calls that name a date or key (project restore, the date picker's
+ * re-add) pass straight through.
+ *
+ * @param control - The NASA Earthdata control to patch.
+ */
+function addAtAvailableDefaultDate(control: NasaEarthdataControl): void {
+  const addLayer = control.addLayer.bind(control);
+  control.addLayer = (layerId, options) => {
+    const layer =
+      options?.date === undefined && options?.key === undefined
+        ? control.search(layerId).find((candidate) => candidate.id === layerId)
+        : undefined;
+    if (!layer?.time || typeof globalThis.fetch !== "function") {
+      addLayer(layerId, options);
+      return;
+    }
+    const probe = (url: string) =>
+      globalThis.fetch(
+        url,
+        typeof AbortSignal.timeout === "function"
+          ? { signal: AbortSignal.timeout(DATE_PROBE_TIMEOUT_MS) }
+          : undefined,
+      );
+    void findGibsFallbackDate(layer, probe).then((date) => {
+      // The plugin may have been deactivated while the probe was in flight.
+      if (nasaEarthdataControl !== control) return;
+      addLayer(layerId, date ? { ...options, date } : options);
+    });
+  };
+}
 
 function instanceKey(entry: WebServiceLayerEntry): string {
   return stringMetadata(entry.metadata?.nasaKey) ?? entry.id.slice(NATIVE_ID_PREFIX.length);
@@ -166,6 +207,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
+      addAtAvailableDefaultDate(nasaEarthdataControl);
     }
 
     const activeControl = nasaEarthdataControl;
