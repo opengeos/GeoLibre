@@ -228,7 +228,8 @@ jobs:
                 }
               }' \
             --jq '.data.repository.pullRequest.reviewThreads.nodes[]' > "$RUNNER_TEMP/nodes.json"
-          jq -s --argjson writers "$WRITERS" '
+          # A quoted heredoc, so the program is not shell-quoted: it may hold any character.
+          cat > "$RUNNER_TEMP/threads.jq" <<'EOF'
             def trusted: (.author.__typename == "Bot") or (.author.login as $l | $writers | index($l));
             # A thread whose last comment is an autofix reply was answered in an earlier round;
             # it comes back once a reviewer replies to it.
@@ -242,10 +243,10 @@ jobs:
                              | [ $s, (.comments.nodes[] | select(.id != $s.id)) ]
                              | map(select(trusted) | { author: (.author.login // "ghost"), body })
                              # The starter is always first (it is trusted, or the thread was dropped).
-                             # This program is in single quotes in bash: keep apostrophes out of it.
                              | if $n > 51 then .[:1] + [{ note: "\($n - 51) earlier comments are not shown" }] + .[1:]
                                else . end) } ]
-          ' "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
+          EOF
+          jq -s --argjson writers "$WRITERS" -f "$RUNNER_TEMP/threads.jq" "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
           count=$(jq length .autofix/threads.json)
           echo "count=$count" >> "$GITHUB_OUTPUT"
           # The reply and resolve steps take their ids from here, not from the files Claude can edit.
