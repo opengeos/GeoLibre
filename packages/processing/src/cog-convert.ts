@@ -228,11 +228,11 @@ export interface ConvertRasterDataToCogOptions {
    * trade-off: any NoData pixel blanks its whole overview block, so a NoData
    * edge grows by up to one block at low zoom, and scattered NoData (speckle,
    * cloud masks) can leave the coarsest levels mostly empty. Without the
-   * option those same blocks hold blended outliers instead, so it is still the
-   * better default for display; the full fix is a NoData-aware average in the
-   * encoder (opengeos/whitebox-wasm#33). Use it
-   * for a COG that is only drawn on the map; keep the sentinel for one that
-   * feeds tools which compare against it.
+   * option those same blocks hold blended outliers instead, so nanNodata is
+   * still the better choice for display. The full fix is a NoData-aware average
+   * in the encoder (opengeos/whitebox-wasm#33). Use it for a COG that is only
+   * drawn on the map; keep the sentinel for one that feeds tools which compare
+   * against it.
    */
   nanNodata?: boolean;
 }
