@@ -24,34 +24,35 @@ import {
 const GOOGLE = "https://tile.googleapis.com/v1/3dtiles/root.json";
 
 describe("threeDTilesSampleLayerName", () => {
-  const SAMPLES = ["AGI HQ", "Google Photorealistic 3D Tiles", "3D BAG Netherlands (LoD 2.2)"];
+  const GOOGLE_LABEL = "Google Photorealistic 3D Tiles";
+  const BAG_LABEL = "3D BAG Netherlands (LoD 2.2)";
 
   it("names the layer after the sample when the field is blank or the default", () => {
-    assert.equal(threeDTilesSampleLayerName("", "AGI HQ", SAMPLES), "AGI HQ");
-    assert.equal(threeDTilesSampleLayerName("  ", "AGI HQ", SAMPLES), "AGI HQ");
-    assert.equal(threeDTilesSampleLayerName("3D Tiles", "AGI HQ", SAMPLES), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("", "AGI HQ"), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("  ", "AGI HQ"), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("3D Tiles", "AGI HQ"), "AGI HQ");
   });
 
-  it("replaces a name an earlier sample pick filled in (#3258)", () => {
-    assert.equal(
-      threeDTilesSampleLayerName(
-        "Google Photorealistic 3D Tiles",
-        "3D BAG Netherlands (LoD 2.2)",
-        SAMPLES,
-      ),
-      "3D BAG Netherlands (LoD 2.2)",
-    );
+  it("replaces the name the previous sample pick filled in (#3258)", () => {
+    assert.equal(threeDTilesSampleLayerName(GOOGLE_LABEL, BAG_LABEL, GOOGLE_LABEL), BAG_LABEL);
   });
 
   it("keeps a name the user typed", () => {
     assert.equal(
-      threeDTilesSampleLayerName("My buildings", "3D BAG Netherlands (LoD 2.2)", SAMPLES),
+      threeDTilesSampleLayerName("My buildings", BAG_LABEL, GOOGLE_LABEL),
       "My buildings",
     );
   });
 
+  it("keeps a typed name even when it matches a sample label", () => {
+    // Typed over the auto-filled "3D BAG..." name, so it is no longer the
+    // last sample-filled value.
+    assert.equal(threeDTilesSampleLayerName("AGI HQ", BAG_LABEL, GOOGLE_LABEL), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName(GOOGLE_LABEL, BAG_LABEL), GOOGLE_LABEL);
+  });
+
   it("leaves the field alone when the picked sample has no label", () => {
-    assert.equal(threeDTilesSampleLayerName("AGI HQ", "", SAMPLES), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("AGI HQ", "", "AGI HQ"), "AGI HQ");
   });
 });
 
