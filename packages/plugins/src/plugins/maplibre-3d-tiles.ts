@@ -945,6 +945,13 @@ function installGooglePhotorealisticTilesPanelHandlers(
   const urlInput = getThreeDTilesUrlInput(panel);
   urlInput?.addEventListener("input", applyDefaults);
   urlInput?.addEventListener("change", applyDefaults);
+  // Once the user edits the Layer name it is theirs, even if they type a
+  // sample label back in, so forget the name a sample pick filled in.
+  panel
+    .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
+    ?.addEventListener("input", () => {
+      delete panel.dataset.geolibreSampleLayerName;
+    });
   // Intercept the submit on the panel (an ancestor of the form) during the
   // capture phase so this runs before maplibre-gl-3d-tiles' own form-level
   // submit listener. A capture listener on the form target itself would not:

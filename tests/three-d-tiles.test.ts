@@ -48,6 +48,7 @@ describe("threeDTilesSampleLayerName", () => {
     // Typed over the auto-filled "3D BAG..." name, so it is no longer the
     // last sample-filled value.
     assert.equal(threeDTilesSampleLayerName("AGI HQ", BAG_LABEL, GOOGLE_LABEL), "AGI HQ");
+    // No earlier pick filled the name (it was edited, clearing the memory).
     assert.equal(threeDTilesSampleLayerName(GOOGLE_LABEL, BAG_LABEL), GOOGLE_LABEL);
   });
 
