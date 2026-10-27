@@ -30,6 +30,7 @@ export interface ArcGISDomain {
 /** A feature template: a named starting point for new features. */
 export interface ArcGISFeatureTemplate {
   name?: string;
+  description?: string;
   prototype?: { attributes?: Record<string, unknown> | null } | null;
 }
 

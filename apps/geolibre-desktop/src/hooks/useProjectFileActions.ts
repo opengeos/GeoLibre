@@ -1006,6 +1006,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
       if (controller.signal.aborted) return null;
       loadProject(project, result.path);
+      if (result.fromStoredCopy) {
+        notify.warning(t("settings.startup.storedCopyWarning"), {
+          dedupeKey: "stored-project-copy",
+          durationMs: null,
+        });
+      }
       // `loadProject` moves this path to the front of the recent list, so in
       // "last" mode it is now the project the next launch will reopen. Without
       // this, reopening an older project from the recent list would leave the

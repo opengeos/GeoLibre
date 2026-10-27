@@ -30,8 +30,14 @@ let minimapRequest = 0;
 let minimapOptions = defaultMinimapOptions();
 const minimapPanelListeners = new Set<() => void>();
 
-// Standalone Minimap control, toggled from the Controls menu.
+// Standalone Minimap control, toggled from the Controls menu. `collapsed`
+// opens (or folds) it to its on-map button (GeoLibre#3241); otherwise an open
+// keeps a rebuilt overview's collapsed state and expands a new one.
 export function openMinimapPanel(app: GeoLibreAppAPI, options?: GeoLibreMinimapOptions): void {
+  const collapsed = options?.collapsed;
+  if (collapsed !== undefined && typeof collapsed !== "boolean") {
+    throw new Error("Minimap collapsed must be a boolean");
+  }
   const next = { ...minimapOptions };
   for (const key of minimapOptionKeys) {
     const value = options?.[key];
@@ -48,9 +54,15 @@ export function openMinimapPanel(app: GeoLibreAppAPI, options?: GeoLibreMinimapO
     next[key] = value;
   }
   const optionsChanged = minimapOptionKeys.some((key) => next[key] !== minimapOptions[key]);
-  if (!optionsChanged && (minimapPanelVisible || minimapControlMounted)) return;
+  if (
+    !optionsChanged &&
+    collapsed === undefined &&
+    (minimapPanelVisible || minimapControlMounted)
+  ) {
+    return;
+  }
   minimapOptions = next;
-  void openStandaloneMinimapControl(app, ++minimapRequest, optionsChanged);
+  void openStandaloneMinimapControl(app, ++minimapRequest, optionsChanged, collapsed);
 }
 
 export function closeMinimapPanel(app: GeoLibreAppAPI): void {
@@ -70,13 +82,15 @@ async function openStandaloneMinimapControl(
   app: GeoLibreAppAPI,
   request: number,
   optionsChanged: boolean,
+  collapsed: boolean | undefined,
 ): Promise<boolean> {
   const { MinimapControl: MinimapControlClass } = await getComponentsConstructors();
   if (request !== minimapRequest) return false;
 
   // Reconfigure in place after loading the constructor. Keep the visibility
   // store and the user's collapsed state steady while replacing the control.
-  const wasCollapsed = optionsChanged && minimapControl?.getState().collapsed === true;
+  const wasCollapsed =
+    collapsed ?? (optionsChanged && minimapControl?.getState().collapsed === true);
   if (optionsChanged && minimapControl && minimapControlMounted) {
     app.removeMapControl(minimapControl);
     minimapControl = null;
@@ -104,10 +118,15 @@ async function openStandaloneMinimapControl(
   }
 
   const control = minimapControl;
+  // Apply an explicit request now, not only in the deferred callback: a
+  // basemap refresh in between reads this state to rebuild the overview.
+  if (collapsed === true) control.collapse();
+  else if (collapsed === false) control.expand();
   setTimeout(() => {
     if (request !== minimapRequest || minimapControl !== control) return;
     control.show();
-    if (!wasCollapsed) control.expand();
+    if (wasCollapsed) control.collapse();
+    else control.expand();
     setMinimapPanelVisible(true);
   }, 0);
   return true;
@@ -174,7 +193,9 @@ export function teardownMinimapControl(app: GeoLibreAppAPI): void {
   minimapOptions = defaultMinimapOptions();
 }
 
-function defaultMinimapOptions(): Required<GeoLibreMinimapOptions> {
+function defaultMinimapOptions(): Required<
+  Pick<GeoLibreMinimapOptions, (typeof minimapOptionKeys)[number]>
+> {
   return {
     zoomOffset: MINIMAP_OPTIONS.zoomOffset,
     width: MINIMAP_OPTIONS.width,

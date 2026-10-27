@@ -34,11 +34,11 @@ test("the attribute table status bar reports totals, filtering, and selection", 
 
   // A search that matches one feature adds the "shown" count; the total stays
   // the layer's, not the filtered set's.
-  await page.getByPlaceholder("Search attributes...").fill("Alpha");
+  await page.getByPlaceholder("Search attributes…").fill("Alpha");
   await expect(status).toContainText("1 shown");
   await expect(status).toContainText(`${FIXTURE_FEATURE_COUNT} features`);
 
   // Clearing the search puts it back to the unfiltered reading.
-  await page.getByPlaceholder("Search attributes...").fill("");
+  await page.getByPlaceholder("Search attributes…").fill("");
   await expect(status).not.toContainText("shown");
 });

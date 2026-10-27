@@ -19,6 +19,12 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
+      # Same for tauri-plugin-dialog 2.8.x
+      # (src-tauri/vendor/tauri-plugin-dialog/GEOLIBRE_PATCH.md).
+      - dependency-name: "@tauri-apps/plugin-dialog"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
     groups:
       # Security fixes land on their own, immediately actionable PRs.
       npm-security:

@@ -8,8 +8,9 @@
  *
  * Entries are plain `string | number | boolean` field bags so they serialise
  * cleanly to JSON (localStorage + import/export) and repopulate the source
- * forms directly. Built-in presets seed the library: they are always listed but
- * never persisted, so they stay fresh across releases and can't be deleted.
+ * forms directly. Built-in presets seed the library: they are never persisted,
+ * so they stay fresh across releases. Deleting one only records its id as
+ * hidden, and the user can restore the hidden presets later.
  */
 
 import { readDeploymentEnv } from "../../../lib/deployment-env";
@@ -23,6 +24,7 @@ import {
   DEFAULT_XYZ_URL,
   GEBCO_WMS_ENDPOINT,
   GEBCO_WMS_LAYERS,
+  HIDDEN_BUILTIN_SERVICES_STORAGE_KEY,
   NLCD_WMS_ENDPOINT,
   NLCD_WMS_LAYERS,
   MAX_SAVED_SERVICES,
@@ -47,7 +49,7 @@ export interface ServiceLibraryEntry {
   kind: ServiceLibraryKind;
   /** Source-form field values, applied verbatim when the entry is loaded. */
   fields: ServiceFields;
-  /** True for built-in presets: always listed, read-only, never persisted. */
+  /** True for built-in presets: read-only and never persisted, but deletable (hidden). */
   builtin?: boolean;
   /** True for deployment-managed connections: read-only and never persisted. */
   deployment?: boolean;
@@ -65,6 +67,12 @@ export const SERVICE_KINDS: readonly ServiceLibraryKind[] = [
 /** The wrapped JSON shape produced by {@link serializeUserServices}. */
 const EXPORT_FORMAT = "geolibre-service-library";
 const DEPLOYMENT_ID_PREFIX = "deployment:";
+
+/**
+ * Fired on `window` after the user's saved services are written, so listeners
+ * that cache the library (the Browser panel) can re-read it.
+ */
+export const SERVICE_LIBRARY_CHANGED_EVENT = "geolibre:service-library-changed";
 
 /** Managed definitions can be copied, but never edited or saved as user entries. */
 export function isManagedService(entry: ServiceLibraryEntry): boolean {
@@ -238,6 +246,7 @@ export function writeUserServices(entries: ServiceLibraryEntry[]): void {
         entries.filter((entry) => !isManagedService(entry)).slice(0, MAX_SAVED_SERVICES),
       ),
     );
+    window.dispatchEvent(new Event(SERVICE_LIBRARY_CHANGED_EVENT));
   } catch {
     // Best-effort persistence: a quota/private-mode failure must not break the
     // Add Data dialog (mirrors readUserServices' guard).
@@ -263,6 +272,35 @@ export function createServiceEntry(input: {
     kind: input.kind,
     fields: input.fields,
   };
+}
+
+/** Reads the ids of built-in presets the user deleted (best-effort). */
+export function readHiddenBuiltinIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const value = window.localStorage.getItem(HIDDEN_BUILTIN_SERVICES_STORAGE_KEY);
+    const parsed: unknown = value ? JSON.parse(value) : [];
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/** Persists the hidden built-in ids (best-effort) and announces the change. */
+export function writeHiddenBuiltinIds(ids: Iterable<string>): void {
+  if (typeof window === "undefined") return;
+  const known = new Set(BUILTIN_SERVICES.map((entry) => entry.id));
+  try {
+    window.localStorage.setItem(
+      HIDDEN_BUILTIN_SERVICES_STORAGE_KEY,
+      JSON.stringify(Array.from(new Set(ids)).filter((id) => known.has(id))),
+    );
+    window.dispatchEvent(new Event(SERVICE_LIBRARY_CHANGED_EVENT));
+  } catch {
+    // Best-effort persistence (mirrors writeUserServices' guard).
+  }
 }
 
 /** Inserts or replaces an entry by id, newest first, capped at the limit. */
@@ -339,14 +377,22 @@ export function mergeImportedServices(
 }
 
 /** True when the deployment hides the built-in starter presets (GEOLIBRE_BUILTIN_SERVICES=off). */
-function builtinsHidden(): boolean {
+export function builtinsHidden(): boolean {
   const value = readDeploymentEnv()?.VITE_GEOLIBRE_BUILTIN_SERVICES;
   return value !== undefined && value.trim().toLowerCase() === "off";
 }
 
-/** Shared catalog for the Browser and source picker, in ownership order. */
-export function listAllServices(userEntries: ServiceLibraryEntry[]): ServiceLibraryEntry[] {
-  const builtins = builtinsHidden() ? [] : BUILTIN_SERVICES;
+/**
+ * Shared catalog for the Browser and source picker, in ownership order. Built-in
+ * presets the user deleted are left out.
+ */
+export function listAllServices(
+  userEntries: ServiceLibraryEntry[],
+  hiddenBuiltinIds: ReadonlySet<string> = readHiddenBuiltinIds(),
+): ServiceLibraryEntry[] {
+  const builtins = builtinsHidden()
+    ? []
+    : BUILTIN_SERVICES.filter((entry) => !hiddenBuiltinIds.has(entry.id));
   return [...builtins, ...readDeploymentServices(), ...userEntries];
 }
 
@@ -357,8 +403,9 @@ export function listAllServices(userEntries: ServiceLibraryEntry[]): ServiceLibr
 export function listServices(
   kind: ServiceLibraryKind,
   userEntries: ServiceLibraryEntry[],
+  hiddenBuiltinIds: ReadonlySet<string> = readHiddenBuiltinIds(),
 ): ServiceLibraryEntry[] {
-  return listAllServices(userEntries).filter((entry) => entry.kind === kind);
+  return listAllServices(userEntries, hiddenBuiltinIds).filter((entry) => entry.kind === kind);
 }
 
 /** The distinct, sorted categories present in a list of entries. */

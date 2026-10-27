@@ -101,6 +101,7 @@ SLUG_RE = re.compile(r"[^a-z0-9]+")
 # value. Matching whole tags keeps a comma inside the quotes part of the tag.
 ENTITY_TAG_RE = re.compile(r'(?:W/)?"[^"]*"')
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
+OPTIONAL_AUTH_OPENAPI = {"security": [{"HTTPBearer": []}, {}]}
 
 OAUTH_CLEANUP_INTERVAL_SECONDS = 300
 logger = logging.getLogger(__name__)
@@ -2542,7 +2543,7 @@ def create_app(
         group.thumbnail_type = content_type
         session.commit()
 
-    @app.get("/api/groups/{group_id}/thumbnail")
+    @app.get("/api/groups/{group_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_group_thumbnail(
         group_id: str,
         principal: AuthPrincipal | None = Depends(optional_principal),
@@ -2581,7 +2582,7 @@ def create_app(
         group.thumbnail_type = None
         session.commit()
 
-    @app.get("/api/users/{username}/projects")
+    @app.get("/api/users/{username}/projects", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_user_projects(
         username: str,
         response: Response,
@@ -2724,7 +2725,7 @@ def create_app(
         project.updated_at = now()
         session.commit()
 
-    @app.get("/api/projects")
+    @app.get("/api/projects", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def list_projects(
         response: Response,
         limit: Annotated[int, Query(ge=1, le=100)] = 24,
@@ -2825,7 +2826,7 @@ def create_app(
             "total": session.scalar(count),
         }
 
-    @app.get("/api/projects/{project_id}")
+    @app.get("/api/projects/{project_id}", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_project(
         project_id: str,
         principal: AuthPrincipal | None = Depends(optional_principal),
@@ -3405,7 +3406,7 @@ def create_app(
             response.headers["Cache-Control"] = "private, no-store"
         return response
 
-    @app.get("/api/projects/{project_id}/versions/{number}")
+    @app.get("/api/projects/{project_id}/versions/{number}", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_version(
         project_id: str,
         number: int,
@@ -3457,7 +3458,7 @@ def create_app(
         project.updated_at = now()
         session.commit()
 
-    @app.get("/api/projects/{project_id}/thumbnail")
+    @app.get("/api/projects/{project_id}/thumbnail", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def get_thumbnail(
         project_id: str,
         principal: AuthPrincipal | None = Depends(optional_principal),
@@ -3487,7 +3488,7 @@ def create_app(
         project.updated_at = now()
         session.commit()
 
-    @app.get("/org/{organization_slug}/{slug}.geolibre.json")
+    @app.get("/org/{organization_slug}/{slug}.geolibre.json", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def latest_organization_raw(
         organization_slug: str,
         slug: str,
@@ -3525,7 +3526,7 @@ def create_app(
         session.commit()
         return body
 
-    @app.get("/org/{organization_slug}/{slug}")
+    @app.get("/org/{organization_slug}/{slug}", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def organization_project_page(
         organization_slug: str,
         slug: str,
@@ -3555,7 +3556,7 @@ def create_app(
         raw = f"{base_url}/org/{quote(organization_slug)}/{quote(slug)}.geolibre.json"
         return RedirectResponse(viewer_url + "?project=" + quote(raw, safe=""), status_code=302)
 
-    @app.get("/{username}/{slug}.geolibre.json")
+    @app.get("/{username}/{slug}.geolibre.json", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def latest_raw(
         username: str,
         slug: str,
@@ -3666,7 +3667,7 @@ def create_app(
             headers={"Cache-Control": "private, no-store"},
         )
 
-    @app.post("/org/{organization_slug}/{slug}/access")
+    @app.post("/org/{organization_slug}/{slug}/access", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def organization_share_access(
         organization_slug: str,
         slug: str,
@@ -3683,7 +3684,7 @@ def create_app(
         )
         return share_access_response(request, session, project, principal, body.password)
 
-    @app.post("/{username}/{slug}/access")
+    @app.post("/{username}/{slug}/access", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def share_access(
         username: str,
         slug: str,
@@ -3704,7 +3705,7 @@ def create_app(
         )
         return share_access_response(request, session, project, principal, body.password)
 
-    @app.get("/{username}/{slug}")
+    @app.get("/{username}/{slug}", openapi_extra=OPTIONAL_AUTH_OPENAPI)
     def project_page(
         username: str,
         slug: str,

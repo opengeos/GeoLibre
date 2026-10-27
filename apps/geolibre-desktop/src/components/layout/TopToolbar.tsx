@@ -26,6 +26,7 @@ import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import { useOsmPbfLoader } from "../../hooks/useOsmPbfLoader";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import { useTilePackageLoader } from "../../hooks/useTilePackageLoader";
 import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
@@ -75,6 +76,7 @@ import {
 import { OsmPbfDialogs } from "./toolbar/OsmPbfDialogs";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
+import { TilePackageDialogs } from "./toolbar/TilePackageDialogs";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
@@ -83,6 +85,7 @@ import {
   resetRuntimeControlsForNewProject,
 } from "./toolbar/toolbar-actions";
 import { ViewMenu } from "./toolbar/ViewMenu";
+import { handleMenubarKeyDown } from "./toolbar/menubarKeyboard";
 
 interface TopToolbarProps {
   compact?: boolean;
@@ -200,6 +203,7 @@ export function TopToolbar({
   // map init would otherwise miss its only chance to attach the idle listener).
   useVectorTileGeometryBackfill(appApi, mapReadyGeneration);
   const osmPbf = useOsmPbfLoader(appApi, projectFiles.setActionError);
+  const tilePackage = useTilePackageLoader(appApi, projectFiles.setActionError);
   const consent = useConsentGatedActions({ appApi, isActive, toggle });
   const viewportHistory = useViewportHistory(
     mapControllerRef,
@@ -256,6 +260,7 @@ export function TopToolbar({
     addLayer,
     openAddDataKind,
     osmPbf,
+    tilePackage,
     handleOpenPlanetaryComputer,
     panels,
     consent,
@@ -296,8 +301,11 @@ export function TopToolbar({
     renderLabel: renderToolbarLabel,
   };
 
+  // The header's key handler only routes arrow keys between the menu buttons inside.
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <header
+      onKeyDown={handleMenubarKeyDown}
       className={cn(
         // One row at every width: menus that don't fit scroll horizontally
         // instead of wrapping onto a second row (#871).
@@ -419,12 +427,14 @@ export function TopToolbar({
           chrome={chrome}
           addLayer={addLayer}
           osmPbfBusy={osmPbf.busy}
+          tilePackageBusy={tilePackage.busy}
           onSetAddDataKind={openAddDataKind}
           onAddGltfModel={() => {
             addData.setAddDataDeckVizKind("scenegraph");
             openAddDataKind("deckgl-viz");
           }}
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
+          onOpenTilePackageDialog={() => tilePackage.setDialogOpen(true)}
         />
       )}
       {!viewer &&
@@ -670,6 +680,7 @@ export function TopToolbar({
       <ProjectFileDialogs projectFiles={projectFiles} />
       <ConsentNoticeDialogs consent={consent} />
       <OsmPbfDialogs osmPbf={osmPbf} />
+      <TilePackageDialogs tilePackage={tilePackage} />
       <MountWhenOpened open={dialogs.aboutOpen}>
         <AboutDialog
           checkForUpdatesRequest={dialogs.checkForUpdatesRequest}

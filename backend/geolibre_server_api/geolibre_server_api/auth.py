@@ -42,8 +42,9 @@ from datetime import UTC, datetime
 from typing import Annotated, Callable, Iterator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, Security
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -563,6 +564,9 @@ def verify_password_login(
     return account
 
 
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
 def optional_principal(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
@@ -758,6 +762,9 @@ def cleanup_expired_security_rows(session: Session, now_ts: int, *, batch_size: 
 
 def required_principal(
     principal: AuthPrincipal | None = Depends(optional_principal),
+    # Declares the HTTPBearer scheme for OpenAPI/Swagger only; token resolution
+    # and validation remain in optional_principal above.
+    _credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
 ) -> AuthPrincipal:
     """Resolve a Bearer PAT, or reject the request with a Bearer challenge."""
     if principal is None:

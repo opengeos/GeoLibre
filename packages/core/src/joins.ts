@@ -288,8 +288,9 @@ export function applyJoinsToLayer(
     return allLayers.find((candidate) => candidate.id === joinLayerId)?.geojson;
   });
   const withVirtual = applyLayerVirtualFields(applied.features, virtualFields);
+  const { geoarrow: _staleGeoarrow, ...rest } = layer;
   return {
-    ...layer,
+    ...rest,
     geojson: { ...geojson, features: withVirtual.features },
     joins: applied.joins.length > 0 ? applied.joins : undefined,
     virtualFields: withVirtual.fields.length > 0 ? withVirtual.fields : undefined,

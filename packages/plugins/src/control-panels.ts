@@ -1,4 +1,9 @@
-import type { GeoLibreAppAPI, GeoLibreControlPanelId, GeoLibreMinimapOptions } from "./types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreControlPanelId,
+  GeoLibreMeasureOptions,
+  GeoLibreMinimapOptions,
+} from "./types";
 import {
   closeBookmarkPanel,
   isBookmarkPanelVisible,
@@ -50,16 +55,20 @@ function panelToggle(id: GeoLibreControlPanelId) {
   return PANEL_TOGGLES[id];
 }
 
-/** Open a built-in panel; supplied Minimap options also update an open overview. */
+/**
+ * Open a built-in panel; supplied Minimap or Measure options also update an
+ * already open control.
+ */
 export function openControlPanel(
   app: GeoLibreAppAPI,
   id: GeoLibreControlPanelId,
-  options?: GeoLibreMinimapOptions,
+  options?: GeoLibreMinimapOptions | GeoLibreMeasureOptions,
 ): void {
   const panel = panelToggle(id);
   if (options !== undefined) {
-    if (id !== "minimap") throw new Error("Control panel options are only supported for minimap");
-    openMinimapPanel(app, options);
+    if (id === "minimap") openMinimapPanel(app, options as GeoLibreMinimapOptions);
+    else if (id === "measure") openMeasurePanel(app, options as GeoLibreMeasureOptions);
+    else throw new Error("Control panel options are only supported for minimap and measure");
   } else if (!panel.isVisible()) {
     panel.open(app);
   }

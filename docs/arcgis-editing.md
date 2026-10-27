@@ -72,23 +72,117 @@ appears in the attribute table toolbar while editing:
 Range domains on date fields and coded-value domains on date or GUID fields
 keep the generic editor; the save check still validates them.
 
+## Contingent values
+
+A layer can also publish contingent values: field groups that list which
+combinations of values are allowed across several fields, overall or per
+subtype. Each field may hold a valid domain code while the combination is not
+one the organization permits. GeoLibre reads the definition with the layer's
+metadata, through the same signed-in connection, and reads it again before
+every save, so edits are checked against the rules the service holds at that
+moment:
+
+- A hosted layer (ArcGIS Online, or ArcGIS Enterprise 11.2 and later) reports
+  `hasContingentValuesDefinition`; its definition comes from the layer's
+  `contingentValues` resource or, failing that, the service's
+  `queryContingentValues` operation.
+- A nonhosted ArcGIS Enterprise service does not report them on the layer. For
+  an editable layer only, GeoLibre asks the service for the layer's data
+  element (`queryDataElements`, when the service supports it), which lists its
+  field groups, and then reads their combinations with
+  `queryContingentValues`. Read-only layers are not asked.
+
+While editing in the attribute table:
+
+- A coded-value cell governed by a field group lists the values that fit the
+  rest of the row first, under **Fits the other values**, and the remaining
+  domain values under **Other values**. Nothing is hidden, so a row never gets
+  stuck: correct any field first. Empty fields of the row count as not yet
+  entered when the choices are worked out. Retired combinations are not
+  offered.
+- A drafted row whose values break a **restrictive** group is marked on every
+  field of the group, and the edit cannot be saved until it is corrected. The
+  values are never cleared or replaced for you.
+- A **non-restrictive** group only warns, in the toolbar notice; the edit can be
+  saved.
+- The notice also reports a drafted row whose stored combination is already
+  outside a group (or uses a retired one). Edits to other fields of that row
+  can still be saved: only an edit that changes a group's values, or the
+  record's subtype, has to leave that group in an allowed combination.
+
+The same rules are applied when the edits are sent to the service, whichever
+editor produced them. New features (drawn, copied or created from a template)
+must fit every restrictive group they have values in. GeoLibre's rules, where
+Esri's documentation leaves them open:
+
+- A combination is matched whole: values are never mixed from different
+  combinations, and a field in several groups must satisfy each of them.
+- `Any` accepts any value, an empty one included; `Null` requires the field to
+  be empty. A contingency never relaxes the field's own type, nullability or
+  domain checks.
+- A group whose fields are all empty is not evaluated (nothing has been entered
+  for it). If any of its fields has a value, an empty field must be matched by
+  an `Any` or `Null` entry.
+- Text codes are compared exactly, so `"1"`, `"01"` and `"0"` stay distinct, and
+  a numeric field compares numbers. Ranges are inclusive, and a value between
+  two allowed ranges is rejected.
+- A retired combination stays valid on a record that already holds it, but an
+  edit cannot introduce it.
+- Combinations defined per subtype leave other subtypes unconstrained by that
+  group.
+
+Related records follow the related table's own contingent values, read with
+its metadata when the **Related records** dialog opens. The form lists fitting
+values first, marks a restrictive group the row breaks, and disables **Save**
+until it is corrected; the relationship's key is set to the parent's before the
+row is checked, as it is when the row is saved.
+
+If the rules cannot be retrieved (a request failed), new features and attribute
+changes are held, with a notice in the attribute table; saving again retries,
+and deletions and shape-only changes still go through. If they are retrieved
+but cannot be read with confidence (a format GeoLibre does not decode, a text
+code that cannot be looked up, a code outside its domain, or more than 50,000
+combinations), GeoLibre says so and leaves the check to the server, as it does
+for layers without contingent values. A nonhosted service that does not support
+`queryDataElements`, or whose own metadata cannot be read, is treated as having
+no contingent values; one that supports it but fails to answer is treated as
+unavailable.
+
 ## New features
 
 Features drawn with **Edit geometry** start with the service's creation
 defaults, filling only attributes that are empty. Most specific first:
 
-1. The type or subtype field takes the type of the only template the layer
-   publishes, otherwise `defaultSubtypeCode`, otherwise the field's
-   `defaultValue`.
+1. The type or subtype field takes the type of the template picked for the
+   session, or of the only template the layer publishes, otherwise
+   `defaultSubtypeCode`, otherwise the field's `defaultValue`.
 2. Other editable fields take the prototype value of the template for that
    type, otherwise the subtype's `defaultValues`, otherwise the field's
    `defaultValue`.
 
-A template is used only when the choice is unambiguous: the layer, or the
-feature's type, publishes exactly one. With several templates none is picked,
-and only subtype and field defaults apply. Change the type in the attribute
-table afterwards if needed; defaults are not reapplied, and existing features
-never receive them. Values the service assigns (object ID, global ID, editor
+When the layer publishes several feature templates (layer-level `templates[]`
+and `types[].templates[]` together), **Edit geometry** first asks which one new
+features should start from. The picker lists each template's name, the type it
+creates and its description; templates that share a name are numbered. Choose
+**No template** to keep the subtype and field defaults only. The choice is
+pinned for the whole session: every feature drawn in it starts from that
+template, and to use another one, finish the session and start a new one.
+Features drawn in earlier sessions keep the attributes they already have. A
+template listed under one type whose prototype sets the type field to another
+is not offered, since GeoLibre cannot tell which the publisher meant. Opening
+**Edit geometry** from an Identify result does not ask, because that session
+is for reshaping an existing feature; features drawn in it get the defaults
+only. The editor's own drawing tools are used whatever drawing tool a template
+suggests.
+
+Without a picked template, one is used only when the choice is unambiguous:
+the layer, or the feature's type, publishes exactly one. With several
+templates none is picked automatically, and only subtype and field defaults
+apply. A picked template that no longer matches the layer's metadata when the
+session is saved (the service changed it in the meantime) is ignored the same
+way rather than matched to a different template. Change the type in the
+attribute table afterwards if needed; defaults are not reapplied, and existing
+features never receive them. Values the service assigns (object ID, global ID, editor
 tracking and other read-only fields) are left to the server, which also fills
 any field default GeoLibre did not, and the saved record is read back after
 the save.
@@ -268,7 +362,8 @@ that default is explicitly enabled. Otherwise every vertex must supply a finite 
 Object IDs must remain unchanged. New fields and changes to server-managed fields
 cannot be written through feature editing. GeoLibre validates basic field types,
 nullability, string lengths, and coded-value and range domains, including those
-a type or subtype overrides.
+a type or subtype overrides, and contingent values, including those of related
+tables.
 
 Versioned services, M coordinates, dates in an unknown timezone, and offline
 synchronization are outside this implementation. Related records cover existing

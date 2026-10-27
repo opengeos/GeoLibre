@@ -172,7 +172,7 @@ export function LayerGroupHeader({
         ) : (
           <span
             className="min-w-0 flex-1 truncate text-sm font-semibold"
-            title={t("layers.doubleClickToRename")}
+            title={`${group.name}\n${t("layers.doubleClickToRename")}`}
             onDoubleClick={(e: ReactMouseEvent) => {
               e.stopPropagation();
               beginGroupRename(group);

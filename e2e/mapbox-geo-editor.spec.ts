@@ -185,7 +185,7 @@ async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "
       console.warn(`map error: ${event.error?.message}`),
     );
   });
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 }
 
 /** A point inside the map canvas, as a fraction of its box, in page pixels. */

@@ -108,7 +108,7 @@ const threeDTilesOptions = (defaultTilesetUrl: string) =>
     collapseOnClickOutside: false,
     layerId: THREE_D_TILES_LAYER_ID,
     panelWidth: 365,
-    title: "Add 3D Tiles Layer",
+    title: "Add 3D Tiles layer",
     // Empty input; the sample tileset is the explicit, opt-in way to load one.
     tilesetUrl: "",
     sampleData: [
@@ -945,6 +945,13 @@ function installGooglePhotorealisticTilesPanelHandlers(
   const urlInput = getThreeDTilesUrlInput(panel);
   urlInput?.addEventListener("input", applyDefaults);
   urlInput?.addEventListener("change", applyDefaults);
+  // Once the user edits the Layer name it is theirs, even if they type a
+  // sample label back in, so forget the name a sample pick filled in.
+  panel
+    .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
+    ?.addEventListener("input", () => {
+      delete panel.dataset.geolibreSampleLayerName;
+    });
   // Intercept the submit on the panel (an ancestor of the form) during the
   // capture phase so this runs before maplibre-gl-3d-tiles' own form-level
   // submit listener. A capture listener on the form target itself would not:
@@ -1065,12 +1072,55 @@ function installGooglePhotorealisticTilesPanelHandlers(
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const option = target.closest<HTMLButtonElement>(".three-d-tiles-sample-option");
-    if (option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL) {
-      deferApplyDefaults();
+    if (!option) return;
+    // The library's own option handler (on the option itself, so it ran
+    // first) only fills the URL and altitude; name the layer after the sample
+    // too, unless the user typed a name of their own (#3258).
+    const layerNameInput = panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]');
+    if (layerNameInput) {
+      const currentName = layerNameInput.value;
+      const nextName = threeDTilesSampleLayerName(
+        currentName,
+        option.textContent ?? "",
+        panel.dataset.geolibreSampleLayerName,
+      );
+      layerNameInput.value = nextName;
+      // Remember only a name this pick filled in, so the next pick can tell it
+      // apart from one the user typed (even one that matches a sample label).
+      if (nextName !== currentName) panel.dataset.geolibreSampleLayerName = nextName;
     }
+    // Run the URL defaults for every pick, not only the Google one: the
+    // library sets the URL without an input event, so switching from the
+    // Google sample to another would otherwise keep its masked
+    // X-GOOG-API-KEY header.
+    deferApplyDefaults();
   });
 
   applyDefaults();
+}
+
+/**
+ * The Layer name to show after a sample tileset is picked. A blank name, the
+ * "3D Tiles" default, or the name the previous sample pick filled in is
+ * replaced by the picked sample's label, so switching samples renames the
+ * layer; any other name is one the user typed and is kept.
+ *
+ * @param currentName - The Layer name field's current value.
+ * @param sampleLabel - The label of the sample that was just picked.
+ * @param lastSampleName - The name the previous sample pick filled in, if any.
+ * @returns The Layer name to put in the field.
+ */
+export function threeDTilesSampleLayerName(
+  currentName: string,
+  sampleLabel: string,
+  lastSampleName?: string,
+): string {
+  const label = sampleLabel.trim();
+  if (!label) return currentName;
+  const current = currentName.trim();
+  const replaceable =
+    !current || current === "3D Tiles" || (!!lastSampleName && current === lastSampleName.trim());
+  return replaceable ? label : currentName;
 }
 
 /**
@@ -1240,12 +1290,15 @@ function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl
       'textarea[aria-label="Request headers"]',
     );
     if (headersInput) {
+      const rawHeaders = parseThreeDTilesRequestHeaders(headersInput.value);
+      // Keep a typed key in panel memory (never in the field) so switching to
+      // another sample and back to Google does not make the user re-enter it.
+      rememberGoogleMapsApiKeyFromHeaders(panel, rawHeaders);
       headersInput.value = serializeThreeDTilesRequestHeaders(
-        stripGoogleMapsApiKeyHeader(parseThreeDTilesRequestHeaders(headersInput.value)),
+        stripGoogleMapsApiKeyHeader(rawHeaders),
       );
       headersInput.placeholder = THREE_D_TILES_HEADER_PLACEHOLDER;
     }
-    googleTilesApiKeysByPanel.delete(panel);
     panel.dataset.geolibreGoogleMapsApiKeyVisible = "false";
     // Re-arm the one-shot altitude default so it applies again if the user
     // returns to a Google URL.
@@ -1262,6 +1315,8 @@ function applyGooglePhotorealisticTilesPanelDefaults(control: ThreeDTilesControl
       layerNameInput.value.trim() === layerNameFromUrl(GOOGLE_PHOTOREALISTIC_TILES_URL, "3D Tiles"))
   ) {
     layerNameInput.value = GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+    // An auto-filled name, so a later sample pick may replace it.
+    panel.dataset.geolibreSampleLayerName = GOOGLE_PHOTOREALISTIC_TILES_LABEL;
   }
 
   const altitudeInput = panel.querySelector<HTMLInputElement>(

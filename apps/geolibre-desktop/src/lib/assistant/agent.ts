@@ -309,8 +309,8 @@ export class AssistantSession {
       const pinned = this.selection?.provider ?? this.profile?.provider;
       throw new Error(
         pinned
-          ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment Variables, or pick another provider.`
-          : "No LLM API key is configured. Add GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or AI_GATEWAY_API_KEY in Settings → Environment Variables.",
+          ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment variables, or pick another provider.`
+          : "No LLM API key is configured. Add GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or AI_GATEWAY_API_KEY in Settings → Environment variables.",
       );
     }
     const model = await createModel(config);

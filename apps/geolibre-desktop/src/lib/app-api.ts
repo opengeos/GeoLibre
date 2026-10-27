@@ -28,6 +28,7 @@ import type {
   GeoLibreCogLayerOptions,
   GeoLibreCogRenderEngine,
   GeoLibreControlPanelId,
+  GeoLibreMeasureOptions,
   GeoLibreMinimapOptions,
   GeoLibreDeckGL,
   GeoLibreDownloadFolder,
@@ -62,6 +63,7 @@ import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
 import { resolvePluginAssetUrlForLoadedPlugin } from "./external-plugins";
 import { startGeometryEditSession } from "./geometry-edit-session";
+import { setPluginUrlParameters } from "./live-url";
 import { isDesktopRuntime } from "./is-mobile";
 import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
@@ -74,6 +76,7 @@ import { createPluginLayerQueries } from "./plugin-layer-queries";
 import { createPluginLayerStyleActions } from "./plugin-layer-style";
 import { createPluginLayerVisibilityActions } from "./plugin-layer-visibility";
 import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
+import { createPluginMapCrsApi } from "./plugin-map-crs";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
 import { authorizeInPopup, getPluginOAuthRedirectUri } from "./plugin-oauth";
 import { openProjectFromUrlForPlugin } from "./plugin-open-project";
@@ -262,6 +265,7 @@ export function createAppAPI(
   // itself (e.g. addCogLayer -> addRasterToMap) can pass `api`. Only read
   // when those methods are called, which is always after assignment.
   const api = {
+    setUrlParameters: setPluginUrlParameters,
     setBasemap: (url: string) => {
       const state = useAppStore.getState();
       // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL
@@ -606,6 +610,10 @@ export function createAppAPI(
     readRasterWindow: (layerId: string, options: GeoLibreRasterWindowOptions) =>
       host.readRasterWindow(layerId, options),
     getMapRenderer: () => useAppStore.getState().primaryRenderer,
+    ...createPluginMapCrsApi({
+      getEngine: () => mapControllerRef?.current,
+      eventTarget: typeof window === "undefined" ? undefined : window,
+    }),
     getArcgisView: () => {
       const engine = mapControllerRef?.current;
       // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
@@ -823,8 +831,10 @@ export function createAppAPI(
         state.removeLayer(id);
       }
     },
-    openControlPanel: (id: GeoLibreControlPanelId, options?: GeoLibreMinimapOptions): void =>
-      host.openControlPanel(api, id, options),
+    openControlPanel: (
+      id: GeoLibreControlPanelId,
+      options?: GeoLibreMinimapOptions | GeoLibreMeasureOptions,
+    ): void => host.openControlPanel(api, id, options),
     closeControlPanel: (id: GeoLibreControlPanelId): void => host.closeControlPanel(api, id),
     isControlPanelVisible: host.isControlPanelVisible,
     addMapControl: (

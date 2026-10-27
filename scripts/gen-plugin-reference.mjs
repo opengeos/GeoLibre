@@ -266,7 +266,7 @@ export function collectBuiltInPlugins() {
     if (!menu) {
       if (skipped.has(id)) {
         problems.push(`${id}: PluginsMenu hides it, so plugin-reference.json needs a "menu"`);
-      } else if (webServices.has(id)) menu = "Plugins → Web Services";
+      } else if (webServices.has(id)) menu = "Plugins → Web services";
       else if (dggs.has(id)) menu = "Plugins → DGGS";
       else menu = "Plugins";
     }

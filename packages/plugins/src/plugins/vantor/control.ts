@@ -179,7 +179,7 @@ export class VantorControl implements IControl {
     const panel = this.panel;
     if (!panel) return;
 
-    panel.setStatus(this.t("vantor.status.fetchingCatalog", "Fetching catalog..."), "info");
+    panel.setStatus(this.t("vantor.status.fetchingCatalog", "Fetching catalog…"), "info");
     panel.setLoading(true);
 
     try {
@@ -223,7 +223,7 @@ export class VantorControl implements IControl {
     }
 
     panel.setLoading(true);
-    panel.setStatus(this.t("vantor.status.fetchingItems", "Fetching items..."), "info");
+    panel.setStatus(this.t("vantor.status.fetchingItems", "Fetching items…"), "info");
 
     try {
       let items = await this.stacClient.fetchItems(eventUrl);
@@ -301,10 +301,7 @@ export class VantorControl implements IControl {
 
     this.isDrawing = true;
     panel.setDrawBBoxActive(true);
-    panel.setStatus(
-      this.t("vantor.status.drawRectangle", "Draw a rectangle on the map..."),
-      "info",
-    );
+    panel.setStatus(this.t("vantor.status.drawRectangle", "Draw a rectangle on the map…"), "info");
 
     try {
       const bbox = await drawBBox.activate();
@@ -391,7 +388,7 @@ export class VantorControl implements IControl {
     await cogLayer.setRenderEngine(panel.getRenderEngine());
 
     panel.setStatus(
-      this.t("vantor.status.addingLayers", `Adding ${checked.length} COG layer(s)...`, {
+      this.t("vantor.status.addingLayers", `Adding ${checked.length} COG layer(s)…`, {
         count: checked.length,
       }),
       "info",
@@ -439,7 +436,7 @@ export class VantorControl implements IControl {
     panel.setDownloading(true);
     panel.setProgress(0);
     panel.setStatus(
-      this.t("vantor.status.startingDownloads", `Starting ${checked.length} download(s)...`, {
+      this.t("vantor.status.startingDownloads", `Starting ${checked.length} download(s)…`, {
         count: checked.length,
       }),
       "info",

@@ -1155,7 +1155,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
           ? tr(
               app,
               "noClouds",
-              "Load a LiDAR point cloud first (Add Data → LiDAR Layer), then start an annotation session here.",
+              "Load a LiDAR point cloud first (Add data → LiDAR layer), then start an annotation session here.",
             )
           : tr(
               app,

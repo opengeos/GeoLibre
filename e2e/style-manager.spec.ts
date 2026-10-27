@@ -4,8 +4,8 @@ import { dropGeoJson, readFixture, waitForMap } from "./helpers";
 
 async function openStyleManager(page: Page) {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Style Manager", exact: true }).click();
-  return page.getByRole("region", { name: "Style Manager", exact: true });
+  await page.getByRole("menuitem", { name: "Style manager", exact: true }).click();
+  return page.getByRole("region", { name: "Style manager", exact: true });
 }
 
 for (const theme of ["light", "dark"]) {

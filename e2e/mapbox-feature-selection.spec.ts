@@ -58,7 +58,7 @@ for (const theme of ["light", "dark"] as const) {
     );
     await page.goto("/");
     if (theme === "dark") {
-      await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+      await page.getByRole("button", { name: "Switch to dark mode" }).click();
     }
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
@@ -66,8 +66,8 @@ for (const theme of ["light", "dark"] as const) {
     const canvas = page.locator(".mapboxgl-canvas");
     await expect(canvas).toBeVisible();
 
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Vector Layer", exact: true }).click();
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Vector layer", exact: true }).click();
     await page.locator('input[type="file"]').setInputFiles(DATA_PATH);
     const row = layerRow(page, "smoke");
     await expect(row).toBeVisible();
@@ -137,7 +137,7 @@ for (const theme of ["light", "dark"] as const) {
 
     await row.locator('button[aria-label="Layer actions"]').click();
     await expect(
-      page.getByRole("menuitem", { name: "Zoom to Selection", exact: true }),
+      page.getByRole("menuitem", { name: "Zoom to selection", exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await page.screenshot({ path: testInfo.outputPath(`mapbox-feature-selection-${theme}.png`) });

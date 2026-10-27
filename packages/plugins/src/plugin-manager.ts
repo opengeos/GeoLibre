@@ -63,7 +63,7 @@ export class PluginManager {
     queueMicrotask(() => {
       synchronous = false;
     });
-    return scopeAppToPlugin(app, id, {
+    const scoped = scopeAppToPlugin(app, id, {
       ...options,
       pluginName: plugin?.name,
       isLive: () => this.activating.has(id) || this.active.has(id),
@@ -77,6 +77,55 @@ export class PluginManager {
           (!options.assistantTools &&
             (synchronous || (restorePass !== undefined && restorePass === this.restorePass)))),
     });
+    if (app.setUrlParameters) {
+      scoped.setUrlParameters = (params) => {
+        if (
+          this.plugins.get(id) !== plugin ||
+          this.activationGenerations.get(id) !== generation ||
+          (!this.active.has(id) && !this.activating.has(id)) ||
+          (app.getMapRenderer?.() ?? "maplibre") !== renderer
+        )
+          return;
+        if (this.writeUrlParameters(id, app, params)) this.urlPublishingPlugins.add(id);
+      };
+    }
+    return scoped;
+  }
+
+  private writeUrlParameters(id: string, app: GeoLibreAppAPI, params: URLSearchParams): boolean {
+    // The trailing argument is host-only. Plugins only receive the scoped API.
+    const write = app.setUrlParameters as
+      | ((params: URLSearchParams, names: readonly string[]) => void)
+      | undefined;
+    if (!write) return false;
+    const ownedNames = this.writableUrlParameterNamesById.get(id) ?? [];
+    const declaredNames = new Set(this.urlParameterNamesById.get(id) ?? []);
+    const currentNames = ownedNames.filter((name) => declaredNames.has(name));
+    // Retired names remain reserved until this host-backed write clears them,
+    // but a replacement may only publish its current declarations.
+    const currentParams = new URLSearchParams();
+    for (const name of currentNames) {
+      for (const value of params.getAll(name)) currentParams.append(name, value);
+    }
+    try {
+      write(currentParams, ownedNames);
+      this.writableUrlParameterNamesById.set(id, currentNames);
+      return true;
+    } catch (error) {
+      // Address-bar updates must not interrupt plugin lifecycle cleanup. Keep
+      // retired claims until a later successful write can clear their values.
+      console.warn(`Failed to update URL parameters for plugin '${id}'.`, error);
+      return false;
+    }
+  }
+
+  private clearUrlParameters(id: string, app: GeoLibreAppAPI, publishedOnly = false): void {
+    // An activation that never published must leave its inbound link intact
+    // so a declined or failed activation can be retried with the same input.
+    if (publishedOnly && !this.urlPublishingPlugins.has(id)) return;
+    if (this.writeUrlParameters(id, app, new URLSearchParams())) {
+      this.urlPublishingPlugins.delete(id);
+    }
   }
 
   private plugins = new Map<string, GeoLibrePlugin>();
@@ -86,6 +135,8 @@ export class PluginManager {
   private handledUrlParametersByContext = new Map<string, Set<string>>();
   private inFlightUrlContexts = new Map<string, number>();
   private urlParameterNamesById = new Map<string, string[]>();
+  private writableUrlParameterNamesById = new Map<string, string[]>();
+  private urlPublishingPlugins = new Set<string>();
   private listeners = new Set<() => void>();
   private activationGenerations = new Map<string, number>();
   private activationResults = new Map<string, Promise<boolean>>();
@@ -105,7 +156,28 @@ export class PluginManager {
       }
     }
     this.plugins.set(plugin.id, plugin);
-    this.urlParameterNamesById.set(plugin.id, normalizeUrlParameterNames(plugin.urlParameterNames));
+    // Keep the first registration's claim so another plugin cannot overwrite
+    // or clear its published state, even when that owner is inactive.
+    const claimed = new Set(
+      [...this.writableUrlParameterNamesById]
+        .filter(([id]) => id !== plugin.id)
+        .flatMap(([, names]) => names),
+    );
+    const requestedNames = normalizeUrlParameterNames(plugin.urlParameterNames);
+    // URL reads remain shareable for backwards-compatible dispatch semantics.
+    this.urlParameterNamesById.set(plugin.id, requestedNames);
+    const conflictingNames = requestedNames.filter((name) => claimed.has(name));
+    if (conflictingNames.length > 0) {
+      console.warn(
+        `Plugin '${plugin.id}' cannot own URL parameters already declared by another plugin: ${conflictingNames.join(", ")}`,
+      );
+    }
+    this.writableUrlParameterNamesById.set(plugin.id, [
+      ...new Set([
+        ...(this.writableUrlParameterNamesById.get(plugin.id) ?? []),
+        ...requestedNames.filter((name) => !claimed.has(name)),
+      ]),
+    ]);
     const defaultPosition = plugin.getMapControlPosition?.();
     if (defaultPosition) {
       this.defaultMapControlPositions.set(plugin.id, defaultPosition);
@@ -154,11 +226,14 @@ export class PluginManager {
       this.active.delete(id);
     }
     releaseOwnedRegistrations(id);
+    this.clearUrlParameters(id, app);
     this.plugins.delete(id);
     this.deferredActive.delete(id);
     this.defaultActive.delete(id);
     this.defaultMapControlPositions.delete(id);
     this.urlParameterNamesById.delete(id);
+    this.writableUrlParameterNamesById.delete(id);
+    this.urlPublishingPlugins.delete(id);
     // Invalidate any watcher retained by an activation Promise from the old
     // plugin instance. Keep the counter monotonic so a re-registered plugin
     // cannot reuse the same generation identity.
@@ -286,6 +361,7 @@ export class PluginManager {
       activated = plugin.activate(scopedApp);
     } catch (error) {
       releaseOwnedRegistrations(id);
+      this.clearUrlParameters(id, app, true);
       restoreDisplaced();
       throw error;
     } finally {
@@ -293,18 +369,13 @@ export class PluginManager {
     }
     if (activated === false) {
       releaseOwnedRegistrations(id);
+      this.clearUrlParameters(id, app, true);
       restoreDisplaced();
       return false;
     }
     this.active.add(id);
     this.notify();
-    const result = this.watchAsyncActivation(
-      id,
-      activated,
-      scopedApp,
-      generation,
-      restoreDisplaced,
-    );
+    const result = this.watchAsyncActivation(id, activated, app, generation, restoreDisplaced);
     if (!result) return true;
     this.trackActivationResult(id, result);
     return result;
@@ -373,12 +444,13 @@ export class PluginManager {
       try {
         // Tear down any partial mount. Plugin teardown is written to be safe to
         // run even when nothing was mounted.
-        plugin.deactivate(app);
+        plugin.deactivate(this.scopeAppToPlugin(app, id));
       } catch (deactivateError) {
         console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
     releaseOwnedRegistrations(id);
+    this.clearUrlParameters(id, app, true);
     this.notify();
     return true;
   }
@@ -397,6 +469,7 @@ export class PluginManager {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
       releaseOwnedRegistrations(id);
+      this.clearUrlParameters(id, app);
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
@@ -693,12 +766,14 @@ export class PluginManager {
         activated = plugin.activate(scopedApp);
       } catch (error) {
         releaseOwnedRegistrations(id);
+        this.clearUrlParameters(id, app, true);
         throw error;
       } finally {
         this.activating.delete(id);
       }
       if (activated === false) {
         releaseOwnedRegistrations(id);
+        this.clearUrlParameters(id, app, true);
         continue;
       }
       this.active.add(id);
@@ -706,7 +781,7 @@ export class PluginManager {
       // Restoring a saved project re-activates plugins the same way the user
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
-      const result = this.watchAsyncActivation(id, activated, scopedApp, generation);
+      const result = this.watchAsyncActivation(id, activated, app, generation);
       if (result) this.trackActivationResult(id, result);
     }
 

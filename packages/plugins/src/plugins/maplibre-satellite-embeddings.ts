@@ -1619,7 +1619,7 @@ export const maplibreSatelliteEmbeddingsPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: () => tr("title", "Satellite Embeddings"),
+        title: () => tr("title", "Satellite embeddings"),
         dock: "replace-style",
         defaultWidth: 360,
         render: (container) => {

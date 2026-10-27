@@ -46,7 +46,7 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: pluginDisplayTitle(app, "maplibre-gl-esri-wayback", "Historical Imagery"),
+      title: pluginDisplayTitle(app, "maplibre-gl-esri-wayback", "Historical imagery"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

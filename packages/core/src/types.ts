@@ -1,4 +1,6 @@
 import type { FeatureCollection } from "geojson";
+import type { GeoArrowBatch } from "./geoarrow";
+export type { GeoArrowBatch };
 import type { PrintLayoutConfig } from "./print-layout-config";
 
 export const OPENFREEMAP_BASEMAPS = [
@@ -783,15 +785,24 @@ export function styleValue<K extends keyof LayerStyle>(style: LayerStyle, key: K
 export const LARGE_VECTOR_FEATURE_THRESHOLD = 50_000;
 
 /**
- * Decide whether a GeoJSON layer should use the tiled rendering path.
+ * Decide whether a vector layer should use the tiled rendering path.
  *
- * @param geojson - The layer's feature collection (may be undefined for
+ * @param data - The layer's feature collection or GeoArrow batch (may be undefined for
  *   non-vector layers).
- * @returns `true` when the collection exceeds
- *   {@link LARGE_VECTOR_FEATURE_THRESHOLD} features.
+ * @returns `true` when the feature count exceeds
+ *   {@link LARGE_VECTOR_FEATURE_THRESHOLD}.
  */
-export function shouldUseTiledRendering(geojson: GeoJSON.FeatureCollection | undefined): boolean {
-  return (geojson?.features.length ?? 0) > LARGE_VECTOR_FEATURE_THRESHOLD;
+export function shouldUseTiledRendering(
+  data: GeoJSON.FeatureCollection | GeoArrowBatch | undefined,
+): boolean {
+  if (!data) return false;
+  if ("featureCount" in data && typeof data.featureCount === "number") {
+    return data.featureCount > LARGE_VECTOR_FEATURE_THRESHOLD;
+  }
+  if ("features" in data && Array.isArray(data.features)) {
+    return data.features.length > LARGE_VECTOR_FEATURE_THRESHOLD;
+  }
+  return false;
 }
 
 /**
@@ -1281,6 +1292,11 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Optional binary GeoArrow representation for high-performance vector rendering,
+   * zero-copy Web Worker vector tiling, and compact in-memory storage.
+   */
+  geoarrow?: GeoArrowBatch;
   /** A SQL Server write needs a successful table reread before it may be submitted again. */
   mssqlWritebackPending?: boolean;
   /**
@@ -1835,6 +1851,12 @@ export interface GeocodingLocator {
   reverse?: boolean;
   /** Whether the service advertises `suggest`. */
   suggest?: boolean;
+  /**
+   * The published input field a search string goes to, chosen by the user for
+   * a locator whose inputs are structured (an asset or parcel ID field, say).
+   * Unset means the single-line field, or the only published field.
+   */
+  searchField?: string;
 }
 
 export interface ProjectPreferences {
@@ -2122,7 +2144,7 @@ export interface ProcessingModelStep {
  * raster nodes exchange GeoTIFF bytes. A port declaring `"any"` accepts either
  * and is resolved to a concrete kind at run time by whatever is wired into it.
  */
-export type ModelPortKind = "vector" | "raster" | "any";
+export type ModelPortKind = "vector" | "raster" | "raster-collection" | "boolean" | "any";
 
 /** One connection point on a {@link ModelGraphNode}. */
 export interface ModelGraphPort {
@@ -2140,9 +2162,19 @@ export interface ModelGraphPort {
 
 /**
  * What a node does. `input` sources an existing project layer, `tool` runs a
- * processing algorithm, and `output` names a result to add back to the map.
+ * processing algorithm, `output` names a result to add back to the map,
+ * `iterate-features` and `iterate-rasters` execute loops, `collect-results` gathers
+ * iteration outputs, and `conditional-switch` / `conditional-merge` route execution.
  */
-export type ModelGraphNodeKind = "input" | "tool" | "output";
+export type ModelGraphNodeKind =
+  | "input"
+  | "tool"
+  | "output"
+  | "iterate-features"
+  | "iterate-rasters"
+  | "collect-results"
+  | "conditional-switch"
+  | "conditional-merge";
 
 /** One node on the Model Builder canvas. */
 export interface ModelGraphNode {
@@ -2161,10 +2193,12 @@ export interface ModelGraphNode {
   toolId?: string;
   /** `tool` nodes: which registry resolves {@link toolId}. */
   provider?: ModelToolProvider;
-  /** `tool` nodes: parameter values for everything not supplied by an edge. */
+  /** `tool` / control nodes: parameter values for configuration. */
   parameters?: Record<string, unknown>;
   /** `output` nodes: the layer name given to the result added to the map. */
   name?: string;
+  /** Optional nested body graph for iterator nodes. */
+  body?: ProcessingModelGraph;
 }
 
 /**
@@ -2602,9 +2636,23 @@ export interface ProjectInteraction {
   identify?: string | string[] | null;
   /**
    * Map control or toolbar panel name (`"search"`, `"bookmark"`, `"globe"`,
-   * ...) to whether it starts shown. Unknown names are ignored on open.
+   * ...) to whether it starts shown, or to a {@link ProjectControlSetting}
+   * that also carries the control's options. Unknown names are ignored on open.
    */
-  controls?: Record<string, boolean>;
+  controls?: Record<string, boolean | ProjectControlSetting>;
+}
+
+/**
+ * A control's startup state with options, for example
+ * `{ "visible": true, "collapsed": true, "distanceUnit": "feet" }` for the
+ * Measure panel (issue #3241). Measure takes `collapsed`, `distanceUnit` and
+ * `areaUnit`; Minimap takes `collapsed`, `zoomOffset`, `width` and `height`.
+ */
+export interface ProjectControlSetting {
+  /** Whether the control starts shown. */
+  visible: boolean;
+  /** Control-specific options; the app validates them when it applies them. */
+  [option: string]: string | number | boolean;
 }
 
 export type CommentAnchor =

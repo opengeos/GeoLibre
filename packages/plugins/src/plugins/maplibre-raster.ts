@@ -1,6 +1,7 @@
 import {
   effectiveLayerRenderState,
   explainS3ReadError,
+  isMapClickClaimed,
   resolveReadableUrl,
   shouldZoomToNewLayers,
   styleValue,
@@ -137,7 +138,27 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
 export type RasterControlInternals = {
   _layerManager?: RasterLayerManagerInternals;
   _panel?: HTMLElement;
+  _inspector?: { _onClick?: (event: unknown) => void };
 };
+
+/**
+ * Keep the pixel inspector from reading a click that a drawing map tool
+ * (Measure, the Geo Editor) owns, the way the host's Identify handlers stand
+ * down (GeoLibre#3237). The inspector binds its click handler through the
+ * `_onClick` instance property on both enable and disable, so wrapping it once,
+ * after onAdd creates the inspector, keeps on/off symmetric.
+ *
+ * @param control - The mounted raster control.
+ */
+function guardRasterInspectorClicks(control: RasterControl): void {
+  const inspector = (control as unknown as RasterControlInternals)._inspector;
+  const onClick = inspector?._onClick;
+  if (!inspector || typeof onClick !== "function") return;
+  inspector._onClick = (event: unknown) => {
+    if (isMapClickClaimed()) return;
+    onClick.call(inspector, event);
+  };
+}
 
 type RasterControlConstructor = typeof RasterControl;
 type OverlayFactoryOptions = {
@@ -1014,6 +1035,10 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     }
     rasterControlMounted = true;
     rasterHostApp = app;
+    // Before the first await: setRasterPixelInspect can enable the inspector
+    // as soon as the control is mounted, and an enable that binds the
+    // unwrapped handler would leave it attached after disable().
+    guardRasterInspectorClicks(rasterControl);
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
@@ -1196,7 +1221,12 @@ function createRasterControl(
     });
   }
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
-    control.on(event, () => syncRasterLayersToStoreForRuntime(control));
+    control.on(event, () => {
+      // Engine changes and async WASM readiness can fire before saved rasters
+      // are restored. An empty rasterchange is not a layer removal.
+      if (event === "rasterchange" && control.getRasters().length === 0) return;
+      syncRasterLayersToStoreForRuntime(control);
+    });
   }
   // Free the per-layer classification GPU texture when its raster is dropped.
   // The control owns the File-backed bytes blob (source.objectUrl) and revokes
@@ -1278,8 +1308,13 @@ function createRasterControl(
   // Safe: expand()/collapse() delegate to toggle(), which flips
   // _state.collapsed BEFORE emitting the event (re-verified against v0.12.0) --
   // re-verify that ordering when bumping the dependency.
-  const panelStateSyncHandler: RasterControlEventHandler = () =>
+  // An empty control has no layer to record the panel state on, so syncing
+  // could only prune store layers -- including saved rasters whose local files
+  // a restore is still reading. Only rasterremove may do that.
+  const panelStateSyncHandler: RasterControlEventHandler = () => {
+    if (control.getRasters().length === 0) return;
     syncRasterLayersToStoreForRuntime(control);
+  };
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
   wireRasterStoreSync(control);

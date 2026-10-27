@@ -282,7 +282,24 @@ a list of layer ids to identify only those, or `null` for off; ids that name no
 layer are skipped. `controls` maps a toolbar panel (`bookmark`, `search`,
 `measure`, `minimap`, `print`) or built-in map control (`navigation`,
 `fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`)
-to whether it starts shown; other names are ignored. The app writes the block
+to whether it starts shown; other names are ignored. `measure` and `minimap`
+also accept an object with a boolean `visible` and the control's options:
+
+```json
+{
+  "controls": {
+    "measure": { "visible": true, "collapsed": true, "distanceUnit": "feet", "areaUnit": "acres" },
+    "minimap": { "visible": true, "collapsed": true }
+  }
+}
+```
+
+`collapsed: true` opens only the control's on-map button, so a shared map does
+not start with the Measure panel over it and its tool armed. Measure's
+`distanceUnit` and `areaUnit` take the values listed in
+[Built-in control panels](plugin-api.md#built-in-control-panels); Minimap also
+takes `zoomOffset`, `width` and `height`. A plain `true` opens the control
+expanded, as the Controls menu does. The app writes the block
 back unchanged when it saves the project; turning Identify or a control on or
 off in the app does not edit it.
 

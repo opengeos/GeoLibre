@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
-import {
+import widget, {
   canProxyLocalFiles,
   rewriteProxiedLocalFileUrls,
 } from "../python/src/geolibre/_frontend.js";
@@ -180,5 +180,88 @@ describe("canProxyLocalFiles", () => {
       canProxyLocalFiles("https://session-41123-colab.googleusercontent.com/", 0),
       false,
     );
+  });
+});
+
+describe("widget control replay (GeoLibre#3241)", () => {
+  type Message = { type: string; method?: string; params?: Record<string, unknown> };
+  const appUrl = "http://127.0.0.1:8765/";
+  let onMessage: ((event: unknown) => void) | undefined;
+  const posted: Message[] = [];
+  const contentWindow = { postMessage: (message: Message) => posted.push(message) };
+
+  function fakeModel(values: Record<string, unknown>) {
+    const handlers = new Map<string, () => void>();
+    return {
+      get: (key: string) => values[key],
+      set: (key: string, value: unknown) => {
+        values[key] = value;
+      },
+      save_changes: () => {},
+      on: (event: string, handler: () => void) => handlers.set(event, handler),
+      off: (event: string) => handlers.delete(event),
+      send: () => {},
+      update(key: string, value: unknown) {
+        values[key] = value;
+        handlers.get(`change:${key}`)?.();
+      },
+    };
+  }
+
+  const controlCommands = () =>
+    posted.filter((message) => message.method === "setControlVisible").map((m) => m.params);
+  const ready = () =>
+    onMessage?.({
+      source: contentWindow,
+      origin: new URL(appUrl).origin,
+      data: { type: "geolibre:ready" },
+    });
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).window;
+    delete (globalThis as Record<string, unknown>).document;
+    posted.length = 0;
+    onMessage = undefined;
+  });
+
+  it("does not re-send collapsed options on unrelated _ui changes, but does after a reload", async () => {
+    (globalThis as Record<string, unknown>).window = {
+      location: { href: "http://localhost:8888/lab" },
+      addEventListener: (_type: string, handler: (event: unknown) => void) => {
+        onMessage = handler;
+      },
+      removeEventListener: () => {},
+    };
+    (globalThis as Record<string, unknown>).document = {
+      createElement: () => ({ style: {}, contentWindow }),
+      getElementById: () => null,
+    };
+    const model = fakeModel({
+      _app_url: appUrl,
+      project: { layers: [] },
+      _ui: { controls: { measure: { visible: true, collapsed: true }, search: true } },
+    });
+    await widget.render({ model, el: { replaceChildren: () => {} } } as never);
+    ready();
+    assert.deepEqual(controlCommands(), [
+      { control: "measure", visible: true, options: { collapsed: true } },
+      { control: "search", visible: true },
+    ]);
+
+    posted.length = 0;
+    model.update("_ui", { ...(model.get("_ui") as object), identify: "all" });
+    assert.deepEqual(controlCommands(), [{ control: "search", visible: true }]);
+
+    posted.length = 0;
+    model.update("_ui", { controls: { measure: { visible: true, collapsed: false } } });
+    assert.deepEqual(controlCommands(), [
+      { control: "measure", visible: true, options: { collapsed: false } },
+    ]);
+
+    posted.length = 0;
+    ready();
+    assert.deepEqual(controlCommands(), [
+      { control: "measure", visible: true, options: { collapsed: false } },
+    ]);
   });
 });

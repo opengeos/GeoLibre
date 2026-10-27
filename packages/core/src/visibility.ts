@@ -48,7 +48,8 @@ export function excludeHiddenFieldsFromProject(project: GeoLibreProject): GeoLib
       const strippedGeojson = excludeHiddenFieldsFromGeojson(layer.geojson, layer.fieldVisibility);
       if (strippedGeojson !== layer.geojson) {
         changed = true;
-        updatedLayer = { ...updatedLayer, geojson: strippedGeojson };
+        const { geoarrow: _staleGeoarrow, ...rest } = updatedLayer;
+        updatedLayer = { ...rest, geojson: strippedGeojson };
       }
     }
 

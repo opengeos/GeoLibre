@@ -190,6 +190,36 @@ def test_accounts_login_current_user_and_hashed_secrets(client):
     assert client.get("/api/account", headers=auth(token)).status_code == 401
 
 
+def test_openapi_documents_bearer_auth_for_protected_routes(client):
+    schema = client.get("/openapi.json").json()
+
+    assert schema["components"]["securitySchemes"]["HTTPBearer"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    assert schema["paths"]["/api/account"]["get"]["security"] == [{"HTTPBearer": []}]
+    assert schema["paths"]["/api/projects"]["post"]["security"] == [{"HTTPBearer": []}]
+    optional_security = [{"HTTPBearer": []}, {}]
+    optional_routes = [
+        ("/api/groups/{group_id}/thumbnail", "get"),
+        ("/api/users/{username}/projects", "get"),
+        ("/api/projects", "get"),
+        ("/api/projects/{project_id}", "get"),
+        ("/api/projects/{project_id}/versions/{number}", "get"),
+        ("/api/projects/{project_id}/thumbnail", "get"),
+        ("/org/{organization_slug}/{slug}.geolibre.json", "get"),
+        ("/org/{organization_slug}/{slug}", "get"),
+        ("/{username}/{slug}.geolibre.json", "get"),
+        ("/org/{organization_slug}/{slug}/access", "post"),
+        ("/{username}/{slug}/access", "post"),
+        ("/{username}/{slug}", "get"),
+    ]
+    for path, method in optional_routes:
+        assert schema["paths"][path][method]["security"] == optional_security
+    assert "security" not in schema["paths"]["/api/accounts"]["post"]
+    assert "security" not in schema["paths"]["/api/auth/token"]["post"]
+
+
 def test_project_crud_visibility_listing_and_raw_views(client):
     owner = account(client)
     other = account(client, "grace")

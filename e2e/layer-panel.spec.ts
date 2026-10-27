@@ -74,6 +74,11 @@ test("long layer names truncate without widening the layer panel", async ({ page
 
   await expect(renamedRow).toBeVisible();
   await expect(name).toHaveCSS("text-overflow", "ellipsis");
+  // The truncated name stays readable in full from the tooltip.
+  await expect(name).toHaveAttribute(
+    "title",
+    /^This is an exceptionally long vector layer name that should truncate cleanly\n/,
+  );
   await expect(typeBadge).toBeVisible();
   await expect(opacitySlider).toBeVisible();
   await expect

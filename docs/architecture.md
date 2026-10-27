@@ -153,7 +153,77 @@ Two engines have no such escape hatch. **Pyodide** is always fetched: `VITE_PYOD
 
 The **desktop** build ships no service worker, so none of this runtime caching applies there: it re-fetches every CDN-loaded engine on first use per install, unless PGlite/PostGIS and CereusDB are bundled with the flags above.
 
-A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background and takes control (`skipWaiting` + `clientsClaim`), so its fresh precache serves subsequent requests. Workbox's default force-reload-on-activation is deliberately suppressed via `onNeedReload` in `src/main.tsx` — on the relative-base `/demo/` subpath that reload fired spuriously and discarded in-progress map state. Page recovery is delegated to `installStaleChunkReload`, which reloads on-demand only when an orphaned lazy chunk 404s (cooldown-guarded; if `sessionStorage` is blocked it skips the reload and lets the preload error surface). Precached chunks are served from cache and never 404, so the page is no longer reloaded out from under the user.
+A new deploy is picked up via `registerType: "autoUpdate"`: the new service worker installs in the background and takes control (`skipWaiting` + `clientsClaim`), so its fresh precache serves subsequent requests. Workbox's default force-reload-on-activation is deliberately suppressed via `onNeedReload` in `src/main.tsx` — on the relative-base `/demo/` subpath that reload fired spuriously and discarded in-progress map state. Instead, a `controllerchange` listener calls `offerReloadIfNewBuild()`, which offers the user a reload when the deployed `index.html` loads a different build than the running page (screening out the first install and those spurious activations). `installStaleChunkReload` stays the on-demand recovery path, reloading only when an orphaned lazy chunk 404s before the user acts (cooldown-guarded; if `sessionStorage` is blocked it skips the reload and lets the preload error surface). Precached chunks are served from cache and never 404, so the page is no longer reloaded out from under the user.
+
+## WebAssembly Geoprocessing Worker Pool
+
+GeoLibre executes client-side geospatial analysis and Whitebox tools via WebAssembly. The engine architecture supports three execution tiers with automatic capability detection, progressive fallback, and observable diagnostics.
+
+### Toolchain & Runtime Architecture
+
+- **Source & Compiler Target**: The geospatial processing CLI (`geolibre-cli.wasm`, ~24.1 MB) is built from Rust ([`opengeos/geolibre-rust`](https://github.com/opengeos/geolibre-rust), forked from Whitebox Next Gen) targeted at `wasm32-wasip1`.
+- **In-Browser Execution**: Executed via `@bjorn3/browser_wasi_shim` inside dedicated Web Workers (`wasm-tool.worker.ts`) using an in-memory virtual `/work` filesystem for zero-disk, secure file staging and result capture.
+- **Worker Pool**: Managed by `@geolibre/processing` (`wasm-tool-runner.ts`), which maintains an adaptive pool of workers. Every mode runs the same `geolibre-cli.wasm` binary with private (non-shared) memory: the mode only sets how many workers may run at once. Each concurrent run gets its own worker unless the caller explicitly requests `executionMode: "threaded-simd"`, which bounds concurrent runs to the resolved thread count; in `threaded-simd` up to that many workers stay warm, otherwise one. Parked workers are kept warm to avoid repeating the ~24 MB WASM compilation on subsequent jobs. A dead-worker acknowledgement protocol (`REUSED_WORKER_ACK_MS = 10,000 ms`) automatically replaces unresponsive or discarded workers.
+
+### Three Execution Modes
+
+| Execution Mode | Requirements | Concurrent runs | Best Used For |
+|---|---|---|---|
+| `threaded-simd` | Browser SIMD128 + `crossOriginIsolated` (COOP/COEP) + `SharedArrayBuffer` + WebAssembly Shared Memory | One worker per concurrent run; bounded to 1–16 (from `hardwareConcurrency` or `maxThreads`) only when explicitly requested | Multi-tile batch processing via `runParallelWasmTools` |
+| `simd-single-thread` | Browser SIMD128 supported | One worker per concurrent run, one kept warm | Standard non-isolated environments, public web deployments without COOP/COEP |
+| `portable-single-thread` | Baseline WebAssembly support | One worker per concurrent run, one kept warm | Universal fallback for legacy embeds, constrained WebViews, and sandbox iframes |
+
+### Capability Detection & Mode Selection
+
+`packages/processing/src/wasm-capabilities.ts` probes the host environment safely using bytecode validation without triggering runtime exceptions:
+
+1. **SIMD128 Probe**: Validates a minimal 43-byte WebAssembly module containing `v128.const`.
+2. **Shared Memory Probe**: Validates a minimal WebAssembly module declaring shared memory (`memory 1 2 shared`).
+3. **Isolation & Concurrency**: Checks `globalThis.crossOriginIsolated === true`, `typeof SharedArrayBuffer !== "undefined"`, and clamps `navigator.hardwareConcurrency` between 1 and 16.
+4. **Resolution**: `resolveExecutionMode()` resolves the active tier and surfaces exact fallback reasons through structured diagnostics:
+   ```ts
+   import { getWasmDiagnostics, setWasmRuntimeConfig } from "@geolibre/processing";
+
+   const diag = getWasmDiagnostics();
+   console.log(diag.activeMode); // "threaded-simd" | "simd-single-thread" | "portable-single-thread"
+   console.log(diag.activeThreads); // e.g. 4
+   if (diag.fallbackReason) {
+     console.info("WASM Fallback Reason:", diag.fallbackReason);
+   }
+   ```
+
+### Cross-Origin Isolation Deployment (COOP & COEP)
+
+To enable `SharedArrayBuffer` and `threaded-simd` mode in browser deployments, servers must return cross-origin isolation headers. GeoLibre provides an opt-in configuration so that third-party embeds, iframes, and OAuth redirects remain unimpacted by default.
+
+- **Development Server (`vite.config.ts`)**:
+  Set `VITE_CROSS_ORIGIN_ISOLATION=1` in your environment:
+  ```bash
+  VITE_CROSS_ORIGIN_ISOLATION=1 npm run dev
+  ```
+  Vite's dev and preview servers attach:
+  ```http
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  ```
+- **Production Nginx (`docker/nginx.conf`)**:
+  The shipped config does **not** send these headers. To opt in, add:
+  ```nginx
+  add_header Cross-Origin-Opener-Policy "same-origin" always;
+  add_header Cross-Origin-Embedder-Policy "require-corp" always;
+  ```
+  **Warning**: with `VITE_CROSS_ORIGIN_ISOLATION=1` or these headers, COEP `require-corp` is active, so any cross-origin tile, basemap, or font resources fetched by the browser must support CORS or include `Cross-Origin-Resource-Policy: cross-origin`.
+
+### Algorithm Parallelization Classification
+
+`packages/processing/src/wasm-algorithm-audit.ts` classifies selected tools by data dependency. The classification is advisory: the runner does not consume it, and no tool is split across workers today.
+
+- **Tileable Stencil (`tileable-stencil`)**: `slope`, `aspect`, `hillshade`, `gaussian_filter`, `mean_filter`, `focal_statistics` — could be partitioned into strips or tiles with a 1-pixel halo.
+- **Pixel-Independent (`pixel-independent`)**: `raster_calculator` — point-wise, fully partitionable.
+- **Topological DAG (`topological-dag`)**: `d8_flow_accumulation`, `d_inf_flow_accumulation` — cannot be naively partitioned because of global drainage-network ordering.
+- **Priority Queue (`priority-queue`)**: `fill_depressions` — the priority-flood algorithm relies on a global min-heap.
+- **Radial Raymarch (`radial-raymarch`)**: `viewshed` — could be partitioned by angular sector.
+- **Vector Batch (`vector-batch`)**: `buffer_vector` — feature chunks could be distributed across workers; not SIMD-eligible.
 
 ## Container image
 

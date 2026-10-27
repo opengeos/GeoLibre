@@ -14,6 +14,7 @@ import {
   createThreeDTilesGlobeStoreLayer,
   deferThreeDTilesRestoreUntilMapIdle,
   restoreThreeDTilesLayers,
+  threeDTilesSampleLayerName,
 } from "../packages/plugins/src/plugins/maplibre-3d-tiles";
 
 // Shared 3D-Tiles header resolution: Google Photorealistic tiles keep their
@@ -21,6 +22,40 @@ import {
 // the MapLibre and Cesium render paths must resolve it the same way.
 
 const GOOGLE = "https://tile.googleapis.com/v1/3dtiles/root.json";
+
+describe("threeDTilesSampleLayerName", () => {
+  const GOOGLE_LABEL = "Google Photorealistic 3D Tiles";
+  const BAG_LABEL = "3D BAG Netherlands (LoD 2.2)";
+
+  it("names the layer after the sample when the field is blank or the default", () => {
+    assert.equal(threeDTilesSampleLayerName("", "AGI HQ"), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("  ", "AGI HQ"), "AGI HQ");
+    assert.equal(threeDTilesSampleLayerName("3D Tiles", "AGI HQ"), "AGI HQ");
+  });
+
+  it("replaces the name the previous sample pick filled in (#3258)", () => {
+    assert.equal(threeDTilesSampleLayerName(GOOGLE_LABEL, BAG_LABEL, GOOGLE_LABEL), BAG_LABEL);
+  });
+
+  it("keeps a name the user typed", () => {
+    assert.equal(
+      threeDTilesSampleLayerName("My buildings", BAG_LABEL, GOOGLE_LABEL),
+      "My buildings",
+    );
+  });
+
+  it("keeps a typed name even when it matches a sample label", () => {
+    // Typed over the auto-filled "3D BAG..." name, so it is no longer the
+    // last sample-filled value.
+    assert.equal(threeDTilesSampleLayerName("AGI HQ", BAG_LABEL, GOOGLE_LABEL), "AGI HQ");
+    // No earlier pick filled the name (it was edited, clearing the memory).
+    assert.equal(threeDTilesSampleLayerName(GOOGLE_LABEL, BAG_LABEL), GOOGLE_LABEL);
+  });
+
+  it("leaves the field alone when the picked sample has no label", () => {
+    assert.equal(threeDTilesSampleLayerName("AGI HQ", "", "AGI HQ"), "AGI HQ");
+  });
+});
 
 describe("deferThreeDTilesRestoreUntilMapIdle", () => {
   it("continues immediately when the style is ready", () => {

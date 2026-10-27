@@ -164,6 +164,36 @@ describe("project interaction block (issue #2688)", () => {
     assert.equal(savedProject().interaction, undefined);
   });
 
+  it("keeps control options and drops settings without a boolean visible (issue #3241)", () => {
+    const base = projectFromStore(useAppStore.getState());
+    const project = parseProject(
+      JSON.stringify({
+        ...base,
+        interaction: {
+          controls: {
+            measure: {
+              visible: true,
+              collapsed: true,
+              distanceUnit: "feet",
+              areaUnit: "acres",
+              nested: { dropped: true },
+            },
+            minimap: { collapsed: true },
+            search: true,
+          },
+        },
+      }),
+    );
+    assert.deepEqual(project.interaction, {
+      controls: {
+        measure: { visible: true, collapsed: true, distanceUnit: "feet", areaUnit: "acres" },
+        search: true,
+      },
+    });
+    useAppStore.getState().loadProject(project);
+    assert.deepEqual(savedProject().interaction, project.interaction);
+  });
+
   it("arms 'all' and disarms on a project without the block", () => {
     const base = projectFromStore(useAppStore.getState());
     useAppStore.getState().loadProject({ ...base, interaction: { identify: "all" } });

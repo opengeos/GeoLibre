@@ -127,6 +127,64 @@ export function clearNetcdfProfileSamplesForLayer(layerId: string): void {
 }
 
 /**
+ * Drop the pixels sampled from layers that are no longer in the project.
+ *
+ * The samples live outside the project store, so removing the inspected layer
+ * would otherwise leave its numbered markers and chart behind, attached to
+ * nothing (issue #3257).
+ *
+ * @param liveLayerIds - The ids of the layers the project still holds.
+ */
+export function pruneNetcdfProfileSamples(liveLayerIds: ReadonlySet<string>): void {
+  // The list holds one layer at a time, so one orphan means they all are.
+  if (samples.some((item) => !liveLayerIds.has(item.layerId))) clearNetcdfProfileSamples();
+}
+
+/** The slice of the app store `bindNetcdfProfileSamplesToProject` reads. */
+interface ProfileSampleProjectState {
+  projectGeneration: number;
+  layers: ReadonlyArray<{ id: string }>;
+}
+
+/**
+ * Keep the sampled pixels scoped to the open project (issue #3257).
+ *
+ * Samples are module state, not project state, so nothing in New or Open
+ * reaches them: without this the numbered markers and the spectral profile
+ * survive into the next project. A project switch (New, Open, a collaboration
+ * join, including a reconnect whose welcome re-sends the snapshot through
+ * `loadProject`) clears them outright, even when the incoming project reuses
+ * the inspected layer's id; removing the inspected layer drops only that
+ * layer's samples.
+ *
+ * A switch is a `projectGeneration` bump that lands in the same update as a new
+ * `layers` list. A collaborator's live edit also bumps the generation, but on
+ * its own, after the layers were already applied, so it only prunes layers the
+ * edit removed rather than wiping the user's samples.
+ *
+ * @param store - The app store, or anything with its `getState`/`subscribe`.
+ * @returns A function that stops tracking the store.
+ */
+export function bindNetcdfProfileSamplesToProject(store: {
+  getState: () => ProfileSampleProjectState;
+  subscribe: (
+    listener: (state: ProfileSampleProjectState, previous: ProfileSampleProjectState) => void,
+  ) => () => void;
+}): () => void {
+  return store.subscribe((state, previous) => {
+    if (
+      state.projectGeneration !== previous.projectGeneration &&
+      state.layers !== previous.layers
+    ) {
+      clearNetcdfProfileSamples();
+      return;
+    }
+    if (state.layers === previous.layers || samples.length === 0) return;
+    pruneNetcdfProfileSamples(new Set(state.layers.map((layer) => layer.id)));
+  });
+}
+
+/**
  * Drop one sample by id.
  *
  * Used when a click turns out to have nothing to chart (a single-band raster, a

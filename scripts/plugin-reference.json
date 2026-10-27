@@ -1,6 +1,6 @@
 {
   "maplibre-layer-control": {
-    "menu": "Controls → Layer Control",
+    "menu": "Controls → Layer control",
     "description": "The on-map layer list. On by default."
   },
   "maplibre-gl-geo-editor": {
@@ -213,7 +213,7 @@
     "description": "RainViewer precipitation radar, animated over roughly the last two hours."
   },
   "maplibre-atmosphere-effects": {
-    "menu": "Controls → Atmospheric Effects",
+    "menu": "Controls → Atmospheric effects",
     "description": "A deep-space backdrop, starfield, comets, and an atmospheric halo at low zoom."
   },
   "geolibre-sun": {
@@ -221,11 +221,11 @@
     "description": "The sun's position and the day/night terminator for any date and time."
   },
   "geolibre-route-animation": {
-    "menu": "Controls → Route Animation",
+    "menu": "Controls → Route animation",
     "description": "Animate a marker along a line layer with play/pause, speed, a trail, and camera follow."
   },
   "geolibre-flight-simulator": {
-    "menu": "Plugins; also Controls → Flight Simulator",
+    "menu": "Plugins; also Controls → Flight simulator",
     "description": "Fly over terrain and 3D layers with keyboard controls."
   },
   "gods-eye-view": {
@@ -245,11 +245,11 @@
     "description": "Click the map to add waypoints and get a route from the public OSRM demo server."
   },
   "maplibre-reverse-geocode": {
-    "menu": "Controls → Reverse Geocode",
+    "menu": "Controls → Reverse geocode",
     "description": "Click the map to look up the address at that point through the configured geocoding provider."
   },
   "maplibre-deckgl-viz": {
-    "menu": "Add Data → Deck.gl Layer",
+    "menu": "Add data → Deck.gl layer",
     "description": "The deck.gl overlay that renders layers built in the Deck.gl Layer dialog."
   },
   "maplibre-gl-components": {

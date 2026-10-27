@@ -31,7 +31,7 @@ const DUCKDB_ROWS = 200;
 test.use({ actionTimeout: 30_000 });
 
 async function openSource(page: Page, name: string) {
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
@@ -142,7 +142,7 @@ async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
   await bindEngine(page, "mapbox");
   // The menu waits for the engine to finish loading before accepting imports.
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 }
 
 for (const theme of ["light", "dark"] as const) {
@@ -154,16 +154,16 @@ for (const theme of ["light", "dark"] as const) {
 
     // The menu offers the deck.gl-drawn sources and still withholds the ones
     // that need a MapLibre protocol or custom render pass.
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    for (const name of ["Deck.gl Layer", "3D Model (glTF)", "DuckDB Layer", "Zarr Layer"]) {
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    for (const name of ["Deck.gl layer", "3D model (glTF)", "DuckDB layer", "Zarr layer"]) {
       await expect(page.getByRole("menuitem", { name, exact: true })).toBeEnabled();
     }
-    for (const name of ["MBTiles Layer", "Gaussian Splatting"]) {
+    for (const name of ["MBTiles layer", "Gaussian splatting"]) {
       await expect(page.getByRole("menuitem", { name, exact: true })).toBeDisabled();
     }
     await page.keyboard.press("Escape");
 
-    await openSource(page, "Deck.gl Layer");
+    await openSource(page, "Deck.gl layer");
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Use example data", exact: true }).click();
     await dialog.getByRole("button", { name: "Load data", exact: true }).click();
@@ -179,7 +179,7 @@ for (const theme of ["light", "dark"] as const) {
     // The project opened on the globe; the overlay holds the map in Mercator.
     expect(state.projection).toBe("mercator");
 
-    await openSource(page, "3D Model (glTF)");
+    await openSource(page, "3D model (glTF)");
     // The scenegraph builder opens on the bundled airplane sample.
     await page.getByRole("dialog").getByRole("button", { name: "Add layer", exact: true }).click();
     await expect(layerRow(page, "3D model (glTF)")).toBeVisible();
@@ -223,10 +223,10 @@ test("DuckDB query layers render on Mapbox and the panel remounts after a render
   test.setTimeout(300_000);
   await openMapboxProject(page, info.project.use.baseURL!, "light");
 
-  await openSource(page, "DuckDB Layer");
+  await openSource(page, "DuckDB layer");
   // The control's panel is appended to the map container, not to the control
   // element, so locate its fields at page level.
-  const panel = page.getByText("Add DuckDB Layer", { exact: true });
+  const panel = page.getByText("Add DuckDB layer", { exact: true });
   await page.getByRole("textbox", { name: "https://example.com/data.duckdb" }).fill(DUCKDB);
   await page.getByRole("button", { name: "Load", exact: true }).click();
   // The sample database is ~20 MB and DuckDB-WASM plus its spatial extension
@@ -278,12 +278,12 @@ test("DuckDB query layers render on Mapbox and the panel remounts after a render
   // The map tears the panel down with the old engine; reopening it must mount
   // on the new map and redraw the cached results, in both directions.
   await switchRenderer(page, "MapLibre");
-  await openSource(page, "DuckDB Layer");
+  await openSource(page, "DuckDB layer");
   await expect(panel).toBeVisible();
   await expect.poll(duckdbRowsDrawn, { timeout: 60_000 }).toBe(DUCKDB_ROWS);
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await switchRenderer(page, "Mapbox");
-  await openSource(page, "DuckDB Layer");
+  await openSource(page, "DuckDB layer");
   await expect(panel).toBeVisible();
   await expect.poll(duckdbRowsDrawn, { timeout: 60_000 }).toBe(DUCKDB_ROWS);
   await expect(layerRow(page, "nyc_census_blocks")).not.toContainText("No Mapbox");

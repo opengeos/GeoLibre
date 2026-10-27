@@ -76,6 +76,13 @@ export interface MapCrsPreset {
   basemap: MapCrsBasemap;
 }
 
+/**
+ * Window event the map fires when it enters or leaves a CRS, or is torn down
+ * while in one. It carries no detail: the plugin API's `getMapCrs` reads the
+ * new value, and its `onMapCrsChange` listens for this.
+ */
+export const MAP_CRS_CHANGE_EVENT = "geolibre:map-crs-change";
+
 /** Codes that are the default Web Mercator map rather than a custom CRS. */
 const WEB_MERCATOR_CODES: ReadonlySet<number> = new Set([3857, 900913, 102100, 102113]);
 

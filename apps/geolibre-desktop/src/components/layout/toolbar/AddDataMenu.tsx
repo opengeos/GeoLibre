@@ -31,10 +31,12 @@ interface AddDataMenuProps {
   chrome: ToolbarChrome;
   addLayer: AddLayerHandlers;
   osmPbfBusy: boolean;
+  tilePackageBusy: boolean;
   disabled?: boolean;
   onSetAddDataKind: (kind: AddDataKind) => void;
   onAddGltfModel: () => void;
   onOpenOsmPbfDialog: () => void;
+  onOpenTilePackageDialog: () => void;
 }
 
 interface AddDataItem {
@@ -55,10 +57,12 @@ export function AddDataMenu({
   chrome,
   addLayer,
   osmPbfBusy,
+  tilePackageBusy,
   disabled = false,
   onSetAddDataKind,
   onAddGltfModel,
   onOpenOsmPbfDialog,
+  onOpenTilePackageDialog,
 }: AddDataMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((state) => state.desktopSettings.uiProfile);
@@ -80,6 +84,7 @@ export function AddDataMenu({
     "delimited-text": { onSelect: () => onSetAddDataKind("delimited-text") },
     cad: { onSelect: () => onSetAddDataKind("cad") },
     gdb: { onSelect: () => onSetAddDataKind("gdb") },
+    vtpk: { onSelect: onOpenTilePackageDialog, disabled: tilePackageBusy },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     landxml: { onSelect: () => onSetAddDataKind("landxml") },

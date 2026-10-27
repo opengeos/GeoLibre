@@ -10,6 +10,9 @@ import {
   runWhiteboxToolWasm,
   topologicalOrder,
   validateModelGraph,
+  evaluateCondition,
+  switchSourceLayerId,
+  portsFor,
   type ProcessingAlgorithm,
   type ProcessingContext,
   type WhiteboxLayerInput,
@@ -268,13 +271,26 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
     setControlVisible: (params) => {
       const control = params.control;
       const visible = Boolean(params.visible);
+      const options = params.options;
+      if (
+        options !== undefined &&
+        (options === null || typeof options !== "object" || Array.isArray(options))
+      ) {
+        throw new Error("setControlVisible: options must be an object");
+      }
       if (isScriptablePanel(control)) {
         // The shared helpers make opens idempotent. Always forward a close
         // so it can cancel initialization before a panel becomes visible.
+        // Options (Measure's collapsed state and units, Minimap's size) are
+        // validated by the panel itself (GeoLibre#3241).
         const app = createAppAPI(controllerRefFrom(getController));
-        if (visible) app.openControlPanel(control);
-        else app.closeControlPanel(control);
+        if (!visible) app.closeControlPanel(control);
+        else if (options === undefined) app.openControlPanel(control);
+        else app.openControlPanel(control, options);
         return visible;
+      }
+      if (options !== undefined) {
+        throw new Error("setControlVisible: options are only supported for measure and minimap");
       }
       if (isScriptableMapControl(control)) {
         // Record before applying. The controller is created asynchronously, so a
@@ -528,6 +544,17 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const byKey = new Map(catalog.map((descriptor) => [descriptor.key, descriptor]));
       const resolve = (provider: string | undefined, toolId: string | undefined) =>
         provider && toolId ? byKey.get(`${provider}:${toolId}`) : undefined;
+      for (const node of graph.nodes) {
+        if (
+          node.kind === "iterate-features" ||
+          node.kind === "iterate-rasters" ||
+          node.kind === "collect-results"
+        ) {
+          throw new Error(
+            `runModelBuilder: Iteration nodes ("${node.kind}") are not supported via scripting API execution; run this model in Model Builder to execute iterators.`,
+          );
+        }
+      }
       const issues = validateModelGraph(graph, resolve);
       if (issues.length) throw new Error(issues.map((issue) => issue.message).join("\n"));
       const ordered = topologicalOrder(graph);
@@ -539,9 +566,43 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         list.push(edge);
         incoming.set(edge.to, list);
       }
+      const SKIPPED = "__SKIPPED__";
       const produced = new Map<string, Map<string, string>>();
       const outputLayerIds: string[] = [];
       for (const node of ordered) {
+        const incomingEdges = incoming.get(node.id) ?? [];
+        let anyReal = false;
+        let anySkipped = false;
+        let allSkipped = incomingEdges.length > 0;
+        for (const edge of incomingEdges) {
+          const lId = produced.get(edge.from)?.get(edge.fromPort);
+          if (lId === SKIPPED) {
+            anySkipped = true;
+          } else if (lId !== undefined) {
+            anyReal = true;
+            allSkipped = false;
+          } else {
+            allSkipped = false;
+          }
+        }
+        // Any input from an unselected branch puts the node on that branch
+        // (as in runModelGraph); only a merge takes one live branch of two.
+        if (node.kind === "conditional-merge") {
+          if (anyReal) allSkipped = false;
+        } else if (anySkipped) {
+          allSkipped = true;
+        }
+        if (allSkipped) {
+          const desc = node.kind === "tool" ? resolve(node.provider, node.toolId) : undefined;
+          const nodePorts = portsFor(node, desc);
+          const skippedOutputs = new Map<string, string>();
+          for (const outPort of nodePorts.outputs) {
+            skippedOutputs.set(outPort.id, SKIPPED);
+          }
+          produced.set(node.id, skippedOutputs);
+          continue;
+        }
+
         if (node.kind === "input") {
           const layerId = node.layerId ?? "";
           if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
@@ -553,9 +614,80 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         if (node.kind === "output") {
           const edge = incoming.get(node.id)?.[0];
           const layerId = edge ? produced.get(edge.from)?.get(edge.fromPort) : undefined;
+          if (layerId === SKIPPED) continue;
           if (!layerId) throw new Error(`No result reached output "${node.name ?? node.id}"`);
           if (node.name?.trim()) useAppStore.getState().updateLayer(layerId, { name: node.name });
           outputLayerIds.push(layerId);
+          continue;
+        }
+
+        if (node.kind === "conditional-switch") {
+          const edge =
+            incoming.get(node.id)?.find((e) => e.toPort === "input") ?? incoming.get(node.id)?.[0];
+          // Like runModelGraph: an unwired switch routes the layer it names.
+          const layerId = edge
+            ? produced.get(edge.from)?.get(edge.fromPort)
+            : switchSourceLayerId(node);
+          if (!layerId || layerId === SKIPPED) {
+            produced.set(
+              node.id,
+              new Map([
+                ["true", SKIPPED],
+                ["false", SKIPPED],
+              ]),
+            );
+            continue;
+          }
+          const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+          const isVector = layer?.type === "geojson" && layer.geojson;
+          const cond = evaluateCondition({
+            // A raster condition reads only the name (and metadata), so the
+            // layer's bytes are not fetched here.
+            inputValue: isVector
+              ? { kind: "vector", geojson: layer.geojson as FeatureCollection }
+              : layer
+                ? { kind: "raster", bytes: new Uint8Array(), name: layer.name }
+                : undefined,
+            parameters: node.parameters,
+          });
+          if (cond) {
+            produced.set(
+              node.id,
+              new Map([
+                ["true", layerId],
+                ["false", SKIPPED],
+              ]),
+            );
+          } else {
+            produced.set(
+              node.id,
+              new Map([
+                ["true", SKIPPED],
+                ["false", layerId],
+              ]),
+            );
+          }
+          continue;
+        }
+
+        if (node.kind === "conditional-merge") {
+          const trueEdge = incoming.get(node.id)?.find((e) => e.toPort === "true");
+          const falseEdge = incoming.get(node.id)?.find((e) => e.toPort === "false");
+          const trueId = trueEdge ? produced.get(trueEdge.from)?.get(trueEdge.fromPort) : undefined;
+          const falseId = falseEdge
+            ? produced.get(falseEdge.from)?.get(falseEdge.fromPort)
+            : undefined;
+          const activeId =
+            trueId && trueId !== SKIPPED
+              ? trueId
+              : falseId && falseId !== SKIPPED
+                ? falseId
+                : undefined;
+          if (!activeId) {
+            produced.set(node.id, new Map([["out", SKIPPED]]));
+          } else {
+            produced.set(node.id, new Map([["out", activeId]]));
+          }
           continue;
         }
 

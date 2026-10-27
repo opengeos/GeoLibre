@@ -97,7 +97,7 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
-import { setActiveMapCrs, type ResolvedMapCrs } from "./active-map-crs";
+import { notifyMapCrsChange, setActiveMapCrs, type ResolvedMapCrs } from "./active-map-crs";
 import { createMapCrsStyle, registerMapCrs, resolveMapCrs } from "./map-crs";
 import { transformTileRequest } from "./tile-request-headers";
 import {
@@ -902,12 +902,19 @@ export class MapController implements MapEngine {
     this.styleReady = false;
     // A later init() starts from the default map and resolves its CRS afresh;
     // the bump drops a resolution still in flight for this map.
+    const hadCrs = this.activeCrs !== null;
     this.activeCrs = null;
     this.desiredCrsId = undefined;
     this.failedCrsId = undefined;
     this.crsStyleDeferred = false;
     this.crsGeneration += 1;
     this.clearLayerDisplayNames();
+    if (hadCrs) notifyMapCrsChange();
+  }
+
+  /** The CRS the map is drawn in, or `null` on the default Web Mercator map or globe. */
+  getMapCrs(): ResolvedMapCrs | null {
+    return this.activeCrs;
   }
 
   setStyle(url: string): void {

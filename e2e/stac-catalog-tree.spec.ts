@@ -119,8 +119,8 @@ async function serveCatalog(
 
 async function openStacPanel(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Web Services" }).click();
-  await page.getByRole("menuitem", { name: "STAC Catalogs" }).click();
+  await page.getByRole("menuitem", { name: "Web services" }).click();
+  await page.getByRole("menuitem", { name: "STAC catalogs" }).click();
   await page.getByPlaceholder("https://example.org/stac/").fill(ROOT);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 }

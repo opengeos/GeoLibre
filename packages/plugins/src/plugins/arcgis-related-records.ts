@@ -25,6 +25,7 @@ import {
   type ArcGISEditInfo,
 } from "./arcgis-edits";
 import { arcGISFeatureLayerConnection, type ArcGISFeatureLayerConnection } from "./arcgis-layer";
+import { withArcGISContingentValues } from "./arcgis-contingent-values";
 import {
   arcGISServiceError,
   postArcGISWrite,
@@ -410,7 +411,7 @@ function serviceError(error: ArcGISServiceError | undefined, fallback: string): 
  * @param layerId - The parent ArcGIS feature layer.
  * @param relationship - The relationship to follow.
  * @param signal - Aborts the request.
- * @returns The related resource's metadata.
+ * @returns The related resource's metadata, with its contingent values when it publishes any.
  */
 export async function fetchArcGISRelatedTableInfo(
   layerId: string,
@@ -436,7 +437,22 @@ export async function fetchArcGISRelatedTableInfo(
     );
   }
   if (!json.objectIdField || !Array.isArray(json.fields)) throw MESSAGES.invalidResponse();
-  return json;
+  // The related table's own contingent values govern its rows, not the parent's.
+  return withArcGISContingentValues(
+    relatedUrl(connection, relationship.relatedTableId),
+    json,
+    async (resource) => {
+      const body = await readArcGISJson<unknown>(
+        await connection.fetch(withQuery(resource, { f: "json", token: connection.token }), {
+          signal,
+        }),
+        MESSAGES,
+      );
+      if (body.error) throw serviceError(body.error, "ArcGIS service request failed.");
+      return body;
+    },
+    signal,
+  );
 }
 
 interface RelatedRecordsResponse {

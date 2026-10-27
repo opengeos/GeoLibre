@@ -1,8 +1,9 @@
 /**
  * "Saved services" box rendered atop each web-service source in the Add Data
  * dialog. Lets users save the current form to a cross-project library, reload a
- * saved (or built-in) service into the form, delete their own entries, and
- * import/export the library as JSON (issue #417).
+ * saved (or built-in) service into the form, delete their own entries or the
+ * built-in presets (which can be restored), and import/export the library as
+ * JSON (issue #417).
  *
  * Persistence and validation live in `service-library.ts`; this component owns
  * only the dialog-scoped UI state.
@@ -14,11 +15,14 @@ import { type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
 import {
+  BUILTIN_SERVICES,
+  builtinsHidden,
   createServiceEntry,
   isManagedService,
   listServices,
   mergeImportedServices,
   parseImportedServices,
+  readHiddenBuiltinIds,
   readUserServices,
   removeServiceEntry,
   serializeUserServices,
@@ -27,6 +31,7 @@ import {
   type ServiceLibraryEntry,
   type ServiceLibraryKind,
   upsertServiceEntry,
+  writeHiddenBuiltinIds,
   writeUserServices,
 } from "./service-library";
 
@@ -75,6 +80,9 @@ export function ServiceLibrarySection({
 }: ServiceLibrarySectionProps) {
   const { t } = useTranslation();
   const [userEntries, setUserEntries] = useState<ServiceLibraryEntry[]>(() => readUserServices());
+  const [hiddenBuiltinIds, setHiddenBuiltinIds] = useState<Set<string>>(() =>
+    readHiddenBuiltinIds(),
+  );
   const [selectedId, setSelectedId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -84,11 +92,25 @@ export function ServiceLibrarySection({
   const importInputRef = useRef<HTMLInputElement>(null);
   const categoryListId = `service-categories-${kind}`;
 
-  const entries = useMemo(() => listServices(kind, userEntries), [kind, userEntries]);
+  const entries = useMemo(
+    () => listServices(kind, userEntries, hiddenBuiltinIds),
+    [kind, userEntries, hiddenBuiltinIds],
+  );
+  // Zero when the deployment turns built-ins off: restoring could show nothing.
+  const hiddenBuiltinCount = useMemo(
+    () =>
+      builtinsHidden()
+        ? 0
+        : BUILTIN_SERVICES.filter((entry) => entry.kind === kind && hiddenBuiltinIds.has(entry.id))
+            .length,
+    [kind, hiddenBuiltinIds],
+  );
   const groups = useMemo(() => groupByCategory(entries), [entries]);
   const categories = useMemo(() => serviceCategories(entries), [entries]);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
-  const canDeleteSelected = Boolean(selectedEntry && !isManagedService(selectedEntry));
+  // Deployment connections are admin-managed and stay locked; built-in presets
+  // can be deleted (hidden) and restored.
+  const canDeleteSelected = Boolean(selectedEntry && !selectedEntry.deployment);
 
   const persist = (next: ServiceLibraryEntry[]) => {
     setUserEntries(next);
@@ -143,12 +165,32 @@ export function ServiceLibrarySection({
     }
   };
 
+  const persistHiddenBuiltins = (next: Set<string>) => {
+    setHiddenBuiltinIds(next);
+    writeHiddenBuiltinIds(next);
+  };
+
   const handleDelete = () => {
-    if (!selectedEntry || isManagedService(selectedEntry)) return;
-    persist(removeServiceEntry(userEntries, selectedEntry.id));
+    if (!selectedEntry || selectedEntry.deployment) return;
+    if (selectedEntry.builtin) {
+      // Re-read storage rather than trusting this dialog's mount-time copy, so a
+      // write from another tab is not overwritten.
+      persistHiddenBuiltins(new Set([...readHiddenBuiltinIds(), selectedEntry.id]));
+    } else {
+      persist(removeServiceEntry(userEntries, selectedEntry.id));
+    }
     setSelectedId("");
     setError(null);
     setNotice(t("addData.serviceLibrary.removed", { name: selectedEntry.name }));
+  };
+
+  const handleRestoreBuiltins = () => {
+    const kindIds = new Set(
+      BUILTIN_SERVICES.filter((entry) => entry.kind === kind).map((entry) => entry.id),
+    );
+    persistHiddenBuiltins(new Set([...readHiddenBuiltinIds()].filter((id) => !kindIds.has(id))));
+    setError(null);
+    setNotice(t("addData.serviceLibrary.restoredBuiltins", { count: hiddenBuiltinCount }));
   };
 
   const handleExport = async () => {
@@ -290,6 +332,18 @@ export function ServiceLibrarySection({
       ) : (
         <p className="text-xs text-muted-foreground">{t("addData.serviceLibrary.empty")}</p>
       )}
+
+      {hiddenBuiltinCount > 0 ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="link"
+          className="h-auto p-0 text-xs"
+          onClick={handleRestoreBuiltins}
+        >
+          {t("addData.serviceLibrary.restoreBuiltins", { count: hiddenBuiltinCount })}
+        </Button>
+      ) : null}
 
       {isSaving ? (
         <div className="space-y-2 rounded-md border border-border/60 bg-background p-2">

@@ -454,7 +454,7 @@ function enhanceEarthEngineSignIn(root: ParentNode, app: GeoLibreAppAPI): () => 
     const oauthClientId = oauthClientIdValue(clientIdInput.value);
     clientIdInput.value = oauthClientId;
     button.disabled = true;
-    status.textContent = tr("signInOpening", "Opening Google sign-in...");
+    status.textContent = tr("signInOpening", "Opening Google sign-in…");
     try {
       await authenticateEarthEngine(oauthClientId);
       await applyEarthEngineAccessToken(oauthClientId, projectValue(projectIdInput.value));

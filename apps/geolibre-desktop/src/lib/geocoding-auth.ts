@@ -26,6 +26,11 @@ const federation = new Map<string, Promise<boolean>>();
 const APPROVALS_STORAGE_KEY = "geolibre.geocoding.locatorTokenHosts";
 /** Approvals kept for this session when storage is unavailable. */
 const sessionApprovals = new Set<string>();
+/**
+ * Approvals revoked this session. They stay revoked even if removing them from
+ * storage failed, so a stale stored copy can never re-grant them.
+ */
+const revokedApprovals = new Set<string>();
 /** Checks that passed in the open Settings dialog, granted only when it saves. */
 const stagedApprovals = new Set<string>();
 
@@ -62,6 +67,7 @@ function readApprovals(): Set<string> {
   } catch {
     // Storage unavailable or corrupt: only this session's approvals count.
   }
+  for (const key of revokedApprovals) approvals.delete(key);
   return approvals;
 }
 
@@ -75,11 +81,57 @@ function readApprovals(): Set<string> {
 export function approveLocatorPortalToken(locatorUrl: string, portalUrl: string | undefined): void {
   const key = approvalKey(locatorUrl, portalUrl);
   if (!key) return;
+  revokedApprovals.delete(key);
   sessionApprovals.add(key);
   try {
     localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify([...readApprovals()]));
   } catch {
     // Kept for this session only.
+  }
+}
+
+/** One device-local approval to send a portal's sign-in to a locator server. */
+export interface LocatorPortalApproval {
+  /** The portal whose sign-in is sent. */
+  portalHost: string;
+  /** The server that receives it. */
+  locatorHost: string;
+}
+
+/**
+ * The approvals granted on this device, for review in Settings.
+ *
+ * @returns The approvals, sorted by portal then server.
+ */
+export function listLocatorPortalApprovals(): LocatorPortalApproval[] {
+  return [...readApprovals()]
+    .flatMap((entry) => {
+      const [portalHost, locatorHost] = entry.split(" ");
+      return portalHost && locatorHost ? [{ portalHost, locatorHost }] : [];
+    })
+    .sort(
+      (a, b) =>
+        a.portalHost.localeCompare(b.portalHost) || a.locatorHost.localeCompare(b.locatorHost),
+    );
+}
+
+/**
+ * Withdraw an approval: the portal's sign-in is no longer sent to that server
+ * until a locator on it is checked and saved again.
+ *
+ * @param approval - The approval to remove.
+ */
+export function revokeLocatorPortalApproval(approval: LocatorPortalApproval): void {
+  const key = `${approval.portalHost} ${approval.locatorHost}`;
+  revokedApprovals.add(key);
+  sessionApprovals.delete(key);
+  stagedApprovals.delete(key);
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(APPROVALS_STORAGE_KEY) ?? "[]");
+    const kept = Array.isArray(stored) ? stored.filter((entry) => entry !== key) : [];
+    localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage unavailable: the session copy is already gone.
   }
 }
 
@@ -206,6 +258,7 @@ export function resetLocatorFederationCache(): void {
   federation.clear();
   sessionApprovals.clear();
   stagedApprovals.clear();
+  revokedApprovals.clear();
   try {
     localStorage.removeItem(APPROVALS_STORAGE_KEY);
   } catch {

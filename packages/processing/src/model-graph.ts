@@ -14,8 +14,17 @@ import type { AlgorithmParameter } from "./types";
  * still fail fast when an edge would connect two incompatible ports.
  */
 export type ModelValue =
-  | { kind: "vector"; geojson: FeatureCollection }
-  | { kind: "raster"; bytes: Uint8Array; name?: string };
+  | { kind: "vector"; geojson: FeatureCollection; metadata?: Record<string, unknown> }
+  | { kind: "raster"; bytes: Uint8Array; name?: string; metadata?: Record<string, unknown> }
+  | {
+      kind: "raster-collection";
+      items: Array<{ bytes: Uint8Array; name?: string; metadata?: Record<string, unknown> }>;
+      metadata?: Record<string, unknown>;
+    }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "number"; value: number }
+  | { kind: "string"; value: string }
+  | { kind: "any"; value: unknown };
 
 /**
  * One connection point on a {@link ModelToolDescriptor}.
@@ -69,6 +78,35 @@ export const INPUT_NODE_PORT = "out";
 /** The single input port every `output` node exposes. */
 export const OUTPUT_NODE_PORT = "in";
 
+/** Iterate Features port ids */
+export const ITERATE_FEATURES_INPUT_PORT = "collection";
+export const ITERATE_FEATURES_OUTPUT_FEATURE = "feature";
+export const ITERATE_FEATURES_OUTPUT_INDEX = "index";
+export const ITERATE_FEATURES_OUTPUT_COUNT = "count";
+
+/** Iterate Rasters port ids */
+export const ITERATE_RASTERS_INPUT_PORT = "collection";
+export const ITERATE_RASTERS_OUTPUT_RASTER = "raster";
+export const ITERATE_RASTERS_OUTPUT_NAME = "name";
+export const ITERATE_RASTERS_OUTPUT_INDEX = "index";
+export const ITERATE_RASTERS_OUTPUT_COUNT = "count";
+
+/** Collect Results port ids */
+export const COLLECT_RESULTS_INPUT_PORT = "item";
+export const COLLECT_RESULTS_OUTPUT_PORT = "collection";
+export const COLLECT_RESULTS_OUTPUT_COUNT = "count";
+
+/** Conditional Switch port ids */
+export const SWITCH_INPUT_PORT = "input";
+export const SWITCH_CONDITION_PORT = "condition";
+export const SWITCH_TRUE_PORT = "true";
+export const SWITCH_FALSE_PORT = "false";
+
+/** Conditional Merge port ids */
+export const MERGE_TRUE_PORT = "true";
+export const MERGE_FALSE_PORT = "false";
+export const MERGE_OUTPUT_PORT = "out";
+
 /** Resolve a tool node to its descriptor, or `undefined` when unknown. */
 export type DescriptorResolver = (
   provider: ModelToolProvider | undefined,
@@ -88,7 +126,10 @@ export interface ModelGraphIssue {
     | "cycle"
     | "no-output"
     | "duplicate-node"
-    | "dangling-edge";
+    | "dangling-edge"
+    | "invalid-condition"
+    | "invalid-iterator"
+    | "invalid-body";
   nodeId?: string;
   edgeId?: string;
   /**
@@ -146,7 +187,7 @@ export function topologicalOrder(graph: ProcessingModelGraph): ModelGraphNode[] 
 }
 
 /** The ports a node exposes, given its descriptor (tool nodes only). */
-function portsFor(
+export function portsFor(
   node: ModelGraphNode,
   descriptor: ModelToolDescriptor | undefined,
 ): { inputs: ModelToolPort[]; outputs: ModelToolPort[] } {
@@ -159,7 +200,363 @@ function portsFor(
       outputs: [],
     };
   }
+  if (node.kind === "iterate-features") {
+    return {
+      inputs: [
+        {
+          id: ITERATE_FEATURES_INPUT_PORT,
+          label: "Feature Collection",
+          kind: "vector",
+          required: true,
+        },
+      ],
+      outputs: [
+        { id: ITERATE_FEATURES_OUTPUT_FEATURE, label: "Current Feature", kind: "vector" },
+        { id: ITERATE_FEATURES_OUTPUT_INDEX, label: "Index", kind: "any" },
+        { id: ITERATE_FEATURES_OUTPUT_COUNT, label: "Total Count", kind: "any" },
+      ],
+    };
+  }
+  if (node.kind === "iterate-rasters") {
+    return {
+      inputs: [
+        {
+          id: ITERATE_RASTERS_INPUT_PORT,
+          label: "Raster Collection",
+          kind: "any",
+          required: false,
+        },
+      ],
+      outputs: [
+        { id: ITERATE_RASTERS_OUTPUT_RASTER, label: "Current Raster", kind: "any" },
+        { id: ITERATE_RASTERS_OUTPUT_NAME, label: "Raster Name", kind: "any" },
+        { id: ITERATE_RASTERS_OUTPUT_INDEX, label: "Index", kind: "any" },
+        { id: ITERATE_RASTERS_OUTPUT_COUNT, label: "Total Count", kind: "any" },
+      ],
+    };
+  }
+  if (node.kind === "collect-results") {
+    return {
+      inputs: [
+        { id: COLLECT_RESULTS_INPUT_PORT, label: "Item to Collect", kind: "any", required: true },
+      ],
+      outputs: [
+        { id: COLLECT_RESULTS_OUTPUT_PORT, label: "Collected Results", kind: "any" },
+        { id: COLLECT_RESULTS_OUTPUT_COUNT, label: "Count", kind: "any" },
+      ],
+    };
+  }
+  if (node.kind === "conditional-switch") {
+    return {
+      inputs: [
+        { id: SWITCH_INPUT_PORT, label: "Input", kind: "any", required: true },
+        { id: SWITCH_CONDITION_PORT, label: "Condition Value", kind: "any", required: false },
+      ],
+      outputs: [
+        { id: SWITCH_TRUE_PORT, label: "True Branch", kind: "any" },
+        { id: SWITCH_FALSE_PORT, label: "False Branch", kind: "any" },
+      ],
+    };
+  }
+  if (node.kind === "conditional-merge") {
+    return {
+      inputs: [
+        { id: MERGE_TRUE_PORT, label: "True Result", kind: "any", required: false },
+        { id: MERGE_FALSE_PORT, label: "False Result", kind: "any", required: false },
+      ],
+      outputs: [{ id: MERGE_OUTPUT_PORT, label: "Active Output", kind: "any" }],
+    };
+  }
   return { inputs: descriptor?.inputs ?? [], outputs: descriptor?.outputs ?? [] };
+}
+
+export interface ConditionEvaluationOptions {
+  inputValue?: ModelValue;
+  conditionValue?: ModelValue;
+  parameters?: Record<string, unknown>;
+}
+
+/**
+ * Safely evaluate a conditional switch's condition without arbitrary code execution.
+ *
+ * Supports boolean evaluation, numeric/string comparisons, property/metadata lookups,
+ * and null/empty checks.
+ */
+export function evaluateCondition(options: ConditionEvaluationOptions): boolean {
+  const params = options.parameters ?? {};
+  const condType = String(params.conditionType || "compare").toLowerCase();
+  const operator = String(params.operator || "==").toLowerCase();
+  const targetVal = params.value;
+  const propPath = typeof params.property === "string" ? params.property : undefined;
+
+  // Resolve left-hand operand
+  let left: unknown;
+  if (options.conditionValue !== undefined) {
+    if ("value" in options.conditionValue) {
+      left = options.conditionValue.value;
+    } else if (options.conditionValue.kind === "vector") {
+      left = options.conditionValue.geojson.features.length;
+    } else if (options.conditionValue.kind === "raster") {
+      left = options.conditionValue.name;
+    }
+  }
+
+  if (left === undefined && options.inputValue) {
+    if (propPath) {
+      if (options.inputValue.kind === "vector") {
+        const feat = options.inputValue.geojson.features[0];
+        const cleanPath = propPath.startsWith("properties.") ? propPath.slice(11) : propPath;
+        left = feat?.properties?.[cleanPath] ?? feat?.properties?.[propPath];
+        if (left === undefined && propPath === "feature_count") {
+          left = options.inputValue.geojson.features.length;
+        }
+      } else if (options.inputValue.kind === "raster") {
+        const meta = options.inputValue.metadata as Record<string, unknown> | undefined;
+        const cleanPath = propPath.startsWith("metadata.") ? propPath.slice(9) : propPath;
+        left =
+          meta?.[cleanPath] ??
+          meta?.[propPath] ??
+          (propPath === "name" ? options.inputValue.name : undefined);
+      } else if ("value" in options.inputValue) {
+        left = options.inputValue.value;
+      }
+    } else if ("value" in options.inputValue) {
+      left = options.inputValue.value;
+    } else if (options.inputValue.kind === "vector") {
+      left = options.inputValue.geojson.features.length;
+    } else if (options.inputValue.kind === "raster") {
+      left = options.inputValue.name;
+    }
+  }
+
+  if (left === undefined && params.left !== undefined) {
+    left = params.left;
+  }
+
+  if (condType === "boolean") {
+    // The inspector stores the target value as text, so "true"/"false" (and a
+    // "false" property value) must read as booleans, not as non-empty strings.
+    const leftBool = booleanLike(left);
+    if (leftBool !== undefined) return leftBool;
+    const targetBool = booleanLike(targetVal);
+    if (targetBool !== undefined) return targetBool;
+    return Boolean(left);
+  }
+
+  if (
+    condType === "null_check" ||
+    operator === "is_null" ||
+    operator === "not_null" ||
+    operator === "is_empty" ||
+    operator === "not_empty"
+  ) {
+    switch (operator) {
+      case "is_null":
+        return left === null || left === undefined;
+      case "not_null":
+        return left !== null && left !== undefined;
+      case "is_empty":
+        if (left === null || left === undefined) return true;
+        if (typeof left === "string") return left.trim().length === 0;
+        if (Array.isArray(left)) return left.length === 0;
+        if (typeof left === "number") return false;
+        if (typeof left === "object") return Object.keys(left).length === 0;
+        return false;
+      case "not_empty":
+        if (left === null || left === undefined) return false;
+        if (typeof left === "string") return left.trim().length > 0;
+        if (Array.isArray(left)) return left.length > 0;
+        if (typeof left === "number") return true;
+        if (typeof left === "object") return Object.keys(left).length > 0;
+        return true;
+    }
+    // A null check left on a comparison operator (the node's default is "==")
+    // means "is null"; never fall through to an equality test.
+    return left === null || left === undefined;
+  }
+
+  switch (operator) {
+    case "==":
+    case "eq":
+      if (typeof left === "number" || typeof targetVal === "number") {
+        return Number(left) === Number(targetVal);
+      }
+      return String(left ?? "") === String(targetVal ?? "");
+    case "!=":
+    case "neq":
+      if (typeof left === "number" || typeof targetVal === "number") {
+        return Number(left) !== Number(targetVal);
+      }
+      return String(left ?? "") !== String(targetVal ?? "");
+    case "<":
+    case "lt":
+      return Number(left) < Number(targetVal);
+    case "<=":
+    case "lte":
+      return Number(left) <= Number(targetVal);
+    case ">":
+    case "gt":
+      return Number(left) > Number(targetVal);
+    case ">=":
+    case "gte":
+      return Number(left) >= Number(targetVal);
+    case "contains":
+      if (Array.isArray(left)) return left.includes(targetVal);
+      return String(left ?? "").includes(String(targetVal ?? ""));
+    case "starts_with":
+      return String(left ?? "").startsWith(String(targetVal ?? ""));
+    case "ends_with":
+      return String(left ?? "").endsWith(String(targetVal ?? ""));
+    default:
+      return Boolean(left);
+  }
+}
+
+export function findDownstreamCollector(
+  graph: ProcessingModelGraph,
+  startNodeId: string,
+): ModelGraphNode | undefined {
+  const outgoing = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = outgoing.get(edge.from) ?? [];
+    list.push(edge.to);
+    outgoing.set(edge.from, list);
+  }
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const queue = [startNodeId];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    if (seen.has(curr)) continue;
+    seen.add(curr);
+    for (const next of outgoing.get(curr) ?? []) {
+      const node = byId.get(next);
+      if (node?.kind === "collect-results") return node;
+      queue.push(next);
+    }
+  }
+  return undefined;
+}
+
+export function findNodesBetween(
+  graph: ProcessingModelGraph,
+  startId: string,
+  endId: string,
+): ModelGraphNode[] {
+  const outgoing = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = outgoing.get(edge.from) ?? [];
+    list.push(edge.to);
+    outgoing.set(edge.from, list);
+  }
+  const fromStart = new Set<string>();
+  const q1 = [startId];
+  while (q1.length > 0) {
+    const c = q1.shift()!;
+    for (const n of outgoing.get(c) ?? []) {
+      if (!fromStart.has(n)) {
+        fromStart.add(n);
+        q1.push(n);
+      }
+    }
+  }
+
+  const incoming = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = incoming.get(edge.to) ?? [];
+    list.push(edge.from);
+    incoming.set(edge.to, list);
+  }
+  const canReachEnd = new Set<string>();
+  const q2 = [endId];
+  while (q2.length > 0) {
+    const c = q2.shift()!;
+    for (const p of incoming.get(c) ?? []) {
+      if (!canReachEnd.has(p)) {
+        canReachEnd.add(p);
+        q2.push(p);
+      }
+    }
+  }
+
+  const betweenIds = new Set<string>();
+  for (const id of fromStart) {
+    if (canReachEnd.has(id) && id !== startId && id !== endId) {
+      betweenIds.add(id);
+    }
+  }
+  const fullOrder = topologicalOrder(graph) ?? graph.nodes;
+  return fullOrder.filter((n) => betweenIds.has(n.id));
+}
+
+function findExternalAncestors(
+  graph: ProcessingModelGraph,
+  bodyNodeIds: Set<string>,
+  iteratorNodeId: string,
+  producedNodeIds: Set<string>,
+): ModelGraphNode[] {
+  const incoming = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const list = incoming.get(edge.to) ?? [];
+    list.push(edge.from);
+    incoming.set(edge.to, list);
+  }
+  const ancestors = new Set<string>();
+  const queue = Array.from(bodyNodeIds);
+  const seen = new Set<string>(queue);
+
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    for (const parentId of incoming.get(curr) ?? []) {
+      if (parentId === iteratorNodeId || bodyNodeIds.has(parentId)) continue;
+      if (!ancestors.has(parentId)) {
+        ancestors.add(parentId);
+        if (!seen.has(parentId)) {
+          seen.add(parentId);
+          queue.push(parentId);
+        }
+      }
+    }
+  }
+
+  const needed = Array.from(ancestors).filter((id) => !producedNodeIds.has(id));
+  const fullOrder = topologicalOrder(graph) ?? graph.nodes;
+  const neededSet = new Set(needed);
+  return fullOrder.filter((n) => neededSet.has(n.id));
+}
+
+/**
+ * The order {@link runModelGraph} visits nodes in: the topological order, with
+ * every node a collector-driven loop body reads from outside the loop placed
+ * before that loop's iterator. Without this, a ready node that appears earlier
+ * in `graph.nodes` (say a second loop fed by the first loop's collector) can be
+ * visited first and its body would run against inputs nobody produced yet.
+ *
+ * @param graph The graph to order.
+ * @returns Nodes in run order, or `null` when the graph contains a cycle.
+ */
+function executionOrder(graph: ProcessingModelGraph): ModelGraphNode[] | null {
+  const base = topologicalOrder(graph);
+  if (!base) return null;
+  const extra: ProcessingModelGraph["edges"] = [];
+  for (const node of graph.nodes) {
+    if (node.kind !== "iterate-features" && node.kind !== "iterate-rasters") continue;
+    if (node.body) continue;
+    const collector = findDownstreamCollector(graph, node.id);
+    if (!collector) continue;
+    const bodyIds = new Set(findNodesBetween(graph, node.id, collector.id).map((n) => n.id));
+    for (const anc of findExternalAncestors(graph, bodyIds, node.id, new Set())) {
+      extra.push({
+        id: `order:${anc.id}:${node.id}`,
+        from: anc.id,
+        fromPort: "",
+        to: node.id,
+        toPort: "",
+      });
+    }
+  }
+  if (extra.length === 0) return base;
+  return topologicalOrder({ ...graph, edges: [...graph.edges, ...extra] }) ?? base;
 }
 
 /**
@@ -280,12 +677,164 @@ export function validateModelGraph(
       if (filled.get(node.id)?.has(port.id)) continue;
       const typed = node.parameters?.[port.id];
       if (typed !== undefined && typed !== null && typed !== "") continue;
+      // Only control nodes read a layer named in their settings; a tool's
+      // unwired port must still be connected or typed.
+      if (
+        node.kind !== "tool" &&
+        sourceLayerId(node) &&
+        (port.id === "collection" || port.id === "input" || port.id === "layer")
+      )
+        continue;
       issues.push({
         code: "missing-input",
         nodeId: node.id,
         detail: port.label,
         message: `"${port.label}" needs a connection or a value.`,
       });
+    }
+
+    if (node.kind === "iterate-features") {
+      const hasCollectionEdge = filled.get(node.id)?.has(ITERATE_FEATURES_INPUT_PORT);
+      const hasLayer = !!node.layerId || !!node.parameters?.layer;
+      if (!hasCollectionEdge && !hasLayer) {
+        issues.push({
+          code: "missing-input",
+          nodeId: node.id,
+          detail: "collection",
+          message: "Iterate Features requires an input collection connection or layer.",
+        });
+      }
+      const collector = findDownstreamCollector(graph, node.id);
+      const hasBody = !!node.body && node.body.nodes.length > 0;
+      if (!collector && !hasBody) {
+        issues.push({
+          code: "invalid-iterator",
+          nodeId: node.id,
+          message: "Iterator node requires an iteration body or a downstream Collect Results node.",
+        });
+      } else if (collector) {
+        const bodyNodes = findNodesBetween(graph, node.id, collector.id);
+        const bodyIds = new Set(bodyNodes.map((bn) => bn.id));
+        for (const bn of bodyNodes) {
+          if (bn.kind === "iterate-features" || bn.kind === "iterate-rasters") {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: bn.id,
+              message:
+                "A loop inside a Collect Results loop body is not supported; use an iteration body.",
+            });
+          }
+        }
+        for (const edge of graph.edges) {
+          if (bodyIds.has(edge.from) && edge.to !== collector.id && !bodyIds.has(edge.to)) {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: edge.from,
+              edgeId: edge.id,
+              message:
+                "Nodes inside an iteration body can only feed other body nodes or the collector.",
+            });
+          }
+        }
+      }
+      if (node.body) {
+        const bodyIssues = validateModelGraph(node.body, resolve);
+        for (const bi of bodyIssues) {
+          issues.push({ ...bi, nodeId: node.id, message: `Iteration body: ${bi.message}` });
+        }
+      }
+    }
+    if (node.kind === "iterate-rasters") {
+      const hasCollectionEdge = filled.get(node.id)?.has(ITERATE_RASTERS_INPUT_PORT);
+      const hasLayers =
+        (Array.isArray(node.parameters?.layers) &&
+          (node.parameters.layers as unknown[]).length > 0) ||
+        (typeof node.parameters?.layers === "string" &&
+          (node.parameters.layers as string).trim().length > 0) ||
+        !!node.layerId;
+      if (!hasCollectionEdge && !hasLayers) {
+        issues.push({
+          code: "missing-input",
+          nodeId: node.id,
+          detail: "collection",
+          message:
+            "Iterate Rasters requires an input collection connection or configured raster layers.",
+        });
+      }
+      const collector = findDownstreamCollector(graph, node.id);
+      const hasBody = !!node.body && node.body.nodes.length > 0;
+      if (!collector && !hasBody) {
+        issues.push({
+          code: "invalid-iterator",
+          nodeId: node.id,
+          message: "Iterator node requires an iteration body or a downstream Collect Results node.",
+        });
+      } else if (collector) {
+        const bodyNodes = findNodesBetween(graph, node.id, collector.id);
+        const bodyIds = new Set(bodyNodes.map((bn) => bn.id));
+        for (const bn of bodyNodes) {
+          if (bn.kind === "iterate-features" || bn.kind === "iterate-rasters") {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: bn.id,
+              message:
+                "A loop inside a Collect Results loop body is not supported; use an iteration body.",
+            });
+          }
+        }
+        for (const edge of graph.edges) {
+          if (bodyIds.has(edge.from) && edge.to !== collector.id && !bodyIds.has(edge.to)) {
+            issues.push({
+              code: "invalid-iterator",
+              nodeId: edge.from,
+              edgeId: edge.id,
+              message:
+                "Nodes inside an iteration body can only feed other body nodes or the collector.",
+            });
+          }
+        }
+      }
+      if (node.body) {
+        const bodyIssues = validateModelGraph(node.body, resolve);
+        for (const bi of bodyIssues) {
+          issues.push({ ...bi, nodeId: node.id, message: `Iteration body: ${bi.message}` });
+        }
+      }
+    }
+    if (node.kind === "collect-results") {
+      if (!filled.get(node.id)?.has(COLLECT_RESULTS_INPUT_PORT)) {
+        issues.push({
+          code: "missing-input",
+          nodeId: node.id,
+          detail: "item",
+          message: "Collect Results requires an incoming connection to collect.",
+        });
+      }
+    }
+    if (node.kind === "conditional-switch") {
+      if (
+        !filled.get(node.id)?.has(SWITCH_INPUT_PORT) &&
+        !node.parameters?.input &&
+        !node.layerId
+      ) {
+        issues.push({
+          code: "missing-input",
+          nodeId: node.id,
+          detail: "input",
+          message: "Conditional Switch requires an incoming data connection to route.",
+        });
+      }
+    }
+    if (node.kind === "conditional-merge") {
+      const hasTrue = filled.get(node.id)?.has(MERGE_TRUE_PORT);
+      const hasFalse = filled.get(node.id)?.has(MERGE_FALSE_PORT);
+      if (!hasTrue && !hasFalse) {
+        issues.push({
+          code: "missing-input",
+          nodeId: node.id,
+          message: "Conditional Merge requires at least one branch input connection.",
+        });
+      }
     }
   }
 
@@ -322,7 +871,9 @@ export interface RunModelGraphOptions {
   log: (message: string) => void;
   signal?: AbortSignal;
   /** Called as each node starts and finishes, for canvas progress marking. */
-  onNodeStatus?: (nodeId: string, status: "running" | "done" | "error") => void;
+  onNodeStatus?: (nodeId: string, status: "running" | "done" | "error" | "skipped") => void;
+  /** Optional callback for iteration progress. */
+  onIterationProgress?: (nodeId: string, current: number, total: number) => void;
 }
 
 /** Outcome of a {@link runModelGraph} call. */
@@ -334,6 +885,179 @@ export interface ModelGraphRunResult {
 }
 
 /**
+ * The layer a control node reads when nothing is wired in: its `layerId`, or a
+ * layer id in `parameters.layer` (which the AI Assistant writes).
+ *
+ * @param node The node.
+ * @returns The layer id, or `undefined` when neither is set.
+ */
+function sourceLayerId(node: ModelGraphNode): string | undefined {
+  if (node.layerId) return node.layerId;
+  const layer = node.parameters?.layer;
+  return typeof layer === "string" && layer ? layer : undefined;
+}
+
+/**
+ * The layer id a Conditional Switch routes when no data edge is wired in: its
+ * `layerId`, or a layer id in `parameters.input` (validation accepts both).
+ *
+ * @param node The switch node.
+ * @returns The layer id, or `undefined` when neither is set.
+ */
+export function switchSourceLayerId(node: ModelGraphNode): string | undefined {
+  if (node.layerId) return node.layerId;
+  const input = node.parameters?.input;
+  return typeof input === "string" && input ? input : undefined;
+}
+
+/** Resolve a Conditional Switch's unwired data input from its layer, if it names one. */
+async function resolveSwitchLayer(
+  node: ModelGraphNode,
+  options: RunModelGraphOptions,
+): Promise<ModelValue | undefined> {
+  const layerId = switchSourceLayerId(node);
+  return layerId ? ((await options.resolveInput(layerId)) ?? undefined) : undefined;
+}
+
+/**
+ * Read a value as a boolean when it plainly is one: a boolean, or the text
+ * "true"/"false"/"1"/"0" (any case). Anything else returns `undefined`.
+ *
+ * @param value The value to read.
+ * @returns The boolean, or `undefined` when the value is not boolean-like.
+ */
+function booleanLike(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const text = value.trim().toLowerCase();
+  if (text === "true" || text === "1") return true;
+  if (text === "false" || text === "0") return false;
+  return undefined;
+}
+
+/**
+ * An iterator's iteration cap: a positive whole `maxIterations`, else 1000.
+ * Matches the inspector, which stores only positive whole numbers, so a zero or
+ * negative value in a hand-edited project never silently runs nothing.
+ *
+ * @param node The iterator node.
+ * @returns The maximum number of iterations to run.
+ */
+function iterationLimit(node: ModelGraphNode): number {
+  const value = Number(node.parameters?.maxIterations);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1000;
+}
+
+const SKIPPED = Symbol("SKIPPED");
+type ValueOrSkipped = ModelValue | typeof SKIPPED;
+
+async function executeSingleNode(
+  node: ModelGraphNode,
+  graph: ProcessingModelGraph,
+  produced: Map<string, Record<string, ValueOrSkipped>>,
+  options: RunModelGraphOptions,
+  descriptors: Map<string, ModelToolDescriptor | undefined>,
+): Promise<{ error?: string }> {
+  const incoming = graph.edges.filter((e) => e.to === node.id);
+  const inputs: Record<string, ModelValue> = {};
+  let anyInputReal = false;
+  let anyInputSkipped = false;
+  let allIncomingSkipped = incoming.length > 0;
+  for (const edge of incoming) {
+    const val = produced.get(edge.from)?.[edge.fromPort];
+    if (val === SKIPPED) {
+      anyInputSkipped = true;
+    } else if (val !== undefined) {
+      inputs[edge.toPort] = val;
+      anyInputReal = true;
+      allIncomingSkipped = false;
+    } else {
+      allIncomingSkipped = false;
+    }
+  }
+
+  // A node fed by an unselected branch sits on that branch, even when another
+  // input is live; only a merge exists to take one live branch out of two.
+  if (node.kind === "conditional-merge") {
+    if (anyInputReal) allIncomingSkipped = false;
+  } else if (anyInputSkipped) {
+    allIncomingSkipped = true;
+  }
+
+  if (allIncomingSkipped) {
+    options.onNodeStatus?.(node.id, "skipped");
+    const skipOutputs: Record<string, typeof SKIPPED> = {};
+    for (const port of portsFor(node, descriptors.get(node.id)).outputs) {
+      skipOutputs[port.id] = SKIPPED;
+    }
+    produced.set(node.id, skipOutputs);
+    return {};
+  }
+
+  if (node.kind === "conditional-switch") {
+    options.onNodeStatus?.(node.id, "running");
+    const inputVal = inputs[SWITCH_INPUT_PORT] ?? (await resolveSwitchLayer(node, options));
+    if (!inputVal) return { error: `Conditional Switch "${node.id}" has no incoming data input.` };
+    const condVal = inputs[SWITCH_CONDITION_PORT];
+    const cond = evaluateCondition({
+      inputValue: inputVal,
+      conditionValue: condVal,
+      parameters: node.parameters,
+    });
+    if (cond) {
+      produced.set(node.id, { [SWITCH_TRUE_PORT]: inputVal, [SWITCH_FALSE_PORT]: SKIPPED });
+    } else {
+      produced.set(node.id, { [SWITCH_TRUE_PORT]: SKIPPED, [SWITCH_FALSE_PORT]: inputVal });
+    }
+    options.onNodeStatus?.(node.id, "done");
+    return {};
+  }
+
+  if (node.kind === "conditional-merge") {
+    options.onNodeStatus?.(node.id, "running");
+    const activeVal = inputs[MERGE_TRUE_PORT] ?? inputs[MERGE_FALSE_PORT];
+    if (!activeVal)
+      return { error: `Conditional Merge "${node.id}" received no active branch result.` };
+    produced.set(node.id, { [MERGE_OUTPUT_PORT]: activeVal });
+    options.onNodeStatus?.(node.id, "done");
+    return {};
+  }
+
+  if (node.kind === "tool") {
+    const descriptor = descriptors.get(node.id);
+    if (!descriptor) return { error: `Unknown tool "${node.toolId ?? ""}"` };
+    for (const port of descriptor.inputs) {
+      if (inputs[port.id]) continue;
+      const typed = node.parameters?.[port.id];
+      if (typeof typed !== "string" || !typed) continue;
+      const val = await options.resolveInput(typed);
+      if (val) inputs[port.id] = val;
+    }
+    options.onNodeStatus?.(node.id, "running");
+    options.log(`Running ${descriptor.name}...`);
+    try {
+      const result = await options.executeTool({
+        node,
+        descriptor,
+        inputs,
+        signal: options.signal,
+      });
+      produced.set(node.id, result);
+      options.onNodeStatus?.(node.id, "done");
+      return {};
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { error: message };
+    }
+  }
+
+  // Inputs and outputs never sit inside a loop body, and a nested loop or an
+  // extra collector would otherwise be a silent no-op that leaves the real
+  // collector empty.
+  return { error: `A "${node.kind}" node cannot run inside a loop body.` };
+}
+
+/**
  * Execute a validated graph in dependency order.
  *
  * Each node's inputs are gathered from its incoming edges (falling back, for a
@@ -342,7 +1066,9 @@ export interface ModelGraphRunResult {
  * first node that fails and reports which one, leaving already-produced outputs
  * in place so a partial run is still inspectable.
  *
- * Validate first: this assumes the graph is acyclic and its ports line up.
+ * Supports conditional branching (evaluating switches, routing active branches,
+ * skipping unselected branches), iteration loops (features and rasters), and result
+ * collection.
  *
  * @param graph The graph to run.
  * @param options Resolution, execution and reporting hooks.
@@ -352,14 +1078,19 @@ export async function runModelGraph(
   graph: ProcessingModelGraph,
   options: RunModelGraphOptions,
 ): Promise<ModelGraphRunResult> {
-  const ordered = topologicalOrder(graph);
+  const ordered = executionOrder(graph);
   const outputs: Record<string, ModelValue> = {};
   if (!ordered) {
     return { outputs, error: { message: "The model contains a loop." } };
   }
 
-  // Values produced per node, keyed by output port id.
-  const produced = new Map<string, Record<string, ModelValue>>();
+  const descriptors = new Map<string, ModelToolDescriptor | undefined>();
+  for (const node of graph.nodes) {
+    if (node.kind === "tool")
+      descriptors.set(node.id, options.resolveDescriptor(node.provider, node.toolId));
+  }
+
+  const produced = new Map<string, Record<string, ValueOrSkipped>>();
   const incoming = new Map<string, typeof graph.edges>();
   for (const edge of graph.edges) {
     const list = incoming.get(edge.to) ?? [];
@@ -367,16 +1098,50 @@ export async function runModelGraph(
     incoming.set(edge.to, list);
   }
 
+  const handledNodes = new Set<string>();
+
   for (const node of ordered) {
+    if (handledNodes.has(node.id)) continue;
     if (options.signal?.aborted) {
       return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
     }
 
-    // Gather whatever the upstream nodes put on this node's input ports.
+    // Gather upstream values
+    const incomingEdges = incoming.get(node.id) ?? [];
     const inputs: Record<string, ModelValue> = {};
-    for (const edge of incoming.get(node.id) ?? []) {
+    let anyInputReal = false;
+    let anyInputSkipped = false;
+    let allIncomingSkipped = incomingEdges.length > 0;
+    for (const edge of incomingEdges) {
       const value = produced.get(edge.from)?.[edge.fromPort];
-      if (value) inputs[edge.toPort] = value;
+      if (value === SKIPPED) {
+        anyInputSkipped = true;
+      } else if (value !== undefined) {
+        inputs[edge.toPort] = value;
+        anyInputReal = true;
+        allIncomingSkipped = false;
+      } else {
+        allIncomingSkipped = false;
+      }
+    }
+
+    // A node fed by an unselected branch sits on that branch, even when another
+    // input is live; only a merge exists to take one live branch out of two.
+    if (node.kind === "conditional-merge") {
+      if (anyInputReal) allIncomingSkipped = false;
+    } else if (anyInputSkipped) {
+      allIncomingSkipped = true;
+    }
+
+    if (allIncomingSkipped) {
+      options.onNodeStatus?.(node.id, "skipped");
+      options.log(`Skipping "${node.id}" (${node.kind}) - branch not selected`);
+      const skipOutputs: Record<string, typeof SKIPPED> = {};
+      for (const port of portsFor(node, descriptors.get(node.id)).outputs) {
+        skipOutputs[port.id] = SKIPPED;
+      }
+      produced.set(node.id, skipOutputs);
+      continue;
     }
 
     try {
@@ -404,8 +1169,560 @@ export async function runModelGraph(
           return { outputs, error: { nodeId: node.id, message } };
         }
         const name = node.name?.trim() || "Model output";
-        options.emitOutput(name, value, node);
+        if (value.kind === "raster-collection") {
+          value.items.forEach((item, idx) => {
+            const subName = item.name ? `${name} - ${item.name}` : `${name} ${idx + 1}`;
+            options.emitOutput(
+              subName,
+              { kind: "raster", bytes: item.bytes, name: item.name, metadata: item.metadata },
+              node,
+            );
+          });
+        } else {
+          options.emitOutput(name, value, node);
+        }
         outputs[node.id] = value;
+        options.onNodeStatus?.(node.id, "done");
+        continue;
+      }
+
+      if (node.kind === "conditional-switch") {
+        options.onNodeStatus?.(node.id, "running");
+        const inputVal = inputs[SWITCH_INPUT_PORT] ?? (await resolveSwitchLayer(node, options));
+        if (!inputVal) {
+          const message = `Conditional Switch "${node.id}" has no incoming data input.`;
+          options.log(`Error: ${message}`);
+          options.onNodeStatus?.(node.id, "error");
+          return { outputs, error: { nodeId: node.id, message } };
+        }
+        const condVal = inputs[SWITCH_CONDITION_PORT];
+        const cond = evaluateCondition({
+          inputValue: inputVal,
+          conditionValue: condVal,
+          parameters: node.parameters,
+        });
+        if (cond) {
+          options.log(`Switch "${node.id}": condition TRUE -> True branch`);
+          produced.set(node.id, {
+            [SWITCH_TRUE_PORT]: inputVal,
+            [SWITCH_FALSE_PORT]: SKIPPED,
+          });
+        } else {
+          options.log(`Switch "${node.id}": condition FALSE -> False branch`);
+          produced.set(node.id, {
+            [SWITCH_TRUE_PORT]: SKIPPED,
+            [SWITCH_FALSE_PORT]: inputVal,
+          });
+        }
+        options.onNodeStatus?.(node.id, "done");
+        continue;
+      }
+
+      if (node.kind === "conditional-merge") {
+        options.onNodeStatus?.(node.id, "running");
+        const activeVal = inputs[MERGE_TRUE_PORT] ?? inputs[MERGE_FALSE_PORT];
+        if (!activeVal) {
+          const message = `Conditional Merge "${node.id}" received no active branch result.`;
+          options.log(`Error: ${message}`);
+          options.onNodeStatus?.(node.id, "error");
+          return { outputs, error: { nodeId: node.id, message } };
+        }
+        produced.set(node.id, { [MERGE_OUTPUT_PORT]: activeVal });
+        options.onNodeStatus?.(node.id, "done");
+        continue;
+      }
+
+      if (node.kind === "iterate-features") {
+        options.onNodeStatus?.(node.id, "running");
+        let collectionVal = inputs[ITERATE_FEATURES_INPUT_PORT];
+        const layerSource = sourceLayerId(node);
+        if (!collectionVal && layerSource) {
+          const resolved = await options.resolveInput(layerSource);
+          if (resolved) collectionVal = resolved;
+        }
+        if (!collectionVal || collectionVal.kind !== "vector") {
+          const message = `Iterate Features "${node.id}" requires a vector FeatureCollection.`;
+          options.log(`Error: ${message}`);
+          options.onNodeStatus?.(node.id, "error");
+          return { outputs, error: { nodeId: node.id, message } };
+        }
+        const features = collectionVal.geojson.features;
+        const maxIterations = iterationLimit(node);
+        const stopOnError = node.parameters?.stopOnError !== false;
+        const count = Math.min(features.length, maxIterations);
+        options.log(
+          `Iterate Features "${node.id}": running iteration over ${count} features (total: ${features.length}).`,
+        );
+
+        if (node.body) {
+          const collected: FeatureCollection["features"] = [];
+          for (let i = 0; i < count; i++) {
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            const feature = features[i];
+            options.onIterationProgress?.(node.id, i + 1, count);
+            const singleFC: FeatureCollection = { type: "FeatureCollection", features: [feature] };
+            const subResult = await runModelGraph(node.body, {
+              ...options,
+              resolveInput: (layerId) => {
+                if (
+                  layerId === "current" ||
+                  layerId === "item" ||
+                  layerId === "feature" ||
+                  !layerId
+                ) {
+                  return { kind: "vector", geojson: singleFC };
+                }
+                return options.resolveInput(layerId);
+              },
+              emitOutput: () => {},
+            });
+            if (subResult.error) {
+              const message = `Iteration ${i + 1}/${count} failed: ${subResult.error.message}`;
+              if (stopOnError) {
+                options.log(`Error: ${message}`);
+                options.onNodeStatus?.(node.id, "error");
+                return { outputs, error: { nodeId: node.id, message } };
+              } else {
+                options.log(`Warning: ${message}; continuing.`);
+              }
+            } else {
+              for (const outVal of Object.values(subResult.outputs)) {
+                if (outVal.kind === "vector") collected.push(...outVal.geojson.features);
+              }
+            }
+          }
+          const resVal: ModelValue = {
+            kind: "vector",
+            geojson: { type: "FeatureCollection", features: collected },
+          };
+          produced.set(node.id, {
+            [ITERATE_FEATURES_OUTPUT_FEATURE]: resVal,
+            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
+            [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
+          });
+          options.onNodeStatus?.(node.id, "done");
+          continue;
+        }
+
+        const collector = findDownstreamCollector(graph, node.id);
+        if (collector) {
+          const bodyNodes = findNodesBetween(graph, node.id, collector.id);
+          const extAncestors = findExternalAncestors(
+            graph,
+            new Set(bodyNodes.map((n) => n.id)),
+            node.id,
+            new Set([...produced.keys(), ...handledNodes]),
+          );
+          for (const anc of extAncestors) {
+            const ancRes = await executeSingleNode(anc, graph, produced, options, descriptors);
+            if (ancRes.error) {
+              options.onNodeStatus?.(anc.id, "error");
+              return { outputs, error: { nodeId: anc.id, message: ancRes.error } };
+            }
+            handledNodes.add(anc.id);
+          }
+
+          const collectedFeatures: FeatureCollection["features"] = [];
+          const collectedRasters: Array<{
+            bytes: Uint8Array;
+            name?: string;
+            metadata?: Record<string, unknown>;
+          }> = [];
+          let hasVector = false;
+          let hasRaster = false;
+
+          for (let i = 0; i < count; i++) {
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            const feature = features[i];
+            options.onIterationProgress?.(node.id, i + 1, count);
+            const singleFC: FeatureCollection = { type: "FeatureCollection", features: [feature] };
+            const iterProduced = new Map(produced);
+            iterProduced.set(node.id, {
+              [ITERATE_FEATURES_OUTPUT_FEATURE]: { kind: "vector", geojson: singleFC },
+              [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: i },
+              [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
+            });
+            let iterFailed = false;
+            for (const bn of bodyNodes) {
+              const stepRes = await executeSingleNode(
+                bn,
+                graph,
+                iterProduced,
+                options,
+                descriptors,
+              );
+              if (stepRes.error) {
+                iterFailed = true;
+                const message = `Iteration ${i + 1}/${count} failed at "${bn.id}": ${stepRes.error}`;
+                if (stopOnError) {
+                  options.log(`Error: ${message}`);
+                  options.onNodeStatus?.(bn.id, "error");
+                  return { outputs, error: { nodeId: bn.id, message } };
+                } else {
+                  options.log(`Warning: ${message}; continuing.`);
+                }
+                break;
+              }
+            }
+            if (!iterFailed) {
+              for (const edge of incoming.get(collector.id) ?? []) {
+                const val = iterProduced.get(edge.from)?.[edge.fromPort];
+                if (val && val !== SKIPPED) {
+                  if (val.kind === "vector") {
+                    hasVector = true;
+                    collectedFeatures.push(...val.geojson.features);
+                  } else if (val.kind === "raster") {
+                    hasRaster = true;
+                    collectedRasters.push({
+                      bytes: val.bytes,
+                      name: val.name,
+                      metadata: val.metadata,
+                    });
+                  } else if (val.kind === "raster-collection") {
+                    hasRaster = true;
+                    collectedRasters.push(...val.items);
+                  }
+                }
+              }
+            }
+          }
+
+          if (hasVector && hasRaster) {
+            const message = "Collector received mixed vector and raster results across iterations.";
+            options.log(`Error: ${message}`);
+            options.onNodeStatus?.(collector.id, "error");
+            return { outputs, error: { nodeId: collector.id, message } };
+          }
+
+          for (const bn of bodyNodes) {
+            handledNodes.add(bn.id);
+            options.onNodeStatus?.(bn.id, "done");
+          }
+          handledNodes.add(collector.id);
+          options.onNodeStatus?.(collector.id, "done");
+
+          let resVal: ModelValue;
+          if (hasRaster) {
+            resVal = {
+              kind: "raster-collection",
+              items: collectedRasters,
+            };
+            produced.set(collector.id, {
+              [COLLECT_RESULTS_OUTPUT_PORT]: resVal,
+              [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: collectedRasters.length },
+            });
+          } else {
+            resVal = {
+              kind: "vector",
+              geojson: { type: "FeatureCollection", features: collectedFeatures },
+            };
+            produced.set(collector.id, {
+              [COLLECT_RESULTS_OUTPUT_PORT]: resVal,
+              [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: collectedFeatures.length },
+            });
+          }
+
+          produced.set(node.id, {
+            [ITERATE_FEATURES_OUTPUT_FEATURE]: resVal,
+            [ITERATE_FEATURES_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
+            [ITERATE_FEATURES_OUTPUT_COUNT]: { kind: "number", value: features.length },
+          });
+          options.onNodeStatus?.(node.id, "done");
+          continue;
+        }
+
+        const message =
+          "Iterate Features requires an iteration body or a downstream Collect Results node.";
+        options.log(`Error: ${message}`);
+        options.onNodeStatus?.(node.id, "error");
+        return { outputs, error: { nodeId: node.id, message } };
+      }
+
+      if (node.kind === "iterate-rasters") {
+        options.onNodeStatus?.(node.id, "running");
+        let rasterItems: Array<{
+          bytes: Uint8Array;
+          name?: string;
+          metadata?: Record<string, unknown>;
+        }> = [];
+        const incomingColl = inputs[ITERATE_RASTERS_INPUT_PORT];
+        if (incomingColl) {
+          if (incomingColl.kind === "raster-collection") {
+            rasterItems = incomingColl.items;
+          } else if (incomingColl.kind === "raster") {
+            rasterItems = [
+              {
+                bytes: incomingColl.bytes,
+                name: incomingColl.name,
+                metadata: incomingColl.metadata,
+              },
+            ];
+          } else {
+            // Otherwise the loop would run zero times and "succeed" empty.
+            const message = `Iterate Rasters "${node.id}" requires rasters, but received ${incomingColl.kind} data.`;
+            options.log(`Error: ${message}`);
+            options.onNodeStatus?.(node.id, "error");
+            return { outputs, error: { nodeId: node.id, message } };
+          }
+        } else if (node.parameters?.layers) {
+          const layerList = Array.isArray(node.parameters.layers)
+            ? (node.parameters.layers as string[])
+            : String(node.parameters.layers)
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
+          for (const lid of layerList) {
+            const res = await options.resolveInput(lid);
+            if (res && res.kind === "raster") {
+              rasterItems.push({ bytes: res.bytes, name: res.name ?? lid, metadata: res.metadata });
+            }
+          }
+        } else if (node.layerId) {
+          const res = await options.resolveInput(node.layerId);
+          if (res && res.kind === "raster") {
+            rasterItems.push({
+              bytes: res.bytes,
+              name: res.name ?? node.layerId,
+              metadata: res.metadata,
+            });
+          }
+        }
+
+        const maxIterations = iterationLimit(node);
+        const stopOnError = node.parameters?.stopOnError !== false;
+        const count = Math.min(rasterItems.length, maxIterations);
+        options.log(
+          `Iterate Rasters "${node.id}": running iteration over ${count} rasters (total: ${rasterItems.length}).`,
+        );
+
+        if (node.body) {
+          const collectedRasters: Array<{
+            bytes: Uint8Array;
+            name?: string;
+            metadata?: Record<string, unknown>;
+          }> = [];
+          for (let i = 0; i < count; i++) {
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            const rItem = rasterItems[i];
+            options.onIterationProgress?.(node.id, i + 1, count);
+            const singleRasterVal: ModelValue = {
+              kind: "raster",
+              bytes: rItem.bytes,
+              name: rItem.name,
+              metadata: rItem.metadata,
+            };
+            const subResult = await runModelGraph(node.body, {
+              ...options,
+              resolveInput: (layerId) => {
+                if (
+                  layerId === "current" ||
+                  layerId === "item" ||
+                  layerId === "raster" ||
+                  !layerId
+                ) {
+                  return singleRasterVal;
+                }
+                return options.resolveInput(layerId);
+              },
+              emitOutput: () => {},
+            });
+            if (subResult.error) {
+              const message = `Iteration ${i + 1}/${count} failed: ${subResult.error.message}`;
+              if (stopOnError) {
+                options.log(`Error: ${message}`);
+                options.onNodeStatus?.(node.id, "error");
+                return { outputs, error: { nodeId: node.id, message } };
+              } else {
+                options.log(`Warning: ${message}; continuing.`);
+              }
+            } else {
+              for (const outVal of Object.values(subResult.outputs)) {
+                if (outVal.kind === "raster") {
+                  collectedRasters.push({
+                    bytes: outVal.bytes,
+                    name: outVal.name ?? rItem.name,
+                    metadata: outVal.metadata,
+                  });
+                } else if (outVal.kind === "raster-collection") {
+                  collectedRasters.push(...outVal.items);
+                }
+              }
+            }
+          }
+          const resVal: ModelValue = {
+            kind: "raster-collection",
+            items: collectedRasters,
+          };
+          produced.set(node.id, {
+            [ITERATE_RASTERS_OUTPUT_RASTER]: resVal,
+            [ITERATE_RASTERS_OUTPUT_NAME]: {
+              kind: "string",
+              value: collectedRasters[0]?.name ?? "",
+            },
+            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
+            [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
+          });
+          options.onNodeStatus?.(node.id, "done");
+          continue;
+        }
+
+        const collector = findDownstreamCollector(graph, node.id);
+        if (collector) {
+          const bodyNodes = findNodesBetween(graph, node.id, collector.id);
+          const extAncestors = findExternalAncestors(
+            graph,
+            new Set(bodyNodes.map((n) => n.id)),
+            node.id,
+            new Set([...produced.keys(), ...handledNodes]),
+          );
+          for (const anc of extAncestors) {
+            const ancRes = await executeSingleNode(anc, graph, produced, options, descriptors);
+            if (ancRes.error) {
+              options.onNodeStatus?.(anc.id, "error");
+              return { outputs, error: { nodeId: anc.id, message: ancRes.error } };
+            }
+            handledNodes.add(anc.id);
+          }
+
+          const collectedFeatures: GeoJSON.Feature[] = [];
+          const collectedRasters: Array<{
+            bytes: Uint8Array;
+            name?: string;
+            metadata?: Record<string, unknown>;
+          }> = [];
+          let hasVector = false;
+          let hasRaster = false;
+
+          for (let i = 0; i < count; i++) {
+            if (options.signal?.aborted)
+              return { outputs, error: { nodeId: node.id, message: "Run cancelled." } };
+            const rItem = rasterItems[i];
+            options.onIterationProgress?.(node.id, i + 1, count);
+            const singleRasterVal: ModelValue = {
+              kind: "raster",
+              bytes: rItem.bytes,
+              name: rItem.name,
+              metadata: rItem.metadata,
+            };
+            const iterProduced = new Map(produced);
+            iterProduced.set(node.id, {
+              [ITERATE_RASTERS_OUTPUT_RASTER]: singleRasterVal,
+              [ITERATE_RASTERS_OUTPUT_NAME]: { kind: "string", value: rItem.name ?? "" },
+              [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: i },
+              [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
+            });
+            let iterFailed = false;
+            for (const bn of bodyNodes) {
+              const stepRes = await executeSingleNode(
+                bn,
+                graph,
+                iterProduced,
+                options,
+                descriptors,
+              );
+              if (stepRes.error) {
+                iterFailed = true;
+                const message = `Iteration ${i + 1}/${count} failed at "${bn.id}": ${stepRes.error}`;
+                if (stopOnError) {
+                  options.log(`Error: ${message}`);
+                  options.onNodeStatus?.(bn.id, "error");
+                  return { outputs, error: { nodeId: bn.id, message } };
+                } else {
+                  options.log(`Warning: ${message}; continuing.`);
+                }
+                break;
+              }
+            }
+            if (!iterFailed) {
+              for (const edge of incoming.get(collector.id) ?? []) {
+                const val = iterProduced.get(edge.from)?.[edge.fromPort];
+                if (val && val !== SKIPPED) {
+                  if (val.kind === "vector") {
+                    hasVector = true;
+                    collectedFeatures.push(...val.geojson.features);
+                  } else if (val.kind === "raster") {
+                    hasRaster = true;
+                    collectedRasters.push({
+                      bytes: val.bytes,
+                      name: val.name ?? rItem.name,
+                      metadata: val.metadata,
+                    });
+                  } else if (val.kind === "raster-collection") {
+                    hasRaster = true;
+                    collectedRasters.push(...val.items);
+                  }
+                }
+              }
+            }
+          }
+
+          if (hasVector && hasRaster) {
+            const message = "Collector received mixed vector and raster results across iterations.";
+            options.log(`Error: ${message}`);
+            options.onNodeStatus?.(collector.id, "error");
+            return { outputs, error: { nodeId: collector.id, message } };
+          }
+
+          for (const bn of bodyNodes) {
+            handledNodes.add(bn.id);
+            options.onNodeStatus?.(bn.id, "done");
+          }
+          handledNodes.add(collector.id);
+          options.onNodeStatus?.(collector.id, "done");
+
+          let resVal: ModelValue;
+          if (hasVector) {
+            resVal = {
+              kind: "vector",
+              geojson: { type: "FeatureCollection", features: collectedFeatures },
+            };
+            produced.set(collector.id, {
+              [COLLECT_RESULTS_OUTPUT_PORT]: resVal,
+              [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: collectedFeatures.length },
+            });
+          } else {
+            resVal = {
+              kind: "raster-collection",
+              items: collectedRasters,
+            };
+            produced.set(collector.id, {
+              [COLLECT_RESULTS_OUTPUT_PORT]: resVal,
+              [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: collectedRasters.length },
+            });
+          }
+
+          produced.set(node.id, {
+            [ITERATE_RASTERS_OUTPUT_RASTER]: resVal,
+            [ITERATE_RASTERS_OUTPUT_NAME]: {
+              kind: "string",
+              value: collectedRasters[0]?.name ?? "",
+            },
+            [ITERATE_RASTERS_OUTPUT_INDEX]: { kind: "number", value: count - 1 },
+            [ITERATE_RASTERS_OUTPUT_COUNT]: { kind: "number", value: rasterItems.length },
+          });
+          options.onNodeStatus?.(node.id, "done");
+          continue;
+        }
+
+        const message =
+          "Iterate Rasters requires an iteration body or a downstream Collect Results node.";
+        options.log(`Error: ${message}`);
+        options.onNodeStatus?.(node.id, "error");
+        return { outputs, error: { nodeId: node.id, message } };
+      }
+
+      if (node.kind === "collect-results") {
+        options.onNodeStatus?.(node.id, "running");
+        const itemVal = inputs[COLLECT_RESULTS_INPUT_PORT];
+        if (itemVal) {
+          produced.set(node.id, {
+            [COLLECT_RESULTS_OUTPUT_PORT]: itemVal,
+            [COLLECT_RESULTS_OUTPUT_COUNT]: { kind: "number", value: 1 },
+          });
+        }
         options.onNodeStatus?.(node.id, "done");
         continue;
       }
