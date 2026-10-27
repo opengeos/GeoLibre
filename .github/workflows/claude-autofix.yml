@@ -191,6 +191,18 @@ jobs:
           rm -rf .autofix
           mkdir .autofix
           echo /.autofix/ >> .git/info/exclude
+          # A symlink in the head pointing out of the checkout, or into .git, would let Claude's file
+          # tools read what the deny rules keep out (/proc/self/environ, .git/config).
+          find . -path ./.git -prune -o -type l -print0 > "$RUNNER_TEMP/links.z"
+          while IFS= read -r -d '' l; do
+            t=$(realpath -m -- "$l")
+            case "$t" in
+              "$PWD/.git" | "$PWD/.git/"*) ;;
+              "$PWD"/*) continue ;;
+            esac
+            echo "::error::$l links outside the checkout or into .git ($t), so autofix doesn't run on it."
+            exit 1
+          done < "$RUNNER_TEMP/links.z"
           gh api graphql --paginate \
             -F owner="${GITHUB_REPOSITORY%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$NUMBER" \
             -f query='
@@ -205,6 +217,7 @@ jobs:
                           nodes { id author { login __typename } body }
                         }
                         comments(last: 50) {
+                          totalCount
                           nodes { id author { login __typename } body }
                         }
                       }
@@ -223,9 +236,12 @@ jobs:
               | select(.comments.nodes[-1]
                        | (.author.__typename == "Bot" and (.body | startswith("**Claude autofix ("))) | not)
               | { id, path, line: (.line // .originalLine), outdated: .isOutdated,
-                  comments: (.starter.nodes[0] as $s
+                  comments: (.comments.totalCount as $n | .starter.nodes[0] as $s
                              | [ $s, (.comments.nodes[] | select(.id != $s.id)) ]
-                             | map(select(trusted) | { author: (.author.login // "ghost"), body })) } ]
+                             | map(select(trusted) | { author: (.author.login // "ghost"), body })
+                             | if $n > 51 then .[:1] + [{ author: "autofix",
+                                 body: "(\($n - 51) earlier comments are not shown)" }] + .[1:]
+                               else . end) } ]
           ' "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
           count=$(jq length .autofix/threads.json)
           echo "count=$count" >> "$GITHUB_OUTPUT"
@@ -254,7 +270,7 @@ jobs:
           # Checked on the NUL-separated list: git still quotes a path with `"`, `\` or a control
           # character even with quotePath off, and a quoted name would slip past the pattern.
           git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/conflicts.z"
-          if grep -zqiE '^\.github/|(^|/)(agents|claude)\.md$|^\.claude/|(^|/)CLAUDE\.local\.md$|^\.mcp\.json$' \
+          if grep -zqiE '^\.github/|(^|/)(agents|claude)\.md$|(^|/)\.claude/|(^|/)CLAUDE\.local\.md$|^\.mcp\.json$' \
               "$RUNNER_TEMP/conflicts.z"; then
             echo "::error::A conflict in .github/ or an instruction file needs a person."
             exit 1
@@ -405,12 +421,16 @@ jobs:
               git rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
-          left=$(git diff --name-only -z --diff-filter=U | xargs -0 -r grep -lE '^(<<<<<<<|>>>>>>>)( |$)' -- || true)
-          if [ -n "$left" ]; then
-            echo "::error::Claude left conflicts for a person:"; echo "$left"
-            exit 1
-          fi
-          git add -A
+          # Every still-unmerged file must be readable and free of markers: grep's "error" (a file
+          # Claude deleted without listing it in delete.txt, say) fails the run like a marker does.
+          git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/left.z"
+          while IFS= read -r -d '' f; do
+            rc=0
+            grep -qE '^(<<<<<<<|>>>>>>>)( |$)' -- "$f" || rc=$?
+            [ "$rc" != 0 ] || { echo "::error::Claude left conflicts for a person: $f"; exit 1; }
+            [ "$rc" = 1 ] || { echo "::error::Couldn't check $f for conflict markers."; exit 1; }
+          done < "$RUNNER_TEMP/left.z"
+          git add -A -- . ':!.autofix'
           test -z "$(git diff --cached --name-only --diff-filter=U)"
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
@@ -494,17 +514,19 @@ jobs:
                 and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string" and (.reply | length) > 0
                              and (.status | IN("fixed", "addressed", "declined", "unclear")))
                 and (map(.id) | sort) == ($ids | sort))' .autofix/report.json > /dev/null; then
-            missed=$(jq -rs --argjson ids "$IDS" '(.[0] // []) as $r | if ($r | type) == "array"
-              then [$ids[] | select(. as $i | [$r[] | objects | .id] | index($i) | not)] | join(", ") else "all" end' \
-              .autofix/report.json 2> /dev/null || echo "all")
-            echo "::warning::Claude didn't finish the review threads (unanswered: ${missed:-none, but the report is malformed}); their changes are dropped."
+            if ! missed=$(jq -rs --argjson ids "$IDS" '(.[0] // []) as $r | if ($r | type) == "array"
+                then [$ids[] | select(. as $i | [$r[] | objects | .id] | index($i) | not)] | join(", ")
+                else "the report isn'"'"'t an array" end' .autofix/report.json 2> /dev/null); then
+              missed="the report isn't valid JSON"
+            fi
+            echo "::warning::Claude didn't finish the review threads (missing: ${missed:-none, but an entry is malformed or repeated}); their changes are dropped."
             git reset -q --hard HEAD
             git clean -fdq
             rm -f .autofix/report.json
             exit 0
           fi
           echo "reported=true" >> "$GITHUB_OUTPUT"
-          git add -A
+          git add -A -- . ':!.autofix'
           if git diff --cached --quiet; then
             echo "No code changes."
             exit 0
@@ -779,5 +801,5 @@ jobs:
               --body "Claude autofix stopped without finishing; the reason is in [the run]($RUN)."
           elif [ "$WORK" = false ]; then
             gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
-              --body "Claude autofix: no conflicts with the base branch and no open review threads."
+              --body "Claude autofix: nothing to do. There are no conflicts with the base branch, and no open review threads that a bot or someone with push access started and autofix hasn't answered yet."
           fi
