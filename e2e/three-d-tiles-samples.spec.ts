@@ -45,4 +45,8 @@ test("3D Tiles sample picks rename the layer unless the user typed one", async (
   await pickSample(page, "AGI HQ");
   await expect(url).toHaveValue(/agi-hq/);
   await expect(name).toHaveValue("My buildings");
+  // A second pick must not mistake the kept name for a sample-filled one.
+  await pickSample(page, "Google Photorealistic 3D Tiles");
+  await expect(url).toHaveValue("https://tile.googleapis.com/v1/3dtiles/root.json");
+  await expect(name).toHaveValue("My buildings");
 });

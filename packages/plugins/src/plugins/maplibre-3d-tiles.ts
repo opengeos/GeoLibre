@@ -1071,14 +1071,16 @@ function installGooglePhotorealisticTilesPanelHandlers(
     // too, unless the user typed a name of their own (#3258).
     const layerNameInput = panel.querySelector<HTMLInputElement>('input[aria-label="Layer name"]');
     if (layerNameInput) {
-      layerNameInput.value = threeDTilesSampleLayerName(
-        layerNameInput.value,
+      const currentName = layerNameInput.value;
+      const nextName = threeDTilesSampleLayerName(
+        currentName,
         option.textContent ?? "",
         panel.dataset.geolibreSampleLayerName,
       );
-      // Remember the name this pick filled in, so the next pick can tell it
+      layerNameInput.value = nextName;
+      // Remember only a name this pick filled in, so the next pick can tell it
       // apart from one the user typed (even one that matches a sample label).
-      panel.dataset.geolibreSampleLayerName = layerNameInput.value;
+      if (nextName !== currentName) panel.dataset.geolibreSampleLayerName = nextName;
     }
     // Run the URL defaults for every pick, not only the Google one: the
     // library sets the URL without an input event, so switching from the
