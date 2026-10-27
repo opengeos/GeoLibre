@@ -81,6 +81,10 @@ jobs:
           CAN_MODIFY: ${{ github.event.pull_request.maintainer_can_modify }}
         run: |
           set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The AUTOFIX_TOKEN secret isn't set. Add a maintainer's token with contents and pull-requests write access to this repository."
+            exit 1
+          fi
           perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$SENDER/permission" --jq .permission)
           case "$perm" in
             admin|maintain|write) ;;
