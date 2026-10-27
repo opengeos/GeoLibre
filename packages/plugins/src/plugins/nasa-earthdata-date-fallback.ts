@@ -42,13 +42,19 @@ function parseInterval(value: string): TimeInterval | null {
   return { start, end, period: { years, months, days } };
 }
 
-function subtractPeriod(date: string, period: NonNullable<TimeInterval["period"]>): string {
+function subtractPeriod(
+  date: string,
+  period: NonNullable<TimeInterval["period"]>,
+  steps: number,
+): string {
   const [year, month, day] = date.split("-").map(Number);
+  const years = period.years * steps;
+  const months = period.months * steps;
   // Clamp the day to the target month so 2024-03-31 minus P1M is 2024-02-29,
   // not the Date.UTC rollover 2024-03-02 (a date GIBS never advertises).
-  const lastDay = new Date(Date.UTC(year - period.years, month - period.months, 0)).getUTCDate();
+  const lastDay = new Date(Date.UTC(year - years, month - months, 0)).getUTCDate();
   const shifted = new Date(
-    Date.UTC(year - period.years, month - 1 - period.months, Math.min(day, lastDay) - period.days),
+    Date.UTC(year - years, month - 1 - months, Math.min(day, lastDay) - period.days * steps),
   );
   return shifted.toISOString().slice(0, 10);
 }
@@ -72,14 +78,21 @@ export function previousGibsDates(time: GibsTimeDimension, from: string, count: 
     .filter((interval): interval is TimeInterval => interval !== null);
   const dates: string[] = [];
   let current = from;
+  // Step from a fixed anchor rather than from the last (possibly clamped) date,
+  // so 2024-03-31 by P1M gives 2024-02-29 and then 2024-01-31, not 2024-01-29.
+  let anchor = from;
+  let steps = 0;
   while (dates.length < count) {
     const containing = intervals.find(
       (interval) => interval.start <= current && current <= interval.end,
     );
     let next: string | undefined;
     if (containing?.period) {
-      const stepped = subtractPeriod(current, containing.period);
-      if (stepped >= containing.start) next = stepped;
+      const stepped = subtractPeriod(anchor, containing.period, steps + 1);
+      if (stepped >= containing.start) {
+        next = stepped;
+        steps += 1;
+      }
     }
     if (!next) {
       // Continue at the newest interval end before the current date.
@@ -88,6 +101,8 @@ export function previousGibsDates(time: GibsTimeDimension, from: string, count: 
         .filter((end) => end < current)
         .sort()
         .at(-1);
+      anchor = next ?? anchor;
+      steps = 0;
     }
     if (!next) break;
     dates.push(next);
@@ -220,6 +235,10 @@ export function addAtAvailableDefaultDate(
       .then((date) => {
         if (!isActive()) return;
         addLayer(layerId, date ? { ...options, date } : options);
-      });
+      })
+      // The add now runs after the click handler returned, so surface its errors.
+      .catch((error: unknown) =>
+        console.warn("[GeoLibre] Failed to add the NASA Earthdata layer", error),
+      );
   };
 }

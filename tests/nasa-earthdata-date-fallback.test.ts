@@ -69,7 +69,11 @@ describe("previousGibsDates", () => {
 
   it("clamps month and year steps to the target month's length", () => {
     const monthly = { default: "2024-03-31", values: ["2023-01-31/2024-03-31/P1M"] };
-    assert.deepEqual(previousGibsDates(monthly, "2024-03-31", 1), ["2024-02-29"]);
+    assert.deepEqual(previousGibsDates(monthly, "2024-03-31", 3), [
+      "2024-02-29",
+      "2024-01-31",
+      "2023-12-31",
+    ]);
     const yearly = { default: "2024-02-29", values: ["2020-02-29/2024-02-29/P1Y"] };
     assert.deepEqual(previousGibsDates(yearly, "2024-02-29", 1), ["2023-02-28"]);
   });
