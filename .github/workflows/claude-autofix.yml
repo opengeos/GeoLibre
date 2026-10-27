@@ -51,8 +51,10 @@ on:
 permissions: {}
 
 # One autofix at a time per pull request; a second label waits rather than racing the first push.
+# Other labels get a group of their own: a pending run is replaced by the next one in its group,
+# so a `bug` label added meanwhile would otherwise cancel a queued autofix.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'claude-autofix' }}
   cancel-in-progress: false
 
 jobs:
@@ -101,6 +103,7 @@ jobs:
     outputs:
       work: ${{ steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0' }}
       threads: ${{ steps.threads.outputs.count }}
+      thread_ids: ${{ steps.threads.outputs.ids }}
       conflicts: ${{ steps.merge.outputs.conflicts }}
       base_sha: ${{ steps.merge.outputs.base_sha }}
       fixed: ${{ steps.fixcommit.outputs.committed == 'true' }}
@@ -186,6 +189,8 @@ jobs:
           ' "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
           count=$(jq length .autofix/threads.json)
           echo "count=$count" >> "$GITHUB_OUTPUT"
+          # The reply and resolve steps take their ids from here, not from the files Claude can edit.
+          echo "ids=$(jq -c 'map(.id)' .autofix/threads.json)" >> "$GITHUB_OUTPUT"
           echo "$count open review thread(s) staged."
 
       # Merged only when it conflicts: a clean pull request is left on its base as it is.
@@ -310,9 +315,11 @@ jobs:
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
+            # The index's unmerged paths, not conflicts.txt, which Claude could have edited.
+            conflicted=$(git -c core.quotePath=false diff --name-only --diff-filter=U)
             while IFS= read -r f; do
               [ -n "$f" ] || continue
-              grep -qxF -- "$f" .autofix/conflicts.txt || { echo "::error::$f had no conflict."; exit 1; }
+              grep -qxF -- "$f" <<< "$conflicted" || { echo "::error::$f had no conflict."; exit 1; }
               git rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
@@ -491,7 +498,8 @@ jobs:
           git push origin "$new:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-      # Replies go out only for threads that were staged, whatever ids the report holds. A thread
+      # Replies go out only for threads that were staged (the ids recorded before Claude ran),
+      # whatever ids the report holds. A thread
       # Claude calls fixed is resolved only when a fix commit was pushed; one it calls addressed
       # needs no commit. Declined and unclear threads stay open for a maintainer.
       - name: Reply to the threads
@@ -499,12 +507,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DIR: ${{ runner.temp }}/autofix
+          IDS: ${{ needs.fix.outputs.thread_ids }}
           LANDED: ${{ needs.fix.outputs.fixed == 'true' && steps.push.outputs.pushed == 'true' }}
         run: |
           set -euo pipefail
           : > "$RUNNER_TEMP/to-resolve"
-          jq -c --slurpfile t "$DIR/threads.json" \
-            '($t[0] | map(.id)) as $ids | .[] | select(.id as $i | $ids | index($i))
+          jq -c --argjson ids "$IDS" \
+            '.[] | select(.id as $i | $ids | index($i))
              | select(.status | IN("fixed", "addressed", "declined", "unclear"))' \
             "$DIR/report.json" |
           while read -r entry; do
