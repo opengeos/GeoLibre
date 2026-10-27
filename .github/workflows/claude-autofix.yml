@@ -23,9 +23,9 @@ name: Claude autofix
 #   - Review comments reach Claude only from bots and the repository's owner and members, not
 #     from outside collaborators, whatever their access.
 #   - Scripts come from this file, never from the checkout. Claude's file tools may not edit
-#     `.git/`, the git config in the home directory or the runner's temp directory, it gets no
-#     git commands, and the steps after it check that every git config layer, the hooks and the
-#     helper script are as they were.
+#     `.git/`, the git config in the home directory or the runner's temp directory, and it gets no
+#     git commands. The steps after it check the helper script, put back the git config and hooks
+#     saved before Claude ran, and ignore the global and system git config.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -241,13 +241,7 @@ jobs:
           cat > "$RUNNER_TEMP/instructions.sh" <<'EOF'
           set -euo pipefail
           aside="$RUNNER_TEMP/instructions"
-          gitsum() {
-            {
-              git config --list --show-origin
-              find .git/hooks -printf '%m %p\n' | sort
-              find .git/hooks -type f -print0 | sort -z | xargs -0 -r sha256sum
-            } | sha256sum | cut -d' ' -f1
-          }
+          saved="$RUNNER_TEMP/git-saved"
           files() {
             find . \( -path ./.git -o -path ./.autofix -o -name node_modules -o -name target \) -prune \
               -o -name .claude -prune "$@" \
@@ -261,24 +255,26 @@ jobs:
                   mkdir -p "$aside/$(dirname "$f")"; mv "$f" "$aside/$f"
                 done
               cp .autofix/CLAUDE.md CLAUDE.md ;;
+            save)
+              rm -rf "$saved"; mkdir -p "$saved"
+              cp -a .git/config .git/hooks "$saved/" ;;
             check)
-              # Claude may not touch any git config layer or the hooks: they run commands in the git
-              # steps.
-              [ "$(gitsum)" = "$GIT_SUM" ] || { echo "::error::The git config or hooks changed."; exit 1; } ;;
-            sum)
-              gitsum ;;
+              # The git config and hooks run commands in the git steps, so they go back to what they
+              # were before Claude's steps. claude-code-action itself writes .git/config (a git user,
+              # a credential helper), so comparing them can't work. The steps that run git also set
+              # GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM, so no other config layer counts.
+              rm -rf .git/config .git/hooks
+              cp -a "$saved/config" "$saved/hooks" .git/ ;;
             restore)
-              GIT_SUM="$GIT_SUM" bash "$0" check
+              bash "$0" check
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
           esac
           EOF
           bash "$RUNNER_TEMP/instructions.sh" hide
-          {
-            echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
-            echo "git=$(bash "$RUNNER_TEMP/instructions.sh" sum)"
-          } >> "$GITHUB_OUTPUT"
+          bash "$RUNNER_TEMP/instructions.sh" save
+          echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: (steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0') && env.FORK != 'true'
@@ -324,7 +320,8 @@ jobs:
         if: steps.merge.outputs.conflicts != '0'
         env:
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
-          GIT_SUM: ${{ steps.instructions.outputs.git }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
@@ -394,7 +391,8 @@ jobs:
         env:
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
-          GIT_SUM: ${{ steps.instructions.outputs.git }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
@@ -429,7 +427,8 @@ jobs:
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         env:
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
-          GIT_SUM: ${{ steps.instructions.outputs.git }}
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
