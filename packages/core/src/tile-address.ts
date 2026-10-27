@@ -59,3 +59,8 @@ export function resolveLayerTileAddress(
   if (layer.type !== "xyz") return { tiles: [...tiles], scheme };
   return resolveTileAddress(tiles, scheme);
 }
+
+/** True when {@link resolveTileAddress} rejected a mixed `{y}` / `{-y}` template. */
+export function isTileAddressError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("{y} or {-y}");
+}

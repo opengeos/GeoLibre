@@ -7,6 +7,7 @@ import {
   resolveTileAddress,
   type GeoLibreLayer,
 } from "@geolibre/core";
+import { resolveXyzTileUrlTemplate } from "../apps/geolibre-desktop/src/lib/xyz-url";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
 import { compileMapboxLayer } from "../packages/map/src/gl-style-compiler";
 import { syncLayer } from "../packages/map/src/layer-sync";
@@ -71,6 +72,28 @@ function xyzLayer(source: GeoLibreLayer["source"]): GeoLibreLayer {
 }
 
 describe("XYZ layer renderers", () => {
+  it("rejects a direct template that names both row tokens", async () => {
+    await assert.rejects(resolveXyzTileUrlTemplate("https://t/{z}/{x}/{y}/{-y}.png"), /not both/);
+  });
+
+  it("skips a stored layer with both row tokens and still draws the next layer", () => {
+    const sources = new Map<string, { tiles?: string[] }>();
+    const map = {
+      getSource: (id: string) => sources.get(id),
+      addSource: (id: string, spec: { tiles?: string[] }) => sources.set(id, spec),
+      getLayer: () => undefined,
+      addLayer: () => undefined,
+    } as unknown as maplibregl.Map;
+    const bad = xyzLayer({ tiles: ["https://t/{z}/{x}/{y}/{-y}.png"] });
+    bad.id = "bad";
+    const good = xyzLayer({ tiles: ["https://ok/{z}/{x}/{y}.png"] });
+    good.id = "good";
+    syncLayer(map, bad);
+    syncLayer(map, good);
+    assert.equal(sources.size, 1);
+    assert.equal(sources.get("source-good")?.tiles?.[0], "https://ok/{z}/{x}/{y}.png");
+  });
+
   it("asks MapLibre for a TMS row when the template uses {-y}", () => {
     const sources = new Map<string, maplibregl.RasterSourceSpecification>();
     const map = {

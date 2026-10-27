@@ -17,6 +17,7 @@ import {
   type LabelStyle,
   type LayerStyle,
   documentLocale,
+  isTileAddressError,
   resolveLayerTileAddress,
 } from "@geolibre/core";
 import {
@@ -2851,7 +2852,18 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
   const rawTiles = getRenderableRasterTiles(map, layer);
   const tileSize = numberSource(layer.source.tileSize) ?? 256;
   if (rawTiles.length === 0) return;
-  const addressed = resolveLayerTileAddress(layer, rawTiles);
+  // A saved template that mixes {y} and {-y} must not abort the rest of the
+  // layer pass. New layers are rejected before they are stored.
+  let addressed: ReturnType<typeof resolveLayerTileAddress>;
+  try {
+    addressed = resolveLayerTileAddress(layer, rawTiles);
+  } catch (error) {
+    if (!isTileAddressError(error)) throw error;
+    console.warn(
+      `[GeoLibre] skipping layer "${layer.name || layer.id}": a tile template can use {y} or {-y}, not both.`,
+    );
+    return;
+  }
   if (!map.getSource(src)) {
     const bounds = boundsSource(layer.source.bounds);
     const minzoom = numberSource(layer.source.minzoom);

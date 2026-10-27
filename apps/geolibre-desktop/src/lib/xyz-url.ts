@@ -74,12 +74,9 @@ export async function resolveXyzTileUrlTemplate(
   signal?.throwIfAborted();
   const originalUrl = normalizeTileUrlTemplate(url.trim());
   if (hasXyzTilePlaceholders(originalUrl)) {
-    return {
-      originalUrl,
-      redirected: false,
-      renderUrl: renderableXyzTileUrl(originalUrl),
-      url: originalUrl,
-    };
+    // Same check as addTileLayer: a template that names both row tokens is
+    // rejected here, before the form stores the layer.
+    return createXyzTileUrlTemplate(originalUrl);
   }
 
   return resolveShortXyzUrl(originalUrl, signal);
@@ -234,13 +231,6 @@ function getSavedXyzUrl(layer: GeoLibreLayer): string | null {
   return null;
 }
 
-function renderableXyzTileUrl(url: string): string {
-  // Tauri allows HTTPS image tiles via CSP, so keep the browser/WebView tile
-  // path. Routing every XYZ tile through IPC makes slow tile servers affect
-  // desktop responsiveness.
-  return url;
-}
-
 function parseXyzTileRequest(request: RequestParameters): string {
   const url = new URL(request.url);
   const template = url.searchParams.get("url");
@@ -385,6 +375,8 @@ export function parseXyzTileJson(value: unknown): XyzTileJsonSource {
     return url;
   });
   // One scheme covers every template, so the list cannot mix {y} and {-y}.
+  // The stored tiles and scheme stay as written. "tms" and {-y} are two flips
+  // and cancel to an XYZ row when the layer is drawn.
   resolveTileAddress(tiles, record.scheme === "tms" ? "tms" : "xyz");
   const source: XyzTileJsonSource = { tiles };
   const bounds = record.bounds;

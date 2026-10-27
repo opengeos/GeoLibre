@@ -925,7 +925,7 @@ export interface GeoLibreTileLayerOptions {
   bounds?: [number, number, number, number]; // [west, south, east, north] in WGS84
   minzoom?: number;
   maxzoom?: number;
-  scheme?: "xyz" | "tms"; // default "xyz"
+  scheme?: "xyz" | "tms"; // default "xyz". "tms" flips {y}; {-y} is a separate flip, and the two cancel
   visible?: boolean; // default true
   opacity?: number; // default 1
   beforeLayerId?: string; // insert beneath this layer
@@ -1045,6 +1045,8 @@ const layerId = await app.addWfsLayer?.("Roads", {
 `options.engine` picks the renderer (`"maplibre-gl-raster"` for the GPU/deck.gl path, `"cog-tiler-wasm"` for the WebAssembly tiler, `"titiler"` for a TiTiler server). Unlike the other options it is **not per layer**: the raster control holds one engine for every raster it manages, so naming one re-renders the rasters already on the map. Pass `"auto"` to leave whatever the control is on alone; omit it and the GPU renderer is used. The GPU renderer requires a Mercator projection, so a plugin that expects to work on the globe should ask for `"cog-tiler-wasm"`.
 
 `addWmsLayer` requests Web Mercator tiles unless `crs` names another CRS, for a server whose capabilities do not list EPSG:3857. Pick one the layer lists, preferably geographic (`EPSG:4326`, `EPSG:4258`, `EPSG:6706`, or `CRS:84` with `version: "1.3.0"`), otherwise a projected `EPSG:<code>` such as `EPSG:25832`. Only the desktop app redraws those tiles into Web Mercator: the web build still sends the Web Mercator BBOX, so such a layer stays blank there. The exception is a map drawn in that CRS (`app.getMapCrs()?.code`, see [Reading the map CRS](#reading-the-map-crs)): the host then asks every WMS layer for its tiles in the map's CRS, so a layer the server lists in it lines up on both builds. An unsupported value, or `CRS:84` with WMS 1.1.1, throws.
+
+`scheme` defaults to `"xyz"`. `"tms"` flips the `{y}` row. A `{-y}` placeholder is a second flip and does not select TMS, on a bare template or in TileJSON. A document that sets `"scheme": "tms"` and also writes `{-y}` requests the ordinary XYZ row, because the two flips cancel. The stored template and scheme stay as written. One template, and every URL in one TileJSON `tiles` list, uses `{y}` or `{-y}`, not both.
 
 `addTileLayer`/`addWmtsLayer`/`addWmsLayer` expect **pre-rendered tiles** (e.g. a COG already served through a tiler such as titiler as an XYZ endpoint). `addCogLayer` is different: it loads the **GeoTIFF itself** and renders it client-side, exposing band selection, rescale, colormap, and nodata in the raster panel. It is async (it fetches the file's header), so it returns a `Promise<string>` and rejects if the COG cannot be read.
 
