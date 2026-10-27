@@ -9,7 +9,12 @@
  * imagery becomes the layer's date. A default date that works costs one tile
  * request and changes nothing.
  */
-import { buildTileUrl, type GibsLayer, type GibsTimeDimension } from "maplibre-gl-nasa-earthdata";
+import {
+  buildTileUrl,
+  type GibsLayer,
+  type GibsTimeDimension,
+  type NasaEarthdataControl,
+} from "maplibre-gl-nasa-earthdata";
 
 /** How many earlier dates are probed before giving up on the fallback. */
 export const MAX_FALLBACK_STEPS = 3;
@@ -29,16 +34,12 @@ function parseInterval(value: string): TimeInterval | null {
   if (end === undefined) return { start, end: start };
   if (!DATE_ONLY.test(end)) return null;
   const match = period ? PERIOD.exec(period) : null;
-  if (!match || !(match[1] || match[2] || match[3])) return { start, end };
-  return {
-    start,
-    end,
-    period: {
-      years: Number(match[1] ?? 0),
-      months: Number(match[2] ?? 0),
-      days: Number(match[3] ?? 0),
-    },
-  };
+  const years = Number(match?.[1] ?? 0);
+  const months = Number(match?.[2] ?? 0);
+  const days = Number(match?.[3] ?? 0);
+  // A zero (or unparseable) period cannot be stepped through.
+  if (years + months + days === 0) return { start, end };
+  return { start, end, period: { years, months, days } };
 }
 
 function subtractPeriod(date: string, period: NonNullable<TimeInterval["period"]>): string {
@@ -154,4 +155,68 @@ export async function findGibsFallbackDate(
     if (missing === null) return null;
   }
   return null;
+}
+
+/** How long one tile probe may take before the layer is added at its default. */
+export const DATE_PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * Fetches a tile, aborting the request after {@link DATE_PROBE_TIMEOUT_MS}.
+ *
+ * @param url - The tile URL.
+ * @returns The response.
+ */
+export async function fetchWithProbeTimeout(url: string): Promise<Pick<Response, "status">> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DATE_PROBE_TIMEOUT_MS);
+  try {
+    return await globalThis.fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type AddLayerOptions = Parameters<NasaEarthdataControl["addLayer"]>[1];
+
+/** The parts of `NasaEarthdataControl` the Add wrapper uses. */
+export interface DateFallbackControl {
+  search(query: string): GibsLayer[];
+  addLayer(layerId: string, options?: AddLayerOptions): void;
+}
+
+/**
+ * Makes a panel "Add" of a time-enabled layer start at a date GIBS has imagery
+ * for (issue #3259). The control's Add button calls `addLayer(id)` with no
+ * date; that call now probes one tile first and adds the layer at the newest
+ * date with imagery (the default date when it works). Calls that name a date
+ * or key (project restore, the date picker's re-add) pass straight through.
+ *
+ * @param control - The control whose `addLayer` is wrapped in place.
+ * @param isActive - Whether the control is still in use once a probe settles;
+ *   a deactivated plugin adds nothing.
+ * @param fetchImpl - The fetch used for the probes.
+ */
+export function addAtAvailableDefaultDate(
+  control: DateFallbackControl,
+  isActive: () => boolean,
+  fetchImpl: ProbeFetch = fetchWithProbeTimeout,
+): void {
+  const addLayer = control.addLayer.bind(control);
+  control.addLayer = (layerId: string, options?: AddLayerOptions) => {
+    const layer =
+      options?.date === undefined && options?.key === undefined
+        ? control.search(layerId).find((candidate) => candidate.id === layerId)
+        : undefined;
+    if (!layer?.time) {
+      addLayer(layerId, options);
+      return;
+    }
+    void findGibsFallbackDate(layer, fetchImpl)
+      // An unexpected failure must not swallow the add: use the default date.
+      .catch(() => null)
+      .then((date) => {
+        if (!isActive()) return;
+        addLayer(layerId, date ? { ...options, date } : options);
+      });
+  };
 }

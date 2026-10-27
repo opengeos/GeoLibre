@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GibsLayer } from "maplibre-gl-nasa-earthdata";
 import {
+  addAtAvailableDefaultDate,
   findGibsFallbackDate,
   gibsProbeTileUrl,
   previousGibsDates,
@@ -66,6 +67,11 @@ describe("previousGibsDates", () => {
     assert.deepEqual(previousGibsDates(time, "2024-01-17", 5), ["2024-01-09", "2024-01-01"]);
   });
 
+  it("does not loop on a zero period", () => {
+    const time = { default: "2024-01-10", values: ["2024-01-01/2024-01-10/P0D", "2023-12-31"] };
+    assert.deepEqual(previousGibsDates(time, "2024-01-10", 3), ["2023-12-31"]);
+  });
+
   it("returns nothing for sub-daily domains", () => {
     const time = {
       default: "2024-01-01T12:00:00Z",
@@ -113,5 +119,78 @@ describe("findGibsFallbackDate", () => {
     const { fetchImpl, requested } = fakeFetch(() => 404);
     assert.equal(await findGibsFallbackDate({ ...MOPITT, time: undefined }, fetchImpl), null);
     assert.equal(requested.length, 0);
+  });
+});
+
+describe("addAtAvailableDefaultDate", () => {
+  type AddCall = { layerId: string; options?: Record<string, unknown> };
+
+  function makeControl() {
+    const calls: AddCall[] = [];
+    const control = {
+      search: (query: string) =>
+        [MOPITT, { ...MOPITT, id: "STATIC", time: undefined }].filter((layer) =>
+          layer.id.includes(query),
+        ),
+      addLayer(layerId: string, options?: Record<string, unknown>) {
+        calls.push({ layerId, ...(options ? { options } : {}) });
+      },
+    };
+    return { control, calls };
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("adds a panel Add at the newest date with imagery", async () => {
+    const { control, calls } = makeControl();
+    const { fetchImpl } = fakeFetch((url) => (url.includes("/2024-11-01/") ? 404 : 200));
+    addAtAvailableDefaultDate(control, () => true, fetchImpl);
+    control.addLayer(MOPITT.id);
+    assert.equal(calls.length, 0, "the add waits for the probe");
+    await settle();
+    assert.deepEqual(calls, [{ layerId: MOPITT.id, options: { date: "2024-10-01" } }]);
+  });
+
+  it("keeps the default date when it has imagery", async () => {
+    const { control, calls } = makeControl();
+    addAtAvailableDefaultDate(control, () => true, fakeFetch(() => 200).fetchImpl);
+    control.addLayer(MOPITT.id);
+    await settle();
+    assert.deepEqual(calls, [{ layerId: MOPITT.id }]);
+  });
+
+  it("passes adds that name a date or key, and non-time layers, straight through", () => {
+    const { control, calls } = makeControl();
+    const { fetchImpl, requested } = fakeFetch(() => 404);
+    addAtAvailableDefaultDate(control, () => true, fetchImpl);
+    control.addLayer(MOPITT.id, { date: "2024-11-01" });
+    control.addLayer(MOPITT.id, { key: "restored" });
+    control.addLayer("STATIC");
+    assert.equal(calls.length, 3);
+    assert.equal(requested.length, 0);
+  });
+
+  it("adds nothing once the plugin is deactivated", async () => {
+    const { control, calls } = makeControl();
+    let active = true;
+    addAtAvailableDefaultDate(control, () => active, fakeFetch(() => 200).fetchImpl);
+    control.addLayer(MOPITT.id);
+    active = false;
+    await settle();
+    assert.equal(calls.length, 0);
+  });
+
+  it("still adds at the default date when the probe throws unexpectedly", async () => {
+    const { control, calls } = makeControl();
+    // A malformed time domain makes date stepping fail after the first probe.
+    const broken = {
+      ...MOPITT,
+      time: { default: "2024-11-01", values: null as unknown as string[] },
+    };
+    control.search = () => [broken];
+    addAtAvailableDefaultDate(control, () => true, fakeFetch(() => 404).fetchImpl);
+    control.addLayer(MOPITT.id);
+    await settle();
+    assert.deepEqual(calls, [{ layerId: MOPITT.id }]);
   });
 });
