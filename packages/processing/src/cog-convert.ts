@@ -225,8 +225,12 @@ export interface ConvertRasterDataToCogOptions {
    * coarsest overview, so those outliers flatten the whole layer (#3255). NaN
    * propagates through the average instead, so an overview pixel that touches
    * NoData stays NoData, and the renderer already treats NaN as NoData. The
-   * trade-off: coarse overviews drop valid pixels along NoData edges, so the
-   * NoData footprint grows by up to one overview block at low zoom. Use it
+   * trade-off: any NoData pixel blanks its whole overview block, so a NoData
+   * edge grows by up to one block at low zoom, and scattered NoData (speckle,
+   * cloud masks) can leave the coarsest levels mostly empty. Without the
+   * option those same blocks hold blended outliers instead, so it is still the
+   * better default for display; the full fix is a NoData-aware average in the
+   * encoder (opengeos/whitebox-wasm#33). Use it
    * for a COG that is only drawn on the map; keep the sentinel for one that
    * feeds tools which compare against it.
    */
@@ -283,7 +287,7 @@ export async function convertRasterDataToCog(
     const toNaN = options.nanNodata === true;
     // Samples are Float32, so match the sentinel in that precision (-9999.9
     // is stored as -9999.900390625).
-    const nodata32 = nodata == null ? null : Math.fround(nodata);
+    const nodata32 = toNaN && nodata != null ? Math.fround(nodata) : null;
     if (toNaN && nodata != null) {
       builder.set_nodata(Number.NaN);
     } else if (nodata != null && Number.isFinite(nodata)) {
