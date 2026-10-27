@@ -433,9 +433,10 @@ jobs:
             [ "$rc" = 1 ] || { echo "::error::Couldn't check $(printf %q "$f") for conflict markers."; exit 1; }
           done < "$RUNNER_TEMP/left.z"
           # .autofix is excluded in .git/info/exclude; a pathspec naming it (even ':!.autofix') makes
-          # git add fail on the ignored path, so it is unstaged afterwards instead.
+          # git add fail on the ignored path, so it is unstaged afterwards instead: reset restores the
+          # index from HEAD, so the commit neither adds .autofix nor deletes it if it were ever tracked.
           git add -A -- .
-          git rm -r -q --cached --ignore-unmatch -- .autofix
+          git reset -q -- .autofix
           test -z "$(git diff --cached --name-only --diff-filter=U)"
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
@@ -532,7 +533,7 @@ jobs:
           fi
           echo "reported=true" >> "$GITHUB_OUTPUT"
           git add -A -- .
-          git rm -r -q --cached --ignore-unmatch -- .autofix
+          git reset -q -- .autofix
           if git diff --cached --quiet; then
             echo "No code changes."
             exit 0
