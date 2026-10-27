@@ -83,11 +83,26 @@ describe("previousGibsDates", () => {
       default: "2024-03-31",
       values: ["2024-01-01/2024-02-29/P1D", "2024-02-29/2024-03-31/P1M"],
     };
-    // 2024-02-29 is in both; the daily interval takes over from there.
+    // The monthly grid starts on the 29th, so 2024-03-31 steps to 2024-03-29.
+    // 2024-02-29 is in both intervals; the daily one takes over from there.
     assert.deepEqual(previousGibsDates(time, "2024-03-31", 3), [
+      "2024-03-29",
       "2024-02-29",
       "2024-02-28",
-      "2024-02-27",
+    ]);
+  });
+
+  it("keeps the period grid when the date to step from is off it", () => {
+    // 2024-03-20 is not on the 12-day grid from 2024-02-25 (or the 8-day one
+    // from 2024-02-09), so each step still lands on its interval's own grid.
+    const time = {
+      default: "2024-03-20",
+      values: ["2024-02-09/2024-03-12/P8D", "2024-02-25/2024-03-20/P12D"],
+    };
+    assert.deepEqual(previousGibsDates(time, "2024-03-20", 3), [
+      "2024-03-08",
+      "2024-03-04",
+      "2024-02-25",
     ]);
   });
 

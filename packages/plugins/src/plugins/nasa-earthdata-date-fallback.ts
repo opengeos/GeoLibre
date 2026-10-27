@@ -42,7 +42,10 @@ function parseInterval(value: string): TimeInterval | null {
   return { start, end, period: { years, months, days } };
 }
 
-function subtractPeriod(
+/**
+ * Moves a date by whole periods: forward for positive `steps`, back for negative.
+ */
+function shiftPeriod(
   date: string,
   period: NonNullable<TimeInterval["period"]>,
   steps: number,
@@ -52,19 +55,33 @@ function subtractPeriod(
   const months = period.months * steps;
   // Clamp the day to the target month so 2024-03-31 minus P1M is 2024-02-29,
   // not the Date.UTC rollover 2024-03-02 (a date GIBS never advertises).
-  const lastDay = new Date(Date.UTC(year - years, month - months, 0)).getUTCDate();
+  const lastDay = new Date(Date.UTC(year + years, month + months, 0)).getUTCDate();
   const shifted = new Date(
-    Date.UTC(year - years, month - 1 - months, Math.min(day, lastDay) - period.days * steps),
+    Date.UTC(year + years, month - 1 + months, Math.min(day, lastDay) + period.days * steps),
   );
   return shifted.toISOString().slice(0, 10);
 }
 
 /**
+ * The newest date on an interval's period grid (its start plus whole periods)
+ * that comes before `current`. The grid is anchored at the interval's start, so
+ * a `current` that is not on it (a default date off the grid) does not shift
+ * the dates that follow.
+ */
+function gridDateBefore(interval: TimeInterval | undefined, current: string): string | undefined {
+  if (!interval?.period || interval.start >= current) return undefined;
+  const { period } = interval;
+  let steps = 0;
+  while (shiftPeriod(interval.start, period, steps + 1) < current) steps += 1;
+  return shiftPeriod(interval.start, period, steps);
+}
+
+/**
  * Lists the dates of a GIBS time domain that come before `from`, newest first.
  *
- * Steps back by the period of the interval `from` falls in, then continues at
- * the end of the previous interval. Only date-only (`YYYY-MM-DD`) domains are
- * handled; sub-daily domains return no dates.
+ * Steps back along the period grid of the interval `from` falls in, then
+ * continues at the end of the previous interval. Only date-only (`YYYY-MM-DD`)
+ * domains are handled; sub-daily domains return no dates.
  *
  * @param time - The layer's time dimension from the capabilities document.
  * @param from - The date to step back from (usually the default date).
@@ -78,38 +95,18 @@ export function previousGibsDates(time: GibsTimeDimension, from: string, count: 
     .filter((interval): interval is TimeInterval => interval !== null);
   const dates: string[] = [];
   let current = from;
-  // Step from a fixed anchor rather than from the last (possibly clamped) date,
-  // so 2024-03-31 by P1M gives 2024-02-29 and then 2024-01-31, not 2024-01-29.
-  let anchor = from;
-  let steps = 0;
-  let anchorInterval: TimeInterval | undefined;
   while (dates.length < count) {
     const containing = intervals.find(
       (interval) => interval.start <= current && current <= interval.end,
     );
-    // Re-anchor on entering another interval: its period need not match, and
-    // stepping from the old anchor could land after the current date.
-    if (containing !== anchorInterval) {
-      anchorInterval = containing;
-      anchor = current;
-      steps = 0;
-    }
-    let next: string | undefined;
-    if (containing?.period) {
-      const stepped = subtractPeriod(anchor, containing.period, steps + 1);
-      if (stepped >= containing.start) {
-        next = stepped;
-        steps += 1;
-      }
-    }
-    if (!next) {
+    const next =
+      gridDateBefore(containing, current) ??
       // Continue at the newest interval end before the current date.
-      next = intervals
+      intervals
         .map((interval) => interval.end)
         .filter((end) => end < current)
         .sort()
         .at(-1);
-    }
     if (!next) break;
     dates.push(next);
     current = next;

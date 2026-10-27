@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { NasaEarthdataControl } from "maplibre-gl-nasa-earthdata";
 import { MAX_VECTOR_BYTES } from "../packages/plugins/src/plugins/remote-file-formats";
 import {
   citedSections,
@@ -269,6 +270,42 @@ describe("Web Services control packages", () => {
       }
     });
   }
+});
+
+describe("maplibre-gl-nasa-earthdata", () => {
+  const section = "Web Services control packages (`packages/plugins/package.json`)";
+  // Both checks read method bodies, which are private or live inside the class.
+  const proto = NasaEarthdataControl.prototype as unknown as Record<string, unknown>;
+
+  it("still wires the panel Add through `this.addLayer(layer.id)`", () => {
+    // The date fallback replaces the instance's addLayer; the Add button only
+    // reaches it if the button calls the instance method.
+    assert.match(
+      sourceOf(proto._createLayerRow),
+      /this\.addLayer\(layer\.id\)/,
+      contractMessage(
+        "maplibre-gl-nasa-earthdata",
+        section,
+        "the panel Add no longer calls this.addLayer(layer.id), so the date fallback in nasa-earthdata-date-fallback.ts is bypassed",
+        "packages/plugins",
+      ),
+    );
+  });
+
+  it("still lets addLayer take a date or key, which the fallback passes through", () => {
+    const body = sourceOf(proto.addLayer);
+    for (const option of ["options?.date", "options?.key"]) {
+      assert.ok(
+        body.includes(option),
+        contractMessage(
+          "maplibre-gl-nasa-earthdata",
+          section,
+          `addLayer no longer reads ${option}, so a restore or date-picker add would be probed and moved`,
+          "packages/plugins",
+        ),
+      );
+    }
+  });
 });
 
 describe("maplibre-gl-components", () => {
