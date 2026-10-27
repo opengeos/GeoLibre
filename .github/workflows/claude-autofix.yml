@@ -25,9 +25,13 @@ name: Claude autofix
 #     `.git/`, the git config in the home directory or the runner's temp directory, and it gets no
 #     git commands. The steps after it check the helper script, put back the git config and hooks
 #     saved before Claude ran (after checking the saved copy), and ignore the global and system
-#     git config. On a same-repo branch the code Claude runs through its build tools is outside
-#     those rules; the steps after it hold no secrets, except the leaked-token check, which clears
-#     the loader and shell variables at its boundary and runs bash privileged.
+#     git config. The steps after Claude run privileged bash with the loader and shell variables
+#     cleared, a fixed PATH and no stray GIT_* variables.
+#   - The limit: on a same-repo branch, the code Claude runs through its build tools runs as the
+#     runner user next to the Claude process, so it could read that process's token (for example
+#     from /proc). The deny rules, the env scrub and the leaked-token check don't cover that; it
+#     rests on the branch's code being as trusted as the people who can push it. Fork branches
+#     never run code.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -64,6 +68,7 @@ concurrency:
 jobs:
   gate:
     name: Check the labeller
+    timeout-minutes: 10
     # sender.type: a bot adding the label would make an automatic loop out of a paid, pushing job.
     if: >-
       github.event.label.name == 'claude-autofix' &&
@@ -361,13 +366,21 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Read(.git/config),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
             --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npm install --package-lock-only --ignore-scripts)' || '' }}"
 
       - name: Commit the merge
         id: commitmerge
         if: steps.merge.outputs.conflicts != '0'
+        shell: /usr/bin/bash --noprofile --norc -p -e {0}
         env:
+          LD_PRELOAD: ""
+          LD_LIBRARY_PATH: ""
+          LD_AUDIT: ""
+          BASH_ENV: ""
+          ENV: ""
+          SHELLOPTS: ""
+          BASHOPTS: ""
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
           ASIDE_SUM: ${{ steps.instructions.outputs.aside }}
@@ -378,6 +391,9 @@ jobs:
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
+          for v in $(compgen -e); do
+            case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
+          done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
@@ -438,13 +454,21 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Read(.git/config),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
             --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npx eslint:*),Bash(npm run typecheck:fast),Bash(node --import tsx --test:*)' || '' }}"
 
       - name: Commit the fix
         id: fixcommit
         if: steps.threads.outputs.count != '0'
+        shell: /usr/bin/bash --noprofile --norc -p -e {0}
         env:
+          LD_PRELOAD: ""
+          LD_LIBRARY_PATH: ""
+          LD_AUDIT: ""
+          BASH_ENV: ""
+          ENV: ""
+          SHELLOPTS: ""
+          BASHOPTS: ""
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
@@ -456,6 +480,9 @@ jobs:
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
+          for v in $(compgen -e); do
+            case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
+          done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
           # A report counts only when it answers every staged thread exactly once: a partial one would
@@ -492,7 +519,15 @@ jobs:
       - name: Bundle the commits
         id: bundle
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
+        shell: /usr/bin/bash --noprofile --norc -p -e {0}
         env:
+          LD_PRELOAD: ""
+          LD_LIBRARY_PATH: ""
+          LD_AUDIT: ""
+          BASH_ENV: ""
+          ENV: ""
+          SHELLOPTS: ""
+          BASHOPTS: ""
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
           GIT_CONFIG_GLOBAL: /dev/null
@@ -502,6 +537,9 @@ jobs:
         run: |
           set -euo pipefail
           PATH=/usr/bin:/bin
+          for v in $(compgen -e); do
+            case "$v" in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_CONFIG_GLOBAL|GIT_CONFIG_NOSYSTEM) ;; GIT_*) unset "$v" ;; esac
+          done
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           /usr/bin/bash "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
