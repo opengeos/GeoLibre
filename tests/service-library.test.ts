@@ -19,6 +19,7 @@ import {
   type ServiceLibraryEntry,
   upsertServiceEntry,
   writeUserServices,
+  SERVICE_LIBRARY_CHANGED_EVENT,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
 function makeEntry(overrides: Partial<ServiceLibraryEntry> = {}): ServiceLibraryEntry {
@@ -206,11 +207,13 @@ describe("import / export round-trip", () => {
 describe("deployment service library", () => {
   let deploymentEnv: Record<string, string>;
   let storage: Map<string, string>;
+  let dispatched: string[];
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
   beforeEach(() => {
     deploymentEnv = {};
     storage = new Map();
+    dispatched = [];
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -218,6 +221,10 @@ describe("deployment service library", () => {
         localStorage: {
           getItem: (key: string) => storage.get(key) ?? null,
           setItem: (key: string, value: string) => storage.set(key, value),
+        },
+        dispatchEvent: (event: Event) => {
+          dispatched.push(event.type);
+          return true;
         },
       },
     });
@@ -273,6 +280,18 @@ describe("deployment service library", () => {
     assert.deepEqual(readUserServices(), [copy]);
     assert.deepEqual(parseImportedServices(serializeUserServices(combined)), [copy]);
     assert.equal(readDeploymentServices()[0].fields.endpoint, "https://x.test/wms");
+  });
+
+  it("announces writes so the Browser panel re-reads the library", () => {
+    writeUserServices([
+      createServiceEntry({
+        name: "Saved",
+        category: "",
+        kind: "xyz",
+        fields: { url: "https://x.test/{z}/{x}/{y}.png" },
+      }),
+    ]);
+    assert.deepEqual(dispatched, [SERVICE_LIBRARY_CHANGED_EVENT]);
   });
 
   it("does not let imported ownership flags or reserved ids create managed entries", () => {

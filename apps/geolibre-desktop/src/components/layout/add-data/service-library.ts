@@ -66,6 +66,12 @@ export const SERVICE_KINDS: readonly ServiceLibraryKind[] = [
 const EXPORT_FORMAT = "geolibre-service-library";
 const DEPLOYMENT_ID_PREFIX = "deployment:";
 
+/**
+ * Fired on `window` after the user's saved services are written, so listeners
+ * that cache the library (the Browser panel) can re-read it.
+ */
+export const SERVICE_LIBRARY_CHANGED_EVENT = "geolibre:service-library-changed";
+
 /** Managed definitions can be copied, but never edited or saved as user entries. */
 export function isManagedService(entry: ServiceLibraryEntry): boolean {
   return Boolean(entry.builtin || entry.deployment);
@@ -238,6 +244,7 @@ export function writeUserServices(entries: ServiceLibraryEntry[]): void {
         entries.filter((entry) => !isManagedService(entry)).slice(0, MAX_SAVED_SERVICES),
       ),
     );
+    window.dispatchEvent(new Event(SERVICE_LIBRARY_CHANGED_EVENT));
   } catch {
     // Best-effort persistence: a quota/private-mode failure must not break the
     // Add Data dialog (mirrors readUserServices' guard).
