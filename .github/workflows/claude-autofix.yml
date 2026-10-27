@@ -20,15 +20,14 @@ name: Claude autofix
 #     are moved aside while Claude works and the base branch's CLAUDE.md takes their place: a pull
 #     request mustn't rewrite the rules it's fixed to, or add hooks and servers to the agent. They
 #     are put back before each commit, so the commits leave them as they were.
-#   - Review comments reach Claude only from bots and the repository's owner and members, not
-#     from outside collaborators, whatever their access.
+#   - Review comments reach Claude only from bots and people who can push to the repository.
 #   - Scripts come from this file, never from the checkout. Claude's file tools may not edit
 #     `.git/`, the git config in the home directory or the runner's temp directory, and it gets no
 #     git commands. The steps after it check the helper script, put back the git config and hooks
 #     saved before Claude ran (after checking the saved copy), and ignore the global and system
 #     git config. On a same-repo branch the code Claude runs through its build tools is outside
-#     those rules; the steps after it hold no secrets, except the leaked-token check, which starts
-#     a clean shell.
+#     those rules; the steps after it hold no secrets, except the leaked-token check, which clears
+#     the loader and shell variables at its boundary and runs bash privileged.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -74,6 +73,7 @@ jobs:
     outputs:
       login: ${{ steps.who.outputs.login }}
       id: ${{ steps.who.outputs.id }}
+      writers: ${{ steps.writers.outputs.writers }}
     env:
       FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
@@ -100,6 +100,25 @@ jobs:
             exit 1
           fi
           gh api user --jq '"login=\(.login)\nid=\(.id)"' >> "$GITHUB_OUTPUT"
+
+      # The people whose review comments reach Claude: those who can push to this repository.
+      # authorAssociation can't tell (a read-only org member is a MEMBER, a write collaborator a
+      # COLLABORATOR), so each commenter's permission is looked up, once per login.
+      - name: List the commenters who can push
+        id: writers
+        env:
+          GH_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/comments" \
+            --jq '.[].user | select(.type == "User") | .login' | sort -u > "$RUNNER_TEMP/commenters"
+          writers=()
+          while IFS= read -r login; do
+            perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2> /dev/null || echo none)
+            case "$perm" in admin|maintain|write) writers+=("$login") ;; esac
+          done < "$RUNNER_TEMP/commenters"
+          echo "writers=$(printf '%s\n' "${writers[@]}" | jq -Rnc '[inputs | select(length > 0)]')" >> "$GITHUB_OUTPUT"
 
   fix:
     name: Merge the base and fix review comments
@@ -139,15 +158,17 @@ jobs:
           # that way, and keep npm, node and npx out of Claude's tools when FORK is true.
           allow-unsafe-pr-checkout: true
 
-      # Claude has no GitHub access of its own: the threads are staged on disk. Only threads a bot,
-      # the owner or a member started are kept, and only their comments in them, so a passer-by's
-      # or a read-only collaborator's comment can't instruct the agent. A thread's starter is read
+      # Claude has no GitHub access of its own: the threads are staged on disk. Only threads a bot
+      # or someone who can push started are kept (the gate looked up each commenter), and only
+      # their comments in them, so a passer-by's or a read-only member's comment can't instruct
+      # the agent. A thread's starter is read
       # on its own, and its last 50 comments, so a long thread still shows its latest reply.
       - name: Stage the open review threads
         id: threads
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.pull_request.number }}
+          WRITERS: ${{ needs.gate.outputs.writers }}
         run: |
           set -euo pipefail
           # `rm -rf` unlinks a symlink rather than following it, so a branch that ships its own
@@ -182,12 +203,8 @@ jobs:
                 }
               }' \
             --jq '.data.repository.pullRequest.reviewThreads.nodes[]' > "$RUNNER_TEMP/nodes.json"
-          jq -s '
-            def trusted: (.author.__typename == "Bot")
-              or (.authorAssociation | IN("OWNER", "MEMBER"));
-            # MEMBER stands in for "can push": an org member with read-only access still counts,
-            # and an outside collaborator with write access doesn't. Checking each author's
-            # permission would take a call per author.
+          jq -s --argjson writers "$WRITERS" '
+            def trusted: (.author.__typename == "Bot") or (.author.login as $l | $writers | index($l));
             # A thread whose last comment is an autofix reply was answered in an earlier round;
             # it comes back once a reviewer replies to it.
             [ .[]
@@ -273,7 +290,8 @@ jobs:
               # a credential helper), so comparing them can't work. The saved copy is checked against
               # the sum recorded in a step output first: code a same-repo branch runs through cargo or
               # npm could otherwise change it. The steps that run git also set GIT_CONFIG_GLOBAL,
-              # GIT_CONFIG_NOSYSTEM and GIT_CONFIG_COUNT, so no other config layer counts.
+              # GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT and GIT_CONFIG_PARAMETERS, so no other config
+              # layer counts.
               [ "$(bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
@@ -339,6 +357,7 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
+          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
@@ -412,6 +431,7 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
+          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
@@ -422,7 +442,7 @@ jobs:
           if [ ! -s .autofix/report.json ] || ! jq -se --argjson ids "$IDS" '
               length == 1 and (.[0]
                 | type == "array"
-                and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string"
+                and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string" and (.reply | length) > 0
                              and (.status | IN("fixed", "addressed", "declined", "unclear")))
                 and (map(.id) | sort) == ($ids | sort))' .autofix/report.json > /dev/null; then
             echo "::warning::Claude didn't finish the review threads or missed one; their changes are dropped."
@@ -453,13 +473,15 @@ jobs:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
+          GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
           # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
-          { cat .autofix/report.json 2> /dev/null; git log --format=%B "$SHA..HEAD"; git diff "$SHA" HEAD; } \
+          { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
+            git log --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } \
             > "$RUNNER_TEMP/output.txt"
           if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
             git branch -f autofix HEAD
@@ -468,15 +490,24 @@ jobs:
           echo "output=$(sha256sum "$RUNNER_TEMP/output.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       # Nothing Claude wrote may carry its token, so this runs before the upload. The token is in
-      # this step's environment, so the shell starts without what earlier steps may have added
-      # through GITHUB_ENV or GITHUB_PATH (code a same-repo branch runs through cargo or npm can
-      # write those), and the file is checked against the sum recorded when it was written. The
+      # this step's environment, and code a same-repo branch runs through cargo or npm can write
+      # GITHUB_ENV and GITHUB_PATH. So the loader and shell variables are emptied in the step's own
+      # env, which wins over GITHUB_ENV and applies before any process starts; bash runs privileged
+      # (-p), which ignores exported functions, SHELLOPTS and BASHOPTS; PATH is fixed; and the file
+      # is checked against the sum recorded when it was written. The
       # file is grepped rather than a pipe: grep -q exits on its first match, and under pipefail
       # the writer's SIGPIPE would turn that match into a pass.
       - name: Check for a leaked token
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
-        shell: /usr/bin/env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH /usr/bin/bash --noprofile --norc -eu {0}
+        shell: /usr/bin/bash -p --noprofile --norc -eu {0}
         env:
+          LD_PRELOAD: ""
+          LD_LIBRARY_PATH: ""
+          LD_AUDIT: ""
+          BASH_ENV: ""
+          ENV: ""
+          SHELLOPTS: ""
+          BASHOPTS: ""
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OUTPUT_SUM: ${{ steps.bundle.outputs.output }}
           OUTPUT: ${{ runner.temp }}/output.txt
