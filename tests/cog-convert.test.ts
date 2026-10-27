@@ -94,6 +94,66 @@ describe("convertGeoTiffToCog", () => {
     }
   });
 
+  it("keeps NoData out of the overviews of a processing result (#3255)", async () => {
+    // An NDVI-like result (values in -1..1) with a 3-pixel -9999 NoData border:
+    // big enough for overviews, and a border that does not line up with the
+    // 2x2 / 4x4 overview blocks, so a block straddles NoData and valid pixels.
+    const size = 1100;
+    const border = 3;
+    const nodata = -9999;
+    const band = new Float32Array(size * size);
+    for (let row = 0; row < size; row += 1) {
+      for (let col = 0; col < size; col += 1) {
+        const edge = row < border || col < border || row >= size - border || col >= size - border;
+        band[row * size + col] = edge ? nodata : ((row + col) % 100) / 100 - 0.5;
+      }
+    }
+    const raster = {
+      bands: [band],
+      width: size,
+      height: size,
+      originX: 432262.5,
+      originY: 4605367.5,
+      resX: 15,
+      resY: 15,
+      nodata,
+      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32617 },
+    };
+    // The default keeps the raster's own sentinel for COGs that feed tools.
+    const plain = await readGeoTiffInfo(await convertRasterDataToCog(raster));
+    assert.equal(plain.nodata, nodata);
+
+    const cog = await convertRasterDataToCog(raster, { nanNodata: true });
+
+    const { fromArrayBuffer } = await import("geotiff");
+    const tiff = await fromArrayBuffer(
+      cog.buffer.slice(cog.byteOffset, cog.byteOffset + cog.byteLength) as ArrayBuffer,
+    );
+    const count = await tiff.getImageCount();
+    assert.ok(count > 1, "expected an overview pyramid");
+    // Whatever sentinel the COG declares, every pixel is either NoData or a
+    // valid value: no blend of the two.
+    const declared = (await tiff.getImage(0)).getGDALNoData();
+    assert.ok(declared !== null, "the COG declares NoData");
+    const isNoData = (value: number) => Number.isNaN(value) || value === declared;
+
+    for (let index = 0; index < count; index += 1) {
+      const image = await tiff.getImage(index);
+      const [values] = (await image.readRasters()) as unknown as Float32Array[];
+      let masked = 0;
+      for (const value of values) {
+        if (isNoData(value)) {
+          masked += 1;
+          continue;
+        }
+        // Before the fix the coarsest level held blends such as -9374 and
+        // -624, and the renderer's auto stretch read them as data.
+        assert.ok(value >= -0.5 && value <= 0.5, `level ${index} holds ${value}`);
+      }
+      assert.ok(masked > 0, `level ${index} keeps its NoData border`);
+    }
+  });
+
   for (const crsCode of [32767, 32768, 65535]) {
     it(`rejects user-defined or private CRS code ${crsCode}`, async () => {
       await assert.rejects(

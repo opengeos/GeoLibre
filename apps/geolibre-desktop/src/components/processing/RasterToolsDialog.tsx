@@ -583,8 +583,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       try {
         // Encode the computed Float32 samples directly. Passing the temporary
         // geotiff.js file through the WASM reader can reinterpret its byte
-        // order and corrupt otherwise-correct calculated values.
-        const cogBytes = await convertRasterDataToCog(result);
+        // order and corrupt otherwise-correct calculated values. NoData goes in
+        // as NaN so the overviews the auto stretch reads hold no NoData blends
+        // (#3255); the Download button keeps the raster's own sentinel.
+        const cogBytes = await convertRasterDataToCog(result, { nanNodata: true });
         await addRasterToMap(
           app,
           // TypeScript widens wasm byte buffers to ArrayBufferLike, which is

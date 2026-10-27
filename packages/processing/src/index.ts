@@ -383,6 +383,7 @@ export {
   MAX_BROWSER_COG_CONVERSION_SAMPLES,
   type CogWasmCompression,
   type ConvertGeoTiffToCogOptions,
+  type ConvertRasterDataToCogOptions,
   type GeoTiffInfo,
 } from "./cog-convert";
 export {

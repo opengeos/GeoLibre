@@ -54,8 +54,9 @@ export interface ConvertGeoTiffToCogOptions {
   compression?: CogWasmCompression;
   /**
    * Build the overview pyramid (default true). The encoder downsamples with a
-   * 2x2 average that ignores NoData, which blends categorical values (class
-   * codes, colors at class edges), so categorical rasters should pass false.
+   * box average that does not skip NoData, which blends categorical values
+   * (class codes, colors at class edges), so categorical rasters should pass
+   * false.
    */
   overviews?: boolean;
 }
@@ -213,8 +214,33 @@ export async function convertGeoTiffToCog(
   }
 }
 
-/** Encode an in-memory client-processing result directly as a Float32 COG. */
-export async function convertRasterDataToCog(raster: RasterData): Promise<Uint8Array> {
+export interface ConvertRasterDataToCogOptions {
+  /**
+   * Write NoData as NaN instead of the raster's own sentinel (default false).
+   * The encoder builds overviews with a box average that does not skip NoData,
+   * so a finite sentinel such as -9999 blends into its valid neighbours along
+   * every NoData edge (an NDVI overview pixel that is 15/16 NoData reads
+   * -9374). The renderer takes its auto stretch and histogram from the
+   * coarsest overview, so those outliers flatten the whole layer (#3255). NaN
+   * propagates through the average instead, so an overview pixel that touches
+   * NoData stays NoData, and the renderer already treats NaN as NoData. Use it
+   * for a COG that is only drawn on the map; keep the sentinel for one that
+   * feeds tools which compare against it.
+   */
+  nanNodata?: boolean;
+}
+
+/**
+ * Encode an in-memory client-processing result directly as a Float32 COG.
+ *
+ * @param raster - The processing result to encode.
+ * @param options - Optional encoder settings; see {@link ConvertRasterDataToCogOptions}.
+ * @returns The COG file bytes.
+ */
+export async function convertRasterDataToCog(
+  raster: RasterData,
+  options: ConvertRasterDataToCogOptions = {},
+): Promise<Uint8Array> {
   await initCogWasm();
   const samples = geoTiffSampleCount({
     width: raster.width,
@@ -248,8 +274,12 @@ export async function convertRasterDataToCog(raster: RasterData): Promise<Uint8A
         raster.flipY ? raster.resY : -raster.resY,
       ]),
     );
-    if (raster.nodata != null && Number.isFinite(raster.nodata)) {
-      builder.set_nodata(raster.nodata);
+    const nodata = raster.nodata;
+    const maskNodata = options.nanNodata === true && nodata != null;
+    if (maskNodata) {
+      builder.set_nodata(Number.NaN);
+    } else if (nodata != null && Number.isFinite(nodata)) {
+      builder.set_nodata(nodata);
     }
     builder.set_tile_size(COG_TILE_SIZE);
     builder.set_compression("deflate");
@@ -259,7 +289,9 @@ export async function convertRasterDataToCog(raster: RasterData): Promise<Uint8A
     const values = new Float32Array(samples);
     for (let pixel = 0; pixel < pixels; pixel += 1) {
       for (let band = 0; band < raster.bands.length; band += 1) {
-        values[pixel * raster.bands.length + band] = raster.bands[band][pixel];
+        const value = raster.bands[band][pixel];
+        values[pixel * raster.bands.length + band] =
+          maskNodata && (value === nodata || !Number.isFinite(value)) ? Number.NaN : value;
       }
     }
     return builder.write_f32(values);
