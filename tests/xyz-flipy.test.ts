@@ -34,8 +34,7 @@ describe("resolveTileAddress", () => {
     });
     assert.throws(() => resolveTileAddress(["https://t/{z}/{x}/{y}/{-y}.png"]), /not both/);
     assert.throws(
-      () =>
-        resolveTileAddress(["https://a/{z}/{x}/{y}.png", "https://b/{z}/{x}/{-y}.png"]),
+      () => resolveTileAddress(["https://a/{z}/{x}/{y}.png", "https://b/{z}/{x}/{-y}.png"]),
       /not both/,
     );
     assert.deepEqual(

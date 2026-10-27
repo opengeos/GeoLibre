@@ -328,7 +328,8 @@ async function resolveTileSources(
           // The style spec wins; fall back to the TileJSON's declared bounds.
           if (minzoom === undefined) minzoom = tilejson.minzoom;
           if (maxzoom === undefined) maxzoom = tilejson.maxzoom;
-          if (spec.scheme !== "xyz" && spec.scheme !== "tms") scheme = asTileScheme(tilejson.scheme);
+          if (spec.scheme !== "xyz" && spec.scheme !== "tms")
+            scheme = asTileScheme(tilejson.scheme);
         }
       } catch {
         // Unreachable TileJSON: skip this source rather than abort the whole run.
