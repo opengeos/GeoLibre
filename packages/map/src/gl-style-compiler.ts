@@ -5,6 +5,7 @@ import {
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   DEFAULT_LAYER_STYLE,
+  resolveTileAddress,
   styleValue,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -731,14 +732,25 @@ export function compileMapboxLayer(
   if (classifyLayer(layer) === "raster-tiles" && (tiles.length || url)) {
     // Same dev-server WMS proxy as the MapLibre path (getRenderableRasterTiles),
     // so a WMS layer that works in a MapLibre pane also works here in `npm run dev`.
-    const rasterTiles = proxyWmsTiles(layer.type, tiles);
+    let rasterTiles = proxyWmsTiles(layer.type, tiles);
+    let rasterOptions = options;
+    if (layer.type === "xyz" && rasterTiles.length) {
+      const addressed = resolveTileAddress(
+        rasterTiles,
+        layer.source.scheme === "tms" ? "tms" : "xyz",
+      );
+      rasterTiles = addressed.tiles;
+      const { scheme: _scheme, ...withoutScheme } = options;
+      rasterOptions =
+        addressed.scheme === "tms" ? { ...withoutScheme, scheme: "tms" as const } : withoutScheme;
+    }
     return {
       sourceId,
       source: {
         type: "raster",
         ...(rasterTiles.length ? { tiles: rasterTiles } : { url }),
         tileSize: typeof layer.source.tileSize === "number" ? layer.source.tileSize : 256,
-        ...options,
+        ...rasterOptions,
       },
       layers: rasterLayers,
     };

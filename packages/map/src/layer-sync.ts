@@ -17,6 +17,7 @@ import {
   type LabelStyle,
   type LayerStyle,
   documentLocale,
+  resolveTileAddress,
 } from "@geolibre/core";
 import {
   normalizePMTilesUrl,
@@ -2846,9 +2847,15 @@ function resolveTextFontFromStyle(map: maplibregl.Map): string[] {
 function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-raster`;
-  const tiles = getRenderableRasterTiles(map, layer);
+  const rawTiles = getRenderableRasterTiles(map, layer);
   const tileSize = numberSource(layer.source.tileSize) ?? 256;
-  if (tiles.length === 0) return;
+  if (rawTiles.length === 0) return;
+  // {-y} flips the row and does not select TMS. Combined with scheme "tms"
+  // the two flips cancel. MapLibre only flips {y} when scheme is tms.
+  const addressed =
+    layer.type === "xyz"
+      ? resolveTileAddress(rawTiles, layer.source.scheme === "tms" ? "tms" : "xyz")
+      : { tiles: rawTiles, scheme: layer.source.scheme === "tms" ? "tms" : ("xyz" as const) };
   if (!map.getSource(src)) {
     const bounds = boundsSource(layer.source.bounds);
     const minzoom = numberSource(layer.source.minzoom);
@@ -2856,12 +2863,12 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
     const attribution = stringSource(layer.source.attribution);
     map.addSource(src, {
       type: "raster",
-      tiles,
+      tiles: addressed.tiles,
       tileSize,
       ...(minzoom !== undefined ? { minzoom } : {}),
       ...(maxzoom !== undefined ? { maxzoom } : {}),
       ...(bounds ? { bounds } : {}),
-      ...(layer.source.scheme === "tms" ? { scheme: "tms" as const } : {}),
+      ...(addressed.scheme === "tms" ? { scheme: "tms" as const } : {}),
       ...(attribution ? { attribution } : {}),
     });
   }

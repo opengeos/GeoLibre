@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./tile-address";
 export * from "./diagram";
 export * from "./marker-shape";
 export * from "./hyperlink";

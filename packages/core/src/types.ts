@@ -1407,7 +1407,11 @@ export interface AddTileLayerOptions {
   minzoom?: number;
   /** Maximum zoom at which tiles are requested. */
   maxzoom?: number;
-  /** Tile y-axis scheme; `"tms"` flips the y origin. Defaults to `"xyz"`. */
+  /**
+   * Tile y-axis scheme. `"tms"` flips the row. A `{-y}` token is a separate
+   * flip and does not set this field; the two flips cancel when a tile is
+   * requested. Defaults to `"xyz"`.
+   */
   scheme?: "xyz" | "tms";
   /** Initial visibility (default true). */
   visible?: boolean;

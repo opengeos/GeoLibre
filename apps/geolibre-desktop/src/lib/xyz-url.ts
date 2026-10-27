@@ -1,4 +1,4 @@
-import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
+import { resolveTileAddress, type GeoLibreLayer, type GeoLibreProject } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
@@ -35,6 +35,8 @@ export interface XyzTileJsonSource {
 
 export function normalizeTileUrlTemplate(url: string): string {
   return url
+    .replace(/%7B-y%7D/gi, "{-y}")
+    .replace(/\{-y\}/gi, "{-y}")
     .replace(/%7B([xyz])%7D/gi, (_, placeholder: string) => {
       return `{${placeholder.toLowerCase()}}`;
     })
@@ -44,14 +46,18 @@ export function normalizeTileUrlTemplate(url: string): string {
 }
 
 export function hasXyzTilePlaceholders(url: string): boolean {
-  return ["x", "y", "z"].every((placeholder) => url.includes(`{${placeholder}}`));
+  return (
+    url.includes("{z}") && url.includes("{x}") && (url.includes("{y}") || url.includes("{-y}"))
+  );
 }
 
 export function createXyzTileUrlTemplate(url: string): ResolvedXyzTileUrl {
   const originalUrl = normalizeTileUrlTemplate(url.trim());
   if (!hasXyzTilePlaceholders(originalUrl)) {
-    throw new Error("Enter an XYZ tile URL template with {z}, {x}, and {y} placeholders.");
+    throw new Error("Enter an XYZ tile URL template with {z}, {x}, and {y} or {-y} placeholders.");
   }
+  // {-y} is a row flip, validated here and applied when the layer is drawn.
+  resolveTileAddress([originalUrl]);
 
   return {
     originalUrl,
@@ -368,8 +374,10 @@ export function parseXyzTileJson(value: unknown): XyzTileJsonSource {
     if (typeof tile !== "string") throw new Error("Invalid TileJSON tile URL.");
     const url = normalizeTileUrlTemplate(tile.trim());
     if (!isHttpUrl(url) || !hasXyzTilePlaceholders(url)) {
-      throw new Error("TileJSON tile URLs must use HTTP(S) and contain {z}, {x}, and {y}.");
+      throw new Error("TileJSON tile URLs must use HTTP(S) and contain {z}, {x}, and {y} or {-y}.");
     }
+    // {-y} flips the row at draw time. It does not change `scheme`.
+    resolveTileAddress([url]);
     // Check syntax as well as the protocol prefix.
     try {
       new URL(url);

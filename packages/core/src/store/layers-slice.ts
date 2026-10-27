@@ -37,6 +37,7 @@ import {
   type LayerStyle,
   type LayerVirtualField,
 } from "../types";
+import { resolveTileAddress } from "../tile-address";
 import { hasSimpleStyleProperties } from "../vector-color";
 import {
   cascadeJoinRefreshForRemoved,
@@ -536,6 +537,11 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       .filter((tile) => tile !== "");
     if (tiles.length === 0) {
       throw new Error("addTileLayer requires at least one non-empty tile URL template.");
+    }
+    // {-y} is accepted on XYZ templates. Reject a template that names both
+    // row tokens before the layer is stored.
+    if (type === "xyz") {
+      resolveTileAddress(tiles, options.scheme === "tms" ? "tms" : "xyz");
     }
     // MapLibre's addSource throws synchronously when maxzoom < minzoom, and
     // syncRasterTileLayer does not catch it, which would strand a layer in

@@ -285,6 +285,27 @@ describe("TileJSON validation", () => {
     assert.deepEqual(parsed.tiles, ["https://tiles.example/{z}/{x}/{y}.png"]);
   });
 
+  it("keeps {-y} as a row flip and does not treat it as the scheme", async () => {
+    const parsed = parseXyzTileJson({
+      ...manifest(),
+      scheme: "tms",
+      tiles: ["https://tiles.example/%7B-y%7D/{z}/{x}/{-Y}.webp"],
+    });
+    assert.equal(parsed.scheme, "tms");
+    assert.deepEqual(parsed.tiles, ["https://tiles.example/{-y}/{z}/{x}/{-y}.webp"]);
+    const bare = await resolveXyzTileUrlTemplate("https://tiles.example/{z}/{x}/{-y}.webp");
+    assert.equal(bare.renderUrl, "https://tiles.example/{z}/{x}/{-y}.webp");
+    assert.equal(bare.tilejson, undefined);
+    assert.throws(
+      () =>
+        parseXyzTileJson({
+          ...manifest(),
+          tiles: ["https://tiles.example/{z}/{x}/{y}/{-y}.png"],
+        }),
+      /not both/,
+    );
+  });
+
   it("rejects missing endpoints, invalid URLs, and vector TileJSON", () => {
     assert.throws(() => parseXyzTileJson({ ...manifest(), tiles: [] }), /at least one/);
     assert.throws(

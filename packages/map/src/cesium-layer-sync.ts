@@ -22,6 +22,7 @@ import {
   ruleBasedVisibilityFilter,
   transformGeojsonElevation,
   resolveProjectHeaderReferences,
+  resolveTileAddress,
   useAppStore,
   type GeoLibreLayer,
   type LayerStyle,
@@ -1225,8 +1226,16 @@ function tileTemplateImageryProvider(
   layer: GeoLibreLayer,
   makeResource: ImageryResourceFactory,
 ): ImageryProvider {
-  const url = firstTile(layer);
-  if (!url) throw new Error("no tile URL template");
+  const rawUrl = firstTile(layer);
+  if (!rawUrl) throw new Error("no tile URL template");
+  // Same row rule as the MapLibre XYZ source: {-y} flips once, and scheme
+  // "tms" flips once, so both together request an XYZ row.
+  const addressed =
+    layer.type === "xyz"
+      ? resolveTileAddress([rawUrl], layer.source.scheme === "tms" ? "tms" : "xyz")
+      : null;
+  const url = addressed?.tiles[0] ?? rawUrl;
+  const tileScheme = addressed?.scheme ?? (layer.source.scheme === "tms" ? "tms" : "xyz");
   const maxLevel = Number(layer.source.maxzoom);
   const minLevel = Number(layer.source.minzoom);
   const scheme = protocolScheme(url);
@@ -1252,7 +1261,7 @@ function tileTemplateImageryProvider(
       throw new Error(`no MapLibre protocol handler registered for "${scheme}://"`);
     return new ProtocolImageryProvider(Cesium, {
       template: url,
-      scheme: layer.source.scheme === "tms" ? "tms" : "xyz",
+      scheme: tileScheme,
       tileWidth,
       tileHeight: tileWidth,
       rectangle,
@@ -1262,7 +1271,7 @@ function tileTemplateImageryProvider(
     });
   }
   let finalUrl = url;
-  if (layer.source.scheme === "tms") {
+  if (tileScheme === "tms") {
     finalUrl = finalUrl.replace(/\{y\}/g, "{-y}");
   }
   const resource = makeResource(finalUrl);
