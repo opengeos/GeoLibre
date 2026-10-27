@@ -44,6 +44,7 @@ import {
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
 import { lidarOutputForMap } from "../../lib/lidar-export";
+import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { projectUrlFromLocation } from "../../lib/project-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
@@ -364,6 +365,9 @@ export function DesktopShell({
   useRasterIdentify();
   useNetcdfIdentify(mapControllerRef, mapReadyGeneration);
   useCogSpectralIdentify(mapControllerRef, mapReadyGeneration);
+  // The sampled pixels (markers + profile) those two hooks record live outside
+  // the project, so New/Open and removing the inspected layer clear them here.
+  useEffect(() => bindNetcdfProfileSamplesToProject(useAppStore), []);
   useRasterViewportStretch(mapControllerRef, mapReadyGeneration);
   useTerrainRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
   useScriptControlRestore(mapControllerRef, mapReadyGeneration, projectGeneration);
