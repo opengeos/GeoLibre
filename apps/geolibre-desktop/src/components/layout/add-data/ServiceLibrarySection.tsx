@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/tauri-io";
 import {
   BUILTIN_SERVICES,
+  builtinsHidden,
   createServiceEntry,
   isManagedService,
   listServices,
@@ -95,10 +96,13 @@ export function ServiceLibrarySection({
     () => listServices(kind, userEntries, hiddenBuiltinIds),
     [kind, userEntries, hiddenBuiltinIds],
   );
+  // Zero when the deployment turns built-ins off: restoring could show nothing.
   const hiddenBuiltinCount = useMemo(
     () =>
-      BUILTIN_SERVICES.filter((entry) => entry.kind === kind && hiddenBuiltinIds.has(entry.id))
-        .length,
+      builtinsHidden()
+        ? 0
+        : BUILTIN_SERVICES.filter((entry) => entry.kind === kind && hiddenBuiltinIds.has(entry.id))
+            .length,
     [kind, hiddenBuiltinIds],
   );
   const groups = useMemo(() => groupByCategory(entries), [entries]);
@@ -169,7 +173,9 @@ export function ServiceLibrarySection({
   const handleDelete = () => {
     if (!selectedEntry || selectedEntry.deployment) return;
     if (selectedEntry.builtin) {
-      persistHiddenBuiltins(new Set([...hiddenBuiltinIds, selectedEntry.id]));
+      // Re-read storage rather than trusting this dialog's mount-time copy, so a
+      // write from another tab is not overwritten.
+      persistHiddenBuiltins(new Set([...readHiddenBuiltinIds(), selectedEntry.id]));
     } else {
       persist(removeServiceEntry(userEntries, selectedEntry.id));
     }
@@ -182,7 +188,7 @@ export function ServiceLibrarySection({
     const kindIds = new Set(
       BUILTIN_SERVICES.filter((entry) => entry.kind === kind).map((entry) => entry.id),
     );
-    persistHiddenBuiltins(new Set([...hiddenBuiltinIds].filter((id) => !kindIds.has(id))));
+    persistHiddenBuiltins(new Set([...readHiddenBuiltinIds()].filter((id) => !kindIds.has(id))));
     setError(null);
     setNotice(t("addData.serviceLibrary.restoredBuiltins", { count: hiddenBuiltinCount }));
   };

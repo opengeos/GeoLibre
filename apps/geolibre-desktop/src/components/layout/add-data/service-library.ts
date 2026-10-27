@@ -23,8 +23,8 @@ import {
   DEFAULT_WMTS_URL,
   DEFAULT_XYZ_URL,
   GEBCO_WMS_ENDPOINT,
-  HIDDEN_BUILTIN_SERVICES_STORAGE_KEY,
   GEBCO_WMS_LAYERS,
+  HIDDEN_BUILTIN_SERVICES_STORAGE_KEY,
   NLCD_WMS_ENDPOINT,
   NLCD_WMS_LAYERS,
   MAX_SAVED_SERVICES,
@@ -377,7 +377,7 @@ export function mergeImportedServices(
 }
 
 /** True when the deployment hides the built-in starter presets (GEOLIBRE_BUILTIN_SERVICES=off). */
-function builtinsHidden(): boolean {
+export function builtinsHidden(): boolean {
   const value = readDeploymentEnv()?.VITE_GEOLIBRE_BUILTIN_SERVICES;
   return value !== undefined && value.trim().toLowerCase() === "off";
 }

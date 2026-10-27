@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   BUILTIN_SERVICES,
+  builtinsHidden,
   createServiceEntry,
   isManagedService,
   listAllServices,
@@ -10,18 +11,18 @@ import {
   normalizeServiceEntries,
   parseImportedServices,
   readDeploymentServices,
+  readHiddenBuiltinIds,
   readUserServices,
   removeServiceEntry,
   serializeUserServices,
+  SERVICE_LIBRARY_CHANGED_EVENT,
   serviceCategories,
   serviceFieldBoolean,
   serviceFieldString,
   type ServiceLibraryEntry,
   upsertServiceEntry,
-  writeUserServices,
-  SERVICE_LIBRARY_CHANGED_EVENT,
-  readHiddenBuiltinIds,
   writeHiddenBuiltinIds,
+  writeUserServices,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
 function makeEntry(overrides: Partial<ServiceLibraryEntry> = {}): ServiceLibraryEntry {
@@ -313,6 +314,12 @@ describe("deployment service library", () => {
 
     writeHiddenBuiltinIds([]);
     assert.ok(listServices("xyz", []).some((entry) => entry.id === osm.id));
+  });
+
+  it("reports built-ins as hidden when the deployment turns them off", () => {
+    assert.equal(builtinsHidden(), false);
+    deploymentEnv.VITE_GEOLIBRE_BUILTIN_SERVICES = "off";
+    assert.equal(builtinsHidden(), true);
   });
 
   it("treats a corrupt hidden-built-ins value as nothing hidden", () => {

@@ -132,6 +132,11 @@ export function useBrowserTree(): BrowserTreeState {
         }
       : undefined;
     const favorites = readBrowserFavorites();
+    // A deleted built-in keeps its saved favorite (restoring the preset brings
+    // the shortcut back) but is not shown while the preset is hidden.
+    const visibleFavorites = favorites.filter(
+      (fav) => !(fav.kind === "service" && fav.builtin && !byId.has(fav.serviceId ?? "")),
+    );
     const layerLibraryById = new Map(layerLibrary.map((entry) => [entry.id, entry]));
     return {
       tree: buildBrowserTree({
@@ -140,7 +145,7 @@ export function useBrowserTree(): BrowserTreeState {
         databaseConnections,
         mssqlConnections,
         files,
-        favorites,
+        favorites: visibleFavorites,
         libraryLayers: layerLibrary.map((entry) => ({
           id: entry.id,
           name: entry.name,
