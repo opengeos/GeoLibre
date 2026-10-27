@@ -8,9 +8,11 @@ import {
   isPopupClickEnabled,
   isPopupHoverEnabled,
   isSafePopupUrl,
+  isTileAddressError,
   lineWidthValue,
   mapZoomStepOutputs,
   resolveConfiguredPopupTitle,
+  resolveLayerTileAddress,
   resolvePopupBody,
   resolvePopupRows,
   resolvePopupTitle,
@@ -613,7 +615,22 @@ function buildRasterTileSource(layer: GeoLibreLayer): Record<string, unknown> | 
   // handler there.
   const isHttpUrl = (value: unknown): value is string =>
     typeof value === "string" && /^https?:\/\//i.test(value);
-  const tiles = Array.isArray(layer.source.tiles) ? layer.source.tiles.filter(isHttpUrl) : [];
+  const rawTiles = Array.isArray(layer.source.tiles) ? layer.source.tiles.filter(isHttpUrl) : [];
+  // The exported page is plain MapLibre, which leaves {-y} as text. Rewrite an
+  // XYZ template the same way the live map does. A non-XYZ layer keeps its
+  // templates; scheme tms is written only when the resolved row still flips.
+  let tiles = rawTiles;
+  let scheme: "xyz" | "tms" = layer.source.scheme === "tms" ? "tms" : "xyz";
+  if (rawTiles.length > 0) {
+    try {
+      const addressed = resolveLayerTileAddress(layer, rawTiles);
+      tiles = addressed.tiles;
+      scheme = addressed.scheme;
+    } catch (error) {
+      if (!isTileAddressError(error)) throw error;
+      return null;
+    }
+  }
   // The TileJSON `url` fallback is scoped to plain raster layers: wms/wmts
   // records keep the raw service endpoint (not a TileJSON) in `url` — their
   // loadable template lives in `tiles` — so embedding it would produce a
@@ -631,7 +648,7 @@ function buildRasterTileSource(layer: GeoLibreLayer): Record<string, unknown> | 
   if (typeof layer.source.maxzoom === "number") {
     source.maxzoom = layer.source.maxzoom;
   }
-  if (layer.source.scheme === "tms") source.scheme = "tms";
+  if (scheme === "tms") source.scheme = "tms";
   if (typeof layer.source.attribution === "string") {
     source.attribution = layer.source.attribution;
   }

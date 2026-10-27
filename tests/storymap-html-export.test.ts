@@ -112,6 +112,80 @@ describe("buildStoryMapHtml raster sources", () => {
     assert.ok(!html.includes(JSON.stringify(TILEJSON_URL)), "does not also embed the TileJSON url");
   });
 
+  it("rewrites a {-y} XYZ template into the row MapLibre can request", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        rasterLayer(
+          "scene-a",
+          { type: "raster", tiles: ["https://tiles.example.com/{z}/{x}/{-y}.png"] },
+          { type: "xyz" },
+        ),
+      ],
+    });
+    assert.ok(html.includes("https://tiles.example.com/{z}/{x}/{y}.png"));
+    assert.ok(!html.includes("{-y}"));
+    assert.ok(html.includes('"scheme":"tms"'));
+  });
+
+  it("cancels scheme tms and {-y} to an XYZ row in the export", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        rasterLayer(
+          "scene-a",
+          {
+            type: "raster",
+            scheme: "tms",
+            tiles: ["https://tiles.example.com/{z}/{x}/{-y}.png"],
+          },
+          { type: "xyz" },
+        ),
+      ],
+    });
+    assert.ok(html.includes("https://tiles.example.com/{z}/{x}/{y}.png"));
+    assert.ok(!html.includes("{-y}"));
+    assert.ok(!html.includes('"scheme"'));
+  });
+
+  it("keeps scheme tms when the XYZ template uses {y}", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        rasterLayer(
+          "scene-a",
+          {
+            type: "raster",
+            scheme: "tms",
+            tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          },
+          { type: "xyz" },
+        ),
+      ],
+    });
+    assert.ok(html.includes("https://tiles.example.com/{z}/{x}/{y}.png"));
+    assert.ok(html.includes('"scheme":"tms"'));
+  });
+
+  it("omits an XYZ layer whose template names both row tokens", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        rasterLayer(
+          "scene-a",
+          { type: "raster", tiles: ["https://tiles.example.com/{z}/{x}/{y}/{-y}.png"] },
+          { type: "xyz" },
+        ),
+      ],
+    });
+    assert.ok(!html.includes("scene-a-source"));
+    assert.ok(!html.includes("{-y}"));
+  });
+
   it("drops raster layers whose url is not http(s)", () => {
     for (const url of [
       "blob:https://app.example/1234",
