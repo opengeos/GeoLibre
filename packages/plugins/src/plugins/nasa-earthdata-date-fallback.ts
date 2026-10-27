@@ -82,10 +82,18 @@ export function previousGibsDates(time: GibsTimeDimension, from: string, count: 
   // so 2024-03-31 by P1M gives 2024-02-29 and then 2024-01-31, not 2024-01-29.
   let anchor = from;
   let steps = 0;
+  let anchorInterval: TimeInterval | undefined;
   while (dates.length < count) {
     const containing = intervals.find(
       (interval) => interval.start <= current && current <= interval.end,
     );
+    // Re-anchor on entering another interval: its period need not match, and
+    // stepping from the old anchor could land after the current date.
+    if (containing !== anchorInterval) {
+      anchorInterval = containing;
+      anchor = current;
+      steps = 0;
+    }
     let next: string | undefined;
     if (containing?.period) {
       const stepped = subtractPeriod(anchor, containing.period, steps + 1);
@@ -101,8 +109,6 @@ export function previousGibsDates(time: GibsTimeDimension, from: string, count: 
         .filter((end) => end < current)
         .sort()
         .at(-1);
-      anchor = next ?? anchor;
-      steps = 0;
     }
     if (!next) break;
     dates.push(next);

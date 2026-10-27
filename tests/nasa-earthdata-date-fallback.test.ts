@@ -78,6 +78,19 @@ describe("previousGibsDates", () => {
     assert.deepEqual(previousGibsDates(yearly, "2024-02-29", 1), ["2023-02-28"]);
   });
 
+  it("re-anchors when an earlier date falls in an interval with another period", () => {
+    const time = {
+      default: "2024-03-31",
+      values: ["2024-01-01/2024-02-29/P1D", "2024-02-29/2024-03-31/P1M"],
+    };
+    // 2024-02-29 is in both; the daily interval takes over from there.
+    assert.deepEqual(previousGibsDates(time, "2024-03-31", 3), [
+      "2024-02-29",
+      "2024-02-28",
+      "2024-02-27",
+    ]);
+  });
+
   it("does not loop on a zero period", () => {
     const time = { default: "2024-01-10", values: ["2024-01-01/2024-01-10/P0D", "2023-12-31"] };
     assert.deepEqual(previousGibsDates(time, "2024-01-10", 3), ["2023-12-31"]);
