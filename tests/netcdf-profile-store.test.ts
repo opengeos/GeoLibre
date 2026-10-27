@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   createEmptyProject,
   DEFAULT_LAYER_STYLE,
@@ -249,6 +249,11 @@ describe("netcdf profile samples follow the project (issue #3257)", () => {
     useAppStore.getState().newProject();
     clearNetcdfProfileSamples();
     unbind = bindNetcdfProfileSamplesToProject(useAppStore);
+  });
+
+  afterEach(() => {
+    unbind?.();
+    unbind = null;
   });
 
   it("clears the samples and docks the window on Project > New", () => {
