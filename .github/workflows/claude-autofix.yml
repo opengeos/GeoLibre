@@ -197,10 +197,10 @@ jobs:
                       nodes {
                         id isResolved isOutdated path line originalLine
                         starter: comments(first: 1) {
-                          nodes { id author { login __typename } authorAssociation body }
+                          nodes { id author { login __typename } body }
                         }
                         comments(last: 50) {
-                          nodes { id author { login __typename } authorAssociation body }
+                          nodes { id author { login __typename } body }
                         }
                       }
                     }
@@ -300,8 +300,14 @@ jobs:
               [ "$(bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
+            aside-sum)
+              { find "$aside" -printf '%m %P\n' | sort; find "$aside" -type f -print0 | sort -z | xargs -0 -r sha256sum; } \
+                | sha256sum | cut -d' ' -f1 ;;
             restore)
               bash "$0" reset-git
+              # The head's instruction files go back as they were set aside: code a same-repo branch
+              # runs through its build tools could otherwise have changed them on the way.
+              [ "$(bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
@@ -312,6 +318,7 @@ jobs:
           {
             echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
             echo "saved=$(bash "$RUNNER_TEMP/instructions.sh" saved-sum)"
+            echo "aside=$(bash "$RUNNER_TEMP/instructions.sh" aside-sum)"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -355,10 +362,12 @@ jobs:
             --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npm install --package-lock-only --ignore-scripts)' || '' }}"
 
       - name: Commit the merge
+        id: commitmerge
         if: steps.merge.outputs.conflicts != '0'
         env:
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
+          ASIDE_SUM: ${{ steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
@@ -385,7 +394,9 @@ jobs:
           test -z "$(git diff --cached --name-only --diff-filter=U)"
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
+          # The merge may have changed the instruction files, so the aside is summed again.
           bash "$RUNNER_TEMP/instructions.sh" hide
+          echo "aside=$(bash "$RUNNER_TEMP/instructions.sh" aside-sum)" >> "$GITHUB_OUTPUT"
 
       # After the merge commit, since package-lock.json may have been the conflict.
       - name: Install dependencies
@@ -433,6 +444,7 @@ jobs:
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           SAVED_SUM: ${{ steps.instructions.outputs.saved }}
+          ASIDE_SUM: ${{ steps.commitmerge.outputs.aside || steps.instructions.outputs.aside }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
           GIT_CONFIG_COUNT: "0"
@@ -450,7 +462,10 @@ jobs:
                 and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string" and (.reply | length) > 0
                              and (.status | IN("fixed", "addressed", "declined", "unclear")))
                 and (map(.id) | sort) == ($ids | sort))' .autofix/report.json > /dev/null; then
-            echo "::warning::Claude didn't finish the review threads or missed one; their changes are dropped."
+            missed=$(jq -rs --argjson ids "$IDS" '(.[0] // []) as $r | if ($r | type) == "array"
+              then [$ids[] | select(. as $i | [$r[] | objects | .id] | index($i) | not)] | join(", ") else "all" end' \
+              .autofix/report.json 2> /dev/null || echo "all")
+            echo "::warning::Claude didn't finish the review threads (unanswered: ${missed:-none, but the report is malformed}); their changes are dropped."
             git reset -q --hard HEAD
             git clean -fdq
             rm -f .autofix/report.json
@@ -491,8 +506,9 @@ jobs:
 
       # Nothing Claude wrote may carry its token, so this runs before the upload. The token is in
       # this step's environment, and code a same-repo branch runs through cargo or npm can write
-      # GITHUB_ENV and GITHUB_PATH. So the loader, shell and git variables are emptied in the step's
-      # own env, which wins over GITHUB_ENV and applies before any process starts; bash runs
+      # GITHUB_ENV and GITHUB_PATH. So the loader and shell variables are emptied in the step's
+      # own env, which wins over GITHUB_ENV and applies before any process starts, and every GIT_*
+      # variable is unset before git runs; bash runs
       # privileged (-p), which ignores exported functions, SHELLOPTS and BASHOPTS; PATH is fixed;
       # and the text it checks is built here, from HEAD, with the bundle checked to hold HEAD. The
       # text goes to a file that is grepped, not a pipe: grep -q exits on its first match, and under
@@ -518,7 +534,10 @@ jobs:
           OUTPUT: ${{ runner.temp }}/output.txt
         run: |
           PATH=/usr/bin:/bin
-          unset GIT_EXEC_PATH
+          # Any GIT_* variable an earlier step put in GITHUB_ENV (GIT_DIR, GIT_EXTERNAL_DIFF, ...) is
+          # dropped, then git is pinned to the repo config alone.
+          for v in $(compgen -e); do case "$v" in GIT_*) unset "$v" ;; esac; done
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
           # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
           { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
             git log --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
@@ -592,14 +611,15 @@ jobs:
           # `.github/` may only change to the base branch's own version, and only through the merge.
           allowed=""
           if [ "$CONFLICTS" != 0 ]; then allowed="$BASE_SHA"; fi
-          # NUL-separated, so a path git would quote is compared as itself, and read in the main
-          # shell, so `exit` stops the step.
+          # NUL-separated, so a path git would quote is compared as itself; written to a file first,
+          # so a failing git diff stops the step instead of reading as an empty list.
+          git diff --name-only -z "$SHA" "$new" -- .github/ > "$RUNNER_TEMP/github.z"
           while IFS= read -r -d '' f; do
             if [ -z "$allowed" ] || ! git diff --quiet "$allowed" "$new" -- ":(literal)$f"; then
               echo "::error::The commits change $f, which autofix doesn't push."
               exit 1
             fi
-          done < <(git diff --name-only -z "$SHA" "$new" -- .github/)
+          done < "$RUNNER_TEMP/github.z"
           git log --oneline "$SHA..$new" --first-parent
           git push origin "$new:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
