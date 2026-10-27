@@ -25,7 +25,10 @@ name: Claude autofix
 #   - Scripts come from this file, never from the checkout. Claude's file tools may not edit
 #     `.git/`, the git config in the home directory or the runner's temp directory, and it gets no
 #     git commands. The steps after it check the helper script, put back the git config and hooks
-#     saved before Claude ran, and ignore the global and system git config.
+#     saved before Claude ran (after checking the saved copy), and ignore the global and system
+#     git config. On a same-repo branch the code Claude runs through its build tools is outside
+#     those rules; the steps after it hold no secrets, except the leaked-token check, which starts
+#     a clean shell.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -84,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The AUTOFIX_TOKEN secret isn't set. Add a maintainer's token with contents and pull-requests write access to this repository, and the workflow scope (Workflows: write) so a merge that brings in workflow changes can be pushed."
+            echo "::error::The AUTOFIX_TOKEN secret isn't set. Add a maintainer's token: a classic one with the repo and workflow scopes, or a fine-grained one with Contents, Pull requests and Workflows write access to this repository (it can't push to forks)."
             exit 1
           fi
           perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$SENDER/permission" --jq .permission)
@@ -168,10 +171,10 @@ jobs:
                       nodes {
                         id isResolved isOutdated path line originalLine
                         starter: comments(first: 1) {
-                          nodes { author { login __typename } authorAssociation body }
+                          nodes { id author { login __typename } authorAssociation body }
                         }
                         comments(last: 50) {
-                          nodes { author { login __typename } authorAssociation body }
+                          nodes { id author { login __typename } authorAssociation body }
                         }
                       }
                     }
@@ -182,6 +185,9 @@ jobs:
           jq -s '
             def trusted: (.author.__typename == "Bot")
               or (.authorAssociation | IN("OWNER", "MEMBER"));
+            # MEMBER stands in for "can push": an org member with read-only access still counts,
+            # and an outside collaborator with write access doesn't. Checking each author's
+            # permission would take a call per author.
             # A thread whose last comment is an autofix reply was answered in an earlier round;
             # it comes back once a reviewer replies to it.
             [ .[]
@@ -191,7 +197,7 @@ jobs:
                        | (.author.__typename == "Bot" and (.body | startswith("**Claude autofix ("))) | not)
               | { id, path, line: (.line // .originalLine), outdated: .isOutdated,
                   comments: (.starter.nodes[0] as $s
-                             | [ $s, (.comments.nodes[] | select(. != $s)) ]
+                             | [ $s, (.comments.nodes[] | select(.id != $s.id)) ]
                              | map(select(trusted) | { author: (.author.login // "ghost"), body })) } ]
           ' "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
           count=$(jq length .autofix/threads.json)
@@ -221,7 +227,7 @@ jobs:
           # Checked on the NUL-separated list: git still quotes a path with `"`, `\` or a control
           # character even with quotePath off, and a quoted name would slip past the pattern.
           git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/conflicts.z"
-          if grep -zqiE '^\.github/|(^|/)(agents|claude)\.md$|^\.claude/|^CLAUDE\.local\.md$|^\.mcp\.json$' \
+          if grep -zqiE '^\.github/|(^|/)(agents|claude)\.md$|^\.claude/|(^|/)CLAUDE\.local\.md$|^\.mcp\.json$' \
               "$RUNNER_TEMP/conflicts.z"; then
             echo "::error::A conflict in .github/ or an instruction file needs a person."
             exit 1
@@ -258,15 +264,21 @@ jobs:
             save)
               rm -rf "$saved"; mkdir -p "$saved"
               cp -a .git/config .git/hooks "$saved/" ;;
-            check)
+            saved-sum)
+              { find "$saved" -printf '%m %P\n' | sort; find "$saved" -type f -print0 | sort -z | xargs -0 -r sha256sum; } \
+                | sha256sum | cut -d' ' -f1 ;;
+            reset-git)
               # The git config and hooks run commands in the git steps, so they go back to what they
               # were before Claude's steps. claude-code-action itself writes .git/config (a git user,
-              # a credential helper), so comparing them can't work. The steps that run git also set
-              # GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM, so no other config layer counts.
+              # a credential helper), so comparing them can't work. The saved copy is checked against
+              # the sum recorded in a step output first: code a same-repo branch runs through cargo or
+              # npm could otherwise change it. The steps that run git also set GIT_CONFIG_GLOBAL,
+              # GIT_CONFIG_NOSYSTEM and GIT_CONFIG_COUNT, so no other config layer counts.
+              [ "$(bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
             restore)
-              bash "$0" check
+              bash "$0" reset-git
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
@@ -274,7 +286,10 @@ jobs:
           EOF
           bash "$RUNNER_TEMP/instructions.sh" hide
           bash "$RUNNER_TEMP/instructions.sh" save
-          echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          {
+            echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
+            echo "saved=$(bash "$RUNNER_TEMP/instructions.sh" saved-sum)"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: (steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0') && env.FORK != 'true'
@@ -309,7 +324,7 @@ jobs:
 
             ${{ github.event.pull_request.head.repo.full_name != github.repository && 'You have no shell here: the result is checked by the pull request''s CI after it is pushed. Resolve only what you are sure is right, and leave a conflict in `package-lock.json` in place.' || 'If `package-lock.json` conflicts, take the base branch''s version and run `npm install --package-lock-only --ignore-scripts` to fold the pull request''s dependency changes back in. Dependencies are not installed while the merge is unfinished, so check the resolved code by reading it.' }}
 
-            Don't commit, push or run git commands that change the index; the workflow commits the merge.
+            You have no git commands; the workflow commits the merge.
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
@@ -320,18 +335,20 @@ jobs:
         if: steps.merge.outputs.conflicts != '0'
         env:
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          SAVED_SUM: ${{ steps.instructions.outputs.saved }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
+          GIT_CONFIG_COUNT: "0"
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
             # The index's unmerged paths, not conflicts.txt, which Claude could have edited.
-            conflicted=$(git -c core.quotePath=false diff --name-only --diff-filter=U)
+            git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/unmerged.z"
             while IFS= read -r f; do
               [ -n "$f" ] || continue
-              grep -qxF -- "$f" <<< "$conflicted" || { echo "::error::$f had no conflict."; exit 1; }
+              grep -zqxF -- "$f" "$RUNNER_TEMP/unmerged.z" || { echo "::error::$f had no conflict."; exit 1; }
               git rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
@@ -391,20 +408,24 @@ jobs:
         env:
           IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          SAVED_SUM: ${{ steps.instructions.outputs.saved }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
+          GIT_CONFIG_COUNT: "0"
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
           # A report counts only when it answers every staged thread exactly once: a partial one would
           # commit edits that no reply explains.
-          if [ ! -s .autofix/report.json ] || ! jq -e --argjson ids "$IDS" '
-              type == "array"
-              and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string"
-                           and (.status | IN("fixed", "addressed", "declined", "unclear")))
-              and (map(.id) | sort) == ($ids | sort)' .autofix/report.json > /dev/null; then
-            echo "::warning::Claude didn't finish the review threads; their changes are dropped."
+          # Slurped, so a file with two JSON values (only the last of which jq -e would judge) fails.
+          if [ ! -s .autofix/report.json ] || ! jq -se --argjson ids "$IDS" '
+              length == 1 and (.[0]
+                | type == "array"
+                and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string"
+                             and (.status | IN("fixed", "addressed", "declined", "unclear")))
+                and (map(.id) | sort) == ($ids | sort))' .autofix/report.json > /dev/null; then
+            echo "::warning::Claude didn't finish the review threads or missed one; their changes are dropped."
             git reset -q --hard HEAD
             git clean -fdq
             rm -f .autofix/report.json
@@ -424,29 +445,47 @@ jobs:
           git log -1 --stat
 
       - name: Bundle the commits
+        id: bundle
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         env:
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          SAVED_SUM: ${{ steps.instructions.outputs.saved }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
-          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GIT_CONFIG_COUNT: "0"
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          bash "$RUNNER_TEMP/instructions.sh" check
+          bash "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
-          # Nothing Claude wrote may carry its token: the replies, the commit messages, the diff.
-          # Written to a file first: grep -q in a pipe exits on the first match, and under pipefail
-          # the writer's SIGPIPE would turn that match into a pass.
+          # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
           { cat .autofix/report.json 2> /dev/null; git log --format=%B "$SHA..HEAD"; git diff "$SHA" HEAD; } \
             > "$RUNNER_TEMP/output.txt"
-          if [ -n "$TOKEN" ] && grep -qaF -- "$TOKEN" "$RUNNER_TEMP/output.txt"; then
-            echo "::error::Claude's output contains its token; nothing is pushed."
-            exit 1
-          fi
           if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
             git branch -f autofix HEAD
             git bundle create .autofix/autofix.bundle autofix --not "$SHA"
+          fi
+          echo "output=$(sha256sum "$RUNNER_TEMP/output.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Nothing Claude wrote may carry its token, so this runs before the upload. The token is in
+      # this step's environment, so the shell starts without what earlier steps may have added
+      # through GITHUB_ENV or GITHUB_PATH (code a same-repo branch runs through cargo or npm can
+      # write those), and the file is checked against the sum recorded when it was written. The
+      # file is grepped rather than a pipe: grep -q exits on its first match, and under pipefail
+      # the writer's SIGPIPE would turn that match into a pass.
+      - name: Check for a leaked token
+        if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
+        shell: /usr/bin/env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH /usr/bin/bash --noprofile --norc -eu {0}
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OUTPUT_SUM: ${{ steps.bundle.outputs.output }}
+          OUTPUT: ${{ runner.temp }}/output.txt
+        run: |
+          PATH=/usr/bin:/bin
+          echo "$OUTPUT_SUM  $OUTPUT" | sha256sum -c --quiet
+          if [ -z "$TOKEN" ] || grep -qaF -- "$TOKEN" "$OUTPUT"; then
+            echo "::error::Claude's output contains its token (or the token is missing); nothing is pushed."
+            exit 1
           fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -595,7 +634,7 @@ jobs:
               echo "- Merged \`$BASE\` and resolved conflicts in $CONFLICTS file(s)."
             fi
             if [ "$THREADS" != 0 ] && [ "$REPORTED" != true ]; then
-              echo "- Claude didn't finish the review threads; the run's log says why."
+              echo "- Claude didn't finish the review threads, or its report missed one, so its changes were dropped. Add the label again for another round."
             elif [ "$THREADS" != 0 ]; then
               jq -r --arg landed "$LANDED" '
                 map(if .status == "fixed" and $landed != "true" then .status = "unclear" else . end)
