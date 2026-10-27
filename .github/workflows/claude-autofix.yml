@@ -274,7 +274,7 @@ jobs:
       - name: Resolve the conflicts
         if: steps.merge.outputs.conflicts != '0'
         # Pinned to the same commit as claude-code-review.yml; Dependabot bumps both.
-        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1 (Claude Code 2.1.220)
+        uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1 (Claude Code 2.1.220)
         with:
           # GITHUB_TOKEN rather than the OIDC exchange, which fails under pull_request_target (see
           # claude-code-review.yml). Setting allowed_non_write_users also turns on the action's
@@ -343,7 +343,7 @@ jobs:
       - name: Fix the review threads
         if: steps.threads.outputs.count != '0'
         continue-on-error: true
-        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1 (Claude Code 2.1.220)
+        uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1 (Claude Code 2.1.220)
         with:
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
