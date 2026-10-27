@@ -115,7 +115,12 @@ jobs:
             --jq '.[].user | select(.type == "User") | .login' | sort -u > "$RUNNER_TEMP/commenters"
           writers=()
           while IFS= read -r login; do
-            perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2> /dev/null || echo none)
+            # Only a 404 means "not a collaborator": any other failure stops the run rather than
+            # quietly leaving a maintainer's threads out.
+            if ! perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2> "$RUNNER_TEMP/perm.err"); then
+              grep -q 'HTTP 404' "$RUNNER_TEMP/perm.err" || { cat "$RUNNER_TEMP/perm.err" >&2; exit 1; }
+              perm=none
+            fi
             case "$perm" in admin|maintain|write) writers+=("$login") ;; esac
           done < "$RUNNER_TEMP/commenters"
           echo "writers=$(printf '%s\n' "${writers[@]}" | jq -Rnc '[inputs | select(length > 0)]')" >> "$GITHUB_OUTPUT"
@@ -161,8 +166,8 @@ jobs:
       # Claude has no GitHub access of its own: the threads are staged on disk. Only threads a bot
       # or someone who can push started are kept (the gate looked up each commenter), and only
       # their comments in them, so a passer-by's or a read-only member's comment can't instruct
-      # the agent. A thread's starter is read
-      # on its own, and its last 50 comments, so a long thread still shows its latest reply.
+      # the agent. A thread's starter is read on its own, and its last 50 comments, so a long
+      # thread still shows its latest reply.
       - name: Stage the open review threads
         id: threads
         env:
@@ -479,27 +484,22 @@ jobs:
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
-          # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
-          { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
-            git log --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } \
-            > "$RUNNER_TEMP/output.txt"
           if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
             git branch -f autofix HEAD
             git bundle create .autofix/autofix.bundle autofix --not "$SHA"
           fi
-          echo "output=$(sha256sum "$RUNNER_TEMP/output.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       # Nothing Claude wrote may carry its token, so this runs before the upload. The token is in
       # this step's environment, and code a same-repo branch runs through cargo or npm can write
-      # GITHUB_ENV and GITHUB_PATH. So the loader and shell variables are emptied in the step's own
-      # env, which wins over GITHUB_ENV and applies before any process starts; bash runs privileged
-      # (-p), which ignores exported functions, SHELLOPTS and BASHOPTS; PATH is fixed; and the file
-      # is checked against the sum recorded when it was written. The
-      # file is grepped rather than a pipe: grep -q exits on its first match, and under pipefail
-      # the writer's SIGPIPE would turn that match into a pass.
+      # GITHUB_ENV and GITHUB_PATH. So the loader, shell and git variables are emptied in the step's
+      # own env, which wins over GITHUB_ENV and applies before any process starts; bash runs
+      # privileged (-p), which ignores exported functions, SHELLOPTS and BASHOPTS; PATH is fixed;
+      # and the text it checks is built here, from HEAD, with the bundle checked to hold HEAD. The
+      # text goes to a file that is grepped, not a pipe: grep -q exits on its first match, and under
+      # pipefail the writer's SIGPIPE would turn that match into a pass.
       - name: Check for a leaked token
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
-        shell: /usr/bin/bash -p --noprofile --norc -eu {0}
+        shell: /usr/bin/bash --noprofile --norc -p -eu {0}
         env:
           LD_PRELOAD: ""
           LD_LIBRARY_PATH: ""
@@ -508,12 +508,24 @@ jobs:
           ENV: ""
           SHELLOPTS: ""
           BASHOPTS: ""
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_CONFIG_COUNT: "0"
+          GIT_CONFIG_PARAMETERS: ""
+          GIT_EXEC_PATH: ""
+          SHA: ${{ github.event.pull_request.head.sha }}
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          OUTPUT_SUM: ${{ steps.bundle.outputs.output }}
           OUTPUT: ${{ runner.temp }}/output.txt
         run: |
           PATH=/usr/bin:/bin
-          echo "$OUTPUT_SUM  $OUTPUT" | sha256sum -c --quiet
+          unset GIT_EXEC_PATH
+          # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
+          { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
+            git log --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
+          if [ -e .autofix/autofix.bundle ]; then
+            heads=$(git bundle list-heads .autofix/autofix.bundle | cut -d' ' -f1)
+            [ "$heads" = "$(git rev-parse HEAD)" ] || { echo "::error::The bundle doesn't hold HEAD."; exit 1; }
+          fi
           if [ -z "$TOKEN" ] || grep -qaF -- "$TOKEN" "$OUTPUT"; then
             echo "::error::Claude's output contains its token (or the token is missing); nothing is pushed."
             exit 1
@@ -580,12 +592,14 @@ jobs:
           # `.github/` may only change to the base branch's own version, and only through the merge.
           allowed=""
           if [ "$CONFLICTS" != 0 ]; then allowed="$BASE_SHA"; fi
-          git diff --name-only "$SHA" "$new" -- .github/ | while IFS= read -r f; do
-            if [ -z "$allowed" ] || ! git diff --quiet "$allowed" "$new" -- "$f"; then
+          # NUL-separated, so a path git would quote is compared as itself, and read in the main
+          # shell, so `exit` stops the step.
+          while IFS= read -r -d '' f; do
+            if [ -z "$allowed" ] || ! git diff --quiet "$allowed" "$new" -- ":(literal)$f"; then
               echo "::error::The commits change $f, which autofix doesn't push."
               exit 1
             fi
-          done
+          done < <(git diff --name-only -z "$SHA" "$new" -- .github/)
           git log --oneline "$SHA..$new" --first-parent
           git push origin "$new:refs/heads/$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
