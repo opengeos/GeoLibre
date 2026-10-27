@@ -36,6 +36,7 @@ import { useScreenshotReadiness } from "../../hooks/useScreenshotReadiness";
 import i18n from "../../i18n";
 import {
   createAppAPI,
+  isMapClickModeActive,
   useExternalPluginsReady,
   useProjectPluginTrust,
   useSwipeSplitViewExclusivity,
@@ -339,6 +340,9 @@ export function DesktopShell({
     mapControllerRef,
     collaboration,
     mapReadyGeneration,
+    // A Directions or Reverse Geocode click places a waypoint or runs a
+    // lookup; it must not also open the comment dialog (#3256).
+    isMapClickModeActive,
   });
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
