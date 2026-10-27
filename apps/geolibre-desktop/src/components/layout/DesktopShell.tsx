@@ -44,8 +44,8 @@ import {
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
 import { lidarOutputForMap } from "../../lib/lidar-export";
-import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
+import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
 import { projectUrlFromLocation } from "../../lib/project-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";

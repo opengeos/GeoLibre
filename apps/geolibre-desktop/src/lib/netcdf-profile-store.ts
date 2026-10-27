@@ -152,10 +152,15 @@ interface ProfileSampleProjectState {
  *
  * Samples are module state, not project state, so nothing in New or Open
  * reaches them: without this the numbered markers and the spectral profile
- * survive into the next project. A project switch (any `projectGeneration`
- * bump: New, Open, a collaboration join, an undone load) clears them outright,
- * even when the incoming project reuses the inspected layer's id; removing the
- * inspected layer drops only that layer's samples.
+ * survive into the next project. A project switch (New, Open, a collaboration
+ * join) clears them outright, even when the incoming project reuses the
+ * inspected layer's id; removing the inspected layer drops only that layer's
+ * samples.
+ *
+ * A switch is a `projectGeneration` bump that lands in the same update as a new
+ * `layers` list. A collaborator's live edit also bumps the generation, but on
+ * its own, after the layers were already applied, so it only prunes layers the
+ * edit removed rather than wiping the user's samples.
  *
  * @param store - The app store, or anything with its `getState`/`subscribe`.
  * @returns A function that stops tracking the store.
@@ -167,7 +172,10 @@ export function bindNetcdfProfileSamplesToProject(store: {
   ) => () => void;
 }): () => void {
   return store.subscribe((state, previous) => {
-    if (state.projectGeneration !== previous.projectGeneration) {
+    if (
+      state.projectGeneration !== previous.projectGeneration &&
+      state.layers !== previous.layers
+    ) {
       clearNetcdfProfileSamples();
       return;
     }

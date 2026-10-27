@@ -277,6 +277,16 @@ describe("netcdf profile samples follow the project (issue #3257)", () => {
     assert.deepEqual(getNetcdfProfileSamples(), []);
   });
 
+  it("keeps the samples through a collaborator's live edit", () => {
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    // useCollaboration applies a remote snapshot's layers, then bumps the
+    // generation on its own to re-run the restore hooks.
+    useAppStore.setState({ layers: [...useAppStore.getState().layers, cogLayer("remote")] });
+    useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    assert.equal(getNetcdfProfileSamples().length, 1);
+  });
+
   it("drops the samples when the inspected layer is removed", () => {
     useAppStore.getState().addLayer(cogLayer("cleveland"));
     useAppStore.getState().addLayer(cogLayer("other"));
