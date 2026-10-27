@@ -22,6 +22,7 @@ export * from "./label-number-format";
 export * from "./external-native-paint";
 export * from "./attribute-form";
 export * from "./layer-descriptive-metadata";
+export * from "./map-click-claims";
 export * from "./popup";
 export * from "./joins";
 export * from "./virtual-fields";
@@ -126,6 +127,7 @@ export {
   GEOCODE_SCORE_KEY,
   GEOCODE_PROVIDER_KEY,
   GEOCODE_STATUS_KEY,
+  GEOCODE_ATTRIBUTE_PREFIX,
   DEFAULT_GEOCODING_PROVIDER_ID,
   GEOCODING_PROVIDERS,
   getGeocoderConfig,
@@ -145,10 +147,14 @@ export {
   nominatimReverseResultToDisplay,
   csvRowsToGeocodeRequests,
   geocodeForward,
+  geocodeSuggest,
+  parseArcGISSuggestions,
+  arcgisLocatorInputField,
   geocodeReverse,
   setGeocodingFetch,
   setGeocodingTokenProvider,
   geocoderSupportsReverse,
+  geocoderSupportsSuggest,
   selectedGeocodingLocator,
   normalizeArcGISLocatorUrl,
   normalizeGeocodingLocator,
@@ -163,6 +169,7 @@ export {
   type GeocodingProviderId,
   type GeocodingPreferenceInput,
   type GeocodeMatch,
+  type GeocodeSuggestion,
   type GeocodeStatus,
   type NominatimForwardResult,
   type NominatimReverseResult,
@@ -280,3 +287,5 @@ export {
   patchJpegCogSource,
   withJpegTablesPatch,
 } from "./cog-jpeg-tables";
+
+export * from "./geoarrow";

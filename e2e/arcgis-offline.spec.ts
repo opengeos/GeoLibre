@@ -30,7 +30,7 @@ project.layers = [
 
 async function openProject(page: Page, waitUntilReady = true) {
   await page.getByTestId("desktop-shell").waitFor();
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled({
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled({
     timeout: 60_000,
   });
   await page.evaluate((text) => {

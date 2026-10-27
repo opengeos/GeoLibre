@@ -9,6 +9,7 @@ import type {
 } from "@geolibre/core";
 import type { FeatureCollection, Geometry, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
+import type { ResolvedMapCrs } from "./active-map-crs";
 import type { SupportedLayerKinds } from "./layer-kind";
 import { MAPLIBRE_SUPPORTED_LAYER_KINDS } from "./maplibre-layer-kinds";
 
@@ -173,6 +174,12 @@ export interface MapEngine {
   drawExtent(options: ExtentDrawingOptions): () => void;
   /** Current visible geographic extent, or null when the view is unavailable. */
   getViewBounds(): MapExtent | null;
+  /**
+   * The CRS the map is drawn in (`preferences.map.mapCrs`), or `null` on the
+   * default Web Mercator map or globe. Only MapLibre draws other CRSs, so the
+   * other engines leave it out. Changes fire `MAP_CRS_CHANGE_EVENT` (`@geolibre/core`) on window.
+   */
+  getMapCrs?(): ResolvedMapCrs | null;
   /** Globe-native overlay; MapLibre panels keep their existing SVG overlay. */
   showExtent(extent: MapExtent): () => void;
   /** Rendered pixels and geometry for capture without requiring a MapLibre map. */

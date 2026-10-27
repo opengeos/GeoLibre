@@ -31,7 +31,9 @@ import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
 import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
+import { openReplyLink } from "../../lib/assistant/reply-links";
 import { isSendKey } from "../../lib/assistant/send-key";
+import { openExternalLink } from "../../lib/open-external";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
@@ -407,6 +409,24 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     const el = outputRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
+
+  // Links in a reply open outside the app instead of navigating its webview
+  // (system browser on the desktop, new tab on the web); see openReplyLink.
+  useEffect(() => {
+    const el = outputRef.current;
+    if (!el) return;
+    const onClick = (event: MouseEvent) => {
+      // The middle button opens a link through auxclick, not click.
+      if (event.type === "auxclick" && event.button !== 1) return;
+      openReplyLink(event, (url) => void openExternalLink(url));
+    };
+    el.addEventListener("click", onClick);
+    el.addEventListener("auxclick", onClick);
+    return () => {
+      el.removeEventListener("click", onClick);
+      el.removeEventListener("auxclick", onClick);
+    };
+  }, []);
 
   /**
    * Runs one prompt through the agent and streams it into the transcript.

@@ -59,12 +59,17 @@ describe("normalizeEffectsSettings", () => {
       haloExtent: 2,
       haloOpacity: 0.5,
       spaceColor: "#222222",
+      showStars: false,
+      showMilkyWay: true,
+      showConstellations: true,
     };
     const result = normalizeEffectsSettings({ haloExtent: 3 }, base);
     assert.equal(result.haloExtent, 3);
     assert.equal(result.haloColor, "#111111");
     assert.equal(result.spaceColor, "#222222");
     assert.equal(result.haloOpacity, 0.5);
+    assert.equal(result.showStars, false);
+    assert.equal(result.showConstellations, true);
   });
 });
 

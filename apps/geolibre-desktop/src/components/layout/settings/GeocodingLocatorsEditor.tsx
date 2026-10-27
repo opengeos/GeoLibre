@@ -1,4 +1,5 @@
 import {
+  arcgisLocatorInputField,
   fetchArcGISLocatorInfo,
   GeocoderServiceError,
   GeocoderUnsupportedError,
@@ -10,7 +11,12 @@ import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tryGetArcGISAccessToken } from "../../../lib/arcgis-oauth";
-import { locatorAcceptsPortalToken, stageLocatorPortalApproval } from "../../../lib/geocoding-auth";
+import {
+  listLocatorPortalApprovals,
+  locatorAcceptsPortalToken,
+  revokeLocatorPortalApproval,
+  stageLocatorPortalApproval,
+} from "../../../lib/geocoding-auth";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
 /** The outcome of the last "Check service" per locator id. */
@@ -28,7 +34,13 @@ type CheckErrorKey =
   | "settings.geocoding.locators.errorNetwork";
 
 /** The capability fields a URL edit makes stale. */
-const CAPABILITY_FIELDS = ["singleLineField", "addressFields", "reverse", "suggest"] as const;
+const CAPABILITY_FIELDS = [
+  "singleLineField",
+  "addressFields",
+  "reverse",
+  "suggest",
+  "searchField",
+] as const;
 
 /**
  * Map a failed check to the message shown under the locator.
@@ -65,6 +77,8 @@ export function GeocodingLocatorsEditor() {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences, setError } = useSettingsDraft();
   const [statuses, setStatuses] = useState<Record<string, CheckStatus>>({});
+  // Device-local, so revoking takes effect at once rather than on save.
+  const [approvals, setApprovals] = useState(listLocatorPortalApprovals);
   // The check in flight per locator id. An edit to the URL or portal forgets it,
   // so a check that finishes afterwards does not overwrite the newer values.
   const pendingChecks = useRef(new Map<string, object>());
@@ -227,6 +241,18 @@ export function GeocodingLocatorsEditor() {
         const status = statuses[locator.id];
         const checked = locator.reverse !== undefined;
         const urlValid = !locator.url.trim() || normalizeArcGISLocatorUrl(locator.url) !== null;
+        // The published inputs a search string can go to, plus the one in use
+        // when it is not among them (ArcGIS's conventional SingleLine), so the
+        // selector always shows what requests send.
+        const searchFields = [
+          ...new Set(
+            [
+              arcgisLocatorInputField(locator),
+              locator.singleLineField,
+              ...(locator.addressFields ?? []),
+            ].filter((field): field is string => !!field),
+          ),
+        ];
         return (
           <div key={locator.id} className="space-y-2 rounded-md border p-3">
             <div className="flex items-end gap-2">
@@ -322,9 +348,75 @@ export function GeocodingLocatorsEditor() {
                 {t("settings.geocoding.locators.noReverse")}
               </p>
             ) : null}
+            {searchFields.length > 1 ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs" htmlFor={`geocoding-locator-field-${locator.id}`}>
+                  {t("settings.geocoding.locators.searchField")}
+                </Label>
+                <Select
+                  id={`geocoding-locator-field-${locator.id}`}
+                  value={arcgisLocatorInputField(locator)}
+                  onChange={(event) =>
+                    patchLocator(locator.id, {
+                      // The default needs no setting, so a later check keeps it current.
+                      searchField:
+                        event.target.value ===
+                        arcgisLocatorInputField({ ...locator, searchField: undefined })
+                          ? undefined
+                          : event.target.value,
+                    })
+                  }
+                >
+                  {searchFields.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.geocoding.locators.searchFieldHint")}
+                </p>
+              </div>
+            ) : null}
           </div>
         );
       })}
+
+      {approvals.length ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <div>
+            <h4 className="text-xs font-semibold">
+              {t("settings.geocoding.locators.approvalsTitle")}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              {t("settings.geocoding.locators.approvalsDescription")}
+            </p>
+          </div>
+          <ul className="space-y-1">
+            {approvals.map((approval) => (
+              <li
+                key={`${approval.portalHost} ${approval.locatorHost}`}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="min-w-0 break-all">
+                  {t("settings.geocoding.locators.approvalEntry", { ...approval })}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    revokeLocatorPortalApproval(approval);
+                    setApprovals(listLocatorPortalApprovals());
+                  }}
+                >
+                  {t("settings.geocoding.locators.revoke")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

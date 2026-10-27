@@ -382,13 +382,14 @@ export function LayerRow({
             className={`min-w-0 flex-1 truncate rounded text-start text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               groupHidden ? "text-muted-foreground" : ""
             }`}
-            title={
+            // Lead with the full name: the visible label truncates.
+            title={`${layer.name}\n${
               isLayerLocked
                 ? t("collaborate.layerLockedHint")
                 : groupHidden
                   ? `${t("layers.hiddenByGroup")} — ${t("layers.doubleClickToRename")}`
                   : t("layers.doubleClickToRename")
-            }
+            }`}
             onDoubleClick={(e: ReactMouseEvent) => {
               e.stopPropagation();
               if (layerEditable) beginRename(layer);

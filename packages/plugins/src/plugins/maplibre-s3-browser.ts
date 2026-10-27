@@ -76,7 +76,7 @@ export interface S3BrowserLabels {
 export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
   hint: "Browse an S3 bucket, add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map, or open a .geolibre or .geolibre.json project. Enter s3://bucket/prefix/.",
   noConnections:
-    "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud Storage.",
+    "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud storage.",
   connection: "Connection",
   listBuckets: "List buckets",
   locationPlaceholder: "s3://bucket/prefix/",

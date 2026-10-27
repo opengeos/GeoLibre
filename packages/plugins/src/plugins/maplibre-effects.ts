@@ -2,13 +2,14 @@ import type { CesiumSceneHandle } from "@geolibre/map";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { getActiveEllipsoid } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { drawRealSky, loadSky } from "./maplibre-effects-sky";
 import { getStyleMap } from "./style-map";
 
 /**
  * GeoLibre atmosphere & particle effects plugin.
  *
  * Stacks transparent Canvas 2D layers behind the MapLibre globe to give it a
- * sense of place in space: a deep-space backdrop, tiled parallax starfield,
+ * sense of place in space: a deep-space backdrop, the real night sky,
  * occasional comets (shooting stars), and an atmospheric halo aligned to the
  * projected globe. The effects render only while the map is in globe projection,
  * so they never interfere with normal map work. A toolbar toggle turns the
@@ -46,12 +47,18 @@ export const EFFECTS_PLUGIN_ID = "maplibre-atmosphere-effects";
  * - `haloOpacity` scales the whole halo's strength (0 hides it).
  * - `spaceColor` is the center color of the deep-space radial backdrop; the
  *   outer edge is a darkened shade of it.
+ * - `showStars`, `showMilkyWay` and `showConstellations` toggle the layers of
+ *   the real night sky painted on the MapLibre/Mapbox backdrop (the Cesium
+ *   globe has its own sky box).
  */
 export interface EffectsSettings {
   haloColor: string;
   haloExtent: number;
   haloOpacity: number;
   spaceColor: string;
+  showStars: boolean;
+  showMilkyWay: boolean;
+  showConstellations: boolean;
 }
 
 export const DEFAULT_EFFECTS_SETTINGS: EffectsSettings = {
@@ -59,6 +66,9 @@ export const DEFAULT_EFFECTS_SETTINGS: EffectsSettings = {
   haloExtent: 2.8,
   haloOpacity: 1,
   spaceColor: "#0c1b33",
+  showStars: true,
+  showMilkyWay: true,
+  showConstellations: false,
 };
 
 // Slider bounds shared by the UI and the settings normalizer.
@@ -125,16 +135,11 @@ export function effectsOverlayCss(): string {
     `;
 }
 
-// Roughly one star per this many CSS pixels of starfield area.
-const STAR_AREA_PER_STAR = 900;
-// Starfield parallax scales exactly like the reference: a full 360° longitude
-// pan shifts one viewport width, and a 180° latitude pan shifts one height.
-const STARFIELD_LNG_PERIOD_DEGREES = 360;
-const STARFIELD_LAT_PERIOD_DEGREES = 180;
-
 const HALO_SAMPLE_COUNT = 16;
 // Keep decorative canvas work from competing with MapLibre on high-refresh displays.
 const EFFECTS_FRAME_MS = 1000 / 60;
+// How often a still globe redraws the sky to follow sidereal time.
+const SKY_REFRESH_MS = 60_000;
 
 export function nextEffectsFrameTime(timestamp: number, lastFrameTime: number): number | null {
   return timestamp - lastFrameTime + 0.1 < EFFECTS_FRAME_MS ? null : timestamp;
@@ -300,6 +305,13 @@ export function normalizeEffectsSettings(
       base.haloOpacity,
     ),
     spaceColor: isHex(candidate.spaceColor) ? withHash(candidate.spaceColor) : base.spaceColor,
+    showStars: typeof candidate.showStars === "boolean" ? candidate.showStars : base.showStars,
+    showMilkyWay:
+      typeof candidate.showMilkyWay === "boolean" ? candidate.showMilkyWay : base.showMilkyWay,
+    showConstellations:
+      typeof candidate.showConstellations === "boolean"
+        ? candidate.showConstellations
+        : base.showConstellations,
   };
 }
 
@@ -308,16 +320,11 @@ function effectsSettingsEqual(a: EffectsSettings, b: EffectsSettings): boolean {
     a.haloColor === b.haloColor &&
     a.haloExtent === b.haloExtent &&
     a.haloOpacity === b.haloOpacity &&
-    a.spaceColor === b.spaceColor
+    a.spaceColor === b.spaceColor &&
+    a.showStars === b.showStars &&
+    a.showMilkyWay === b.showMilkyWay &&
+    a.showConstellations === b.showConstellations
   );
-}
-
-interface Star {
-  x: number;
-  y: number;
-  size: number;
-  alpha: number;
-  glow: boolean;
 }
 
 interface Comet {
@@ -543,6 +550,7 @@ function solveLinear(m: number[][], b: number[]): number[] | null {
  */
 class EffectsEngine {
   private readonly map: MapLibreMap;
+  private globeProjection: boolean;
   private readonly mapRoot: HTMLElement | null;
   private readonly spaceCanvas: HTMLCanvasElement;
   private readonly starsCanvas: HTMLCanvasElement;
@@ -558,9 +566,6 @@ class EffectsEngine {
   private readonly previousControlContainerZIndex: string;
   private readonly overlayStyle: HTMLStyleElement;
 
-  private starfield: HTMLCanvasElement | null = null;
-  private starfieldOriginLng = 0;
-  private starfieldOriginLat = 0;
   private comets: Comet[] = [];
   // Cached space-background gradient; only depends on size, so rebuilt on resize.
   private spaceGradient: CanvasGradient | null = null;
@@ -569,14 +574,26 @@ class EffectsEngine {
   private height = 0;
   private dpr = 1;
   private starsDirty = true;
+  // One stable callback, so the redraws asked for while the sky data loads
+  // collapse into one entry in loadSky's pending set.
+  private readonly onSkyLoaded = (): void => {
+    if (this.destroyed) return;
+    this.starsDirty = true;
+    if (!document.hidden) this.start();
+  };
+  private spaceDirty = true;
+  private haloDirty = true;
   private settings: EffectsSettings;
 
   private rafId: number | null = null;
+  private cometTimer: number | null = null;
+  private skyTimer: number | null = null;
   private lastFrameTime = -Infinity;
   private destroyed = false;
 
   constructor(map: MapLibreMap, settings: EffectsSettings) {
     this.map = map;
+    this.globeProjection = isGlobeProjection(map);
     this.settings = settings;
     this.mapCanvas = map.getCanvas();
     // Either 2D engine: mapbox-gl names the same elements with its own prefix,
@@ -590,10 +607,10 @@ class EffectsEngine {
       ) ?? null;
     this.previousControlContainerZIndex = this.controlContainer?.style.zIndex ?? "";
     this.overlayStyle = this.ensureOverlayStyle();
-    this.spaceCanvas = this.createCanvas(0);
-    this.starsCanvas = this.createCanvas(1);
-    this.cometCanvas = this.createCanvas(2);
-    this.haloCanvas = this.createCanvas(3);
+    this.spaceCanvas = this.createCanvas(0, "space");
+    this.starsCanvas = this.createCanvas(1, "stars");
+    this.cometCanvas = this.createCanvas(2, "comets");
+    this.haloCanvas = this.createCanvas(3, "halo");
     this.spaceCtx = this.spaceCanvas.getContext("2d")!;
     this.starsCtx = this.starsCanvas.getContext("2d")!;
     this.cometCtx = this.cometCanvas.getContext("2d")!;
@@ -613,12 +630,16 @@ class EffectsEngine {
     this.handleResize = this.handleResize.bind(this);
     this.handleVisibility = this.handleVisibility.bind(this);
     this.handleMapChange = this.handleMapChange.bind(this);
+    this.handleRender = this.handleRender.bind(this);
     this.tick = this.tick.bind(this);
 
     map.on("resize", this.handleResize);
     // "move" already fires for pan, zoom, pitch, and rotate, so it covers every
     // camera change; no separate "zoom" listener is needed.
     map.on("move", this.handleMapChange);
+    // Direct setProjection calls do not emit a camera move.
+    map.on("projectiontransition", this.handleMapChange);
+    map.on("render", this.handleRender);
     document.addEventListener("visibilitychange", this.handleVisibility);
 
     this.handleResize();
@@ -632,13 +653,15 @@ class EffectsEngine {
 
   /**
    * Swap in new appearance settings. The space gradient is size-cached, so drop
-   * it to rebuild with the new color on the next frame; the halo is rebuilt
-   * every frame already. Restart the loop in case it idled (a settings change
-   * can arrive while the map sits still in globe mode).
+   * it to rebuild with the new color on the next frame. Restart the loop in
+   * case it idled (settings can change while the map sits still in globe mode).
    */
   applySettings(settings: EffectsSettings): void {
     this.settings = settings;
     this.spaceGradient = null;
+    this.spaceDirty = true;
+    this.starsDirty = true;
+    this.haloDirty = true;
     if (!document.hidden) this.start();
   }
 
@@ -647,6 +670,8 @@ class EffectsEngine {
     this.stop();
     this.map.off("resize", this.handleResize);
     this.map.off("move", this.handleMapChange);
+    this.map.off("projectiontransition", this.handleMapChange);
+    this.map.off("render", this.handleRender);
     document.removeEventListener("visibilitychange", this.handleVisibility);
     this.mapCanvas.style.zIndex = this.previousMapCanvasZIndex;
     if (this.controlContainer) {
@@ -671,9 +696,10 @@ class EffectsEngine {
     return style;
   }
 
-  private createCanvas(zIndex: number): HTMLCanvasElement {
+  private createCanvas(zIndex: number, layer: string): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.className = "geolibre-effects-canvas";
+    canvas.dataset.effectsLayer = layer;
     canvas.style.position = "absolute";
     canvas.style.top = "0";
     canvas.style.left = "0";
@@ -692,11 +718,22 @@ class EffectsEngine {
     }
   }
 
-  // A move restarts a loop that stopped because the map was not in globe mode.
+  // A move invalidates the camera-dependent layers and wakes the idle loop.
   // MapLibre's "move" fires for pan, zoom, pitch, and rotate.
   private handleMapChange(): void {
     this.starsDirty = true;
+    this.haloDirty = true;
     if (!document.hidden) this.start();
+  }
+
+  private handleRender(): void {
+    // Mapbox has no projectiontransition event, but setProjection schedules a
+    // render. Only a changed projection wakes the effects, so unrelated map
+    // frames never invalidate the cached canvases.
+    const globe = isGlobeProjection(this.map);
+    if (globe === this.globeProjection) return;
+    this.globeProjection = globe;
+    this.handleMapChange();
   }
 
   private handleResize(): void {
@@ -714,9 +751,11 @@ class EffectsEngine {
       canvas.height = Math.round(this.height * this.dpr);
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     }
-    this.starfield = null; // regenerate at the new size on the next frame
     this.spaceGradient = null; // rebuild for the new dimensions
     this.starsDirty = true;
+    this.spaceDirty = true;
+    this.haloDirty = true;
+    if (!document.hidden) this.start();
   }
 
   private start(): void {
@@ -725,9 +764,40 @@ class EffectsEngine {
   }
 
   private stop(): void {
-    if (this.rafId === null) return;
-    window.cancelAnimationFrame(this.rafId);
+    if (this.rafId !== null) window.cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    if (this.cometTimer !== null) window.clearTimeout(this.cometTimer);
+    this.cometTimer = null;
+    if (this.skyTimer !== null) window.clearTimeout(this.skyTimer);
+    this.skyTimer = null;
+    this.lastFrameTime = -Infinity;
+  }
+
+  /**
+   * The real sky turns with sidereal time (a quarter degree a minute), so a
+   * globe left still redraws the stars once a minute rather than freezing them.
+   */
+  private scheduleSkyRefresh(): void {
+    if (this.skyTimer !== null) return;
+    this.skyTimer = window.setTimeout(() => {
+      this.skyTimer = null;
+      if (this.destroyed || document.hidden || !isGlobeProjection(this.map)) return;
+      this.starsDirty = true;
+      this.start();
+    }, SKY_REFRESH_MS);
+  }
+
+  private scheduleComet(): void {
+    if (this.cometTimer !== null) return;
+    // Same geometric waiting-time distribution as a 0.5% chance per 60 Hz
+    // frame, without polling or touching any canvases between comets.
+    const frames = Math.floor(Math.log(1 - Math.random()) / Math.log(0.995)) + 1;
+    this.cometTimer = window.setTimeout(() => {
+      this.cometTimer = null;
+      if (this.destroyed || document.hidden || !isGlobeProjection(this.map)) return;
+      this.comets.push(this.spawnComet());
+      this.start();
+    }, frames * EFFECTS_FRAME_MS);
   }
 
   private clear(): void {
@@ -736,90 +806,25 @@ class EffectsEngine {
     this.haloCtx.clearRect(0, 0, this.width, this.height);
   }
 
-  private ensureStarfield(): void {
-    if (this.starfield) return;
-    const center = this.map.getCenter();
-    this.starfieldOriginLng = center.lng;
-    this.starfieldOriginLat = center.lat;
-
-    const fieldWidth = this.width;
-    const fieldHeight = this.height;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(fieldWidth * this.dpr);
-    canvas.height = Math.round(fieldHeight * this.dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-
-    const count = Math.round((fieldWidth * fieldHeight) / STAR_AREA_PER_STAR);
-    for (let i = 0; i < count; i++) {
-      const star = this.makeStar(fieldWidth, fieldHeight);
-      this.drawStar(ctx, star);
-    }
-    this.starfield = canvas;
-  }
-
-  private makeStar(fieldWidth: number, fieldHeight: number): Star {
-    const size = Math.random() * 1.3 + 0.2;
-    const alpha = Math.random() * 0.6 + 0.15;
-    return {
-      x: Math.random() * fieldWidth,
-      y: Math.random() * fieldHeight,
-      size,
-      alpha,
-      glow: size > 1.1,
-    };
-  }
-
-  private drawStar(ctx: CanvasRenderingContext2D, star: Star): void {
-    // ~20% of stars get a faint blue (hue 220) or warm (hue 40) tint; the rest
-    // are white.
-    let color = `rgba(255, 255, 255, ${star.alpha})`;
-    if (Math.random() > 0.8) {
-      color =
-        Math.random() > 0.5
-          ? `hsla(220, 30%, 85%, ${star.alpha})`
-          : `hsla(40, 30%, 85%, ${star.alpha})`;
-    }
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-    ctx.fill();
-    if (star.glow) {
-      ctx.fillStyle = `rgba(200, 220, 255, ${0.12 * star.alpha})`;
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.size * 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
   private drawStarfield(): void {
     if (this.width <= 0 || this.height <= 0) return;
-    this.ensureStarfield();
-    if (!this.starfield) return;
-    const center = this.map.getCenter();
-    const offsetX =
-      ((center.lng - this.starfieldOriginLng) / STARFIELD_LNG_PERIOD_DEGREES) * this.width;
-    const offsetY =
-      ((center.lat - this.starfieldOriginLat) / STARFIELD_LAT_PERIOD_DEGREES) * this.height;
-    const wrappedX = ((offsetX % this.width) + this.width) % this.width;
-    const wrappedY = ((offsetY % this.height) + this.height) % this.height;
-    const field = this.starfield;
-    if (!field) return;
     const ctx = this.starsCtx;
     ctx.clearRect(0, 0, this.width, this.height);
-    ctx.drawImage(field, wrappedX, wrappedY, this.width, this.height);
-    ctx.drawImage(field, wrappedX - this.width, wrappedY, this.width, this.height);
-    ctx.drawImage(field, wrappedX, wrappedY - this.height, this.width, this.height);
-    ctx.drawImage(field, wrappedX - this.width, wrappedY - this.height, this.width, this.height);
+    // Until the sky data arrives (a chunk of its own) the backdrop is empty; the
+    // load redraws the stars.
+    const layers = {
+      stars: this.settings.showStars,
+      milkyWay: this.settings.showMilkyWay,
+      constellations: this.settings.showConstellations,
+    };
+    if (!layers.stars && !layers.milkyWay && !layers.constellations) return;
+    const center = this.map.getCenter();
+    if (!drawRealSky(ctx, this.width, this.height, center, this.map.getBearing(), layers)) {
+      loadSky(this.onSkyLoaded);
+    }
   }
 
   private updateAndDrawComets(frameScale: number): void {
-    // Preserve the original ~0.5% chance per 60 Hz frame when frames are skipped.
-    const spawnChance = 1 - Math.pow(1 - 0.005, frameScale);
-    if (this.comets.length === 0 && Math.random() < spawnChance) {
-      this.comets.push(this.spawnComet());
-    }
-
     const ctx = this.cometCtx;
     const survivors: Comet[] = [];
     for (const comet of this.comets) {
@@ -940,29 +945,46 @@ class EffectsEngine {
       : EFFECTS_FRAME_MS;
     this.lastFrameTime = nextFrameTime;
 
-    this.clear();
-
     if (!isGlobeProjection(this.map)) {
+      this.clear();
       this.starsCtx.clearRect(0, 0, this.width, this.height);
+      this.spaceDirty = this.starsDirty = this.haloDirty = true;
+      this.comets = [];
+      this.stop();
       // Not globe: idle without burning frames. A later move (handleMapChange)
       // restarts the loop when the globe comes back.
       return;
     }
 
-    this.drawSpaceBackground();
+    if (this.spaceDirty) {
+      this.drawSpaceBackground();
+      this.spaceDirty = false;
+    }
     if (this.starsDirty) {
       this.drawStarfield();
       this.starsDirty = false;
     }
-    this.updateAndDrawComets(elapsed / EFFECTS_FRAME_MS);
+    if (this.comets.length > 0) {
+      this.cometCtx.clearRect(0, 0, this.width, this.height);
+      this.updateAndDrawComets(elapsed / EFFECTS_FRAME_MS);
+    }
     // The atmospheric halo is Earth-only — other celestial bodies (Moon, Mars,
     // Pluto, …) are airless or don't share Earth's blue glow, so we keep the
     // space backdrop, starfield, and comets but skip the halo for them.
-    if (getActiveEllipsoid().id === "earth") {
-      this.drawHalo(getGeoglifyGlobeCircle(this.map));
+    if (this.haloDirty) {
+      this.haloCtx.clearRect(0, 0, this.width, this.height);
+      if (getActiveEllipsoid().id === "earth") {
+        this.drawHalo(getGeoglifyGlobeCircle(this.map));
+      }
+      this.haloDirty = false;
     }
 
-    this.start();
+    if (this.comets.length > 0) this.start();
+    else {
+      this.lastFrameTime = -Infinity;
+      this.scheduleComet();
+      this.scheduleSkyRefresh();
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   BUILTIN_SERVICES,
+  builtinsHidden,
   createServiceEntry,
   isManagedService,
   listAllServices,
@@ -10,14 +11,17 @@ import {
   normalizeServiceEntries,
   parseImportedServices,
   readDeploymentServices,
+  readHiddenBuiltinIds,
   readUserServices,
   removeServiceEntry,
   serializeUserServices,
+  SERVICE_LIBRARY_CHANGED_EVENT,
   serviceCategories,
   serviceFieldBoolean,
   serviceFieldString,
   type ServiceLibraryEntry,
   upsertServiceEntry,
+  writeHiddenBuiltinIds,
   writeUserServices,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
@@ -206,11 +210,13 @@ describe("import / export round-trip", () => {
 describe("deployment service library", () => {
   let deploymentEnv: Record<string, string>;
   let storage: Map<string, string>;
+  let dispatched: string[];
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
   beforeEach(() => {
     deploymentEnv = {};
     storage = new Map();
+    dispatched = [];
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -218,6 +224,10 @@ describe("deployment service library", () => {
         localStorage: {
           getItem: (key: string) => storage.get(key) ?? null,
           setItem: (key: string, value: string) => storage.set(key, value),
+        },
+        dispatchEvent: (event: Event) => {
+          dispatched.push(event.type);
+          return true;
         },
       },
     });
@@ -273,6 +283,49 @@ describe("deployment service library", () => {
     assert.deepEqual(readUserServices(), [copy]);
     assert.deepEqual(parseImportedServices(serializeUserServices(combined)), [copy]);
     assert.equal(readDeploymentServices()[0].fields.endpoint, "https://x.test/wms");
+  });
+
+  it("announces writes so the Browser panel re-reads the library", () => {
+    writeUserServices([
+      createServiceEntry({
+        name: "Saved",
+        category: "",
+        kind: "xyz",
+        fields: { url: "https://x.test/{z}/{x}/{y}.png" },
+      }),
+    ]);
+    assert.deepEqual(dispatched, [SERVICE_LIBRARY_CHANGED_EVENT]);
+  });
+
+  it("hides deleted built-ins from every listing until they are restored", () => {
+    const [osm] = BUILTIN_SERVICES.filter((entry) => entry.id === "builtin-xyz-osm");
+    writeHiddenBuiltinIds([osm.id, "not-a-builtin"]);
+    assert.deepEqual([...readHiddenBuiltinIds()], [osm.id]);
+    assert.deepEqual(dispatched, [SERVICE_LIBRARY_CHANGED_EVENT]);
+    assert.equal(
+      listAllServices([]).some((entry) => entry.id === osm.id),
+      false,
+    );
+    assert.equal(
+      listServices("xyz", []).some((entry) => entry.id === osm.id),
+      false,
+    );
+    assert.equal(listAllServices([]).length, BUILTIN_SERVICES.length - 1);
+
+    writeHiddenBuiltinIds([]);
+    assert.ok(listServices("xyz", []).some((entry) => entry.id === osm.id));
+  });
+
+  it("reports built-ins as hidden when the deployment turns them off", () => {
+    assert.equal(builtinsHidden(), false);
+    deploymentEnv.VITE_GEOLIBRE_BUILTIN_SERVICES = "off";
+    assert.equal(builtinsHidden(), true);
+  });
+
+  it("treats a corrupt hidden-built-ins value as nothing hidden", () => {
+    storage.set("geolibre.serviceLibrary.hiddenBuiltins", "{not json");
+    assert.equal(readHiddenBuiltinIds().size, 0);
+    assert.equal(listAllServices([]).length, BUILTIN_SERVICES.length);
   });
 
   it("does not let imported ownership flags or reserved ids create managed entries", () => {

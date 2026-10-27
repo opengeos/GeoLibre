@@ -184,7 +184,7 @@ const DUCKDB_OPTIONS = {
   // Empty input; the sample database is the explicit, opt-in way to load one.
   sampleData: [{ label: "NYC data", url: DUCKDB_SAMPLE_DATABASE_URL }],
   sourceCrs: "EPSG:32618",
-  title: "Add DuckDB Layer",
+  title: "Add DuckDB layer",
 } satisfies DuckDBControlOptions;
 
 let duckdbControl: DuckDBControl | null = null;

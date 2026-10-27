@@ -250,6 +250,12 @@ export async function openRecentProjectFile(
   project: GeoLibreProject;
   path: string;
   text: string;
+  /**
+   * The original could not be read and this is the copy kept for it
+   * (GeoLibre#1948), which predates any change made to the file since.
+   * Callers tell the user so (GeoLibre#3216).
+   */
+  fromStoredCopy?: true;
 }> {
   if (isHttpUrl(path)) {
     const response = await fetch(path, {
@@ -316,7 +322,7 @@ export async function openRecentProjectFile(
         `Reopening the stored copy of "${path}"; the original could not be read.`,
         error,
       );
-      return { project: parseProject(snapshot), path, text: snapshot };
+      return { project: parseProject(snapshot), path, text: snapshot, fromStoredCopy: true };
     }
     if (isFileMissingError(error)) {
       throw new RecentProjectGoneError(`Project file no longer exists: ${path}`);

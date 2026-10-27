@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import { useAppStore, type CommentAnchor, type ProjectComment } from "@geolibre/core";
@@ -16,6 +16,12 @@ interface UseCommentToolOptions {
    * effect when the map underneath changes (#2268 review).
    */
   mapReadyGeneration: number;
+  /**
+   * True while a click-to-interact map mode (Directions, Reverse Geocode) owns
+   * map clicks. An armed comment tool then leaves the click to that mode
+   * instead of also opening the Add review comment dialog (#3256).
+   */
+  isMapClickModeActive?: () => boolean;
 }
 
 export interface PendingCommentState {
@@ -27,8 +33,13 @@ export function useCommentTool({
   mapControllerRef,
   collaboration,
   mapReadyGeneration,
+  isMapClickModeActive,
 }: UseCommentToolOptions) {
   const { t } = useTranslation();
+  // Read at click time through a ref, so a new predicate identity from the
+  // caller does not re-run the listener effect below.
+  const isMapClickModeActiveRef = useRef(isMapClickModeActive);
+  isMapClickModeActiveRef.current = isMapClickModeActive;
   const [isActive, setIsActive] = useState(false);
   const [pendingComment, setPendingComment] = useState<PendingCommentState | null>(null);
 
@@ -145,6 +156,7 @@ export function useCommentTool({
       const canvas = surface.getCanvas();
       canvas.style.cursor = "crosshair";
       const stop = engine.onMapClick((lngLat) => {
+        if (isMapClickModeActiveRef.current?.()) return;
         const storeIds = new Set(useAppStore.getState().layers.map((l) => l.id));
         const hit = engine
           .identifyFeatures(lngLat)
@@ -183,6 +195,10 @@ export function useCommentTool({
 
     const handleMapClick = (e: maplibreGl.MapMouseEvent) => {
       e.originalEvent.stopPropagation();
+      // Directions or Reverse Geocode owns the click: it places a waypoint or
+      // runs a lookup, and a comment card on top of that is one the user did
+      // not ask for (#3256). MapLibre still runs their own click listeners.
+      if (isMapClickModeActiveRef.current?.()) return;
 
       // Map source and style layer IDs to canonical store layer IDs.
       const storeLayers = useAppStore.getState().layers;

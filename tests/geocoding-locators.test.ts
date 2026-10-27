@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   createEmptyProject,
+  arcgisLocatorInputField,
   fetchArcGISLocatorInfo,
+  GEOCODE_ATTRIBUTE_PREFIX,
+  geocodeMatchToFeature,
+  geocodeSuggest,
+  geocoderSupportsSuggest,
   getGeocoderConfig,
+  normalizeGeocodingLocator,
   geocodeForward,
   geocodeReverse,
   GeocoderServiceError,
@@ -22,6 +28,8 @@ import {
 import {
   approveLocatorPortalToken,
   commitLocatorPortalApprovals,
+  listLocatorPortalApprovals,
+  revokeLocatorPortalApproval,
   discardStagedLocatorApprovals,
   locatorAcceptsPortalToken,
   resetLocatorFederationCache,
@@ -544,5 +552,186 @@ describe("locator approvals and federation caching", () => {
     stageLocatorPortalApproval(locator.url, locator.portalUrl);
     commitLocatorPortalApprovals([locator]);
     assert.equal(await resolveLocatorToken(locator), undefined);
+  });
+});
+
+describe("locator suggestions (#3123)", () => {
+  const SUGGESTING: GeocodingLocator = { ...PARCELS, suggest: true };
+
+  it("are offered only for a locator that advertises suggest, through its single-line field", () => {
+    assert.equal(geocoderSupportsSuggest(locatorConfig(SUGGESTING)), true);
+    assert.equal(geocoderSupportsSuggest(locatorConfig(PARCELS)), false);
+    assert.equal(geocoderSupportsSuggest(locatorConfig({ ...ASSETS, suggest: true })), false);
+    // A structured field chosen for search does not take whole-address suggestions.
+    assert.equal(
+      geocoderSupportsSuggest(
+        locatorConfig({ ...SUGGESTING, addressFields: ["Parcel"], searchField: "Parcel" }),
+      ),
+      false,
+    );
+    assert.equal(
+      geocoderSupportsSuggest(resolveGeocoderConfig({ providerId: "nominatim" })),
+      false,
+    );
+  });
+
+  it("asks suggest and drops category suggestions", async () => {
+    const urls = stubFetch({
+      suggestions: [
+        { text: "222 W Hargett St, Raleigh, NC, 27601", magicKey: "abc", isCollection: false },
+        { text: "Coffee shop", magicKey: "cat", isCollection: true },
+        { text: "", magicKey: "empty" },
+        null,
+      ],
+    });
+    const suggestions = await geocodeSuggest("222 W Harg", {
+      config: locatorConfig(SUGGESTING),
+      limit: 6,
+    });
+    const url = new URL(urls[0]);
+    assert.equal(`${url.origin}${url.pathname}`, `${BASE}/suggest`);
+    assert.equal(url.searchParams.get("text"), "222 W Harg");
+    assert.equal(url.searchParams.get("maxSuggestions"), "6");
+    assert.deepEqual(suggestions, [
+      { text: "222 W Hargett St, Raleigh, NC, 27601", magicKey: "abc" },
+    ]);
+  });
+
+  it("refuses a locator that does not suggest, and reports service errors", async () => {
+    const urls = stubFetch({ suggestions: [] });
+    await assert.rejects(
+      geocodeSuggest("A", { config: locatorConfig(PARCELS) }),
+      GeocoderUnsupportedError,
+    );
+    assert.equal(urls.length, 0);
+    stubFetch({ error: { code: 499, message: "Token Required" } });
+    await assert.rejects(
+      geocodeSuggest("A", { config: locatorConfig(SUGGESTING) }),
+      (error: unknown) => error instanceof GeocoderServiceError && error.isAuthError,
+    );
+  });
+
+  it("resolves a picked suggestion by its magicKey", async () => {
+    const urls = stubFetch({ candidates: [] });
+    await geocodeForward("222 W Hargett St", {
+      config: locatorConfig(SUGGESTING),
+      magicKey: "abc",
+      limit: 1,
+    });
+    const url = new URL(urls[0]);
+    assert.equal(url.searchParams.get("magicKey"), "abc");
+    assert.equal(url.searchParams.get("SingleLine"), "222 W Hargett St");
+  });
+
+  it("carries the secured locator's token, like other requests", async () => {
+    const urls = stubFetch({ suggestions: [] });
+    setGeocodingTokenProvider(async () => "secret");
+    await geocodeSuggest("A", {
+      config: locatorConfig({ ...SUGGESTING, portalUrl: "https://gis.example.org/portal" }),
+    });
+    assert.equal(new URL(urls[0]).searchParams.get("token"), "secret");
+  });
+});
+
+describe("locator search field (#3123)", () => {
+  const STRUCTURED: GeocodingLocator = {
+    ...PARCELS,
+    addressFields: ["Address", "Parcel", "Postal"],
+  };
+
+  it("sends the search to the published field the user chose", async () => {
+    const urls = stubFetch({ candidates: [] });
+    await geocodeForward("0123456789", {
+      config: locatorConfig({ ...STRUCTURED, searchField: "Parcel" }),
+    });
+    const url = new URL(urls[0]);
+    assert.equal(url.searchParams.get("Parcel"), "0123456789");
+    assert.equal(url.searchParams.get("SingleLine"), null);
+  });
+
+  it("falls back to the default when the chosen field is no longer published", () => {
+    assert.equal(arcgisLocatorInputField({ ...STRUCTURED, searchField: "Gone" }), "SingleLine");
+    assert.equal(arcgisLocatorInputField({ ...ASSETS, searchField: "Gone" }), "AssetID");
+  });
+
+  it("is kept in the project file", () => {
+    assert.equal(
+      normalizeGeocodingLocator({ ...STRUCTURED, searchField: " Parcel " })?.searchField,
+      "Parcel",
+    );
+    assert.equal(
+      normalizeGeocodingLocator({ ...STRUCTURED, searchField: "" })?.searchField,
+      undefined,
+    );
+  });
+});
+
+describe("locator candidate attributes (#3123)", () => {
+  it("are requested and kept on the match, without empty values or the shape", async () => {
+    const urls = stubFetch({
+      spatialReference: { wkid: 4326 },
+      candidates: [
+        {
+          address: "PIN 1703",
+          location: { x: -78.6, y: 35.7 },
+          score: 100,
+          attributes: {
+            PIN: "1703",
+            Addr_type: "Parcel",
+            Rank: 20,
+            Shape: { x: 1, y: 2 },
+            DisplayX: -78.6,
+            Phone: "",
+            Nothing: null,
+          },
+        },
+      ],
+    });
+    const [match] = await geocodeForward("1703", { config: locatorConfig(), attributes: true });
+    assert.equal(new URL(urls[0]).searchParams.get("outFields"), "*");
+    await geocodeForward("1703", { config: locatorConfig() });
+    // The search box does not ask for them.
+    assert.equal(new URL(urls[1]).searchParams.get("outFields"), null);
+    assert.deepEqual(match.attributes, { PIN: "1703", Addr_type: "Parcel", Rank: 20 });
+  });
+
+  it("become prefixed columns only when asked", () => {
+    const match = {
+      lat: 35.7,
+      lon: -78.6,
+      displayName: "PIN 1703",
+      score: 100,
+      attributes: { PIN: "1703" },
+    };
+    const row = { address: "1703", [`${GEOCODE_ATTRIBUTE_PREFIX}PIN`]: "mine" };
+    assert.equal(
+      geocodeMatchToFeature(match, { address: "1703" })?.properties?.geocode_attr_PIN,
+      undefined,
+    );
+    const properties = geocodeMatchToFeature(match, row, { attributes: true })?.properties ?? {};
+    // The row's own column of that name is kept; the locator's value gets a free key.
+    assert.equal(properties[`${GEOCODE_ATTRIBUTE_PREFIX}PIN`], "mine");
+    assert.ok(Object.values(properties).includes("1703"));
+  });
+});
+
+describe("revoking locator approvals (#3123)", () => {
+  afterEach(() => resetLocatorFederationCache());
+
+  it("lists approvals and forgets a revoked one", () => {
+    const federated: GeocodingLocator = {
+      ...PARCELS,
+      url: "https://maps.example.org/arcgis/rest/services/Locators/Parcels/GeocodeServer",
+      portalUrl: "https://gis.example.org/portal",
+    };
+    approveLocatorPortalToken(federated.url, federated.portalUrl);
+    assert.deepEqual(listLocatorPortalApprovals(), [
+      { portalHost: "gis.example.org", locatorHost: "maps.example.org" },
+    ]);
+    revokeLocatorPortalApproval({ portalHost: "gis.example.org", locatorHost: "maps.example.org" });
+    assert.deepEqual(listLocatorPortalApprovals(), []);
+    // Approving it again (checking and saving) restores it.
+    approveLocatorPortalToken(federated.url, federated.portalUrl);
+    assert.equal(listLocatorPortalApprovals().length, 1);
   });
 });

@@ -92,8 +92,8 @@ function expectSameZoom(actual: number, expected: number): void {
  */
 async function setView(page: Page, lng: number, lat: number, zoom: number): Promise<void> {
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await dialog.locator("#set-view-longitude").fill(String(lng));
   await dialog.locator("#set-view-latitude").fill(String(lat));
   await dialog.locator("#set-view-zoom").fill(String(zoom));

@@ -22,9 +22,9 @@ test("submits a fractional zoom the native validator would reject", async ({ pag
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await expect(dialog).toBeVisible();
 
   // A zoom that is not a multiple of step="0.1" — exactly the kind of value the
@@ -61,9 +61,9 @@ test("rejects out-of-range input via the dialog's own validation", async ({ page
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await expect(dialog).toBeVisible();
 
   // Longitude 999 is outside -180..180 — the browser would have caught this
@@ -88,9 +88,9 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await expect(dialog).toBeVisible();
 
   await dialog.getByRole("radio", { name: "DMS", exact: true }).click();
@@ -131,9 +131,9 @@ test("accepts a center entered in degrees and decimal minutes", async ({ page })
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await expect(dialog).toBeVisible();
 
   await dialog.getByRole("radio", { name: "DDM", exact: true }).click();
@@ -167,9 +167,9 @@ test("fills the fields from a pasted string only after Process input", async ({ 
   await waitForMap(page);
 
   await page.getByRole("button", { name: "View", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  await page.getByRole("menuitem", { name: /Set view/ }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Set View" });
+  const dialog = page.getByRole("dialog", { name: "Set view" });
   await expect(dialog).toBeVisible();
 
   const longitude = dialog.locator("#set-view-longitude");

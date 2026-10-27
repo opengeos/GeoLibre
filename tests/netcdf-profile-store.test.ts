@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import {
+  createEmptyProject,
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
 import {
   addNetcdfProfileSample,
+  bindNetcdfProfileSamplesToProject,
   clearNetcdfProfileSamples,
   clearNetcdfProfileSamplesForLayer,
   getNetcdfProfileSamples,
   isNetcdfProfilePoppedOut,
   MAX_PROFILE_SAMPLES,
+  pruneNetcdfProfileSamples,
   removeNetcdfProfileSample,
   setNetcdfProfilePoppedOut,
   setNetcdfProfileSampleProfile,
@@ -216,5 +224,98 @@ describe("netcdf profile store", () => {
     clearNetcdfProfileSamples();
     assert.equal(calls, 0);
     unsubscribe();
+  });
+});
+
+/** A COG layer record, enough for the app store's add/remove bookkeeping. */
+function cogLayer(id: string): GeoLibreLayer {
+  return {
+    id,
+    name: `Raster ${id}`,
+    type: "cog",
+    source: { type: "raster", url: `https://example.com/${id}.tif` },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+  } as GeoLibreLayer;
+}
+
+describe("netcdf profile samples follow the project (issue #3257)", () => {
+  let unbind: (() => void) | null = null;
+
+  beforeEach(() => {
+    unbind?.();
+    useAppStore.getState().newProject();
+    clearNetcdfProfileSamples();
+    unbind = bindNetcdfProfileSamplesToProject(useAppStore);
+  });
+
+  afterEach(() => {
+    unbind?.();
+    unbind = null;
+  });
+
+  it("clears the samples and docks the window on Project > New", () => {
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    addNetcdfProfileSample(sample("cleveland", 2));
+    setNetcdfProfilePoppedOut(true);
+    useAppStore.getState().newProject();
+    assert.deepEqual(getNetcdfProfileSamples(), []);
+    assert.equal(isNetcdfProfilePoppedOut(), false);
+    // Numbering restarts, so the next project's first marker reads "1".
+    useAppStore.getState().addLayer(cogLayer("landsat"));
+    addNetcdfProfileSample(sample("landsat", 3));
+    assert.deepEqual(
+      getNetcdfProfileSamples().map((item) => item.order),
+      [1],
+    );
+  });
+
+  it("clears the samples on opening a project, even one reusing the layer id", () => {
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    useAppStore
+      .getState()
+      .loadProject({ ...createEmptyProject("Other"), layers: [cogLayer("cleveland")] });
+    assert.deepEqual(getNetcdfProfileSamples(), []);
+  });
+
+  it("keeps the samples through a collaborator's live edit", () => {
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    // useCollaboration applies a remote snapshot's layers, then bumps the
+    // generation on its own to re-run the restore hooks.
+    useAppStore.setState({ layers: [...useAppStore.getState().layers, cogLayer("remote")] });
+    useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    assert.equal(getNetcdfProfileSamples().length, 1);
+  });
+
+  it("drops the samples when the inspected layer is removed", () => {
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    useAppStore.getState().addLayer(cogLayer("other"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    useAppStore.getState().removeLayer("other");
+    assert.equal(getNetcdfProfileSamples().length, 1);
+    useAppStore.getState().removeLayer("cleveland");
+    assert.deepEqual(getNetcdfProfileSamples(), []);
+  });
+
+  it("stops tracking once unbound", () => {
+    unbind?.();
+    unbind = null;
+    useAppStore.getState().addLayer(cogLayer("cleveland"));
+    addNetcdfProfileSample(sample("cleveland", 1));
+    useAppStore.getState().newProject();
+    assert.equal(getNetcdfProfileSamples().length, 1);
+  });
+
+  it("prunes only samples whose layer is gone", () => {
+    addNetcdfProfileSample(sample("a", 1));
+    pruneNetcdfProfileSamples(new Set(["a"]));
+    assert.equal(getNetcdfProfileSamples().length, 1);
+    pruneNetcdfProfileSamples(new Set(["b"]));
+    assert.deepEqual(getNetcdfProfileSamples(), []);
   });
 });

@@ -52,7 +52,7 @@ export interface ReverseGeocodeLabels {
 }
 
 let labels: ReverseGeocodeLabels = {
-  lookingUp: "Looking up address...",
+  lookingUp: "Looking up address…",
   noAddress: "No address found.",
   copyAddress: "Copy address",
   failed: "Reverse geocoding failed.",

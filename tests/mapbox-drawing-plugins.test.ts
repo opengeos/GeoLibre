@@ -477,6 +477,32 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
     assert.equal(controlContainer.style.zIndex, "");
   });
 
+  it("wakes idle effects on a Mapbox projection change without repainting on every render", () => {
+    const frames: FrameRequestCallback[] = [];
+    window.requestAnimationFrame = (callback) => frames.push(callback);
+    const map = makeMapboxMap(canvasContainer, controlContainer);
+    let projection = "mercator";
+    map.getProjection = () => ({ name: projection });
+    const removedEvents: string[] = [];
+    const off = map.off;
+    map.off = (event, handler) => {
+      removedEvents.push(event);
+      off(event, handler);
+    };
+    const { app } = makeApp(map);
+    restoreEffects(app, true);
+    // The initial Mercator frame clears the effects and then goes idle.
+    frames.shift()!(0);
+    assert.equal(frames.length, 0);
+    map.fire("render");
+    assert.equal(frames.length, 0, "unchanged projection does not wake the effects");
+    projection = "globe";
+    map.fire("render");
+    assert.equal(frames.length, 1, "Mapbox emits render, not projectiontransition");
+    restoreEffects(app, false);
+    assert.ok(removedEvents.includes("render"), "teardown removes the render listener");
+  });
+
   it("shades the night side and lights the Mapbox map from the sun", () => {
     const map = makeMapboxMap(canvasContainer, controlContainer);
     const { app, cesiumReads } = makeApp(map);

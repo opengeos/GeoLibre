@@ -11,6 +11,11 @@
 
 import { GeoJSONVT, Supercluster, type GeoJSONVTTile } from "@maplibre/geojson-vt";
 import { fromGeojsonVt } from "@maplibre/vt-pbf";
+import {
+  geoArrowToFeatureCollection,
+  isGeoArrowBatch,
+  type GeoArrowBatch,
+} from "@geolibre/core/worker-safe";
 
 /**
  * The single source-layer name carried by every generated tile. Render layers
@@ -75,6 +80,26 @@ export function buildTileIndex(
 }
 
 /**
+ * Build the tile index directly from a {@link GeoArrowBatch}.
+ *
+ * Runs inside the Web Worker (or inline when workers are unavailable).
+ * For clustered point layers, loads points into Supercluster.
+ * For unclustered vector layers, indexes directly with GeoJSONVT without
+ * requiring the main thread to deserialize or clone feature objects.
+ *
+ * @param batch The columnar GeoArrow batch.
+ * @param options Clustering configuration.
+ * @returns The index tiles are cut from.
+ */
+export function buildTileIndexFromBinary(
+  batch: GeoArrowBatch,
+  options: GeoJsonVtSourceOptions,
+): TileIndex {
+  const geojson = geoArrowToFeatureCollection(batch);
+  return buildTileIndex(geojson as GeoJSON.FeatureCollection, options);
+}
+
+/**
  * Encode one tile of an index to MVT bytes.
  *
  * @param index The layer's tile index.
@@ -117,6 +142,27 @@ export const TILE_WORKER_CHUNK_FEATURES = 2_000;
 export type TileWorkerRequest =
   | { type: "begin"; layerId: string; generation: number; options: GeoJsonVtSourceOptions }
   | { type: "features"; layerId: string; generation: number; features: GeoJSON.Feature[] }
+  | {
+      type: "binary";
+      layerId: string;
+      generation: number;
+      options: GeoJsonVtSourceOptions;
+      batch: GeoArrowBatch;
+    }
+  | {
+      type: "binary-begin";
+      layerId: string;
+      generation: number;
+      options: GeoJsonVtSourceOptions;
+      batch: GeoArrowBatch;
+    }
+  | {
+      type: "binary-properties";
+      layerId: string;
+      generation: number;
+      properties?: GeoArrowBatch["properties"];
+      featureIds?: GeoArrowBatch["featureIds"];
+    }
   | { type: "build"; layerId: string; generation: number }
   | { type: "drop"; layerId: string }
   | { type: "tile"; requestId: number; layerId: string; z: number; x: number; y: number }
@@ -149,7 +195,15 @@ export function createTileIndexSession(
   const indexes = new Map<string, TileIndex>();
   const building = new Map<
     string,
-    { generation: number; options: GeoJsonVtSourceOptions; features: GeoJSON.Feature[] }
+    {
+      generation: number;
+      options: GeoJsonVtSourceOptions;
+      features: GeoJSON.Feature[];
+      batch?: Omit<GeoArrowBatch, "properties" | "featureIds"> & {
+        properties?: Record<string, unknown>[];
+        featureIds?: (string | number | undefined)[];
+      };
+    }
   >();
   const queue = new Map<number, { layerId: string; z: number; x: number; y: number }>();
   let draining = false;
@@ -180,6 +234,29 @@ export function createTileIndexSession(
           features: [],
         });
         return;
+      case "binary-begin": {
+        const { properties: _properties, featureIds: _featureIds, ...geometry } = request.batch;
+        building.set(request.layerId, {
+          generation: request.generation,
+          options: request.options,
+          features: [],
+          batch: geometry,
+        });
+        return;
+      }
+      case "binary-properties": {
+        const pending = building.get(request.layerId);
+        if (pending?.generation !== request.generation || !pending.batch) return;
+        if (request.properties) {
+          const properties = (pending.batch.properties ??= []);
+          for (const value of request.properties) properties.push(value);
+        }
+        if (request.featureIds) {
+          const ids = (pending.batch.featureIds ??= []);
+          for (const id of request.featureIds) ids.push(id);
+        }
+        return;
+      }
       case "features": {
         const pending = building.get(request.layerId);
         if (pending?.generation !== request.generation) return;
@@ -193,16 +270,28 @@ export function createTileIndexSession(
         try {
           indexes.set(
             request.layerId,
-            buildTileIndex(
-              { type: "FeatureCollection", features: pending.features },
-              pending.options,
-            ),
+            pending.batch
+              ? buildTileIndexFromBinary(pending.batch, pending.options)
+              : buildTileIndex(
+                  { type: "FeatureCollection", features: pending.features },
+                  pending.options,
+                ),
           );
         } catch (err) {
           // A layer that cannot be indexed serves empty tiles rather than
           // stale ones from its previous data.
           indexes.delete(request.layerId);
           console.warn("[GeoLibre] geojson-vt index build failed", err);
+        }
+        return;
+      }
+      case "binary": {
+        building.delete(request.layerId);
+        try {
+          indexes.set(request.layerId, buildTileIndexFromBinary(request.batch, request.options));
+        } catch (err) {
+          indexes.delete(request.layerId);
+          console.warn("[GeoLibre] geojson-vt binary index build failed", err);
         }
         return;
       }

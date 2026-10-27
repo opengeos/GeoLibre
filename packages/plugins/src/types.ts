@@ -23,6 +23,24 @@ import type { GeoLibreToolbarLabel } from "./toolbar-menu-label";
 
 export type GeoLibreMapControlPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
+/**
+ * The CRS the primary map is drawn in, when it is not the default Web Mercator
+ * map or globe (`preferences.map.mapCrs`, see docs/maplibre-renderer.md).
+ */
+export interface GeoLibreMapCrs {
+  /** The `preferences.map.mapCrs` value: a preset id or `"EPSG:<code>"`. */
+  id: string;
+  /** The authority code the map is registered under, such as `"EPSG:25832"`. */
+  code: string;
+  /**
+   * The label WMS and ArcGIS export layers on the map ask servers for instead
+   * of {@link code}, set only when the two differ (the planetary presets,
+   * whose IAU codes servers do not read). Match a server's capabilities
+   * against `wmsSrs ?? code`.
+   */
+  wmsSrs?: string;
+}
+
 /** Built-in panels shared by plugins and the scripting API. */
 export type GeoLibreControlPanelId = "bookmark" | "search" | "measure" | "minimap" | "print";
 
@@ -34,6 +52,39 @@ export interface GeoLibreMinimapOptions {
   width?: number;
   /** Height in pixels. Must be positive. Default 180. */
   height?: number;
+  /** Open as its on-map button only, with the overview hidden. Default false. */
+  collapsed?: boolean;
+}
+
+/** Distance units the host's Measure panel can report. */
+export type GeoLibreMeasureDistanceUnit =
+  | "meters"
+  | "kilometers"
+  | "miles"
+  | "feet"
+  | "yards"
+  | "nautical-miles";
+
+/** Area units the host's Measure panel can report. */
+export type GeoLibreMeasureAreaUnit =
+  | "square-meters"
+  | "square-kilometers"
+  | "square-miles"
+  | "hectares"
+  | "acres"
+  | "square-feet";
+
+/** Options for the host's Measure panel. */
+export interface GeoLibreMeasureOptions {
+  /**
+   * Open as its on-map ruler button only, with the panel closed and the tool
+   * idle until the viewer clicks it. Default false.
+   */
+  collapsed?: boolean;
+  /** Unit for distances. Default `"kilometers"`. */
+  distanceUnit?: GeoLibreMeasureDistanceUnit;
+  /** Unit for areas. Default `"square-kilometers"`. */
+  areaUnit?: GeoLibreMeasureAreaUnit;
 }
 
 export type GeoLibreBuiltInMapControl =
@@ -625,6 +676,12 @@ export interface GeoLibrePluginCredentials {
 }
 
 export interface GeoLibreAppAPI {
+  /** Replace this plugin's declared URL parameters, removing omitted names.
+   * Other plugins' parameters and host parameters are preserved. Web only;
+   * inactive or stale plugin instances cannot write. Older hosts may omit it.
+   */
+  setUrlParameters?: (params: URLSearchParams) => void;
+
   /** Register an SDK Tool. The host scopes ownership to the calling plugin.
    * Returns a disposer; the host also removes tools on plugin deactivation.
    */
@@ -1055,6 +1112,25 @@ export interface GeoLibreAppAPI {
   getMap?: () => MapLibreMap | null;
   /** Active primary renderer, including while its canvas is being replaced. */
   getMapRenderer?: () => MapRendererKind;
+  /**
+   * The CRS the primary map is drawn in, or `null` on the default Web
+   * Mercator map or globe, and on renderers other than MapLibre (only MapLibre
+   * draws other CRSs). On a map in another CRS the host asks WMS and ArcGIS
+   * export layers for each tile's box in `wmsSrs ?? code`, so a WMS that lists
+   * that CRS lines up even without EPSG:3857, and it does not draw XYZ, vector
+   * tile or MBTiles layers. A plugin's own tiles and deck.gl overlays are not
+   * adapted. A newly picked CRS shows up here only once it has resolved (an
+   * EPSG code loads the EPSG tables first); {@link onMapCrsChange} reports it.
+   */
+  getMapCrs?: () => GeoLibreMapCrs | null;
+  /**
+   * Subscribe to the value {@link getMapCrs} returns changing: the user picking
+   * another CRS, leaving one, or switching renderer. Does not call back
+   * immediately. Switching CRS rebuilds the style, which drops layers and
+   * sources a plugin added to the map itself; re-add them on the map's next
+   * `style.load`. Call the returned unsubscribe function on deactivation.
+   */
+  onMapCrsChange?: (listener: (crs: GeoLibreMapCrs | null) => void) => () => void;
   /** Native ArcGIS view; null while another engine is active. */
   getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
   /**
@@ -1194,11 +1270,13 @@ export interface GeoLibreAppAPI {
   /**
    * Open a built-in panel using the host's existing control. Idempotent; the
    * menu checkmark follows. Minimap options also update an already open map
-   * and survive basemap changes until it is closed. Controls initialize
-   * asynchronously. Optional on older hosts.
+   * and survive basemap changes until it is closed; Measure options update an
+   * already open panel. Controls initialize asynchronously. Optional on older
+   * hosts.
    */
   openControlPanel?: {
     (id: "minimap", options: GeoLibreMinimapOptions): void;
+    (id: "measure", options: GeoLibreMeasureOptions): void;
     (id: GeoLibreControlPanelId): void;
   };
   /** Close a built-in panel, as its menu toggle does. Optional on older hosts. */

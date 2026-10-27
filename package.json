@@ -1,6 +1,6 @@
 {
   "name": "geolibre",
-  "version": "3.4.0",
+  "version": "3.5.1",
   "private": true,
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
@@ -72,10 +72,10 @@
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
-    "happy-dom": "^21.0.3",
-    "linkedom": "^0.18.13",
+    "happy-dom": "^21.0.4",
+    "linkedom": "^0.18.14",
     "tsx": "^4.23.15",
-    "typescript-eslint": "^8.71.2"
+    "typescript-eslint": "^8.72.0"
   },
   "overrides": {
     "@deck.gl/geo-layers": {

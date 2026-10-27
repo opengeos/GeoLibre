@@ -116,7 +116,7 @@ describe("SettingsDialog", () => {
     // Toggling only edits the dialog's draft...
     assert.equal(layoutSettings().toolbarLabels, before);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save Settings" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save settings" }));
 
     // ...Save commits it and closes the dialog.
     assert.equal(layoutSettings().toolbarLabels, !before);
@@ -144,7 +144,7 @@ describe("SettingsDialog", () => {
 
     const dialog = openAt("map");
     fireEvent.click(checkbox(dialog, "Restrict map bounds"));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save Settings" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save settings" }));
 
     assert.equal(useAppStore.getState().preferences.map.restrictBounds, !before);
   });

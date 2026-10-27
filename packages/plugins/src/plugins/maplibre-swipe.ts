@@ -138,7 +138,7 @@ function registerSwipePanel(app: GeoLibreAppAPI): void {
   unregisterPanel =
     app.registerRightPanel?.({
       id: PANEL_ID,
-      title: pluginDisplayTitle(app, SWIPE_PLUGIN_ID, "Layer Swipe"),
+      title: pluginDisplayTitle(app, SWIPE_PLUGIN_ID, "Layer swipe"),
       dock: "replace-style",
       defaultWidth: 320,
       deactivatePluginOnClose: true,

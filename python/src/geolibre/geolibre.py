@@ -57,6 +57,19 @@ MAP_CONTROLS = frozenset(
 
 _VALID_PROJECTIONS = frozenset({"globe", "mercator"})
 
+#: Units the Measure panel accepts for :meth:`Map.show_control`. Mirrors
+#: ``MEASURE_DISTANCE_UNITS`` / ``MEASURE_AREA_UNITS`` in
+#: ``packages/plugins/src/plugins/components/measure.ts``.
+MEASURE_DISTANCE_UNITS = frozenset(
+    {"meters", "kilometers", "miles", "feet", "yards", "nautical-miles"}
+)
+MEASURE_AREA_UNITS = frozenset(
+    {"square-meters", "square-kilometers", "square-miles", "hectares", "acres", "square-feet"}
+)
+
+#: Panels that take a ``collapsed`` option in :meth:`Map.show_control`.
+_COLLAPSIBLE_PANELS = frozenset({"measure", "minimap"})
+
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
 # same 50 MB ceiling applies to a fetched response or a local file.
 _MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
@@ -3658,7 +3671,7 @@ class Map(anywidget.AnyWidget):
             interaction["identify"] = list(identify) if isinstance(identify, list) else identify
         controls = self._ui.get("controls")
         if controls:
-            interaction["controls"] = dict(controls)
+            interaction["controls"] = copy.deepcopy(controls)
         if interaction:
             project["interaction"] = interaction
         return project
@@ -3708,7 +3721,15 @@ class Map(anywidget.AnyWidget):
             raise ValueError("set_identify: the list of layers is empty")
         self._set_ui(identify=ids[0] if len(ids) == 1 else ids)
 
-    def show_control(self, name: str, visible: bool = True) -> None:
+    def show_control(
+        self,
+        name: str,
+        visible: bool = True,
+        *,
+        collapsed: bool | None = None,
+        distance_unit: str | None = None,
+        area_unit: str | None = None,
+    ) -> None:
         """Show (or hide) a map control or toolbar panel.
 
         Covers the panels in the app's Controls menu (``"bookmark"``,
@@ -3723,18 +3744,57 @@ class Map(anywidget.AnyWidget):
         Hiding ``"globe"`` removes the globe/flat toggle button only; use
         :meth:`set_projection` to change how the map is drawn.
 
+        The Measure panel opens expanded with the tool active, so a viewer's
+        first clicks on the map place measurement points. For a shared map,
+        ``m.show_control("measure", collapsed=True)`` shows only its ruler
+        button until the viewer clicks it, and ``distance_unit`` /
+        ``area_unit`` pick the units it starts in.
+
         Args:
             name: The control or panel name.
             visible: ``True`` to show it, ``False`` to hide it.
+            collapsed: For ``"measure"`` and ``"minimap"``, ``True`` shows only
+                the control's on-map button, ``False`` opens it expanded.
+                ``None`` (the default) keeps the app's default, expanded.
+            distance_unit: For ``"measure"``, the distance unit: one of
+                ``"meters"``, ``"kilometers"`` (the app's default),
+                ``"miles"``, ``"feet"``, ``"yards"`` or ``"nautical-miles"``.
+            area_unit: For ``"measure"``, the area unit: one of
+                ``"square-meters"``, ``"square-kilometers"`` (the app's
+                default), ``"square-miles"``, ``"hectares"``, ``"acres"`` or
+                ``"square-feet"``.
 
         Raises:
-            ValueError: If ``name`` is not a known control or panel.
+            ValueError: If ``name`` is not a known control or panel, or an
+                option does not apply to it or has an unknown value.
         """
         if name not in MAP_PANELS and name not in MAP_CONTROLS:
             raise ValueError(
                 f"Unknown control {name!r}; expected one of {sorted(MAP_PANELS | MAP_CONTROLS)}"
             )
-        self._set_ui(controls={**self._ui.get("controls", {}), name: bool(visible)})
+        options: dict[str, Any] = {}
+        if collapsed is not None:
+            if name not in _COLLAPSIBLE_PANELS:
+                raise ValueError(f"collapsed applies only to {sorted(_COLLAPSIBLE_PANELS)}")
+            if not isinstance(collapsed, bool):
+                raise ValueError("collapsed must be a boolean")
+            options["collapsed"] = collapsed
+        for key, value, units in (
+            ("distanceUnit", distance_unit, MEASURE_DISTANCE_UNITS),
+            ("areaUnit", area_unit, MEASURE_AREA_UNITS),
+        ):
+            if value is None:
+                continue
+            if name != "measure":
+                raise ValueError(f"{key} applies only to 'measure'")
+            if value not in units:
+                raise ValueError(f"Unknown {key} {value!r}; expected one of {sorted(units)}")
+            options[key] = value
+        shown = bool(visible)
+        setting: bool | dict[str, Any] = (
+            {"visible": shown, **options} if options and shown else shown
+        )
+        self._set_ui(controls={**self._ui.get("controls", {}), name: setting})
 
     def hide_control(self, name: str) -> None:
         """Hide a map control or toolbar panel (see :meth:`show_control`).
@@ -4146,9 +4206,13 @@ class Map(anywidget.AnyWidget):
             changes["controls"] = {
                 **self._ui.get("controls", {}),
                 **{
-                    name: shown
+                    name: dict(shown) if isinstance(shown, dict) else shown
                     for name, shown in controls.items()
-                    if (name in MAP_PANELS or name in MAP_CONTROLS) and isinstance(shown, bool)
+                    if (name in MAP_PANELS or name in MAP_CONTROLS)
+                    and (
+                        isinstance(shown, bool)
+                        or (isinstance(shown, dict) and isinstance(shown.get("visible"), bool))
+                    )
                 },
             }
         if changes:

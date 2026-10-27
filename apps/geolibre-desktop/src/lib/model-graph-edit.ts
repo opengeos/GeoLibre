@@ -79,6 +79,48 @@ export function addDataNode(
 }
 
 /**
+ * Add a control flow node (iterator, switch, merge, or collector) at a canvas position.
+ *
+ * @param graph The current graph.
+ * @param kind Which control-flow node kind to add.
+ * @param position Canvas coordinates for the new node.
+ * @param createId Id factory.
+ * @returns The updated graph and the new node's id.
+ */
+export function addControlNode(
+  graph: ProcessingModelGraph,
+  kind: Extract<
+    ModelGraphNodeKind,
+    | "iterate-features"
+    | "iterate-rasters"
+    | "collect-results"
+    | "conditional-switch"
+    | "conditional-merge"
+  >,
+  position: { x: number; y: number },
+  createId: () => string,
+): { graph: ProcessingModelGraph; nodeId: string } {
+  const nodeId = createId();
+  const free = findFreePosition(graph, position);
+  const parameters: Record<string, unknown> = {};
+  if (kind === "iterate-features" || kind === "iterate-rasters") {
+    parameters.maxIterations = 1000;
+    parameters.stopOnError = true;
+  } else if (kind === "conditional-switch") {
+    parameters.conditionType = "compare";
+    parameters.operator = "==";
+  }
+  const node: ModelGraphNode = {
+    id: nodeId,
+    kind,
+    x: free.x,
+    y: free.y,
+    parameters,
+  };
+  return { graph: { ...graph, nodes: [...graph.nodes, node] }, nodeId };
+}
+
+/**
  * Add a tool node, seeded with the descriptor's documented parameter defaults so
  * a freshly dropped node is runnable without opening every field first.
  *
@@ -178,6 +220,19 @@ export function setNodeParameter(
         : node,
     ),
   };
+}
+
+/**
+ * Parse the iterator inspector's "Maximum Iterations Limit" field. Only a
+ * positive whole number is kept; blank, zero, negative or non-numeric text
+ * returns `undefined` so the runner falls back to its default limit instead of
+ * silently running nothing (or more than the field shows).
+ */
+export function parseMaxIterations(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") return undefined;
+  const num = Number(trimmed);
+  return Number.isFinite(num) && num >= 1 ? Math.floor(num) : undefined;
 }
 
 /** Set an `input` node's source layer, or an `output` node's result name. */

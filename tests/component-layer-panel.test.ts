@@ -445,7 +445,7 @@ describe("LayerPanel", () => {
 
     fireEvent.click(within(row("Parks")).getByRole("button", { name: "Metadata" }));
     let dialog = screen.getByRole("dialog");
-    within(dialog).getByText("Parks Metadata");
+    within(dialog).getByText("Parks metadata");
 
     // A rename and a metadata change made while the dialog is open (the row's
     // rename, a refresh) show up in it rather than the snapshot taken on open.
@@ -456,7 +456,7 @@ describe("LayerPanel", () => {
       });
     });
     dialog = screen.getByRole("dialog");
-    within(dialog).getByText("City parks Metadata");
+    within(dialog).getByText("City parks metadata");
     const json = JSON.parse(dialog.querySelector("pre")?.textContent ?? "{}");
     assert.equal(json.layerName, "City parks");
     assert.equal(json.featureCount, 5);

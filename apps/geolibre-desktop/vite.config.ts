@@ -205,6 +205,22 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// Opt-in cross-origin isolation (COOP same-origin + COEP require-corp)
+// for multi-threaded WebAssembly with SharedArrayBuffer. Preserves standard embed
+// and third-party iframe compatibility when left unset or "0".
+// Read here, before the build-env allowlist below drops unknown VITE_ vars: the
+// flag configures the servers only and is not exposed to the bundle.
+const CROSS_ORIGIN_ISOLATION =
+  process.env.VITE_CROSS_ORIGIN_ISOLATION === "1" || process.env.CROSS_ORIGIN_ISOLATION === "1";
+const CROSS_ORIGIN_ISOLATION_SERVER = CROSS_ORIGIN_ISOLATION
+  ? {
+      headers: {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+      },
+    }
+  : {};
+
 // ---------------------------------------------------------------------------
 // Build-time env exposed to the bundle.
 //
@@ -1554,6 +1570,7 @@ export default defineConfig({
     // answered with "Blocked request". `.ts.net` names are only resolvable
     // inside the tailnet, so allowing them does not widen public exposure.
     allowedHosts: [".ts.net"],
+    ...CROSS_ORIGIN_ISOLATION_SERVER,
     watch: {
       // Never watch the Rust side. `tauri dev` runs this dev server as its
       // `beforeDevCommand` and then starts cargo in the same tree, so the
@@ -1568,6 +1585,9 @@ export default defineConfig({
       // defaults (node_modules, .git), not a replacement for them.
       ignored: ["**/src-tauri/**"],
     },
+  },
+  preview: {
+    ...CROSS_ORIGIN_ISOLATION_SERVER,
   },
   worker: {
     format: "es",

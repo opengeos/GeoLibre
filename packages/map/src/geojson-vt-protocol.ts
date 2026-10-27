@@ -20,6 +20,7 @@
 import { addProtocol, config, type RequestParameters } from "maplibre-gl";
 import {
   buildTileIndex,
+  buildTileIndexFromBinary,
   encodeTile,
   TILE_WORKER_CHUNK_FEATURES,
   type GeoJsonVtSourceOptions,
@@ -27,6 +28,7 @@ import {
   type TileWorkerMessage,
   type TileWorkerRequest,
 } from "./geojson-vt-index";
+import { isGeoArrowBatch, type GeoArrowBatch } from "@geolibre/core/worker-safe";
 
 export { TILE_MAX_ZOOM, TILE_SOURCE_LAYER, type GeoJsonVtSourceOptions } from "./geojson-vt-index";
 
@@ -35,7 +37,9 @@ export const GEOJSONVT_PROTOCOL = "geolibre-gjvt";
 
 interface RegistryEntry {
   /** Reference to the geojson last indexed — used to detect data changes. */
-  geojsonRef: GeoJSON.FeatureCollection;
+  geojsonRef?: GeoJSON.FeatureCollection;
+  /** Reference to the GeoArrow batch last indexed — used to detect data changes. */
+  batchRef?: GeoArrowBatch;
   cluster: boolean;
   clusterRadius: number;
   clusterMaxZoom: number;
@@ -165,6 +169,37 @@ export class TileWorkerHost {
   }
 
   /**
+   * Send geometry buffers once, then clone row properties and IDs in yielding
+   * chunks. The store owns the buffers, so they must not be detached.
+   */
+  async buildBinary(
+    layerId: string,
+    generation: number,
+    batch: GeoArrowBatch,
+    options: GeoJsonVtSourceOptions,
+    isCurrent: () => boolean,
+  ): Promise<void> {
+    if (!isCurrent()) return;
+    const { properties, featureIds, ...geometry } = batch;
+    if (!this.post({ type: "binary-begin", layerId, generation, options, batch: geometry })) return;
+    for (let start = 0; start < batch.featureCount; start += TILE_WORKER_CHUNK_FEATURES) {
+      if (
+        !this.post({
+          type: "binary-properties",
+          layerId,
+          generation,
+          properties: properties?.slice(start, start + TILE_WORKER_CHUNK_FEATURES),
+          featureIds: featureIds?.slice(start, start + TILE_WORKER_CHUNK_FEATURES),
+        })
+      )
+        return;
+      await yieldToEventLoop();
+      if (!isCurrent()) return;
+    }
+    this.post({ type: "build", layerId, generation });
+  }
+
+  /**
    * Ask the worker for one encoded tile.
    *
    * @returns The tile's bytes (empty when the tile holds nothing or the request
@@ -272,13 +307,14 @@ export function disposeGeoJsonVtWorker(): void {
  */
 export function registerGeoJsonVtSource(
   layerId: string,
-  geojson: GeoJSON.FeatureCollection,
+  data: GeoJSON.FeatureCollection | GeoArrowBatch,
   options: GeoJsonVtSourceOptions,
 ): boolean {
+  const isBinary = isGeoArrowBatch(data);
   const existing = registry.get(layerId);
   const unchanged =
     existing !== undefined &&
-    existing.geojsonRef === geojson &&
+    (isBinary ? existing.batchRef === data : existing.geojsonRef === data) &&
     existing.cluster === options.cluster &&
     existing.clusterRadius === options.clusterRadius &&
     existing.clusterMaxZoom === options.clusterMaxZoom;
@@ -286,28 +322,48 @@ export function registerGeoJsonVtSource(
 
   const worker = getTileWorker();
   if (!worker) {
+    const index = isBinary
+      ? buildTileIndexFromBinary(data, options)
+      : buildTileIndex(data, options);
     registry.set(layerId, {
-      geojsonRef: geojson,
+      ...(isBinary ? { batchRef: data } : { geojsonRef: data }),
       ...options,
-      index: buildTileIndex(geojson, options),
+      index,
       posted: null,
     });
     return true;
   }
-  const entry: RegistryEntry = { geojsonRef: geojson, ...options, index: null, posted: null };
+  const entry: RegistryEntry = {
+    ...(isBinary ? { batchRef: data } : { geojsonRef: data }),
+    ...options,
+    index: null,
+    posted: null,
+  };
   registry.set(layerId, entry);
   const generation = ++buildGeneration;
-  entry.posted = worker.build(
-    layerId,
-    generation,
-    geojson,
-    {
-      cluster: options.cluster,
-      clusterRadius: options.clusterRadius,
-      clusterMaxZoom: options.clusterMaxZoom,
-    },
-    () => registry.get(layerId) === entry,
-  );
+  entry.posted = isBinary
+    ? worker.buildBinary(
+        layerId,
+        generation,
+        data,
+        {
+          cluster: options.cluster,
+          clusterRadius: options.clusterRadius,
+          clusterMaxZoom: options.clusterMaxZoom,
+        },
+        () => registry.get(layerId) === entry,
+      )
+    : worker.build(
+        layerId,
+        generation,
+        data,
+        {
+          cluster: options.cluster,
+          clusterRadius: options.clusterRadius,
+          clusterMaxZoom: options.clusterMaxZoom,
+        },
+        () => registry.get(layerId) === entry,
+      );
   return true;
 }
 
@@ -373,7 +429,12 @@ async function geojsonVtProtocolHandler(
   // MapLibre cancels tiles scrolled off-screen; skip the CPU-heavy encode when
   // the request was already aborted (the result would be discarded anyway).
   if (signal?.aborted) return empty;
-  entry.index ??= buildTileIndex(entry.geojsonRef, entry);
+  entry.index ??= entry.batchRef
+    ? buildTileIndexFromBinary(entry.batchRef, entry)
+    : entry.geojsonRef
+      ? buildTileIndex(entry.geojsonRef, entry)
+      : null;
+  if (!entry.index) return empty;
   return { data: encodeTile(entry.index, z, x, y) };
 }
 

@@ -65,6 +65,8 @@ export const GEOCODE_SCORE_KEY = "geocode_importance";
 export const GEOCODE_PROVIDER_KEY = "geocode_provider";
 /** Whether a row matched, when stamped. See {@link GeocodeStatus}. */
 export const GEOCODE_STATUS_KEY = "geocode_status";
+/** Prefix of a matched candidate's own attributes, when they are kept. */
+export const GEOCODE_ATTRIBUTE_PREFIX = "geocode_attr_";
 
 /** Identifier of a selectable geocoding backend. */
 export type GeocodingProviderId =
@@ -128,6 +130,10 @@ export class GeocoderUnsupportedError extends Error {
 export interface ForwardRequestOptions {
   email?: string;
   limit?: number;
+  /** A suggestion's key, so the locator resolves exactly that suggestion. */
+  magicKey?: string;
+  /** Ask for each candidate's own attributes (see {@link GeocodeMatch.attributes}). */
+  attributes?: boolean;
 }
 
 /** Per-request options passed to a provider's reverse URL builder. */
@@ -148,6 +154,20 @@ export interface GeocodeMatch {
   lon: number;
   displayName: string;
   score: number | null;
+  /**
+   * The candidate's own attributes, when the service returns them (an
+   * organization locator's parcel or asset identifiers, address type, ...).
+   * Empty values are left out.
+   */
+  attributes?: Record<string, string | number | boolean>;
+}
+
+/** A partial-text suggestion from a locator's `suggest` operation. */
+export interface GeocodeSuggestion {
+  /** The suggested place, as the locator words it. */
+  text: string;
+  /** Opaque key that `findAddressCandidates` resolves to this suggestion. */
+  magicKey: string;
 }
 
 /**
@@ -329,11 +349,13 @@ function nominatimForwardResultToMatch(result: NominatimForwardResult): GeocodeM
  * `extra.providerId`, when passed, also stamps `geocode_provider` and
  * `geocode_status: "matched"` (dropped when omitted, so the existing
  * `GeocodeDialog` call site keeps its current output unchanged).
+ * `extra.attributes` also adds the candidate's own attributes, each under
+ * {@link GEOCODE_ATTRIBUTE_PREFIX} plus its name.
  */
 export function geocodeMatchToFeature(
   match: GeocodeMatch,
   originalRow: Record<string, string> = {},
-  extra?: { providerId?: GeocodingProviderId },
+  extra?: { providerId?: GeocodingProviderId; attributes?: boolean },
 ): Feature<Point> | null {
   if (!Number.isFinite(match.lat) || !Number.isFinite(match.lon)) return null;
 
@@ -348,6 +370,10 @@ export function geocodeMatchToFeature(
     added[GEOCODE_PROVIDER_KEY] = extra.providerId;
     added[GEOCODE_STATUS_KEY] = "matched" satisfies GeocodeStatus;
   }
+  // The locator's own fields, prefixed so they never collide with the row's.
+  if (extra?.attributes)
+    for (const [key, value] of Object.entries(match.attributes ?? {}))
+      added[`${GEOCODE_ATTRIBUTE_PREFIX}${key}`] = value;
   for (const [key, value] of Object.entries(added)) {
     properties[uniqueKey(key, properties)] = value;
   }
@@ -608,6 +634,29 @@ function arcgisCandidatePosition(
 }
 
 /**
+ * A candidate's attributes worth keeping: plain values that are not empty.
+ * The shape and the location fields the match already carries are dropped.
+ */
+function candidateAttributes(
+  value: unknown,
+): Record<string, string | number | boolean> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const kept: Record<string, string | number | boolean> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (/^(shape|x|y|displayx|displayy|xmin|xmax|ymin|ymax)$/i.test(key)) continue;
+    if (
+      typeof entry === "string"
+        ? entry.trim() === ""
+        : typeof entry !== "number" && typeof entry !== "boolean"
+    )
+      continue;
+    if (typeof entry === "number" && !Number.isFinite(entry)) continue;
+    kept[key] = entry as string | number | boolean;
+  }
+  return Object.keys(kept).length ? kept : undefined;
+}
+
+/**
  * Normalize an ArcGIS `findAddressCandidates` response. Throws the service's
  * error envelope instead of reporting it as "no matches".
  *
@@ -626,10 +675,12 @@ function parseArcGISCandidates(data: unknown): GeocodeMatch[] {
       const location = candidate.location as { x?: unknown; y?: unknown } | undefined;
       const position = arcgisCandidatePosition(Number(location?.x), Number(location?.y), wkid);
       if (!position) return null;
+      const attributes = candidateAttributes(candidate.attributes);
       return {
         ...position,
         displayName: readString(candidate, "address") ?? "",
         score: coerceScore(candidate.score as number | undefined),
+        ...(attributes ? { attributes } : {}),
       } satisfies GeocodeMatch;
     })
     .filter((m): m is GeocodeMatch => m !== null);
@@ -734,6 +785,8 @@ export function normalizeGeocodingLocator(value: unknown): GeocodingLocator | nu
   if (reverse !== undefined) locator.reverse = reverse;
   const suggest = flag("suggest");
   if (suggest !== undefined) locator.suggest = suggest;
+  const searchField = text("searchField");
+  if (searchField) locator.searchField = searchField;
   return locator;
 }
 
@@ -784,11 +837,18 @@ export function parseArcGISLocatorInfo(data: unknown): ArcGISLocatorCapabilities
 }
 
 /**
- * The input field a single search string is sent in: the locator's published
- * single-line field, else its only structured field (an asset ID locator often
- * publishes just one), else ArcGIS's conventional `SingleLine`.
+ * The input field a single search string is sent in: the published field the
+ * user chose for it, else the locator's single-line field, else its only
+ * structured field (an asset ID locator often publishes just one), else
+ * ArcGIS's conventional `SingleLine`.
+ *
+ * @param locator - The locator.
+ * @returns The input field name.
  */
-function arcgisLocatorInputField(locator: GeocodingLocator): string {
+export function arcgisLocatorInputField(locator: GeocodingLocator): string {
+  // The user's choice, while the service still publishes that field.
+  const published = [locator.singleLineField, ...(locator.addressFields ?? [])];
+  if (locator.searchField && published.includes(locator.searchField)) return locator.searchField;
   if (locator.singleLineField) return locator.singleLineField;
   if (locator.addressFields?.length === 1) return locator.addressFields[0];
   return "SingleLine";
@@ -822,6 +882,10 @@ const arcgisLocatorProvider: GeocodingProvider = {
     // Locators often work in a projected system; ask for WGS 84 and check the
     // spatial reference the response reports (see arcgisCandidatePosition).
     url.searchParams.set("outSR", "4326");
+    // The candidate's own fields (parcel or asset IDs, address type, ...),
+    // only when wanted: a locator can return dozens of them.
+    if (options.attributes) url.searchParams.set("outFields", "*");
+    if (options.magicKey) url.searchParams.set("magicKey", options.magicKey);
     if (options.limit) url.searchParams.set("maxLocations", String(options.limit));
     return url.toString();
   },
@@ -1481,6 +1545,75 @@ export function geocoderSupportsReverse(config: GeocoderConfig): boolean {
 }
 
 /**
+ * Whether `config` offers suggestions while typing: a locator whose metadata
+ * advertises `suggest`, searched through its single-line field (a suggestion
+ * is a whole address, so it does not fit a structured field the user chose).
+ *
+ * @param config - The geocoder configuration.
+ * @returns Whether {@link geocodeSuggest} can be used.
+ */
+export function geocoderSupportsSuggest(config: GeocoderConfig): boolean {
+  const locator = config.providerId === "arcgis-locator" ? config.locator : undefined;
+  if (!locator?.suggest || !locator.singleLineField) return false;
+  return arcgisLocatorInputField(locator) === locator.singleLineField;
+}
+
+/**
+ * Normalize an ArcGIS `suggest` response. Collection suggestions (a category
+ * such as "Coffee shop") are dropped: they name many places, not one.
+ *
+ * @param data - The parsed response body.
+ * @returns The suggestions.
+ */
+export function parseArcGISSuggestions(data: unknown): GeocodeSuggestion[] {
+  const error = arcgisServiceError(data);
+  if (error) throw error;
+  const suggestions =
+    data && typeof data === "object" ? (data as { suggestions?: unknown }).suggestions : undefined;
+  if (!Array.isArray(suggestions)) return [];
+  return suggestions.flatMap((entry) => {
+    const text = readString(entry, "text")?.trim();
+    const magicKey = readString(entry, "magicKey");
+    const collection = (entry as { isCollection?: unknown } | null)?.isCollection === true;
+    return text && magicKey && !collection ? [{ text, magicKey }] : [];
+  });
+}
+
+/**
+ * Ask the selected locator for suggestions that complete `text`. Resolve one
+ * with {@link geocodeForward} and its `magicKey`.
+ *
+ * @param text - What the user has typed so far.
+ * @param options - Abort signal, configuration and the most suggestions wanted.
+ * @returns The suggestions.
+ * @throws GeocoderUnsupportedError When the geocoder does not suggest.
+ * @throws GeocoderServiceError For an HTTP or service error.
+ */
+export async function geocodeSuggest(
+  text: string,
+  options: { signal?: AbortSignal; config?: GeocoderConfig; limit?: number } = {},
+): Promise<GeocodeSuggestion[]> {
+  const config = options.config ?? getGeocoderConfig();
+  if (!geocoderSupportsSuggest(config)) {
+    throw new GeocoderUnsupportedError("The selected geocoder does not offer suggestions.");
+  }
+  const url = new URL(`${requireLocator(config).url}/suggest`);
+  url.searchParams.set("text", text);
+  url.searchParams.set("f", "json");
+  if (options.limit) url.searchParams.set("maxSuggestions", String(options.limit));
+  const request = await withLocatorToken(url.toString(), config);
+  const response = await geocodeFetch()(request.url, {
+    signal: options.signal,
+    headers: { Accept: "application/json" },
+    ...(request.token ? { redirect: "error" as const } : {}),
+  });
+  if (!response.ok) {
+    throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
+  }
+  return parseArcGISSuggestions(await readGeocodeJson(response));
+}
+
+/**
  * Fetch and read a GeocodeServer's capabilities. A secured service is asked
  * with `token`.
  *
@@ -1556,7 +1689,15 @@ function wrapLongitude(lon: number): number | null {
  */
 export async function geocodeForward(
   query: string,
-  options: { signal?: AbortSignal; config?: GeocoderConfig; limit?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    config?: GeocoderConfig;
+    limit?: number;
+    /** A {@link GeocodeSuggestion}'s key, to resolve that suggestion. */
+    magicKey?: string;
+    /** Ask for each candidate's own attributes, where the provider supports it. */
+    attributes?: boolean;
+  } = {},
 ): Promise<GeocodeMatch[]> {
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
@@ -1564,6 +1705,8 @@ export async function geocodeForward(
     provider.buildForwardUrl(config, query, {
       email: config.email,
       limit: options.limit,
+      magicKey: options.magicKey,
+      attributes: options.attributes,
     }),
     config,
   );

@@ -14,7 +14,10 @@ import {
   addArcGISRelatedRecord,
   arcGISRelatedAttachmentSupport,
   arcGISRelatedEditSupport,
+  arcGISContingencyChecks,
+  arcGISContingentChoices,
   arcGISRelatedFields,
+  blocksArcGISEdit,
   arcGISRelatedNewRecordDefaults,
   arcGISRelatedParentKey,
   deleteArcGISRelatedRecord,
@@ -22,6 +25,7 @@ import {
   LocalizedError,
   queryArcGISRelatedRecords,
   updateArcGISRelatedRecord,
+  type ArcGISContingencyCheck,
   type ArcGISRelatedField,
   type ArcGISRelatedRecord,
   type ArcGISRelatedTableInfo,
@@ -234,6 +238,37 @@ export function ArcGISRelatedRecordsDialog({
     return ok;
   };
 
+  const contingencyText = (check: ArcGISContingencyCheck) =>
+    t(check.status === "retired" ? "contingentValues.retired" : "contingentValues.violation", {
+      fields: check.fields.join(", "),
+      group: check.group,
+    });
+
+  // Values that fit the rest of the row first; the others stay selectable so
+  // the row can always be corrected one field at a time.
+  const codedValueOptions = (
+    codedValues: NonNullable<ArcGISRelatedField["codedValues"]>,
+    fits: ((value: unknown) => boolean) | undefined,
+  ) => {
+    const option = (entry: (typeof codedValues)[number]) => (
+      <option key={String(entry.code)} value={String(entry.code)}>
+        {entry.name || String(entry.code)}
+      </option>
+    );
+    const fitting = fits ? codedValues.filter((entry) => fits(entry.code)) : codedValues;
+    if (!fits || fitting.length === codedValues.length) return codedValues.map(option);
+    return (
+      <>
+        {fitting.length ? (
+          <optgroup label={t("contingentValues.fitting")}>{fitting.map(option)}</optgroup>
+        ) : null}
+        <optgroup label={t("contingentValues.others")}>
+          {codedValues.filter((entry) => !fits(entry.code)).map(option)}
+        </optgroup>
+      </>
+    );
+  };
+
   const editValues = (state: Editing, fields: ArcGISRelatedField[]) => {
     const values: Record<string, unknown> = {};
     for (const field of fields) {
@@ -321,6 +356,37 @@ export function ArcGISRelatedRecordsDialog({
     const fields = arcGISRelatedFields(related, support, candidate).filter(
       (field) => state.mode === "edit" || field.editable || field.managedKey,
     );
+    // The related table's own field groups judge the row, with the parent key
+    // the relationship manages already in place, as the save will.
+    if (state.mode === "add" && support.foreignKeyField && parentKey !== undefined)
+      candidate[support.foreignKeyField] = parentKey;
+    const checks = arcGISContingencyChecks(
+      related,
+      candidate,
+      state.mode === "edit" ? state.record.attributes : undefined,
+    );
+    const groupErrors = new Map<string, string>();
+    for (const check of checks)
+      if (blocksArcGISEdit(check))
+        for (const name of check.fields)
+          if (!groupErrors.has(name)) groupErrors.set(name, contingencyText(check));
+    const groupNotices = checks
+      .filter((check) => check.status !== "ok" && !blocksArcGISEdit(check))
+      .map((check) =>
+        t(
+          check.affected
+            ? "contingentValues.advisoryRecord"
+            : check.status === "retired"
+              ? "contingentValues.existingRetiredRecord"
+              : "contingentValues.existingRecord",
+          { fields: check.fields.join(", "), group: check.group },
+        ),
+      );
+    const rules = related.contingentValues;
+    if (rules?.status === "unavailable")
+      groupNotices.unshift(t("contingentValues.unavailableTable", { reason: rules.reason }));
+    else if (rules?.status === "unsupported")
+      groupNotices.unshift(t("contingentValues.unsupported"));
     const setDraft = (name: string, text: string) =>
       setEditing({ ...state, draft: { ...state.draft, [name]: text } });
     return (
@@ -387,11 +453,10 @@ export function ArcGISRelatedRecordsDialog({
                         {t("relatedRecords.outsideDomainOption", { value: text })}
                       </option>
                     ) : null}
-                    {field.codedValues.map((entry) => (
-                      <option key={String(entry.code)} value={String(entry.code)}>
-                        {entry.name || String(entry.code)}
-                      </option>
-                    ))}
+                    {codedValueOptions(
+                      field.codedValues,
+                      arcGISContingentChoices(related, candidate, field.name),
+                    )}
                   </Select>
                 ) : (
                   <Input
@@ -420,16 +485,25 @@ export function ArcGISRelatedRecordsDialog({
                       ? t("relatedRecords.outsideDomainEntered")
                       : t("relatedRecords.outsideDomain")}
                   </div>
+                ) : groupErrors.has(field.name) ? (
+                  <div className="text-xs text-destructive">{groupErrors.get(field.name)}</div>
                 ) : null}
               </div>
             );
           })}
         </div>
+        {groupNotices.length ? (
+          <div className="space-y-1 text-xs text-amber-600" role="status">
+            {groupNotices.map((notice, index) => (
+              <div key={`${index}:${notice}`}>{notice}</div>
+            ))}
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setEditing(null)}>
             {t("common.cancel")}
           </Button>
-          <Button type="submit" size="sm" disabled={busy}>
+          <Button type="submit" size="sm" disabled={busy || groupErrors.size > 0}>
             {t("relatedRecords.save")}
           </Button>
         </div>

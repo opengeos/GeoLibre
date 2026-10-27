@@ -270,6 +270,29 @@ describe("desktop CSP script-src (tauri.conf.json)", () => {
   });
 });
 
+describe("desktop CSP style-src (tauri.conf.json)", () => {
+  it("keeps 'unsafe-inline' effective for runtime-injected styles (#3210)", () => {
+    // At build time Tauri hashes every inline <style> in index.html into
+    // style-src and adds a nonce. A hash or nonce in a directive makes the
+    // browser ignore 'unsafe-inline', so the <style> elements external plugins
+    // inject at runtime were blocked once index.html gained its startup
+    // placeholder style. Opting style-src out of that rewrite keeps the policy
+    // exactly as written here.
+    const conf = JSON.parse(
+      readFileSync(path.join(ROOT, "apps/geolibre-desktop/src-tauri/tauri.conf.json"), "utf8"),
+    ) as { app: { security: { dangerousDisableAssetCspModification?: boolean | string[] } } };
+    // Exactly style-src: `true` or a wider list would also drop the nonces and
+    // hashes Tauri adds to script-src.
+    assert.deepEqual(conf.app.security.dangerousDisableAssetCspModification, ["style-src"]);
+    const styleSrc = cspDirective("style-src");
+    assert.ok(styleSrc.includes("'unsafe-inline'"));
+    assert.ok(
+      !styleSrc.some((source) => /^'(nonce|sha(256|384|512))-/.test(source)),
+      "style-src must not list a nonce or hash",
+    );
+  });
+});
+
 describe("web build CSP script-src (docker/nginx.conf)", () => {
   it("sends a CSP from the app and JupyterLite locations", () => {
     const locations = [...nginxPolicies().keys()];

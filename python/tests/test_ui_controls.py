@@ -9,7 +9,13 @@ import re
 import pytest
 
 import geolibre.geolibre as gmod
-from geolibre.geolibre import MAP_CONTROLS, MAP_PANELS, Map
+from geolibre.geolibre import (
+    MAP_CONTROLS,
+    MAP_PANELS,
+    MEASURE_AREA_UNITS,
+    MEASURE_DISTANCE_UNITS,
+    Map,
+)
 
 
 @pytest.fixture
@@ -89,6 +95,53 @@ def test_show_control_keeps_identify(m):
 def test_show_control_rejects_unknown_name(m):
     with pytest.raises(ValueError, match="Unknown control"):
         m.show_control("terrain")
+
+
+def test_show_control_measure_options(m):
+    """Measure options are stored with the visibility (issue #3241)."""
+    m.show_control("measure", collapsed=True, distance_unit="feet", area_unit="acres")
+    assert m._ui["controls"]["measure"] == {
+        "visible": True,
+        "collapsed": True,
+        "distanceUnit": "feet",
+        "areaUnit": "acres",
+    }
+    m.show_control("minimap", collapsed=True)
+    assert m._ui["controls"]["minimap"] == {"visible": True, "collapsed": True}
+    # A plain call keeps the boolean form, and hiding drops the options.
+    m.show_control("measure")
+    assert m._ui["controls"]["measure"] is True
+    m.show_control("minimap", False, collapsed=True)
+    assert m._ui["controls"]["minimap"] is False
+
+
+@pytest.mark.parametrize(
+    ("name", "kwargs", "match"),
+    [
+        ("search", {"collapsed": True}, "collapsed applies only"),
+        ("minimap", {"distance_unit": "feet"}, "applies only to 'measure'"),
+        ("measure", {"distance_unit": "furlongs"}, "Unknown distanceUnit"),
+        ("measure", {"area_unit": "feet"}, "Unknown areaUnit"),
+        ("measure", {"collapsed": "false"}, "collapsed must be a boolean"),
+    ],
+)
+def test_show_control_rejects_bad_options(m, name, kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        m.show_control(name, **kwargs)
+
+
+def test_measure_options_round_trip(m, tmp_path):
+    """Control options survive save_project and load_project."""
+    m.show_control("measure", collapsed=True, distance_unit="miles")
+    expected = {
+        "controls": {"measure": {"visible": True, "collapsed": True, "distanceUnit": "miles"}}
+    }
+    assert m.to_project()["interaction"] == expected
+    out = tmp_path / "map.geolibre.json"
+    m.save_project(str(out))
+    other = Map()
+    other.load_project(str(out))
+    assert other._ui["controls"] == expected["controls"]
 
 
 def test_set_projection_writes_project_preferences(m):
@@ -251,8 +304,8 @@ def _ts_string_set(source: str, name: str) -> set[str]:
     Raises:
         AssertionError: If the constant is not found.
     """
-    match = re.search(rf"export const {name} = \[(.*?)\]", source, re.DOTALL)
-    assert match, f"{name} not found in ui-controls.ts"
+    match = re.search(rf"(?:export )?const {name} = \[(.*?)\]", source, re.DOTALL)
+    assert match, f"{name} not found in the TypeScript source"
     return set(re.findall(r'"([^"]+)"', match.group(1)))
 
 
@@ -271,3 +324,16 @@ def test_control_lists_match_the_typescript_source():
     source = ts_path.read_text(encoding="utf-8")
     assert _ts_string_set(source, "SCRIPTABLE_PANELS") == set(MAP_PANELS)
     assert _ts_string_set(source, "SCRIPTABLE_MAP_CONTROLS") == set(MAP_CONTROLS)
+
+
+def test_measure_units_match_the_typescript_source():
+    """The Measure unit sets mirror ``measure.ts`` by hand; catch the drift."""
+    ts_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "packages/plugins/src/plugins/components/measure.ts"
+    )
+    if not ts_path.exists():
+        pytest.skip("frontend source not present in this checkout")
+    source = ts_path.read_text(encoding="utf-8")
+    assert _ts_string_set(source, "MEASURE_DISTANCE_UNITS") == set(MEASURE_DISTANCE_UNITS)
+    assert _ts_string_set(source, "MEASURE_AREA_UNITS") == set(MEASURE_AREA_UNITS)

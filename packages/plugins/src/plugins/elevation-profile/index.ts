@@ -86,7 +86,7 @@ function registerPanel(app: GeoLibreAppAPI): void {
     app.registerRightPanel?.({
       id: PANEL_ID,
       // The plugin's display name is already translated in every catalog.
-      title: pluginDisplayTitle(app, ELEVATION_PROFILE_PLUGIN_ID, "Elevation Profile"),
+      title: pluginDisplayTitle(app, ELEVATION_PROFILE_PLUGIN_ID, "Elevation profile"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

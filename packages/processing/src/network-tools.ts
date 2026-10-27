@@ -381,7 +381,7 @@ export const sequentialRouteTool: ProcessingAlgorithm = {
       const isClientError =
         error instanceof RoutingRequestError && error.status >= 400 && error.status < 500;
       const hint = isClientError
-        ? " The routing server rejected the request — reduce the number of points or use your own server (Settings → Environment Variables, VITE_ROUTING_ENDPOINT)."
+        ? " The routing server rejected the request — reduce the number of points or use your own server (Settings → Environment variables, VITE_ROUTING_ENDPOINT)."
         : "";
       ctx.log(`Routing failed: ${message}.${hint}`);
     }

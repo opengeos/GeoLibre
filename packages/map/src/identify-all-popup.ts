@@ -47,7 +47,7 @@ export const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   expandAll: "Expand all",
   collapseAll: "Collapse all",
   loadingTitle: "Identify visible layers",
-  loading: "Loading...",
+  loading: "Loading…",
   errorLabel: "Error",
   error: "Could not identify this layer.",
   noData: "No data at this location.",

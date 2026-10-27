@@ -1,7 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type * as GeoLibrePlugins from "@geolibre/plugins";
-import type { GeoLibreAppAPI, PluginManager } from "@geolibre/plugins";
+import type {
+  ArcGISCreationTemplateSelection,
+  GeoLibreAppAPI,
+  PluginManager,
+} from "@geolibre/plugins";
 import { GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import type { FeatureCollection } from "geojson";
 
@@ -11,6 +15,12 @@ export type GeometryEditStartResult =
   | "unsupported-renderer"
   | "activation-failed"
   | "start-failed";
+
+/** Choices made before the session starts. */
+export interface GeometryEditStartOptions {
+  /** The ArcGIS feature template new features start from (#3179); omit for defaults only. */
+  creationTemplate?: ArcGISCreationTemplateSelection;
+}
 
 /** What starting a session needs from the host. */
 export interface GeometryEditStartContext {
@@ -53,11 +63,13 @@ export const GEOMETRY_EDIT_QUEUE_WAIT_MS = 60_000;
  *
  * @param layerId - The layer to edit.
  * @param context - The host's app API, plugin manager, map and GeoEditor functions.
+ * @param options - Choices made before the session starts.
  * @returns "started", or why the session could not start.
  */
 export async function startGeometryEditSession(
   layerId: string,
   context: GeometryEditStartContext,
+  options: GeometryEditStartOptions = {},
 ): Promise<GeometryEditStartResult> {
   const earlierStarts = pendingStarts;
   let finished!: () => void;
@@ -69,7 +81,7 @@ export async function startGeometryEditSession(
   pendingStarts = earlierStarts.then(() => thisStart);
   try {
     if (!(await settlesWithin(earlierStarts, GEOMETRY_EDIT_QUEUE_WAIT_MS))) return "start-failed";
-    return await startWhenIdle(layerId, context);
+    return await startWhenIdle(layerId, context, options);
   } finally {
     finished();
   }
@@ -97,11 +109,13 @@ function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boole
  *
  * @param layerId - The layer to edit.
  * @param context - The host's app API, plugin manager, map and GeoEditor functions.
+ * @param options - Choices made before the session starts.
  * @returns "started", or why the session could not start.
  */
 async function startWhenIdle(
   layerId: string,
   context: GeometryEditStartContext,
+  options: GeometryEditStartOptions,
 ): Promise<GeometryEditStartResult> {
   const { app, manager, geoEditor } = context;
   // Don't load and activate the editor for a layer that isn't there.
@@ -132,7 +146,9 @@ async function startWhenIdle(
     if (!activated || !manager.isActive(GEO_EDITOR_PLUGIN_ID)) return "activation-failed";
   }
   try {
-    return (await geoEditor.startLayerGeometryEdit(app, layerId)) ? "started" : "start-failed";
+    return (await geoEditor.startLayerGeometryEdit(app, layerId, options))
+      ? "started"
+      : "start-failed";
   } catch (error) {
     // Ending the previous session (its write-back or sketches restore) can
     // throw; report a failed start rather than reject.

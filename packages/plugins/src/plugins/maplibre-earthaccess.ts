@@ -679,7 +679,7 @@ async function transferGranule(
         }
         if (kind === "open" && result.data) {
           appRef?.openSpaceborneLidarGranule?.(result.data, fileName);
-          transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
+          transfer.done = tr("opened", "Opened in Add data → ICESat-2 / GEDI.");
         } else if (!folder) {
           transfer.done = tr("saved", "Saved to {{path}}", { path: result.path ?? fileName });
         }
@@ -694,7 +694,7 @@ async function transferGranule(
         const data = await proxyDownload(url, controller.signal, onProgress);
         if (kind === "open") {
           appRef?.openSpaceborneLidarGranule?.(data, fileName);
-          transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
+          transfer.done = tr("opened", "Opened in Add data → ICESat-2 / GEDI.");
         } else {
           saveBlob(data, fileName);
           transfer.done = tr("downloaded", "Downloaded {{name}}", { name: fileName });

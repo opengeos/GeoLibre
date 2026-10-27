@@ -1,5 +1,11 @@
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import {
+  arcGISContingencyChecks,
+  arcGISContingencyError,
+  blocksArcGISEdit,
+  type ArcGISContingentValues,
+} from "./arcgis-contingent-values";
+import {
   arcGISDomainError,
   arcGISSubtypeField,
   resolveArcGISFieldDomain,
@@ -51,6 +57,13 @@ export interface ArcGISEditInfo {
   subtypeField?: string;
   /** Subtypes, each optionally overriding field domains. */
   subtypes?: ArcGISSubtype[];
+  /** Whether the layer publishes contingent values (field group combinations). */
+  hasContingentValuesDefinition?: boolean;
+  /**
+   * The layer's contingent values, retrieved with its metadata when it
+   * publishes them. Absent when it publishes none.
+   */
+  contingentValues?: ArcGISContingentValues;
 }
 
 /**
@@ -408,6 +421,23 @@ export function arcGISEditAttributes(
       );
       if (error) throw new Error(`${error} It does not fit the new ${selector} value.`);
     }
+  }
+  // Contingent values: an edit must leave every restrictive field group it
+  // touches in an active combination. Unchanged values are read for this but
+  // never sent back, and a group the edit does not touch keeps whatever it
+  // held, so existing data never has to be repaired for an unrelated edit.
+  const rules = info.contingentValues;
+  if (rules?.status === "unavailable" && (!previous || Object.keys(result).length))
+    throw new Error(
+      `This layer's contingent value rules could not be loaded (${rules.reason}), so new features and attribute changes cannot be checked against them. Save again to retry; deletions and shape-only changes can still be saved.`,
+    );
+  if (rules?.status === "ready") {
+    for (const check of arcGISContingencyChecks(
+      info,
+      { ...candidate, ...result },
+      previous ? (previous.properties ?? {}) : undefined,
+    ))
+      if (blocksArcGISEdit(check)) throw new Error(arcGISContingencyError(check));
   }
   return result;
 }

@@ -138,6 +138,18 @@ export {
 } from "./plugins/arcgis-layer";
 export type { ArcGISDomainDiagnostic } from "./plugins/arcgis-domains";
 export {
+  arcGISContingencyChecks,
+  arcGISContingentChoices,
+  blocksArcGISEdit,
+  type ArcGISContingencyCheck,
+  type ArcGISContingentValues,
+} from "./plugins/arcgis-contingent-values";
+export {
+  arcGISLayerCreationTemplates,
+  type ArcGISCreationTemplate,
+  type ArcGISCreationTemplateSelection,
+} from "./plugins/arcgis-defaults";
+export {
   addArcGISAttachment,
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,

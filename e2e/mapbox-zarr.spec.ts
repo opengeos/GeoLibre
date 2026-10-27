@@ -144,11 +144,11 @@ test("a Zarr store added through the panel mounts as a custom layer on the Mapbo
   await page.goto(`/?project=${info.project.use.baseURL!}${PROJECT_PATH}`);
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
   await bindMapboxEngine(page);
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Zarr Layer", exact: true })).toBeEnabled();
-  await page.getByRole("menuitem", { name: "Zarr Layer", exact: true }).click();
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Zarr layer", exact: true })).toBeEnabled();
+  await page.getByRole("menuitem", { name: "Zarr layer", exact: true }).click();
   await page.getByRole("textbox", { name: "https://example.com/data.zarr" }).fill(STORE);
   await page.getByRole("textbox", { name: "e.g., temperature" }).fill("temperature");
   await page.getByRole("button", { name: "Add Layer", exact: true }).click();

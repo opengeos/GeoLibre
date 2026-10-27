@@ -151,7 +151,7 @@ async function openMapboxProject(page: Page, baseURL: string, theme: "light" | "
   );
   await page.goto(`/?project=${baseURL}${PROJECT_PATH}${theme === "dark" ? "&theme=dark" : ""}`);
   await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Data", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add data", exact: true })).toBeEnabled();
 }
 
 for (const theme of ["light", "dark"] as const) {

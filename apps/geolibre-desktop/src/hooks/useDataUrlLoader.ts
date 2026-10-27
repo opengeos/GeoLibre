@@ -159,7 +159,7 @@ export function useDataUrlLoader(
   useEffect(() => {
     if (!params || !mapAppAPI) return;
     const controller = new AbortController();
-    setState({ error: null, message: "Loading data from URL...", status: "loading" });
+    setState({ error: null, message: "Loading data from URL…", status: "loading" });
     const load = async () => {
       // Preserve the established one-dataset behavior. For a batch, prevent
       // each format-specific loader from moving the camera and let the shell

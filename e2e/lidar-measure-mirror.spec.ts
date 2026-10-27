@@ -43,8 +43,8 @@ test.describe("measured geometry over a LiDAR point cloud", () => {
   test("redraws the measure line inside the point cloud's own canvas", async ({ page }) => {
     await waitForMap(page);
 
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "LiDAR layer", exact: true }).click();
     await page
       .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
       .fill(COPC_URL);

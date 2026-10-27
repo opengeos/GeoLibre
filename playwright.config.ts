@@ -20,6 +20,7 @@ const BASE_URL = `http://localhost:${PORT}`;
  */
 const CORE_SPECS = [
   "smoke.spec.ts", // the app loads, a layer renders, the attribute table opens
+  "startup.spec.ts", // recovery remains visible if startup scripts cannot load
   "theme.spec.ts",
   "a11y.spec.ts",
   // Add, restyle and export a layer with the keyboard alone: one ~6 s test,

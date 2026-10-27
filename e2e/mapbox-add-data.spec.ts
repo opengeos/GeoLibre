@@ -8,7 +8,7 @@ test.skip(!process.env.MAPBOX_TOKEN, "Set MAPBOX_TOKEN to test the Mapbox render
 test.use({ actionTimeout: 30_000 });
 
 async function openSource(page: Page, name: string) {
-  await page.getByRole("button", { name: "Add Data", exact: true }).click();
+  await page.getByRole("button", { name: "Add data", exact: true }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
@@ -34,26 +34,26 @@ for (const theme of ["light", "dark"] as const) {
     );
     await page.goto("/");
     if (theme === "dark") {
-      await page.getByRole("button", { name: "Switch to Dark Mode" }).click();
+      await page.getByRole("button", { name: "Switch to dark mode" }).click();
     }
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
     await page.getByRole("menuitemradio", { name: "Mapbox", exact: true }).click();
     await expect(page.locator(".mapboxgl-canvas")).toBeVisible();
 
-    await page.getByRole("button", { name: "Add Data", exact: true }).click();
-    for (const name of ["MBTiles Layer", "Gaussian Splatting"]) {
+    await page.getByRole("button", { name: "Add data", exact: true }).click();
+    for (const name of ["MBTiles layer", "Gaussian splatting"]) {
       await expect(page.getByRole("menuitem", { name, exact: true })).toBeDisabled();
     }
     // Drawn through deck.gl overlays or a Mapbox-capable custom layer (see
     // mapbox-deck-overlays.spec.ts and mapbox-zarr.spec.ts for the checks).
-    for (const name of ["DuckDB Layer", "Deck.gl Layer", "3D Model (glTF)", "Zarr Layer"]) {
+    for (const name of ["DuckDB layer", "Deck.gl layer", "3D model (glTF)", "Zarr layer"]) {
       await expect(page.getByRole("menuitem", { name, exact: true })).toBeEnabled();
     }
     await page.keyboard.press("Escape");
 
     // This used to open a different importer that produced a No Mapbox layer.
-    await openSource(page, "FlatGeobuf Layer");
+    await openSource(page, "FlatGeobuf layer");
     const countries = await request.get("https://flatgeobuf.org/test/data/countries.fgb");
     expect(countries.ok()).toBeTruthy();
     await page.locator('input[type="file"]').setInputFiles({
@@ -69,16 +69,16 @@ for (const theme of ["light", "dark"] as const) {
     await page.getByRole("button", { name: "Close panel", exact: true }).click();
 
     // The saved service style, including its classified colors, must reach Mapbox.
-    await openSource(page, "ArcGIS Layer");
+    await openSource(page, "ArcGIS layer");
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("combobox", { name: "Sample data", exact: true }).selectOption("1");
     await dialog.getByRole("button", { name: "Add layer", exact: true }).click();
     await expect(dialog).toBeHidden({ timeout: 30_000 });
-    await expect(layerRow(page, "ArcGIS Layer")).toBeVisible();
-    await expect(layerRow(page, "ArcGIS Layer")).not.toContainText("No Mapbox");
+    await expect(layerRow(page, "ArcGIS layer")).toBeVisible();
+    await expect(layerRow(page, "ArcGIS layer")).not.toContainText("No Mapbox");
 
     // Previously the menu silently refused to activate the STAC plugin.
-    await openSource(page, "STAC Layer");
+    await openSource(page, "STAC layer");
     await page
       .getByRole("textbox", { name: "STAC catalog or API URL", exact: true })
       .fill("https://earth-search.aws.element84.com/v1");

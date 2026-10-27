@@ -3,6 +3,7 @@ import {
   isReadOnlyAttributeLayer,
   isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
@@ -28,6 +29,8 @@ import {
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
   arcGISAttributeConstraints,
+  blocksArcGISEdit,
+  type ArcGISContingencyCheck,
   arcGISLayerHasPendingEdits,
   arcGISRelatedParentObjectId,
   arcGISRelationships,
@@ -99,6 +102,7 @@ import {
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type RefObject,
   useEffect,
   useMemo,
@@ -187,7 +191,8 @@ const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
 const ESTIMATED_ROW_HEIGHT = 37;
 /** Sticky header plus horizontal scrollbar: the table's non-row height, in px. */
 const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
-const DEFAULT_TABLE_HEIGHT = 192;
+// Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
+const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
 
@@ -297,6 +302,36 @@ function toRowForm(
     serviceForm,
     selectorField,
   };
+}
+
+/**
+ * The options of a coded-value cell. When field groups govern the field, the
+ * values that fit the rest of the row come first and the others follow in a
+ * second group: nothing is hidden, so a row is never stuck without a way to
+ * correct another field first.
+ */
+function valueMapOptions(
+  valueMap: NonNullable<AttributeFormFieldConfig["valueMap"]>,
+  fits: ((value: unknown) => boolean) | undefined,
+  t: TFunction,
+): ReactNode {
+  const option = (entry: (typeof valueMap)[number]) => (
+    <option key={entry.value} value={entry.value}>
+      {entry.label ?? entry.value}
+    </option>
+  );
+  if (!fits) return valueMap.map(option);
+  const fitting = valueMap.filter((entry) => fits(entry.value));
+  if (fitting.length === valueMap.length) return valueMap.map(option);
+  const others = valueMap.filter((entry) => !fits(entry.value));
+  return (
+    <>
+      {fitting.length ? (
+        <optgroup label={t("contingentValues.fitting")}>{fitting.map(option)}</optgroup>
+      ) : null}
+      <optgroup label={t("contingentValues.others")}>{others.map(option)}</optgroup>
+    </>
+  );
 }
 
 /**
@@ -410,6 +445,7 @@ function computeFormDraftErrors(
   formForRow: RowFormResolver,
   drafts: AttributeDrafts,
   featureById: Map<string, Feature> | null,
+  contingencies?: ContingencyContext,
 ): Record<string, Record<string, AttributeFormFieldError>> {
   const result: Record<string, Record<string, AttributeFormFieldError>> = {};
   if (!featureById || !hasDraftEdits(drafts)) {
@@ -423,6 +459,15 @@ function computeFormDraftErrors(
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
 
     const { candidate, rowForm } = draftCandidate(properties, rowDrafts, formForRow);
+    // A restrictive field group the draft changed must hold an active
+    // combination; the error marks every field of the group, since any of
+    // them can be the one to correct.
+    const groupErrors: Record<string, AttributeFormFieldError> = {};
+    for (const check of contingencies?.checks(candidate, properties) ?? [])
+      if (blocksArcGISEdit(check))
+        for (const field of check.fields)
+          groupErrors[field] ??= { code: "constraint", message: contingencies!.message(check) };
+    if (Object.keys(groupErrors).length) result[featureId] = groupErrors;
     const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
       serviceForm: rowForm.serviceForm,
@@ -450,9 +495,40 @@ function computeFormDraftErrors(
         rowErrors[field] = error;
       }
     }
-    if (Object.keys(rowErrors).length > 0) result[featureId] = rowErrors;
+    if (Object.keys(rowErrors).length > 0)
+      result[featureId] = { ...result[featureId], ...rowErrors };
   }
   return result;
+}
+
+/** The layer's contingent values, as the draft validation consumes them. */
+interface ContingencyContext {
+  checks: NonNullable<ReturnType<typeof arcGISAttributeConstraints>>["contingencyChecks"];
+  message: (check: ArcGISContingencyCheck) => string;
+}
+
+/**
+ * Field groups the drafts leave outside their combinations without blocking
+ * the save: advisory groups the drafts changed, and existing combinations of
+ * the drafted rows that the drafts did not touch.
+ */
+function contingencyNotices(
+  drafts: AttributeDrafts,
+  featureById: Map<string, Feature> | null,
+  formForRow: RowFormResolver,
+  checks: ContingencyContext["checks"],
+): Array<{ featureId: string; check: ArcGISContingencyCheck }> {
+  const notices: Array<{ featureId: string; check: ArcGISContingencyCheck }> = [];
+  if (!featureById) return notices;
+  for (const [featureId, rowDrafts] of Object.entries(drafts)) {
+    const feature = featureById.get(featureId);
+    if (!feature || Object.keys(rowDrafts).length === 0) continue;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    const { candidate } = draftCandidate(properties, rowDrafts, formForRow);
+    for (const check of checks(candidate, properties))
+      if (check.status !== "ok" && !blocksArcGISEdit(check)) notices.push({ featureId, check });
+  }
+  return notices;
 }
 
 function duckDBRowsToAttributeRows(rows: DuckDBAttributeRow[]): AttributeTableRow[] {
@@ -767,10 +843,50 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       ]),
     );
   }, [hasRowForms, layer?.geojson]);
+  const contingencyContext = useMemo((): ContingencyContext | undefined => {
+    if (!serviceConstraints) return undefined;
+    return {
+      checks: serviceConstraints.contingencyChecks,
+      message: (check) =>
+        t(check.status === "retired" ? "contingentValues.retired" : "contingentValues.violation", {
+          fields: check.fields.join(", "),
+          group: check.group,
+        }),
+    };
+  }, [serviceConstraints, t]);
   const formDraftErrors = useMemo(
-    () => computeFormDraftErrors(formForRow, drafts, formFeatureIndex),
-    [formForRow, drafts, formFeatureIndex],
+    () => computeFormDraftErrors(formForRow, drafts, formFeatureIndex, contingencyContext),
+    [formForRow, drafts, formFeatureIndex, contingencyContext],
   );
+  // Advisory field groups and untouched existing combinations: reported, not blocking.
+  const contingencyNotice = useMemo(() => {
+    const problem = serviceConstraints?.contingentValuesProblem;
+    const lines = problem
+      ? [
+          problem.status === "unavailable"
+            ? t("contingentValues.unavailable", { reason: problem.reason })
+            : t("contingentValues.unsupported"),
+        ]
+      : [];
+    if (contingencyContext)
+      for (const { featureId, check } of contingencyNotices(
+        drafts,
+        formFeatureIndex,
+        formForRow,
+        contingencyContext.checks,
+      ))
+        lines.push(
+          t(
+            check.affected
+              ? "contingentValues.advisory"
+              : check.status === "retired"
+                ? "contingentValues.existingRetired"
+                : "contingentValues.existing",
+            { row: featureId, fields: check.fields.join(", "), group: check.group },
+          ),
+        );
+    return lines.join(" ");
+  }, [serviceConstraints, contingencyContext, drafts, formFeatureIndex, formForRow, t]);
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
@@ -1787,7 +1903,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       ref={tableSectionRef}
       aria-label={t("attributeTable.title")}
       data-collapsed={collapsed || undefined}
-      className="geolibre-attribute-table-panel relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-attribute-table-panel @container relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: collapsed ? undefined : tableHeight }}
     >
       {!collapsed ? (
@@ -1803,7 +1919,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         ref={tableResizeGuideRef}
         className="pointer-events-none fixed left-0 right-0 z-50 hidden h-px bg-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
       />
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5">
         <TableProperties className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">{t("attributeTable.title")}</span>
         {layer ? (
@@ -1845,6 +1961,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             {domainNotice}
           </span>
         ) : null}
+        {isEditing && contingencyNotice ? (
+          <span
+            className="max-w-64 truncate text-xs text-amber-600"
+            title={contingencyNotice}
+            role="status"
+          >
+            {contingencyNotice}
+          </span>
+        ) : null}
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
@@ -1873,7 +1998,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{t("attributeTable.buttons.edit")}</span>
+          <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.edit")}</span>
         </Button>
         <Button
           variant="default"
@@ -1895,7 +2020,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{t("common.save")}</span>
+          <span className="hidden @[112rem]:inline">{t("common.save")}</span>
         </Button>
         {canManageColumns && !isEditing ? (
           <Button
@@ -1907,7 +2032,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={openAddColumn}
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.addField")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.addField")}</span>
           </Button>
         ) : null}
         {canManageColumns && !isEditing ? (
@@ -1920,7 +2045,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={openCalculator}
           >
             <Calculator className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.buttons.calculate")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.calculate")}</span>
           </Button>
         ) : null}
         {canManageColumns && !isEditing ? (
@@ -1934,7 +2059,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 aria-label={t("attributeTable.manageFields")}
               >
                 <Columns3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("attributeTable.buttons.fields")}</span>
+                <span className="hidden @[112rem]:inline">
+                  {t("attributeTable.buttons.fields")}
+                </span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
@@ -1981,7 +2108,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={() => setExplorerOpen(true)}
           >
             <Telescope className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.buttons.explore")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.explore")}</span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -1999,7 +2126,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={() => setStatsOpen(true)}
           >
             <Sigma className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.buttons.statistics")}</span>
+            <span className="hidden @[112rem]:inline">
+              {t("attributeTable.buttons.statistics")}
+            </span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -2017,7 +2146,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={() => setChartOpen(true)}
           >
             <ChartColumn className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.charts")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.charts")}</span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -2030,7 +2159,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={() => setDashboardOpen(true)}
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t("attributeTable.dashboard")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.dashboard")}</span>
           </Button>
         ) : null}
         {!isEditing && canRefreshLayer && layer ? (
@@ -2051,7 +2180,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             onClick={() => void refreshLayerRows(layer)}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingLayer ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">{t("attributeTable.buttons.refresh")}</span>
+            <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.refresh")}</span>
           </Button>
         ) : null}
         <DropdownMenu>
@@ -2071,7 +2200,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
               disabled={!layer?.geojson || !layerCaps.export}
             >
               <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t("attributeTable.buttons.export")}</span>
+              <span className="hidden @[112rem]:inline">{t("attributeTable.buttons.export")}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -2270,9 +2399,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   const rowDrafts = drafts[featureId];
                   // Follows a drafted type/subtype, so dependent dropdowns
                   // and bounds update as soon as the selector changes.
-                  const rowForm = rowDrafts
-                    ? draftCandidate(properties, rowDrafts, formForRow).rowForm
-                    : formForRow(properties);
+                  const drafted = rowDrafts
+                    ? draftCandidate(properties, rowDrafts, formForRow)
+                    : undefined;
+                  const rowForm = drafted?.rowForm ?? formForRow(properties);
+                  const rowCandidate = drafted?.candidate ?? properties;
                   return (
                     <TableRow
                       key={featureId}
@@ -2363,11 +2494,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                                     !config.valueMap.some((entry) => entry.value === current) && (
                                       <option value={current}>{current}</option>
                                     )}
-                                  {config.valueMap.map((entry) => (
-                                    <option key={entry.value} value={entry.value}>
-                                      {entry.label ?? entry.value}
-                                    </option>
-                                  ))}
+                                  {valueMapOptions(
+                                    config.valueMap,
+                                    serviceConstraints?.contingentChoices(rowCandidate, col),
+                                    t,
+                                  )}
                                 </Select>
                               ) : config?.widget === "checkbox" ? (
                                 <input

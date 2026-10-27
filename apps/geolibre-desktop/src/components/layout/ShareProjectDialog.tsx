@@ -859,7 +859,7 @@ export function ShareProjectDialog({
                 }`}
                 onClick={() => setTab("create")}
               >
-                {t("share.createShare", "New Share")}
+                {t("share.createShare", "New share")}
               </button>
               <button
                 type="button"
@@ -870,7 +870,7 @@ export function ShareProjectDialog({
                 }`}
                 onClick={() => setTab("manage")}
               >
-                {t("share.activeShares", "Active Shares")}
+                {t("share.activeShares", "Active shares")}
                 {activeShares.length > 0 && (
                   <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-xs">
                     {activeShares.length}
@@ -932,7 +932,7 @@ export function ShareProjectDialog({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="share-role">{t("share.role", "Access Role")}</Label>
+                    <Label htmlFor="share-role">{t("share.role", "Access role")}</Label>
                     <Select
                       id="share-role"
                       value={role}
@@ -950,7 +950,7 @@ export function ShareProjectDialog({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="share-expiry">{t("share.expiry", "Link Expiry")}</Label>
+                    <Label htmlFor="share-expiry">{t("share.expiry", "Link expiry")}</Label>
                     <Select
                       id="share-expiry"
                       value={expiresIn}

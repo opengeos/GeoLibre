@@ -162,15 +162,15 @@ const RADIO_CATEGORY_LABELS: Record<RadioCategory, readonly [key: string, fallba
   all: ["panel.godsEyeView.options.radioCategories.all", "All"],
   news: ["panel.godsEyeView.options.radioCategories.news", "News"],
   talk: ["panel.godsEyeView.options.radioCategories.talk", "Talk"],
-  weather: ["panel.godsEyeView.options.radioCategories.weather", "Weather / Emergency"],
-  "public-safety": ["panel.godsEyeView.options.radioCategories.publicSafety", "Public Safety"],
+  weather: ["panel.godsEyeView.options.radioCategories.weather", "Weather / emergency"],
+  "public-safety": ["panel.godsEyeView.options.radioCategories.publicSafety", "Public safety"],
   "aviation-marine": [
     "panel.godsEyeView.options.radioCategories.aviationMarine",
-    "Aviation / Marine",
+    "Aviation / marine",
   ],
   "traffic-transit": [
     "panel.godsEyeView.options.radioCategories.trafficTransit",
-    "Traffic / Transit",
+    "Traffic / transit",
   ],
   music: ["panel.godsEyeView.options.radioCategories.music", "Music"],
   other: ["panel.godsEyeView.options.radioCategories.other", "Other"],
@@ -187,7 +187,7 @@ const RADIO_CATEGORY_LABELS: Record<RadioCategory, readonly [key: string, fallba
 const FEED_DESCRIPTORS = {
   flights: {
     group: "movement",
-    label: ["panel.godsEyeView.flights", "Live Flights"],
+    label: ["panel.godsEyeView.flights", "Live flights"],
     attribution: "Live flights: © OpenSky Network; aircraft details: ADSBDB",
     refreshIntervalMs: 30_000,
     timeoutMs: 20_000,
@@ -197,7 +197,7 @@ const FEED_DESCRIPTORS = {
   },
   militaryFlights: {
     group: "movement",
-    label: ["panel.godsEyeView.militaryFlights", "Military Flights"],
+    label: ["panel.godsEyeView.militaryFlights", "Military flights"],
     attribution: "Military flights: adsb.lol, ODbL; aircraft details: ADSBDB",
     refreshIntervalMs: 15_000,
     timeoutMs: 20_000,
@@ -231,7 +231,7 @@ const FEED_DESCRIPTORS = {
   },
   bikeShare: {
     group: "movement",
-    label: ["panel.godsEyeView.bikeShare", "Bike Share"],
+    label: ["panel.godsEyeView.bikeShare", "Bike share"],
     attribution: "Bike share: GBFS feeds from participating public systems",
     refreshIntervalMs: 5 * 60_000,
     timeoutMs: 60_000,
@@ -241,7 +241,7 @@ const FEED_DESCRIPTORS = {
   },
   vessels: {
     group: "movement",
-    label: ["panel.godsEyeView.vessels", "Live AIS Vessels"],
+    label: ["panel.godsEyeView.vessels", "Live AIS vessels"],
     attribution: "Live vessels: AISStream.io",
     // A snapshot of the open socket, so this costs no request.
     refreshIntervalMs: 10_000,
@@ -291,7 +291,7 @@ const FEED_DESCRIPTORS = {
   },
   transit: {
     group: "movement",
-    label: ["panel.godsEyeView.transit", "Live Transit"],
+    label: ["panel.godsEyeView.transit", "Live transit"],
     attribution:
       "Live transit: MBTA/MassDOT; CapMetro; Metro Transit; HSL; OVapi; Entur; TransLink Queensland",
     refreshIntervalMs: 15_000,
@@ -302,7 +302,7 @@ const FEED_DESCRIPTORS = {
   },
   streetTraffic: {
     group: "movement",
-    label: ["panel.godsEyeView.streetTraffic", "Simulated Street Traffic"],
+    label: ["panel.godsEyeView.streetTraffic", "Simulated street traffic"],
     attribution:
       "Simulated vehicle positions on © OpenStreetMap contributors, ODbL 1.0; live flow: © TomTom",
     // Road geometry changes slowly, but live flow is worth re-reading. The roads
@@ -348,7 +348,7 @@ const FEED_DESCRIPTORS = {
   },
   osmInfrastructure: {
     group: "infrastructure",
-    label: ["panel.godsEyeView.osmInfrastructure", "OSM Infrastructure"],
+    label: ["panel.godsEyeView.osmInfrastructure", "OSM infrastructure"],
     attribution: "OSM infrastructure: © OpenStreetMap contributors, ODbL 1.0",
     refreshIntervalMs: 60 * 60_000,
     // Overpass gets the same longer budget as the shared OSM downloader.
@@ -369,7 +369,7 @@ const FEED_DESCRIPTORS = {
   },
   cables: {
     group: "infrastructure",
-    label: ["panel.godsEyeView.cables", "Submarine Cables"],
+    label: ["panel.godsEyeView.cables", "Submarine cables"],
     attribution: "Submarine cables: © TeleGeography, submarinecablemap.com, CC BY-NC-SA 3.0",
     refreshIntervalMs: 24 * 60 * 60_000,
     timeoutMs: 60_000,
@@ -403,7 +403,7 @@ const FEED_DESCRIPTORS = {
   },
   spaceMissions: {
     group: "events",
-    label: ["panel.godsEyeView.spaceMissions", "Space Missions (30d)"],
+    label: ["panel.godsEyeView.spaceMissions", "Space missions (30d)"],
     attribution: "Space missions: Launch Library 2, The Space Devs",
     refreshIntervalMs: 15 * 60_000,
     timeoutMs: 30_000,
@@ -413,7 +413,7 @@ const FEED_DESCRIPTORS = {
   },
   activeFires: {
     group: "events",
-    label: ["panel.godsEyeView.activeFires", "Active Fires (24h)"],
+    label: ["panel.godsEyeView.activeFires", "Active fires (24h)"],
     attribution: "Active fires: NASA FIRMS, VIIRS NRT (NOAA-20, NOAA-21, Suomi NPP)",
     // The relay caches for 30 minutes; polling faster would only re-read it.
     refreshIntervalMs: 30 * 60_000,
@@ -425,7 +425,7 @@ const FEED_DESCRIPTORS = {
   },
   mappedAlpr: {
     group: "cameras",
-    label: ["panel.godsEyeView.mappedAlpr", "Mapped ALPR Cameras"],
+    label: ["panel.godsEyeView.mappedAlpr", "Mapped ALPR cameras"],
     attribution: "Mapped ALPR cameras: © OpenStreetMap contributors, ODbL 1.0",
     refreshIntervalMs: 60 * 60_000,
     timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
@@ -439,7 +439,7 @@ const FEED_DESCRIPTORS = {
   },
   cctv: {
     group: "cameras",
-    label: ["panel.godsEyeView.cctv", "Public CCTV Cameras"],
+    label: ["panel.godsEyeView.cctv", "Public CCTV cameras"],
     attribution:
       "Public camera imagery: TfL Open Data; City of Austin; City of Calgary; Fintraffic; Ontario 511; DriveBC; Live Traffic NSW; Caltrans",
     refreshIntervalMs: 60_000,
@@ -483,7 +483,7 @@ const FEED_DESCRIPTORS = {
   },
   radio: {
     group: "utilities",
-    label: ["panel.godsEyeView.radio", "Radio Stations"],
+    label: ["panel.godsEyeView.radio", "Radio stations"],
     attribution: "Radio stations: Radio Browser (radio-browser.info), public domain",
     refreshIntervalMs: 60 * 60_000,
     timeoutMs: 20_000,
@@ -1170,11 +1170,11 @@ const KEY_PROVIDER_DETAILS: Record<
   { label: readonly [key: string, fallback: string]; signupUrl: string }
 > = {
   tomtom: {
-    label: ["panel.godsEyeView.apiKeys.tomtom", "TomTom (Street Traffic live flow)"],
+    label: ["panel.godsEyeView.apiKeys.tomtom", "TomTom (street traffic live flow)"],
     signupUrl: "https://developer.tomtom.com/",
   },
   aisstream: {
-    label: ["panel.godsEyeView.apiKeys.aisstream", "AISStream (Live AIS Vessels)"],
+    label: ["panel.godsEyeView.apiKeys.aisstream", "AISStream (live AIS vessels)"],
     signupUrl: "https://aisstream.io/",
   },
 };
@@ -1487,7 +1487,7 @@ function activate(app: GeoLibreAppAPI): void {
   unregisterPanel =
     app.registerRightPanel?.({
       id: GODS_EYE_VIEW_PLUGIN_ID,
-      title: () => translate("toolbar.plugin.gods-eye-view", "God's Eye View"),
+      title: () => translate("toolbar.plugin.gods-eye-view", "God's eye view"),
       dock: "replace-style",
       defaultWidth: 320,
       render(container) {

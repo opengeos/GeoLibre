@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import {
   listAllServices,
   readUserServices,
+  SERVICE_LIBRARY_CHANGED_EVENT,
   type ServiceLibraryEntry,
 } from "../components/layout/add-data/service-library";
 import {
@@ -46,11 +47,9 @@ export interface BrowserTreeState {
  * library (built-in presets, deployment services, and the user's localStorage
  * entries), the store's recent-projects list, and the store's Layer Library (My Data).
  *
- * The saved-service library is not a reactive store, so it is read when the
- * panel mounts (the panel is conditionally rendered, so it re-mounts each time
- * it opens) and again whenever the recent-projects list changes. That is enough
- * for the MVP: a service saved from the Add Data dialog appears the next time
- * the panel is opened.
+ * The saved-service library is not a reactive store, so it is re-read whenever
+ * {@link SERVICE_LIBRARY_CHANGED_EVENT} fires: a service saved from the Add
+ * Data dialog appears in the (still-mounted) panel straight away.
  *
  * @returns The tree plus by-id lookups (saved service, saved layer) for the
  *   one-click add paths.
@@ -80,20 +79,24 @@ export function useBrowserTree(): BrowserTreeState {
   const [mssqlRevision, setMssqlRevision] = useState(0);
   const [foldersRevision, setFoldersRevision] = useState(0);
   const [favoritesRevision, setFavoritesRevision] = useState(0);
+  const [servicesRevision, setServicesRevision] = useState(0);
   useEffect(() => {
     const bumpConnections = () => setConnectionsRevision((n) => n + 1);
     const bumpFolders = () => setFoldersRevision((n) => n + 1);
     const bumpFavorites = () => setFavoritesRevision((n) => n + 1);
     const bumpMssql = () => setMssqlRevision((n) => n + 1);
+    const bumpServices = () => setServicesRevision((n) => n + 1);
     window.addEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
     window.addEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
     window.addEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
     window.addEventListener(MSSQL_CONNECTIONS_CHANGED_EVENT, bumpMssql);
+    window.addEventListener(SERVICE_LIBRARY_CHANGED_EVENT, bumpServices);
     return () => {
       window.removeEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
       window.removeEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
       window.removeEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
       window.removeEventListener(MSSQL_CONNECTIONS_CHANGED_EVENT, bumpMssql);
+      window.removeEventListener(SERVICE_LIBRARY_CHANGED_EVENT, bumpServices);
     };
   }, []);
 
@@ -129,6 +132,11 @@ export function useBrowserTree(): BrowserTreeState {
         }
       : undefined;
     const favorites = readBrowserFavorites();
+    // A deleted built-in keeps its saved favorite (restoring the preset brings
+    // the shortcut back) but is not shown while the preset is hidden.
+    const visibleFavorites = favorites.filter(
+      (fav) => !(fav.kind === "service" && fav.builtin && !byId.has(fav.serviceId ?? "")),
+    );
     const layerLibraryById = new Map(layerLibrary.map((entry) => [entry.id, entry]));
     return {
       tree: buildBrowserTree({
@@ -137,7 +145,7 @@ export function useBrowserTree(): BrowserTreeState {
         databaseConnections,
         mssqlConnections,
         files,
-        favorites,
+        favorites: visibleFavorites,
         libraryLayers: layerLibrary.map((entry) => ({
           id: entry.id,
           name: entry.name,
@@ -173,6 +181,7 @@ export function useBrowserTree(): BrowserTreeState {
     mssqlRevision,
     foldersRevision,
     favoritesRevision,
+    servicesRevision,
     t,
   ]);
 }

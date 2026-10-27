@@ -57,7 +57,7 @@ export class Downloader {
         onProgress?.(
           i,
           total,
-          this.t("vantor.downloadProgress.starting", `Starting ${filename}...`, { filename }),
+          this.t("vantor.downloadProgress.starting", `Starting ${filename}…`, { filename }),
         );
 
         // Use direct link to let the browser handle the download natively.

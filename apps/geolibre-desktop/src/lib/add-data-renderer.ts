@@ -6,7 +6,9 @@ import type { MapRendererKind } from "@geolibre/core";
 // DuckDB, 3D Tiles, LiDAR) are not listed: `@deck.gl/mapbox` hosts them on
 // Mapbox natively. KML/KMZ is not listed either: off the globe it goes through
 // the host KML importer, the same path a dropped file takes on any renderer.
-const MAPBOX_UNSUPPORTED_SOURCES = new Set(["mbtiles", "splatting", "cesium-ion", "czml"]);
+// VTPK/TPKX tiles are read through MapLibre's `tilepackage://` protocol, which
+// neither Mapbox GL nor the ArcGIS SDK view can resolve.
+const MAPBOX_UNSUPPORTED_SOURCES = new Set(["mbtiles", "vtpk", "splatting", "cesium-ion", "czml"]);
 
 // Adapted deck.gl plugins are gated separately by flat/local view capabilities.
 // STAC's browser draws its results as MapLibre/Mapbox layers, and the SDK has

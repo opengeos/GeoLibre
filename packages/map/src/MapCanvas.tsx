@@ -11,6 +11,7 @@ import {
   IDENTIFY_ALL_LAYERS_ID,
   identifyAllIncludes,
   isDuckDBQueryLayer,
+  isMapClickClaimed,
   isPopupClickEnabled,
   isPopupHoverEnabled,
   NETCDF_IMAGE_SOURCE_KIND,
@@ -582,7 +583,9 @@ export const MapCanvas = memo(function MapCanvas({
       setMapLibreIdentifyCursor(map, true);
       let globalIdentifyAbortController: AbortController | null = null;
       const handleIdentifyAllClick = (event: maplibregl.MapMouseEvent) => {
-        if (featureSelectionActive.current) return;
+        // A selection gesture, or a tool drawing on the map (Measure, the Geo
+        // Editor), owns the click: it is a vertex, not a pick.
+        if (featureSelectionActive.current || isMapClickClaimed()) return;
 
         globalIdentifyAbortController?.abort();
         const abortController = new AbortController();
@@ -872,8 +875,8 @@ export const MapCanvas = memo(function MapCanvas({
     };
 
     const handleIdentifyClick = (event: maplibregl.MapMouseEvent) => {
-      // A selection gesture owns the map clicks while it runs.
-      if (featureSelectionActive.current) return;
+      // A selection gesture or a drawing map tool owns the clicks while it runs.
+      if (featureSelectionActive.current || isMapClickClaimed()) return;
       const clearIdentifyResult = () => {
         wmsIdentifyAbortController?.abort();
         wmsIdentifyAbortController = null;
@@ -1141,8 +1144,13 @@ export const MapCanvas = memo(function MapCanvas({
     const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
       // The Identify tool already renders the photo in its own popup; skip ours
       // so one click never opens two popups. Likewise while a selection gesture
-      // is drawing, where a click is a vertex rather than a pick.
-      if (useAppStore.getState().identifyLayerId || featureSelectionActive.current) return;
+      // or a map tool is drawing, where a click is a vertex rather than a pick.
+      if (
+        useAppStore.getState().identifyLayerId ||
+        featureSelectionActive.current ||
+        isMapClickClaimed()
+      )
+        return;
       const feature = event.features?.[0];
       if (!feature) return;
       // Anchor to the feature's own coordinate rather than the click point, so

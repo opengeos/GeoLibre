@@ -29,6 +29,13 @@ import {
 } from "./arcgis-domains";
 import { ARCGIS_FEATURE_SOURCE_KIND } from "./arcgis-defaults";
 import {
+  arcGISContingencyChecks,
+  arcGISContingentChoices,
+  withArcGISContingentValues,
+  type ArcGISContingencyCheck,
+  type ArcGISContingentValues,
+} from "./arcgis-contingent-values";
+import {
   arcgisQuantizationParams,
   decodeArcGISQuantizedFeatures,
   isArcGISQuantizedFeatureSet,
@@ -582,7 +589,7 @@ async function addArcGISFeatureLayerAsGeoJson(
     options.sourceType === "url"
       ? await resolveFeatureLayerUrl(input, options, undefined)
       : await resolvePortalFeatureLayerUrl(input, options, undefined);
-  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
+  const layerInfo = await fetchArcGISFeatureLayerInfo(layerUrl, options, undefined);
   if (!layerInfo.geometryType) {
     throw new LocalizedError(
       `${ERROR_KEY}.missingGeometryType`,
@@ -913,7 +920,7 @@ export function restoreArcGISViewportLayers(app: GeoLibreAppAPI): void {
     // instead of leaving the layer permanently unbound.
     let pending: Promise<ArcGISFeatureLayerInfo> | null = null;
     const resolveLayerInfo = (): Promise<ArcGISFeatureLayerInfo> =>
-      (pending ??= fetchArcGISJson<ArcGISFeatureLayerInfo>(
+      (pending ??= fetchArcGISFeatureLayerInfo(
         trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
         options,
         undefined,
@@ -1766,7 +1773,7 @@ export async function refreshArcGISFeatureLayer(params: {
   });
   // Re-read the metadata rather than trusting a stored copy: `maxRecordCount`
   // and the paging capabilities are the service's to change between sessions.
-  const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(queryUrl, options, undefined);
+  const layerInfo = await fetchArcGISFeatureLayerInfo(queryUrl, options, undefined);
   const data = identifyArcGISFeatures(
     await fetchArcGISFeaturePages(`${queryUrl}/query`, options, layerInfo),
     layerInfo.objectIdField,
@@ -2630,6 +2637,44 @@ async function fetchArcGISJson<T>(
   return json;
 }
 
+/**
+ * A feature layer's `?f=json` metadata, with its contingent values when it
+ * publishes them. Their definition lives in a separate resource, so it is
+ * requested here, once per metadata load, and travels with the metadata to
+ * the editors and the save. A failure to retrieve it is recorded on the
+ * metadata as `unavailable` rather than failing the layer.
+ *
+ * @param layerUrl - The layer's REST URL.
+ * @param options - The connection, including its token.
+ * @param cause - Attached to request errors.
+ * @param signal - Aborts both requests.
+ * @param lookup - `fresh`: ask about contingent values even when the service
+ *   was found to have none for this layer before (a save checks current rules).
+ * @returns The metadata.
+ */
+async function fetchArcGISFeatureLayerInfo(
+  layerUrl: string,
+  options: ArcGISLayerOptions,
+  cause: unknown,
+  signal?: AbortSignal,
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<ArcGISFeatureLayerInfo> {
+  const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, cause, signal);
+  // A nonhosted layer is only found to have no contingent values by asking its
+  // service; a confirmed answer is remembered, so a layer on an automatic
+  // refresh does not ask again every time. A save always asks.
+  return withArcGISContingentValues(
+    trimTrailingSlash(layerUrl),
+    info,
+    (resource) => fetchArcGISJson<unknown>(resource, options, cause, signal),
+    signal,
+    { knownAbsent: layersWithoutContingentValues, fresh },
+  );
+}
+
+/** Layers whose service confirmed it has no contingent values for them. */
+const layersWithoutContingentValues = new Set<string>();
+
 async function resolveArcGISLayerBounds(
   input: string,
   options: ArcGISLayerOptions,
@@ -2910,6 +2955,25 @@ export interface ArcGISAttributeConstraints {
   subtypeField?: string;
   /** Metadata problems that leave some checks to the server. */
   diagnostics: ArcGISDomainDiagnostic[];
+  /**
+   * How each field group judges a candidate record against its baseline (the
+   * record as currently stored); empty when the layer publishes no usable
+   * contingent values.
+   */
+  contingencyChecks: (
+    candidate: Record<string, unknown>,
+    baseline: Record<string, unknown> | null | undefined,
+  ) => ArcGISContingencyCheck[];
+  /**
+   * Which values of a field fit the rest of a drafted record, or `undefined`
+   * when no field group governs the field.
+   */
+  contingentChoices: (
+    candidate: Record<string, unknown>,
+    field: string,
+  ) => ((value: unknown) => boolean) | undefined;
+  /** Contingent values the layer publishes but that cannot be evaluated, and why. */
+  contingentValuesProblem?: Exclude<ArcGISContingentValues, { status: "ready" }>;
 }
 
 /**
@@ -2930,6 +2994,11 @@ export function arcGISAttributeConstraints(
     formFor: (properties) => arcGISServiceAttributeForm(info, properties),
     subtypeField: arcGISSubtypeField(info),
     diagnostics: arcGISDomainDiagnostics(info),
+    contingencyChecks: (candidate, baseline) => arcGISContingencyChecks(info, candidate, baseline),
+    contingentChoices: (candidate, field) => arcGISContingentChoices(info, candidate, field),
+    ...(info.contingentValues && info.contingentValues.status !== "ready"
+      ? { contingentValuesProblem: info.contingentValues }
+      : {}),
   };
 }
 
@@ -3006,7 +3075,11 @@ export async function saveArcGISLayerEdits(
     const options = await withFreshArcGISToken(
       arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
     );
-    const fetched = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
+    // Re-read the contingent values too, so the edits are checked against the
+    // rules the service holds now rather than the ones loaded with the layer.
+    const fetched = await fetchArcGISFeatureLayerInfo(layerUrl, options, undefined, undefined, {
+      fresh: true,
+    });
     const current = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!current?.geojson) {
       throw new LocalizedError(`${ERROR_KEY}.layerRemoved`, "ArcGIS layer was removed.");

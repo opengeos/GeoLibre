@@ -262,6 +262,6 @@ describe("Vantor Open Data built-in plugin", () => {
     assert.ok(container.querySelector('label[for="vantor-phase-select"]'));
 
     panel.setTranslator((_key, fallback) => `Translated: ${fallback}`);
-    assert.equal(container.querySelector("h3")?.textContent, "Translated: Vantor STAC Explorer");
+    assert.equal(container.querySelector("h3")?.textContent, "Translated: Vantor STAC explorer");
   });
 });

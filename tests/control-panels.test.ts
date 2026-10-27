@@ -10,6 +10,7 @@ import {
   getComponentsConstructors,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/components/constructors";
+import { subscribeMeasurePanel } from "../packages/plugins/src/plugins/components/measure";
 import {
   openMinimapPanel,
   subscribeMinimapPanel,
@@ -46,11 +47,55 @@ class Overview {
     this.collapsed = false;
     return this;
   }
+  collapse() {
+    this.collapsed = true;
+    return this;
+  }
   getState() {
     return { visible: true, collapsed: this.collapsed };
   }
 }
 
+// Records the options and collapsed state the Measure panel is driven with,
+// and the expand listeners it leaves on the control.
+class Ruler {
+  collapsed: boolean;
+  listeners = new Map<string, Set<() => void>>();
+  constructor(readonly options: Record<string, unknown>) {
+    this.collapsed = options.collapsed === true;
+    rulers.push(this);
+  }
+  on(event: string, handler: () => void) {
+    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+    this.listeners.get(event)!.add(handler);
+    return this;
+  }
+  off(event: string, handler: () => void) {
+    this.listeners.get(event)?.delete(handler);
+    return this;
+  }
+  show() {
+    return this;
+  }
+  expand() {
+    if (!this.collapsed) return this;
+    this.collapsed = false;
+    for (const handler of [...(this.listeners.get("expand") ?? [])]) handler();
+    return this;
+  }
+  collapse() {
+    this.collapsed = true;
+    return this;
+  }
+  setRadius() {
+    return this;
+  }
+  getState() {
+    return { collapsed: this.collapsed, isDrawing: !this.collapsed };
+  }
+}
+
+const rulers: Ruler[] = [];
 const created: Overview[] = [];
 const mounted = new Set<unknown>();
 let basemap = "https://example.com/initial.json";
@@ -77,7 +122,7 @@ const modules = [
     MinimapControl: Overview,
     BookmarkControl: Panel,
     SearchControl: Panel,
-    MeasureControl: Panel,
+    MeasureControl: Ruler,
     PrintControl: Panel,
   },
   null,
@@ -91,6 +136,7 @@ async function settle() {
 describe("built-in control panel API", () => {
   beforeEach(() => {
     created.length = 0;
+    rulers.length = 0;
     mounted.clear();
     canMount = true;
     basemap = "https://example.com/initial.json";
@@ -261,6 +307,120 @@ describe("built-in control panel API", () => {
     assert.equal(mounted.size, 1);
     assert.equal(created.length, 1);
     assert.equal(isControlPanelVisible("minimap"), true);
+  });
+
+  it("opens Measure collapsed with the project's units (GeoLibre#3241)", async () => {
+    openControlPanel(app, "measure", {
+      collapsed: true,
+      distanceUnit: "feet",
+      areaUnit: "acres",
+    });
+    await settle();
+    assert.equal(rulers.length, 1);
+    const [ruler] = rulers;
+    assert.equal(ruler.options.collapsed, true);
+    assert.equal(ruler.options.distanceUnit, "feet");
+    assert.equal(ruler.options.areaUnit, "acres");
+    assert.equal(ruler.collapsed, true);
+    assert.equal(isControlPanelVisible("measure"), true);
+    // The panel is built on first expand, so its add-ons wait for that.
+    assert.equal(ruler.listeners.get("expand")?.size, 1);
+    // Expanding the same instance later consumes the wait.
+    openControlPanel(app, "measure", { collapsed: false });
+    await settle();
+    assert.equal(rulers.length, 1);
+    assert.equal(ruler.collapsed, false);
+    assert.equal(ruler.listeners.get("expand")?.size, 0);
+  });
+
+  it("opens Measure expanded in kilometers from the menu", async () => {
+    openControlPanel(app, "measure");
+    await settle();
+    assert.equal(rulers.length, 1);
+    assert.equal(rulers[0].collapsed, false);
+    assert.equal(rulers[0].options.distanceUnit, "kilometers");
+    assert.equal(rulers[0].options.areaUnit, "square-kilometers");
+  });
+
+  it("rebuilds an open Measure control for new units and resets them on close", async () => {
+    openControlPanel(app, "measure");
+    await settle();
+    const visibilityChanges: boolean[] = [];
+    const unsubscribe = subscribeMeasurePanel(() =>
+      visibilityChanges.push(isControlPanelVisible("measure")),
+    );
+    try {
+      openControlPanel(app, "measure", { distanceUnit: "miles" });
+      await settle();
+      assert.equal(rulers.length, 2);
+      assert.equal(mounted.size, 1);
+      assert.ok(mounted.has(rulers[1]));
+      assert.equal(rulers[1].options.distanceUnit, "miles");
+      assert.deepEqual(visibilityChanges, []);
+      // Same units again: no rebuild.
+      openControlPanel(app, "measure", { distanceUnit: "miles" });
+      await settle();
+      assert.equal(rulers.length, 2);
+    } finally {
+      unsubscribe();
+    }
+    closeControlPanel(app, "measure");
+    assert.equal(rulers[1].listeners.get("expand")?.size ?? 0, 0);
+    openControlPanel(app, "measure");
+    await settle();
+    assert.equal(rulers[2].options.distanceUnit, "kilometers");
+  });
+
+  it("keeps a folded ruler folded when only its units change or nothing does", async () => {
+    openControlPanel(app, "measure", { collapsed: true });
+    await settle();
+    openControlPanel(app, "measure", {});
+    await settle();
+    assert.equal(rulers.length, 1);
+    assert.equal(rulers[0].collapsed, true);
+    openControlPanel(app, "measure", { distanceUnit: "feet" });
+    await settle();
+    assert.equal(rulers.length, 2);
+    assert.equal(rulers[1].collapsed, true);
+  });
+
+  it("rejects invalid Measure options before touching an open panel", async () => {
+    openControlPanel(app, "measure");
+    await settle();
+    assert.throws(
+      () => openControlPanel(app, "measure", { distanceUnit: "furlongs" as "feet" }),
+      /distanceUnit must be one of/,
+    );
+    assert.throws(
+      () => openControlPanel(app, "measure", { areaUnit: "feet" as "acres" }),
+      /areaUnit must be one of/,
+    );
+    assert.throws(
+      () => openControlPanel(app, "measure", { collapsed: "yes" as unknown as boolean }),
+      /collapsed must be a boolean/,
+    );
+    assert.equal(rulers.length, 1);
+    assert.equal(mounted.size, 1);
+    assert.throws(
+      () => openControlPanel(app, "search", { collapsed: true }),
+      /only supported for minimap and measure/,
+    );
+  });
+
+  it("opens the overview collapsed on request and folds an open one in place", async () => {
+    openControlPanel(app, "minimap", { collapsed: true });
+    await settle();
+    assert.equal(created.length, 1);
+    assert.equal(created[0].options.collapsed, true);
+    assert.equal(created[0].collapsed, true);
+    openControlPanel(app, "minimap", { collapsed: false });
+    await settle();
+    assert.equal(created.length, 1);
+    assert.equal(created[0].collapsed, false);
+    openControlPanel(app, "minimap", { collapsed: true });
+    await settle();
+    assert.equal(created.length, 1);
+    assert.equal(created[0].collapsed, true);
   });
 
   it("rejects unknown panel ids, including object prototype members", () => {

@@ -65,7 +65,9 @@ another CRS:
 - **Image and video overlays** are drawn from their corner coordinates.
 - **XYZ, vector tile, MBTiles and Wayback layers** are not drawn, nor is the
   shared basemap, since their tiles are Web Mercator. Plugins that add their own
-  tiles or deck.gl overlays are not adapted either.
+  tiles or deck.gl overlays are not adapted either; they can read the CRS, and
+  be told when it changes, through `getMapCrs` and `onMapCrsChange` (see
+  [Reading the map CRS](plugin-api.md#reading-the-map-crs)).
 - The globe button is hidden, terrain is off, and the restricted-bounds setting
   is set aside (MapLibre keeps the view inside the CRS).
 

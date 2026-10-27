@@ -2,6 +2,7 @@ import type { GeoLibreLayer, ProcessingModel, ProcessingModelGraph } from "@geol
 import {
   INPUT_NODE_PORT,
   OUTPUT_NODE_PORT,
+  portsFor,
   validateModelGraph,
   graphToLinearSteps,
   type AlgorithmParameter,
@@ -240,13 +241,90 @@ export function buildAssistantModel(
     nodesByKey.set(input.key, { id, outputs: [INPUT_NODE_PORT], kind: "input" });
   });
 
+  const CONTROL_FLOW_KINDS = new Set<string>([
+    "iterate-features",
+    "iterate-rasters",
+    "collect-results",
+    "conditional-switch",
+    "conditional-merge",
+  ]);
+
   definition.steps.forEach((step, index) => {
     claimKey(step.key);
+    const id = createId();
+
+    if (CONTROL_FLOW_KINDS.has(step.algorithm)) {
+      const kind = step.algorithm as
+        | "iterate-features"
+        | "iterate-rasters"
+        | "collect-results"
+        | "conditional-switch"
+        | "conditional-merge";
+      const nodePorts = portsFor({ id, kind, x: 0, y: 0 }, undefined);
+      const inputPorts = new Map(nodePorts.inputs.map((port) => [port.id, port]));
+      const parameters = { ...(step.parameters ?? {}) };
+      // The runner also accepts a comma-separated string; split it here so
+      // each name is resolved to a layer id like the array form.
+      if (typeof parameters.layers === "string") {
+        parameters.layers = parameters.layers
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
+      if (Array.isArray(parameters.layers)) {
+        parameters.layers = parameters.layers.map((entry) => {
+          if (typeof entry !== "string" || !entry) return entry;
+          const layer = resolveLayer(entry);
+          if (!layer) {
+            throw new Error(`No layer matching "${entry}" for "layers" of "${step.algorithm}".`);
+          }
+          return layer.id;
+        });
+      }
+      if (typeof parameters.layer === "string" && parameters.layer) {
+        const layer = resolveLayer(parameters.layer);
+        if (!layer) {
+          throw new Error(
+            `No layer matching "${parameters.layer}" for "layer" of "${step.algorithm}".`,
+          );
+        }
+        parameters.layer = layer.id;
+      }
+      for (const [portId, sourceKey] of Object.entries(step.inputs)) {
+        if (!inputPorts.has(portId)) {
+          throw new Error(`Control node "${step.algorithm}" has no input port "${portId}".`);
+        }
+        const source = resolveSource(sourceKey);
+        if (!source)
+          throw new Error(`Model source "${sourceKey}" must be defined before "${step.key}".`);
+        delete parameters[portId];
+        edges.push({
+          id: createId(),
+          from: source.id,
+          fromPort: source.port,
+          to: id,
+          toPort: portId,
+        });
+      }
+      nodes.push({
+        id,
+        kind,
+        parameters,
+        x: 260 + index * 260,
+        y: index * 32,
+      });
+      nodesByKey.set(step.key, {
+        id,
+        outputs: nodePorts.outputs.map((port) => port.id),
+        kind: "tool",
+      });
+      return;
+    }
+
     const descriptor = resolveDescriptor(step.algorithm);
     const inputPorts = new Map(descriptor.inputs.map((port) => [port.id, port]));
     const parameters = { ...(step.parameters ?? {}) };
     const wired = new Set<string>();
-    const id = createId();
     for (const [portId, sourceKey] of Object.entries(step.inputs)) {
       if (!inputPorts.has(portId)) {
         throw new Error(`Algorithm "${step.algorithm}" has no input port "${portId}".`);

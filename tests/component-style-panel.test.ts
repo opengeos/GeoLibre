@@ -213,7 +213,7 @@ describe("StylePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open expression builder" }));
 
     const dialog = screen.getByRole("dialog");
-    within(dialog).getByText("Expression Builder");
+    within(dialog).getByText("Expression builder");
     const expression = '["case", [">", ["get", "height"], 50], "#ff0000", "#0000ff"]';
     fireEvent.change(within(dialog).getByLabelText("Expression"), {
       target: { value: expression },

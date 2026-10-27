@@ -203,6 +203,8 @@ export const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 // service-library.ts). Bumping the key would orphan a user's saved services.
 export const SERVICE_LIBRARY_STORAGE_KEY = "geolibre.serviceLibrary";
 export const MAX_SAVED_SERVICES = 200;
+// Ids of built-in presets the user deleted from the service library.
+export const HIDDEN_BUILTIN_SERVICES_STORAGE_KEY = "geolibre.serviceLibrary.hiddenBuiltins";
 // Last File Geodatabase (and feature class) added through the GDB source, so
 // reopening the panel restores the selection instead of starting blank.
 export const LAST_GEODATABASE_STORAGE_KEY = "geolibre.lastGeodatabase";
