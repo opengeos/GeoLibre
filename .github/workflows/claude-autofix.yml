@@ -20,10 +20,12 @@ name: Claude autofix
 #     are moved aside while Claude works and the base branch's CLAUDE.md takes their place: a pull
 #     request mustn't rewrite the rules it's fixed to, or add hooks and servers to the agent. They
 #     are put back before each commit, so the commits leave them as they were.
-#   - Review comments reach Claude only from bots and the repository's owner and members.
-#   - Scripts come from this file, never from the checkout. Claude can't write to `.git/` or the
-#     runner's temp directory, and the steps after it check that the git config, the hooks and
-#     the helper script are as they were.
+#   - Review comments reach Claude only from bots and the repository's owner and members, not
+#     from outside collaborators, whatever their access.
+#   - Scripts come from this file, never from the checkout. Claude's file tools may not edit
+#     `.git/`, the git config in the home directory or the runner's temp directory, it gets no
+#     git commands, and the steps after it check that every git config layer, the hooks and the
+#     helper script are as they were.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
@@ -188,8 +190,9 @@ jobs:
               | select(.comments.nodes[-1]
                        | (.author.__typename == "Bot" and (.body | startswith("**Claude autofix ("))) | not)
               | { id, path, line: (.line // .originalLine), outdated: .isOutdated,
-                  comments: [ .comments.nodes[] | select(trusted)
-                              | { author: (.author.login // "ghost"), body } ] } ]
+                  comments: (.starter.nodes[0] as $s
+                             | [ $s, (.comments.nodes[] | select(. != $s)) ]
+                             | map(select(trusted) | { author: (.author.login // "ghost"), body })) } ]
           ' "$RUNNER_TEMP/nodes.json" > .autofix/threads.json
           count=$(jq length .autofix/threads.json)
           echo "count=$count" >> "$GITHUB_OUTPUT"
@@ -236,7 +239,11 @@ jobs:
           set -euo pipefail
           aside="$RUNNER_TEMP/instructions"
           gitsum() {
-            { cat .git/config; find .git/hooks -type f -print0 | sort -z | xargs -0 -r cat; } | sha256sum | cut -d' ' -f1
+            {
+              git config --list --show-origin
+              find .git/hooks -printf '%m %p\n' | sort
+              find .git/hooks -type f -print0 | sort -z | xargs -0 -r sha256sum
+            } | sha256sum | cut -d' ' -f1
           }
           files() {
             find . \( -path ./.git -o -path ./.autofix -o -name node_modules -o -name target \) -prune \
@@ -252,7 +259,8 @@ jobs:
                 done
               cp .autofix/CLAUDE.md CLAUDE.md ;;
             check)
-              # Claude may not touch the git config or hooks: they run commands in the git steps.
+              # Claude may not touch any git config layer or the hooks: they run commands in the git
+              # steps.
               [ "$(gitsum)" = "$GIT_SUM" ] || { echo "::error::The git config or hooks changed."; exit 1; } ;;
             sum)
               gitsum ;;
@@ -306,8 +314,8 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**)"
-            --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npm install --package-lock-only --ignore-scripts),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)' || '' }}"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
+            --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npm install --package-lock-only --ignore-scripts)' || '' }}"
 
       - name: Commit the merge
         if: steps.merge.outputs.conflicts != '0'
@@ -374,20 +382,27 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**)"
-            --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npx eslint:*),Bash(npm run typecheck:fast),Bash(node --import tsx --test:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)' || '' }}"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**),Edit(~/.gitconfig),Edit(~/.config/git/**)"
+            --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npx eslint:*),Bash(npm run typecheck:fast),Bash(node --import tsx --test:*)' || '' }}"
 
       - name: Commit the fix
         id: fixcommit
         if: steps.threads.outputs.count != '0'
         env:
+          IDS: ${{ steps.threads.outputs.ids }}
           SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
           GIT_SUM: ${{ steps.instructions.outputs.git }}
         run: |
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
-          if [ ! -s .autofix/report.json ] || ! jq -e 'type == "array"' .autofix/report.json > /dev/null; then
+          # A report counts only when it answers every staged thread exactly once: a partial one would
+          # commit edits that no reply explains.
+          if [ ! -s .autofix/report.json ] || ! jq -e --argjson ids "$IDS" '
+              type == "array"
+              and all(.[]; type == "object" and (.id | type) == "string" and (.reply | type) == "string"
+                           and (.status | IN("fixed", "addressed", "declined", "unclear")))
+              and (map(.id) | sort) == ($ids | sort)' .autofix/report.json > /dev/null; then
             echo "::warning::Claude didn't finish the review threads; their changes are dropped."
             git reset -q --hard HEAD
             git clean -fdq
@@ -417,6 +432,7 @@ jobs:
           set -euo pipefail
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" check
+          rm -f .autofix/autofix.bundle
           # Nothing Claude wrote may carry its token: the replies, the commit messages, the diff.
           # Written to a file first: grep -q in a pipe exits on the first match, and under pipefail
           # the writer's SIGPIPE would turn that match into a pass.
@@ -503,9 +519,9 @@ jobs:
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       # Replies go out only for threads that were staged (the ids recorded before Claude ran),
-      # whatever ids the report holds. A thread
-      # Claude calls fixed is resolved only when a fix commit was pushed; one it calls addressed
-      # needs no commit. Declined and unclear threads stay open for a maintainer.
+      # whatever ids the report holds. A thread Claude calls fixed is resolved only when a fix
+      # commit was pushed; one it calls addressed needs no commit. Declined and unclear threads
+      # stay open for a maintainer.
       - name: Reply to the threads
         if: needs.fix.outputs.reported == 'true'
         env:
