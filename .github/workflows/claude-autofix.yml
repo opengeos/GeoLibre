@@ -522,7 +522,7 @@ jobs:
                 else "the report isn'"'"'t an array" end' .autofix/report.json 2> /dev/null); then
               missed="the report isn't valid JSON"
             fi
-            echo "::warning::Claude didn't finish the review threads (missing: ${missed:-none, but an entry is malformed or repeated}); their changes are dropped."
+            echo "::warning::Claude didn't finish the review threads (missing: ${missed:-none}; or an entry is unexpected, malformed or repeated); their changes are dropped."
             git reset -q --hard HEAD
             git clean -fdq
             rm -f .autofix/report.json
@@ -599,6 +599,8 @@ jobs:
           GIT_CONFIG_PARAMETERS: ""
           GIT_EXEC_PATH: ""
           SHA: ${{ github.event.pull_request.head.sha }}
+          # Claude's commits are the ones the base doesn't have; the net diff below covers the rest.
+          BASE_SHA: ${{ steps.merge.outputs.base_sha }}
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           READ_TOKEN: ${{ github.token }}
           OUTPUT: ${{ runner.temp }}/output.txt
@@ -611,7 +613,8 @@ jobs:
           # Everything Claude wrote that leaves this job: the replies, each commit's message and patch
           # (the bundle carries every commit, not just the net diff), and the diff.
           { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
-            git log -p -m --text --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
+            git log -p -m --text --format=%B "$SHA..HEAD" --not "$BASE_SHA"
+            git diff --text "$SHA" HEAD; } > "$OUTPUT"
           if [ -e .autofix/autofix.bundle ]; then
             heads=$(git bundle list-heads .autofix/autofix.bundle | cut -d' ' -f1)
             [ "$heads" = "$(git rev-parse HEAD)" ] || { echo "::error::The bundle doesn't hold HEAD."; exit 1; }
