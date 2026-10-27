@@ -190,6 +190,19 @@ describe("addAtAvailableDefaultDate", () => {
     assert.deepEqual(calls, [{ layerId: MOPITT.id, options: { date: "2024-10-01" } }]);
   });
 
+  it("ignores a repeat Add while that layer is still probing", async () => {
+    const { control, calls } = makeControl();
+    addAtAvailableDefaultDate(control, () => true, fakeFetch(() => 200).fetchImpl);
+    control.addLayer(MOPITT.id);
+    control.addLayer(MOPITT.id);
+    await settle();
+    assert.equal(calls.length, 1);
+    // Once the probe settles, a later Add (another instance on purpose) goes through.
+    control.addLayer(MOPITT.id);
+    await settle();
+    assert.equal(calls.length, 2);
+  });
+
   it("keeps the default date when it has imagery", async () => {
     const { control, calls } = makeControl();
     addAtAvailableDefaultDate(control, () => true, fakeFetch(() => 200).fetchImpl);

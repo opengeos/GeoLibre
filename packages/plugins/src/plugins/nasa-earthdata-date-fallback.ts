@@ -223,6 +223,10 @@ export function addAtAvailableDefaultDate(
   fetchImpl: ProbeFetch = fetchWithProbeTimeout,
 ): void {
   const addLayer = control.addLayer.bind(control);
+  // Layers whose probe is still running. Upstream gives a repeat add at the
+  // same date its own "#2" instance, so a second click while the first one is
+  // probing would otherwise add a duplicate once both probes settle.
+  const probing = new Set<string>();
   control.addLayer = (layerId: string, options?: AddLayerOptions) => {
     const layer =
       options?.date === undefined && options?.key === undefined
@@ -232,10 +236,13 @@ export function addAtAvailableDefaultDate(
       addLayer(layerId, options);
       return;
     }
+    if (probing.has(layerId)) return;
+    probing.add(layerId);
     void findGibsFallbackDate(layer, fetchImpl)
       // An unexpected failure must not swallow the add: use the default date.
       .catch(() => null)
       .then((date) => {
+        probing.delete(layerId);
         if (!isActive()) return;
         addLayer(layerId, date ? { ...options, date } : options);
       })
