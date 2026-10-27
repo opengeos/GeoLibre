@@ -94,8 +94,48 @@ it("still anchors a comment on a map click when no map-click mode is on", () => 
   assert.equal(current().pendingComment?.anchor.type, "point");
 });
 
+it("leaves a Reverse Geocode click alone on a non-MapLibre renderer too", () => {
+  // Another renderer reports clicks through `onMapClick` instead of MapLibre's
+  // own events, so the gate has to hold on that path as well.
+  const clicks = new Set<(lngLat: [number, number]) => void>();
+  const canvas = { style: { cursor: "" } };
+  const engine = {
+    capabilities: { nativeMapInstance: false },
+    getMap: () => null,
+    getRenderSurface: () => ({ getCanvas: () => canvas, project: () => ({ x: 40, y: 30 }) }),
+    onMapClick: (handler: (lngLat: [number, number]) => void) => {
+      clicks.add(handler);
+      return () => clicks.delete(handler);
+    },
+    identifyFeatures: () => [],
+  };
+  let reverseGeocodeActive = true;
+  let tool: CommentTool | null = null;
+  function Harness() {
+    tool = useCommentTool({
+      mapControllerRef: { current: engine as never },
+      mapReadyGeneration: 1,
+      isMapClickModeActive: () => reverseGeocodeActive,
+    });
+    return null;
+  }
+  render(createElement(Harness));
+  const click = () => {
+    for (const handler of [...clicks]) handler([10, 20]);
+  };
+  const current = (): CommentTool => tool!;
+
+  act(() => current().activateTool());
+  act(() => click());
+  assert.equal(current().pendingComment, null);
+
+  reverseGeocodeActive = false;
+  act(() => click());
+  assert.deepEqual(current().pendingComment?.anchor, { type: "point", lngLat: [10, 20] });
+});
+
 it("counts Directions and Reverse Geocode as the map-click modes", async () => {
-  const { isMapClickModeActive } = await import("../apps/geolibre-desktop/src/hooks/usePlugins");
+  const { isMapClickModeActive } = await import("../apps/geolibre-desktop/src/lib/map-click-modes");
   const { DIRECTIONS_PLUGIN_ID, REVERSE_GEOCODE_PLUGIN_ID } = await import("@geolibre/plugins");
   const managerWith = (...active: string[]) => ({ isActive: (id: string) => active.includes(id) });
   assert.equal(isMapClickModeActive(managerWith()), false);

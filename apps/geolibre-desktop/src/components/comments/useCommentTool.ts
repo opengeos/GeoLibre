@@ -194,11 +194,11 @@ export function useCommentTool({
     map.getCanvas().style.cursor = "crosshair";
 
     const handleMapClick = (e: maplibreGl.MapMouseEvent) => {
+      e.originalEvent.stopPropagation();
       // Directions or Reverse Geocode owns the click: it places a waypoint or
       // runs a lookup, and a comment card on top of that is one the user did
-      // not ask for (#3256).
+      // not ask for (#3256). MapLibre still runs their own click listeners.
       if (isMapClickModeActiveRef.current?.()) return;
-      e.originalEvent.stopPropagation();
 
       // Map source and style layer IDs to canonical store layer IDs.
       const storeLayers = useAppStore.getState().layers;
