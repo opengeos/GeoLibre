@@ -20,12 +20,16 @@ name: Claude autofix
 #     are moved aside while Claude works and the base branch's CLAUDE.md takes their place: a pull
 #     request mustn't rewrite the rules it's fixed to, or add hooks and servers to the agent. They
 #     are put back before each commit, so the commits leave them as they were.
-#   - Review comments reach Claude only from bots and maintainers.
-#   - Scripts come from this file, never from the checkout.
+#   - Review comments reach Claude only from bots and the repository's owner and members.
+#   - Scripts come from this file, never from the checkout. Claude can't write to `.git/` or the
+#     runner's temp directory, and the steps after it check that the git config, the hooks and
+#     the helper script are as they were.
 #   - Everything is pinned to the commit that was labelled; the push is refused if the branch has
 #     moved since.
 #
-# Three jobs, so the push token never shares a machine with the agent:
+# Four jobs, so the push token never shares a job with the agent:
+#   gate  checks the labeller and the branch, and reads the token owner's identity for the
+#         commits.
 #   fix   checks out the head without credentials, runs Claude with a read-only GITHUB_TOKEN, and
 #         uploads the new commits as a git bundle with Claude's replies.
 #   push  starts from a fresh checkout, checks the bundle and fast-forwards the branch with
@@ -52,33 +56,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  fix:
-    name: Merge the base and fix review comments
+  gate:
+    name: Check the labeller
     # sender.type: a bot adding the label would make an automatic loop out of a paid, pushing job.
     if: >-
       github.event.label.name == 'claude-autofix' &&
       github.event.sender.type != 'Bot' &&
       github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
-      work: ${{ steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0' }}
-      threads: ${{ steps.threads.outputs.count }}
-      conflicts: ${{ steps.merge.outputs.conflicts }}
-      base_sha: ${{ steps.merge.outputs.base_sha }}
-      fixed: ${{ steps.fixcommit.outputs.committed == 'true' }}
+      login: ${{ steps.who.outputs.login }}
+      id: ${{ steps.who.outputs.id }}
     env:
       FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-      SHA: ${{ github.event.pull_request.head.sha }}
-      BASE: ${{ github.event.pull_request.base.ref }}
-      HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
       # Triage can label too: only someone who could push the fix themselves may use the label.
-      # The commits are made as the push token's owner, like a maintainer's own.
       - name: Check the labeller and the branch
+        id: who
         env:
           GH_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
           SENDER: ${{ github.event.sender.login }}
@@ -94,15 +88,35 @@ jobs:
             echo "::error::The fork doesn't allow edits by maintainers, so the fix couldn't be pushed."
             exit 1
           fi
-          read -r login id < <(gh api user --jq '"\(.login) \(.id)"')
-          {
-            echo "GIT_AUTHOR_NAME=$login"
-            echo "GIT_AUTHOR_EMAIL=$id+$login@users.noreply.github.com"
-            echo "GIT_COMMITTER_NAME=$login"
-            echo "GIT_COMMITTER_EMAIL=$id+$login@users.noreply.github.com"
-          } >> "$GITHUB_ENV"
+          gh api user --jq '"login=\(.login)\nid=\(.id)"' >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v7
+  fix:
+    name: Merge the base and fix review comments
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      work: ${{ steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0' }}
+      threads: ${{ steps.threads.outputs.count }}
+      conflicts: ${{ steps.merge.outputs.conflicts }}
+      base_sha: ${{ steps.merge.outputs.base_sha }}
+      fixed: ${{ steps.fixcommit.outputs.committed == 'true' }}
+      reported: ${{ steps.fixcommit.outputs.reported == 'true' }}
+    env:
+      FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      BASE: ${{ github.event.pull_request.base.ref }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      # The commits are made as the push token's owner, like a maintainer's own.
+      GIT_AUTHOR_NAME: ${{ needs.gate.outputs.login }}
+      GIT_AUTHOR_EMAIL: ${{ needs.gate.outputs.id }}+${{ needs.gate.outputs.login }}@users.noreply.github.com
+      GIT_COMMITTER_NAME: ${{ needs.gate.outputs.login }}
+      GIT_COMMITTER_EMAIL: ${{ needs.gate.outputs.id }}+${{ needs.gate.outputs.login }}@users.noreply.github.com
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
@@ -113,9 +127,10 @@ jobs:
           # that way, and keep npm, node and npx out of Claude's tools when FORK is true.
           allow-unsafe-pr-checkout: true
 
-      # Claude has no GitHub access of its own: the threads are staged on disk. Only threads a bot
-      # or a maintainer started are kept, and only bot and maintainer comments in them, so a
-      # passer-by's comment on a public pull request can't instruct the agent.
+      # Claude has no GitHub access of its own: the threads are staged on disk. Only threads a bot,
+      # the owner or a member started are kept, and only their comments in them, so a passer-by's
+      # or a read-only collaborator's comment can't instruct the agent. A thread's starter is read
+      # on its own, and its last 50 comments, so a long thread still shows its latest reply.
       - name: Stage the open review threads
         id: threads
         env:
@@ -143,7 +158,10 @@ jobs:
                       pageInfo { hasNextPage endCursor }
                       nodes {
                         id isResolved isOutdated path line originalLine
-                        comments(first: 50) {
+                        starter: comments(first: 1) {
+                          nodes { author { login __typename } authorAssociation body }
+                        }
+                        comments(last: 50) {
                           nodes { author { login __typename } authorAssociation body }
                         }
                       }
@@ -154,12 +172,12 @@ jobs:
             --jq '.data.repository.pullRequest.reviewThreads.nodes[]' > "$RUNNER_TEMP/nodes.json"
           jq -s '
             def trusted: (.author.__typename == "Bot")
-              or (.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"));
+              or (.authorAssociation | IN("OWNER", "MEMBER"));
             # A thread whose last comment is an autofix reply was answered in an earlier round;
             # it comes back once a reviewer replies to it.
             [ .[]
               | select(.isResolved | not)
-              | select(.comments.nodes[0] | trusted)
+              | select(.starter.nodes[0] | trusted)
               | select(.comments.nodes[-1]
                        | (.author.__typename == "Bot" and (.body | startswith("**Claude autofix ("))) | not)
               | { id, path, line: (.line // .originalLine), outdated: .isOutdated,
@@ -184,7 +202,7 @@ jobs:
             echo "No conflicts with $BASE."
             exit 0
           fi
-          git diff --name-only --diff-filter=U > .autofix/conflicts.txt
+          git -c core.quotePath=false diff --name-only --diff-filter=U > .autofix/conflicts.txt
           test -s .autofix/conflicts.txt || { echo "::error::The merge failed without conflicts."; exit 1; }
           echo "conflicts=$(wc -l < .autofix/conflicts.txt)" >> "$GITHUB_OUTPUT"
           echo "Conflicts with $BASE:"; cat .autofix/conflicts.txt
@@ -197,6 +215,7 @@ jobs:
       # hide moves the head's instruction files aside and puts the base branch's CLAUDE.md in their
       # place; restore puts them back before a commit.
       - name: Use the base branch's instructions
+        id: instructions
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -207,6 +226,9 @@ jobs:
           cat > "$RUNNER_TEMP/instructions.sh" <<'EOF'
           set -euo pipefail
           aside="$RUNNER_TEMP/instructions"
+          gitsum() {
+            { cat .git/config; find .git/hooks -type f -print0 | sort -z | xargs -0 -r cat; } | sha256sum | cut -d' ' -f1
+          }
           files() {
             find . \( -path ./.git -o -path ./.autofix -o -name node_modules -o -name target \) -prune \
               -o -name .claude -prune "$@" \
@@ -220,15 +242,25 @@ jobs:
                   mkdir -p "$aside/$(dirname "$f")"; mv "$f" "$aside/$f"
                 done
               cp .autofix/CLAUDE.md CLAUDE.md ;;
+            check)
+              # Claude may not touch the git config or hooks: they run commands in the git steps.
+              [ "$(gitsum)" = "$GIT_SUM" ] || { echo "::error::The git config or hooks changed."; exit 1; } ;;
+            sum)
+              gitsum ;;
             restore)
+              GIT_SUM="$GIT_SUM" bash "$0" check
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
           esac
           EOF
           bash "$RUNNER_TEMP/instructions.sh" hide
+          {
+            echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
+            echo "git=$(bash "$RUNNER_TEMP/instructions.sh" sum)"
+          } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: (steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0') && env.FORK != 'true'
         with:
           node-version: "22"
@@ -244,7 +276,9 @@ jobs:
           # subprocess env scrub, which keeps the tokens out of the commands Claude runs. The
           # Claude process holds its own token, so reads of process environments and the runner's
           # files are denied: a fork's text could otherwise talk Claude into quoting it in a
-          # reply. "Bundle the commits" checks for it as well.
+          # reply. "Bundle the commits" checks for it as well. Edits to `.git/` and the runner's
+          # temp directory are denied too: the git config and hooks run commands, and the helper
+          # script and the step outputs live in the temp directory.
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_non_write_users: "*"
@@ -263,13 +297,17 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**)"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**)"
             --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npm install --package-lock-only --ignore-scripts),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)' || '' }}"
 
       - name: Commit the merge
         if: steps.merge.outputs.conflicts != '0'
+        env:
+          SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          GIT_SUM: ${{ steps.instructions.outputs.git }}
         run: |
           set -euo pipefail
+          echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
             while IFS= read -r f; do
@@ -278,7 +316,7 @@ jobs:
               git rm -q --ignore-unmatch -- "$f"
             done < .autofix/delete.txt
           fi
-          left=$(git diff --name-only --diff-filter=U | xargs -r grep -lE '^(<<<<<<<|>>>>>>>)( |$)' -- || true)
+          left=$(git diff --name-only -z --diff-filter=U | xargs -0 -r grep -lE '^(<<<<<<<|>>>>>>>)( |$)' -- || true)
           if [ -n "$left" ]; then
             echo "::error::Claude left conflicts for a person:"; echo "$left"
             exit 1
@@ -294,8 +332,10 @@ jobs:
         if: steps.threads.outputs.count != '0' && env.FORK != 'true'
         run: npm ci
 
+      # A failure here (out of turns, say) drops the thread fixes but keeps the merge commit.
       - name: Fix the review threads
         if: steps.threads.outputs.count != '0'
+        continue-on-error: true
         uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33 # v1 (Claude Code 2.1.220)
         with:
           github_token: ${{ github.token }}
@@ -323,17 +363,27 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 120
-            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**)"
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(/${{ runner.temp }}/**),Read(~/.claude/**),Edit(/${{ runner.temp }}/**),Edit(.git/**),Edit(~/.claude/**)"
             --allowedTools "Read,Grep,Glob,Edit,Write${{ github.event.pull_request.head.repo.full_name == github.repository && ',Bash(npx eslint:*),Bash(npm run typecheck:fast),Bash(node --import tsx --test:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)' || '' }}"
 
       - name: Commit the fix
         id: fixcommit
         if: steps.threads.outputs.count != '0'
+        env:
+          SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          GIT_SUM: ${{ steps.instructions.outputs.git }}
         run: |
           set -euo pipefail
+          echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
           bash "$RUNNER_TEMP/instructions.sh" restore
-          test -s .autofix/report.json || { echo "::error::Claude wrote no report."; exit 1; }
-          jq -e 'type == "array"' .autofix/report.json > /dev/null
+          if [ ! -s .autofix/report.json ] || ! jq -e 'type == "array"' .autofix/report.json > /dev/null; then
+            echo "::warning::Claude didn't finish the review threads; their changes are dropped."
+            git reset -q --hard HEAD
+            git clean -fdq
+            rm -f .autofix/report.json
+            exit 0
+          fi
+          echo "reported=true" >> "$GITHUB_OUTPUT"
           git add -A
           if git diff --cached --quiet; then
             echo "No code changes."
@@ -349,11 +399,19 @@ jobs:
       - name: Bundle the commits
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         env:
+          SCRIPT_SUM: ${{ steps.instructions.outputs.script }}
+          GIT_SUM: ${{ steps.instructions.outputs.git }}
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
-          # Nothing Claude wrote may carry its token, in the replies or in the commits.
-          if [ -n "$TOKEN" ] && { cat .autofix/report.json 2> /dev/null; git diff "$SHA" HEAD; } | grep -qF -- "$TOKEN"; then
+          echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
+          bash "$RUNNER_TEMP/instructions.sh" check
+          # Nothing Claude wrote may carry its token: the replies, the commit messages, the diff.
+          # Written to a file first: grep -q in a pipe exits on the first match, and under pipefail
+          # the writer's SIGPIPE would turn that match into a pass.
+          { cat .autofix/report.json 2> /dev/null; git log --format=%B "$SHA..HEAD"; git diff "$SHA" HEAD; } \
+            > "$RUNNER_TEMP/output.txt"
+          if [ -n "$TOKEN" ] && grep -qaF -- "$TOKEN" "$RUNNER_TEMP/output.txt"; then
             echo "::error::Claude's output contains its token; nothing is pushed."
             exit 1
           fi
@@ -362,7 +420,7 @@ jobs:
             git bundle create .autofix/autofix.bundle autofix --not "$SHA"
           fi
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.merge.outputs.conflicts != '0' || steps.threads.outputs.count != '0'
         with:
           name: autofix
@@ -385,7 +443,7 @@ jobs:
       pull-requests: write
     steps:
       # Only git runs on this checkout: no hooks or filters come with a clone.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
@@ -393,7 +451,7 @@ jobs:
           fetch-depth: 0
           allow-unsafe-pr-checkout: true
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: autofix
           path: ${{ runner.temp }}/autofix
@@ -437,7 +495,7 @@ jobs:
       # Claude calls fixed is resolved only when a fix commit was pushed; one it calls addressed
       # needs no commit. Declined and unclear threads stay open for a maintainer.
       - name: Reply to the threads
-        if: needs.fix.outputs.threads != '0'
+        if: needs.fix.outputs.reported == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DIR: ${{ runner.temp }}/autofix
@@ -473,7 +531,7 @@ jobs:
       # integration"). A fixed thread left open is staged again next round and answered twice, so
       # a failed resolve fails the step.
       - name: Resolve the fixed threads
-        if: needs.fix.outputs.threads != '0'
+        if: needs.fix.outputs.reported == 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTOFIX_TOKEN }}
         run: |
@@ -495,6 +553,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.ref }}
           CONFLICTS: ${{ needs.fix.outputs.conflicts }}
           THREADS: ${{ needs.fix.outputs.threads }}
+          REPORTED: ${{ needs.fix.outputs.reported }}
           LANDED: ${{ needs.fix.outputs.fixed == 'true' && steps.push.outputs.pushed == 'true' }}
           DIR: ${{ runner.temp }}/autofix
         run: |
@@ -504,7 +563,9 @@ jobs:
             if [ "$CONFLICTS" != 0 ]; then
               echo "- Merged \`$BASE\` and resolved conflicts in $CONFLICTS file(s)."
             fi
-            if [ "$THREADS" != 0 ]; then
+            if [ "$THREADS" != 0 ] && [ "$REPORTED" != true ]; then
+              echo "- Claude didn't finish the review threads; the run's log says why."
+            elif [ "$THREADS" != 0 ]; then
               jq -r --arg landed "$LANDED" '
                 map(if .status == "fixed" and $landed != "true" then .status = "unclear" else . end)
                 | "- Review threads: " + (group_by(.status) | map("\(length) \(.[0].status)") | join(", ")) + "."' \
@@ -517,7 +578,7 @@ jobs:
 
   done:
     name: Remove the label
-    needs: [fix, push]
+    needs: [gate, fix, push]
     if: always() && github.event.label.name == 'claude-autofix'
     runs-on: ubuntu-latest
     permissions:
@@ -528,7 +589,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.html_url }}
           WORK: ${{ needs.fix.outputs.work }}
-          FAILED: ${{ needs.fix.result == 'failure' || needs.push.result == 'failure' }}
+          FAILED: ${{ needs.gate.result == 'failure' || needs.fix.result == 'failure' || needs.push.result == 'failure' }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label claude-autofix
