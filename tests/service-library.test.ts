@@ -20,6 +20,8 @@ import {
   upsertServiceEntry,
   writeUserServices,
   SERVICE_LIBRARY_CHANGED_EVENT,
+  readHiddenBuiltinIds,
+  writeHiddenBuiltinIds,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
 function makeEntry(overrides: Partial<ServiceLibraryEntry> = {}): ServiceLibraryEntry {
@@ -292,6 +294,31 @@ describe("deployment service library", () => {
       }),
     ]);
     assert.deepEqual(dispatched, [SERVICE_LIBRARY_CHANGED_EVENT]);
+  });
+
+  it("hides deleted built-ins from every listing until they are restored", () => {
+    const [osm] = BUILTIN_SERVICES.filter((entry) => entry.id === "builtin-xyz-osm");
+    writeHiddenBuiltinIds([osm.id, "not-a-builtin"]);
+    assert.deepEqual([...readHiddenBuiltinIds()], [osm.id]);
+    assert.deepEqual(dispatched, [SERVICE_LIBRARY_CHANGED_EVENT]);
+    assert.equal(
+      listAllServices([]).some((entry) => entry.id === osm.id),
+      false,
+    );
+    assert.equal(
+      listServices("xyz", []).some((entry) => entry.id === osm.id),
+      false,
+    );
+    assert.equal(listAllServices([]).length, BUILTIN_SERVICES.length - 1);
+
+    writeHiddenBuiltinIds([]);
+    assert.ok(listServices("xyz", []).some((entry) => entry.id === osm.id));
+  });
+
+  it("treats a corrupt hidden-built-ins value as nothing hidden", () => {
+    storage.set("geolibre.serviceLibrary.hiddenBuiltins", "{not json");
+    assert.equal(readHiddenBuiltinIds().size, 0);
+    assert.equal(listAllServices([]).length, BUILTIN_SERVICES.length);
   });
 
   it("does not let imported ownership flags or reserved ids create managed entries", () => {
