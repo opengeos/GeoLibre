@@ -44,8 +44,11 @@ function parseInterval(value: string): TimeInterval | null {
 
 function subtractPeriod(date: string, period: NonNullable<TimeInterval["period"]>): string {
   const [year, month, day] = date.split("-").map(Number);
+  // Clamp the day to the target month so 2024-03-31 minus P1M is 2024-02-29,
+  // not the Date.UTC rollover 2024-03-02 (a date GIBS never advertises).
+  const lastDay = new Date(Date.UTC(year - period.years, month - period.months, 0)).getUTCDate();
   const shifted = new Date(
-    Date.UTC(year - period.years, month - 1 - period.months, day - period.days),
+    Date.UTC(year - period.years, month - 1 - period.months, Math.min(day, lastDay) - period.days),
   );
   return shifted.toISOString().slice(0, 10);
 }

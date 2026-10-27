@@ -67,6 +67,13 @@ describe("previousGibsDates", () => {
     assert.deepEqual(previousGibsDates(time, "2024-01-17", 5), ["2024-01-09", "2024-01-01"]);
   });
 
+  it("clamps month and year steps to the target month's length", () => {
+    const monthly = { default: "2024-03-31", values: ["2023-01-31/2024-03-31/P1M"] };
+    assert.deepEqual(previousGibsDates(monthly, "2024-03-31", 1), ["2024-02-29"]);
+    const yearly = { default: "2024-02-29", values: ["2020-02-29/2024-02-29/P1Y"] };
+    assert.deepEqual(previousGibsDates(yearly, "2024-02-29", 1), ["2023-02-28"]);
+  });
+
   it("does not loop on a zero period", () => {
     const time = { default: "2024-01-10", values: ["2024-01-01/2024-01-10/P0D", "2023-12-31"] };
     assert.deepEqual(previousGibsDates(time, "2024-01-10", 3), ["2023-12-31"]);
