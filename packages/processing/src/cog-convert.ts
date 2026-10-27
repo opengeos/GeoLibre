@@ -216,7 +216,8 @@ export async function convertGeoTiffToCog(
 
 export interface ConvertRasterDataToCogOptions {
   /**
-   * Write NoData as NaN instead of the raster's own sentinel (default false).
+   * Write NoData, and any non-finite sample, as NaN instead of the raster's
+   * own sentinel (default false).
    * The encoder builds overviews with a box average that does not skip NoData,
    * so a finite sentinel such as -9999 blends into its valid neighbours along
    * every NoData edge (an NDVI overview pixel that is 15/16 NoData reads
@@ -275,8 +276,10 @@ export async function convertRasterDataToCog(
       ]),
     );
     const nodata = raster.nodata;
-    const maskNodata = options.nanNodata === true && nodata != null;
-    if (maskNodata) {
+    // With nanNodata, the sentinel and any non-finite sample (an Infinity
+    // would blend into the overviews just like -9999) are written as NaN.
+    const toNaN = options.nanNodata === true;
+    if (toNaN && nodata != null) {
       builder.set_nodata(Number.NaN);
     } else if (nodata != null && Number.isFinite(nodata)) {
       builder.set_nodata(nodata);
@@ -291,7 +294,7 @@ export async function convertRasterDataToCog(
       for (let band = 0; band < raster.bands.length; band += 1) {
         const value = raster.bands[band][pixel];
         values[pixel * raster.bands.length + band] =
-          maskNodata && (value === nodata || !Number.isFinite(value)) ? Number.NaN : value;
+          toNaN && (value === nodata || !Number.isFinite(value)) ? Number.NaN : value;
       }
     }
     return builder.write_f32(values);

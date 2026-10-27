@@ -154,6 +154,31 @@ describe("convertGeoTiffToCog", () => {
     }
   });
 
+  it("writes non-finite samples as NaN under nanNodata even without declared NoData", async () => {
+    const cog = await convertRasterDataToCog(
+      {
+        bands: [Float32Array.from([0.25, Number.POSITIVE_INFINITY, -0.5, 0.75])],
+        width: 4,
+        height: 1,
+        originX: 0,
+        originY: 1,
+        resX: 1,
+        resY: 1,
+        nodata: null,
+        geoKeys: { GTModelTypeGeoKey: 2, GeographicTypeGeoKey: 4326 },
+      },
+      { nanNodata: true },
+    );
+    const reader = new GeoTiffReader(cog);
+    try {
+      const band = Array.from(reader.read_band_f32(0));
+      assert.deepEqual([band[0], band[2], band[3]], [0.25, -0.5, 0.75]);
+      assert.ok(Number.isNaN(band[1]));
+    } finally {
+      reader.free();
+    }
+  });
+
   for (const crsCode of [32767, 32768, 65535]) {
     it(`rejects user-defined or private CRS code ${crsCode}`, async () => {
       await assert.rejects(
