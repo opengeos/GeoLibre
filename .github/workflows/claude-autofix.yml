@@ -268,6 +268,9 @@ jobs:
             -H "Accept: application/vnd.github.raw" > .autofix/CLAUDE.md
           cat > "$RUNNER_TEMP/instructions.sh" <<'EOF'
           set -euo pipefail
+          # Fixed, so a GITHUB_PATH entry added by code a same-repo branch runs can't shadow the tools
+          # these checks rely on.
+          PATH=/usr/bin:/bin
           aside="$RUNNER_TEMP/instructions"
           saved="$RUNNER_TEMP/git-saved"
           files() {
@@ -297,28 +300,28 @@ jobs:
               # npm could otherwise change it. The steps that run git also set GIT_CONFIG_GLOBAL,
               # GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT and GIT_CONFIG_PARAMETERS, so no other config
               # layer counts.
-              [ "$(bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
+              [ "$(/usr/bin/bash "$0" saved-sum)" = "$SAVED_SUM" ] || { echo "::error::The saved git config changed."; exit 1; }
               rm -rf .git/config .git/hooks
               cp -a "$saved/config" "$saved/hooks" .git/ ;;
             aside-sum)
               { find "$aside" -printf '%m %P\n' | sort; find "$aside" -type f -print0 | sort -z | xargs -0 -r sha256sum; } \
                 | sha256sum | cut -d' ' -f1 ;;
             restore)
-              bash "$0" reset-git
+              /usr/bin/bash "$0" reset-git
               # The head's instruction files go back as they were set aside: code a same-repo branch
               # runs through its build tools could otherwise have changed them on the way.
-              [ "$(bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
+              [ "$(/usr/bin/bash "$0" aside-sum)" = "$ASIDE_SUM" ] || { echo "::error::The set-aside instruction files changed."; exit 1; }
               rm -f CLAUDE.md
               files -print0 | xargs -0 -r rm -rf
               cp -a "$aside/." . ;;
           esac
           EOF
-          bash "$RUNNER_TEMP/instructions.sh" hide
-          bash "$RUNNER_TEMP/instructions.sh" save
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" hide
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" save
           {
             echo "script=$(sha256sum "$RUNNER_TEMP/instructions.sh" | cut -d' ' -f1)"
-            echo "saved=$(bash "$RUNNER_TEMP/instructions.sh" saved-sum)"
-            echo "aside=$(bash "$RUNNER_TEMP/instructions.sh" aside-sum)"
+            echo "saved=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" saved-sum)"
+            echo "aside=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" aside-sum)"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -374,8 +377,9 @@ jobs:
           GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
+          PATH=/usr/bin:/bin
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          bash "$RUNNER_TEMP/instructions.sh" restore
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
           if [ -f .autofix/delete.txt ]; then
             # The index's unmerged paths, not conflicts.txt, which Claude could have edited.
             git diff --name-only -z --diff-filter=U > "$RUNNER_TEMP/unmerged.z"
@@ -395,8 +399,8 @@ jobs:
           git commit -q --no-edit --cleanup=strip
           git log -1 --stat
           # The merge may have changed the instruction files, so the aside is summed again.
-          bash "$RUNNER_TEMP/instructions.sh" hide
-          echo "aside=$(bash "$RUNNER_TEMP/instructions.sh" aside-sum)" >> "$GITHUB_OUTPUT"
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" hide
+          echo "aside=$(/usr/bin/bash "$RUNNER_TEMP/instructions.sh" aside-sum)" >> "$GITHUB_OUTPUT"
 
       # After the merge commit, since package-lock.json may have been the conflict.
       - name: Install dependencies
@@ -451,8 +455,9 @@ jobs:
           GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
+          PATH=/usr/bin:/bin
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          bash "$RUNNER_TEMP/instructions.sh" restore
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" restore
           # A report counts only when it answers every staged thread exactly once: a partial one would
           # commit edits that no reply explains.
           # Slurped, so a file with two JSON values (only the last of which jq -e would judge) fails.
@@ -496,8 +501,9 @@ jobs:
           GIT_CONFIG_PARAMETERS: ""
         run: |
           set -euo pipefail
+          PATH=/usr/bin:/bin
           echo "$SCRIPT_SUM  $RUNNER_TEMP/instructions.sh" | sha256sum -c --quiet
-          bash "$RUNNER_TEMP/instructions.sh" reset-git
+          /usr/bin/bash "$RUNNER_TEMP/instructions.sh" reset-git
           rm -f .autofix/autofix.bundle
           if [ "$(git rev-parse HEAD)" != "$SHA" ]; then
             git branch -f autofix HEAD
@@ -531,6 +537,7 @@ jobs:
           GIT_EXEC_PATH: ""
           SHA: ${{ github.event.pull_request.head.sha }}
           TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          READ_TOKEN: ${{ github.token }}
           OUTPUT: ${{ runner.temp }}/output.txt
         run: |
           PATH=/usr/bin:/bin
@@ -538,14 +545,15 @@ jobs:
           # dropped, then git is pinned to the repo config alone.
           for v in $(compgen -e); do case "$v" in GIT_*) unset "$v" ;; esac; done
           export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-          # Everything Claude wrote that leaves this job: the replies, the commit messages, the diff.
+          # Everything Claude wrote that leaves this job: the replies, each commit's message and patch
+          # (the bundle carries every commit, not just the net diff), and the diff.
           { cat .autofix/report.json .autofix/threads.json .autofix/conflicts.txt 2> /dev/null || true
-            git log --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
+            git log -p --first-parent --text --format=%B "$SHA..HEAD"; git diff --text "$SHA" HEAD; } > "$OUTPUT"
           if [ -e .autofix/autofix.bundle ]; then
             heads=$(git bundle list-heads .autofix/autofix.bundle | cut -d' ' -f1)
             [ "$heads" = "$(git rev-parse HEAD)" ] || { echo "::error::The bundle doesn't hold HEAD."; exit 1; }
           fi
-          if [ -z "$TOKEN" ] || grep -qaF -- "$TOKEN" "$OUTPUT"; then
+          if [ -z "$TOKEN" ] || [ -z "$READ_TOKEN" ] || grep -qaF -- "$TOKEN" "$OUTPUT" || grep -qaF -- "$READ_TOKEN" "$OUTPUT"; then
             echo "::error::Claude's output contains its token (or the token is missing); nothing is pushed."
             exit 1
           fi
