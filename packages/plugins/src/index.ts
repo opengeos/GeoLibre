@@ -767,6 +767,13 @@ export {
 } from "./plugins/maplibre-us-local-gis";
 export { US_LOCAL_GIS_CATALOGS } from "./plugins/us-local-gis-catalogs";
 export {
+  DEFAULT_INDIA_GIS_LABELS,
+  maplibreIndiaGisPlugin,
+  setIndiaGisLabels,
+  INDIA_GIS_PLUGIN_ID,
+} from "./plugins/maplibre-india-gis";
+export { INDIA_GIS_CATALOGS } from "./plugins/india-gis-catalogs";
+export {
   DEFAULT_US_FEDERAL_GIS_LABELS,
   maplibreUsFederalGisPlugin,
   setUsFederalGisLabels,
