@@ -182,8 +182,15 @@ describe("S3 signing region", () => {
     const signer = createS3Signer(() => [keysConnection]);
     const first = await signer.presign({ bucket: "unlisted", key: "a.tif" });
     assert.match(first?.href ?? "", /%2Fus-east-1%2Fs3%2Faws4_request/);
+    const second = await signer.presign({ bucket: "unlisted", key: "b.tif" });
+    assert.match(second?.href ?? "", /%2Fus-east-1%2Fs3%2Faws4_request/);
+    // The failed probe is remembered for a while, so other reads skip it...
+    assert.equal(probes, 1);
+    // ...and nothing signed for the guess was cached: once that wears off, the
+    // same object probes again rather than reusing its first URL.
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now + 6 * 60 * 1000);
     await signer.presign({ bucket: "unlisted", key: "a.tif" });
-    // The second read signed afresh, probing again, instead of reusing the guess.
     assert.equal(probes, 2);
   });
 });

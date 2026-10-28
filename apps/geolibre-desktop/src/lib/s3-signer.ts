@@ -16,7 +16,7 @@ import {
   type S3UrlSigner,
 } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
-import { untilAborted } from "./abortable";
+import { abortReason, untilAborted } from "./abortable";
 import { isTauri } from "./is-tauri";
 import {
   isS3ConnectionComplete,
@@ -54,6 +54,13 @@ const signedUrlCache = new Map<string, S3SignedUrl>();
  * same bucket name on two endpoints (AWS and a MinIO, say) is two buckets.
  */
 const bucketRegions = new Map<string, string>();
+/**
+ * When a probe last failed to name a bucket's region, keyed like
+ * {@link bucketRegions}, so reads in a bucket without list permission do not
+ * each pay for a probe while their URLs stay uncached.
+ */
+const failedRegionProbes = new Map<string, number>();
+const FAILED_PROBE_RETRY_MS = 5 * 60 * 1000;
 /** Bumped by every invalidation, so a presign already in flight does not cache its stale result. */
 let cacheGeneration = 0;
 const pendingRegionProbes = new Map<string, Promise<string | null>>();
@@ -168,6 +175,7 @@ export function clearS3SignerCaches(): void {
   cacheGeneration += 1;
   credentialCache.clear();
   signedUrlCache.clear();
+  failedRegionProbes.clear();
 }
 
 async function fetchText(
@@ -258,17 +266,23 @@ async function regionFor(
   if (connection.region) return settled(connection.region);
   // ListBuckets is answered by the global endpoint, signed for us-east-1.
   if (!request.bucket) return settled(DEFAULT_REGION);
-  const known = bucketRegions.get(regionKey(connection, request.bucket));
+  const key = regionKey(connection, request.bucket);
+  const known = bucketRegions.get(key);
   if (known) return settled(known);
   // A custom endpoint has no region errors to learn from; `us-east-1` is what
   // MinIO and most S3-compatible stores expect by default.
   if (connection.endpoint) return settled(credentials.region || DEFAULT_REGION);
+  const guess = { region: credentials.region ?? DEFAULT_REGION, guessed: true };
+  if (Date.now() - (failedRegionProbes.get(key) ?? -Infinity) < FAILED_PROBE_RETRY_MS) {
+    return guess;
+  }
   const probed = await untilAborted(
     probeBucketRegion(connection, credentials, request.bucket),
     signal,
   );
   if (probed) return settled(probed);
-  return { region: credentials.region ?? DEFAULT_REGION, guessed: true };
+  failedRegionProbes.set(key, Date.now());
+  return guess;
 }
 
 function cacheKey(connection: S3Connection, request: S3PresignRequest): string | null {
@@ -326,7 +340,7 @@ export function createS3Signer(
 
     const credentials = await resolveS3ConnectionCredentials(connection);
     // The lookup takes no signal; a cancelled caller gets no URL.
-    signal?.throwIfAborted();
+    if (signal?.aborted) throw abortReason(signal);
     const lifetime = () => {
       const seconds = presignLifetimeSeconds(credentials.expiresAt, Date.now(), PRESIGN_SECONDS);
       if (seconds === null) {
