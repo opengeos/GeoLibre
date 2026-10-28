@@ -21,7 +21,7 @@ export function rejectOnAbort(signal: AbortSignal): Promise<never> {
 }
 
 /**
- * Settles with `promise`, or rejects with `signal.reason` as soon as `signal`
+ * Settles with `promise`, or rejects with the abort reason as soon as `signal`
  * aborts (immediately when it already has), removing its listener either way.
  *
  * @param promise The work, which may not take the signal itself.
@@ -30,10 +30,25 @@ export function rejectOnAbort(signal: AbortSignal): Promise<never> {
  */
 export function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(signal.reason);
+  if (signal.aborted) {
+    // Nobody waits for it now; keep a later rejection from going unhandled.
+    promise.catch(() => undefined);
+    return Promise.reject(abortReason(signal));
+  }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
+    const onAbort = () => reject(abortReason(signal));
     signal.addEventListener("abort", onAbort, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
   });
+}
+
+/**
+ * Why `signal` aborted, or an `AbortError` for a signal-like object that
+ * carries no `reason` (plugins may pass one from another realm).
+ *
+ * @param signal An aborted signal.
+ * @returns The rejection value.
+ */
+export function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
 }

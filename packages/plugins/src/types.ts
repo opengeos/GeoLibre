@@ -1001,7 +1001,7 @@ export interface GeoLibreAppAPI {
    *   connection's credentials (access keys; on desktop also AWS profiles
    *   including SSO, the environment, and instance roles);
    * - any other `s3://` URL resolves to its public HTTPS object URL;
-   * - every other URL is returned unchanged.
+   * - every other URL is returned unchanged (surrounding whitespace trimmed).
    *
    * Credentials never reach the plugin, only the signed URL. Signed URLs
    * expire (in at most 12 hours, sooner with temporary credentials), so resolve

@@ -131,9 +131,13 @@ describe("S3 signing region", () => {
     let answerProbe: (response: Response) => void = () => undefined;
     let fetchStarted: () => void = () => undefined;
     const started = new Promise<void>((resolve) => (fetchStarted = resolve));
-    t.mock.method(globalThis, "fetch", () => {
+    t.mock.method(globalThis, "fetch", (_url: string, init?: RequestInit) => {
       fetchStarted();
-      return new Promise<Response>((resolve) => (answerProbe = resolve));
+      // Honor the signal, so a caller's abort leaking into the shared probe fails the test.
+      return new Promise<Response>((resolve, reject) => {
+        answerProbe = resolve;
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
     });
     const keysConnection = connection("probe", {
       source: "keys",
@@ -161,6 +165,26 @@ describe("S3 signing region", () => {
     // The cancelled object was not cached under the default region.
     const retried = await signer.presign({ bucket: "probed", key: "a.tif" });
     assert.match(retried?.href ?? "", /%2Feu-central-1%2Fs3%2Faws4_request/);
+  });
+
+  it("does not cache a URL signed for a guessed region", async (t) => {
+    let probes = 0;
+    // No list permission: S3 refuses without naming the region.
+    t.mock.method(globalThis, "fetch", async () => {
+      probes += 1;
+      return new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+    });
+    const keysConnection = connection("guess", {
+      source: "keys",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "secret",
+    });
+    const signer = createS3Signer(() => [keysConnection]);
+    const first = await signer.presign({ bucket: "unlisted", key: "a.tif" });
+    assert.match(first?.href ?? "", /%2Fus-east-1%2Fs3%2Faws4_request/);
+    await signer.presign({ bucket: "unlisted", key: "a.tif" });
+    // The second read signed afresh, probing again, instead of reusing the guess.
+    assert.equal(probes, 2);
   });
 });
 

@@ -1607,7 +1607,7 @@ const image = document.createElement("img");
 image.src = await resolve(indexUrl.slice(0, indexUrl.lastIndexOf("/") + 1) + index.preview);
 ```
 
-The snippet appends the file name as written, without encoding or normalizing it. A name with `..`, an absolute path, or a `%`, `?` or `#` in it reaches the URL unchanged, and a `?` or `#` in an `s3://` URL ends the key early, so encode or check such names in the plugin before you append them.
+The snippet appends the file name as written. An `s3://` URL takes its key literally, so a space or a `%` needs no encoding, but a `?` or `#` ends the key there. For a key that contains either, pass the object's S3 HTTPS URL with the key percent-encoded instead (`https://my-bucket.s3.amazonaws.com/datasets/a/a%23b.png` for the key `datasets/a/a#b.png`). Check names with `..` or a leading `/` before appending them.
 
 - **Credentials never reach the plugin**, only signed URLs. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
 - **Signed URLs expire** within 12 hours (sooner with temporary credentials); a connection set to anonymous access returns a plain, non-expiring public URL. Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.

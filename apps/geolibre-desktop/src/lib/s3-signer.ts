@@ -242,26 +242,33 @@ function probeBucketRegion(
   return probe;
 }
 
+/**
+ * The region to sign for. `guessed` marks a fallback taken because the probe
+ * could not say (no list permission, a timeout): a URL signed for it may be
+ * wrong, so it is not cached and the next read probes again.
+ */
 async function regionFor(
   connection: S3Connection,
   credentials: ResolvedCredentials,
   request: S3PresignRequest,
   signal?: AbortSignal,
-): Promise<string> {
-  if (request.region) return request.region;
-  if (connection.region) return connection.region;
+): Promise<{ region: string; guessed: boolean }> {
+  const settled = (region: string) => ({ region, guessed: false });
+  if (request.region) return settled(request.region);
+  if (connection.region) return settled(connection.region);
   // ListBuckets is answered by the global endpoint, signed for us-east-1.
-  if (!request.bucket) return DEFAULT_REGION;
+  if (!request.bucket) return settled(DEFAULT_REGION);
   const known = bucketRegions.get(regionKey(connection, request.bucket));
-  if (known) return known;
+  if (known) return settled(known);
   // A custom endpoint has no region errors to learn from; `us-east-1` is what
   // MinIO and most S3-compatible stores expect by default.
-  if (connection.endpoint) return credentials.region || DEFAULT_REGION;
-  return (
-    (await untilAborted(probeBucketRegion(connection, credentials, request.bucket), signal)) ??
-    credentials.region ??
-    DEFAULT_REGION
+  if (connection.endpoint) return settled(credentials.region || DEFAULT_REGION);
+  const probed = await untilAborted(
+    probeBucketRegion(connection, credentials, request.bucket),
+    signal,
   );
+  if (probed) return settled(probed);
+  return { region: credentials.region ?? DEFAULT_REGION, guessed: true };
 }
 
 function cacheKey(connection: S3Connection, request: S3PresignRequest): string | null {
@@ -331,12 +338,12 @@ export function createS3Signer(
       return seconds;
     };
     lifetime();
-    const region = await regionFor(connection, credentials, request, signal);
+    const { region, guessed } = await regionFor(connection, credentials, request, signal);
     // Again: the credentials may have expired during the region probe.
     const expiresIn = lifetime();
     const href = await presignFor(connection, credentials, request, region, expiresIn);
     const signed = { href, expiresAt: Date.now() + expiresIn * 1000 };
-    if (key && generation === cacheGeneration) rememberSignedUrl(key, signed);
+    if (key && !guessed && generation === cacheGeneration) rememberSignedUrl(key, signed);
     return signed;
   };
 

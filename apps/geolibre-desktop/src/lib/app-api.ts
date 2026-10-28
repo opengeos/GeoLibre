@@ -59,7 +59,7 @@ import {
 } from "../components/layout/add-data/helpers";
 import { ensureFileExtension, useFileNamePrompt } from "../hooks/useFileNamePrompt";
 import type { buildProjectEgressSnapshot } from "./build-project-snapshot";
-import { untilAborted } from "./abortable";
+import { abortReason, untilAborted } from "./abortable";
 import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
@@ -582,7 +582,7 @@ export function createAppAPI(
       }
       const abort = signal ?? undefined;
       // Skip the lookup once aborted, and never return a URL after an abort.
-      if (abort?.aborted) return Promise.reject(abort.reason);
+      if (abort?.aborted) return Promise.reject(abortReason(abort));
       return untilAborted(resolveReadableUrl(url.trim(), abort), abort);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
