@@ -776,6 +776,40 @@ describe("plugin app API S3 URL resolution", () => {
     await assert.rejects(api.resolveReadableUrl("  "), /non-empty string/);
     await assert.rejects(api.resolveReadableUrl(42 as unknown as string), /non-empty string/);
     await assert.rejects(api.resolveReadableUrl("s3://private/a.json"), /SSO session has expired/);
+    await assert.rejects(
+      api.resolveReadableUrl("s3://private/a.json", {} as AbortSignal),
+      /must be an AbortSignal/,
+    );
+  });
+
+  it("never returns a URL once the signal aborts", async () => {
+    let presigned = 0;
+    let finishLookup: () => void = () => undefined;
+    registerS3UrlSigner({
+      covers: () => true,
+      connections: () => [],
+      // A credential lookup that ignores the signal, like an SSO refresh.
+      presign: async (location) => {
+        presigned += 1;
+        await new Promise<void>((resolve) => (finishLookup = resolve));
+        return { href: `https://b.s3.amazonaws.com/${location.key}?sig`, expiresAt: Infinity };
+      },
+    });
+    const api = createAppAPI(undefined, fakeHost().host);
+
+    await assert.rejects(
+      api.resolveReadableUrl("s3://private/a.json", AbortSignal.abort()),
+      (error: Error) => error.name === "AbortError",
+    );
+    assert.equal(presigned, 0);
+
+    const controller = new AbortController();
+    const pending = api.resolveReadableUrl("s3://private/a.json", controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    finishLookup();
+    await assert.rejects(pending, (error: Error) => error.name === "AbortError");
+    assert.equal(presigned, 1);
   });
 });
 

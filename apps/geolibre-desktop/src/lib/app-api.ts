@@ -576,7 +576,10 @@ export function createAppAPI(
       if (typeof url !== "string" || !url.trim()) {
         return Promise.reject(new TypeError("resolveReadableUrl: url must be a non-empty string."));
       }
-      return resolveReadableUrl(url.trim(), signal);
+      if (signal !== undefined && !isAbortSignalLike(signal)) {
+        return Promise.reject(new TypeError("resolveReadableUrl: signal must be an AbortSignal."));
+      }
+      return rejectOnAbort(() => resolveReadableUrl(url.trim(), signal), signal);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()
@@ -1020,6 +1023,39 @@ export async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> 
     );
   }
   return fetchWebviewArrayBuffer(url);
+}
+
+/** Whether `value` quacks like an `AbortSignal` (it may come from another realm). */
+function isAbortSignalLike(value: unknown): value is AbortSignal {
+  const signal = value as AbortSignal | null;
+  return (
+    typeof signal === "object" &&
+    signal !== null &&
+    typeof signal.aborted === "boolean" &&
+    typeof signal.addEventListener === "function"
+  );
+}
+
+/**
+ * Runs `start` unless `signal` has already aborted, and rejects as soon as it
+ * aborts, so a caller never gets a result (a signed URL, say) after cancelling,
+ * even from a step that does not take the signal itself.
+ *
+ * @param start Starts the work.
+ * @param signal Cancels it.
+ * @returns The work's result.
+ */
+function rejectOnAbort<T>(start: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return start();
+  const reason = () => signal.reason ?? new DOMException("Aborted", "AbortError");
+  if (signal.aborted) return Promise.reject(reason());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(reason());
+    signal.addEventListener("abort", onAbort, { once: true });
+    start()
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
 
 /** The webview's own fetch, through the dev raster proxy in local development. */

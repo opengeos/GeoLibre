@@ -1592,21 +1592,22 @@ Their strings live in GeoLibre's bundled catalogs (`apps/geolibre-desktop/src/i1
 
 - An `s3://` (or S3 HTTPS) URL in a bucket a configured **S3 connection** (Settings → Cloud storage) covers resolves to a **presigned** HTTPS URL. On the desktop a connection can use an AWS profile (including SSO), the environment, or an instance role; in the browser only access keys.
 - Any other `s3://` URL resolves to its public HTTPS object URL (anonymous read).
-- Every other URL is returned unchanged, so a plugin can call it for every URL it reads.
+- Every other URL is returned unchanged (surrounding whitespace is trimmed), so a plugin can call it for every URL it reads.
+
+It takes an optional `AbortSignal` as its second argument and rejects once that signal aborts.
 
 ```typescript
 const resolve = (url: string) => app.resolveReadableUrl?.(url) ?? Promise.resolve(url);
 
 const indexUrl = "s3://my-bucket/datasets/a/index.json"; // chosen by the user
 const index = await (await fetch(await resolve(indexUrl))).json();
-// Resolve each file against the s3:// URL (new URL() does not resolve s3://),
-// then sign it when it is needed.
+// Resolve each file against the s3:// URL, then sign it when it is needed.
 const image = document.createElement("img");
-image.src = await resolve(`s3://my-bucket/datasets/a/${index.preview}`);
+image.src = await resolve(new URL(index.preview, indexUrl).href);
 ```
 
-- **Credentials never reach the plugin**, only signed URLs.
-- **Signed URLs expire** within 12 hours (sooner with temporary credentials). Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.
+- **Credentials never reach the plugin**, only signed URLs. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
+- **Signed URLs expire** within 12 hours (a connection set to anonymous access returns its plain, non-expiring public URL) (sooner with temporary credentials). Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.
 - It rejects when the bucket is covered but its credentials cannot be resolved (an expired SSO session, for example). Show the message; the user fixes the connection in Settings.
 - The bucket's CORS rules still apply to `fetch` in the webview. On the desktop, `app.fetchArrayBuffer(signedUrl)` reads through the native HTTP client, which CORS does not restrict. `<img>` elements need no CORS.
 
