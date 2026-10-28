@@ -338,6 +338,8 @@ export function createS3Signer(
     const cached = key ? signedUrlCache.get(key) : undefined;
     if (cached && cached.expiresAt - EXPIRY_MARGIN_MS > Date.now()) return cached;
 
+    // A cancelled caller should not start an SSO refresh either.
+    if (signal?.aborted) throw abortReason(signal);
     const credentials = await resolveS3ConnectionCredentials(connection);
     // The lookup takes no signal; a cancelled caller gets no URL.
     if (signal?.aborted) throw abortReason(signal);

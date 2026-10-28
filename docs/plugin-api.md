@@ -1612,7 +1612,7 @@ The snippet appends the file name as written. An `s3://` URL takes its key liter
 - **Credentials never reach the plugin**, only signed URLs. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
 - **Signed URLs expire** within 12 hours (sooner with temporary credentials); a connection set to anonymous access returns a plain, non-expiring public URL. Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.
 - It rejects when the bucket is covered but its credentials cannot be resolved (an expired SSO session, for example). Show the message; the user fixes the connection in Settings.
-- The bucket's CORS rules still apply to `fetch` in the webview. On the desktop, `app.fetchArrayBuffer(signedUrl)` reads through the native HTTP client, which CORS does not restrict. `<img>` elements need no CORS.
+- The bucket's CORS rules still apply to `fetch` in the webview. On the desktop, `app.fetchArrayBuffer(signedUrl)` tries the native HTTP client first, which CORS does not restrict; it falls back to the webview (where CORS applies) for 401/403 responses and for hosts the native client cannot reach. `<img>` elements need no CORS.
 
 ## Saving credentials
 
