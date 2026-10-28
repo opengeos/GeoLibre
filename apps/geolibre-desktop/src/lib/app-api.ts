@@ -569,6 +569,15 @@ export function createAppAPI(
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
+    // The host's own URL resolution, so a plugin reads private S3 objects
+    // through a configured connection without ever seeing its credentials.
+    resolveReadableUrl: (url: string, signal?: AbortSignal) => {
+      // External plugins call through a JS boundary TypeScript cannot check.
+      if (typeof url !== "string" || !url.trim()) {
+        return Promise.reject(new TypeError("resolveReadableUrl: url must be a non-empty string."));
+      }
+      return resolveReadableUrl(url.trim(), signal);
+    },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())

@@ -256,6 +256,8 @@ export interface GeoLibreAppAPI {
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
+  // Presign private S3 objects through a configured connection (see "Reading S3 objects").
+  resolveReadableUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
   // Desktop only: fetch through the native client (see "Signing in with a session cookie").
   nativeFetch?: typeof globalThis.fetch;
   fitBounds?: (bounds: [number, number, number, number]) => void;
@@ -1583,6 +1585,30 @@ Built-in plugins (in `packages/plugins`) follow the same contract with two helpe
 - `pluginDisplayTitle(app, pluginId, name)` returns a panel-title getter that reads `toolbar.plugin.<pluginId>`, the plugin's name as the Plugins menu shows it, so the dock header and the menu entry stay in the same language.
 
 Their strings live in GeoLibre's bundled catalogs (`apps/geolibre-desktop/src/i18n/locales/*.json`) rather than in `registerTranslations`, and the catalog test requires every locale to carry them (see `docs/i18n.md`).
+
+## Reading S3 objects
+
+`app.resolveReadableUrl(url)` turns a data URL into one a plain HTTP reader can read, the same way GeoLibre's own layers do. A plugin that reads files from S3 (an index and the files it lists, images, tiles) calls it for each URL and hands the result to `fetch`, an `<img>`, or a loader:
+
+- An `s3://` (or S3 HTTPS) URL in a bucket a configured **S3 connection** (Settings → Cloud storage) covers resolves to a **presigned** HTTPS URL. On the desktop a connection can use an AWS profile (including SSO), the environment, or an instance role; in the browser only access keys.
+- Any other `s3://` URL resolves to its public HTTPS object URL (anonymous read).
+- Every other URL is returned unchanged, so a plugin can call it for every URL it reads.
+
+```typescript
+const resolve = (url: string) => app.resolveReadableUrl?.(url) ?? Promise.resolve(url);
+
+const indexUrl = "s3://my-bucket/datasets/a/index.json"; // chosen by the user
+const index = await (await fetch(await resolve(indexUrl))).json();
+// Resolve each file against the s3:// URL (new URL() does not resolve s3://),
+// then sign it when it is needed.
+const image = document.createElement("img");
+image.src = await resolve(`s3://my-bucket/datasets/a/${index.preview}`);
+```
+
+- **Credentials never reach the plugin**, only signed URLs.
+- **Signed URLs expire** within 12 hours (sooner with temporary credentials). Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.
+- It rejects when the bucket is covered but its credentials cannot be resolved (an expired SSO session, for example). Show the message; the user fixes the connection in Settings.
+- The bucket's CORS rules still apply to `fetch` in the webview. On the desktop, `app.fetchArrayBuffer(signedUrl)` reads through the native HTTP client, which CORS does not restrict. `<img>` elements need no CORS.
 
 ## Saving credentials
 
