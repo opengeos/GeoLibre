@@ -242,7 +242,9 @@ function probeBucketRegion(
   })()
     .catch(() => null)
     .then((region) => {
+      // Recorded here, not by a waiting caller, so it holds when every caller cancelled.
       if (region) bucketRegions.set(cacheKey, region);
+      else failedRegionProbes.set(cacheKey, Date.now());
       return region;
     })
     .finally(() => pendingRegionProbes.delete(cacheKey));
@@ -280,9 +282,7 @@ async function regionFor(
     probeBucketRegion(connection, credentials, request.bucket),
     signal,
   );
-  if (probed) return settled(probed);
-  failedRegionProbes.set(key, Date.now());
-  return guess;
+  return probed ? settled(probed) : guess;
 }
 
 function cacheKey(connection: S3Connection, request: S3PresignRequest): string | null {
@@ -385,6 +385,10 @@ export function createS3Signer(
       for (const key of [...signedUrlCache.keys()]) {
         if (key.startsWith(prefix)) signedUrlCache.delete(key);
       }
+      // A probe signed with the refused credentials may have failed for that
+      // reason alone, so let the next read probe again.
+      if (bucket) failedRegionProbes.delete(regionKey(connection, bucket));
+      else failedRegionProbes.clear();
     },
     async presign(request, signal) {
       const generation = cacheGeneration;
