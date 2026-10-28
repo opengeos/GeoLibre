@@ -226,7 +226,8 @@ function probeBucketRegion(
       DEFAULT_REGION,
       300,
     );
-    const response = await fetchText(url);
+    // Bounded, since no caller can cancel it: a stalled probe would hold the bucket's pending entry.
+    const response = await fetchText(url, AbortSignal.timeout(30_000));
     if (response.status === 200) return DEFAULT_REGION;
     return parseS3Error(response.body)?.region ?? null;
   })()

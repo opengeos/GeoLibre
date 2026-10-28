@@ -129,11 +129,12 @@ describe("S3 signing region", () => {
 
   it("keeps a cancelled caller from caching a fallback or failing a shared probe", async (t) => {
     let answerProbe: (response: Response) => void = () => undefined;
-    t.mock.method(
-      globalThis,
-      "fetch",
-      () => new Promise<Response>((resolve) => (answerProbe = resolve)),
-    );
+    let fetchStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => (fetchStarted = resolve));
+    t.mock.method(globalThis, "fetch", () => {
+      fetchStarted();
+      return new Promise<Response>((resolve) => (answerProbe = resolve));
+    });
     const keysConnection = connection("probe", {
       source: "keys",
       accessKeyId: "AKIAEXAMPLE",
@@ -143,7 +144,7 @@ describe("S3 signing region", () => {
     const controller = new AbortController();
     const cancelled = signer.presign({ bucket: "probed", key: "a.tif" }, controller.signal);
     const waiting = signer.presign({ bucket: "probed", key: "b.tif" });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await started;
     controller.abort();
     await assert.rejects(cancelled, (error: Error) => error.name === "AbortError");
 
