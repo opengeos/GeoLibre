@@ -183,6 +183,23 @@ describe("S3 signing region", () => {
     );
   });
 
+  it("probes again after a network failure", async (t) => {
+    let probes = 0;
+    t.mock.method(globalThis, "fetch", async () => {
+      probes += 1;
+      throw new TypeError("Failed to fetch");
+    });
+    const keysConnection = connection("offline", {
+      source: "keys",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "secret",
+    });
+    const signer = createS3Signer(() => [keysConnection]);
+    await signer.presign({ bucket: "flaky", key: "a.tif" });
+    await signer.presign({ bucket: "flaky", key: "b.tif" });
+    assert.equal(probes, 2);
+  });
+
   it("does not cache a URL signed for a guessed region", async (t) => {
     let probes = 0;
     // No list permission: S3 refuses without naming the region.

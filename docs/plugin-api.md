@@ -1591,7 +1591,7 @@ Their strings live in GeoLibre's bundled catalogs (`apps/geolibre-desktop/src/i1
 `app.resolveReadableUrl(url)` turns a data URL into one a plain HTTP reader can read, the same way GeoLibre's own layers do. A plugin that reads files from S3 (an index and the files it lists, images, tiles) calls it for each URL and hands the result to `fetch`, an `<img>`, or a loader:
 
 - An `s3://` (or S3 HTTPS) URL in a bucket a configured **S3 connection** (Settings → Cloud storage) covers resolves to a **presigned** HTTPS URL. On the desktop a connection can use an AWS profile (including SSO), the environment, or an instance role; in the browser only access keys.
-- Any other `s3://` URL resolves to its public HTTPS object URL (anonymous read). An `s3://` URL with an invalid bucket name is returned unchanged.
+- Any other `s3://` URL resolves to its public HTTPS object URL (anonymous read). An `s3://` URL with an invalid bucket name is returned unchanged; one whose key has a `.` or `..` segment rejects, since no URL can address it.
 - Every other URL is returned unchanged (surrounding whitespace is trimmed), so a plugin can call it for every URL it reads.
 
 It takes an optional `AbortSignal` as its second argument and rejects once that signal aborts.

@@ -1000,7 +1000,8 @@ export interface GeoLibreAppAPI {
    *   covers resolves to a **presigned** HTTPS URL, signed with that
    *   connection's credentials (access keys; on desktop also AWS profiles
    *   including SSO, the environment, and instance roles);
-   * - any other `s3://` URL resolves to its public HTTPS object URL;
+   * - any other `s3://` URL resolves to its public HTTPS object URL (a key
+   *   with a `.` or `..` segment rejects: no URL can address it);
    * - every other URL is returned unchanged (surrounding whitespace trimmed).
    *
    * Credentials never reach the plugin, only the signed URL. Signed URLs
