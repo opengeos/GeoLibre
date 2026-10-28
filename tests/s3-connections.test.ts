@@ -126,6 +126,41 @@ describe("S3 signing region", () => {
     assert.ok(signed);
     assert.equal(new URL(signed.href).hostname, "bucket.s3.us-west-2.amazonaws.com");
   });
+
+  it("keeps a cancelled caller from caching a fallback or failing a shared probe", async (t) => {
+    let answerProbe: (response: Response) => void = () => undefined;
+    t.mock.method(
+      globalThis,
+      "fetch",
+      () => new Promise<Response>((resolve) => (answerProbe = resolve)),
+    );
+    const keysConnection = connection("probe", {
+      source: "keys",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "secret",
+    });
+    const signer = createS3Signer(() => [keysConnection]);
+    const controller = new AbortController();
+    const cancelled = signer.presign({ bucket: "probed", key: "a.tif" }, controller.signal);
+    const waiting = signer.presign({ bucket: "probed", key: "b.tif" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    await assert.rejects(cancelled, (error: Error) => error.name === "AbortError");
+
+    answerProbe(
+      new Response(
+        "<Error><Code>AuthorizationHeaderMalformed</Code><Region>eu-central-1</Region></Error>",
+        {
+          status: 400,
+        },
+      ),
+    );
+    const other = await waiting;
+    assert.match(other?.href ?? "", /%2Feu-central-1%2Fs3%2Faws4_request/);
+    // The cancelled object was not cached under the default region.
+    const retried = await signer.presign({ bucket: "probed", key: "a.tif" });
+    assert.match(retried?.href ?? "", /%2Feu-central-1%2Fs3%2Faws4_request/);
+  });
 });
 
 describe("presign lifetime", () => {

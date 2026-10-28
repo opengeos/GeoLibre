@@ -205,13 +205,13 @@ function presignFor(
  * Learns an AWS bucket's region with one signed, empty listing: S3 answers a
  * request signed for the wrong region with an error naming the right one.
  * Resolves null when S3 does not say (no list permission, no network), and the
- * caller falls back to its default.
+ * caller falls back to its default. Callers share the probe, so it takes no
+ * signal: one caller cancelling must not turn the others' answer into null.
  */
 function probeBucketRegion(
   connection: S3Connection,
   credentials: ResolvedCredentials,
   bucket: string,
-  signal?: AbortSignal,
 ): Promise<string | null> {
   const cacheKey = regionKey(connection, bucket);
   const known = bucketRegions.get(cacheKey);
@@ -226,7 +226,7 @@ function probeBucketRegion(
       DEFAULT_REGION,
       300,
     );
-    const response = await fetchText(url, signal);
+    const response = await fetchText(url);
     if (response.status === 200) return DEFAULT_REGION;
     return parseS3Error(response.body)?.region ?? null;
   })()
@@ -256,10 +256,21 @@ async function regionFor(
   // MinIO and most S3-compatible stores expect by default.
   if (connection.endpoint) return credentials.region || DEFAULT_REGION;
   return (
-    (await probeBucketRegion(connection, credentials, request.bucket, signal)) ??
+    (await untilAborted(probeBucketRegion(connection, credentials, request.bucket), signal)) ??
     credentials.region ??
     DEFAULT_REGION
   );
+}
+
+/** Settles with `promise`, or rejects as soon as `signal` aborts. */
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
 
 function cacheKey(connection: S3Connection, request: S3PresignRequest): string | null {
@@ -316,6 +327,8 @@ export function createS3Signer(
     if (cached && cached.expiresAt - EXPIRY_MARGIN_MS > Date.now()) return cached;
 
     const credentials = await resolveS3ConnectionCredentials(connection);
+    // The lookup takes no signal; a cancelled caller gets no URL.
+    signal?.throwIfAborted();
     const lifetime = () => {
       const seconds = presignLifetimeSeconds(credentials.expiresAt, Date.now(), PRESIGN_SECONDS);
       if (seconds === null) {

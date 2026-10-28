@@ -576,10 +576,11 @@ export function createAppAPI(
       if (typeof url !== "string" || !url.trim()) {
         return Promise.reject(new TypeError("resolveReadableUrl: url must be a non-empty string."));
       }
-      if (signal !== undefined && !isAbortSignalLike(signal)) {
+      if (signal != null && !isAbortSignalLike(signal)) {
         return Promise.reject(new TypeError("resolveReadableUrl: signal must be an AbortSignal."));
       }
-      return rejectOnAbort(() => resolveReadableUrl(url.trim(), signal), signal);
+      const abort = signal ?? undefined;
+      return rejectOnAbort(() => resolveReadableUrl(url.trim(), abort), abort);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()

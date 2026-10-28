@@ -807,9 +807,15 @@ describe("plugin app API S3 URL resolution", () => {
     const pending = api.resolveReadableUrl("s3://private/a.json", controller.signal);
     await Promise.resolve();
     controller.abort();
-    finishLookup();
+    // Rejects while the lookup is still pending, not once it finishes.
     await assert.rejects(pending, (error: Error) => error.name === "AbortError");
+    finishLookup();
     assert.equal(presigned, 1);
+    // null means no signal, as an optional argument usually does in JS.
+    assert.equal(
+      await api.resolveReadableUrl(" https://example.com/a.json", null as unknown as AbortSignal),
+      "https://example.com/a.json",
+    );
   });
 });
 

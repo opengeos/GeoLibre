@@ -1603,7 +1603,9 @@ const indexUrl = "s3://my-bucket/datasets/a/index.json"; // chosen by the user
 const index = await (await fetch(await resolve(indexUrl))).json();
 // Resolve each file against the s3:// URL, then sign it when it is needed.
 const image = document.createElement("img");
-image.src = await resolve(new URL(index.preview, indexUrl).href);
+// new URL() percent-encodes (a space becomes %20) and object keys are taken
+// literally, so decode the result back to the key's own characters.
+image.src = await resolve(decodeURI(new URL(index.preview, indexUrl).href));
 ```
 
 - **Credentials never reach the plugin**, only signed URLs. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
