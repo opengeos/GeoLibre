@@ -167,6 +167,22 @@ describe("S3 signing region", () => {
     assert.match(retried?.href ?? "", /%2Feu-central-1%2Fs3%2Faws4_request/);
   });
 
+  it("refuses to sign a key that climbs out of the covered bucket", async () => {
+    const pathStyle = connection("path", {
+      source: "keys",
+      buckets: ["private"],
+      endpoint: "https://minio.test",
+      pathStyle: true,
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "secret",
+    });
+    const signer = createS3Signer(() => [pathStyle]);
+    await assert.rejects(
+      signer.presign({ bucket: "private", key: "../other/secret.bin" }),
+      /"\." or "\.\." segment/,
+    );
+  });
+
   it("does not cache a URL signed for a guessed region", async (t) => {
     let probes = 0;
     // No list permission: S3 refuses without naming the region.

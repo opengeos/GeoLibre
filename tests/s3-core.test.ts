@@ -96,6 +96,24 @@ describe("s3ObjectHttpsUrl", () => {
     );
   });
 
+  it("refuses keys whose dot segments a URL would resolve away", () => {
+    for (const key of ["../other/secret.bin", "a/./b", "a/.."]) {
+      assert.throws(
+        () =>
+          s3ObjectHttpsUrl(
+            { bucket: "b", key },
+            { endpoint: "https://minio.test", pathStyle: true },
+          ),
+        /"\." or "\.\." segment/,
+      );
+    }
+    // Dots inside a segment are ordinary key characters.
+    assert.equal(
+      s3ObjectHttpsUrl({ bucket: "b", key: "a/..b/.c" }),
+      "https://b.s3.amazonaws.com/a/..b/.c",
+    );
+  });
+
   it("refuses bucket names that could change the URL's host", () => {
     assert.throws(() =>
       s3ObjectHttpsUrl({ bucket: "a\\b", key: "k" }, { endpoint: "https://x.test" }),

@@ -388,7 +388,12 @@ export function createS3Signer(
       // A probe signed with the refused credentials may have failed for that
       // reason alone, so let the next read probe again.
       if (bucket) failedRegionProbes.delete(regionKey(connection, bucket));
-      else failedRegionProbes.clear();
+      else {
+        const endpoint = regionKey(connection, "");
+        for (const key of [...failedRegionProbes.keys()]) {
+          if (key.startsWith(endpoint)) failedRegionProbes.delete(key);
+        }
+      }
     },
     async presign(request, signal) {
       const generation = cacheGeneration;

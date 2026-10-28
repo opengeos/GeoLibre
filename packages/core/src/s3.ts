@@ -188,6 +188,14 @@ export function s3ObjectHttpsUrl(
   if (location.bucket && !isSafeBucketName(location.bucket)) {
     throw new Error(`Invalid S3 bucket name: ${location.bucket}`);
   }
+  // Every URL parser drops "." and ".." path segments (encoded or not), so such
+  // a key would address another object, or with path style another bucket,
+  // and a signer would sign that read with the covered bucket's credentials.
+  if (location.key.split("/").some((segment) => segment === "." || segment === "..")) {
+    throw new Error(
+      `S3 object key has a "." or ".." segment a URL cannot address: ${location.key}`,
+    );
+  }
   const key = encodeS3Key(location.key);
   const endpoint = config.endpoint?.trim().replace(/\/+$/, "");
   // No bucket addresses the service itself (ListBuckets).
