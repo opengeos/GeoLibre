@@ -94,6 +94,10 @@
     "description": "The GIS and open-data portals of about 150 large US cities, counties, and regional agencies.",
     "docs": "web-services.md#us-local-gis"
   },
+  "geolibre-india-gis": {
+    "description": "Public GIS data and open geospatial portals across India (Survey of India, state geoportals, and municipal corporations).",
+    "docs": "web-services.md#india-gis"
+  },
   "maplibre-gl-socrata": {
     "description": "Search government Socrata open-data portals.",
     "docs": "web-services.md#socrata"

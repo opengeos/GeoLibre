@@ -120,11 +120,21 @@ export interface ArcGisHubCatalog {
   /** ArcGIS organization id, the fallback scope. */
   orgId?: string;
   /**
+   * Additional Lucene query expression that scopes this catalog (for example,
+   * a regional or thematic filter across shared public organizations).
+   */
+  searchQuery?: string;
+  /**
    * Hostname of a Socrata portal (e.g. `data.cityofchicago.org`). Takes the
    * place of `siteId`/`orgId`; the "current map area" filter does not apply,
    * since the Socrata catalog has no spatial search.
    */
   socrataDomain?: string;
+  /**
+   * Direct open datasets (such as Indian Government open GeoJSON layers)
+   * that load directly without requiring third-party APIs.
+   */
+  items?: readonly ArcGisHubItem[];
 }
 
 /** A group of catalogs picked together, such as one state's portals. */
@@ -141,29 +151,35 @@ export interface ArcGisHubCatalogSet {
 interface CatalogScope {
   groups?: readonly string[];
   orgId?: string;
+  searchQuery?: string;
 }
 
 /**
  * Resolve the search scope of a picker catalog: its Hub site's groups when
- * they load, otherwise its organization.
+ * they load, otherwise its organization and/or regional search query.
  *
  * Args:
  *   catalog: The catalog to scope.
  *   signal: Aborts the site lookup.
  *
  * Returns:
- *   The groups or organization the catalog's search is limited to.
+ *   The groups, organization, or query clause the catalog's search is limited to.
  */
 async function resolveCatalogScope(
   catalog: ArcGisHubCatalog,
   signal: AbortSignal,
 ): Promise<CatalogScope> {
+  if (catalog.items && catalog.items.length > 0) {
+    return { searchQuery: catalog.searchQuery };
+  }
   if (catalog.siteId) {
     try {
       const groups = await fetchArcGisHubSiteGroups(catalog.siteId, undefined, signal);
-      if (groups.length > 0) return { groups };
+      if (groups.length > 0) return { groups, searchQuery: catalog.searchQuery };
     } catch (error) {
-      if ((error as Error).name === "AbortError" || !catalog.orgId) throw error;
+      if ((error as Error).name === "AbortError" || (!catalog.orgId && !catalog.searchQuery)) {
+        throw error;
+      }
       console.warn(
         `Could not read the ${catalog.name} catalog; searching its organization.`,
         error,
@@ -172,8 +188,12 @@ async function resolveCatalogScope(
   }
   // Never search without a scope: that would widen a state catalog to all of
   // ArcGIS Online.
-  if (!catalog.orgId) throw new Error(`${catalog.name} has no catalog groups.`);
-  return { orgId: catalog.orgId };
+  if (!catalog.orgId && !catalog.searchQuery) {
+    throw new Error(`${catalog.name} has no catalog groups.`);
+  }
+  const orgId =
+    catalog.searchQuery && /\borgid:/i.test(catalog.searchQuery) ? undefined : catalog.orgId;
+  return { orgId, searchQuery: catalog.searchQuery };
 }
 
 /** Configures one ArcGIS Hub catalog panel built by {@link createArcGisHubPlugin}. */
@@ -212,6 +232,15 @@ export interface ArcGisHubPluginConfig {
    * catalog's site.
    */
   catalogSets?: readonly ArcGisHubCatalogSet[];
+  /**
+   * Initial catalog set id selected before the user has saved a choice in
+   * `localStorage`. When omitted, the picker starts on its placeholder option.
+   */
+  defaultCatalogSetId?: string;
+  /**
+   * Optional item-level filter (e.g. strict regional boundary or country validation).
+   */
+  itemFilter?: (item: ArcGisHubItem) => boolean;
 }
 
 /** A catalog panel plugin plus the hook that translates its labels. */
@@ -328,20 +357,28 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     pickerRestored = true;
     try {
       const raw = globalThis.localStorage?.getItem(pickerStorageKey);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as { set?: unknown; catalogs?: unknown };
-      const set = catalogSets.find((candidate) => candidate.id === saved.set);
-      if (set) selectedSetId = set.id;
-      if (saved.catalogs && typeof saved.catalogs === "object") {
-        for (const [setId, catalogId] of Object.entries(saved.catalogs)) {
-          const owner = catalogSets.find((candidate) => candidate.id === setId);
-          if (owner?.catalogs.some((catalog) => catalog.id === catalogId)) {
-            selectedCatalogIds.set(setId, catalogId as string);
+      if (raw) {
+        const saved = JSON.parse(raw) as { set?: unknown; catalogs?: unknown };
+        const set = catalogSets.find((candidate) => candidate.id === saved.set);
+        if (set) selectedSetId = set.id;
+        if (saved.catalogs && typeof saved.catalogs === "object") {
+          for (const [setId, catalogId] of Object.entries(saved.catalogs)) {
+            const owner = catalogSets.find((candidate) => candidate.id === setId);
+            if (owner?.catalogs.some((catalog) => catalog.id === catalogId)) {
+              selectedCatalogIds.set(setId, catalogId as string);
+            }
           }
         }
       }
     } catch {
       // Storage blocked (private window, sandboxed iframe) or corrupt: start fresh.
+    }
+    if (
+      !selectedSetId &&
+      config.defaultCatalogSetId &&
+      catalogSets.some((candidate) => candidate.id === config.defaultCatalogSetId)
+    ) {
+      selectedSetId = config.defaultCatalogSetId;
     }
   }
 
@@ -522,7 +559,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         catalogSelect.hidden = (set?.catalogs.length ?? 0) < 2;
         openPortal.disabled = !current;
         // The Socrata catalog cannot search by extent, so the filter is moot.
-        viewOnly.disabled = Boolean(current?.socrataDomain);
+        viewOnly.disabled = Boolean(
+          current?.socrataDomain || (current?.items && current.items.length > 0),
+        );
       };
       syncCatalogs();
 
@@ -733,7 +772,10 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       // view-only search with no extent is refused and says so instead. Checked
       // before the abort below, like the empty-query guard, so a refused search
       // leaves the running one alone.
-      const viewFilter = viewOnly.checked && !catalog?.socrataDomain;
+      const viewFilter =
+        viewOnly.checked &&
+        !catalog?.socrataDomain &&
+        (!catalog?.items || catalog.items.length === 0);
       const viewBounds = !append && viewFilter ? (appRef?.getViewBounds?.() ?? null) : null;
       if (!append && viewFilter && !viewBounds) {
         status.textContent = labels.viewUnavailable;
@@ -762,7 +804,23 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         const signal = controller.signal;
         let scope: CatalogScope = {};
         let page: ArcGisHubSearchResult;
-        if (catalog?.socrataDomain) {
+        if (catalog?.items && catalog.items.length > 0) {
+          const queryLower = query.toLowerCase().trim();
+          const filtered = queryLower
+            ? catalog.items.filter(
+                (item) =>
+                  item.title.toLowerCase().includes(queryLower) ||
+                  (item.snippet && item.snippet.toLowerCase().includes(queryLower)) ||
+                  (item.description && item.description.toLowerCase().includes(queryLower)) ||
+                  (item.owner && item.owner.toLowerCase().includes(queryLower)),
+              )
+            : [...catalog.items];
+          page = {
+            results: filtered.slice(start - 1, start - 1 + PAGE_SIZE),
+            total: filtered.length,
+            nextStart: start + PAGE_SIZE <= filtered.length ? start + PAGE_SIZE : -1,
+          };
+        } else if (catalog?.socrataDomain) {
           page = await searchSocrataCatalog(catalog.socrataDomain, query, {
             start,
             num: PAGE_SIZE,
@@ -791,6 +849,7 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
             bbox: activeBbox,
             groups: scope.groups,
             orgId: scope.orgId,
+            searchQuery: scope.searchQuery,
             types: config.types,
             signal,
           });
@@ -799,10 +858,17 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         // A site catalog's datasets have pages on that site; an organization
         // scope may reach items the site does not list, so use the global Hub.
         // (A Socrata card carries its own page URL.)
-        if (catalog && !append) detailsPageUrl = scope.groups ? catalog.url : undefined;
-        page.results.forEach(renderItem);
+        if (catalog && !append) {
+          detailsPageUrl = catalog.items?.length
+            ? catalog.url
+            : scope.groups
+              ? catalog.url
+              : undefined;
+        }
+        const items = config.itemFilter ? page.results.filter(config.itemFilter) : page.results;
+        items.forEach(renderItem);
         total = page.total;
-        shown += page.results.length;
+        shown += items.length;
         start = page.nextStart;
         status.textContent =
           shown === 0

@@ -17,6 +17,7 @@ import {
   fetchArcGisHubSiteGroups,
   searchArcGisHub,
 } from "../packages/plugins/src/plugins/arcgis-hub-api.ts";
+import { INDIA_GIS_CATALOGS } from "../packages/plugins/src/plugins/india-gis-catalogs.ts";
 import { searchSocrataCatalog } from "../packages/plugins/src/plugins/socrata-api.ts";
 import { US_FEDERAL_GIS_CATALOGS } from "../packages/plugins/src/plugins/us-federal-gis-catalogs.ts";
 import { US_LOCAL_GIS_CATALOGS } from "../packages/plugins/src/plugins/us-local-gis-catalogs.ts";
@@ -32,6 +33,9 @@ const TYPES = [...ARCGIS_HUB_SEARCH_TYPES, "Map Service", "Image Service"];
  * @returns {Promise<string>} How the portal was searched and what it held.
  */
 async function checkPortal(catalog) {
+  if (catalog.items && catalog.items.length > 0) {
+    return `open-gov, ${catalog.items.length} items`;
+  }
   if (catalog.socrataDomain) {
     const page = await searchSocrataCatalog(catalog.socrataDomain, "", { num: 1 });
     if (page.results.length === 0) throw new Error("no spatial datasets");
@@ -41,11 +45,17 @@ async function checkPortal(catalog) {
   if (catalog.siteId) {
     groups = await fetchArcGisHubSiteGroups(catalog.siteId).catch(() => undefined);
   }
-  const scope = groups?.length ? { groups } : { orgId: catalog.orgId };
-  if (!scope.groups && !scope.orgId) throw new Error("no catalog groups and no organization");
+  const orgId =
+    catalog.searchQuery && /\borgid:/i.test(catalog.searchQuery) ? undefined : catalog.orgId;
+  const scope = groups?.length
+    ? { groups, searchQuery: catalog.searchQuery }
+    : { orgId, searchQuery: catalog.searchQuery };
+  if (!scope.groups && !scope.orgId && !scope.searchQuery) {
+    throw new Error("no catalog groups and no organization");
+  }
   const page = await searchArcGisHub("", { ...scope, num: 1, types: TYPES });
   if (page.total === 0) throw new Error("no datasets");
-  return `${scope.groups ? "site" : "org"}, ${page.total} items`;
+  return `${scope.groups ? "site" : scope.searchQuery ? "query" : "org"}, ${page.total} items`;
 }
 
 const which = process.argv[2];
@@ -53,9 +63,10 @@ const panels = [
   ["state", US_STATE_GIS_CATALOGS],
   ["local", US_LOCAL_GIS_CATALOGS],
   ["federal", US_FEDERAL_GIS_CATALOGS],
+  ["india", INDIA_GIS_CATALOGS],
 ];
 if (which && !panels.some(([panel]) => panel === which)) {
-  console.error(`Unknown panel "${which}"; expected state, local, or federal.`);
+  console.error(`Unknown panel "${which}"; expected state, local, federal, or india.`);
   process.exit(2);
 }
 const sets = panels
