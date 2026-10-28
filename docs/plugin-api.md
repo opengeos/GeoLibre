@@ -1601,13 +1601,13 @@ const resolve = (url: string) => app.resolveReadableUrl?.(url) ?? Promise.resolv
 
 const indexUrl = "s3://my-bucket/datasets/a/index.json"; // chosen by the user
 const index = await (await fetch(await resolve(indexUrl))).json();
-// Resolve each file against the s3:// URL, then sign it when it is needed.
+// Resolve each file against the s3:// URL when you read it.
 const image = document.createElement("img");
 // The preview sits beside the index, so append its name to the index's folder.
 image.src = await resolve(indexUrl.slice(0, indexUrl.lastIndexOf("/") + 1) + index.preview);
 ```
 
-The snippet takes a plain relative file name as written. A name with `..`, an absolute path, or a `%`, `?` or `#` in the key needs the plugin's own encoding, since `decodeURI` would throw on a lone `%` and leaves `?` and `#` encoded.
+The snippet appends the file name as written, without encoding or normalizing it. A name with `..`, an absolute path, or a `%`, `?` or `#` in it reaches the URL unchanged, and a `?` or `#` in an `s3://` URL ends the key early, so encode or check such names in the plugin before you append them.
 
 - **Credentials never reach the plugin**, only signed URLs. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
 - **Signed URLs expire** within 12 hours (a connection set to anonymous access returns its plain, non-expiring public URL) (sooner with temporary credentials). Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.

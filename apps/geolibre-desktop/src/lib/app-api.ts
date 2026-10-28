@@ -580,7 +580,7 @@ export function createAppAPI(
         return Promise.reject(new TypeError("resolveReadableUrl: signal must be an AbortSignal."));
       }
       const abort = signal ?? undefined;
-      return rejectOnAbort(() => resolveReadableUrl(url.trim(), abort), abort);
+      return startUnlessAborted(() => resolveReadableUrl(url.trim(), abort), abort);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()
@@ -1046,7 +1046,7 @@ function isAbortSignalLike(value: unknown): value is AbortSignal {
  * @param signal Cancels it.
  * @returns The work's result.
  */
-function rejectOnAbort<T>(start: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+function startUnlessAborted<T>(start: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return start();
   const reason = () => signal.reason ?? new DOMException("Aborted", "AbortError");
   if (signal.aborted) return Promise.reject(reason());
