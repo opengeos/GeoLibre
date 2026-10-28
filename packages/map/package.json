@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/map",
-  "version": "3.5.1",
+  "version": "3.5.2",
   "description": "Headless MapLibre layer synchronization and style engine from GeoLibre",
   "keywords": [
     "geolibre",

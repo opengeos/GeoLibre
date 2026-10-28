@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/ui",
-  "version": "3.5.1",
+  "version": "3.5.2",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

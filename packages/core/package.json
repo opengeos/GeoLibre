@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/core",
-  "version": "3.5.1",
+  "version": "3.5.2",
   "description": "GeoLibre domain types, project schema, and Zustand store",
   "keywords": [
     "geolibre",
