@@ -55,12 +55,14 @@ const signedUrlCache = new Map<string, S3SignedUrl>();
  */
 const bucketRegions = new Map<string, string>();
 /**
- * When a probe last failed to name a bucket's region, keyed like
- * {@link bucketRegions}, so reads in a bucket without list permission do not
- * each pay for a probe while their URLs stay uncached.
+ * When to probe a bucket again after a probe failed to name its region, keyed
+ * like {@link bucketRegions}, so reads do not each pay for a probe while their
+ * URLs stay uncached. S3 declining to say (no list permission) holds for
+ * minutes; a network error, timeout or non-S3 answer only backs off briefly.
  */
 const failedRegionProbes = new Map<string, number>();
-const FAILED_PROBE_RETRY_MS = 5 * 60 * 1000;
+const DECLINED_PROBE_RETRY_MS = 5 * 60 * 1000;
+const TRANSIENT_PROBE_RETRY_MS = 30 * 1000;
 /** Bumped by every invalidation, so a presign already in flight does not cache its stale result. */
 let cacheGeneration = 0;
 const pendingRegionProbes = new Map<string, Promise<string | null>>();
@@ -238,17 +240,21 @@ function probeBucketRegion(
     // Bounded, since no caller can cancel it: a stalled probe would hold the bucket's pending entry.
     const response = await fetchText(url, AbortSignal.timeout(30_000));
     if (response.status === 200) return DEFAULT_REGION;
-    return parseS3Error(response.body)?.region ?? null;
+    // A body that is no S3 error (a gateway's HTML 504) is transient too.
+    const error = parseS3Error(response.body);
+    return error ? error.region || null : undefined;
   })()
-    // A network error or timeout is `undefined`: unlike S3 declining to name
-    // the region (`null`), it says nothing about the bucket, so the next read
-    // probes again.
+    // `null`: S3 answered without naming the region. `undefined`: a network
+    // error, timeout or non-S3 answer, which says nothing about the bucket.
     .catch(() => undefined)
     .then((region) => {
       // Recorded here, not by a waiting caller, so it holds when every caller cancelled.
       if (region) bucketRegions.set(cacheKey, region);
-      else if (region === null) failedRegionProbes.set(cacheKey, Date.now());
-      return region ?? null;
+      else {
+        const retryMs = region === null ? DECLINED_PROBE_RETRY_MS : TRANSIENT_PROBE_RETRY_MS;
+        failedRegionProbes.set(cacheKey, Date.now() + retryMs);
+      }
+      return region || null;
     })
     .finally(() => pendingRegionProbes.delete(cacheKey));
   pendingRegionProbes.set(cacheKey, probe);
@@ -278,7 +284,7 @@ async function regionFor(
   // MinIO and most S3-compatible stores expect by default.
   if (connection.endpoint) return settled(credentials.region || DEFAULT_REGION);
   const guess = { region: credentials.region ?? DEFAULT_REGION, guessed: true };
-  if (Date.now() - (failedRegionProbes.get(key) ?? -Infinity) < FAILED_PROBE_RETRY_MS) {
+  if (Date.now() < (failedRegionProbes.get(key) ?? 0)) {
     return guess;
   }
   const probed = await untilAborted(

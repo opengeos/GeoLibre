@@ -183,21 +183,42 @@ describe("S3 signing region", () => {
     );
   });
 
-  it("probes again after a network failure", async (t) => {
+  it("backs off only briefly after a timeout or a non-S3 answer", async (t) => {
+    const answers: Array<() => Response> = [
+      () => {
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      },
+      () => new Response("<html>504 Gateway Timeout</html>", { status: 504 }),
+      () =>
+        new Response(
+          "<Error><Code>AuthorizationHeaderMalformed</Code><Region>ap-south-1</Region></Error>",
+          {
+            status: 400,
+          },
+        ),
+    ];
     let probes = 0;
-    t.mock.method(globalThis, "fetch", async () => {
-      probes += 1;
-      throw new TypeError("Failed to fetch");
-    });
-    const keysConnection = connection("offline", {
+    t.mock.method(globalThis, "fetch", async () => answers[probes++]());
+    const keysConnection = connection("flaky", {
       source: "keys",
       accessKeyId: "AKIAEXAMPLE",
       secretAccessKey: "secret",
     });
     const signer = createS3Signer(() => [keysConnection]);
+    const start = Date.now();
+    const clock = t.mock.method(Date, "now", () => start);
     await signer.presign({ bucket: "flaky", key: "a.tif" });
     await signer.presign({ bucket: "flaky", key: "b.tif" });
+    // A timeout holds off the next probe for a moment, not for minutes...
+    assert.equal(probes, 1);
+    clock.mock.mockImplementation(() => start + 31_000);
+    await signer.presign({ bucket: "flaky", key: "a.tif" });
     assert.equal(probes, 2);
+    // ...and so does a gateway's HTML error page.
+    clock.mock.mockImplementation(() => start + 62_000);
+    const signed = await signer.presign({ bucket: "flaky", key: "a.tif" });
+    assert.equal(probes, 3);
+    assert.match(signed?.href ?? "", /%2Fap-south-1%2Fs3%2Faws4_request/);
   });
 
   it("does not cache a URL signed for a guessed region", async (t) => {
