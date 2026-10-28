@@ -136,8 +136,8 @@ were rendered before the choice existed and cannot honor it.
 | Item | Notes |
 | --- | --- |
 | **DuckDB Layer** | Query a DuckDB or DuckDB Spatial source and add the result as a layer, with identify, selection, and attribute table support. |
-| **PostgreSQL Layer** | Add a layer from a PostgreSQL/PostGIS connection (desktop app, served through a local tile server). |
-| **SQL Server Layer** | Add a spatial table from SQL Server or Azure SQL (desktop app). |
+| **PostgreSQL Layer** | Add a layer from a PostgreSQL/PostGIS connection (desktop app). **Vector tiles** serve a table of any size read-only through a local tile server; an **Editable layer** loads every feature, up to 1,000,000 by default. Set `GEOLIBRE_DB_MAX_FEATURES` on the processing server to change that limit. |
+| **SQL Server Layer** | Add a spatial table from SQL Server or Azure SQL (desktop app), as an editable layer of up to 1,000,000 features by default (`GEOLIBRE_DB_MAX_FEATURES`). |
 | **Apache Iceberg Layer** | Read an Iceberg table through DuckDB and add its spatial column as a layer. |
 
 ## Drag and drop

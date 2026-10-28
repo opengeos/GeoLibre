@@ -202,18 +202,18 @@ def test_write_requires_features() -> None:
 
 
 @requires_psycopg
-def test_write_rejects_oversized_payloads() -> None:
-    from geolibre_server import vector_ops
-
+def test_write_rejects_oversized_payloads(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "2")
     feature = {"type": "Feature", "properties": {}, "geometry": _point(0, 0)}
     request = PostgisWriteRequest(
         connection="postgresql://localhost/ignored",
         table=TABLE,
-        geojson=_collection([feature] * (vector_ops.MAX_FEATURES + 1)),
+        geojson=_collection([feature] * 3),
     )
     with pytest.raises(HTTPException) as exc:
         postgis_write(request)
     assert exc.value.status_code == 413
+    assert "GEOLIBRE_DB_MAX_FEATURES" in exc.value.detail
 
 
 def test_write_request_capabilities_parsing() -> None:
@@ -684,12 +684,46 @@ def test_write_explicit_key_insert_overrides_always_identity(live_table) -> None
 
 
 @requires_live_postgis
-def test_write_rejects_tables_beyond_feature_cap(live_table, monkeypatch) -> None:
-    """The key-set diff refuses tables larger than the editable-layer cap."""
+def test_read_reaches_past_the_geoprocessing_cap(live_table) -> None:
+    """Editable reads are not bound by the 50k geoprocessing payload cap (#3270)."""
     from geolibre_server import vector_ops
 
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {TABLE} (name, population, geom)
+                SELECT 'grid', g,
+                       ST_Transform(ST_SetSRID(ST_MakePoint(g %% 360 - 180, 0), 4326), 3857)
+                FROM generate_series(1, %s) AS g
+                """,
+                (vector_ops.MAX_FEATURES,),
+            )
+        conn.commit()
     read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
-    monkeypatch.setattr(vector_ops, "MAX_FEATURES", 2)
+    assert read["feature_count"] == vector_ops.MAX_FEATURES + 3
+
+
+@requires_live_postgis
+def test_read_rejects_tables_beyond_feature_cap(live_table, monkeypatch) -> None:
+    """A table over the cap is refused with a message naming the way out."""
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "2")
+    with pytest.raises(HTTPException) as exc:
+        postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    assert exc.value.status_code == 413
+    assert "2-feature limit" in exc.value.detail
+    assert "vector tiles" in exc.value.detail
+    assert "GEOLIBRE_DB_MAX_FEATURES" in exc.value.detail
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "3")
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    assert read["feature_count"] == 3
+
+
+@requires_live_postgis
+def test_write_rejects_tables_beyond_feature_cap(live_table, monkeypatch) -> None:
+    """The key-set diff refuses tables larger than the editable-layer cap."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "2")
     with pytest.raises(HTTPException) as exc:
         postgis_write(
             PostgisWriteRequest(

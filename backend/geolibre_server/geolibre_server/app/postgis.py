@@ -30,10 +30,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from geolibre_server import vector_ops
-
 from .db_common import (
     allowlist_from_env,
+    db_max_features,
+    feature_limit_error,
     host_port_allowed,
     json_safe,
     normalize_host,
@@ -50,6 +50,9 @@ logger = logging.getLogger(__name__)
 _STATEMENT_TIMEOUT_MS = 60_000
 _POSTGIS_HOSTS_ENV = "GEOLIBRE_POSTGIS_HOSTS"
 _DEFAULT_POSTGRES_PORT = 5432
+# Tables beyond the editable cap can still be viewed, read-only, as vector
+# tiles, which stream only the tiles in view.
+_VECTOR_TILES_HINT = "Load it as vector tiles to view it read-only. "
 
 
 def psycopg_import_error() -> Optional[str]:
@@ -414,6 +417,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     _require_psycopg()
     psycopg = _import_psycopg()
     sql = psycopg.sql
+    limit = db_max_features()
 
     try:
         with _connect(request.connection) as conn:
@@ -442,7 +446,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
             with conn.cursor() as cur:
                 # Over-fetch by one row to distinguish "exactly at the cap"
                 # from "the table is larger than the cap".
-                cur.execute(query, (vector_ops.MAX_FEATURES + 1,))
+                cur.execute(query, (limit + 1,))
                 rows = cur.fetchall()
     except HTTPException:
         raise
@@ -458,13 +462,8 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
             detail=f"Could not read table: {scrub_secrets(str(exc))}",
         ) from exc
 
-    if len(rows) > vector_ops.MAX_FEATURES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Table exceeds the {vector_ops.MAX_FEATURES}-feature limit for editable layers"
-            ),
-        )
+    if len(rows) > limit:
+        raise feature_limit_error(limit, "editable layers", _VECTOR_TILES_HINT)
 
     pk = info["primary_key"]
     features = []
@@ -568,14 +567,9 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                         schema=schema_ident, table=table_ident
                     )
                 )
-                if cur.fetchone()[0] > vector_ops.MAX_FEATURES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=(
-                            f"Table exceeds the {vector_ops.MAX_FEATURES}-feature "
-                            "limit for editable write-back"
-                        ),
-                    )
+                limit = db_max_features()
+                if cur.fetchone()[0] > limit:
+                    raise feature_limit_error(limit, "editable write-back")
                 # Read the current rows (geometry serialized exactly as /read
                 # serves it) so unchanged features can be skipped instead of
                 # rewritten: the client always sends the whole layer, and

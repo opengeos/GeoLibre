@@ -4,11 +4,14 @@ import pytest
 from fastapi import HTTPException
 
 from geolibre_server.app.db_common import (
+    DEFAULT_DB_MAX_FEATURES,
+    db_max_features,
     host_port_allowed,
     json_safe,
     normalize_host,
     parse_host_allowlist,
     plan_feature_diff,
+    require_features,
     scrub_secrets,
 )
 
@@ -249,3 +252,35 @@ def test_plan_feature_diff_changed_columns_protect_stale_values_and_full_reinser
 
     assert [(row.key, row.values) for row in diff.updates] == [(1, {"pop": 2})]
     assert [(row.key, row.values) for row in diff.inserts] == [(2, {"name": "kept", "pop": 5})]
+
+
+def test_db_max_features_defaults_far_above_the_geoprocessing_cap(monkeypatch) -> None:
+    from geolibre_server import vector_ops
+
+    monkeypatch.delenv("GEOLIBRE_DB_MAX_FEATURES", raising=False)
+    assert db_max_features() == DEFAULT_DB_MAX_FEATURES
+    assert DEFAULT_DB_MAX_FEATURES > vector_ops.MAX_FEATURES
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "  ")
+    assert db_max_features() == DEFAULT_DB_MAX_FEATURES
+
+
+def test_db_max_features_reads_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", " 5000000 ")
+    assert db_max_features() == 5_000_000
+
+
+@pytest.mark.parametrize("raw", ["0", "-1", "lots", "1.5"])
+def test_db_max_features_rejects_invalid_values(monkeypatch, raw: str) -> None:
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", raw)
+    with pytest.raises(HTTPException) as exc:
+        db_max_features()
+    assert exc.value.status_code == 500
+
+
+def test_require_features_uses_the_database_cap(monkeypatch) -> None:
+    feature = {"type": "Feature", "properties": {}, "geometry": None}
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "2")
+    assert len(require_features({"features": [feature] * 2})) == 2
+    with pytest.raises(HTTPException) as exc:
+        require_features({"features": [feature] * 3})
+    assert exc.value.status_code == 413

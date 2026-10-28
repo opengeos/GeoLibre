@@ -26,6 +26,8 @@ from pydantic import BaseModel
 
 from .db_common import (
     allowlist_from_env,
+    db_max_features,
+    feature_limit_error,
     host_port_allowed,
     json_safe,
     normalize_host,
@@ -890,23 +892,10 @@ def _geojson_to_wkb(geometry: dict, srid: int, column_type: str) -> bytes:
         raise HTTPException(400, f"Could not encode SQL Server geometry: {exc}") from exc
 
 
-def _features_limit_error(write: bool = False) -> HTTPException:
-    from geolibre_server import vector_ops
-
-    if write:
-        detail = (
-            f"Table exceeds the {vector_ops.MAX_FEATURES}-feature limit for editable write-back"
-        )
-    else:
-        detail = f"Layer exceeds the {vector_ops.MAX_FEATURES}-feature limit"
-    return HTTPException(413, detail)
-
-
 @router.post("/read")
 def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
-    from geolibre_server import vector_ops
-
     session = _get_session(request.session_id)
+    limit = db_max_features()
     try:
         with _connection(session) as conn:
             cur = conn.cursor()
@@ -923,10 +912,10 @@ def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
                 f"SELECT TOP (?) {geom}.STAsBinary(), {geom}.STSrid"
                 f"{selected_columns} FROM {_q(request.schema_name)}.{_q(request.table)}"
             )
-            cur.execute(sql, (vector_ops.MAX_FEATURES + 1,))
+            cur.execute(sql, (limit + 1,))
             rows = cur.fetchall()
-        if len(rows) > vector_ops.MAX_FEATURES:
-            raise _features_limit_error()
+        if len(rows) > limit:
+            raise feature_limit_error(limit, "editable layers")
         features = []
         for row in rows:
             raw = {col: json_safe(val) for col, val in zip(read_columns, row[2:], strict=True)}
@@ -964,8 +953,6 @@ def mssql_read(request: MssqlReadRequest) -> dict[str, Any]:
 
 @router.post("/write")
 def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
-    from geolibre_server import vector_ops
-
     submitted = request.geojson.get("features")
     # Deleting every loaded feature is a valid save: with a non-empty baseline the
     # diff deletes exactly those rows. Without one, an empty payload stays an error.
@@ -995,8 +982,9 @@ def mssql_write(request: MssqlWriteRequest) -> dict[str, Any]:
                 )
             table_sql = f"{_q(request.schema_name)}.{_q(request.table)}"
             cur.execute(f"SELECT COUNT_BIG(*) FROM {table_sql}")
-            if cur.fetchone()[0] > vector_ops.MAX_FEATURES:
-                raise _features_limit_error(True)
+            limit = db_max_features()
+            if cur.fetchone()[0] > limit:
+                raise feature_limit_error(limit, "editable write-back")
             cols = info["columns"]
             query = (
                 f"SELECT {_q(pk)}, {_q(info['geometry_column'])}.STAsBinary(), "
