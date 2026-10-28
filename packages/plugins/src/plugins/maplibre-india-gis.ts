@@ -11,7 +11,12 @@ export const INDIA_GIS_PLUGIN_ID = "geolibre-india-gis";
 
 // India geospatial portals publish map services, feature services, and image services
 // (administrative boundaries, LULC, flood zones, urban sprawl, Smart Cities data).
-const INDIA_GIS_TYPES = [...ARCGIS_HUB_SEARCH_TYPES, "Map Service", "Image Service", "Feature Service"];
+const INDIA_GIS_TYPES = [
+  ...ARCGIS_HUB_SEARCH_TYPES,
+  "Map Service",
+  "Image Service",
+  "Feature Service",
+];
 
 export const DEFAULT_INDIA_GIS_LABELS: ArcGisHubLabels = {
   ...DEFAULT_ARCGIS_HUB_LABELS,
