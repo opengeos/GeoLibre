@@ -110,10 +110,7 @@ describe("India GIS panel", () => {
       assert.equal(setSelect.value, "national");
       assert.match(container.textContent ?? "", /Survey of India Composite Boundary/);
       assert.match(container.textContent ?? "", /India 36 States & Union Territories Boundary/);
-      assert.match(
-        container.textContent ?? "",
-        new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(4, 4)),
-      );
+      assert.match(container.textContent ?? "", new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(4, 4)));
 
       const pick = (select: HTMLSelectElement, value: string) => {
         const option = Array.from(select.options).find((candidate) => candidate.value === value);
@@ -130,10 +127,7 @@ describe("India GIS panel", () => {
 
       assert.match(container.textContent ?? "", /Delhi State Boundary \(GSDL\)/);
       assert.match(container.textContent ?? "", /Delhi Municipal Corporation \(MCD\) Wards/);
-      assert.match(
-        container.textContent ?? "",
-        new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(2, 2)),
-      );
+      assert.match(container.textContent ?? "", new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(2, 2)));
     } finally {
       maplibreIndiaGisPlugin.deactivate?.(app);
       globalThis.fetch = originalFetch;
