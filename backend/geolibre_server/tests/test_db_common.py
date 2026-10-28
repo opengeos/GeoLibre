@@ -269,7 +269,7 @@ def test_db_max_features_reads_the_environment(monkeypatch) -> None:
     assert db_max_features() == 5_000_000
 
 
-@pytest.mark.parametrize("raw", ["0", "-1", "lots", "1.5"])
+@pytest.mark.parametrize("raw", ["0", "-1", "lots", "1.5", "99999999999999999999"])
 def test_db_max_features_rejects_invalid_values(monkeypatch, raw: str) -> None:
     monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", raw)
     with pytest.raises(HTTPException) as exc:

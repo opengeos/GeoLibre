@@ -158,7 +158,8 @@ def db_max_features() -> int:
         :data:`DEFAULT_DB_MAX_FEATURES` when it is unset or blank.
 
     Raises:
-        HTTPException: 500 when the variable is not a positive integer.
+        HTTPException: 500 when the variable is not a positive integer below
+            the bigint range.
     """
     raw = os.environ.get(DB_MAX_FEATURES_ENV, "").strip()
     if not raw:
@@ -167,7 +168,8 @@ def db_max_features() -> int:
         value = int(raw)
     except ValueError:
         value = 0
-    if value <= 0:
+    # The cap is bound into LIMIT / TOP (?), so it must fit a bigint.
+    if value <= 0 or value >= 2**63 - 1:
         raise HTTPException(status_code=500, detail=f"{DB_MAX_FEATURES_ENV} is invalid")
     return value
 

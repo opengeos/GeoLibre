@@ -440,6 +440,57 @@ def test_read_decodes_each_geometry_with_its_own_srid(monkeypatch):
     assert [feature["id"] for feature in result["geojson"]["features"]] == [1, 2]
 
 
+_CAP_TABLE_INFO = {
+    "primary_key": "id",
+    "primary_key_columns": ["id"],
+    "geometry_column": "geom",
+    "column_type": "geometry",
+    "srid": 4326,
+    "mixed_geometry": False,
+    "mixed_srid": False,
+    "columns": ["id"],
+}
+
+
+def test_read_refuses_tables_beyond_the_database_cap(monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "1")
+    conn = FakeConnection()
+    request = _install_session(monkeypatch, conn)
+    seen = []
+    conn.execute_hook = lambda sql, params: seen.append(params)
+    conn.fetchall_results = [[(b"a", 4326, 1), (b"b", 4326, 2)]]
+    monkeypatch.setattr(mssql, "_table_info", lambda *args: _CAP_TABLE_INFO)
+    with pytest.raises(HTTPException) as exc:
+        mssql.mssql_read(mssql.MssqlReadRequest(session_id=request.session_id, table="t"))
+    assert exc.value.status_code == 413
+    assert "1-feature limit for editable layers" in exc.value.detail
+    assert "GEOLIBRE_DB_MAX_FEATURES" in exc.value.detail
+    # TOP (?) over-fetches one row past the cap to tell "at" from "over".
+    assert seen == [((2,),)]
+
+
+def test_write_refuses_tables_beyond_the_database_cap(monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_DB_MAX_FEATURES", "2")
+    conn = FakeConnection()
+    request = _install_session(monkeypatch, conn)
+    conn.fetchone_results = [(3,)]
+    monkeypatch.setattr(mssql, "_table_info", lambda *args: _CAP_TABLE_INFO)
+    with pytest.raises(HTTPException) as exc:
+        mssql.mssql_write(
+            mssql.MssqlWriteRequest(
+                session_id=request.session_id,
+                table="t",
+                geojson={
+                    "type": "FeatureCollection",
+                    "features": [{"type": "Feature", "properties": {"id": 1}, "geometry": None}],
+                },
+            )
+        )
+    assert exc.value.status_code == 413
+    assert "2-feature limit for editable write-back" in exc.value.detail
+    assert not conn.committed
+
+
 def test_read_closes_connection_on_error(monkeypatch):
     conn = FakeConnection()
     conn.execute_hook = _fail
