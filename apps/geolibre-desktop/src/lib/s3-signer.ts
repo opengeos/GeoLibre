@@ -16,6 +16,7 @@ import {
   type S3UrlSigner,
 } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
+import { untilAborted } from "./abortable";
 import { isTauri } from "./is-tauri";
 import {
   isS3ConnectionComplete,
@@ -261,17 +262,6 @@ async function regionFor(
     credentials.region ??
     DEFAULT_REGION
   );
-}
-
-/** Settles with `promise`, or rejects as soon as `signal` aborts. */
-function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return promise;
-  signal.throwIfAborted();
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-  });
 }
 
 function cacheKey(connection: S3Connection, request: S3PresignRequest): string | null {

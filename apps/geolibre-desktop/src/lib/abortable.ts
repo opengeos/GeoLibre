@@ -19,3 +19,21 @@ export function rejectOnAbort(signal: AbortSignal): Promise<never> {
     else signal.addEventListener("abort", fail, { once: true });
   });
 }
+
+/**
+ * Settles with `promise`, or rejects with `signal.reason` as soon as `signal`
+ * aborts (immediately when it already has), removing its listener either way.
+ *
+ * @param promise The work, which may not take the signal itself.
+ * @param signal Cancels the wait.
+ * @returns The work's result.
+ */
+export function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}

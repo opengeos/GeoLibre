@@ -59,6 +59,7 @@ import {
 } from "../components/layout/add-data/helpers";
 import { ensureFileExtension, useFileNamePrompt } from "../hooks/useFileNamePrompt";
 import type { buildProjectEgressSnapshot } from "./build-project-snapshot";
+import { untilAborted } from "./abortable";
 import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
@@ -580,7 +581,9 @@ export function createAppAPI(
         return Promise.reject(new TypeError("resolveReadableUrl: signal must be an AbortSignal."));
       }
       const abort = signal ?? undefined;
-      return startUnlessAborted(() => resolveReadableUrl(url.trim(), abort), abort);
+      // Skip the lookup once aborted, and never return a URL after an abort.
+      if (abort?.aborted) return Promise.reject(abort.reason);
+      return untilAborted(resolveReadableUrl(url.trim(), abort), abort);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()
@@ -1035,28 +1038,6 @@ function isAbortSignalLike(value: unknown): value is AbortSignal {
     typeof signal.aborted === "boolean" &&
     typeof signal.addEventListener === "function"
   );
-}
-
-/**
- * Runs `start` unless `signal` has already aborted, and rejects as soon as it
- * aborts, so a caller never gets a result (a signed URL, say) after cancelling,
- * even from a step that does not take the signal itself.
- *
- * @param start Starts the work.
- * @param signal Cancels it.
- * @returns The work's result.
- */
-function startUnlessAborted<T>(start: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return start();
-  const reason = () => signal.reason ?? new DOMException("Aborted", "AbortError");
-  if (signal.aborted) return Promise.reject(reason());
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(reason());
-    signal.addEventListener("abort", onAbort, { once: true });
-    start()
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", onAbort));
-  });
 }
 
 /** The webview's own fetch, through the dev raster proxy in local development. */
