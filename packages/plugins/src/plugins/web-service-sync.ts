@@ -42,6 +42,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "geolibre-us-federal-gis",
   "geolibre-us-state-gis",
   "geolibre-us-local-gis",
+  "geolibre-india-gis",
   "maplibre-gl-socrata",
   "maplibre-gl-ckan",
   "geolibre-stac-catalogs",
