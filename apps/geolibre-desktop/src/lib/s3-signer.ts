@@ -240,12 +240,15 @@ function probeBucketRegion(
     if (response.status === 200) return DEFAULT_REGION;
     return parseS3Error(response.body)?.region ?? null;
   })()
-    .catch(() => null)
+    // A network error or timeout is `undefined`: unlike S3 declining to name
+    // the region (`null`), it says nothing about the bucket, so the next read
+    // probes again.
+    .catch(() => undefined)
     .then((region) => {
       // Recorded here, not by a waiting caller, so it holds when every caller cancelled.
       if (region) bucketRegions.set(cacheKey, region);
-      else failedRegionProbes.set(cacheKey, Date.now());
-      return region;
+      else if (region === null) failedRegionProbes.set(cacheKey, Date.now());
+      return region ?? null;
     })
     .finally(() => pendingRegionProbes.delete(cacheKey));
   pendingRegionProbes.set(cacheKey, probe);
