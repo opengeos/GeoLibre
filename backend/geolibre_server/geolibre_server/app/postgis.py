@@ -52,7 +52,7 @@ _POSTGIS_HOSTS_ENV = "GEOLIBRE_POSTGIS_HOSTS"
 _DEFAULT_POSTGRES_PORT = 5432
 # Tables beyond the editable cap can still be viewed, read-only, as vector
 # tiles, which stream only the tiles in view.
-_VECTOR_TILES_HINT = "Load it as vector tiles to view it read-only. "
+_VECTOR_TILES_HINT = "Load it as vector tiles to view it read-only."
 
 
 def psycopg_import_error() -> Optional[str]:

@@ -46,6 +46,13 @@ requires_live_postgis = pytest.mark.skipif(
     reason="GEOLIBRE_TEST_POSTGIS_DSN not set",
 )
 
+
+@pytest.fixture(autouse=True)
+def _default_feature_cap(monkeypatch):
+    """Pin the default editable-layer cap so a value exported in the shell cannot leak in."""
+    monkeypatch.delenv("GEOLIBRE_DB_MAX_FEATURES", raising=False)
+
+
 TABLE = "geolibre_writeback_test"
 NO_PK_TABLE = "geolibre_writeback_nopk"
 

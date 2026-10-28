@@ -172,22 +172,26 @@ def db_max_features() -> int:
     return value
 
 
-def feature_limit_error(limit: int, action: str, hint: str = "") -> HTTPException:
+def feature_limit_error(
+    limit: int, action: str, hint: str = "", subject: str = "Table"
+) -> HTTPException:
     """Build the HTTP 413 raised when a table or payload exceeds the cap.
 
     Args:
         limit: The cap that was exceeded.
         action: What was refused, e.g. ``"editable layers"``.
         hint: An optional extra sentence naming an alternative.
+        subject: What exceeded the cap, ``"Table"`` or ``"Layer"``.
 
     Returns:
         The exception, naming the setting that raises the cap.
     """
-    detail = (
-        f"Table exceeds the {limit}-feature limit for {action}. {hint}"
-        f"To allow more, set {DB_MAX_FEATURES_ENV} on the processing server."
+    parts = (
+        f"{subject} exceeds the {limit}-feature limit for {action}.",
+        hint.strip(),
+        f"To allow more, set {DB_MAX_FEATURES_ENV} on the processing server.",
     )
-    return HTTPException(status_code=413, detail=detail)
+    return HTTPException(status_code=413, detail=" ".join(part for part in parts if part))
 
 
 def require_features(geojson: Optional[dict]) -> list[dict]:
@@ -197,13 +201,7 @@ def require_features(geojson: Optional[dict]) -> list[dict]:
         raise HTTPException(status_code=400, detail="No features to write.")
     limit = db_max_features()
     if len(features) > limit:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Layer exceeds the {limit}-feature limit. To allow more, set "
-                f"{DB_MAX_FEATURES_ENV} on the processing server."
-            ),
-        )
+        raise feature_limit_error(limit, "editable write-back", subject="Layer")
     return features
 
 
