@@ -255,7 +255,11 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 !!! note "Blocking queries"
     Interactive queries block the kernel until the app replies (via
     `jupyter_ui_poll`, installed automatically). Pass `timeout=` for slow calls,
-    e.g. `m.run_algorithm(..., timeout=300)`.
+    e.g. `m.run_algorithm(..., timeout=300)`. Every query method also has an
+    `*_async()` variant (`await m.get_center_async()`, `await m.fly_to_async(...)`,
+    ...) that awaits the reply instead of blocking a thread — the right choice
+    inside `async` code, such as a Shiny for Python app, where the blocking
+    variants can only run on a worker thread.
 
 ## API reference
 
@@ -282,6 +286,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted) in this map's `layout` and `theme`; returns the HTML or writes to `path`. |
 | `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
 | `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
+| `request_async(method, params=None, timeout=)` | Awaitable counterpart of `request()`; each query/processing method above has an `*_async()` twin. |
 
 ### Data, view & projects
 

@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
-import { getExternalNativePaintBridge, useAppStore } from "@geolibre/core";
+import {
+  getExternalNativePaintBridge,
+  registerS3UrlSigner,
+  unsignedSourceUrl,
+  useAppStore,
+} from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { tileRequestHeadersFor } from "@geolibre/map/tile-request-headers";
 import { createAppAPI, type AppApiHost } from "../apps/geolibre-desktop/src/lib/app-api";
@@ -720,6 +725,97 @@ describe("plugin app API edit sessions", () => {
     );
     const tiles = notEditable.addTileLayer("Tiles", "https://tiles.example.com/{z}/{x}/{y}.png");
     assert.equal(await notEditable.startEditSession(tiles), false);
+  });
+});
+
+describe("plugin app API S3 URL resolution", () => {
+  afterEach(() => registerS3UrlSigner(null));
+
+  it("presigns covered buckets, reads others anonymously, and leaves other URLs alone", async () => {
+    const signed: string[] = [];
+    registerS3UrlSigner({
+      covers: (bucket) => bucket === "private",
+      connections: () => [],
+      presign: async (location) => {
+        signed.push(`${location.bucket}/${location.key}`);
+        return {
+          href: `https://private.s3.amazonaws.com/${location.key}?X-Amz-Signature=sig`,
+          expiresAt: Date.now() + 60_000,
+        };
+      },
+    });
+    const api = createAppAPI(undefined, fakeHost().host);
+
+    const href = await api.resolveReadableUrl("s3://private/datasets/a/index.json");
+    assert.equal(
+      href,
+      "https://private.s3.amazonaws.com/datasets/a/index.json?X-Amz-Signature=sig",
+    );
+    // The host remembers the source, so nothing it saves keeps the signature.
+    assert.equal(unsignedSourceUrl(href), "s3://private/datasets/a/index.json");
+    assert.equal(
+      await api.resolveReadableUrl("s3://public-bucket/x/tile.bin"),
+      "https://public-bucket.s3.amazonaws.com/x/tile.bin",
+    );
+    assert.equal(
+      await api.resolveReadableUrl(" https://example.com/a.json "),
+      "https://example.com/a.json",
+    );
+    assert.deepEqual(signed, ["private/datasets/a/index.json"]);
+  });
+
+  it("rejects a missing URL and passes credential failures through", async () => {
+    registerS3UrlSigner({
+      covers: () => true,
+      connections: () => [],
+      presign: async () => {
+        throw new Error("The SSO session has expired.");
+      },
+    });
+    const api = createAppAPI(undefined, fakeHost().host);
+    await assert.rejects(api.resolveReadableUrl("  "), /non-empty string/);
+    await assert.rejects(api.resolveReadableUrl(42 as unknown as string), /non-empty string/);
+    await assert.rejects(api.resolveReadableUrl("s3://private/a.json"), /SSO session has expired/);
+    await assert.rejects(
+      api.resolveReadableUrl("s3://private/a.json", {} as AbortSignal),
+      /must be an AbortSignal/,
+    );
+  });
+
+  it("never returns a URL once the signal aborts", async () => {
+    let presigned = 0;
+    let finishLookup: () => void = () => undefined;
+    registerS3UrlSigner({
+      covers: () => true,
+      connections: () => [],
+      // A credential lookup that ignores the signal, like an SSO refresh.
+      presign: async (location) => {
+        presigned += 1;
+        await new Promise<void>((resolve) => (finishLookup = resolve));
+        return { href: `https://b.s3.amazonaws.com/${location.key}?sig`, expiresAt: Infinity };
+      },
+    });
+    const api = createAppAPI(undefined, fakeHost().host);
+
+    await assert.rejects(
+      api.resolveReadableUrl("s3://private/a.json", AbortSignal.abort()),
+      (error: Error) => error.name === "AbortError",
+    );
+    assert.equal(presigned, 0);
+
+    const controller = new AbortController();
+    const pending = api.resolveReadableUrl("s3://private/a.json", controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    // Rejects while the lookup is still pending, not once it finishes.
+    await assert.rejects(pending, (error: Error) => error.name === "AbortError");
+    finishLookup();
+    assert.equal(presigned, 1);
+    // null means no signal, as an optional argument usually does in JS.
+    assert.equal(
+      await api.resolveReadableUrl(" https://example.com/a.json", null as unknown as AbortSignal),
+      "https://example.com/a.json",
+    );
   });
 });
 

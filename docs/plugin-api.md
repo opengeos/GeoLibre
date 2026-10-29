@@ -256,6 +256,8 @@ export interface GeoLibreAppAPI {
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
+  // Presign private S3 objects through a configured connection (see "Reading S3 objects").
+  resolveReadableUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
   // Desktop only: fetch through the native client (see "Signing in with a session cookie").
   nativeFetch?: typeof globalThis.fetch;
   fitBounds?: (bounds: [number, number, number, number]) => void;
@@ -1583,6 +1585,34 @@ Built-in plugins (in `packages/plugins`) follow the same contract with two helpe
 - `pluginDisplayTitle(app, pluginId, name)` returns a panel-title getter that reads `toolbar.plugin.<pluginId>`, the plugin's name as the Plugins menu shows it, so the dock header and the menu entry stay in the same language.
 
 Their strings live in GeoLibre's bundled catalogs (`apps/geolibre-desktop/src/i18n/locales/*.json`) rather than in `registerTranslations`, and the catalog test requires every locale to carry them (see `docs/i18n.md`).
+
+## Reading S3 objects
+
+`app.resolveReadableUrl(url)` turns a data URL into one a plain HTTP reader can read, the same way GeoLibre's own layers do. A plugin that reads files from S3 (an index and the files it lists, images, tiles) calls it for each URL and hands the result to `fetch`, an `<img>`, or a loader:
+
+- An `s3://` (or S3 HTTPS) URL in a bucket a configured **S3 connection** (Settings → Cloud storage) covers resolves to a **presigned** HTTPS URL. On the desktop a connection can use an AWS profile (including SSO), the environment, or an instance role; in the browser only access keys.
+- Any other `s3://` URL resolves to its public HTTPS object URL (anonymous read). An `s3://` URL with an invalid bucket name is returned unchanged; one whose key has a `.` or `..` segment rejects, since no URL can address it.
+- Every other URL is returned unchanged (surrounding whitespace is trimmed), so a plugin can call it for every URL it reads.
+
+It takes an optional `AbortSignal` as its second argument and rejects once that signal aborts.
+
+```typescript
+const resolve = (url: string) => app.resolveReadableUrl?.(url) ?? Promise.resolve(url);
+
+const indexUrl = "s3://my-bucket/datasets/a/index.json"; // chosen by the user
+const index = await (await fetch(await resolve(indexUrl))).json();
+// Resolve each file against the s3:// URL when you read it.
+const image = document.createElement("img");
+// The preview sits beside the index, so append its name to the index's folder.
+image.src = await resolve(indexUrl.slice(0, indexUrl.lastIndexOf("/") + 1) + index.preview);
+```
+
+The snippet appends the file name as written. An `s3://` URL takes its key literally, so a space or a `%` needs no encoding, but a `?` or `#` ends the key there. For a key that contains either, pass the object's S3 HTTPS URL with the key percent-encoded instead (`https://my-bucket.s3.amazonaws.com/datasets/a/a%23b.png` for the key `datasets/a/a#b.png`). Check names with `..` or a leading `/` before appending them.
+
+- **Secrets never reach the plugin**, only signed URLs. A signed URL does carry the access key ID, and with temporary credentials the session token, but never the secret key. It is still a read capability: a plugin can ask for any object in a bucket a connection covers, not only the ones the user picked, so install only plugins you trust with that data (plugins run with the app's full trust, as everywhere else in this API).
+- **Signed URLs expire** within 12 hours (sooner with temporary credentials); a connection set to anonymous access returns a plain, non-expiring public URL. Resolve again when you need a URL instead of storing it, and save the `s3://` URL, never a signed one, in project state.
+- It rejects when the bucket is covered but its credentials cannot be resolved (an expired SSO session, for example). Show the message; the user fixes the connection in Settings.
+- The bucket's CORS rules still apply to `fetch` in the webview. On the desktop, `app.fetchArrayBuffer(signedUrl)` tries the native HTTP client first, which CORS does not restrict; it falls back to the webview (where CORS applies) for 401/403 responses and for hosts the native client cannot reach. `<img>` elements need no CORS.
 
 ## Saving credentials
 

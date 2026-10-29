@@ -59,6 +59,7 @@ import {
 } from "../components/layout/add-data/helpers";
 import { ensureFileExtension, useFileNamePrompt } from "../hooks/useFileNamePrompt";
 import type { buildProjectEgressSnapshot } from "./build-project-snapshot";
+import { abortReason, untilAborted } from "./abortable";
 import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
@@ -569,6 +570,21 @@ export function createAppAPI(
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
+    // The host's own URL resolution, so a plugin reads private S3 objects
+    // through a configured connection without ever seeing its credentials.
+    resolveReadableUrl: (url: string, signal?: AbortSignal) => {
+      // External plugins call through a JS boundary TypeScript cannot check.
+      if (typeof url !== "string" || !url.trim()) {
+        return Promise.reject(new TypeError("resolveReadableUrl: url must be a non-empty string."));
+      }
+      if (signal != null && !isAbortSignalLike(signal)) {
+        return Promise.reject(new TypeError("resolveReadableUrl: signal must be an AbortSignal."));
+      }
+      const abort = signal ?? undefined;
+      // Skip the lookup once aborted, and never return a URL after an abort.
+      if (abort?.aborted) return Promise.reject(abortReason(abort));
+      return untilAborted(resolveReadableUrl(url.trim(), abort), abort);
+    },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isDesktopRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())
@@ -1011,6 +1027,17 @@ export async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> 
     );
   }
   return fetchWebviewArrayBuffer(url);
+}
+
+/** Whether `value` quacks like an `AbortSignal` (it may come from another realm). */
+function isAbortSignalLike(value: unknown): value is AbortSignal {
+  const signal = value as AbortSignal | null;
+  return (
+    typeof signal === "object" &&
+    signal !== null &&
+    typeof signal.aborted === "boolean" &&
+    typeof signal.addEventListener === "function"
+  );
 }
 
 /** The webview's own fetch, through the dev raster proxy in local development. */

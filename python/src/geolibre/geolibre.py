@@ -576,15 +576,36 @@ class Map(anywidget.AnyWidget):
         msg_type = content.get("type")
         if msg_type == "geolibre:result":
             slot = self._pending.get(content.get("requestId"))
-            if slot is None:
-                # A reply for a request that already timed out / was cleaned up.
+            if slot is None or slot["done"]:
+                # A reply for a request that already timed out / was cleaned
+                # up, or a duplicate reply.
                 return
             slot["ok"] = bool(content.get("ok"))
             slot["value"] = content.get("value")
             slot["error"] = content.get("error")
             slot["done"] = True
+            future = slot.get("future")
+            if future is not None:
+                # Async request: wake the awaiting coroutine on its own loop.
+                # Replies may arrive on any thread (the Jupyter kernel's,
+                # Shiny's event loop, ...), so go through call_soon_threadsafe.
+                try:
+                    future.get_loop().call_soon_threadsafe(self._resolve_future, future)
+                except RuntimeError:
+                    # The awaiting coroutine's loop already closed.
+                    pass
         elif msg_type == "geolibre:event":
             self._dispatch_event(content.get("event"), content.get("payload"))
+
+    @staticmethod
+    def _resolve_future(future: asyncio.Future) -> None:
+        """Resolve a pending async-request future, if nobody beat us to it.
+
+        A future can already be done when its waiter timed out
+        (``asyncio.wait_for`` cancels it) but the reply arrived anyway.
+        """
+        if not future.done():
+            future.set_result(None)
 
     def _dispatch_event(self, event: Any, payload: Any) -> None:
         """Invoke every callback registered for an event, isolating failures."""
@@ -741,6 +762,71 @@ class Map(anywidget.AnyWidget):
             raise RuntimeError(slot["error"] or f"GeoLibre command {method!r} failed")
         return slot["value"]
 
+    async def request_async(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        timeout: float = 10.0,
+    ) -> Any:
+        """Send a command to the running app and asynchronously await its reply.
+
+        Async counterpart of :meth:`request`, with the same command set,
+        arguments, return value, and errors. Because awaiting suspends the
+        coroutine instead of blocking a thread, this works on the thread
+        running the asyncio event loop that delivers the reply -- e.g.
+        directly inside an async Shiny for Python observer or
+        ``reactive.extended_task``, with no worker thread and no
+        ``jupyter_ui_poll`` pumping. It also works with top-level ``await``
+        in Jupyter.
+
+        Args:
+            method: The command name (e.g. ``"getCenter"``).
+            params: Command parameters.
+            timeout: Seconds to wait for the reply.
+
+        Returns:
+            The command's result value.
+
+        Raises:
+            TimeoutError: If the app does not reply in time.
+            RuntimeError: If the app reports the command failed.
+        """
+        loop = asyncio.get_running_loop()
+        request_id = uuid.uuid4().hex
+        slot: dict[str, Any] = {
+            "done": False,
+            "ok": False,
+            "value": None,
+            "error": None,
+            "future": loop.create_future(),
+        }
+        try:
+            # Register and send inside the try so a failing send() still cleans
+            # up the slot in finally.
+            self._pending[request_id] = slot
+            self.send(
+                {
+                    "type": "geolibre:command",
+                    "requestId": request_id,
+                    "method": method,
+                    "params": params or {},
+                }
+            )
+            await asyncio.wait_for(slot["future"], timeout)
+        except TimeoutError:
+            raise TimeoutError(
+                f"GeoLibre command {method!r} timed out after {timeout}s. "
+                "The map must be displayed and loaded before it can "
+                "answer; show the map, then retry or pass a larger "
+                "timeout=."
+            ) from None
+        finally:
+            self._pending.pop(request_id, None)
+        if not slot["ok"]:
+            raise RuntimeError(slot["error"] or f"GeoLibre command {method!r} failed")
+        return slot["value"]
+
     def on(self, event: str, callback: Callable[[Any], None]) -> Callable[[], None]:
         """Register a callback for an app event.
 
@@ -784,13 +870,25 @@ class Map(anywidget.AnyWidget):
         """Return the live camera ``{center, zoom, bearing, pitch, bbox}``."""
         return self.request("getView", timeout=timeout)
 
+    async def get_view_async(self, *, timeout: float = 10.0) -> dict[str, Any]:
+        """Async variant of :meth:`get_view`; see :meth:`request_async`."""
+        return await self.request_async("getView", timeout=timeout)
+
     def get_center(self, *, timeout: float = 10.0) -> list[float]:
         """Return the live map center as ``[lng, lat]``."""
         return self.request("getCenter", timeout=timeout)
 
+    async def get_center_async(self, *, timeout: float = 10.0) -> list[float]:
+        """Async variant of :meth:`get_center`; see :meth:`request_async`."""
+        return await self.request_async("getCenter", timeout=timeout)
+
     def get_bounds(self, *, timeout: float = 10.0) -> list[float]:
         """Return the live viewport bounds as ``[west, south, east, north]``."""
         return self.request("getBounds", timeout=timeout)
+
+    async def get_bounds_async(self, *, timeout: float = 10.0) -> list[float]:
+        """Async variant of :meth:`get_bounds`; see :meth:`request_async`."""
+        return await self.request_async("getBounds", timeout=timeout)
 
     def fly_to(
         self,
@@ -814,6 +912,40 @@ class Map(anywidget.AnyWidget):
             duration: Animation duration in milliseconds.
             timeout: Seconds to wait for acknowledgement.
         """
+        self.request(
+            "flyTo",
+            self._fly_to_params(lng, lat, zoom, bearing, pitch, duration),
+            timeout=timeout,
+        )
+
+    async def fly_to_async(
+        self,
+        lng: float | None = None,
+        lat: float | None = None,
+        *,
+        zoom: float | None = None,
+        bearing: float | None = None,
+        pitch: float | None = None,
+        duration: float | None = None,
+        timeout: float = 10.0,
+    ) -> None:
+        """Async variant of :meth:`fly_to`; see :meth:`request_async`."""
+        await self.request_async(
+            "flyTo",
+            self._fly_to_params(lng, lat, zoom, bearing, pitch, duration),
+            timeout=timeout,
+        )
+
+    @staticmethod
+    def _fly_to_params(
+        lng: float | None,
+        lat: float | None,
+        zoom: float | None,
+        bearing: float | None,
+        pitch: float | None,
+        duration: float | None,
+    ) -> dict[str, Any]:
+        """Build the ``flyTo`` command params; only provided fields change."""
         params: dict[str, Any] = {}
         if lng is not None and lat is not None:
             params["center"] = [float(lng), float(lat)]
@@ -825,7 +957,7 @@ class Map(anywidget.AnyWidget):
             params["pitch"] = float(pitch)
         if duration is not None:
             params["duration"] = float(duration)
-        self.request("flyTo", params, timeout=timeout)
+        return params
 
     def fit_bounds(
         self,
@@ -834,6 +966,24 @@ class Map(anywidget.AnyWidget):
         timeout: float = 10.0,
     ) -> None:
         """Fit the camera to ``[west, south, east, north]``."""
+        values = self._validate_bounds(bounds)
+        self.request("fitBounds", {"bounds": values}, timeout=timeout)
+
+    async def fit_bounds_async(
+        self,
+        bounds: list[float] | tuple[float, float, float, float],
+        *,
+        timeout: float = 10.0,
+    ) -> None:
+        """Async variant of :meth:`fit_bounds`; see :meth:`request_async`."""
+        values = self._validate_bounds(bounds)
+        await self.request_async("fitBounds", {"bounds": values}, timeout=timeout)
+
+    @staticmethod
+    def _validate_bounds(
+        bounds: list[float] | tuple[float, float, float, float],
+    ) -> list[float]:
+        """Validate ``[west, south, east, north]`` bounds and return them as floats."""
         values = [float(b) for b in bounds]
         if len(values) != 4:
             raise ValueError("bounds must contain [west, south, east, north]")
@@ -842,7 +992,7 @@ class Map(anywidget.AnyWidget):
         west, south, east, north = values
         if west > east or south > north:
             raise ValueError("bounds must satisfy west <= east and south <= north")
-        self.request("fitBounds", {"bounds": values}, timeout=timeout)
+        return values
 
     def zoom_to_bounds(
         self,
@@ -853,10 +1003,24 @@ class Map(anywidget.AnyWidget):
         """Fit the map to bounds (leafmap-style alias of :meth:`fit_bounds`)."""
         self.fit_bounds(bounds, timeout=timeout)
 
+    async def zoom_to_bounds_async(
+        self,
+        bounds: list[float] | tuple[float, float, float, float],
+        *,
+        timeout: float = 10.0,
+    ) -> None:
+        """Async variant of :meth:`zoom_to_bounds`; see :meth:`request_async`."""
+        await self.fit_bounds_async(bounds, timeout=timeout)
+
     def zoom_to_layer(self, layer: str | Layer, *, timeout: float = 10.0) -> None:
         """Fit the map to a layer, addressed by id, name, or layer handle."""
         resolved = self._resolve_layer(layer)
         self.request("zoomToLayer", {"layerId": resolved.id}, timeout=timeout)
+
+    async def zoom_to_layer_async(self, layer: str | Layer, *, timeout: float = 10.0) -> None:
+        """Async variant of :meth:`zoom_to_layer`; see :meth:`request_async`."""
+        resolved = self._resolve_layer(layer)
+        await self.request_async("zoomToLayer", {"layerId": resolved.id}, timeout=timeout)
 
     def identify(
         self,
@@ -883,6 +1047,20 @@ class Map(anywidget.AnyWidget):
             params["layerId"] = layer_id
         return self.request("identify", params, timeout=timeout)
 
+    async def identify_async(
+        self,
+        lng: float,
+        lat: float,
+        *,
+        layer_id: str | None = None,
+        timeout: float = 10.0,
+    ) -> list[dict[str, Any]]:
+        """Async variant of :meth:`identify`; see :meth:`request_async`."""
+        params: dict[str, Any] = {"lngLat": [float(lng), float(lat)]}
+        if layer_id is not None:
+            params["layerId"] = layer_id
+        return await self.request_async("identify", params, timeout=timeout)
+
     def get_features(self, layer_id: str, *, timeout: float = 10.0) -> list[Feature]:
         """Return a layer's features as :class:`Feature` (GeoJSON) objects.
 
@@ -898,6 +1076,18 @@ class Map(anywidget.AnyWidget):
             A list of :class:`Feature` objects (each also a plain GeoJSON dict).
         """
         features = self.request("getLayerFeatures", {"layerId": layer_id}, timeout=timeout)
+        return self._wrap_features(features)
+
+    async def get_features_async(self, layer_id: str, *, timeout: float = 10.0) -> list[Feature]:
+        """Async variant of :meth:`get_features`; see :meth:`request_async`."""
+        features = await self.request_async(
+            "getLayerFeatures", {"layerId": layer_id}, timeout=timeout
+        )
+        return self._wrap_features(features)
+
+    @staticmethod
+    def _wrap_features(features: Any) -> list[Feature]:
+        """Wrap raw GeoJSON feature dicts as :class:`Feature` objects."""
         return [Feature(f) for f in features or []]
 
     @staticmethod
@@ -950,7 +1140,15 @@ class Map(anywidget.AnyWidget):
             the result is an empty list; use :meth:`identify` for those layers.
         """
         features = self.request("getSelectedFeatures", timeout=timeout)
-        feats = [Feature(f) for f in features or []]
+        feats = self._wrap_features(features)
+        return self._features_to_gdf(feats) if as_gdf else feats
+
+    async def get_selected_features_async(
+        self, *, as_gdf: bool = False, timeout: float = 10.0
+    ) -> list[Feature] | Any:
+        """Async variant of :meth:`get_selected_features`; see :meth:`request_async`."""
+        features = await self.request_async("getSelectedFeatures", timeout=timeout)
+        feats = self._wrap_features(features)
         return self._features_to_gdf(feats) if as_gdf else feats
 
     def get_drawn_features(
@@ -972,7 +1170,15 @@ class Map(anywidget.AnyWidget):
             ``as_gdf`` is true.
         """
         features = self.request("getDrawnFeatures", timeout=timeout)
-        feats = [Feature(f) for f in features or []]
+        feats = self._wrap_features(features)
+        return self._features_to_gdf(feats) if as_gdf else feats
+
+    async def get_drawn_features_async(
+        self, *, as_gdf: bool = False, timeout: float = 10.0
+    ) -> list[Feature] | Any:
+        """Async variant of :meth:`get_drawn_features`; see :meth:`request_async`."""
+        features = await self.request_async("getDrawnFeatures", timeout=timeout)
+        feats = self._wrap_features(features)
         return self._features_to_gdf(feats) if as_gdf else feats
 
     @property
@@ -996,6 +1202,10 @@ class Map(anywidget.AnyWidget):
             :meth:`run_algorithm`.
         """
         return self.request("listAlgorithms", timeout=timeout)
+
+    async def list_algorithms_async(self, *, timeout: float = 10.0) -> list[dict[str, Any]]:
+        """Async variant of :meth:`list_algorithms`; see :meth:`request_async`."""
+        return await self.request_async("listAlgorithms", timeout=timeout)
 
     def run_algorithm(
         self,
@@ -1022,6 +1232,20 @@ class Map(anywidget.AnyWidget):
             timeout=timeout,
         )
 
+    async def run_algorithm_async(
+        self,
+        algorithm_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict[str, Any]:
+        """Async variant of :meth:`run_algorithm`; see :meth:`request_async`."""
+        return await self.request_async(
+            "runAlgorithm",
+            {"id": algorithm_id, "params": parameters or {}},
+            timeout=timeout,
+        )
+
     def run_model_builder(
         self,
         graph: dict[str, Any],
@@ -1036,6 +1260,15 @@ class Map(anywidget.AnyWidget):
         """
         return self.request("runModelBuilder", {"graph": graph}, timeout=timeout)
 
+    async def run_model_builder_async(
+        self,
+        graph: dict[str, Any],
+        *,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Async variant of :meth:`run_model_builder`; see :meth:`request_async`."""
+        return await self.request_async("runModelBuilder", {"graph": graph}, timeout=timeout)
+
     def list_whitebox_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
         """List the bundled Whitebox/GeoLibre WASM tools and their parameters.
 
@@ -1043,6 +1276,10 @@ class Map(anywidget.AnyWidget):
         runtime executes the tools. Display the map before calling this method.
         """
         return self.request("listWhiteboxTools", timeout=timeout)
+
+    async def list_whitebox_tools_async(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
+        """Async variant of :meth:`list_whitebox_tools`; see :meth:`request_async`."""
+        return await self.request_async("listWhiteboxTools", timeout=timeout)
 
     def run_whitebox_tool(
         self,
@@ -1068,15 +1305,34 @@ class Map(anywidget.AnyWidget):
         Returns:
             ``{"logs": [...], "resultLayerIds": [...]}``.
         """
-        resolved = {
-            key: self._resolve_layer(value).id if isinstance(value, Layer) else value
-            for key, value in (parameters or {}).items()
-        }
+        resolved = self._resolve_tool_params(parameters)
         return self.request(
             "runWhiteboxTool",
             {"id": str(tool_id), "params": resolved},
             timeout=timeout,
         )
+
+    async def run_whitebox_tool_async(
+        self,
+        tool_id: str,
+        parameters: dict[str, Any] | None = None,
+        *,
+        timeout: float = 300.0,
+    ) -> dict[str, Any]:
+        """Async variant of :meth:`run_whitebox_tool`; see :meth:`request_async`."""
+        resolved = self._resolve_tool_params(parameters)
+        return await self.request_async(
+            "runWhiteboxTool",
+            {"id": str(tool_id), "params": resolved},
+            timeout=timeout,
+        )
+
+    def _resolve_tool_params(self, parameters: dict[str, Any] | None) -> dict[str, Any]:
+        """Replace :class:`Layer` handles in tool parameters with their layer ids."""
+        return {
+            key: self._resolve_layer(value).id if isinstance(value, Layer) else value
+            for key, value in (parameters or {}).items()
+        }
 
     def to_image(self, path: str | None = None, *, timeout: float = 30.0) -> bytes | None:
         """Capture the current map view as a PNG.
@@ -1090,6 +1346,18 @@ class Map(anywidget.AnyWidget):
             The PNG bytes, or ``None`` when written to ``path``.
         """
         data_url = self.request("toImage", timeout=timeout)
+        return self._png_from_data_url(data_url, path)
+
+    async def to_image_async(
+        self, path: str | None = None, *, timeout: float = 30.0
+    ) -> bytes | None:
+        """Async variant of :meth:`to_image`; see :meth:`request_async`."""
+        data_url = await self.request_async("toImage", timeout=timeout)
+        return self._png_from_data_url(data_url, path)
+
+    @staticmethod
+    def _png_from_data_url(data_url: Any, path: str | None) -> bytes | None:
+        """Decode a ``toImage`` data URL to PNG bytes, optionally writing ``path``."""
         _, sep, encoded = str(data_url).partition(",")
         if not sep:
             raise ValueError(f"toImage returned an unexpected value: {data_url!r}")

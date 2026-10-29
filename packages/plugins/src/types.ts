@@ -993,6 +993,28 @@ export interface GeoLibreAppAPI {
   onLayersChanged?: (callback: (layerIds: string[]) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   /**
+   * Turn a data URL into one a plain HTTP reader (`fetch`, an `<img>`, a
+   * loader) can read, the way GeoLibre's own layers do:
+   *
+   * - an `s3://` (or S3 HTTPS) URL in a bucket a configured S3 connection
+   *   covers resolves to a **presigned** HTTPS URL, signed with that
+   *   connection's credentials (access keys; on desktop also AWS profiles
+   *   including SSO, the environment, and instance roles);
+   * - any other `s3://` URL resolves to its public HTTPS object URL (a key
+   *   with a `.` or `..` segment rejects: no URL can address it);
+   * - every other URL is returned unchanged (surrounding whitespace trimmed).
+   *
+   * Credentials never reach the plugin, only the signed URL. Signed URLs
+   * expire (in at most 12 hours, sooner with temporary credentials), so resolve
+   * again when you need the URL rather than storing it, and never persist one:
+   * save the `s3://` URL instead. Rejects when the bucket is covered but its
+   * credentials cannot be resolved (an expired SSO session, say), or `signal`
+   * aborts.
+   *
+   * Typed optional for forward-compatibility, so call it with optional chaining.
+   */
+  resolveReadableUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
+  /**
    * A `fetch` that runs through the desktop app's native HTTP client: any
    * method, no CORS, and a cookie jar kept for the app session. Desktop only;
    * undefined in the browser and Jupyter builds.
