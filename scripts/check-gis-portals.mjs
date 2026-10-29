@@ -69,13 +69,23 @@ async function checkItem(item) {
     : data.features;
   if (features.length === 0) throw new Error(`${item.id} has no features`);
   // A projected file (Web Mercator metres) parses fine but renders nowhere.
-  const position = JSON.stringify(features[0].geometry?.coordinates ?? [])
-    .match(/-?[\d.]+(?:e[-+]?\d+)?/gi)
-    ?.slice(0, 2)
-    .map(Number);
-  if (!position || Math.abs(position[0]) > 180 || Math.abs(position[1]) > 90) {
+  if (!features.every((feature) => isLonLat(feature.geometry?.coordinates))) {
     throw new Error(`${item.id} is not in longitude/latitude`);
   }
+}
+
+/**
+ * Whether every position in a GeoJSON coordinate array is longitude/latitude.
+ *
+ * @param {unknown} coordinates A geometry's `coordinates`, at any nesting depth.
+ * @returns {boolean}
+ */
+function isLonLat(coordinates) {
+  if (!Array.isArray(coordinates)) return true;
+  if (typeof coordinates[0] === "number") {
+    return Math.abs(coordinates[0]) <= 180 && Math.abs(coordinates[1]) <= 90;
+  }
+  return coordinates.every(isLonLat);
 }
 
 /**
