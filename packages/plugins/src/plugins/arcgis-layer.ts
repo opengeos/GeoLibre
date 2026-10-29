@@ -245,7 +245,10 @@ interface ArcGISFeatureLayerInfo extends ArcGISEditInfo {
 interface ArcGISFeatureServiceInfo {
   layers?: Array<{
     id: number;
-    subLayerIds?: number[];
+    /** A map service names each layer's kind ("Feature Layer", "Raster Layer"...). */
+    type?: string;
+    /** Null, not absent, on a map service's non-group layers. */
+    subLayerIds?: number[] | null;
   }>;
 }
 
@@ -2586,7 +2589,11 @@ async function resolvePortalFeatureLayerUrl(
       options,
       cause,
     );
-    const layerId = serviceInfo.layers?.find((layer) => !layer.subLayerIds)?.id;
+    // A map service can list raster or annotation layers before its first
+    // feature layer; older servers omit `type`, so fall back to any non-group.
+    const layerId = serviceInfo.layers?.find((layer) =>
+      layer.type ? layer.type === "Feature Layer" : !layer.subLayerIds?.length,
+    )?.id;
     if (layerId == null) {
       throw new LocalizedError(
         `${ERROR_KEY}.noFeatureLayer`,

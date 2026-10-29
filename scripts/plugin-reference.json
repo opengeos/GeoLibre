@@ -95,7 +95,7 @@
     "docs": "web-services.md#us-local-gis"
   },
   "geolibre-india-gis": {
-    "description": "Public GIS data and open geospatial portals across India (Survey of India, state geoportals, and municipal corporations).",
+    "description": "Open national, state, and city boundary datasets for India.",
     "docs": "web-services.md#india-gis"
   },
   "maplibre-gl-socrata": {

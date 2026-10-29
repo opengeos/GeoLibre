@@ -22,6 +22,12 @@ export interface ArcGisHubItem {
   pageUrl?: string;
   /** The most features `dataUrl` returns, when the export is capped. */
   featureLimit?: number;
+  /**
+   * Keep only the features of `dataUrl` whose `property` is one of `values`,
+   * for a card that shows part of a larger GeoJSON file (one state's districts
+   * from a national file).
+   */
+  featureFilter?: { property: string; values: readonly string[] };
 }
 
 export interface ArcGisHubSearchResult {
@@ -73,11 +79,6 @@ export interface ArcGisHubSearchOptions {
    * for a portal whose Hub site has no catalog groups to search.
    */
   orgId?: string;
-  /**
-   * Restrict results with an additional Lucene query clause (for example,
-   * scoping a regional or thematic portal across shared organizations).
-   */
-  searchQuery?: string;
   /** Item types to include. Defaults to {@link ARCGIS_HUB_SEARCH_TYPES}. */
   types?: readonly string[];
 }
@@ -89,7 +90,6 @@ export function buildArcGisHubSearchUrl(
   const portalUrl = options.portalUrl ?? ARCGIS_HUB_PORTAL_URL;
   const url = new URL("/sharing/rest/search", portalUrl);
   const text = sanitizeArcGisHubSearchText(query);
-  const scopeQuery = options.searchQuery?.trim() ?? "";
   const types = options.types ?? ARCGIS_HUB_SEARCH_TYPES;
   const typeQuery = types.map((type) => `type:"${type.replace(/"/g, "")}"`).join(" OR ");
   const groups = (options.groups ?? []).filter((group) => GROUP_ID_RE.test(group));
@@ -98,21 +98,17 @@ export function buildArcGisHubSearchUrl(
     : "";
   const orgQuery =
     options.orgId && ORG_ID_RE.test(options.orgId) ? ` AND orgid:${options.orgId}` : "";
-  const scopeClause = scopeQuery ? ` AND (${scopeQuery})` : "";
   url.searchParams.set(
     "q",
-    `${text ? `(${text}) AND ` : ""}(${typeQuery})${groupQuery}${orgQuery}${scopeClause} AND access:public`,
+    `${text ? `(${text}) AND ` : ""}(${typeQuery})${groupQuery}${orgQuery} AND access:public`,
   );
   url.searchParams.set("f", "json");
   url.searchParams.set("start", String(options.start ?? 1));
   url.searchParams.set("num", String(options.num ?? 20));
   // Relevance has nothing to rank when there is no keyword (browsing a scoped
   // catalog), so list it alphabetically instead of in an arbitrary order.
-  // When a catalog scopes by `searchQuery`, relevance ranks the closest
-  // regional/portal matches first even before the user types a keyword.
-  const hasRankingQuery = Boolean(text || scopeQuery);
-  url.searchParams.set("sortField", hasRankingQuery ? "relevance" : "title");
-  url.searchParams.set("sortOrder", hasRankingQuery ? "desc" : "asc");
+  url.searchParams.set("sortField", text ? "relevance" : "title");
+  url.searchParams.set("sortOrder", text ? "desc" : "asc");
   if (options.bbox) url.searchParams.set("bbox", options.bbox.join(","));
   return url.href;
 }

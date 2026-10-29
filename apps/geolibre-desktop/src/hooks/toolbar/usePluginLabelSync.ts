@@ -12,6 +12,7 @@ import {
   setGraticuleLabels,
   setH3Labels,
   setHuggingFaceLabels,
+  setIndiaGisLabels,
   setMapillaryLabels,
   setOlcLabels,
   setOpenAerialMapLabels,
@@ -268,6 +269,17 @@ export function usePluginLabelSync(): void {
       catalog: t("usLocalGis.portal"),
       chooseCatalogSet: t("usLocalGis.chooseStateHint"),
       openPortal: t("usLocalGis.openPortal"),
+    });
+    setIndiaGisLabels({
+      ...arcGisHubLabels,
+      hint: t("indiaGis.hint"),
+      searchPlaceholder: t("indiaGis.searchPlaceholder"),
+      noResults: t("indiaGis.noResults"),
+      searchError: t("indiaGis.searchError"),
+      catalogSet: t("indiaGis.chooseRegion"),
+      catalog: t("indiaGis.portal"),
+      chooseCatalogSet: t("indiaGis.chooseRegionHint"),
+      openPortal: t("indiaGis.openPortal"),
     });
     setUsFederalGisLabels({
       ...arcGisHubLabels,

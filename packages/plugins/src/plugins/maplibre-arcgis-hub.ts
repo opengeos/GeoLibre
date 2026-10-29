@@ -1,3 +1,4 @@
+import type { Feature } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { addArcGISLayer } from "./arcgis-layer";
 import {
@@ -120,19 +121,15 @@ export interface ArcGisHubCatalog {
   /** ArcGIS organization id, the fallback scope. */
   orgId?: string;
   /**
-   * Additional Lucene query expression that scopes this catalog (for example,
-   * a regional or thematic filter across shared public organizations).
-   */
-  searchQuery?: string;
-  /**
    * Hostname of a Socrata portal (e.g. `data.cityofchicago.org`). Takes the
    * place of `siteId`/`orgId`; the "current map area" filter does not apply,
    * since the Socrata catalog has no spatial search.
    */
   socrataDomain?: string;
   /**
-   * Direct open datasets (such as Indian Government open GeoJSON layers)
-   * that load directly without requiring third-party APIs.
+   * A fixed list of GeoJSON datasets, for a portal with no searchable catalog.
+   * Takes the place of `siteId`/`orgId`: the panel filters the list by keyword
+   * locally, and the "current map area" filter does not apply.
    */
   items?: readonly ArcGisHubItem[];
 }
@@ -151,35 +148,29 @@ export interface ArcGisHubCatalogSet {
 interface CatalogScope {
   groups?: readonly string[];
   orgId?: string;
-  searchQuery?: string;
 }
 
 /**
  * Resolve the search scope of a picker catalog: its Hub site's groups when
- * they load, otherwise its organization and/or regional search query.
+ * they load, otherwise its organization.
  *
  * Args:
  *   catalog: The catalog to scope.
  *   signal: Aborts the site lookup.
  *
  * Returns:
- *   The groups, organization, or query clause the catalog's search is limited to.
+ *   The groups or organization the catalog's search is limited to.
  */
 async function resolveCatalogScope(
   catalog: ArcGisHubCatalog,
   signal: AbortSignal,
 ): Promise<CatalogScope> {
-  if (catalog.items && catalog.items.length > 0) {
-    return { searchQuery: catalog.searchQuery };
-  }
   if (catalog.siteId) {
     try {
       const groups = await fetchArcGisHubSiteGroups(catalog.siteId, undefined, signal);
-      if (groups.length > 0) return { groups, searchQuery: catalog.searchQuery };
+      if (groups.length > 0) return { groups };
     } catch (error) {
-      if ((error as Error).name === "AbortError" || (!catalog.orgId && !catalog.searchQuery)) {
-        throw error;
-      }
+      if ((error as Error).name === "AbortError" || !catalog.orgId) throw error;
       console.warn(
         `Could not read the ${catalog.name} catalog; searching its organization.`,
         error,
@@ -188,12 +179,8 @@ async function resolveCatalogScope(
   }
   // Never search without a scope: that would widen a state catalog to all of
   // ArcGIS Online.
-  if (!catalog.orgId && !catalog.searchQuery) {
-    throw new Error(`${catalog.name} has no catalog groups.`);
-  }
-  const orgId =
-    catalog.searchQuery && /\borgid:/i.test(catalog.searchQuery) ? undefined : catalog.orgId;
-  return { orgId, searchQuery: catalog.searchQuery };
+  if (!catalog.orgId) throw new Error(`${catalog.name} has no catalog groups.`);
+  return { orgId: catalog.orgId };
 }
 
 /** Configures one ArcGIS Hub catalog panel built by {@link createArcGisHubPlugin}. */
@@ -237,10 +224,6 @@ export interface ArcGisHubPluginConfig {
    * `localStorage`. When omitted, the picker starts on its placeholder option.
    */
   defaultCatalogSetId?: string;
-  /**
-   * Optional item-level filter (e.g. strict regional boundary or country validation).
-   */
-  itemFilter?: (item: ArcGisHubItem) => boolean;
 }
 
 /** A catalog panel plugin plus the hook that translates its labels. */
@@ -433,6 +416,12 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       const data = JSON.parse(text);
       if (data?.type !== "FeatureCollection" || !Array.isArray(data.features)) {
         throw new Error("The item is not valid GeoJSON.");
+      }
+      if (item.featureFilter) {
+        const { property, values } = item.featureFilter;
+        data.features = data.features.filter((feature: Feature) =>
+          values.includes(String(feature.properties?.[property])),
+        );
       }
       // deactivate() nulls appRef, which can happen while the fetch above is in
       // flight; bail explicitly instead of adding a layer to a torn-down host.
@@ -849,7 +838,6 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
             bbox: activeBbox,
             groups: scope.groups,
             orgId: scope.orgId,
-            searchQuery: scope.searchQuery,
             types: config.types,
             signal,
           });
@@ -865,10 +853,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
               ? catalog.url
               : undefined;
         }
-        const items = config.itemFilter ? page.results.filter(config.itemFilter) : page.results;
-        items.forEach(renderItem);
+        page.results.forEach(renderItem);
         total = page.total;
-        shown += items.length;
+        shown += page.results.length;
         start = page.nextStart;
         status.textContent =
           shown === 0

@@ -17,6 +17,7 @@ describe("India GIS catalog", () => {
     assert.equal(new Set(setIds).size, setIds.length, "Catalog set IDs must be unique");
 
     const catalogIds = new Set<string>();
+    const itemIds = new Set<string>();
     const urls = new Set<string>();
     for (const set of INDIA_GIS_CATALOGS) {
       assert.ok(set.catalogs.length > 0, `${set.name} has at least one portal`);
@@ -27,11 +28,38 @@ describe("India GIS catalog", () => {
         urls.add(catalog.url);
         assert.match(catalog.url, /^https:\/\/[^/]+$/);
         assert.ok(catalog.name.length > 0);
-        assert.match(catalog.orgId ?? "", /^[0-9A-Za-z]{16}$/, `${catalog.name} has valid orgId`);
-        if (catalog.searchQuery !== undefined) {
-          assert.ok(catalog.searchQuery.trim().length > 0);
+        // Every portal is a fixed list of GeoJSON files, never a search that
+        // could widen to all of ArcGIS Online.
+        assert.equal(catalog.orgId, undefined);
+        assert.equal(catalog.siteId, undefined);
+        assert.ok(catalog.items && catalog.items.length > 0, `${catalog.name} lists datasets`);
+        for (const item of catalog.items) {
+          assert.ok(!itemIds.has(item.id), `Item id ${item.id} is unique`);
+          itemIds.add(item.id);
+          assert.equal(item.type, "GeoJson");
+          // raw.githubusercontent.com serves an LFS pointer for geoBoundaries.
+          assert.doesNotMatch(item.dataUrl ?? "", /raw\.githubusercontent\.com\/wmgeolab/);
+          assert.match(item.dataUrl ?? "", /^https:\/\/.+\.geojson$/);
+          assert.match(item.pageUrl ?? "", /^https:\/\//);
+          assert.ok(item.owner && item.snippet, `${item.id} names its source`);
+          if (item.dataUrl?.includes("datameet/Municipal_Spatial_Data")) {
+            assert.match(item.snippet ?? "", /DataMeet/, `${item.id} credits DataMeet`);
+          }
         }
       }
+    }
+  });
+
+  it("cuts each state's districts out of the shared all-India file", () => {
+    const districtCards = INDIA_GIS_CATALOGS.flatMap((set) =>
+      set.catalogs.flatMap((catalog) => catalog.items ?? []),
+    ).filter((item) => item.dataUrl?.endsWith("/district/india_district.geojson"));
+    const filtered = districtCards.filter((item) => item.featureFilter);
+    // Only the national card loads the whole file.
+    assert.equal(districtCards.length - filtered.length, 1);
+    for (const item of filtered) {
+      assert.equal(item.featureFilter?.property, "NAME_1");
+      assert.ok(item.featureFilter?.values.length, `${item.id} names its states`);
     }
   });
 
@@ -48,7 +76,7 @@ describe("India GIS panel", () => {
     for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   };
 
-  it("loads the default National portal on open and switches to Delhi GSDL end-to-end", async () => {
+  it("opens on the national boundaries, switches portals, and adds one state's districts", async () => {
     const { document, window } = parseHTML("<html><body></body></html>");
     Object.assign(globalThis, { document, window });
     const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -61,36 +89,25 @@ describe("India GIS panel", () => {
       },
     });
     const originalFetch = globalThis.fetch;
-    const requests: URL[] = [];
+    const requests: string[] = [];
+    const district = (state: string, x: number) => ({
+      type: "Feature",
+      properties: { NAME_1: state, NAME_2: `${state} district` },
+      geometry: { type: "Point", coordinates: [x, 15] },
+    });
     globalThis.fetch = (async (input: string | URL | Request) => {
-      const url = new URL(String(input));
-      requests.push(url);
-      return Response.json({
-        total: 2,
-        start: 1,
-        num: 2,
-        nextStart: -1,
-        results: [
-          {
-            id: "c711ba97b899443b9b57c152a4f9e391",
-            title: "Noida Sector Boundaries",
-            owner: "esri_IN_content",
-            type: "Feature Service",
-            url: "https://livingatlas.esri.in/server/rest/services/Sectors/Noida/MapServer/0",
-          },
-          {
-            id: "2c6f91687f37493ba7411f33ae82b4fe",
-            title: "Delhi Assembly Constituency Results",
-            owner: "esri_IN_content0",
-            type: "Feature Service",
-            url: "https://livingatlas.esri.in/server1/rest/services/Elections/Election_Result_of_Delhi_Assembly_Constituency_2025/MapServer/0",
-          },
-        ],
-      });
+      requests.push(String(input));
+      return new Response(
+        JSON.stringify({
+          type: "FeatureCollection",
+          features: [district("Karnataka", 76), district("Kerala", 76.5), district("Goa", 74)],
+        }),
+      );
     }) as typeof fetch;
 
     const container = document.createElement("div");
     document.body.append(container);
+    const added: Array<[string, { features: unknown[] }]> = [];
     const app = {
       registerRightPanel: (panel: { render: (el: HTMLElement) => void }) => {
         panel.render(container);
@@ -99,6 +116,11 @@ describe("India GIS panel", () => {
       openRightPanel: () => {},
       closeRightPanel: () => {},
       getViewBounds: () => null,
+      addGeoJsonLayer: (name: string, data: unknown) => {
+        added.push([name, data as { features: unknown[] }]);
+        return "layer-1";
+      },
+      fitBounds: () => {},
     } as unknown as GeoLibreAppAPI;
 
     try {
@@ -108,9 +130,8 @@ describe("India GIS panel", () => {
       // Default catalog set ("national") should be selected and loaded automatically on open.
       const [setSelect, catalogSelect] = Array.from(container.querySelectorAll("select"));
       assert.equal(setSelect.value, "national");
-      assert.match(container.textContent ?? "", /Survey of India Composite Boundary/);
-      assert.match(container.textContent ?? "", /India 36 States & Union Territories Boundary/);
-      assert.match(container.textContent ?? "", new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(4, 4)));
+      assert.match(container.textContent ?? "", /India Composite Boundary/);
+      assert.match(container.textContent ?? "", new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(1, 1)));
 
       const pick = (select: HTMLSelectElement, value: string) => {
         const option = Array.from(select.options).find((candidate) => candidate.value === value);
@@ -125,9 +146,27 @@ describe("India GIS panel", () => {
       pick(catalogSelect, "dl-geospatial-delhi-limited-gsdl");
       await settle();
 
-      assert.match(container.textContent ?? "", /Delhi State Boundary \(GSDL\)/);
+      assert.match(container.textContent ?? "", /Delhi State Boundary/);
       assert.match(container.textContent ?? "", /Delhi Municipal Corporation \(MCD\) Wards/);
       assert.match(container.textContent ?? "", new RegExp(DEFAULT_INDIA_GIS_LABELS.showing(2, 2)));
+      // Static lists are filtered locally, never searched on ArcGIS Online.
+      assert.equal(requests.length, 0);
+
+      // A state's district card loads only that state's districts.
+      pick(setSelect, "ka");
+      await settle();
+      pick(catalogSelect, "ka-karnataka-geographic-information-system-k-gis");
+      await settle();
+      const addButton = Array.from(container.querySelectorAll("button")).find(
+        (candidate) => candidate.textContent === DEFAULT_INDIA_GIS_LABELS.add,
+      ) as HTMLButtonElement;
+      addButton.click();
+      await settle();
+      assert.equal(requests.length, 1);
+      assert.match(requests[0], /\/district\/india_district\.geojson$/);
+      assert.equal(added.length, 1);
+      assert.equal(added[0][0], "Karnataka District Boundaries");
+      assert.deepEqual(added[0][1].features, [district("Karnataka", 76)]);
     } finally {
       maplibreIndiaGisPlugin.deactivate?.(app);
       globalThis.fetch = originalFetch;

@@ -38,7 +38,7 @@ They are grouped together because they behave the same way, not because they sha
 | [US Federal GIS](#us-federal-gis) | US federal agencies | The public GIS portals of 24 federal agencies, from the Census Bureau and NOAA to USGS and FEMA |
 | [US State GIS](#us-state-gis) | US state GIS offices | The public GIS data portals of all 50 states and DC |
 | [US Local GIS](#us-local-gis) | US cities and counties | The GIS and open-data portals of about 150 large US cities, counties, and regional agencies |
-| [India GIS](#india-gis) | Indian national and state agencies | Public GIS data and open geospatial portals across India (Survey of India, state geoportals, and municipal corporations) |
+| [India GIS](#india-gis) | DataMeet, GADM, geoBoundaries | Open national, state, and city boundary datasets for India |
 | [Socrata](#socrata) | Socrata | Government open-data portals |
 | [CKAN](#ckan) | HDX | Humanitarian Data Exchange resources |
 | [STAC Catalogs](#stac-catalogs) | any STAC | Any STAC API or static catalog, via STAC Index |
@@ -267,14 +267,12 @@ Browses the public GIS and open-data portals of large US cities and counties, pl
 
 ## India GIS
 
-Browses public GIS and open geospatial data portals across India — including Survey of India (SOI), state geoportals, and municipal corporations (Delhi GSDL/MCD, Bengaluru BBMP, Chennai GCC, Hyderabad GHMC, Mumbai BMC, Ahmedabad AMC, Chandigarh, and others).
+Lists open boundary and municipal datasets for India, grouped by region: national boundaries, then state and city portals (Delhi, Bengaluru, Chennai, Hyderabad, Mumbai, Ahmedabad, Chandigarh, and others).
 
-- Choose an Indian state or national portal from the picker; the panel lists its datasets immediately. Type a keyword to search across layer titles and descriptions.
-- **Add to map**: Directly adds the authoritative GeoJSON boundaries (state boundaries, 700+ districts, taluks/tehsils, and municipal wards) to the map and frames the view.
-- **Zoom**: Zooms the viewport directly to the boundary extent of the selected Indian region or city.
-- **Download**: Downloads the GeoJSON dataset.
-- **Open portal**: Opens the official Indian government portal (`.gov.in`).
-- `npm run check:gis-portals -- india` tests that every Indian portal answers with valid datasets.
+- Choose a region, then a portal; the panel lists its datasets immediately. Type a keyword to filter them by title and description. **Search the current map area** does not apply.
+- No Indian government portal offers a catalog the panel can search, so each portal is a fixed list of GeoJSON files, and every card names where its file comes from: [DataMeet](https://datameet.org/) (the national outline and city wards), [GADM](https://gadm.org/) (states, districts, and sub-districts, with older boundaries), or [geoBoundaries](https://www.geoboundaries.org/). **Open portal** opens the government agency's own site.
+- A state's district card loads only that state's districts from the all-India GADM file; **Download** saves the whole file.
+- `npm run check:gis-portals -- india` downloads every file and checks that it is GeoJSON in longitude and latitude.
 
 ## Socrata
 

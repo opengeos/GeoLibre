@@ -5000,6 +5000,16 @@
     "chooseStateHint": "Choose a state, then a city or county, to list its GIS data.",
     "openPortal": "Open portal"
   },
+  "indiaGis": {
+    "hint": "Choose a region, then a portal, to browse open GIS data for India. Add layers to the map or download data.",
+    "searchPlaceholder": "Search India GIS datasets",
+    "noResults": "No matching datasets found for this portal.",
+    "searchError": "Could not list this portal's datasets.",
+    "chooseRegion": "Choose a region",
+    "portal": "Portal",
+    "chooseRegionHint": "Choose a region, then a portal, to list its GIS data.",
+    "openPortal": "Open portal"
+  },
   "usFederalGis": {
     "hint": "Choose a department, then an agency, to browse and search its public GIS data. Add layers to the map or download data.",
     "searchPlaceholder": "Search the agency's GIS data",

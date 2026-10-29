@@ -2,11 +2,16 @@ import type { ArcGisHubItem } from "./arcgis-hub-api";
 import type { ArcGisHubCatalog, ArcGisHubCatalogSet } from "./maplibre-arcgis-hub";
 
 type PortalEntry = Omit<ArcGisHubCatalog, "id">;
+type Extent = [[number, number], [number, number]];
 
-/**
- * 16-character identifier used for open Indian Government spatial services.
- */
-const INDIA_OPEN_GOV_ORG_ID = "ind0000000000gov";
+const DATAMEET_MUNICIPAL =
+  "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/";
+const GADM_INDIA_DISTRICTS =
+  "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson";
+// media.githubusercontent.com serves Git LFS files (raw.githubusercontent.com
+// returns the LFS pointer) and, unlike github.com's redirect, allows CORS.
+const GEOBOUNDARIES_INDIA =
+  "https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/9469f09592ced973a3448cf66b6100b741b64c0d/releaseData/gbOpen/IND/";
 
 function geoJsonItem(
   id: string,
@@ -15,7 +20,7 @@ function geoJsonItem(
   dataUrl: string,
   pageUrl: string,
   snippet: string,
-  extent?: [[number, number], [number, number]],
+  extent: Extent,
 ): ArcGisHubItem {
   return {
     id,
@@ -27,6 +32,74 @@ function geoJsonItem(
     dataUrl,
     pageUrl,
     extent,
+  };
+}
+
+/**
+ * Build a card for a file of DataMeet's Municipal Spatial Data, a community
+ * repository of city ward and boundary maps. Its license asks that every
+ * dataset credit DataMeet and link to the file, so the card does both.
+ *
+ * Args:
+ *   id: The card's unique id.
+ *   title: The card's title.
+ *   path: The file's path in the repository (`<City>/<file>.geojson`).
+ *   snippet: What the file maps.
+ *   extent: The file's bounds.
+ *
+ * Returns:
+ *   The catalog item.
+ */
+function datameetItem(
+  id: string,
+  title: string,
+  path: string,
+  snippet: string,
+  extent: Extent,
+): ArcGisHubItem {
+  return geoJsonItem(
+    id,
+    title,
+    "DataMeet community",
+    `${DATAMEET_MUNICIPAL}${path}`,
+    `https://github.com/datameet/Municipal_Spatial_Data/blob/master/${path}`,
+    `${snippet} Community dataset from DataMeet's Municipal Spatial Data.`,
+    extent,
+  );
+}
+
+/**
+ * Build a card for some states' districts, cut from the all-India GADM
+ * district file by its `NAME_1` (state) property when the card is added.
+ *
+ * Args:
+ *   id: The card's unique id.
+ *   title: The card's title.
+ *   states: The `NAME_1` values to keep (GADM's spelling, such as "Orissa").
+ *   snippet: What the card maps.
+ *   extent: The kept districts' bounds.
+ *
+ * Returns:
+ *   The catalog item.
+ */
+function gadmDistricts(
+  id: string,
+  title: string,
+  states: readonly string[],
+  snippet: string,
+  extent: Extent,
+): ArcGisHubItem {
+  return {
+    ...geoJsonItem(
+      id,
+      title,
+      "GADM (via geohacker/india)",
+      GADM_INDIA_DISTRICTS,
+      "https://github.com/geohacker/india",
+      snippet,
+      extent,
+    ),
+    featureFilter: { property: "NAME_1", values: states },
   };
 }
 
@@ -56,212 +129,181 @@ function region(code: string, name: string, portals: PortalEntry[]): ArcGisHubCa
 }
 
 /**
- * Public GIS and authoritative open geospatial data portals across India.
- * Includes direct open Indian Government and Municipal spatial datasets (GeoJSON)
- * that load natively without third-party API dependencies.
+ * Open GIS data for India, grouped by region. The national boundaries link to
+ * their publishers; a state or city portal links to that government's own
+ * site, while its datasets come from the community or global sources each
+ * card names (no Indian government portal here offers a searchable catalog).
  */
 export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
-  region("national", "National Portals (India)", [
+  region("national", "National boundaries", [
     {
-      name: "Survey of India (SOI) Open Data",
-      url: "https://surveyofindia.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
+      name: "DataMeet India Maps",
+      url: "https://projects.datameet.org",
       items: [
         geoJsonItem(
-          "soi-composite-boundary",
-          "Survey of India Composite Boundary",
-          "Survey of India (SOI)",
+          "datameet-india-composite",
+          "India Composite Boundary",
+          "DataMeet India community",
           "https://raw.githubusercontent.com/datameet/maps/master/Country/india-composite.geojson",
-          "https://surveyofindia.gov.in",
-          "Authoritative composite national boundary of India as published by the Survey of India.",
+          "https://github.com/datameet/maps/blob/master/Country/india-composite.geojson",
+          "India's national outline, following the boundary the Government of India recognizes (CC BY 4.0, 11 MB).",
           [
-            [68.1, 6.7],
-            [97.4, 35.7],
-          ],
-        ),
-        geoJsonItem(
-          "soi-india-states",
-          "India 36 States & Union Territories Boundary",
-          "Survey of India (SOI)",
-          "https://raw.githubusercontent.com/geohacker/india/master/state/india_state.geojson",
-          "https://surveyofindia.gov.in",
-          "Official administrative boundaries for all 28 states and 8 union territories across India.",
-          [
-            [68.1, 6.7],
-            [97.4, 35.7],
-          ],
-        ),
-        geoJsonItem(
-          "census-india-districts",
-          "India District Boundaries (700+ Districts)",
-          "Census of India",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://censusindia.gov.in",
-          "Complete nationwide district boundary polygons for all 700+ administrative districts in India.",
-          [
-            [68.1, 6.7],
-            [97.4, 35.7],
-          ],
-        ),
-        geoJsonItem(
-          "india-taluks-tehsils",
-          "India Taluk & Tehsil Sub-District Boundaries",
-          "Survey of India (SOI)",
-          "https://raw.githubusercontent.com/geohacker/india/master/taluk/india_taluk.geojson",
-          "https://surveyofindia.gov.in",
-          "Nationwide sub-district administrative divisions (tehsils, taluks, mandals, and blocks).",
-          [
-            [68.1, 6.7],
-            [97.4, 35.7],
+            [68.16, 6.75],
+            [97.4, 37.1],
           ],
         ),
       ],
     },
     {
-      name: "Open Government Data (OGD) Platform India",
-      url: "https://data.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
+      name: "GADM India (geohacker/india)",
+      url: "https://gadm.org",
+      items: [
+        geoJsonItem(
+          "gadm-india-states",
+          "India State & Union Territory Boundaries",
+          "GADM (via geohacker/india)",
+          "https://raw.githubusercontent.com/geohacker/india/master/state/india_state.geojson",
+          "https://github.com/geohacker/india",
+          "35 state and union territory polygons from GADM, drawn before Telangana (2014) and Ladakh (2019) were formed (23 MB).",
+          [
+            [68.18, 6.75],
+            [97.42, 35.51],
+          ],
+        ),
+        geoJsonItem(
+          "gadm-india-districts",
+          "India District Boundaries",
+          "GADM (via geohacker/india)",
+          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
+          "https://github.com/geohacker/india",
+          "594 district polygons from GADM, with older boundaries: districts created since are missing (35 MB).",
+          [
+            [68.18, 6.75],
+            [97.42, 35.51],
+          ],
+        ),
+        geoJsonItem(
+          "gadm-india-taluks",
+          "India Taluk & Tehsil Sub-District Boundaries",
+          "GADM (via geohacker/india)",
+          "https://raw.githubusercontent.com/geohacker/india/master/taluk/india_taluk.geojson",
+          "https://github.com/geohacker/india",
+          "2,299 sub-district polygons (tehsils, taluks, mandals and blocks) from GADM (46 MB).",
+          [
+            [68.18, 6.75],
+            [97.42, 35.51],
+          ],
+        ),
+      ],
+    },
+    {
+      name: "geoBoundaries India",
+      url: "https://www.geoboundaries.org",
       items: [
         geoJsonItem(
           "geoboundaries-ind-adm1",
           "geoBoundaries India States & UTs (ADM1)",
-          "Government of India / geoBoundaries",
-          "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/main/releaseData/gbOpen/IND/ADM1/geoBoundaries-IND-ADM1.geojson",
-          "https://data.gov.in",
-          "Open administrative boundary level 1 polygons for India states and union territories.",
+          "geoBoundaries",
+          `${GEOBOUNDARIES_INDIA}ADM1/geoBoundaries-IND-ADM1_simplified.geojson`,
+          "https://www.geoboundaries.org",
+          "36 simplified state and union territory polygons. Source: DataMeet India community and the Election Commission of India (CC BY 2.5 IN).",
           [
-            [68.1, 6.7],
-            [97.4, 35.7],
+            [68.09, 6.75],
+            [97.42, 37.08],
           ],
         ),
         geoJsonItem(
           "geoboundaries-ind-adm2",
           "geoBoundaries India Districts (ADM2)",
-          "Government of India / geoBoundaries",
-          "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/main/releaseData/gbOpen/IND/ADM2/geoBoundaries-IND-ADM2.geojson",
-          "https://data.gov.in",
-          "Open administrative boundary level 2 polygons for all Indian districts.",
+          "geoBoundaries",
+          `${GEOBOUNDARIES_INDIA}ADM2/geoBoundaries-IND-ADM2_simplified.geojson`,
+          "https://www.geoboundaries.org",
+          "735 simplified district polygons. Source: Pathways Data and the Local Government Directory, lgdirectory.gov.in (ODbL 1.0).",
           [
-            [68.1, 6.7],
-            [97.4, 35.7],
-          ],
-        ),
-      ],
-    },
-    {
-      name: "ISRO Bhuvan Geo-Portal",
-      url: "https://bhuvan.nrsc.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
-      items: [
-        geoJsonItem(
-          "bhuvan-soi-composite",
-          "Bhuvan Indian National Administrative Framework",
-          "ISRO / NRSC",
-          "https://raw.githubusercontent.com/datameet/maps/master/Country/india-composite.geojson",
-          "https://bhuvan.nrsc.gov.in",
-          "National geospatial reference framework for Indian administrative boundaries.",
-          [
-            [68.1, 6.7],
-            [97.4, 35.7],
+            [68.17, 6.75],
+            [97.4, 37.08],
           ],
         ),
       ],
     },
   ]),
-
   region("dl", "Delhi (NCR)", [
     {
       name: "Geospatial Delhi Limited (GSDL)",
       url: "https://gsdl.delhi.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "delhi-state-boundary",
-          "Delhi State Boundary (GSDL)",
-          "Geospatial Delhi Limited (GSDL)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Delhi/Delhi_Boundary.geojson",
-          "https://gsdl.delhi.gov.in",
-          "Official state boundary of the National Capital Territory (NCT) of Delhi.",
+          "Delhi State Boundary",
+          "Delhi/Delhi_Boundary.geojson",
+          "Boundary of the National Capital Territory (NCT) of Delhi.",
           [
-            [76.84, 28.4],
-            [77.35, 28.88],
+            [76.83, 28.4],
+            [77.35, 28.89],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "delhi-mcd-wards",
           "Delhi Municipal Corporation (MCD) Wards",
-          "Municipal Corporation of Delhi (MCD)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Delhi/Delhi_Wards.geojson",
-          "https://mcdonline.nic.in",
-          "Municipal wards across North, South, and East Delhi municipal zones.",
+          "Delhi/Delhi_Wards.geojson",
+          "290 municipal wards of Delhi.",
           [
-            [76.84, 28.4],
-            [77.35, 28.88],
+            [76.83, 28.4],
+            [77.35, 28.89],
           ],
         ),
       ],
     },
     {
-      name: "Delhi Development Authority (DDA)",
-      url: "https://dda.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
+      name: "Municipal Corporation Faridabad",
+      url: "https://mcfaridabad.org",
       items: [
-        geoJsonItem(
+        datameetItem(
           "faridabad-ncr-wards",
-          "Faridabad Municipal Corporation Wards (NCR)",
-          "Municipal Corporation Faridabad",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Faridabad/Faridabad_Wards.geojson",
-          "https://mcfaridabad.gov.in",
-          "National Capital Region (NCR) municipal ward boundaries for Faridabad.",
+          "Faridabad Municipal Corporation Wards",
+          "Faridabad/Faridabad_Wards.geojson",
+          "40 municipal wards of Faridabad, Haryana (NCR).",
           [
-            [77.25, 28.32],
-            [77.38, 28.48],
+            [77.21, 28.29],
+            [77.37, 28.52],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "faridabad-ncr-boundary",
           "Faridabad Municipal Corporation Boundary",
-          "Municipal Corporation Faridabad",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Faridabad/Faridabad_Boundary.geojson",
-          "https://mcfaridabad.gov.in",
-          "Administrative boundary limit of Faridabad Municipal Corporation in NCR.",
+          "Faridabad/Faridabad_Boundary.geojson",
+          "Municipal corporation limit of Faridabad, Haryana (NCR).",
           [
-            [77.25, 28.32],
-            [77.38, 28.48],
+            [77.21, 28.29],
+            [77.37, 28.52],
           ],
         ),
       ],
     },
   ]),
-
   region("ka", "Karnataka", [
     {
       name: "Bruhat Bengaluru Mahanagara Palike (BBMP)",
       url: "https://bbmp.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "bbmp-wards",
-          "Bengaluru BBMP Municipal Wards (198 Wards)",
-          "Bruhat Bengaluru Mahanagara Palike (BBMP)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bangalore/BBMP.geojson",
-          "https://bbmp.gov.in",
-          "Official municipal ward spatial boundaries across Bengaluru metropolitan area.",
+          "Bengaluru BBMP Municipal Wards",
+          "Bangalore/BBMP.geojson",
+          "243 municipal wards of Bengaluru.",
           [
-            [77.46, 12.83],
-            [77.75, 13.14],
+            [77.45, 12.83],
+            [77.79, 13.15],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "bbmp-old-wards",
-          "Bengaluru BBMP Historical Administrative Wards",
-          "BBMP GIS Cell",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bangalore/BBMP_oldWards.geojson",
-          "https://bbmp.gov.in",
-          "Historical municipal ward delineations for the city of Bengaluru.",
+          "Bengaluru BBMP Previous Wards",
+          "Bangalore/BBMP_oldWards.geojson",
+          "The earlier 198-ward division of Bengaluru.",
           [
             [77.46, 12.83],
-            [77.75, 13.14],
+            [77.79, 13.15],
           ],
         ),
       ],
@@ -269,64 +311,53 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Karnataka Geographic Information System (K-GIS)",
       url: "https://kgis.ksrsac.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "karnataka-districts",
-          "Karnataka State District Boundaries",
-          "Karnataka State Remote Sensing Applications Centre (KSRSAC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://kgis.ksrsac.in",
-          "Administrative district boundaries of Karnataka state.",
+          "Karnataka District Boundaries",
+          ["Karnataka"],
+          "The 27 districts of Karnataka, as mapped by GADM (older boundaries: districts created since are missing). Loads only Karnataka's districts from the all-India file, which Download saves.",
           [
-            [74.05, 11.59],
-            [78.59, 18.45],
+            [74.05, 11.57],
+            [78.58, 18.46],
           ],
         ),
       ],
     },
   ]),
-
   region("tn", "Tamil Nadu", [
     {
       name: "Greater Chennai Corporation (GCC)",
       url: "https://chennaicorporation.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "chennai-gcc-wards",
-          "Greater Chennai Corporation (GCC) 200 Wards",
-          "Greater Chennai Corporation (GCC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chennai/Wards.geojson",
-          "https://chennaicorporation.gov.in",
-          "Official 200 municipal wards governing the city of Chennai.",
+          "Greater Chennai Corporation (GCC) Wards",
+          "Chennai/Wards.geojson",
+          "201 municipal wards of Chennai.",
           [
-            [80.14, 12.89],
-            [80.33, 13.24],
+            [80.14, 12.85],
+            [80.34, 13.24],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "chennai-cma-boundary",
-          "Chennai Metropolitan Area (CMA Boundary)",
-          "Chennai Metropolitan Development Authority (CMDA)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chennai/CMA.geojson",
-          "https://cmdachennai.gov.in",
-          "Jurisdictional boundary of the Chennai Metropolitan Planning Area.",
+          "Chennai Metropolitan Area (CMA) Boundary",
+          "Chennai/CMA.geojson",
+          "Boundary of the Chennai Metropolitan Area planning region.",
           [
-            [79.95, 12.75],
-            [80.35, 13.35],
+            [80.0, 12.85],
+            [80.35, 13.3],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "chennai-zones",
-          "Chennai Municipal Corporation Administrative Zones",
-          "Greater Chennai Corporation (GCC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chennai/Zones.geojson",
-          "https://chennaicorporation.gov.in",
-          "15 administrative zones of Greater Chennai Corporation.",
+          "Greater Chennai Corporation Zones",
+          "Chennai/Zones.geojson",
+          "16 administrative zones of Greater Chennai Corporation.",
           [
-            [80.14, 12.89],
-            [80.33, 13.24],
+            [80.14, 12.85],
+            [80.34, 13.24],
           ],
         ),
       ],
@@ -334,64 +365,53 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Tamil Nadu GIS (TNGIS)",
       url: "https://tngis.tn.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "tamil-nadu-districts",
-          "Tamil Nadu State District Boundaries",
-          "Tamil Nadu e-Governance Agency (TNeGA)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://tngis.tn.gov.in",
-          "Administrative district boundaries of Tamil Nadu.",
+          "Tamil Nadu District Boundaries",
+          ["Tamil Nadu"],
+          "The 30 districts of Tamil Nadu, as mapped by GADM (older boundaries: districts created since are missing). Loads only Tamil Nadu's districts from the all-India file, which Download saves.",
           [
-            [76.24, 8.08],
-            [80.35, 13.57],
+            [76.22, 8.07],
+            [80.35, 13.54],
           ],
         ),
       ],
     },
   ]),
-
   region("ts", "Telangana & Andhra Pradesh", [
     {
       name: "Greater Hyderabad Municipal Corporation (GHMC)",
       url: "https://ghmc.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "ghmc-area",
           "Greater Hyderabad Municipal Corporation (GHMC) Boundary",
-          "Greater Hyderabad Municipal Corporation (GHMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Hyderabad/ghmc-area.geojson",
-          "https://ghmc.gov.in",
-          "Jurisdictional outline of Greater Hyderabad Municipal Corporation.",
+          "Hyderabad/ghmc-area.geojson",
+          "Outline of the Greater Hyderabad Municipal Corporation.",
           [
-            [78.23, 17.22],
-            [78.61, 17.57],
+            [78.23, 17.29],
+            [78.63, 17.57],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "ghmc-wards",
-          "Hyderabad Municipal Wards (GHMC Wards)",
-          "Greater Hyderabad Municipal Corporation (GHMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Hyderabad/ghmc-wards.geojson",
-          "https://ghmc.gov.in",
-          "150 electoral and administrative wards of Hyderabad.",
+          "Hyderabad GHMC Wards",
+          "Hyderabad/ghmc-wards.geojson",
+          "145 wards of Greater Hyderabad.",
           [
-            [78.23, 17.22],
-            [78.61, 17.57],
+            [78.27, 17.29],
+            [78.63, 17.57],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "ghmc-zones",
-          "Hyderabad GHMC Administrative Zones",
-          "Greater Hyderabad Municipal Corporation (GHMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Hyderabad/ghmc-zones.geojson",
-          "https://ghmc.gov.in",
-          "Zonal administrative divisions of GHMC.",
+          "Hyderabad GHMC Zones",
+          "Hyderabad/ghmc-zones.geojson",
+          "5 administrative zones of Greater Hyderabad.",
           [
-            [78.23, 17.22],
-            [78.61, 17.57],
+            [78.23, 17.29],
+            [78.63, 17.57],
           ],
         ),
       ],
@@ -399,64 +419,53 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Andhra Pradesh GIS Portal",
       url: "https://core.ap.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "vijayawada-wards",
           "Vijayawada Municipal Corporation (VMC) Wards",
-          "Vijayawada Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Vijayawada/Vijayawada_Wards.geojson",
-          "https://vmc.ap.gov.in",
-          "Municipal ward divisions of Vijayawada city.",
+          "Vijayawada/Vijayawada_Wards.geojson",
+          "77 municipal wards of Vijayawada.",
           [
-            [80.57, 16.48],
-            [80.69, 16.55],
+            [80.58, 16.47],
+            [80.69, 16.59],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "vijayawada-boundary",
           "Vijayawada City Boundary",
-          "Vijayawada Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Vijayawada/Vijayawada_Boundary.geojson",
-          "https://vmc.ap.gov.in",
+          "Vijayawada/Vijayawada_Boundary.geojson",
           "Municipal corporation limit of Vijayawada.",
           [
-            [80.57, 16.48],
-            [80.69, 16.55],
+            [80.58, 16.47],
+            [80.69, 16.59],
           ],
         ),
       ],
     },
   ]),
-
   region("mh", "Maharashtra", [
     {
       name: "Brihanmumbai Municipal Corporation (BMC)",
       url: "https://portal.mcgm.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "bmc-wards",
           "Mumbai Municipal Corporation (BMC/MCGM) Wards",
-          "Brihanmumbai Municipal Corporation (BMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Mumbai/BMC_Wards.geojson",
-          "https://portal.mcgm.gov.in",
-          "24 administrative municipal wards (A to T) of Mumbai.",
+          "Mumbai/BMC_Wards.geojson",
+          "24 administrative wards of Mumbai.",
           [
             [72.77, 18.89],
-            [72.99, 19.27],
+            [72.98, 19.28],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "mumbai-slum-clusters",
-          "Mumbai Slum Clusters Spatial Inventory",
-          "Slum Rehabilitation Authority (SRA) Mumbai",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Mumbai/slumClusters.geojson",
-          "https://sra.gov.in",
-          "Mapped informal settlements and slum rehabilitation clusters in Mumbai.",
+          "Mumbai Slum Clusters",
+          "Mumbai/slumClusters.geojson",
+          "2,542 mapped slum clusters in Mumbai.",
           [
-            [72.77, 18.89],
-            [72.99, 19.27],
+            [72.78, 18.9],
+            [72.98, 19.27],
           ],
         ),
       ],
@@ -464,64 +473,33 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Maharashtra Remote Sensing Application Centre (MRSAC)",
       url: "https://mrsac.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "maharashtra-districts",
-          "Maharashtra State District Boundaries",
-          "Maharashtra Remote Sensing Application Centre (MRSAC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://mrsac.gov.in",
-          "District boundaries across Maharashtra state.",
+          "Maharashtra District Boundaries",
+          ["Maharashtra"],
+          "The 34 districts of Maharashtra, as mapped by GADM (older boundaries: districts created since are missing). Loads only Maharashtra's districts from the all-India file, which Download saves.",
           [
-            [72.63, 15.6],
-            [80.89, 22.03],
+            [72.65, 15.6],
+            [80.9, 22.04],
           ],
         ),
       ],
     },
   ]),
-
   region("gj", "Gujarat", [
     {
       name: "Ahmedabad Municipal Corporation (AMC)",
       url: "https://ahmedabadcity.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "amc-wards",
           "Ahmedabad Municipal Corporation (AMC) Wards",
-          "Ahmedabad Municipal Corporation (AMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Ahmedabad/Wards.geojson",
-          "https://ahmedabadcity.gov.in",
-          "Municipal ward administrative divisions of Ahmedabad.",
+          "Ahmedabad/Wards.geojson",
+          "48 municipal wards of Ahmedabad.",
           [
-            [72.48, 22.96],
-            [72.67, 23.11],
-          ],
-        ),
-        geoJsonItem(
-          "amc-zonal-offices",
-          "Ahmedabad AMC Zonal Administrative Offices",
-          "Ahmedabad Municipal Corporation (AMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Ahmedabad/Zonal_office.geojson",
-          "https://ahmedabadcity.gov.in",
-          "Location coordinates of AMC zonal administrative headquarters.",
-          [
-            [72.48, 22.96],
-            [72.67, 23.11],
-          ],
-        ),
-        geoJsonItem(
-          "amc-ward-offices",
-          "Ahmedabad AMC Ward Offices",
-          "Ahmedabad Municipal Corporation (AMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Ahmedabad/Ward_office.geojson",
-          "https://ahmedabadcity.gov.in",
-          "Geographic locations of civic ward offices in Ahmedabad.",
-          [
-            [72.48, 22.96],
-            [72.67, 23.11],
+            [72.44, 22.91],
+            [72.71, 23.15],
           ],
         ),
       ],
@@ -529,52 +507,43 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Gujarat State Portal (BISAG-N)",
       url: "https://bisag-n.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "gujarat-districts",
-          "Gujarat State District Boundaries",
-          "Bhaskaracharya National Institute for Space Applications and Geo-informatics (BISAG-N)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://bisag-n.gov.in",
-          "District boundaries of Gujarat state.",
+          "Gujarat District Boundaries",
+          ["Gujarat"],
+          "The 25 districts of Gujarat, as mapped by GADM (older boundaries: districts created since are missing). Loads only Gujarat's districts from the all-India file, which Download saves.",
           [
-            [68.1, 20.1],
-            [74.47, 24.71],
+            [68.18, 20.12],
+            [74.48, 24.71],
           ],
         ),
       ],
     },
   ]),
-
   region("mp", "Madhya Pradesh", [
     {
       name: "Bhopal Municipal Corporation (BMC MP)",
       url: "https://bhopalbmc.mp.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "bhopal-wards",
           "Bhopal Municipal Corporation Wards",
-          "Bhopal Municipal Corporation (BMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bhopal/Bhopal_wards.geojson",
-          "https://bhopalbmc.mp.gov.in",
-          "Municipal wards governing the capital city of Bhopal.",
+          "Bhopal/Bhopal_wards.geojson",
+          "86 municipal wards of Bhopal.",
           [
-            [77.31, 23.16],
-            [77.51, 23.31],
+            [77.26, 23.11],
+            [77.54, 23.34],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "bhopal-zones",
-          "Bhopal Municipal Corporation Zone Boundaries",
-          "Bhopal Municipal Corporation (BMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bhopal/Zone_Boundary.geojson",
-          "https://bhopalbmc.mp.gov.in",
-          "Administrative zone divisions of Bhopal.",
+          "Bhopal Municipal Corporation Zones",
+          "Bhopal/Zone_Boundary.geojson",
+          "19 administrative zones of Bhopal.",
           [
-            [77.31, 23.16],
-            [77.51, 23.31],
+            [77.26, 23.11],
+            [77.54, 23.34],
           ],
         ),
       ],
@@ -582,64 +551,53 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "MP Council of Science and Technology (MPCOST)",
       url: "https://mpcost.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "madhya-pradesh-districts",
-          "Madhya Pradesh State District Boundaries",
-          "MP Council of Science & Technology (MPCOST)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://mpcost.gov.in",
-          "District boundaries across Madhya Pradesh.",
+          "Madhya Pradesh District Boundaries",
+          ["Madhya Pradesh"],
+          "The 48 districts of Madhya Pradesh, as mapped by GADM (older boundaries: districts created since are missing). Loads only Madhya Pradesh's districts from the all-India file, which Download saves.",
           [
-            [74.04, 21.08],
-            [82.8, 26.87],
+            [74.03, 21.07],
+            [82.81, 26.88],
           ],
         ),
       ],
     },
   ]),
-
   region("pb", "Punjab, Haryana & Chandigarh", [
     {
       name: "Chandigarh Smart City & Municipal Corporation",
       url: "https://mcchandigarh.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "chandigarh-sectors",
           "Chandigarh Sector Boundaries",
-          "Chandigarh Smart City / Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chandigarh/Chandigarh_Sectors.geojson",
-          "https://mcchandigarh.gov.in",
-          "Detailed sector layout and administrative sectors of Chandigarh.",
+          "Chandigarh/Chandigarh_Sectors.geojson",
+          "63 sectors of Chandigarh.",
           [
-            [76.69, 30.66],
+            [76.71, 30.68],
             [76.85, 30.78],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "chandigarh-boundary",
           "Chandigarh Union Territory Boundary",
-          "Chandigarh Administration",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chandigarh/Chandigarh_Boundary.geojson",
-          "https://mcchandigarh.gov.in",
-          "Official territorial outline of the Union Territory of Chandigarh.",
+          "Chandigarh/Chandigarh_Boundary.geojson",
+          "Outline of the Union Territory of Chandigarh.",
           [
-            [76.69, 30.66],
-            [76.85, 30.78],
+            [76.7, 30.66],
+            [76.85, 30.8],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "chandigarh-wards",
           "Chandigarh Municipal Corporation Wards",
-          "Municipal Corporation Chandigarh",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Chandigarh/Chandigarh_Wards.geojson",
-          "https://mcchandigarh.gov.in",
-          "Electoral and civic wards of Chandigarh.",
+          "Chandigarh/Chandigarh_Wards.geojson",
+          "28 municipal wards of Chandigarh.",
           [
-            [76.69, 30.66],
-            [76.85, 30.78],
+            [76.7, 30.66],
+            [76.85, 30.8],
           ],
         ),
       ],
@@ -647,40 +605,33 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Punjab Remote Sensing Centre (PRSC)",
       url: "https://prsc.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "punjab-haryana-districts",
           "Punjab & Haryana District Boundaries",
-          "Punjab Remote Sensing Centre (PRSC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://prsc.gov.in",
-          "District boundaries of Punjab and Haryana states.",
+          ["Punjab", "Haryana"],
+          "The 36 districts of Punjab and Haryana, as mapped by GADM (older boundaries: districts created since are missing). Loads only Punjab and Haryana's districts from the all-India file, which Download saves.",
           [
-            [73.88, 27.65],
-            [77.6, 32.5],
+            [73.87, 27.65],
+            [77.6, 32.58],
           ],
         ),
       ],
     },
   ]),
-
   region("wb", "West Bengal", [
     {
       name: "Kolkata Municipal Corporation (KMC)",
       url: "https://kmcgov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "kolkata-wards",
           "Kolkata Municipal Corporation (KMC) Wards",
-          "Kolkata Municipal Corporation (KMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kolkata/kolkata.geojson",
-          "https://kmcgov.in",
-          "Municipal wards and civic boundaries of Kolkata.",
+          "Kolkata/kolkata.geojson",
+          "141 municipal wards of Kolkata.",
           [
-            [88.26, 22.46],
-            [88.43, 22.63],
+            [88.24, 22.45],
+            [88.46, 22.64],
           ],
         ),
       ],
@@ -688,40 +639,33 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "West Bengal Spatial Data Infrastructure (WBSDI)",
       url: "https://wbsdi.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "west-bengal-districts",
-          "West Bengal State District Boundaries",
-          "Department of Science & Technology, Govt. of West Bengal",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://wbsdi.gov.in",
-          "District boundaries of West Bengal.",
+          "West Bengal District Boundaries",
+          ["West Bengal"],
+          "The 19 districts of West Bengal, as mapped by GADM (older boundaries: districts created since are missing). Loads only West Bengal's districts from the all-India file, which Download saves.",
           [
-            [85.8, 21.5],
-            [89.9, 27.2],
+            [85.82, 21.53],
+            [89.88, 27.23],
           ],
         ),
       ],
     },
   ]),
-
   region("or", "Odisha", [
     {
       name: "Bhubaneswar Smart City Limited (BSCL)",
       url: "https://smartcitybhubaneswar.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "bhubaneswar-jurisdiction",
-          "Bhubaneswar Administrative & Police Jurisdictions",
-          "Bhubaneswar Smart City Limited / BMC",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bhubaneswar/Police_Jurisdiction.geojson",
-          "https://smartcitybhubaneswar.gov.in",
-          "Civic and police administrative zones across Bhubaneswar.",
+          "Bhubaneswar Police Jurisdictions",
+          "Bhubaneswar/Police_Jurisdiction.geojson",
+          "17 police station jurisdictions of Bhubaneswar.",
           [
-            [85.76, 20.21],
-            [85.89, 20.36],
+            [85.62, 20.06],
+            [86.09, 20.44],
           ],
         ),
       ],
@@ -729,76 +673,63 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Odisha State Spatial Data Infrastructure (OSSDI)",
       url: "https://spatialodisha.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "odisha-districts",
-          "Odisha State District Boundaries",
-          "Odisha Space Applications Centre (ORSAC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://spatialodisha.gov.in",
-          "Administrative district boundaries of Odisha state.",
+          "Odisha District Boundaries",
+          ["Orissa"],
+          "The 30 districts of Odisha, as mapped by GADM (older boundaries: districts created since are missing). Loads only Odisha's districts from the all-India file, which Download saves.",
           [
             [81.38, 17.8],
-            [87.5, 22.57],
+            [87.49, 22.57],
           ],
         ),
       ],
     },
   ]),
-
   region("br", "Bihar & Jharkhand", [
     {
       name: "Bodh Gaya Nagar Panchayat",
       url: "https://bodhgayacity.bihar.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "bodh-gaya-wards",
           "Bodh Gaya Municipal Wards",
-          "Bodh Gaya Nagar Panchayat",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bodh_Gaya/Bodh_Gaya_Wards.geojson",
-          "https://bodhgayacity.bihar.gov.in",
-          "Municipal ward divisions of Bodh Gaya.",
+          "Bodh_Gaya/Bodh_Gaya_Wards.geojson",
+          "19 municipal wards of Bodh Gaya.",
           [
-            [84.96, 24.67],
-            [85.04, 24.74],
+            [84.95, 24.67],
+            [85.02, 24.74],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "bodh-gaya-boundary",
           "Bodh Gaya Civic Boundary",
-          "Bodh Gaya Nagar Panchayat",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Bodh_Gaya/Bodh_Gaya_Boundary.geojson",
-          "https://bodhgayacity.bihar.gov.in",
-          "Administrative town boundary of Bodh Gaya.",
+          "Bodh_Gaya/Bodh_Gaya_Boundary.geojson",
+          "Town boundary of Bodh Gaya.",
           [
-            [84.96, 24.67],
-            [85.04, 24.74],
+            [84.95, 24.67],
+            [85.02, 24.74],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "katihar-wards",
           "Katihar Municipal Corporation Wards",
-          "Katihar Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Katihar/Katihar_Wards.geojson",
-          "https://katihar.nic.in",
-          "Civic wards of Katihar city, Bihar.",
+          "Katihar/Katihar_Wards.geojson",
+          "45 municipal wards of Katihar, Bihar.",
           [
-            [87.52, 25.5],
-            [87.62, 25.58],
+            [87.54, 25.5],
+            [87.6, 25.6],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "purnia-wards",
           "Purnia Municipal Corporation Wards",
-          "Purnia Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Purnia/Purnia_Wards.geojson",
-          "https://purnea.nic.in",
-          "Municipal wards of Purnia city, Bihar.",
+          "Purnia/Purnia_Wards.geojson",
+          "43 municipal wards of Purnia, Bihar.",
           [
-            [87.42, 25.74],
-            [87.52, 25.82],
+            [87.43, 25.75],
+            [87.55, 25.85],
           ],
         ),
       ],
@@ -806,76 +737,63 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Bihar Remote Sensing Application Centre (BIRSAC)",
       url: "https://disastermgmt.bihar.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "bihar-jharkhand-districts",
           "Bihar & Jharkhand District Boundaries",
-          "Bihar Remote Sensing Application Centre (BIRSAC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://disastermgmt.bihar.gov.in",
-          "District boundaries of Bihar and Jharkhand states.",
+          ["Bihar", "Jharkhand"],
+          "The 59 districts of Bihar and Jharkhand, as mapped by GADM (older boundaries: districts created since are missing). Loads only Bihar and Jharkhand's districts from the all-India file, which Download saves.",
           [
-            [83.3, 21.9],
-            [88.3, 27.5],
+            [83.31, 21.96],
+            [88.3, 27.86],
           ],
         ),
       ],
     },
   ]),
-
   region("rj", "Rajasthan", [
     {
       name: "Jaipur Smart City Limited",
       url: "https://jaipurmc.org",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "jaipur-wards",
           "Jaipur Municipal Corporation Wards",
-          "Jaipur Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Jaipur/Jaipur_Wards.geojson",
-          "https://jaipurmc.org",
-          "Municipal wards of the Pink City of Jaipur.",
+          "Jaipur/Jaipur_Wards.geojson",
+          "77 municipal wards of Jaipur.",
           [
-            [75.72, 26.82],
-            [75.91, 26.98],
+            [75.68, 26.77],
+            [75.92, 27.03],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "jaipur-boundary",
           "Jaipur Municipal Boundary",
-          "Jaipur Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Jaipur/Jaipur_Boundary.geojson",
-          "https://jaipurmc.org",
+          "Jaipur/Jaipur_Boundary.geojson",
           "Municipal corporation boundary of Jaipur.",
           [
-            [75.72, 26.82],
-            [75.91, 26.98],
+            [75.68, 26.77],
+            [75.92, 27.03],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "jaipur-zones",
           "Jaipur Municipal Zones",
-          "Jaipur Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Jaipur/Jaipur_Zones.geojson",
-          "https://jaipurmc.org",
-          "Administrative municipal zones across Jaipur.",
+          "Jaipur/Jaipur_Zones.geojson",
+          "10 administrative zones of Jaipur.",
           [
-            [75.72, 26.82],
-            [75.91, 26.98],
+            [75.68, 26.77],
+            [75.92, 27.03],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "kishangarh-wards",
           "Kishangarh Municipal Wards",
-          "Kishangarh Municipality",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kishangarh/Kishangarh_Wards.geojson",
-          "https://ajmer.rajasthan.gov.in",
-          "Civic wards of Kishangarh, Rajasthan.",
+          "Kishangarh/Kishangarh_Wards.geojson",
+          "45 municipal wards of Kishangarh, Rajasthan.",
           [
-            [74.82, 26.54],
-            [74.92, 26.62],
+            [74.79, 26.54],
+            [74.9, 26.64],
           ],
         ),
       ],
@@ -883,129 +801,71 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Rajasthan GIS (Raj-GIS / RISL)",
       url: "https://gis.rajasthan.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "rajasthan-districts",
-          "Rajasthan State District Boundaries",
-          "Raj-GIS / RISL, Govt. of Rajasthan",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://gis.rajasthan.gov.in",
-          "District administrative boundaries of Rajasthan.",
+          "Rajasthan District Boundaries",
+          ["Rajasthan"],
+          "The 32 districts of Rajasthan, as mapped by GADM (older boundaries: districts created since are missing). Loads only Rajasthan's districts from the all-India file, which Download saves.",
           [
-            [69.5, 23.05],
-            [78.3, 30.2],
+            [69.48, 23.06],
+            [78.27, 30.2],
           ],
         ),
       ],
     },
   ]),
-
   region("kl", "Kerala", [
-    {
-      name: "Kochi Municipal Corporation",
-      url: "https://kochimunicipalcorporation.lsgkerala.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
-      items: [
-        geoJsonItem(
-          "kochi-wards",
-          "Kochi Municipal Corporation Wards",
-          "Kochi Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kochi/KCH_wards.geojson",
-          "https://kochimunicipalcorporation.lsgkerala.gov.in",
-          "Civic wards of Kochi Municipal Corporation.",
-          [
-            [76.24, 9.92],
-            [76.33, 10.04],
-          ],
-        ),
-        geoJsonItem(
-          "kochi-boundary",
-          "Kochi Corporation Boundary",
-          "Kochi Municipal Corporation",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kochi/KCH_Corporation_Boundary.geojson",
-          "https://kochimunicipalcorporation.lsgkerala.gov.in",
-          "Territorial municipal boundary of Kochi.",
-          [
-            [76.24, 9.92],
-            [76.33, 10.04],
-          ],
-        ),
-      ],
-    },
     {
       name: "Kerala Spatial Data Infrastructure (KSDI)",
       url: "https://ksdi.kerala.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "kerala-districts",
-          "Kerala State District Boundaries",
-          "Kerala State Spatial Data Infrastructure (KSDI)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://ksdi.kerala.gov.in",
-          "14 revenue districts of Kerala state.",
+          "Kerala District Boundaries",
+          ["Kerala"],
+          "The 14 districts of Kerala, as mapped by GADM (older boundaries: districts created since are missing). Loads only Kerala's districts from the all-India file, which Download saves.",
           [
-            [74.85, 8.3],
+            [74.86, 8.29],
             [77.4, 12.8],
           ],
         ),
       ],
     },
   ]),
-
   region("up", "Uttar Pradesh", [
     {
       name: "Lucknow Municipal Corporation",
       url: "https://lmc.up.nic.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        datameetItem(
           "lucknow-wards",
           "Lucknow Municipal Corporation Wards",
-          "Lucknow Municipal Corporation (LMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Lucknow/Lucknow_ward_boundary.geojson",
-          "https://lmc.up.nic.in",
-          "110 municipal wards of Lucknow city.",
+          "Lucknow/Lucknow_ward_boundary.geojson",
+          "112 municipal wards of Lucknow.",
           [
-            [80.86, 26.79],
-            [81.03, 26.94],
+            [80.83, 26.74],
+            [81.07, 26.94],
           ],
         ),
-        geoJsonItem(
+        datameetItem(
           "lucknow-boundary",
           "Lucknow City Boundary",
-          "Lucknow Municipal Corporation (LMC)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Lucknow/Lucknow_city_boundary.geojson",
-          "https://lmc.up.nic.in",
+          "Lucknow/Lucknow_city_boundary.geojson",
           "Municipal corporation boundary of Lucknow.",
           [
-            [80.86, 26.79],
-            [81.03, 26.94],
+            [80.83, 26.74],
+            [81.07, 26.94],
           ],
         ),
-        geoJsonItem(
-          "kanpur-wards",
-          "Kanpur Municipal Corporation Wards",
-          "Kanpur Municipal Corporation (KMC UP)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kanpur/Kanpur_wards.geojson",
-          "https://kmc.up.nic.in",
-          "Municipal wards of Kanpur city.",
-          [
-            [80.25, 26.4],
-            [80.4, 26.55],
-          ],
-        ),
-        geoJsonItem(
+        datameetItem(
           "kanpur-boundary",
           "Kanpur City Boundary",
-          "Kanpur Municipal Corporation (KMC UP)",
-          "https://raw.githubusercontent.com/datameet/Municipal_Spatial_Data/master/Kanpur/Kanpur_city_boundaries.geojson",
-          "https://kmc.up.nic.in",
-          "Municipal boundary limit of Kanpur.",
+          "Kanpur/Kanpur_city_boundaries.geojson",
+          "Municipal boundary of Kanpur.",
           [
-            [80.25, 26.4],
-            [80.4, 26.55],
+            [80.19, 26.33],
+            [80.48, 26.54],
           ],
         ),
       ],
@@ -1013,84 +873,78 @@ export const INDIA_GIS_CATALOGS: readonly ArcGisHubCatalogSet[] = [
     {
       name: "Remote Sensing Applications Centre Uttar Pradesh (RSAC-UP)",
       url: "https://rsacup.org.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "uttar-pradesh-districts",
-          "Uttar Pradesh State District Boundaries",
-          "Remote Sensing Applications Centre Uttar Pradesh (RSAC-UP)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://rsacup.org.in",
-          "75 administrative districts of Uttar Pradesh.",
+          "Uttar Pradesh District Boundaries",
+          ["Uttar Pradesh"],
+          "The 70 districts of Uttar Pradesh, as mapped by GADM (older boundaries: districts created since are missing). Loads only Uttar Pradesh's districts from the all-India file, which Download saves.",
           [
-            [77.08, 23.85],
-            [84.65, 30.4],
+            [77.08, 23.87],
+            [84.64, 30.42],
           ],
         ),
       ],
     },
   ]),
-
   region("ct", "Chhattisgarh", [
     {
       name: "Chhattisgarh State Centre (CG-Spatial)",
       url: "https://chhattisgarh.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "chhattisgarh-districts",
-          "Chhattisgarh State District Boundaries",
-          "Chhattisgarh State Center / CHiPS",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://chhattisgarh.gov.in",
-          "District boundaries of Chhattisgarh state.",
+          "Chhattisgarh District Boundaries",
+          ["Chhattisgarh"],
+          "The 16 districts of Chhattisgarh, as mapped by GADM (older boundaries: districts created since are missing). Loads only Chhattisgarh's districts from the all-India file, which Download saves.",
           [
-            [80.25, 17.78],
-            [84.4, 24.1],
+            [80.23, 17.78],
+            [84.39, 24.11],
           ],
         ),
       ],
     },
   ]),
-
   region("ga", "Goa", [
     {
       name: "Goa State Spatial Data Infrastructure",
       url: "https://goa.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "goa-districts",
-          "Goa North & South District Boundaries",
-          "Directorate of Settlement and Land Records Goa",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://goa.gov.in",
-          "North Goa and South Goa revenue district boundaries.",
+          "Goa District Boundaries",
+          ["Goa"],
+          "The 2 districts of Goa, as mapped by GADM (older boundaries: districts created since are missing). Loads only Goa's districts from the all-India file, which Download saves.",
           [
-            [73.68, 14.88],
+            [73.67, 14.89],
             [74.35, 15.8],
           ],
         ),
       ],
     },
   ]),
-
   region("as", "Assam & North East", [
     {
       name: "Assam Remote Sensing Application Centre (ARSAC)",
       url: "https://arsac.assam.gov.in",
-      orgId: INDIA_OPEN_GOV_ORG_ID,
       items: [
-        geoJsonItem(
+        gadmDistricts(
           "assam-north-east-districts",
           "Assam & North Eastern Region District Boundaries",
-          "Assam Remote Sensing Application Centre (ARSAC)",
-          "https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson",
-          "https://arsac.assam.gov.in",
-          "District boundaries across Assam and the North Eastern states.",
           [
-            [89.7, 24.1],
-            [96.02, 28.0],
+            "Assam",
+            "Arunachal Pradesh",
+            "Manipur",
+            "Meghalaya",
+            "Mizoram",
+            "Nagaland",
+            "Sikkim",
+            "Tripura",
+          ],
+          "The 78 districts of Assam and the other North Eastern states, as mapped by GADM (older boundaries: districts created since are missing). Loads only Assam and the other North Eastern states's districts from the all-India file, which Download saves.",
+          [
+            [88.01, 21.94],
+            [97.42, 29.47],
           ],
         ),
       ],

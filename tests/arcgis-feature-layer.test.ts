@@ -1375,7 +1375,7 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.ok(fetchUrls.some((url) => url.startsWith(`${serviceUrl}/query`)));
   });
 
-  it("resolves the first non-group sublayer of a MapServer root registered as a Feature Service item", async () => {
+  it("resolves the first feature layer of a MapServer root registered as a Feature Service item", async () => {
     const mapServerUrl = "https://livingatlas.esri.in/server/rest/services/Cities/Noida/MapServer";
     const fetchUrls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -1383,7 +1383,13 @@ describe("addArcGISLayer (feature layer)", () => {
       fetchUrls.push(url);
       if (url.includes("/content/items/")) return jsonResponse({ url: mapServerUrl });
       if (url.startsWith(`${mapServerUrl}?`)) {
-        return jsonResponse({ layers: [{ id: 0, subLayerIds: [1] }, { id: 1 }] });
+        return jsonResponse({
+          layers: [
+            { id: 0, type: "Group Layer", subLayerIds: [1, 2] },
+            { id: 1, type: "Raster Layer", subLayerIds: null },
+            { id: 2, type: "Feature Layer", subLayerIds: null },
+          ],
+        });
       }
       return jsonResponse(url.includes("/query") ? QUERY_GEOJSON : LAYER_INFO);
     }) as typeof fetch;
@@ -1398,7 +1404,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const layer = useAppStore.getState().layers.find((l) => l.id === id);
     assert.equal(layer?.type, "geojson");
     assert.equal(layer?.geojson?.features.length, 1);
-    assert.ok(fetchUrls.some((url) => url.startsWith(`${mapServerUrl}/1/query`)));
+    assert.ok(fetchUrls.some((url) => url.startsWith(`${mapServerUrl}/2/query`)));
   });
 });
 
