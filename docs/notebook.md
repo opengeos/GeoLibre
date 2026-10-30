@@ -40,6 +40,10 @@ m.get_layer(layer_id)
 m.list_layers()
 m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
+m.add_tile_layer("https://…/{z}/{x}/{y}.png", name="Imagery")
+m.add_cog("https://…/dem.tif", name="DEM", colormap="terrain", rescale=(0, 4000))
+m.add_raster(geotiff_bytes, name="Slope", colormap="magma")  # a GeoTIFF in memory
+m.run_whitebox_tool("slope", input=layer_id, output="slope.tif")
 ```
 
 Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
@@ -76,6 +80,19 @@ Synchronous read-back is desktop-only. JupyterLite uses browser `postMessage`;
 blocking its Python call would also block the browser event loop that must
 deliver the result. Canonical client source:
 `backend/geolibre_server/notebook_client.py`.
+
+## Example notebooks
+
+Two example notebooks open in the panel's file browser:
+
+- **`Welcome.ipynb`** covers the basics: moving the camera and adding markers and
+  GeoJSON.
+- **`Explore_GeoLibre.ipynb`** covers raster and vector data. It adds tile layers
+  and a COG, runs terrain analysis with NumPy, and converts raster results to
+  vector. It then styles live USGS earthquake data with data-driven colors,
+  heatmaps, labels and 3D extrusions, and runs a GeoPandas spatial join. In the
+  desktop app, it also manages layers by id and runs Whitebox tools, processing
+  tools and a Model Builder graph.
 
 ## Driving the map from an external client (VS Code, …)
 
@@ -180,10 +197,10 @@ block in `docker/nginx.conf`:
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
 `jupyter_lite_config.json`, a `jupyter-lite.json`, and the build
-`requirements.txt`). The build stages the kernel client and the starter
-`Welcome.ipynb` into its `files/` from their canonical copies under
-`backend/geolibre_server/` (`notebook_client.py`,
-`notebook_examples/Welcome.ipynb`). The generated directory is excluded from the PWA
+`requirements.txt`). The build stages the kernel client and the example notebooks
+into its `files/` from their canonical copies under
+`backend/geolibre_server/` (`notebook_client.py`, `notebook_examples/`). The
+generated directory is excluded from the PWA
 precache (see `pwaPlugin` in `apps/geolibre-desktop/vite.config.ts`).
 
 ## Desktop server

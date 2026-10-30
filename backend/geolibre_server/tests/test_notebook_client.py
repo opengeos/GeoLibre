@@ -112,6 +112,48 @@ def test_model_builder_graph_is_sent_as_one_command(relay, displays):
     assert displays == []
 
 
+def test_add_raster_sends_base64_and_display_options(relay, displays):
+    notebook_client.HostMap().add_raster(b"II*\x00", "Slope", colormap="magma", rescale=(0, 45))
+
+    assert json.loads(relay.calls[0].data) == {
+        "type": "geolibre:command",
+        "requestId": json.loads(relay.calls[0].data)["requestId"],
+        "method": "addRasterBytes",
+        "params": {
+            "name": "Slope",
+            "data": "SUkqAA==",
+            "options": {"colormap": "magma", "rescaleMin": 0.0, "rescaleMax": 45.0},
+        },
+    }
+
+
+def test_add_cog_and_tile_layer_send_their_urls(relay, displays):
+    host = notebook_client.HostMap()
+    host.add_cog("https://x.test/dem.tif", "DEM", colormap="terrain", opacity=0.5)
+    host.add_tile_layer("https://x.test/{z}/{x}/{y}.png", "Imagery", attribution="X")
+
+    cog, tiles = (json.loads(call.data) for call in relay.calls)
+    assert cog["method"] == "addCogLayer"
+    assert cog["params"] == {
+        "name": "DEM",
+        "url": "https://x.test/dem.tif",
+        "options": {"opacity": 0.5, "colormap": "terrain"},
+    }
+    assert tiles["method"] == "addTileLayer"
+    assert tiles["params"]["options"] == {"attribution": "X"}
+
+
+def test_run_whitebox_tool_is_fire_and_forget(relay, displays):
+    notebook_client.HostMap().run_whitebox_tool("slope", dem="layer-1")
+
+    assert json.loads(relay.calls[0].data) == {
+        "type": "geolibre:command",
+        "requestId": "",
+        "method": "runWhiteboxTool",
+        "params": {"id": "slope", "params": {"dem": "layer-1"}},
+    }
+
+
 def test_warns_when_no_window_is_listening(relay, displays):
     relay.listeners = 0
 

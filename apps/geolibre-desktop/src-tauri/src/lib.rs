@@ -2977,14 +2977,13 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
             notebooks_dir.display()
         )
     })?;
-    // Seed the starter Welcome notebook (the same one bundled into JupyterLite on
-    // web) on first run only, so we never clobber a user's edits.
-    let welcome_dest = notebooks_dir.join("Welcome.ipynb");
-    if !welcome_dest.exists() {
-        let _ = fs::copy(
-            project_dir.join("notebook_examples").join("Welcome.ipynb"),
-            &welcome_dest,
-        );
+    // Seed the example notebooks (the same ones bundled into JupyterLite on web)
+    // only when missing, so we never clobber a user's edits.
+    for notebook in ["Welcome.ipynb", "Explore_GeoLibre.ipynb"] {
+        let dest = notebooks_dir.join(notebook);
+        if !dest.exists() {
+            let _ = fs::copy(project_dir.join("notebook_examples").join(notebook), &dest);
+        }
     }
     // Make the kernel-side `geolibre` client importable from any notebook: copy
     // it out of the bundled backend resource into a dedicated lib dir placed on

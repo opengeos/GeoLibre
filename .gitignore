@@ -8,10 +8,10 @@ bundle-report/
 apps/geolibre-desktop/public/jupyterlite/
 # JupyterLite (doit) build cache, written to the working dir during the build.
 .jupyterlite.doit.db
-# The kernel-side geolibre client and the Welcome example are staged here from
+# The kernel-side geolibre client and the example notebooks are staged here from
 # their canonical backend copies by scripts/build-jupyterlite.mjs.
 apps/geolibre-desktop/jupyterlite/files/geolibre.py
-apps/geolibre-desktop/jupyterlite/files/Welcome.ipynb
+apps/geolibre-desktop/jupyterlite/files/*.ipynb
 site/
 target/
 .tauri/

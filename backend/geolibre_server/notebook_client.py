@@ -8,7 +8,7 @@ notebook scripting bridge: it forwards commands to the running GeoLibre app.
 
 Scope: this client speaks GeoLibre's **scripting bridge** (the same
 ``createScriptingHandlers`` surface used by the in-app Python console). That is a
-focused map-control API — camera, layers, styling, GeoJSON, processing — and is
+focused map-control API — camera, layers, styling, GeoJSON, rasters, processing — and is
 intentionally a smaller surface than the full ``geolibre`` PyPI widget (which
 mutates a whole project model and renders its own app). Marker/choropleth helpers
 here build GeoJSON and add it through the same layer command, so no extra bridge
@@ -56,6 +56,7 @@ and the desktop launcher copies it onto the kernel's import path
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -452,6 +453,18 @@ def _points_to_featurecollection(points: Iterable[Any]) -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
+def _raster_options(
+    colormap: str | None, rescale: Sequence[float] | None, options: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge the raster display keywords into one command options dict."""
+    merged = dict(options)
+    if colormap is not None:
+        merged["colormap"] = colormap
+    if rescale is not None:
+        merged["rescaleMin"], merged["rescaleMax"] = float(rescale[0]), float(rescale[1])
+    return merged
+
+
 class HostMap:
     """A handle to the live map in the surrounding GeoLibre app."""
 
@@ -546,13 +559,26 @@ class HostMap:
             "geojson": _to_featurecollection(data),
             "style": dict(style),
         }
+        return self._add_layer("addGeoJsonLayer", params)
+
+    def _add_layer(self, method: str, params: dict[str, Any]) -> str | None:
+        """Send a command that adds a layer, returning its id when one can be read.
+
+        Args:
+            method: The scripting command name.
+            params: The command's parameters.
+
+        Returns:
+            The new layer's id on desktop, or None when it is unavailable (see
+            :meth:`add_geojson`).
+        """
         # Desktop kernels have a correlated request/reply relay, so return the
         # new layer id. JupyterLite retains its display/postMessage transport,
         # where a synchronous Python call cannot wait on the browser event loop.
         url = _relay_url()
         if url is not None:
             try:
-                value = _request_from_relay(url, "addGeoJsonLayer", params)
+                value = _request_from_relay(url, method, params)
             except GeoLibreNotConnectedError as error:
                 # Nothing ran. Every other mutation degrades to the display
                 # transport here (which still reaches the embedded Notebook
@@ -564,20 +590,19 @@ class HostMap:
                 # answer; passing it through skips a second POST that would wait
                 # out another full timeout, keeping this no worse than the single
                 # attempt every other mutation makes.
-                _send("addGeoJsonLayer", params, known_failure=error.relay_reason)
+                _send(method, params, known_failure=error.relay_reason)
                 return None
             except GeoLibreTimeoutError as error:
                 # A window DID take this command — a big FeatureCollection can
                 # outrun the relay's result timeout — and is probably still
                 # adding the layer. Re-sending would add it twice, so give up on
                 # the id alone and say what happened.
-                # stacklevel=2, not the 3 _send uses: this warn() is already in
-                # the HostMap method, so the user's cell is one frame up, not two.
+                # stacklevel=3: _add_layer -> the add_* method -> the user's cell.
                 warnings.warn(
                     f"GeoLibre: {error} The layer is most likely being added; "
                     "its id is unavailable. Use list_layers() to find it.",
                     GeoLibreTimeoutWarning,
-                    stacklevel=2,
+                    stacklevel=3,
                 )
                 return None
             if not isinstance(value, str) or not value:
@@ -585,8 +610,86 @@ class HostMap:
                 # later set_style/remove_layer call could ever resolve.
                 raise RuntimeError(f"GeoLibre returned an unexpected layer id: {value!r}")
             return value
-        _send("addGeoJsonLayer", params)
+        _send(method, params)
         return None
+
+    def add_tile_layer(self, url: str, name: str = "Tile layer", **options: Any) -> str | None:
+        """Add an XYZ raster tile layer.
+
+        Args:
+            url: Tile URL template with ``{z}``, ``{x}`` and ``{y}``.
+            name: Layer display name.
+            **options: Source options such as ``attribution``, ``opacity``,
+                ``bounds`` (``[west, south, east, north]``), ``minzoom`` and
+                ``maxzoom``.
+
+        Returns:
+            The new layer's id, or None when it is unavailable (see
+            :meth:`add_geojson`).
+        """
+        return self._add_layer("addTileLayer", {"name": name, "url": url, "options": options})
+
+    def add_cog(
+        self,
+        url: str,
+        name: str = "COG",
+        *,
+        colormap: str | None = None,
+        rescale: Sequence[float] | None = None,
+        **options: Any,
+    ) -> str | None:
+        """Add a Cloud Optimized GeoTIFF that the app reads from a URL.
+
+        Args:
+            url: The COG's http(s) URL. The server must allow cross-origin reads.
+            name: Layer display name.
+            colormap: Colormap name for a single-band raster, e.g. ``"terrain"``.
+            rescale: The ``(min, max)`` value range mapped onto the colormap.
+            **options: Other display options: ``bands`` (e.g. ``"1,2,3"``),
+                ``nodata``, ``opacity`` and ``zoomTo``.
+
+        Returns:
+            The new layer's id, or None when it is unavailable (see
+            :meth:`add_geojson`).
+        """
+        return self._add_layer(
+            "addCogLayer",
+            {"name": name, "url": url, "options": _raster_options(colormap, rescale, options)},
+        )
+
+    def add_raster(
+        self,
+        data: bytes,
+        name: str = "Raster",
+        *,
+        colormap: str | None = None,
+        rescale: Sequence[float] | None = None,
+        **options: Any,
+    ) -> str | None:
+        """Add a GeoTIFF held in memory, such as an analysis result.
+
+        The bytes travel through the notebook bridge, so keep them to a few
+        megabytes. Use :meth:`add_cog` for a large raster that has a URL.
+
+        Args:
+            data: The GeoTIFF file's bytes.
+            name: Layer display name.
+            colormap: Colormap name for a single-band raster, e.g. ``"viridis"``.
+            rescale: The ``(min, max)`` value range mapped onto the colormap.
+            **options: Other display options: ``nodata`` and ``opacity``.
+
+        Returns:
+            The new layer's id, or None when it is unavailable (see
+            :meth:`add_geojson`).
+        """
+        return self._add_layer(
+            "addRasterBytes",
+            {
+                "name": name,
+                "data": base64.b64encode(bytes(data)).decode("ascii"),
+                "options": _raster_options(colormap, rescale, options),
+            },
+        )
 
     def add_marker(
         self, lng: float, lat: float, *, name: str = "Marker", **properties: Any
@@ -634,6 +737,15 @@ class HostMap:
         logs/result-layer ids are not available here.)
         """
         _send("runAlgorithm", {"id": algorithm_id, "params": dict(params)})
+
+    def run_whitebox_tool(self, tool_id: str, **params: Any) -> None:
+        """Run a Whitebox tool in the app through WebAssembly.
+
+        Pass a layer id for an input-layer parameter, and a ``.tif`` name for a
+        raster ``output``. Result layers are added to the map. (Fire-and-forget,
+        like :meth:`run_algorithm`.)
+        """
+        _send("runWhiteboxTool", {"id": tool_id, "params": dict(params)})
 
     def run_model_builder(self, graph: dict[str, Any]) -> None:
         """Run a complete Model Builder graph in the host app.

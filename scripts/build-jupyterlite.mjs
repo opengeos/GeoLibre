@@ -24,14 +24,14 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const liteDir = resolve(repoRoot, "apps/geolibre-desktop/jupyterlite");
 const contentsDir = resolve(liteDir, "files");
-// The kernel-side `geolibre` client and the Welcome example both have a single
+// The kernel-side `geolibre` client and the example notebooks each have a single
 // canonical copy under the backend (so the desktop launcher bundles/copies the
 // same files); stage them into the JupyterLite contents here so the web kernel
-// gets `import geolibre` and the same starter notebook.
+// gets `import geolibre` and the same starter notebooks.
 const notebookClientSrc = resolve(repoRoot, "backend/geolibre_server/notebook_client.py");
 const notebookClientDest = resolve(contentsDir, "geolibre.py");
-const welcomeSrc = resolve(repoRoot, "backend/geolibre_server/notebook_examples/Welcome.ipynb");
-const welcomeDest = resolve(contentsDir, "Welcome.ipynb");
+const notebookExamplesDir = resolve(repoRoot, "backend/geolibre_server/notebook_examples");
+const notebookExamples = ["Welcome.ipynb", "Explore_GeoLibre.ipynb"];
 const outputDir = resolve(repoRoot, "apps/geolibre-desktop/public/jupyterlite");
 
 const isWin = process.platform === "win32";
@@ -119,11 +119,13 @@ if (probe.status !== 0) {
   process.exit(0);
 }
 
-// Stage the kernel-side `geolibre` client and the Welcome example into the
+// Stage the kernel-side `geolibre` client and the example notebooks into the
 // contents (the dir holds only generated copies, so ensure it exists first).
 mkdirSync(contentsDir, { recursive: true });
 copyFileSync(notebookClientSrc, notebookClientDest);
-copyFileSync(welcomeSrc, welcomeDest);
+for (const notebook of notebookExamples) {
+  copyFileSync(resolve(notebookExamplesDir, notebook), resolve(contentsDir, notebook));
+}
 
 // Rebuild cleanly so stale assets from an older JupyterLite version don't linger.
 rmSync(outputDir, { recursive: true, force: true });
