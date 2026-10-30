@@ -646,7 +646,8 @@ class HostMap:
             colormap: Colormap name for a single-band raster, e.g. ``"terrain"``.
             rescale: The ``(min, max)`` value range mapped onto the colormap.
             **options: Other display options: ``bands`` (e.g. ``"1,2,3"``),
-                ``nodata``, ``opacity`` and ``zoomTo``.
+                ``nodata``, ``opacity``, ``zoomTo``, ``engine`` and
+                ``beforeLayerId``. Other names are ignored.
 
         Returns:
             The new layer's id, or None when it is unavailable (see

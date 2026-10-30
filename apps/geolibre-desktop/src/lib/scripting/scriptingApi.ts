@@ -18,11 +18,7 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import {
-  SKETCHES_SOURCE_KIND,
-  addRasterToMap,
-  type GeoLibreTileLayerOptions,
-} from "@geolibre/plugins";
+import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
@@ -30,7 +26,12 @@ import { isTiff } from "./binary-output";
 import { beginProcessingRun } from "../processing-history";
 import { imageBlobToDataUrl } from "@geolibre/map";
 import { styleParamPatch } from "./style-params";
-import { base64ToBytes, cogOptionsFromParams, requireHttpUrl } from "./raster-params";
+import {
+  base64ToBytes,
+  cogOptionsFromParams,
+  requireHttpUrl,
+  tileOptionsFromParams,
+} from "./raster-params";
 import { parameterKind } from "../whitebox-param-kind";
 import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
 import { createAppAPI } from "../../hooks/usePlugins";
@@ -243,7 +244,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       return app.addTileLayer(
         String(params.name ?? "Tile layer"),
         url,
-        params.options as GeoLibreTileLayerOptions | undefined,
+        tileOptionsFromParams(params.options),
       );
     },
     addCogLayer: async (params) => {
@@ -269,8 +270,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       );
       return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
         name,
+        ...(colormap !== undefined ? { defaults: { colormap } } : {}),
         state: {
-          ...(colormap !== undefined ? { colormap: colormap as never } : {}),
           ...(rescaleMin !== undefined && rescaleMax !== undefined
             ? { rescale: [[rescaleMin, rescaleMax]] }
             : {}),

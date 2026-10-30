@@ -42,8 +42,8 @@ m.fit_bounds([-123, 37, -122, 38])
 m.set_basemap("https://…/style.json")
 m.add_tile_layer("https://…/{z}/{x}/{y}.png", name="Imagery")
 m.add_cog("https://…/dem.tif", name="DEM", colormap="terrain", rescale=(0, 4000))
-m.add_raster(geotiff_bytes, name="Slope", colormap="magma")  # a GeoTIFF in memory
-m.run_whitebox_tool("slope", input=layer_id, output="slope.tif")
+dem_id = m.add_raster(geotiff_bytes, name="DEM", colormap="terrain")  # a GeoTIFF in memory
+m.run_whitebox_tool("slope", input=dem_id, output="slope.tif")
 ```
 
 Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
