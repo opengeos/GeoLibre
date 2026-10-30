@@ -43,7 +43,13 @@ m.set_basemap("https://…/style.json")
 m.add_tile_layer("https://…/{z}/{x}/{y}.png", name="Imagery")
 m.add_cog("https://…/dem.tif", name="DEM", colormap="terrain", rescale=(0, 4000))
 dem_id = m.add_raster(geotiff_bytes, name="DEM", colormap="terrain")  # a GeoTIFF in memory
-m.run_whitebox_tool("slope", input=dem_id, output="slope.tif")
+```
+
+Calls that take a layer id need one returned on desktop, because `add_*` returns
+`None` on the web:
+
+```python
+m.run_whitebox_tool("slope", input=dem_id, output="slope.tif")  # desktop only
 ```
 
 Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the

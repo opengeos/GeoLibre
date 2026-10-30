@@ -270,8 +270,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       );
       return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
         name,
-        ...(colormap !== undefined ? { defaults: { colormap } } : {}),
         state: {
+          ...(colormap !== undefined ? { colormap } : {}),
           ...(rescaleMin !== undefined && rescaleMax !== undefined
             ? { rescale: [[rescaleMin, rescaleMax]] }
             : {}),

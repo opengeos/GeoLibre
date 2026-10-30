@@ -34,6 +34,10 @@ describe("scripting raster params", () => {
       { attribution: "Esri", minzoom: 5, bounds: [-1, -1, 1, 1] },
     );
     assert.deepEqual(tileOptionsFromParams({ bounds: [0, 0], scheme: "other" }), {});
+    assert.deepEqual(tileOptionsFromParams({ beforeLayerId: "a", metadata: { source: "x" } }), {
+      beforeLayerId: "a",
+      metadata: { source: "x" },
+    });
   });
 
   it("keeps a known COG engine and drops an unknown one", () => {

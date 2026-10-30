@@ -75,6 +75,11 @@ export function tileOptionsFromParams(value: unknown): GeoLibreTileLayerOptions 
   if (typeof raw.attribution === "string") options.attribution = raw.attribution;
   if (typeof raw.visible === "boolean") options.visible = raw.visible;
   if (raw.scheme === "xyz" || raw.scheme === "tms") options.scheme = raw.scheme;
+  if (typeof raw.beforeLayerId === "string") options.beforeLayerId = raw.beforeLayerId;
+  // The app API validates metadata itself, so only the container is checked here.
+  if (raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)) {
+    options.metadata = raw.metadata as GeoLibreTileLayerOptions["metadata"];
+  }
   for (const key of ["tileSize", "minzoom", "maxzoom", "opacity"] as const) {
     const number = raw[key];
     if (typeof number === "number" && Number.isFinite(number)) options[key] = number;
