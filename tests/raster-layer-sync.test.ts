@@ -707,6 +707,11 @@ describe("wireRasterStoreSync", () => {
       useAppStore.getState().layers.map(({ id }) => id),
       ["raster-a", "raster-b", "raster-c"],
     );
+    // The refused move is undone on the control too, not left to the next store change.
+    assert.deepEqual(
+      control.getRasters().map(({ id }) => id),
+      ["raster-a", "raster-b", "raster-c"],
+    );
   });
 
   it("does not echo control-driven syncs back at the control", () => {
