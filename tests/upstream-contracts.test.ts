@@ -434,6 +434,20 @@ describe("maplibre-gl-lidar", () => {
   });
 });
 
+describe("maplibre-gl-raster", () => {
+  // The package loads deck.gl and WebGL code, so this reads the published text.
+  it("still keeps deck.gl rasters out of the depth buffer", () => {
+    assert.ok(
+      readPublishedText("maplibre-gl-raster").includes("depthWriteEnabled: false"),
+      contractMessage(
+        "maplibre-gl-raster",
+        "`maplibre-gl-raster` — rasters stay out of the depth buffer",
+        "the published bundle no longer sets `depthWriteEnabled: false` on raster layers",
+      ),
+    );
+  });
+});
+
 describe("maplibre-gl-layer-control", () => {
   const section = "`maplibre-gl-layer-control` (`packages/map/package.json`) — private internals";
 

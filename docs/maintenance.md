@@ -600,6 +600,15 @@ opens on measure clicks again) or, worse, `disable()` stops unbinding it.
 field, the arrow property or either binding moves. Better still, upstream a
 click-filter option and delete the wrap.
 
+### `maplibre-gl-raster` — rasters stay out of the depth buffer
+
+The package draws deck.gl rasters with `depthWriteEnabled: false`. Each grid
+gets different mesh triangles, so with depth writes on, a raster under another
+one on a different grid punches stable holes in it (#3285). Nothing errors, so
+`tests/upstream-contracts.test.ts` checks the published bundle for the flag. If
+that test fails, confirm the new version still keeps rasters from fighting
+before changing it.
+
 ### `maplibre-gl-raster` — checked by the compiler
 
 `GeoLibreCogRenderEngine` (`packages/plugins/src/types.ts`) mirrors the
