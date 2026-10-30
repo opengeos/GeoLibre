@@ -143,14 +143,28 @@ def test_add_cog_and_tile_layer_send_their_urls(relay, displays):
     assert tiles["params"]["options"] == {"attribution": "X"}
 
 
+def test_add_raster_rejects_a_raw_array(relay, displays):
+    with pytest.raises(TypeError, match="GeoTIFF bytes"):
+        notebook_client.HostMap().add_raster([1, 2, 3])
+
+
+def test_add_layer_warning_points_at_the_caller(relay, displays):
+    relay.listeners = 0
+
+    with pytest.warns(notebook_client.GeoLibreNotConnectedWarning) as caught:
+        notebook_client.HostMap().add_cog("https://x.test/dem.tif")
+
+    assert caught[0].filename == __file__
+
+
 def test_run_whitebox_tool_is_fire_and_forget(relay, displays):
-    notebook_client.HostMap().run_whitebox_tool("slope", dem="layer-1")
+    notebook_client.HostMap().run_whitebox_tool("slope", input="layer-1")
 
     assert json.loads(relay.calls[0].data) == {
         "type": "geolibre:command",
         "requestId": "",
         "method": "runWhiteboxTool",
-        "params": {"id": "slope", "params": {"dem": "layer-1"}},
+        "params": {"id": "slope", "params": {"input": "layer-1"}},
     }
 
 

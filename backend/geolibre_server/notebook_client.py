@@ -333,7 +333,11 @@ def is_connected() -> bool:
 
 
 def _send(
-    method: str, params: dict[str, Any] | None = None, *, known_failure: str | None = None
+    method: str,
+    params: dict[str, Any] | None = None,
+    *,
+    known_failure: str | None = None,
+    stacklevel: int = 3,
 ) -> None:
     """Post one scripting command to the host GeoLibre app.
 
@@ -352,6 +356,8 @@ def _send(
             already established. Skips the relay POST — which would only wait out
             a second timeout against an endpoint just proven unresponsive — and
             goes straight to the display transport, warning with this reason.
+        stacklevel: The warning's stack level. The default points at the user's
+            cell when a HostMap method calls this directly.
     """
     message = {
         "type": "geolibre:command",
@@ -371,12 +377,12 @@ def _send(
         # postMessage, and this notebook may be embedded in its Notebook panel.
         _post_message_via_display(message)
         reason = error or "no GeoLibre window is connected to this Jupyter server"
-        # stacklevel=3: HostMap method -> _send -> the user's cell, so the warning
+        # By default HostMap method -> _send -> the user's cell, so the warning
         # points at their code (and repeats in each new cell rather than once).
         warnings.warn(
             f"GeoLibre: {reason}. {_NOT_CONNECTED_HINT}",
             GeoLibreNotConnectedWarning,
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
         return
 
@@ -387,7 +393,7 @@ def _send(
             "so map commands can only be delivered when the notebook is rendered "
             f"inside the app's Notebook panel. {_NOT_CONNECTED_HINT}",
             GeoLibreNotConnectedWarning,
-            stacklevel=3,
+            stacklevel=stacklevel,
         )
 
 
@@ -590,7 +596,7 @@ class HostMap:
                 # answer; passing it through skips a second POST that would wait
                 # out another full timeout, keeping this no worse than the single
                 # attempt every other mutation makes.
-                _send(method, params, known_failure=error.relay_reason)
+                _send(method, params, known_failure=error.relay_reason, stacklevel=4)
                 return None
             except GeoLibreTimeoutError as error:
                 # A window DID take this command — a big FeatureCollection can
@@ -610,7 +616,7 @@ class HostMap:
                 # later set_style/remove_layer call could ever resolve.
                 raise RuntimeError(f"GeoLibre returned an unexpected layer id: {value!r}")
             return value
-        _send(method, params)
+        _send(method, params, stacklevel=4)
         return None
 
     def add_tile_layer(self, url: str, name: str = "Tile layer", **options: Any) -> str | None:
@@ -683,6 +689,8 @@ class HostMap:
             The new layer's id, or None when it is unavailable (see
             :meth:`add_geojson`).
         """
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError("add_raster() needs GeoTIFF bytes, not a raw array")
         return self._add_layer(
             "addRasterBytes",
             {
