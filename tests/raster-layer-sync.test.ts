@@ -689,6 +689,26 @@ describe("wireRasterStoreSync", () => {
     assert.deepEqual(calls, []);
   });
 
+  it("does not mirror a raster panel move that would split a layer group", () => {
+    const { control } = fakeControl([
+      rasterInfo({ id: "raster-a" }),
+      rasterInfo({ id: "raster-b" }),
+      rasterInfo({ id: "raster-c" }),
+    ]);
+    syncRasterLayersToStore(control);
+    useAppStore.getState().updateLayer("raster-a", { groupId: "group" });
+    useAppStore.getState().updateLayer("raster-b", { groupId: "group" });
+
+    const infos = control.getRasters();
+    infos.splice(1, 0, ...infos.splice(2, 1));
+    syncRasterLayersToStore(control);
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map(({ id }) => id),
+      ["raster-a", "raster-b", "raster-c"],
+    );
+  });
+
   it("does not echo control-driven syncs back at the control", () => {
     const { control, calls } = fakeControl([rasterInfo()]);
     syncRasterLayersToStore(control);

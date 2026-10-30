@@ -444,7 +444,8 @@ export function syncRasterLayersToStoreWithOptions(
 /**
  * Moves the store's rasters into the control's order, after a move made with
  * the raster panel's own up/down buttons. Only the slots rasters already occupy
- * are rewritten, so other layers keep their place in the stack.
+ * are rewritten, so other layers keep their place in the stack. A move that
+ * would split a layer group is not mirrored, and the store order stands.
  *
  * @param infos - The control's rasters, bottom to top.
  */
@@ -459,7 +460,27 @@ function applyControlRasterOrder(infos: RasterLayerInfo[]): void {
   let next = 0;
   const reordered = layers.map((layer) => (orderedIds.has(layer.id) ? ordered[next++] : layer));
   if (reordered.every((layer, index) => layer === layers[index])) return;
+  if (splitsLayerGroup(reordered)) return;
   useAppStore.setState({ layers: reordered, isDirty: true });
+}
+
+/**
+ * Whether any layer group's members are no longer contiguous in the stack. The
+ * raster control knows nothing about groups, so its order can ask for this.
+ *
+ * @param layers - The candidate store layers, bottom to top.
+ * @returns True when a group's members would be separated by another layer.
+ */
+function splitsLayerGroup(layers: GeoLibreLayer[]): boolean {
+  const closed = new Set<string>();
+  let current: string | undefined;
+  for (const { groupId } of layers) {
+    if (groupId === current) continue;
+    if (current) closed.add(current);
+    if (groupId && closed.has(groupId)) return true;
+    current = groupId;
+  }
+  return false;
 }
 
 /**
