@@ -17,7 +17,9 @@ import type {
  */
 export const OVERPASS_DEFAULT_ENDPOINT = "https://tiles.geolibre.app/overpass";
 export const OVERPASS_DEV_ENDPOINT = "/overpass";
-export const OVERPASS_REQUEST_TIMEOUT_MS = 75_000;
+export const OVERPASS_REQUEST_TIMEOUT_MS = 90_000;
+export const OSM_MAP_API_ENDPOINT = "https://api.openstreetmap.org/api/0.6/map.json";
+export const MAX_OSM_MAP_API_AREA_SQUARE_DEGREES = 0.25;
 export const OSM_CUSTOM_TAG_MAX_LENGTH = 255;
 // Keep these mirrored limits aligned with isAllowedOverpassQuery in workers/tiles/src/overpass-query.ts.
 export const MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
@@ -96,6 +98,24 @@ export interface OverpassResponse {
   remark?: string;
 }
 
+interface OsmApiElement {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+  nodes?: number[];
+  members?: Array<{
+    type: "node" | "way" | "relation";
+    ref: number;
+    role?: string;
+  }>;
+}
+
+interface OsmApiResponse {
+  elements?: OsmApiElement[];
+}
+
 export type OverpassFetch = (
   url: string,
   init: RequestInit,
@@ -115,6 +135,28 @@ const PRESET_TAGS: Record<Exclude<OsmDownloadPreset, "all" | "custom">, string> 
   waterways: '"waterway"',
   landuse: '"landuse"',
 };
+
+const PRESET_TAG_KEYS: Record<Exclude<OsmDownloadPreset, "all" | "custom">, string> = {
+  buildings: "building",
+  roads: "highway",
+  amenities: "amenity",
+  waterways: "waterway",
+  landuse: "landuse",
+};
+
+function matchesOsmDownloadFilter(
+  tags: Record<string, string> | undefined,
+  filter: OsmDownloadFilter,
+): boolean {
+  if (!tags) return false;
+  if (filter.preset === "all") return Object.keys(tags).length > 0;
+  if (filter.preset === "custom") {
+    const key = filter.key?.trim() ?? "";
+    const value = filter.value?.trim() ?? "";
+    return Boolean(key && key in tags && (!value || tags[key] === value));
+  }
+  return PRESET_TAG_KEYS[filter.preset] in tags;
+}
 
 /** Escape a user-entered tag key/value for an Overpass quoted string. */
 export function escapeOverpassString(value: string): string {
@@ -217,6 +259,23 @@ export async function downloadOsmGeoJson(
       signal: requestController.signal,
     });
     if (!response.ok) {
+      if (
+        options.endpoint === undefined &&
+        [429, 502, 503, 504].includes(response.status) &&
+        (osmDownloadBoundsArea(bbox) ?? Infinity) <= MAX_OSM_MAP_API_AREA_SQUARE_DEGREES
+      ) {
+        const [west, south, east, north] = bbox;
+        const mapUrl = new URL(OSM_MAP_API_ENDPOINT);
+        mapUrl.searchParams.set("bbox", [west, south, east, north].join(","));
+        const mapResponse = await fetchImpl(mapUrl.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: requestController.signal,
+        });
+        if (mapResponse.ok) {
+          return osmApiJsonToGeoJson((await mapResponse.json()) as OsmApiResponse, filter);
+        }
+      }
       let detail = "";
       try {
         detail = (await response.text())
@@ -235,6 +294,50 @@ export async function downloadOsmGeoJson(
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
   }
+}
+
+/** Convert OSM map API JSON to filtered GeoJSON, resolving way-node references locally. */
+export function osmApiJsonToGeoJson(
+  payload: OsmApiResponse,
+  filter: OsmDownloadFilter,
+): FeatureCollection {
+  const elements = payload.elements ?? [];
+  const nodes = new Map(
+    elements
+      .filter((element): element is OsmApiElement & { type: "node" } => element.type === "node")
+      .map((node) => [node.id, node]),
+  );
+  const ways = new Map(
+    elements
+      .filter((element): element is OsmApiElement & { type: "way" } => element.type === "way")
+      .map((way) => [way.id, way]),
+  );
+  const wayGeometry = (way: OsmApiElement | undefined) =>
+    way?.nodes?.map((nodeId) => {
+      const node = nodes.get(nodeId);
+      return node && isValidPosition(node) ? { lat: node.lat, lon: node.lon } : null;
+    });
+
+  const selected: OverpassElement[] = elements
+    .filter((element) => matchesOsmDownloadFilter(element.tags, filter))
+    .map((element) => {
+      if (element.type === "node") return element;
+      if (element.type === "way") {
+        return { ...element, geometry: wayGeometry(element) };
+      }
+      return {
+        ...element,
+        members: element.members?.map((member) => {
+          const node = member.type === "node" ? nodes.get(member.ref) : undefined;
+          return {
+            ...member,
+            ...(node && isValidPosition(node) ? { lat: node.lat, lon: node.lon } : {}),
+            ...(member.type === "way" ? { geometry: wayGeometry(ways.get(member.ref)) } : {}),
+          };
+        }),
+      };
+    });
+  return overpassJsonToGeoJson({ elements: selected });
 }
 
 function isValidPosition(point: { lat?: number; lon?: number } | null | undefined): point is {

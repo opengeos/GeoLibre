@@ -49,6 +49,7 @@ import {
   OPEN_SKY_STATES_UPSTREAM,
   OVERPASS_API_UPSTREAM,
   OVERPASS_API_FALLBACK_UPSTREAM,
+  OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
   ONTARIO_CCTV_CATALOG_UPSTREAM,
   ONTARIO_CCTV_FRAME_UPSTREAM,
   TRANSIT_UPSTREAMS,
@@ -650,11 +651,18 @@ async function handleOverpass(request: Request): Promise<Response> {
   let originResponse: Response | null = null;
   let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
   const upstreamDeadline = Date.now() + OVERPASS_UPSTREAM_TIMEOUT_MS;
-  for (const upstream of [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM]) {
+  const upstreams = [
+    OVERPASS_API_UPSTREAM,
+    OVERPASS_API_FALLBACK_UPSTREAM,
+    OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
+  ];
+  for (const [index, upstream] of upstreams.entries()) {
     const remainingMs = upstreamDeadline - Date.now();
     if (remainingMs <= 0) break;
     const upstreamController = new AbortController();
-    upstreamTimeout = setTimeout(() => upstreamController.abort(), remainingMs);
+    const attemptsLeft = upstreams.length - index;
+    const attemptTimeoutMs = Math.max(1, Math.floor(remainingMs / attemptsLeft));
+    upstreamTimeout = setTimeout(() => upstreamController.abort(), attemptTimeoutMs);
     try {
       originResponse = await fetchAllowlistedUpstream(upstream, {
         method: "POST",
@@ -669,9 +677,14 @@ async function handleOverpass(request: Request): Promise<Response> {
     } catch {
       clearTimeout(upstreamTimeout);
       upstreamTimeout = null;
+      continue;
+    }
+    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) {
+      clearTimeout(upstreamTimeout);
+      const bodyTimeoutMs = Math.max(1, upstreamDeadline - Date.now());
+      upstreamTimeout = setTimeout(() => upstreamController.abort(), bodyTimeoutMs);
       break;
     }
-    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) break;
     clearTimeout(upstreamTimeout);
     upstreamTimeout = null;
     await originResponse?.body?.cancel().catch(() => undefined);

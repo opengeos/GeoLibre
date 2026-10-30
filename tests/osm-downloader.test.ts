@@ -5,9 +5,12 @@ import {
   canDownloadOsmBounds,
   defaultOverpassEndpoint,
   downloadOsmGeoJson,
+  MAX_OSM_MAP_API_AREA_SQUARE_DEGREES,
+  OSM_MAP_API_ENDPOINT,
   OVERPASS_DEFAULT_ENDPOINT,
   OVERPASS_DEV_ENDPOINT,
   overpassJsonToGeoJson,
+  osmApiJsonToGeoJson,
   osmDownloadAreaLimit,
   osmDownloadBoundsArea,
   type OverpassFetch,
@@ -278,6 +281,28 @@ describe("Overpass JSON conversion", () => {
   });
 });
 
+describe("OSM map API fallback conversion", () => {
+  it("reconstructs way geometry and applies the selected tag filter", () => {
+    const result = osmApiJsonToGeoJson(
+      {
+        elements: [
+          { type: "node", id: 1, lon: 1, lat: 2 },
+          { type: "node", id: 2, lon: 2, lat: 2 },
+          { type: "node", id: 3, lon: 2, lat: 3 },
+          { type: "node", id: 4, lon: 1, lat: 2 },
+          { type: "way", id: 10, nodes: [1, 2, 3, 4], tags: { building: "yes" } },
+          { type: "way", id: 11, nodes: [1, 2], tags: { highway: "service" } },
+        ],
+      },
+      { preset: "buildings" },
+    );
+
+    assert.equal(result.features.length, 1);
+    assert.equal(result.features[0].id, "way/10");
+    assert.equal(result.features[0].geometry.type, "Polygon");
+  });
+});
+
 describe("downloadOsmGeoJson", () => {
   it("uses the same-origin relay in Vite development", () => {
     assert.equal(defaultOverpassEndpoint(true), OVERPASS_DEV_ENDPOINT);
@@ -331,6 +356,54 @@ describe("downloadOsmGeoJson", () => {
       () => downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl }),
       /429.*Please retry later/,
     );
+  });
+
+  it("falls back to the OSM map API for a small extent when Overpass is busy", async () => {
+    const calls: Array<{ url: string; method: string | undefined }> = [];
+    const fetchImpl: OverpassFetch = async (url, init) => {
+      calls.push({ url, method: init.method });
+      if (calls.length === 1) {
+        return { ok: false, status: 502, json: async () => ({}), text: async () => "Bad Gateway" };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "",
+        json: async () => ({
+          elements: [
+            { type: "node", id: 1, lon: 0, lat: 0 },
+            { type: "node", id: 2, lon: 0.1, lat: 0 },
+            { type: "way", id: 3, nodes: [1, 2], tags: { highway: "service" } },
+          ],
+        }),
+      };
+    };
+
+    const result = await downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl });
+
+    assert.equal(result.features.length, 1);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, "GET");
+    assert.equal(new URL(calls[1].url).origin + new URL(calls[1].url).pathname, OSM_MAP_API_ENDPOINT);
+  });
+
+  it("does not use the map API fallback above its safe area limit", async () => {
+    let calls = 0;
+    const fetchImpl: OverpassFetch = async () => {
+      calls += 1;
+      return { ok: false, status: 502, json: async () => ({}), text: async () => "Bad Gateway" };
+    };
+
+    await assert.rejects(
+      () =>
+        downloadOsmGeoJson(
+          [0, 0, MAX_OSM_MAP_API_AREA_SQUARE_DEGREES + 0.01, 1],
+          { preset: "roads" },
+          { fetchImpl },
+        ),
+      /502/,
+    );
+    assert.equal(calls, 1);
   });
 
   it("rejects partial results carrying an Overpass remark", async () => {
