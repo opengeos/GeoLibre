@@ -660,10 +660,33 @@ describe("wireRasterStoreSync", () => {
       infos.map(({ id }) => id),
       ["raster-b", "raster-pending", "raster-a"],
     );
-    assert.equal(
-      calls.every(({ method }) => method === "reorderRaster"),
-      true,
+    assert.deepEqual(calls, [
+      { method: "reorderRaster", args: ["raster-b", 0] },
+      { method: "reorderRaster", args: ["raster-pending", 1] },
+    ]);
+  });
+
+  it("mirrors a move made in the raster panel, keeping other layers in place", () => {
+    const { control, calls } = fakeControl([
+      rasterInfo({ id: "raster-a" }),
+      rasterInfo({ id: "raster-b" }),
+    ]);
+    syncRasterLayersToStore(control);
+    useAppStore.getState().addLayer(otherStoreLayer());
+    useAppStore.getState().moveLayer("unrelated", 1);
+    wireRasterStoreSync(control);
+
+    control.getRasters().reverse();
+    syncRasterLayersToStore(control);
+
+    assert.deepEqual(
+      useAppStore.getState().layers.map(({ id }) => id),
+      ["raster-b", "unrelated", "raster-a"],
     );
+
+    // A later store change must not undo the panel's move.
+    useAppStore.getState().updateLayer("unrelated", { visible: false });
+    assert.deepEqual(calls, []);
   });
 
   it("does not echo control-driven syncs back at the control", () => {

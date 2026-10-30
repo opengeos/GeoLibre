@@ -435,9 +435,31 @@ export function syncRasterLayersToStoreWithOptions(
         });
       }
     }
+    applyControlRasterOrder(infos);
   } finally {
     syncingLayersToStore = false;
   }
+}
+
+/**
+ * Moves the store's rasters into the control's order, after a move made with
+ * the raster panel's own up/down buttons. Only the slots rasters already occupy
+ * are rewritten, so other layers keep their place in the stack.
+ *
+ * @param infos - The control's rasters, bottom to top.
+ */
+function applyControlRasterOrder(infos: RasterLayerInfo[]): void {
+  const { layers } = useAppStore.getState();
+  const byId = new Map(layers.map((layer) => [layer.id, layer]));
+  const ordered = infos.flatMap((info) => {
+    const layer = byId.get(info.id);
+    return layer && isRasterControlStoreLayer(layer) ? [layer] : [];
+  });
+  const orderedIds = new Set(ordered.map(({ id }) => id));
+  let next = 0;
+  const reordered = layers.map((layer) => (orderedIds.has(layer.id) ? ordered[next++] : layer));
+  if (reordered.every((layer, index) => layer === layers[index])) return;
+  useAppStore.setState({ layers: reordered, isDirty: true });
 }
 
 /**
