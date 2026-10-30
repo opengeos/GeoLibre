@@ -10208,6 +10208,8 @@
       "exportGeoJson": "Save GeoJSON",
       "mapUnavailable": "The map extent is not available yet.",
       "extentApplied": "Map extent applied.",
+      "invalidExtent": "Enter a valid bounding box.",
+      "zoomIn": "Zoom in until the map area is {{limit}} square degrees or less.",
       "downloading": "Downloading from OpenStreetMap…",
       "noFeatures": "No matching features were found in this area.",
       "error": "Could not download OSM data: {{message}}",

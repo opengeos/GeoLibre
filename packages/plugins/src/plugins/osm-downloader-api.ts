@@ -38,6 +38,42 @@ export interface OsmDownloadFilter {
   value?: string;
 }
 
+/** Maximum query area for a filter preset, in unprojected square degrees. */
+export function osmDownloadAreaLimit(preset: OsmDownloadPreset): number {
+  return preset === "all"
+    ? MAX_ALL_QUERY_AREA_SQUARE_DEGREES
+    : MAX_QUERY_AREA_SQUARE_DEGREES;
+}
+
+/** Validated bbox area, or null when the WGS84 bounds cannot be queried. */
+export function osmDownloadBoundsArea(
+  bbox: [number, number, number, number],
+): number | null {
+  const [west, south, east, north] = bbox;
+  if (
+    !bbox.every(Number.isFinite) ||
+    west < -180 ||
+    west > 180 ||
+    east > west + 360 ||
+    south < -90 ||
+    north > 90 ||
+    west >= east ||
+    south >= north
+  ) {
+    return null;
+  }
+  return (east - west) * (north - south);
+}
+
+/** Whether the bbox is valid and small enough for the selected OSM preset. */
+export function canDownloadOsmBounds(
+  bbox: [number, number, number, number],
+  preset: OsmDownloadPreset,
+): boolean {
+  const area = osmDownloadBoundsArea(bbox);
+  return area !== null && area <= osmDownloadAreaLimit(preset);
+}
+
 export interface OverpassElement {
   type: "node" | "way" | "relation";
   id: number;
@@ -109,21 +145,9 @@ export function buildOsmDownloadQuery(
   filter: OsmDownloadFilter,
 ): string {
   const [west, south, east, north] = bbox;
-  if (
-    !bbox.every(Number.isFinite) ||
-    west < -180 ||
-    west > 180 ||
-    east > west + 360 ||
-    south < -90 ||
-    north > 90 ||
-    west >= east ||
-    south >= north
-  ) {
-    throw new Error("Invalid bounding box");
-  }
-  const area = (east - west) * (north - south);
-  const areaLimit =
-    filter.preset === "all" ? MAX_ALL_QUERY_AREA_SQUARE_DEGREES : MAX_QUERY_AREA_SQUARE_DEGREES;
+  const area = osmDownloadBoundsArea(bbox);
+  if (area === null) throw new Error("Invalid bounding box");
+  const areaLimit = osmDownloadAreaLimit(filter.preset);
   if (area > areaLimit) {
     const scope = filter.preset === "all" ? "All-features downloads" : "OSM downloads";
     throw new Error(`${scope} are limited to ${areaLimit} square degrees`);

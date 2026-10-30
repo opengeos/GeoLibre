@@ -1,12 +1,16 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
+  canDownloadOsmBounds,
   downloadOsmGeoJson,
   OSM_CUSTOM_TAG_MAX_LENGTH,
+  osmDownloadAreaLimit,
+  osmDownloadBoundsArea,
   type OsmDownloadFilter,
   type OsmDownloadPreset,
 } from "./osm-downloader-api";
 import { createPluginTranslator } from "../plugin-i18n";
+import { getControlMap } from "./style-map";
 
 export const OSM_DOWNLOADER_PLUGIN_ID = "geolibre-osm-downloader";
 const PANEL_ID = OSM_DOWNLOADER_PLUGIN_ID;
@@ -37,6 +41,10 @@ const CSS = {
   primary:
     "padding:7px 10px;border:1px solid hsl(var(--primary));border-radius:6px;" +
     "background:hsl(var(--primary));color:hsl(var(--primary-foreground));cursor:pointer;font-weight:600;",
+  disabled:
+    "padding:7px 10px;border:1px solid hsl(var(--border));border-radius:6px;" +
+    "background:hsl(var(--muted));color:hsl(var(--muted-foreground));" +
+    "cursor:not-allowed;opacity:0.65;font-weight:600;",
   actions: "display:flex;gap:7px;flex-wrap:wrap;",
   status:
     "padding:8px;border-radius:6px;background:hsl(var(--muted));" +
@@ -192,6 +200,38 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   let resultPreset: OsmDownloadPreset | null = null;
   let disposed = false;
 
+  const readBounds = (): [number, number, number, number] =>
+    coordInputs.map((input) =>
+      input.value.trim() === "" ? Number.NaN : Number(input.value),
+    ) as [number, number, number, number];
+
+  const updateDownloadAvailability = (announce = false) => {
+    const bbox = readBounds();
+    const selectedPreset = preset.value as OsmDownloadPreset;
+    const area = osmDownloadBoundsArea(bbox);
+    const limit = osmDownloadAreaLimit(selectedPreset);
+    const eligible = canDownloadOsmBounds(bbox, selectedPreset);
+    const pending = controller !== null;
+    downloadButton.disabled = pending || !eligible;
+    downloadButton.style.cssText = !pending && eligible ? CSS.primary : CSS.disabled;
+    if (eligible) {
+      downloadButton.removeAttribute("title");
+      if (announce) status.textContent = tr(app, "extentApplied", "Map extent applied.");
+      return;
+    }
+    const message =
+      area === null
+        ? tr(app, "invalidExtent", "Enter a valid bounding box.")
+        : tr(
+            app,
+            "zoomIn",
+            "Zoom in until the map area is {{limit}} square degrees or less.",
+            { limit },
+          );
+    downloadButton.title = message;
+    if (announce && !pending) status.textContent = message;
+  };
+
   const refreshLabels = () => {
     hint.textContent = tr(
       app,
@@ -230,6 +270,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     useView.textContent = tr(app, "useMapExtent", "Use map extent");
     downloadButton.textContent = tr(app, "download", "Download OSM data");
     exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
+    updateDownloadAvailability(false);
   };
   refreshPanelLabels = refreshLabels;
 
@@ -242,19 +283,24 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     bounds.forEach((value, index) => {
       coordInputs[index].value = formatNumber(value);
     });
-    status.textContent = tr(app, "extentApplied", "Map extent applied.");
+    updateDownloadAvailability(true);
   };
 
   preset.addEventListener("change", () => {
     customGrid.hidden = preset.value !== "custom";
+    updateDownloadAvailability(true);
   });
+  coordInputs.forEach((input) =>
+    input.addEventListener("input", () => updateDownloadAvailability(true)),
+  );
   useView.addEventListener("click", applyViewBounds);
+  const map = getControlMap(app);
+  const onMoveEnd = () => applyViewBounds();
+  map?.on("moveend", onMoveEnd);
   applyViewBounds();
 
   downloadButton.addEventListener("click", async () => {
-    const bbox = coordInputs.map((input) =>
-      input.value.trim() === "" ? Number.NaN : Number(input.value),
-    ) as [number, number, number, number];
+    const bbox = readBounds();
     const selectedPreset = preset.value as OsmDownloadPreset;
     const filter: OsmDownloadFilter = {
       preset: selectedPreset,
@@ -267,7 +313,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     result = null;
     resultPreset = null;
     exportButton.disabled = true;
-    downloadButton.disabled = true;
+    updateDownloadAvailability(false);
     status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
     try {
       result = await downloadOsmGeoJson(bbox, filter, { signal: requestController.signal });
@@ -292,7 +338,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     } finally {
       if (!disposed && controller === requestController) {
         controller = null;
-        downloadButton.disabled = false;
+        updateDownloadAvailability(false);
       }
     }
   });
@@ -311,6 +357,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   return () => {
     disposed = true;
     controller?.abort();
+    map?.off("moveend", onMoveEnd);
     if (refreshPanelLabels === refreshLabels) refreshPanelLabels = null;
     container.replaceChildren();
   };

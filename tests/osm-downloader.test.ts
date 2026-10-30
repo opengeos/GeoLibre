@@ -2,17 +2,31 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildOsmDownloadQuery,
+  canDownloadOsmBounds,
   defaultOverpassEndpoint,
   downloadOsmGeoJson,
   OVERPASS_DEFAULT_ENDPOINT,
   OVERPASS_DEV_ENDPOINT,
   overpassJsonToGeoJson,
+  osmDownloadAreaLimit,
+  osmDownloadBoundsArea,
   type OverpassFetch,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
 import { OSM_DOWNLOADER_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-osm-downloader";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
 
 describe("OSM download query", () => {
+  it("reports whether the current bounds are eligible before downloading", () => {
+    assert.equal(osmDownloadAreaLimit("roads"), 4);
+    assert.equal(osmDownloadAreaLimit("all"), 0.25);
+    assert.equal(osmDownloadBoundsArea([0, 0, 2, 2]), 4);
+    assert.equal(canDownloadOsmBounds([0, 0, 2, 2], "roads"), true);
+    assert.equal(canDownloadOsmBounds([0, 0, 2.01, 2], "roads"), false);
+    assert.equal(canDownloadOsmBounds([0, 0, 0.5, 0.5], "all"), true);
+    assert.equal(canDownloadOsmBounds([0, 0, 0.51, 0.5], "all"), false);
+    assert.equal(canDownloadOsmBounds([2, 0, 1, 1], "roads"), false);
+  });
+
   it("uses Overpass bbox order and preset tag filters", () => {
     assert.equal(
       buildOsmDownloadQuery([-84.5, 33.6, -84.2, 33.9], { preset: "buildings" }),
