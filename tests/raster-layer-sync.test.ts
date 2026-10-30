@@ -66,6 +66,11 @@ function fakeControl(infos: RasterLayerInfo[] = [], options: { collapsed?: boole
     getState: () => ({ collapsed: options.collapsed ?? true }),
     getRasters: () => infos,
     removeRaster: (id) => calls.push({ method: "removeRaster", args: [id] }),
+    reorderRaster: (id, toIndex) => {
+      calls.push({ method: "reorderRaster", args: [id, toIndex] });
+      const from = infos.findIndex((info) => info.id === id);
+      infos.splice(toIndex, 0, ...infos.splice(from, 1));
+    },
     setRasterState: (id, patch) => calls.push({ method: "setRasterState", args: [id, patch] }),
     setVisible: (id, visible) => calls.push({ method: "setVisible", args: [id, visible] }),
   };
@@ -532,6 +537,7 @@ describe("syncRasterLayersToStore", () => {
       getState: () => ({ collapsed }),
       getRasters: () => [rasterInfo()],
       removeRaster: () => {},
+      reorderRaster: () => {},
       setRasterState: () => {},
       setVisible: () => {},
     };
@@ -601,6 +607,63 @@ describe("wireRasterStoreSync", () => {
     useAppStore.getState().removeLayer("raster-1");
 
     assert.deepEqual(calls, [{ method: "removeRaster", args: ["raster-1"] }]);
+  });
+
+  it("moves the control's rasters to follow a Layers panel reorder", () => {
+    const { control, calls } = fakeControl([
+      rasterInfo({ id: "raster-a" }),
+      rasterInfo({ id: "raster-b" }),
+      rasterInfo({ id: "raster-c" }),
+    ]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+
+    useAppStore.getState().moveLayer("raster-a", 2);
+
+    assert.deepEqual(calls, [
+      { method: "reorderRaster", args: ["raster-b", 0] },
+      { method: "reorderRaster", args: ["raster-c", 1] },
+    ]);
+    assert.deepEqual(
+      control.getRasters().map(({ id }) => id),
+      ["raster-b", "raster-c", "raster-a"],
+    );
+  });
+
+  it("does not reorder when only a non-raster layer moved around the rasters", () => {
+    const { control, calls } = fakeControl([
+      rasterInfo({ id: "raster-a" }),
+      rasterInfo({ id: "raster-b" }),
+    ]);
+    syncRasterLayersToStore(control);
+    useAppStore.getState().addLayer(otherStoreLayer());
+    wireRasterStoreSync(control);
+
+    useAppStore.getState().moveLayer("unrelated", 0);
+
+    assert.deepEqual(calls, []);
+  });
+
+  it("keeps a raster the store does not know about in its slot", () => {
+    const { control, calls } = fakeControl([
+      rasterInfo({ id: "raster-a" }),
+      rasterInfo({ id: "raster-b" }),
+    ]);
+    syncRasterLayersToStore(control);
+    wireRasterStoreSync(control);
+    const infos = control.getRasters();
+    infos.splice(1, 0, rasterInfo({ id: "raster-pending" }));
+
+    useAppStore.getState().moveLayer("raster-a", 1);
+
+    assert.deepEqual(
+      infos.map(({ id }) => id),
+      ["raster-b", "raster-pending", "raster-a"],
+    );
+    assert.equal(
+      calls.every(({ method }) => method === "reorderRaster"),
+      true,
+    );
   });
 
   it("does not echo control-driven syncs back at the control", () => {

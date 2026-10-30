@@ -52,6 +52,7 @@ export type RasterSyncableControl = {
   getState?: () => { collapsed: boolean };
   getRasters: () => RasterLayerInfo[];
   removeRaster: (id: string) => void;
+  reorderRaster: (id: string, toIndex: number) => void;
   setRasterState: (id: string, patch: Partial<RasterLayerState>) => void;
   setVisible: (id: string, visible: boolean) => void;
 };
@@ -500,7 +501,39 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
         const zoomPatch = zoomRangePatch(layer, current);
         if (zoomPatch) activeControl.setRasterState(layer.id, zoomPatch);
       }
+      applyStoreRasterOrder(activeControl, state.layers);
     });
+  });
+}
+
+/**
+ * Moves the control's rasters into the store's bottom-to-top order.
+ *
+ * Rasters on the deck.gl engine usually share one `deck-layer-group-*`: no
+ * style layer exists for layer-sync to anchor one raster to another, so they
+ * all get the same beforeId and draw in the control's own list order. That list
+ * is therefore the only channel for a Layers panel move between them
+ * (GeoLibre#3287). The native engines also redraw in this order on every rebuild.
+ *
+ * A raster the store does not know about keeps its slot in the list.
+ *
+ * @param control - The raster control to reorder.
+ * @param layers - The store layers, bottom to top.
+ */
+function applyStoreRasterOrder(control: RasterSyncableControl, layers: GeoLibreLayer[]): void {
+  const order = control.getRasters().map(({ id }) => id);
+  const known = new Set(order);
+  const stored = layers
+    .filter((layer) => isRasterControlStoreLayer(layer) && known.has(layer.id))
+    .map(({ id }) => id);
+  const storedIds = new Set(stored);
+  let next = 0;
+  const target = order.map((id) => (storedIds.has(id) ? stored[next++] : id));
+  target.forEach((id, index) => {
+    if (order[index] === id) return;
+    control.reorderRaster(id, index);
+    order.splice(order.indexOf(id), 1);
+    order.splice(index, 0, id);
   });
 }
 
