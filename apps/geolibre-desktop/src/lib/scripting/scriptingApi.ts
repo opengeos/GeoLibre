@@ -265,11 +265,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       const file = new File([base64ToBytes(params.data) as BlobPart], `${name}.tif`, {
         type: "image/tiff",
       });
-      const { colormap, rescaleMin, rescaleMax, nodata, opacity } = cogOptionsFromParams(
-        params.options,
-      );
+      const { colormap, rescaleMin, rescaleMax, nodata, opacity, beforeLayerId, zoomTo } =
+        cogOptionsFromParams(params.options);
       return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, {
         name,
+        ...(beforeLayerId ? { beforeId: beforeLayerId } : {}),
+        ...(zoomTo !== undefined ? { zoomTo } : {}),
         state: {
           ...(colormap !== undefined ? { colormap } : {}),
           ...(rescaleMin !== undefined && rescaleMax !== undefined

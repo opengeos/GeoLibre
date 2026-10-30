@@ -467,6 +467,8 @@ def _raster_options(
     if colormap is not None:
         merged["colormap"] = colormap
     if rescale is not None:
+        if len(rescale) != 2:
+            raise ValueError("rescale must be a (min, max) pair")
         merged["rescaleMin"], merged["rescaleMax"] = float(rescale[0]), float(rescale[1])
     return merged
 
@@ -683,7 +685,8 @@ class HostMap:
             name: Layer display name.
             colormap: Colormap name for a single-band raster, e.g. ``"viridis"``.
             rescale: The ``(min, max)`` value range mapped onto the colormap.
-            **options: Other display options: ``nodata`` and ``opacity``.
+            **options: Other display options: ``nodata``, ``opacity``, ``zoomTo``
+                and ``beforeLayerId``. Other names are ignored.
 
         Returns:
             The new layer's id, or None when it is unavailable (see

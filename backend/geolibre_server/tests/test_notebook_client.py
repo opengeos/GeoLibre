@@ -143,6 +143,11 @@ def test_add_cog_and_tile_layer_send_their_urls(relay, displays):
     assert tiles["params"]["options"] == {"attribution": "X"}
 
 
+def test_rescale_must_be_a_pair(relay, displays):
+    with pytest.raises(ValueError, match="min, max"):
+        notebook_client.HostMap().add_raster(b"II*\x00", rescale=(0,))
+
+
 def test_add_raster_rejects_a_raw_array(relay, displays):
     with pytest.raises(TypeError, match="GeoTIFF bytes"):
         notebook_client.HostMap().add_raster([1, 2, 3])

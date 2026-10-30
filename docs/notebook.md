@@ -45,11 +45,13 @@ m.add_cog("https://…/dem.tif", name="DEM", colormap="terrain", rescale=(0, 400
 dem_id = m.add_raster(geotiff_bytes, name="DEM", colormap="terrain")  # a GeoTIFF in memory
 ```
 
-Calls that take a layer id need one returned on desktop, because `add_*` returns
-`None` on the web:
+Calls that take a layer id only work where `add_*` returns one, which is a desktop
+JupyterLab kernel with a connected window. It returns `None` on JupyterLite (the
+web and Mac App Store builds), and when the relay gets no reply in time:
 
 ```python
-m.run_whitebox_tool("slope", input=dem_id, output="slope.tif")  # desktop only
+if dem_id is not None:
+    m.run_whitebox_tool("slope", input=dem_id, output="slope.tif")
 ```
 
 Most mutation calls are **fire-and-forget**. On desktop, `add_geojson` uses the
