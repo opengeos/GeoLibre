@@ -16,7 +16,7 @@ import {
   resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
-import { GDAL_AUTO_FID_COLUMN, stripAutoFidColumn } from "./duckdb-geometry";
+import { isAutoFidColumn, stripAutoFidColumn } from "./duckdb-geometry";
 import { collectQueryDataSources } from "./sql-data-sources";
 import { maskSqlLiterals, resolveCloudUrls } from "./sql-cloud-urls";
 
@@ -144,7 +144,7 @@ export function previewLayerColumns(
       for (const key of Object.keys(properties)) {
         // Skip GDAL's synthetic FID: it is dropped from registered layers, so
         // offering it as a completion would only mislead.
-        if (key === GDAL_AUTO_FID_COLUMN || seen.has(key)) continue;
+        if (isAutoFidColumn(key) || seen.has(key)) continue;
         seen.add(key);
         seenLower.add(key.toLowerCase());
         columns.push(key);
@@ -470,7 +470,7 @@ export function rowsToFeatureCollection(
       // stripAutoFidColumn remains the belt-and-braces guard at registration
       // time for layers that arrive via other paths (drag-drop, project
       // restore, plugins) and already carry OGC_FID.
-      if (key === GDAL_AUTO_FID_COLUMN) continue;
+      if (isAutoFidColumn(key)) continue;
       if (value instanceof Uint8Array) continue;
       properties[key] = normalizeValue(value);
     }

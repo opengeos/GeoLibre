@@ -439,15 +439,27 @@ export function geometryGeoJsonSql(geometryExpression: string, sourceCrs: string
 // which happens whenever the layer was itself derived from a prior `ST_Read`
 // result, e.g. a SQL query result added back as a layer or created by the AI
 // assistant — re-reading it makes GDAL emit a *second* `OGC_FID`, so `ST_Read`
-// fails to bind with `duplicate column name "OGC_FID"` (issue #499).
-export const GDAL_AUTO_FID_COLUMN = "OGC_FID";
+// fails to bind with `duplicate column name "OGC_FID"` (issue #499). DuckDB
+// column names are case-insensitive, so an `ogc_fid` attribute in any casing
+// collides the same way (issue #3288).
+const GDAL_AUTO_FID_COLUMN = "ogc_fid";
+
+/**
+ * Whether a property name collides with GDAL's auto-generated FID column.
+ *
+ * @param key Property or column name.
+ * @returns True for `OGC_FID` in any casing.
+ */
+export function isAutoFidColumn(key: string): boolean {
+  return key.toLowerCase() === GDAL_AUTO_FID_COLUMN;
+}
 
 /**
  * Return a copy of `geojson` with the reserved GDAL FID column
- * (`OGC_FID`) removed from every feature's properties, so re-reading it with
- * `ST_Read` cannot collide with GDAL's auto-generated FID column. The input is
- * left untouched and the same object is returned when no feature carries the
- * property, so unaffected layers pay no allocation cost.
+ * (`OGC_FID`, in any casing) removed from every feature's properties, so
+ * re-reading it with `ST_Read` cannot collide with GDAL's auto-generated FID
+ * column. The input is left untouched and the same object is returned when no
+ * feature carries the property, so unaffected layers pay no allocation cost.
  *
  * @param geojson Feature collection about to be handed to `ST_Read`.
  * @returns The collection without any `OGC_FID` properties.
@@ -455,14 +467,18 @@ export const GDAL_AUTO_FID_COLUMN = "OGC_FID";
 export function stripAutoFidColumn(geojson: FeatureCollection): FeatureCollection {
   // Scan first so the common (no-OGC_FID) path returns the original object
   // without allocating a throw-away features array or any feature copies.
+  const hasAutoFid = (props: NonNullable<FeatureCollection["features"][number]["properties"]>) =>
+    Object.keys(props).some(isAutoFidColumn);
   const needsStrip = geojson.features.some(
-    (feature) => feature.properties != null && GDAL_AUTO_FID_COLUMN in feature.properties,
+    (feature) => feature.properties != null && hasAutoFid(feature.properties),
   );
   if (!needsStrip) return geojson;
   const features = geojson.features.map((feature) => {
     const props = feature.properties;
-    if (props && GDAL_AUTO_FID_COLUMN in props) {
-      const { [GDAL_AUTO_FID_COLUMN]: _omit, ...rest } = props;
+    if (props && hasAutoFid(props)) {
+      const rest = Object.fromEntries(
+        Object.entries(props).filter(([key]) => !isAutoFidColumn(key)),
+      );
       return { ...feature, properties: rest };
     }
     return feature;

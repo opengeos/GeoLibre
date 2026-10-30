@@ -348,6 +348,11 @@ describe("stripAutoFidColumn", () => {
     assert.deepEqual(input.features[0].properties, { OGC_FID: 5, name: "a" });
   });
 
+  it("removes ogc_fid in any casing (issue #3288)", () => {
+    const out = stripAutoFidColumn(collection({ fid: 1, ogc_fid: 5, Ogc_Fid: 6, name: "a" }));
+    assert.deepEqual(out.features[0].properties, { fid: 1, name: "a" });
+  });
+
   it("returns the same object when no feature carries OGC_FID", () => {
     const input = collection({ name: "a" });
     assert.equal(stripAutoFidColumn(input), input);
