@@ -16,7 +16,7 @@ import {
   resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
-import { isAutoFidColumn, stripAutoFidColumn } from "./duckdb-geometry";
+import { GDAL_AUTO_FID_COLUMN, isAutoFidColumn, stripAutoFidColumn } from "./duckdb-geometry";
 import { collectQueryDataSources } from "./sql-data-sources";
 import { maskSqlLiterals, resolveCloudUrls } from "./sql-cloud-urls";
 
@@ -470,7 +470,7 @@ export function rowsToFeatureCollection(
       // stripAutoFidColumn remains the belt-and-braces guard at registration
       // time for layers that arrive via other paths (drag-drop, project
       // restore, plugins) and already carry OGC_FID.
-      if (isAutoFidColumn(key)) continue;
+      if (key === GDAL_AUTO_FID_COLUMN) continue;
       if (value instanceof Uint8Array) continue;
       properties[key] = normalizeValue(value);
     }

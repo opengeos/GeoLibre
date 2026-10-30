@@ -442,7 +442,7 @@ export function geometryGeoJsonSql(geometryExpression: string, sourceCrs: string
 // fails to bind with `duplicate column name "OGC_FID"` (issue #499). DuckDB
 // column names are case-insensitive, so an `ogc_fid` attribute in any casing
 // collides the same way (issue #3288).
-const GDAL_AUTO_FID_COLUMN = "ogc_fid";
+export const GDAL_AUTO_FID_COLUMN = "OGC_FID";
 
 /**
  * Whether a property name collides with GDAL's auto-generated FID column.
@@ -451,7 +451,7 @@ const GDAL_AUTO_FID_COLUMN = "ogc_fid";
  * @returns True for `OGC_FID` in any casing.
  */
 export function isAutoFidColumn(key: string): boolean {
-  return key.toLowerCase() === GDAL_AUTO_FID_COLUMN;
+  return key.toLowerCase() === GDAL_AUTO_FID_COLUMN.toLowerCase();
 }
 
 /**
@@ -467,8 +467,10 @@ export function isAutoFidColumn(key: string): boolean {
 export function stripAutoFidColumn(geojson: FeatureCollection): FeatureCollection {
   // Scan first so the common (no-OGC_FID) path returns the original object
   // without allocating a throw-away features array or any feature copies.
-  const hasAutoFid = (props: NonNullable<FeatureCollection["features"][number]["properties"]>) =>
-    Object.keys(props).some(isAutoFidColumn);
+  const hasAutoFid = (props: NonNullable<FeatureCollection["features"][number]["properties"]>) => {
+    for (const key in props) if (isAutoFidColumn(key)) return true;
+    return false;
+  };
   const needsStrip = geojson.features.some(
     (feature) => feature.properties != null && hasAutoFid(feature.properties),
   );
