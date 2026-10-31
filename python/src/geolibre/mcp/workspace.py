@@ -26,6 +26,9 @@ PROJECT_SUFFIXES = (".json", ".geolibre.json")
 #: Extensions the server will write an export to.
 EXPORT_SUFFIXES = (".html", ".htm")
 
+#: Extensions the server will write a captured map image to.
+IMAGE_SUFFIXES = (".png",)
+
 
 class WorkspaceError(ValueError):
     """A path was outside the workspace, or otherwise not writable."""

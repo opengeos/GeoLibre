@@ -247,3 +247,299 @@ def test_live_run_algorithm_reports_a_slow_run(relay_server, monkeypatch, tmp_pa
     relay_server.response = {"message": "GeoLibre did not return a result in time."}
     with pytest.raises(ToolError, match="may still be running"):
         asyncio.run(server.call_tool("live_run_algorithm", {"algorithm_id": "buffer"}))
+
+
+def test_live_get_layer_returns_matching_layer_or_raises(relay_server, monkeypatch, tmp_path):
+    """live_get_layer resolves one layer by id from listLayers and rejects missing ids."""
+    import asyncio
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": [
+            {"id": "layer-1", "name": "Roads", "type": "geojson", "visible": True, "opacity": 1.0},
+            {"id": "layer-2", "name": "Lakes", "type": "geojson", "visible": False, "opacity": 0.5},
+        ],
+    }
+    result = asyncio.run(server.call_tool("live_get_layer", {"layer_id": "layer-2"}))
+    assert result.structured_content == {
+        "id": "layer-2",
+        "name": "Lakes",
+        "type": "geojson",
+        "visible": False,
+        "opacity": 0.5,
+    }
+    assert relay_server.body["method"] == "listLayers"
+
+    with pytest.raises(ToolError, match="No layer with id 'missing'"):
+        asyncio.run(server.call_tool("live_get_layer", {"layer_id": "missing"}))
+
+
+def test_live_get_and_set_view_and_fly_to_camera_fields(relay_server, monkeypatch, tmp_path):
+    """live_get_view, live_set_view, and live_fly_to round-trip camera fields."""
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": {
+            "center": [77.2, 28.6],
+            "zoom": 10.5,
+            "bearing": 15.0,
+            "pitch": 30.0,
+            "bbox": [77.0, 28.4, 77.4, 28.8],
+        },
+    }
+    view = asyncio.run(server.call_tool("live_get_view", {}))
+    assert view.structured_content["center"] == [77.2, 28.6]
+    assert relay_server.body["method"] == "getView"
+
+    set_res = asyncio.run(
+        server.call_tool(
+            "live_set_view",
+            {"lng": 77.2, "lat": 28.6, "zoom": 12, "bearing": 45, "pitch": 60},
+        )
+    )
+    assert set_res.structured_content == {
+        "center": [77.2, 28.6],
+        "zoom": 12.0,
+        "bearing": 45.0,
+        "pitch": 60.0,
+    }
+    assert relay_server.body["method"] == "setView"
+
+    fly_res = asyncio.run(
+        server.call_tool(
+            "live_fly_to",
+            {"lng": 77.2, "lat": 28.6, "zoom": 11, "bearing": 20, "pitch": 40, "duration": 1500},
+        )
+    )
+    assert fly_res.structured_content == {
+        "center": [77.2, 28.6],
+        "zoom": 11,
+        "bearing": 20.0,
+        "pitch": 40.0,
+        "duration": 1500.0,
+    }
+    assert relay_server.body["method"] == "flyTo"
+    assert relay_server.body["params"] == {
+        "center": [77.2, 28.6],
+        "zoom": 11.0,
+        "bearing": 20.0,
+        "pitch": 40.0,
+        "duration": 1500.0,
+    }
+
+
+def test_live_add_marker_and_add_markers(relay_server, monkeypatch, tmp_path):
+    """live_add_marker and live_add_markers build Point FeatureCollections for addGeoJsonLayer."""
+    import asyncio
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {"delivered": 1, "ok": True, "value": "marker-layer-1"}
+
+    res1 = asyncio.run(
+        server.call_tool(
+            "live_add_marker",
+            {
+                "lng": 77.5946,
+                "lat": 12.9716,
+                "name": "Bengaluru",
+                "properties": {"city": "Bengaluru"},
+                "style": {"fillColor": "#ef4444"},
+            },
+        )
+    )
+    assert res1.structured_content == {"layerId": "marker-layer-1", "layerName": "Bengaluru"}
+    assert relay_server.body["method"] == "addGeoJsonLayer"
+    assert relay_server.body["params"]["geojson"]["features"] == [
+        {
+            "type": "Feature",
+            "properties": {"city": "Bengaluru"},
+            "geometry": {"type": "Point", "coordinates": [77.5946, 12.9716]},
+        }
+    ]
+
+    relay_server.response = {"delivered": 1, "ok": True, "value": "markers-layer-2"}
+    res2 = asyncio.run(
+        server.call_tool(
+            "live_add_markers",
+            {
+                "points": [
+                    [72.8777, 19.0760],
+                    {"lon": 88.3639, "latitude": 22.5726, "label": "Kolkata"},
+                ],
+                "name": "Cities",
+            },
+        )
+    )
+    assert res2.structured_content == {
+        "layerId": "markers-layer-2",
+        "layerName": "Cities",
+        "count": 2,
+    }
+    features = relay_server.body["params"]["geojson"]["features"]
+    assert len(features) == 2
+    assert features[1]["properties"] == {"label": "Kolkata"}
+
+    with pytest.raises(ToolError, match="points must not be empty"):
+        asyncio.run(server.call_tool("live_add_markers", {"points": []}))
+
+
+def test_live_feature_queries_and_identify(relay_server, monkeypatch, tmp_path):
+    """Feature query tools and live_identify forward requests and return feature lists."""
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    sample_feature = {
+        "type": "Feature",
+        "properties": {"name": "Lake"},
+        "geometry": {"type": "Point", "coordinates": [77.0, 32.0]},
+    }
+    relay_server.response = {"delivered": 1, "ok": True, "value": [sample_feature]}
+
+    res_layer = asyncio.run(server.call_tool("live_get_layer_features", {"layer_id": "lakes-1"}))
+    assert res_layer.structured_content["result"] == [sample_feature]
+    assert relay_server.body["method"] == "getLayerFeatures"
+    assert relay_server.body["params"] == {"layerId": "lakes-1"}
+
+    res_sel = asyncio.run(server.call_tool("live_get_selected_features", {}))
+    assert res_sel.structured_content["result"] == [sample_feature]
+    assert relay_server.body["method"] == "getSelectedFeatures"
+
+    res_drawn = asyncio.run(server.call_tool("live_get_drawn_features", {}))
+    assert res_drawn.structured_content["result"] == [sample_feature]
+    assert relay_server.body["method"] == "getDrawnFeatures"
+
+    res_id = asyncio.run(
+        server.call_tool("live_identify", {"lng": 77.0, "lat": 32.0, "layer_id": "lakes-1"})
+    )
+    assert res_id.structured_content["result"] == [sample_feature]
+    assert relay_server.body["method"] == "identify"
+    assert relay_server.body["params"] == {"lngLat": [77.0, 32.0], "layerId": "lakes-1"}
+
+
+def test_live_identify_toggle_and_control_visibility(relay_server, monkeypatch, tmp_path):
+    """live_set_identify, live_get_identify, and live_set_control_visible."""
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {"delivered": 1, "ok": True, "value": "*"}
+
+    set_id = asyncio.run(server.call_tool("live_set_identify", {"layer_id": "*"}))
+    assert set_id.structured_content == {"layerId": "*"}
+    assert relay_server.body["method"] == "setIdentify"
+
+    get_id = asyncio.run(server.call_tool("live_get_identify", {}))
+    assert get_id.structured_content == {"layerId": "*"}
+    assert relay_server.body["method"] == "getIdentify"
+
+    relay_server.response = {"delivered": 1, "ok": True, "value": True}
+    ctrl = asyncio.run(
+        server.call_tool(
+            "live_set_control_visible",
+            {"control": "minimap", "visible": True, "options": {"size": "sm"}},
+        )
+    )
+    assert ctrl.structured_content == {"control": "minimap", "visible": True}
+    assert relay_server.body["method"] == "setControlVisible"
+    assert relay_server.body["params"] == {
+        "control": "minimap",
+        "visible": True,
+        "options": {"size": "sm"},
+    }
+
+
+def test_live_whitebox_tools_and_model_builder(relay_server, monkeypatch, tmp_path):
+    """live_list_whitebox_tools, live_run_whitebox_tool, and live_run_model_builder."""
+    import asyncio
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": [
+            {"id": "slope", "name": "Slope", "category": "Terrain", "description": "Slope angle"},
+            {"id": "aspect", "name": "Aspect", "category": "Terrain", "description": "Aspect"},
+        ],
+    }
+    tools_res = asyncio.run(server.call_tool("live_list_whitebox_tools", {"query": "SLOPE"}))
+    assert [t["id"] for t in tools_res.structured_content["result"]] == ["slope"]
+    assert relay_server.body["method"] == "listWhiteboxTools"
+
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": {"logs": ["slope complete"], "resultLayerIds": ["wb-1"]},
+    }
+    run_wb = asyncio.run(
+        server.call_tool(
+            "live_run_whitebox_tool",
+            {"tool_id": "slope", "parameters": {"dem": "dem-1", "units": "degrees"}},
+        )
+    )
+    assert run_wb.structured_content == {"logs": ["slope complete"], "resultLayerIds": ["wb-1"]}
+    assert relay_server.body["method"] == "runWhiteboxTool"
+    assert relay_server.body["params"] == {
+        "id": "slope",
+        "params": {"dem": "dem-1", "units": "degrees"},
+    }
+
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": {"outputLayerIds": ["model-out-1"]},
+    }
+    graph = {"nodes": [{"id": "n1", "kind": "input", "layerId": "a"}], "edges": []}
+    model_res = asyncio.run(server.call_tool("live_run_model_builder", {"graph": graph}))
+    assert model_res.structured_content == {"outputLayerIds": ["model-out-1"]}
+    assert relay_server.body["method"] == "runModelBuilder"
+    assert relay_server.body["params"] == {"graph": graph}
+
+    with pytest.raises(ToolError, match="non-empty"):
+        asyncio.run(server.call_tool("live_run_model_builder", {"graph": {}}))
+
+
+def test_live_to_image_returns_data_url_or_writes_workspace_png(
+    relay_server, monkeypatch, tmp_path
+):
+    """live_to_image returns a PNG dataUrl or writes a confined .png in the workspace."""
+    import asyncio
+    import base64
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    raw_png = b"\x89PNG\r\n\x1a\nfakepngbytes"
+    data_url = "data:image/png;base64," + base64.b64encode(raw_png).decode("ascii")
+    relay_server.response = {"delivered": 1, "ok": True, "value": data_url}
+
+    res_inline = asyncio.run(server.call_tool("live_to_image", {}))
+    assert res_inline.structured_content == {"dataUrl": data_url, "bytes": len(raw_png)}
+    assert relay_server.body["method"] == "toImage"
+
+    res_file = asyncio.run(server.call_tool("live_to_image", {"out_path": "snapshot.png"}))
+    written = tmp_path / "snapshot.png"
+    assert written.read_bytes() == raw_png
+    assert res_file.structured_content == {"path": str(written.resolve()), "bytes": len(raw_png)}
+
+    with pytest.raises(ToolError, match="already exists"):
+        asyncio.run(server.call_tool("live_to_image", {"out_path": "snapshot.png"}))
+
+    with pytest.raises(ToolError, match="expected a file ending in .png"):
+        asyncio.run(server.call_tool("live_to_image", {"out_path": "bad.txt"}))

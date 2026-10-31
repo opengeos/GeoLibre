@@ -354,26 +354,50 @@ project file.
 ```text
 live_status()
 live_list_layers()
-live_fly_to(lng=None, lat=None, zoom=None)
+live_get_layer(layer_id)
+live_get_view()
+live_set_view(lng, lat, zoom=None, bearing=None, pitch=None)
+live_fly_to(lng=None, lat=None, zoom=None, bearing=None, pitch=None, duration=None)
 live_fit_bounds(bounds)
 live_zoom_to_layer(layer_id)
 live_set_basemap(basemap)
 live_add_geojson(data, name="GeoJSON", style=None)
+live_add_marker(lng, lat, name="Marker", properties=None, style=None)
+live_add_markers(points, name="Markers", style=None)
+live_get_layer_features(layer_id)
+live_get_selected_features()
+live_get_drawn_features()
+live_identify(lng, lat, layer_id=None)
+live_set_identify(layer_id=None)
+live_get_identify()
+live_set_control_visible(control, visible=True, options=None)
 live_set_visibility(layer_id, visible)
 live_set_opacity(layer_id, opacity)
 live_set_style(layer_id, style)
 live_remove_layer(layer_id)
 live_list_algorithms(query=None)
 live_run_algorithm(algorithm_id, parameters=None)
+live_list_whitebox_tools(query=None)
+live_run_whitebox_tool(tool_id, parameters=None)
+live_run_model_builder(graph)
+live_to_image(out_path=None, overwrite=False)
 ```
 
 Processing runs in the app, so it is live-only: there is no file tool for it.
-`live_list_algorithms` returns each algorithm's `id` and `parameters`;
-`live_run_algorithm` runs one on the open map, adds its result layers, and
-returns their ids. Layer parameters take ids from `live_list_layers()`. The
+`live_list_algorithms` and `live_list_whitebox_tools` return each tool's `id`
+and `parameters`; `live_run_algorithm` and `live_run_whitebox_tool` run one on
+the open map, add its result layers, and return their ids.
+`live_run_model_builder` executes a serialized Model Builder graph (`nodes` and
+`edges`) in one call. Layer parameters take ids from `live_list_layers()`. The
 relay waits about five seconds: a longer run keeps going in the app and the
 call reports that it did not finish, so check `live_list_layers()` before
 running it again.
+
+`live_get_layer_features`, `live_get_selected_features`, and
+`live_get_drawn_features` read GeoJSON features from the live store (including
+user sketches in the Geo Editor); `live_identify` queries rendered features at
+`(lng, lat)`. `live_to_image` captures the current viewport as a PNG data URL
+or writes a `.png` inside the workspace.
 
 `live_set_basemap` takes a catalog name (`liberty`, `bright`, `positron`,
 `dark`, `fiord`) or an `http(s)` style URL. `live_add_geojson` confines a
@@ -381,8 +405,8 @@ local path to the workspace, the same way `add_geojson_layer` does.
 
 ## Workspace rules
 
-- Writes are limited to `.json` (projects) and `.html`/`.htm` (exports). A bare
-  `.json` with no name is refused.
+- Writes are limited to `.json` (projects), `.html`/`.htm` (exports), and `.png`
+  (live map captures). A bare `.json` with no name is refused.
 - Existing files are never replaced without `overwrite=True`.
 - A tool that edits an existing project first checks the file really is one.
 - Reads are capped at 256 MB per project file.
