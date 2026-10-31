@@ -514,12 +514,20 @@ describe("OSM downloader registration", () => {
 
     // `as`, not an annotation: the fake assigns this in a callback TypeScript cannot follow.
     let panel = null as GeoLibreRightPanelRegistration | null;
+    let moveEnd = null as (() => void) | null;
     let fetchCount = 0;
     const added: Array<{ id: string; name: string; data: FeatureCollection }> = [];
     const removed: string[] = [];
     const exported: Array<{ name: string; contents: string }> = [];
     const app = {
-      getMap: () => null,
+      getMap: () => ({
+        on: (event: string, handler: () => void) => {
+          if (event === "moveend") moveEnd = handler;
+        },
+        off: (event: string, handler: () => void) => {
+          if (event === "moveend" && moveEnd === handler) moveEnd = null;
+        },
+      }),
       getViewBounds: () => [-9.145, 38.71, -9.14, 38.715] as [number, number, number, number],
       registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
         panel = registration;
@@ -598,6 +606,12 @@ describe("OSM downloader registration", () => {
       assert.equal(add.disabled, false);
       assert.equal(save.disabled, false);
       assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /1 features/);
+
+      assert.ok(moveEnd);
+      moveEnd();
+      assert.deepEqual(removed, []);
+      assert.equal(add.disabled, false);
+      assert.equal(save.disabled, false);
 
       add.dispatchEvent(new dom.window.Event("click"));
       assert.deepEqual(removed, ["layer-1"]);

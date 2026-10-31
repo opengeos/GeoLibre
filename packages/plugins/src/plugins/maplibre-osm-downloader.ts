@@ -311,7 +311,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
   refreshPanelLabels = refreshLabels;
 
-  const applyViewBounds = () => {
+  const applyViewBounds = (
+    { preservePreview = false, announce = true }: { preservePreview?: boolean; announce?: boolean } = {},
+  ) => {
     const bounds = app.getViewBounds?.();
     if (!bounds) {
       status.textContent = tr(app, "mapUnavailable", "The map extent is not available yet.");
@@ -320,8 +322,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     bounds.forEach((value, index) => {
       coordInputs[index].value = formatNumber(value);
     });
-    clearPreview(false);
-    updateActionAvailability(true);
+    if (!preservePreview) clearPreview(false);
+    updateActionAvailability(announce);
   };
 
   preset.addEventListener("change", () => {
@@ -338,9 +340,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   for (const input of [keyInput, valueInput]) {
     input.addEventListener("input", () => clearPreview(true));
   }
-  useView.addEventListener("click", applyViewBounds);
+  useView.addEventListener("click", () => applyViewBounds());
   const map = getControlMap(app);
-  const onMoveEnd = () => applyViewBounds();
+  const onMoveEnd = () => applyViewBounds({ preservePreview: true, announce: false });
   map?.on("moveend", onMoveEnd);
   applyViewBounds();
 
