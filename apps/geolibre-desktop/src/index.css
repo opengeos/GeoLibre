@@ -280,6 +280,14 @@ html:lang(fa) {
   filter: invert(1);
 }
 
+/* mapbox-gl's `.mapboxgl-ctrl button:hover` paints #eee behind every button in a
+   control, including the shared controls' unclassed toggles and their panels,
+   whose icons are light in dark mode. `:where` keeps a control's own, more
+   specific hover color in charge. */
+:where(.dark) .mapboxgl-map .mapboxgl-ctrl button:not(:disabled):hover {
+  background-color: hsl(var(--accent));
+}
+
 /* Shared popup frame covers native Inspect/NLDI popups too. Content-specific
    rules below retain their layouts; inline authored content retains its colors. */
 .maplibregl-map .maplibregl-popup {
