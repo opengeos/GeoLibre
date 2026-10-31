@@ -64,12 +64,10 @@ interface MapLibreMapLike {
  */
 export function optimizeFeatureCollection(
   geojson: GeoJSONCollectionLike | null | undefined,
-  options: RenderOptimizerOptions = {}
+  options: RenderOptimizerOptions = {},
 ): OptimizeResult {
   const startTime =
-    typeof performance !== "undefined" && performance.now
-      ? performance.now()
-      : Date.now();
+    typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
   const maxFeatures = options.maxFeatures || 500;
   const sortProperty = options.sortProperty || "area_ha";
   const sortOrder = options.sortOrder || "desc";
@@ -109,15 +107,11 @@ export function optimizeFeatureCollection(
   const isCapped = totalInViewport > maxFeatures;
 
   if (!isCapped) {
-    inViewportFeatures.sort((a, b) =>
-      sortOrder === "desc" ? b.area - a.area : a.area - b.area
-    );
+    inViewportFeatures.sort((a, b) => (sortOrder === "desc" ? b.area - a.area : a.area - b.area));
     finalFeatures = inViewportFeatures.map((item) => item.feature);
   } else {
     if (sortOrder === "desc") {
-      const heap = new MinHeap<{ feature: FeatureLike; area: number }>(
-        (a, b) => a.area - b.area
-      );
+      const heap = new MinHeap<{ feature: FeatureLike; area: number }>((a, b) => a.area - b.area);
       for (let i = 0; i < inViewportFeatures.length; i++) {
         const item = inViewportFeatures[i];
         if (heap.size() < maxFeatures) {
@@ -129,9 +123,7 @@ export function optimizeFeatureCollection(
       }
       finalFeatures = heap.toArraySortedDescending().map((item) => item.feature);
     } else {
-      const heap = new MinHeap<{ feature: FeatureLike; area: number }>(
-        (a, b) => b.area - a.area
-      );
+      const heap = new MinHeap<{ feature: FeatureLike; area: number }>((a, b) => b.area - a.area);
       for (let i = 0; i < inViewportFeatures.length; i++) {
         const item = inViewportFeatures[i];
         if (heap.size() < maxFeatures) {
@@ -146,9 +138,7 @@ export function optimizeFeatureCollection(
   }
 
   const endTime =
-    typeof performance !== "undefined" && performance.now
-      ? performance.now()
-      : Date.now();
+    typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
   const stats: LimiterStats = {
     totalInViewport,
     renderedCount: finalFeatures.length,
@@ -186,7 +176,7 @@ export class AreaPriorityLimiter {
       sourceId?: string;
       layerId?: string;
       data?: GeoJSONCollectionLike;
-    } = {}
+    } = {},
   ) {
     this.map = map;
     this.sourceId = options.sourceId;
@@ -286,10 +276,4 @@ export class AreaPriorityLimiter {
   }
 }
 
-export {
-  MinHeap,
-  getFeatureArea,
-  isFeatureInBBox,
-  computeRingAreaHectares,
-  type FeatureLike,
-};
+export { MinHeap, getFeatureArea, isFeatureInBBox, computeRingAreaHectares, type FeatureLike };

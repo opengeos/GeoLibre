@@ -92,7 +92,7 @@ export function getFeatureArea(feature: FeatureLike, sortProperty: string = "are
  */
 export function isFeatureInBBox(
   feature: FeatureLike,
-  bbox: [number, number, number, number] | null
+  bbox: [number, number, number, number] | null,
 ): boolean {
   if (!bbox) return true;
   const [minX, minY, maxX, maxY] = bbox;

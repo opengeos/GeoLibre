@@ -1,6 +1,6 @@
 # geolibre-layer-limiter
 
-> **Area-Priority Viewport Feature Limiter for GeoLibre & MapLibre GL JS**  
+> **Area-Priority Viewport Feature Limiter for GeoLibre & MapLibre GL JS**
 > Developed for [`opengeos/GeoLibre`](https://github.com/opengeos/GeoLibre) by GetBack2Basics Spatial AI Engineering.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -84,4 +84,3 @@ limiter.enable();
 ## License
 
 Apache-2.0 or MIT.
-

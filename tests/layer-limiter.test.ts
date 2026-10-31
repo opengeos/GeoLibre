@@ -101,7 +101,7 @@ describe("optimizeFeatureCollection", () => {
 
     // Verify top 5 largest: 100, 95, 90, 85, 80
     const areas = result.optimizedGeoJSON.features.map(
-      (f: { properties: { area_ha: number } }) => f.properties.area_ha
+      (f: { properties: { area_ha: number } }) => f.properties.area_ha,
     );
     assert.deepEqual(areas, [100, 95, 90, 85, 80]);
   });
