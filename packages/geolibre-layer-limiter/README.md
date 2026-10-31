@@ -81,6 +81,24 @@ limiter.enable();
 
 ---
 
+## Real-World Case Study & Live Showcase
+
+`geolibre-layer-limiter` was engineered directly out of real-world production requirements in **[AURA Siting Crafter](https://aura.getback2basics.net)** ([GitHub Repository](https://github.com/GetBack2Basics/aura_siting_crafter)), an AI-assisted spatial siting pipeline for renewable energy and industrial infrastructure across Australia.
+
+### Why It Was Built
+In national-scale spatial siting analyses, viewports frequently span regions with **15,000 to 50,000+ candidate land parcels** and environmental zoning polygons. In raw WebGL / MapLibre GL JS implementations, rendering this entire volume simultaneously causes:
+- Severe frame rate degradation (<15–20 FPS) and dropped interaction frames during continuous pan and zoom gestures.
+- Visual clutter from sub-pixel micro-parcels that obscure high-impact large landholdings.
+- Eventual WebGL context loss or high memory pressure on mobile and standard desktop browsers.
+
+By prioritizing the top $K$ largest polygons within the active camera bounding box via $O(M \log K)$ Top-K selection, AURA maintains silky-smooth **60 FPS** interaction while keeping the most strategically significant land holdings immediately visible to the user.
+
+- **Live Application**: [aura.getback2basics.net](https://aura.getback2basics.net)
+- **Production Integration Example**: [AURA Map Viewer (`src/geolibre_frontend/map.html`)](https://github.com/GetBack2Basics/aura_siting_crafter/blob/main/src/geolibre_frontend/map.html) showcases how the limiter dynamically hooks into streaming vector feeds with a real-time HUD metrics badge.
+- **Reference Engineering Specs**: [Upstream GeoLibre Contributions Document](https://github.com/GetBack2Basics/aura_siting_crafter/blob/main/docs/engineering/upstream_geolibre_contributions.md)
+
+---
+
 ## License
 
 Apache-2.0 or MIT.
