@@ -20,6 +20,8 @@ export const MAPBOX_GL_STYLE_INTEGRITY =
 type MapboxGl = typeof mapboxgl.default;
 
 let mapboxGlPromise: Promise<MapboxGl> | null = null;
+let scriptPromise: Promise<void> | null = null;
+let stylePromise: Promise<void> | null = null;
 
 declare const __NO_EXTERNAL_CDN__: boolean;
 
@@ -69,7 +71,8 @@ async function loadStyle(): Promise<void> {
 /**
  * Load Mapbox GL JS and its stylesheet from Mapbox's CDN, once per page.
  *
- * A failed load clears the cache, so mounting another pane retries it.
+ * A failed load clears the cache, so mounting another pane retries only the
+ * half that failed: re-running the script or duplicating the style would not help.
  *
  * @returns The `mapboxgl` namespace. Rejects in a `GEOLIBRE_NO_EXTERNAL_CDN`
  *   build, which must not run code from a CDN.
@@ -79,7 +82,15 @@ export function loadMapboxGl(): Promise<MapboxGl> {
     return Promise.reject(new Error("The Mapbox renderer is disabled in this build."));
   }
   if (mapboxGlPromise) return mapboxGlPromise;
-  mapboxGlPromise = Promise.all([loadScript(), loadStyle()])
+  scriptPromise ??= loadScript().catch((error) => {
+    scriptPromise = null;
+    throw error;
+  });
+  stylePromise ??= loadStyle().catch((error) => {
+    stylePromise = null;
+    throw error;
+  });
+  mapboxGlPromise = Promise.all([scriptPromise, stylePromise])
     .then(() => {
       const gl = (globalThis as unknown as { mapboxgl?: MapboxGl }).mapboxgl;
       if (!gl) throw new Error("Mapbox GL JS loaded but did not define `mapboxgl`.");

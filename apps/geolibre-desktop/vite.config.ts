@@ -12,6 +12,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { isolateMaplibreRegistryPlugin } from "./vite-plugins/isolate-maplibre-registry";
 import { sharedH5wasmChunkPlugin, workerH5wasmFromMainPlugin } from "./vite-plugins/shared-h5wasm";
 import {
   proxyAircraftRequestGuarded,
@@ -1571,6 +1572,7 @@ export default defineConfig({
     duckdbWasmBundlesPlugin(),
     stripDuckDbWorkerSourcemapPlugin(),
     thirdPartyLicensePlugin(),
+    isolateMaplibreRegistryPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
     copyVectorOps(
@@ -1654,6 +1656,7 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
+    rolldownOptions: { plugins: [isolateMaplibreRegistryPlugin()] },
     // Pre-bundle the AI Assistant's heavy deps at dev-server startup. They are
     // only reached through the lazily-imported assistant panel (and, for the
     // provider models, through dynamic import() inside it), so Vite would

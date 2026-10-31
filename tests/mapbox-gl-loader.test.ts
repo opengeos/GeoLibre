@@ -101,11 +101,13 @@ it("retries after a failed load, then shares one load between callers", async ()
   failedScript!.fire("error");
   await assert.rejects(failed, /Could not load Mapbox GL JS/);
   assert.ok(!appended.includes(failedScript!));
-  appended.length = 0;
+  assert.equal(fetches.length, 1);
+  assert.equal(appended.at(-1)!.textContent, "/* css */");
+  assert.equal(appended.length, 1);
 
   const retried = loadMapboxGl();
   assert.equal(loadMapboxGl(), retried);
-  const [script] = appended;
+  const script = appended.at(-1);
   assert.equal(script!.src, MAPBOX_GL_SCRIPT_URL);
   assert.equal(script!.integrity, MAPBOX_GL_SCRIPT_INTEGRITY);
   assert.equal(script!.crossOrigin, "anonymous");
@@ -113,6 +115,5 @@ it("retries after a failed load, then shares one load between callers", async ()
   testGlobals.mapboxgl = namespace;
   script!.fire("load");
   assert.equal(await retried, namespace);
-  assert.deepEqual(fetches.at(-1), [MAPBOX_GL_STYLE_URL, { integrity: MAPBOX_GL_STYLE_INTEGRITY }]);
-  assert.equal(appended.at(-1)!.textContent, "/* css */");
+  assert.deepEqual(fetches, [[MAPBOX_GL_STYLE_URL, { integrity: MAPBOX_GL_STYLE_INTEGRITY }]]);
 });
