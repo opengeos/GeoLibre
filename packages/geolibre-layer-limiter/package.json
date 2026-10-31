@@ -1,0 +1,26 @@
+{
+  "name": "@geolibre/layer-limiter",
+  "version": "3.5.2",
+  "private": true,
+  "description": "Area-Priority Viewport Feature Limiter for GeoLibre and MapLibre GL JS",
+  "keywords": [
+    "cadastre",
+    "geolibre",
+    "maplibre",
+    "performance",
+    "top-k",
+    "viewport-limiter",
+    "webgis"
+  ],
+  "license": "Apache-2.0",
+  "author": "GetBack2Basics Spatial AI Engineering",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./heap": "./src/heap.ts",
+    "./geometry": "./src/geometry.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
