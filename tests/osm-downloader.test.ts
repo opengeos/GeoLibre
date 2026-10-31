@@ -478,7 +478,7 @@ describe("OSM downloader registration", () => {
     assert.ok(WEB_SERVICE_PLUGIN_IDS.includes(OSM_DOWNLOADER_PLUGIN_ID));
   });
 
-  it("previews once, then reuses the result for adding and GeoJSON export", async () => {
+  it("exports directly and reuses a preview for adding and later export", async () => {
     const dom = parseHTML("<html><body></body></html>");
     const previous = {
       document: globalThis.document,
@@ -579,11 +579,20 @@ describe("OSM downloader registration", () => {
       assert.ok(preview);
       assert.ok(add);
       assert.ok(save);
+      assert.equal(save.disabled, false);
+
+      save.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(fetchCount, 1);
+      assert.equal(added.length, 0);
+      assert.equal(exported.length, 1);
+      assert.equal(JSON.parse(exported[0].contents).features.length, 1);
 
       preview.dispatchEvent(new dom.window.Event("click"));
       await new Promise<void>((resolve) => setImmediate(resolve));
 
-      assert.equal(fetchCount, 1);
+      assert.equal(fetchCount, 2);
       assert.equal(added.length, 1);
       assert.equal(added[0].name, "Preview — OSM buildings");
       assert.equal(add.disabled, false);
@@ -594,13 +603,13 @@ describe("OSM downloader registration", () => {
       assert.deepEqual(removed, ["layer-1"]);
       assert.equal(added.length, 2);
       assert.equal(added[1].name, "OSM buildings");
-      assert.equal(fetchCount, 1);
+      assert.equal(fetchCount, 2);
 
       save.dispatchEvent(new dom.window.Event("click"));
-      assert.equal(exported.length, 1);
-      assert.match(exported[0].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
-      assert.equal(JSON.parse(exported[0].contents).features.length, 1);
-      assert.equal(fetchCount, 1);
+      assert.equal(exported.length, 2);
+      assert.match(exported[1].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
+      assert.equal(JSON.parse(exported[1].contents).features.length, 1);
+      assert.equal(fetchCount, 2);
     } finally {
       maplibreOsmDownloaderPlugin.deactivate(app);
       Object.assign(globalThis, previous);

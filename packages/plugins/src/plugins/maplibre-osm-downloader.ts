@@ -214,7 +214,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       number,
     ];
 
-  const updatePreviewAvailability = (announce = false) => {
+  const updateActionAvailability = (announce = false) => {
     const bbox = readBounds();
     const selectedPreset = preset.value as OsmDownloadPreset;
     const area = osmDownloadBoundsArea(bbox);
@@ -223,8 +223,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const pending = controller !== null;
     previewButton.disabled = pending || !eligible;
     previewButton.style.cssText = !pending && eligible ? CSS.primary : CSS.disabled;
+    exportButton.disabled = pending || !eligible;
+    exportButton.style.cssText = !pending && eligible ? CSS.button : CSS.disabled;
     if (eligible) {
       previewButton.removeAttribute("title");
+      exportButton.removeAttribute("title");
       if (announce) status.textContent = tr(app, "extentApplied", "Map extent applied.");
       return;
     }
@@ -235,6 +238,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
             limit,
           });
     previewButton.title = message;
+    exportButton.title = message;
     if (announce && !pending) status.textContent = message;
   };
 
@@ -247,7 +251,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     resultFilter = null;
     addButton.disabled = true;
     addButton.style.cssText = CSS.disabled;
-    exportButton.disabled = true;
+    updateActionAvailability(false);
     if (announce) status.textContent = tr(app, "ready", "Choose an area and feature type.");
   };
 
@@ -303,7 +307,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     previewButton.textContent = tr(app, "preview", "Preview OSM data");
     addButton.textContent = tr(app, "addToMap", "Add to map");
     exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
-    updatePreviewAvailability(false);
+    updateActionAvailability(false);
   };
   refreshPanelLabels = refreshLabels;
 
@@ -317,18 +321,18 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       coordInputs[index].value = formatNumber(value);
     });
     clearPreview(false);
-    updatePreviewAvailability(true);
+    updateActionAvailability(true);
   };
 
   preset.addEventListener("change", () => {
     customGrid.hidden = preset.value !== "custom";
     clearPreview(true);
-    updatePreviewAvailability(false);
+    updateActionAvailability(false);
   });
   coordInputs.forEach((input) =>
     input.addEventListener("input", () => {
       clearPreview(true);
-      updatePreviewAvailability(false);
+      updateActionAvailability(false);
     }),
   );
   for (const input of [keyInput, valueInput]) {
@@ -351,7 +355,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     clearPreview(false);
     const requestController = new AbortController();
     controller = requestController;
-    updatePreviewAvailability(false);
+    updateActionAvailability(false);
     status.textContent = tr(app, "previewing", "Loading OSM preview…");
     try {
       result = await downloadOsmGeoJson(bbox, filter, {
@@ -391,7 +395,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     } finally {
       if (!disposed && controller === requestController) {
         controller = null;
-        updatePreviewAvailability(false);
+        updateActionAvailability(false);
       }
     }
   });
@@ -409,12 +413,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     });
   });
 
-  exportButton.addEventListener("click", () => {
-    if (!result || !resultFilter) return;
+  const exportGeoJson = (data: FeatureCollection, filter: OsmDownloadFilter) => {
     const suffix = new Date().toISOString().slice(0, 10);
     app.exportTextFile?.(
-      `osm-${resultFilter.preset}-${suffix}.geojson`,
-      JSON.stringify(result, null, 2),
+      `osm-${filter.preset}-${suffix}.geojson`,
+      JSON.stringify(data, null, 2),
       {
         description: "GeoJSON",
         extensions: ["geojson"],
@@ -422,6 +425,52 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         promptName: true,
       },
     );
+  };
+
+  exportButton.addEventListener("click", async () => {
+    if (result?.features.length && resultFilter) {
+      exportGeoJson(result, resultFilter);
+      return;
+    }
+
+    const bbox = readBounds();
+    const filter: OsmDownloadFilter = {
+      preset: preset.value as OsmDownloadPreset,
+      key: keyInput.value,
+      value: valueInput.value,
+    };
+    const requestController = new AbortController();
+    controller = requestController;
+    updateActionAvailability(false);
+    status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
+    try {
+      const data = await downloadOsmGeoJson(bbox, filter, {
+        signal: requestController.signal,
+      });
+      if (disposed || controller !== requestController) return;
+      const count = data.features.length;
+      if (!count) {
+        status.textContent = tr(app, "noFeatures", "No matching features were found in this area.");
+        return;
+      }
+      result = data;
+      resultFilter = { ...filter };
+      exportGeoJson(data, filter);
+      status.textContent = tr(app, "exported", "Prepared {{count}} features for GeoJSON export.", {
+        count,
+      });
+    } catch (error) {
+      if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
+      const message = error instanceof Error ? error.message : String(error);
+      status.textContent = tr(app, "error", "Could not download OSM data: {{message}}", {
+        message,
+      });
+    } finally {
+      if (!disposed && controller === requestController) {
+        controller = null;
+        updateActionAvailability(false);
+      }
+    }
   });
 
   return () => {
