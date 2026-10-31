@@ -5,8 +5,15 @@ export class MinHeap<T> {
   private heap: T[] = [];
   private compare: (a: T, b: T) => number;
 
-  constructor(comparator: (a: T, b: T) => number) {
-    this.compare = comparator;
+  constructor(comparator?: (a: T, b: T) => number) {
+    this.compare =
+      comparator ??
+      ((a: T, b: T) =>
+        (a as unknown as number) < (b as unknown as number)
+          ? -1
+          : (a as unknown as number) > (b as unknown as number)
+            ? 1
+            : 0);
   }
 
   size(): number {

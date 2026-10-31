@@ -6,7 +6,10 @@ import {
   getFeatureArea,
   isFeatureInBBox,
 } from "../packages/geolibre-layer-limiter/src/geometry";
-import { optimizeFeatureCollection } from "../packages/geolibre-layer-limiter/src/index";
+import {
+  AreaPriorityLimiter,
+  optimizeFeatureCollection,
+} from "../packages/geolibre-layer-limiter/src/index";
 
 describe("MinHeap", () => {
   it("maintains minimum element at root and extracts sorted descending", () => {
@@ -27,7 +30,7 @@ describe("MinHeap", () => {
   });
 
   it("handles empty heap peek and pop gracefully", () => {
-    const heap = new MinHeap();
+    const heap = new MinHeap<number>((a, b) => a - b);
     assert.equal(heap.peek(), null);
     assert.equal(heap.pop(), null);
     assert.equal(heap.size(), 0);
@@ -100,9 +103,47 @@ describe("optimizeFeatureCollection", () => {
     assert.equal(result.optimizedGeoJSON.features.length, 5);
 
     // Verify top 5 largest: 100, 95, 90, 85, 80
-    const areas = result.optimizedGeoJSON.features.map(
-      (f: { properties: { area_ha: number } }) => f.properties.area_ha,
-    );
+    const areas = result.optimizedGeoJSON.features.map((f) => Number(f.properties?.area_ha ?? 0));
     assert.deepEqual(areas, [100, 95, 90, 85, 80]);
+  });
+});
+
+describe("AreaPriorityLimiter", () => {
+  it("keeps raw data after disable when a pending debounce fires", async () => {
+    const raw = {
+      type: "FeatureCollection",
+      features: [1, 2, 3].map((id) => ({
+        type: "Feature" as const,
+        properties: { id, area_ha: id * 10 },
+        geometry: { type: "Point", coordinates: [140 + id * 0.01, -30.0] },
+      })),
+    };
+    const sourceData: unknown[] = [];
+    const handlers = new Map<string, () => void>();
+    const map = {
+      on: (event: string, handler: () => void) => handlers.set(event, handler),
+      off: (event: string) => handlers.delete(event),
+      getBounds: () => ({
+        getWest: () => 139,
+        getSouth: () => -31,
+        getEast: () => 141,
+        getNorth: () => -29,
+      }),
+      getSource: () => ({ setData: (data: unknown) => sourceData.push(data) }),
+    };
+
+    const limiter = new AreaPriorityLimiter(map, {
+      sourceId: "areas",
+      data: raw,
+      maxFeatures: 1,
+      debounceMs: 5,
+    });
+
+    limiter.enable();
+    handlers.get("moveend")?.();
+    limiter.disable();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(sourceData.at(-1), raw);
   });
 });

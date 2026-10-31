@@ -222,6 +222,10 @@ export class AreaPriorityLimiter {
   public disable(): void {
     if (!this.enabled) return;
     this.enabled = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     if (this.map) {
       this.map.off("moveend", this.boundOnMoveEnd);
       this.map.off("zoomend", this.boundOnMoveEnd);
@@ -243,7 +247,7 @@ export class AreaPriorityLimiter {
   }
 
   public apply(): OptimizeResult | null {
-    if (!this.rawGeoJSON || !this.map) return null;
+    if (!this.enabled || !this.rawGeoJSON || !this.map) return null;
 
     const bounds = this.map.getBounds();
     const bbox: [number, number, number, number] = [
