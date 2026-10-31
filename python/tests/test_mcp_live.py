@@ -396,7 +396,7 @@ def test_live_add_marker_and_add_markers(relay_server, monkeypatch, tmp_path):
 
 
 def test_live_feature_queries_and_identify(relay_server, monkeypatch, tmp_path):
-    """live_get_layer_features, live_get_selected_features, live_get_drawn_features, and live_identify."""
+    """Feature query tools and live_identify forward requests and return feature lists."""
     import asyncio
 
     server = _live_server(tmp_path)

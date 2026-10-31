@@ -2310,6 +2310,29 @@ def build_server(workspace: Workspace) -> MCPServer:
         live.require().call("setBasemap", {"url": url})
         return {"basemap": url}
 
+    def add_live_geojson_layer(
+        name: str,
+        collection: dict[str, Any],
+        style: dict[str, Any] | None = None,
+    ) -> str:
+        """Send an ``addGeoJsonLayer`` relay call and validate the returned layer id.
+
+        Args:
+            name: The layer's display name.
+            collection: A GeoJSON FeatureCollection dict.
+            style: Optional style overrides.
+
+        Returns:
+            The non-empty layer id returned by GeoLibre Desktop.
+        """
+        layer_id = live.require().call(
+            "addGeoJsonLayer",
+            {"name": name, "geojson": collection, "style": dict(style or {})},
+        )
+        if not isinstance(layer_id, str) or not layer_id:
+            raise ValueError(f"GeoLibre returned an unexpected layer id: {layer_id!r}")
+        return layer_id
+
     @tool()
     def live_add_geojson(
         data: Any,
@@ -2332,12 +2355,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             The new layer id and name.
         """
         collection, _source = load_geojson(data)
-        layer_id = live.require().call(
-            "addGeoJsonLayer",
-            {"name": name, "geojson": collection, "style": style or {}},
-        )
-        if not isinstance(layer_id, str) or not layer_id:
-            raise ValueError(f"GeoLibre returned an unexpected layer id: {layer_id!r}")
+        layer_id = add_live_geojson_layer(name, collection, style)
         return {"layerId": layer_id, "layerName": name}
 
     @tool()
@@ -2370,12 +2388,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 }
             ],
         }
-        layer_id = live.require().call(
-            "addGeoJsonLayer",
-            {"name": name, "geojson": collection, "style": dict(style or {})},
-        )
-        if not isinstance(layer_id, str) or not layer_id:
-            raise ValueError(f"GeoLibre returned an unexpected layer id: {layer_id!r}")
+        layer_id = add_live_geojson_layer(name, collection, style)
         return {"layerId": layer_id, "layerName": name}
 
     @tool()
@@ -2431,12 +2444,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             else:
                 raise ValueError(f"Each point must be [lng, lat] or a dict, got {point!r}")
         collection = {"type": "FeatureCollection", "features": features}
-        layer_id = live.require().call(
-            "addGeoJsonLayer",
-            {"name": name, "geojson": collection, "style": dict(style or {})},
-        )
-        if not isinstance(layer_id, str) or not layer_id:
-            raise ValueError(f"GeoLibre returned an unexpected layer id: {layer_id!r}")
+        layer_id = add_live_geojson_layer(name, collection, style)
         return {"layerId": layer_id, "layerName": name, "count": len(features)}
 
     @tool()
