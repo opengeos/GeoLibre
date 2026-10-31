@@ -104,6 +104,9 @@ export function createRemoteDownload(
   };
 }
 
+/** Maximum payload size supported by writeFileToFolder (50 MB). */
+export const MAX_WRITE_FILE_BYTES = 50 * 1024 * 1024;
+
 /**
  * Normalize arbitrary file data (string, Blob, ArrayBuffer, ArrayBufferView) into
  * a number array suitable for native command serialization.
@@ -111,22 +114,41 @@ export function createRemoteDownload(
 export async function normalizeBinaryData(
   data: string | Uint8Array | ArrayBuffer | Blob,
 ): Promise<number[]> {
+  let bytes: Uint8Array;
   if (typeof data === "string") {
-    return Array.from(new TextEncoder().encode(data));
+    bytes = new TextEncoder().encode(data);
+  } else if (data instanceof Blob) {
+    if (data.size > MAX_WRITE_FILE_BYTES) {
+      throw new RangeError(
+        `writeFileToFolder data exceeds the 50 MB limit (received ${data.size} bytes).`,
+      );
+    }
+    bytes = new Uint8Array(await data.arrayBuffer());
+  } else if (data instanceof ArrayBuffer) {
+    if (data.byteLength > MAX_WRITE_FILE_BYTES) {
+      throw new RangeError(
+        `writeFileToFolder data exceeds the 50 MB limit (received ${data.byteLength} bytes).`,
+      );
+    }
+    bytes = new Uint8Array(data);
+  } else if (ArrayBuffer.isView(data)) {
+    if (data.byteLength > MAX_WRITE_FILE_BYTES) {
+      throw new RangeError(
+        `writeFileToFolder data exceeds the 50 MB limit (received ${data.byteLength} bytes).`,
+      );
+    }
+    bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  } else {
+    throw new TypeError(
+      "Unsupported data type for writeFileToFolder; expected string, Blob, ArrayBuffer, or ArrayBufferView.",
+    );
   }
-  if (data instanceof Blob) {
-    const buffer = await data.arrayBuffer();
-    return Array.from(new Uint8Array(buffer));
+  if (bytes.byteLength > MAX_WRITE_FILE_BYTES) {
+    throw new RangeError(
+      `writeFileToFolder data exceeds the 50 MB limit (received ${bytes.byteLength} bytes).`,
+    );
   }
-  if (data instanceof ArrayBuffer) {
-    return Array.from(new Uint8Array(data));
-  }
-  if (ArrayBuffer.isView(data)) {
-    return Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-  }
-  throw new TypeError(
-    "Unsupported data type for writeFileToFolder; expected string, Blob, ArrayBuffer, or ArrayBufferView.",
-  );
+  return Array.from(bytes);
 }
 
 /**

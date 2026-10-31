@@ -21,7 +21,10 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
     time::Duration,
 };
 
@@ -525,6 +528,8 @@ pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder
     Err("Choosing a download folder is not supported on this platform.".into())
 }
 
+static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 fn write_file_to_folder_core(
     folder_id: &str,
     file_name: &str,
@@ -546,9 +551,50 @@ fn write_file_to_folder_core(
     if destination.parent() != Some(&folder) {
         return Err("Refusing to write: file name resolves outside the picked folder.".into());
     }
+    if let Ok(meta) = destination.symlink_metadata() {
+        if meta.file_type().is_symlink() {
+            return Err("Refusing to write: destination is a symlink.".into());
+        }
+    }
     let size = data.len() as u64;
-    fs::write(&destination, data)
-        .map_err(|error| format!("Could not write file to folder: {error}"))?;
+
+    let mut temp_name = std::ffi::OsString::from(".geolibre-write-tmp-");
+    temp_name.push(format!(
+        "{}-{}-{}",
+        std::process::id(),
+        WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed),
+        sanitized
+    ));
+    let temp = folder.join(temp_name);
+
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+
+    let write_result = options
+        .open(&temp)
+        .and_then(|mut file| {
+            file.write_all(data)?;
+            file.sync_all()
+        })
+        .and_then(|()| {
+            if let Ok(meta) = destination.symlink_metadata() {
+                if meta.file_type().is_symlink() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "destination is a symlink",
+                    ));
+                }
+            }
+            fs::rename(&temp, &destination)
+        });
+
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Could not write file to folder: {error}"));
+    }
+
     Ok(WriteFileResult {
         path: destination.to_string_lossy().into_owned(),
         size,
@@ -707,7 +753,14 @@ mod tests {
 
     #[test]
     fn writes_file_into_picked_folder() {
-        let dir = std::env::temp_dir().join(format!("geolibre-write-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-write-folder-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         fs::create_dir_all(&dir).unwrap();
         let downloads = RemoteDownloads::default();
         downloads
@@ -724,7 +777,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(res.size, 27);
+        assert_eq!(res.size, 28);
         assert_eq!(res.path, dir.join("test.geojson").to_string_lossy());
         assert_eq!(
             fs::read(dir.join("test.geojson")).unwrap(),
@@ -744,7 +797,14 @@ mod tests {
 
     #[test]
     fn write_file_sanitizes_filename_and_prevents_escape() {
-        let dir = std::env::temp_dir().join(format!("geolibre-escape-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-escape-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         fs::create_dir_all(&dir).unwrap();
         let downloads = RemoteDownloads::default();
         downloads
