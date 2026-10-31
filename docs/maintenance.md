@@ -75,17 +75,6 @@ at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
   that tool's field offers metres and silently converts a dimensionless number as
   if it were a distance.
 
-### `whitebox-wasm` (root `package.json` override)
-
-Nothing in GeoLibre imports `whitebox-wasm` directly: its only consumer is
-`cog-tiler-wasm`, which declares it as a peer. `cog-tiler-wasm` 0.5.0 still asks
-for `^0.6.0`, so the root `overrides` entry forces every consumer onto the same
-`^0.7.0` copy. Without it, npm hoists a second copy and the tiler keeps running
-the old decoder, whatever `packages/plugins/package.json` says. `npm ls
-whitebox-wasm` reports the peer mismatch as `invalid` until `cog-tiler-wasm`
-widens its range; drop the override then. On a bump, keep the override and the
-`packages/plugins` range in step, and load a real COG in the app.
-
 ### `geotiff` (`packages/processing/package.json`) — private `actualizedFields`
 
 `readRasterData` (`packages/processing/src/raster-client.ts`) pads a
