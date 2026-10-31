@@ -21,26 +21,49 @@ type MapboxGl = typeof mapboxgl.default;
 
 let mapboxGlPromise: Promise<MapboxGl> | null = null;
 
+declare const __NO_EXTERNAL_CDN__: boolean;
+
 /**
- * Append a CDN element to the document head and wait for it to load.
+ * Load the Mapbox GL JS script and wait for it to run.
  *
- * @param element - The configured `<script>` or `<link>` element.
- * @param url - The URL being loaded, named in the failure message.
- * @returns A promise that settles with the element's load or error event.
+ * @returns A promise that settles with the script's load or error event.
  */
-function appendAndWait(element: HTMLElement, url: string): Promise<void> {
+function loadScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    element.addEventListener("load", () => resolve(), { once: true });
-    element.addEventListener(
+    const script = document.createElement("script");
+    script.src = MAPBOX_GL_SCRIPT_URL;
+    script.integrity = MAPBOX_GL_SCRIPT_INTEGRITY;
+    script.crossOrigin = "anonymous";
+    script.addEventListener("load", () => resolve(), { once: true });
+    script.addEventListener(
       "error",
       () => {
-        element.remove();
-        reject(new Error(`Could not load Mapbox GL JS from ${url}`));
+        script.remove();
+        reject(new Error(`Could not load Mapbox GL JS from ${MAPBOX_GL_SCRIPT_URL}`));
       },
       { once: true },
     );
-    document.head.appendChild(element);
+    document.head.appendChild(script);
   });
+}
+
+/**
+ * Inject the Mapbox GL stylesheet as an inline `<style>`.
+ *
+ * As with `ensureArcgisCss`, a `<link>` would need a CDN host in `style-src`,
+ * while the fetch is already allowed by `connect-src https:`. The stylesheet's
+ * only `url()`s are data URIs, so moving it off the CDN breaks no references.
+ *
+ * @returns A promise that settles once the style is in the document.
+ */
+async function loadStyle(): Promise<void> {
+  const response = await fetch(MAPBOX_GL_STYLE_URL, { integrity: MAPBOX_GL_STYLE_INTEGRITY });
+  if (!response.ok) {
+    throw new Error(`Could not load the Mapbox GL stylesheet (HTTP ${response.status}).`);
+  }
+  const style = document.createElement("style");
+  style.textContent = await response.text();
+  document.head.appendChild(style);
 }
 
 /**
@@ -48,31 +71,21 @@ function appendAndWait(element: HTMLElement, url: string): Promise<void> {
  *
  * A failed load clears the cache, so mounting another pane retries it.
  *
- * @returns The `mapboxgl` namespace.
+ * @returns The `mapboxgl` namespace. Rejects in a `GEOLIBRE_NO_EXTERNAL_CDN`
+ *   build, which must not run code from a CDN.
  */
 export function loadMapboxGl(): Promise<MapboxGl> {
+  if (typeof __NO_EXTERNAL_CDN__ !== "undefined" && __NO_EXTERNAL_CDN__) {
+    return Promise.reject(new Error("The Mapbox renderer is disabled in this build."));
+  }
   if (mapboxGlPromise) return mapboxGlPromise;
-  const script = document.createElement("script");
-  script.src = MAPBOX_GL_SCRIPT_URL;
-  script.integrity = MAPBOX_GL_SCRIPT_INTEGRITY;
-  script.crossOrigin = "anonymous";
-  const style = document.createElement("link");
-  style.rel = "stylesheet";
-  style.href = MAPBOX_GL_STYLE_URL;
-  style.integrity = MAPBOX_GL_STYLE_INTEGRITY;
-  style.crossOrigin = "anonymous";
-  mapboxGlPromise = Promise.all([
-    appendAndWait(script, MAPBOX_GL_SCRIPT_URL),
-    appendAndWait(style, MAPBOX_GL_STYLE_URL),
-  ])
+  mapboxGlPromise = Promise.all([loadScript(), loadStyle()])
     .then(() => {
       const gl = (globalThis as unknown as { mapboxgl?: MapboxGl }).mapboxgl;
       if (!gl) throw new Error("Mapbox GL JS loaded but did not define `mapboxgl`.");
       return gl;
     })
     .catch((error) => {
-      script.remove();
-      style.remove();
       mapboxGlPromise = null;
       throw error;
     });

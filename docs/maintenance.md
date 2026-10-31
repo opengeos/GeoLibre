@@ -146,7 +146,11 @@ is there only for types. A bump must update `MAPBOX_GL_VERSION` and both
 `*_INTEGRITY` hashes in that file; `tests/mapbox-gl-loader.test.ts` computes the
 expected values from the installed package and fails until they match. A
 runtime import of `mapbox-gl`, direct or transitive, fails the build
-(`thirdPartyLicensePlugin` in `apps/geolibre-desktop/vite.config.ts`).
+(`thirdPartyLicensePlugin` in `apps/geolibre-desktop/vite.config.ts`). The
+script runs under `script-src`, which lists the CDN path; the stylesheet is
+fetched and inlined because `style-src` lists no external host. Playwright's
+`vite preview` sends no CSP, so the e2e suite cannot catch a policy mismatch. A
+`GEOLIBRE_NO_EXTERNAL_CDN=1` build refuses to load the renderer.
 
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 

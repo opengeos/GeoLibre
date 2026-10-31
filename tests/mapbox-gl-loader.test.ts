@@ -24,24 +24,34 @@ const sri = (file: string): string =>
 
 type FakeElement = {
   src?: string;
-  href?: string;
   integrity?: string;
   crossOrigin?: string;
+  textContent?: string;
   fire: (event: string) => void;
   addEventListener: (event: string, listener: () => void) => void;
   remove: () => void;
 };
 
+const testGlobals = globalThis as unknown as {
+  document?: unknown;
+  mapboxgl?: unknown;
+  __NO_EXTERNAL_CDN__?: boolean;
+};
+const realFetch = globalThis.fetch;
+
 /** Install a fake document and return the elements appended to its head. */
 function installDocument(): FakeElement[] {
   const appended: FakeElement[] = [];
-  (globalThis as { document?: unknown }).document = {
+  testGlobals.document = {
     createElement: () => {
       const listeners = new Map<string, () => void>();
       const element: FakeElement = {
         fire: (event) => listeners.get(event)?.(),
         addEventListener: (event, listener) => listeners.set(event, listener),
-        remove: () => appended.splice(appended.indexOf(element), 1),
+        remove: () => {
+          const index = appended.indexOf(element);
+          if (index !== -1) appended.splice(index, 1);
+        },
       };
       return element;
     },
@@ -51,8 +61,10 @@ function installDocument(): FakeElement[] {
 }
 
 afterEach(() => {
-  delete (globalThis as { document?: unknown }).document;
-  delete (globalThis as { mapboxgl?: unknown }).mapboxgl;
+  delete testGlobals.document;
+  delete testGlobals.mapboxgl;
+  delete testGlobals.__NO_EXTERNAL_CDN__;
+  globalThis.fetch = realFetch;
 });
 
 it("pins the CDN files to the exact installed package", () => {
@@ -62,26 +74,44 @@ it("pins the CDN files to the exact installed package", () => {
   assert.equal(MAPBOX_GL_STYLE_INTEGRITY, sri("mapbox-gl.css"), STALE);
 });
 
+it("needs no CSP style-src host: the stylesheet only uses data URIs", () => {
+  const css = readFileSync(path.join(packageDir, "dist/mapbox-gl.css"), "utf8");
+  assert.ok(css.includes("url("));
+  assert.doesNotMatch(css, /url\(\s*(?!["']?data:)/);
+});
+
+it("refuses to load from the CDN in a no-external-CDN build", async () => {
+  const appended = installDocument();
+  testGlobals.__NO_EXTERNAL_CDN__ = true;
+  await assert.rejects(loadMapboxGl(), /disabled in this build/);
+  assert.equal(appended.length, 0);
+});
+
 it("retries after a failed load, then shares one load between callers", async () => {
   const appended = installDocument();
+  const fetches: Array<[unknown, RequestInit | undefined]> = [];
+  globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+    fetches.push([url, init]);
+    return new Response("/* css */");
+  }) as typeof fetch;
+
   const failed = loadMapboxGl();
-  assert.equal(appended.length, 2);
-  appended[0]!.fire("error");
+  const [failedScript] = appended;
+  failedScript!.fire("error");
   await assert.rejects(failed, /Could not load Mapbox GL JS/);
-  assert.equal(appended.length, 0);
+  assert.ok(!appended.includes(failedScript!));
+  appended.length = 0;
 
   const retried = loadMapboxGl();
   assert.equal(loadMapboxGl(), retried);
-  assert.equal(appended.length, 2);
-  const [script, style] = appended;
+  const [script] = appended;
   assert.equal(script!.src, MAPBOX_GL_SCRIPT_URL);
   assert.equal(script!.integrity, MAPBOX_GL_SCRIPT_INTEGRITY);
   assert.equal(script!.crossOrigin, "anonymous");
-  assert.equal(style!.href, MAPBOX_GL_STYLE_URL);
-  assert.equal(style!.integrity, MAPBOX_GL_STYLE_INTEGRITY);
   const namespace = { Map: class {} };
-  (globalThis as { mapboxgl?: unknown }).mapboxgl = namespace;
+  testGlobals.mapboxgl = namespace;
   script!.fire("load");
-  style!.fire("load");
   assert.equal(await retried, namespace);
+  assert.deepEqual(fetches.at(-1), [MAPBOX_GL_STYLE_URL, { integrity: MAPBOX_GL_STYLE_INTEGRITY }]);
+  assert.equal(appended.at(-1)!.textContent, "/* css */");
 });
