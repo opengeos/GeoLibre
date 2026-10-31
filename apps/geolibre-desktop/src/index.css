@@ -291,9 +291,9 @@ html:lang(fa) {
 
 /* mapbox-gl's `.mapboxgl-ctrl button:hover` paints #eee behind every button in a
    control, including the shared controls' unclassed toggles and their panels,
-   whose icons are light in dark mode. The attribution button is inverted, which
-   already turns #eee dark. `:where` keeps a control's own, more
-   specific hover color in charge. */
+   whose icons are light in dark mode. This outranks it, and any other hover
+   color a control sets below (0,4,1), which that #eee was already overriding.
+   The attribution button is inverted, which already turns #eee dark. */
 :where(.dark)
   .mapboxgl-map
   .mapboxgl-ctrl
