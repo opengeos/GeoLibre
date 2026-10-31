@@ -76,8 +76,9 @@ it("pins the CDN files to the exact installed package", () => {
 
 it("needs no CSP style-src host: the stylesheet only uses data URIs", () => {
   const css = readFileSync(path.join(packageDir, "dist/mapbox-gl.css"), "utf8");
-  assert.ok(css.includes("url("));
-  assert.doesNotMatch(css, /url\(\s*(?!["']?data:)/);
+  const withoutDataUris = css.replace(/url\("data:[^"]*"\)/g, "");
+  assert.notEqual(withoutDataUris, css);
+  assert.ok(!withoutDataUris.includes("url("));
 });
 
 it("refuses to load from the CDN in a no-external-CDN build", async () => {
