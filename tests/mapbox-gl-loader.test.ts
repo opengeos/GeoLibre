@@ -11,6 +11,7 @@ import {
   MAPBOX_GL_STYLE_INTEGRITY,
   MAPBOX_GL_STYLE_URL,
   MAPBOX_GL_VERSION,
+  resetMapboxGlForTests,
 } from "../packages/map/src/mapbox-gl-loader";
 
 const require = createRequire(path.resolve("packages/map/package.json"));
@@ -61,6 +62,7 @@ function installDocument(): FakeElement[] {
 }
 
 afterEach(() => {
+  resetMapboxGlForTests();
   delete testGlobals.document;
   delete testGlobals.mapboxgl;
   delete testGlobals.__NO_EXTERNAL_CDN__;
@@ -101,6 +103,7 @@ it("retries after a failed load, then shares one load between callers", async ()
   failedScript!.fire("error");
   await assert.rejects(failed, /Could not load Mapbox GL JS/);
   assert.ok(!appended.includes(failedScript!));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(fetches.length, 1);
   assert.equal(appended.at(-1)!.textContent, "/* css */");
   assert.equal(appended.length, 1);
@@ -116,4 +119,45 @@ it("retries after a failed load, then shares one load between callers", async ()
   script!.fire("load");
   assert.equal(await retried, namespace);
   assert.deepEqual(fetches, [[MAPBOX_GL_STYLE_URL, { integrity: MAPBOX_GL_STYLE_INTEGRITY }]]);
+});
+
+it("retries only the stylesheet when the script already loaded", async () => {
+  const appended = installDocument();
+  let status = 503;
+  let fetchCount = 0;
+  globalThis.fetch = (async () => {
+    fetchCount += 1;
+    return new Response("/* css */", { status });
+  }) as typeof fetch;
+
+  const failed = loadMapboxGl();
+  const [script] = appended;
+  script!.fire("load");
+  await assert.rejects(failed, /HTTP 503/);
+
+  status = 200;
+  const namespace = { Map: class {} };
+  testGlobals.mapboxgl = namespace;
+  assert.equal(await loadMapboxGl(), namespace);
+  assert.equal(fetchCount, 2);
+  assert.deepEqual(appended[0], script);
+  assert.equal(appended.length, 2);
+  assert.equal(appended[1]!.textContent, "/* css */");
+});
+
+it("reloads a script that ran without defining the namespace", async () => {
+  const appended = installDocument();
+  globalThis.fetch = (async () => new Response("/* css */")) as typeof fetch;
+
+  const failed = loadMapboxGl();
+  appended[0]!.fire("load");
+  await assert.rejects(failed, /did not define/);
+
+  const retried = loadMapboxGl();
+  const scripts = appended.filter((element) => element.src);
+  assert.equal(scripts.length, 2);
+  const namespace = { Map: class {} };
+  testGlobals.mapboxgl = namespace;
+  scripts[1]!.fire("load");
+  assert.equal(await retried, namespace);
 });

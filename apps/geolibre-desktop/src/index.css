@@ -242,7 +242,16 @@ html:lang(fa) {
     .maplibregl-ctrl-geolocate-background,
     .maplibregl-ctrl-geolocate-background-error
   )
-  .maplibregl-ctrl-icon {
+  .maplibregl-ctrl-icon,
+.dark
+  .mapboxgl-map
+  .mapboxgl-ctrl-geolocate:is(
+    .mapboxgl-ctrl-geolocate-active,
+    .mapboxgl-ctrl-geolocate-active-error,
+    .mapboxgl-ctrl-geolocate-background,
+    .mapboxgl-ctrl-geolocate-background-error
+  )
+  .mapboxgl-ctrl-icon {
   filter: none;
 }
 

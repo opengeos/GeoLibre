@@ -93,7 +93,11 @@ export function loadMapboxGl(): Promise<MapboxGl> {
   mapboxGlPromise = Promise.all([scriptPromise, stylePromise])
     .then(() => {
       const gl = (globalThis as unknown as { mapboxgl?: MapboxGl }).mapboxgl;
-      if (!gl) throw new Error("Mapbox GL JS loaded but did not define `mapboxgl`.");
+      if (!gl) {
+        // A script that throws while running still fires `load`.
+        scriptPromise = null;
+        throw new Error("Mapbox GL JS loaded but did not define `mapboxgl`.");
+      }
       return gl;
     })
     .catch((error) => {
@@ -101,4 +105,11 @@ export function loadMapboxGl(): Promise<MapboxGl> {
       throw error;
     });
   return mapboxGlPromise;
+}
+
+/** Forget the cached load, so each test starts from an unloaded page. */
+export function resetMapboxGlForTests(): void {
+  mapboxGlPromise = null;
+  scriptPromise = null;
+  stylePromise = null;
 }

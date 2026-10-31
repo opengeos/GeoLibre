@@ -152,7 +152,8 @@ describe("maplibre-gl and mapbox-gl class registries", () => {
       "/node_modules/maplibre-gl/dist/maplibre-gl.mjs",
     );
     assert.match(maplibre, /_classRegistryKey/, "see 'mapbox-gl' in docs/maintenance.md");
-    assert.doesNotMatch(isolated ?? "", /_classRegistryKey/);
+    assert.ok(isolated !== null, "the plugin must rewrite MapLibre's main bundle");
+    assert.doesNotMatch(isolated, /_classRegistryKey/);
     assert.match(file("mapbox-gl", "mapbox-gl.js"), /_classRegistryKey/);
   });
 
