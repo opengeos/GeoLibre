@@ -99,7 +99,7 @@
     "shpjs": "^6.2.0",
     "three": "^0.186.1",
     "webdggrid": "^1.11.0",
-    "whitebox-wasm": "^0.6.1",
+    "whitebox-wasm": "^0.7.0",
     "zarrita": "^0.7.5"
   },
   "devDependencies": {

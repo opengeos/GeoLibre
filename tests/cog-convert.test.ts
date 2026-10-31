@@ -98,13 +98,21 @@ describe("convertGeoTiffToCog", () => {
     // An NDVI-like result (values in -1..1) with a 3-pixel -9999 NoData border:
     // big enough for overviews, and a border that does not line up with the
     // 2x2 / 4x4 overview blocks, so a block straddles NoData and valid pixels.
+    // Such a block averages its valid pixels, so only the 64-pixel NoData corner
+    // is wide enough to cover whole blocks and stay masked at every level.
     const size = 1100;
     const border = 3;
+    const corner = 64;
     const nodata = -9999;
     const band = new Float32Array(size * size);
     for (let row = 0; row < size; row += 1) {
       for (let col = 0; col < size; col += 1) {
-        const edge = row < border || col < border || row >= size - border || col >= size - border;
+        const edge =
+          row < border ||
+          col < border ||
+          row >= size - border ||
+          col >= size - border ||
+          (row < corner && col < corner);
         band[row * size + col] = edge ? nodata : ((row + col) % 100) / 100 - 0.5;
       }
     }
@@ -152,7 +160,7 @@ describe("convertGeoTiffToCog", () => {
         // -624, and the renderer's auto stretch read them as data.
         assert.ok(value >= -0.5 && value <= 0.5, `level ${index} holds ${value}`);
       }
-      assert.ok(masked > 0, `level ${index} keeps its NoData border`);
+      assert.ok(masked > 0, `level ${index} keeps its NoData corner`);
       assert.ok(valid > 0, `level ${index} keeps valid data`);
     }
   });

@@ -37,7 +37,7 @@
     "a5-js": "^1.0.0",
     "dggal": "^0.0.6",
     "fflate": "^0.8.3",
-    "geolibre-wasm": "^1.7.1",
+    "geolibre-wasm": "^1.8.0",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.10.9",
     "onnxruntime-web": "1.30.0",

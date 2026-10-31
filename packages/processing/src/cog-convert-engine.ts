@@ -218,21 +218,13 @@ export interface ConvertRasterDataToCogOptions {
   /**
    * Write NoData, and any non-finite sample, as NaN instead of the raster's
    * own sentinel (default false).
-   * The encoder builds overviews with a box average that does not skip NoData,
-   * so a finite sentinel such as -9999 blends into its valid neighbours along
-   * every NoData edge (an NDVI overview pixel that is 15/16 NoData reads
-   * -9374). The renderer takes its auto stretch and histogram from the
-   * coarsest overview, so those outliers flatten the whole layer (#3255). NaN
-   * propagates through the average instead, so an overview pixel that touches
-   * NoData stays NoData, and the renderer already treats NaN as NoData. The
-   * trade-off: any NoData pixel blanks its whole overview block, so a NoData
-   * edge grows by up to one block at low zoom, and scattered NoData (speckle,
-   * cloud masks) can leave the coarsest levels mostly empty. Without the
-   * option those same blocks hold blended outliers instead, so nanNodata is
-   * still the better choice for display. The full fix is a NoData-aware average
-   * in the encoder (opengeos/whitebox-wasm#33). Use it for a COG that is only
-   * drawn on the map; keep the sentinel for one that feeds tools which compare
-   * against it.
+   * Encoders older than geolibre-wasm 1.8.0 built overviews with a box average
+   * that did not skip NoData, so a finite sentinel such as -9999 blended into
+   * its valid neighbours along every NoData edge and flattened the renderer's
+   * auto stretch (#3255). The average now skips NoData and NaN alike. Use this
+   * option for a COG that is only drawn on the map, where the renderer already
+   * treats NaN as NoData; keep the sentinel for one that feeds tools which
+   * compare against it.
    */
   nanNodata?: boolean;
 }
