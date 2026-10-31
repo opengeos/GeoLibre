@@ -32,6 +32,7 @@ import {
 } from "./map-identify-lifecycle";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
+import { loadMapboxGl } from "./mapbox-gl-loader";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
 import { styleUsesUnsupportedSource } from "./gl-style-compiler";
 import { resolveMapStyle } from "./basemap-style";
@@ -127,10 +128,9 @@ export function MapboxCanvas({
       }
     };
     setError(null);
-    void Promise.all([import("mapbox-gl"), import("mapbox-gl/dist/mapbox-gl.css")])
-      .then(async ([module]) => {
+    void loadMapboxGl()
+      .then(async (gl) => {
         if (cancelled || !container.current) return;
-        const gl = module.default;
         const state = useAppStore.getState();
         const pane = state.secondaryMapViews.find((p) => p.id === viewId);
         const view =

@@ -141,7 +141,8 @@
     "upToDateNoVersion": "You are up to date.",
     "generalSectionTitle": "General",
     "homePage": "Home page",
-    "githubRepository": "GitHub repository"
+    "githubRepository": "GitHub repository",
+    "thirdPartyLicenses": "Third-party licenses"
   },
   "updates": {
     "changelogTitle": "What's new",

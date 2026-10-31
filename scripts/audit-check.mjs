@@ -15,7 +15,7 @@ import { spawnSync } from "node:child_process";
 // Severities that fail the build. Moderate/low are left to Dependabot PRs.
 const BLOCKING = new Set(["high", "critical"]);
 
-const ALLOWLIST = new Map([]);
+const ALLOWLIST = new Map();
 
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   encoding: "utf8",

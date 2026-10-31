@@ -12,6 +12,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { isolateMaplibreRegistryPlugin } from "./vite-plugins/isolate-maplibre-registry";
 import { sharedH5wasmChunkPlugin, workerH5wasmFromMainPlugin } from "./vite-plugins/shared-h5wasm";
 import {
   proxyAircraftRequestGuarded,
@@ -634,7 +635,6 @@ function manualChunks(id: string): string | undefined {
   // generic `maplibre-gl` rule below, which would fold it into the eager
   // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
   if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
-  if (id.includes("/mapbox-gl/")) return "mapbox";
   // One chunk per `maplibre-gl-*` feature plugin (components, splat, 3d-tiles,
   // lidar, …). A single shared chunk put ~12 MB of plugins, plus the
   // dependencies they pull in (three, deck.gl, luma.gl), into the chunk that
@@ -1073,6 +1073,53 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
           asset.source = source.replace(DUCKDB_WORKER_SOURCE_MAP_RE, "");
         }
       }
+    },
+  };
+}
+
+/**
+ * Keep the redistributed build within its dependencies' licenses.
+ *
+ * Fails the build if proprietary Mapbox GL JS or its stylesheet is imported,
+ * including transitively; `loadMapboxGl` fetches it from Mapbox's CDN instead. Also
+ * emits the license and source link the LGPL requires for the gdal3.js loader,
+ * the one LGPL file in the bundle.
+ *
+ * @returns The Vite plugin.
+ */
+function thirdPartyLicensePlugin(): Plugin {
+  return {
+    name: "geolibre-third-party-licenses",
+    apply: "build",
+    enforce: "pre",
+    load(id) {
+      if (id.replaceAll("\\", "/").includes("/node_modules/mapbox-gl/")) {
+        this.error(
+          `${id} reached the build. Mapbox GL JS is proprietary and must not be bundled; use loadMapboxGl.`,
+        );
+      }
+      return null;
+    },
+    generateBundle() {
+      const { dir, manifest } = findPackageManifest(
+        pgliteCdnRequire.resolve("gdal3.js"),
+        "gdal3.js",
+      );
+      this.emitFile({
+        type: "asset",
+        fileName: "licenses/gdal3.js/LICENSE",
+        source: readFileSync(path.join(dir, "LICENSE"), "utf8"),
+      });
+      this.emitFile({
+        type: "asset",
+        fileName: "licenses/gdal3.js/NOTICE.txt",
+        source: [
+          `GeoLibre's Georeferencer export uses gdal3.js ${manifest.version}, unmodified.`,
+          "gdal3.js is licensed under the GNU Lesser General Public License, version 2.1 or later; see LICENSE in this directory.",
+          `Source code: https://github.com/bugra9/gdal3.js/tree/v${manifest.version}`,
+          "",
+        ].join("\n"),
+      });
     },
   };
 }
@@ -1522,6 +1569,8 @@ export default defineConfig({
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
     duckdbWasmBundlesPlugin(),
     stripDuckDbWorkerSourcemapPlugin(),
+    thirdPartyLicensePlugin(),
+    isolateMaplibreRegistryPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
     copyVectorOps(
@@ -1605,6 +1654,7 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
+    rolldownOptions: { plugins: [isolateMaplibreRegistryPlugin()] },
     // Pre-bundle the AI Assistant's heavy deps at dev-server startup. They are
     // only reached through the lazily-imported assistant panel (and, for the
     // provider models, through dynamic import() inside it), so Vite would
