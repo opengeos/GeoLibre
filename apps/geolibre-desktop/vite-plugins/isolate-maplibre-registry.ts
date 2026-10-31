@@ -11,8 +11,9 @@ const REGISTRY_KEY = /_classRegistryKey/g;
  * the shared `Set` and `Error` globals. Mapbox's serializer trusts any class with
  * that key, then fails looking it up in its own registry ("Cannot read properties
  * of undefined (reading 'omit')"), so no tile loads. The name is private to the
- * bundle, and classes cross to the worker as `$name`, so MapLibre's own worker
- * needs no change. `tests/upstream-contracts.test.ts` guards the assumption.
+ * bundle and the same length, so source maps stay correct. Classes cross to the
+ * worker as `$name`, so MapLibre's own worker needs no change.
+ * `tests/upstream-contracts.test.ts` guards the assumption.
  *
  * @param code - The module source.
  * @param id - The module id.
@@ -20,7 +21,7 @@ const REGISTRY_KEY = /_classRegistryKey/g;
  */
 export function isolateMaplibreRegistry(code: string, id: string): string | null {
   if (!MAPLIBRE_MAIN_THREAD_BUNDLE.test(id.split("?")[0]!)) return null;
-  return code.replace(REGISTRY_KEY, "_geolibreMaplibreClassRegistryKey");
+  return code.replace(REGISTRY_KEY, "_maplibreRegistry");
 }
 
 /**

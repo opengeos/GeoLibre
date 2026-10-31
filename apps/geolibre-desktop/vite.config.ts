@@ -1080,8 +1080,8 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
 /**
  * Keep the redistributed build within its dependencies' licenses.
  *
- * Fails the build if proprietary Mapbox GL JS reaches a chunk, including through
- * a transitive import; `loadMapboxGl` fetches it from Mapbox's CDN instead. Also
+ * Fails the build if proprietary Mapbox GL JS or its stylesheet is imported,
+ * including transitively; `loadMapboxGl` fetches it from Mapbox's CDN instead. Also
  * emits the license and source link the LGPL requires for the gdal3.js loader,
  * the one LGPL file in the bundle.
  *
@@ -1091,18 +1091,16 @@ function thirdPartyLicensePlugin(): Plugin {
   return {
     name: "geolibre-third-party-licenses",
     apply: "build",
-    generateBundle(_, bundle) {
-      for (const output of Object.values(bundle)) {
-        if (output.type !== "chunk") continue;
-        const leaked = Object.keys(output.modules).find((id) =>
-          id.replaceAll("\\", "/").includes("/node_modules/mapbox-gl/"),
+    enforce: "pre",
+    load(id) {
+      if (id.replaceAll("\\", "/").includes("/node_modules/mapbox-gl/")) {
+        this.error(
+          `${id} reached the build. Mapbox GL JS is proprietary and must not be bundled; use loadMapboxGl.`,
         );
-        if (leaked) {
-          this.error(
-            `${leaked} reached chunk ${output.fileName}. Mapbox GL JS is proprietary and must not be bundled; use loadMapboxGl.`,
-          );
-        }
       }
+      return null;
+    },
+    generateBundle() {
       const { dir, manifest } = findPackageManifest(
         pgliteCdnRequire.resolve("gdal3.js"),
         "gdal3.js",
