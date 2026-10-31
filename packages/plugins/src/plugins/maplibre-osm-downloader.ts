@@ -113,7 +113,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   hint.textContent = tr(
     app,
     "hint",
-    "Download OpenStreetMap features from the current map area with the public Overpass API.",
+    "Preview OpenStreetMap features from the current map area before adding or saving them.",
   );
   const attribution = element("p", CSS.hint);
   attribution.textContent = tr(
@@ -165,22 +165,27 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const useView = element("button", CSS.button);
   useView.type = "button";
   useView.textContent = tr(app, "useMapExtent", "Use map extent");
-  const downloadButton = element("button", CSS.primary);
-  downloadButton.type = "button";
-  downloadButton.textContent = tr(app, "download", "Download OSM data");
+  const previewButton = element("button", CSS.primary);
+  previewButton.type = "button";
+  previewButton.textContent = tr(app, "preview", "Preview OSM data");
   const queryActions = element("div", CSS.actions);
-  queryActions.append(useView, downloadButton);
+  queryActions.append(useView, previewButton);
 
   const status = element("div", CSS.status);
   status.setAttribute("role", "status");
   status.textContent = tr(app, "ready", "Choose an area and feature type.");
 
+  const addButton = element("button", CSS.primary);
+  addButton.type = "button";
+  addButton.textContent = tr(app, "addToMap", "Add to map");
+  addButton.disabled = true;
+  addButton.style.cssText = CSS.disabled;
   const exportButton = element("button", CSS.button);
   exportButton.type = "button";
   exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
   exportButton.disabled = true;
   const resultActions = element("div", CSS.actions);
-  resultActions.append(exportButton);
+  resultActions.append(addButton, exportButton);
 
   const presetField = field(tr(app, "featureType", "Feature type"), preset);
   root.append(
@@ -197,46 +202,73 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   let controller: AbortController | null = null;
   let result: FeatureCollection | null = null;
-  let resultPreset: OsmDownloadPreset | null = null;
+  let resultFilter: OsmDownloadFilter | null = null;
+  let previewLayerId: string | null = null;
   let disposed = false;
 
   const readBounds = (): [number, number, number, number] =>
-    coordInputs.map((input) =>
-      input.value.trim() === "" ? Number.NaN : Number(input.value),
-    ) as [number, number, number, number];
+    coordInputs.map((input) => (input.value.trim() === "" ? Number.NaN : Number(input.value))) as [
+      number,
+      number,
+      number,
+      number,
+    ];
 
-  const updateDownloadAvailability = (announce = false) => {
+  const updatePreviewAvailability = (announce = false) => {
     const bbox = readBounds();
     const selectedPreset = preset.value as OsmDownloadPreset;
     const area = osmDownloadBoundsArea(bbox);
     const limit = osmDownloadAreaLimit(selectedPreset);
     const eligible = canDownloadOsmBounds(bbox, selectedPreset);
     const pending = controller !== null;
-    downloadButton.disabled = pending || !eligible;
-    downloadButton.style.cssText = !pending && eligible ? CSS.primary : CSS.disabled;
+    previewButton.disabled = pending || !eligible;
+    previewButton.style.cssText = !pending && eligible ? CSS.primary : CSS.disabled;
     if (eligible) {
-      downloadButton.removeAttribute("title");
+      previewButton.removeAttribute("title");
       if (announce) status.textContent = tr(app, "extentApplied", "Map extent applied.");
       return;
     }
     const message =
       area === null
         ? tr(app, "invalidExtent", "Enter a valid bounding box.")
-        : tr(
-            app,
-            "zoomIn",
-            "Zoom in until the map area is {{limit}} square degrees or less.",
-            { limit },
-          );
-    downloadButton.title = message;
+        : tr(app, "zoomIn", "Zoom in until the map area is {{limit}} square degrees or less.", {
+            limit,
+          });
+    previewButton.title = message;
     if (announce && !pending) status.textContent = message;
+  };
+
+  const clearPreview = (announce = false) => {
+    controller?.abort();
+    controller = null;
+    if (previewLayerId) app.removeLayer?.(previewLayerId);
+    previewLayerId = null;
+    result = null;
+    resultFilter = null;
+    addButton.disabled = true;
+    addButton.style.cssText = CSS.disabled;
+    exportButton.disabled = true;
+    if (announce) status.textContent = tr(app, "ready", "Choose an area and feature type.");
+  };
+
+  const previewSummary = (data: FeatureCollection) => {
+    let points = 0;
+    let lines = 0;
+    let polygons = 0;
+    for (const feature of data.features) {
+      const type = feature.geometry?.type ?? "";
+      if (type === "Point" || type === "MultiPoint") points += 1;
+      else if (type === "LineString" || type === "MultiLineString") lines += 1;
+      else if (type === "Polygon" || type === "MultiPolygon") polygons += 1;
+    }
+    return { points, lines, polygons };
   };
 
   const refreshLabels = () => {
     hint.textContent = tr(
       app,
       "hint",
-      "Download OpenStreetMap features from the current map area with the public Overpass API.",
+      "Preview OpenStreetMap features from the current map area before adding or saving them.",
     );
     attribution.textContent = tr(
       app,
@@ -268,9 +300,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     keyInput.placeholder = tr(app, "tagKeyPlaceholder", "e.g. shop");
     valueInput.placeholder = tr(app, "tagValuePlaceholder", "optional, e.g. bakery");
     useView.textContent = tr(app, "useMapExtent", "Use map extent");
-    downloadButton.textContent = tr(app, "download", "Download OSM data");
+    previewButton.textContent = tr(app, "preview", "Preview OSM data");
+    addButton.textContent = tr(app, "addToMap", "Add to map");
     exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
-    updateDownloadAvailability(false);
+    updatePreviewAvailability(false);
   };
   refreshPanelLabels = refreshLabels;
 
@@ -283,23 +316,31 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     bounds.forEach((value, index) => {
       coordInputs[index].value = formatNumber(value);
     });
-    updateDownloadAvailability(true);
+    clearPreview(false);
+    updatePreviewAvailability(true);
   };
 
   preset.addEventListener("change", () => {
     customGrid.hidden = preset.value !== "custom";
-    updateDownloadAvailability(true);
+    clearPreview(true);
+    updatePreviewAvailability(false);
   });
   coordInputs.forEach((input) =>
-    input.addEventListener("input", () => updateDownloadAvailability(true)),
+    input.addEventListener("input", () => {
+      clearPreview(true);
+      updatePreviewAvailability(false);
+    }),
   );
+  for (const input of [keyInput, valueInput]) {
+    input.addEventListener("input", () => clearPreview(true));
+  }
   useView.addEventListener("click", applyViewBounds);
   const map = getControlMap(app);
   const onMoveEnd = () => applyViewBounds();
   map?.on("moveend", onMoveEnd);
   applyViewBounds();
 
-  downloadButton.addEventListener("click", async () => {
+  previewButton.addEventListener("click", async () => {
     const bbox = readBounds();
     const selectedPreset = preset.value as OsmDownloadPreset;
     const filter: OsmDownloadFilter = {
@@ -307,28 +348,40 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       key: keyInput.value,
       value: valueInput.value,
     };
-    controller?.abort();
+    clearPreview(false);
     const requestController = new AbortController();
     controller = requestController;
-    result = null;
-    resultPreset = null;
-    exportButton.disabled = true;
-    updateDownloadAvailability(false);
-    status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
+    updatePreviewAvailability(false);
+    status.textContent = tr(app, "previewing", "Loading OSM preview…");
     try {
-      result = await downloadOsmGeoJson(bbox, filter, { signal: requestController.signal });
-      if (disposed) return;
-      resultPreset = selectedPreset;
+      result = await downloadOsmGeoJson(bbox, filter, {
+        signal: requestController.signal,
+      });
+      if (disposed || controller !== requestController) return;
+      resultFilter = { ...filter };
       const count = result.features.length;
       if (count) {
-        app.addGeoJsonLayer(resultName(app, filter), result);
-        status.textContent = tr(app, "added", "Added {{count}} features to the map.", {
-          count,
-        });
+        const name = resultName(app, filter);
+        previewLayerId = app.addGeoJsonLayer(
+          tr(app, "previewLayerName", "Preview — {{name}}", { name }),
+          result,
+        );
+        const summary = previewSummary(result);
+        status.textContent = tr(
+          app,
+          "previewed",
+          "Previewing {{count}} features: {{points}} points, {{lines}} lines, {{polygons}} polygons.",
+          {
+            count,
+            ...summary,
+          },
+        );
+        addButton.disabled = false;
+        addButton.style.cssText = CSS.primary;
+        exportButton.disabled = false;
       } else {
         status.textContent = tr(app, "noFeatures", "No matching features were found in this area.");
       }
-      exportButton.disabled = count === 0;
     } catch (error) {
       if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
       const message = error instanceof Error ? error.message : String(error);
@@ -338,25 +391,43 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     } finally {
       if (!disposed && controller === requestController) {
         controller = null;
-        updateDownloadAvailability(false);
+        updatePreviewAvailability(false);
       }
     }
   });
 
-  exportButton.addEventListener("click", () => {
-    if (!result || !resultPreset) return;
-    const suffix = new Date().toISOString().slice(0, 10);
-    app.exportTextFile?.(`osm-${resultPreset}-${suffix}.geojson`, JSON.stringify(result, null, 2), {
-      description: "GeoJSON",
-      extensions: ["geojson"],
-      mimeType: "application/geo+json",
-      promptName: true,
+  addButton.addEventListener("click", () => {
+    if (!result || !resultFilter || !result.features.length) return;
+    if (previewLayerId) app.removeLayer?.(previewLayerId);
+    previewLayerId = null;
+    const count = result.features.length;
+    app.addGeoJsonLayer(resultName(app, resultFilter), result);
+    addButton.disabled = true;
+    addButton.style.cssText = CSS.disabled;
+    status.textContent = tr(app, "added", "Added {{count}} features to the map.", {
+      count,
     });
+  });
+
+  exportButton.addEventListener("click", () => {
+    if (!result || !resultFilter) return;
+    const suffix = new Date().toISOString().slice(0, 10);
+    app.exportTextFile?.(
+      `osm-${resultFilter.preset}-${suffix}.geojson`,
+      JSON.stringify(result, null, 2),
+      {
+        description: "GeoJSON",
+        extensions: ["geojson"],
+        mimeType: "application/geo+json",
+        promptName: true,
+      },
+    );
   });
 
   return () => {
     disposed = true;
     controller?.abort();
+    if (previewLayerId) app.removeLayer?.(previewLayerId);
     map?.off("moveend", onMoveEnd);
     if (refreshPanelLabels === refreshLabels) refreshPanelLabels = null;
     container.replaceChildren();
@@ -369,7 +440,7 @@ function mountPanel(container: HTMLElement, app: GeoLibreAppAPI): void {
   disposePanel = buildPanel(container, app);
 }
 
-/** Download OpenStreetMap vector features from Overpass into GeoLibre or GeoJSON. */
+/** Preview and add OpenStreetMap vector features from Overpass or the OSM map API. */
 export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
   id: OSM_DOWNLOADER_PLUGIN_ID,
   name: "OSM Downloader",

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
+import { parseHTML } from "linkedom";
 import {
   buildOsmDownloadQuery,
   canDownloadOsmBounds,
@@ -15,8 +17,12 @@ import {
   osmDownloadBoundsArea,
   type OverpassFetch,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
-import { OSM_DOWNLOADER_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-osm-downloader";
+import {
+  maplibreOsmDownloaderPlugin,
+  OSM_DOWNLOADER_PLUGIN_ID,
+} from "../packages/plugins/src/plugins/maplibre-osm-downloader";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
+import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
 
 describe("OSM download query", () => {
   it("reports whether the current bounds are eligible before downloading", () => {
@@ -32,7 +38,9 @@ describe("OSM download query", () => {
 
   it("uses Overpass bbox order and preset tag filters", () => {
     assert.equal(
-      buildOsmDownloadQuery([-84.5, 33.6, -84.2, 33.9], { preset: "buildings" }),
+      buildOsmDownloadQuery([-84.5, 33.6, -84.2, 33.9], {
+        preset: "buildings",
+      }),
       '[out:json][timeout:60];nwr["building"](33.6,-84.5,33.9,-84.2);out geom;',
     );
   });
@@ -127,7 +135,13 @@ describe("Overpass JSON conversion", () => {
   it("converts tagged nodes, line ways, and area ways", () => {
     const result = overpassJsonToGeoJson({
       elements: [
-        { type: "node", id: 1, lon: -84.3, lat: 33.7, tags: { amenity: "cafe" } },
+        {
+          type: "node",
+          id: 1,
+          lon: -84.3,
+          lat: 33.7,
+          tags: { amenity: "cafe" },
+        },
         {
           type: "way",
           id: 2,
@@ -290,7 +304,12 @@ describe("OSM map API fallback conversion", () => {
           { type: "node", id: 2, lon: 2, lat: 2 },
           { type: "node", id: 3, lon: 2, lat: 3 },
           { type: "node", id: 4, lon: 1, lat: 2 },
-          { type: "way", id: 10, nodes: [1, 2, 3, 4], tags: { building: "yes" } },
+          {
+            type: "way",
+            id: 10,
+            nodes: [1, 2, 3, 4],
+            tags: { building: "yes" },
+          },
           { type: "way", id: 11, nodes: [1, 2], tags: { highway: "service" } },
         ],
       },
@@ -313,7 +332,12 @@ describe("downloadOsmGeoJson", () => {
     const calls: string[] = [];
     const fetchImpl: OverpassFetch = async (url) => {
       calls.push(url);
-      return { ok: true, status: 200, json: async () => ({ elements: [] }), text: async () => "" };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ elements: [] }),
+        text: async () => "",
+      };
     };
     await downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl });
     assert.equal(OVERPASS_DEFAULT_ENDPOINT, "https://tiles.geolibre.app/overpass");
@@ -327,7 +351,9 @@ describe("downloadOsmGeoJson", () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ elements: [{ type: "node", id: 7, lon: 1, lat: 2 }] }),
+        json: async () => ({
+          elements: [{ type: "node", id: 7, lon: 1, lat: 2 }],
+        }),
         text: async () => "",
       };
     };
@@ -363,7 +389,12 @@ describe("downloadOsmGeoJson", () => {
     const fetchImpl: OverpassFetch = async (url, init) => {
       calls.push({ url, method: init.method });
       if (calls.length === 1) {
-        return { ok: false, status: 502, json: async () => ({}), text: async () => "Bad Gateway" };
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({}),
+          text: async () => "Bad Gateway",
+        };
       }
       return {
         ok: true,
@@ -384,14 +415,22 @@ describe("downloadOsmGeoJson", () => {
     assert.equal(result.features.length, 1);
     assert.equal(calls.length, 2);
     assert.equal(calls[1].method, "GET");
-    assert.equal(new URL(calls[1].url).origin + new URL(calls[1].url).pathname, OSM_MAP_API_ENDPOINT);
+    assert.equal(
+      new URL(calls[1].url).origin + new URL(calls[1].url).pathname,
+      OSM_MAP_API_ENDPOINT,
+    );
   });
 
   it("does not use the map API fallback above its safe area limit", async () => {
     let calls = 0;
     const fetchImpl: OverpassFetch = async () => {
       calls += 1;
-      return { ok: false, status: 502, json: async () => ({}), text: async () => "Bad Gateway" };
+      return {
+        ok: false,
+        status: 502,
+        json: async () => ({}),
+        text: async () => "Bad Gateway",
+      };
     };
 
     await assert.rejects(
@@ -437,5 +476,134 @@ describe("downloadOsmGeoJson", () => {
 describe("OSM downloader registration", () => {
   it("appears in the Web Services plugin group", () => {
     assert.ok(WEB_SERVICE_PLUGIN_IDS.includes(OSM_DOWNLOADER_PLUGIN_ID));
+  });
+
+  it("previews once, then reuses the result for adding and GeoJSON export", async () => {
+    const dom = parseHTML("<html><body></body></html>");
+    const previous = {
+      document: globalThis.document,
+      window: globalThis.window,
+      HTMLElement: globalThis.HTMLElement,
+      Event: globalThis.Event,
+      Option: globalThis.Option,
+      fetch: globalThis.fetch,
+    };
+    const selectProto = (dom.window as unknown as { HTMLSelectElement: { prototype: object } })
+      .HTMLSelectElement.prototype;
+    Object.defineProperty(selectProto, "value", {
+      configurable: true,
+      get(this: Element) {
+        return (
+          this.getAttribute("data-test-value") ??
+          this.querySelector("option")?.getAttribute("value") ??
+          ""
+        );
+      },
+      set(this: Element, value: unknown) {
+        this.setAttribute("data-test-value", String(value));
+      },
+    });
+    class TestOption {
+      constructor(text = "", value = "") {
+        const option = dom.document.createElement("option");
+        option.textContent = text;
+        option.setAttribute("value", value);
+        return option;
+      }
+    }
+
+    // `as`, not an annotation: the fake assigns this in a callback TypeScript cannot follow.
+    let panel = null as GeoLibreRightPanelRegistration | null;
+    let fetchCount = 0;
+    const added: Array<{ id: string; name: string; data: FeatureCollection }> = [];
+    const removed: string[] = [];
+    const exported: Array<{ name: string; contents: string }> = [];
+    const app = {
+      getMap: () => null,
+      getViewBounds: () => [-9.145, 38.71, -9.14, 38.715] as [number, number, number, number],
+      registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
+        panel = registration;
+        return () => {};
+      },
+      openRightPanel: () => {},
+      closeRightPanel: () => {},
+      addGeoJsonLayer: (name: string, data: FeatureCollection) => {
+        const id = `layer-${added.length + 1}`;
+        added.push({ id, name, data });
+        return id;
+      },
+      removeLayer: (id: string) => removed.push(id),
+      exportTextFile: (name: string, contents: string) => {
+        exported.push({ name, contents });
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    Object.assign(globalThis, {
+      document: dom.document,
+      window: dom.window,
+      HTMLElement: dom.window.HTMLElement,
+      Event: dom.window.Event,
+      Option: TestOption,
+      fetch: async () => {
+        fetchCount += 1;
+        return new Response(
+          JSON.stringify({
+            elements: [
+              {
+                type: "way",
+                id: 7,
+                tags: { building: "yes" },
+                geometry: [
+                  { lon: -9.144, lat: 38.711 },
+                  { lon: -9.143, lat: 38.711 },
+                  { lon: -9.143, lat: 38.712 },
+                  { lon: -9.144, lat: 38.711 },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    try {
+      maplibreOsmDownloaderPlugin.activate(app);
+      assert.ok(panel);
+      const container = dom.document.createElement("div");
+      panel.render(container);
+      const buttons = Array.from(container.querySelectorAll("button"));
+      const preview = buttons.find((button) => button.textContent === "Preview OSM data");
+      const add = buttons.find((button) => button.textContent === "Add to map");
+      const save = buttons.find((button) => button.textContent === "Save GeoJSON");
+      assert.ok(preview);
+      assert.ok(add);
+      assert.ok(save);
+
+      preview.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(fetchCount, 1);
+      assert.equal(added.length, 1);
+      assert.equal(added[0].name, "Preview — OSM buildings");
+      assert.equal(add.disabled, false);
+      assert.equal(save.disabled, false);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /1 features/);
+
+      add.dispatchEvent(new dom.window.Event("click"));
+      assert.deepEqual(removed, ["layer-1"]);
+      assert.equal(added.length, 2);
+      assert.equal(added[1].name, "OSM buildings");
+      assert.equal(fetchCount, 1);
+
+      save.dispatchEvent(new dom.window.Event("click"));
+      assert.equal(exported.length, 1);
+      assert.match(exported[0].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
+      assert.equal(JSON.parse(exported[0].contents).features.length, 1);
+      assert.equal(fetchCount, 1);
+    } finally {
+      maplibreOsmDownloaderPlugin.deactivate(app);
+      Object.assign(globalThis, previous);
+    }
   });
 });
