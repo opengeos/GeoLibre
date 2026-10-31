@@ -128,7 +128,7 @@ describe("convertGeoTiffToCog", () => {
       geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32617 },
     };
     const { fromArrayBuffer } = await import("geotiff");
-    const assertNoBlends = async (cog: Uint8Array) => {
+    const assertNoBlends = async (cog: Uint8Array, keepsSentinel: boolean) => {
       const tiff = await fromArrayBuffer(
         cog.buffer.slice(cog.byteOffset, cog.byteOffset + cog.byteLength) as ArrayBuffer,
       );
@@ -146,6 +146,8 @@ describe("convertGeoTiffToCog", () => {
         let masked = 0;
         let valid = 0;
         for (const value of values) {
+          // A COG that feeds tools must hold the sentinel it declares, not NaN.
+          if (keepsSentinel) assert.ok(!Number.isNaN(value), `level ${index} holds NaN`);
           if (isNoData(value)) {
             masked += 1;
             continue;
@@ -157,15 +159,21 @@ describe("convertGeoTiffToCog", () => {
         }
         assert.ok(masked > 0, `level ${index} keeps its NoData corner`);
         assert.ok(valid > 0, `level ${index} keeps valid data`);
+        // A block straddling the left border averages its valid pixels instead
+        // of going blank: level 1's blocks are wider than the 3-pixel border.
+        if (index === 1) {
+          const edge = values[Math.floor(image.getHeight() / 2) * image.getWidth()];
+          assert.ok(!isNoData(edge), `the mixed block at level 1 holds ${edge}`);
+        }
       }
     };
 
     // The default keeps the raster's own sentinel for COGs that feed tools.
     const plain = await convertRasterDataToCog(raster);
     assert.equal((await readGeoTiffInfo(plain)).nodata, nodata);
-    await assertNoBlends(plain);
+    await assertNoBlends(plain, true);
 
-    await assertNoBlends(await convertRasterDataToCog(raster, { nanNodata: true }));
+    await assertNoBlends(await convertRasterDataToCog(raster, { nanNodata: true }), false);
   });
 
   it("matches a fractional NoData sentinel in Float32 precision under nanNodata", async () => {

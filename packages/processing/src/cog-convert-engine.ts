@@ -54,9 +54,8 @@ export interface ConvertGeoTiffToCogOptions {
   compression?: CogWasmCompression;
   /**
    * Build the overview pyramid (default true). The encoder downsamples with a
-   * box average that does not skip NoData, which blends categorical values
-   * (class codes, colors at class edges), so categorical rasters should pass
-   * false.
+   * box average that skips NoData but still blends categorical values (class
+   * codes, colors at class edges), so categorical rasters should pass false.
    */
   overviews?: boolean;
 }
@@ -218,10 +217,10 @@ export interface ConvertRasterDataToCogOptions {
   /**
    * Write NoData, and any non-finite sample, as NaN instead of the raster's
    * own sentinel (default false).
-   * The renderer treats NaN as NoData and skips it in its auto stretch, so use
-   * this for a COG that is only drawn on the map. Keep the sentinel for one
-   * that feeds tools which compare against it, since those tools read the
-   * declared NoData value.
+   * The overview average skips NaN and a declared sentinel alike, and the
+   * renderer treats NaN as NoData, so use this for a COG that is only drawn on
+   * the map. Keep the sentinel for one that feeds tools which compare against
+   * it, since those tools read the declared NoData value.
    */
   nanNodata?: boolean;
 }
@@ -272,7 +271,7 @@ export async function convertRasterDataToCog(
     );
     const nodata = raster.nodata;
     // With nanNodata, the sentinel and any non-finite sample (an Infinity
-    // would blend into the overviews just like -9999) are written as NaN.
+    // would otherwise blend into the overviews) are written as NaN.
     const toNaN = options.nanNodata === true;
     // Samples are Float32, so match the sentinel in that precision (-9999.9
     // is stored as -9999.900390625).
