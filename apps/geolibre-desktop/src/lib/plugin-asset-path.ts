@@ -23,7 +23,5 @@ export function isSafePluginAssetRelativePath(relativePath: string): boolean {
   if (/^[a-z][a-z\d+.-]*:/i.test(relativePath)) {
     return false;
   }
-  return relativePath
-    .split("/")
-    .every((part) => part !== "" && part !== "." && part !== "..");
+  return relativePath.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
