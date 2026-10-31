@@ -137,7 +137,8 @@
     "upToDateNoVersion": "已是最新版本。",
     "generalSectionTitle": "常规",
     "homePage": "主页",
-    "githubRepository": "GitHub 仓库"
+    "githubRepository": "GitHub 仓库",
+    "thirdPartyLicenses": "第三方许可证"
   },
   "updates": {
     "changelogTitle": "更新内容",
@@ -537,6 +538,8 @@
       "builtin": "{{name}}（内置）",
       "config": "{{name}}（配置）",
       "deleteAria": "删除已保存的服务",
+      "restoreBuiltins_other": "恢复 {{count}} 个已删除的内置服务",
+      "restoredBuiltins_other": "已恢复 {{count}} 个内置服务。",
       "empty": "尚无已保存的服务 — 填写表单并选择“保存当前设置”。",
       "name": "名称",
       "category": "分类",
@@ -4003,6 +4006,7 @@
       "navigation": "逐向导航...",
       "navigationTooltip": "逐向导航：规划路线，然后在语音指引下沿路线行进。",
       "search": "搜索",
+      "searchPlacesPlaceholder": "搜索地点…",
       "colorbar": "色带",
       "legend": "图例",
       "html": "HTML",
@@ -4166,6 +4170,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "美国州级 GIS",
       "geolibre-us-local-gis": "美国地方 GIS",
+      "geolibre-india-gis": "印度 GIS",
       "geolibre-us-federal-gis": "美国联邦 GIS",
       "geolibre-osm-downloader": "OSM 下载器",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4232,7 +4237,14 @@
       "bothVectorLayers_other": "{{count}} 个矢量图层",
       "bothRasterLayers_other": "{{count}} 个栅格图层",
       "savePromptTitle": "保存当前项目？",
-      "savePromptDescription": "当前项目有未保存的更改。是否在打开拖放的项目之前保存？"
+      "savePromptDescription": "当前项目有未保存的更改。是否在打开拖放的项目之前保存？",
+      "importing": "正在导入数据…",
+      "parsing": "正在解析 {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} 约为 {{sizeMb}} MB。解析可能占用大量内存。是否继续？",
+      "addedOsmPbfLayers_other": "已从 {{name}} 添加 {{count}} 个图层。",
+      "osmPbfNoFeatures": "在 {{name}} 中未找到要素。",
+      "couldNotParse": "无法解析 {{name}}：{{message}}",
+      "couldNotImport": "无法导入文件。"
     },
     "windowClose": {
       "savePromptTitle": "关闭前保存更改？",
@@ -4847,6 +4859,16 @@
     "chooseStateHint": "选择一个州，再选择一个城市或县，以列出其 GIS 数据。",
     "openPortal": "打开门户"
   },
+  "indiaGis": {
+    "hint": "选择区域，然后选择门户，以浏览印度的开放 GIS 数据。可将图层添加到地图或下载数据。",
+    "searchPlaceholder": "搜索印度 GIS 数据集",
+    "noResults": "未找到此门户中匹配的数据集。",
+    "searchError": "无法列出此门户的数据集。",
+    "chooseRegion": "选择区域",
+    "portal": "门户",
+    "chooseRegionHint": "选择区域，然后选择门户，以列出其 GIS 数据。",
+    "openPortal": "打开门户"
+  },
   "usFederalGis": {
     "hint": "选择一个部门，再选择一个机构，即可浏览和搜索其公共 GIS 数据。可将图层添加到地图或下载数据。",
     "searchPlaceholder": "搜索该机构的 GIS 数据",
@@ -5275,7 +5297,10 @@
     "noElements": "暂无地图元素。",
     "moveUp": "上移",
     "moveDown": "下移",
-    "deleteElement": "删除"
+    "deleteElement": "删除",
+    "titlePrompt": "标题",
+    "pinDescPlaceholder": "可选描述…",
+    "stickyNotePlaceholder": "输入便笺详情…"
   },
   "dimensions": {
     "toolbar": "尺寸标注工具",

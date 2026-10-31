@@ -141,7 +141,8 @@
     "upToDateNoVersion": "Sie sind auf dem neuesten Stand.",
     "generalSectionTitle": "Allgemein",
     "homePage": "Startseite",
-    "githubRepository": "GitHub-Repository"
+    "githubRepository": "GitHub-Repository",
+    "thirdPartyLicenses": "Lizenzen von Drittanbietern"
   },
   "updates": {
     "changelogTitle": "Neuerungen",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (integriert)",
       "config": "{{name}} (Konfig)",
       "deleteAria": "Gespeicherten Dienst löschen",
+      "restoreBuiltins_one": "{{count}} gelöschten integrierten Dienst wiederherstellen",
+      "restoreBuiltins_other": "{{count}} gelöschte integrierte Dienste wiederherstellen",
+      "restoredBuiltins_one": "{{count}} integrierter Dienst wiederhergestellt.",
+      "restoredBuiltins_other": "{{count}} integrierte Dienste wiederhergestellt.",
       "empty": "Noch keine gespeicherten Dienste — füllen Sie das Formular aus und wählen Sie „Aktuellen speichern“.",
       "name": "Name",
       "category": "Kategorie",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "{{name}} wird mit DuckDB-WASM gelesen",
       "readFeatures": "{{features}} Objekte aus {{name}} gelesen",
       "savedFile": "{{name}} gespeichert",
+      "cancelled": "Konvertierung abgebrochen.",
       "saveCanceled": "Konvertierung abgeschlossen; Speichern wurde abgebrochen.",
       "vectorToGeoparquet": "Vektor zu GeoParquet",
       "vectorToFlatgeobuf": "Vektor zu FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "Navigation mit Abbiegehinweisen...",
       "navigationTooltip": "Navigation mit Abbiegehinweisen: Planen Sie eine Route und folgen Sie ihr dann mit Sprachführung.",
       "search": "Suche",
+      "searchPlacesPlaceholder": "Orte suchen…",
       "colorbar": "Farbskala",
       "legend": "Legende",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "US-Bundesstaaten-GIS",
       "geolibre-us-local-gis": "US-Kommunal-GIS",
+      "geolibre-india-gis": "Indien GIS",
       "geolibre-us-federal-gis": "US-Bundes-GIS",
       "geolibre-osm-downloader": "OSM-Downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} Rasterebene",
       "bothRasterLayers_other": "{{count}} Rasterebenen",
       "savePromptTitle": "Aktuelles Projekt speichern?",
-      "savePromptDescription": "Das aktuelle Projekt enthält ungespeicherte Änderungen. Möchten Sie sie speichern, bevor das abgelegte Projekt geöffnet wird?"
+      "savePromptDescription": "Das aktuelle Projekt enthält ungespeicherte Änderungen. Möchten Sie sie speichern, bevor das abgelegte Projekt geöffnet wird?",
+      "importing": "Daten werden importiert…",
+      "parsing": "{{name}} wird ausgewertet…",
+      "largeOsmPbfConfirm": "{{name}} ist etwa {{sizeMb}} MB groß. Das Auswerten kann viel Arbeitsspeicher belegen. Fortfahren?",
+      "addedOsmPbfLayers_one": "{{count}} Ebene aus {{name}} hinzugefügt.",
+      "addedOsmPbfLayers_other": "{{count}} Ebenen aus {{name}} hinzugefügt.",
+      "osmPbfNoFeatures": "Keine Objekte in {{name}} gefunden.",
+      "couldNotParse": "{{name}} konnte nicht ausgewertet werden: {{message}}",
+      "couldNotImport": "Dateien konnten nicht importiert werden."
     },
     "windowClose": {
       "savePromptTitle": "Änderungen vor dem Schließen speichern?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "Einen Bundesstaat und dann eine Stadt oder ein County wählen, um die GIS-Daten aufzulisten.",
     "openPortal": "Portal öffnen"
   },
+  "indiaGis": {
+    "hint": "Wählen Sie eine Region und dann ein Portal aus, um offene GIS-Daten für Indien zu durchsuchen. Fügen Sie der Karte Ebenen hinzu oder laden Sie Daten herunter.",
+    "searchPlaceholder": "GIS-Datensätze für Indien durchsuchen",
+    "noResults": "Für dieses Portal wurden keine passenden Datensätze gefunden.",
+    "searchError": "Die Datensätze dieses Portals konnten nicht aufgelistet werden.",
+    "chooseRegion": "Region auswählen",
+    "portal": "Portal",
+    "chooseRegionHint": "Wählen Sie eine Region und dann ein Portal aus, um dessen GIS-Daten aufzulisten.",
+    "openPortal": "Portal öffnen"
+  },
   "usFederalGis": {
     "hint": "Ein Ministerium und dann eine Behörde wählen, um deren öffentliche GIS-Daten zu durchsuchen. Layer zur Karte hinzufügen oder Daten herunterladen.",
     "searchPlaceholder": "GIS-Daten der Behörde durchsuchen",
@@ -5356,7 +5382,10 @@
     "noElements": "Noch keine Kartenelemente.",
     "moveUp": "Nach oben verschieben",
     "moveDown": "Nach unten verschieben",
-    "deleteElement": "Löschen"
+    "deleteElement": "Löschen",
+    "titlePrompt": "Titel",
+    "pinDescPlaceholder": "Optionale Beschreibung…",
+    "stickyNotePlaceholder": "Details zur Notiz eingeben…"
   },
   "dimensions": {
     "toolbar": "Bemaßungswerkzeuge",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "Raster",
+    "cogConverting": "„{{name}}“ wird in ein COG konvertiert…",
     "cogConvertConfirm": "\"{{name}}\" ist ein einfaches (gestreiftes) GeoTIFF, das nicht direkt angezeigt werden kann. Jetzt in ein Cloud-Optimized GeoTIFF konvertieren und dieses laden?",
     "cogConvertRemoteConfirm": "\"{{name}}\" ist ein einfaches (gestreiftes) GeoTIFF, das nicht direkt angezeigt werden kann. Es anzuzeigen bedeutet, die vollständige Datei herunterzuladen und im Browser in ein Cloud-Optimized GeoTIFF zu konvertieren, was bei großen Dateien langsam und speicherintensiv sein kann. Fortfahren?",
     "cogConvertLargeConfirm": "\"{{name}}\" ist ein großes {{width}}×{{height}}-GeoTIFF, das kein Cloud-Optimized GeoTIFF ist. Die Konvertierung im Browser kann langsam und speicherintensiv sein. Trotzdem konvertieren und laden?",

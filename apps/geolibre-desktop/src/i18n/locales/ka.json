@@ -141,7 +141,8 @@
     "upToDateNoVersion": "თქვენ იყენებთ უახლეს ვერსიას.",
     "generalSectionTitle": "ზოგადი",
     "homePage": "მთავარი გვერდი",
-    "githubRepository": "GitHub რეპოზიტორია"
+    "githubRepository": "GitHub რეპოზიტორია",
+    "thirdPartyLicenses": "მესამე მხარის ლიცენზიები"
   },
   "updates": {
     "changelogTitle": "სიახლეები",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (ჩაშენებული)",
       "config": "{{name}} (კონფიგ)",
       "deleteAria": "შენახული სერვისის წაშლა",
+      "restoreBuiltins_one": "{{count}} წაშლილი ჩაშენებული სერვისის აღდგენა",
+      "restoreBuiltins_other": "{{count}} წაშლილი ჩაშენებული სერვისის აღდგენა",
+      "restoredBuiltins_one": "აღდგა {{count}} ჩაშენებული სერვისი.",
+      "restoredBuiltins_other": "აღდგა {{count}} ჩაშენებული სერვისი.",
       "empty": "ჯერ არ არის შენახული სერვისები — შეავსეთ ფორმა და აირჩიეთ „მიმდინარის შენახვა“.",
       "name": "სახელი",
       "category": "კატეგორია",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "{{name}}-ის წაკითხვა DuckDB-WASM-ით",
       "readFeatures": "წაკითხულია {{features}} ობიექტი {{name}}-იდან",
       "savedFile": "შენახულია {{name}}",
+      "cancelled": "გარდაქმნა გაუქმდა.",
       "saveCanceled": "კონვერტაცია დასრულდა; შენახვა გაუქმდა.",
       "vectorToGeoparquet": "ვექტორიდან GeoParquet-ში",
       "vectorToFlatgeobuf": "ვექტორიდან FlatGeobuf-ში",
@@ -4064,6 +4070,7 @@
       "navigation": "ნაბიჯ-ნაბიჯ ნავიგაცია...",
       "navigationTooltip": "ნაბიჯ-ნაბიჯ ნავიგაცია: დაგეგმეთ მარშრუტი, შემდეგ მიჰყევით მას ხმოვანი მითითებებით.",
       "search": "ძებნა",
+      "searchPlacesPlaceholder": "ადგილების ძიება…",
       "colorbar": "ფერთა ზოლი",
       "legend": "ლეგენდა",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "აშშ-ის შტატების GIS",
       "geolibre-us-local-gis": "აშშ-ის ადგილობრივი GIS",
+      "geolibre-india-gis": "ინდოეთის GIS",
       "geolibre-us-federal-gis": "აშშ-ის ფედერალური GIS",
       "geolibre-osm-downloader": "OSM ჩამომტვირთველი",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} რასტრული შრე",
       "bothRasterLayers_other": "{{count}} რასტრული შრე",
       "savePromptTitle": "შეინახოს მიმდინარე პროექტი?",
-      "savePromptDescription": "მიმდინარე პროექტს შეუნახავი ცვლილებები აქვს. შეინახოს ისინი ჩამოგდებული პროექტის გახსნამდე?"
+      "savePromptDescription": "მიმდინარე პროექტს შეუნახავი ცვლილებები აქვს. შეინახოს ისინი ჩამოგდებული პროექტის გახსნამდე?",
+      "importing": "მონაცემების იმპორტი…",
+      "parsing": "მუშავდება {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} დაახლოებით {{sizeMb}} მბ-ია. დამუშავებამ შეიძლება ბევრი მეხსიერება გამოიყენოს. გაგრძელდეს?",
+      "addedOsmPbfLayers_one": "{{name}}-დან დაემატა {{count}} შრე.",
+      "addedOsmPbfLayers_other": "{{name}}-დან დაემატა {{count}} შრე.",
+      "osmPbfNoFeatures": "{{name}}-ში ობიექტები ვერ მოიძებნა.",
+      "couldNotParse": "{{name}}-ის დამუშავება ვერ მოხერხდა: {{message}}",
+      "couldNotImport": "ფაილების იმპორტი ვერ მოხერხდა."
     },
     "windowClose": {
       "savePromptTitle": "შევინახოთ ცვლილებები დახურვამდე?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "აირჩიეთ შტატი, შემდეგ ქალაქი ან ოლქი, რათა ნახოთ მისი GIS მონაცემები.",
     "openPortal": "პორტალის გახსნა"
   },
+  "indiaGis": {
+    "hint": "აირჩიეთ რეგიონი, შემდეგ პორტალი, ინდოეთის ღია GIS მონაცემების დასათვალიერებლად. დაამატეთ შრეები რუკაზე ან ჩამოტვირთეთ მონაცემები.",
+    "searchPlaceholder": "ინდოეთის GIS მონაცემთა ნაკრებების ძიება",
+    "noResults": "ამ პორტალისთვის შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
+    "searchError": "ამ პორტალის მონაცემთა ნაკრებების ჩამოთვლა ვერ მოხერხდა.",
+    "chooseRegion": "აირჩიეთ რეგიონი",
+    "portal": "პორტალი",
+    "chooseRegionHint": "აირჩიეთ რეგიონი, შემდეგ პორტალი, მისი GIS მონაცემების სიის სანახავად.",
+    "openPortal": "პორტალის გახსნა"
+  },
   "usFederalGis": {
     "hint": "აირჩიეთ დეპარტამენტი, შემდეგ უწყება, რათა დაათვალიეროთ და მოძებნოთ მისი საჯარო GIS მონაცემები. დაამატეთ ფენები რუკაზე ან ჩამოტვირთეთ მონაცემები.",
     "searchPlaceholder": "უწყების GIS მონაცემების ძიება",
@@ -5356,7 +5382,10 @@
     "noElements": "რუკის ელემენტები ჯერ არ არის.",
     "moveUp": "ზემოთ გადატანა",
     "moveDown": "ქვემოთ გადატანა",
-    "deleteElement": "წაშლა"
+    "deleteElement": "წაშლა",
+    "titlePrompt": "სათაური",
+    "pinDescPlaceholder": "არასავალდებულო აღწერა…",
+    "stickyNotePlaceholder": "შეიყვანეთ შენიშვნის დეტალები…"
   },
   "dimensions": {
     "toolbar": "ზომების ხელსაწყოები",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "რასტრები",
+    "cogConverting": "„{{name}}“ გარდაიქმნება COG-ად…",
     "cogConvertConfirm": "„{{name}}“ არის ჩვეულებრივი (striped) GeoTIFF, რომლის პირდაპირ ჩვენება შეუძლებელია. გადავაკეთოთ ახლა Cloud-Optimized GeoTIFF-ად და ის ჩავტვირთოთ?",
     "cogConvertRemoteConfirm": "„{{name}}“ არის ჩვეულებრივი (striped) GeoTIFF, რომლის პირდაპირ ჩვენება შეუძლებელია. მისი ჩვენება ნიშნავს სრული ფაილის ჩამოტვირთვას და ბრაუზერში Cloud-Optimized GeoTIFF-ად გადაკეთებას, რაც დიდი ფაილებისთვის შეიძლება იყოს ნელი და მეხსიერებატევადი. გავაგრძელოთ?",
     "cogConvertLargeConfirm": "„{{name}}“ არის დიდი {{width}}×{{height}} GeoTIFF, რომელიც არ არის Cloud-Optimized GeoTIFF. ბრაუზერში მისი გადაკეთება შეიძლება იყოს ნელი და მეხსიერებატევადი. მაინც გადავაკეთოთ და ჩავტვირთოთ?",

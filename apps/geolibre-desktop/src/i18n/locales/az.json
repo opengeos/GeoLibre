@@ -141,7 +141,8 @@
     "upToDateNoVersion": "Ən son versiyadan istifadə edirsiniz.",
     "generalSectionTitle": "Ümumi",
     "homePage": "Ana səhifə",
-    "githubRepository": "GitHub repozitoriyası"
+    "githubRepository": "GitHub repozitoriyası",
+    "thirdPartyLicenses": "Üçüncü tərəf lisenziyaları"
   },
   "updates": {
     "changelogTitle": "Yeniliklər",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (daxili)",
       "config": "{{name}} (konfiqurasiya)",
       "deleteAria": "Yadda saxlanmış xidməti sil",
+      "restoreBuiltins_one": "Silinmiş {{count}} daxili xidməti bərpa et",
+      "restoreBuiltins_other": "Silinmiş {{count}} daxili xidməti bərpa et",
+      "restoredBuiltins_one": "{{count}} daxili xidmət bərpa edildi.",
+      "restoredBuiltins_other": "{{count}} daxili xidmət bərpa edildi.",
       "empty": "Hələ yadda saxlanmış xidmət yoxdur — formanı doldurub “Hazırkını yadda saxla” seçin.",
       "name": "Ad",
       "category": "Kateqoriya",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "{{name}} DuckDB-WASM ilə oxunur",
       "readFeatures": "{{name}} faylından {{features}} obyekt oxundu",
       "savedFile": "{{name}} yadda saxlanıldı",
+      "cancelled": "Çevirmə ləğv edildi.",
       "saveCanceled": "Çevirmə başa çatdı; yadda saxlama ləğv edildi.",
       "vectorToGeoparquet": "Vektordan GeoParquet-ə",
       "vectorToFlatgeobuf": "Vektordan FlatGeobuf-a",
@@ -4064,6 +4070,7 @@
       "navigation": "Addım-addım naviqasiya...",
       "navigationTooltip": "Addım-addım naviqasiya: marşrut planlaşdırın, sonra səsli göstərişlərlə onu izləyin.",
       "search": "Axtar",
+      "searchPlacesPlaceholder": "Yer axtar…",
       "colorbar": "Rəng şkalası",
       "legend": "Şərti işarələr",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ABŞ ştatlarının GIS-i",
       "geolibre-us-local-gis": "ABŞ yerli GIS-i",
+      "geolibre-india-gis": "Hindistan GIS",
       "geolibre-us-federal-gis": "ABŞ federal GIS-i",
       "geolibre-osm-downloader": "OSM endiricisi",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} rastr layı",
       "bothRasterLayers_other": "{{count}} rastr layı",
       "savePromptTitle": "Cari layihə yadda saxlanılsın?",
-      "savePromptDescription": "Cari layihədə yadda saxlanmamış dəyişikliklər var. Buraxılan layihəni açmazdan əvvəl onları yadda saxlamaq istəyirsiniz?"
+      "savePromptDescription": "Cari layihədə yadda saxlanmamış dəyişikliklər var. Buraxılan layihəni açmazdan əvvəl onları yadda saxlamaq istəyirsiniz?",
+      "importing": "Məlumatlar idxal edilir…",
+      "parsing": "{{name}} təhlil edilir…",
+      "largeOsmPbfConfirm": "{{name}} təxminən {{sizeMb}} MB-dır. Təhlil çox yaddaş istifadə edə bilər. Davam edilsin?",
+      "addedOsmPbfLayers_one": "{{name}} faylından {{count}} lay əlavə edildi.",
+      "addedOsmPbfLayers_other": "{{name}} faylından {{count}} lay əlavə edildi.",
+      "osmPbfNoFeatures": "{{name}} içində obyekt tapılmadı.",
+      "couldNotParse": "{{name}} təhlil edilə bilmədi: {{message}}",
+      "couldNotImport": "Faylları idxal etmək mümkün olmadı."
     },
     "windowClose": {
       "savePromptTitle": "Bağlamazdan əvvəl dəyişikliklər yadda saxlanılsın?",
@@ -4986,6 +5002,16 @@
     "chooseStateHint": "GIS verilənlərinin siyahısını görmək üçün əvvəl ştat, sonra şəhər və ya dairə seçin.",
     "openPortal": "Portalı aç"
   },
+  "indiaGis": {
+    "hint": "Hindistanın açıq GIS məlumatlarına baxmaq üçün region, sonra portal seçin. Xəritəyə laylar əlavə edin və ya məlumatları endirin.",
+    "searchPlaceholder": "Hindistan GIS məlumat dəstlərində axtar",
+    "noResults": "Bu portal üçün uyğun məlumat dəsti tapılmadı.",
+    "searchError": "Bu portalın məlumat dəstlərini siyahılamaq mümkün olmadı.",
+    "chooseRegion": "Region seçin",
+    "portal": "Portal",
+    "chooseRegionHint": "GIS məlumatlarını siyahılamaq üçün region, sonra portal seçin.",
+    "openPortal": "Portalı aç"
+  },
   "usFederalGis": {
     "hint": "Açıq GIS verilənlərinə baxmaq və onları axtarmaq üçün əvvəl departament, sonra qurum seçin. Layları xəritəyə əlavə edin və ya verilənləri endirin.",
     "searchPlaceholder": "Qurumun GIS verilənlərini axtar",
@@ -5420,7 +5446,10 @@
     "noElements": "Hələ xəritə elementi yoxdur.",
     "moveUp": "Yuxarı köçür",
     "moveDown": "Aşağı köçür",
-    "deleteElement": "Sil"
+    "deleteElement": "Sil",
+    "titlePrompt": "Başlıq",
+    "pinDescPlaceholder": "İstəyə bağlı təsvir…",
+    "stickyNotePlaceholder": "Qeydin təfərrüatlarını yazın…"
   },
   "dimensions": {
     "toolbar": "Ölçü alətləri",
@@ -9635,6 +9664,7 @@
   },
   "raster": {
     "filePickerLabel": "Rastrlar",
+    "cogConverting": "\"{{name}}\" COG formatına çevrilir…",
     "cogConvertConfirm": "\"{{name}}\" birbaşa göstərilə bilməyən adi (zolaqlı) GeoTIFF faylıdır. İndi onu bulud üçün optimallaşdırılmış GeoTIFF-ə çevirib yükləmək istəyirsiniz?",
     "cogConvertRemoteConfirm": "\"{{name}}\" birbaşa göstərilə bilməyən adi (zolaqlı) GeoTIFF faylıdır. Onu göstərmək üçün bütün faylı endirib brauzerdə bulud üçün optimallaşdırılmış GeoTIFF-ə çevirmək lazımdır; böyük fayllar üçün bu, yavaş işləyə və çox yaddaş tələb edə bilər. Davam edilsin?",
     "cogConvertLargeConfirm": "\"{{name}}\" bulud üçün optimallaşdırılmamış, {{width}}×{{height}} ölçülü böyük GeoTIFF faylıdır. Onu brauzerdə çevirmək yavaş işləyə və çox yaddaş tələb edə bilər. Yenə də çevirib yükləmək istəyirsiniz?",

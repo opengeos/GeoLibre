@@ -149,7 +149,8 @@
     "upToDateNoVersion": "У вас установлена последняя версия.",
     "generalSectionTitle": "Общее",
     "homePage": "Домашняя страница",
-    "githubRepository": "Репозиторий GitHub"
+    "githubRepository": "Репозиторий GitHub",
+    "thirdPartyLicenses": "Сторонние лицензии"
   },
   "updates": {
     "changelogTitle": "Что нового",
@@ -558,6 +559,14 @@
       "builtin": "{{name}} (встроенный)",
       "config": "{{name}} (конфиг)",
       "deleteAria": "Удалить сохранённый сервис",
+      "restoreBuiltins_one": "Восстановить {{count}} удалённый встроенный сервис",
+      "restoreBuiltins_few": "Восстановить {{count}} удалённых встроенных сервиса",
+      "restoreBuiltins_many": "Восстановить {{count}} удалённых встроенных сервисов",
+      "restoreBuiltins_other": "Восстановить {{count}} удалённого встроенного сервиса",
+      "restoredBuiltins_one": "Восстановлен {{count}} встроенный сервис.",
+      "restoredBuiltins_few": "Восстановлено {{count}} встроенных сервиса.",
+      "restoredBuiltins_many": "Восстановлено {{count}} встроенных сервисов.",
+      "restoredBuiltins_other": "Восстановлено {{count}} встроенного сервиса.",
       "empty": "Пока нет сохранённых сервисов — заполните форму и нажмите «Сохранить текущий».",
       "name": "Имя",
       "category": "Категория",
@@ -3835,6 +3844,7 @@
       "readingWithDuckDb": "Чтение {{name}} с помощью DuckDB-WASM",
       "readFeatures": "Прочитано объектов: {{features}} из {{name}}",
       "savedFile": "{{name}} сохранён",
+      "cancelled": "Преобразование отменено.",
       "saveCanceled": "Конвертация завершена; сохранение отменено.",
       "vectorToGeoparquet": "Вектор в GeoParquet",
       "vectorToFlatgeobuf": "Вектор в FlatGeobuf",
@@ -4186,6 +4196,7 @@
       "navigation": "Пошаговая навигация...",
       "navigationTooltip": "Пошаговая навигация: постройте маршрут и следуйте по нему с голосовыми подсказками.",
       "search": "Поиск",
+      "searchPlacesPlaceholder": "Поиск мест…",
       "colorbar": "Шкала цветов",
       "legend": "Легенда",
       "html": "HTML",
@@ -4369,6 +4380,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ГИС штатов США",
       "geolibre-us-local-gis": "Местные ГИС США",
+      "geolibre-india-gis": "ГИС Индии",
       "geolibre-us-federal-gis": "Федеральные ГИС США",
       "geolibre-osm-downloader": "Загрузчик OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4447,7 +4459,17 @@
       "bothRasterLayers_many": "{{count}} растровых слоёв",
       "bothRasterLayers_other": "{{count}} растрового слоя",
       "savePromptTitle": "Сохранить текущий проект?",
-      "savePromptDescription": "В текущем проекте есть несохранённые изменения. Сохранить их перед открытием перетащенного проекта?"
+      "savePromptDescription": "В текущем проекте есть несохранённые изменения. Сохранить их перед открытием перетащенного проекта?",
+      "importing": "Импорт данных…",
+      "parsing": "Разбор {{name}}…",
+      "largeOsmPbfConfirm": "Размер {{name}} составляет около {{sizeMb}} МБ. Разбор может занять много памяти. Продолжить?",
+      "addedOsmPbfLayers_one": "Добавлен {{count}} слой из {{name}}.",
+      "addedOsmPbfLayers_few": "Добавлено {{count}} слоя из {{name}}.",
+      "addedOsmPbfLayers_many": "Добавлено {{count}} слоёв из {{name}}.",
+      "addedOsmPbfLayers_other": "Добавлено {{count}} слоя из {{name}}.",
+      "osmPbfNoFeatures": "В {{name}} не найдено объектов.",
+      "couldNotParse": "Не удалось разобрать {{name}}: {{message}}",
+      "couldNotImport": "Не удалось импортировать файлы."
     },
     "windowClose": {
       "savePromptTitle": "Сохранить изменения перед закрытием?",
@@ -5074,6 +5096,16 @@
     "chooseStateHint": "Выберите штат, а затем город или округ, чтобы увидеть список его ГИС-данных.",
     "openPortal": "Открыть портал"
   },
+  "indiaGis": {
+    "hint": "Выберите регион, затем портал, чтобы просмотреть открытые данные ГИС по Индии. Добавляйте слои на карту или скачивайте данные.",
+    "searchPlaceholder": "Поиск наборов данных ГИС Индии",
+    "noResults": "Для этого портала не найдено подходящих наборов данных.",
+    "searchError": "Не удалось получить список наборов данных этого портала.",
+    "chooseRegion": "Выберите регион",
+    "portal": "Портал",
+    "chooseRegionHint": "Выберите регион, затем портал, чтобы увидеть список его данных ГИС.",
+    "openPortal": "Открыть портал"
+  },
   "usFederalGis": {
     "hint": "Выберите министерство, а затем ведомство, чтобы просматривать его открытые ГИС-данные и искать в них. Добавляйте слои на карту или скачивайте данные.",
     "searchPlaceholder": "Поиск ГИС-данных ведомства",
@@ -5520,7 +5552,10 @@
     "noElements": "Элементов карты пока нет.",
     "moveUp": "Переместить вверх",
     "moveDown": "Переместить вниз",
-    "deleteElement": "Удалить"
+    "deleteElement": "Удалить",
+    "titlePrompt": "Заголовок",
+    "pinDescPlaceholder": "Необязательное описание…",
+    "stickyNotePlaceholder": "Введите текст заметки…"
   },
   "dimensions": {
     "toolbar": "Инструменты простановки размеров",
@@ -9833,6 +9868,7 @@
   },
   "raster": {
     "filePickerLabel": "Растры",
+    "cogConverting": "Преобразование «{{name}}» в COG…",
     "cogConvertConfirm": "«{{name}}» — это обычный (полосовой) GeoTIFF, который нельзя отобразить напрямую. Преобразовать его сейчас в Cloud-Optimized GeoTIFF и загрузить?",
     "cogConvertRemoteConfirm": "«{{name}}» — это обычный (полосовой) GeoTIFF, который нельзя отобразить напрямую. Для отображения потребуется скачать весь файл и преобразовать его в Cloud-Optimized GeoTIFF в браузере, что может быть медленным и требовательным к памяти для больших файлов. Продолжить?",
     "cogConvertLargeConfirm": "«{{name}}» — это большой GeoTIFF {{width}}×{{height}}, не являющийся Cloud-Optimized GeoTIFF. Преобразование в браузере может быть медленным и требовательным к памяти. Всё равно преобразовать и загрузить?",

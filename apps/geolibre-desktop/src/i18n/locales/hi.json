@@ -141,7 +141,8 @@
     "upToDateNoVersion": "आप अद्यतित हैं।",
     "generalSectionTitle": "सामान्य",
     "homePage": "होम पेज",
-    "githubRepository": "GitHub रिपॉज़िटरी"
+    "githubRepository": "GitHub रिपॉज़िटरी",
+    "thirdPartyLicenses": "तृतीय-पक्ष लाइसेंस"
   },
   "updates": {
     "changelogTitle": "नया क्या है",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (अंतर्निहित)",
       "config": "{{name}} (कॉन्फ़िग)",
       "deleteAria": "सहेजी गई सेवा हटाएँ",
+      "restoreBuiltins_one": "{{count}} हटाई गई अंतर्निहित सेवा पुनर्स्थापित करें",
+      "restoreBuiltins_other": "{{count}} हटाई गई अंतर्निहित सेवाएँ पुनर्स्थापित करें",
+      "restoredBuiltins_one": "{{count}} अंतर्निहित सेवा पुनर्स्थापित की गई।",
+      "restoredBuiltins_other": "{{count}} अंतर्निहित सेवाएँ पुनर्स्थापित की गईं।",
       "empty": "अभी तक कोई सहेजी गई सेवा नहीं है — फ़ॉर्म भरें और \"वर्तमान सहेजें\" चुनें।",
       "name": "नाम",
       "category": "श्रेणी",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "DuckDB-WASM के साथ {{name}} पढ़ा जा रहा है",
       "readFeatures": "{{name}} से {{features}} फ़ीचर पढ़े गए",
       "savedFile": "{{name}} सहेजी गई",
+      "cancelled": "रूपांतरण रद्द किया गया।",
       "saveCanceled": "रूपांतरण पूर्ण हुआ; सहेजना रद्द कर दिया गया।",
       "vectorToGeoparquet": "वेक्टर से GeoParquet",
       "vectorToFlatgeobuf": "वेक्टर से FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "मोड़-दर-मोड़ नेविगेशन...",
       "navigationTooltip": "मोड़-दर-मोड़ नेविगेशन: एक मार्ग की योजना बनाएँ, फिर आवाज़ मार्गदर्शन के साथ उसका पालन करें।",
       "search": "खोजें",
+      "searchPlacesPlaceholder": "स्थान खोजें…",
       "colorbar": "कलरबार",
       "legend": "लीजेंड",
       "html": "HTML",
@@ -4304,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} रैस्टर लेयर",
       "bothRasterLayers_other": "{{count}} रैस्टर लेयर",
       "savePromptTitle": "वर्तमान प्रोजेक्ट सहेजें?",
-      "savePromptDescription": "वर्तमान प्रोजेक्ट में सहेजे नहीं गए बदलाव हैं। छोड़े गए प्रोजेक्ट को खोलने से पहले उन्हें सहेजें?"
+      "savePromptDescription": "वर्तमान प्रोजेक्ट में सहेजे नहीं गए बदलाव हैं। छोड़े गए प्रोजेक्ट को खोलने से पहले उन्हें सहेजें?",
+      "importing": "डेटा आयात किया जा रहा है…",
+      "parsing": "{{name}} पार्स किया जा रहा है…",
+      "largeOsmPbfConfirm": "{{name}} लगभग {{sizeMb}} MB का है। इसे पार्स करने में बहुत मेमोरी लग सकती है। जारी रखें?",
+      "addedOsmPbfLayers_one": "{{name}} से {{count}} लेयर जोड़ी गई।",
+      "addedOsmPbfLayers_other": "{{name}} से {{count}} लेयर जोड़ी गईं।",
+      "osmPbfNoFeatures": "{{name}} में कोई फ़ीचर नहीं मिला।",
+      "couldNotParse": "{{name}} पार्स नहीं किया जा सका: {{message}}",
+      "couldNotImport": "फ़ाइलें आयात नहीं की जा सकीं।"
     },
     "windowClose": {
       "savePromptTitle": "बंद करने से पहले बदलाव सहेजें?",
@@ -4923,6 +4938,16 @@
     "chooseStateHint": "उसका GIS डेटा सूचीबद्ध करने के लिए कोई राज्य और फिर कोई शहर या काउंटी चुनें।",
     "openPortal": "पोर्टल खोलें"
   },
+  "indiaGis": {
+    "hint": "भारत का खुला GIS डेटा ब्राउज़ करने के लिए कोई क्षेत्र और फिर कोई पोर्टल चुनें। मानचित्र में लेयर जोड़ें या डेटा डाउनलोड करें।",
+    "searchPlaceholder": "भारत GIS डेटासेट खोजें",
+    "noResults": "इस पोर्टल के लिए कोई मेल खाता डेटासेट नहीं मिला।",
+    "searchError": "इस पोर्टल के डेटासेट सूचीबद्ध नहीं किए जा सके।",
+    "chooseRegion": "कोई क्षेत्र चुनें",
+    "portal": "पोर्टल",
+    "chooseRegionHint": "इसके GIS डेटा की सूची देखने के लिए कोई क्षेत्र और फिर कोई पोर्टल चुनें।",
+    "openPortal": "पोर्टल खोलें"
+  },
   "usFederalGis": {
     "hint": "किसी विभाग और फिर किसी एजेंसी को चुनें ताकि उसके सार्वजनिक GIS डेटा को ब्राउज़ और खोजा जा सके। मानचित्र में परतें जोड़ें या डेटा डाउनलोड करें।",
     "searchPlaceholder": "एजेंसी का GIS डेटा खोजें",
@@ -5357,7 +5382,10 @@
     "noElements": "अभी तक कोई मानचित्र तत्व नहीं।",
     "moveUp": "ऊपर ले जाएं",
     "moveDown": "नीचे ले जाएं",
-    "deleteElement": "हटाएँ"
+    "deleteElement": "हटाएँ",
+    "titlePrompt": "शीर्षक",
+    "pinDescPlaceholder": "वैकल्पिक विवरण…",
+    "stickyNotePlaceholder": "नोट का विवरण लिखें…"
   },
   "dimensions": {
     "toolbar": "विमांकन टूल्स",
@@ -9572,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "रास्टर",
+    "cogConverting": "\"{{name}}\" को COG में बदला जा रहा है…",
     "cogConvertConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। क्या इसे अभी Cloud-Optimized GeoTIFF में बदलकर लोड करें?",
     "cogConvertRemoteConfirm": "\"{{name}}\" एक सामान्य (striped) GeoTIFF है, जिसे सीधे प्रदर्शित नहीं किया जा सकता। इसे प्रदर्शित करने के लिए पूरी फ़ाइल डाउनलोड करके ब्राउज़र में उसे Cloud-Optimized GeoTIFF में बदलना होगा, जो बड़ी फ़ाइलों के लिए धीमा और मेमोरी-गहन हो सकता है। जारी रखें?",
     "cogConvertLargeConfirm": "\"{{name}}\" एक बड़ी {{width}}×{{height}} GeoTIFF है जो Cloud-Optimized GeoTIFF नहीं है। इसे ब्राउज़र में बदलना धीमा और मेमोरी-गहन हो सकता है। फिर भी बदलकर लोड करें?",

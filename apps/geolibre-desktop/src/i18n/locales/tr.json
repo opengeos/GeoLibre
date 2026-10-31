@@ -141,7 +141,8 @@
     "upToDateNoVersion": "Güncelsiniz.",
     "generalSectionTitle": "Genel",
     "homePage": "Ana sayfa",
-    "githubRepository": "GitHub deposu"
+    "githubRepository": "GitHub deposu",
+    "thirdPartyLicenses": "Üçüncü taraf lisansları"
   },
   "updates": {
     "changelogTitle": "Yenilikler",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (yerleşik)",
       "config": "{{name}} (konfig)",
       "deleteAria": "Kayıtlı servisi sil",
+      "restoreBuiltins_one": "Silinen {{count}} yerleşik hizmeti geri yükle",
+      "restoreBuiltins_other": "Silinen {{count}} yerleşik hizmeti geri yükle",
+      "restoredBuiltins_one": "{{count}} yerleşik hizmet geri yüklendi.",
+      "restoredBuiltins_other": "{{count}} yerleşik hizmet geri yüklendi.",
       "empty": "Henüz kayıtlı servis yok — formu doldurun ve “Mevcut olanı kaydet”i seçin.",
       "name": "Ad",
       "category": "Kategori",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "{{name}} DuckDB-WASM ile okunuyor",
       "readFeatures": "{{name}} kaynağından {{features}} öğe okundu",
       "savedFile": "{{name}} kaydedildi",
+      "cancelled": "Dönüştürme iptal edildi.",
       "saveCanceled": "Dönüştürme tamamlandı; kaydetme iptal edildi.",
       "vectorToGeoparquet": "Vektörden GeoParquet'e",
       "vectorToFlatgeobuf": "Vektörden FlatGeobuf'a",
@@ -4064,6 +4070,7 @@
       "navigation": "Adım Adım Navigasyon...",
       "navigationTooltip": "Adım adım navigasyon: bir rota planlayın, ardından sesli yönlendirmeyle izleyin.",
       "search": "Ara",
+      "searchPlacesPlaceholder": "Yer ara…",
       "colorbar": "Renk Çubuğu",
       "legend": "Lejand",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ABD Eyalet CBS",
       "geolibre-us-local-gis": "ABD Yerel CBS",
+      "geolibre-india-gis": "Hindistan GIS",
       "geolibre-us-federal-gis": "ABD Federal CBS",
       "geolibre-osm-downloader": "OSM İndirici",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} raster katmanı",
       "bothRasterLayers_other": "{{count}} raster katmanı",
       "savePromptTitle": "Geçerli proje kaydedilsin mi?",
-      "savePromptDescription": "Geçerli projede kaydedilmemiş değişiklikler var. Bırakılan projeyi açmadan önce kaydetmek ister misiniz?"
+      "savePromptDescription": "Geçerli projede kaydedilmemiş değişiklikler var. Bırakılan projeyi açmadan önce kaydetmek ister misiniz?",
+      "importing": "Veriler içe aktarılıyor…",
+      "parsing": "{{name}} ayrıştırılıyor…",
+      "largeOsmPbfConfirm": "{{name}} yaklaşık {{sizeMb}} MB boyutunda. Ayrıştırma çok fazla bellek kullanabilir. Devam edilsin mi?",
+      "addedOsmPbfLayers_one": "{{name}} dosyasından {{count}} katman eklendi.",
+      "addedOsmPbfLayers_other": "{{name}} dosyasından {{count}} katman eklendi.",
+      "osmPbfNoFeatures": "{{name}} içinde öğe bulunamadı.",
+      "couldNotParse": "{{name}} ayrıştırılamadı: {{message}}",
+      "couldNotImport": "Dosyalar içe aktarılamadı."
     },
     "windowClose": {
       "savePromptTitle": "Kapatmadan önce değişiklikler kaydedilsin mi?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "CBS verilerini listelemek için bir eyalet, ardından bir şehir veya ilçe seçin.",
     "openPortal": "Portalı aç"
   },
+  "indiaGis": {
+    "hint": "Hindistan'ın açık GIS verilerine göz atmak için bir bölge, ardından bir portal seçin. Haritaya katman ekleyin veya verileri indirin.",
+    "searchPlaceholder": "Hindistan GIS veri kümelerinde ara",
+    "noResults": "Bu portal için eşleşen veri kümesi bulunamadı.",
+    "searchError": "Bu portalın veri kümeleri listelenemedi.",
+    "chooseRegion": "Bir bölge seçin",
+    "portal": "Portal",
+    "chooseRegionHint": "GIS verilerini listelemek için bir bölge, ardından bir portal seçin.",
+    "openPortal": "Portalı aç"
+  },
   "usFederalGis": {
     "hint": "Herkese açık CBS verilerine göz atmak ve aramak için bir bakanlık, ardından bir kurum seçin. Haritaya katman ekleyin veya veri indirin.",
     "searchPlaceholder": "Kurumun CBS verilerinde ara",
@@ -5356,7 +5382,10 @@
     "noElements": "Henüz harita ögesi yok.",
     "moveUp": "Yukarı taşı",
     "moveDown": "Aşağı taşı",
-    "deleteElement": "Sil"
+    "deleteElement": "Sil",
+    "titlePrompt": "Başlık",
+    "pinDescPlaceholder": "İsteğe bağlı açıklama…",
+    "stickyNotePlaceholder": "Not ayrıntılarını yazın…"
   },
   "dimensions": {
     "toolbar": "Ölçülendirme araçları",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "Rasterlar",
+    "cogConverting": "\"{{name}}\" COG'a dönüştürülüyor…",
     "cogConvertConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Şimdi Bulut Optimizeli bir GeoTIFF'e dönüştürülüp yüklensin mi?",
     "cogConvertRemoteConfirm": "\"{{name}}\", doğrudan görüntülenemeyen düz (şeritli) bir GeoTIFF'tir. Görüntülemek, tüm dosyayı indirmeyi ve tarayıcıda Bulut Optimizeli bir GeoTIFF'e dönüştürmeyi gerektirir; bu büyük dosyalar için yavaş ve bellek yoğun olabilir. Devam edilsin mi?",
     "cogConvertLargeConfirm": "\"{{name}}\", Bulut Optimizeli bir GeoTIFF olmayan büyük bir {{width}}×{{height}} GeoTIFF'tir. Tarayıcıda dönüştürmek yavaş ve bellek yoğun olabilir. Yine de dönüştürülüp yüklensin mi?",

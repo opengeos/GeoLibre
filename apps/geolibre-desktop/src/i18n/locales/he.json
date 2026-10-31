@@ -145,7 +145,8 @@
     "upToDateNoVersion": "הגרסה שלך מעודכנת.",
     "generalSectionTitle": "כללי",
     "homePage": "דף הבית",
-    "githubRepository": "מאגר GitHub"
+    "githubRepository": "מאגר GitHub",
+    "thirdPartyLicenses": "רישיונות צד שלישי"
   },
   "updates": {
     "changelogTitle": "מה חדש",
@@ -551,6 +552,12 @@
       "builtin": "{{name}} (מובנה)",
       "config": "{{name}} (תצורה)",
       "deleteAria": "מחק שירות שמור",
+      "restoreBuiltins_one": "שחזר שירות מובנה {{count}} שנמחק",
+      "restoreBuiltins_two": "שחזר {{count}} שירותים מובנים שנמחקו",
+      "restoreBuiltins_other": "שחזר {{count}} שירותים מובנים שנמחקו",
+      "restoredBuiltins_one": "שוחזר שירות מובנה {{count}}.",
+      "restoredBuiltins_two": "שוחזרו {{count}} שירותים מובנים.",
+      "restoredBuiltins_other": "שוחזרו {{count}} שירותים מובנים.",
       "empty": "אין עדיין שירותים שמורים — יש למלא את הטופס ולבחור „שמור נוכחי”.",
       "name": "שם",
       "category": "קטגוריה",
@@ -3774,6 +3781,7 @@
       "readingWithDuckDb": "קורא את {{name}} עם DuckDB-WASM",
       "readFeatures": "נקראו {{features}} ישויות מתוך {{name}}",
       "savedFile": "{{name}} נשמר",
+      "cancelled": "ההמרה בוטלה.",
       "saveCanceled": "ההמרה הסתיימה; השמירה בוטלה.",
       "vectorToGeoparquet": "וקטור ל-GeoParquet",
       "vectorToFlatgeobuf": "וקטור ל-FlatGeobuf",
@@ -4125,6 +4133,7 @@
       "navigation": "ניווט פנייה אחר פנייה...",
       "navigationTooltip": "ניווט פנייה אחר פנייה: תכנן מסלול ולאחר מכן עקוב אחריו עם הנחיה קולית.",
       "search": "חיפוש",
+      "searchPlacesPlaceholder": "חפש מקומות…",
       "colorbar": "סרגל צבעים",
       "legend": "מקרא",
       "html": "HTML",
@@ -4301,6 +4310,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS של מדינות ארה״ב",
       "geolibre-us-local-gis": "GIS מקומי בארה״ב",
+      "geolibre-india-gis": "GIS הודו",
       "geolibre-us-federal-gis": "GIS פדרלי בארה״ב",
       "geolibre-osm-downloader": "מוריד OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4372,6 +4382,15 @@
       "bothRasterLayers_other": "{{count}} שכבות רסטר",
       "savePromptTitle": "לשמור את הפרויקט הנוכחי?",
       "savePromptDescription": "בפרויקט הנוכחי יש שינויים שלא נשמרו. לשמור אותם לפני פתיחת הפרויקט שנגרר?",
+      "importing": "מייבא נתונים…",
+      "parsing": "מפענח את {{name}}…",
+      "largeOsmPbfConfirm": "הגודל של {{name}} הוא כ-{{sizeMb}} MB. פענוחו עשוי לצרוך זיכרון רב. להמשיך?",
+      "addedOsmPbfLayers_one": "נוספה שכבה {{count}} מתוך {{name}}.",
+      "addedOsmPbfLayers_two": "נוספו {{count}} שכבות מתוך {{name}}.",
+      "addedOsmPbfLayers_other": "נוספו {{count}} שכבות מתוך {{name}}.",
+      "osmPbfNoFeatures": "לא נמצאו ישויות ב-{{name}}.",
+      "couldNotParse": "לא ניתן היה לפענח את {{name}}: {{message}}",
+      "couldNotImport": "לא ניתן היה לייבא את הקבצים.",
       "addedVectorLayers_two": "{{count}} שכבות וקטוריות נוספו לחלונית השכבות.",
       "addedRasterLayers_two": "{{count}} שכבות רסטר נוספו לחלונית השכבות.",
       "bothVectorLayers_two": "{{count}} שכבות וקטוריות",
@@ -5062,6 +5081,16 @@
     "chooseStateHint": "בחרו מדינה ולאחר מכן עיר או מחוז כדי להציג את נתוני ה-GIS שלהם.",
     "openPortal": "פתיחת הפורטל"
   },
+  "indiaGis": {
+    "hint": "בחר אזור ולאחר מכן פורטל כדי לעיין בנתוני GIS פתוחים של הודו. הוסף שכבות למפה או הורד נתונים.",
+    "searchPlaceholder": "חפש מערכי נתוני GIS של הודו",
+    "noResults": "לא נמצאו מערכי נתונים תואמים בפורטל זה.",
+    "searchError": "לא ניתן היה להציג את מערכי הנתונים של פורטל זה.",
+    "chooseRegion": "בחר אזור",
+    "portal": "פורטל",
+    "chooseRegionHint": "בחר אזור ולאחר מכן פורטל כדי להציג את נתוני ה-GIS שלו.",
+    "openPortal": "פתח פורטל"
+  },
   "usFederalGis": {
     "hint": "בחרו משרד ולאחר מכן סוכנות כדי לעיין ולחפש בנתוני ה-GIS הציבוריים שלה. הוסיפו שכבות למפה או הורידו נתונים.",
     "searchPlaceholder": "חיפוש בנתוני ה-GIS של הסוכנות",
@@ -5502,7 +5531,10 @@
     "noElements": "אין עדיין רכיבי מפה.",
     "moveUp": "הזז למעלה",
     "moveDown": "הזז למטה",
-    "deleteElement": "מחק"
+    "deleteElement": "מחק",
+    "titlePrompt": "כותרת",
+    "pinDescPlaceholder": "תיאור אופציונלי…",
+    "stickyNotePlaceholder": "הקלד את פרטי ההערה…"
   },
   "dimensions": {
     "toolbar": "כלי מידות",
@@ -9766,6 +9798,7 @@
   },
   "raster": {
     "filePickerLabel": "רסטרים",
+    "cogConverting": "ממיר את \"{{name}}\" ל-COG…",
     "cogConvertConfirm": "\"{{name}}\" הוא GeoTIFF רגיל (striped), שלא ניתן להציג ישירות. להמיר אותו עכשיו ל-Cloud-Optimized GeoTIFF ולטעון את התוצאה?",
     "cogConvertRemoteConfirm": "\"{{name}}\" הוא GeoTIFF רגיל (striped), שלא ניתן להציג ישירות. הצגתו מחייבת הורדה של הקובץ המלא והמרתו ל-Cloud-Optimized GeoTIFF בדפדפן, פעולה שעלולה להיות איטית ולצרוך זיכרון רב בקבצים גדולים. להמשיך?",
     "cogConvertLargeConfirm": "\"{{name}}\" הוא GeoTIFF גדול בגודל {{width}}×{{height}} שאינו Cloud-Optimized GeoTIFF. המרתו בדפדפן עלולה להיות איטית ולצרוך זיכרון רב. להמיר ולטעון בכל זאת?",

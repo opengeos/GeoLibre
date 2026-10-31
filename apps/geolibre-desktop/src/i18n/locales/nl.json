@@ -141,7 +141,8 @@
     "upToDateNoVersion": "U gebruikt de nieuwste versie.",
     "generalSectionTitle": "Algemeen",
     "homePage": "Startpagina",
-    "githubRepository": "GitHub-repository"
+    "githubRepository": "GitHub-repository",
+    "thirdPartyLicenses": "Licenties van derden"
   },
   "updates": {
     "changelogTitle": "Wat is er nieuw",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (ingebouwd)",
       "config": "{{name}} (geconfigureerd)",
       "deleteAria": "Opgeslagen service verwijderen",
+      "restoreBuiltins_one": "{{count}} verwijderde ingebouwde service herstellen",
+      "restoreBuiltins_other": "{{count}} verwijderde ingebouwde services herstellen",
+      "restoredBuiltins_one": "{{count}} ingebouwde service hersteld.",
+      "restoredBuiltins_other": "{{count}} ingebouwde services hersteld.",
       "empty": "Nog geen opgeslagen services — vul het formulier in en kies “Huidige opslaan”.",
       "name": "Naam",
       "category": "Categorie",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "{{name}} lezen met DuckDB-WASM",
       "readFeatures": "{{features}} features gelezen uit {{name}}",
       "savedFile": "{{name}} opgeslagen",
+      "cancelled": "Conversie geannuleerd.",
       "saveCanceled": "Conversie voltooid; opslaan is geannuleerd.",
       "vectorToGeoparquet": "Vector naar GeoParquet",
       "vectorToFlatgeobuf": "Vector naar FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "Stapsgewijze navigatie...",
       "navigationTooltip": "Stapsgewijze navigatie: plan een route en volg die met gesproken begeleiding.",
       "search": "Zoeken",
+      "searchPlacesPlaceholder": "Plaatsen zoeken…",
       "colorbar": "Kleurenbalk",
       "legend": "Legenda",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS van Amerikaanse staten",
       "geolibre-us-local-gis": "Lokale GIS in de VS",
+      "geolibre-india-gis": "India GIS",
       "geolibre-us-federal-gis": "Federale GIS in de VS",
       "geolibre-osm-downloader": "OSM-downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} rasterlaag",
       "bothRasterLayers_other": "{{count}} rasterlagen",
       "savePromptTitle": "Huidig project opslaan?",
-      "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Wilt u die opslaan voordat het neergezette project wordt geopend?"
+      "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Wilt u die opslaan voordat het neergezette project wordt geopend?",
+      "importing": "Gegevens importeren…",
+      "parsing": "{{name}} verwerken…",
+      "largeOsmPbfConfirm": "{{name}} is ongeveer {{sizeMb}} MB. Het verwerken kan veel geheugen gebruiken. Doorgaan?",
+      "addedOsmPbfLayers_one": "{{count}} laag toegevoegd uit {{name}}.",
+      "addedOsmPbfLayers_other": "{{count}} lagen toegevoegd uit {{name}}.",
+      "osmPbfNoFeatures": "Geen objecten gevonden in {{name}}.",
+      "couldNotParse": "Kan {{name}} niet verwerken: {{message}}",
+      "couldNotImport": "Kan de bestanden niet importeren."
     },
     "windowClose": {
       "savePromptTitle": "Wijzigingen opslaan voor het sluiten?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "Kies een staat en vervolgens een stad of county om de GIS-gegevens te tonen.",
     "openPortal": "Portaal openen"
   },
+  "indiaGis": {
+    "hint": "Kies een regio en daarna een portaal om open GIS-gegevens van India te verkennen. Voeg lagen toe aan de kaart of download gegevens.",
+    "searchPlaceholder": "GIS-datasets van India zoeken",
+    "noResults": "Geen overeenkomende datasets gevonden voor dit portaal.",
+    "searchError": "Kan de datasets van dit portaal niet weergeven.",
+    "chooseRegion": "Kies een regio",
+    "portal": "Portaal",
+    "chooseRegionHint": "Kies een regio en daarna een portaal om de GIS-gegevens ervan weer te geven.",
+    "openPortal": "Portaal openen"
+  },
   "usFederalGis": {
     "hint": "Kies een ministerie en vervolgens een agentschap om de openbare GIS-gegevens te doorzoeken. Voeg lagen toe aan de kaart of download gegevens.",
     "searchPlaceholder": "GIS-gegevens van het agentschap doorzoeken",
@@ -5356,7 +5382,10 @@
     "noElements": "Nog geen kaartelementen.",
     "moveUp": "Omhoog verplaatsen",
     "moveDown": "Omlaag verplaatsen",
-    "deleteElement": "Verwijderen"
+    "deleteElement": "Verwijderen",
+    "titlePrompt": "Titel",
+    "pinDescPlaceholder": "Optionele beschrijving…",
+    "stickyNotePlaceholder": "Typ de details van de notitie…"
   },
   "dimensions": {
     "toolbar": "Maatvoeringsgereedschap",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "Rasters",
+    "cogConverting": "‘{{name}}’ wordt geconverteerd naar een COG…",
     "cogConvertConfirm": "\"{{name}}\" is een gewone (striped) GeoTIFF, die niet rechtstreeks kan worden weergegeven. Nu omzetten naar een Cloud-Optimized GeoTIFF en die laden?",
     "cogConvertRemoteConfirm": "\"{{name}}\" is een gewone (striped) GeoTIFF, die niet rechtstreeks kan worden weergegeven. Om deze weer te geven moet het volledige bestand worden gedownload en in de browser worden omgezet naar een Cloud-Optimized GeoTIFF, wat traag en geheugenintensief kan zijn bij grote bestanden. Doorgaan?",
     "cogConvertLargeConfirm": "\"{{name}}\" is een grote GeoTIFF van {{width}}×{{height}} die geen Cloud-Optimized GeoTIFF is. Omzetten in de browser kan traag en geheugenintensief zijn. Toch omzetten en laden?",
