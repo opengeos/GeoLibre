@@ -28,6 +28,7 @@ import {
   resolvePluginAssetUrl,
   withPluginAssetCacheToken,
 } from "./plugin-asset-url";
+import { isSafePluginAssetRelativePath } from "./plugin-asset-path";
 import {
   computePluginBundleHash,
   pinPluginBundle,
@@ -176,6 +177,10 @@ export async function loadExternalPlugins(
   const issues: ExternalPluginLoadIssue[] = [];
   const bundledUrls = new Set(options.bundledManifestUrls ?? []);
   const policy = options.policy === undefined ? getDeploymentPolicy() : options.policy;
+  // Remember the directories this scan covered, so readPluginAssetForLoadedPlugin
+  // can pass the same root list to the desktop asset-read command (the command
+  // re-derives the roots to contain the recorded plugin source before reading).
+  currentAdditionalPluginDirectories = additionalPluginDirectories;
   if (policy?.plugins?.sideload === false) {
     const decision = evaluatePlugin("", "directory", policy);
     if (!decision.allowed) {
@@ -848,6 +853,55 @@ export function resolvePluginAssetUrlForLoadedPlugin(
   relativePath: string,
 ): string | null {
   return pluginAssetUrlFromSource(externallyLoadedPluginSources.get(pluginId), relativePath);
+}
+
+// The additional plugin directories of the most recent filesystem scan; see
+// loadExternalPlugins. Only consulted on desktop (Tauri), where the asset-read
+// command re-derives the same root list to contain a recorded plugin source.
+let currentAdditionalPluginDirectories: string[] = [];
+
+/**
+ * Read one asset file from a loaded external plugin's own bundle, as raw
+ * bytes. Filesystem plugins (an installed zip or a development directory) read
+ * through the desktop command, which contains the read to the plugin roots;
+ * URL-installed plugins fetch the same asset URL
+ * {@link resolvePluginAssetUrlForLoadedPlugin} resolves. Resolves null when the
+ * plugin is unknown or built-in, the path is unsafe or the asset is missing,
+ * or off-desktop, where web-installed archives persist only their entry and
+ * style sources.
+ */
+export async function readPluginAssetForLoadedPlugin(
+  pluginId: string,
+  relativePath: string,
+): Promise<Uint8Array | null> {
+  const source = externallyLoadedPluginSources.get(pluginId);
+  if (source === undefined || !isSafePluginAssetRelativePath(relativePath)) {
+    return null;
+  }
+  if (isManagedUrlSource(source)) {
+    try {
+      const response = await fetch(resolvePluginAssetUrl(source, relativePath));
+      if (!response.ok) return null;
+      return new Uint8Array(await response.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+  if (!isTauri()) {
+    // Web-installed archives persist only their entry and style sources, so
+    // arbitrary bundle assets are not available in the web build.
+    return null;
+  }
+  try {
+    const bytes = await invoke<ArrayBuffer>("read_external_plugin_asset", {
+      additionalPluginDirectories: currentAdditionalPluginDirectories,
+      sourcePath: source,
+      relativePath,
+    });
+    return new Uint8Array(bytes);
+  } catch {
+    return null;
+  }
 }
 
 /**

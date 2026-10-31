@@ -1099,6 +1099,22 @@ export interface GeoLibreAppAPI {
    */
   resolvePluginAssetUrl?: (pluginId: string, relativePath: string) => string | null;
   /**
+   * Read one asset file shipped inside an external plugin's own bundle, as
+   * raw bytes. For plugins installed from the desktop filesystem (a zip
+   * archive or a development directory) the host reads the file out of that
+   * bundle; for URL-installed plugins it fetches the same asset URL
+   * {@link resolvePluginAssetUrl} resolves. Resolves null when the plugin is
+   * unknown or built-in, `relativePath` is absolute or escapes the plugin's
+   * own bundle, or the asset does not exist. `pluginId` should be the calling
+   * plugin's own id; since all plugins share one JS context the host cannot
+   * verify the caller, so this is a convention rather than an enforced
+   * boundary — and it grants no access a plugin does not already have, since
+   * only the calling plugin's own bundle is ever read. Web-installed plugin
+   * archives currently persist only their entry and style sources, so asset
+   * reads resolve to null there.
+   */
+  readPluginAsset?: (pluginId: string, relativePath: string) => Promise<Uint8Array | null>;
+  /**
    * Activate an installed plugin and optionally apply a partial project-state
    * patch after activation. Returns false when the plugin is unavailable,
    * refuses activation, or rejects the state.
