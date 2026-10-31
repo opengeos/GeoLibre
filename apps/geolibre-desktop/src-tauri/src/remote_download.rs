@@ -99,6 +99,14 @@ pub(crate) struct RemoteDownloadResult {
     size: u64,
 }
 
+#[derive(Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriteFileResult {
+    /// Where the written file landed.
+    path: String,
+    size: u64,
+}
+
 type CancelDownload = Box<dyn Fn() + Send + Sync>;
 
 /// In-flight downloads (for cancellation) and finished cache downloads waiting
@@ -517,6 +525,63 @@ pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder
     Err("Choosing a download folder is not supported on this platform.".into())
 }
 
+fn write_file_to_folder_core(
+    folder_id: &str,
+    file_name: &str,
+    data: &[u8],
+    downloads: &RemoteDownloads,
+) -> Result<WriteFileResult, String> {
+    let folder = {
+        let folders = downloads.folders.lock().unwrap();
+        folders
+            .get(folder_id)
+            .cloned()
+            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+    };
+    if !folder.is_dir() {
+        return Err("The chosen folder does not exist or is no longer accessible.".to_string());
+    }
+    let sanitized = sanitize_file_name(file_name);
+    let destination = folder.join(&sanitized);
+    if destination.parent() != Some(&folder) {
+        return Err("Refusing to write: file name resolves outside the picked folder.".into());
+    }
+    let size = data.len() as u64;
+    fs::write(&destination, data)
+        .map_err(|error| format!("Could not write file to folder: {error}"))?;
+    Ok(WriteFileResult {
+        path: destination.to_string_lossy().into_owned(),
+        size,
+    })
+}
+
+/// Write data directly into a folder picked earlier with [`pick_download_folder`].
+///
+/// The file name is sanitized before writing, cannot escape the picked folder,
+/// and writes directly to disk.
+#[cfg(desktop)]
+#[tauri::command]
+pub(crate) async fn write_file_to_folder(
+    folder_id: String,
+    file_name: String,
+    data: Vec<u8>,
+    downloads: tauri::State<'_, RemoteDownloads>,
+) -> Result<WriteFileResult, String> {
+    write_file_to_folder_core(&folder_id, &file_name, &data, &downloads)
+}
+
+/// Mobile stand-in for [`write_file_to_folder`]: writing to a picked folder is
+/// desktop-only.
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) async fn write_file_to_folder(
+    _folder_id: String,
+    _file_name: String,
+    _data: Vec<u8>,
+) -> Result<WriteFileResult, String> {
+    Err("Writing files to a chosen folder is not supported on this platform.".into())
+}
+
 /// Abort an in-flight [`download_remote_file`].
 #[tauri::command]
 pub(crate) fn cancel_remote_download(
@@ -637,6 +702,68 @@ mod tests {
             done: true,
         });
         assert!(path.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn writes_file_into_picked_folder() {
+        let dir = std::env::temp_dir().join(format!("geolibre-write-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "test.geojson",
+            b"{\"type\":\"FeatureCollection\"}",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 27);
+        assert_eq!(res.path, dir.join("test.geojson").to_string_lossy());
+        assert_eq!(
+            fs::read(dir.join("test.geojson")).unwrap(),
+            b"{\"type\":\"FeatureCollection\"}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_unknown_folder() {
+        let downloads = RemoteDownloads::default();
+        let err = write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads)
+            .unwrap_err();
+        assert!(err.contains("Unknown download folder id"));
+    }
+
+    #[test]
+    fn write_file_sanitizes_filename_and_prevents_escape() {
+        let dir = std::env::temp_dir().join(format!("geolibre-escape-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "../../nested/escape.txt",
+            b"safe",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.path, dir.join("escape.txt").to_string_lossy());
+        assert_eq!(fs::read(dir.join("escape.txt")).unwrap(), b"safe");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -10,6 +10,7 @@ import type { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";
 import type {
   GeoLibreRemoteDownloadOptions,
   GeoLibreRemoteDownloadResult,
+  GeoLibreWriteFileResult,
 } from "@geolibre/plugins";
 
 /** Progress the native command reports while it streams. */
@@ -100,5 +101,59 @@ export function createRemoteDownload(
     if (options.target !== "memory") return { path: result.path, size: result.size, data: null };
     const data = await invoke<ArrayBuffer>("take_cached_download", { requestId });
     return { path: null, size: result.size, data };
+  };
+}
+
+/**
+ * Normalize arbitrary file data (string, Blob, ArrayBuffer, ArrayBufferView) into
+ * a number array suitable for native command serialization.
+ */
+export async function normalizeBinaryData(
+  data: string | Uint8Array | ArrayBuffer | Blob,
+): Promise<number[]> {
+  if (typeof data === "string") {
+    return Array.from(new TextEncoder().encode(data));
+  }
+  if (data instanceof Blob) {
+    const buffer = await data.arrayBuffer();
+    return Array.from(new Uint8Array(buffer));
+  }
+  if (data instanceof ArrayBuffer) {
+    return Array.from(new Uint8Array(data));
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  }
+  throw new TypeError(
+    "Unsupported data type for writeFileToFolder; expected string, Blob, ArrayBuffer, or ArrayBufferView.",
+  );
+}
+
+/**
+ * Build the app API's `writeFileToFolder`.
+ *
+ * @param invoke - Tauri's `invoke`.
+ * @returns The write function.
+ */
+export function createWriteFileToFolder(
+  invoke: typeof nativeInvoke,
+): (
+  folderId: string,
+  fileName: string,
+  data: string | Uint8Array | ArrayBuffer | Blob,
+) => Promise<GeoLibreWriteFileResult> {
+  return async (folderId, fileName, data) => {
+    if (!folderId || typeof folderId !== "string") {
+      throw new TypeError("writeFileToFolder requires a valid folderId from pickDownloadFolder.");
+    }
+    if (!fileName || typeof fileName !== "string") {
+      throw new TypeError("writeFileToFolder requires a non-empty fileName.");
+    }
+    const bytes = await normalizeBinaryData(data);
+    return invoke<GeoLibreWriteFileResult>("write_file_to_folder", {
+      folderId,
+      fileName,
+      data: bytes,
+    });
   };
 }

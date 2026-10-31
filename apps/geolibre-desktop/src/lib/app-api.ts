@@ -88,7 +88,11 @@ import {
   setPluginLayerRequestHeaders,
 } from "./plugin-tile-request-headers";
 import { addPluginVectorTileLayer } from "./plugin-vector-tile-layer";
-import { createRemoteDownload, type RemoteDownloadProgress } from "./remote-download";
+import {
+  createRemoteDownload,
+  createWriteFileToFolder,
+  type RemoteDownloadProgress,
+} from "./remote-download";
 import { requestSpaceborneLidarGranule } from "./spaceborne-lidar-handoff";
 import { addPluginWfsLayer } from "./plugin-wfs-layer";
 import {
@@ -592,6 +596,7 @@ export function createAppAPI(
     pickDownloadFolder: isDesktopRuntime()
       ? () => invoke<GeoLibreDownloadFolder | null>("pick_download_folder")
       : undefined,
+    writeFileToFolder: isDesktopRuntime() ? createWriteFileToFolder(invoke) : undefined,
     openSpaceborneLidarUrl: (url: string, fileName: string, headers?: Record<string, string>) =>
       requestSpaceborneLidarGranule({ url, fileName, ...(headers ? { headers } : {}) }),
     openSpaceborneLidarGranule: (data: ArrayBuffer, fileName: string) =>

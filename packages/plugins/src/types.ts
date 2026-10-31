@@ -679,6 +679,14 @@ export interface GeoLibreRemoteDownloadResult {
   data: ArrayBuffer | null;
 }
 
+/** What {@link GeoLibreAppAPI.writeFileToFolder} resolves with. */
+export interface GeoLibreWriteFileResult {
+  /** Where the file landed on disk. */
+  path: string;
+  /** Size of the written file in bytes. */
+  size: number;
+}
+
 /** Where `app.credentials` keeps values: the OS credential store on desktop, localStorage elsewhere. */
 export type GeoLibreCredentialLocation = "keychain" | "browser";
 
@@ -1085,6 +1093,23 @@ export interface GeoLibreAppAPI {
    * cancels. Desktop only.
    */
   pickDownloadFolder?: () => Promise<GeoLibreDownloadFolder | null>;
+  /**
+   * Write data into a folder the user picked earlier with
+   * {@link pickDownloadFolder}.
+   *
+   * The file name is sanitized by the host and cannot leave the picked
+   * folder. Desktop only.
+   *
+   * @param folderId - The opaque id from {@link pickDownloadFolder}.
+   * @param fileName - File name to write inside the folder.
+   * @param data - The file content: a string, Uint8Array, ArrayBuffer, or Blob.
+   * @returns The written file's path and size.
+   */
+  writeFileToFolder?: (
+    folderId: string,
+    fileName: string,
+    data: string | Uint8Array | ArrayBuffer | Blob,
+  ) => Promise<GeoLibreWriteFileResult>;
   /**
    * Resolve a fetchable URL for an asset shipped alongside an external
    * plugin's manifest (e.g. sample data bundled in the plugin folder). The
