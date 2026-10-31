@@ -88,7 +88,9 @@ interface MountedControlWithReorder {
 
 describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)", () => {
   it("applies drag reorder of three GeoJSON layers into the store", () => {
-    const { window } = parseHTML('<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>');
+    const { window } = parseHTML(
+      '<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>',
+    );
     const globals = globalThis as { document?: unknown; window?: unknown };
     const previous = { document: globals.document, window: globals.window };
     globals.document = window.document;
@@ -146,13 +148,19 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
       const mounted = controlInstance as MountedControlWithReorder;
 
       // Verify initial panel order in the store: layer-3, layer-2, layer-1
-      const initialPanelOrder = useAppStore.getState().layers.map((l) => l.id).reverse();
+      const initialPanelOrder = useAppStore
+        .getState()
+        .layers.map((l) => l.id)
+        .reverse();
       assert.deepEqual(initialPanelOrder, ["layer-3", "layer-2", "layer-1"]);
 
       // Simulate dragging layer-2 above layer-3: next panel order is ["layer-2", "layer-3", "layer-1"]
       mounted.onLayerReorder?.(["layer-2", "layer-3", "layer-1"]);
 
-      const updatedPanelOrder = useAppStore.getState().layers.map((l) => l.id).reverse();
+      const updatedPanelOrder = useAppStore
+        .getState()
+        .layers.map((l) => l.id)
+        .reverse();
       assert.deepEqual(updatedPanelOrder, ["layer-2", "layer-3", "layer-1"]);
       assert.deepEqual(
         useAppStore.getState().layers.map((l) => l.id),
@@ -162,7 +170,10 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
       // Simulate dragging layer-1 to top: next panel order is ["layer-1", "layer-2", "layer-3"]
       mounted.onLayerReorder?.(["layer-1", "layer-2", "layer-3"]);
 
-      const finalPanelOrder = useAppStore.getState().layers.map((l) => l.id).reverse();
+      const finalPanelOrder = useAppStore
+        .getState()
+        .layers.map((l) => l.id)
+        .reverse();
       assert.deepEqual(finalPanelOrder, ["layer-1", "layer-2", "layer-3"]);
       assert.deepEqual(
         useAppStore.getState().layers.map((l) => l.id),
@@ -177,7 +188,9 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
   });
 
   it("rejects reorders violating group contiguity and restores order", () => {
-    const { window } = parseHTML('<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>');
+    const { window } = parseHTML(
+      '<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>',
+    );
     const globals = globalThis as { document?: unknown; window?: unknown };
     const previous = { document: globals.document, window: globals.window };
     globals.document = window.document;
@@ -234,7 +247,10 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
       const mounted = controlInstance as MountedControlWithReorder;
 
       // Panel order (reverse of store): ["g2", "g1", "u"]
-      const currentOrder = useAppStore.getState().layers.map((l) => l.id).reverse();
+      const currentOrder = useAppStore
+        .getState()
+        .layers.map((l) => l.id)
+        .reverse();
       assert.deepEqual(currentOrder, ["g2", "g1", "u"]);
 
       // Attempt to split the group by inserting u between g2 and g1: ["g2", "u", "g1"]
@@ -242,7 +258,10 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
 
       // Move should be rejected: store layers must remain unchanged
       assert.deepEqual(
-        useAppStore.getState().layers.map((l) => l.id).reverse(),
+        useAppStore
+          .getState()
+          .layers.map((l) => l.id)
+          .reverse(),
         ["g2", "g1", "u"],
       );
 
@@ -253,4 +272,3 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
     }
   });
 });
-
