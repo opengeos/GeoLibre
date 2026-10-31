@@ -408,9 +408,7 @@ def test_live_feature_queries_and_identify(relay_server, monkeypatch, tmp_path):
     }
     relay_server.response = {"delivered": 1, "ok": True, "value": [sample_feature]}
 
-    res_layer = asyncio.run(
-        server.call_tool("live_get_layer_features", {"layer_id": "lakes-1"})
-    )
+    res_layer = asyncio.run(server.call_tool("live_get_layer_features", {"layer_id": "lakes-1"}))
     assert res_layer.structured_content["result"] == [sample_feature]
     assert relay_server.body["method"] == "getLayerFeatures"
     assert relay_server.body["params"] == {"layerId": "lakes-1"}

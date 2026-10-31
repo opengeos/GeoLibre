@@ -2486,9 +2486,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         return value
 
     @tool()
-    def live_identify(
-        lng: float, lat: float, layer_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def live_identify(lng: float, lat: float, layer_id: str | None = None) -> list[dict[str, Any]]:
         """Query rendered features at ``(lng, lat)`` on the open map.
 
         Args:
@@ -2744,9 +2742,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         return value
 
     @tool()
-    def live_to_image(
-        out_path: str | None = None, overwrite: bool = False
-    ) -> dict[str, Any]:
+    def live_to_image(out_path: str | None = None, overwrite: bool = False) -> dict[str, Any]:
         """Capture the current view of the open GeoLibre Desktop map as a PNG.
 
         Args:
