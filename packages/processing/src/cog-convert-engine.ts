@@ -54,9 +54,8 @@ export interface ConvertGeoTiffToCogOptions {
   compression?: CogWasmCompression;
   /**
    * Build the overview pyramid (default true). The encoder downsamples with a
-   * box average that does not skip NoData, which blends categorical values
-   * (class codes, colors at class edges), so categorical rasters should pass
-   * false.
+   * box average that skips NoData but still blends categorical values (class
+   * codes, colors at class edges), so categorical rasters should pass false.
    */
   overviews?: boolean;
 }
@@ -218,21 +217,10 @@ export interface ConvertRasterDataToCogOptions {
   /**
    * Write NoData, and any non-finite sample, as NaN instead of the raster's
    * own sentinel (default false).
-   * The encoder builds overviews with a box average that does not skip NoData,
-   * so a finite sentinel such as -9999 blends into its valid neighbours along
-   * every NoData edge (an NDVI overview pixel that is 15/16 NoData reads
-   * -9374). The renderer takes its auto stretch and histogram from the
-   * coarsest overview, so those outliers flatten the whole layer (#3255). NaN
-   * propagates through the average instead, so an overview pixel that touches
-   * NoData stays NoData, and the renderer already treats NaN as NoData. The
-   * trade-off: any NoData pixel blanks its whole overview block, so a NoData
-   * edge grows by up to one block at low zoom, and scattered NoData (speckle,
-   * cloud masks) can leave the coarsest levels mostly empty. Without the
-   * option those same blocks hold blended outliers instead, so nanNodata is
-   * still the better choice for display. The full fix is a NoData-aware average
-   * in the encoder (opengeos/whitebox-wasm#33). Use it for a COG that is only
-   * drawn on the map; keep the sentinel for one that feeds tools which compare
-   * against it.
+   * The overview average skips NaN and a declared sentinel alike, and the
+   * renderer treats NaN as NoData, so use this for a COG that is only drawn on
+   * the map. Keep the sentinel for one that feeds tools which compare against
+   * it, since those tools read the declared NoData value.
    */
   nanNodata?: boolean;
 }
@@ -283,7 +271,7 @@ export async function convertRasterDataToCog(
     );
     const nodata = raster.nodata;
     // With nanNodata, the sentinel and any non-finite sample (an Infinity
-    // would blend into the overviews just like -9999) are written as NaN.
+    // would otherwise blend into the overviews) are written as NaN.
     const toNaN = options.nanNodata === true;
     // Samples are Float32, so match the sentinel in that precision (-9999.9
     // is stored as -9999.900390625).

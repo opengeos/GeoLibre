@@ -137,7 +137,8 @@
     "upToDateNoVersion": "คุณใช้เวอร์ชันล่าสุดอยู่แล้ว",
     "generalSectionTitle": "ทั่วไป",
     "homePage": "หน้าแรก",
-    "githubRepository": "ที่เก็บโค้ดบน GitHub"
+    "githubRepository": "ที่เก็บโค้ดบน GitHub",
+    "thirdPartyLicenses": "สัญญาอนุญาตของบุคคลที่สาม"
   },
   "updates": {
     "changelogTitle": "มีอะไรใหม่",
@@ -537,6 +538,8 @@
       "builtin": "{{name}} (ในตัว)",
       "config": "{{name}} (คอนฟิก)",
       "deleteAria": "ลบบริการที่บันทึกไว้",
+      "restoreBuiltins_other": "กู้คืนบริการในตัวที่ถูกลบ {{count}} รายการ",
+      "restoredBuiltins_other": "กู้คืนบริการในตัวแล้ว {{count}} รายการ",
       "empty": "ยังไม่มีบริการที่บันทึกไว้ — กรอกแบบฟอร์มแล้วเลือก “บันทึกรายการปัจจุบัน”",
       "name": "ชื่อ",
       "category": "หมวดหมู่",
@@ -3652,6 +3655,7 @@
       "readingWithDuckDb": "กำลังอ่าน {{name}} ด้วย DuckDB-WASM",
       "readFeatures": "อ่านฟีเจอร์ {{features}} รายการจาก {{name}}",
       "savedFile": "บันทึก {{name}} แล้ว",
+      "cancelled": "ยกเลิกการแปลงแล้ว",
       "saveCanceled": "การแปลงเสร็จสิ้น แต่การบันทึกถูกยกเลิก",
       "vectorToGeoparquet": "เวกเตอร์เป็น GeoParquet",
       "vectorToFlatgeobuf": "เวกเตอร์เป็น FlatGeobuf",
@@ -4003,6 +4007,7 @@
       "navigation": "การนำทางทีละจุดเลี้ยว...",
       "navigationTooltip": "การนำทางทีละจุดเลี้ยว: วางแผนเส้นทาง แล้วเดินตามเส้นทางพร้อมเสียงนำทาง",
       "search": "ค้นหา",
+      "searchPlacesPlaceholder": "ค้นหาสถานที่…",
       "colorbar": "แถบสี",
       "legend": "คำอธิบายสัญลักษณ์",
       "html": "HTML",
@@ -4165,6 +4170,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS รัฐในสหรัฐฯ",
       "geolibre-us-local-gis": "GIS ท้องถิ่นในสหรัฐฯ",
+      "geolibre-india-gis": "GIS อินเดีย",
       "geolibre-us-federal-gis": "GIS รัฐบาลกลางสหรัฐฯ",
       "geolibre-osm-downloader": "ตัวดาวน์โหลด OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4231,7 +4237,14 @@
       "bothVectorLayers_other": "เลเยอร์เวกเตอร์ {{count}} เลเยอร์",
       "bothRasterLayers_other": "เลเยอร์แรสเตอร์ {{count}} เลเยอร์",
       "savePromptTitle": "บันทึกโปรเจกต์ปัจจุบันหรือไม่",
-      "savePromptDescription": "โปรเจกต์ปัจจุบันมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก ต้องการบันทึกก่อนเปิดโปรเจกต์ที่วางหรือไม่"
+      "savePromptDescription": "โปรเจกต์ปัจจุบันมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก ต้องการบันทึกก่อนเปิดโปรเจกต์ที่วางหรือไม่",
+      "importing": "กำลังนำเข้าข้อมูล…",
+      "parsing": "กำลังตีความ {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} มีขนาดประมาณ {{sizeMb}} MB การตีความอาจใช้หน่วยความจำมาก ดำเนินการต่อหรือไม่",
+      "addedOsmPbfLayers_other": "เพิ่มเลเยอร์จาก {{name}} แล้ว {{count}} เลเยอร์",
+      "osmPbfNoFeatures": "ไม่พบฟีเจอร์ใน {{name}}",
+      "couldNotParse": "ไม่สามารถตีความ {{name}} ได้: {{message}}",
+      "couldNotImport": "ไม่สามารถนำเข้าไฟล์ได้"
     },
     "windowClose": {
       "savePromptTitle": "บันทึกการเปลี่ยนแปลงก่อนปิดหรือไม่?",
@@ -4846,6 +4859,16 @@
     "chooseStateHint": "เลือกรัฐ แล้วเลือกเมืองหรือเคาน์ตี เพื่อแสดงรายการข้อมูล GIS",
     "openPortal": "เปิดพอร์ทัล"
   },
+  "indiaGis": {
+    "hint": "เลือกภูมิภาค แล้วเลือกพอร์ทัลเพื่อเรียกดูข้อมูล GIS แบบเปิดของอินเดีย เพิ่มเลเยอร์ลงในแผนที่หรือดาวน์โหลดข้อมูล",
+    "searchPlaceholder": "ค้นหาชุดข้อมูล GIS ของอินเดีย",
+    "noResults": "ไม่พบชุดข้อมูลที่ตรงกันสำหรับพอร์ทัลนี้",
+    "searchError": "ไม่สามารถแสดงรายการชุดข้อมูลของพอร์ทัลนี้ได้",
+    "chooseRegion": "เลือกภูมิภาค",
+    "portal": "พอร์ทัล",
+    "chooseRegionHint": "เลือกภูมิภาค แล้วเลือกพอร์ทัลเพื่อแสดงข้อมูล GIS ของพอร์ทัลนั้น",
+    "openPortal": "เปิดพอร์ทัล"
+  },
   "usFederalGis": {
     "hint": "เลือกกระทรวง แล้วเลือกหน่วยงาน เพื่อเรียกดูและค้นหาข้อมูล GIS สาธารณะ เพิ่มชั้นข้อมูลลงในแผนที่หรือดาวน์โหลดข้อมูล",
     "searchPlaceholder": "ค้นหาข้อมูล GIS ของหน่วยงาน",
@@ -5274,7 +5297,10 @@
     "noElements": "ยังไม่มีองค์ประกอบแผนที่",
     "moveUp": "เลื่อนขึ้น",
     "moveDown": "เลื่อนลง",
-    "deleteElement": "ลบ"
+    "deleteElement": "ลบ",
+    "titlePrompt": "ชื่อเรื่อง",
+    "pinDescPlaceholder": "คำอธิบายเพิ่มเติม (ไม่บังคับ)…",
+    "stickyNotePlaceholder": "พิมพ์รายละเอียดบันทึก…"
   },
   "dimensions": {
     "toolbar": "เครื่องมือเส้นบอกขนาด",
@@ -9440,6 +9466,7 @@
   },
   "raster": {
     "filePickerLabel": "แรสเตอร์",
+    "cogConverting": "กำลังแปลง \"{{name}}\" เป็น COG…",
     "cogConvertConfirm": "\"{{name}}\" เป็น GeoTIFF ธรรมดา (แบบแถบ) ซึ่งแสดงผลโดยตรงไม่ได้ ต้องการแปลงเป็น Cloud-Optimized GeoTIFF ตอนนี้แล้วโหลดไฟล์นั้นหรือไม่?",
     "cogConvertRemoteConfirm": "\"{{name}}\" เป็น GeoTIFF ธรรมดา (แบบแถบ) ซึ่งแสดงผลโดยตรงไม่ได้ การแสดงผลจะต้องดาวน์โหลดไฟล์ทั้งไฟล์แล้วแปลงเป็น Cloud-Optimized GeoTIFF ในเบราว์เซอร์ ซึ่งอาจช้าและใช้หน่วยความจำมากสำหรับไฟล์ขนาดใหญ่ ต้องการดำเนินการต่อหรือไม่?",
     "cogConvertLargeConfirm": "\"{{name}}\" เป็นไฟล์ GeoTIFF ขนาดใหญ่ {{width}}×{{height}} ที่ไม่ใช่ Cloud-Optimized GeoTIFF การแปลงในเบราว์เซอร์อาจช้าและใช้หน่วยความจำมาก ต้องการแปลงและโหลดต่อไปหรือไม่?",

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { NasaEarthdataControl } from "maplibre-gl-nasa-earthdata";
+import { isolateMaplibreRegistry } from "../apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry";
 import { MAX_VECTOR_BYTES } from "../packages/plugins/src/plugins/remote-file-formats";
 import {
   citedSections,
@@ -136,6 +137,37 @@ describe("maplibre-gl", () => {
         "`maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler",
         "GeoJSONSource no longer stores setData's value as `_data.geojson` (lidar-measure-mirror reads it)",
       ),
+    );
+  });
+});
+
+describe("maplibre-gl and mapbox-gl class registries", () => {
+  const file = (pkg: string, name: string) =>
+    readFileSync(path.resolve("node_modules", pkg, "dist", name), "utf8");
+
+  it("still collide on the property isolateMaplibreRegistry renames", () => {
+    const maplibre = file("maplibre-gl", "maplibre-gl.mjs");
+    const isolated = isolateMaplibreRegistry(
+      maplibre,
+      "/node_modules/maplibre-gl/dist/maplibre-gl.mjs",
+    );
+    assert.match(maplibre, /_classRegistryKey/, "see 'mapbox-gl' in docs/maintenance.md");
+    assert.ok(isolated !== null, "the plugin must rewrite MapLibre's main bundle");
+    assert.doesNotMatch(isolated, /_classRegistryKey/);
+    assert.match(file("mapbox-gl", "mapbox-gl.js"), /_classRegistryKey/);
+  });
+
+  it("only rewrites MapLibre's main-thread bundle", () => {
+    assert.equal(
+      isolateMaplibreRegistry("_classRegistryKey", "/node_modules/mapbox-gl/dist/x.js"),
+      null,
+    );
+    assert.equal(
+      isolateMaplibreRegistry(
+        "_classRegistryKey",
+        "/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+      ),
+      null,
     );
   });
 });

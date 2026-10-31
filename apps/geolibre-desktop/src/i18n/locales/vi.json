@@ -137,7 +137,8 @@
     "upToDateNoVersion": "Bạn đã được cập nhật.",
     "generalSectionTitle": "Tổng quan",
     "homePage": "Trang chủ",
-    "githubRepository": "Kho lưu trữ GitHub"
+    "githubRepository": "Kho lưu trữ GitHub",
+    "thirdPartyLicenses": "Giấy phép của bên thứ ba"
   },
   "updates": {
     "changelogTitle": "Có gì mới",
@@ -537,6 +538,8 @@
       "builtin": "{{name}} (tích hợp sẵn)",
       "config": "{{name}} (config)",
       "deleteAria": "Xóa dịch vụ đã lưu",
+      "restoreBuiltins_other": "Khôi phục {{count}} dịch vụ tích hợp đã xóa",
+      "restoredBuiltins_other": "Đã khôi phục {{count}} dịch vụ tích hợp.",
       "empty": "Chưa có dịch vụ nào được lưu - hãy điền vào biểu mẫu và chọn “Lưu hiện tại”.",
       "name": "Hồ toàn cầu (bản demo pygeoapi)",
       "category": "Loại",
@@ -3652,6 +3655,7 @@
       "readingWithDuckDb": "Đọc {{name}} với DuckDB-WASM",
       "readFeatures": "Đọc các tính năng {{features}} từ {{name}}",
       "savedFile": "Đã lưu {{name}}",
+      "cancelled": "Đã hủy chuyển đổi.",
       "band": "Nhập tệp CSV",
       "bandError": "Dải phải là số nguyên dương.",
       "bandOutOfRange": "Ban nhạc {{band}} không tồn tại; raster này có (các) băng tần {{bands}}.",
@@ -4003,6 +4007,7 @@
       "navigation": "Dẫn đường từng chặng...",
       "navigationTooltip": "Dẫn đường từng chặng: lập lộ trình, sau đó đi theo với hướng dẫn bằng giọng nói.",
       "search": "Tìm kiếm",
+      "searchPlacesPlaceholder": "Tìm kiếm địa điểm…",
       "colorbar": "Thanh màu",
       "legend": "Huyền thoại",
       "html": "HTML",
@@ -4172,6 +4177,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS các bang Hoa Kỳ",
       "geolibre-us-local-gis": "GIS địa phương Hoa Kỳ",
+      "geolibre-india-gis": "GIS Ấn Độ",
       "geolibre-us-federal-gis": "GIS liên bang Hoa Kỳ",
       "geolibre-osm-downloader": "Trình tải xuống OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4231,7 +4237,14 @@
       "addedLayer": "Đã thêm \"{{name}}\" vào bảng điều khiển Lớp.",
       "addedVectorLayers_other": "Đã thêm các lớp vectơ {{count}} vào bảng điều khiển Lớp.",
       "savePromptTitle": "Lưu dự án hiện tại?",
-      "savePromptDescription": "Dự án hiện tại có thay đổi chưa lưu. Lưu trước khi mở dự án được thả vào?"
+      "savePromptDescription": "Dự án hiện tại có thay đổi chưa lưu. Lưu trước khi mở dự án được thả vào?",
+      "importing": "Đang nhập dữ liệu…",
+      "parsing": "Đang phân tích cú pháp {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} có dung lượng khoảng {{sizeMb}} MB. Việc phân tích cú pháp có thể dùng nhiều bộ nhớ. Tiếp tục?",
+      "addedOsmPbfLayers_other": "Đã thêm {{count}} lớp từ {{name}}.",
+      "osmPbfNoFeatures": "Không tìm thấy đối tượng nào trong {{name}}.",
+      "couldNotParse": "Không thể phân tích cú pháp {{name}}: {{message}}",
+      "couldNotImport": "Không thể nhập tệp."
     },
     "windowClose": {
       "savePromptTitle": "Lưu thay đổi trước khi đóng?",
@@ -4846,6 +4859,16 @@
     "chooseStateHint": "Chọn một bang, rồi chọn một thành phố hoặc quận, để liệt kê dữ liệu GIS của nơi đó.",
     "openPortal": "Mở cổng dữ liệu"
   },
+  "indiaGis": {
+    "hint": "Chọn một khu vực, sau đó chọn một cổng để duyệt dữ liệu GIS mở của Ấn Độ. Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
+    "searchPlaceholder": "Tìm kiếm tập dữ liệu GIS của Ấn Độ",
+    "noResults": "Không tìm thấy tập dữ liệu phù hợp cho cổng này.",
+    "searchError": "Không thể liệt kê các tập dữ liệu của cổng này.",
+    "chooseRegion": "Chọn một khu vực",
+    "portal": "Cổng",
+    "chooseRegionHint": "Chọn một khu vực, sau đó chọn một cổng để liệt kê dữ liệu GIS của cổng đó.",
+    "openPortal": "Mở cổng"
+  },
   "usFederalGis": {
     "hint": "Chọn một bộ, rồi chọn một cơ quan, để duyệt và tìm kiếm dữ liệu GIS công khai của cơ quan đó. Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
     "searchPlaceholder": "Tìm kiếm dữ liệu GIS của cơ quan",
@@ -5267,6 +5290,9 @@
     "moveUp": "Di chuyển lên",
     "moveDown": "Di chuyển xuống",
     "deleteElement": "Xóa",
+    "titlePrompt": "Tiêu đề",
+    "pinDescPlaceholder": "Mô tả tùy chọn…",
+    "stickyNotePlaceholder": "Nhập chi tiết ghi chú…",
     "color": "Màu chú thích",
     "width": "Chiều rộng đường",
     "widthOptions": {
@@ -9440,6 +9466,7 @@
   },
   "raster": {
     "filePickerLabel": "Giá trị",
+    "cogConverting": "Đang chuyển đổi \"{{name}}\" sang COG…",
     "cogConvertConfirm": "Chuyển đổi {{name}}?",
     "cogConvertRemoteConfirm": "Chuyển đổi {{name}}?",
     "cogConvertLargeConfirm": "\"{{name}}\" là {{width}}×{{height}} GeoTIFF lớn không phải là GeoTIFF được tối ưu hóa cho đám mây. Việc chuyển đổi nó trong trình duyệt có thể chậm và tốn nhiều bộ nhớ. Vẫn chuyển đổi và tải nó?",

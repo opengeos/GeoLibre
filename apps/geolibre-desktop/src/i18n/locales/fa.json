@@ -141,7 +141,8 @@
     "upToDateNoVersion": "شما به‌روز هستید.",
     "generalSectionTitle": "عمومی",
     "homePage": "صفحهٔ اصلی",
-    "githubRepository": "مخزن GitHub"
+    "githubRepository": "مخزن GitHub",
+    "thirdPartyLicenses": "مجوزهای شخص ثالث"
   },
   "updates": {
     "changelogTitle": "تازه‌ها",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (توکار)",
       "config": "{{name}} (کانفیگ)",
       "deleteAria": "حذف سرویس ذخیره‌شده",
+      "restoreBuiltins_one": "بازیابی {{count}} سرویس داخلی حذف‌شده",
+      "restoreBuiltins_other": "بازیابی {{count}} سرویس داخلی حذف‌شده",
+      "restoredBuiltins_one": "{{count}} سرویس داخلی بازیابی شد.",
+      "restoredBuiltins_other": "{{count}} سرویس داخلی بازیابی شد.",
       "empty": "هنوز سرویس ذخیره‌شده‌ای نیست — فرم را پر کنید و «ذخیرهٔ مورد فعلی» را برگزینید.",
       "name": "نام",
       "category": "دسته",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "در حال خواندن {{name}} با DuckDB-WASM",
       "readFeatures": "{{features}} عارضه از {{name}} خوانده شد",
       "savedFile": "{{name}} ذخیره شد",
+      "cancelled": "تبدیل لغو شد.",
       "saveCanceled": "تبدیل به پایان رسید؛ ذخیره لغو شد.",
       "vectorToGeoparquet": "برداری به GeoParquet",
       "vectorToFlatgeobuf": "برداری به FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "ناوبری گام‌به‌گام...",
       "navigationTooltip": "ناوبری گام‌به‌گام: یک مسیر برنامه‌ریزی کنید، سپس با راهنمای صوتی آن را دنبال کنید.",
       "search": "جستجو",
+      "searchPlacesPlaceholder": "جستجوی مکان‌ها…",
       "colorbar": "نوار رنگ",
       "legend": "راهنمای نقشه",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS ایالت‌های آمریکا",
       "geolibre-us-local-gis": "GIS محلی آمریکا",
+      "geolibre-india-gis": "GIS هند",
       "geolibre-us-federal-gis": "GIS فدرال آمریکا",
       "geolibre-osm-downloader": "بارگیر OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} لایهٔ رستری",
       "bothRasterLayers_other": "{{count}} لایهٔ رستری",
       "savePromptTitle": "پروژهٔ فعلی ذخیره شود؟",
-      "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. آیا پیش از باز کردن پروژهٔ رهاشده آن‌ها را ذخیره می‌کنید؟"
+      "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. آیا پیش از باز کردن پروژهٔ رهاشده آن‌ها را ذخیره می‌کنید؟",
+      "importing": "در حال وارد کردن داده‌ها…",
+      "parsing": "در حال تجزیهٔ {{name}}…",
+      "largeOsmPbfConfirm": "حجم {{name}} حدود {{sizeMb}} مگابایت است. تجزیهٔ آن ممکن است حافظهٔ زیادی مصرف کند. ادامه می‌دهید؟",
+      "addedOsmPbfLayers_one": "{{count}} لایه از {{name}} افزوده شد.",
+      "addedOsmPbfLayers_other": "{{count}} لایه از {{name}} افزوده شد.",
+      "osmPbfNoFeatures": "هیچ عارضه‌ای در {{name}} پیدا نشد.",
+      "couldNotParse": "تجزیهٔ {{name}} ممکن نشد: {{message}}",
+      "couldNotImport": "وارد کردن فایل‌ها ممکن نشد."
     },
     "windowClose": {
       "savePromptTitle": "تغییرات پیش از بستن ذخیره شوند؟",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "یک ایالت و سپس یک شهر یا شهرستان را انتخاب کنید تا داده‌های GIS آن فهرست شود.",
     "openPortal": "باز کردن درگاه"
   },
+  "indiaGis": {
+    "hint": "برای مرور داده‌های باز GIS هند، یک منطقه و سپس یک درگاه انتخاب کنید. لایه‌ها را به نقشه بیفزایید یا داده‌ها را دانلود کنید.",
+    "searchPlaceholder": "جستجوی مجموعه‌داده‌های GIS هند",
+    "noResults": "هیچ مجموعه‌دادهٔ منطبقی برای این درگاه پیدا نشد.",
+    "searchError": "فهرست کردن مجموعه‌داده‌های این درگاه ممکن نشد.",
+    "chooseRegion": "یک منطقه انتخاب کنید",
+    "portal": "درگاه",
+    "chooseRegionHint": "برای فهرست کردن داده‌های GIS، یک منطقه و سپس یک درگاه انتخاب کنید.",
+    "openPortal": "باز کردن درگاه"
+  },
   "usFederalGis": {
     "hint": "یک وزارتخانه و سپس یک سازمان را انتخاب کنید تا داده‌های عمومی GIS آن را مرور و جست‌وجو کنید. لایه‌ها را به نقشه اضافه کنید یا داده‌ها را دانلود کنید.",
     "searchPlaceholder": "جست‌وجو در داده‌های GIS سازمان",
@@ -5356,7 +5382,10 @@
     "noElements": "هنوز هیچ عنصر نقشه‌ای وجود ندارد.",
     "moveUp": "بردن به بالا",
     "moveDown": "بردن به پایین",
-    "deleteElement": "حذف"
+    "deleteElement": "حذف",
+    "titlePrompt": "عنوان",
+    "pinDescPlaceholder": "توضیح اختیاری…",
+    "stickyNotePlaceholder": "جزئیات یادداشت را بنویسید…"
   },
   "dimensions": {
     "toolbar": "ابزارهای اندازه‌گذاری",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "رسترها",
+    "cogConverting": "در حال تبدیل «{{name}}» به COG…",
     "cogConvertConfirm": "«{{name}}» یک GeoTIFF ساده (نواری) است که مستقیم نمایش‌پذیر نیست. اکنون به یک GeoTIFF بهینه‌شده برای ابر تبدیل و همان بارگیری شود؟",
     "cogConvertRemoteConfirm": "«{{name}}» یک GeoTIFF ساده (نواری) است که مستقیم نمایش‌پذیر نیست. نمایش آن یعنی دانلود کل فایل و تبدیلش به یک GeoTIFF بهینه‌شده برای ابر در مرورگر، که برای فایل‌های بزرگ می‌تواند کند و پرمصرف باشد. ادامه می‌دهید؟",
     "cogConvertLargeConfirm": "«{{name}}» یک GeoTIFF بزرگ {{width}}×{{height}} است که بهینه‌شده برای ابر نیست. تبدیل آن در مرورگر ممکن است کند و پرمصرف باشد. به‌هر‌حال تبدیل و بارگیری شود؟",

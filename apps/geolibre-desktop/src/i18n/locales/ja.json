@@ -137,7 +137,8 @@
     "upToDateNoVersion": "最新の状態です。",
     "generalSectionTitle": "一般",
     "homePage": "ホームページ",
-    "githubRepository": "GitHub リポジトリ"
+    "githubRepository": "GitHub リポジトリ",
+    "thirdPartyLicenses": "サードパーティのライセンス"
   },
   "updates": {
     "changelogTitle": "新機能",
@@ -537,6 +538,8 @@
       "builtin": "{{name}} (ビルトイン)",
       "config": "{{name}} (コンフィグ)",
       "deleteAria": "保存済みサービスを削除",
+      "restoreBuiltins_other": "削除された組み込みサービス {{count}} 件を復元",
+      "restoredBuiltins_other": "組み込みサービス {{count}} 件を復元しました。",
       "empty": "保存済みサービスはまだありません。フォームに入力して「現在の設定を保存」を選択してください。",
       "name": "名前",
       "category": "カテゴリ",
@@ -3652,6 +3655,7 @@
       "readingWithDuckDb": "DuckDB-WASMで{{name}}を読み込み中",
       "readFeatures": "{{name}}から{{features}}件のフィーチャを読み込みました",
       "savedFile": "{{name}}を保存しました",
+      "cancelled": "変換をキャンセルしました。",
       "saveCanceled": "変換は完了しましたが、保存はキャンセルされました。",
       "vectorToGeoparquet": "ベクターからGeoParquetへ",
       "vectorToFlatgeobuf": "ベクターからFlatGeobufへ",
@@ -4003,6 +4007,7 @@
       "navigation": "ターンバイターンナビゲーション...",
       "navigationTooltip": "ターンバイターンナビゲーション: ルートを計画し、音声案内に従って進みます。",
       "search": "検索",
+      "searchPlacesPlaceholder": "場所を検索…",
       "colorbar": "カラーバー",
       "legend": "凡例",
       "html": "HTML",
@@ -4165,6 +4170,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "米国州 GIS",
       "geolibre-us-local-gis": "米国地方自治体 GIS",
+      "geolibre-india-gis": "インド GIS",
       "geolibre-us-federal-gis": "米国連邦政府 GIS",
       "geolibre-osm-downloader": "OSM ダウンローダー",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4231,7 +4237,14 @@
       "bothVectorLayers_other": "ベクターレイヤー {{count}} 件",
       "bothRasterLayers_other": "ラスターレイヤー {{count}} 件",
       "savePromptTitle": "現在のプロジェクトを保存しますか？",
-      "savePromptDescription": "現在のプロジェクトには未保存の変更があります。ドロップしたプロジェクトを開く前に保存しますか？"
+      "savePromptDescription": "現在のプロジェクトには未保存の変更があります。ドロップしたプロジェクトを開く前に保存しますか？",
+      "importing": "データをインポートしています…",
+      "parsing": "{{name}} を解析しています…",
+      "largeOsmPbfConfirm": "{{name}} は約 {{sizeMb}} MB です。解析に多くのメモリを使用する場合があります。続行しますか？",
+      "addedOsmPbfLayers_other": "{{name}} から {{count}} 件のレイヤーを追加しました。",
+      "osmPbfNoFeatures": "{{name}} にフィーチャーが見つかりませんでした。",
+      "couldNotParse": "{{name}} を解析できませんでした: {{message}}",
+      "couldNotImport": "ファイルをインポートできませんでした。"
     },
     "windowClose": {
       "savePromptTitle": "閉じる前に変更を保存しますか?",
@@ -4846,6 +4859,16 @@
     "chooseStateHint": "州を選び、続いて市または郡を選ぶと、その GIS データが一覧表示されます。",
     "openPortal": "ポータルを開く"
   },
+  "indiaGis": {
+    "hint": "地域、次にポータルを選択して、インドのオープン GIS データを参照します。地図にレイヤーを追加したり、データをダウンロードしたりできます。",
+    "searchPlaceholder": "インドの GIS データセットを検索",
+    "noResults": "このポータルに一致するデータセットは見つかりませんでした。",
+    "searchError": "このポータルのデータセットを一覧表示できませんでした。",
+    "chooseRegion": "地域を選択",
+    "portal": "ポータル",
+    "chooseRegionHint": "地域、次にポータルを選択すると、その GIS データを一覧表示します。",
+    "openPortal": "ポータルを開く"
+  },
   "usFederalGis": {
     "hint": "省庁を選び、続いて機関を選ぶと、その公開 GIS データを閲覧・検索できます。レイヤーを地図に追加したり、データをダウンロードしたりできます。",
     "searchPlaceholder": "機関の GIS データを検索",
@@ -5274,7 +5297,10 @@
     "noElements": "まだ地図要素がありません。",
     "moveUp": "上に移動",
     "moveDown": "下に移動",
-    "deleteElement": "削除"
+    "deleteElement": "削除",
+    "titlePrompt": "タイトル",
+    "pinDescPlaceholder": "説明（任意）…",
+    "stickyNotePlaceholder": "メモの詳細を入力…"
   },
   "dimensions": {
     "toolbar": "寸法ツール",
@@ -9440,6 +9466,7 @@
   },
   "raster": {
     "filePickerLabel": "ラスター",
+    "cogConverting": "「{{name}}」を COG に変換しています…",
     "cogConvertConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。今すぐCloud-Optimized GeoTIFFに変換して読み込みますか?",
     "cogConvertRemoteConfirm": "「{{name}}」は通常の(ストライプ形式の)GeoTIFFであり、直接表示できません。表示するにはファイル全体をダウンロードし、ブラウザ内でCloud-Optimized GeoTIFFに変換する必要があります。大きなファイルの場合、処理に時間がかかりメモリを多く消費する可能性があります。続行しますか?",
     "cogConvertLargeConfirm": "「{{name}}」は{{width}}×{{height}}の大きなGeoTIFFで、Cloud-Optimized GeoTIFFではありません。ブラウザ内での変換は時間がかかりメモリを多く消費する可能性があります。それでも変換して読み込みますか?",

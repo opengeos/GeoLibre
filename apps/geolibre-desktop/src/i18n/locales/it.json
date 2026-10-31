@@ -141,7 +141,8 @@
     "upToDateNoVersion": "Il software è aggiornato.",
     "generalSectionTitle": "Generale",
     "homePage": "Pagina iniziale",
-    "githubRepository": "Repository GitHub"
+    "githubRepository": "Repository GitHub",
+    "thirdPartyLicenses": "Licenze di terze parti"
   },
   "updates": {
     "changelogTitle": "Novità",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (integrato)",
       "config": "{{name}} (config)",
       "deleteAria": "Elimina servizio salvato",
+      "restoreBuiltins_one": "Ripristina {{count}} servizio integrato eliminato",
+      "restoreBuiltins_other": "Ripristina {{count}} servizi integrati eliminati",
+      "restoredBuiltins_one": "Ripristinato {{count}} servizio integrato.",
+      "restoredBuiltins_other": "Ripristinati {{count}} servizi integrati.",
       "empty": "Nessun servizio salvato ancora — compila il modulo e scegli \"Salva corrente\".",
       "name": "Nome",
       "category": "Categoria",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "Lettura di {{name}} con DuckDB-WASM",
       "readFeatures": "Letti {{features}} elementi da {{name}}",
       "savedFile": "{{name}} salvato",
+      "cancelled": "Conversione annullata.",
       "saveCanceled": "Conversione completata; salvataggio annullato.",
       "vectorToGeoparquet": "Da vettoriale a GeoParquet",
       "vectorToFlatgeobuf": "Da vettoriale a FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "Navigazione passo passo...",
       "navigationTooltip": "Navigazione passo passo: pianifica un percorso, quindi seguilo con la guida vocale.",
       "search": "Ricerca",
+      "searchPlacesPlaceholder": "Cerca luoghi…",
       "colorbar": "Barra dei colori",
       "legend": "Legenda",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS degli Stati USA",
       "geolibre-us-local-gis": "GIS locali USA",
+      "geolibre-india-gis": "GIS dell'India",
       "geolibre-us-federal-gis": "GIS federali USA",
       "geolibre-osm-downloader": "Downloader OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} layer raster",
       "bothRasterLayers_other": "{{count}} layer raster",
       "savePromptTitle": "Salvare il progetto corrente?",
-      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto trascinato?"
+      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto trascinato?",
+      "importing": "Importazione dei dati…",
+      "parsing": "Analisi di {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} occupa circa {{sizeMb}} MB. L'analisi può usare molta memoria. Continuare?",
+      "addedOsmPbfLayers_one": "Aggiunto {{count}} layer da {{name}}.",
+      "addedOsmPbfLayers_other": "Aggiunti {{count}} layer da {{name}}.",
+      "osmPbfNoFeatures": "Nessun elemento trovato in {{name}}.",
+      "couldNotParse": "Impossibile analizzare {{name}}: {{message}}",
+      "couldNotImport": "Impossibile importare i file."
     },
     "windowClose": {
       "savePromptTitle": "Salvare le modifiche prima di chiudere?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "Scegli uno Stato, poi una città o una contea, per elencarne i dati GIS.",
     "openPortal": "Apri portale"
   },
+  "indiaGis": {
+    "hint": "Scegli una regione e poi un portale per esplorare i dati GIS aperti dell'India. Aggiungi layer alla mappa o scarica i dati.",
+    "searchPlaceholder": "Cerca dataset GIS dell'India",
+    "noResults": "Nessun dataset corrispondente trovato per questo portale.",
+    "searchError": "Impossibile elencare i dataset di questo portale.",
+    "chooseRegion": "Scegli una regione",
+    "portal": "Portale",
+    "chooseRegionHint": "Scegli una regione e poi un portale per elencarne i dati GIS.",
+    "openPortal": "Apri portale"
+  },
   "usFederalGis": {
     "hint": "Scegli un dipartimento, poi un'agenzia, per sfogliare e cercare i suoi dati GIS pubblici. Aggiungi layer alla mappa o scarica i dati.",
     "searchPlaceholder": "Cerca nei dati GIS dell'agenzia",
@@ -5356,7 +5382,10 @@
     "noElements": "Nessun elemento sulla mappa.",
     "moveUp": "Sposta su",
     "moveDown": "Sposta giù",
-    "deleteElement": "Elimina"
+    "deleteElement": "Elimina",
+    "titlePrompt": "Titolo",
+    "pinDescPlaceholder": "Descrizione facoltativa…",
+    "stickyNotePlaceholder": "Digita i dettagli della nota…"
   },
   "dimensions": {
     "toolbar": "Strumenti di quotatura",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "Raster",
+    "cogConverting": "Conversione di «{{name}}» in COG…",
     "cogConvertConfirm": "\"{{name}}\" è un GeoTIFF semplice (a strisce), che non può essere visualizzato direttamente. Convertirlo ora in un Cloud-Optimized GeoTIFF e caricare quello?",
     "cogConvertRemoteConfirm": "\"{{name}}\" è un GeoTIFF semplice (a strisce), che non può essere visualizzato direttamente. Visualizzarlo implica scaricare il file completo e convertirlo in un Cloud-Optimized GeoTIFF nel browser, un'operazione che può essere lenta e richiedere molta memoria per i file di grandi dimensioni. Procedere?",
     "cogConvertLargeConfirm": "\"{{name}}\" è un GeoTIFF di grandi dimensioni ({{width}}×{{height}}) che non è un Cloud-Optimized GeoTIFF. La conversione nel browser potrebbe essere lenta e richiedere molta memoria. Convertirlo e caricarlo comunque?",

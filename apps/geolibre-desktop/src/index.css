@@ -157,34 +157,43 @@ html:lang(fa) {
   --geolibre-primary: hsl(var(--primary));
 }
 
-.maplibregl-map .maplibregl-ctrl {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl, .mapboxgl-ctrl) {
   font-family: var(--font-sans);
 }
 
-.maplibregl-map .maplibregl-ctrl-group {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) {
   background: hsl(var(--popover));
   border-radius: var(--radius);
   color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-group:not(:empty) {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group):not(:empty) {
   box-shadow:
     0 0 0 1px hsl(var(--border)),
     var(--shadow-sm);
 }
 
-.maplibregl-map .maplibregl-ctrl-group button {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) button {
   color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-group button + button {
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  button
+  + button {
   border-top-color: hsl(var(--border));
 }
 
-.maplibregl-map
-  .maplibregl-ctrl-group
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
   button:where(
     .maplibregl-ctrl-zoom-in,
+    .mapboxgl-ctrl-zoom-in,
+    .mapboxgl-ctrl-zoom-out,
+    .mapboxgl-ctrl-compass,
+    .mapboxgl-ctrl-fullscreen,
+    .mapboxgl-ctrl-shrink,
+    .mapboxgl-ctrl-geolocate,
     .maplibregl-ctrl-zoom-out,
     .maplibregl-ctrl-compass,
     .maplibregl-ctrl-fullscreen,
@@ -200,61 +209,96 @@ html:lang(fa) {
   background-color: hsl(var(--accent));
 }
 
-.maplibregl-map .maplibregl-ctrl-group button:focus-visible,
-.maplibregl-map .maplibregl-ctrl-attrib-button:focus-visible {
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  button:focus-visible,
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-attrib-button, .mapboxgl-ctrl-attrib-button):focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: -2px;
 }
 
-.maplibregl-map .maplibregl-ctrl-group button:disabled {
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  button:disabled {
   cursor: not-allowed;
 }
 
 /* Native icons are SVG background images, not currentColor. Invert neutral
    icons only; preserve enabled/colored status icons. Never filter map content. */
-.dark .maplibregl-map .maplibregl-ctrl-icon {
+.dark :is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-icon, .mapboxgl-ctrl-icon) {
   filter: invert(1);
 }
 
 .dark
-  .maplibregl-map
+  :is(.maplibregl-map, .mapboxgl-map)
   :is(.maplibregl-ctrl-globe-enabled, .maplibregl-ctrl-terrain-enabled)
   .maplibregl-ctrl-icon,
 .dark
-  .maplibregl-map
+  :is(.maplibregl-map, .mapboxgl-map)
   .maplibregl-ctrl-geolocate:is(
     .maplibregl-ctrl-geolocate-active,
     .maplibregl-ctrl-geolocate-active-error,
     .maplibregl-ctrl-geolocate-background,
     .maplibregl-ctrl-geolocate-background-error
   )
-  .maplibregl-ctrl-icon {
+  .maplibregl-ctrl-icon,
+.dark
+  .mapboxgl-map
+  .mapboxgl-ctrl-geolocate:is(
+    .mapboxgl-ctrl-geolocate-active,
+    .mapboxgl-ctrl-geolocate-active-error,
+    .mapboxgl-ctrl-geolocate-background,
+    .mapboxgl-ctrl-geolocate-background-error
+  )
+  .mapboxgl-ctrl-icon {
   filter: none;
 }
 
-.maplibregl-map .maplibregl-ctrl:is(.maplibregl-ctrl-scale, .maplibregl-ctrl-attrib) {
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl, .mapboxgl-ctrl):is(
+    .maplibregl-ctrl-scale,
+    .mapboxgl-ctrl-scale,
+    .maplibregl-ctrl-attrib,
+    .mapboxgl-ctrl-attrib
+  ) {
   background: hsl(var(--popover) / 0.95);
   color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-scale {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-scale, .mapboxgl-ctrl-scale) {
   border-color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-attrib a {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-attrib, .mapboxgl-ctrl-attrib) a {
   color: hsl(var(--muted-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-attrib a:hover {
+:is(.maplibregl-map, .mapboxgl-map) :is(.maplibregl-ctrl-attrib, .mapboxgl-ctrl-attrib) a:hover {
   color: hsl(var(--popover-foreground));
 }
 
-.maplibregl-map .maplibregl-ctrl-attrib-button {
+:is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-attrib-button, .mapboxgl-ctrl-attrib-button) {
   background-color: transparent;
 }
 
-.dark .maplibregl-map .maplibregl-ctrl-attrib-button {
+.dark
+  :is(.maplibregl-map, .mapboxgl-map)
+  :is(.maplibregl-ctrl-attrib-button, .mapboxgl-ctrl-attrib-button) {
   filter: invert(1);
+}
+
+/* mapbox-gl's `.mapboxgl-ctrl button:hover` paints #eee behind every button in a
+   control, including the shared controls' unclassed toggles and their panels,
+   whose icons are light in dark mode. This outranks it, and any other hover
+   color a control sets below (0,4,1), which that #eee was already overriding.
+   The attribution button is inverted, which already turns #eee dark. */
+:where(.dark)
+  .mapboxgl-map
+  .mapboxgl-ctrl
+  button:not(:disabled, .mapboxgl-ctrl-attrib-button):hover {
+  background-color: hsl(var(--accent));
 }
 
 /* Shared popup frame covers native Inspect/NLDI popups too. Content-specific
@@ -1869,7 +1913,7 @@ body,
    globally. mapbox-gl's popup has no such lift, so with effects on it opens
    underneath the canvas: visible through nothing and unclickable. Match the
    MapLibre value so the two engines stack popups the same way. `!important`
-   as upstream's: mapbox-gl.css is loaded by a dynamic import after this
+   as upstream's: mapbox-gl.css is loaded from Mapbox's CDN after this
    sheet, so a same-specificity rule there would otherwise win. */
 .mapboxgl-popup {
   z-index: 10 !important;

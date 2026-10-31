@@ -157,7 +157,8 @@
     "upToDateNoVersion": "أنت على أحدث إصدار.",
     "generalSectionTitle": "عام",
     "homePage": "الصفحة الرئيسية",
-    "githubRepository": "مستودع GitHub"
+    "githubRepository": "مستودع GitHub",
+    "thirdPartyLicenses": "تراخيص الجهات الخارجية"
   },
   "updates": {
     "changelogTitle": "ما الجديد",
@@ -572,6 +573,18 @@
       "builtin": "{{name}} (مضمَّنة)",
       "config": "{{name}} (كونفيج)",
       "deleteAria": "حذف الخدمة المحفوظة",
+      "restoreBuiltins_zero": "استعادة {{count}} خدمة مضمنة محذوفة",
+      "restoreBuiltins_one": "استعادة {{count}} خدمة مضمنة محذوفة",
+      "restoreBuiltins_two": "استعادة {{count}} خدمتين مضمنتين محذوفتين",
+      "restoreBuiltins_few": "استعادة {{count}} خدمات مضمنة محذوفة",
+      "restoreBuiltins_many": "استعادة {{count}} خدمة مضمنة محذوفة",
+      "restoreBuiltins_other": "استعادة {{count}} خدمة مضمنة محذوفة",
+      "restoredBuiltins_zero": "تمت استعادة {{count}} خدمة مضمنة.",
+      "restoredBuiltins_one": "تمت استعادة {{count}} خدمة مضمنة.",
+      "restoredBuiltins_two": "تمت استعادة {{count}} خدمتين مضمنتين.",
+      "restoredBuiltins_few": "تمت استعادة {{count}} خدمات مضمنة.",
+      "restoredBuiltins_many": "تمت استعادة {{count}} خدمة مضمنة.",
+      "restoredBuiltins_other": "تمت استعادة {{count}} خدمة مضمنة.",
       "empty": "لا توجد خدمات محفوظة بعد — املأ النموذج واختر «حفظ الحالية».",
       "name": "الاسم",
       "category": "الفئة",
@@ -3956,6 +3969,7 @@
       "readingWithDuckDb": "جارٍ قراءة {{name}} باستخدام DuckDB-WASM",
       "readFeatures": "تمت قراءة {{features}} من المعالم من {{name}}",
       "savedFile": "تم حفظ {{name}}",
+      "cancelled": "تم إلغاء التحويل.",
       "saveCanceled": "اكتمل التحويل؛ تم إلغاء الحفظ.",
       "vectorToGeoparquet": "متجه إلى GeoParquet",
       "vectorToFlatgeobuf": "متجه إلى FlatGeobuf",
@@ -4307,6 +4321,7 @@
       "navigation": "الملاحة خطوة بخطوة...",
       "navigationTooltip": "الملاحة خطوة بخطوة: خطّط مسارًا، ثم اتبعه بالإرشاد الصوتي.",
       "search": "البحث",
+      "searchPlacesPlaceholder": "البحث عن أماكن…",
       "colorbar": "شريط الألوان",
       "legend": "مفتاح الخريطة",
       "html": "HTML",
@@ -4504,6 +4519,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "نظم المعلومات الجغرافية للولايات الأمريكية",
       "geolibre-us-local-gis": "نظم المعلومات الجغرافية المحلية الأمريكية",
+      "geolibre-india-gis": "GIS الهند",
       "geolibre-us-federal-gis": "نظم المعلومات الجغرافية الفيدرالية الأمريكية",
       "geolibre-osm-downloader": "مُنزِّل OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4590,7 +4606,19 @@
       "bothRasterLayers_many": "{{count}} طبقةً نقطية",
       "bothRasterLayers_other": "{{count}} طبقة نقطية",
       "savePromptTitle": "هل تريد حفظ المشروع الحالي؟",
-      "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل فتح المشروع المُسقَط؟"
+      "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل فتح المشروع المُسقَط؟",
+      "importing": "جارٍ استيراد البيانات…",
+      "parsing": "جارٍ تحليل {{name}}…",
+      "largeOsmPbfConfirm": "يبلغ حجم {{name}} نحو {{sizeMb}} ميغابايت. قد يستهلك تحليله ذاكرة كبيرة. هل تريد المتابعة؟",
+      "addedOsmPbfLayers_zero": "تمت إضافة {{count}} طبقة من {{name}}.",
+      "addedOsmPbfLayers_one": "تمت إضافة {{count}} طبقة من {{name}}.",
+      "addedOsmPbfLayers_two": "تمت إضافة {{count}} طبقتين من {{name}}.",
+      "addedOsmPbfLayers_few": "تمت إضافة {{count}} طبقات من {{name}}.",
+      "addedOsmPbfLayers_many": "تمت إضافة {{count}} طبقة من {{name}}.",
+      "addedOsmPbfLayers_other": "تمت إضافة {{count}} طبقة من {{name}}.",
+      "osmPbfNoFeatures": "لم يتم العثور على معالم في {{name}}.",
+      "couldNotParse": "تعذّر تحليل {{name}}: {{message}}",
+      "couldNotImport": "تعذّر استيراد الملفات."
     },
     "windowClose": {
       "savePromptTitle": "هل تريد حفظ التغييرات قبل الإغلاق؟",
@@ -5225,6 +5253,16 @@
     "chooseStateHint": "اختر ولاية ثم مدينة أو مقاطعة لعرض بيانات نظم المعلومات الجغرافية الخاصة بها.",
     "openPortal": "فتح البوابة"
   },
+  "indiaGis": {
+    "hint": "اختر منطقة ثم بوابة لاستعراض بيانات GIS المفتوحة للهند. أضف طبقات إلى الخريطة أو نزّل البيانات.",
+    "searchPlaceholder": "البحث في مجموعات بيانات GIS للهند",
+    "noResults": "لم يتم العثور على مجموعات بيانات مطابقة لهذه البوابة.",
+    "searchError": "تعذّر عرض مجموعات بيانات هذه البوابة.",
+    "chooseRegion": "اختر منطقة",
+    "portal": "البوابة",
+    "chooseRegionHint": "اختر منطقة ثم بوابة لعرض بيانات GIS الخاصة بها.",
+    "openPortal": "فتح البوابة"
+  },
   "usFederalGis": {
     "hint": "اختر وزارة ثم وكالة لتصفح بيانات نظم المعلومات الجغرافية العامة الخاصة بها والبحث فيها. أضف طبقات إلى الخريطة أو نزّل البيانات.",
     "searchPlaceholder": "ابحث في بيانات نظم المعلومات الجغرافية للوكالة",
@@ -5683,7 +5721,10 @@
     "noElements": "لا توجد عناصر خريطة بعد.",
     "moveUp": "نقل لأعلى",
     "moveDown": "نقل لأسفل",
-    "deleteElement": "حذف"
+    "deleteElement": "حذف",
+    "titlePrompt": "العنوان",
+    "pinDescPlaceholder": "وصف اختياري…",
+    "stickyNotePlaceholder": "اكتب تفاصيل الملاحظة…"
   },
   "dimensions": {
     "toolbar": "أدوات الأبعاد",
@@ -10094,6 +10135,7 @@
   },
   "raster": {
     "filePickerLabel": "بيانات الراستر",
+    "cogConverting": "جارٍ تحويل \"{{name}}\" إلى COG…",
     "cogConvertConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. هل تريد تحويله الآن إلى Cloud-Optimized GeoTIFF وتحميل الناتج؟",
     "cogConvertRemoteConfirm": "\"{{name}}\" هو ملف GeoTIFF عادي (شرائطي) لا يمكن عرضه مباشرة. يتطلب عرضه تنزيل الملف كاملًا وتحويله إلى Cloud-Optimized GeoTIFF في المتصفح، وقد يكون ذلك بطيئًا ومستهلكًا للذاكرة مع الملفات الكبيرة. هل تريد المتابعة؟",
     "cogConvertLargeConfirm": "\"{{name}}\" هو ملف GeoTIFF كبير بأبعاد {{width}}×{{height}} وليس Cloud-Optimized GeoTIFF. قد يكون تحويله في المتصفح بطيئًا ومستهلكًا للذاكرة. هل تريد تحويله وتحميله على أي حال؟",

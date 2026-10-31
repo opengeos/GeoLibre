@@ -585,7 +585,7 @@
 - [x] **Startup layers and shareable interface files**: a layers file seeds every new project with URL- or path-referenced layers, and Settings → Interface exports and imports the language, layout, theme, and profile from a file or URL. See [Settings](user-guide/settings.md)
 - [x] **For Python, AI agents, and embedders**: read-only map previews in MCP clients that support MCP Apps, `getLayerFeatures`, `getDrawnFeatures`, and a `featuresChanged` event in the embed API, plugins that can read the active map tool, and a configurable GeoLibre base URL in the Chrome extension. See [MCP server](mcp.md) and [Embedding](user-guide/embedding.md)
 
-## v3.5: The map in other coordinate systems and planetary grids, ArcGIS feature templates and contingent values, organization geocoders, and story map presentations (current)
+## v3.5: The map in other coordinate systems and planetary grids, ArcGIS feature templates and contingent values, organization geocoders, and story map presentations
 
 - [x] **The MapLibre map in other coordinate systems**: draw the flat map in another CRS, including the planetary grids used for the Moon, Mars, and other bodies, with WMS basemaps rendered by the server in the requested CRS. See [MapLibre renderer](maplibre-renderer.md)
 - [x] **ArcGIS editing that follows the service's rules**: pick one of a layer's published feature templates for new features, and edit with its contingent values enforced in the attribute table, on every save, in related records, and on nonhosted ArcGIS Enterprise services. See [ArcGIS editing](arcgis-editing.md)
@@ -597,6 +597,14 @@
 - [x] **In v3.5.1**: Model Builder gains loops (Iterate Features, Iterate Rasters, Collect Results) and conditional branches (Conditional Switch, Branch Merge) that keep the graph acyclic, and they carry over to the Python export. See [Model Builder](user-guide/model-builder.md)
 - [x] **In v3.5.1**: the globe shows the real night sky, with about 5,000 stars and the Milky Way placed by the current sidereal time and optional constellation lines; the arrow keys move between the top menus; shared maps can open Measure and Minimap collapsed, with Measure in the units you choose; and plugins can read the map's CRS and hear when it changes. See [Plugin API](plugin-api.md)
 - [x] **In v3.5.2**: XYZ layers accept the TMS-style `{-y}` row placeholder in a tile URL or TileJSON, as QGIS does; services saved from Add Data appear in the Browser pane right away and built-in presets can be deleted and restored; and blocking Python methods such as `fly_to()` and `identify()` work outside Jupyter, for example from a worker thread in a Shiny app. See [Adding data](user-guide/adding-data.md) and [Python](python.md)
+
+## v3.6: India GIS portals, point clouds and private S3 for plugins, async Python, and richer notebooks (current)
+
+- [x] **India GIS**: a catalog plugin under Plugins → Web Services that lists open boundary and municipal datasets for India from DataMeet, GADM, and geoBoundaries. Pick a region and a portal, then add layers to the map or download the data. See [Web Services](user-guide/web-services.md).
+- [x] **Point clouds and private S3 for plugins**: external plugins can add LAS, LAZ, COPC, and EPT data as regular GeoLibre LiDAR layers, decode them with the host's own `maplibre-gl-lidar`, and read objects from private S3 buckets through presigned URLs without receiving the secret key, so install only plugins you trust with the buckets your S3 connections cover. See the [Plugin API](plugin-api.md).
+- [x] **Async Python**: every blocking `Map` command now has an awaitable `*_async()` twin, such as `fly_to_async()` and `get_center_async()`, that runs directly on the event loop in hosts such as Shiny for Python. See [Python](python.md).
+- [x] **A raster and vector example notebook**: `Explore_GeoLibre.ipynb` walks through COGs, DEM analysis, live earthquake data, spatial joins, and 3D extrusions in the Notebook panel, backed by new `add_tile_layer`, `add_cog`, `add_raster`, and `run_whitebox_tool` kernel commands. See [Notebook Panel](notebook.md).
+- [x] **Larger editable database layers and cancellable COG conversion**: editable PostGIS and SQL Server layers now open up to 1,000,000 features by default, adjustable with `GEOLIBRE_DB_MAX_FEATURES`, and browser GeoTIFF-to-COG conversion runs in a worker you can cancel while the interface stays responsive.
 
 ## Plugin marketplace and registry (design)
 

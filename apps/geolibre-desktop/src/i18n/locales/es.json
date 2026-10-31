@@ -141,7 +141,8 @@
     "upToDateNoVersion": "Está actualizado.",
     "generalSectionTitle": "General",
     "homePage": "Página de inicio",
-    "githubRepository": "Repositorio de GitHub"
+    "githubRepository": "Repositorio de GitHub",
+    "thirdPartyLicenses": "Licencias de terceros"
   },
   "updates": {
     "changelogTitle": "Novedades",
@@ -544,6 +545,10 @@
       "builtin": "{{name}} (integrado)",
       "config": "{{name}} (config)",
       "deleteAria": "Eliminar servicio guardado",
+      "restoreBuiltins_one": "Restaurar {{count}} servicio integrado eliminado",
+      "restoreBuiltins_other": "Restaurar {{count}} servicios integrados eliminados",
+      "restoredBuiltins_one": "Se restauró {{count}} servicio integrado.",
+      "restoredBuiltins_other": "Se restauraron {{count}} servicios integrados.",
       "empty": "Aún no hay servicios guardados: complete el formulario y elija «Guardar actual».",
       "name": "Nombre",
       "category": "Categoría",
@@ -3713,6 +3718,7 @@
       "readingWithDuckDb": "Leyendo {{name}} con DuckDB-WASM",
       "readFeatures": "Se leyeron {{features}} entidades de {{name}}",
       "savedFile": "Se guardó {{name}}",
+      "cancelled": "Conversión cancelada.",
       "saveCanceled": "Conversión finalizada; se canceló el guardado.",
       "vectorToGeoparquet": "Vectorial a GeoParquet",
       "vectorToFlatgeobuf": "Vectorial a FlatGeobuf",
@@ -4064,6 +4070,7 @@
       "navigation": "Navegación paso a paso...",
       "navigationTooltip": "Navegación paso a paso: planifique una ruta y sígala con guía por voz.",
       "search": "Buscar",
+      "searchPlacesPlaceholder": "Buscar lugares…",
       "colorbar": "Barra de color",
       "legend": "Leyenda",
       "html": "HTML",
@@ -4233,6 +4240,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "SIG de estados de EE. UU.",
       "geolibre-us-local-gis": "SIG locales de EE. UU.",
+      "geolibre-india-gis": "SIG de India",
       "geolibre-us-federal-gis": "SIG federales de EE. UU.",
       "geolibre-osm-downloader": "Descargador de OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4303,7 +4311,15 @@
       "bothRasterLayers_one": "{{count}} capa ráster",
       "bothRasterLayers_other": "{{count}} capas ráster",
       "savePromptTitle": "¿Guardar el proyecto actual?",
-      "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Desea guardarlos antes de abrir el proyecto soltado?"
+      "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Desea guardarlos antes de abrir el proyecto soltado?",
+      "importing": "Importando datos…",
+      "parsing": "Interpretando {{name}}…",
+      "largeOsmPbfConfirm": "{{name}} ocupa unos {{sizeMb}} MB. Interpretarlo puede usar mucha memoria. ¿Continuar?",
+      "addedOsmPbfLayers_one": "Se añadió {{count}} capa de {{name}}.",
+      "addedOsmPbfLayers_other": "Se añadieron {{count}} capas de {{name}}.",
+      "osmPbfNoFeatures": "No se encontraron entidades en {{name}}.",
+      "couldNotParse": "No se pudo interpretar {{name}}: {{message}}",
+      "couldNotImport": "No se pudieron importar los archivos."
     },
     "windowClose": {
       "savePromptTitle": "¿Guardar los cambios antes de cerrar?",
@@ -4922,6 +4938,16 @@
     "chooseStateHint": "Elige un estado y luego una ciudad o condado para listar sus datos SIG.",
     "openPortal": "Abrir portal"
   },
+  "indiaGis": {
+    "hint": "Elija una región y luego un portal para explorar datos SIG abiertos de India. Añada capas al mapa o descargue datos.",
+    "searchPlaceholder": "Buscar conjuntos de datos SIG de India",
+    "noResults": "No se encontraron conjuntos de datos coincidentes para este portal.",
+    "searchError": "No se pudieron listar los conjuntos de datos de este portal.",
+    "chooseRegion": "Elija una región",
+    "portal": "Portal",
+    "chooseRegionHint": "Elija una región y luego un portal para ver sus datos SIG.",
+    "openPortal": "Abrir portal"
+  },
   "usFederalGis": {
     "hint": "Elige un departamento y luego una agencia para explorar y buscar sus datos SIG públicos. Añade capas al mapa o descarga datos.",
     "searchPlaceholder": "Buscar datos SIG de la agencia",
@@ -5356,7 +5382,10 @@
     "noElements": "Todavía no hay elementos en el mapa.",
     "moveUp": "Subir",
     "moveDown": "Bajar",
-    "deleteElement": "Eliminar"
+    "deleteElement": "Eliminar",
+    "titlePrompt": "Título",
+    "pinDescPlaceholder": "Descripción opcional…",
+    "stickyNotePlaceholder": "Escriba los detalles de la nota…"
   },
   "dimensions": {
     "toolbar": "Herramientas de acotación",
@@ -9571,6 +9600,7 @@
   },
   "raster": {
     "filePickerLabel": "Ráster",
+    "cogConverting": "Convirtiendo «{{name}}» a COG…",
     "cogConvertConfirm": "«{{name}}» es un GeoTIFF simple (por franjas), que no se puede mostrar directamente. ¿Convertirlo ahora a un GeoTIFF optimizado para la nube y cargar ese?",
     "cogConvertRemoteConfirm": "«{{name}}» es un GeoTIFF simple (por franjas), que no se puede mostrar directamente. Mostrarlo implica descargar el archivo completo y convertirlo a un GeoTIFF optimizado para la nube en el navegador, lo que puede ser lento y usar mucha memoria en archivos grandes. ¿Continuar?",
     "cogConvertLargeConfirm": "«{{name}}» es un GeoTIFF grande de {{width}}×{{height}} que no está optimizado para la nube. Convertirlo en el navegador puede ser lento y usar mucha memoria. ¿Convertirlo y cargarlo de todos modos?",

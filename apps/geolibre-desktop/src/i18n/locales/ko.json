@@ -137,7 +137,8 @@
     "upToDateNoVersion": "최신 버전입니다.",
     "generalSectionTitle": "일반",
     "homePage": "홈페이지",
-    "githubRepository": "GitHub 저장소"
+    "githubRepository": "GitHub 저장소",
+    "thirdPartyLicenses": "타사 라이선스"
   },
   "updates": {
     "changelogTitle": "새로운 기능",
@@ -537,6 +538,8 @@
       "builtin": "{{name}}(내장)",
       "config": "{{name}} (설정)",
       "deleteAria": "저장된 서비스 삭제",
+      "restoreBuiltins_other": "삭제된 기본 제공 서비스 {{count}}개 복원",
+      "restoredBuiltins_other": "기본 제공 서비스 {{count}}개를 복원했습니다.",
       "empty": "저장된 서비스가 아직 없습니다 — 양식을 작성한 후 \"현재 항목 저장\"을 선택하세요.",
       "name": "이름",
       "category": "범주",
@@ -3652,6 +3655,7 @@
       "readingWithDuckDb": "DuckDB-WASM으로 {{name}} 읽는 중",
       "readFeatures": "{{name}}에서 피처 {{features}}개를 읽었습니다.",
       "savedFile": "{{name}} 저장됨",
+      "cancelled": "변환이 취소되었습니다.",
       "saveCanceled": "변환이 완료되었지만 저장이 취소되었습니다.",
       "vectorToGeoparquet": "벡터에서 GeoParquet로",
       "vectorToFlatgeobuf": "벡터에서 FlatGeobuf로",
@@ -4003,6 +4007,7 @@
       "navigation": "턴바이턴 내비게이션...",
       "navigationTooltip": "턴바이턴 내비게이션: 경로를 계획한 다음 음성 안내에 따라 이동합니다.",
       "search": "검색",
+      "searchPlacesPlaceholder": "장소 검색…",
       "colorbar": "컬러바",
       "legend": "범례",
       "html": "HTML",
@@ -4165,6 +4170,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "미국 주 GIS",
       "geolibre-us-local-gis": "미국 지역 GIS",
+      "geolibre-india-gis": "인도 GIS",
       "geolibre-us-federal-gis": "미국 연방 GIS",
       "geolibre-osm-downloader": "OSM 다운로더",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD",
@@ -4231,7 +4237,14 @@
       "bothVectorLayers_other": "벡터 레이어 {{count}}개",
       "bothRasterLayers_other": "래스터 레이어 {{count}}개",
       "savePromptTitle": "현재 프로젝트를 저장할까요?",
-      "savePromptDescription": "현재 프로젝트에 저장하지 않은 변경 사항이 있습니다. 드롭한 프로젝트를 열기 전에 저장할까요?"
+      "savePromptDescription": "현재 프로젝트에 저장하지 않은 변경 사항이 있습니다. 드롭한 프로젝트를 열기 전에 저장할까요?",
+      "importing": "데이터를 가져오는 중…",
+      "parsing": "{{name}} 파싱 중…",
+      "largeOsmPbfConfirm": "{{name}}의 크기는 약 {{sizeMb}}MB입니다. 파싱에 메모리를 많이 사용할 수 있습니다. 계속할까요?",
+      "addedOsmPbfLayers_other": "{{name}}에서 레이어 {{count}}개를 추가했습니다.",
+      "osmPbfNoFeatures": "{{name}}에서 피처를 찾을 수 없습니다.",
+      "couldNotParse": "{{name}}을(를) 파싱할 수 없습니다: {{message}}",
+      "couldNotImport": "파일을 가져올 수 없습니다."
     },
     "windowClose": {
       "savePromptTitle": "닫기 전에 변경 사항을 저장하시겠습니까?",
@@ -4846,6 +4859,16 @@
     "chooseStateHint": "주를 선택한 다음 시 또는 카운티를 선택하면 해당 GIS 데이터가 표시됩니다.",
     "openPortal": "포털 열기"
   },
+  "indiaGis": {
+    "hint": "지역을 선택한 다음 포털을 선택하여 인도의 공개 GIS 데이터를 찾아보세요. 지도에 레이어를 추가하거나 데이터를 다운로드할 수 있습니다.",
+    "searchPlaceholder": "인도 GIS 데이터 세트 검색",
+    "noResults": "이 포털에서 일치하는 데이터 세트를 찾을 수 없습니다.",
+    "searchError": "이 포털의 데이터 세트를 나열할 수 없습니다.",
+    "chooseRegion": "지역 선택",
+    "portal": "포털",
+    "chooseRegionHint": "지역을 선택한 다음 포털을 선택하면 해당 GIS 데이터가 표시됩니다.",
+    "openPortal": "포털 열기"
+  },
   "usFederalGis": {
     "hint": "부처를 선택한 다음 기관을 선택하여 공개 GIS 데이터를 탐색하고 검색하세요. 지도에 레이어를 추가하거나 데이터를 다운로드할 수 있습니다.",
     "searchPlaceholder": "기관의 GIS 데이터 검색",
@@ -5274,7 +5297,10 @@
     "noElements": "아직 지도 요소가 없습니다.",
     "moveUp": "위로 이동",
     "moveDown": "아래로 이동",
-    "deleteElement": "삭제"
+    "deleteElement": "삭제",
+    "titlePrompt": "제목",
+    "pinDescPlaceholder": "선택 사항 설명…",
+    "stickyNotePlaceholder": "메모 내용을 입력하세요…"
   },
   "dimensions": {
     "toolbar": "치수 도구",
@@ -9440,6 +9466,7 @@
   },
   "raster": {
     "filePickerLabel": "래스터",
+    "cogConverting": "\"{{name}}\"을(를) COG로 변환하는 중…",
     "cogConvertConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 지금 Cloud-Optimized GeoTIFF로 변환하여 불러오시겠습니까?",
     "cogConvertRemoteConfirm": "\"{{name}}\"은(는) 직접 표시할 수 없는 일반(스트라이프) GeoTIFF입니다. 표시하려면 전체 파일을 다운로드하여 브라우저에서 Cloud-Optimized GeoTIFF로 변환해야 하며, 파일이 클 경우 느리고 메모리를 많이 사용할 수 있습니다. 계속하시겠습니까?",
     "cogConvertLargeConfirm": "\"{{name}}\"은(는) {{width}}×{{height}} 크기의 대용량 GeoTIFF로, Cloud-Optimized GeoTIFF가 아닙니다. 브라우저에서 변환하면 느리고 메모리를 많이 사용할 수 있습니다. 그래도 변환하여 불러오시겠습니까?",

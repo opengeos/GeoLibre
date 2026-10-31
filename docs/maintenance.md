@@ -138,6 +138,26 @@ fail again with "Unsupported data format/bitsPerSample";
   warns). After a bump, run `tests/map-crs.test.ts` and pick a preset under
   **Settings → Map** with a GeoJSON layer on the map.
 
+### `mapbox-gl`
+
+Mapbox GL JS v2+ is proprietary, so it must never enter a build: the app loads
+it from Mapbox's CDN (`packages/map/src/mapbox-gl-loader.ts`) and the npm package
+is there only for types. A bump must update `MAPBOX_GL_VERSION` and both
+`*_INTEGRITY` hashes in that file; `tests/mapbox-gl-loader.test.ts` computes the
+expected values from the installed package and fails until they match. A
+runtime import of `mapbox-gl`, direct or transitive, fails the build
+(`thirdPartyLicensePlugin` in `apps/geolibre-desktop/vite.config.ts`). The
+script runs under `script-src`, which lists the CDN path; the stylesheet is
+fetched and inlined because `style-src` lists no external host. Playwright's
+`vite preview` sends no CSP, so the e2e suite cannot catch a policy mismatch. A
+`GEOLIBRE_NO_EXTERNAL_CDN=1` build refuses to load the renderer.
+
+MapLibre and Mapbox both use a `_classRegistryKey` property, and MapLibre sets it
+permanently on the global `Set` and `Error`, which stops every Mapbox tile from
+loading. `apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry.ts` renames
+MapLibre's copy at build time. A CI run can't see this failure without a real
+Mapbox token, so after a bump of either package, load a Mapbox style with one.
+
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 
 `bridgeArcgisDeckControl` (`packages/plugins/src/plugins/arcgis-deck/control-adapter.ts`)
