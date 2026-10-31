@@ -634,7 +634,6 @@ function manualChunks(id: string): string | undefined {
   // generic `maplibre-gl` rule below, which would fold it into the eager
   // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
   if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
-  if (id.includes("/mapbox-gl/")) return "mapbox";
   // One chunk per `maplibre-gl-*` feature plugin (components, splat, 3d-tiles,
   // lidar, …). A single shared chunk put ~12 MB of plugins, plus the
   // dependencies they pull in (three, deck.gl, luma.gl), into the chunk that
@@ -1073,6 +1072,55 @@ function stripDuckDbWorkerSourcemapPlugin(): Plugin {
           asset.source = source.replace(DUCKDB_WORKER_SOURCE_MAP_RE, "");
         }
       }
+    },
+  };
+}
+
+/**
+ * Keep the redistributed build within its dependencies' licenses.
+ *
+ * Fails the build if proprietary Mapbox GL JS reaches a chunk, including through
+ * a transitive import; `loadMapboxGl` fetches it from Mapbox's CDN instead. Also
+ * emits the license and source link the LGPL requires for the gdal3.js loader,
+ * the one LGPL file in the bundle.
+ *
+ * @returns The Vite plugin.
+ */
+function thirdPartyLicensePlugin(): Plugin {
+  return {
+    name: "geolibre-third-party-licenses",
+    apply: "build",
+    generateBundle(_, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "chunk") continue;
+        const leaked = Object.keys(output.modules).find((id) =>
+          id.replaceAll("\\", "/").includes("/node_modules/mapbox-gl/"),
+        );
+        if (leaked) {
+          this.error(
+            `${leaked} reached chunk ${output.fileName}. Mapbox GL JS is proprietary and must not be bundled; use loadMapboxGl.`,
+          );
+        }
+      }
+      const { dir, manifest } = findPackageManifest(
+        pgliteCdnRequire.resolve("gdal3.js"),
+        "gdal3.js",
+      );
+      this.emitFile({
+        type: "asset",
+        fileName: "licenses/gdal3.js/LICENSE",
+        source: readFileSync(path.join(dir, "LICENSE"), "utf8"),
+      });
+      this.emitFile({
+        type: "asset",
+        fileName: "licenses/gdal3.js/NOTICE.txt",
+        source: [
+          `GeoLibre's Georeferencer export uses gdal3.js ${manifest.version}, unmodified.`,
+          "gdal3.js is licensed under the GNU Lesser General Public License, version 2.1 or later; see LICENSE in this directory.",
+          `Source code: https://github.com/bugra9/gdal3.js/tree/v${manifest.version}`,
+          "",
+        ].join("\n"),
+      });
     },
   };
 }
@@ -1522,6 +1570,7 @@ export default defineConfig({
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
     duckdbWasmBundlesPlugin(),
     stripDuckDbWorkerSourcemapPlugin(),
+    thirdPartyLicensePlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
     copyVectorOps(

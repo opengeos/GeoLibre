@@ -32,6 +32,10 @@ const LINKS = [
     labelKey: "about.githubRepository",
     href: "https://github.com/opengeos/GeoLibre",
   },
+  {
+    labelKey: "about.thirdPartyLicenses",
+    href: "https://github.com/opengeos/GeoLibre/blob/main/docs/third-party-licenses.md",
+  },
 ] as const;
 
 type UpdateStatus = "idle" | "checking" | "current" | "available" | "error";
