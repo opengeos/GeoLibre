@@ -218,13 +218,10 @@ export interface ConvertRasterDataToCogOptions {
   /**
    * Write NoData, and any non-finite sample, as NaN instead of the raster's
    * own sentinel (default false).
-   * Encoders older than geolibre-wasm 1.8.0 built overviews with a box average
-   * that did not skip NoData, so a finite sentinel such as -9999 blended into
-   * its valid neighbours along every NoData edge and flattened the renderer's
-   * auto stretch (#3255). The average now skips NoData and NaN alike. Use this
-   * option for a COG that is only drawn on the map, where the renderer already
-   * treats NaN as NoData; keep the sentinel for one that feeds tools which
-   * compare against it.
+   * The renderer treats NaN as NoData and skips it in its auto stretch, so use
+   * this for a COG that is only drawn on the map. Keep the sentinel for one
+   * that feeds tools which compare against it, since those tools read the
+   * declared NoData value.
    */
   nanNodata?: boolean;
 }

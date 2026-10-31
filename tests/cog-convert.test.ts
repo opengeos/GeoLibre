@@ -127,42 +127,45 @@ describe("convertGeoTiffToCog", () => {
       nodata,
       geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32617 },
     };
-    // The default keeps the raster's own sentinel for COGs that feed tools.
-    const plain = await readGeoTiffInfo(await convertRasterDataToCog(raster));
-    assert.equal(plain.nodata, nodata);
-
-    const cog = await convertRasterDataToCog(raster, { nanNodata: true });
-
     const { fromArrayBuffer } = await import("geotiff");
-    const tiff = await fromArrayBuffer(
-      cog.buffer.slice(cog.byteOffset, cog.byteOffset + cog.byteLength) as ArrayBuffer,
-    );
-    const count = await tiff.getImageCount();
-    assert.ok(count > 1, "expected an overview pyramid");
-    // Whatever sentinel the COG declares, every pixel is either NoData or a
-    // valid value: no blend of the two.
-    const declared = (await tiff.getImage(0)).getGDALNoData();
-    assert.ok(declared !== null, "the COG declares NoData");
-    const isNoData = (value: number) => Number.isNaN(value) || value === declared;
+    const assertNoBlends = async (cog: Uint8Array) => {
+      const tiff = await fromArrayBuffer(
+        cog.buffer.slice(cog.byteOffset, cog.byteOffset + cog.byteLength) as ArrayBuffer,
+      );
+      const count = await tiff.getImageCount();
+      assert.ok(count > 1, "expected an overview pyramid");
+      // Whatever sentinel the COG declares, every pixel is either NoData or a
+      // valid value: no blend of the two.
+      const declared = (await tiff.getImage(0)).getGDALNoData();
+      assert.ok(declared !== null, "the COG declares NoData");
+      const isNoData = (value: number) => Number.isNaN(value) || value === declared;
 
-    for (let index = 0; index < count; index += 1) {
-      const image = await tiff.getImage(index);
-      const [values] = (await image.readRasters()) as unknown as Float32Array[];
-      let masked = 0;
-      let valid = 0;
-      for (const value of values) {
-        if (isNoData(value)) {
-          masked += 1;
-          continue;
+      for (let index = 0; index < count; index += 1) {
+        const image = await tiff.getImage(index);
+        const [values] = (await image.readRasters()) as unknown as Float32Array[];
+        let masked = 0;
+        let valid = 0;
+        for (const value of values) {
+          if (isNoData(value)) {
+            masked += 1;
+            continue;
+          }
+          valid += 1;
+          // Before the fix the coarsest level held blends such as -9374 and
+          // -624, and the renderer's auto stretch read them as data.
+          assert.ok(value >= -0.5 && value <= 0.5, `level ${index} holds ${value}`);
         }
-        valid += 1;
-        // Before the fix the coarsest level held blends such as -9374 and
-        // -624, and the renderer's auto stretch read them as data.
-        assert.ok(value >= -0.5 && value <= 0.5, `level ${index} holds ${value}`);
+        assert.ok(masked > 0, `level ${index} keeps its NoData corner`);
+        assert.ok(valid > 0, `level ${index} keeps valid data`);
       }
-      assert.ok(masked > 0, `level ${index} keeps its NoData corner`);
-      assert.ok(valid > 0, `level ${index} keeps valid data`);
-    }
+    };
+
+    // The default keeps the raster's own sentinel for COGs that feed tools.
+    const plain = await convertRasterDataToCog(raster);
+    assert.equal((await readGeoTiffInfo(plain)).nodata, nodata);
+    await assertNoBlends(plain);
+
+    await assertNoBlends(await convertRasterDataToCog(raster, { nanNodata: true }));
   });
 
   it("matches a fractional NoData sentinel in Float32 precision under nanNodata", async () => {
