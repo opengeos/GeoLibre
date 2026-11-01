@@ -556,8 +556,8 @@ fn write_file_to_folder_in_dir(
     if !folder.is_dir() {
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
-    let base = file_name.rsplit(['/', '\\']).next().unwrap_or("").trim();
-    let stripped = base.trim_start_matches('.');
+    let raw = file_name.rsplit(['/', '\\']).next().unwrap_or("");
+    let stripped = raw.trim().trim_start_matches('.');
     if stripped.is_empty() {
         return Err("Refusing to write: file name cannot be empty.".to_string());
     }
@@ -592,8 +592,16 @@ fn write_file_to_folder_in_dir(
             | "LPT7"
             | "LPT8"
             | "LPT9"
+            | "COM¹"
+            | "COM²"
+            | "COM³"
+            | "LPT¹"
+            | "LPT²"
+            | "LPT³"
     );
-    if is_reserved_device || stripped.ends_with('.') || stripped.ends_with(' ') {
+    // Trailing spaces are checked on the raw name: Windows drops them, so
+    // `report.json ` would otherwise land on an existing `report.json`.
+    if is_reserved_device || stripped.ends_with('.') || raw.ends_with(char::is_whitespace) {
         return Err("Refusing to write: reserved or invalid file name on Windows.".to_string());
     }
     let sanitized = encode_reserved_filename_chars(stripped);
@@ -687,10 +695,12 @@ fn write_file_to_folder_core(
 
 /// Write data directly into a folder picked earlier with [`pick_download_folder`].
 ///
-/// The file name is sanitized before writing and cannot leave the picked folder.
-/// Existing files with the same name are atomically replaced, allowing plugins
-/// to checkpoint or update saved progress. Blocking file I/O runs on a worker
-/// thread via [`tauri::async_runtime::spawn_blocking`].
+/// Path separators are stripped from the file name, and the destination must sit
+/// directly inside the picked folder. A symlink already at the destination is
+/// refused rather than followed. Existing files with the same name are
+/// atomically replaced, allowing plugins to checkpoint or update saved progress.
+/// Blocking file I/O runs on a worker thread via
+/// [`tauri::async_runtime::spawn_blocking`].
 #[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn write_file_to_folder(
@@ -1009,6 +1019,64 @@ mod tests {
         assert!(write_file_to_folder_core("folder-1", "con.txt", b"x", &downloads).is_err());
         assert!(write_file_to_folder_core("folder-1", "NUL.json", b"x", &downloads).is_err());
         assert!(write_file_to_folder_core("folder-1", "bad.", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "COM¹.txt", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "lpt³.log", b"x", &downloads).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_trailing_space_names() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-trailing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("report.json"), b"keep").unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "report.json ", b"x", &downloads).is_err());
+        assert_eq!(fs::read(dir.join("report.json")).unwrap(), b"keep");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_refuses_symlink_at_destination() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-symlink-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let folder = dir.join("folder");
+        fs::create_dir_all(&folder).unwrap();
+        let target = dir.join("target.json");
+        fs::write(&target, b"keep").unwrap();
+        std::os::unix::fs::symlink(&target, folder.join("link.json")).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), folder.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "link.json", b"x", &downloads).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"keep");
 
         let _ = fs::remove_dir_all(&dir);
     }

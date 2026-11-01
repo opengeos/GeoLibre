@@ -116,11 +116,6 @@ export async function normalizeBinaryData(
 ): Promise<number[]> {
   let bytes: Uint8Array;
   if (typeof data === "string") {
-    if (data.length > MAX_WRITE_FILE_BYTES) {
-      throw new RangeError(
-        `writeFileToFolder data exceeds the 50 MiB limit (received ${data.length} code units).`,
-      );
-    }
     bytes = new TextEncoder().encode(data);
   } else if (data instanceof Blob) {
     if (data.size > MAX_WRITE_FILE_BYTES) {
