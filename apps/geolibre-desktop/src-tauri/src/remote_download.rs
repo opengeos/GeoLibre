@@ -538,11 +538,18 @@ fn write_file_to_folder_in_dir(
     if !folder.is_dir() {
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
-    let sanitized = sanitize_file_name(file_name);
+    let base = file_name.rsplit(['/', '\\']).next().unwrap_or("").trim();
+    let sanitized = base.trim_start_matches('.');
     if sanitized.is_empty() {
         return Err("Refusing to write: file name cannot be empty.".to_string());
     }
-    let destination = folder.join(&sanitized);
+    if sanitized.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | '\0')) {
+        return Err("Refusing to write: invalid characters in file name.".to_string());
+    }
+    if sanitized.chars().count() > MAX_FILE_NAME_CHARS {
+        return Err("Refusing to write: file name exceeds maximum length.".to_string());
+    }
+    let destination = folder.join(sanitized);
     if destination.parent() != Some(folder) {
         return Err("Refusing to write: file name resolves outside the picked folder.".into());
     }
@@ -555,10 +562,9 @@ fn write_file_to_folder_in_dir(
 
     let mut temp_name = std::ffi::OsString::from(".geolibre-write-tmp-");
     temp_name.push(format!(
-        "{}-{}-{}",
+        "{}-{}",
         std::process::id(),
         WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed),
-        sanitized
     ));
     let temp = folder.join(temp_name);
 
@@ -830,12 +836,40 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(res.size, 26);
+        assert_eq!(res.size, 27);
         assert_eq!(res.path, dir.join("checkpoint.json").to_string_lossy());
         assert_eq!(
             fs::read(dir.join("checkpoint.json")).unwrap(),
             b"{\"v\":2,\"checkpoint\":\"done\"}"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_preserves_distinct_unicode_filenames() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-unicode-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        write_file_to_folder_core("folder-1", "春.geojson", b"spring", &downloads).unwrap();
+        write_file_to_folder_core("folder-1", "秋.geojson", b"autumn", &downloads).unwrap();
+
+        assert_eq!(fs::read(dir.join("春.geojson")).unwrap(), b"spring");
+        assert_eq!(fs::read(dir.join("秋.geojson")).unwrap(), b"autumn");
 
         let _ = fs::remove_dir_all(&dir);
     }
