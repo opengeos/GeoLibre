@@ -52,6 +52,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
+import type { FeatureCollection } from "geojson";
 import {
   createWmsTileUrl,
   normalizeWmsCrs,
@@ -827,6 +828,10 @@ export function createAppAPI(
       })().catch((error) => {
         console.error(`Could not export ${filename}.`, error);
       });
+    },
+    exportGeoParquetFile: async (filename: string, data: FeatureCollection) => {
+      const { exportVectorLayer } = await import("./vector-export");
+      return exportVectorLayer(data, "geoparquet", filename);
     },
     importTextFile: (options?: GeoLibreFileDialogOptions) => {
       const extensions = options?.extensions ?? ["json"];

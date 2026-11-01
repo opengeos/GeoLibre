@@ -184,8 +184,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   exportButton.type = "button";
   exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
   exportButton.disabled = true;
+  const exportParquetButton = element("button", CSS.button);
+  exportParquetButton.type = "button";
+  exportParquetButton.textContent = tr(app, "exportGeoParquet", "Save GeoParquet");
+  exportParquetButton.disabled = true;
+  exportParquetButton.hidden = !app.exportGeoParquetFile;
+  const exportButtons = [exportButton, exportParquetButton];
   const resultActions = element("div", CSS.actions);
-  resultActions.append(addButton, exportButton);
+  resultActions.append(addButton, ...exportButtons);
 
   const presetField = field(tr(app, "featureType", "Feature type"), preset);
   root.append(
@@ -223,11 +229,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const pending = controller !== null;
     previewButton.disabled = pending || !eligible;
     previewButton.style.cssText = !pending && eligible ? CSS.primary : CSS.disabled;
-    exportButton.disabled = pending || !eligible;
-    exportButton.style.cssText = !pending && eligible ? CSS.button : CSS.disabled;
+    for (const button of exportButtons) {
+      button.disabled = pending || !eligible;
+      button.style.cssText = !pending && eligible ? CSS.button : CSS.disabled;
+    }
     if (eligible) {
       previewButton.removeAttribute("title");
-      exportButton.removeAttribute("title");
+      for (const button of exportButtons) button.removeAttribute("title");
       if (announce) status.textContent = tr(app, "extentApplied", "Map extent applied.");
       return;
     }
@@ -238,7 +246,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
             limit,
           });
     previewButton.title = message;
-    exportButton.title = message;
+    for (const button of exportButtons) button.title = message;
     if (announce && !pending) status.textContent = message;
   };
 
@@ -307,6 +315,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     previewButton.textContent = tr(app, "preview", "Preview OSM data");
     addButton.textContent = tr(app, "addToMap", "Add to map");
     exportButton.textContent = tr(app, "exportGeoJson", "Save GeoJSON");
+    exportParquetButton.textContent = tr(app, "exportGeoParquet", "Save GeoParquet");
     updateActionAvailability(false);
   };
   refreshPanelLabels = refreshLabels;
@@ -384,7 +393,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         );
         addButton.disabled = false;
         addButton.style.cssText = CSS.primary;
-        exportButton.disabled = false;
+        for (const button of exportButtons) button.disabled = false;
       } else {
         status.textContent = tr(app, "noFeatures", "No matching features were found in this area.");
       }
@@ -429,26 +438,27 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     );
   };
 
-  exportButton.addEventListener("click", async () => {
-    if (result?.features.length && resultFilter) {
-      exportGeoJson(result, resultFilter);
-      return;
-    }
-
-    const bbox = readBounds();
-    const filter: OsmDownloadFilter = {
-      preset: preset.value as OsmDownloadPreset,
-      key: keyInput.value,
-      value: valueInput.value,
-    };
+  const exportCurrentData = async (format: "GeoJSON" | "GeoParquet") => {
+    if (controller) return;
     const requestController = new AbortController();
     controller = requestController;
     updateActionAvailability(false);
-    status.textContent = tr(app, "downloading", "Downloading from OpenStreetMap…");
+    const cached =
+      result?.features.length && resultFilter ? { data: result, filter: resultFilter } : null;
+    status.textContent = cached
+      ? tr(app, "preparingExport", "Preparing {{format}} export…", { format })
+      : tr(app, "downloading", "Downloading from OpenStreetMap…");
     try {
-      const data = await downloadOsmGeoJson(bbox, filter, {
-        signal: requestController.signal,
-      });
+      const filter: OsmDownloadFilter = cached?.filter ?? {
+        preset: preset.value as OsmDownloadPreset,
+        key: keyInput.value,
+        value: valueInput.value,
+      };
+      const data =
+        cached?.data ??
+        (await downloadOsmGeoJson(readBounds(), filter, {
+          signal: requestController.signal,
+        }));
       if (disposed || controller !== requestController) return;
       const count = data.features.length;
       if (!count) {
@@ -457,9 +467,16 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       }
       result = data;
       resultFilter = { ...filter };
-      exportGeoJson(data, filter);
-      status.textContent = tr(app, "exported", "Prepared {{count}} features for GeoJSON export.", {
+      if (format === "GeoJSON") {
+        exportGeoJson(data, filter);
+      } else {
+        const suffix = new Date().toISOString().slice(0, 10);
+        await app.exportGeoParquetFile?.(`osm-${filter.preset}-${suffix}`, data);
+      }
+      if (disposed || controller !== requestController) return;
+      status.textContent = tr(app, "exported", "Prepared {{count}} features for {{format}} export.", {
         count,
+        format,
       });
     } catch (error) {
       if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -473,7 +490,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         updateActionAvailability(false);
       }
     }
-  });
+  };
+
+  exportButton.addEventListener("click", () => void exportCurrentData("GeoJSON"));
+  exportParquetButton.addEventListener("click", () => void exportCurrentData("GeoParquet"));
 
   return () => {
     disposed = true;

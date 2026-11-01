@@ -519,6 +519,7 @@ describe("OSM downloader registration", () => {
     const added: Array<{ id: string; name: string; data: FeatureCollection }> = [];
     const removed: string[] = [];
     const exported: Array<{ name: string; contents: string }> = [];
+    const exportedParquet: Array<{ name: string; data: FeatureCollection }> = [];
     const app = {
       getMap: () => ({
         on: (event: string, handler: () => void) => {
@@ -543,6 +544,10 @@ describe("OSM downloader registration", () => {
       removeLayer: (id: string) => removed.push(id),
       exportTextFile: (name: string, contents: string) => {
         exported.push({ name, contents });
+      },
+      exportGeoParquetFile: (name: string, data: FeatureCollection) => {
+        exportedParquet.push({ name, data });
+        return Promise.resolve(`${name}.parquet`);
       },
     } as unknown as GeoLibreAppAPI;
 
@@ -584,9 +589,11 @@ describe("OSM downloader registration", () => {
       const preview = buttons.find((button) => button.textContent === "Preview OSM data");
       const add = buttons.find((button) => button.textContent === "Add to map");
       const save = buttons.find((button) => button.textContent === "Save GeoJSON");
+      const saveParquet = buttons.find((button) => button.textContent === "Save GeoParquet");
       assert.ok(preview);
       assert.ok(add);
       assert.ok(save);
+      assert.ok(saveParquet);
       assert.equal(save.disabled, false);
 
       save.dispatchEvent(new dom.window.Event("click"));
@@ -596,6 +603,13 @@ describe("OSM downloader registration", () => {
       assert.equal(added.length, 0);
       assert.equal(exported.length, 1);
       assert.equal(JSON.parse(exported[0].contents).features.length, 1);
+
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(fetchCount, 1);
+      assert.equal(exportedParquet.length, 1);
+      assert.match(exportedParquet[0].name, /^osm-buildings-\d{4}-\d{2}-\d{2}$/);
+      assert.equal(exportedParquet[0].data.features.length, 1);
 
       preview.dispatchEvent(new dom.window.Event("click"));
       await new Promise<void>((resolve) => setImmediate(resolve));

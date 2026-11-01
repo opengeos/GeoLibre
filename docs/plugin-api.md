@@ -258,6 +258,18 @@ export interface GeoLibreAppAPI {
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   // Presign private S3 objects through a configured connection (see "Reading S3 objects").
   resolveReadableUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
+  // Save plugin output through the host's browser or native file dialog.
+  exportTextFile?: (
+    filename: string,
+    content: string,
+    options?: GeoLibreFileDialogOptions
+  ) => void;
+  // Convert WGS84 GeoJSON to GeoParquet with the host's established writer.
+  // The filename is a base name without an extension.
+  exportGeoParquetFile?: (
+    filename: string,
+    data: FeatureCollection
+  ) => Promise<string | null>;
   // Desktop only: fetch through the native client (see "Signing in with a session cookie").
   nativeFetch?: typeof globalThis.fetch;
   fitBounds?: (bounds: [number, number, number, number]) => void;
