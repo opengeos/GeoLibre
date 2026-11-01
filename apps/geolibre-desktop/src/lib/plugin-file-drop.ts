@@ -252,12 +252,8 @@ export function reportFileHandlerDrop(
   setError: (error: string | null) => void,
   t: TFunction,
 ): boolean {
-  if (opened.length > 0) {
-    const name = opened.map((handler) => handler.name).join(", ");
-    setMessage(t("toolbar.fileDrop.openedByHandler", { name }));
-  }
   if (failed.length > 0) {
-    if (opened.length === 0) setMessage(null);
+    setMessage(null);
     setError(
       failed
         .map(({ handler, error }) =>
@@ -268,6 +264,11 @@ export function reportFileHandlerDrop(
         )
         .join(" "),
     );
+  }
+  // Last, since the production error setter dismisses the current status.
+  if (opened.length > 0) {
+    const name = opened.map((handler) => handler.name).join(", ");
+    setMessage(t("toolbar.fileDrop.openedByHandler", { name }));
   }
   return opened.length + failed.length > 0;
 }
@@ -349,20 +350,18 @@ function wantedByAnyHandler(handlers: GeoLibreFileHandler[]) {
  * event: `DataTransfer` items are emptied as soon as the handler first yields.
  *
  * @param dataTransfer - The drop event's data.
- * @returns The dropped folders' entries by name, in drop order (two folders can share a name).
+ * @returns For each entry of `dataTransfer.files`, by index, its folder entry,
+ *   or null for a plain file.
  */
 export function captureDroppedDirectories(
   dataTransfer: DataTransfer,
-): Map<string, FileSystemDirectoryEntry[]> {
-  const directories = new Map<string, FileSystemDirectoryEntry[]>();
-  for (const item of Array.from(dataTransfer.items)) {
-    const entry = item.kind === "file" ? item.webkitGetAsEntry?.() : null;
-    if (!entry?.isDirectory) continue;
-    const sameName = directories.get(entry.name) ?? [];
-    sameName.push(entry as FileSystemDirectoryEntry);
-    directories.set(entry.name, sameName);
-  }
-  return directories;
+): (FileSystemDirectoryEntry | null)[] {
+  return Array.from(dataTransfer.items)
+    .filter((item) => item.kind === "file")
+    .map((item) => {
+      const entry = item.webkitGetAsEntry?.();
+      return entry?.isDirectory ? (entry as FileSystemDirectoryEntry) : null;
+    });
 }
 
 /**
@@ -375,15 +374,15 @@ export function captureDroppedDirectories(
  */
 export async function offerBrowserDrop(
   files: File[],
-  directories: Map<string, FileSystemDirectoryEntry[]>,
+  directories: (FileSystemDirectoryEntry | null)[],
   handlers: GeoLibreFileHandler[],
 ): Promise<FileHandlerDropResult<File>> {
   if (handlers.length === 0) return { unclaimed: files, opened: [], failed: [] };
   const wanted = wantedByAnyHandler(handlers);
   const leaves: DropLeaf<File>[] = [];
   const budget: WalkBudget = { visited: 0 };
-  for (const file of files) {
-    const directory = directories.get(file.name)?.shift();
+  for (const [index, file] of files.entries()) {
+    const directory = directories[index];
     if (directory) {
       try {
         await walkBrowserDirectory(file, directory, file.name, 0, budget, wanted, leaves);
