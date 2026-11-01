@@ -10,6 +10,7 @@ import type { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";
 import type {
   GeoLibreRemoteDownloadOptions,
   GeoLibreRemoteDownloadResult,
+  GeoLibreWriteFileResult,
 } from "@geolibre/plugins";
 
 /** Progress the native command reports while it streams. */
@@ -100,5 +101,71 @@ export function createRemoteDownload(
     if (options.target !== "memory") return { path: result.path, size: result.size, data: null };
     const data = await invoke<ArrayBuffer>("take_cached_download", { requestId });
     return { path: null, size: result.size, data };
+  };
+}
+
+/** Maximum payload size supported by writeFileToFolder (50 MiB). */
+export const MAX_WRITE_FILE_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Normalize arbitrary file data (string, Blob, ArrayBuffer, ArrayBufferView) into
+ * a number array suitable for native command serialization.
+ */
+export async function normalizeBinaryData(
+  data: string | Uint8Array | ArrayBuffer | Blob,
+): Promise<number[]> {
+  let bytes: Uint8Array;
+  if (typeof data === "string") {
+    bytes = new TextEncoder().encode(data);
+  } else if (data instanceof Blob) {
+    if (data.size > MAX_WRITE_FILE_BYTES) {
+      throw new RangeError(
+        `writeFileToFolder data exceeds the 50 MiB limit (received ${data.size} bytes).`,
+      );
+    }
+    bytes = new Uint8Array(await data.arrayBuffer());
+  } else if (data instanceof ArrayBuffer) {
+    bytes = new Uint8Array(data);
+  } else if (ArrayBuffer.isView(data)) {
+    bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  } else {
+    throw new TypeError(
+      "Unsupported data type for writeFileToFolder; expected string, Blob, ArrayBuffer, or ArrayBufferView.",
+    );
+  }
+  if (bytes.byteLength > MAX_WRITE_FILE_BYTES) {
+    throw new RangeError(
+      `writeFileToFolder data exceeds the 50 MiB limit (received ${bytes.byteLength} bytes).`,
+    );
+  }
+  return Array.from(bytes);
+}
+
+/**
+ * Build the app API's `writeFileToFolder`.
+ *
+ * @param invoke - Tauri's `invoke`.
+ * @returns The write function.
+ */
+export function createWriteFileToFolder(
+  invoke: typeof nativeInvoke,
+): (
+  folderId: string,
+  fileName: string,
+  data: string | Uint8Array | ArrayBuffer | Blob,
+) => Promise<GeoLibreWriteFileResult> {
+  return async (folderId, fileName, data) => {
+    if (!folderId || typeof folderId !== "string") {
+      throw new TypeError("writeFileToFolder requires a valid folderId from pickDownloadFolder.");
+    }
+    if (!fileName || typeof fileName !== "string") {
+      throw new TypeError("writeFileToFolder requires a non-empty fileName.");
+    }
+    const bytes = await normalizeBinaryData(data);
+    return invoke<GeoLibreWriteFileResult>("write_file_to_folder", {
+      folderId,
+      fileName,
+      data: bytes,
+    });
   };
 }

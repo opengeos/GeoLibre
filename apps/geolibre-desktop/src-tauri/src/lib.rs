@@ -510,6 +510,7 @@ pub fn run() {
             remote_download::download_remote_file,
             remote_download::cancel_remote_download,
             remote_download::pick_download_folder,
+            remote_download::write_file_to_folder,
             remote_download::take_cached_download,
             aws_credentials::aws_list_profiles,
             aws_credentials::aws_resolve_credentials,

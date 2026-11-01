@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createRemoteDownload,
+  createWriteFileToFolder,
+  MAX_WRITE_FILE_BYTES,
+  normalizeBinaryData,
   type RemoteDownloadProgress,
 } from "../apps/geolibre-desktop/src/lib/remote-download";
 
@@ -118,5 +121,82 @@ describe("native remote download glue", () => {
     // The user then picks a path; the first progress message registers the download.
     host.progress({ received: 0, total: null });
     assert.equal(host.calls.filter((c) => c.cmd === "cancel_remote_download").length, 1);
+  });
+});
+
+describe("native write file to folder glue", () => {
+  it("normalizes strings, Blobs, ArrayBuffers, and Uint8Arrays", async () => {
+    assert.deepEqual(await normalizeBinaryData("hello"), [104, 101, 108, 108, 111]);
+    assert.deepEqual(await normalizeBinaryData(new Uint8Array([1, 2, 3])), [1, 2, 3]);
+    assert.deepEqual(await normalizeBinaryData(new Uint8Array([4, 5, 6]).buffer), [4, 5, 6]);
+    assert.deepEqual(await normalizeBinaryData(new Blob(["world"])), [119, 111, 114, 108, 100]);
+    await assert.rejects(
+      normalizeBinaryData(123 as unknown as string),
+      /Unsupported data type for writeFileToFolder/,
+    );
+  });
+
+  it("rejects data exceeding MAX_WRITE_FILE_BYTES", async () => {
+    const oversizedString = "a".repeat(MAX_WRITE_FILE_BYTES + 1);
+    await assert.rejects(
+      normalizeBinaryData(oversizedString),
+      /writeFileToFolder data exceeds the 50 MiB limit/,
+    );
+
+    const fakeBlob = { size: MAX_WRITE_FILE_BYTES + 1 } as Blob;
+    Object.setPrototypeOf(fakeBlob, Blob.prototype);
+    await assert.rejects(
+      normalizeBinaryData(fakeBlob),
+      /writeFileToFolder data exceeds the 50 MiB limit/,
+    );
+
+    const fakeBuffer = new ArrayBuffer(MAX_WRITE_FILE_BYTES + 1);
+    await assert.rejects(
+      normalizeBinaryData(fakeBuffer),
+      /writeFileToFolder data exceeds the 50 MiB limit/,
+    );
+  });
+
+  it("passes folderId, fileName, and data to write_file_to_folder command", async () => {
+    const calls: { cmd: string; args: Record<string, unknown> }[] = [];
+    const invoke = (async (cmd: string, args?: Record<string, unknown>) => {
+      calls.push({ cmd, args: args ?? {} });
+      if (cmd === "write_file_to_folder") {
+        return { path: "/picked/folder/test.geojson", size: 5 };
+      }
+      return undefined;
+    }) as Invoke;
+
+    const writer = createWriteFileToFolder(invoke);
+    const result = await writer("folder-1", "test.geojson", "hello");
+
+    assert.deepEqual(result, { path: "/picked/folder/test.geojson", size: 5 });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cmd, "write_file_to_folder");
+    assert.equal(calls[0].args.folderId, "folder-1");
+    assert.equal(calls[0].args.fileName, "test.geojson");
+    assert.deepEqual(calls[0].args.data, [104, 101, 108, 108, 111]);
+  });
+
+  it("rejects when folderId or fileName is missing or invalid", async () => {
+    const invoke = (async () => undefined) as Invoke;
+    const writer = createWriteFileToFolder(invoke);
+
+    await assert.rejects(
+      writer("", "test.geojson", "data"),
+      /writeFileToFolder requires a valid folderId/,
+    );
+    await assert.rejects(
+      writer(null as unknown as string, "test.geojson", "data"),
+      /writeFileToFolder requires a valid folderId/,
+    );
+    await assert.rejects(
+      writer("folder-1", "", "data"),
+      /writeFileToFolder requires a non-empty fileName/,
+    );
+    await assert.rejects(
+      writer("folder-1", null as unknown as string, "data"),
+      /writeFileToFolder requires a non-empty fileName/,
+    );
   });
 });

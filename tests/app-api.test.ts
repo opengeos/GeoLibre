@@ -90,6 +90,7 @@ const DESKTOP_ONLY_MEMBERS = new Set([
   "nativeFetch",
   "downloadRemoteFile",
   "pickDownloadFolder",
+  "writeFileToFolder",
   "pickVectorFilesWithSidecars",
 ]);
 /** Members that are objects rather than functions. */

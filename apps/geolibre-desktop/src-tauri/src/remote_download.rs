@@ -21,7 +21,10 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
     time::Duration,
 };
 
@@ -96,6 +99,14 @@ pub(crate) struct RemoteDownloadProgress {
 pub(crate) struct RemoteDownloadResult {
     /// Where a saved file landed; `None` for a cached download.
     path: Option<String>,
+    size: u64,
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WriteFileResult {
+    /// Where the written file landed.
+    path: String,
     size: u64,
 }
 
@@ -517,6 +528,213 @@ pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder
     Err("Choosing a download folder is not supported on this platform.".into())
 }
 
+fn encode_reserved_filename_chars(name: &str) -> String {
+    let mut encoded = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '<' => encoded.push_str("%3C"),
+            '>' => encoded.push_str("%3E"),
+            ':' => encoded.push_str("%3A"),
+            '"' => encoded.push_str("%22"),
+            '|' => encoded.push_str("%7C"),
+            '?' => encoded.push_str("%3F"),
+            '*' => encoded.push_str("%2A"),
+            '%' => encoded.push_str("%25"),
+            _ => encoded.push(c),
+        }
+    }
+    encoded
+}
+
+static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn write_file_to_folder_in_dir(
+    folder: &Path,
+    file_name: &str,
+    data: &[u8],
+) -> Result<WriteFileResult, String> {
+    if !folder.is_dir() {
+        return Err("The chosen folder does not exist or is no longer accessible.".to_string());
+    }
+    let raw = file_name.rsplit(['/', '\\']).next().unwrap_or("");
+    let stripped = raw.trim().trim_start_matches('.');
+    if stripped.is_empty() {
+        return Err("Refusing to write: file name cannot be empty.".to_string());
+    }
+    if stripped
+        .chars()
+        .any(|c| c.is_control() || matches!(c, '/' | '\\' | '\0'))
+    {
+        return Err("Refusing to write: invalid characters in file name.".to_string());
+    }
+    let stem = stripped.split('.').next().unwrap_or(stripped);
+    let is_reserved_device = matches!(
+        stem.to_ascii_uppercase().as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+            | "COM¹"
+            | "COM²"
+            | "COM³"
+            | "LPT¹"
+            | "LPT²"
+            | "LPT³"
+    );
+    // Trailing spaces are checked on the raw name: Windows drops them, so
+    // `report.json ` would otherwise land on an existing `report.json`.
+    if is_reserved_device || stripped.ends_with('.') || raw.ends_with(char::is_whitespace) {
+        return Err("Refusing to write: reserved or invalid file name on Windows.".to_string());
+    }
+    let sanitized = encode_reserved_filename_chars(stripped);
+    if sanitized.chars().count() > MAX_FILE_NAME_CHARS {
+        return Err("Refusing to write: file name exceeds maximum length.".to_string());
+    }
+    let destination = folder.join(&sanitized);
+    if destination.parent() != Some(folder) {
+        return Err("Refusing to write: file name resolves outside the picked folder.".into());
+    }
+    if let Ok(meta) = destination.symlink_metadata() {
+        if meta.file_type().is_symlink() {
+            return Err("Refusing to write: destination is a symlink.".into());
+        }
+    }
+    let size = data.len() as u64;
+
+    let mut temp = None;
+    let mut file = None;
+
+    for _ in 0..10 {
+        let mut rand_bytes = [0u8; 8];
+        let rand_suffix = if getrandom::fill(&mut rand_bytes).is_ok() {
+            rand_bytes
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        } else {
+            format!(
+                "{}-{}",
+                std::process::id(),
+                WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed)
+            )
+        };
+        let candidate = folder.join(format!(".geolibre-write-tmp-{rand_suffix}"));
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+
+        match options.open(&candidate) {
+            Ok(f) => {
+                temp = Some(candidate);
+                file = Some(f);
+                break;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(format!("Could not create temporary file in folder: {err}")),
+        }
+    }
+
+    let (temp_path, mut temp_file) = match (temp, file) {
+        (Some(p), Some(f)) => (p, f),
+        _ => return Err("Could not allocate a unique temporary file in the chosen folder.".into()),
+    };
+
+    let write_result = (|| -> Result<(), std::io::Error> {
+        temp_file.write_all(data)?;
+        temp_file.sync_all()?;
+        fs::rename(&temp_path, &destination)?;
+        Ok(())
+    })();
+
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Could not write file to folder: {error}"));
+    }
+
+    Ok(WriteFileResult {
+        path: destination.to_string_lossy().into_owned(),
+        size,
+    })
+}
+
+#[cfg(test)]
+fn write_file_to_folder_core(
+    folder_id: &str,
+    file_name: &str,
+    data: &[u8],
+    downloads: &RemoteDownloads,
+) -> Result<WriteFileResult, String> {
+    let folder = {
+        let folders = downloads.folders.lock().unwrap();
+        folders
+            .get(folder_id)
+            .cloned()
+            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+    };
+    write_file_to_folder_in_dir(&folder, file_name, data)
+}
+
+/// Write data directly into a folder picked earlier with [`pick_download_folder`].
+///
+/// Path separators are stripped from the file name, and the destination must sit
+/// directly inside the picked folder. A symlink already at the destination is
+/// refused rather than followed. Existing files with the same name are
+/// atomically replaced, allowing plugins to checkpoint or update saved progress.
+/// Blocking file I/O runs on a worker thread via
+/// [`tauri::async_runtime::spawn_blocking`].
+#[cfg(desktop)]
+#[tauri::command]
+pub(crate) async fn write_file_to_folder(
+    folder_id: String,
+    file_name: String,
+    data: Vec<u8>,
+    downloads: tauri::State<'_, RemoteDownloads>,
+) -> Result<WriteFileResult, String> {
+    let folder = {
+        let folders = downloads.folders.lock().unwrap();
+        folders
+            .get(&folder_id)
+            .cloned()
+            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        write_file_to_folder_in_dir(&folder, &file_name, &data)
+    })
+    .await
+    .map_err(|error| format!("Write task failed: {error}"))?
+}
+
+/// Mobile stand-in for [`write_file_to_folder`]: writing to a picked folder is
+/// desktop-only.
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) async fn write_file_to_folder(
+    _folder_id: String,
+    _file_name: String,
+    _data: Vec<u8>,
+) -> Result<WriteFileResult, String> {
+    Err("Writing files to a chosen folder is not supported on this platform.".into())
+}
+
 /// Abort an in-flight [`download_remote_file`].
 #[tauri::command]
 pub(crate) fn cancel_remote_download(
@@ -637,6 +855,269 @@ mod tests {
             done: true,
         });
         assert!(path.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn writes_file_into_picked_folder() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-write-folder-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "test.geojson",
+            b"{\"type\":\"FeatureCollection\"}",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 28);
+        assert_eq!(res.path, dir.join("test.geojson").to_string_lossy());
+        assert_eq!(
+            fs::read(dir.join("test.geojson")).unwrap(),
+            b"{\"type\":\"FeatureCollection\"}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_overwrites_existing_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-overwrite-folder-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("checkpoint.json"), b"{\"v\":1}").unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "checkpoint.json",
+            b"{\"v\":2,\"checkpoint\":\"done\"}",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 27);
+        assert_eq!(res.path, dir.join("checkpoint.json").to_string_lossy());
+        assert_eq!(
+            fs::read(dir.join("checkpoint.json")).unwrap(),
+            b"{\"v\":2,\"checkpoint\":\"done\"}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_preserves_distinct_unicode_filenames() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-unicode-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        write_file_to_folder_core("folder-1", "春.geojson", b"spring", &downloads).unwrap();
+        write_file_to_folder_core("folder-1", "秋.geojson", b"autumn", &downloads).unwrap();
+
+        assert_eq!(fs::read(dir.join("春.geojson")).unwrap(), b"spring");
+        assert_eq!(fs::read(dir.join("秋.geojson")).unwrap(), b"autumn");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_encodes_reserved_filename_characters() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-reserved-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "checkpoint:12.json",
+            b"content",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 7);
+        assert!(res.path.ends_with("checkpoint%3A12.json"));
+        assert_eq!(
+            fs::read(dir.join("checkpoint%3A12.json")).unwrap(),
+            b"content"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_windows_reserved_device_names() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-device-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "con.txt", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "NUL.json", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "bad.", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "COM¹.txt", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "lpt³.log", b"x", &downloads).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_trailing_space_names() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-trailing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("report.json"), b"keep").unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "report.json ", b"x", &downloads).is_err());
+        assert_eq!(fs::read(dir.join("report.json")).unwrap(), b"keep");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_refuses_symlink_at_destination() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-symlink-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let folder = dir.join("folder");
+        fs::create_dir_all(&folder).unwrap();
+        let target = dir.join("target.json");
+        fs::write(&target, b"keep").unwrap();
+        std::os::unix::fs::symlink(&target, folder.join("link.json")).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), folder.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "link.json", b"x", &downloads).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"keep");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_unknown_folder() {
+        let downloads = RemoteDownloads::default();
+        let err = write_file_to_folder_core("folder-missing", "a.txt", b"data", &downloads)
+            .unwrap_err();
+        assert!(err.contains("Unknown download folder id"));
+    }
+
+    #[test]
+    fn write_file_sanitizes_filename_and_prevents_escape() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-escape-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "../../nested/escape.txt",
+            b"safe",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.path, dir.join("escape.txt").to_string_lossy());
+        assert_eq!(fs::read(dir.join("escape.txt")).unwrap(), b"safe");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
