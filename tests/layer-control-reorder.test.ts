@@ -84,6 +84,11 @@ interface MountedControlWithReorder {
   onAdd: (map: unknown) => HTMLElement;
   onRemove?: (map: unknown) => void;
   onLayerReorder?: (ids: string[]) => void;
+  state?: {
+    collapsed?: boolean;
+    layerStates?: Record<string, { visible: boolean; opacity: number; name: string }>;
+  };
+  buildLayerItems?: () => void;
 }
 
 describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)", () => {
@@ -96,6 +101,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
     globals.document = window.document;
     globals.window = window;
 
+    let host: LayerControlHost | null = null;
     try {
       const container = window.document.getElementById("map")!;
       // Three GeoJSON layers: layer-1, layer-2, layer-3 (bottom-to-top in store).
@@ -142,7 +148,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         getBasemapState: () => ({ visible: true, opacity: 1 }),
       };
 
-      const host = new LayerControlHost(adapter);
+      host = new LayerControlHost(adapter);
       assert.equal(host.add("top-right"), true);
       assert.ok(controlInstance);
       const mounted = controlInstance as MountedControlWithReorder;
@@ -154,7 +160,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         .reverse();
       assert.deepEqual(initialPanelOrder, ["layer-3", "layer-2", "layer-1"]);
 
-      // Simulate dragging layer-2 above layer-3: next panel order is ["layer-2", "layer-3", "layer-1"]
+      // Next panel order is ["layer-2", "layer-3", "layer-1"] (moving layer-2 above layer-3 / layer-3 below layer-2)
       mounted.onLayerReorder?.(["layer-2", "layer-3", "layer-1"]);
 
       const updatedPanelOrder = useAppStore
@@ -167,7 +173,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         ["layer-1", "layer-3", "layer-2"],
       );
 
-      // Simulate dragging layer-1 to top: next panel order is ["layer-1", "layer-2", "layer-3"]
+      // Next panel order is ["layer-1", "layer-2", "layer-3"] (moving layer-1 to top)
       mounted.onLayerReorder?.(["layer-1", "layer-2", "layer-3"]);
 
       const finalPanelOrder = useAppStore
@@ -179,9 +185,8 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         useAppStore.getState().layers.map((l) => l.id),
         ["layer-3", "layer-2", "layer-1"],
       );
-
-      host.destroy();
     } finally {
+      host?.destroy();
       globals.document = previous.document;
       globals.window = previous.window;
     }
@@ -196,6 +201,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
     globals.document = window.document;
     globals.window = window;
 
+    let host: LayerControlHost | null = null;
     try {
       const container = window.document.getElementById("map")!;
       // g1 and g2 in group "grp"; u is ungrouped.
@@ -241,7 +247,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         getBasemapState: () => ({ visible: true, opacity: 1 }),
       };
 
-      const host = new LayerControlHost(adapter);
+      host = new LayerControlHost(adapter);
       assert.equal(host.add("top-right"), true);
       assert.ok(controlInstance);
       const mounted = controlInstance as MountedControlWithReorder;
@@ -252,6 +258,24 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         .layers.map((l) => l.id)
         .reverse();
       assert.deepEqual(currentOrder, ["g2", "g1", "u"]);
+
+      // Set up the control's internal layerStates reflecting the rejected reorder attempt
+      // (as would occur during a drag or context-menu reorder before validation).
+      let buildLayerItemsCalled = false;
+      mounted.state = {
+        ...mounted.state,
+        layerStates: {
+          Background: { visible: true, opacity: 1, name: "Background" },
+          g2: { visible: true, opacity: 1, name: "G2" },
+          u: { visible: true, opacity: 1, name: "U" },
+          g1: { visible: true, opacity: 1, name: "G1" },
+        },
+      };
+      const originalBuildLayerItems = mounted.buildLayerItems?.bind(mounted);
+      mounted.buildLayerItems = () => {
+        buildLayerItemsCalled = true;
+        originalBuildLayerItems?.();
+      };
 
       // Attempt to split the group by inserting u between g2 and g1: ["g2", "u", "g1"]
       mounted.onLayerReorder?.(["g2", "u", "g1"]);
@@ -265,8 +289,16 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         ["g2", "g1", "u"],
       );
 
-      host.destroy();
+      // Control state order must be restored to previous panel order (Background first)
+      assert.deepEqual(Object.keys(mounted.state?.layerStates ?? {}), [
+        "Background",
+        "g2",
+        "g1",
+        "u",
+      ]);
+      assert.equal(buildLayerItemsCalled, true);
     } finally {
+      host?.destroy();
       globals.document = previous.document;
       globals.window = previous.window;
     }
