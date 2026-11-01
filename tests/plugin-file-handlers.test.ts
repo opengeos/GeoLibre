@@ -380,6 +380,14 @@ describe("offerDropToFileHandlers", () => {
     );
   });
 
+  it("treats a malformed claim result as not mine", async () => {
+    const leaves = [leaf("a.fit")];
+    const result = await offerDropToFileHandlers(leaves, origins(leaves), [
+      handler({ extensions: [".fit"], claim: () => [null as never] }),
+    ]);
+    assert.deepEqual(result.unclaimed, ["a.fit"]);
+  });
+
   it("reports a throwing open and keeps its files claimed", async () => {
     const leaves = [leaf("a.fit")];
     const result = await offerDropToFileHandlers(leaves, origins(leaves), [
@@ -521,6 +529,30 @@ describe("offerBrowserDrop", () => {
       [handler({ extensions: [".xml"] })],
     );
     assert.deepEqual(result.unclaimed, [plain]);
+  });
+
+  it("keeps walking a folder past an unreadable entry", async () => {
+    const paths: Array<string | undefined> = [];
+    const broken = {
+      name: "broken.xml",
+      isDirectory: false,
+      isFile: true,
+      file: (_: unknown, reject: (error: Error) => void) => reject(new Error("denied")),
+    } as unknown as FileSystemEntry;
+    const folder = fakeDirectory("TASKDATA", [broken, fakeFileEntry(new File(["x"], "a.xml"))]);
+    await offerBrowserDrop(
+      [new File([], "TASKDATA")],
+      [folder],
+      [
+        handler({
+          extensions: [".xml"],
+          open: (files) => {
+            paths.push(...files.map((f) => f.path));
+          },
+        }),
+      ],
+    );
+    assert.deepEqual(paths, ["TASKDATA/a.xml"]);
   });
 
   it("walks both of two folders that share a name", async () => {

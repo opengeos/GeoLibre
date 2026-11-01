@@ -164,13 +164,22 @@ function takenLeaves<T>(
   claimed: GeoLibreDroppedFileInfo[],
 ): DropLeaf<T>[] {
   const returned = new Set(claimed);
-  const taken = new Set(offered.filter((leaf) => returned.has(files.get(leaf)!)));
-  const given = new Set<GeoLibreDroppedFileInfo>(offered.map((leaf) => files.get(leaf)!));
+  const taken = new Set<DropLeaf<T>>();
+  const unmatchedByKey = new Map<string, DropLeaf<T>[]>();
+  const given = new Set<GeoLibreDroppedFileInfo>();
+  for (const leaf of offered) {
+    const file = files.get(leaf)!;
+    given.add(file);
+    if (returned.has(file)) {
+      taken.add(leaf);
+    } else {
+      const key = fileKey(file);
+      unmatchedByKey.set(key, [...(unmatchedByKey.get(key) ?? []), leaf]);
+    }
+  }
   for (const copy of claimed) {
     if (given.has(copy)) continue;
-    const match = offered.find(
-      (leaf) => !taken.has(leaf) && fileKey(files.get(leaf)!) === fileKey(copy),
-    );
+    const match = unmatchedByKey.get(fileKey(copy))?.shift();
     if (match) taken.add(match);
   }
   return offered.filter((leaf) => taken.has(leaf));
@@ -221,15 +230,14 @@ export async function offerDropToFileHandlers<T>(
       files.set(leaf, file);
     }
 
-    let claimed: GeoLibreDroppedFileInfo[];
+    let taken: DropLeaf<T>[];
     try {
       const result = await handler.claim(offered.map((leaf) => files.get(leaf)!));
-      claimed = Array.isArray(result) ? result : [];
+      taken = takenLeaves(offered, files, Array.isArray(result) ? result : []);
     } catch (error) {
       console.warn(`[GeoLibre] File handler "${handler.id}" failed to claim a drop.`, error);
       continue;
     }
-    const taken = takenLeaves(offered, files, claimed);
     if (taken.length === 0) continue;
 
     for (const leaf of taken) {
@@ -346,10 +354,11 @@ async function walkBrowserDirectory(
         leaves,
       );
     } else if (wanted(entry.name)) {
+      // One unreadable entry must not cost the handler the rest of the folder.
       const file = await new Promise<File>((resolve, reject) =>
         (entry as FileSystemFileEntry).file(resolve, reject),
-      );
-      leaves.push(fileLeaf(origin, file, path));
+      ).catch(() => null);
+      if (file) leaves.push(fileLeaf(origin, file, path));
     }
   }
 }
@@ -464,8 +473,9 @@ async function walkLocalDirectory(
     if (entry.isDirectory) {
       await walkLocalDirectory(origin, entry.path, path, depth + 1, budget, wanted, leaves);
     } else if (wanted(entry.name)) {
-      const { size } = await stat(entry.path);
-      leaves.push(pathLeaf(origin, entry.path, size, path));
+      // One unreadable entry must not cost the handler the rest of the folder.
+      const info = await stat(entry.path).catch(() => null);
+      if (info) leaves.push(pathLeaf(origin, entry.path, info.size, path));
     }
   }
 }
