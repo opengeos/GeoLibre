@@ -92,7 +92,7 @@ interface MountedControlWithReorder {
 }
 
 describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)", () => {
-  it("applies drag reorder of three GeoJSON layers into the store", () => {
+  it("applies a panel reorder of three GeoJSON layers into the store", () => {
     const { window } = parseHTML(
       '<div id="map"><div class="maplibregl-ctrl-top-right"></div></div>',
     );
@@ -160,7 +160,7 @@ describe("LayerControlHost reorder integration with three GeoJSON layers (#3297)
         .reverse();
       assert.deepEqual(initialPanelOrder, ["layer-3", "layer-2", "layer-1"]);
 
-      // Next panel order is ["layer-2", "layer-3", "layer-1"] (moving layer-2 above layer-3 / layer-3 below layer-2)
+      // Next panel order swaps the top two rows: ["layer-2", "layer-3", "layer-1"]
       mounted.onLayerReorder?.(["layer-2", "layer-3", "layer-1"]);
 
       const updatedPanelOrder = useAppStore
