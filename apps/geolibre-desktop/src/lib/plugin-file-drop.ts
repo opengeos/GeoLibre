@@ -154,6 +154,29 @@ function fileKey(file: GeoLibreDroppedFileInfo): string {
 }
 
 /**
+ * The offered files a `claim` result names. The objects `claim` was given match
+ * exactly. A copy matches by key, one file per copy, since two dropped files can
+ * share a key and returning one of them must not claim the other.
+ */
+function takenLeaves<T>(
+  offered: DropLeaf<T>[],
+  files: Map<DropLeaf<T>, GeoLibreDroppedFile>,
+  claimed: GeoLibreDroppedFileInfo[],
+): DropLeaf<T>[] {
+  const returned = new Set(claimed);
+  const taken = new Set(offered.filter((leaf) => returned.has(files.get(leaf)!)));
+  const given = new Set<GeoLibreDroppedFileInfo>(offered.map((leaf) => files.get(leaf)!));
+  for (const copy of claimed) {
+    if (given.has(copy)) continue;
+    const match = offered.find(
+      (leaf) => !taken.has(leaf) && fileKey(files.get(leaf)!) === fileKey(copy),
+    );
+    if (match) taken.add(match);
+  }
+  return offered.filter((leaf) => taken.has(leaf));
+}
+
+/**
  * Run a drop past the handlers. Each handler, in registration order, gets the
  * still-unclaimed files matching its extensions and claims what it recognizes.
  *
@@ -189,32 +212,24 @@ export async function offerDropToFileHandlers<T>(
       if (files.has(leaf)) continue;
       const file = toDroppedFile(leaf);
       if (leaf.name.toLowerCase().endsWith(".zip")) {
-        const entries = await listZipEntryPaths(leaf.size, leaf.readRange).catch(() => undefined);
+        const entries = await listZipEntryPaths(leaf.size, leaf.readRange).catch((error) => {
+          console.debug(`[GeoLibre] Could not list the entries of "${leaf.name}".`, error);
+          return undefined;
+        });
         if (entries) file.entries = entries;
       }
       files.set(leaf, file);
     }
 
-    // Counted, not a set: top-level files have no path, so two dropped files can
-    // share a key, and returning one of them must not claim the other.
-    const claimedKeys = new Map<string, number>();
+    let claimed: GeoLibreDroppedFileInfo[];
     try {
-      const claimed = await handler.claim(offered.map((leaf) => files.get(leaf)!));
-      for (const file of Array.isArray(claimed) ? claimed : []) {
-        const key = fileKey(file);
-        claimedKeys.set(key, (claimedKeys.get(key) ?? 0) + 1);
-      }
+      const result = await handler.claim(offered.map((leaf) => files.get(leaf)!));
+      claimed = Array.isArray(result) ? result : [];
     } catch (error) {
       console.warn(`[GeoLibre] File handler "${handler.id}" failed to claim a drop.`, error);
       continue;
     }
-    const taken = offered.filter((leaf) => {
-      const key = fileKey(files.get(leaf)!);
-      const count = claimedKeys.get(key) ?? 0;
-      if (count === 0) return false;
-      claimedKeys.set(key, count - 1);
-      return true;
-    });
+    const taken = takenLeaves(offered, files, claimed);
     if (taken.length === 0) continue;
 
     for (const leaf of taken) {

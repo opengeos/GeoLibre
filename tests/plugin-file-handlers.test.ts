@@ -343,6 +343,24 @@ describe("offerDropToFileHandlers", () => {
     assert.deepEqual(result.unclaimed, ["other/same.fit"]);
   });
 
+  it("opens the exact file returned when two share a name", async () => {
+    const opened: number[] = [];
+    const leaves = [
+      leaf("same.zip", shapefileZip),
+      { ...leaf("same.zip", taskDataZip), origin: "other/same.zip" },
+    ];
+    const result = await offerDropToFileHandlers(leaves, origins(leaves), [
+      handler({
+        claim: isTaskData,
+        open: (files) => {
+          opened.push(...files.map((f) => f.size));
+        },
+      }),
+    ]);
+    assert.deepEqual(opened, [taskDataZip.byteLength]);
+    assert.deepEqual(result.unclaimed, ["same.zip"]);
+  });
+
   it("treats a throwing claim as not mine and still tries later handlers", async () => {
     const leaves = [leaf("a.fit")];
     const result = await offerDropToFileHandlers(leaves, origins(leaves), [
