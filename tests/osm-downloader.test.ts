@@ -320,6 +320,17 @@ describe("OSM map API fallback conversion", () => {
     assert.equal(result.features[0].id, "way/10");
     assert.equal(result.features[0].geometry.type, "Polygon");
   });
+
+  it("does not match inherited Object prototype keys as custom tags", () => {
+    const result = osmApiJsonToGeoJson(
+      {
+        elements: [{ type: "node", id: 1, lon: 1, lat: 2, tags: { building: "yes" } }],
+      },
+      { preset: "custom", key: "constructor" },
+    );
+
+    assert.equal(result.features.length, 0);
+  });
 });
 
 describe("downloadOsmGeoJson", () => {

@@ -149,7 +149,9 @@ function matchesOsmDownloadFilter(
   if (filter.preset === "custom") {
     const key = filter.key?.trim() ?? "";
     const value = filter.value?.trim() ?? "";
-    return Boolean(key && key in tags && (!value || tags[key] === value));
+    return Boolean(
+      key && Object.prototype.hasOwnProperty.call(tags, key) && (!value || tags[key] === value),
+    );
   }
   return PRESET_TAG_KEYS[filter.preset] in tags;
 }
