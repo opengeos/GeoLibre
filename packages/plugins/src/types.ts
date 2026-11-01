@@ -1098,11 +1098,12 @@ export interface GeoLibreAppAPI {
    * {@link pickDownloadFolder}.
    *
    * The file name is sanitized by the host and cannot leave the picked
-   * folder. Desktop only.
+   * folder. If a file with the given name already exists, it is atomically
+   * replaced (supporting checkpointing and incremental updates). Desktop only.
    *
    * @param folderId - The opaque id from {@link pickDownloadFolder}.
    * @param fileName - File name to write inside the folder.
-   * @param data - The file content: a string, Uint8Array, ArrayBuffer, or Blob.
+   * @param data - The file content: a string, Uint8Array, ArrayBuffer, or Blob (up to 50 MiB).
    * @returns The written file's path and size.
    */
   writeFileToFolder?: (

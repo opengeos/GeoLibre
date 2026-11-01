@@ -137,18 +137,23 @@ describe("native write file to folder glue", () => {
   });
 
   it("rejects data exceeding MAX_WRITE_FILE_BYTES", async () => {
+    const oversizedString = "a".repeat(MAX_WRITE_FILE_BYTES + 1);
+    await assert.rejects(
+      normalizeBinaryData(oversizedString),
+      /writeFileToFolder data exceeds the 50 MiB limit/,
+    );
+
     const fakeBlob = { size: MAX_WRITE_FILE_BYTES + 1 } as Blob;
     Object.setPrototypeOf(fakeBlob, Blob.prototype);
     await assert.rejects(
       normalizeBinaryData(fakeBlob),
-      /writeFileToFolder data exceeds the 50 MB limit/,
+      /writeFileToFolder data exceeds the 50 MiB limit/,
     );
 
-    const fakeBuffer = new ArrayBuffer(0);
-    Object.defineProperty(fakeBuffer, "byteLength", { value: MAX_WRITE_FILE_BYTES + 1 });
+    const fakeBuffer = new ArrayBuffer(MAX_WRITE_FILE_BYTES + 1);
     await assert.rejects(
       normalizeBinaryData(fakeBuffer),
-      /writeFileToFolder data exceeds the 50 MB limit/,
+      /writeFileToFolder data exceeds the 50 MiB limit/,
     );
   });
 

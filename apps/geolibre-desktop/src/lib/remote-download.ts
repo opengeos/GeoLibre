@@ -104,7 +104,7 @@ export function createRemoteDownload(
   };
 }
 
-/** Maximum payload size supported by writeFileToFolder (50 MB). */
+/** Maximum payload size supported by writeFileToFolder (50 MiB). */
 export const MAX_WRITE_FILE_BYTES = 50 * 1024 * 1024;
 
 /**
@@ -116,27 +116,22 @@ export async function normalizeBinaryData(
 ): Promise<number[]> {
   let bytes: Uint8Array;
   if (typeof data === "string") {
+    if (data.length > MAX_WRITE_FILE_BYTES) {
+      throw new RangeError(
+        `writeFileToFolder data exceeds the 50 MiB limit (received ${data.length} code units).`,
+      );
+    }
     bytes = new TextEncoder().encode(data);
   } else if (data instanceof Blob) {
     if (data.size > MAX_WRITE_FILE_BYTES) {
       throw new RangeError(
-        `writeFileToFolder data exceeds the 50 MB limit (received ${data.size} bytes).`,
+        `writeFileToFolder data exceeds the 50 MiB limit (received ${data.size} bytes).`,
       );
     }
     bytes = new Uint8Array(await data.arrayBuffer());
   } else if (data instanceof ArrayBuffer) {
-    if (data.byteLength > MAX_WRITE_FILE_BYTES) {
-      throw new RangeError(
-        `writeFileToFolder data exceeds the 50 MB limit (received ${data.byteLength} bytes).`,
-      );
-    }
     bytes = new Uint8Array(data);
   } else if (ArrayBuffer.isView(data)) {
-    if (data.byteLength > MAX_WRITE_FILE_BYTES) {
-      throw new RangeError(
-        `writeFileToFolder data exceeds the 50 MB limit (received ${data.byteLength} bytes).`,
-      );
-    }
     bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   } else {
     throw new TypeError(
@@ -145,7 +140,7 @@ export async function normalizeBinaryData(
   }
   if (bytes.byteLength > MAX_WRITE_FILE_BYTES) {
     throw new RangeError(
-      `writeFileToFolder data exceeds the 50 MB limit (received ${bytes.byteLength} bytes).`,
+      `writeFileToFolder data exceeds the 50 MiB limit (received ${bytes.byteLength} bytes).`,
     );
   }
   return Array.from(bytes);

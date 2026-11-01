@@ -530,25 +530,20 @@ pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder
 
 static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn write_file_to_folder_core(
-    folder_id: &str,
+fn write_file_to_folder_in_dir(
+    folder: &Path,
     file_name: &str,
     data: &[u8],
-    downloads: &RemoteDownloads,
 ) -> Result<WriteFileResult, String> {
-    let folder = {
-        let folders = downloads.folders.lock().unwrap();
-        folders
-            .get(folder_id)
-            .cloned()
-            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
-    };
     if !folder.is_dir() {
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
     let sanitized = sanitize_file_name(file_name);
+    if sanitized.is_empty() {
+        return Err("Refusing to write: file name cannot be empty.".to_string());
+    }
     let destination = folder.join(&sanitized);
-    if destination.parent() != Some(&folder) {
+    if destination.parent() != Some(folder) {
         return Err("Refusing to write: file name resolves outside the picked folder.".into());
     }
     if let Ok(meta) = destination.symlink_metadata() {
@@ -578,17 +573,7 @@ fn write_file_to_folder_core(
             file.write_all(data)?;
             file.sync_all()
         })
-        .and_then(|()| {
-            if let Ok(meta) = destination.symlink_metadata() {
-                if meta.file_type().is_symlink() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::PermissionDenied,
-                        "destination is a symlink",
-                    ));
-                }
-            }
-            fs::rename(&temp, &destination)
-        });
+        .and_then(|()| fs::rename(&temp, &destination));
 
     if let Err(error) = write_result {
         let _ = fs::remove_file(&temp);
@@ -601,10 +586,29 @@ fn write_file_to_folder_core(
     })
 }
 
+#[cfg(test)]
+fn write_file_to_folder_core(
+    folder_id: &str,
+    file_name: &str,
+    data: &[u8],
+    downloads: &RemoteDownloads,
+) -> Result<WriteFileResult, String> {
+    let folder = {
+        let folders = downloads.folders.lock().unwrap();
+        folders
+            .get(folder_id)
+            .cloned()
+            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+    };
+    write_file_to_folder_in_dir(&folder, file_name, data)
+}
+
 /// Write data directly into a folder picked earlier with [`pick_download_folder`].
 ///
-/// The file name is sanitized before writing, cannot escape the picked folder,
-/// and writes directly to disk.
+/// The file name is sanitized before writing and cannot leave the picked folder.
+/// Existing files with the same name are atomically replaced, allowing plugins
+/// to checkpoint or update saved progress. Blocking file I/O runs on a worker
+/// thread via [`tauri::async_runtime::spawn_blocking`].
 #[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn write_file_to_folder(
@@ -613,7 +617,18 @@ pub(crate) async fn write_file_to_folder(
     data: Vec<u8>,
     downloads: tauri::State<'_, RemoteDownloads>,
 ) -> Result<WriteFileResult, String> {
-    write_file_to_folder_core(&folder_id, &file_name, &data, &downloads)
+    let folder = {
+        let folders = downloads.folders.lock().unwrap();
+        folders
+            .get(&folder_id)
+            .cloned()
+            .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        write_file_to_folder_in_dir(&folder, &file_name, &data)
+    })
+    .await
+    .map_err(|error| format!("Write task failed: {error}"))?
 }
 
 /// Mobile stand-in for [`write_file_to_folder`]: writing to a picked folder is
@@ -782,6 +797,44 @@ mod tests {
         assert_eq!(
             fs::read(dir.join("test.geojson")).unwrap(),
             b"{\"type\":\"FeatureCollection\"}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_overwrites_existing_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-overwrite-folder-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("checkpoint.json"), b"{\"v\":1}").unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "checkpoint.json",
+            b"{\"v\":2,\"checkpoint\":\"done\"}",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 26);
+        assert_eq!(res.path, dir.join("checkpoint.json").to_string_lossy());
+        assert_eq!(
+            fs::read(dir.join("checkpoint.json")).unwrap(),
+            b"{\"v\":2,\"checkpoint\":\"done\"}"
         );
 
         let _ = fs::remove_dir_all(&dir);
