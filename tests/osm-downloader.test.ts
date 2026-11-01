@@ -699,6 +699,14 @@ describe("OSM downloader registration", () => {
       assert.match(exported[1].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
       assert.equal(JSON.parse(exported[1].contents).features.length, 1);
       assert.equal(fetchCount, 3);
+
+      // Panning to a different extent must not export the preview from the old area.
+      viewBounds = [-9.3, 38.8, -9.29, 38.81];
+      moveEnd();
+      save.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(fetchCount, 4);
+      assert.equal(exported.length, 3);
     } finally {
       maplibreOsmDownloaderPlugin.deactivate(app);
       Object.assign(globalThis, previous);

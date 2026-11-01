@@ -209,6 +209,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   let controller: AbortController | null = null;
   let result: FeatureCollection | null = null;
   let resultFilter: OsmDownloadFilter | null = null;
+  let resultBounds: [number, number, number, number] | null = null;
   let previewLayerId: string | null = null;
   let disposed = false;
 
@@ -257,6 +258,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     previewLayerId = null;
     result = null;
     resultFilter = null;
+    resultBounds = null;
     addButton.disabled = true;
     addButton.style.cssText = CSS.disabled;
     updateActionAvailability(false);
@@ -376,6 +378,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       });
       if (disposed || controller !== requestController) return;
       resultFilter = { ...filter };
+      resultBounds = bbox;
       const count = result.features.length;
       if (count) {
         const name = resultName(app, filter);
@@ -443,8 +446,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const requestController = new AbortController();
     controller = requestController;
     updateActionAvailability(false);
+    // A preview survives panning, so only reuse it while its extent still matches the inputs.
+    const bbox = readBounds();
     const cached =
-      result?.features.length && resultFilter ? { data: result, filter: resultFilter } : null;
+      result?.features.length &&
+      resultFilter &&
+      resultBounds?.every((value, index) => value === bbox[index])
+        ? { data: result, filter: resultFilter }
+        : null;
     status.textContent = cached
       ? tr(app, "preparingExport", "Preparing {{format}} export…", { format })
       : tr(app, "downloading", "Downloading from OpenStreetMap…");
@@ -457,7 +466,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       };
       const data =
         cached?.data ??
-        (await downloadOsmGeoJson(readBounds(), filter, {
+        (await downloadOsmGeoJson(bbox, filter, {
           signal: requestController.signal,
         }));
       if (disposed || controller !== requestController) return;

@@ -257,6 +257,16 @@ export async function downloadOsmGeoJson(
       signal: requestController.signal,
     });
     if (!response.ok) {
+      // Read the failed body before any fallback so its connection is released on every path.
+      let detail = "";
+      try {
+        detail = (await response.text())
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      } catch {
+        // The status is still useful when a proxy supplies no readable body.
+      }
       if (
         options.endpoint === undefined &&
         [429, 502, 503, 504].includes(response.status) &&
@@ -278,15 +288,6 @@ export async function downloadOsmGeoJson(
           // Preserve the original Overpass response unless the caller cancelled or timed out.
           if (requestController.signal.aborted) throw fallbackError;
         }
-      }
-      let detail = "";
-      try {
-        detail = (await response.text())
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
-      } catch {
-        // The status is still useful when a proxy supplies no readable body.
       }
       throw new Error(`Overpass request failed (${response.status})${detail ? `: ${detail}` : ""}`);
     }
