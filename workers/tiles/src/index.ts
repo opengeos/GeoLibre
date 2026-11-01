@@ -49,6 +49,7 @@ import {
   OPEN_SKY_STATES_UPSTREAM,
   OVERPASS_API_UPSTREAM,
   OVERPASS_API_FALLBACK_UPSTREAM,
+  OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
   ONTARIO_CCTV_CATALOG_UPSTREAM,
   ONTARIO_CCTV_FRAME_UPSTREAM,
   TRANSIT_UPSTREAMS,
@@ -650,10 +651,18 @@ async function handleOverpass(request: Request): Promise<Response> {
   let originResponse: Response | null = null;
   let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
   const upstreamDeadline = Date.now() + OVERPASS_UPSTREAM_TIMEOUT_MS;
-  for (const upstream of [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM]) {
+  const upstreams = [
+    OVERPASS_API_UPSTREAM,
+    OVERPASS_API_FALLBACK_UPSTREAM,
+    OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
+  ];
+  for (const upstream of upstreams) {
     const remainingMs = upstreamDeadline - Date.now();
     if (remainingMs <= 0) break;
     const upstreamController = new AbortController();
+    // A valid Overpass query may run for the full 60-second query timeout. Give
+    // the current upstream the remaining relay budget; quick 429/5xx responses
+    // still leave almost all of that budget for the next fixed instance.
     upstreamTimeout = setTimeout(() => upstreamController.abort(), remainingMs);
     try {
       originResponse = await fetchAllowlistedUpstream(upstream, {
@@ -669,9 +678,14 @@ async function handleOverpass(request: Request): Promise<Response> {
     } catch {
       clearTimeout(upstreamTimeout);
       upstreamTimeout = null;
+      continue;
+    }
+    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) {
+      clearTimeout(upstreamTimeout);
+      const bodyTimeoutMs = Math.max(1, upstreamDeadline - Date.now());
+      upstreamTimeout = setTimeout(() => upstreamController.abort(), bodyTimeoutMs);
       break;
     }
-    if (originResponse && originResponse.status !== 429 && originResponse.status < 500) break;
     clearTimeout(upstreamTimeout);
     upstreamTimeout = null;
     await originResponse?.body?.cancel().catch(() => undefined);

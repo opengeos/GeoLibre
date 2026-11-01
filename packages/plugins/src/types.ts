@@ -1336,6 +1336,12 @@ export interface GeoLibreAppAPI {
    */
   exportTextFile?: (filename: string, content: string, options?: GeoLibreFileDialogOptions) => void;
   /**
+   * Convert WGS84 GeoJSON features to GeoParquet and save them through the
+   * host's native or browser file dialog. `filename` is the base name without
+   * an extension. Resolves to the saved path/name, or null when cancelled.
+   */
+  exportGeoParquetFile?: (filename: string, data: FeatureCollection) => Promise<string | null>;
+  /**
    * Return a redacted, serializable snapshot of the current GeoLibre project.
    * Plugins can embed this snapshot in portable HTML viewers without copying
    * the host's layer/style serialization logic.

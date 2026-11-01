@@ -1,21 +1,46 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
+import { parseHTML } from "linkedom";
 import {
   buildOsmDownloadQuery,
+  canDownloadOsmBounds,
   defaultOverpassEndpoint,
   downloadOsmGeoJson,
+  MAX_OSM_MAP_API_AREA_SQUARE_DEGREES,
+  OSM_MAP_API_ENDPOINT,
   OVERPASS_DEFAULT_ENDPOINT,
   OVERPASS_DEV_ENDPOINT,
   overpassJsonToGeoJson,
+  osmApiJsonToGeoJson,
+  osmDownloadAreaLimit,
+  osmDownloadBoundsArea,
   type OverpassFetch,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
-import { OSM_DOWNLOADER_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-osm-downloader";
+import {
+  maplibreOsmDownloaderPlugin,
+  OSM_DOWNLOADER_PLUGIN_ID,
+} from "../packages/plugins/src/plugins/maplibre-osm-downloader";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
+import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
 
 describe("OSM download query", () => {
+  it("reports whether the current bounds are eligible before downloading", () => {
+    assert.equal(osmDownloadAreaLimit("roads"), 4);
+    assert.equal(osmDownloadAreaLimit("all"), 0.25);
+    assert.equal(osmDownloadBoundsArea([0, 0, 2, 2]), 4);
+    assert.equal(canDownloadOsmBounds([0, 0, 2, 2], "roads"), true);
+    assert.equal(canDownloadOsmBounds([0, 0, 2.01, 2], "roads"), false);
+    assert.equal(canDownloadOsmBounds([0, 0, 0.5, 0.5], "all"), true);
+    assert.equal(canDownloadOsmBounds([0, 0, 0.51, 0.5], "all"), false);
+    assert.equal(canDownloadOsmBounds([2, 0, 1, 1], "roads"), false);
+  });
+
   it("uses Overpass bbox order and preset tag filters", () => {
     assert.equal(
-      buildOsmDownloadQuery([-84.5, 33.6, -84.2, 33.9], { preset: "buildings" }),
+      buildOsmDownloadQuery([-84.5, 33.6, -84.2, 33.9], {
+        preset: "buildings",
+      }),
       '[out:json][timeout:60];nwr["building"](33.6,-84.5,33.9,-84.2);out geom;',
     );
   });
@@ -110,7 +135,13 @@ describe("Overpass JSON conversion", () => {
   it("converts tagged nodes, line ways, and area ways", () => {
     const result = overpassJsonToGeoJson({
       elements: [
-        { type: "node", id: 1, lon: -84.3, lat: 33.7, tags: { amenity: "cafe" } },
+        {
+          type: "node",
+          id: 1,
+          lon: -84.3,
+          lat: 33.7,
+          tags: { amenity: "cafe" },
+        },
         {
           type: "way",
           id: 2,
@@ -264,6 +295,44 @@ describe("Overpass JSON conversion", () => {
   });
 });
 
+describe("OSM map API fallback conversion", () => {
+  it("reconstructs way geometry and applies the selected tag filter", () => {
+    const result = osmApiJsonToGeoJson(
+      {
+        elements: [
+          { type: "node", id: 1, lon: 1, lat: 2 },
+          { type: "node", id: 2, lon: 2, lat: 2 },
+          { type: "node", id: 3, lon: 2, lat: 3 },
+          { type: "node", id: 4, lon: 1, lat: 2 },
+          {
+            type: "way",
+            id: 10,
+            nodes: [1, 2, 3, 4],
+            tags: { building: "yes" },
+          },
+          { type: "way", id: 11, nodes: [1, 2], tags: { highway: "service" } },
+        ],
+      },
+      { preset: "buildings" },
+    );
+
+    assert.equal(result.features.length, 1);
+    assert.equal(result.features[0].id, "way/10");
+    assert.equal(result.features[0].geometry.type, "Polygon");
+  });
+
+  it("does not match inherited Object prototype keys as custom tags", () => {
+    const result = osmApiJsonToGeoJson(
+      {
+        elements: [{ type: "node", id: 1, lon: 1, lat: 2, tags: { building: "yes" } }],
+      },
+      { preset: "custom", key: "constructor" },
+    );
+
+    assert.equal(result.features.length, 0);
+  });
+});
+
 describe("downloadOsmGeoJson", () => {
   it("uses the same-origin relay in Vite development", () => {
     assert.equal(defaultOverpassEndpoint(true), OVERPASS_DEV_ENDPOINT);
@@ -274,7 +343,12 @@ describe("downloadOsmGeoJson", () => {
     const calls: string[] = [];
     const fetchImpl: OverpassFetch = async (url) => {
       calls.push(url);
-      return { ok: true, status: 200, json: async () => ({ elements: [] }), text: async () => "" };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ elements: [] }),
+        text: async () => "",
+      };
     };
     await downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl });
     assert.equal(OVERPASS_DEFAULT_ENDPOINT, "https://tiles.geolibre.app/overpass");
@@ -288,7 +362,9 @@ describe("downloadOsmGeoJson", () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ elements: [{ type: "node", id: 7, lon: 1, lat: 2 }] }),
+        json: async () => ({
+          elements: [{ type: "node", id: 7, lon: 1, lat: 2 }],
+        }),
         text: async () => "",
       };
     };
@@ -317,6 +393,89 @@ describe("downloadOsmGeoJson", () => {
       () => downloadOsmGeoJson([0, 0, 1, 1], { preset: "roads" }, { fetchImpl }),
       /429.*Please retry later/,
     );
+  });
+
+  it("falls back to the OSM map API for a small extent when Overpass is busy", async () => {
+    const calls: Array<{ url: string; method: string | undefined }> = [];
+    const fetchImpl: OverpassFetch = async (url, init) => {
+      calls.push({ url, method: init.method });
+      if (calls.length === 1) {
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({}),
+          text: async () => "Bad Gateway",
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "",
+        json: async () => ({
+          elements: [
+            { type: "node", id: 1, lon: 0, lat: 0 },
+            { type: "node", id: 2, lon: 0.1, lat: 0 },
+            { type: "way", id: 3, nodes: [1, 2], tags: { highway: "service" } },
+          ],
+        }),
+      };
+    };
+
+    const result = await downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl });
+
+    assert.equal(result.features.length, 1);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].method, "GET");
+    assert.equal(
+      new URL(calls[1].url).origin + new URL(calls[1].url).pathname,
+      OSM_MAP_API_ENDPOINT,
+    );
+  });
+
+  it("preserves the Overpass error when the map API fallback rejects", async () => {
+    let calls = 0;
+    const fetchImpl: OverpassFetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({}),
+          text: async () => "Bad Gateway",
+        };
+      }
+      throw new TypeError("map API unavailable");
+    };
+
+    await assert.rejects(
+      () => downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl }),
+      /502.*Bad Gateway/,
+    );
+    assert.equal(calls, 2);
+  });
+
+  it("does not use the map API fallback above its safe area limit", async () => {
+    let calls = 0;
+    const fetchImpl: OverpassFetch = async () => {
+      calls += 1;
+      return {
+        ok: false,
+        status: 502,
+        json: async () => ({}),
+        text: async () => "Bad Gateway",
+      };
+    };
+
+    await assert.rejects(
+      () =>
+        downloadOsmGeoJson(
+          [0, 0, MAX_OSM_MAP_API_AREA_SQUARE_DEGREES + 0.01, 1],
+          { preset: "roads" },
+          { fetchImpl },
+        ),
+      /502/,
+    );
+    assert.equal(calls, 1);
   });
 
   it("rejects partial results carrying an Overpass remark", async () => {
@@ -350,5 +509,207 @@ describe("downloadOsmGeoJson", () => {
 describe("OSM downloader registration", () => {
   it("appears in the Web Services plugin group", () => {
     assert.ok(WEB_SERVICE_PLUGIN_IDS.includes(OSM_DOWNLOADER_PLUGIN_ID));
+  });
+
+  it("exports directly and reuses a preview for adding and later export", async () => {
+    const dom = parseHTML("<html><body></body></html>");
+    const previous = {
+      document: globalThis.document,
+      window: globalThis.window,
+      HTMLElement: globalThis.HTMLElement,
+      Event: globalThis.Event,
+      Option: globalThis.Option,
+      fetch: globalThis.fetch,
+    };
+    const selectProto = (dom.window as unknown as { HTMLSelectElement: { prototype: object } })
+      .HTMLSelectElement.prototype;
+    Object.defineProperty(selectProto, "value", {
+      configurable: true,
+      get(this: Element) {
+        return (
+          this.getAttribute("data-test-value") ??
+          this.querySelector("option")?.getAttribute("value") ??
+          ""
+        );
+      },
+      set(this: Element, value: unknown) {
+        this.setAttribute("data-test-value", String(value));
+      },
+    });
+    class TestOption {
+      constructor(text = "", value = "") {
+        const option = dom.document.createElement("option");
+        option.textContent = text;
+        option.setAttribute("value", value);
+        return option;
+      }
+    }
+
+    // `as`, not an annotation: the fake assigns this in a callback TypeScript cannot follow.
+    let panel = null as GeoLibreRightPanelRegistration | null;
+    let moveEnd = null as (() => void) | null;
+    let viewBounds = null as [number, number, number, number] | null;
+    let parquetOutcome: "saved" | "cancelled" | "failed" = "saved";
+    let fetchCount = 0;
+    const added: Array<{ id: string; name: string; data: FeatureCollection }> = [];
+    const removed: string[] = [];
+    const exported: Array<{ name: string; contents: string }> = [];
+    const exportedParquet: Array<{ name: string; data: FeatureCollection }> = [];
+    const app = {
+      getMap: () => ({
+        on: (event: string, handler: () => void) => {
+          if (event === "moveend") moveEnd = handler;
+        },
+        off: (event: string, handler: () => void) => {
+          if (event === "moveend" && moveEnd === handler) moveEnd = null;
+        },
+      }),
+      getViewBounds: () => viewBounds,
+      registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
+        panel = registration;
+        return () => {};
+      },
+      openRightPanel: () => {},
+      closeRightPanel: () => {},
+      addGeoJsonLayer: (name: string, data: FeatureCollection) => {
+        const id = `layer-${added.length + 1}`;
+        added.push({ id, name, data });
+        return id;
+      },
+      removeLayer: (id: string) => removed.push(id),
+      exportTextFile: (name: string, contents: string) => {
+        exported.push({ name, contents });
+      },
+      exportGeoParquetFile: (name: string, data: FeatureCollection) => {
+        exportedParquet.push({ name, data });
+        if (parquetOutcome === "cancelled") return Promise.resolve(null);
+        if (parquetOutcome === "failed") return Promise.reject(new Error("writer failed"));
+        return Promise.resolve(`${name}.parquet`);
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    Object.assign(globalThis, {
+      document: dom.document,
+      window: dom.window,
+      HTMLElement: dom.window.HTMLElement,
+      Event: dom.window.Event,
+      Option: TestOption,
+      fetch: async () => {
+        fetchCount += 1;
+        return new Response(
+          JSON.stringify({
+            elements: [
+              {
+                type: "way",
+                id: 7,
+                tags: { building: "yes" },
+                geometry: [
+                  { lon: -9.144, lat: 38.711 },
+                  { lon: -9.143, lat: 38.711 },
+                  { lon: -9.143, lat: 38.712 },
+                  { lon: -9.144, lat: 38.711 },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    try {
+      maplibreOsmDownloaderPlugin.activate(app);
+      assert.ok(panel);
+      const container = dom.document.createElement("div");
+      panel.render(container);
+      const buttons = Array.from(container.querySelectorAll("button"));
+      const preview = buttons.find((button) => button.textContent === "Preview OSM data");
+      const useView = buttons.find((button) => button.textContent === "Use map extent");
+      const add = buttons.find((button) => button.textContent === "Add to map");
+      const save = buttons.find((button) => button.textContent === "Save GeoJSON");
+      const saveParquet = buttons.find((button) => button.textContent === "Save GeoParquet");
+      assert.ok(preview);
+      assert.ok(useView);
+      assert.ok(add);
+      assert.ok(save);
+      assert.ok(saveParquet);
+      assert.equal(preview.disabled, true);
+      assert.equal(save.disabled, true);
+      assert.equal(saveParquet.disabled, true);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /not available/);
+
+      viewBounds = [-9.145, 38.71, -9.14, 38.715];
+      useView.dispatchEvent(new dom.window.Event("click"));
+      assert.equal(save.disabled, false);
+
+      save.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(fetchCount, 1);
+      assert.equal(added.length, 0);
+      assert.equal(exported.length, 1);
+      assert.equal(JSON.parse(exported[0].contents).features.length, 1);
+
+      assert.ok(moveEnd);
+      viewBounds = [-9.14, 38.715, -9.135, 38.72];
+      moveEnd();
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(fetchCount, 2);
+      assert.equal(exportedParquet.length, 1);
+      assert.match(exportedParquet[0].name, /^osm-buildings-\d{4}-\d{2}-\d{2}$/);
+      assert.equal(exportedParquet[0].data.features.length, 1);
+
+      preview.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      assert.equal(fetchCount, 3);
+      assert.equal(added.length, 1);
+      assert.equal(added[0].name, "Preview — OSM buildings");
+      assert.equal(add.disabled, false);
+      assert.equal(save.disabled, false);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /1 features/);
+
+      moveEnd();
+      assert.deepEqual(removed, []);
+      assert.equal(add.disabled, false);
+      assert.equal(save.disabled, false);
+
+      parquetOutcome = "cancelled";
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /cancelled/);
+
+      parquetOutcome = "failed";
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.match(
+        container.querySelector('[role="status"]')?.textContent ?? "",
+        /Could not export GeoParquet: writer failed/,
+      );
+
+      add.dispatchEvent(new dom.window.Event("click"));
+      assert.deepEqual(removed, ["layer-1"]);
+      assert.equal(added.length, 2);
+      assert.equal(added[1].name, "OSM buildings");
+      assert.equal(fetchCount, 3);
+
+      save.dispatchEvent(new dom.window.Event("click"));
+      assert.equal(exported.length, 2);
+      assert.match(exported[1].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
+      assert.equal(JSON.parse(exported[1].contents).features.length, 1);
+      assert.equal(fetchCount, 3);
+
+      // Panning to a different extent must not export the preview from the old area.
+      viewBounds = [-9.3, 38.8, -9.29, 38.81];
+      moveEnd();
+      save.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(fetchCount, 4);
+      assert.equal(exported.length, 3);
+    } finally {
+      maplibreOsmDownloaderPlugin.deactivate(app);
+      Object.assign(globalThis, previous);
+    }
   });
 });

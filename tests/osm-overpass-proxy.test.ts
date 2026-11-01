@@ -98,6 +98,50 @@ describe("Overpass edge proxy", () => {
     await response.text();
   });
 
+  it("tries every fixed instance after retryable failures", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(String(input));
+      if (calls.length < 3) return new Response("Bad Gateway", { status: 502 });
+      return new Response('{"elements":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const body =
+      "data=" + encodeURIComponent(buildOsmDownloadQuery([0, 0, 1, 1], { preset: "buildings" }));
+
+    const response = await tilesWorker.fetch(request(body), {}, {} as ExecutionContext);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [
+      "https://z.overpass-api.de/api/interpreter",
+      "https://overpass.private.coffee/api/interpreter",
+      "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    ]);
+    await response.text();
+  });
+
+  it("continues to a fallback after an upstream network error", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(String(input));
+      if (calls.length === 1) throw new TypeError("network unavailable");
+      return new Response('{"elements":[]}', { status: 200 });
+    };
+    const body =
+      "data=" + encodeURIComponent(buildOsmDownloadQuery([0, 0, 1, 1], { preset: "roads" }));
+
+    const response = await tilesWorker.fetch(request(body), {}, {} as ExecutionContext);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [
+      "https://z.overpass-api.de/api/interpreter",
+      "https://overpass.private.coffee/api/interpreter",
+    ]);
+    await response.text();
+  });
+
   it("accepts a bounded antimeridian split and rejects injected selector text", async () => {
     globalThis.fetch = async () =>
       new Response('{"elements":[]}', {
