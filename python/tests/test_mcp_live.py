@@ -435,14 +435,15 @@ def test_live_identify_toggle_and_control_visibility(relay_server, monkeypatch, 
 
     server = _live_server(tmp_path)
     monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
-    relay_server.response = {"delivered": 1, "ok": True, "value": "*"}
+    relay_server.response = {"delivered": 1, "ok": True, "value": "all"}
 
-    set_id = asyncio.run(server.call_tool("live_set_identify", {"layer_id": "*"}))
-    assert set_id.structured_content == {"layerId": "*"}
+    set_id = asyncio.run(server.call_tool("live_set_identify", {"layer_id": "all"}))
+    assert set_id.structured_content == {"layerId": "all"}
     assert relay_server.body["method"] == "setIdentify"
+    assert relay_server.body["params"] == {"layerId": "all"}
 
     get_id = asyncio.run(server.call_tool("live_get_identify", {}))
-    assert get_id.structured_content == {"layerId": "*"}
+    assert get_id.structured_content == {"layerId": "all"}
     assert relay_server.body["method"] == "getIdentify"
 
     relay_server.response = {"delivered": 1, "ok": True, "value": True}
@@ -543,3 +544,7 @@ def test_live_to_image_returns_data_url_or_writes_workspace_png(
 
     with pytest.raises(ToolError, match="expected a file ending in .png"):
         asyncio.run(server.call_tool("live_to_image", {"out_path": "bad.txt"}))
+
+    relay_server.response = {"delivered": 1, "ok": True, "value": "data:image/jpeg;base64,AAAA"}
+    with pytest.raises(ToolError, match="unexpected image data URL"):
+        asyncio.run(server.call_tool("live_to_image", {}))

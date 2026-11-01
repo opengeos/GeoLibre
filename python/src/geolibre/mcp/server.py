@@ -2519,8 +2519,9 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Set or clear the click-to-identify target on the open map.
 
         Args:
-            layer_id: A layer id from ``live_list_layers``, ``"*"`` for all
-                layers, or ``None`` / ``""`` to turn click-identify off.
+            layer_id: A layer id from ``live_list_layers``, a list of layer
+                ids, ``"all"`` for every visible queryable layer, or ``None``
+                to turn click-identify off. An empty string is rejected.
 
         Returns:
             The active ``layerId`` target (or ``None`` when disabled).
@@ -2533,7 +2534,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Return the active click-to-identify target on the open map.
 
         Returns:
-            A dict with ``layerId`` (a layer id, ``"*"``, or ``None``).
+            A dict with ``layerId`` (a layer id, a list of layer ids,
+            ``"all"``, or ``None``).
         """
         value = live.require().call("getIdentify")
         return {"layerId": value}
@@ -2547,10 +2549,12 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Show or hide a built-in map control or panel in GeoLibre Desktop.
 
         Args:
-            control: Control or panel name (e.g. ``"navigation"``, ``"scale"``,
-                ``"fullscreen"``, ``"geolocate"``, ``"globe"``, ``"terrain"``,
-                ``"attribution"``, ``"measure"``, ``"minimap"``, ``"inspect"``,
-                ``"print"``, ``"bookmarks"``, ``"swipe"``, ``"lidar"``).
+            control: Map control or panel name. Map controls are
+                ``"navigation"``, ``"fullscreen"``, ``"compass"``,
+                ``"geolocate"``, ``"globe"``, ``"scale"``, ``"attribution"``,
+                and ``"logo"``. Panels are ``"bookmark"``, ``"search"``,
+                ``"measure"``, ``"minimap"``, and ``"print"``. Terrain and
+                other names are rejected.
             visible: Whether the control or panel should be shown.
             options: Optional configuration object (supported by ``"measure"``
                 and ``"minimap"``).
@@ -2768,8 +2772,8 @@ def build_server(workspace: Workspace) -> MCPServer:
             else None
         )
         data_url = live.require().call("toImage")
-        _, sep, encoded = str(data_url).partition(",")
-        if not sep or not encoded:
+        header, sep, encoded = str(data_url).partition(",")
+        if header != "data:image/png;base64" or not sep or not encoded:
             raise ValueError(f"GeoLibre returned an unexpected image data URL: {data_url!r}")
         png = base64.b64decode(encoded)
         if destination is not None:
