@@ -35,8 +35,14 @@ export function registerFileHandler(
   if (typeof handler.name !== "string" || handler.name.length === 0) {
     throw new Error(`File handler "${handler.id}" must have a non-empty name.`);
   }
-  if (!Array.isArray(handler.extensions) || handler.extensions.length === 0) {
-    throw new Error(`File handler "${handler.id}" must list at least one extension.`);
+  if (
+    !Array.isArray(handler.extensions) ||
+    handler.extensions.length === 0 ||
+    handler.extensions.some((extension) => typeof extension !== "string" || extension.length === 0)
+  ) {
+    throw new Error(
+      `File handler "${handler.id}" must list at least one extension, all non-empty.`,
+    );
   }
   if (typeof handler.claim !== "function" || typeof handler.open !== "function") {
     throw new Error(`File handler "${handler.id}" must have claim and open functions.`);

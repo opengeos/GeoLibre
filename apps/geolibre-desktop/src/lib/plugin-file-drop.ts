@@ -5,6 +5,7 @@
  * handler works the same on web and desktop.
  */
 
+import type { TFunction } from "i18next";
 import { open as openLocalFile, SeekMode, stat } from "@tauri-apps/plugin-fs";
 import type {
   GeoLibreDroppedFile,
@@ -29,7 +30,7 @@ const CENTRAL_ENTRY_SIZE = 46;
 /** Longest possible zip comment plus the record that precedes it. */
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
 /** A central directory beyond this is not a file a handler should inspect. */
-const MAX_CENTRAL_DIRECTORY_BYTES = 256 * 1024 * 1024;
+const MAX_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024;
 
 /** Walk limits for a dropped folder, so dropping a home directory cannot hang the app. */
 const MAX_FOLDER_DEPTH = 16;
@@ -194,15 +195,26 @@ export async function offerDropToFileHandlers<T>(
       files.set(leaf, file);
     }
 
-    let claimedKeys: Set<string>;
+    // Counted, not a set: top-level files have no path, so two dropped files can
+    // share a key, and returning one of them must not claim the other.
+    const claimedKeys = new Map<string, number>();
     try {
       const claimed = await handler.claim(offered.map((leaf) => files.get(leaf)!));
-      claimedKeys = new Set((Array.isArray(claimed) ? claimed : []).map(fileKey));
+      for (const file of Array.isArray(claimed) ? claimed : []) {
+        const key = fileKey(file);
+        claimedKeys.set(key, (claimedKeys.get(key) ?? 0) + 1);
+      }
     } catch (error) {
       console.warn(`[GeoLibre] File handler "${handler.id}" failed to claim a drop.`, error);
       continue;
     }
-    const taken = offered.filter((leaf) => claimedKeys.has(fileKey(files.get(leaf)!)));
+    const taken = offered.filter((leaf) => {
+      const key = fileKey(files.get(leaf)!);
+      const count = claimedKeys.get(key) ?? 0;
+      if (count === 0) return false;
+      claimedKeys.set(key, count - 1);
+      return true;
+    });
     if (taken.length === 0) continue;
 
     for (const leaf of taken) {
@@ -222,6 +234,34 @@ export async function offerDropToFileHandlers<T>(
     opened,
     failed,
   };
+}
+
+/**
+ * Show the outcome of {@link offerDropToFileHandlers} in the drop status. A
+ * built-in group that loads the rest of the drop may replace the message.
+ *
+ * @param result - The handler outcomes.
+ * @param setMessage - Sets the drop status message.
+ * @param setError - Sets the drop error.
+ * @param t - The translation function.
+ * @returns Whether any handler took files, so an empty rest is not an error.
+ */
+export function reportFileHandlerDrop(
+  { opened, failed }: FileHandlerDropResult<unknown>,
+  setMessage: (message: string | null) => void,
+  setError: (error: string | null) => void,
+  t: TFunction,
+): boolean {
+  if (opened.length > 0) {
+    const name = opened.map((handler) => handler.name).join(", ");
+    setMessage(t("toolbar.fileDrop.openedByHandler", { name }));
+  }
+  for (const { handler, error } of failed) {
+    const message = error instanceof Error ? error.message : String(error);
+    setMessage(null);
+    setError(t("toolbar.fileDrop.handlerFailed", { name: handler.name, message }));
+  }
+  return opened.length + failed.length > 0;
 }
 
 function fileLeaf(origin: File, file: File, path?: string): DropLeaf<File> {

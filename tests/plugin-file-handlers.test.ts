@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { strToU8, zipSync } from "fflate";
+import type { TFunction } from "i18next";
 import {
   __resetFileHandlerRegistryForTests,
   listFileHandlers,
@@ -20,6 +21,7 @@ import {
   matchesFileHandlerExtensions,
   offerBrowserDrop,
   offerDropToFileHandlers,
+  reportFileHandlerDrop,
 } from "../apps/geolibre-desktop/src/lib/plugin-file-drop";
 
 function handler(overrides: Partial<GeoLibreFileHandler> = {}): GeoLibreFileHandler {
@@ -84,6 +86,10 @@ describe("file handler registry", () => {
     assert.throws(() => registerFileHandler(handler({ id: "" })), /non-empty id/);
     assert.throws(() => registerFileHandler(handler({ name: "" })), /non-empty name/);
     assert.throws(() => registerFileHandler(handler({ extensions: [] })), /at least one/);
+    assert.throws(
+      () => registerFileHandler(handler({ extensions: [".zip", undefined as never] })),
+      /at least one/,
+    );
     assert.throws(
       () => registerFileHandler(handler({ claim: undefined as never })),
       /claim and open/,
@@ -192,6 +198,48 @@ describe("listZipEntryPaths", () => {
   });
 });
 
+describe("reportFileHandlerDrop", () => {
+  const t = ((key: string, options: Record<string, string>) =>
+    `${key}:${Object.values(options).join("|")}`) as unknown as TFunction;
+
+  it("reports nothing and returns false when no handler took files", () => {
+    let calls = 0;
+    const bump = () => {
+      calls += 1;
+    };
+    assert.equal(
+      reportFileHandlerDrop({ unclaimed: [], opened: [], failed: [] }, bump, bump, t),
+      false,
+    );
+    assert.equal(calls, 0);
+  });
+
+  it("names the handlers that opened, and shows a failure as an error", () => {
+    const messages: Array<string | null> = [];
+    const errors: Array<string | null> = [];
+    const handled = reportFileHandlerDrop(
+      { unclaimed: [], opened: [handler({ name: "A" })], failed: [] },
+      (m) => messages.push(m),
+      (e) => errors.push(e),
+      t,
+    );
+    assert.equal(handled, true);
+    assert.equal(messages[0], "toolbar.fileDrop.openedByHandler:A");
+    reportFileHandlerDrop(
+      {
+        unclaimed: [],
+        opened: [],
+        failed: [{ handler: handler({ name: "B" }), error: new Error("bad") }],
+      },
+      (m) => messages.push(m),
+      (e) => errors.push(e),
+      t,
+    );
+    assert.equal(messages.at(-1), null);
+    assert.deepEqual(errors, ["toolbar.fileDrop.handlerFailed:B|bad"]);
+  });
+});
+
 describe("matchesFileHandlerExtensions", () => {
   it("ignores case and tolerates a missing dot", () => {
     assert.ok(matchesFileHandlerExtensions("TASKDATA.ZIP", [".zip"]));
@@ -261,6 +309,14 @@ describe("offerDropToFileHandlers", () => {
     ]);
     assert.deepEqual(seenBySecond, ["b.fit"]);
     assert.deepEqual(result.unclaimed, ["b.fit"]);
+  });
+
+  it("claims only one of two files that share a name when one is returned", async () => {
+    const leaves = [leaf("same.fit"), { ...leaf("same.fit"), origin: "other/same.fit" }];
+    const result = await offerDropToFileHandlers(leaves, origins(leaves), [
+      handler({ extensions: [".fit"], claim: (files) => files.slice(0, 1) }),
+    ]);
+    assert.deepEqual(result.unclaimed, ["other/same.fit"]);
   });
 
   it("treats a throwing claim as not mine and still tries later handlers", async () => {
