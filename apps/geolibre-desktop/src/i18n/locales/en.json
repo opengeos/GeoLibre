@@ -4319,7 +4319,9 @@
       "addedOsmPbfLayers_other": "Added {{count}} layers from {{name}}.",
       "osmPbfNoFeatures": "No features found in {{name}}.",
       "couldNotParse": "Could not parse {{name}}: {{message}}",
-      "couldNotImport": "Could not import files."
+      "couldNotImport": "Could not import files.",
+      "openedByHandler": "Opened by {{name}}.",
+      "handlerFailed": "{{name}} could not open the dropped files: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Save changes before closing?",

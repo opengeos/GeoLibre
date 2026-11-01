@@ -1,6 +1,6 @@
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addVectorFileToMap, prepareRasterControl } from "@geolibre/plugins";
+import { addVectorFileToMap, listFileHandlers, prepareRasterControl } from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import {
   type Dispatch,
@@ -13,6 +13,12 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
+import {
+  captureDroppedDirectories,
+  type FileHandlerDropResult,
+  offerBrowserDrop,
+  offerDesktopDrop,
+} from "../../lib/plugin-file-drop";
 import {
   type DroppedPointCloud,
   dropErrorMessage,
@@ -117,6 +123,31 @@ export function useFileDrop({
     [mapControllerRef, setDropError, setDropMessage, t],
   );
 
+  // Status for the plugin file handlers a drop just ran past. Both drop paths
+  // report through here; a later built-in group may replace the message.
+  const reportFileHandlers = useCallback(
+    ({ opened, failed }: FileHandlerDropResult<unknown>) => {
+      if (opened.length > 0) {
+        setDropMessage(
+          t("toolbar.fileDrop.openedByHandler", {
+            name: opened.map((handler) => handler.name).join(", "),
+          }),
+        );
+      }
+      for (const { handler, error } of failed) {
+        setDropMessage(null);
+        setDropError(
+          t("toolbar.fileDrop.handlerFailed", {
+            name: handler.name,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+      return opened.length + failed.length > 0;
+    },
+    [setDropError, setDropMessage, t],
+  );
+
   useEffect(() => {
     if (!isTauri() || dropDisabled) return;
 
@@ -154,13 +185,13 @@ export function useFileDrop({
           setDropMessage(t("toolbar.fileDrop.importing"));
 
           try {
-            const paths = event.payload.paths;
-            const projectPaths = paths.filter(isGeoLibreProjectFileName);
+            const droppedPaths = event.payload.paths;
+            const projectPaths = droppedPaths.filter(isGeoLibreProjectFileName);
             if (projectPaths.length > 0) {
               if (!deploymentCapabilities.has("project:edit")) {
                 throw new Error(t("toolbar.error.projectDropNotAllowed"));
               }
-              if (paths.length !== 1) {
+              if (droppedPaths.length !== 1) {
                 throw new Error(t("toolbar.error.multipleProjectDrop"));
               }
               const projectPath = projectPaths[0];
@@ -172,6 +203,11 @@ export function useFileDrop({
               setDropMessage(null);
               return;
             }
+            // Plugin file handlers go before the built-in groups and take what
+            // they recognize; the rest loads as if they were not there.
+            const handlerResult = await offerDesktopDrop(droppedPaths, listFileHandlers());
+            const handledByPlugin = reportFileHandlers(handlerResult);
+            const paths = handlerResult.unclaimed;
             // OSM PBF files split into three layers, so they bypass the normal
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
@@ -185,7 +221,7 @@ export function useFileDrop({
             await addPointClouds(
               await readDroppedPointClouds(cloudPaths, readLocalFileBytes, onReadError),
             );
-            const handledElsewhere = pbfPaths.length + cloudPaths.length > 0;
+            const handledElsewhere = handledByPlugin || pbfPaths.length + cloudPaths.length > 0;
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -328,6 +364,7 @@ export function useFileDrop({
     t,
     mapControllerRef,
     projectFilesRef,
+    reportFileHandlers,
     setCrsWarning,
     setDropError,
     setDropMessage,
@@ -375,6 +412,8 @@ export function useFileDrop({
       // an uncancelled drop navigates away from the app.
       event.preventDefault();
       if (dropDisabled) return;
+      // DataTransfer items are emptied at the first await below.
+      const droppedDirectories = captureDroppedDirectories(event.dataTransfer);
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
       setDropError(null);
@@ -385,13 +424,15 @@ export function useFileDrop({
       setDropMessage(t("toolbar.fileDrop.importing"));
 
       try {
-        const allFiles = Array.from(event.dataTransfer.files);
-        const projectFilesInDrop = allFiles.filter((file) => isGeoLibreProjectFileName(file.name));
+        const droppedFiles = Array.from(event.dataTransfer.files);
+        const projectFilesInDrop = droppedFiles.filter((file) =>
+          isGeoLibreProjectFileName(file.name),
+        );
         if (projectFilesInDrop.length > 0) {
           if (!deploymentCapabilities.has("project:edit")) {
             throw new Error(t("toolbar.error.projectDropNotAllowed"));
           }
-          if (allFiles.length !== 1) {
+          if (droppedFiles.length !== 1) {
             throw new Error(t("toolbar.error.multipleProjectDrop"));
           }
           const projectFile = projectFilesInDrop[0];
@@ -400,6 +441,15 @@ export function useFileDrop({
           setDropMessage(null);
           return;
         }
+        // Plugin file handlers go before the built-in groups and take what they
+        // recognize; the rest loads as if they were not there.
+        const handlerResult = await offerBrowserDrop(
+          droppedFiles,
+          droppedDirectories,
+          listFileHandlers(),
+        );
+        const handledByPlugin = reportFileHandlers(handlerResult);
+        const allFiles = handlerResult.unclaimed;
         // OSM PBF files produce three separate layers (points/lines/polygons),
         // so they bypass the single-FeatureCollection vector drop pipeline.
         // Handle them first, then run the rest through the normal pipeline —
@@ -411,7 +461,7 @@ export function useFileDrop({
           (file) => !isOsmPbfFileName(file.name) && !isPointCloudFileName(file.name),
         );
         await addPointClouds(cloudFiles.map((file) => ({ name: file.name, data: file })));
-        const handledElsewhere = pbfFiles.length + cloudFiles.length > 0;
+        const handledElsewhere = handledByPlugin || pbfFiles.length + cloudFiles.length > 0;
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
@@ -525,6 +575,7 @@ export function useFileDrop({
       t,
       mapControllerRef,
       projectFilesRef,
+      reportFileHandlers,
       setCrsWarning,
       setDropError,
       setDropMessage,

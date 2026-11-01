@@ -3,12 +3,14 @@ import {
   getAssistantToolOwnerScope,
   unregisterAssistantToolsByOwner,
 } from "./assistant-tool-registry";
+import { unregisterFileHandlersByOwner } from "./file-handler-registry";
 import { unregisterMenuContributionsByOwner } from "./menu-contribution-registry";
 import type { MapRendererKind, ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
   GeoLibreCredentialLocation,
+  GeoLibreFileHandler,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
   GeoLibreMenuContribution,
@@ -24,6 +26,7 @@ import type {
 function releaseOwnedRegistrations(id: string): void {
   unregisterAssistantToolsByOwner(id);
   unregisterMenuContributionsByOwner(id);
+  unregisterFileHandlersByOwner(id);
 }
 
 export class PluginManager {
@@ -878,6 +881,8 @@ function scopeAppToPlugin(
     !register &&
     !registerContribution &&
     !app.unregisterMenuContribution &&
+    !app.registerFileHandler &&
+    !app.unregisterFileHandler &&
     !onControlAdded &&
     !onRightPanelOpened &&
     !activatePlugin &&
@@ -959,6 +964,27 @@ function scopeAppToPlugin(
       ownerPluginId: string,
     ) => void;
     scoped.unregisterMenuContribution = (id) => unregisterContribution(id, pluginId);
+  }
+
+  if (app.registerFileHandler) {
+    // Same host-side owner injection and liveness gate as menu contributions: a
+    // plugin that stays inactive must not start receiving dropped files.
+    const registerHandlerWithOwner = app.registerFileHandler as (
+      handler: GeoLibreFileHandler,
+      ownerPluginId: string,
+    ) => () => void;
+    scoped.registerFileHandler = (handler) =>
+      canAddControl?.() === false || isLive?.() === false
+        ? () => {}
+        : registerHandlerWithOwner(handler, pluginId);
+  }
+  if (app.unregisterFileHandler) {
+    // Scoped too, so a plugin can only remove handlers it owns.
+    const unregisterHandler = app.unregisterFileHandler as (
+      id: string,
+      ownerPluginId: string,
+    ) => void;
+    scoped.unregisterFileHandler = (id) => unregisterHandler(id, pluginId);
   }
 
   if (registerRightPanel) {

@@ -148,6 +148,8 @@ export interface AppApiHost extends Pick<
   | "unregisterToolbarMenu"
   | "registerMenuContribution"
   | "unregisterMenuContribution"
+  | "registerFileHandler"
+  | "unregisterFileHandler"
   | "registerFloatingPanel"
   | "unregisterFloatingPanel"
   | "openFloatingPanel"
@@ -1005,6 +1007,8 @@ export function createAppAPI(
     unregisterToolbarMenu: host.unregisterToolbarMenu,
     registerMenuContribution: host.registerMenuContribution,
     unregisterMenuContribution: host.unregisterMenuContribution,
+    registerFileHandler: host.registerFileHandler,
+    unregisterFileHandler: host.unregisterFileHandler,
     registerFloatingPanel: host.registerFloatingPanel,
     unregisterFloatingPanel: host.unregisterFloatingPanel,
     openFloatingPanel: host.openFloatingPanel,

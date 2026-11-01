@@ -1599,6 +1599,17 @@ export interface GeoLibreAppAPI {
   /** Remove a previously registered menu contribution. */
   unregisterMenuContribution?: (id: string) => void;
   /**
+   * Receive files dropped on the map in a format this plugin reads. Handlers
+   * are consulted before the built-in file groups, and can decide by content
+   * for an extension they share with the core (such as `.zip`). Returns an
+   * unregister function (call it from `deactivate`). Re-registering the same id
+   * replaces the handler. Typed optional for forward-compatibility, so call it
+   * with optional chaining.
+   */
+  registerFileHandler?: (handler: GeoLibreFileHandler) => () => void;
+  /** Remove a previously registered file handler. */
+  unregisterFileHandler?: (id: string) => void;
+  /**
    * Register a plugin-owned floating panel: a draggable, closeable card the
    * host overlays on the map's top-left corner. Returns an unregister function
    * (call it from `deactivate`). The panel is not shown until
@@ -1701,6 +1712,53 @@ export interface GeoLibreMenuContribution {
   menu: GeoLibreMenuContributionTarget;
   /** The items (actions, separators, or submenus), same shape as toolbar menus. */
   items: GeoLibreToolbarMenuItem[];
+}
+
+/** What a {@link GeoLibreFileHandler} is told about a dropped file when claiming it. */
+export interface GeoLibreDroppedFileInfo {
+  /** The file name, without any directory. */
+  name: string;
+  /** Path relative to the drop, starting with the folder name. Only for files inside a dropped folder. */
+  path?: string;
+  /** Size in bytes. */
+  size: number;
+  /**
+   * Paths inside the archive, read from its central directory without loading
+   * the archive. Only for a readable `.zip`.
+   */
+  entries?: string[];
+}
+
+/** A dropped file a handler can read, the same on web and desktop. */
+export interface GeoLibreDroppedFile extends GeoLibreDroppedFileInfo {
+  /** Read the whole file. */
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  /** Read the whole file as UTF-8 text. */
+  text: () => Promise<string>;
+}
+
+/**
+ * A plugin's handler for a file format dropped on the map. Project files are
+ * still opened first, and files no handler claims load as they would without it.
+ */
+export interface GeoLibreFileHandler {
+  /** Stable unique id used to unregister the handler. */
+  id: string;
+  /** Shown in the drop status message: "Opened by <name>". */
+  name: string;
+  /** Cheap pre-filter such as `[".zip", ".xml"]`. Only matching files are offered. */
+  extensions: string[];
+  /**
+   * Claim files from the drop. Gets every dropped file that matched
+   * {@link extensions}, so a handler can take a multi-file set. Returns the
+   * files it takes; an empty list means "not mine". A rejection counts as "not
+   * mine" too.
+   */
+  claim: (
+    files: GeoLibreDroppedFileInfo[],
+  ) => GeoLibreDroppedFileInfo[] | Promise<GeoLibreDroppedFileInfo[]>;
+  /** Load the claimed files: parse them, add layers, open a panel. */
+  open: (files: GeoLibreDroppedFile[]) => void | Promise<void>;
 }
 
 /**

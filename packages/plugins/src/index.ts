@@ -54,6 +54,12 @@ export {
   type MenuContributionEntry,
 } from "./menu-contribution-registry";
 export {
+  registerFileHandler,
+  unregisterFileHandler,
+  listFileHandlers,
+  type FileHandlerEntry,
+} from "./file-handler-registry";
+export {
   registerFloatingPanel,
   unregisterFloatingPanel,
   openFloatingPanel,
