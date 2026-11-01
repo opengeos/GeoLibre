@@ -297,13 +297,17 @@ is dropped or rewritten.
 | Tool | What it does |
 | --- | --- |
 | `live_status` | Report whether a GeoLibre Desktop window is listening. |
-| `live_list_layers` | List the open map's layers. |
-| `live_fly_to` / `live_fit_bounds` / `live_zoom_to_layer` | Move the camera. |
+| `live_list_layers` / `live_get_layer` | List the open map's layers or fetch one layer's metadata by id. |
+| `live_get_view` / `live_set_view` / `live_fly_to` / `live_fit_bounds` / `live_zoom_to_layer` | Read or move the camera. |
 | `live_set_basemap` | Switch the basemap. |
-| `live_add_geojson` / `live_remove_layer` | Add or remove a layer. |
+| `live_add_geojson` / `live_add_marker` / `live_add_markers` / `live_remove_layer` | Add GeoJSON or point markers, or remove a layer. |
+| `live_get_layer_features` / `live_get_selected_features` / `live_get_drawn_features` / `live_identify` | Read layer, selected, or sketched GeoJSON features, or query rendered features at `(lng, lat)`. |
+| `live_set_identify` / `live_get_identify` / `live_set_control_visible` | Toggle click-to-identify or show/hide a built-in map control or panel. |
 | `live_set_visibility` / `live_set_opacity` / `live_set_style` | Change a layer. |
-| `live_list_algorithms` | List the app's processing algorithms and their parameters, optionally filtered by `query`. |
-| `live_run_algorithm` | Run an algorithm on the open map; returns its logs and the ids of the result layers it added. |
+| `live_list_algorithms` / `live_run_algorithm` | List or run client-side processing algorithms on the open map. |
+| `live_list_whitebox_tools` / `live_run_whitebox_tool` | List or run bundled Whitebox/WASM tools on the open map. |
+| `live_run_model_builder` | Execute a serialized Model Builder graph on the open map. |
+| `live_to_image` | Capture the current viewport as a PNG data URL or save a `.png` in the workspace. |
 
 Processing is live-only. The algorithm catalog and the engines that run it
 (Turf.js, DuckDB-WASM) live in the app, so there is nothing a file tool could
