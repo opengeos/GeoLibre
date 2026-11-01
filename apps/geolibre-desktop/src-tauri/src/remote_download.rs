@@ -567,6 +567,35 @@ fn write_file_to_folder_in_dir(
     {
         return Err("Refusing to write: invalid characters in file name.".to_string());
     }
+    let stem = stripped.split('.').next().unwrap_or(stripped);
+    let is_reserved_device = matches!(
+        stem.to_ascii_uppercase().as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+    if is_reserved_device || stripped.ends_with('.') || stripped.ends_with(' ') {
+        return Err("Refusing to write: reserved or invalid file name on Windows.".to_string());
+    }
     let sanitized = encode_reserved_filename_chars(stripped);
     if sanitized.chars().count() > MAX_FILE_NAME_CHARS {
         return Err("Refusing to write: file name exceeds maximum length.".to_string());
@@ -954,6 +983,32 @@ mod tests {
             fs::read(dir.join("checkpoint%3A12.json")).unwrap(),
             b"content"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_rejects_windows_reserved_device_names() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-device-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        assert!(write_file_to_folder_core("folder-1", "con.txt", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "NUL.json", b"x", &downloads).is_err());
+        assert!(write_file_to_folder_core("folder-1", "bad.", b"x", &downloads).is_err());
 
         let _ = fs::remove_dir_all(&dir);
     }
