@@ -1,6 +1,6 @@
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addVectorFileToMap, prepareRasterControl } from "@geolibre/plugins";
+import { addVectorFileToMap, listFileHandlers, prepareRasterControl } from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import {
   type Dispatch,
@@ -13,6 +13,12 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
+import {
+  captureDroppedDirectories,
+  offerBrowserDrop,
+  offerDesktopDrop,
+  reportFileHandlerDrop,
+} from "../../lib/plugin-file-drop";
 import {
   type DroppedPointCloud,
   dropErrorMessage,
@@ -175,9 +181,11 @@ export function useFileDrop({
             // OSM PBF files split into three layers, so they bypass the normal
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
-            const pbfPaths = paths.filter((path) => isOsmPbfFileName(path));
-            const cloudPaths = paths.filter((path) => isPointCloudFileName(path));
-            const otherPaths = paths.filter(
+            const offer = await offerDesktopDrop(paths, listFileHandlers());
+            const handledByPlugin = reportFileHandlerDrop(offer, setDropMessage, setDropError, t);
+            const pbfPaths = offer.unclaimed.filter((path) => isOsmPbfFileName(path));
+            const cloudPaths = offer.unclaimed.filter((path) => isPointCloudFileName(path));
+            const otherPaths = offer.unclaimed.filter(
               (path) => !isOsmPbfFileName(path) && !isPointCloudFileName(path),
             );
             const onReadError = (name: string, error: unknown) =>
@@ -185,7 +193,7 @@ export function useFileDrop({
             await addPointClouds(
               await readDroppedPointClouds(cloudPaths, readLocalFileBytes, onReadError),
             );
-            const handledElsewhere = pbfPaths.length + cloudPaths.length > 0;
+            const handledElsewhere = handledByPlugin || pbfPaths.length + cloudPaths.length > 0;
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -375,6 +383,7 @@ export function useFileDrop({
       // an uncancelled drop navigates away from the app.
       event.preventDefault();
       if (dropDisabled) return;
+      const folders = captureDroppedDirectories(event.dataTransfer);
       dragDepthRef.current = 0;
       setIsDraggingFiles(false);
       setDropError(null);
@@ -405,13 +414,15 @@ export function useFileDrop({
         // Handle them first, then run the rest through the normal pipeline —
         // finishDrop throws on an empty list, so only call it when non-PBF
         // files were dropped.
-        const pbfFiles = allFiles.filter((file) => isOsmPbfFileName(file.name));
-        const cloudFiles = allFiles.filter((file) => isPointCloudFileName(file.name));
-        const otherFiles = allFiles.filter(
+        const offer = await offerBrowserDrop(allFiles, folders, listFileHandlers());
+        const handledByPlugin = reportFileHandlerDrop(offer, setDropMessage, setDropError, t);
+        const pbfFiles = offer.unclaimed.filter((file) => isOsmPbfFileName(file.name));
+        const cloudFiles = offer.unclaimed.filter((file) => isPointCloudFileName(file.name));
+        const otherFiles = offer.unclaimed.filter(
           (file) => !isOsmPbfFileName(file.name) && !isPointCloudFileName(file.name),
         );
         await addPointClouds(cloudFiles.map((file) => ({ name: file.name, data: file })));
-        const handledElsewhere = pbfFiles.length + cloudFiles.length > 0;
+        const handledElsewhere = handledByPlugin || pbfFiles.length + cloudFiles.length > 0;
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge

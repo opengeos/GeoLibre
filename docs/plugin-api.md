@@ -384,6 +384,9 @@ export interface GeoLibreAppAPI {
     contribution: GeoLibreMenuContribution
   ) => () => void;
   unregisterMenuContribution?: (id: string) => void;
+  // Files dropped on the map (see "Receiving dropped files" below).
+  registerFileHandler?: (handler: GeoLibreFileHandler) => () => void;
+  unregisterFileHandler?: (id: string) => void;
   // Floating panels (see "Floating panels" below).
   registerFloatingPanel?: (
     panel: GeoLibreFloatingPanelRegistration
@@ -425,6 +428,28 @@ export type GeoLibreToolbarMenuItem =
       items: GeoLibreToolbarMenuItem[];
     }
   | { type: "separator"; id?: string };
+
+export interface GeoLibreDroppedFileInfo {
+  name: string;
+  path?: string; // relative path, only for a file inside a dropped folder
+  size: number;
+  entries?: string[]; // paths inside the archive, only for a readable .zip
+}
+
+export interface GeoLibreDroppedFile extends GeoLibreDroppedFileInfo {
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  text: () => Promise<string>;
+}
+
+export interface GeoLibreFileHandler {
+  id: string;
+  name: string; // shown in the drop status message
+  extensions: string[]; // cheap pre-filter, e.g. [".zip", ".xml"]
+  claim: (
+    files: GeoLibreDroppedFileInfo[]
+  ) => GeoLibreDroppedFileInfo[] | Promise<GeoLibreDroppedFileInfo[]>;
+  open: (files: GeoLibreDroppedFile[]) => void | Promise<void>;
+}
 
 export interface GeoLibreMenuContribution {
   id: string;
@@ -1547,6 +1572,38 @@ const unregister = app.registerMenuContribution?.({
 The host always nests the items under a submenu named after your plugin, placed after a separator at the end of the target menu, and sorts plugin submenus alphabetically. A plugin cannot insert loose items between the built-in entries or reorder them. Several contributions from the same plugin to the same menu share one submenu, with a separator between them. Contributions with no items are not shown.
 
 Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. Ids are global, like toolbar menu ids, so prefix them with your plugin id; the host warns when one plugin's id replaces another's, and `unregisterMenuContribution` only removes contributions your own plugin registered. The host also drops a plugin's contributions when it is deactivated or its activation fails, so a missed disposer cannot leave stale items behind. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
+
+## Receiving dropped files
+
+A plugin that reads a format the core does not know can receive that format when a user drops it on the map, on web and desktop alike. Project files are still opened first; every other file is offered to the registered handlers before the built-in groups (rasters, point clouds, vector files and so on) see it:
+
+```typescript
+const unregister = app.registerFileHandler?.({
+  id: "my-plugin-taskdata",
+  name: "ISOXML TaskData",
+  extensions: [".zip", ".xml", ".bin"],
+  // Only claim what you recognize. A shapefile zip is not yours, so return [].
+  claim: (files) =>
+    files.filter(
+      (file) =>
+        file.entries?.some((entry) => /(^|\/)TASKDATA\.XML$/i.test(entry)) ||
+        /^TASKDATA\//i.test(file.path ?? ""),
+    ),
+  open: async (files) => {
+    for (const file of files) parseAndAddLayers(file.name, await file.arrayBuffer());
+  },
+});
+```
+
+- `extensions` is a cheap, case-insensitive pre-filter: only files that match are offered, so `claim` never runs for a file you could never take. It must list at least one extension.
+- `claim` gets every matching file in the drop, so it can take a multi-file set, and returns the files it takes. An empty list means "not mine". Each file has a `name` and `size`; a readable `.zip` also has `entries`, the paths inside the archive, read from its central directory without loading the archive. Decide by these, since `.zip` is shared with the core. A `claim` that throws counts as "not mine".
+- `open` gets the claimed files, which add `arrayBuffer()` and `text()`. The drop status then says "Opened by" and your `name`. If `open` rejects, the error is shown under your `name` and the files stay claimed.
+
+Handlers run in registration order, and a file one handler claims is not offered to the next. Everything nobody claims loads as it would without any handlers, so a shapefile zip still loads as a shapefile.
+
+Files inside a dropped folder also have a `path` relative to the drop, such as `TASKDATA/TLG00001.BIN`. Hidden entries and `__MACOSX` are skipped, and very deep or very large folders are cut off, so do not rely on seeing every file of a huge tree. When a handler claims any file of a folder, the whole folder counts as handled and its other files are not loaded. When no handler claims any, the folder goes to the built-in groups as usual.
+
+Register in `activate` and call the returned function (or `app.unregisterFileHandler?.(id)`) in `deactivate`; re-registering the same `id` replaces the handler. Ids are global, so prefix them with your plugin id; `unregisterFileHandler` only removes handlers your own plugin registered. The host also drops a plugin's handlers when it is deactivated or its activation fails. Drops are still blocked before any handler runs in the read-only viewer and when a deployment does not grant `data:add`.
 
 ## Following the app language
 

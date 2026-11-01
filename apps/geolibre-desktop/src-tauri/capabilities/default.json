@@ -13,6 +13,12 @@
     "dialog:default",
     "fs:default",
     "fs:allow-read-dir",
+    {
+      "comment": "Range reads of a dropped .zip, so a plugin file handler (GeoLibre#3283, lib/plugin-file-drop.ts) can see its entry list without the whole archive being loaded. The fs scope still applies: this reads no path that fs:allow-read-file cannot.",
+      "identifier": "fs:allow-open"
+    },
+    "fs:allow-read",
+    "fs:allow-seek",
     "fs:allow-read-file",
     "fs:allow-stat",
     "fs:allow-read-text-file",

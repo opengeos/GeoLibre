@@ -31,6 +31,10 @@ import {
   registerMenuContribution,
   unregisterMenuContribution,
 } from "../packages/plugins/src/menu-contribution-registry";
+import {
+  registerFileHandler,
+  unregisterFileHandler,
+} from "../packages/plugins/src/file-handler-registry";
 import { GEO_EDITOR_PLUGIN_ID } from "../packages/plugins/src/plugin-ids";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
 import {
@@ -197,6 +201,8 @@ function fakeHost(overrides: Partial<AppApiHost> = {}): { host: AppApiHost; call
     unregisterToolbarMenu,
     registerMenuContribution,
     unregisterMenuContribution,
+    registerFileHandler,
+    unregisterFileHandler,
     registerFloatingPanel,
     unregisterFloatingPanel,
     openFloatingPanel,
