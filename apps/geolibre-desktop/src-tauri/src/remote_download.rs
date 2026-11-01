@@ -528,6 +528,24 @@ pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder
     Err("Choosing a download folder is not supported on this platform.".into())
 }
 
+fn encode_reserved_filename_chars(name: &str) -> String {
+    let mut encoded = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '<' => encoded.push_str("%3C"),
+            '>' => encoded.push_str("%3E"),
+            ':' => encoded.push_str("%3A"),
+            '"' => encoded.push_str("%22"),
+            '|' => encoded.push_str("%7C"),
+            '?' => encoded.push_str("%3F"),
+            '*' => encoded.push_str("%2A"),
+            '%' => encoded.push_str("%25"),
+            _ => encoded.push(c),
+        }
+    }
+    encoded
+}
+
 static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn write_file_to_folder_in_dir(
@@ -539,17 +557,21 @@ fn write_file_to_folder_in_dir(
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
     let base = file_name.rsplit(['/', '\\']).next().unwrap_or("").trim();
-    let sanitized = base.trim_start_matches('.');
-    if sanitized.is_empty() {
+    let stripped = base.trim_start_matches('.');
+    if stripped.is_empty() {
         return Err("Refusing to write: file name cannot be empty.".to_string());
     }
-    if sanitized.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | '\0')) {
+    if stripped
+        .chars()
+        .any(|c| c.is_control() || matches!(c, '/' | '\\' | '\0'))
+    {
         return Err("Refusing to write: invalid characters in file name.".to_string());
     }
+    let sanitized = encode_reserved_filename_chars(stripped);
     if sanitized.chars().count() > MAX_FILE_NAME_CHARS {
         return Err("Refusing to write: file name exceeds maximum length.".to_string());
     }
-    let destination = folder.join(sanitized);
+    let destination = folder.join(&sanitized);
     if destination.parent() != Some(folder) {
         return Err("Refusing to write: file name resolves outside the picked folder.".into());
     }
@@ -560,29 +582,54 @@ fn write_file_to_folder_in_dir(
     }
     let size = data.len() as u64;
 
-    let mut temp_name = std::ffi::OsString::from(".geolibre-write-tmp-");
-    temp_name.push(format!(
-        "{}-{}",
-        std::process::id(),
-        WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed),
-    ));
-    let temp = folder.join(temp_name);
+    let mut temp = None;
+    let mut file = None;
 
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    for _ in 0..10 {
+        let mut rand_bytes = [0u8; 8];
+        let rand_suffix = if getrandom::fill(&mut rand_bytes).is_ok() {
+            rand_bytes
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        } else {
+            format!(
+                "{}-{}",
+                std::process::id(),
+                WRITE_FILE_COUNTER.fetch_add(1, Ordering::Relaxed)
+            )
+        };
+        let candidate = folder.join(format!(".geolibre-write-tmp-{rand_suffix}"));
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
 
-    let write_result = options
-        .open(&temp)
-        .and_then(|mut file| {
-            file.write_all(data)?;
-            file.sync_all()
-        })
-        .and_then(|()| fs::rename(&temp, &destination));
+        match options.open(&candidate) {
+            Ok(f) => {
+                temp = Some(candidate);
+                file = Some(f);
+                break;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(format!("Could not create temporary file in folder: {err}")),
+        }
+    }
+
+    let (temp_path, mut temp_file) = match (temp, file) {
+        (Some(p), Some(f)) => (p, f),
+        _ => return Err("Could not allocate a unique temporary file in the chosen folder.".into()),
+    };
+
+    let write_result = (|| -> Result<(), std::io::Error> {
+        temp_file.write_all(data)?;
+        temp_file.sync_all()?;
+        fs::rename(&temp_path, &destination)?;
+        Ok(())
+    })();
 
     if let Err(error) = write_result {
-        let _ = fs::remove_file(&temp);
+        let _ = fs::remove_file(&temp_path);
         return Err(format!("Could not write file to folder: {error}"));
     }
 
@@ -870,6 +917,43 @@ mod tests {
 
         assert_eq!(fs::read(dir.join("春.geojson")).unwrap(), b"spring");
         assert_eq!(fs::read(dir.join("秋.geojson")).unwrap(), b"autumn");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_encodes_reserved_filename_characters() {
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-reserved-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+
+        let downloads = RemoteDownloads::default();
+        downloads
+            .folders
+            .lock()
+            .unwrap()
+            .insert("folder-1".into(), dir.clone());
+
+        let res = write_file_to_folder_core(
+            "folder-1",
+            "checkpoint:12.json",
+            b"content",
+            &downloads,
+        )
+        .unwrap();
+
+        assert_eq!(res.size, 7);
+        assert!(res.path.ends_with("checkpoint%3A12.json"));
+        assert_eq!(
+            fs::read(dir.join("checkpoint%3A12.json")).unwrap(),
+            b"content"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
