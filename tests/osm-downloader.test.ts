@@ -421,6 +421,28 @@ describe("downloadOsmGeoJson", () => {
     );
   });
 
+  it("preserves the Overpass error when the map API fallback rejects", async () => {
+    let calls = 0;
+    const fetchImpl: OverpassFetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({}),
+          text: async () => "Bad Gateway",
+        };
+      }
+      throw new TypeError("map API unavailable");
+    };
+
+    await assert.rejects(
+      () => downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl }),
+      /502.*Bad Gateway/,
+    );
+    assert.equal(calls, 2);
+  });
+
   it("does not use the map API fallback above its safe area limit", async () => {
     let calls = 0;
     const fetchImpl: OverpassFetch = async () => {
@@ -515,6 +537,8 @@ describe("OSM downloader registration", () => {
     // `as`, not an annotation: the fake assigns this in a callback TypeScript cannot follow.
     let panel = null as GeoLibreRightPanelRegistration | null;
     let moveEnd = null as (() => void) | null;
+    let viewBounds = null as [number, number, number, number] | null;
+    let parquetOutcome: "saved" | "cancelled" | "failed" = "saved";
     let fetchCount = 0;
     const added: Array<{ id: string; name: string; data: FeatureCollection }> = [];
     const removed: string[] = [];
@@ -529,7 +553,7 @@ describe("OSM downloader registration", () => {
           if (event === "moveend" && moveEnd === handler) moveEnd = null;
         },
       }),
-      getViewBounds: () => [-9.145, 38.71, -9.14, 38.715] as [number, number, number, number],
+      getViewBounds: () => viewBounds,
       registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
         panel = registration;
         return () => {};
@@ -547,6 +571,8 @@ describe("OSM downloader registration", () => {
       },
       exportGeoParquetFile: (name: string, data: FeatureCollection) => {
         exportedParquet.push({ name, data });
+        if (parquetOutcome === "cancelled") return Promise.resolve(null);
+        if (parquetOutcome === "failed") return Promise.reject(new Error("writer failed"));
         return Promise.resolve(`${name}.parquet`);
       },
     } as unknown as GeoLibreAppAPI;
@@ -587,13 +613,22 @@ describe("OSM downloader registration", () => {
       panel.render(container);
       const buttons = Array.from(container.querySelectorAll("button"));
       const preview = buttons.find((button) => button.textContent === "Preview OSM data");
+      const useView = buttons.find((button) => button.textContent === "Use map extent");
       const add = buttons.find((button) => button.textContent === "Add to map");
       const save = buttons.find((button) => button.textContent === "Save GeoJSON");
       const saveParquet = buttons.find((button) => button.textContent === "Save GeoParquet");
       assert.ok(preview);
+      assert.ok(useView);
       assert.ok(add);
       assert.ok(save);
       assert.ok(saveParquet);
+      assert.equal(preview.disabled, true);
+      assert.equal(save.disabled, true);
+      assert.equal(saveParquet.disabled, true);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /not available/);
+
+      viewBounds = [-9.145, 38.71, -9.14, 38.715];
+      useView.dispatchEvent(new dom.window.Event("click"));
       assert.equal(save.disabled, false);
 
       save.dispatchEvent(new dom.window.Event("click"));
@@ -604,9 +639,12 @@ describe("OSM downloader registration", () => {
       assert.equal(exported.length, 1);
       assert.equal(JSON.parse(exported[0].contents).features.length, 1);
 
+      assert.ok(moveEnd);
+      viewBounds = [-9.14, 38.715, -9.135, 38.72];
+      moveEnd();
       saveParquet.dispatchEvent(new dom.window.Event("click"));
       await new Promise<void>((resolve) => setImmediate(resolve));
-      assert.equal(fetchCount, 1);
+      assert.equal(fetchCount, 2);
       assert.equal(exportedParquet.length, 1);
       assert.match(exportedParquet[0].name, /^osm-buildings-\d{4}-\d{2}-\d{2}$/);
       assert.equal(exportedParquet[0].data.features.length, 1);
@@ -614,30 +652,42 @@ describe("OSM downloader registration", () => {
       preview.dispatchEvent(new dom.window.Event("click"));
       await new Promise<void>((resolve) => setImmediate(resolve));
 
-      assert.equal(fetchCount, 2);
+      assert.equal(fetchCount, 3);
       assert.equal(added.length, 1);
       assert.equal(added[0].name, "Preview — OSM buildings");
       assert.equal(add.disabled, false);
       assert.equal(save.disabled, false);
       assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /1 features/);
 
-      assert.ok(moveEnd);
       moveEnd();
       assert.deepEqual(removed, []);
       assert.equal(add.disabled, false);
       assert.equal(save.disabled, false);
 
+      parquetOutcome = "cancelled";
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /cancelled/);
+
+      parquetOutcome = "failed";
+      saveParquet.dispatchEvent(new dom.window.Event("click"));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.match(
+        container.querySelector('[role="status"]')?.textContent ?? "",
+        /Could not export GeoParquet: writer failed/,
+      );
+
       add.dispatchEvent(new dom.window.Event("click"));
       assert.deepEqual(removed, ["layer-1"]);
       assert.equal(added.length, 2);
       assert.equal(added[1].name, "OSM buildings");
-      assert.equal(fetchCount, 2);
+      assert.equal(fetchCount, 3);
 
       save.dispatchEvent(new dom.window.Event("click"));
       assert.equal(exported.length, 2);
       assert.match(exported[1].name, /^osm-buildings-\d{4}-\d{2}-\d{2}\.geojson$/);
       assert.equal(JSON.parse(exported[1].contents).features.length, 1);
-      assert.equal(fetchCount, 2);
+      assert.equal(fetchCount, 3);
     } finally {
       maplibreOsmDownloaderPlugin.deactivate(app);
       Object.assign(globalThis, previous);

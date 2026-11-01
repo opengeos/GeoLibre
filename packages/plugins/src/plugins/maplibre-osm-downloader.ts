@@ -326,6 +326,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   }: { preservePreview?: boolean; announce?: boolean } = {}) => {
     const bounds = app.getViewBounds?.();
     if (!bounds) {
+      updateActionAvailability(false);
       status.textContent = tr(app, "mapUnavailable", "The map extent is not available yet.");
       return;
     }
@@ -437,6 +438,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const exportCurrentData = async (format: "GeoJSON" | "GeoParquet") => {
     if (controller) return;
+    const exportGeoParquetFile = app.exportGeoParquetFile;
+    if (format === "GeoParquet" && !exportGeoParquetFile) return;
     const requestController = new AbortController();
     controller = requestController;
     updateActionAvailability(false);
@@ -445,6 +448,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     status.textContent = cached
       ? tr(app, "preparingExport", "Preparing {{format}} export…", { format })
       : tr(app, "downloading", "Downloading from OpenStreetMap…");
+    let exporting = false;
     try {
       const filter: OsmDownloadFilter = cached?.filter ?? {
         preset: preset.value as OsmDownloadPreset,
@@ -462,13 +466,19 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         status.textContent = tr(app, "noFeatures", "No matching features were found in this area.");
         return;
       }
-      result = data;
-      resultFilter = { ...filter };
+      exporting = true;
       if (format === "GeoJSON") {
         exportGeoJson(data, filter);
       } else {
+        if (!exportGeoParquetFile) return;
         const suffix = new Date().toISOString().slice(0, 10);
-        await app.exportGeoParquetFile?.(`osm-${filter.preset}-${suffix}`, data);
+        const saved = await exportGeoParquetFile(`osm-${filter.preset}-${suffix}`, data);
+        if (saved === null) {
+          if (!disposed && controller === requestController) {
+            status.textContent = tr(app, "exportCancelled", "Export cancelled.");
+          }
+          return;
+        }
       }
       if (disposed || controller !== requestController) return;
       status.textContent = tr(
@@ -483,9 +493,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     } catch (error) {
       if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
       const message = error instanceof Error ? error.message : String(error);
-      status.textContent = tr(app, "error", "Could not download OSM data: {{message}}", {
-        message,
-      });
+      status.textContent = exporting
+        ? tr(app, "exportError", "Could not export {{format}}: {{message}}", { format, message })
+        : tr(app, "error", "Could not download OSM data: {{message}}", { message });
     } finally {
       if (!disposed && controller === requestController) {
         controller = null;

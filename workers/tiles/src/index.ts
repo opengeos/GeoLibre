@@ -656,13 +656,14 @@ async function handleOverpass(request: Request): Promise<Response> {
     OVERPASS_API_FALLBACK_UPSTREAM,
     OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
   ];
-  for (const [index, upstream] of upstreams.entries()) {
+  for (const upstream of upstreams) {
     const remainingMs = upstreamDeadline - Date.now();
     if (remainingMs <= 0) break;
     const upstreamController = new AbortController();
-    const attemptsLeft = upstreams.length - index;
-    const attemptTimeoutMs = Math.max(1, Math.floor(remainingMs / attemptsLeft));
-    upstreamTimeout = setTimeout(() => upstreamController.abort(), attemptTimeoutMs);
+    // A valid Overpass query may run for the full 60-second query timeout. Give
+    // the current upstream the remaining relay budget; quick 429/5xx responses
+    // still leave almost all of that budget for the next fixed instance.
+    upstreamTimeout = setTimeout(() => upstreamController.abort(), remainingMs);
     try {
       originResponse = await fetchAllowlistedUpstream(upstream, {
         method: "POST",

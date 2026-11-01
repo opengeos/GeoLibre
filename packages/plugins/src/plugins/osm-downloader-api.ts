@@ -263,13 +263,18 @@ export async function downloadOsmGeoJson(
         const [west, south, east, north] = bbox;
         const mapUrl = new URL(OSM_MAP_API_ENDPOINT);
         mapUrl.searchParams.set("bbox", [west, south, east, north].join(","));
-        const mapResponse = await fetchImpl(mapUrl.toString(), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: requestController.signal,
-        });
-        if (mapResponse.ok) {
-          return osmApiJsonToGeoJson((await mapResponse.json()) as OsmApiResponse, filter);
+        try {
+          const mapResponse = await fetchImpl(mapUrl.toString(), {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            signal: requestController.signal,
+          });
+          if (mapResponse.ok) {
+            return osmApiJsonToGeoJson((await mapResponse.json()) as OsmApiResponse, filter);
+          }
+        } catch (fallbackError) {
+          // Preserve the original Overpass response unless the caller cancelled or timed out.
+          if (requestController.signal.aborted) throw fallbackError;
         }
       }
       let detail = "";
