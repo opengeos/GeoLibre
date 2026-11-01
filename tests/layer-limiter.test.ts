@@ -86,7 +86,9 @@ describe("geometry area and bbox", () => {
       geometry: { type: "Point", coordinates: [-175.0, -30.0] },
     };
     assert.equal(isFeatureInBBox(feat, [175.0, -31.0, 195.0, -29.0]), true);
-    assert.equal(isFeatureInBBox(feat, [175.0, -31.0, 185.0, -29.0]), false);
+    // A viewport ending at 185° wraps to -175°, so the point sits exactly on its inclusive edge
+    assert.equal(isFeatureInBBox(feat, [175.0, -31.0, 185.0, -29.0]), true);
+    assert.equal(isFeatureInBBox(feat, [175.0, -31.0, 184.0, -29.0]), false);
   });
 
   it("subtracts hole rings from polygon area", () => {
