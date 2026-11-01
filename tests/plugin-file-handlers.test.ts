@@ -214,6 +214,29 @@ describe("reportFileHandlerDrop", () => {
     assert.equal(calls, 0);
   });
 
+  it("keeps the success message and shows every failure when results are mixed", () => {
+    const messages: Array<string | null> = [];
+    const errors: Array<string | null> = [];
+    reportFileHandlerDrop(
+      {
+        unclaimed: [],
+        opened: [handler({ name: "A" })],
+        failed: [
+          { handler: handler({ name: "B" }), error: new Error("x") },
+          { handler: handler({ name: "C" }), error: new Error("y") },
+        ],
+      },
+      (m) => messages.push(m),
+      (e) => errors.push(e),
+      t,
+    );
+    assert.equal(messages.length, 1);
+    assert.equal(
+      errors[0],
+      "toolbar.fileDrop.handlerFailed:B|x toolbar.fileDrop.handlerFailed:C|y",
+    );
+  });
+
   it("names the handlers that opened, and shows a failure as an error", () => {
     const messages: Array<string | null> = [];
     const errors: Array<string | null> = [];
@@ -435,7 +458,7 @@ describe("offerBrowserDrop", () => {
       fakeFileEntry(new File(["jpeg"], "photo.jpg")),
       fakeDirectory("logs", [fakeFileEntry(new File(["01"], "TLG00001.BIN"))]),
     ]);
-    const result = await offerBrowserDrop([placeholder], new Map([["TASKDATA", folder]]), [
+    const result = await offerBrowserDrop([placeholder], new Map([["TASKDATA", [folder]]]), [
       handler({
         extensions: [".xml", ".bin"],
         open: (files) => {
@@ -447,10 +470,26 @@ describe("offerBrowserDrop", () => {
     assert.deepEqual(result.unclaimed, []);
   });
 
+  it("walks both of two folders that share a name", async () => {
+    const paths: Array<string | undefined> = [];
+    const first = fakeDirectory("TASKDATA", [fakeFileEntry(new File(["x"], "a.xml"))]);
+    const second = fakeDirectory("TASKDATA", [fakeFileEntry(new File(["x"], "b.xml"))]);
+    const placeholders = [new File([], "TASKDATA"), new File([], "TASKDATA")];
+    await offerBrowserDrop(placeholders, new Map([["TASKDATA", [first, second]]]), [
+      handler({
+        extensions: [".xml"],
+        open: (files) => {
+          paths.push(...files.map((f) => f.path));
+        },
+      }),
+    ]);
+    assert.deepEqual(paths, ["TASKDATA/a.xml", "TASKDATA/b.xml"]);
+  });
+
   it("leaves an unclaimed folder as the placeholder the built-in groups saw before", async () => {
     const placeholder = new File([], "TASKDATA");
     const folder = fakeDirectory("TASKDATA", [fakeFileEntry(new File(["x"], "a.xml"))]);
-    const result = await offerBrowserDrop([placeholder], new Map([["TASKDATA", folder]]), [
+    const result = await offerBrowserDrop([placeholder], new Map([["TASKDATA", [folder]]]), [
       handler({ extensions: [".xml"], claim: () => [] }),
     ]);
     assert.deepEqual(result.unclaimed, [placeholder]);
