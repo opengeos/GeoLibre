@@ -320,9 +320,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
   refreshPanelLabels = refreshLabels;
 
-  const applyViewBounds = (
-    { preservePreview = false, announce = true }: { preservePreview?: boolean; announce?: boolean } = {},
-  ) => {
+  const applyViewBounds = ({
+    preservePreview = false,
+    announce = true,
+  }: { preservePreview?: boolean; announce?: boolean } = {}) => {
     const bounds = app.getViewBounds?.();
     if (!bounds) {
       status.textContent = tr(app, "mapUnavailable", "The map extent is not available yet.");
@@ -426,16 +427,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const exportGeoJson = (data: FeatureCollection, filter: OsmDownloadFilter) => {
     const suffix = new Date().toISOString().slice(0, 10);
-    app.exportTextFile?.(
-      `osm-${filter.preset}-${suffix}.geojson`,
-      JSON.stringify(data, null, 2),
-      {
-        description: "GeoJSON",
-        extensions: ["geojson"],
-        mimeType: "application/geo+json",
-        promptName: true,
-      },
-    );
+    app.exportTextFile?.(`osm-${filter.preset}-${suffix}.geojson`, JSON.stringify(data, null, 2), {
+      description: "GeoJSON",
+      extensions: ["geojson"],
+      mimeType: "application/geo+json",
+      promptName: true,
+    });
   };
 
   const exportCurrentData = async (format: "GeoJSON" | "GeoParquet") => {
@@ -474,10 +471,15 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         await app.exportGeoParquetFile?.(`osm-${filter.preset}-${suffix}`, data);
       }
       if (disposed || controller !== requestController) return;
-      status.textContent = tr(app, "exported", "Prepared {{count}} features for {{format}} export.", {
-        count,
-        format,
-      });
+      status.textContent = tr(
+        app,
+        "exported",
+        "Prepared {{count}} features for {{format}} export.",
+        {
+          count,
+          format,
+        },
+      );
     } catch (error) {
       if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
       const message = error instanceof Error ? error.message : String(error);

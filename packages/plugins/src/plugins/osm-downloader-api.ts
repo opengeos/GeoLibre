@@ -42,15 +42,11 @@ export interface OsmDownloadFilter {
 
 /** Maximum query area for a filter preset, in unprojected square degrees. */
 export function osmDownloadAreaLimit(preset: OsmDownloadPreset): number {
-  return preset === "all"
-    ? MAX_ALL_QUERY_AREA_SQUARE_DEGREES
-    : MAX_QUERY_AREA_SQUARE_DEGREES;
+  return preset === "all" ? MAX_ALL_QUERY_AREA_SQUARE_DEGREES : MAX_QUERY_AREA_SQUARE_DEGREES;
 }
 
 /** Validated bbox area, or null when the WGS84 bounds cannot be queried. */
-export function osmDownloadBoundsArea(
-  bbox: [number, number, number, number],
-): number | null {
+export function osmDownloadBoundsArea(bbox: [number, number, number, number]): number | null {
   const [west, south, east, north] = bbox;
   if (
     !bbox.every(Number.isFinite) ||
