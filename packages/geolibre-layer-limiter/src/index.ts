@@ -7,7 +7,10 @@ import {
 } from "./geometry";
 
 export interface RenderOptimizerOptions {
-  /** Maximum number of features rendered in the active viewport (default: 500) */
+  /**
+   * Maximum number of features rendered in the active viewport (default: 500).
+   * Values below 1 or non-finite fall back to the default.
+   */
   maxFeatures?: number;
   /** Primary property to sort by (default: 'area_ha') */
   sortProperty?: string;
@@ -60,6 +63,16 @@ interface MapLibreMapLike {
 }
 
 /**
+ * Shared cap normalization: a finite integer >= 1, otherwise the 500 default.
+ * Zero or negative caps would make the Top-K heap throw, so they never reach it.
+ */
+function normalizeMaxFeatures(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : 500;
+}
+
+/**
  * Core Area-Priority Optimizer: Selects Top K features by surface area
  */
 export function optimizeFeatureCollection(
@@ -68,7 +81,7 @@ export function optimizeFeatureCollection(
 ): OptimizeResult {
   const startTime =
     typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-  const maxFeatures = options.maxFeatures || 500;
+  const maxFeatures = normalizeMaxFeatures(options.maxFeatures);
   const sortProperty = options.sortProperty || "area_ha";
   const sortOrder = options.sortOrder || "desc";
   const minAreaThreshold = options.minAreaThreshold || 0.0;
@@ -182,13 +195,13 @@ export class AreaPriorityLimiter {
     this.sourceId = options.sourceId;
     this.layerId = options.layerId;
     this.options = {
-      maxFeatures: options.maxFeatures || 500,
+      ...options,
+      maxFeatures: normalizeMaxFeatures(options.maxFeatures),
       sortProperty: options.sortProperty || "area_ha",
       sortOrder: options.sortOrder || "desc",
       minAreaThreshold: options.minAreaThreshold || 0.0,
-      debounceMs: options.debounceMs || 200,
+      debounceMs: options.debounceMs ?? 200,
       onLimitApplied: options.onLimitApplied,
-      ...options,
     };
 
     this.rawGeoJSON = options.data || null;
@@ -203,7 +216,7 @@ export class AreaPriorityLimiter {
   }
 
   public setMaxFeatures(count: number): void {
-    this.options.maxFeatures = count;
+    this.options.maxFeatures = normalizeMaxFeatures(count);
     if (this.enabled) {
       this.apply();
     }

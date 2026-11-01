@@ -78,6 +78,11 @@ export class MinHeap<T> {
     }
   }
 
+  /**
+   * Drains the heap, returning items in descending comparator order. The name describes the
+   * comparator, not the values: an inverted comparator (as used for `sortOrder: "asc"`) returns
+   * the smallest values first.
+   */
   toArraySortedDescending(): T[] {
     const arr: T[] = [];
     while (this.size() > 0) {

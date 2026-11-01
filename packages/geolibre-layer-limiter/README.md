@@ -3,7 +3,7 @@
 > **Area-Priority Viewport Feature Limiter for GeoLibre & MapLibre GL JS**
 > Developed for [`opengeos/GeoLibre`](https://github.com/opengeos/GeoLibre) by GetBack2Basics Spatial AI Engineering.
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 [![GeoLibre](https://img.shields.io/badge/ecosystem-GeoLibre-emerald.svg)](https://github.com/opengeos/GeoLibre)
 
 ---
@@ -17,45 +17,23 @@ When rendering dense polygon datasets (such as 15.4M+ cadastral parcels, urban z
 1. Intercepting map viewport movements (`moveend`, `zoomend`).
 2. Extracting or calculating polygon surface area (`area_ha` or dynamic geodesic planar Shoelace formula).
 3. Using an $O(M \log K)$ **Top-K Min-Heap** algorithm to cap rendered features to the top $N$ largest polygons in the viewport.
-4. Sustaining consistent **60 FPS** WebGL frame rates without visual clutter from sub-pixel micro-slivers.
+4. Keeping the rendered set to the largest features in view, so micro-slivers don't clutter the map.
 
 ---
 
 ## Installation
 
-```bash
-npm install geolibre-layer-limiter
-# or
-pnpm add geolibre-layer-limiter
-```
+This is a private package in the GeoLibre npm workspace. Import it as `@geolibre/layer-limiter`
+from within the repository; it is not published to the npm registry.
 
 ---
 
 ## Quick Start
 
-### Fluent GeoLibre Layer Usage
-
-```typescript
-import { AreaPriorityLimiter } from "geolibre-layer-limiter";
-
-// Attach to GeoLibre layer
-layer.setRenderOptimizer({
-  maxFeatures: 500,
-  sortProperty: "area_ha",
-  sortOrder: "desc",
-  debounceMs: 200,
-  onLimitApplied: (stats) => {
-    console.log(
-      `Rendered ${stats.renderedCount}/${stats.totalInViewport} features in ${stats.executionTimeMs}ms`,
-    );
-  },
-});
-```
-
 ### Standalone MapLibre GL JS Usage
 
 ```typescript
-import { AreaPriorityLimiter } from "geolibre-layer-limiter";
+import { AreaPriorityLimiter } from "@geolibre/layer-limiter";
 
 const limiter = new AreaPriorityLimiter(map, {
   sourceId: "parcels-source",
@@ -76,16 +54,6 @@ limiter.enable();
 
 ---
 
-## Benchmark Performance
-
-| Dataset Scale     | Features in Viewport | Unoptimized Draw Time  | `geolibre-layer-limiter` ($K=500$) | FPS Improvement            |
-| :---------------- | :------------------- | :--------------------- | :--------------------------------- | :------------------------- |
-| Regional Cadastre | 12,500 polygons      | 142ms (dropped frames) | **3.8ms** ($O(M \log K)$)          | **18 FPS -> 60 FPS**       |
-| Urban Parcels     | 45,000 polygons      | 480ms (WebGL stall)    | **7.4ms** ($O(M \log K)$)          | **8 FPS -> 60 FPS**        |
-| Continental Grid  | 150,000 polygons     | Out of Memory / Crash  | **14.1ms**                         | **Context Lost -> 60 FPS** |
-
----
-
 ## Real-World Case Study & Live Showcase
 
 `geolibre-layer-limiter` was engineered directly out of real-world production requirements in **[AURA Siting Crafter](https://aura.getback2basics.net)** ([GitHub Repository](https://github.com/GetBack2Basics/aura_siting_crafter)), an AI-assisted spatial siting pipeline for renewable energy and industrial infrastructure across Australia.
@@ -94,11 +62,11 @@ limiter.enable();
 
 In national-scale spatial siting analyses, viewports frequently span regions with **15,000 to 50,000+ candidate land parcels** and environmental zoning polygons. In raw WebGL / MapLibre GL JS implementations, rendering this entire volume simultaneously causes:
 
-- Severe frame rate degradation (<15–20 FPS) and dropped interaction frames during continuous pan and zoom gestures.
+- Severe frame rate degradation and dropped interaction frames during continuous pan and zoom gestures.
 - Visual clutter from sub-pixel micro-parcels that obscure high-impact large landholdings.
 - Eventual WebGL context loss or high memory pressure on mobile and standard desktop browsers.
 
-By prioritizing the top $K$ largest polygons within the active camera bounding box via $O(M \log K)$ Top-K selection, AURA maintains silky-smooth **60 FPS** interaction while keeping the most strategically significant land holdings immediately visible to the user.
+By prioritizing the top $K$ largest polygons within the active camera bounding box via $O(M \log K)$ Top-K selection, AURA keeps interaction smooth while keeping the most strategically significant land holdings immediately visible to the user.
 
 - **Live Application**: [aura.getback2basics.net](https://aura.getback2basics.net)
 - **Production Integration Example**: [AURA Map Viewer (`src/geolibre_frontend/map.html`)](https://github.com/GetBack2Basics/aura_siting_crafter/blob/main/src/geolibre_frontend/map.html) showcases how the limiter dynamically hooks into streaming vector feeds with a real-time HUD metrics badge.
@@ -108,4 +76,4 @@ By prioritizing the top $K$ largest polygons within the active camera bounding b
 
 ## License
 
-Apache-2.0 or MIT.
+Apache-2.0.

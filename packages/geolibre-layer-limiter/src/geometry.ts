@@ -1,10 +1,12 @@
 /**
- * Fast Planar Geodesic Shoelace Approximation for Ring Coordinates
+ * Planar approximation of a ring's area (Shoelace formula on locally scaled coordinates)
  */
 export function computeRingAreaHectares(coords: number[][]): number {
   if (!coords || coords.length < 3) return 0.0;
   let sum = 0.0;
   const n = coords.length;
+  // Measure from the first vertex so large coordinates don't lose precision in the products
+  const [originX, originY] = coords[0];
 
   let centerLat = 0.0;
   for (let i = 0; i < n; i++) {
@@ -16,10 +18,10 @@ export function computeRingAreaHectares(coords: number[][]): number {
   const mPerDegLng = 111412.84 * Math.cos(centerLat) - 93.5 * Math.cos(3 * centerLat);
 
   for (let i = 0; i < n - 1; i++) {
-    const x1 = coords[i][0] * mPerDegLng;
-    const y1 = coords[i][1] * mPerDegLat;
-    const x2 = coords[i + 1][0] * mPerDegLng;
-    const y2 = coords[i + 1][1] * mPerDegLat;
+    const x1 = (coords[i][0] - originX) * mPerDegLng;
+    const y1 = (coords[i][1] - originY) * mPerDegLat;
+    const x2 = (coords[i + 1][0] - originX) * mPerDegLng;
+    const y2 = (coords[i + 1][1] - originY) * mPerDegLat;
     sum += x1 * y2 - x2 * y1;
   }
 
@@ -34,6 +36,17 @@ export interface FeatureLike {
     type?: string;
     coordinates?: unknown;
   } | null;
+}
+
+/**
+ * Polygon area in hectares: the exterior ring minus any hole rings
+ */
+function polygonAreaHectares(rings: number[][][]): number {
+  let ha = computeRingAreaHectares(rings[0]);
+  for (let i = 1; i < rings.length; i++) {
+    ha -= computeRingAreaHectares(rings[i]);
+  }
+  return Math.max(0.0, ha);
 }
 
 /**
@@ -62,7 +75,8 @@ export function getFeatureArea(feature: FeatureLike, sortProperty: string = "are
         const val = typeof rawVal === "number" ? rawVal : parseFloat(String(rawVal));
         if (!isNaN(val) && val > 0) {
           if (prop === "shape_area" || prop === "Shape__Area" || prop === "st_area") {
-            return val > 100000000 ? val / 10000.0 : val > 1000 ? val / 10000.0 : val;
+            // These properties are assumed to store square meters
+            return val / 10000.0;
           }
           return val;
         }
@@ -75,12 +89,12 @@ export function getFeatureArea(feature: FeatureLike, sortProperty: string = "are
 
   let totalHa = 0.0;
   if (geom.type === "Polygon" && Array.isArray(geom.coordinates)) {
-    totalHa += computeRingAreaHectares(geom.coordinates[0] as number[][]);
+    totalHa += polygonAreaHectares(geom.coordinates as number[][][]);
   } else if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
     for (let i = 0; i < geom.coordinates.length; i++) {
       const poly = geom.coordinates[i];
       if (Array.isArray(poly)) {
-        totalHa += computeRingAreaHectares(poly[0] as number[][]);
+        totalHa += polygonAreaHectares(poly as number[][][]);
       }
     }
   }
@@ -118,5 +132,10 @@ export function isFeatureInBBox(
   }
 
   expand(geom.coordinates);
-  return !(fMaxX < minX || fMinX > maxX || fMaxY < minY || fMinY > maxY);
+  if (fMaxY < minY || fMinY > maxY) return false;
+  // Map viewport longitudes can run past ±180°, so also test the feature shifted by whole turns
+  for (const shift of [-360, 0, 360]) {
+    if (fMaxX >= minX + shift && fMinX <= maxX + shift) return true;
+  }
+  return false;
 }
