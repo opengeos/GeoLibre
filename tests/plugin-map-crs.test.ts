@@ -100,4 +100,79 @@ describe("plugin map CRS API", () => {
     stop();
     assert.deepEqual(seen, ["EPSG:25832", "IAU_2015:49910", null]);
   });
+
+  describe("setMapCrs", () => {
+    function settable(known: readonly string[] = ["EPSG:32632", "earth-arctic"]) {
+      const writes: unknown[] = [];
+      const api = createPluginMapCrsApi({
+        getEngine: () => fakeEngine(),
+        canResolve: async (mapCrs) => known.includes(mapCrs),
+        applyPreferences: (patch) => writes.push(patch),
+      });
+      return { api, writes };
+    }
+
+    it("writes what Settings writes, with the body the CRS maps", async () => {
+      const { api, writes } = settable();
+      assert.equal(await api.setMapCrs("epsg:32632"), true);
+      assert.equal(await api.setMapCrs("EPSG:3413"), true);
+      assert.equal(await api.setMapCrs(null), true);
+      assert.deepEqual(writes, [
+        { mapCrs: "EPSG:32632", ellipsoidId: "earth" },
+        { mapCrs: "earth-arctic", ellipsoidId: "earth" },
+        { mapCrs: undefined },
+      ]);
+    });
+
+    it("takes a Web Mercator code as the default map", async () => {
+      const { api, writes } = settable();
+      assert.equal(await api.setMapCrs("EPSG:3857"), true);
+      assert.deepEqual(writes, [{ mapCrs: undefined }]);
+    });
+
+    it("refuses what cannot be drawn and leaves the map alone", async () => {
+      const { api, writes } = settable();
+      assert.equal(await api.setMapCrs("not-a-crs"), false);
+      assert.equal(await api.setMapCrs("EPSG:999999"), false);
+      assert.deepEqual(writes, []);
+    });
+
+    it("treats a failed lookup as a refusal", async () => {
+      const writes: unknown[] = [];
+      const api = createPluginMapCrsApi({
+        getEngine: () => fakeEngine(),
+        canResolve: () => Promise.reject(new Error("chunk failed")),
+        applyPreferences: (patch) => writes.push(patch),
+      });
+      assert.equal(await api.setMapCrs("EPSG:32632"), false);
+      assert.deepEqual(writes, []);
+    });
+
+    it("refuses when a renderer swap lands during the lookup", async () => {
+      const writes: unknown[] = [];
+      let engine: { getMapCrs?: () => ResolvedMapCrs | null } = fakeEngine();
+      const api = createPluginMapCrsApi({
+        getEngine: () => engine,
+        canResolve: async () => {
+          engine = {};
+          return true;
+        },
+        applyPreferences: (patch) => writes.push(patch),
+      });
+      assert.equal(await api.setMapCrs("EPSG:32632"), false);
+      assert.deepEqual(writes, []);
+    });
+
+    it("refuses on an engine that draws no other CRS", async () => {
+      const writes: unknown[] = [];
+      const api = createPluginMapCrsApi({
+        getEngine: () => ({}),
+        canResolve: async () => true,
+        applyPreferences: (patch) => writes.push(patch),
+      });
+      assert.equal(await api.setMapCrs("EPSG:32632"), false);
+      assert.equal(await api.setMapCrs(null), false);
+      assert.deepEqual(writes, []);
+    });
+  });
 });

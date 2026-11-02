@@ -1,9 +1,11 @@
 import {
   createEmptyProject,
+  mapCrsPreferencePatch,
   useAppStore,
   type MapProjection,
   type MapViewState,
 } from "@geolibre/core";
+import { requestInitialMapCrsFrame } from "@geolibre/map";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
@@ -19,7 +21,8 @@ import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopS
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
 import { initialNativeProjectPath } from "../lib/native-project-open";
-import { coordinateTargetFromSearch } from "../lib/coordinate-url";
+import { coordinateTargetFromSearch, type CoordinateTarget } from "../lib/coordinate-url";
+import { mapCrsRequestFromSearch } from "../lib/map-crs-url";
 import {
   initialNativeCoordinateTarget,
   finishNativeCoordinateStartup,
@@ -128,6 +131,25 @@ function seedStartupLayers(): Set<string> {
   return startupLayerIds(project);
 }
 
+/**
+ * Draw the first map in the CRS the link names (`?crs=`), before the map exists
+ * so the Web Mercator basemap never loads. Not dirtying, like the seed above; a
+ * `?url=` project takes it in `useProjectUrlLoader`, on top of its own
+ * preferences, and `useMapCrsUrl` backs out a code that does not resolve.
+ */
+function seedLinkedMapCrs(location: CoordinateTarget | null): void {
+  const mapCrs = mapCrsRequestFromSearch(window.location.search)?.mapCrs;
+  if (mapCrs == null || projectUrlFromLocation() !== null) return;
+  useAppStore.setState((state) => ({
+    preferences: {
+      ...state.preferences,
+      map: { ...state.preferences.map, ...mapCrsPreferencePatch(mapCrs) },
+    },
+  }));
+  // Without a view of its own the default one may lie outside the CRS's area.
+  if (!location) requestInitialMapCrsFrame();
+}
+
 export function useStartupProject(): {
   restoring: boolean;
 } {
@@ -176,6 +198,7 @@ export function useStartupProject(): {
         ...startupDefaultWorkspace(useDesktopSettingsStore.getState().desktopSettings.startup),
         ...location,
       });
+      seedLinkedMapCrs(location);
       return false;
     }
     const plan = currentStartupPlan(openedProjectPath);
@@ -183,7 +206,9 @@ export function useStartupProject(): {
       seededLayerIds.current = seedStartupLayers();
       applyDefaultWorkspace(plan);
     }
-    return plan.kind === "restore";
+    if (plan.kind === "restore") return true;
+    seedLinkedMapCrs(location);
+    return false;
   });
 
   // Fetch the features of the URL layers the seeding above added, and only

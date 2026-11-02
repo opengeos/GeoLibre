@@ -1,4 +1,4 @@
-import type { MapViewState } from "@geolibre/core";
+import { normalizeMapCrs, type MapViewState } from "@geolibre/core";
 import { isTauri } from "./is-tauri";
 
 // Host routing, startup, authentication and layout parameters are never owned
@@ -7,6 +7,7 @@ const HOST_PARAMETERS = new Set([
   "lat",
   "lon",
   "zoom",
+  "crs",
   "url",
   "project",
   "plugin",
@@ -92,4 +93,19 @@ export function setMapViewUrl(view: MapViewState): void {
     }),
     ["lat", "lon", "zoom"],
   );
+}
+
+/**
+ * Keep the address's `crs` on the CRS the map is drawn in, so a copied link
+ * opens the same map. A link's own spelling of that CRS (`EPSG:3413` for the
+ * `earth-arctic` preset) is left as written.
+ *
+ * Args:
+ *   mapCrs: The map's normalized CRS, or `null` on the default map.
+ */
+export function setMapCrsUrl(mapCrs: string | null): void {
+  if (typeof window === "undefined") return;
+  const current = new URL(window.location.href).searchParams.get("crs");
+  if (mapCrs !== null && normalizeMapCrs(current) === mapCrs) return;
+  replaceUrlParameters(new URLSearchParams(mapCrs === null ? {} : { crs: mapCrs }), ["crs"]);
 }

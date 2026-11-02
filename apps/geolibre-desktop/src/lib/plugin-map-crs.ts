@@ -1,6 +1,6 @@
 /**
  * The map CRS half of the plugin app API: `getMapCrs` and `onMapCrsChange`
- * (GeoLibre#3213).
+ * (GeoLibre#3213), and `setMapCrs` (GeoLibre#3308).
  *
  * The host adapts the layers it manages to a map drawn in another CRS (WMS and
  * ArcGIS export boxes in that CRS, XYZ and vector tiles left out), but before
@@ -13,7 +13,12 @@
  * Kept in its own module, parameterized over the engine ref and the event
  * target, so it is unit-testable under node.
  */
-import { MAP_CRS_CHANGE_EVENT } from "@geolibre/core";
+import {
+  MAP_CRS_CHANGE_EVENT,
+  mapCrsPreferencePatch,
+  normalizeMapCrs,
+  parseMapCrsEpsgCode,
+} from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoLibreMapCrs } from "@geolibre/plugins";
 
@@ -23,6 +28,10 @@ export interface PluginMapCrsHost {
   getEngine: () => Pick<MapEngine, "getMapCrs"> | null | undefined;
   /** Where the map dispatches `MAP_CRS_CHANGE_EVENT`; omitted off the browser. */
   eventTarget?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  /** Whether a normalized map CRS can be drawn. */
+  canResolve?: (mapCrs: string) => Promise<boolean>;
+  /** Write the map preferences, as saving Settings does. */
+  applyPreferences?: (patch: ReturnType<typeof mapCrsPreferencePatch>) => void;
 }
 
 /**
@@ -62,9 +71,27 @@ function sameMapCrs(a: GeoLibreMapCrs | null, b: GeoLibreMapCrs | null): boolean
 export function createPluginMapCrsApi(host: PluginMapCrsHost): {
   getMapCrs: () => GeoLibreMapCrs | null;
   onMapCrsChange: (listener: (crs: GeoLibreMapCrs | null) => void) => () => void;
+  setMapCrs: (id: string | null) => Promise<boolean>;
 } {
   return {
     getMapCrs: () => readMapCrs(host),
+    setMapCrs: async (id) => {
+      // Only the engines with `getMapCrs` draw another CRS.
+      if (!host.getEngine()?.getMapCrs || !host.applyPreferences) return false;
+      const mapCrs = id === null ? undefined : normalizeMapCrs(id);
+      if (mapCrs === undefined) {
+        // `null` and a Web Mercator code are the default map; anything else is
+        // not a CRS at all.
+        if (id !== null && parseMapCrsEpsgCode(id) === null) return false;
+        host.applyPreferences(mapCrsPreferencePatch(null));
+        return true;
+      }
+      if (!(await host.canResolve?.(mapCrs).catch(() => false))) return false;
+      // A renderer swap may have replaced the engine during the lookup.
+      if (!host.getEngine()?.getMapCrs) return false;
+      host.applyPreferences(mapCrsPreferencePatch(mapCrs));
+      return true;
+    },
     onMapCrsChange: (listener) => {
       let previous = readMapCrs(host);
       const emitIfChanged = () => {

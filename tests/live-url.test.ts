@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { setMapViewUrl, setPluginUrlParameters } from "../apps/geolibre-desktop/src/lib/live-url";
+import {
+  setMapCrsUrl,
+  setMapViewUrl,
+  setPluginUrlParameters,
+} from "../apps/geolibre-desktop/src/lib/live-url";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
 
@@ -423,4 +427,26 @@ test("failed URL cleanup retains publication state until a later activation fail
     await attempt();
     assert.equal(url.params().get("own"), "fresh");
   }
+});
+
+test("the address follows the map's CRS and keeps a link's spelling of it", () => {
+  const url = address("?lat=1&lon=2&zoom=3");
+  setMapCrsUrl("EPSG:32632");
+  assert.equal(url.params().get("crs"), "EPSG:32632");
+  assert.equal(url.params().get("lat"), "1");
+  setMapCrsUrl(null);
+  assert.equal(url.params().has("crs"), false);
+
+  const preset = address("?crs=EPSG:3413");
+  setMapCrsUrl("earth-arctic");
+  assert.equal(preset.params().get("crs"), "EPSG:3413");
+  assert.equal(preset.writes(), 0);
+  setMapCrsUrl("mars-north-polar");
+  assert.equal(preset.params().get("crs"), "mars-north-polar");
+});
+
+test("a plugin cannot claim the crs parameter", () => {
+  const url = address("?crs=EPSG:32632");
+  setPluginUrlParameters(new URLSearchParams({ crs: "EPSG:4326" }), ["crs"]);
+  assert.equal(url.params().get("crs"), "EPSG:32632");
 });

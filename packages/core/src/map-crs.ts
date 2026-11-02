@@ -412,6 +412,25 @@ export function normalizeMapCrs(value: unknown): string | undefined {
 }
 
 /**
+ * The map preferences that draw a map in a CRS, as a Settings choice writes them.
+ *
+ * Args:
+ *   mapCrs: A normalized map CRS, or `null` for the default map.
+ *
+ * Returns:
+ *   The preferences to merge. A CRS brings the body it maps, so measurements
+ *   follow it (the EPSG tables describe Earth); the default map leaves the body
+ *   alone.
+ */
+export function mapCrsPreferencePatch(mapCrs: string | null): {
+  mapCrs: string | undefined;
+  ellipsoidId?: string;
+} {
+  if (mapCrs === null) return { mapCrs: undefined };
+  return { mapCrs, ellipsoidId: getMapCrsPreset(mapCrs)?.ellipsoidId ?? "earth" };
+}
+
+/**
  * Point a Web Mercator WMS or ArcGIS export template at a map CRS.
  *
  * GeoLibre's WMS layers request `BBOX={bbox-epsg-3857}` in `EPSG:3857`. On a

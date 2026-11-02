@@ -3001,6 +3001,7 @@
       },
       "mapCrs": "Map coordinate reference system",
       "mapCrsHint": "Draws the MapLibre map flat in another CRS, such as a polar or simple-cylindrical grid of Earth, the Moon or Mars, with a basemap served in that grid. Tiles are not reprojected: GeoJSON layers, image overlays and WMS or ArcGIS export layers (requested in the CRS) are drawn, while XYZ, vector tile and most plugin layers are not, and the globe and terrain are off.",
+      "mapCrsLinkUnknown": "This link asks for the map CRS \"{{crs}}\", which is unknown or unsupported, so it was ignored.",
       "mapCrsDefault": "Web Mercator / globe (default)",
       "mapCrsCustom": "Custom EPSG code…",
       "mapCrsEpsg": "EPSG code",

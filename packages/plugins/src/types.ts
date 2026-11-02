@@ -1220,6 +1220,15 @@ export interface GeoLibreAppAPI {
    * `style.load`. Call the returned unsubscribe function on deactivation.
    */
   onMapCrsChange?: (listener: (crs: GeoLibreMapCrs | null) => void) => () => void;
+  /**
+   * Draw the primary map in a CRS, with the checks and effects of choosing it in
+   * Settings: `id` is a preset id or `"EPSG:<code>"`, `null` the default map. The
+   * choice is a project preference, so it marks the project unsaved. Resolves to
+   * `false`, leaving the map as it is, when the value cannot be drawn or the
+   * renderer is not MapLibre. `true` means the switch has started: it rebuilds
+   * the style, and {@link onMapCrsChange} reports when it lands.
+   */
+  setMapCrs?: (id: string | null) => Promise<boolean>;
   /** Native ArcGIS view; null while another engine is active. */
   getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
   /**

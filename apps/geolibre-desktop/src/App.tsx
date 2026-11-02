@@ -9,6 +9,7 @@ import { UpdateNotificationModal } from "./components/layout/UpdateNotificationM
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import "./lib/s3-signer-setup";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
+import { useMapCrsUrl } from "./hooks/useMapCrsUrl";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useDataUrlLoader } from "./hooks/useDataUrlLoader";
 import { useStacUrlLoader } from "./hooks/useStacUrlLoader";
@@ -57,6 +58,7 @@ export default function App() {
   useThemeScheme();
   useRecentProjectsPersistence();
   const { restoring: restoringStartupProject } = useStartupProject();
+  useMapCrsUrl();
   useStyleLibraryPersistence();
   useStartupLayerStyles();
   useLayerLibraryPersistence();

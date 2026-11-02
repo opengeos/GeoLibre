@@ -1,11 +1,12 @@
-import { useEffect } from "react";
-import { useAppStore } from "@geolibre/core";
+import { useEffect, type RefObject } from "react";
+import { MAP_CRS_CHANGE_EVENT, useAppStore } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import { isTauri } from "../lib/is-tauri";
-import { setMapViewUrl } from "../lib/live-url";
+import { setMapCrsUrl, setMapViewUrl } from "../lib/live-url";
 
 /** Subscribe without rendering the shell on camera movement. Do not write the
  * default view on mount, before startup links/projects have restored theirs. */
-export function useLiveMapUrl(): void {
+export function useLiveMapUrl(engineRef: RefObject<MapEngine | null>): void {
   useEffect(() => {
     if (isTauri()) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -16,6 +17,10 @@ export function useLiveMapUrl(): void {
       setMapViewUrl(useAppStore.getState().mapView);
     };
     window.addEventListener("pagehide", flush);
+    // Fired only when the map enters or leaves a CRS. A link's `crs` therefore
+    // stays in the address while it resolves, and stays there if it never does.
+    const syncCrs = () => setMapCrsUrl(engineRef.current?.getMapCrs?.()?.id ?? null);
+    window.addEventListener(MAP_CRS_CHANGE_EVENT, syncCrs);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
       const view = state.mapView;
       const old = previous.mapView;
@@ -31,7 +36,8 @@ export function useLiveMapUrl(): void {
     return () => {
       unsubscribe();
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener(MAP_CRS_CHANGE_EVENT, syncCrs);
       flush();
     };
-  }, []);
+  }, [engineRef]);
 }
