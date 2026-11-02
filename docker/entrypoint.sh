@@ -343,10 +343,15 @@ project_storage = os.environ.get("GEOLIBRE_PROJECT_STORAGE", "").strip().lower()
 if project_storage:
     if project_storage not in ("local", "server"):
         raise SystemExit("ERROR: GEOLIBRE_PROJECT_STORAGE must be 'local' or 'server'.")
-    if project_storage == "server" and share_url.lower() == "off":
-        raise SystemExit(
-            "ERROR: GEOLIBRE_PROJECT_STORAGE=server cannot be used with GEOLIBRE_SHARE_URL=off."
-        )
+    if project_storage == "server":
+        if not share_url:
+            raise SystemExit(
+                "ERROR: GEOLIBRE_PROJECT_STORAGE=server requires GEOLIBRE_SHARE_URL to be set."
+            )
+        if share_url.lower() == "off":
+            raise SystemExit(
+                "ERROR: GEOLIBRE_PROJECT_STORAGE=server cannot be used with GEOLIBRE_SHARE_URL=off."
+            )
     deployment["VITE_GEOLIBRE_PROJECT_STORAGE"] = project_storage
 
 # Display name for the app chrome (toolbar label, browser tab). Unset keeps

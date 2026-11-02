@@ -1573,6 +1573,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         token = "";
       }
       if (!token || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
+        if (!token) setActionError(t("share.oauthFailed"));
         return false;
       }
     }
@@ -1601,7 +1602,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // Unembedded snapshot, compared after the upload to tell whether the user
     // changed the project while the save was in flight.
     const startContent = serializeForSave(
-      excludeHiddenFieldsFromProject(buildCurrentProject().project),
+      excludeHiddenFieldsFromProject(buildCurrentProject(chosenTitle).project),
     );
 
     // 4. Build

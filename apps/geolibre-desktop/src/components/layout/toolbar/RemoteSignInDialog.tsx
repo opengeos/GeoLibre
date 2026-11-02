@@ -34,7 +34,10 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
     <Dialog
       open={prompt !== null}
       onOpenChange={(open: boolean) => {
-        if (!open) onSettle(prompt, false);
+        if (!open) {
+          if (signingIn) return;
+          onSettle(prompt, false);
+        }
       }}
     >
       <DialogContent className="max-w-lg">
@@ -62,7 +65,12 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onSettle(prompt, false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={signingIn}
+                onClick={() => onSettle(prompt, false)}
+              >
                 {t("common.cancel")}
               </Button>
               <Button
