@@ -242,6 +242,67 @@ describe("listZipEntryPaths", () => {
     ]);
   });
 
+  it("follows zip64 records with an extensible data sector between them", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x") });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const eocd = zip.byteLength - 22;
+    const directorySize = view.getUint32(eocd + 12, true);
+    const directoryOffset = view.getUint32(eocd + 16, true);
+    const sector = 10;
+    const bytes = new Uint8Array(zip.byteLength + 56 + sector + 20);
+    bytes.set(zip.subarray(0, eocd));
+    const out = new DataView(bytes.buffer);
+    out.setUint32(eocd, 0x06064b50, true);
+    out.setBigUint64(eocd + 4, BigInt(44 + sector), true);
+    out.setBigUint64(eocd + 40, BigInt(directorySize), true);
+    out.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
+    const locator = eocd + 56 + sector;
+    out.setUint32(locator, 0x07064b50, true);
+    out.setBigUint64(locator + 8, BigInt(eocd), true);
+    const classic = locator + 20;
+    bytes.set(zip.subarray(eocd), classic);
+    out.setUint32(classic + 12, 0xffffffff, true);
+    out.setUint32(classic + 16, 0xffffffff, true);
+    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
+      "a.txt",
+    ]);
+  });
+
+  it("lists a zip with bytes in front of it, as a self-extractor has", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x"), "b/c.xml": strToU8("y") });
+    const bytes = new Uint8Array(1024 + zip.byteLength);
+    bytes.fill(0x4d, 0, 1024);
+    bytes.set(zip, 1024);
+    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
+      "a.txt",
+      "b/c.xml",
+    ]);
+  });
+
+  it("stops after a bounded number of end-record candidates", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x") });
+    const fakes = 2800;
+    const comment = new Uint8Array(fakes * 22);
+    const commentView = new DataView(comment.buffer);
+    for (let i = 0; i < fakes; i += 1) {
+      commentView.setUint32(i * 22, 0x06054b50, true);
+      // Point each fake at a different offset so none can pass as an empty archive.
+      commentView.setUint32(i * 22 + 12, 100, true);
+      commentView.setUint32(i * 22 + 16, 50, true);
+    }
+    const bytes = new Uint8Array(zip.byteLength + comment.byteLength);
+    bytes.set(zip);
+    bytes.set(comment, zip.byteLength);
+    new DataView(bytes.buffer).setUint16(zip.byteLength - 2, comment.byteLength, true);
+    let calls = 0;
+    const result = await listZipEntryPaths(bytes.byteLength, async (offset, length) => {
+      calls += 1;
+      return bytes.subarray(offset, offset + length);
+    });
+    assert.ok(result === undefined || result.join() === "a.txt");
+    assert.ok(calls <= 40, `made ${calls} reads`);
+  });
+
   it("returns undefined for a file that is not a zip", async () => {
     const bytes = new Uint8Array(1000).fill(7);
     assert.equal(
