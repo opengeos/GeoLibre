@@ -76,11 +76,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDismiss}
-              >
+              <Button type="button" variant="outline" onClick={handleDismiss}>
                 {t("common.cancel")}
               </Button>
               <Button
