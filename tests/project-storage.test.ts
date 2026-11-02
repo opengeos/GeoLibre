@@ -26,11 +26,23 @@ describe("resolveProjectStorage", () => {
     assert.equal(resolveProjectStorage("1", {}), "local");
   });
 
-  it("returns 'server' when set to 'server' and share host is available", () => {
-    assert.equal(resolveProjectStorage("server", {}), "server");
-    assert.equal(resolveProjectStorage("Server", {}), "server");
-    assert.equal(resolveProjectStorage("SERVER", {}), "server");
-    assert.equal(resolveProjectStorage("  server  ", {}), "server");
+  it("returns 'local' when set to 'server' but no share URL is configured (prevent public host upload)", () => {
+    assert.equal(resolveProjectStorage("server", {}), "local");
+    assert.equal(resolveProjectStorage("Server", {}), "local");
+    assert.equal(resolveProjectStorage("SERVER", {}), "local");
+    assert.equal(resolveProjectStorage("  server  ", {}), "local");
+  });
+
+  it("returns 'server' when set to 'server' and custom share host is configured", () => {
+    const customEnv = { [SHARE_URL_ENV]: "https://projects.example.internal" };
+    assert.equal(resolveProjectStorage("server", customEnv), "server");
+    assert.equal(resolveProjectStorage("Server", customEnv), "server");
+    assert.equal(resolveProjectStorage("SERVER", customEnv), "server");
+    assert.equal(resolveProjectStorage("  server  ", customEnv), "server");
+    assert.equal(
+      resolveProjectStorage("server", {}, "https://projects.example.internal"),
+      "server",
+    );
   });
 
   it("returns 'local' when set to 'server' but share server is disabled (off)", () => {
@@ -58,7 +70,19 @@ describe("resolveProjectStorage", () => {
   });
 
   it("reads from deploymentEnv record when configured arg is omitted", () => {
-    assert.equal(resolveProjectStorage(undefined, { [PROJECT_STORAGE_ENV]: "server" }), "server");
+    assert.equal(
+      resolveProjectStorage(undefined, {
+        [PROJECT_STORAGE_ENV]: "server",
+        [SHARE_URL_ENV]: "https://projects.example.internal",
+      }),
+      "server",
+    );
+    assert.equal(
+      resolveProjectStorage(undefined, {
+        [PROJECT_STORAGE_ENV]: "server",
+      }),
+      "local",
+    );
     assert.equal(
       resolveProjectStorage(undefined, {
         [PROJECT_STORAGE_ENV]: "server",

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@geolibre/ui";
 import { Loader2, LogIn } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RemoteSignInPrompt } from "../../../hooks/useProjectFileActions";
 import { ShareOAuthError, shareOAuthErrorKey, signInToShare } from "../../../lib/share-oauth";
@@ -22,21 +22,32 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
   const { t } = useTranslation();
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [lastPrompt, setLastPrompt] = useState<RemoteSignInPrompt | null>(prompt);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    if (prompt === null) {
+    if (prompt !== null) {
+      setLastPrompt(prompt);
       setSigningIn(false);
       setSignInError(null);
+      cancelledRef.current = false;
     }
   }, [prompt]);
+
+  const displayPrompt = prompt ?? lastPrompt;
+
+  const handleDismiss = () => {
+    cancelledRef.current = true;
+    setSigningIn(false);
+    onSettle(prompt, false);
+  };
 
   return (
     <Dialog
       open={prompt !== null}
       onOpenChange={(open: boolean) => {
         if (!open) {
-          if (signingIn) return;
-          onSettle(prompt, false);
+          handleDismiss();
         }
       }}
     >
@@ -44,20 +55,20 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
         <DialogHeader>
           <DialogTitle>
             {t("toolbar.remoteSave.signInTitle", {
-              shareHost: prompt?.shareHost,
+              shareHost: displayPrompt?.shareHost,
             })}
           </DialogTitle>
           <DialogDescription>
-            {prompt?.oauthSupported
+            {displayPrompt?.oauthSupported
               ? t("toolbar.remoteSave.signInDescriptionOAuth", {
-                  shareHost: prompt?.shareHost,
+                  shareHost: displayPrompt?.shareHost,
                 })
               : t("toolbar.remoteSave.signInDescriptionToken", {
-                  shareHost: prompt?.shareHost,
+                  shareHost: displayPrompt?.shareHost,
                 })}
           </DialogDescription>
         </DialogHeader>
-        {prompt?.oauthSupported ? (
+        {displayPrompt?.oauthSupported ? (
           <div className="space-y-3">
             {signInError ? (
               <p role="alert" className="text-xs text-destructive">
@@ -68,8 +79,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
               <Button
                 type="button"
                 variant="outline"
-                disabled={signingIn}
-                onClick={() => onSettle(prompt, false)}
+                onClick={handleDismiss}
               >
                 {t("common.cancel")}
               </Button>
@@ -79,8 +89,10 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
                 onClick={() => {
                   setSignInError(null);
                   setSigningIn(true);
+                  cancelledRef.current = false;
                   signInToShare()
                     .then((signedIn) => {
+                      if (cancelledRef.current) return;
                       setSigningIn(false);
                       if (!signedIn) {
                         setSignInError(t("share.oauthFailed"));
@@ -89,6 +101,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
                       onSettle(prompt, true);
                     })
                     .catch((err: unknown) => {
+                      if (cancelledRef.current) return;
                       setSigningIn(false);
                       setSignInError(
                         t(

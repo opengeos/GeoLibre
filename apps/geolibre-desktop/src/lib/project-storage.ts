@@ -15,8 +15,9 @@ export type ProjectStorageMode = "local" | "server";
  * Resolves the active project storage mode ("local" | "server").
  *
  * Returns "server" only if the configured value is "server" (case-insensitive)
- * and the configured/resolved share host has a non-null baseUrl.
- * Anything else returns "local".
+ * and an explicit custom share host is configured (`shareHost.status === "configured"`).
+ * Unset or default share hosts (e.g. public hosted share) return "local" to avoid
+ * silently uploading projects to a public service.
  *
  * @param configured - The raw value; read from the env when omitted.
  * @param deploymentEnv - Runtime env override, for tests.
@@ -36,5 +37,5 @@ export function resolveProjectStorage(
     return "local";
   }
   const shareHost = resolveShareHost(shareUrl, deploymentEnv);
-  return shareHost.baseUrl !== null ? "server" : "local";
+  return shareHost.status === "configured" ? "server" : "local";
 }
