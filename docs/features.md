@@ -92,7 +92,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
 - Private Amazon S3 buckets through saved S3 connections that take access keys, named profiles, IAM Identity Center (SSO) sign-in, or IAM roles, with an S3 Browser for walking a bucket; on the desktop app the secret parts are kept in the operating system's credential store. See [Cloud Storage](user-guide/cloud-storage.md)
 - Manual and automatic refresh for WFS, GeoJSON URL, and Add Vector Layer URL layers, with the cadence, last-synchronized time, last error, and on-failure policy persisted with the project as a `connection` record — so a reopened project keeps refreshing on schedule and the Layers panel can show each live layer's synchronization status
 - ArcGIS Hub, Socrata, and CKAN (Humanitarian Data Exchange) open-data browsers under Plugins → Web Services: search public dataset catalogs by keyword (or restrict the ArcGIS Hub search to the current map area), page through results, and add a dataset to the map or download it
-- OSM Downloader under Plugins → Web Services: query buildings, roads, amenities, waterways, land use, all tagged features, or a custom tag from the current view or typed bounds through Overpass, then add the result as GeoJSON or save it to disk
+- OSM Downloader under Plugins → Web Services: query buildings, roads, amenities, waterways, land use, all tagged features, or a custom tag from the current view or typed bounds through Overpass, with fallback relays and an area limit checked before the request, then preview the result and add it as GeoJSON or export it to GeoJSON or GeoParquet
 - Drag and drop vector and GeoTIFF/COG raster files onto the map to add them as layers
 - **Open data in GeoLibre**, a [Chrome extension](https://chromewebstore.google.com/detail/open-data-in-geolibre/joinecgbfoldanidcoakpjgkbaceaooj) on the Chrome Web Store, that collects the supported dataset links and map services (WMS, WMTS, WFS, OGC API - Features, ArcGIS Feature Services, XYZ/TMS, and vector tiles) on the page you are viewing and opens the ones you pick together on one GeoLibre map; an options page points it at a self-hosted GeoLibre instead of the hosted app
 
@@ -248,6 +248,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - `add_ee_layer` turns an authenticated Earth Engine image, image collection, feature collection, or feature into a restorable tile layer, geemap-style, mosaicking a collection and styling vectors before asking Earth Engine for the map id (needs `earthengine-api`)
     - An xarray `DataArray` or `Dataset` is materialized as a session-scoped Cloud Optimized GeoTIFF and rendered directly in the browser, cleaned up when the `Map` is closed or collected
 - MCP server (`geolibre-mcp`) that lets an AI client author real `.geolibre.json` projects headlessly over stdio — no browser, no running app, and no bundled web build — composing them with the same builders the Python package uses, so anything it writes opens unchanged in the desktop app, the web app, and the Jupyter widget. Every read and write is confined to the roots given by `--root` or `GEOLIBRE_MCP_ROOTS`. See [MCP server](mcp.md)
+    - Live `live_*` tools that drive an open desktop window: read and move the camera, add markers, query layer, selected, drawn, and rendered features, toggle identify and built-in controls, run processing algorithms, Whitebox tools, and Model Builder graphs, and capture a snapshot
     - Read-only map previews rendered inline in MCP clients that support MCP Apps
 - R package (`geolibre`) for interactive GeoLibre maps in RStudio, Quarto, R Markdown, and Shiny, with GeoJSON, `sf`, remote raster, camera, and project-file support. See the [R package guide](r.md)
 - A shipped agent skill (`skills/geolibre/`) for people driving GeoLibre from Claude Code or any other skill-loading runtime: a SKILL.md plus progressive-disclosure references for the MCP tool surface, the Python API, hand-written project JSON, and the basemap, color-ramp, legend-preset, and layer-type catalog, so an agent knows which entry point to reach for and in what order to call it. Its copy is checked against the real registries by a test. See [Agent skill](agent-skill.md)
@@ -383,12 +384,15 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
   subject to the client deployment plugin policy. Bundled drop-ins load
   automatically unless their ids are blocked by that policy.
 
+- Plugin host APIs to claim files dropped on the map through file handlers, write files
+  into a folder the user picked, export GeoJSON and GeoParquet, and set the map CRS
+
 See the [Plugin API](plugin-api.md) to build your own.
 
 ## Deployment and platform builds
 
 - Browser deployment with Docker, with optional HTTP Basic Auth for the web container. See [Embedding & Sharing](user-guide/embedding.md)
-    - Embed-friendly URL parameters, including `?url=` project deep links that skip the welcome wizard, a `?welcome=0` param to opt out of onboarding, coordinate links (`?lat=40.7128&lon=-74.006&zoom=12` or compact `?12/40.7128/-74.006`), and `loading=true`, which exposes screenshot readiness on the document element for headless capture; the web address follows the map view as you pan and zoom, and plugins can publish their own declared parameters into it
+    - Embed-friendly URL parameters, including `?url=` project deep links that skip the welcome wizard, a `?welcome=0` param to opt out of onboarding, coordinate links (`?lat=40.7128&lon=-74.006&zoom=12` or compact `?12/40.7128/-74.006`), a `?crs=` map CRS (`?crs=EPSG:25832` or a preset id such as `earth-arctic`), and `loading=true`, which exposes screenshot readiness on the document element for headless capture; the web address follows the map view as you pan and zoom, and plugins can publish their own declared parameters into it
     - On Android, GeoLibre handles `geo:` links, opening the map at the location without replacing layers
     - A `maponly` chrome-free mode, a `panels=collapsed` layout that keeps the Layers and Style icon rails reachable while starting both panels collapsed, and an option to hide the top toolbar outright for a focused viewer
     - A `layout=viewer` read-only preset that keeps Layers, View, Controls, basemaps, and search/identify while hiding every authoring path — menus, shortcuts, drag-and-drop import, and the plugins whose on-map control writes to the project — so an embed cannot be steered into editing; adding `draw` lets the geometry editor run in that preset, so a host page can offer drawing and read the result back through the embed API

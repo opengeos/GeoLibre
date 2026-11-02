@@ -605,6 +605,7 @@
 - [x] **Async Python**: every blocking `Map` command now has an awaitable `*_async()` twin, such as `fly_to_async()` and `get_center_async()`, that runs directly on the event loop in hosts such as Shiny for Python. See [Python](python.md).
 - [x] **A raster and vector example notebook**: `Explore_GeoLibre.ipynb` walks through COGs, DEM analysis, live earthquake data, spatial joins, and 3D extrusions in the Notebook panel, backed by new `add_tile_layer`, `add_cog`, `add_raster`, and `run_whitebox_tool` kernel commands. See [Notebook Panel](notebook.md).
 - [x] **Larger editable database layers and cancellable COG conversion**: editable PostGIS and SQL Server layers now open up to 1,000,000 features by default, adjustable with `GEOLIBRE_DB_MAX_FEATURES`, and browser GeoTIFF-to-COG conversion runs in a worker you can cancel while the interface stays responsive.
+- [x] **In v3.6.1**: a `?crs=` link parameter and `app.setMapCrs()` set the map CRS from a link or a plugin; the OSM Downloader gains fallback relays, a persistent preview, and GeoJSON and GeoParquet export; plugins can claim dropped files through file handlers and write into a folder the user picked; and the MCP server's `live_*` tools now cover querying, Whitebox, Model Builder, and snapshots on an open desktop window. See [Embedding](user-guide/embedding.md), the [Plugin API](plugin-api.md), and [MCP server](mcp.md).
 
 ## Plugin marketplace and registry (design)
 
