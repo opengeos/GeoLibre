@@ -1598,6 +1598,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const chosenTitle = chosen.trim().replace(/\.geolibre$/i, "");
     if (!chosenTitle) return false;
 
+    // Unembedded snapshot, compared after the upload to tell whether the user
+    // changed the project while the save was in flight.
+    const startContent = serializeForSave(
+      excludeHiddenFieldsFromProject(buildCurrentProject().project),
+    );
+
     // 4. Build
     let projectContent: string | null = null;
     let builtLayers: GeoLibreLayer[] = [];
@@ -1643,7 +1649,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       ) {
         return false;
       }
-      useAppStore.getState().setProjectName(chosenTitle);
+      const liveProjectName = useAppStore.getState().projectName;
+      if (
+        liveProjectName.trim() === currentName ||
+        !liveProjectName.trim() ||
+        liveProjectName === DEFAULT_PROJECT_NAME
+      ) {
+        useAppStore.getState().setProjectName(chosenTitle);
+      }
       setProjectPath(null);
       remoteProjectRef.current = {
         id: uploaded.id,
@@ -1664,7 +1677,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       } catch (error) {
         console.error("Failed to compare the saved shared project", error);
       }
-      if (liveContent && sharedProjectContentMatches(projectContent, liveContent)) {
+      if (
+        startContent &&
+        liveContent &&
+        sharedProjectContentMatches(startContent, liveContent)
+      ) {
         markSaved();
         recordExplicitProjectSave();
       }
