@@ -26,6 +26,7 @@ export { ARCGIS_SDK_CDN, ARCGIS_SDK_HOST, ARCGIS_SDK_VERSION } from "./arcgis-sd
 export { MapboxEngine, MAPBOX_CAPABILITIES } from "./mapbox-engine";
 export { rendererCapabilities } from "./renderer-capabilities";
 export { resolveMapCrs, type ResolvedMapCrs } from "./map-crs";
+export { requestInitialMapCrsFrame } from "./active-map-crs";
 export {
   isMapboxSupportedLayer,
   mapboxUnsupportedStyleSettings,

@@ -74,6 +74,10 @@ another CRS:
 Switching CRS rebuilds the style and frames the new map's area; opening a
 project keeps its saved view.
 
+A link can name the CRS with `crs=EPSG:32632` or a preset id, and the web address
+keeps it up to date, so a copied link opens the same map (see [Embedding &
+Sharing](user-guide/embedding.md)). A plugin can switch it with `setMapCrs`.
+
 ## Basemaps and plugins
 
 The shared Basemaps panel provides keyless styles as well as optional provider

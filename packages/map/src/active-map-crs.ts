@@ -96,3 +96,23 @@ export function tileTemplatesForMapCrs(map: maplibregl.Map, tiles: string[]): st
     .map((tile) => adaptBboxTemplateToCrs(tile, crs.wmsSrs ?? crs.code))
     .filter((tile): tile is string => tile !== null);
 }
+
+let initialMapCrsFrame = false;
+
+/**
+ * Ask the map being created to frame its CRS rather than keep the store's view,
+ * for a link that names a CRS and no view. Set before the map exists.
+ *
+ * Args:
+ *   requested: Whether to frame. The map clears it once it has framed, or given
+ *     up on the CRS, rather than when it is created: a mount can be thrown away
+ *     (React's StrictMode) before its CRS resolves.
+ */
+export function requestInitialMapCrsFrame(requested = true): void {
+  initialMapCrsFrame = requested;
+}
+
+/** Whether a map being created should frame its CRS. */
+export function isInitialMapCrsFrameRequested(): boolean {
+  return initialMapCrsFrame;
+}

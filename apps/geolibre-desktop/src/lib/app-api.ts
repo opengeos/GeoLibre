@@ -647,6 +647,17 @@ export function createAppAPI(
     ...createPluginMapCrsApi({
       getEngine: () => mapControllerRef?.current,
       eventTarget: typeof window === "undefined" ? undefined : window,
+      canResolve: async (mapCrs) => {
+        const { resolveMapCrs } = await import("@geolibre/map");
+        return (await resolveMapCrs(mapCrs)) !== null;
+      },
+      applyPreferences: (patch) => {
+        const state = useAppStore.getState();
+        state.setPreferences({
+          ...state.preferences,
+          map: { ...state.preferences.map, ...patch },
+        });
+      },
     }),
     getArcgisView: () => {
       const engine = mapControllerRef?.current;

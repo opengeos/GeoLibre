@@ -3,6 +3,7 @@ import {
   DEFAULT_PROJECT_PREFERENCES,
   ELLIPSOIDS,
   getMapCrsPreset,
+  mapCrsPreferencePatch,
   MAP_CRS_PRESETS,
   normalizeArcgisWkid,
   normalizeMapCrs,
@@ -415,11 +416,7 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
             setCustomCrs(false);
             const preset = getMapCrsPreset(value);
             // A preset maps one body, so measurements follow it there.
-            updateMapPreferences(
-              preset
-                ? { mapCrs: preset.id, ellipsoidId: preset.ellipsoidId }
-                : { mapCrs: undefined },
-            );
+            updateMapPreferences(mapCrsPreferencePatch(preset ? preset.id : null));
           }}
         >
           <option value="">{t("settings.map.mapCrsDefault")}</option>

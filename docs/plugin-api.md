@@ -2160,6 +2160,18 @@ const stop = app.onMapCrsChange?.((crs) => (status.textContent = describe(crs)))
 // in deactivate: stop?.();
 ```
 
+`app.setMapCrs(id)` switches the map, for a layer the user picked that only
+lines up in its own CRS. `id` is a preset id or `"EPSG:<code>"`, and `null` goes
+back to the default map. It does what choosing the CRS in Settings does,
+including marking the project unsaved, so call it on a user action rather than
+on activation. It resolves to `false`, leaving the map alone, when the value
+cannot be drawn or the renderer is not MapLibre:
+
+```ts
+const switched = await app.setMapCrs?.("EPSG:32632");
+if (switched) app.addWmsLayer?.(/* ... */);
+```
+
 ### Reading the viewport
 
 A catalog or service browser that narrows its search to what the user can see
@@ -2372,7 +2384,7 @@ with it. A plugin whose control needs those methods should keep the default
 
 The web host keeps `lat`, `lon`, and `zoom` synchronized with the primary map
 view, debounced with `history.replaceState` so movement does not add Back
-history entries. When a project URL also carries coordinates, that view overrides
+history entries, and `crs` with the CRS the map is drawn in. When a project URL also carries coordinates, that view overrides
 the project's saved center and zoom. Plugins can publish their current search state through the
 optional, plugin-scoped API:
 
@@ -2383,7 +2395,7 @@ app.setUrlParameters?.(new URLSearchParams({ ingvTime: "30d", ingvMag: "3,8" }))
 Declare each writable name in `urlParameterNames`. Each call replaces all of
 that plugin's declared parameters: omitted names are removed, and repeated
 values are preserved. Other query parameters, the fragment, and history state
-are retained. Host parameters such as `url`, `plugin`, `lat`, `lon`, and `zoom`
+are retained. Host parameters such as `url`, `plugin`, `lat`, `lon`, `zoom`, and `crs`
 are reserved, even if declared by a plugin. Use plugin-specific names to avoid
 collisions with other plugins. A query name belongs to the first plugin that
 registers it for writes; later plugins can still read it through URL dispatch,

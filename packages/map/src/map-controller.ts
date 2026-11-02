@@ -97,7 +97,13 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
-import { notifyMapCrsChange, setActiveMapCrs, type ResolvedMapCrs } from "./active-map-crs";
+import {
+  isInitialMapCrsFrameRequested,
+  notifyMapCrsChange,
+  requestInitialMapCrsFrame,
+  setActiveMapCrs,
+  type ResolvedMapCrs,
+} from "./active-map-crs";
 import { createMapCrsStyle, registerMapCrs, resolveMapCrs } from "./map-crs";
 import { transformTileRequest } from "./tile-request-headers";
 import {
@@ -322,6 +328,8 @@ export class MapController implements MapEngine {
    * the CRS switch that follows must keep that view rather than frame its area.
    */
   private storeViewSinceCrsChange = false;
+  /** A link named a CRS and no view: the store's echo of the default view does not count. */
+  private initialCrsFrame = false;
   private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
@@ -468,8 +476,10 @@ export class MapController implements MapEngine {
     // `styledata` are wired, so the real style is treated exactly like a later
     // basemap switch rather than racing the listeners above.
     if (deferMapboxStyle) this.applyStyleToMap(this.basemapStyleUrl);
-    // Keep the project's saved view: frame the CRS only on a later switch.
-    this.syncMapCrs(false);
+    // Keep the project's saved view: frame the CRS only on a later switch, or
+    // when a link names a CRS and no view.
+    this.initialCrsFrame = isInitialMapCrsFrameRequested();
+    this.syncMapCrs(this.initialCrsFrame);
     return this.map;
   }
 
@@ -2064,6 +2074,7 @@ export class MapController implements MapEngine {
     // A CRS that cannot be drawn leaves the default map, with its projection,
     // rather than the blank style or the previous CRS.
     const fallBack = () => {
+      requestInitialMapCrsFrame(false);
       this.failedCrsId = desired;
       this.desiredCrsId = undefined;
       this.showDefaultMap(false);
@@ -2151,7 +2162,11 @@ export class MapController implements MapEngine {
     // After the style has set the projection: before it, the view would be
     // fitted in the outgoing one.
     map.once("style.load", () => {
-      if (this.map !== map || this.activeCrs !== crs || this.storeViewSinceCrsChange) return;
+      if (this.map !== map || this.activeCrs !== crs) return;
+      const keepView = this.storeViewSinceCrsChange && !this.initialCrsFrame;
+      this.initialCrsFrame = false;
+      if (keepView) return;
+      requestInitialMapCrsFrame(false);
       run();
     });
   }
