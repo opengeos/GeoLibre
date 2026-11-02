@@ -55,6 +55,23 @@ function decodeCp437(bytes: Uint8Array): string {
 }
 
 /**
+ * Decode an entry name. Flag bit 11 says UTF-8. Without it the zip default is
+ * CP437, but some writers (macOS "Compress") store UTF-8 without the flag, so
+ * a name that is valid UTF-8 is read as such before falling back to CP437.
+ */
+function decodeEntryName(name: Uint8Array, flags: number): string {
+  if (flags & UTF8_NAME_FLAG) return new TextDecoder().decode(name);
+  if (name.some((byte) => byte >= 0x80)) {
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(name);
+    } catch {
+      return decodeCp437(name);
+    }
+  }
+  return decodeCp437(name);
+}
+
+/**
  * List the paths inside a zip from its central directory, reading only the tail
  * of the archive rather than the whole file.
  *
@@ -78,56 +95,83 @@ export async function listZipEntryPaths(
     const head = await readRange(offset, 4);
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
-  // Scan back for an end record that a central directory really starts under. A
-  // signature inside the archive comment fails that check, so the scan moves on
-  // to the real record before it. Candidates are capped, so a comment full of
-  // signatures cannot cause many reads.
-  let directorySize = 0;
-  let directoryOffset = 0;
-  let found = false;
-  let candidates = 0;
-  for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0 && !found; eocd -= 1) {
-    if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
-    // The declared comment has to fit in the bytes after the record.
-    if (eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true) > tail.byteLength) continue;
-    candidates += 1;
-    if (candidates > MAX_EOCD_CANDIDATES) break;
+  /**
+   * Where the directory of the end record at `eocd` really is, and how far the
+   * archive's own layout backs it: 3 = the directory also ends where the record
+   * (or the ZIP64 record) begins, 2 = an entry starts at the declared offset or
+   * at the offset the size implies, 1 = an empty archive with shifted offsets.
+   */
+  const checkRecord = async (
+    eocd: number,
+  ): Promise<{ tier: number; offset: number; length: number } | undefined> => {
     const eocdOffset = tailOffset + eocd;
-    directorySize = tailView.getUint32(eocd + 12, true);
-    directoryOffset = tailView.getUint32(eocd + 16, true);
-    if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
+    // A spanned archive cannot be unpacked by a handler, so it is not listed.
+    if (tailView.getUint16(eocd + 4, true) !== 0 || tailView.getUint16(eocd + 6, true) !== 0) {
+      return undefined;
+    }
+    let length = tailView.getUint32(eocd + 12, true);
+    let offset = tailView.getUint32(eocd + 16, true);
+    if (length === 0xffffffff || offset === 0xffffffff) {
+      // ZIP64 archives with bytes in front of them are not listed.
       const locator = eocd - ZIP64_LOCATOR_SIZE;
       if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
-        continue;
+        return undefined;
       }
+      if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
-      if (zip64Offset + ZIP64_EOCD_SIZE > size) continue;
+      if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
       const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
-      if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) continue;
-      directorySize = Number(zip64.getBigUint64(40, true));
-      directoryOffset = Number(zip64.getBigUint64(48, true));
-      found = await startsDirectory(directoryOffset, directorySize);
-    } else if (directorySize === 0) {
-      // An empty archive has no entry to find; its directory "starts" at the record.
-      found = tailView.getUint16(eocd + 10, true) === 0 && directoryOffset === eocdOffset;
-    } else if (await startsDirectory(directoryOffset, directorySize)) {
-      found = true;
-    } else {
-      // Bytes before the archive (a self-extractor stub) shift every offset the
-      // record holds, but the directory still ends where the record begins.
-      const shifted = eocdOffset - directorySize;
-      if (await startsDirectory(shifted, directorySize)) {
-        directoryOffset = shifted;
-        found = true;
-      }
+      if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
+      length = Number(zip64.getBigUint64(40, true));
+      offset = Number(zip64.getBigUint64(48, true));
+      if (length === 0) return offset === zip64Offset ? { tier: 3, offset, length } : undefined;
+      if (!(await startsDirectory(offset, length))) return undefined;
+      return { tier: offset + length === zip64Offset ? 3 : 2, offset, length };
     }
+    if (length === 0) {
+      if (tailView.getUint16(eocd + 10, true) !== 0) return undefined;
+      return { tier: offset === eocdOffset ? 3 : 1, offset, length };
+    }
+    if (await startsDirectory(offset, length)) {
+      return { tier: offset + length === eocdOffset ? 3 : 2, offset, length };
+    }
+    // Bytes before the archive (a self-extractor stub) shift every offset the
+    // record holds, but the directory still ends where the record begins.
+    const shifted = eocdOffset - length;
+    if (await startsDirectory(shifted, length)) return { tier: 2, offset: shifted, length };
+    return undefined;
+  };
+  // Collect the end-record signatures from the back. A signature inside the
+  // archive comment is only a candidate: it has to point at a real directory,
+  // and the best-backed candidate wins. Records whose declared comment fits the
+  // file are tried first; the rest only when none of those is usable (a
+  // truncated comment). Evaluations are capped, so a comment full of signatures
+  // cannot cause many reads.
+  const fitting: number[] = [];
+  const overrunning: number[] = [];
+  for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0; eocd -= 1) {
+    if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
+    const commentEnd = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true);
+    (commentEnd <= tail.byteLength ? fitting : overrunning).push(eocd);
   }
-  if (!found) return undefined;
+  let budget = MAX_EOCD_CANDIDATES;
+  let best: { tier: number; offset: number; length: number } | undefined;
+  for (const group of [fitting, overrunning]) {
+    for (const eocd of group) {
+      if (budget <= 0 || best?.tier === 3) break;
+      budget -= 1;
+      const record = await checkRecord(eocd);
+      if (record && (!best || record.tier > best.tier)) best = record;
+    }
+    if (best) break;
+  }
+  if (!best) return undefined;
+  const directoryOffset = best.offset;
+  const directorySize = best.length;
   if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES) return undefined;
 
   const directory = await readRange(directoryOffset, directorySize);
   const view = viewOf(directory);
-  const utf8 = new TextDecoder();
   const paths: string[] = [];
   let cursor = 0;
   while (cursor + CENTRAL_ENTRY_SIZE <= directory.byteLength) {
@@ -139,7 +183,7 @@ export async function listZipEntryPaths(
     const nameStart = cursor + CENTRAL_ENTRY_SIZE;
     if (nameStart + nameLength > directory.byteLength) return undefined;
     const name = directory.subarray(nameStart, nameStart + nameLength);
-    paths.push(flags & UTF8_NAME_FLAG ? utf8.decode(name) : decodeCp437(name));
+    paths.push(decodeEntryName(name, flags));
     cursor = nameStart + nameLength + extraLength + commentLength;
   }
   return paths;
