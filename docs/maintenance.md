@@ -1329,6 +1329,14 @@ So: any edit to that `pyproject.toml`'s dependencies must land with a refreshed
 lock (`uv lock --project backend/geolibre_server`). CI's "Check the bundled sidecar
 lockfile is in sync" step (`uv lock --check`) fails if they drift.
 
+The launch also passes `--python 3.12` (`SIDECAR_PYTHON_VERSION`), the version the
+Whitebox and conversion runtimes use and CI tests. Without it uv picks the newest
+Python available, and `--frozen` then fails outright if a locked package has no
+wheel for it (`psycopg-binary` on 3.15 did). Moving the pin rebuilds users'
+`sidecar-server` and `jupyter-server` environments, dropping anything they
+`%pip install`ed, so check the lock has wheels for the new version on every
+platform first.
+
 ## Credentials must never reach a redistributable build
 
 Anything we hand to someone else — the Jupyter wheel above all — must carry no

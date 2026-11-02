@@ -2711,6 +2711,21 @@ async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerIn
         .map_err(|error| format!("Could not join sidecar startup task: {error}"))?
 }
 
+// Interpreter for the uv project environments behind the sidecar and Jupyter.
+// Matches the Whitebox and conversion runtimes and what CI tests. Left unpinned,
+// uv takes the newest Python it can find or download, which can be a release
+// that locked wheels (psycopg-binary, for one) don't support yet, and then
+// `uv run` fails before the server starts.
+#[cfg(not(feature = "mas"))]
+const SIDECAR_PYTHON_VERSION: &str = "3.12";
+
+// uv replaces an existing project environment built on another Python, so this
+// also repairs installs whose environment was created before the pin.
+#[cfg(not(feature = "mas"))]
+fn add_sidecar_python_pin(command: &mut Command) {
+    command.arg("--python").arg(SIDECAR_PYTHON_VERSION);
+}
+
 #[cfg(not(feature = "mas"))]
 fn add_main_sidecar_extras(command: &mut Command) {
     command
@@ -2797,6 +2812,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .arg("--frozen")
         .arg("--project")
         .arg(&project_dir);
+    add_sidecar_python_pin(&mut command);
     // The main sidecar serves AI segmentation, editable PostGIS and SQL Server
     // layers. Unlike whitebox/conversion (separate managed venvs), their extras
     // must be synced into this environment here.
@@ -3021,7 +3037,9 @@ fn start_jupyter_server_blocking(app: tauri::AppHandle) -> Result<JupyterServerI
         // tested against instead of re-resolving against live PyPI per machine.
         .arg("--frozen")
         .arg("--project")
-        .arg(&project_dir)
+        .arg(&project_dir);
+    add_sidecar_python_pin(&mut command);
+    command
         // The `notebook` extra carries JupyterLab. Synced into a dedicated
         // project environment so it never disturbs the FastAPI sidecar's env
         // (which syncs the `ml` extra).
@@ -5255,7 +5273,8 @@ mod tests {
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
     use super::{
-        add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
+        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message,
+        clear_appimage_python_env,
         find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
         sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
         CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
@@ -5324,6 +5343,15 @@ mod tests {
                 OsStr::new("mssql"),
             ]
         );
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn sidecar_environments_pin_a_python_the_lockfile_supports() {
+        let mut command = Command::new("uv");
+        add_sidecar_python_pin(&mut command);
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(args, [OsStr::new("--python"), OsStr::new("3.12")]);
     }
 
     // A throwaway directory tree under the system temp dir that removes itself
