@@ -30,6 +30,7 @@ import {
   DEEP_LINKABLE_PLUGIN_IDS,
   getExternalPluginLoadIssues,
   getPluginManager,
+  markPluginDeepLinkSettled,
   subscribeToExternalPluginLoads,
 } from "../usePlugins";
 import { useDesktopSettingsStore } from "../useDesktopSettings";
@@ -155,7 +156,11 @@ export function usePluginDeepLink({
 
   useEffect(() => {
     if (projectUrlSettled) projectSettled.current = true;
-    if (!targets || handled.current) return;
+    if (!targets) {
+      markPluginDeepLinkSettled();
+      return;
+    }
+    if (handled.current) return;
     if (!externalPluginsReady || !mapReadyGeneration || !projectSettled.current) return;
     if (!mapControllerRef.current) return;
     handled.current = true;
@@ -177,7 +182,10 @@ export function usePluginDeepLink({
         }
       }
       await resolveRegistryNames(targets.unknown);
-    })().finally(enforceViewerPlugins);
+    })().finally(() => {
+      enforceViewerPlugins();
+      markPluginDeepLinkSettled();
+    });
 
     /**
      * Resolves the names no built-in plugin claimed against the registry:

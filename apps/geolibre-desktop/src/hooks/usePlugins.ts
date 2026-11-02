@@ -536,16 +536,22 @@ const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 // handlers can wait for them. The wait is bounded: a stuck startup delays the
 // load by at most this long instead of blocking it.
 const PLUGIN_SETTLE_TIMEOUT_MS = 15_000;
-const pluginActivationGate = createSettleGate(PLUGIN_SETTLE_TIMEOUT_MS);
+const pluginActivationGate = createSettleGate(PLUGIN_SETTLE_TIMEOUT_MS, ["restore", "deepLink"]);
 
-/** Called once the plugin restore and `?plugin=` activation have finished. */
+/** Called once the project plugin restore (and its URL parameters) has finished. */
 export function markPluginActivationSettled(): void {
-  pluginActivationGate.settle();
+  pluginActivationGate.settle("restore");
+}
+
+/** Called once the `?plugin=` deep link has activated its plugins, or when there is none. */
+export function markPluginDeepLinkSettled(): void {
+  pluginActivationGate.settle("deepLink");
 }
 
 /**
- * Resolves once external plugins have loaded and their startup activation has
- * settled (or after a bounded wait), so handlers they register are visible.
+ * Resolves once external plugins have loaded and their startup activation (project
+ * restore and `?plugin=` deep link) has settled, or after a bounded wait, so the
+ * handlers they register are visible.
  */
 export async function whenPluginsSettled(): Promise<void> {
   await pluginActivationGate.wait();

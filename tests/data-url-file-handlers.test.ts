@@ -330,6 +330,18 @@ describe("createSettleGate", () => {
     await gate.wait();
   });
 
+  it("with several parts, waits for every part (restore and ?plugin= deep link)", async () => {
+    const gate = createSettleGate(10_000, ["restore", "deepLink"]);
+    let done = false;
+    const waiting = gate.wait().then(() => void (done = true));
+    gate.settle("restore");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(done, false);
+    gate.settle("deepLink");
+    await waiting;
+    assert.equal(done, true);
+  });
+
   it("never waits forever: it gives up after the timeout", async () => {
     const gate = createSettleGate(20);
     const started = Date.now();
