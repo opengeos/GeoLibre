@@ -451,15 +451,6 @@ export async function fetchRemoteData(
   const bytes = await readCappedBytes(response, url);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const disposition = response.headers.get("content-disposition")?.toLowerCase() ?? "";
-  if (fileHandlers) {
-    await fileHandlers.ready?.();
-    const handlers = fileHandlers.list();
-    if (handlers.length > 0) {
-      const name = remoteFileName(url, response.headers.get("content-disposition"));
-      const result = await offerRemoteFileToHandlers(name, bytes, handlers);
-      if (result.opened.length + result.failed.length > 0) return { kind: "handled", ...result };
-    }
-  }
   // REST export endpoints commonly have no filename suffix. Prefer their HTTP
   // metadata, then verify by the standard PKZIP signatures so a generic
   // `application/octet-stream` response still imports correctly.
@@ -475,6 +466,17 @@ export async function fetchRemoteData(
     contentType.includes("zip") ||
     /filename\*?=[^;]*\.zip(?:[;"']|$)/i.test(disposition) ||
     zipSignature;
+  if (fileHandlers) {
+    await fileHandlers.ready?.();
+    const handlers = fileHandlers.list();
+    if (handlers.length > 0) {
+      let name = remoteFileName(url, response.headers.get("content-disposition"));
+      // A file already known to be a zip matches `.zip` handlers whatever the URL calls it.
+      if (isZip && !name.toLowerCase().endsWith(".zip")) name = `${name}.zip`;
+      const result = await offerRemoteFileToHandlers(name, bytes, handlers);
+      if (result.opened.length + result.failed.length > 0) return { kind: "handled", ...result };
+    }
+  }
   if (!isZip) {
     return {
       kind: "geojson",

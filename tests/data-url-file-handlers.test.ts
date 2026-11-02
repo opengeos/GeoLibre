@@ -75,6 +75,32 @@ describe("fetchRemoteData with file handlers", () => {
     assert.equal(seen, "Export 7.ZIP");
   });
 
+  it("matches .zip handlers for an extensionless URL the app knows is a zip", async () => {
+    for (const headers of [
+      { "Content-Type": "application/zip" },
+      { "Content-Type": "application/octet-stream" }, // only the PK bytes say zip
+    ]) {
+      let seen: { name: string; entries?: string[] } | undefined;
+      const result = await fetchRemoteData("https://api.example.com/download/abc123?sig=1", {
+        fetchImpl: fetching(taskDataZip, headers),
+        fileHandlers: source([handler({ claim: (files) => ((seen = files[0]), files) })]),
+      });
+      assert.equal(result.kind, "handled");
+      assert.equal(seen?.name, "abc123.zip");
+      assert.deepEqual(seen?.entries, ["TASKDATA/TASKDATA.XML"]);
+    }
+  });
+
+  it("does not guess a zip name for bytes that are not a zip", async () => {
+    let called = false;
+    const result = await fetchRemoteData("https://api.example.com/download/abc123", {
+      fetchImpl: fetching(JSON.stringify(collection)),
+      fileHandlers: source([handler({ claim: () => ((called = true), []) })]),
+    });
+    assert.equal(result.kind, "geojson");
+    assert.equal(called, false);
+  });
+
   it("is unchanged without handlers: a TASKDATA zip still fails as a GeoJSON zip", async () => {
     for (const fileHandlers of [undefined, source([])]) {
       await assert.rejects(
