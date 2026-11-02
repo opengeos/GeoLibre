@@ -1543,7 +1543,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const hostLabel = shareHostLabel();
 
     // 1. Resolve token
-    let personalToken = (useDesktopSettingsStore.getState().desktopSettings.shareToken ?? "").trim();
+    let personalToken = (
+      useDesktopSettingsStore.getState().desktopSettings.shareToken ?? ""
+    ).trim();
     let token = "";
     try {
       token = await resolveShareRequestToken(personalToken, shareBaseUrl);

@@ -402,7 +402,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
                     signInToShare()
                       .then(() => {
                         setRemoteSigningIn(false);
-                        projectFiles.settleRemoteSignInPrompt(projectFiles.remoteSignInPrompt, true);
+                        projectFiles.settleRemoteSignInPrompt(
+                          projectFiles.remoteSignInPrompt,
+                          true,
+                        );
                       })
                       .catch((err: unknown) => {
                         setRemoteSigningIn(false);

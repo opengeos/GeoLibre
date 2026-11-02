@@ -34,14 +34,8 @@ describe("resolveProjectStorage", () => {
   });
 
   it("returns 'local' when set to 'server' but share server is disabled (off)", () => {
-    assert.equal(
-      resolveProjectStorage("server", { [SHARE_URL_ENV]: "off" }),
-      "local",
-    );
-    assert.equal(
-      resolveProjectStorage("server", {}, "off"),
-      "local",
-    );
+    assert.equal(resolveProjectStorage("server", { [SHARE_URL_ENV]: "off" }), "local");
+    assert.equal(resolveProjectStorage("server", {}, "off"), "local");
   });
 
   it("returns 'local' when set to 'server' but share server is invalid", () => {
@@ -49,10 +43,7 @@ describe("resolveProjectStorage", () => {
       resolveProjectStorage("server", { [SHARE_URL_ENV]: "http://insecure.example.com" }),
       "local",
     );
-    assert.equal(
-      resolveProjectStorage("server", {}, "http://insecure.example.com"),
-      "local",
-    );
+    assert.equal(resolveProjectStorage("server", {}, "http://insecure.example.com"), "local");
   });
 
   it("returns 'server' with a valid self-hosted share URL", () => {
@@ -67,10 +58,7 @@ describe("resolveProjectStorage", () => {
   });
 
   it("reads from deploymentEnv record when configured arg is omitted", () => {
-    assert.equal(
-      resolveProjectStorage(undefined, { [PROJECT_STORAGE_ENV]: "server" }),
-      "server",
-    );
+    assert.equal(resolveProjectStorage(undefined, { [PROJECT_STORAGE_ENV]: "server" }), "server");
     assert.equal(
       resolveProjectStorage(undefined, {
         [PROJECT_STORAGE_ENV]: "server",
