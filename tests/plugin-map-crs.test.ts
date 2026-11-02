@@ -148,6 +148,21 @@ describe("plugin map CRS API", () => {
       assert.deepEqual(writes, []);
     });
 
+    it("refuses when a renderer swap lands during the lookup", async () => {
+      const writes: unknown[] = [];
+      let engine: { getMapCrs?: () => null } = fakeEngine();
+      const api = createPluginMapCrsApi({
+        getEngine: () => engine,
+        canResolve: async () => {
+          engine = {};
+          return true;
+        },
+        applyPreferences: (patch) => writes.push(patch),
+      });
+      assert.equal(await api.setMapCrs("EPSG:32632"), false);
+      assert.deepEqual(writes, []);
+    });
+
     it("refuses on an engine that draws no other CRS", async () => {
       const writes: unknown[] = [];
       const api = createPluginMapCrsApi({

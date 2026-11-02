@@ -87,6 +87,8 @@ export function createPluginMapCrsApi(host: PluginMapCrsHost): {
         return true;
       }
       if (!(await host.canResolve?.(mapCrs).catch(() => false))) return false;
+      // A renderer swap may have replaced the engine during the lookup.
+      if (!host.getEngine()?.getMapCrs) return false;
       host.applyPreferences(mapCrsPreferencePatch(mapCrs));
       return true;
     },

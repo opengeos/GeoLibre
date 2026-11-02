@@ -2384,7 +2384,8 @@ with it. A plugin whose control needs those methods should keep the default
 
 The web host keeps `lat`, `lon`, and `zoom` synchronized with the primary map
 view, debounced with `history.replaceState` so movement does not add Back
-history entries, and `crs` with the CRS the map is drawn in. When a project URL also carries coordinates, that view overrides
+history entries, and `crs` with the CRS the map is drawn in. When a project URL
+also carries coordinates, that view overrides
 the project's saved center and zoom. Plugins can publish their current search state through the
 optional, plugin-scoped API:
 

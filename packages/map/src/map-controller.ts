@@ -2075,6 +2075,7 @@ export class MapController implements MapEngine {
     // rather than the blank style or the previous CRS.
     const fallBack = () => {
       requestInitialMapCrsFrame(false);
+      this.initialCrsFrame = false;
       this.failedCrsId = desired;
       this.desiredCrsId = undefined;
       this.showDefaultMap(false);
