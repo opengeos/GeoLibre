@@ -1571,7 +1571,13 @@ const unregister = app.registerMenuContribution?.({
 
 The host always nests the items under a submenu named after your plugin, placed after a separator at the end of the target menu, and sorts plugin submenus alphabetically. A plugin cannot insert loose items between the built-in entries or reorder them. Several contributions from the same plugin to the same menu share one submenu, with a separator between them. Contributions with no items are not shown.
 
-Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. Ids are global, like toolbar menu ids, so prefix them with your plugin id; the host warns when one plugin's id replaces another's, and `unregisterMenuContribution` only removes contributions your own plugin registered. The host also drops a plugin's contributions when it is deactivated or its activation fails, so a missed disposer cannot leave stale items behind. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
+Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Reading archives safely: the host only lists a `.zip`'s central directory and never inflates an entry. A handler that unpacks in `open` is the one reading untrusted bytes, so it should:
+
+- reject entries with a `..` segment or an absolute path, so nothing lands outside the folder you meant;
+- check the entry count and the declared sizes, per entry and in total, before inflating anything;
+- inflate with a bounded read (stop at the size you allow), because a declared size can lie.
+
+Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. Ids are global, like toolbar menu ids, so prefix them with your plugin id; the host warns when one plugin's id replaces another's, and `unregisterMenuContribution` only removes contributions your own plugin registered. The host also drops a plugin's contributions when it is deactivated or its activation fails, so a missed disposer cannot leave stale items behind. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
 
 ## Receiving dropped files
 
@@ -1601,7 +1607,7 @@ const unregister = app.registerFileHandler?.({
 
 Handlers run in registration order, and a file one handler claims is not offered to the next. Everything nobody claims loads as it would without any handlers, so a shapefile zip still loads as a shapefile.
 
-Files inside a dropped folder also have a `path` relative to the drop, such as `TASKDATA/TLG00001.BIN`. Hidden entries and `__MACOSX` are skipped, and very deep or very large folders are cut off, so do not rely on seeing every file of a huge tree. When a handler claims any file of a folder, the whole folder counts as handled and its other files are not loaded. When no handler claims any, the folder goes to the built-in groups as usual.
+Files inside a dropped folder also have a `path` relative to the drop, such as `TASKDATA/TLG00001.BIN`. The path starts with the dropped folder's own name and always uses `/`, on every platform. Hidden entries and `__MACOSX` are skipped, and very deep or very large folders are cut off, so do not rely on seeing every file of a huge tree. When a handler claims any file of a folder, the whole folder counts as handled and its other files are not loaded. When no handler claims any, the folder goes to the built-in groups as usual.
 
 Register in `activate` and call the returned function (or `app.unregisterFileHandler?.(id)`) in `deactivate`; re-registering the same `id` replaces the handler. Ids are global, so prefix them with your plugin id; `unregisterFileHandler` only removes handlers your own plugin registered. The host also drops a plugin's handlers when it is deactivated or its activation fails. Drops are still blocked before any handler runs in the read-only viewer and when a deployment does not grant `data:add`.
 
