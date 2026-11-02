@@ -1605,6 +1605,33 @@ Files inside a dropped folder also have a `path` relative to the drop, such as `
 
 Register in `activate` and call the returned function (or `app.unregisterFileHandler?.(id)`) in `deactivate`; re-registering the same `id` replaces the handler. Ids are global, so prefix them with your plugin id; `unregisterFileHandler` only removes handlers your own plugin registered. The host also drops a plugin's handlers when it is deactivated or its activation fails. Drops are still blocked before any handler runs in the read-only viewer and when a deployment does not grant `data:add`.
 
+### Files loaded by URL
+
+The same handlers also receive a file GeoLibre downloads for `?data=` or the embed `addData` command. After the download, and before the built-in loaders classify it, the file is offered to the handlers exactly as a dropped file is: the `extensions` filter, then `claim`, then `open`, with the same error handling. The file name is the `Content-Disposition` filename when the response has one, otherwise the last segment of the URL path, so a URL that ends in `.zip` reaches a handler whose `extensions` include `.zip`, and `claim` sees the archive's `entries`. A file no handler claims loads as it would without any handlers. A downloaded file is only as large as the URL path already allows (250 MB).
+
+A URL with no extension, such as a signed link or an API endpoint, cannot be matched by `extensions`. Declare a `dataTypes` hint name for it:
+
+```typescript
+app.registerFileHandler?.({
+  id: "my-plugin-taskdata",
+  name: "ISOXML TaskData",
+  extensions: [".zip", ".xml"],
+  dataTypes: ["isoxml"],
+  claim: (files) => files.filter((file) => file.entries?.some((e) => /TASKDATA\.XML$/i.test(e))),
+  open: async (files) => parseAndAddLayers(files[0].name, await files[0].arrayBuffer()),
+});
+```
+
+```text
+https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Fdownload%2F42&dataType=isoxml
+```
+
+When a URL carries `dataType=isoxml` and a registered handler declares that name, the downloaded file goes straight to that handler's `open`, without the extension filter and without `claim`. Names are lower-case letters, digits and hyphens, at most 32 characters; invalid names are ignored with a warning. `lidar` is built in and cannot be declared. If two handlers declare the same name, the first one registered keeps it. A hint no handler declares is ignored. `dataType` pairs with `data` by position, and the embed `addData(url, { dataType })` option takes the same names.
+
+`?data=` loads at startup, before every external plugin has activated, so a load that could reach a handler waits for plugin activation to finish before it offers the file, for at most 15 seconds. A load that needs no download, such as a `.tif` URL, never waits. `open` has no layer to return: the handler adds its own layers, the status line says "Opened by" and your `name`, and `addData` resolves with the ids of the layers that appeared. If `open` rejects, the load fails with the error under your `name`.
+
+URL loads reach handlers only where drops are allowed: not in the read-only viewer (`layout=viewer`) and not when a deployment does not grant `data:add`. There the file loads as it would without handlers.
+
 ## Following the app language
 
 The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Four methods bridge that gap:

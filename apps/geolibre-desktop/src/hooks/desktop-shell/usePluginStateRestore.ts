@@ -30,7 +30,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { notify } from "../../lib/notify";
 import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
-import { createAppAPI, getPluginManager } from "../usePlugins";
+import { createAppAPI, getPluginManager, markPluginActivationSettled } from "../usePlugins";
 
 /** Saved point clouds that could not be reloaded vanish from the map otherwise. */
 function notifyLidarRestoreFailed(error: unknown): void {
@@ -161,6 +161,7 @@ export function usePluginStateRestore({
       .catch(console.error)
       .finally(() => {
         enforceViewerPlugins();
+        markPluginActivationSettled();
         if (current) setRestoredGeneration(projectGeneration);
       });
     // effects engine drives Cesium's sky box and atmosphere, the sun simulation

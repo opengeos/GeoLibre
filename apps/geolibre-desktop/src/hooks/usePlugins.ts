@@ -187,6 +187,7 @@ import { createAppAPI as buildAppAPI, isTauriRuntime, type AppApiHost } from "..
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { isPluginVisible } from "../lib/ui-profile";
 import type { ActivatablePlugin } from "../lib/assistant/plugin-activation";
+import { createSettleGate } from "../lib/settle-gate";
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
 function reportPluginError(pluginId: string, action: string, error: unknown): void {
@@ -530,6 +531,26 @@ let externalPluginLoadIssues = new Map<string, ExternalPluginLoadIssueDisplay>()
 let externalPluginHeldBack = new Map<string, HeldBackPluginBundle>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
+
+// Closes once the startup plugin restore has run, so a URL load that wants file
+// handlers can wait for them. The wait is bounded: a stuck startup delays the
+// load by at most this long instead of blocking it.
+const PLUGIN_SETTLE_TIMEOUT_MS = 15_000;
+const pluginActivationGate = createSettleGate(PLUGIN_SETTLE_TIMEOUT_MS);
+
+/** Called once the plugin restore and `?plugin=` activation have finished. */
+export function markPluginActivationSettled(): void {
+  pluginActivationGate.settle();
+}
+
+/**
+ * Resolves once external plugins have loaded and their startup activation has
+ * settled (or after a bounded wait), so handlers they register are visible.
+ */
+export async function whenPluginsSettled(): Promise<void> {
+  await pluginActivationGate.wait();
+  await Promise.allSettled(manager.list().map((plugin) => manager.pendingActivation(plugin.id)));
+}
 
 export function getPluginManager(): PluginManager {
   return manager;

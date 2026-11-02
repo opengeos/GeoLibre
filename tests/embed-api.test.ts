@@ -245,7 +245,23 @@ describe("parseEmbedRequest: v2 commands", () => {
           type: "addData",
           url: "https://example.com/data.parquet",
           styleUrl: "https://example.com/style.json",
+          dataType: null,
           fit: false,
+        },
+        requestId: null,
+      },
+    );
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addData", { url: "https://example.com/download/42", dataType: "isoxml" }),
+      ),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/download/42",
+          styleUrl: null,
+          dataType: "isoxml",
+          fit: true,
         },
         requestId: null,
       },
@@ -257,6 +273,7 @@ describe("parseEmbedRequest: v2 commands", () => {
           type: "addData",
           url: "https://example.com/data.geojson",
           styleUrl: null,
+          dataType: null,
           fit: true,
         },
         requestId: null,
@@ -274,6 +291,8 @@ describe("parseEmbedRequest: v2 commands", () => {
       { url: "/relative.geojson" },
       { url: "https://example.com/data.geojson", styleUrl: "data:text/json,{}" },
       { url: "https://example.com/data.geojson", fit: "yes" },
+      { url: "https://example.com/data.geojson", dataType: "Not Valid" },
+      { url: "https://example.com/data.geojson", dataType: 7 },
     ]) {
       assert.match(
         (parseEmbedRequest(message("addData", payload)) as { error: string }).error,

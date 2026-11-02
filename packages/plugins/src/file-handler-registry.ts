@@ -14,6 +14,41 @@ import type { GeoLibreFileHandler } from "./types";
 export interface FileHandlerEntry {
   handler: GeoLibreFileHandler;
   ownerPluginId?: string;
+  /** The handler's valid, non-reserved `dataTypes`; the rest were ignored. */
+  dataTypes: string[];
+}
+
+/** Hint names the host handles itself; a handler cannot declare them. */
+const RESERVED_DATA_TYPES = new Set(["lidar"]);
+
+/** Whether `name` is a usable `dataType` hint: lower-case `[a-z0-9-]`, at most 32 characters. */
+export function isFileHandlerDataType(name: unknown): name is string {
+  return typeof name === "string" && /^[a-z0-9-]{1,32}$/.test(name);
+}
+
+/** The valid names of `handler.dataTypes`, warning about each one that is ignored. */
+function declaredDataTypes(handler: GeoLibreFileHandler): string[] {
+  if (handler.dataTypes === undefined) return [];
+  if (!Array.isArray(handler.dataTypes)) {
+    console.warn(`File handler "${handler.id}": dataTypes must be an array; ignoring it.`);
+    return [];
+  }
+  const names: string[] = [];
+  for (const name of handler.dataTypes) {
+    if (!isFileHandlerDataType(name)) {
+      console.warn(
+        `File handler "${handler.id}": ignoring invalid data type ${JSON.stringify(name)}; ` +
+          "use lower-case letters, digits and hyphens, at most 32 characters.",
+      );
+    } else if (RESERVED_DATA_TYPES.has(name)) {
+      console.warn(
+        `File handler "${handler.id}": the "${name}" data type is built in; ignoring it.`,
+      );
+    } else if (!names.includes(name)) {
+      names.push(name);
+    }
+  }
+  return names;
 }
 
 const registry = new Map<string, FileHandlerEntry>();
@@ -47,7 +82,17 @@ export function registerFileHandler(
   if (typeof handler.claim !== "function" || typeof handler.open !== "function") {
     throw new Error(`File handler "${handler.id}" must have claim and open functions.`);
   }
-  const entry: FileHandlerEntry = { handler, ownerPluginId };
+  const entry: FileHandlerEntry = { handler, ownerPluginId, dataTypes: declaredDataTypes(handler) };
+  // The first handler to declare a hint keeps it; a later one is warned, not obeyed.
+  for (const name of entry.dataTypes) {
+    const owner = findEntryByDataType(name);
+    if (owner && owner.handler.id !== handler.id) {
+      console.warn(
+        `File handler "${handler.id}" declares the "${name}" data type, which ` +
+          `"${owner.handler.id}" already declares; "${owner.handler.id}" keeps it.`,
+      );
+    }
+  }
   // Ids are global, like menu contribution ids. Replacing another plugin's
   // handler is almost certainly an accidental collision, so say so.
   const previous = registry.get(handler.id);
@@ -87,6 +132,22 @@ export function unregisterFileHandlersByOwner(ownerPluginId: string): void {
   for (const [id, entry] of registry) {
     if (entry.ownerPluginId === ownerPluginId) registry.delete(id);
   }
+}
+
+function findEntryByDataType(name: string): FileHandlerEntry | undefined {
+  for (const entry of registry.values()) {
+    if (entry.dataTypes.includes(name)) return entry;
+  }
+  return undefined;
+}
+
+/**
+ * The handler that declares a `dataType` hint (the first registered one when
+ * several do), or undefined when none does. The built-in `lidar` hint never
+ * resolves to a handler.
+ */
+export function findFileHandlerByDataType(name: string): GeoLibreFileHandler | undefined {
+  return findEntryByDataType(name)?.handler;
 }
 
 /** All registered handlers, in registration order. */

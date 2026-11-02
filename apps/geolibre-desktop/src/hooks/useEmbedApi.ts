@@ -273,6 +273,7 @@ export function useEmbedApi(
           const result = await queueDataLoad(() =>
             loadDataUrl(mapAppAPI, command.url, {
               styleUrl: command.styleUrl,
+              dataType: command.dataType,
               signal: abort.signal,
               fit: command.fit,
             }),

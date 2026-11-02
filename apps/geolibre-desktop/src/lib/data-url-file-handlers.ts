@@ -1,0 +1,85 @@
+/**
+ * Offers a file downloaded by `?data=` or the embed `addData` command to the
+ * plugin file handlers (GeoLibre#3283), through the same routing a dropped
+ * file takes, so claims, errors and status messages behave alike.
+ */
+
+import type { GeoLibreFileHandler } from "@geolibre/plugins";
+import {
+  type DropLeaf,
+  type FileHandlerDropResult,
+  offerDropToFileHandlers,
+  toDroppedFile,
+} from "./plugin-file-drop";
+
+/** What a data URL load needs from the file handler registry. */
+export interface DataUrlFileHandlers {
+  /** The registered handlers, in registration order. */
+  list: () => GeoLibreFileHandler[];
+  /** The handler that declares a `dataType` hint, if any. */
+  forDataType: (name: string) => GeoLibreFileHandler | undefined;
+  /** Resolves once plugins have had the chance to register their handlers. */
+  ready?: () => Promise<void>;
+}
+
+/** The outcome of offering a downloaded file: the handlers that opened it or failed. */
+export type RemoteFileHandlerResult = Pick<FileHandlerDropResult<string>, "opened" | "failed">;
+
+/**
+ * Whether URL loads may reach file handlers. Drops are closed in the read-only
+ * viewer and without `data:add`, and handlers are closed to URL loads the same
+ * way, so the registry opens no door the drop path keeps shut.
+ */
+export function dataUrlFileHandlers(
+  gate: { viewer: boolean; canAddData: boolean },
+  source: DataUrlFileHandlers,
+): DataUrlFileHandlers | undefined {
+  return gate.viewer || !gate.canAddData ? undefined : source;
+}
+
+function memoryLeaf(name: string, bytes: Uint8Array): DropLeaf<string> {
+  return {
+    origin: name,
+    name,
+    size: bytes.byteLength,
+    read: async () => bytes.slice().buffer,
+    readRange: async (offset, length) => bytes.subarray(offset, offset + length),
+  };
+}
+
+/**
+ * Offer a downloaded file to the handlers: extension filter, `claim`, then
+ * `open`, exactly as for a drop.
+ *
+ * @param name - The file name, with the extension the URL or response gives.
+ * @param bytes - The downloaded bytes.
+ * @param handlers - The registered handlers.
+ * @returns The handlers that opened the file or failed to; both empty when none claimed it.
+ */
+export async function offerRemoteFileToHandlers(
+  name: string,
+  bytes: Uint8Array,
+  handlers: GeoLibreFileHandler[],
+): Promise<RemoteFileHandlerResult> {
+  const leaf = memoryLeaf(name, bytes);
+  const { opened, failed } = await offerDropToFileHandlers([leaf], [name], handlers);
+  return { opened, failed };
+}
+
+/**
+ * Hand a downloaded file straight to the handler a `dataType` hint named,
+ * without the extension filter or `claim`. A throwing `open` is reported, as
+ * for a drop.
+ */
+export async function openRemoteFileWithHandler(
+  handler: GeoLibreFileHandler,
+  name: string,
+  bytes: Uint8Array,
+): Promise<RemoteFileHandlerResult> {
+  try {
+    await handler.open([toDroppedFile(memoryLeaf(name, bytes))]);
+    return { opened: [handler], failed: [] };
+  } catch (error) {
+    return { opened: [], failed: [{ handler, error }] };
+  }
+}

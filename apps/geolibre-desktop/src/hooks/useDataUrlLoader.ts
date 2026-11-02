@@ -5,6 +5,8 @@ import {
   addPMTilesLayerFromUrl,
   addRasterToMap,
   addVectorLayerFromUrl,
+  findFileHandlerByDataType,
+  listFileHandlers,
 } from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,7 +18,9 @@ import {
   parseRasterUrlStyle,
 } from "../lib/data-url";
 import { deepLinkCogDefaults } from "../lib/cog-render-engine";
-import type { createAppAPI } from "./usePlugins";
+import { dataUrlFileHandlers } from "../lib/data-url-file-handlers";
+import { isViewerLayout } from "./useLayoutOptions";
+import { type createAppAPI, whenPluginsSettled } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
 /** `fitLayerIds` carries the layers the shell still has to frame. */
@@ -25,6 +29,28 @@ export type DataUrlLoadState = ProjectUrlLoadState & { fitLayerIds?: string[] };
 export interface DataUrlLoadResult {
   layerIds: string[];
   fitLayerIds: string[];
+  /** Status to show instead of the default "Loaded N layers", e.g. when a plugin opened the file. */
+  message?: string;
+}
+
+/**
+ * The plugin file handlers a URL load may use, or undefined where the drop path
+ * is closed too: the read-only viewer and a deployment without `data:add`. Plugin
+ * activation is awaited (bounded) before the first offer, since `?data=` loads at
+ * startup while external plugins register their handlers asynchronously.
+ */
+function urlFileHandlers() {
+  return dataUrlFileHandlers(
+    {
+      viewer: typeof window !== "undefined" && isViewerLayout(window.location.search),
+      canAddData: useAppStore.getState().deploymentCapabilities.has("data:add"),
+    },
+    {
+      list: listFileHandlers,
+      forDataType: findFileHandlerByDataType,
+      ready: whenPluginsSettled,
+    },
+  );
 }
 
 /** Whether a store layer records the given URL as the data it was loaded from. */
@@ -46,14 +72,43 @@ export async function loadDataUrl(
   } = {},
 ): Promise<DataUrlLoadResult> {
   const fit = options.fit ?? true;
+  // A file handler adds its layers while the download is still being classified.
+  const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
   const [remote, rawStyle] = await Promise.all([
-    fetchRemoteData(dataUrl, { signal: options.signal, dataType: options.dataType }),
+    fetchRemoteData(dataUrl, {
+      signal: options.signal,
+      dataType: options.dataType,
+      fileHandlers: urlFileHandlers(),
+    }),
     options.styleUrl ? fetchRemoteStyle(options.styleUrl, { signal: options.signal }) : null,
   ]);
   if (options.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
   const store = useAppStore.getState();
   const layerIds: string[] = [];
   const fitLayerIds: string[] = [];
+  if (remote.kind === "handled") {
+    // The handler already ran during the download. It adds its own layers, so
+    // report the ones that appeared and leave the camera to it.
+    if (remote.failed.length > 0) {
+      throw new Error(
+        remote.failed
+          .map(
+            ({ handler, error }) =>
+              `${handler.name}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          .join(" "),
+      );
+    }
+    if (rawStyle !== null) {
+      throw new Error("A style cannot be applied to a file opened by a plugin.");
+    }
+    layerIds.push(...store.layers.map((layer) => layer.id).filter((id) => !before.has(id)));
+    return {
+      layerIds,
+      fitLayerIds,
+      message: `Opened by ${remote.opened.map((handler) => handler.name).join(", ")}`,
+    };
+  }
   if (remote.kind === "cog") {
     const rasterStyle = rawStyle === null ? null : parseRasterUrlStyle(rawStyle);
     const id = await addRasterToMap(mapAppAPI, remote.url, {
@@ -191,12 +246,14 @@ export function useDataUrlLoader(
       return { layerIds, fitLayerIds: layerIds };
     };
     void load()
-      .then(({ layerIds, fitLayerIds }) => {
+      .then(({ layerIds, fitLayerIds, message }) => {
         if (controller.signal.aborted) return;
         setState({
           error: null,
           fitLayerIds,
-          message: `Loaded ${layerIds.length} layer${layerIds.length === 1 ? "" : "s"} from URL`,
+          message:
+            message ??
+            `Loaded ${layerIds.length} layer${layerIds.length === 1 ? "" : "s"} from URL`,
           status: "loaded",
         });
         timeoutRef.current = window.setTimeout(() => {

@@ -53,6 +53,11 @@ export interface AddLayerSpec {
 
 export interface AddDataOptions {
   styleUrl?: string;
+  /**
+   * Names the format of a `url` whose path cannot say, like the `dataType` URL
+   * parameter: `"lidar"`, or a name an installed plugin's file handler declares.
+   */
+  dataType?: string;
   /** Fit the map to the newly added data. Defaults to true. */
   fit?: boolean;
 }
