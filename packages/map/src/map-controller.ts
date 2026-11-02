@@ -2158,7 +2158,11 @@ export class MapController implements MapEngine {
         map.jumpTo({ center, zoom: Math.max(0, Math.log2(side / 512)), bearing: 0, pitch: 0 });
       };
     }
-    if (!frameView) return;
+    if (!frameView) {
+      this.initialCrsFrame = false;
+      requestInitialMapCrsFrame(false);
+      return;
+    }
     const run = frameView;
     // After the style has set the projection: before it, the view would be
     // fitted in the outgoing one.

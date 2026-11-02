@@ -150,7 +150,7 @@ describe("plugin map CRS API", () => {
 
     it("refuses when a renderer swap lands during the lookup", async () => {
       const writes: unknown[] = [];
-      let engine: { getMapCrs?: () => null } = fakeEngine();
+      let engine: { getMapCrs?: () => ResolvedMapCrs | null } = fakeEngine();
       const api = createPluginMapCrsApi({
         getEngine: () => engine,
         canResolve: async () => {

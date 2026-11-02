@@ -17,8 +17,8 @@ export function useLiveMapUrl(engineRef: RefObject<MapEngine | null>): void {
       setMapViewUrl(useAppStore.getState().mapView);
     };
     window.addEventListener("pagehide", flush);
-    // Fired only when the map enters or leaves a CRS, so a link's `crs` stays in
-    // the address while it resolves, and when it turns out not to resolve.
+    // Fired only when the map enters or leaves a CRS. A link's `crs` therefore
+    // stays in the address while it resolves, and stays there if it never does.
     const syncCrs = () => setMapCrsUrl(engineRef.current?.getMapCrs?.()?.id ?? null);
     window.addEventListener(MAP_CRS_CHANGE_EVENT, syncCrs);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
