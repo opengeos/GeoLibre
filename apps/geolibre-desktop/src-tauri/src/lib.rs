@@ -2715,7 +2715,7 @@ async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerIn
 // Left unpinned, uv takes the newest Python it can find or download, which can
 // be a release that locked wheels (psycopg-binary, for one) don't support yet,
 // and then `uv run` fails before the server starts. 3.12 matches the Whitebox and
-// conversion runtimes and the version CI tests.
+// conversion runtime defaults and the version CI tests.
 #[cfg(not(feature = "mas"))]
 const SIDECAR_PYTHON_VERSION: &str = "3.12";
 

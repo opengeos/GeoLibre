@@ -1329,10 +1329,11 @@ So: any edit to that `pyproject.toml`'s dependencies must land with a refreshed
 lock (`uv lock --project backend/geolibre_server`). CI's "Check the bundled sidecar
 lockfile is in sync" step (`uv lock --check`) fails if they drift.
 
-The launch also passes `--python 3.12` (`SIDECAR_PYTHON_VERSION`), the version the
-Whitebox and conversion runtimes use and CI tests. Without it uv picks the newest
-Python available, and `--frozen` then fails outright if a locked package has no
-wheel for it (`psycopg-binary` on 3.15 did). Moving the pin rebuilds users'
+The launch also passes `--python 3.12` (`SIDECAR_PYTHON_VERSION`), the default
+version of the Whitebox and conversion runtimes and the one CI tests. Without it uv
+picks the newest Python available, and `--frozen` then fails outright if a locked
+package has no compatible wheel or usable source distribution for it
+(`psycopg-binary` on 3.15 did). Moving the pin rebuilds users'
 `sidecar-server` and `jupyter-server` environments, dropping anything they
 `%pip install`ed, and that first launch needs network access unless the
 interpreter and packages are already present, so mention it in the release notes
