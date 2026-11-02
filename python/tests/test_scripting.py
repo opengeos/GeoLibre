@@ -1127,7 +1127,14 @@ def test_stale_layer_access_raises(m):
         _ = layer.name
 
 
-def test_layout_is_the_ipywidgets_layout_not_the_app_chrome():
+@pytest.fixture
+def stub_app_server(monkeypatch):
+    """Let ``Map()`` construct without the built app bundle, as on CI."""
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+
+
+def test_layout_is_the_ipywidgets_layout_not_the_app_chrome(stub_app_server):
     m = Map(app_layout="full")
     assert isinstance(m.layout, ipywidgets.Layout)
     assert m.app_layout == "full"
@@ -1146,14 +1153,14 @@ def test_frontend_reads_the_renamed_app_layout_trait():
     assert 'model.get("layout")' not in source
 
 
-def test_layout_string_is_a_deprecated_alias_for_app_layout():
+def test_layout_string_is_a_deprecated_alias_for_app_layout(stub_app_server):
     with pytest.warns(DeprecationWarning, match="app_layout"):
         m = Map(layout="maponly")
     assert m.app_layout == "maponly"
     assert isinstance(m.layout, ipywidgets.Layout)
 
 
-def test_app_layout_defaults_to_embed_without_warning(recwarn):
+def test_app_layout_defaults_to_embed_without_warning(stub_app_server, recwarn):
     assert Map().app_layout == "embed"
     assert not [w for w in recwarn if w.category is DeprecationWarning]
 
@@ -1170,7 +1177,7 @@ def test_unknown_app_layout_is_rejected(kwargs):
         Map(**kwargs)
 
 
-def test_layout_height_sizes_the_map():
+def test_layout_height_sizes_the_map(stub_app_server):
     assert Map(layout=ipywidgets.Layout(height="100%"), height="500px").height == "100%"
 
     m = Map(height="500px")
@@ -1181,7 +1188,7 @@ def test_layout_height_sizes_the_map():
     assert m.height == "100%"
 
 
-def test_replacing_layout_moves_the_height_watcher():
+def test_replacing_layout_moves_the_height_watcher(stub_app_server):
     m = Map()
     old = m.layout
     m.layout = ipywidgets.Layout(height="300px")
@@ -1192,7 +1199,7 @@ def test_replacing_layout_moves_the_height_watcher():
     assert m.height == "222px"
 
 
-def test_closed_map_stops_following_its_layout():
+def test_closed_map_stops_following_its_layout(stub_app_server):
     m = Map(height="500px")
     layout = m.layout
     m.close()
