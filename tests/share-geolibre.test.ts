@@ -301,6 +301,25 @@ describe("uploadProjectToShare", () => {
     assert.equal(result.projectUrl, PROJECT_DTO.projectUrl);
     assert.equal(result.viewerUrl, PROJECT_DTO.viewerUrl);
     assert.equal(result.rawJsonUrl, PROJECT_DTO.rawJsonUrl);
+    assert.equal(result.versionCount, 1);
+  });
+
+  it("returns versionCount from the server if an integer >= 1, else 1", async () => {
+    const { fn: fn1 } = fakeFetch(201, { project: { ...PROJECT_DTO, versionCount: 5 } });
+    const res1 = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn1 });
+    assert.equal(res1.versionCount, 5);
+
+    const { fn: fn2 } = fakeFetch(201, { project: { ...PROJECT_DTO, versionCount: 0 } });
+    const res2 = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn2 });
+    assert.equal(res2.versionCount, 1);
+
+    const { fn: fn3 } = fakeFetch(201, { project: { ...PROJECT_DTO, versionCount: 2.5 } });
+    const res3 = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn3 });
+    assert.equal(res3.versionCount, 1);
+
+    const { fn: fn4 } = fakeFetch(201, { project: { ...PROJECT_DTO, versionCount: "3" } });
+    const res4 = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn4 });
+    assert.equal(res4.versionCount, 1);
   });
 
   it("sends organization ownership and additive group shares", async () => {

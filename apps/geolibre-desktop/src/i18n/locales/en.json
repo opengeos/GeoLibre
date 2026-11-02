@@ -4327,6 +4327,13 @@
       "savePromptTitle": "Save changes before closing?",
       "savePromptDescription": "The current project has unsaved changes. Save them before closing GeoLibre?"
     },
+    "remoteSave": {
+      "signInTitle": "Sign in to save project",
+      "signInDescriptionOAuth": "Sign in to {{shareHost}} to save your project on the server.",
+      "signInDescriptionToken": "A personal API token is required to save projects to {{shareHost}}. Add your token in Settings to continue.",
+      "signInButton": "Sign in",
+      "openSettingsButton": "Open Settings"
+    },
     "error": {
       "couldNotOpenProject": "Could not open project.",
       "multipleProjectDrop": "Drop one GeoLibre project at a time, without other files.",
