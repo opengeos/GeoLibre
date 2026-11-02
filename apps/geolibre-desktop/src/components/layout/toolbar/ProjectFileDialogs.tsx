@@ -9,7 +9,7 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -30,10 +30,9 @@ import {
   resolveShareRequestToken,
   ShareOAuthError,
   shareOAuthErrorKey,
-  signInToShare,
   supportsShareOAuth,
 } from "../../../lib/share-oauth";
-import { openSettingsSection } from "../SettingsDialog";
+import { RemoteSignInDialog } from "./RemoteSignInDialog";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 import { ImportWarningList } from "./ImportWarningList";
 
@@ -54,16 +53,6 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
     lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
   }
   const saveNameLabels = projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
-
-  const [remoteSigningIn, setRemoteSigningIn] = useState(false);
-  const [remoteSignInError, setRemoteSignInError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (projectFiles.remoteSignInPrompt === null) {
-      setRemoteSigningIn(false);
-      setRemoteSignInError(null);
-    }
-  }, [projectFiles.remoteSignInPrompt]);
 
   // Stable identities so the warning lists regroup only when the warnings change.
   const describeArcgisWarning = useCallback(
@@ -353,105 +342,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </form>
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={projectFiles.remoteSignInPrompt !== null}
-        onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.settleRemoteSignInPrompt(projectFiles.remoteSignInPrompt, false);
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {t("toolbar.remoteSave.signInTitle", {
-                shareHost: projectFiles.remoteSignInPrompt?.shareHost,
-              })}
-            </DialogTitle>
-            <DialogDescription>
-              {projectFiles.remoteSignInPrompt?.oauthSupported
-                ? t("toolbar.remoteSave.signInDescriptionOAuth", {
-                    shareHost: projectFiles.remoteSignInPrompt?.shareHost,
-                  })
-                : t("toolbar.remoteSave.signInDescriptionToken", {
-                    shareHost: projectFiles.remoteSignInPrompt?.shareHost,
-                  })}
-            </DialogDescription>
-          </DialogHeader>
-          {projectFiles.remoteSignInPrompt?.oauthSupported ? (
-            <div className="space-y-3">
-              {remoteSignInError ? (
-                <p role="alert" className="text-xs text-destructive">
-                  {remoteSignInError}
-                </p>
-              ) : null}
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    projectFiles.settleRemoteSignInPrompt(projectFiles.remoteSignInPrompt, false)
-                  }
-                >
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  disabled={remoteSigningIn}
-                  onClick={() => {
-                    setRemoteSignInError(null);
-                    setRemoteSigningIn(true);
-                    signInToShare()
-                      .then(() => {
-                        setRemoteSigningIn(false);
-                        projectFiles.settleRemoteSignInPrompt(
-                          projectFiles.remoteSignInPrompt,
-                          true,
-                        );
-                      })
-                      .catch((err: unknown) => {
-                        setRemoteSigningIn(false);
-                        setRemoteSignInError(
-                          t(
-                            err instanceof ShareOAuthError
-                              ? shareOAuthErrorKey(err.code)
-                              : "share.oauthFailed",
-                          ),
-                        );
-                      });
-                  }}
-                >
-                  {remoteSigningIn ? (
-                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <LogIn className="me-2 h-3.5 w-3.5" />
-                  )}
-                  {t("toolbar.remoteSave.signInButton")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  projectFiles.settleRemoteSignInPrompt(projectFiles.remoteSignInPrompt, false)
-                }
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  projectFiles.settleRemoteSignInPrompt(projectFiles.remoteSignInPrompt, false);
-                  openSettingsSection("environment", { focus: "shareToken" });
-                }}
-              >
-                {t("toolbar.remoteSave.openSettingsButton")}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <RemoteSignInDialog
+        prompt={projectFiles.remoteSignInPrompt}
+        onSettle={projectFiles.settleRemoteSignInPrompt}
+      />
       <Dialog
         open={projectFiles.credentialStripPrompt !== null}
         onOpenChange={(open: boolean) => {

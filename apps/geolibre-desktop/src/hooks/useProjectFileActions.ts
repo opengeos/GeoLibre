@@ -429,7 +429,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const settleRemoteSignInPrompt = useCallback(
     (prompt: RemoteSignInPrompt | null, signedIn: boolean) => {
       prompt?.resolve(signedIn);
-      setRemoteSignInPrompt(null);
+      setRemoteSignInPrompt((current) => (current === prompt ? null : current));
     },
     [],
   );
@@ -1630,17 +1630,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
       useAppStore.getState().setProjectName(chosenTitle);
       setProjectPath(null);
-      if (uploaded.id) {
-        remoteProjectRef.current = {
-          id: uploaded.id,
-          versionCount: uploaded.versionCount,
-          canEdit: true,
-          token: personalToken,
-          baseUrl: shareBaseUrl,
-          oauthSessionRevision: useShareOAuthStore.getState().sessionRevision,
-          projectGeneration: useAppStore.getState().projectGeneration,
-        };
+      if (!uploaded.id) {
+        throw new Error("The share server returned no project ID.");
       }
+      remoteProjectRef.current = {
+        id: uploaded.id,
+        versionCount: uploaded.versionCount,
+        canEdit: true,
+        token: personalToken,
+        baseUrl: shareBaseUrl,
+        oauthSessionRevision: useShareOAuthStore.getState().sessionRevision,
+        projectGeneration: useAppStore.getState().projectGeneration,
+      };
       setRemoteSaveWarning(null);
       markSaved();
       recordExplicitProjectSave();
