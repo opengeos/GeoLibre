@@ -6,11 +6,14 @@ import asyncio
 import base64
 import contextlib
 import json
+import pathlib
 import sys
 import threading
 import time
 import types
+import warnings
 
+import ipywidgets
 import pytest
 
 import geolibre.geolibre as gmod
@@ -769,7 +772,7 @@ def test_to_html_carries_the_layout_and_theme(monkeypatch, layout, theme, flags)
     # map-only notebook map exports as map-only (#2764).
     monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
     monkeypatch.setattr(gmod, "app_port", lambda: 0)
-    html = Map(layout=layout, theme=theme).to_html(app_url="https://example.com/app")
+    html = Map(app_layout=layout, theme=theme).to_html(app_url="https://example.com/app")
     assert f'src="https://example.com/app?{flags}"' in html
 
 
@@ -1122,3 +1125,76 @@ def test_stale_layer_access_raises(m):
     m.remove_layer(layer_id)
     with pytest.raises(ValueError, match="no longer exists"):
         _ = layer.name
+
+
+def test_layout_is_the_ipywidgets_layout_not_the_app_chrome():
+    m = Map(app_layout="full")
+    assert isinstance(m.layout, ipywidgets.Layout)
+    assert m.app_layout == "full"
+    # Frontends resolve this state entry to a model, so a string here is what
+    # threw in DOMWidgetView.setLayout.
+    state = m.get_state()
+    assert state["layout"].startswith("IPY_MODEL_")
+    assert state["app_layout"] == "full"
+    m.layout = ipywidgets.Layout(width="50%")
+    assert m.layout.width == "50%"
+
+
+def test_frontend_reads_the_renamed_app_layout_trait():
+    source = (pathlib.Path(gmod.__file__).parent / "_frontend.js").read_text(encoding="utf-8")
+    assert 'model.get("app_layout")' in source
+    assert 'model.get("layout")' not in source
+
+
+def test_layout_string_is_a_deprecated_alias_for_app_layout():
+    with pytest.warns(DeprecationWarning, match="app_layout"):
+        m = Map(layout="maponly")
+    assert m.app_layout == "maponly"
+    assert isinstance(m.layout, ipywidgets.Layout)
+
+
+def test_app_layout_defaults_to_embed_without_warning(recwarn):
+    assert Map().app_layout == "embed"
+    assert not [w for w in recwarn if w.category is DeprecationWarning]
+
+
+def test_conflicting_app_layout_and_layout_string_are_rejected():
+    with pytest.raises(TypeError, match="app_layout"):
+        Map(app_layout="full", layout="embed")
+
+
+@pytest.mark.parametrize("kwargs", [{"app_layout": "sidebar"}, {"layout": "sidebar"}])
+def test_unknown_app_layout_is_rejected(kwargs):
+    with pytest.raises(ValueError, match="app_layout must be one of"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        Map(**kwargs)
+
+
+def test_layout_height_sizes_the_map():
+    assert Map(layout=ipywidgets.Layout(height="100%"), height="500px").height == "100%"
+
+    m = Map(height="500px")
+    assert m.height == "500px"
+    m.layout.height = "100%"
+    assert m.height == "100%"
+    m.layout.height = None  # clearing keeps the last height
+    assert m.height == "100%"
+
+
+def test_replacing_layout_moves_the_height_watcher():
+    m = Map()
+    old = m.layout
+    m.layout = ipywidgets.Layout(height="300px")
+    assert m.height == "300px"
+    old.height = "111px"
+    assert m.height == "300px"
+    m.layout.height = "222px"
+    assert m.height == "222px"
+
+
+def test_closed_map_stops_following_its_layout():
+    m = Map(height="500px")
+    layout = m.layout
+    m.close()
+    layout.height = "100%"
+    assert m.height == "500px"

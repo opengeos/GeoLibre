@@ -99,7 +99,7 @@ The click payload has the form `{"lngLat": {"lng": ..., "lat": ...},
 
 | Method | Description |
 | --- | --- |
-| `Map(center, zoom, basemap=, height=, layout=, theme=)` | Create a map. `layout` is `"embed"`, `"full"`, or `"maponly"`. |
+| `Map(center, zoom, basemap=, height=, app_layout=, layout=, theme=)` | Create a map. `app_layout` is `"embed"`, `"full"`, or `"maponly"`. `layout` takes an `ipywidgets.Layout`, as on any widget. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON (dict, path, URL, JSON, or GeoDataFrame). |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv` / `add_xy_data` `(data, x=, y=, name=, **style)` | Add points from CSV, a DataFrame, or row mappings. |

@@ -245,7 +245,7 @@ async function render({ model, el }) {
     return;
   }
 
-  const layout = model.get("layout") || "embed";
+  const layout = model.get("app_layout") || "embed";
   const params = new URLSearchParams({ embed: "1", theme: model.get("theme") || "light" });
   if (layout === "maponly") {
     params.set("maponly", "1");

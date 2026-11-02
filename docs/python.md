@@ -207,7 +207,7 @@ Map(
     zoom=4,
     basemap="dark",      # a basemap name or a MapLibre style URL
     height="800px",
-    layout="embed",      # "embed" (compact UI), "full" (desktop UI), or "maponly"
+    app_layout="embed",  # "embed" (compact UI), "full" (desktop UI), or "maponly"
     theme="light",       # "light" or "dark"
 )
 ```
@@ -283,7 +283,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `run_model_builder(graph, timeout=)` | Run a serialized Model Builder graph in the displayed app. |
 | `list_whitebox_tools()` / `run_whitebox_tool(tool_id, parameters=None, timeout=)` | List, or run in the browser via WASM, the bundled Whitebox tools; `run_whitebox_tool` returns `{logs, resultLayerIds}`. |
 | `to_image(path=None, timeout=)` | Capture the map as PNG bytes, or write to `path`. |
-| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted) in this map's `layout` and `theme`; returns the HTML or writes to `path`. |
+| `to_html(path=None, title=, width=, height=, app_url=)` | Export a standalone HTML page that embeds the current project (credentials redacted) in this map's `app_layout` and `theme`; returns the HTML or writes to `path`. |
 | `on(event, cb)` / `on_click` / `on_selection_change` / `on_layer_change` | Register event callbacks; returns an unsubscribe function. |
 | `request(method, params=None, timeout=)` | Low-level command primitive behind the methods above. |
 | `request_async(method, params=None, timeout=)` | Awaitable counterpart of `request()`; each query/processing method above has an `*_async()` twin. |
@@ -292,7 +292,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 
 | Method | Description |
 | --- | --- |
-| `Map(center, zoom, basemap=, renderer=, height=, layout=, theme=, server_proxy=)` | Create a map. |
+| `Map(center, zoom, basemap=, renderer=, height=, app_layout=, layout=, theme=, server_proxy=)` | Create a map. `app_layout` picks the app chrome; `layout` takes an `ipywidgets.Layout`, as on any widget, and its `height` also sizes the map. Passing a chrome string as `layout=` still works but is deprecated. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv(data, x="longitude", y="latitude", name=, **style)` / `add_xy_data(...)` | Add points from a CSV path, URL, text, DataFrame, or row mappings. |

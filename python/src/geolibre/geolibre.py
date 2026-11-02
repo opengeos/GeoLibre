@@ -398,8 +398,10 @@ class Map(anywidget.AnyWidget):
     # port proxy.
     _remote_mode = traitlets.Unicode("").tag(sync=True)
     height = traitlets.Unicode("800px").tag(sync=True)
-    # "embed" (compact chrome), "full" (desktop chrome), or "maponly".
-    layout = traitlets.Unicode("embed").tag(sync=True)
+    # "embed" (compact chrome), "full" (desktop chrome), or "maponly". Not named
+    # ``layout``: that trait belongs to ipywidgets.DOMWidget and holds the Layout
+    # widget every frontend resolves when it displays the view.
+    app_layout = traitlets.Unicode("embed").tag(sync=True)
     theme = traitlets.Unicode("light").tag(sync=True)
     # Bumped on every Python-initiated project change; echoed by the app.
     _seq = traitlets.Int(0).tag(sync=True)
@@ -420,7 +422,8 @@ class Map(anywidget.AnyWidget):
         basemap: str | None = None,
         renderer: str = "maplibre",
         height: str = "800px",
-        layout: str = "embed",
+        app_layout: str | None = None,
+        layout: Any = None,
         theme: str = "light",
         server_proxy: bool | str = "auto",
         **kwargs: Any,
@@ -433,8 +436,11 @@ class Map(anywidget.AnyWidget):
             basemap: A basemap name or MapLibre style URL for the background.
             renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or ``"arcgis"``.
             height: CSS height of the widget (e.g. ``"800px"``).
-            layout: ``"embed"`` (compact UI), ``"full"`` (full desktop UI), or
-                ``"maponly"`` (map without chrome).
+            app_layout: ``"embed"`` (compact UI, the default), ``"full"`` (full
+                desktop UI), or ``"maponly"`` (map without chrome).
+            layout: An ``ipywidgets.Layout`` for the widget, as on any other
+                ipywidgets widget. Its ``height`` overrides ``height``. Passing
+                an ``app_layout`` string here is deprecated.
             theme: ``"light"`` or ``"dark"``.
             server_proxy: How the browser reaches the bundled app.
                 ``"auto"`` (default) serves the app directly from localhost for
@@ -452,14 +458,31 @@ class Map(anywidget.AnyWidget):
                 always uses its own port proxy.
             **kwargs: Forwarded to ``anywidget.AnyWidget``.
         """
-        if layout not in _VALID_LAYOUTS:
-            raise ValueError(f"layout must be one of {sorted(_VALID_LAYOUTS)}, got {layout!r}")
+        if isinstance(layout, str):
+            if app_layout is not None:
+                raise TypeError("Pass the app chrome as app_layout only, not also as layout")
+            warnings.warn(
+                "Map(layout=<str>) is deprecated; use Map(app_layout=<str>). "
+                "layout now holds the ipywidgets Layout.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            app_layout, layout = layout, None
+        if app_layout is None:
+            app_layout = "embed"
+        if app_layout not in _VALID_LAYOUTS:
+            raise ValueError(
+                f"app_layout must be one of {sorted(_VALID_LAYOUTS)}, got {app_layout!r}"
+            )
         if theme not in _VALID_THEMES:
             raise ValueError(f"theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}")
+        if layout is not None:
+            kwargs["layout"] = layout
         super().__init__(**kwargs)
         self.height = height
-        self.layout = layout
+        self.app_layout = app_layout
         self.theme = theme
+        self._watch_layout_height(self.layout)
         self._remote_mode = self._resolve_remote_mode(server_proxy)
         # Always start the localhost bundle server. Locally it is the app origin;
         # under "remote" it backs the jupyter-server-proxy route (and serves the
@@ -494,8 +517,47 @@ class Map(anywidget.AnyWidget):
         )
         self.on_msg(self._on_custom_msg)
 
+    def _watch_layout_height(self, layout: Any) -> None:
+        """Follow a Layout widget's height, applying the one it already has.
+
+        ipywidgets sizes only the view's outer element from the Layout. The app
+        iframe inside it is sized by the ``height`` trait, so without this
+        ``m.layout.height = "100%"`` would leave the map at its old height.
+
+        Args:
+            layout: The ``ipywidgets.Layout`` now assigned to this widget.
+        """
+        layout.observe(self._on_layout_height, "height")
+        if layout.height:
+            self.height = layout.height
+
+    def _on_layout_height(self, change: dict[str, Any]) -> None:
+        """Copy a Layout height change onto the ``height`` trait.
+
+        Args:
+            change: The traitlets change notification. Clearing the Layout's
+                height leaves the current ``height`` in place.
+        """
+        if change["new"]:
+            self.height = change["new"]
+
+    @traitlets.observe("layout")
+    def _on_layout_replaced(self, change: dict[str, Any]) -> None:
+        """Move the height watcher when ``m.layout`` is assigned a new Layout.
+
+        Args:
+            change: The traitlets change notification for the ``layout`` trait.
+        """
+        old = change["old"]
+        if old is not None and old is not traitlets.Undefined:
+            old.unobserve(self._on_layout_height, "height")
+        self._watch_layout_height(change["new"])
+
     def close(self) -> None:
         """Close the widget and remove rasters materialized from xarray data."""
+        # The Layout outlives this widget in the ipywidgets registry, so its
+        # observer would otherwise keep a closed Map alive.
+        self.layout.unobserve(self._on_layout_height, "height")
         try:
             super().close()
         finally:
@@ -1383,7 +1445,7 @@ class Map(anywidget.AnyWidget):
         The page embeds the GeoLibre app in an ``<iframe>`` and injects the
         current project into it over the same ``postMessage`` bridge the widget
         uses, so it renders the map exactly as configured here, in this map's
-        :attr:`layout` and :attr:`theme`. Unlike
+        :attr:`app_layout` and :attr:`theme`. Unlike
         :meth:`to_image` this needs no running kernel to view; by default it
         loads the hosted GeoLibre app over the network so the file stays
         portable.
@@ -1415,7 +1477,7 @@ class Map(anywidget.AnyWidget):
             width=width,
             height=height or self.height,
             app_url=app_url,
-            layout=self.layout,
+            layout=self.app_layout,
             theme=self.theme,
         )
         if path is not None:
