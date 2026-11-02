@@ -5347,7 +5347,7 @@ mod tests {
 
     #[cfg(not(feature = "mas"))]
     #[test]
-    fn sidecar_environments_pin_a_python_the_lockfile_supports() {
+    fn sidecar_environments_pass_the_python_pin() {
         let mut command = Command::new("uv");
         add_sidecar_python_pin(&mut command);
         let args: Vec<_> = command.get_args().collect();
