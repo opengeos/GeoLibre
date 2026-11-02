@@ -1335,7 +1335,9 @@ package has no wheel for it (`psycopg-binary` on 3.15 did). The Whitebox and
 conversion runtimes pin 3.12 separately, and CI runs the backend suite on 3.12, not
 on this version. Moving the pin rebuilds users'
 `sidecar-server` and `jupyter-server` environments, dropping anything they
-`%pip install`ed, so check the lock has wheels for the new version on every
+`%pip install`ed, and that first launch needs network access unless the
+interpreter and packages are already present, so mention it in the release notes
+and check the lock has wheels for the new version on every
 platform first.
 
 ## Credentials must never reach a redistributable build
