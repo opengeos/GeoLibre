@@ -532,11 +532,17 @@ let externalPluginHeldBack = new Map<string, HeldBackPluginBundle>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
-// Closes once the startup plugin restore has run, so a URL load that wants file
-// handlers can wait for them. The wait is bounded: a stuck startup delays the
-// load by at most this long instead of blocking it.
+// Closes once startup plugin activation has finished (the project restore and the
+// `?plugin=` deep link, each after any `?url=` project), so a URL load that wants
+// file handlers can wait for them. One absolute deadline covers the parts and any
+// activation still pending: a stuck startup delays the first load by at most this
+// long, and later loads not at all.
 const PLUGIN_SETTLE_TIMEOUT_MS = 15_000;
-const pluginActivationGate = createSettleGate(PLUGIN_SETTLE_TIMEOUT_MS, ["restore", "deepLink"]);
+const pluginActivationGate = createSettleGate(
+  PLUGIN_SETTLE_TIMEOUT_MS,
+  ["restore", "deepLink"],
+  () => Promise.allSettled(manager.list().map((plugin) => manager.pendingActivation(plugin.id))),
+);
 
 /** Called once the project plugin restore (and its URL parameters) has finished. */
 export function markPluginActivationSettled(): void {
@@ -549,13 +555,11 @@ export function markPluginDeepLinkSettled(): void {
 }
 
 /**
- * Resolves once external plugins have loaded and their startup activation (project
- * restore and `?plugin=` deep link) has settled, or after a bounded wait, so the
- * handlers they register are visible.
+ * Resolves once external plugins have loaded and their startup activation has
+ * settled, or at the deadline, so the handlers they register are visible.
  */
-export async function whenPluginsSettled(): Promise<void> {
-  await pluginActivationGate.wait();
-  await Promise.allSettled(manager.list().map((plugin) => manager.pendingActivation(plugin.id)));
+export function whenPluginsSettled(): Promise<void> {
+  return pluginActivationGate.wait();
 }
 
 export function getPluginManager(): PluginManager {

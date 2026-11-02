@@ -5,9 +5,10 @@ import type { GeoLibreFileHandler } from "./types";
  *
  * A plugin that adds a data format can already add its own reader and an Add
  * Data entry; a handler lets it also receive that format when a user drops the
- * file on the map. The shell's drop paths consult this registry before sorting
- * the drop into the built-in groups. Unlike the menu registries there is no
- * reactive snapshot: nothing renders from it, the drop handlers read it per drop.
+ * file on the map, or when GeoLibre downloads it for `?data=` or the embed
+ * `addData` command. The shell's drop paths and its URL loader consult this
+ * registry before the built-in loaders. Unlike the menu registries there is no
+ * reactive snapshot: nothing renders from it, the loaders read it per load.
  */
 
 /** A registered handler plus the plugin that registered it (host-injected). */

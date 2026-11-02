@@ -156,12 +156,15 @@ export function usePluginDeepLink({
 
   useEffect(() => {
     if (projectUrlSettled) projectSettled.current = true;
+    if (!projectSettled.current) return;
+    // No link to activate; settled once the `?url=` project has, so a URL load
+    // does not run ahead of that project's plugins.
     if (!targets) {
       markPluginDeepLinkSettled();
       return;
     }
     if (handled.current) return;
-    if (!externalPluginsReady || !mapReadyGeneration || !projectSettled.current) return;
+    if (!externalPluginsReady || !mapReadyGeneration) return;
     if (!mapControllerRef.current) return;
     handled.current = true;
 

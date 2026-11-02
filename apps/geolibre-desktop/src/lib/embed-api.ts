@@ -643,7 +643,11 @@ export function parseEmbedRequest(
       if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
         return fail("addData: fit must be a boolean");
       }
-      if (payload.dataType !== undefined && !isFileHandlerDataType(payload.dataType)) {
+      if (
+        payload.dataType !== undefined &&
+        payload.dataType !== null &&
+        !isFileHandlerDataType(payload.dataType)
+      ) {
         return fail("addData: dataType must be lower-case letters, digits and hyphens");
       }
       return {

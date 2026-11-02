@@ -320,7 +320,7 @@ GeoLibre recognizes a point cloud from its URL path. An API endpoint whose path 
 https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Fdownload%2F42%3Ftoken%3Dabc%26expires%3D3600&dataType=lidar
 ```
 
-A plugin that reads another format can declare its own `dataType` name, such as `isoxml`, and then receives a file loaded this way: `?data=…&dataType=isoxml` hands the downloaded file straight to that plugin. Without a hint, an installed plugin's file handler is still offered a downloaded file by its extension and content, as it is for a dropped file. This works where dropping files works: not in `layout=viewer`, and only with `data:add`. See [Files loaded by URL](../plugin-api.md#files-loaded-by-url).
+A plugin that reads another format can declare its own `dataType` name, such as `isoxml`, and then receives a file loaded this way: `?data=…&dataType=isoxml` hands the downloaded file straight to that plugin, which has to be active (external plugins are not active by default; add `&plugin=<id>` for a registry plugin, or open a `?url=` project that lists it). Without a hint, an active plugin's file handler is still offered a downloaded file by its extension and content, as it is for a dropped file. This works where dropping files works: not in `layout=viewer`, and only with `data:add`. A hint cannot be combined with `style`. See [Files loaded by URL](../plugin-api.md#files-loaded-by-url).
 
 A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `+`, `%`, or `#`. A bare `=` inside the value is fine, since only the first `=` in each `&`-delimited pair separates the name from the value. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, PMTiles, and COPC servers should also support HTTP byte-range requests.
 
@@ -542,7 +542,7 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 
 Every command rejects rather than resolving falsely: an `ack` carrying
 `ok: false` rejects with the app's own error message, and a command with no
-answer inside `requestTimeoutMs` rejects with a timeout. `connect` itself
+answer inside `requestTimeoutMs` rejects with a timeout. The `ready` event does not wait for plugins, and a download is held back until plugin activation has settled (at most 15 seconds, counted from the first load), so the first `addData` sent right after `ready` can take that long: raise `requestTimeoutMs` or wait for your plugin before sending it. `connect` itself
 rejects if `ready` does not arrive inside `timeoutMs` — most often because the
 deployment has not allowlisted your origin, or because `origin` does not match
 the iframe.

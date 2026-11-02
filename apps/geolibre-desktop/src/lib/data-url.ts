@@ -5,6 +5,7 @@ import {
   type DataUrlFileHandlers,
   offerRemoteFileToHandlers,
   openRemoteFileWithHandler,
+  STYLE_WITH_HANDLER_MESSAGE,
   type RemoteFileHandlerResult,
 } from "./data-url-file-handlers";
 
@@ -13,7 +14,7 @@ import {
  * reveal, such as an extensionless API endpoint: the built-in `lidar`, or a
  * name a plugin file handler declares in its `dataTypes`.
  */
-export type DataTypeHint = string;
+export type DataTypeHint = "lidar" | (string & {});
 
 export interface DataUrlParameter {
   dataUrl: string;
@@ -169,17 +170,32 @@ export function remoteName(url: string): string {
  * segment. Unlike {@link remoteName} the extension is kept, since a handler
  * filters by it.
  */
-function remoteFileName(url: string, disposition: string | null): string {
+export function remoteFileName(url: string, disposition: string | null): string {
   const encoded = disposition?.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i)?.[1];
-  const plain = disposition?.match(/filename\s*=\s*(?:"([^"]*)"|([^;]+))/i);
-  const raw = encoded ?? plain?.[1] ?? plain?.[2];
-  let name = raw?.trim() ?? new URL(url).pathname.split("/").at(-1) ?? "";
-  try {
-    name = decodeURIComponent(name);
-  } catch {
-    // Keep the undecoded name, as remoteName does.
+  const quoted = disposition
+    ?.match(/filename\s*=\s*"((?:[^"\\]|\\.)*)"/i)?.[1]
+    ?.replace(/\\(.)/g, "$1");
+  const bare = disposition?.match(/filename\s*=\s*([^;"]+)/i)?.[1];
+  const candidates = [encoded, quoted, bare, new URL(url).pathname.split("/").at(-1)];
+  for (const raw of candidates) {
+    let name = raw?.trim() ?? "";
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      // Keep the undecoded name, as remoteName does.
+    }
+    // A name is a base name: no directories, no control characters, and at
+    // most 255 characters, keeping the end so the extension survives.
+    name = name
+      .split(/[\\/]/)
+      .at(-1)!
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim()
+      .slice(-255);
+    if (name) return name;
   }
-  return name.split(/[\\/]/).at(-1) || "data";
+  return "data";
 }
 
 function extension(url: string): string {
@@ -420,6 +436,8 @@ export async function fetchRemoteData(
      * reaches a handler.
      */
     fileHandlers?: DataUrlFileHandlers;
+    /** Whether a style accompanies the URL, which a plugin hint cannot take. */
+    hasStyle?: boolean;
   } = {},
 ): Promise<RemoteData> {
   const { fileHandlers } = options;
@@ -430,6 +448,8 @@ export async function fetchRemoteData(
     hinted = fileHandlers.forDataType(options.dataType);
   }
   if (hinted) {
+    // Before downloading anything: a plugin opens the file itself, so a style has nothing to apply to.
+    if (options.hasStyle) throw new Error(STYLE_WITH_HANDLER_MESSAGE);
     const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
     const bytes = await readCappedBytes(response, url);
     const name = remoteFileName(url, response.headers.get("content-disposition"));

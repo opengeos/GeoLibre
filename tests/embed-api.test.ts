@@ -266,6 +266,14 @@ describe("parseEmbedRequest: v2 commands", () => {
         requestId: null,
       },
     );
+    assert.equal(
+      (
+        parseEmbedRequest(message("addData", { url: "https://example.com/d", dataType: null })) as {
+          command: { dataType: unknown };
+        }
+      ).command.dataType,
+      null,
+    );
     assert.deepEqual(
       parseEmbedRequest(message("addData", { url: "https://example.com/data.geojson" })),
       {

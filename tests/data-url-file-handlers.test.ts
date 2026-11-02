@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { strToU8, zipSync } from "fflate";
 import type { GeoLibreDroppedFile, GeoLibreFileHandler } from "../packages/plugins/src/types";
-import { fetchRemoteData } from "../apps/geolibre-desktop/src/lib/data-url";
+import { fetchRemoteData, remoteFileName } from "../apps/geolibre-desktop/src/lib/data-url";
 import {
   type DataUrlFileHandlers,
   dataUrlFileHandlers,
+  finishHandledLoad,
+  urlFileHandlers,
 } from "../apps/geolibre-desktop/src/lib/data-url-file-handlers";
-import { createSettleGate } from "../apps/geolibre-desktop/src/lib/settle-gate";
+import {
+  createSettleGate,
+  startupActivationSettled,
+} from "../apps/geolibre-desktop/src/lib/settle-gate";
 
 const collection = {
   type: "FeatureCollection" as const,
@@ -347,5 +352,185 @@ describe("createSettleGate", () => {
     const started = Date.now();
     await gate.wait();
     assert.ok(Date.now() - started >= 15);
+  });
+});
+
+describe("settle gate: one absolute deadline", () => {
+  it("awaits the follow-up work, but never past the deadline", async () => {
+    const hanging = createSettleGate(30, [""], () => new Promise(() => undefined));
+    hanging.settle();
+    const started = Date.now();
+    await hanging.wait();
+    assert.ok(Date.now() - started >= 25, "gave up before the deadline");
+    const slow = createSettleGate(1000, [""], () => new Promise((r) => setTimeout(r, 40)));
+    slow.settle();
+    const slowStart = Date.now();
+    await slow.wait();
+    assert.ok(Date.now() - slowStart >= 35, "did not wait for the follow-up work");
+    assert.ok(Date.now() - slowStart < 500);
+  });
+
+  it("stays open for good once the deadline passed: later waits return at once", async () => {
+    const gate = createSettleGate(20);
+    await gate.wait();
+    const started = Date.now();
+    await Promise.all([gate.wait(), gate.wait()]);
+    assert.ok(Date.now() - started < 10, "a later wait started a new deadline");
+  });
+});
+
+describe("startupActivationSettled", () => {
+  it("needs the project URL settled and the restore to have run for the current project", () => {
+    const settled = { projectUrlSettled: true, restoredGeneration: 1, projectGeneration: 1 };
+    assert.equal(startupActivationSettled(settled), true);
+    assert.equal(startupActivationSettled({ ...settled, projectUrlSettled: false }), false);
+    // The restore of the empty generation-0 project is not the one after the ?url= project.
+    assert.equal(startupActivationSettled({ ...settled, restoredGeneration: 0 }), false);
+    assert.equal(startupActivationSettled({ ...settled, restoredGeneration: null }), false);
+  });
+});
+
+describe("urlFileHandlers", () => {
+  it("reads the viewer flag and data:add each time it is called", () => {
+    const registry = source([handler()]);
+    let viewer = false;
+    let canAddData = true;
+    const read = () =>
+      urlFileHandlers({ isViewer: () => viewer, canAddData: () => canAddData, source: registry });
+    assert.equal(read(), registry);
+    viewer = true;
+    assert.equal(read(), undefined);
+    viewer = false;
+    canAddData = false;
+    assert.equal(read(), undefined);
+    canAddData = true;
+    assert.equal(read(), registry);
+  });
+});
+
+describe("finishHandledLoad", () => {
+  function fakeStore(initial: string[]) {
+    let ids = [...initial];
+    return {
+      add: (...added: string[]) => void ids.push(...added),
+      layerIds: () => ids,
+      removeLayer: (id: string) => void (ids = ids.filter((x) => x !== id)),
+    };
+  }
+  const named = (name: string) => handler({ name });
+
+  it("returns the layers that appeared during the load", () => {
+    const store = fakeStore(["old"]);
+    const before = new Set(store.layerIds());
+    store.add("a", "b");
+    assert.deepEqual(
+      finishHandledLoad({ remote: { failed: [] }, hasStyle: false, before, store }),
+      ["a", "b"],
+    );
+  });
+
+  it("joins every failure under the handler names and removes what they added", () => {
+    const store = fakeStore(["old"]);
+    const before = new Set(store.layerIds());
+    store.add("partial");
+    assert.throws(
+      () =>
+        finishHandledLoad({
+          remote: {
+            failed: [
+              { handler: named("One"), error: new Error("bad bytes") },
+              { handler: named("Two"), error: "plain" },
+            ],
+          },
+          hasStyle: false,
+          before,
+          store,
+        }),
+      /One: bad bytes Two: plain/,
+    );
+    assert.deepEqual(store.layerIds(), ["old"]);
+  });
+
+  it("rejects a style for a file a plugin opened, and removes its layers", () => {
+    const store = fakeStore([]);
+    store.add("x");
+    assert.throws(
+      () =>
+        finishHandledLoad({
+          remote: { failed: [] },
+          hasStyle: true,
+          before: new Set(),
+          store,
+        }),
+      /style cannot be applied/,
+    );
+    assert.deepEqual(store.layerIds(), []);
+  });
+
+  it("removes the layers when the load was aborted", () => {
+    const store = fakeStore(["old"]);
+    const before = new Set(store.layerIds());
+    store.add("late");
+    const controller = new AbortController();
+    controller.abort();
+    assert.throws(
+      () =>
+        finishHandledLoad({
+          remote: { failed: [] },
+          hasStyle: false,
+          before,
+          store,
+          signal: controller.signal,
+        }),
+      { name: "AbortError" },
+    );
+    assert.deepEqual(store.layerIds(), ["old"]);
+  });
+});
+
+describe("a style with a plugin hint", () => {
+  it("is rejected before anything is downloaded", async () => {
+    let downloads = 0;
+    let opened = false;
+    await assert.rejects(
+      fetchRemoteData("https://api.example.com/download/42", {
+        fetchImpl: (async () => ((downloads += 1), new Response("x"))) as unknown as typeof fetch,
+        fileHandlers: source([handler({ open: () => void (opened = true) })], { isoxml: "h" }),
+        dataType: "isoxml",
+        hasStyle: true,
+      }),
+      /style cannot be applied/,
+    );
+    assert.equal(downloads, 0);
+    assert.equal(opened, false);
+  });
+});
+
+describe("remoteFileName", () => {
+  it("strips control characters and keeps the end of an over-long name", () => {
+    const long = `${"a".repeat(300)}.zip`;
+    const name = remoteFileName("https://x.example/d", `attachment; filename="${long}"`);
+    assert.equal(name.length, 255);
+    assert.ok(name.endsWith(".zip"));
+    assert.equal(
+      remoteFileName("https://x.example/d", 'attachment; filename="a\u0001b.zip"'),
+      "ab.zip",
+    );
+    assert.equal(remoteFileName("https://x.example/a%01b.zip", null), "ab.zip");
+  });
+
+  it("reads an escaped quote inside a quoted filename", () => {
+    assert.equal(
+      remoteFileName("https://x.example/d", 'attachment; filename="we\\"ird.zip"'),
+      'we"ird.zip',
+    );
+  });
+
+  it("falls back to the URL path for an empty name", () => {
+    assert.equal(
+      remoteFileName("https://x.example/dl/export.zip", 'attachment; filename=""'),
+      "export.zip",
+    );
+    assert.equal(remoteFileName("https://x.example/", null), "data");
   });
 });

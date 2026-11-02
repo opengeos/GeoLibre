@@ -418,12 +418,17 @@ export function DesktopShell({
     fetchPluginRegistry(undefined, controller.signal).catch(() => {});
     return () => controller.abort();
   }, [canInstallPlugins]);
+  const projectUrlSettled =
+    !hasProjectUrl ||
+    projectUrlLoadState?.status === "loaded" ||
+    projectUrlLoadState?.status === "error";
   const restoredProjectGeneration = usePluginStateRestore({
     mapControllerRef,
     enforceViewerPlugins,
     externalPluginsReady,
     mapReadyGeneration,
     projectGeneration,
+    projectUrlSettled,
   });
   useEffect(() => {
     const root = document.documentElement;
@@ -454,10 +459,7 @@ export function DesktopShell({
     layoutOptions,
     externalPluginsReady,
     mapReadyGeneration,
-    projectUrlSettled:
-      !hasProjectUrl ||
-      projectUrlLoadState?.status === "loaded" ||
-      projectUrlLoadState?.status === "error",
+    projectUrlSettled,
   });
   useStartupPanels({
     mapControllerRef,

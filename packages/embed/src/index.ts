@@ -57,7 +57,7 @@ export interface AddDataOptions {
    * Names the format of a `url` whose path cannot say, like the `dataType` URL
    * parameter: `"lidar"`, or a name an installed plugin's file handler declares.
    */
-  dataType?: string;
+  dataType?: string | null;
   /** Fit the map to the newly added data. Defaults to true. */
   fit?: boolean;
 }

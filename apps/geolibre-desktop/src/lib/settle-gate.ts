@@ -1,32 +1,59 @@
 /**
- * A one-way flag with a bounded wait: `wait()` resolves once every part has
- * been settled with `settle(part)`, or after `timeoutMs`, whichever comes
- * first. Used to hold work until startup has finished without letting a stuck
- * startup block it forever.
+ * A bounded wait for startup work. `wait()` resolves once every part has been
+ * settled with `settle(part)` and the optional `after` work has finished, or
+ * when one absolute deadline of `timeoutMs` (counted from the first `wait()`)
+ * passes, whichever comes first. Either way the gate then stays open for good,
+ * so a stuck startup delays the first caller by at most the deadline and later
+ * callers not at all.
  *
- * @param timeoutMs - The longest a single `wait()` may last.
+ * @param timeoutMs - The deadline, shared by every caller.
  * @param parts - The names that must all settle; one unnamed part by default.
+ * @param after - Work to await once every part has settled; it is bounded by
+ *   the same deadline.
  */
-export function createSettleGate(timeoutMs: number, parts: string[] = [""]) {
+export function createSettleGate(
+  timeoutMs: number,
+  parts: string[] = [""],
+  after?: () => Promise<unknown>,
+) {
   const pending = new Set(parts);
-  const waiters = new Set<() => void>();
+  let partsSettled: () => void = () => undefined;
+  const allPartsSettled = new Promise<void>((resolve) => {
+    partsSettled = resolve;
+  });
+  if (pending.size === 0) partsSettled();
+  let open = false;
+  let waiting: Promise<void> | undefined;
   return {
     settle(part = ""): void {
       pending.delete(part);
-      if (pending.size > 0) return;
-      for (const resolve of [...waiters]) resolve();
+      if (pending.size === 0) partsSettled();
     },
     wait(): Promise<void> {
-      if (pending.size === 0) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        const done = () => {
+      if (open) return Promise.resolve();
+      waiting ??= new Promise<void>((resolve) => {
+        const finish = () => {
           clearTimeout(timer);
-          waiters.delete(done);
+          open = true;
           resolve();
         };
-        const timer = setTimeout(done, timeoutMs);
-        waiters.add(done);
+        const timer = setTimeout(finish, timeoutMs);
+        void allPartsSettled.then(() => after?.()).then(finish, finish);
       });
+      return waiting;
     },
   };
+}
+
+/**
+ * Whether startup plugin activation has finished for the project being shown:
+ * the `?url=` project (if any) has loaded, and the plugin restore has run for
+ * that project's generation rather than for the empty one before it.
+ */
+export function startupActivationSettled(state: {
+  projectUrlSettled: boolean;
+  restoredGeneration: number | null;
+  projectGeneration: number;
+}): boolean {
+  return state.projectUrlSettled && state.restoredGeneration === state.projectGeneration;
 }

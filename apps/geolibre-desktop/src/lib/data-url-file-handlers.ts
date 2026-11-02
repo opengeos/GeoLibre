@@ -83,3 +83,72 @@ export async function openRemoteFileWithHandler(
     return { opened: [], failed: [{ handler, error }] };
   }
 }
+
+/** The layers a URL load can see and remove. */
+export interface UrlLoadLayerStore {
+  layerIds: () => string[];
+  removeLayer: (id: string) => void;
+}
+
+/** Why a style cannot go with a file a plugin opens. */
+export const STYLE_WITH_HANDLER_MESSAGE = "A style cannot be applied to a file opened by a plugin.";
+
+/** Remove the layers that appeared since `before`: what a plugin handler added. */
+export function discardHandledLayers(store: UrlLoadLayerStore, before: ReadonlySet<string>): void {
+  for (const id of store.layerIds()) if (!before.has(id)) store.removeLayer(id);
+}
+
+/**
+ * Finish a load a plugin file handler took, which has already run and added its
+ * own layers. Returns the layers that appeared. A failed `open`, a style, or an
+ * abort throws instead, and removes what the handler added, like the built-in
+ * paths that never leave a half-loaded result behind.
+ */
+export function finishHandledLoad({
+  remote,
+  hasStyle,
+  before,
+  store,
+  signal,
+}: {
+  remote: Pick<RemoteFileHandlerResult, "failed">;
+  hasStyle: boolean;
+  before: ReadonlySet<string>;
+  store: UrlLoadLayerStore;
+  signal?: AbortSignal;
+}): string[] {
+  const added = () => store.layerIds().filter((id) => !before.has(id));
+  const discard = () => discardHandledLayers(store, before);
+  if (signal?.aborted) {
+    discard();
+    throw new DOMException("The operation was aborted", "AbortError");
+  }
+  if (remote.failed.length > 0) {
+    discard();
+    throw new Error(
+      remote.failed
+        .map(
+          ({ handler, error }) =>
+            `${handler.name}: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        .join(" "),
+    );
+  }
+  if (hasStyle) {
+    discard();
+    throw new Error(STYLE_WITH_HANDLER_MESSAGE);
+  }
+  return added();
+}
+
+/** The registry for a URL load, with the viewer flag and `data:add` read at call time. */
+export function urlFileHandlers(deps: {
+  isViewer: () => boolean;
+  canAddData: () => boolean;
+  source: DataUrlFileHandlers;
+}): DataUrlFileHandlers | undefined {
+  return dataUrlFileHandlers(
+    { viewer: deps.isViewer(), canAddData: deps.canAddData() },
+    deps.source,
+  );
+}
