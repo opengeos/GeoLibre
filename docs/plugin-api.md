@@ -1571,13 +1571,7 @@ const unregister = app.registerMenuContribution?.({
 
 The host always nests the items under a submenu named after your plugin, placed after a separator at the end of the target menu, and sorts plugin submenus alphabetically. A plugin cannot insert loose items between the built-in entries or reorder them. Several contributions from the same plugin to the same menu share one submenu, with a separator between them. Contributions with no items are not shown.
 
-Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Reading archives safely: the host only lists a `.zip`'s central directory and never inflates an entry. A handler that unpacks in `open` is the one reading untrusted bytes, so it should:
-
-- reject entries with a `..` segment or an absolute path, so nothing lands outside the folder you meant;
-- check the entry count and the declared sizes, per entry and in total, before inflating anything;
-- inflate with a bounded read (stop at the size you allow), because a declared size can lie.
-
-Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. Ids are global, like toolbar menu ids, so prefix them with your plugin id; the host warns when one plugin's id replaces another's, and `unregisterMenuContribution` only removes contributions your own plugin registered. The host also drops a plugin's contributions when it is deactivated or its activation fails, so a missed disposer cannot leave stale items behind. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
+Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. Ids are global, like toolbar menu ids, so prefix them with your plugin id; the host warns when one plugin's id replaces another's, and `unregisterMenuContribution` only removes contributions your own plugin registered. The host also drops a plugin's contributions when it is deactivated or its activation fails, so a missed disposer cannot leave stale items behind. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
 
 ## Receiving dropped files
 
@@ -1604,6 +1598,12 @@ const unregister = app.registerFileHandler?.({
 - `extensions` is a cheap, case-insensitive pre-filter: only files that match are offered, so `claim` never runs for a file you could never take. It must list at least one extension.
 - `claim` gets every matching file in the drop, so it can take a multi-file set, and returns the files it takes. An empty list means "not mine". Each file has a `name` and `size`; a readable `.zip` also has `entries`, the paths inside the archive, read from its central directory without loading the archive. Decide by these, since `.zip` is shared with the core. A `claim` that throws counts as "not mine".
 - `open` gets the claimed files, which add `arrayBuffer()` and `text()`. The drop status then says "Opened by" and your `name`. If `open` rejects, the error is shown under your `name` and the files stay claimed.
+
+The host only lists a `.zip`'s central directory for `entries` and never inflates an entry. A handler that unpacks the archive in `open` is the one reading untrusted bytes, so it should:
+
+- reject entries with a `..` segment, a backslash separator or an absolute path (`/etc/x`, `C:\x`), so nothing lands outside the folder you meant. Your unzip library may also decode a name differently from `entries`, so check the names it returns, not only the listed ones;
+- check the entry count and the declared sizes, per entry and in total, before inflating anything;
+- inflate with a bounded read (stop at the size you allow), because a declared size can lie.
 
 Handlers run in registration order, and a file one handler claims is not offered to the next. Everything nobody claims loads as it would without any handlers, so a shapefile zip still loads as a shapefile.
 
