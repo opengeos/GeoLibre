@@ -383,7 +383,6 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
 - Install external plugins from uploaded zips and local development directories,
   subject to the client deployment plugin policy. Bundled drop-ins load
   automatically unless their ids are blocked by that policy.
-
 - Plugin host APIs to claim files dropped on the map through file handlers, write files
   into a folder the user picked, export GeoJSON and GeoParquet, and set the map CRS
 
