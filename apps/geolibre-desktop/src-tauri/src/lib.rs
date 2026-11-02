@@ -2714,11 +2714,10 @@ async fn start_geolibre_sidecar(app: tauri::AppHandle) -> Result<SidecarServerIn
 // Interpreter for the uv project environments behind the sidecar and Jupyter.
 // Left unpinned, uv takes the newest Python it can find or download, which can
 // be a release that locked wheels (psycopg-binary, for one) don't support yet,
-// and then `uv run` fails before the server starts. The Whitebox and conversion
-// runtimes pin their own version separately. `+gil` keeps uv off a free-threaded
-// 3.14 that comes first on PATH, which locked wheels don't support either.
+// and then `uv run` fails before the server starts. 3.12 matches the Whitebox and
+// conversion runtimes and the version CI tests.
 #[cfg(not(feature = "mas"))]
-const SIDECAR_PYTHON_VERSION: &str = "3.14+gil";
+const SIDECAR_PYTHON_VERSION: &str = "3.12";
 
 // uv replaces an existing project environment built on another Python, so this
 // also repairs installs whose environment was created before the pin.
@@ -5352,7 +5351,7 @@ mod tests {
         let mut command = Command::new("uv");
         add_sidecar_python_pin(&mut command);
         let args: Vec<_> = command.get_args().collect();
-        assert_eq!(args, [OsStr::new("--python"), OsStr::new("3.14+gil")]);
+        assert_eq!(args, [OsStr::new("--python"), OsStr::new("3.12")]);
     }
 
     // A throwaway directory tree under the system temp dir that removes itself
