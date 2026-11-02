@@ -10,11 +10,7 @@ import { Loader2, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RemoteSignInPrompt } from "../../../hooks/useProjectFileActions";
-import {
-  ShareOAuthError,
-  shareOAuthErrorKey,
-  signInToShare,
-} from "../../../lib/share-oauth";
+import { ShareOAuthError, shareOAuthErrorKey, signInToShare } from "../../../lib/share-oauth";
 import { openSettingsSection } from "../SettingsDialog";
 
 interface RemoteSignInDialogProps {
@@ -66,11 +62,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
               </p>
             ) : null}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onSettle(prompt, false)}
-              >
+              <Button type="button" variant="outline" onClick={() => onSettle(prompt, false)}>
                 {t("common.cancel")}
               </Button>
               <Button
@@ -111,11 +103,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
           </div>
         ) : (
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onSettle(prompt, false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onSettle(prompt, false)}>
               {t("common.cancel")}
             </Button>
             <Button
