@@ -189,6 +189,59 @@ describe("listZipEntryPaths", () => {
     ]);
   });
 
+  it("skips an end-record signature inside the archive comment", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x"), "b/c.xml": strToU8("y") });
+    // A comment that holds a complete fake end record, whose directory fields are zero.
+    const fake = new Uint8Array(22);
+    new DataView(fake.buffer).setUint32(0, 0x06054b50, true);
+    const bytes = new Uint8Array(zip.byteLength + fake.byteLength);
+    bytes.set(zip);
+    bytes.set(fake, zip.byteLength);
+    new DataView(bytes.buffer).setUint16(zip.byteLength - 2, fake.byteLength, true);
+    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
+      "a.txt",
+      "b/c.xml",
+    ]);
+  });
+
+  it("ignores an end record whose comment length runs past the file", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x") });
+    const bytes = new Uint8Array(zip.byteLength + 22);
+    bytes.set(zip);
+    // A second end record at the very end whose directory fields are consistent,
+    // but whose comment length claims bytes that are not there.
+    bytes.set(zip.subarray(zip.byteLength - 22), zip.byteLength);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(zip.byteLength + 12, zip.byteLength, true);
+    view.setUint32(zip.byteLength + 16, 0, true);
+    view.setUint16(zip.byteLength + 20, 500, true);
+    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
+      "a.txt",
+    ]);
+  });
+
+  it("decodes unflagged names as CP437 and flagged names as UTF-8", async () => {
+    const zip = zipSync({ "AAAAAAA.txt": strToU8("x"), "BBBBBBB.txt": strToU8("y") });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const text = new TextDecoder("latin1").decode(zip);
+    // Patch the names in both the local and the central headers.
+    const patch = (from: string, bytes: number[], flag: boolean) => {
+      for (let at = text.indexOf(from); at >= 0; at = text.indexOf(from, at + 1)) {
+        zip.set(bytes, at);
+        const header = text.slice(at - 30, at - 26) === "PK\u0003\u0004" ? at - 30 : at - 46;
+        if (flag) view.setUint16(header + (header === at - 30 ? 6 : 8), 0x0800, true);
+      }
+    };
+    // CP437: 0x84 = a-umlaut, 0x94 = o-umlaut, 0x81 = u-umlaut.
+    patch("AAAAAAA", [0x84, 0x94, 0x81, 0x41, 0x41, 0x41, 0x41], false);
+    // UTF-8 with the language-encoding flag: "äöü" as two bytes each, then 1 pad byte.
+    patch("BBBBBBB", [0xc3, 0xa4, 0xc3, 0xb6, 0xc3, 0xbc, 0x42], true);
+    assert.deepEqual(await listZipEntryPaths(zip.byteLength, rangeReader(zip).readRange), [
+      "\u00e4\u00f6\u00fcAAAA.txt",
+      "\u00e4\u00f6\u00fcB.txt",
+    ]);
+  });
+
   it("returns undefined for a file that is not a zip", async () => {
     const bytes = new Uint8Array(1000).fill(7);
     assert.equal(

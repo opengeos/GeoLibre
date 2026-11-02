@@ -27,6 +27,11 @@ const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const ZIP64_EOCD_SIZE = 56;
 const CENTRAL_ENTRY_SIGNATURE = 0x02014b50;
 const CENTRAL_ENTRY_SIZE = 46;
+/** General purpose flag bit 11: the entry name is UTF-8 rather than CP437. */
+const UTF8_NAME_FLAG = 0x0800;
+/** The upper half (0x80-0xff) of code page 437, the zip default for names. */
+const CP437_HIGH =
+  "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0";
 /** Longest possible zip comment plus the record that precedes it. */
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
 /** A central directory beyond this is not a file a handler should inspect. */
@@ -38,6 +43,13 @@ const MAX_FOLDER_ENTRIES = 20_000;
 
 function viewOf(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function decodeCp437(bytes: Uint8Array): string {
+  let name = "";
+  for (const byte of bytes)
+    name += byte < 0x80 ? String.fromCharCode(byte) : CP437_HIGH[byte - 0x80];
+  return name;
 }
 
 /**
@@ -58,46 +70,53 @@ export async function listZipEntryPaths(
   const tailOffset = size - tailLength;
   const tail = await readRange(tailOffset, tailLength);
   const tailView = viewOf(tail);
-  let eocd = -1;
-  for (let i = tail.byteLength - EOCD_SIZE; i >= 0; i -= 1) {
-    if (tailView.getUint32(i, true) === EOCD_SIGNATURE) {
-      eocd = i;
-      break;
+  // Scan back for an end record the rest of the archive agrees with. A signature
+  // inside the archive comment fails one of the checks, so the scan moves on to
+  // the real record before it.
+  let directorySize = 0;
+  let directoryOffset = 0;
+  let found = false;
+  for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0 && !found; eocd -= 1) {
+    if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
+    // The declared comment has to fit in the bytes after the record.
+    if (eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true) > tail.byteLength) continue;
+    directorySize = tailView.getUint32(eocd + 12, true);
+    directoryOffset = tailView.getUint32(eocd + 16, true);
+    // The directory ends where the record that describes it begins.
+    let directoryEnd = tailOffset + eocd;
+    if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
+      const locator = eocd - ZIP64_LOCATOR_SIZE;
+      if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
+        continue;
+      }
+      const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
+      if (zip64Offset + ZIP64_EOCD_SIZE > size) continue;
+      const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
+      if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) continue;
+      directorySize = Number(zip64.getBigUint64(40, true));
+      directoryOffset = Number(zip64.getBigUint64(48, true));
+      directoryEnd = zip64Offset;
     }
+    found = directoryOffset + directorySize === directoryEnd;
   }
-  if (eocd < 0) return undefined;
-
-  let directorySize = tailView.getUint32(eocd + 12, true);
-  let directoryOffset = tailView.getUint32(eocd + 16, true);
-  if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
-    const locator = eocd - ZIP64_LOCATOR_SIZE;
-    if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
-      return undefined;
-    }
-    const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
-    if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
-    const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
-    if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
-    directorySize = Number(zip64.getBigUint64(40, true));
-    directoryOffset = Number(zip64.getBigUint64(48, true));
-  }
-  if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES || directoryOffset + directorySize > size) {
-    return undefined;
-  }
+  if (!found) return undefined;
+  if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES) return undefined;
 
   const directory = await readRange(directoryOffset, directorySize);
   const view = viewOf(directory);
-  const decoder = new TextDecoder();
+  const utf8 = new TextDecoder();
   const paths: string[] = [];
   let cursor = 0;
   while (cursor + CENTRAL_ENTRY_SIZE <= directory.byteLength) {
     if (view.getUint32(cursor, true) !== CENTRAL_ENTRY_SIGNATURE) return undefined;
+    const flags = view.getUint16(cursor + 8, true);
     const nameLength = view.getUint16(cursor + 28, true);
     const extraLength = view.getUint16(cursor + 30, true);
     const commentLength = view.getUint16(cursor + 32, true);
     const nameStart = cursor + CENTRAL_ENTRY_SIZE;
     if (nameStart + nameLength > directory.byteLength) return undefined;
-    paths.push(decoder.decode(directory.subarray(nameStart, nameStart + nameLength)));
+    const name = directory.subarray(nameStart, nameStart + nameLength);
+    paths.push(flags & UTF8_NAME_FLAG ? utf8.decode(name) : decodeCp437(name));
     cursor = nameStart + nameLength + extraLength + commentLength;
   }
   return paths;
