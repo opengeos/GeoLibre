@@ -555,10 +555,16 @@ class Map(anywidget.AnyWidget):
 
     def close(self) -> None:
         """Close the widget and remove rasters materialized from xarray data."""
-        # The Layout outlives this widget in the ipywidgets registry, so its
-        # observer would otherwise keep a closed Map alive.
-        self.layout.unobserve(self._on_layout_height, "height")
         try:
+            # The Layout outlives this widget in the ipywidgets registry, so its
+            # observer would otherwise keep a closed Map alive. traitlets raises
+            # ValueError once it is gone, as on a repeated close(). Read the stored
+            # value: a rejected constructor reaches here through __del__, and
+            # self.layout would create a new Layout widget just to discard it.
+            layout = self._trait_values.get("layout")
+            if layout is not None:
+                with contextlib.suppress(ValueError):
+                    layout.unobserve(self._on_layout_height, "height")
             super().close()
         finally:
             _remove_temporary_rasters(getattr(self, "_temporary_rasters", []))

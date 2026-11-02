@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import gc
 import json
 import pathlib
 import sys
@@ -1205,3 +1206,25 @@ def test_closed_map_stops_following_its_layout(stub_app_server):
     m.close()
     layout.height = "100%"
     assert m.height == "500px"
+
+
+def test_map_can_be_closed_twice(stub_app_server):
+    m = Map()
+    m.close()
+    m.close()
+
+
+def test_layout_passed_to_the_constructor_stops_following_on_close(stub_app_server):
+    layout = ipywidgets.Layout(height="100px")
+    m = Map(layout=layout)
+    m.close()
+    layout.height = "5px"
+    assert m.height == "100px"
+
+
+def test_rejected_constructor_does_not_leave_a_layout_widget():
+    before = set(ipywidgets.widgets.widget._instances)
+    with pytest.raises(ValueError, match="app_layout must be one of"):
+        Map(app_layout="sidebar")
+    gc.collect()
+    assert set(ipywidgets.widgets.widget._instances) == before
