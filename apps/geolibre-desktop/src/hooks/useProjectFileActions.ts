@@ -1543,6 +1543,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const hostLabel = shareHostLabel();
 
     // 1. Resolve token
+    let oauthSessionRevision = supportsShareOAuth()
+      ? useShareOAuthStore.getState().sessionRevision
+      : undefined;
     let personalToken = (
       useDesktopSettingsStore.getState().desktopSettings.shareToken ?? ""
     ).trim();
@@ -1560,6 +1563,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       if (!signedIn || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
         return false;
       }
+      oauthSessionRevision = supportsShareOAuth()
+        ? useShareOAuthStore.getState().sessionRevision
+        : undefined;
       personalToken = (useDesktopSettingsStore.getState().desktopSettings.shareToken ?? "").trim();
       try {
         token = await resolveShareRequestToken(personalToken, shareBaseUrl);
@@ -1628,23 +1634,40 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       });
       if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
 
-      useAppStore.getState().setProjectName(chosenTitle);
-      setProjectPath(null);
       if (!uploaded.id) {
         throw new Error("The share server returned no project ID.");
       }
+      if (
+        oauthSessionRevision !== undefined &&
+        oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
+      ) {
+        return false;
+      }
+      useAppStore.getState().setProjectName(chosenTitle);
+      setProjectPath(null);
       remoteProjectRef.current = {
         id: uploaded.id,
         versionCount: uploaded.versionCount,
         canEdit: true,
         token: personalToken,
         baseUrl: shareBaseUrl,
-        oauthSessionRevision: useShareOAuthStore.getState().sessionRevision,
+        oauthSessionRevision,
         projectGeneration: useAppStore.getState().projectGeneration,
       };
       setRemoteSaveWarning(null);
-      markSaved();
-      recordExplicitProjectSave();
+
+      let liveContent: string | null = null;
+      try {
+        liveContent = serializeProject(
+          excludeHiddenFieldsFromProject(buildCurrentProject().project),
+        );
+      } catch (error) {
+        console.error("Failed to compare the saved shared project", error);
+      }
+      if (liveContent && sharedProjectContentMatches(projectContent, liveContent)) {
+        markSaved();
+        recordExplicitProjectSave();
+      }
       notifyUnsavedLocalRasters(builtLayers);
       return true;
     } catch (error) {
