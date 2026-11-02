@@ -1677,11 +1677,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       } catch (error) {
         console.error("Failed to compare the saved shared project", error);
       }
-      if (
-        startContent &&
-        liveContent &&
-        sharedProjectContentMatches(startContent, liveContent)
-      ) {
+      if (startContent && liveContent && sharedProjectContentMatches(startContent, liveContent)) {
         markSaved();
         recordExplicitProjectSave();
       }
