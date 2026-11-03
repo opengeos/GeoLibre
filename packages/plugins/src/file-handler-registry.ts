@@ -56,10 +56,36 @@ function declaredDataTypes(handler: GeoLibreFileHandler): string[] {
 const registry = new Map<string, FileHandlerEntry>();
 
 /**
+ * Who owns each `dataType` hint: the first handler to declare it. Kept apart
+ * from the registration order so that replacing a handler (which keeps its
+ * slot) can neither take a hint another live handler owns nor lose one it owned.
+ */
+const hintOwners = new Map<string, string>();
+
+/** Hand `name` to the first live handler, other than `exceptId`, that declares it. */
+function reassignHint(name: string, exceptId: string): void {
+  hintOwners.delete(name);
+  for (const [id, entry] of registry) {
+    if (id !== exceptId && entry.dataTypes.includes(name)) {
+      hintOwners.set(name, id);
+      return;
+    }
+  }
+}
+
+/** Remove a handler and release the hints it owned. */
+function removeHandler(id: string): void {
+  registry.delete(id);
+  for (const [name, owner] of [...hintOwners]) {
+    if (owner === id) reassignHint(name, id);
+  }
+}
+
+/**
  * Register a file handler. Returns an unregister function (call it from the
  * plugin's `deactivate` hook). Re-registering the same id replaces the handler
- * and moves it to the end of the order, so a hint it shares with an earlier
- * handler stays with that handler.
+ * and keeps its place in the order. A replacement keeps the hints its
+ * predecessor owned and never takes one another live handler owns.
  *
  * `ownerPluginId` is injected by the host; plugins call this with one argument.
  */
@@ -95,16 +121,20 @@ export function registerFileHandler(
         `registered by "${previous.ownerPluginId ?? "the host"}"; prefix handler ids with your plugin id.`,
     );
   }
-  // A replacement goes to the end of the order, so what it declares is judged
-  // as if it were new.
-  registry.delete(handler.id);
+  // Hints the predecessor owned but the replacement no longer declares go to
+  // the next handler that declares them.
+  for (const [name, owner] of [...hintOwners]) {
+    if (owner === handler.id && !entry.dataTypes.includes(name)) reassignHint(name, handler.id);
+  }
   // The first handler to declare a hint keeps it; a later one is warned, not obeyed.
   for (const name of entry.dataTypes) {
-    const owner = findEntryByDataType(name);
-    if (owner && owner.handler.id !== handler.id) {
+    const owner = hintOwners.get(name);
+    if (owner === undefined) {
+      hintOwners.set(name, handler.id);
+    } else if (owner !== handler.id) {
       console.warn(
         `File handler "${handler.id}" declares the "${name}" data type, which ` +
-          `"${owner.handler.id}" already declares; "${owner.handler.id}" keeps it.`,
+          `"${owner}" already declares; "${owner}" keeps it.`,
       );
     }
   }
@@ -112,7 +142,7 @@ export function registerFileHandler(
   // Only while this exact registration is current, so a stale disposer cannot
   // evict a newer handler that reused the id.
   return () => {
-    if (registry.get(handler.id) === entry) registry.delete(handler.id);
+    if (registry.get(handler.id) === entry) removeHandler(handler.id);
   };
 }
 
@@ -126,7 +156,7 @@ export function unregisterFileHandler(id: string, ownerPluginId?: string): void 
   const entry = registry.get(id);
   if (!entry) return;
   if (ownerPluginId !== undefined && entry.ownerPluginId !== ownerPluginId) return;
-  registry.delete(id);
+  removeHandler(id);
 }
 
 /**
@@ -136,15 +166,8 @@ export function unregisterFileHandler(id: string, ownerPluginId?: string): void 
  */
 export function unregisterFileHandlersByOwner(ownerPluginId: string): void {
   for (const [id, entry] of registry) {
-    if (entry.ownerPluginId === ownerPluginId) registry.delete(id);
+    if (entry.ownerPluginId === ownerPluginId) removeHandler(id);
   }
-}
-
-function findEntryByDataType(name: string): FileHandlerEntry | undefined {
-  for (const entry of registry.values()) {
-    if (entry.dataTypes.includes(name)) return entry;
-  }
-  return undefined;
 }
 
 /**
@@ -153,7 +176,8 @@ function findEntryByDataType(name: string): FileHandlerEntry | undefined {
  * resolves to a handler.
  */
 export function findFileHandlerByDataType(name: string): GeoLibreFileHandler | undefined {
-  return findEntryByDataType(name)?.handler;
+  const owner = hintOwners.get(name);
+  return owner === undefined ? undefined : registry.get(owner)?.handler;
 }
 
 /** All registered handlers, in registration order. */
@@ -167,4 +191,5 @@ export function listFileHandlers(): GeoLibreFileHandler[] {
  */
 export function __resetFileHandlerRegistryForTests(): void {
   registry.clear();
+  hintOwners.clear();
 }

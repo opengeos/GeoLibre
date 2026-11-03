@@ -310,6 +310,13 @@ describe("parseEmbedRequest: v2 commands", () => {
     assert.equal(seen.length, 2);
   });
 
+  it("lower-cases an addData dataType, like the ?dataType= parameter", () => {
+    const parsed = parseEmbedRequest(
+      message("addData", { url: "https://example.com/d", dataType: " IsoXml " }),
+    ) as { command: { dataType: unknown } };
+    assert.equal(parsed.command.dataType, "isoxml");
+  });
+
   it("rejects invalid addData URLs and options", () => {
     for (const payload of [
       { url: "file:///tmp/data.geojson" },

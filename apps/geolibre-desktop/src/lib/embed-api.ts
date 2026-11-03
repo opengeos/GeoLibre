@@ -646,8 +646,11 @@ export function parseEmbedRequest(
       // A malformed hint is dropped with a warning, as the ?dataType= parameter does.
       let dataType: string | null = null;
       if (payload.dataType !== undefined && payload.dataType !== null) {
-        if (isFileHandlerDataType(payload.dataType)) {
-          dataType = payload.dataType;
+        // Trimmed and lower-cased, like the ?dataType= parameter.
+        const hint =
+          typeof payload.dataType === "string" ? payload.dataType.trim().toLowerCase() : "";
+        if (isFileHandlerDataType(hint)) {
+          dataType = hint;
         } else {
           console.warn(
             "[GeoLibre] addData: ignoring a malformed dataType; use lower-case letters, digits and hyphens.",

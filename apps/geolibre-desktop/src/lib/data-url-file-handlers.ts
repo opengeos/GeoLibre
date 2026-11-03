@@ -153,17 +153,25 @@ export function trackHandlerLayers(
   store: UrlLoadLayerStore,
 ): { source: DataUrlFileHandlers; added: Set<string> } {
   const added = new Set<string>();
-  const wrap = (handler: GeoLibreFileHandler): GeoLibreFileHandler => ({
-    ...handler,
-    open: async (files) => {
+  // A proxy rather than a spread: a class-instance handler keeps its prototype
+  // methods, and every method runs with the original handler as `this`.
+  const wrap = (handler: GeoLibreFileHandler): GeoLibreFileHandler => {
+    const open: GeoLibreFileHandler["open"] = async (files) => {
       const snapshot = new Set(store.layerIds());
       try {
         return await handler.open(files);
       } finally {
         for (const id of store.layerIds()) if (!snapshot.has(id)) added.add(id);
       }
-    },
-  });
+    };
+    return new Proxy(handler, {
+      get(target, property) {
+        if (property === "open") return open;
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
   return {
     added,
     source: {
@@ -178,6 +186,31 @@ export function trackHandlerLayers(
 }
 
 /**
+ * Wait for `ready`, but give up with an AbortError as soon as the load is
+ * aborted, so a stuck startup cannot hold an aborted load until the deadline.
+ */
+export async function waitForReady(
+  ready: (() => Promise<void>) | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!ready) return;
+  signal?.throwIfAborted();
+  if (!signal) return ready();
+  let onAbort: () => void = () => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    await Promise.race([ready(), aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+  // `ready` itself may have been what aborted the load.
+  signal.throwIfAborted();
+}
+
+/**
  * Fetch a style for a URL load, but not when a handler declares the hint: a
  * plugin opens that file itself, so the load fails with
  * {@link STYLE_WITH_HANDLER_MESSAGE} and no style request is sent.
@@ -186,13 +219,15 @@ export async function fetchStyleUnlessHandlerHint<T>({
   handlers,
   dataType,
   fetchStyle,
+  signal,
 }: {
   handlers: DataUrlFileHandlers | undefined;
   dataType: string | null | undefined;
   fetchStyle: () => Promise<T>;
+  signal?: AbortSignal;
 }): Promise<T> {
   if (handlers && dataType && dataType !== "lidar") {
-    await handlers.ready?.();
+    await waitForReady(handlers.ready, signal);
     if (handlers.forDataType(dataType)) throw new Error(STYLE_WITH_HANDLER_MESSAGE);
   }
   return fetchStyle();

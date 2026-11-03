@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { strToU8, zipSync } from "fflate";
-import type { GeoLibreDroppedFile, GeoLibreFileHandler } from "../packages/plugins/src/types";
+import type {
+  GeoLibreDroppedFile,
+  GeoLibreDroppedFileInfo,
+  GeoLibreFileHandler,
+} from "../packages/plugins/src/types";
+import { queueDataLoad } from "../apps/geolibre-desktop/src/lib/data-load-queue";
 import { fetchRemoteData, remoteFileName } from "../apps/geolibre-desktop/src/lib/data-url";
 import {
   type DataUrlFileHandlers,
@@ -12,6 +17,7 @@ import {
   urlFileHandlers,
 } from "../apps/geolibre-desktop/src/lib/data-url-file-handlers";
 import {
+  awaitingEntryState,
   createLatch,
   createSettleGate,
   deepLinkSettled,
@@ -682,5 +688,106 @@ describe("remoteFileName", () => {
       "export.zip",
     );
     assert.equal(remoteFileName("https://x.example/", null), "data");
+  });
+});
+
+describe("trackHandlerLayers with a class-instance handler", () => {
+  it("keeps prototype methods, bound to the handler", async () => {
+    class ClassHandler implements GeoLibreFileHandler {
+      id = "cls";
+      name = "Class handler";
+      extensions = [".zip"];
+      dataTypes = ["isoxml"];
+      opened = 0;
+      claim(files: GeoLibreDroppedFileInfo[]) {
+        // Reads `this`, so it only works when called on the handler itself.
+        return this.extensions.length > 0 ? files : [];
+      }
+      open() {
+        this.opened += 1;
+      }
+    }
+    const instance = new ClassHandler();
+    const registry: DataUrlFileHandlers = {
+      list: () => [instance],
+      forDataType: () => instance,
+    };
+    const tracking = trackHandlerLayers(registry, fakeStore([]));
+    const [wrapped] = tracking.source.list();
+    assert.equal(typeof wrapped!.claim, "function");
+    assert.equal((await wrapped!.claim([{ name: "a.zip", size: 1 }])).length, 1);
+    await wrapped!.open([]);
+    await tracking.source.forDataType("isoxml")!.open([]);
+    assert.equal(instance.opened, 2);
+    assert.equal(wrapped!.name, "Class handler");
+    assert.deepEqual(wrapped!.extensions, [".zip"]);
+  });
+});
+
+describe("the readiness wait honours the abort", () => {
+  const never = () => new Promise<void>(() => undefined);
+  const settles = async (promise: Promise<unknown>) =>
+    Promise.race([
+      promise.then(
+        () => "resolved",
+        (error: Error) => error.name,
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("hung"), 300)),
+    ]);
+
+  it("ends an unhinted offer, a hinted one and the style check with AbortError", async () => {
+    for (const hinted of [false, true]) {
+      const controller = new AbortController();
+      const registry: DataUrlFileHandlers = {
+        ...source([handler()], { isoxml: "h" }),
+        ready: never,
+      };
+      const pending = fetchRemoteData("https://example.com/TASKDATA.zip", {
+        fetchImpl: fetching(taskDataZip),
+        fileHandlers: registry,
+        dataType: hinted ? "isoxml" : undefined,
+        signal: controller.signal,
+      });
+      setTimeout(() => controller.abort(), 20);
+      assert.equal(await settles(pending), "AbortError", hinted ? "hinted" : "unhinted");
+    }
+    const controller = new AbortController();
+    const pending = fetchStyleUnlessHandlerHint({
+      handlers: { ...source([handler()], { isoxml: "h" }), ready: never },
+      dataType: "isoxml",
+      fetchStyle: async () => "style",
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 20);
+    assert.equal(await settles(pending), "AbortError", "style");
+  });
+});
+
+describe("awaitingEntryState", () => {
+  it("settles a trusted entry once it loaded or reported a load issue", () => {
+    assert.equal(awaitingEntryState({ loadedFromEntry: true, hasLoadIssue: false }), "ready");
+    assert.equal(awaitingEntryState({ loadedFromEntry: false, hasLoadIssue: true }), "failed");
+    // Another plugin already holds the id, yet this manifest failed: not stuck.
+    assert.equal(awaitingEntryState({ loadedFromEntry: false, hasLoadIssue: true }), "failed");
+    assert.equal(awaitingEntryState({ loadedFromEntry: false, hasLoadIssue: false }), "waiting");
+  });
+});
+
+describe("queueDataLoad", () => {
+  it("runs loads one after another, and a failure does not block the next", async () => {
+    const order: string[] = [];
+    const slow = queueDataLoad(async () => {
+      order.push("a:start");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      order.push("a:end");
+      throw new Error("a failed");
+    });
+    const next = queueDataLoad(async () => {
+      order.push("b:start");
+      return "b";
+    });
+    await assert.rejects(slow, /a failed/);
+    assert.equal(await next, "b");
+    assert.deepEqual(order, ["a:start", "a:end", "b:start"]);
   });
 });

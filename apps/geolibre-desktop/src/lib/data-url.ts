@@ -6,6 +6,7 @@ import {
   offerRemoteFileToHandlers,
   openRemoteFileWithHandler,
   STYLE_WITH_HANDLER_MESSAGE,
+  waitForReady,
   type RemoteFileHandlerResult,
 } from "./data-url-file-handlers";
 
@@ -451,8 +452,7 @@ export async function fetchRemoteData(
   // A plugin's hint skips detection. `lidar` is built in and never reaches a handler.
   let hinted: ReturnType<DataUrlFileHandlers["forDataType"]>;
   if (fileHandlers && options.dataType && options.dataType !== "lidar") {
-    await fileHandlers.ready?.();
-    options.signal?.throwIfAborted();
+    await waitForReady(fileHandlers.ready, options.signal);
     hinted = fileHandlers.forDataType(options.dataType);
   }
   if (hinted) {
@@ -495,8 +495,7 @@ export async function fetchRemoteData(
     /filename\*?=[^;]*\.zip(?:[;"']|$)/i.test(disposition) ||
     zipSignature;
   if (fileHandlers) {
-    await fileHandlers.ready?.();
-    options.signal?.throwIfAborted();
+    await waitForReady(fileHandlers.ready, options.signal);
     const handlers = fileHandlers.list();
     if (handlers.length > 0) {
       let name = remoteFileName(url, response.headers.get("content-disposition"));

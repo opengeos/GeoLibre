@@ -24,7 +24,7 @@ import {
   satisfiesMinVersion,
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
-import { deepLinkSettled } from "../../lib/settle-gate";
+import { awaitingEntryState, deepLinkSettled } from "../../lib/settle-gate";
 import { mergeStringLists } from "../../lib/string-lists";
 import {
   activateDeepLinkedPlugin,
@@ -287,10 +287,15 @@ export function usePluginDeepLink({
         .list()
         .map((plugin) => plugin.id),
     );
-    const ready = awaiting.filter((entry) => loadedIds.has(entry.id) && isLoadedFromEntry(entry));
-    const failed = awaiting.filter(
-      (entry) => !loadedIds.has(entry.id) && loadIssues.has(entry.manifestUrl),
-    );
+    const state = (entry: PluginRegistryEntry) =>
+      awaitingEntryState({
+        loadedFromEntry: loadedIds.has(entry.id) && isLoadedFromEntry(entry),
+        hasLoadIssue: loadIssues.has(entry.manifestUrl),
+      });
+    const ready = awaiting.filter((entry) => state(entry) === "ready");
+    // A manifest that reported a load issue is failed even when another plugin
+    // already holds the id, so it cannot hold the startup gate until the deadline.
+    const failed = awaiting.filter((entry) => state(entry) === "failed");
     if (ready.length === 0 && failed.length === 0) return;
     setAwaiting((entries) =>
       entries.filter((entry) => !ready.includes(entry) && !failed.includes(entry)),

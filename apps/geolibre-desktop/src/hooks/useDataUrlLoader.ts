@@ -18,6 +18,7 @@ import {
   parseRasterUrlStyle,
 } from "../lib/data-url";
 import { deepLinkCogDefaults } from "../lib/cog-render-engine";
+import { queueDataLoad } from "../lib/data-load-queue";
 import {
   discardHandledLayers,
   fetchStyleUnlessHandlerHint,
@@ -98,6 +99,7 @@ export async function loadDataUrl(
         handlers: tracking?.source,
         dataType: options.dataType,
         fetchStyle: () => fetchRemoteStyle(options.styleUrl!, { signal: controller.signal }),
+        signal: controller.signal,
       })
     : Promise.resolve(null);
   remotePromise.catch(stop);
@@ -265,7 +267,7 @@ export function useDataUrlLoader(
       }
       return { layerIds, fitLayerIds: layerIds };
     };
-    void load()
+    void queueDataLoad(load)
       .then(({ layerIds, fitLayerIds }) => {
         if (controller.signal.aborted) return;
         setState({

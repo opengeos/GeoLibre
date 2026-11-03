@@ -75,13 +75,13 @@ const shapefileZip = zipSync({ "roads.shp": new Uint8Array(4), "roads.dbf": new 
 describe("file handler registry", () => {
   afterEach(() => __resetFileHandlerRegistryForTests());
 
-  it("lists handlers in registration order; replacing an id moves it to the end", () => {
+  it("lists handlers in registration order and keeps the slot when an id is replaced", () => {
     registerFileHandler(handler({ id: "a", name: "A1" }));
     registerFileHandler(handler({ id: "b" }));
     registerFileHandler(handler({ id: "a", name: "A2" }));
     assert.deepEqual(
       listFileHandlers().map((h) => h.name),
-      ["Handler", "A2"],
+      ["A2", "Handler"],
     );
   });
 
@@ -223,14 +223,30 @@ describe("file handler data types", () => {
     assert.match(seen[1]!, /object/);
   });
 
-  it("after a replacement the hint stays with the handler that is first in the order", () => {
+  it("a replacement keeps a hint its predecessor owned, without a warning", () => {
     registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
     registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] }));
     const seen = warnings(() => registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] })));
-    // "a" moved behind "b", which now owns the hint, and the warning says so.
-    assert.equal(findFileHandlerByDataType("isoxml")?.id, "b");
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "a");
+    assert.deepEqual(seen, []);
+  });
+
+  it("a replacement never takes a hint another live handler owns", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    registerFileHandler(handler({ id: "b" }));
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "b", name: "B2", dataTypes: ["isoxml"] })),
+    );
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "a");
     assert.equal(seen.length, 1);
-    assert.match(seen[0]!, /"a".*isoxml.*"b" keeps it/);
+    assert.match(seen[0]!, /"b".*isoxml.*"a" keeps it/);
+  });
+
+  it("a replacement that drops a hint releases it to the next handler declaring it", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    warnings(() => registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] })));
+    registerFileHandler(handler({ id: "a" }));
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "b");
   });
 
   it("does not warn when a handler re-registers its own hint", () => {

@@ -83,3 +83,15 @@ export function deepLinkSettled(state: {
     state.linkResolved && state.pending === 0 && state.awaiting === 0 && state.activating === 0
   );
 }
+
+/**
+ * Where a trusted registry plugin stands: loaded from its own manifest (ready),
+ * reported a load issue (failed, whatever else holds its id), or still loading.
+ */
+export function awaitingEntryState(entry: {
+  loadedFromEntry: boolean;
+  hasLoadIssue: boolean;
+}): "ready" | "failed" | "waiting" {
+  if (entry.loadedFromEntry) return "ready";
+  return entry.hasLoadIssue ? "failed" : "waiting";
+}
