@@ -34,12 +34,8 @@ const CP437_HIGH =
   "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0";
 /** Longest possible zip comment plus the record that precedes it. */
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
-/**
- * Range reads, beyond the tail, spent checking end-record candidates. It bounds
- * reads, not candidates: a check that fits in the tail costs none.
- */
-const MAX_CANDIDATE_READS = 16;
-const SIGNATURE_RECORD_SIGNATURE = 0x05054b50;
+/** End-record candidates tried before giving up, so a hostile comment stays cheap. */
+const MAX_EOCD_CANDIDATES = 16;
 const UTF8_DECODER = new TextDecoder();
 const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 /** A central directory beyond this is not a file a handler should inspect. */
@@ -81,6 +77,12 @@ function decodeEntryName(name: Uint8Array, flags: number): string {
  * List the paths inside a zip from its central directory, reading only the tail
  * of the archive rather than the whole file.
  *
+ * Deliberately not listed (the result is undefined, so a handler can still claim
+ * by file name): archives with bytes in front of them (self-extracting zips),
+ * archives with a digital signature record before the end record, and spanned
+ * or multi-disk archives. The entries are a hint for `claim`, not a full zip
+ * parser; a handler that needs these cases unpacks the file itself in `open`.
+ *
  * @param size - The archive's size in bytes.
  * @param readRange - Reads a byte range of the archive.
  * @returns The entry paths in archive order, or undefined when the file has no
@@ -95,133 +97,58 @@ export async function listZipEntryPaths(
   const tailOffset = size - tailLength;
   const tail = await readRange(tailOffset, tailLength);
   const tailView = viewOf(tail);
-  let reads = 0;
-  const countedRead: ReadRange = (offset, length) => {
-    reads += 1;
-    return readRange(offset, length);
-  };
+
   /** Whether a central directory entry starts at `offset`, with `length` bytes in range. */
   const startsDirectory = async (offset: number, length: number): Promise<boolean> => {
-    if (offset < 0 || offset + Math.max(length, 4) > size) return false;
-    // Most directories lie in the tail that is already read.
-    if (offset >= tailOffset) {
-      return tailView.getUint32(offset - tailOffset, true) === CENTRAL_ENTRY_SIGNATURE;
-    }
-    const head = await countedRead(offset, 4);
+    if (offset + Math.max(length, 4) > size) return false;
+    const head = await readRange(offset, 4);
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
-  // Digital signature records (0x05054b50, a 2-byte size, the data) can sit
-  // between the directory and the end record. Index every one in the tail by
-  // where it ends; data bytes can hold a second signature-like record.
-  const signatureStartsByEnd = new Map<number, number[]>();
-  for (let at = 0; at + 6 <= tail.byteLength; at += 1) {
-    if (tailView.getUint32(at, true) === SIGNATURE_RECORD_SIGNATURE) {
-      const end = at + 6 + tailView.getUint16(at + 4, true);
-      signatureStartsByEnd.set(end, [...(signatureStartsByEnd.get(end) ?? []), at]);
-    }
-  }
-  /** Absolute starts of signature records ending at the end record at `eocd`. */
-  const signatureStarts = async function* (eocd: number): AsyncGenerator<number> {
-    for (const at of signatureStartsByEnd.get(eocd) ?? []) yield tailOffset + at;
-    // A record with a long data part can begin before the tail: one bounded read.
-    const eocdOffset = tailOffset + eocd;
-    const earliest = Math.max(0, eocdOffset - 6 - 0xffff);
-    if (earliest >= tailOffset || reads >= MAX_CANDIDATE_READS) return;
-    const head = await countedRead(earliest, tailOffset - earliest);
-    const window = new Uint8Array(head.byteLength + 6);
-    window.set(head);
-    window.set(tail.subarray(0, 6), head.byteLength);
-    const view = viewOf(window);
-    for (let at = 0; at < head.byteLength; at += 1) {
-      if (
-        view.getUint32(at, true) === SIGNATURE_RECORD_SIGNATURE &&
-        earliest + at + 6 + view.getUint16(at + 4, true) === eocdOffset
-      ) {
-        yield earliest + at;
-      }
-    }
-  };
-  /**
-   * Where the directory of the end record at `eocd` really is, and how far the
-   * archive's own layout backs it: 3 = the directory also ends where the record
-   * (or the ZIP64 record) begins, 2 = an entry starts at the declared offset or
-   * at the offset the size implies, 1 = an empty archive with shifted offsets.
-   */
+  /** The directory the end record at `eocd` declares, if one really starts there. */
   const checkRecord = async (
     eocd: number,
-  ): Promise<{ tier: number; offset: number; length: number } | undefined> => {
-    const eocdOffset = tailOffset + eocd;
-    // A spanned archive cannot be unpacked by a handler, so it is not listed.
-    if (tailView.getUint16(eocd + 4, true) !== 0 || tailView.getUint16(eocd + 6, true) !== 0) {
-      return undefined;
-    }
+  ): Promise<[offset: number, length: number] | undefined> => {
+    // A spanned archive cannot be unpacked by a handler.
+    if (tailView.getUint32(eocd + 4, true) !== 0) return undefined;
+    let total = tailView.getUint16(eocd + 10, true);
     let length = tailView.getUint32(eocd + 12, true);
     let offset = tailView.getUint32(eocd + 16, true);
     if (length === 0xffffffff || offset === 0xffffffff) {
-      // ZIP64 archives with bytes in front of them are not listed.
       const locator = eocd - ZIP64_LOCATOR_SIZE;
       if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
         return undefined;
       }
-      // The locator names the disk of the ZIP64 record and the disk count.
-      if (tailView.getUint32(locator + 4, true) !== 0) return undefined;
-      if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
-      const zip64 = viewOf(await countedRead(zip64Offset, ZIP64_EOCD_SIZE));
+      const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
-      if (zip64.getUint32(16, true) !== 0 || zip64.getUint32(20, true) !== 0) return undefined;
+      total = Number(zip64.getBigUint64(32, true));
       length = Number(zip64.getBigUint64(40, true));
       offset = Number(zip64.getBigUint64(48, true));
-      if (length === 0) return offset === zip64Offset ? { tier: 3, offset, length } : undefined;
-      if (!(await startsDirectory(offset, length))) return undefined;
-      return { tier: offset + length === zip64Offset ? 3 : 2, offset, length };
     }
-    if (length === 0) {
-      if (tailView.getUint16(eocd + 10, true) !== 0) return undefined;
-      return { tier: offset === eocdOffset ? 3 : 1, offset, length };
-    }
-    if (await startsDirectory(offset, length)) {
-      return { tier: offset + length === eocdOffset ? 3 : 2, offset, length };
-    }
-    // Bytes before the archive (a self-extractor stub) shift every offset the
-    // record holds, but the directory still ends where the record begins.
-    const shifted = eocdOffset - length;
-    if (await startsDirectory(shifted, length)) return { tier: 2, offset: shifted, length };
-    for await (const signature of signatureStarts(eocd)) {
-      const shiftedPastSignature = signature - length;
-      if (await startsDirectory(shiftedPastSignature, length)) {
-        return { tier: 2, offset: shiftedPastSignature, length };
-      }
-    }
-    return undefined;
+    // An empty archive has no entry to find a signature at.
+    if (length === 0) return total === 0 ? [offset, 0] : undefined;
+    return (await startsDirectory(offset, length)) ? [offset, length] : undefined;
   };
-  // Collect the end-record signatures. A signature inside the archive comment is
-  // only a candidate: it has to point at a real directory, and the best-backed
-  // candidate wins (the earlier one on a tie). The order needs no read, so it
-  // costs nothing: first records whose directory visibly ends where they begin,
-  // then the record whose declared comment ends exactly at the end of the file
-  // (the real one in a well-formed zip), then other records whose comment fits,
-  // and last the ones that overrun the file (a truncated comment). A tier 3 hit
-  // ends the search; only the range reads a check needs are capped.
-  const buckets: number[][] = [[], [], [], []];
+
+  // Scan back for an end record that points at a real directory: a signature
+  // inside the archive comment is only a candidate. The record whose declared
+  // comment ends exactly at the end of the file is the real one in a well-formed
+  // zip, so it goes first and needs no extra read to be picked.
+  const candidates: number[] = [];
   for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0; eocd -= 1) {
     if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
-    const commentEnd = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true);
-    const directoryEnd = tailView.getUint32(eocd + 12, true) + tailView.getUint32(eocd + 16, true);
-    if (directoryEnd === tailOffset + eocd) buckets[0]!.push(eocd);
-    else if (commentEnd === tail.byteLength) buckets[1]!.push(eocd);
-    else buckets[commentEnd < tail.byteLength ? 2 : 3]!.push(eocd);
+    const exact = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true) === tail.byteLength;
+    if (exact) candidates.unshift(eocd);
+    else candidates.push(eocd);
   }
-  let best: { tier: number; offset: number; length: number } | undefined;
-  for (const eocd of buckets.flat()) {
-    if (reads >= MAX_CANDIDATE_READS || best?.tier === 3) break;
-    const record = await checkRecord(eocd);
-    if (record && (!best || record.tier > best.tier)) best = record;
+  let located: [offset: number, length: number] | undefined;
+  for (const eocd of candidates.slice(0, MAX_EOCD_CANDIDATES)) {
+    located = await checkRecord(eocd);
+    if (located) break;
   }
-  if (!best) return undefined;
-  const directoryOffset = best.offset;
-  const directorySize = best.length;
+  if (!located) return undefined;
+  const [directoryOffset, directorySize] = located;
   if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES) return undefined;
 
   const directory = await readRange(directoryOffset, directorySize);

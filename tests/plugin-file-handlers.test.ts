@@ -141,6 +141,51 @@ describe("file handler registry", () => {
 });
 
 describe("listZipEntryPaths", () => {
+  function concat(...parts: Uint8Array[]): Uint8Array {
+    const out = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.byteLength;
+    }
+    return out;
+  }
+
+  /** An end record with the given directory fields and declared comment length. */
+  function endRecord(directorySize: number, directoryOffset: number, commentLength: number) {
+    const record = new Uint8Array(22);
+    const view = new DataView(record.buffer);
+    view.setUint32(0, 0x06054b50, true);
+    view.setUint32(12, directorySize, true);
+    view.setUint32(16, directoryOffset, true);
+    view.setUint16(20, commentLength, true);
+    return record;
+  }
+
+  /** A two-entry zip, with where its directory is and how long its first entry is. */
+  function twoEntryZip() {
+    const zip = zipSync({ "a.txt": strToU8("x"), "b.txt": strToU8("y") });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const eocd = zip.byteLength - 22;
+    const offset = view.getUint32(eocd + 16, true);
+    const first =
+      46 +
+      view.getUint16(offset + 28, true) +
+      view.getUint16(offset + 30, true) +
+      view.getUint16(offset + 32, true);
+    return { zip, eocd, offset, first };
+  }
+
+  /** `zip` with `tail` appended as its archive comment. */
+  function withComment(zip: Uint8Array, tail: Uint8Array): Uint8Array {
+    const bytes = concat(zip, tail);
+    new DataView(bytes.buffer).setUint16(zip.byteLength - 2, tail.byteLength, true);
+    return bytes;
+  }
+
+  const list = (bytes: Uint8Array) =>
+    listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange);
+
   it("lists entries from the tail, without reading the file data", async () => {
     const stored = zipSync(
       { "big.bin": new Uint8Array(500_000), "a/b.xml": strToU8("x") },
@@ -189,197 +234,89 @@ describe("listZipEntryPaths", () => {
     ]);
   });
 
-  it("skips an end-record signature inside the archive comment", async () => {
-    const zip = zipSync({ "a.txt": strToU8("x"), "b/c.xml": strToU8("y") });
-    // A comment that holds a complete fake end record, whose directory fields are zero.
-    const fake = new Uint8Array(22);
-    new DataView(fake.buffer).setUint32(0, 0x06054b50, true);
-    const bytes = new Uint8Array(zip.byteLength + fake.byteLength);
-    bytes.set(zip);
-    bytes.set(fake, zip.byteLength);
-    new DataView(bytes.buffer).setUint16(zip.byteLength - 2, fake.byteLength, true);
+  it("follows zip64 records with an extensible data sector between them", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x") });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const eocd = zip.byteLength - 22;
+    const directorySize = view.getUint32(eocd + 12, true);
+    const directoryOffset = view.getUint32(eocd + 16, true);
+    const sector = 10;
+    const bytes = new Uint8Array(zip.byteLength + 56 + sector + 20);
+    bytes.set(zip.subarray(0, eocd));
+    const out = new DataView(bytes.buffer);
+    out.setUint32(eocd, 0x06064b50, true);
+    out.setBigUint64(eocd + 4, BigInt(44 + sector), true);
+    out.setBigUint64(eocd + 40, BigInt(directorySize), true);
+    out.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
+    const locator = eocd + 56 + sector;
+    out.setUint32(locator, 0x07064b50, true);
+    out.setBigUint64(locator + 8, BigInt(eocd), true);
+    const classic = locator + 20;
+    bytes.set(zip.subarray(eocd), classic);
+    out.setUint32(classic + 12, 0xffffffff, true);
+    out.setUint32(classic + 16, 0xffffffff, true);
     assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
       "a.txt",
-      "b/c.xml",
     ]);
   });
 
-  describe("end record choice", () => {
-    function concat(...parts: Uint8Array[]): Uint8Array {
-      const out = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
-      let at = 0;
-      for (const part of parts) {
-        out.set(part, at);
-        at += part.byteLength;
-      }
-      return out;
+  it("lists an empty archive", async () => {
+    assert.deepEqual(await list(endRecord(0, 0, 0)), []);
+  });
+
+  it("lists an empty zip64 archive", async () => {
+    const bytes = new Uint8Array(56 + 20 + 22);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0, 0x06064b50, true);
+    view.setUint32(56, 0x07064b50, true);
+    bytes.set(endRecord(0xffffffff, 0xffffffff, 0), 76);
+    assert.deepEqual(await list(bytes), []);
+  });
+
+  it("uses the record that closes the file when a fake in the comment points into the directory", async () => {
+    // The fake claims a comment that is not there and a directory of only the first
+    // entry. The real record's comment covers the fake, so it ends at the end of
+    // the file and is tried first.
+    const { zip, offset, first } = twoEntryZip();
+    const bytes = withComment(zip, endRecord(first, offset, 500));
+    assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+  });
+
+  it("finds the real record behind a comment full of fake records, in few reads", async () => {
+    const { zip } = twoEntryZip();
+    const fakes = 2800;
+    const comment = new Uint8Array(fakes * 22);
+    const commentView = new DataView(comment.buffer);
+    for (let i = 0; i < fakes; i += 1) {
+      commentView.setUint32(i * 22, 0x06054b50, true);
+      commentView.setUint32(i * 22 + 12, 100, true);
+      commentView.setUint32(i * 22 + 16, 50, true);
     }
-
-    function endRecord(directorySize: number, directoryOffset: number, commentLength: number) {
-      const record = new Uint8Array(22);
-      const view = new DataView(record.buffer);
-      view.setUint32(0, 0x06054b50, true);
-      view.setUint32(12, directorySize, true);
-      view.setUint32(16, directoryOffset, true);
-      view.setUint16(20, commentLength, true);
-      return record;
-    }
-
-    /** A two-entry zip, with where its directory is and how long its first entry is. */
-    function twoEntryZip() {
-      const zip = zipSync({ "a.txt": strToU8("x"), "b.txt": strToU8("y") });
-      const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-      const eocd = zip.byteLength - 22;
-      const offset = view.getUint32(eocd + 16, true);
-      const first =
-        46 +
-        view.getUint16(offset + 28, true) +
-        view.getUint16(offset + 30, true) +
-        view.getUint16(offset + 32, true);
-      return { zip, eocd, offset, first };
-    }
-
-    /** `zip` with `tail` appended as its archive comment. */
-    function withComment(zip: Uint8Array, tail: Uint8Array): Uint8Array {
-      const bytes = concat(zip, tail);
-      new DataView(bytes.buffer).setUint16(zip.byteLength - 2, tail.byteLength, true);
-      return bytes;
-    }
-
-    const list = (bytes: Uint8Array) =>
-      listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange);
-
-    it("prefers the record the directory ends at over a fake that points into it", async () => {
-      const { zip, offset, first } = twoEntryZip();
-      const bytes = withComment(zip, endRecord(first, offset, 0));
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    const bytes = withComment(zip, comment);
+    let calls = 0;
+    const result = await listZipEntryPaths(bytes.byteLength, async (offset, length) => {
+      calls += 1;
+      return bytes.subarray(offset, offset + length);
     });
+    assert.deepEqual(result, ["a.txt", "b.txt"]);
+    assert.ok(calls <= 3, `made ${calls} reads`);
+  });
 
-    it("ignores a record whose comment length runs past the file", async () => {
-      // A digital signature record after the directory leaves the real record at the
-      // start-only tier, the same as the fake. On a tie the earlier candidate wins,
-      // and records whose comment fits the file are tried before ones that overrun.
-      const { zip, eocd, offset, first } = twoEntryZip();
-      const signature = new Uint8Array([0x50, 0x4b, 0x05, 0x05, 0, 0]);
-      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
-      const bytes = withComment(signed, endRecord(first, offset, 500));
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
-    });
+  it("falls back to an earlier record when the one that closes the file is a fake", async () => {
+    // The real record declares a comment longer than what is present, so it does
+    // not end at the end of the file; the record that does is a fake.
+    const { zip, eocd } = twoEntryZip();
+    const fake = endRecord(100, 50, 0);
+    const bytes = withComment(zip, fake);
+    new DataView(bytes.buffer).setUint16(eocd + 20, fake.byteLength + 50, true);
+    assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+  });
 
-    it("still lists a zip whose declared comment is longer than what is present", async () => {
-      const { zip, eocd } = twoEntryZip();
-      new DataView(zip.buffer, zip.byteOffset).setUint16(eocd + 20, 10, true);
-      assert.deepEqual(await list(zip), ["a.txt", "b.txt"]);
-    });
-
-    it("lists an empty archive, also with bytes in front of it", async () => {
-      assert.deepEqual(await list(endRecord(0, 0, 0)), []);
-      assert.deepEqual(await list(concat(new Uint8Array(100).fill(7), endRecord(0, 0, 0))), []);
-    });
-
-    /** An empty ZIP64 archive: ZIP64 record, locator, then a saturated end record. */
-    function emptyZip64(totalDisks: number): Uint8Array {
-      const bytes = new Uint8Array(56 + 20 + 22);
-      const view = new DataView(bytes.buffer);
-      view.setUint32(0, 0x06064b50, true);
-      view.setUint32(56, 0x07064b50, true);
-      view.setUint32(56 + 16, totalDisks, true);
-      bytes.set(endRecord(0xffffffff, 0xffffffff, 0), 76);
-      return bytes;
-    }
-
-    it("lists an empty zip64 archive", async () => {
-      assert.deepEqual(await list(emptyZip64(1)), []);
-    });
-
-    it("lists a zip with bytes in front and a digital signature record after the directory", async () => {
-      const { zip, eocd } = twoEntryZip();
-      // 0x05054b50, a 2-byte size, then that many bytes of signature data.
-      const signature = new Uint8Array([0x50, 0x4b, 0x05, 0x05, 4, 0, 1, 2, 3, 4]);
-      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
-      const bytes = concat(new Uint8Array(100).fill(7), signed);
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
-    });
-
-    it("prefers a usable overrunning record over an empty-archive lookalike", async () => {
-      // The real record's comment is cut short, and the comment holds an all-zero
-      // record that would pass as a shifted empty archive.
-      const { zip } = twoEntryZip();
-      const fake = new Uint8Array(22);
-      new DataView(fake.buffer).setUint32(0, 0x06054b50, true);
-      const bytes = withComment(concat(new Uint8Array(100).fill(7), zip), fake);
-      new DataView(bytes.buffer).setUint16(100 + zip.byteLength - 2, fake.byteLength + 50, true);
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
-    });
-
-    it("reaches the real record when many fake records each need a read", async () => {
-      const zip = zipSync(
-        { "big.bin": new Uint8Array(70_000), "a.txt": strToU8("x") },
-        { level: 0 },
-      );
-      const fakes = 100;
-      const comment = new Uint8Array(fakes * 22);
-      const commentView = new DataView(comment.buffer);
-      for (let i = 0; i < fakes; i += 1) {
-        commentView.setUint32(i * 22, 0x06054b50, true);
-        // Points before the tail, so checking it takes a range read.
-        commentView.setUint32(i * 22 + 12, 100, true);
-        commentView.setUint32(i * 22 + 16, 50, true);
-      }
-      const bytes = withComment(zip, comment);
-      // The real record's comment is cut short, so it is not the exact-fit one.
-      new DataView(bytes.buffer).setUint16(zip.byteLength - 2, comment.byteLength + 50, true);
-      const reader = rangeReader(bytes);
-      let calls = 0;
-      const result = await listZipEntryPaths(bytes.byteLength, async (offset, length) => {
-        calls += 1;
-        return reader.readRange(offset, length);
-      });
-      assert.deepEqual(result, ["big.bin", "a.txt"]);
-      assert.ok(calls <= 4, `made ${calls} reads`);
-    });
-
-    it("finds a signature record that starts before the tail window", async () => {
-      const { zip, eocd } = twoEntryZip();
-      const data = 60_000;
-      const signature = new Uint8Array(6 + data);
-      signature.set([0x50, 0x4b, 0x05, 0x05]);
-      new DataView(signature.buffer).setUint16(4, data, true);
-      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
-      const bytes = withComment(
-        concat(new Uint8Array(100).fill(7), signed),
-        new Uint8Array(10_000),
-      );
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
-    });
-
-    it("tries every signature record that ends at the end record", async () => {
-      const { zip, eocd } = twoEntryZip();
-      // A real record of 10 data bytes that holds a second signature-like record
-      // ending at the same place.
-      const signature = new Uint8Array([
-        0x50, 0x4b, 0x05, 0x05, 10, 0, 0, 0, 0, 0, 0x50, 0x4b, 0x05, 0x05, 0, 0,
-      ]);
-      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
-      const bytes = concat(new Uint8Array(100).fill(7), signed);
-      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
-    });
-
-    it("does not list a zip64 archive that names a nonzero disk", async () => {
-      for (const at of [4, 16, 20]) {
-        const bytes = emptyZip64(1);
-        // 4 is the locator's disk, 16 and 20 are the ZIP64 record's two disk fields.
-        new DataView(bytes.buffer).setUint32(at === 4 ? 56 + 4 : at, 1, true);
-        assert.equal(await list(bytes), undefined);
-      }
-    });
-
-    it("does not list a spanned archive", async () => {
-      assert.equal(await list(emptyZip64(2)), undefined);
-      const { zip, eocd } = twoEntryZip();
-      new DataView(zip.buffer, zip.byteOffset).setUint16(eocd + 6, 1, true);
-      assert.equal(await list(zip), undefined);
-    });
+  it("does not list a zip with bytes in front of it, or a spanned archive", async () => {
+    const { zip, eocd } = twoEntryZip();
+    assert.equal(await list(concat(new Uint8Array(100).fill(7), zip)), undefined);
+    new DataView(zip.buffer, zip.byteOffset).setUint16(eocd + 6, 1, true);
+    assert.equal(await list(zip), undefined);
   });
 
   it("reads unflagged UTF-8 names as UTF-8", async () => {
@@ -414,67 +351,6 @@ describe("listZipEntryPaths", () => {
       "\u00e4\u00f6\u00fcAAAA.txt",
       "\u00e4\u00f6\u00fcB.txt",
     ]);
-  });
-
-  it("follows zip64 records with an extensible data sector between them", async () => {
-    const zip = zipSync({ "a.txt": strToU8("x") });
-    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-    const eocd = zip.byteLength - 22;
-    const directorySize = view.getUint32(eocd + 12, true);
-    const directoryOffset = view.getUint32(eocd + 16, true);
-    const sector = 10;
-    const bytes = new Uint8Array(zip.byteLength + 56 + sector + 20);
-    bytes.set(zip.subarray(0, eocd));
-    const out = new DataView(bytes.buffer);
-    out.setUint32(eocd, 0x06064b50, true);
-    out.setBigUint64(eocd + 4, BigInt(44 + sector), true);
-    out.setBigUint64(eocd + 40, BigInt(directorySize), true);
-    out.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
-    const locator = eocd + 56 + sector;
-    out.setUint32(locator, 0x07064b50, true);
-    out.setBigUint64(locator + 8, BigInt(eocd), true);
-    const classic = locator + 20;
-    bytes.set(zip.subarray(eocd), classic);
-    out.setUint32(classic + 12, 0xffffffff, true);
-    out.setUint32(classic + 16, 0xffffffff, true);
-    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
-      "a.txt",
-    ]);
-  });
-
-  it("lists a zip with bytes in front of it, as a self-extractor has", async () => {
-    const zip = zipSync({ "a.txt": strToU8("x"), "b/c.xml": strToU8("y") });
-    const bytes = new Uint8Array(1024 + zip.byteLength);
-    bytes.fill(0x4d, 0, 1024);
-    bytes.set(zip, 1024);
-    assert.deepEqual(await listZipEntryPaths(bytes.byteLength, rangeReader(bytes).readRange), [
-      "a.txt",
-      "b/c.xml",
-    ]);
-  });
-
-  it("finds the real record behind a comment full of fake records, in few reads", async () => {
-    const zip = zipSync({ "a.txt": strToU8("x") });
-    const fakes = 2800;
-    const comment = new Uint8Array(fakes * 22);
-    const commentView = new DataView(comment.buffer);
-    for (let i = 0; i < fakes; i += 1) {
-      commentView.setUint32(i * 22, 0x06054b50, true);
-      // Point each fake at a different offset so none can pass as an empty archive.
-      commentView.setUint32(i * 22 + 12, 100, true);
-      commentView.setUint32(i * 22 + 16, 50, true);
-    }
-    const bytes = new Uint8Array(zip.byteLength + comment.byteLength);
-    bytes.set(zip);
-    bytes.set(comment, zip.byteLength);
-    new DataView(bytes.buffer).setUint16(zip.byteLength - 2, comment.byteLength, true);
-    let calls = 0;
-    const result = await listZipEntryPaths(bytes.byteLength, async (offset, length) => {
-      calls += 1;
-      return bytes.subarray(offset, offset + length);
-    });
-    assert.deepEqual(result, ["a.txt"]);
-    assert.ok(calls <= 3, `made ${calls} reads`);
   });
 
   it("returns undefined for a file that is not a zip", async () => {
