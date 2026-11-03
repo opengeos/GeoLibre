@@ -34,8 +34,11 @@ const CP437_HIGH =
   "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0";
 /** Longest possible zip comment plus the record that precedes it. */
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
-/** End-record candidates tried before giving up, so a hostile comment stays cheap. */
-const MAX_EOCD_CANDIDATES = 16;
+/** Extra range reads spent on end-record candidates, so a hostile comment stays cheap. */
+const MAX_CANDIDATE_READS = 16;
+const SIGNATURE_RECORD_SIGNATURE = 0x05054b50;
+const UTF8_DECODER = new TextDecoder();
+const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 /** A central directory beyond this is not a file a handler should inspect. */
 const MAX_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024;
 
@@ -60,10 +63,10 @@ function decodeCp437(bytes: Uint8Array): string {
  * a name that is valid UTF-8 is read as such before falling back to CP437.
  */
 function decodeEntryName(name: Uint8Array, flags: number): string {
-  if (flags & UTF8_NAME_FLAG) return new TextDecoder().decode(name);
+  if (flags & UTF8_NAME_FLAG) return UTF8_DECODER.decode(name);
   if (name.some((byte) => byte >= 0x80)) {
     try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(name);
+      return STRICT_UTF8_DECODER.decode(name);
     } catch {
       return decodeCp437(name);
     }
@@ -89,12 +92,29 @@ export async function listZipEntryPaths(
   const tailOffset = size - tailLength;
   const tail = await readRange(tailOffset, tailLength);
   const tailView = viewOf(tail);
+  let reads = 0;
+  const countedRead: ReadRange = (offset, length) => {
+    reads += 1;
+    return readRange(offset, length);
+  };
   /** Whether a central directory entry starts at `offset`, with `length` bytes in range. */
   const startsDirectory = async (offset: number, length: number): Promise<boolean> => {
     if (offset < 0 || offset + Math.max(length, 4) > size) return false;
-    const head = await readRange(offset, 4);
+    // Most directories lie in the tail that is already read.
+    if (offset >= tailOffset) {
+      return tailView.getUint32(offset - tailOffset, true) === CENTRAL_ENTRY_SIGNATURE;
+    }
+    const head = await countedRead(offset, 4);
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
+  // Digital signature records (0x05054b50, a 2-byte size, the data) can sit
+  // between the directory and the end record. Index them by where they end.
+  const signatureStartByEnd = new Map<number, number>();
+  for (let at = 0; at + 6 <= tail.byteLength; at += 1) {
+    if (tailView.getUint32(at, true) === SIGNATURE_RECORD_SIGNATURE) {
+      signatureStartByEnd.set(at + 6 + tailView.getUint16(at + 4, true), at);
+    }
+  }
   /**
    * Where the directory of the end record at `eocd` really is, and how far the
    * archive's own layout backs it: 3 = the directory also ends where the record
@@ -120,7 +140,7 @@ export async function listZipEntryPaths(
       if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
-      const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
+      const zip64 = viewOf(await countedRead(zip64Offset, ZIP64_EOCD_SIZE));
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
       length = Number(zip64.getBigUint64(40, true));
       offset = Number(zip64.getBigUint64(48, true));
@@ -139,27 +159,35 @@ export async function listZipEntryPaths(
     // record holds, but the directory still ends where the record begins.
     const shifted = eocdOffset - length;
     if (await startsDirectory(shifted, length)) return { tier: 2, offset: shifted, length };
+    const signature = signatureStartByEnd.get(eocd);
+    if (signature !== undefined) {
+      const shiftedPastSignature = tailOffset + signature - length;
+      if (await startsDirectory(shiftedPastSignature, length)) {
+        return { tier: 2, offset: shiftedPastSignature, length };
+      }
+    }
     return undefined;
   };
-  // Collect the end-record signatures from the back. A signature inside the
-  // archive comment is only a candidate: it has to point at a real directory,
-  // and the best-backed candidate wins. Records whose declared comment fits the
-  // file are tried first; the rest only when none of those is usable (a
-  // truncated comment). Evaluations are capped, so a comment full of signatures
-  // cannot cause many reads.
+  // Collect the end-record signatures. A signature inside the archive comment is
+  // only a candidate: it has to point at a real directory, and the best-backed
+  // candidate wins. The order costs nothing, as it needs no read: first the
+  // record whose declared comment ends exactly at the end of the file (the real
+  // one in a well-formed zip), then other records whose comment fits, and only
+  // when none of those is usable the ones that overrun the file (a truncated
+  // comment). Only the range reads a check needs are capped.
+  const exact: number[] = [];
   const fitting: number[] = [];
   const overrunning: number[] = [];
   for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0; eocd -= 1) {
     if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
     const commentEnd = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true);
-    (commentEnd <= tail.byteLength ? fitting : overrunning).push(eocd);
+    if (commentEnd === tail.byteLength) exact.push(eocd);
+    else (commentEnd < tail.byteLength ? fitting : overrunning).push(eocd);
   }
-  let budget = MAX_EOCD_CANDIDATES;
   let best: { tier: number; offset: number; length: number } | undefined;
-  for (const group of [fitting, overrunning]) {
+  for (const group of [[...exact, ...fitting], overrunning]) {
     for (const eocd of group) {
-      if (budget <= 0 || best?.tier === 3) break;
-      budget -= 1;
+      if (reads >= MAX_CANDIDATE_READS || best?.tier === 3) break;
       const record = await checkRecord(eocd);
       if (record && (!best || record.tier > best.tier)) best = record;
     }

@@ -291,6 +291,15 @@ describe("listZipEntryPaths", () => {
       assert.deepEqual(await list(emptyZip64(1)), []);
     });
 
+    it("lists a zip with bytes in front and a digital signature record after the directory", async () => {
+      const { zip, eocd } = twoEntryZip();
+      // 0x05054b50, a 2-byte size, then that many bytes of signature data.
+      const signature = new Uint8Array([0x50, 0x4b, 0x05, 0x05, 4, 0, 1, 2, 3, 4]);
+      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
+      const bytes = concat(new Uint8Array(100).fill(7), signed);
+      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    });
+
     it("does not list a spanned archive", async () => {
       assert.equal(await list(emptyZip64(2)), undefined);
       const { zip, eocd } = twoEntryZip();
@@ -370,7 +379,7 @@ describe("listZipEntryPaths", () => {
     ]);
   });
 
-  it("stops after a bounded number of end-record candidates", async () => {
+  it("finds the real record behind a comment full of fake records, in few reads", async () => {
     const zip = zipSync({ "a.txt": strToU8("x") });
     const fakes = 2800;
     const comment = new Uint8Array(fakes * 22);
@@ -390,8 +399,8 @@ describe("listZipEntryPaths", () => {
       calls += 1;
       return bytes.subarray(offset, offset + length);
     });
-    assert.ok(result === undefined || result.join() === "a.txt");
-    assert.ok(calls <= 40, `made ${calls} reads`);
+    assert.deepEqual(result, ["a.txt"]);
+    assert.ok(calls <= 3, `made ${calls} reads`);
   });
 
   it("returns undefined for a file that is not a zip", async () => {
