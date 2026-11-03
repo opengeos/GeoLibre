@@ -36,8 +36,8 @@ const CP437_HIGH =
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
 /** End-record candidates tried before giving up, so a hostile comment stays cheap. */
 const MAX_EOCD_CANDIDATES = 16;
-const UTF8_DECODER = new TextDecoder();
-const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+const UTF8_DECODER = new TextDecoder("utf-8", { ignoreBOM: true });
+const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 /** A central directory beyond this is not a file a handler should inspect. */
 const MAX_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024;
 
