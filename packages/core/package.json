@@ -48,14 +48,14 @@
     "build": "tsdown src/index.ts src/worker-safe.ts --format esm --dts"
   },
   "dependencies": {
-    "@maplibre/maplibre-gl-style-spec": "^26.2.1",
+    "@maplibre/maplibre-gl-style-spec": "^26.5.0",
     "uuid": "^14.0.3",
     "zundo": "^2.3.0",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "tsdown": "^0.23.2",
+    "tsdown": "^0.23.4",
     "typescript": "^7.0.2"
   }
 }
