@@ -193,7 +193,7 @@ describe("local Moran's I (LISA)", () => {
   });
 
   it("finds a polygon's neighbors from its area centroid, not its vertex mean", () => {
-    // A 10° square whose east edge is drawn with 200 vertices: the mean of its
+    // A 10° square whose east edge is drawn with 201 vertices: the mean of its
     // vertices sits near that edge (9.9, 5), its centroid at (5, 5). Its nearest
     // neighbor is R (west, centre -1.5) from the centroid, but Q (east, centre
     // 13) from the vertex mean.
@@ -226,6 +226,86 @@ describe("local Moran's I (LISA)", () => {
     // High value with a high neighbor (R): High-High. From the vertex mean its
     // neighbor would be Q (low): High-Low.
     assert.equal(square10?.properties?.["v_lisa_q"], 1);
+  });
+
+  it("subtracts a hole from a polygon's area centroid", () => {
+    // A 10° square with a 3°x2° hole on its west side: its area centroid
+    // (5.16, 5) lies east of the hole, so its nearest neighbor is D (east, centre
+    // 11.5). Adding the hole instead would put the centroid at (4.86, 5), making
+    // B (west, centre -1.5) the nearest neighbor.
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const layer = pointLayer([]);
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { v: 10, i: 0 },
+          geometry: { type: "Polygon", coordinates: [ring(0, 0, 10, 10), ring(1, 4, 4, 6)] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 10, i: 1 },
+          geometry: { type: "Polygon", coordinates: [ring(-2, 4.5, -1, 5.5)] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 0, i: 2 },
+          geometry: { type: "Polygon", coordinates: [ring(11, 4.5, 12, 5.5)] },
+        },
+      ],
+    };
+    const { results } = run(localMoransITool, layer, { k: 1, permutations: 99 });
+    const holed = results[0].geojson.features.find((f) => f.properties?.["i"] === 0);
+    // High value with a low neighbor (D): High-Low.
+    assert.equal(holed?.properties?.["v_lisa_q"], 4);
+  });
+
+  it("weights a MultiPolygon's parts by area when finding its centroid", () => {
+    // Parts of area 1 (centre x=0) and 4 (centre x=10) give an area-weighted
+    // centroid at x=8, so its nearest neighbor is E (low, centre 7.5). The
+    // unweighted mean of the part centres, x=5, would pick F (high, centre 4).
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const layer = pointLayer([]);
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { v: 10, i: 0 },
+          geometry: {
+            type: "MultiPolygon",
+            coordinates: [[ring(-0.5, 4.5, 0.5, 5.5)], [ring(9, 4, 11, 6)]],
+          },
+        },
+        {
+          type: "Feature",
+          properties: { v: 0, i: 1 },
+          geometry: { type: "Polygon", coordinates: [ring(7, 4.5, 8, 5.5)] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 10, i: 2 },
+          geometry: { type: "Polygon", coordinates: [ring(3.5, 4.5, 4.5, 5.5)] },
+        },
+      ],
+    };
+    const { results } = run(localMoransITool, layer, { k: 1, permutations: 99 });
+    const multi = results[0].geojson.features.find((f) => f.properties?.["i"] === 0);
+    // High value with a low neighbor (E): High-Low.
+    assert.equal(multi?.properties?.["v_lisa_q"], 4);
   });
 });
 

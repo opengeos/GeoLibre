@@ -85,6 +85,9 @@ function twoSidedP(z: number): number {
  */
 function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | null {
   const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  // Sum relative to one vertex: raw lon/lat products (about 5,000 near lon 120,
+  // lat 45) round away most of a small polygon's area.
+  const [originX, originY] = polygons[0][0][0];
   let area = 0;
   let sumX = 0;
   let sumY = 0;
@@ -95,8 +98,12 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
       let x = 0;
       let y = 0;
       for (let i = 0; i < ring.length; i++) {
-        const [x0, y0] = ring[i];
-        const [x1, y1] = ring[(i + 1) % ring.length];
+        const [lon0, lat0] = ring[i];
+        const [lon1, lat1] = ring[(i + 1) % ring.length];
+        const x0 = lon0 - originX;
+        const y0 = lat0 - originY;
+        const x1 = lon1 - originX;
+        const y1 = lat1 - originY;
         const cross = x0 * y1 - x1 * y0;
         twiceArea += cross;
         x += (x0 + x1) * cross;
@@ -110,7 +117,7 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
     });
   }
   if (!(Math.abs(area) > 0)) return null;
-  const point: [number, number] = [sumX / area, sumY / area];
+  const point: [number, number] = [originX + sumX / area, originY + sumY / area];
   return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : null;
 }
 
@@ -127,11 +134,11 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       const [lon, lat] = geometry.coordinates;
       return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
     }
-    if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
-      const point = polygonCentroid(geometry);
-      if (point) return point;
-    }
     try {
+      if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+        const point = polygonCentroid(geometry);
+        if (point) return point;
+      }
       const [lon, lat] = centroid(feature).geometry.coordinates;
       return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
     } catch {
