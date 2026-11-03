@@ -85,13 +85,16 @@ function twoSidedP(z: number): number {
  */
 function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | null {
   const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
-  // Sum relative to one vertex: raw lon/lat products (about 5,000 near lon 120,
-  // lat 45) round away most of a small polygon's area.
-  const [originX, originY] = polygons[0][0][0];
-  let area = 0;
-  let sumX = 0;
-  let sumY = 0;
+  let totalArea = 0;
+  let weightedX = 0;
+  let weightedY = 0;
   for (const rings of polygons) {
+    // Each part sums relative to its own first vertex, which keeps precision for
+    // small parts: raw lon/lat products round away most of their area.
+    const [originX, originY] = rings[0][0];
+    let signedArea = 0;
+    let sumX = 0;
+    let sumY = 0;
     rings.forEach((ring, index) => {
       // Shoelace sums: twice the signed area and the centroid numerators.
       let twiceArea = 0;
@@ -111,13 +114,17 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
       }
       // An outer ring adds and a hole subtracts, whichever way it winds.
       const weight = (index === 0 ? 1 : -1) * Math.sign(twiceArea);
-      area += (weight * twiceArea) / 2;
+      signedArea += (weight * twiceArea) / 2;
       sumX += (weight * x) / 6;
       sumY += (weight * y) / 6;
     });
+    // Parts combine by area: a part's area times its centroid, back in lon/lat.
+    totalArea += signedArea;
+    weightedX += originX * signedArea + sumX;
+    weightedY += originY * signedArea + sumY;
   }
-  if (!(Math.abs(area) > 0)) return null;
-  const point: [number, number] = [originX + sumX / area, originY + sumY / area];
+  if (!(Math.abs(totalArea) > 0)) return null;
+  const point: [number, number] = [weightedX / totalArea, weightedY / totalArea];
   return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : null;
 }
 
@@ -136,8 +143,12 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
     }
     try {
       if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
-        const point = polygonCentroid(geometry);
-        if (point) return point;
+        try {
+          const point = polygonCentroid(geometry);
+          if (point) return point;
+        } catch {
+          // A malformed part (e.g. an empty first polygon): use Turf's centroid below.
+        }
       }
       const [lon, lat] = centroid(feature).geometry.coordinates;
       return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;

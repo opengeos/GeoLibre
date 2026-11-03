@@ -267,6 +267,81 @@ describe("local Moran's I (LISA)", () => {
     assert.equal(holed?.properties?.["v_lisa_q"], 4);
   });
 
+  it("subtracts a clockwise hole from a polygon's area centroid", () => {
+    // Same shape as the test above, but the hole is written clockwise, so its
+    // shoelace sum has the opposite sign. It must still be subtracted.
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const clockwiseHole = ring(1, 4, 4, 6).reverse();
+    const layer = pointLayer([]);
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { v: 10, i: 0 },
+          geometry: { type: "Polygon", coordinates: [ring(0, 0, 10, 10), clockwiseHole] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 10, i: 1 },
+          geometry: { type: "Polygon", coordinates: [ring(-2, 4.5, -1, 5.5)] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 0, i: 2 },
+          geometry: { type: "Polygon", coordinates: [ring(11, 4.5, 12, 5.5)] },
+        },
+      ],
+    };
+    const { results } = run(localMoransITool, layer, { k: 1, permutations: 99 });
+    const holed = results[0].geojson.features.find((f) => f.properties?.["i"] === 0);
+    // High value with a low neighbor (D), as in the counter-clockwise case.
+    assert.equal(holed?.properties?.["v_lisa_q"], 4);
+  });
+
+  it("locates a MultiPolygon with an empty first part by its other parts", () => {
+    // The empty first part must not drop the feature: its centroid comes from the
+    // non-empty part centred at (10, 5), so its nearest neighbor is E (low, 7.5).
+    const ring = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const layer = pointLayer([]);
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { v: 10, i: 0 },
+          geometry: { type: "MultiPolygon", coordinates: [[], [ring(9, 4, 11, 6)]] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 0, i: 1 },
+          geometry: { type: "Polygon", coordinates: [ring(7, 4.5, 8, 5.5)] },
+        },
+        {
+          type: "Feature",
+          properties: { v: 10, i: 2 },
+          geometry: { type: "Polygon", coordinates: [ring(3.5, 4.5, 4.5, 5.5)] },
+        },
+      ],
+    };
+    const { results } = run(localMoransITool, layer, { k: 1, permutations: 99 });
+    const multi = results[0].geojson.features.find((f) => f.properties?.["i"] === 0);
+    // High value with a low neighbor (E): High-Low, so the feature was located.
+    assert.equal(multi?.properties?.["v_lisa_q"], 4);
+  });
+
   it("weights a MultiPolygon's parts by area when finding its centroid", () => {
     // Parts of area 1 (centre x=0) and 4 (centre x=10) give an area-weighted
     // centroid at x=8, so its nearest neighbor is E (low, centre 7.5). The
