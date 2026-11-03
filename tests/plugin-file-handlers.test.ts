@@ -312,6 +312,16 @@ describe("listZipEntryPaths", () => {
     assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
   });
 
+  it("does not take an all-zero fake record for an empty archive", async () => {
+    // The record that closes the file is all zeros, which only passes as an empty
+    // archive when its directory sits at the record; the real record's comment is cut short.
+    const { zip, eocd } = twoEntryZip();
+    const fake = endRecord(0, 0, 0);
+    const bytes = withComment(zip, fake);
+    new DataView(bytes.buffer).setUint16(eocd + 20, fake.byteLength + 50, true);
+    assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+  });
+
   it("does not list a zip with bytes in front of it, or a spanned archive", async () => {
     const { zip, eocd } = twoEntryZip();
     assert.equal(await list(concat(new Uint8Array(100).fill(7), zip)), undefined);

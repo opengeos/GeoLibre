@@ -111,6 +111,9 @@ export async function listZipEntryPaths(
     // A spanned archive cannot be unpacked by a handler.
     if (tailView.getUint32(eocd + 4, true) !== 0) return undefined;
     let total = tailView.getUint16(eocd + 10, true);
+    // An empty archive's directory "starts" where its own end record (ZIP64 or
+    // classic) does; a lookalike elsewhere is not one.
+    let recordOffset = tailOffset + eocd;
     let length = tailView.getUint32(eocd + 12, true);
     let offset = tailView.getUint32(eocd + 16, true);
     if (length === 0xffffffff || offset === 0xffffffff) {
@@ -122,12 +125,13 @@ export async function listZipEntryPaths(
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
       const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
+      recordOffset = zip64Offset;
       total = Number(zip64.getBigUint64(32, true));
       length = Number(zip64.getBigUint64(40, true));
       offset = Number(zip64.getBigUint64(48, true));
     }
     // An empty archive has no entry to find a signature at.
-    if (length === 0) return total === 0 ? [offset, 0] : undefined;
+    if (length === 0) return total === 0 && offset === recordOffset ? [offset, 0] : undefined;
     return (await startsDirectory(offset, length)) ? [offset, length] : undefined;
   };
 
