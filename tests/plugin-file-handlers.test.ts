@@ -256,8 +256,9 @@ describe("listZipEntryPaths", () => {
     });
 
     it("ignores a record whose comment length runs past the file", async () => {
-      // A digital signature record after the directory leaves the real record
-      // with only a start check, so it ties the fake; the fitting comment decides.
+      // A digital signature record after the directory leaves the real record at the
+      // start-only tier, the same as the fake. On a tie the earlier candidate wins,
+      // and records whose comment fits the file are tried before ones that overrun.
       const { zip, eocd, offset, first } = twoEntryZip();
       const signature = new Uint8Array([0x50, 0x4b, 0x05, 0x05, 0, 0]);
       const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
@@ -298,6 +299,79 @@ describe("listZipEntryPaths", () => {
       const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
       const bytes = concat(new Uint8Array(100).fill(7), signed);
       assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    });
+
+    it("prefers a usable overrunning record over an empty-archive lookalike", async () => {
+      // The real record's comment is cut short, and the comment holds an all-zero
+      // record that would pass as a shifted empty archive.
+      const { zip } = twoEntryZip();
+      const fake = new Uint8Array(22);
+      new DataView(fake.buffer).setUint32(0, 0x06054b50, true);
+      const bytes = withComment(concat(new Uint8Array(100).fill(7), zip), fake);
+      new DataView(bytes.buffer).setUint16(100 + zip.byteLength - 2, fake.byteLength + 50, true);
+      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    });
+
+    it("reaches the real record when many fake records each need a read", async () => {
+      const zip = zipSync(
+        { "big.bin": new Uint8Array(70_000), "a.txt": strToU8("x") },
+        { level: 0 },
+      );
+      const fakes = 100;
+      const comment = new Uint8Array(fakes * 22);
+      const commentView = new DataView(comment.buffer);
+      for (let i = 0; i < fakes; i += 1) {
+        commentView.setUint32(i * 22, 0x06054b50, true);
+        // Points before the tail, so checking it takes a range read.
+        commentView.setUint32(i * 22 + 12, 100, true);
+        commentView.setUint32(i * 22 + 16, 50, true);
+      }
+      const bytes = withComment(zip, comment);
+      // The real record's comment is cut short, so it is not the exact-fit one.
+      new DataView(bytes.buffer).setUint16(zip.byteLength - 2, comment.byteLength + 50, true);
+      const reader = rangeReader(bytes);
+      let calls = 0;
+      const result = await listZipEntryPaths(bytes.byteLength, async (offset, length) => {
+        calls += 1;
+        return reader.readRange(offset, length);
+      });
+      assert.deepEqual(result, ["big.bin", "a.txt"]);
+      assert.ok(calls <= 4, `made ${calls} reads`);
+    });
+
+    it("finds a signature record that starts before the tail window", async () => {
+      const { zip, eocd } = twoEntryZip();
+      const data = 60_000;
+      const signature = new Uint8Array(6 + data);
+      signature.set([0x50, 0x4b, 0x05, 0x05]);
+      new DataView(signature.buffer).setUint16(4, data, true);
+      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
+      const bytes = withComment(
+        concat(new Uint8Array(100).fill(7), signed),
+        new Uint8Array(10_000),
+      );
+      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    });
+
+    it("tries every signature record that ends at the end record", async () => {
+      const { zip, eocd } = twoEntryZip();
+      // A real record of 10 data bytes that holds a second signature-like record
+      // ending at the same place.
+      const signature = new Uint8Array([
+        0x50, 0x4b, 0x05, 0x05, 10, 0, 0, 0, 0, 0, 0x50, 0x4b, 0x05, 0x05, 0, 0,
+      ]);
+      const signed = concat(zip.subarray(0, eocd), signature, zip.subarray(eocd));
+      const bytes = concat(new Uint8Array(100).fill(7), signed);
+      assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
+    });
+
+    it("does not list a zip64 archive that names a nonzero disk", async () => {
+      for (const at of [4, 16, 20]) {
+        const bytes = emptyZip64(1);
+        // 4 is the locator's disk, 16 and 20 are the ZIP64 record's two disk fields.
+        new DataView(bytes.buffer).setUint32(at === 4 ? 56 + 4 : at, 1, true);
+        assert.equal(await list(bytes), undefined);
+      }
     });
 
     it("does not list a spanned archive", async () => {

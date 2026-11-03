@@ -34,7 +34,10 @@ const CP437_HIGH =
   "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0";
 /** Longest possible zip comment plus the record that precedes it. */
 const MAX_EOCD_SEARCH = 0xffff + EOCD_SIZE;
-/** Extra range reads spent on end-record candidates, so a hostile comment stays cheap. */
+/**
+ * Range reads, beyond the tail, spent checking end-record candidates. It bounds
+ * reads, not candidates: a check that fits in the tail costs none.
+ */
 const MAX_CANDIDATE_READS = 16;
 const SIGNATURE_RECORD_SIGNATURE = 0x05054b50;
 const UTF8_DECODER = new TextDecoder();
@@ -108,13 +111,36 @@ export async function listZipEntryPaths(
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
   // Digital signature records (0x05054b50, a 2-byte size, the data) can sit
-  // between the directory and the end record. Index them by where they end.
-  const signatureStartByEnd = new Map<number, number>();
+  // between the directory and the end record. Index every one in the tail by
+  // where it ends; data bytes can hold a second signature-like record.
+  const signatureStartsByEnd = new Map<number, number[]>();
   for (let at = 0; at + 6 <= tail.byteLength; at += 1) {
     if (tailView.getUint32(at, true) === SIGNATURE_RECORD_SIGNATURE) {
-      signatureStartByEnd.set(at + 6 + tailView.getUint16(at + 4, true), at);
+      const end = at + 6 + tailView.getUint16(at + 4, true);
+      signatureStartsByEnd.set(end, [...(signatureStartsByEnd.get(end) ?? []), at]);
     }
   }
+  /** Absolute starts of signature records ending at the end record at `eocd`. */
+  const signatureStarts = async function* (eocd: number): AsyncGenerator<number> {
+    for (const at of signatureStartsByEnd.get(eocd) ?? []) yield tailOffset + at;
+    // A record with a long data part can begin before the tail: one bounded read.
+    const eocdOffset = tailOffset + eocd;
+    const earliest = Math.max(0, eocdOffset - 6 - 0xffff);
+    if (earliest >= tailOffset || reads >= MAX_CANDIDATE_READS) return;
+    const head = await countedRead(earliest, tailOffset - earliest);
+    const window = new Uint8Array(head.byteLength + 6);
+    window.set(head);
+    window.set(tail.subarray(0, 6), head.byteLength);
+    const view = viewOf(window);
+    for (let at = 0; at < head.byteLength; at += 1) {
+      if (
+        view.getUint32(at, true) === SIGNATURE_RECORD_SIGNATURE &&
+        earliest + at + 6 + view.getUint16(at + 4, true) === eocdOffset
+      ) {
+        yield earliest + at;
+      }
+    }
+  };
   /**
    * Where the directory of the end record at `eocd` really is, and how far the
    * archive's own layout backs it: 3 = the directory also ends where the record
@@ -137,11 +163,14 @@ export async function listZipEntryPaths(
       if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
         return undefined;
       }
+      // The locator names the disk of the ZIP64 record and the disk count.
+      if (tailView.getUint32(locator + 4, true) !== 0) return undefined;
       if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
       const zip64 = viewOf(await countedRead(zip64Offset, ZIP64_EOCD_SIZE));
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
+      if (zip64.getUint32(16, true) !== 0 || zip64.getUint32(20, true) !== 0) return undefined;
       length = Number(zip64.getBigUint64(40, true));
       offset = Number(zip64.getBigUint64(48, true));
       if (length === 0) return offset === zip64Offset ? { tier: 3, offset, length } : undefined;
@@ -159,9 +188,8 @@ export async function listZipEntryPaths(
     // record holds, but the directory still ends where the record begins.
     const shifted = eocdOffset - length;
     if (await startsDirectory(shifted, length)) return { tier: 2, offset: shifted, length };
-    const signature = signatureStartByEnd.get(eocd);
-    if (signature !== undefined) {
-      const shiftedPastSignature = tailOffset + signature - length;
+    for await (const signature of signatureStarts(eocd)) {
+      const shiftedPastSignature = signature - length;
       if (await startsDirectory(shiftedPastSignature, length)) {
         return { tier: 2, offset: shiftedPastSignature, length };
       }
@@ -170,28 +198,26 @@ export async function listZipEntryPaths(
   };
   // Collect the end-record signatures. A signature inside the archive comment is
   // only a candidate: it has to point at a real directory, and the best-backed
-  // candidate wins. The order costs nothing, as it needs no read: first the
-  // record whose declared comment ends exactly at the end of the file (the real
-  // one in a well-formed zip), then other records whose comment fits, and only
-  // when none of those is usable the ones that overrun the file (a truncated
-  // comment). Only the range reads a check needs are capped.
-  const exact: number[] = [];
-  const fitting: number[] = [];
-  const overrunning: number[] = [];
+  // candidate wins (the earlier one on a tie). The order needs no read, so it
+  // costs nothing: first records whose directory visibly ends where they begin,
+  // then the record whose declared comment ends exactly at the end of the file
+  // (the real one in a well-formed zip), then other records whose comment fits,
+  // and last the ones that overrun the file (a truncated comment). A tier 3 hit
+  // ends the search; only the range reads a check needs are capped.
+  const buckets: number[][] = [[], [], [], []];
   for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0; eocd -= 1) {
     if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
     const commentEnd = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true);
-    if (commentEnd === tail.byteLength) exact.push(eocd);
-    else (commentEnd < tail.byteLength ? fitting : overrunning).push(eocd);
+    const directoryEnd = tailView.getUint32(eocd + 12, true) + tailView.getUint32(eocd + 16, true);
+    if (directoryEnd === tailOffset + eocd) buckets[0]!.push(eocd);
+    else if (commentEnd === tail.byteLength) buckets[1]!.push(eocd);
+    else buckets[commentEnd < tail.byteLength ? 2 : 3]!.push(eocd);
   }
   let best: { tier: number; offset: number; length: number } | undefined;
-  for (const group of [[...exact, ...fitting], overrunning]) {
-    for (const eocd of group) {
-      if (reads >= MAX_CANDIDATE_READS || best?.tier === 3) break;
-      const record = await checkRecord(eocd);
-      if (record && (!best || record.tier > best.tier)) best = record;
-    }
-    if (best) break;
+  for (const eocd of buckets.flat()) {
+    if (reads >= MAX_CANDIDATE_READS || best?.tier === 3) break;
+    const record = await checkRecord(eocd);
+    if (record && (!best || record.tier > best.tier)) best = record;
   }
   if (!best) return undefined;
   const directoryOffset = best.offset;
