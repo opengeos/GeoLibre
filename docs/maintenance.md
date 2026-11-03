@@ -542,7 +542,7 @@ bump, check whether the Zarr control now forwards `minzoom` so the write can go.
 relies on two things zarr-cesium does not export as API:
 
 - `ZarrLayerProvider` only honours named matplotlib colormaps (its documented
-  `colorScale` option is not forwarded in 0.3.3), so GeoLibre writes the layer's
+  `colorScale` option is still not forwarded in 0.4.4), so GeoLibre writes the layer's
   ramp to the provider's private `source.colorScale.colors` and calls
   `source.updateColormapTexture()`. If those move, the globe draws the default
   ramp and logs one warning.
