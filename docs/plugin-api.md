@@ -1599,9 +1599,15 @@ const unregister = app.registerFileHandler?.({
 - `claim` gets every matching file in the drop, so it can take a multi-file set, and returns the files it takes. An empty list means "not mine". Each file has a `name` and `size`; a readable `.zip` also has `entries`, the paths inside the archive, read from its central directory without loading the archive. Decide by these, since `.zip` is shared with the core. A `claim` that throws counts as "not mine".
 - `open` gets the claimed files, which add `arrayBuffer()` and `text()`. The drop status then says "Opened by" and your `name`. If `open` rejects, the error is shown under your `name` and the files stay claimed.
 
+The host only lists a `.zip`'s central directory for `entries` and never inflates an entry. A handler that unpacks the archive in `open` is the one reading untrusted bytes, so it should:
+
+- reject entries with a `..` segment, a backslash separator or an absolute path (`/etc/x`, `C:\x`), so nothing lands outside the folder you meant. Your unzip library may also decode a name differently from `entries`, so check the names it returns, not only the listed ones;
+- check the entry count and the declared sizes, per entry and in total, before inflating anything;
+- inflate with a bounded read (stop at the size you allow), because a declared size can lie.
+
 Handlers run in registration order, and a file one handler claims is not offered to the next. Everything nobody claims loads as it would without any handlers, so a shapefile zip still loads as a shapefile.
 
-Files inside a dropped folder also have a `path` relative to the drop, such as `TASKDATA/TLG00001.BIN`. Hidden entries and `__MACOSX` are skipped, and very deep or very large folders are cut off, so do not rely on seeing every file of a huge tree. When a handler claims any file of a folder, the whole folder counts as handled and its other files are not loaded. When no handler claims any, the folder goes to the built-in groups as usual.
+Files inside a dropped folder also have a `path` relative to the drop, such as `TASKDATA/TLG00001.BIN`. The path starts with the dropped folder's own name and always uses `/`, on every platform. Hidden entries and `__MACOSX` are skipped, and very deep or very large folders are cut off, so do not rely on seeing every file of a huge tree. When a handler claims any file of a folder, the whole folder counts as handled and its other files are not loaded. When no handler claims any, the folder goes to the built-in groups as usual.
 
 Register in `activate` and call the returned function (or `app.unregisterFileHandler?.(id)`) in `deactivate`; re-registering the same `id` replaces the handler. Ids are global, so prefix them with your plugin id; `unregisterFileHandler` only removes handlers your own plugin registered. The host also drops a plugin's handlers when it is deactivated or its activation fails. Drops are still blocked before any handler runs in the read-only viewer and when a deployment does not grant `data:add`.
 
