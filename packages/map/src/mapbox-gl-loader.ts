@@ -8,12 +8,12 @@ import type * as mapboxgl from "mapbox-gl";
  * `tests/mapbox-gl-loader.test.ts` ties these constants to the installed
  * package, so a bump fails until they are updated (docs/maintenance.md).
  */
-export const MAPBOX_GL_VERSION = "3.34.1";
+export const MAPBOX_GL_VERSION = "3.34.2";
 const MAPBOX_GL_CDN_BASE = `https://api.mapbox.com/mapbox-gl-js/v${MAPBOX_GL_VERSION}`;
 export const MAPBOX_GL_SCRIPT_URL = `${MAPBOX_GL_CDN_BASE}/mapbox-gl.js`;
 export const MAPBOX_GL_STYLE_URL = `${MAPBOX_GL_CDN_BASE}/mapbox-gl.css`;
 export const MAPBOX_GL_SCRIPT_INTEGRITY =
-  "sha384-bRGpP2/mvLNdh4nRXgIf97xnGmUJRpB58iFa5NaGLEFu8v+0T/Bc0c+iX+AvMgVP";
+  "sha384-RN6DqMUx296OGO3pOwok6hO3u3CQQzI1OXC8hpTzFSpnsG73oYJYy3fTrs3gmav5";
 export const MAPBOX_GL_STYLE_INTEGRITY =
   "sha384-QWCpuitI3tz8lJHSbcFQpEAx5BkQcYir4RLGZBb8zOIH0es6XDO8Kv6Gat+wOJRN";
 
