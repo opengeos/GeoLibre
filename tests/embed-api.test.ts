@@ -310,6 +310,23 @@ describe("parseEmbedRequest: v2 commands", () => {
     assert.equal(seen.length, 2);
   });
 
+  it("treats an empty addData dataType as no hint, without a warning", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      for (const dataType of ["", "   "]) {
+        const parsed = parseEmbedRequest(
+          message("addData", { url: "https://example.com/d", dataType }),
+        ) as { command: { dataType: unknown } };
+        assert.equal(parsed.command.dataType, null);
+      }
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 0);
+  });
+
   it("lower-cases an addData dataType, like the ?dataType= parameter", () => {
     const parsed = parseEmbedRequest(
       message("addData", { url: "https://example.com/d", dataType: " IsoXml " }),

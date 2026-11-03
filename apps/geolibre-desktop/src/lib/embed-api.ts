@@ -644,6 +644,7 @@ export function parseEmbedRequest(
         return fail("addData: fit must be a boolean");
       }
       // A malformed hint is dropped with a warning, as the ?dataType= parameter does.
+      // An empty one means no hint, silently, as an empty ?dataType= does.
       let dataType: string | null = null;
       if (payload.dataType !== undefined && payload.dataType !== null) {
         // Trimmed and lower-cased, like the ?dataType= parameter.
@@ -651,7 +652,7 @@ export function parseEmbedRequest(
           typeof payload.dataType === "string" ? payload.dataType.trim().toLowerCase() : "";
         if (isFileHandlerDataType(hint)) {
           dataType = hint;
-        } else {
+        } else if (hint !== "" || typeof payload.dataType !== "string") {
           console.warn(
             "[GeoLibre] addData: ignoring a malformed dataType; use lower-case letters, digits and hyphens.",
           );
