@@ -98,7 +98,7 @@
     "satellite.js": "^7.1.0",
     "shpjs": "^6.2.0",
     "three": "^0.187.0",
-    "webdggrid": "^1.11.0",
+    "webdggrid": "^2.0.0",
     "whitebox-wasm": "^0.7.0",
     "zarrita": "^0.7.5"
   },
