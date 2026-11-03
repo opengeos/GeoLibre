@@ -2,7 +2,7 @@ import area from "@turf/area";
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { earthAreaToBody, getActiveMeanRadiusMeters, horizontalBbox } from "@geolibre/core";
 import type {
@@ -77,7 +77,60 @@ function twoSidedP(z: number): number {
 }
 
 /**
- * Representative lon/lat for each feature (centroid for non-point geometries).
+ * Area-weighted centroid of a polygon or multipolygon in lon/lat, holes
+ * subtracted: the planar centroid GeoDa and PySAL use. Null when the area is
+ * zero. Turf's `centroid` is the mean of the vertices, which a finely drawn
+ * stretch of boundary pulls toward itself: kilometres off for an irregular
+ * municipality, sometimes outside it, so its neighbors would be the wrong ones.
+ */
+function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | null {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let totalArea = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+  for (const rings of polygons) {
+    // Each part sums relative to its own first vertex, which keeps precision for
+    // small parts: raw lon/lat products round away most of their area.
+    const [originX, originY] = rings[0][0];
+    let signedArea = 0;
+    let sumX = 0;
+    let sumY = 0;
+    rings.forEach((ring, index) => {
+      // Shoelace sums: twice the signed area and the centroid numerators.
+      let twiceArea = 0;
+      let x = 0;
+      let y = 0;
+      for (let i = 0; i < ring.length; i++) {
+        const [lon0, lat0] = ring[i];
+        const [lon1, lat1] = ring[(i + 1) % ring.length];
+        const x0 = lon0 - originX;
+        const y0 = lat0 - originY;
+        const x1 = lon1 - originX;
+        const y1 = lat1 - originY;
+        const cross = x0 * y1 - x1 * y0;
+        twiceArea += cross;
+        x += (x0 + x1) * cross;
+        y += (y0 + y1) * cross;
+      }
+      // An outer ring adds and a hole subtracts, whichever way it winds.
+      const weight = (index === 0 ? 1 : -1) * Math.sign(twiceArea);
+      signedArea += (weight * twiceArea) / 2;
+      sumX += (weight * x) / 6;
+      sumY += (weight * y) / 6;
+    });
+    // Parts combine by area: a part's area times its centroid, back in lon/lat.
+    totalArea += signedArea;
+    weightedX += originX * signedArea + sumX;
+    weightedY += originY * signedArea + sumY;
+  }
+  if (!(Math.abs(totalArea) > 0)) return null;
+  const point: [number, number] = [weightedX / totalArea, weightedY / totalArea];
+  return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : null;
+}
+
+/**
+ * Representative lon/lat for each feature: the point itself, a polygon's
+ * area-weighted centroid, or Turf's centroid for other geometries.
  * Returns null entries for features whose geometry can't be located.
  */
 function featureCoords(features: Feature[]): ([number, number] | null)[] {
@@ -89,6 +142,14 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
     }
     try {
+      if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+        try {
+          const point = polygonCentroid(geometry);
+          if (point) return point;
+        } catch {
+          // A malformed part (e.g. an empty first polygon): use Turf's centroid below.
+        }
+      }
       const [lon, lat] = centroid(feature).geometry.coordinates;
       return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
     } catch {
