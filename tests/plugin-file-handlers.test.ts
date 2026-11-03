@@ -75,13 +75,13 @@ const shapefileZip = zipSync({ "roads.shp": new Uint8Array(4), "roads.dbf": new 
 describe("file handler registry", () => {
   afterEach(() => __resetFileHandlerRegistryForTests());
 
-  it("lists handlers in registration order and keeps the slot when an id is replaced", () => {
+  it("lists handlers in registration order; replacing an id moves it to the end", () => {
     registerFileHandler(handler({ id: "a", name: "A1" }));
     registerFileHandler(handler({ id: "b" }));
     registerFileHandler(handler({ id: "a", name: "A2" }));
     assert.deepEqual(
       listFileHandlers().map((h) => h.name),
-      ["A2", "Handler"],
+      ["Handler", "A2"],
     );
   });
 
@@ -210,6 +210,27 @@ describe("file handler data types", () => {
     assert.equal(findFileHandlerByDataType("isoxml")?.id, "first");
     unregisterFileHandler("first");
     assert.equal(findFileHandlerByDataType("isoxml")?.id, "second");
+  });
+
+  it("describes an invalid data type by its type, so no value can make the warning throw", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "a", dataTypes: [10n as never, cyclic as never] })),
+    );
+    assert.equal(seen.length, 2);
+    assert.match(seen[0]!, /bigint/);
+    assert.match(seen[1]!, /object/);
+  });
+
+  it("after a replacement the hint stays with the handler that is first in the order", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] }));
+    const seen = warnings(() => registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] })));
+    // "a" moved behind "b", which now owns the hint, and the warning says so.
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "b");
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /"a".*isoxml.*"b" keeps it/);
   });
 
   it("does not warn when a handler re-registers its own hint", () => {

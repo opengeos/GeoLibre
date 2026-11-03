@@ -6,11 +6,15 @@ import { fetchRemoteData, remoteFileName } from "../apps/geolibre-desktop/src/li
 import {
   type DataUrlFileHandlers,
   dataUrlFileHandlers,
+  fetchStyleUnlessHandlerHint,
   finishHandledLoad,
+  trackHandlerLayers,
   urlFileHandlers,
 } from "../apps/geolibre-desktop/src/lib/data-url-file-handlers";
 import {
+  createLatch,
   createSettleGate,
+  deepLinkSettled,
   startupActivationSettled,
 } from "../apps/geolibre-desktop/src/lib/settle-gate";
 
@@ -408,31 +412,33 @@ describe("urlFileHandlers", () => {
   });
 });
 
+function fakeStore(initial: string[]) {
+  let ids = [...initial];
+  return {
+    add: (...added: string[]) => void ids.push(...added),
+    layerIds: () => ids,
+    removeLayer: (id: string) => void (ids = ids.filter((x) => x !== id)),
+  };
+}
+
 describe("finishHandledLoad", () => {
-  function fakeStore(initial: string[]) {
-    let ids = [...initial];
-    return {
-      add: (...added: string[]) => void ids.push(...added),
-      layerIds: () => ids,
-      removeLayer: (id: string) => void (ids = ids.filter((x) => x !== id)),
-    };
-  }
   const named = (name: string) => handler({ name });
 
-  it("returns the layers that appeared during the load", () => {
-    const store = fakeStore(["old"]);
-    const before = new Set(store.layerIds());
-    store.add("a", "b");
+  it("returns the layers the handler added", () => {
+    const store = fakeStore(["old", "a", "b"]);
     assert.deepEqual(
-      finishHandledLoad({ remote: { failed: [] }, hasStyle: false, before, store }),
+      finishHandledLoad({
+        remote: { failed: [] },
+        hasStyle: false,
+        added: new Set(["a", "b"]),
+        store,
+      }),
       ["a", "b"],
     );
   });
 
   it("joins every failure under the handler names and removes what they added", () => {
-    const store = fakeStore(["old"]);
-    const before = new Set(store.layerIds());
-    store.add("partial");
+    const store = fakeStore(["old", "partial", "user"]);
     assert.throws(
       () =>
         finishHandledLoad({
@@ -443,23 +449,22 @@ describe("finishHandledLoad", () => {
             ],
           },
           hasStyle: false,
-          before,
+          added: new Set(["partial"]),
           store,
         }),
       /One: bad bytes Two: plain/,
     );
-    assert.deepEqual(store.layerIds(), ["old"]);
+    assert.deepEqual(store.layerIds(), ["old", "user"]);
   });
 
   it("rejects a style for a file a plugin opened, and removes its layers", () => {
-    const store = fakeStore([]);
-    store.add("x");
+    const store = fakeStore(["x"]);
     assert.throws(
       () =>
         finishHandledLoad({
           remote: { failed: [] },
           hasStyle: true,
-          before: new Set(),
+          added: new Set(["x"]),
           store,
         }),
       /style cannot be applied/,
@@ -467,10 +472,8 @@ describe("finishHandledLoad", () => {
     assert.deepEqual(store.layerIds(), []);
   });
 
-  it("removes the layers when the load was aborted", () => {
-    const store = fakeStore(["old"]);
-    const before = new Set(store.layerIds());
-    store.add("late");
+  it("removes the handler's layers, and only those, when the load was aborted", () => {
+    const store = fakeStore(["old", "late", "user"]);
     const controller = new AbortController();
     controller.abort();
     assert.throws(
@@ -478,13 +481,160 @@ describe("finishHandledLoad", () => {
         finishHandledLoad({
           remote: { failed: [] },
           hasStyle: false,
-          before,
+          added: new Set(["late"]),
           store,
           signal: controller.signal,
         }),
       { name: "AbortError" },
     );
-    assert.deepEqual(store.layerIds(), ["old"]);
+    assert.deepEqual(store.layerIds(), ["old", "user"]);
+  });
+});
+
+describe("trackHandlerLayers", () => {
+  it("counts only layers added while the handler's open runs, not a user's during the download", async () => {
+    const store = fakeStore(["old"]);
+    const registry = source([
+      handler({
+        open: async () => {
+          store.add("from-handler");
+        },
+      }),
+    ]);
+    const tracking = trackHandlerLayers(registry, store);
+    store.add("user-during-download"); // the download is still running
+    const [wrapped] = tracking.source.list();
+    await wrapped!.open([]);
+    store.add("user-after"); // after open returned
+    assert.deepEqual([...tracking.added], ["from-handler"]);
+  });
+
+  it("keeps what a failing open added, so it can be removed", async () => {
+    const store = fakeStore([]);
+    const registry = source(
+      [
+        handler({
+          open: () => {
+            store.add("partial");
+            throw new Error("nope");
+          },
+        }),
+      ],
+      { isoxml: "h" },
+    );
+    const tracking = trackHandlerLayers(registry, store);
+    await assert.rejects(async () => tracking.source.forDataType("isoxml")!.open([]), /nope/);
+    assert.deepEqual([...tracking.added], ["partial"]);
+  });
+
+  it("passes the handler's name through and leaves ready alone", () => {
+    const ready = async () => undefined;
+    const tracking = trackHandlerLayers(
+      { ...source([handler({ name: "Named" })]), ready },
+      fakeStore([]),
+    );
+    assert.equal(tracking.source.list()[0]!.name, "Named");
+    assert.equal(tracking.source.ready, ready);
+  });
+});
+
+describe("fetchStyleUnlessHandlerHint", () => {
+  it("rejects a style combined with a hint a handler declares, without fetching it", async () => {
+    let fetched = 0;
+    await assert.rejects(
+      fetchStyleUnlessHandlerHint({
+        handlers: source([handler()], { isoxml: "h" }),
+        dataType: "isoxml",
+        fetchStyle: async () => ((fetched += 1), {}),
+      }),
+      /style cannot be applied/,
+    );
+    assert.equal(fetched, 0);
+  });
+
+  it("fetches the style for a hint nobody declares, for lidar, and for no hint", async () => {
+    let asked: string[] = [];
+    const registry: DataUrlFileHandlers = {
+      list: () => [],
+      forDataType: (name) => (asked.push(name), undefined),
+    };
+    for (const dataType of ["unknown-hint", "lidar", null, undefined]) {
+      asked = [];
+      const style = await fetchStyleUnlessHandlerHint({
+        handlers: registry,
+        dataType,
+        fetchStyle: async () => "style",
+      });
+      assert.equal(style, "style");
+      if (dataType === "lidar") assert.deepEqual(asked, []);
+    }
+    assert.equal(
+      await fetchStyleUnlessHandlerHint({
+        handlers: undefined,
+        dataType: "isoxml",
+        fetchStyle: async () => "style",
+      }),
+      "style",
+    );
+  });
+});
+
+describe("createLatch", () => {
+  it("stays true once it has been true", () => {
+    const latch = createLatch();
+    assert.equal(latch(false), false);
+    assert.equal(latch(true), true);
+    assert.equal(latch(false), true);
+  });
+});
+
+describe("deepLinkSettled", () => {
+  const done = { linkResolved: true, pending: 0, awaiting: 0, activating: 0 };
+  it("waits for registry plugins that still need a trust decision or are activating", () => {
+    assert.equal(deepLinkSettled(done), true);
+    assert.equal(deepLinkSettled({ ...done, linkResolved: false }), false);
+    assert.equal(deepLinkSettled({ ...done, pending: 1 }), false);
+    assert.equal(deepLinkSettled({ ...done, awaiting: 1 }), false);
+    assert.equal(deepLinkSettled({ ...done, activating: 1 }), false);
+  });
+});
+
+describe("the offer after the readiness wait", () => {
+  it("stops if the load was aborted while waiting, without offering the file", async () => {
+    const controller = new AbortController();
+    let claimed = false;
+    const registry: DataUrlFileHandlers = {
+      ...source([handler({ claim: () => ((claimed = true), []) })]),
+      ready: async () => controller.abort(),
+    };
+    await assert.rejects(
+      fetchRemoteData("https://example.com/TASKDATA.zip", {
+        fetchImpl: fetching(taskDataZip),
+        fileHandlers: registry,
+        signal: controller.signal,
+      }),
+      { name: "AbortError" },
+    );
+    assert.equal(claimed, false);
+  });
+
+  it("does the same on the hinted path, before downloading", async () => {
+    const controller = new AbortController();
+    let downloads = 0;
+    const registry: DataUrlFileHandlers = {
+      ...source([handler()], { isoxml: "h" }),
+      ready: async () => controller.abort(),
+    };
+    await assert.rejects(
+      fetchRemoteData("https://example.com/x", {
+        fetchImpl: (async () => ((downloads += 1), new Response("x"))) as unknown as typeof fetch,
+        fileHandlers: registry,
+        dataType: "isoxml",
+        signal: controller.signal,
+      }),
+      { name: "AbortError" },
+    );
+    assert.equal(downloads, 0);
   });
 });
 

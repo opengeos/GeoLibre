@@ -38,7 +38,8 @@ function declaredDataTypes(handler: GeoLibreFileHandler): string[] {
   for (const name of handler.dataTypes) {
     if (!isFileHandlerDataType(name)) {
       console.warn(
-        `File handler "${handler.id}": ignoring invalid data type ${JSON.stringify(name)}; ` +
+        `File handler "${handler.id}": ignoring invalid data type ` +
+          `${typeof name === "string" ? JSON.stringify(name) : `of type ${typeof name}`}; ` +
           "use lower-case letters, digits and hyphens, at most 32 characters.",
       );
     } else if (RESERVED_DATA_TYPES.has(name)) {
@@ -57,7 +58,8 @@ const registry = new Map<string, FileHandlerEntry>();
 /**
  * Register a file handler. Returns an unregister function (call it from the
  * plugin's `deactivate` hook). Re-registering the same id replaces the handler
- * and keeps its place in the order.
+ * and moves it to the end of the order, so a hint it shares with an earlier
+ * handler stays with that handler.
  *
  * `ownerPluginId` is injected by the host; plugins call this with one argument.
  */
@@ -84,6 +86,18 @@ export function registerFileHandler(
     throw new Error(`File handler "${handler.id}" must have claim and open functions.`);
   }
   const entry: FileHandlerEntry = { handler, ownerPluginId, dataTypes: declaredDataTypes(handler) };
+  // Ids are global, like menu contribution ids. Replacing another plugin's
+  // handler is almost certainly an accidental collision, so say so.
+  const previous = registry.get(handler.id);
+  if (previous && previous.ownerPluginId !== ownerPluginId) {
+    console.warn(
+      `File handler "${handler.id}" from "${ownerPluginId ?? "the host"}" replaces one ` +
+        `registered by "${previous.ownerPluginId ?? "the host"}"; prefix handler ids with your plugin id.`,
+    );
+  }
+  // A replacement goes to the end of the order, so what it declares is judged
+  // as if it were new.
+  registry.delete(handler.id);
   // The first handler to declare a hint keeps it; a later one is warned, not obeyed.
   for (const name of entry.dataTypes) {
     const owner = findEntryByDataType(name);
@@ -93,15 +107,6 @@ export function registerFileHandler(
           `"${owner.handler.id}" already declares; "${owner.handler.id}" keeps it.`,
       );
     }
-  }
-  // Ids are global, like menu contribution ids. Replacing another plugin's
-  // handler is almost certainly an accidental collision, so say so.
-  const previous = registry.get(handler.id);
-  if (previous && previous.ownerPluginId !== ownerPluginId) {
-    console.warn(
-      `File handler "${handler.id}" from "${ownerPluginId ?? "the host"}" replaces one ` +
-        `registered by "${previous.ownerPluginId ?? "the host"}"; prefix handler ids with your plugin id.`,
-    );
   }
   registry.set(handler.id, entry);
   // Only while this exact registration is current, so a stale disposer cannot

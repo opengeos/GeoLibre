@@ -24,6 +24,7 @@ import {
   satisfiesMinVersion,
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
+import { deepLinkSettled } from "../../lib/settle-gate";
 import { mergeStringLists } from "../../lib/string-lists";
 import {
   activateDeepLinkedPlugin,
@@ -143,6 +144,10 @@ export function usePluginDeepLink({
   const [pending, setPending] = useState<PluginRegistryEntry[]>([]);
   // Registry plugins the user trusted, activated as each one loads.
   const [awaiting, setAwaiting] = useState<PluginRegistryEntry[]>([]);
+  // The link's own activations are done once its names are resolved and no
+  // registry plugin is left waiting for a trust decision or still activating.
+  const [linkResolved, setLinkResolved] = useState(false);
+  const [activating, setActivating] = useState(0);
   const loadIssues = useSyncExternalStore(
     subscribeToExternalPluginLoads,
     getExternalPluginLoadIssues,
@@ -187,7 +192,7 @@ export function usePluginDeepLink({
       await resolveRegistryNames(targets.unknown);
     })().finally(() => {
       enforceViewerPlugins();
-      markPluginDeepLinkSettled();
+      setLinkResolved(true);
     });
 
     /**
@@ -295,6 +300,8 @@ export function usePluginDeepLink({
         `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not load: ${loadIssues.get(entry.manifestUrl)}`,
       );
     }
+    if (ready.length === 0) return;
+    setActivating((count) => count + 1);
     void (async () => {
       for (const { id } of ready) {
         try {
@@ -305,8 +312,25 @@ export function usePluginDeepLink({
           reportActivationFailure(id, error);
         }
       }
-    })();
+    })().finally(() => setActivating((count) => count - 1));
   }, [awaiting, managerVersion, loadIssues, mapControllerRef]);
+
+  // Only now can a URL load count on the link's plugins having registered
+  // their handlers. A plugin still waiting for the user is bounded by the
+  // load's own deadline.
+  useEffect(() => {
+    if (
+      targets &&
+      deepLinkSettled({
+        linkResolved,
+        pending: pending.length,
+        awaiting: awaiting.length,
+        activating,
+      })
+    ) {
+      markPluginDeepLinkSettled();
+    }
+  }, [targets, linkResolved, pending.length, awaiting.length, activating]);
 
   const trust = useCallback(() => {
     if (pending.length === 0) return;

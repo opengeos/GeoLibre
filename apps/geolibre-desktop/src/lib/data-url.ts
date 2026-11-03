@@ -11,10 +11,11 @@ import {
 
 /**
  * A `dataType` hint naming the format of a `data` URL that its path cannot
- * reveal, such as an extensionless API endpoint: the built-in `lidar`, or a
- * name a plugin file handler declares in its `dataTypes`.
+ * reveal, such as an extensionless API endpoint: the built-in `"lidar"`, or a
+ * name a plugin file handler declares in its `dataTypes`. Any lower-case
+ * `[a-z0-9-]` name parses; whether a handler declares it is decided at load time.
  */
-export type DataTypeHint = "lidar" | (string & {});
+export type DataTypeHint = string;
 
 export interface DataUrlParameter {
   dataUrl: string;
@@ -133,6 +134,12 @@ export function dataUrlParameters(search: string): DataUrlParameter[] | null {
       const dataUrl = httpUrl(value);
       if (!dataUrl) return null;
       const hint = dataTypes[index]?.trim().toLowerCase() ?? "";
+      if (hint && !isFileHandlerDataType(hint)) {
+        console.warn(
+          `[GeoLibre] Ignoring the malformed dataType "${hint}" in the ?data= link: ` +
+            "use lower-case letters, digits and hyphens, at most 32 characters.",
+        );
+      }
       return {
         dataUrl,
         styleUrl: httpUrl(styles[index] ?? null),
@@ -445,6 +452,7 @@ export async function fetchRemoteData(
   let hinted: ReturnType<DataUrlFileHandlers["forDataType"]>;
   if (fileHandlers && options.dataType && options.dataType !== "lidar") {
     await fileHandlers.ready?.();
+    options.signal?.throwIfAborted();
     hinted = fileHandlers.forDataType(options.dataType);
   }
   if (hinted) {
@@ -488,6 +496,7 @@ export async function fetchRemoteData(
     zipSignature;
   if (fileHandlers) {
     await fileHandlers.ready?.();
+    options.signal?.throwIfAborted();
     const handlers = fileHandlers.list();
     if (handlers.length > 0) {
       let name = remoteFileName(url, response.headers.get("content-disposition"));

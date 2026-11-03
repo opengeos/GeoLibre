@@ -57,3 +57,29 @@ export function startupActivationSettled(state: {
 }): boolean {
   return state.projectUrlSettled && state.restoredGeneration === state.projectGeneration;
 }
+
+/**
+ * A flag that, once true, stays true. For a "has finished" signal that a state
+ * machine may report as false again later (a loader going from `loaded` back to
+ * `idle`), which must not un-settle what already settled.
+ */
+export function createLatch(): (value: boolean) => boolean {
+  let latched = false;
+  return (value) => (latched ||= value);
+}
+
+/**
+ * Whether the `?plugin=` link has activated everything it asked for: its names
+ * are resolved, no registry plugin waits for a trust decision, and none is
+ * installing or activating after one.
+ */
+export function deepLinkSettled(state: {
+  linkResolved: boolean;
+  pending: number;
+  awaiting: number;
+  activating: number;
+}): boolean {
+  return (
+    state.linkResolved && state.pending === 0 && state.awaiting === 0 && state.activating === 0
+  );
+}

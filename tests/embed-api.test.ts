@@ -293,14 +293,29 @@ describe("parseEmbedRequest: v2 commands", () => {
     });
   });
 
+  it("drops a malformed addData dataType with a warning, like the ?dataType= parameter", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      for (const dataType of ["Not Valid", 7]) {
+        const parsed = parseEmbedRequest(
+          message("addData", { url: "https://example.com/d", dataType }),
+        ) as { command: { dataType: unknown } };
+        assert.equal(parsed.command.dataType, null);
+      }
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 2);
+  });
+
   it("rejects invalid addData URLs and options", () => {
     for (const payload of [
       { url: "file:///tmp/data.geojson" },
       { url: "/relative.geojson" },
       { url: "https://example.com/data.geojson", styleUrl: "data:text/json,{}" },
       { url: "https://example.com/data.geojson", fit: "yes" },
-      { url: "https://example.com/data.geojson", dataType: "Not Valid" },
-      { url: "https://example.com/data.geojson", dataType: 7 },
     ]) {
       assert.match(
         (parseEmbedRequest(message("addData", payload)) as { error: string }).error,

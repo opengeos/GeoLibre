@@ -46,6 +46,7 @@ import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
 import { isMapClickModeActive } from "../../lib/map-click-modes";
 import { lidarOutputForMap } from "../../lib/lidar-export";
+import { createLatch } from "../../lib/settle-gate";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { bindNetcdfProfileSamplesToProject } from "../../lib/netcdf-profile-store";
 import { projectUrlFromLocation } from "../../lib/project-url";
@@ -418,10 +419,14 @@ export function DesktopShell({
     fetchPluginRegistry(undefined, controller.signal).catch(() => {});
     return () => controller.abort();
   }, [canInstallPlugins]);
-  const projectUrlSettled =
+  // Latched: the loader goes from `loaded` back to `idle` after a few seconds,
+  // which must not un-settle a project that has already loaded.
+  const [latchProjectUrlSettled] = useState(createLatch);
+  const projectUrlSettled = latchProjectUrlSettled(
     !hasProjectUrl ||
-    projectUrlLoadState?.status === "loaded" ||
-    projectUrlLoadState?.status === "error";
+      projectUrlLoadState?.status === "loaded" ||
+      projectUrlLoadState?.status === "error",
+  );
   const restoredProjectGeneration = usePluginStateRestore({
     mapControllerRef,
     enforceViewerPlugins,

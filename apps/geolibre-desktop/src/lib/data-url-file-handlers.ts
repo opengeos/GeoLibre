@@ -93,32 +93,33 @@ export interface UrlLoadLayerStore {
 /** Why a style cannot go with a file a plugin opens. */
 export const STYLE_WITH_HANDLER_MESSAGE = "A style cannot be applied to a file opened by a plugin.";
 
-/** Remove the layers that appeared since `before`: what a plugin handler added. */
-export function discardHandledLayers(store: UrlLoadLayerStore, before: ReadonlySet<string>): void {
-  for (const id of store.layerIds()) if (!before.has(id)) store.removeLayer(id);
+/** Remove the given layers, if they are still there. */
+export function discardHandledLayers(store: UrlLoadLayerStore, added: Iterable<string>): void {
+  const present = new Set(store.layerIds());
+  for (const id of added) if (present.has(id)) store.removeLayer(id);
 }
 
 /**
  * Finish a load a plugin file handler took, which has already run and added its
- * own layers. Returns the layers that appeared. A failed `open`, a style, or an
- * abort throws instead, and removes what the handler added, like the built-in
- * paths that never leave a half-loaded result behind.
+ * own layers (`added`, from {@link trackHandlerLayers}). Returns the layers that
+ * are still there. A failed `open`, a style, or an abort throws instead, and
+ * removes what the handler added, like the built-in paths that never leave a
+ * half-loaded result behind.
  */
 export function finishHandledLoad({
   remote,
   hasStyle,
-  before,
+  added,
   store,
   signal,
 }: {
   remote: Pick<RemoteFileHandlerResult, "failed">;
   hasStyle: boolean;
-  before: ReadonlySet<string>;
+  added: ReadonlySet<string>;
   store: UrlLoadLayerStore;
   signal?: AbortSignal;
 }): string[] {
-  const added = () => store.layerIds().filter((id) => !before.has(id));
-  const discard = () => discardHandledLayers(store, before);
+  const discard = () => discardHandledLayers(store, added);
   if (signal?.aborted) {
     discard();
     throw new DOMException("The operation was aborted", "AbortError");
@@ -138,7 +139,63 @@ export function finishHandledLoad({
     discard();
     throw new Error(STYLE_WITH_HANDLER_MESSAGE);
   }
-  return added();
+  const present = new Set(store.layerIds());
+  return [...added].filter((id) => present.has(id));
+}
+
+/**
+ * Wrap the handlers so each `open` records the layers that appear while it runs.
+ * A layer the user adds during the download, before or after `open`, is not the
+ * handler's and is never removed or framed on its behalf.
+ */
+export function trackHandlerLayers(
+  source: DataUrlFileHandlers,
+  store: UrlLoadLayerStore,
+): { source: DataUrlFileHandlers; added: Set<string> } {
+  const added = new Set<string>();
+  const wrap = (handler: GeoLibreFileHandler): GeoLibreFileHandler => ({
+    ...handler,
+    open: async (files) => {
+      const snapshot = new Set(store.layerIds());
+      try {
+        return await handler.open(files);
+      } finally {
+        for (const id of store.layerIds()) if (!snapshot.has(id)) added.add(id);
+      }
+    },
+  });
+  return {
+    added,
+    source: {
+      ...source,
+      list: () => source.list().map(wrap),
+      forDataType: (name) => {
+        const handler = source.forDataType(name);
+        return handler && wrap(handler);
+      },
+    },
+  };
+}
+
+/**
+ * Fetch a style for a URL load, but not when a handler declares the hint: a
+ * plugin opens that file itself, so the load fails with
+ * {@link STYLE_WITH_HANDLER_MESSAGE} and no style request is sent.
+ */
+export async function fetchStyleUnlessHandlerHint<T>({
+  handlers,
+  dataType,
+  fetchStyle,
+}: {
+  handlers: DataUrlFileHandlers | undefined;
+  dataType: string | null | undefined;
+  fetchStyle: () => Promise<T>;
+}): Promise<T> {
+  if (handlers && dataType && dataType !== "lidar") {
+    await handlers.ready?.();
+    if (handlers.forDataType(dataType)) throw new Error(STYLE_WITH_HANDLER_MESSAGE);
+  }
+  return fetchStyle();
 }
 
 /** The registry for a URL load, with the viewer flag and `data:add` read at call time. */

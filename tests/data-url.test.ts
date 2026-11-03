@@ -345,6 +345,20 @@ describe("data URL deep links", () => {
     );
   });
 
+  it("warns about a malformed dataType hint it drops, but not about an empty one", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      dataUrlParameters("?data=https://example.com/a&data=https://example.com/b&dataType=Bad_Name");
+      dataUrlParameters("?data=https://example.com/a&dataType=");
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /dataType.*bad_name/);
+  });
+
   it("rejects non-http data URLs", () => {
     assert.equal(dataUrlParameters("?data=file:///tmp/private.geojson"), null);
   });

@@ -643,19 +643,23 @@ export function parseEmbedRequest(
       if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
         return fail("addData: fit must be a boolean");
       }
-      if (
-        payload.dataType !== undefined &&
-        payload.dataType !== null &&
-        !isFileHandlerDataType(payload.dataType)
-      ) {
-        return fail("addData: dataType must be lower-case letters, digits and hyphens");
+      // A malformed hint is dropped with a warning, as the ?dataType= parameter does.
+      let dataType: string | null = null;
+      if (payload.dataType !== undefined && payload.dataType !== null) {
+        if (isFileHandlerDataType(payload.dataType)) {
+          dataType = payload.dataType;
+        } else {
+          console.warn(
+            "[GeoLibre] addData: ignoring a malformed dataType; use lower-case letters, digits and hyphens.",
+          );
+        }
       }
       return {
         command: {
           type: "addData",
           url: payload.url,
           styleUrl: typeof payload.styleUrl === "string" ? payload.styleUrl : null,
-          dataType: typeof payload.dataType === "string" ? payload.dataType : null,
+          dataType,
           fit: payload.fit ?? true,
         },
         requestId,
