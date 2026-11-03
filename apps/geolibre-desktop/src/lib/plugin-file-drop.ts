@@ -145,13 +145,17 @@ export async function listZipEntryPaths(
   // inside the archive comment is only a candidate. The record whose declared
   // comment ends exactly at the end of the file is the real one in a well-formed
   // zip, so it goes first and needs no extra read to be picked.
-  const candidates: number[] = [];
+  const exact: number[] = [];
+  const others: number[] = [];
   for (let eocd = tail.byteLength - EOCD_SIZE; eocd >= 0; eocd -= 1) {
     if (tailView.getUint32(eocd, true) !== EOCD_SIGNATURE) continue;
-    const exact = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true) === tail.byteLength;
-    if (exact) candidates.unshift(eocd);
-    else candidates.push(eocd);
+    const ends = eocd + EOCD_SIZE + tailView.getUint16(eocd + 20, true) === tail.byteLength;
+    if (ends) exact.push(eocd);
+    else others.push(eocd);
   }
+  // The scan runs from the end backwards, so reverse the exact records to keep
+  // them in ascending offset order, as prepending them used to.
+  const candidates = [...exact.reverse(), ...others];
   let located: [offset: number, length: number] | undefined;
   for (const eocd of candidates.slice(0, MAX_EOCD_CANDIDATES)) {
     located = await checkRecord(eocd);
