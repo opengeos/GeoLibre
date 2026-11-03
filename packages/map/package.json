@@ -136,22 +136,22 @@
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.10.9",
     "laz-perf": "^0.0.7",
-    "mapbox-gl": "^3.33.0",
-    "maplibre-gl": "^6.15.0",
+    "mapbox-gl": "^3.34.1",
+    "maplibre-gl": "^6.16.0",
     "maplibre-gl-layer-control": "^0.18.3",
     "pmtiles": "^4.5.0",
     "proj4": "^2.22.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "satellite.js": "^7.1.0",
-    "zarr-cesium": "^0.3.5",
+    "zarr-cesium": "^0.4.1",
     "zarrita": "^0.7.5"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "tsdown": "^0.23.2",
+    "tsdown": "^0.23.4",
     "typescript": "^7.0.2"
   },
   "peerDependencies": {

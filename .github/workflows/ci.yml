@@ -144,6 +144,11 @@ jobs:
       # lower the limit when warnings are fixed.
       - name: Lint
         run: npm run lint
+        # Type-aware linting of the whole repo peaks just over Node's default
+        # ~4 GB heap (typescript-eslint 8.72.1 tipped it over); the runner has
+        # 16 GB.
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
 
       # A dependency declared by both the app and packages/plugins must carry
       # the same range, or npm nests a second copy. See "Shared dependency

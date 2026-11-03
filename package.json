@@ -65,17 +65,17 @@
     "@playwright/test": "^1.64.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "happy-dom": "^21.0.4",
     "linkedom": "^0.18.14",
     "tsx": "^4.23.15",
-    "typescript-eslint": "^8.72.0"
+    "typescript-eslint": "^8.72.1"
   },
   "overrides": {
     "@deck.gl/geo-layers": {
@@ -98,7 +98,7 @@
     "texture-compressor": {
       "image-size": "^2.0.4"
     },
-    "three": "^0.186.1",
+    "three": "^0.187.0",
     "uuid": "^14.0.0"
   },
   "engines": {
