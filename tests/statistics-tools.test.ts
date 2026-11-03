@@ -191,6 +191,42 @@ describe("local Moran's I (LISA)", () => {
       assert.ok((f.properties?.["v_lisa_I"] as number) > 0);
     }
   });
+
+  it("finds a polygon's neighbors from its area centroid, not its vertex mean", () => {
+    // A 10° square whose east edge is drawn with 200 vertices: the mean of its
+    // vertices sits near that edge (9.9, 5), its centroid at (5, 5). Its nearest
+    // neighbor is R (west, centre -1.5) from the centroid, but Q (east, centre
+    // 13) from the vertex mean.
+    const square = (x0: number, y0: number, x1: number, y1: number) => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const east = Array.from({ length: 199 }, (_, i) => [10, 0.05 * (i + 1)]);
+    const p = [[0, 0], [10, 0], ...east, [10, 10], [0, 10], [0, 0]];
+    const polygons: Array<[number[][], number]> = [
+      [p, 10],
+      [square(-2, 4.5, -1, 5.5), 10], // R
+      [square(12.5, 4.5, 13.5, 5.5), 0], // Q
+      [square(4.5, 39.5, 5.5, 40.5), 0],
+    ];
+    const layer = pointLayer([]);
+    layer.geojson = {
+      type: "FeatureCollection",
+      features: polygons.map(([ring, v], i) => ({
+        type: "Feature",
+        properties: { v, i },
+        geometry: { type: "Polygon", coordinates: [ring] },
+      })),
+    };
+    const { results } = run(localMoransITool, layer, { k: 1, permutations: 99 });
+    const square10 = results[0].geojson.features.find((f) => f.properties?.["i"] === 0);
+    // High value with a high neighbor (R): High-High. From the vertex mean its
+    // neighbor would be Q (low): High-Low.
+    assert.equal(square10?.properties?.["v_lisa_q"], 1);
+  });
 });
 
 describe("average nearest neighbor", () => {
