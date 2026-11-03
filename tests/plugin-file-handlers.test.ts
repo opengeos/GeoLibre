@@ -276,7 +276,7 @@ describe("listZipEntryPaths", () => {
   it("uses the record that closes the file when a fake in the comment points into the directory", async () => {
     // The fake claims a comment that is not there and a directory of only the first
     // entry. The real record's comment covers the fake, so it ends at the end of
-    // the file and is tried first.
+    // the file and is tried first; the fake is never read.
     const { zip, offset, first } = twoEntryZip();
     const bytes = withComment(zip, endRecord(first, offset, 500));
     assert.deepEqual(await list(bytes), ["a.txt", "b.txt"]);
@@ -327,6 +327,41 @@ describe("listZipEntryPaths", () => {
     assert.equal(await list(concat(new Uint8Array(100).fill(7), zip)), undefined);
     new DataView(zip.buffer, zip.byteOffset).setUint16(eocd + 6, 1, true);
     assert.equal(await list(zip), undefined);
+  });
+
+  it("does not list a zip64 archive that spans disks", async () => {
+    const zip = zipSync({ "a.txt": strToU8("x") });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const eocd = zip.byteLength - 22;
+    const directorySize = view.getUint32(eocd + 12, true);
+    const directoryOffset = view.getUint32(eocd + 16, true);
+    /** A zip64 archive with these disk counts on its locator and record. */
+    const zip64Bytes = (locatorDisks: number, recordDisk: number) => {
+      const bytes = new Uint8Array(zip.byteLength + 56 + 20);
+      bytes.set(zip.subarray(0, eocd));
+      const out = new DataView(bytes.buffer);
+      out.setUint32(eocd, 0x06064b50, true);
+      out.setUint32(eocd + 20, recordDisk, true);
+      out.setBigUint64(eocd + 40, BigInt(directorySize), true);
+      out.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
+      out.setUint32(eocd + 56, 0x07064b50, true);
+      out.setBigUint64(eocd + 56 + 8, BigInt(eocd), true);
+      out.setUint32(eocd + 56 + 16, locatorDisks, true);
+      const classic = eocd + 56 + 20;
+      bytes.set(zip.subarray(eocd), classic);
+      out.setUint32(classic + 12, 0xffffffff, true);
+      out.setUint32(classic + 16, 0xffffffff, true);
+      return bytes;
+    };
+    assert.deepEqual(await list(zip64Bytes(1, 0)), ["a.txt"]);
+    assert.equal(await list(zip64Bytes(2, 0)), undefined);
+    assert.equal(await list(zip64Bytes(1, 1)), undefined);
+  });
+
+  it("does not take a directory too short to hold an entry as the archive's", async () => {
+    // Only a central entry signature, declared as a 4-byte directory at offset 0.
+    const bytes = concat(new Uint8Array([0x50, 0x4b, 0x01, 0x02]), endRecord(4, 0, 0));
+    assert.equal(await list(bytes), undefined);
   });
 
   it("reads unflagged UTF-8 names as UTF-8", async () => {

@@ -79,8 +79,7 @@ function decodeEntryName(name: Uint8Array, flags: number): string {
  *
  * Deliberately not listed (the result is undefined, so a handler can still claim
  * by file name): archives with bytes in front of them (self-extracting zips),
- * archives with a digital signature record before the end record, and spanned
- * or multi-disk archives. The entries are a hint for `claim`, not a full zip
+ * and spanned or multi-disk archives. The entries are a hint for `claim`, not a full zip
  * parser; a handler that needs these cases unpacks the file itself in `open`.
  *
  * @param size - The archive's size in bytes.
@@ -100,7 +99,8 @@ export async function listZipEntryPaths(
 
   /** Whether a central directory entry starts at `offset`, with `length` bytes in range. */
   const startsDirectory = async (offset: number, length: number): Promise<boolean> => {
-    if (offset + Math.max(length, 4) > size) return false;
+    if (length < CENTRAL_ENTRY_SIZE) return false;
+    if (offset + length > size) return false;
     const head = await readRange(offset, 4);
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
@@ -109,7 +109,9 @@ export async function listZipEntryPaths(
     eocd: number,
   ): Promise<[offset: number, length: number] | undefined> => {
     // A spanned archive cannot be unpacked by a handler.
-    if (tailView.getUint32(eocd + 4, true) !== 0) return undefined;
+    const disk = tailView.getUint16(eocd + 4, true);
+    const directoryDisk = tailView.getUint16(eocd + 6, true);
+    if (disk !== 0 || directoryDisk !== 0) return undefined;
     let total = tailView.getUint16(eocd + 10, true);
     // An empty archive's directory "starts" where its own end record (ZIP64 or
     // classic) does; a lookalike elsewhere is not one.
@@ -121,10 +123,14 @@ export async function listZipEntryPaths(
       if (locator < 0 || tailView.getUint32(locator, true) !== ZIP64_LOCATOR_SIGNATURE) {
         return undefined;
       }
+      // The locator names the disk of the ZIP64 record and the disk count.
+      if (tailView.getUint32(locator + 4, true) !== 0) return undefined;
+      if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
       const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
+      if (zip64.getUint32(16, true) !== 0 || zip64.getUint32(20, true) !== 0) return undefined;
       recordOffset = zip64Offset;
       total = Number(zip64.getBigUint64(32, true));
       length = Number(zip64.getBigUint64(40, true));
@@ -153,7 +159,9 @@ export async function listZipEntryPaths(
   }
   if (!located) return undefined;
   const [directoryOffset, directorySize] = located;
-  if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES) return undefined;
+  if (directorySize > MAX_CENTRAL_DIRECTORY_BYTES || directoryOffset + directorySize > size) {
+    return undefined;
+  }
 
   const directory = await readRange(directoryOffset, directorySize);
   const view = viewOf(directory);
