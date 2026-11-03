@@ -25,6 +25,7 @@ import {
 import type { GeoLibreLayer } from "@geolibre/core";
 import { getDeploymentPolicy } from "./deployment-env";
 import { EMBED_API_SOURCE, EMBED_API_VERSION, type AddLayerSpec } from "@geolibre/embed";
+import { isFileHandlerDataType } from "@geolibre/plugins/file-handler-registry";
 
 export { EMBED_API_SOURCE, EMBED_API_VERSION };
 /** Versions understood by the app. V1 remains accepted for existing hosts. */
@@ -163,7 +164,13 @@ export type EmbedCommand =
   | { type: "setRenderer"; renderer: "maplibre" | "cesium" | "mapbox" | "arcgis" }
   | { type: "getViewport" }
   | { type: "addLayer"; spec: AddLayerSpec }
-  | { type: "addData"; url: string; styleUrl: string | null; fit: boolean }
+  | {
+      type: "addData";
+      url: string;
+      styleUrl: string | null;
+      dataType: string | null;
+      fit: boolean;
+    }
   | { type: "exportImage" }
   | { type: "getLayerFeatures"; layerId: string }
   | { type: "getDrawnFeatures" };
@@ -636,11 +643,27 @@ export function parseEmbedRequest(
       if (payload.fit !== undefined && typeof payload.fit !== "boolean") {
         return fail("addData: fit must be a boolean");
       }
+      // A malformed hint is dropped with a warning, as the ?dataType= parameter does.
+      // An empty one means no hint, silently, as an empty ?dataType= does.
+      let dataType: string | null = null;
+      if (payload.dataType !== undefined && payload.dataType !== null) {
+        // Trimmed and lower-cased, like the ?dataType= parameter.
+        const hint =
+          typeof payload.dataType === "string" ? payload.dataType.trim().toLowerCase() : "";
+        if (isFileHandlerDataType(hint)) {
+          dataType = hint;
+        } else if (hint !== "" || typeof payload.dataType !== "string") {
+          console.warn(
+            "[GeoLibre] addData: ignoring a malformed dataType; use lower-case letters, digits and hyphens.",
+          );
+        }
+      }
       return {
         command: {
           type: "addData",
           url: payload.url,
           styleUrl: typeof payload.styleUrl === "string" ? payload.styleUrl : null,
+          dataType,
           fit: payload.fit ?? true,
         },
         requestId,

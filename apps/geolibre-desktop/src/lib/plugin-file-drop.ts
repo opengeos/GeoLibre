@@ -137,7 +137,7 @@ export interface FileHandlerDropResult<T> {
   failed: { handler: GeoLibreFileHandler; error: unknown }[];
 }
 
-function toDroppedFile<T>(leaf: DropLeaf<T>): GeoLibreDroppedFile {
+export function toDroppedFile<T>(leaf: DropLeaf<T>): GeoLibreDroppedFile {
   const file: GeoLibreDroppedFile = {
     name: leaf.name,
     size: leaf.size,

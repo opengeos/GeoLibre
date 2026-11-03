@@ -23,6 +23,7 @@ import { readDrawnFeatures, readLayerFeatures } from "../lib/plugin-layer-querie
 import { fetchProjectFromUrl, projectUrlFromLocation } from "../lib/project-url";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import { isKnownWhiteboxToolId } from "../lib/whitebox-tool-url";
+import { queueDataLoad } from "../lib/data-load-queue";
 import { loadDataUrl } from "./useDataUrlLoader";
 import type { createAppAPI } from "./usePlugins";
 
@@ -131,16 +132,6 @@ export function useEmbedApi(
     let projectSourceUrl: string | null = projectUrlFromLocation();
     let loadAbort: AbortController | null = null;
     const dataLoadAborts = new Set<AbortController>();
-    let dataLoadQueue: Promise<void> = Promise.resolve();
-
-    const queueDataLoad = <T>(operation: () => Promise<T>): Promise<T> => {
-      const next = dataLoadQueue.then(operation, operation);
-      dataLoadQueue = next.then(
-        () => undefined,
-        () => undefined,
-      );
-      return next;
-    };
 
     const loadProjectFromUrl = async (url: string) => {
       // A second load supersedes the first; otherwise a slow fetch could land
@@ -273,6 +264,7 @@ export function useEmbedApi(
           const result = await queueDataLoad(() =>
             loadDataUrl(mapAppAPI, command.url, {
               styleUrl: command.styleUrl,
+              dataType: command.dataType,
               signal: abort.signal,
               fit: command.fit,
             }),

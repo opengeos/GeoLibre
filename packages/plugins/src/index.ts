@@ -57,6 +57,8 @@ export {
   registerFileHandler,
   unregisterFileHandler,
   listFileHandlers,
+  findFileHandlerByDataType,
+  isFileHandlerDataType,
   type FileHandlerEntry,
 } from "./file-handler-registry";
 export {

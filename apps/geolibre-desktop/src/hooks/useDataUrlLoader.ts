@@ -5,6 +5,8 @@ import {
   addPMTilesLayerFromUrl,
   addRasterToMap,
   addVectorLayerFromUrl,
+  findFileHandlerByDataType,
+  listFileHandlers,
 } from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,7 +18,16 @@ import {
   parseRasterUrlStyle,
 } from "../lib/data-url";
 import { deepLinkCogDefaults } from "../lib/cog-render-engine";
-import type { createAppAPI } from "./usePlugins";
+import { queueDataLoad } from "../lib/data-load-queue";
+import {
+  discardHandledLayers,
+  fetchStyleUnlessHandlerHint,
+  finishHandledLoad,
+  trackHandlerLayers,
+  urlFileHandlers,
+} from "../lib/data-url-file-handlers";
+import { isViewerLayout } from "./useLayoutOptions";
+import { type createAppAPI, whenPluginsSettled } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
 
 /** `fitLayerIds` carries the layers the shell still has to frame. */
@@ -25,6 +36,24 @@ export type DataUrlLoadState = ProjectUrlLoadState & { fitLayerIds?: string[] };
 export interface DataUrlLoadResult {
   layerIds: string[];
   fitLayerIds: string[];
+}
+
+/**
+ * The plugin file handlers a URL load may use, or undefined where the drop path
+ * is closed too: the read-only viewer and a deployment without `data:add`. Plugin
+ * activation is awaited (bounded) before the first offer, since `?data=` loads at
+ * startup while plugins register their handlers asynchronously.
+ */
+function fileHandlersForLoad() {
+  return urlFileHandlers({
+    isViewer: () => typeof window !== "undefined" && isViewerLayout(window.location.search),
+    canAddData: () => useAppStore.getState().deploymentCapabilities.has("data:add"),
+    source: {
+      list: listFileHandlers,
+      forDataType: findFileHandlerByDataType,
+      ready: whenPluginsSettled,
+    },
+  });
 }
 
 /** Whether a store layer records the given URL as the data it was loaded from. */
@@ -46,10 +75,58 @@ export async function loadDataUrl(
   } = {},
 ): Promise<DataUrlLoadResult> {
   const fit = options.fit ?? true;
-  const [remote, rawStyle] = await Promise.all([
-    fetchRemoteData(dataUrl, { signal: options.signal, dataType: options.dataType }),
-    options.styleUrl ? fetchRemoteStyle(options.styleUrl, { signal: options.signal }) : null,
-  ]);
+  const layerStore = {
+    layerIds: () => useAppStore.getState().layers.map((layer) => layer.id),
+    removeLayer: (id: string) => useAppStore.getState().removeLayer(id),
+  };
+  // Only the layers added while a handler's `open` runs are the handler's.
+  const gated = fileHandlersForLoad();
+  const tracking = gated ? trackHandlerLayers(gated, layerStore) : null;
+  // One failing request ends the other at once, so its error shows without
+  // waiting for a download that can no longer be used.
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  if (options.signal?.aborted) stop();
+  else options.signal?.addEventListener("abort", stop, { once: true });
+  const remotePromise = fetchRemoteData(dataUrl, {
+    signal: controller.signal,
+    dataType: options.dataType,
+    fileHandlers: tracking?.source,
+    hasStyle: Boolean(options.styleUrl),
+  });
+  const stylePromise = options.styleUrl
+    ? fetchStyleUnlessHandlerHint({
+        handlers: tracking?.source,
+        dataType: options.dataType,
+        fetchStyle: () => fetchRemoteStyle(options.styleUrl!, { signal: controller.signal }),
+        signal: controller.signal,
+      })
+    : Promise.resolve(null);
+  remotePromise.catch(stop);
+  stylePromise.catch(stop);
+  let remote: Awaited<typeof remotePromise>;
+  let rawStyle: Awaited<ReturnType<typeof fetchRemoteStyle>> | null;
+  try {
+    [remote, rawStyle] = await Promise.all([remotePromise, stylePromise]);
+  } catch (error) {
+    // The style failed after a handler already ran: take its layers back.
+    const handled = await remotePromise.catch(() => null);
+    if (handled?.kind === "handled") discardHandledLayers(layerStore, tracking?.added ?? []);
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", stop);
+  }
+  if (remote.kind === "handled") {
+    const layerIds = finishHandledLoad({
+      remote,
+      hasStyle: rawStyle !== null,
+      added: tracking?.added ?? new Set(),
+      store: layerStore,
+      signal: options.signal,
+    });
+    // Framed like the built-in GeoJSON path: the shell fits the set once.
+    return { layerIds, fitLayerIds: layerIds };
+  }
   if (options.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
   const store = useAppStore.getState();
   const layerIds: string[] = [];
@@ -190,7 +267,7 @@ export function useDataUrlLoader(
       }
       return { layerIds, fitLayerIds: layerIds };
     };
-    void load()
+    void queueDataLoad(load)
       .then(({ layerIds, fitLayerIds }) => {
         if (controller.signal.aborted) return;
         setState({

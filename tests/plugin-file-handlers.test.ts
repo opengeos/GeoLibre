@@ -4,6 +4,8 @@ import { strToU8, zipSync } from "fflate";
 import type { TFunction } from "i18next";
 import {
   __resetFileHandlerRegistryForTests,
+  findFileHandlerByDataType,
+  isFileHandlerDataType,
   listFileHandlers,
   registerFileHandler,
   unregisterFileHandler,
@@ -137,6 +139,120 @@ describe("file handler registry", () => {
     assert.equal(listFileHandlers().length, 1);
     manager.deactivate("drop-plugin", mockApp);
     assert.equal(listFileHandlers().length, 0);
+  });
+});
+
+describe("file handler data types", () => {
+  afterEach(() => __resetFileHandlerRegistryForTests());
+
+  /** Capture console.warn while `run` executes. */
+  function warnings(run: () => void): string[] {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      run();
+    } finally {
+      console.warn = original;
+    }
+    return seen;
+  }
+
+  it("accepts lower-case [a-z0-9-] names of at most 32 characters", () => {
+    for (const name of ["isoxml", "a", "taskdata-2", "x".repeat(32)]) {
+      assert.equal(isFileHandlerDataType(name), true, name);
+    }
+    for (const name of ["", "IsoXml", "has_underscore", "a b", "x".repeat(33), 7, null]) {
+      assert.equal(isFileHandlerDataType(name), false, String(name));
+    }
+  });
+
+  it("finds the handler that declares a hint", () => {
+    registerFileHandler(handler({ id: "a" }));
+    registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] }));
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "b");
+    assert.equal(findFileHandlerByDataType("other"), undefined);
+  });
+
+  it("warns about and ignores invalid names but keeps the handler and its valid names", () => {
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "a", dataTypes: ["Bad Name", "isoxml", 3 as never] })),
+    );
+    assert.equal(seen.length, 2);
+    assert.match(seen[0]!, /"a".*data type/);
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "a");
+    assert.equal(findFileHandlerByDataType("Bad Name"), undefined);
+    assert.equal(listFileHandlers().length, 1);
+  });
+
+  it("warns when dataTypes is not an array and ignores it", () => {
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "a", dataTypes: "isoxml" as never })),
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(findFileHandlerByDataType("isoxml"), undefined);
+  });
+
+  it("does not let a handler take over the built-in lidar hint", () => {
+    const seen = warnings(() => registerFileHandler(handler({ id: "a", dataTypes: ["lidar"] })));
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /lidar/);
+    assert.equal(findFileHandlerByDataType("lidar"), undefined);
+  });
+
+  it("gives a hint declared twice to the first registered handler, with a warning", () => {
+    registerFileHandler(handler({ id: "first", dataTypes: ["isoxml"] }));
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "second", dataTypes: ["isoxml"] })),
+    );
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /isoxml.*"first"/);
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "first");
+    unregisterFileHandler("first");
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "second");
+  });
+
+  it("describes an invalid data type by its type, so no value can make the warning throw", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "a", dataTypes: [10n as never, cyclic as never] })),
+    );
+    assert.equal(seen.length, 2);
+    assert.match(seen[0]!, /bigint/);
+    assert.match(seen[1]!, /object/);
+  });
+
+  it("a replacement keeps a hint its predecessor owned, without a warning", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] }));
+    const seen = warnings(() => registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] })));
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "a");
+    assert.deepEqual(seen, []);
+  });
+
+  it("a replacement never takes a hint another live handler owns", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    registerFileHandler(handler({ id: "b" }));
+    const seen = warnings(() =>
+      registerFileHandler(handler({ id: "b", name: "B2", dataTypes: ["isoxml"] })),
+    );
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "a");
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /"b".*isoxml.*"a" keeps it/);
+  });
+
+  it("a replacement that drops a hint releases it to the next handler declaring it", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    warnings(() => registerFileHandler(handler({ id: "b", dataTypes: ["isoxml"] })));
+    registerFileHandler(handler({ id: "a" }));
+    assert.equal(findFileHandlerByDataType("isoxml")?.id, "b");
+  });
+
+  it("does not warn when a handler re-registers its own hint", () => {
+    registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] }));
+    const seen = warnings(() => registerFileHandler(handler({ id: "a", dataTypes: ["isoxml"] })));
+    assert.deepEqual(seen, []);
   });
 });
 

@@ -26,7 +26,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `loading`    | `loading=true` | Exposes screenshot readiness on the document element. Accepts a bare flag, `true`, `1`, `yes`, or `on`; disabled by default. See below. |
 | `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
-| `dataType`   | `dataType=lidar`                                           | Marks a `data` URL whose path has no file extension as a LiDAR point cloud; pairs with `data` by position. See [Open remote data](#open-remote-data). |
+| `dataType`   | `dataType=lidar`                                           | Names the format of a `data` URL whose path has no file extension: `lidar` for a point cloud, or a name an installed plugin declares; pairs with `data` by position. See [Open remote data](#open-remote-data). |
 | `stac`       | `stac=https://earth-search.aws.element84.com/v1/collections/naip` | Opens the STAC Catalogs browser connected to a STAC catalog, API, or API collection. A collection URL is searched on load, so its item footprints appear as a layer. See [Open a STAC catalog](#open-a-stac-catalog). |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, Help, and any quick filters the project's layers carry, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
 | `draw`       | `layout=viewer&draw`                                       | Lets the geometry editor run in `layout=viewer`, so a host page can offer drawing without the rest of the authoring chrome. The bare flag or `true`, `1`, `yes`, `on` enable it. It has no effect in other layouts and needs the `project:edit` [deployment capability](../deployment-capabilities.md). See [Drawing in a viewer embed](#drawing-in-a-viewer-embed). |
@@ -321,6 +321,8 @@ GeoLibre recognizes a point cloud from its URL path. An API endpoint whose path 
 https://web.geolibre.app/?data=https%3A%2F%2Fapi.example.com%2Fdownload%2F42%3Ftoken%3Dabc%26expires%3D3600&dataType=lidar
 ```
 
+A plugin that reads another format can declare its own `dataType` name, such as `isoxml`, and then receives a file loaded this way: `?data=…&dataType=isoxml` hands the downloaded file straight to that plugin, which has to be active (external plugins are not active by default; add `&plugin=<name>` for a built-in or registry plugin, or open a `?url=` project that lists it; a plugin installed from a file needs the project). Without a hint, an active plugin's file handler is still offered a downloaded file by its extension and content, as it is for a dropped file. This works where dropping files works: not in `layout=viewer`, and only with `data:add`. A hint that a plugin declares cannot be combined with `style`; a hint is matched case-insensitively and a malformed one is ignored with a console warning, here and in the `addData` option. A file loaded this way is untrusted input for the plugin, so a plugin must validate what it receives (see the plugin API). See [Files loaded by URL](../plugin-api.md#files-loaded-by-url).
+
 A plain `https://…` URL can be passed as-is, as above: `:` and `/` are legal in a query value and need no escaping. Encode the nested data and style URLs with `encodeURIComponent` only when they contain a character that would be read as GeoLibre's own query syntax — `&`, `+`, `%`, or `#`. A bare `=` inside the value is fine, since only the first `=` in each `&`-delimited pair separates the name from the value. Remote servers must permit browser cross-origin requests (CORS). COG, GeoParquet, PMTiles, and COPC servers should also support HTTP byte-range requests.
 
 For a COG, `style` may point to a raster style JSON object. Supported fields are `mode` (`single`, `rgb`, or `index`), 1-based `bands`, `rescale` ranges, `colormap`, `reversed`, `nodata`, `opacity`, `gamma`, `stretch` (`linear`, `log`, or `sqrt`), and the normalized-difference `index` preset. For example:
@@ -532,7 +534,7 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 | `getRenderer()`                        | the active renderer     | `"maplibre"`, `"mapbox"`, `"cesium"`, or `"arcgis"`.                  |
 | `getViewport()`                        | `Viewport`              | `{ bbox, center, zoom, bearing, pitch }`.                               |
 | `addLayer(spec)`                       | the new layer's `id`    | Takes a project-format layer specification.                             |
-| `addData(url, options?)`               | the new layer `id`s     | Loads remote data like `?data=`; options are `{ styleUrl, fit }`.        |
+| `addData(url, options?)`               | the new layer `id`s     | Loads remote data like `?data=`; options are `{ styleUrl, dataType, fit }`. |
 | `exportImage()`                        | a PNG `data:` URL       | The map as currently rendered.                                          |
 | `getLayerFeatures(layerId)`            | `Feature[]`             | A layer's features. See [Reading features back](#reading-features-back). |
 | `getDrawnFeatures()`                   | `Feature[]`             | The user's drawings (all Sketches layers). See [Reading features back](#reading-features-back). |
@@ -541,7 +543,7 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 
 Every command rejects rather than resolving falsely: an `ack` carrying
 `ok: false` rejects with the app's own error message, and a command with no
-answer inside `requestTimeoutMs` rejects with a timeout. `connect` itself
+answer inside `requestTimeoutMs` rejects with a timeout. The `ready` event does not wait for plugins, and a download is held back until plugin activation has settled (at most 15 seconds, counted from the first load), so the first `addData` sent right after `ready` can take that long: raise `requestTimeoutMs` or wait for your plugin before sending it. `connect` itself
 rejects if `ready` does not arrive inside `timeoutMs` — most often because the
 deployment has not allowlisted your origin, or because `origin` does not match
 the iframe.

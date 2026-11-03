@@ -313,21 +313,50 @@ describe("data URL deep links", () => {
     );
   });
 
-  it("pairs repeated dataType hints by position and ignores unknown ones", () => {
+  it("pairs repeated dataType hints by position and keeps plugin hint names", () => {
     const endpoint = "https://api.example.com/download/42?token=abc";
     assert.deepEqual(
       dataUrlParameters(
         "?data=https://example.com/roads.geojson" +
           `&data=${encodeURIComponent(endpoint)}` +
           "&data=https://example.com/dem.tif" +
-          "&dataType=&dataType=LiDAR&dataType=bogus",
+          "&dataType=&dataType=LiDAR&dataType=isoxml",
       ),
       [
         { dataUrl: "https://example.com/roads.geojson", styleUrl: null, dataType: null },
         { dataUrl: endpoint, styleUrl: null, dataType: "lidar" },
-        { dataUrl: "https://example.com/dem.tif", styleUrl: null, dataType: null },
+        { dataUrl: "https://example.com/dem.tif", styleUrl: null, dataType: "isoxml" },
       ],
     );
+  });
+
+  it("drops a dataType hint that is not a lower-case [a-z0-9-] name of at most 32 characters", () => {
+    const data =
+      "?data=https://example.com/a&data=https://example.com/b&data=https://example.com/c";
+    assert.deepEqual(
+      dataUrlParameters(
+        `${data}&dataType=${"x".repeat(33)}&dataType=has_underscore&dataType=${encodeURIComponent("a b")}`,
+      )?.map((entry) => entry.dataType),
+      [null, null, null],
+    );
+    assert.equal(
+      dataUrlParameters(`?data=https://example.com/a&dataType=${"x".repeat(32)}`)?.[0]?.dataType,
+      "x".repeat(32),
+    );
+  });
+
+  it("warns about a malformed dataType hint it drops, but not about an empty one", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      dataUrlParameters("?data=https://example.com/a&data=https://example.com/b&dataType=Bad_Name");
+      dataUrlParameters("?data=https://example.com/a&dataType=");
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]!, /dataType.*bad_name/);
   });
 
   it("rejects non-http data URLs", () => {

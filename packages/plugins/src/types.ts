@@ -1747,8 +1747,9 @@ export interface GeoLibreDroppedFile extends GeoLibreDroppedFileInfo {
 }
 
 /**
- * A plugin's handler for a file format dropped on the map. Project files are
- * still opened first, and files no handler claims load as they would without it.
+ * A plugin's handler for a file format dropped on the map or loaded by URL
+ * (`?data=` and the embed `addData` command). Project files are still opened
+ * first, and files no handler claims load as they would without it.
  */
 export interface GeoLibreFileHandler {
   /** Stable unique id used to unregister the handler. */
@@ -1757,6 +1758,15 @@ export interface GeoLibreFileHandler {
   name: string;
   /** Cheap pre-filter such as `[".zip", ".xml"]`. Only matching files are offered. */
   extensions: string[];
+  /**
+   * Names this handler answers to as a `dataType` hint, such as `["isoxml"]`:
+   * lower-case letters, digits and hyphens, at most 32 characters. A file
+   * loaded by URL with `dataType=<name>` goes straight to {@link open}, without
+   * {@link claim} and without the {@link extensions} filter. `lidar` is built in
+   * and cannot be declared. When two handlers declare a name, the first
+   * registered one keeps it.
+   */
+  dataTypes?: string[];
   /**
    * Claim files from the drop. Gets every dropped file that matched
    * {@link extensions}, so a handler can take a multi-file set. Returns the

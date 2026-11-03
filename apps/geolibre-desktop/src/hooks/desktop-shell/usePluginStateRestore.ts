@@ -28,9 +28,10 @@ import {
 import i18next from "i18next";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { notify } from "../../lib/notify";
+import { startupActivationSettled } from "../../lib/settle-gate";
 import { restoreLocalFileLayers } from "../../lib/restore-local-layers";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
-import { createAppAPI, getPluginManager } from "../usePlugins";
+import { createAppAPI, getPluginManager, markPluginActivationSettled } from "../usePlugins";
 
 /** Saved point clouds that could not be reloaded vanish from the map otherwise. */
 function notifyLidarRestoreFailed(error: unknown): void {
@@ -46,6 +47,8 @@ interface PluginStateRestoreOptions {
   externalPluginsReady: boolean;
   mapReadyGeneration: number;
   projectGeneration: number;
+  /** Whether a `?url=` project (if the link has one) has finished loading. */
+  projectUrlSettled: boolean;
 }
 
 /**
@@ -61,8 +64,17 @@ export function usePluginStateRestore({
   externalPluginsReady,
   mapReadyGeneration,
   projectGeneration,
+  projectUrlSettled,
 }: PluginStateRestoreOptions): number | null {
   const [restoredGeneration, setRestoredGeneration] = useState<number | null>(null);
+  // Startup activation counts as settled only for the restore that follows the
+  // `?url=` project, not the one for the empty project before it, since that
+  // project's plugins are what a URL load's file handlers may come from.
+  useEffect(() => {
+    if (startupActivationSettled({ projectUrlSettled, restoredGeneration, projectGeneration })) {
+      markPluginActivationSettled();
+    }
+  }, [projectUrlSettled, restoredGeneration, projectGeneration]);
   // A renderer swap restores the plugins from the store's projectPlugins, which
   // is only refreshed when a plugin is toggled or moved, so it would roll every
   // plugin back to how it was then (a Time Slider stack added since came back

@@ -187,6 +187,7 @@ import { createAppAPI as buildAppAPI, isTauriRuntime, type AppApiHost } from "..
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { isPluginVisible } from "../lib/ui-profile";
 import type { ActivatablePlugin } from "../lib/assistant/plugin-activation";
+import { createSettleGate } from "../lib/settle-gate";
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
 function reportPluginError(pluginId: string, action: string, error: unknown): void {
@@ -530,6 +531,36 @@ let externalPluginLoadIssues = new Map<string, ExternalPluginLoadIssueDisplay>()
 let externalPluginHeldBack = new Map<string, HeldBackPluginBundle>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
+
+// Closes once startup plugin activation has finished (the project restore and the
+// `?plugin=` deep link, each after any `?url=` project), so a URL load that wants
+// file handlers can wait for them. One absolute deadline covers the parts and any
+// activation still pending: a stuck startup delays the first load by at most this
+// long, and later loads not at all.
+const PLUGIN_SETTLE_TIMEOUT_MS = 15_000;
+const pluginActivationGate = createSettleGate(
+  PLUGIN_SETTLE_TIMEOUT_MS,
+  ["restore", "deepLink"],
+  () => Promise.allSettled(manager.list().map((plugin) => manager.pendingActivation(plugin.id))),
+);
+
+/** Called once the project plugin restore (and its URL parameters) has finished. */
+export function markPluginActivationSettled(): void {
+  pluginActivationGate.settle("restore");
+}
+
+/** Called once the `?plugin=` deep link has activated its plugins, or when there is none. */
+export function markPluginDeepLinkSettled(): void {
+  pluginActivationGate.settle("deepLink");
+}
+
+/**
+ * Resolves once external plugins have loaded and their startup activation has
+ * settled, or at the deadline, so the handlers they register are visible.
+ */
+export function whenPluginsSettled(): Promise<void> {
+  return pluginActivationGate.wait();
+}
 
 export function getPluginManager(): PluginManager {
   return manager;

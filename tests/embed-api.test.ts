@@ -245,10 +245,34 @@ describe("parseEmbedRequest: v2 commands", () => {
           type: "addData",
           url: "https://example.com/data.parquet",
           styleUrl: "https://example.com/style.json",
+          dataType: null,
           fit: false,
         },
         requestId: null,
       },
+    );
+    assert.deepEqual(
+      parseEmbedRequest(
+        message("addData", { url: "https://example.com/download/42", dataType: "isoxml" }),
+      ),
+      {
+        command: {
+          type: "addData",
+          url: "https://example.com/download/42",
+          styleUrl: null,
+          dataType: "isoxml",
+          fit: true,
+        },
+        requestId: null,
+      },
+    );
+    assert.equal(
+      (
+        parseEmbedRequest(message("addData", { url: "https://example.com/d", dataType: null })) as {
+          command: { dataType: unknown };
+        }
+      ).command.dataType,
+      null,
     );
     assert.deepEqual(
       parseEmbedRequest(message("addData", { url: "https://example.com/data.geojson" })),
@@ -257,6 +281,7 @@ describe("parseEmbedRequest: v2 commands", () => {
           type: "addData",
           url: "https://example.com/data.geojson",
           styleUrl: null,
+          dataType: null,
           fit: true,
         },
         requestId: null,
@@ -266,6 +291,47 @@ describe("parseEmbedRequest: v2 commands", () => {
       command: { type: "exportImage" },
       requestId: null,
     });
+  });
+
+  it("drops a malformed addData dataType with a warning, like the ?dataType= parameter", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      for (const dataType of ["Not Valid", 7]) {
+        const parsed = parseEmbedRequest(
+          message("addData", { url: "https://example.com/d", dataType }),
+        ) as { command: { dataType: unknown } };
+        assert.equal(parsed.command.dataType, null);
+      }
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 2);
+  });
+
+  it("treats an empty addData dataType as no hint, without a warning", () => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (message: unknown) => void seen.push(String(message));
+    try {
+      for (const dataType of ["", "   "]) {
+        const parsed = parseEmbedRequest(
+          message("addData", { url: "https://example.com/d", dataType }),
+        ) as { command: { dataType: unknown } };
+        assert.equal(parsed.command.dataType, null);
+      }
+    } finally {
+      console.warn = original;
+    }
+    assert.equal(seen.length, 0);
+  });
+
+  it("lower-cases an addData dataType, like the ?dataType= parameter", () => {
+    const parsed = parseEmbedRequest(
+      message("addData", { url: "https://example.com/d", dataType: " IsoXml " }),
+    ) as { command: { dataType: unknown } };
+    assert.equal(parsed.command.dataType, "isoxml");
   });
 
   it("rejects invalid addData URLs and options", () => {

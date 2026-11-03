@@ -1,13 +1,22 @@
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
+import { isFileHandlerDataType } from "@geolibre/plugins/file-handler-registry";
+import {
+  type DataUrlFileHandlers,
+  offerRemoteFileToHandlers,
+  openRemoteFileWithHandler,
+  STYLE_WITH_HANDLER_MESSAGE,
+  waitForReady,
+  type RemoteFileHandlerResult,
+} from "./data-url-file-handlers";
 
 /**
  * A `dataType` hint naming the format of a `data` URL that its path cannot
- * reveal, such as an extensionless API endpoint.
+ * reveal, such as an extensionless API endpoint: the built-in `"lidar"`, or a
+ * name a plugin file handler declares in its `dataTypes`. Any lower-case
+ * `[a-z0-9-]` name parses; whether a handler declares it is decided at load time.
  */
-export type DataTypeHint = "lidar";
-
-const DATA_TYPE_HINTS = new Set<string>(["lidar"]);
+export type DataTypeHint = string;
 
 export interface DataUrlParameter {
   dataUrl: string;
@@ -73,7 +82,9 @@ export type RemoteData =
   | { kind: "pmtiles"; name: string; url: string }
   | { kind: "vector"; name: string; url: string; format: "geoparquet" }
   | { kind: "lidar"; name: string; url: string }
-  | { kind: "geojson"; layers: RemoteGeoJsonLayer[] };
+  | { kind: "geojson"; layers: RemoteGeoJsonLayer[] }
+  /** A plugin file handler took the file; it adds its own layers. */
+  | ({ kind: "handled" } & RemoteFileHandlerResult);
 
 const MAX_ZIP_GEOJSON_BYTES = 250 * 1024 * 1024;
 
@@ -114,8 +125,9 @@ export function stacUrlParameter(search: string): string | null {
 export function dataUrlParameters(search: string): DataUrlParameter[] | null {
   const params = new URLSearchParams(search);
   const styles = params.getAll("style");
-  // Paired with `data` by position, like `style`; an empty or unknown value
-  // leaves that entry to be classified from its URL.
+  // Paired with `data` by position, like `style`; an empty or malformed value
+  // leaves that entry to be classified from its URL. Whether a well-formed name
+  // is known is decided at load time, once plugins have registered.
   const dataTypes = params.getAll("dataType");
   const entries = params
     .getAll("data")
@@ -123,10 +135,16 @@ export function dataUrlParameters(search: string): DataUrlParameter[] | null {
       const dataUrl = httpUrl(value);
       if (!dataUrl) return null;
       const hint = dataTypes[index]?.trim().toLowerCase() ?? "";
+      if (hint && !isFileHandlerDataType(hint)) {
+        console.warn(
+          `[GeoLibre] Ignoring the malformed dataType "${hint}" in the ?data= link: ` +
+            "use lower-case letters, digits and hyphens, at most 32 characters.",
+        );
+      }
       return {
         dataUrl,
         styleUrl: httpUrl(styles[index] ?? null),
-        dataType: DATA_TYPE_HINTS.has(hint) ? (hint as DataTypeHint) : null,
+        dataType: isFileHandlerDataType(hint) ? hint : null,
       };
     })
     .filter((entry): entry is DataUrlParameter => entry !== null);
@@ -152,6 +170,40 @@ export function remoteName(url: string): string {
       .replace(/\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|las|laz)$/i, "") ||
     "data"
   );
+}
+
+/**
+ * The file name a download carries, for handing it to a plugin file handler:
+ * the `Content-Disposition` filename when there is one, else the last path
+ * segment. Unlike {@link remoteName} the extension is kept, since a handler
+ * filters by it.
+ */
+export function remoteFileName(url: string, disposition: string | null): string {
+  const encoded = disposition?.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i)?.[1];
+  const quoted = disposition
+    ?.match(/filename\s*=\s*"((?:[^"\\]|\\.)*)"/i)?.[1]
+    ?.replace(/\\(.)/g, "$1");
+  const bare = disposition?.match(/filename\s*=\s*([^;"]+)/i)?.[1];
+  const candidates = [encoded, quoted, bare, new URL(url).pathname.split("/").at(-1)];
+  for (const raw of candidates) {
+    let name = raw?.trim() ?? "";
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      // Keep the undecoded name, as remoteName does.
+    }
+    // A name is a base name: no directories, no control characters, and at
+    // most 255 characters, keeping the end so the extension survives.
+    name = name
+      .split(/[\\/]/)
+      .at(-1)!
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim()
+      .slice(-255);
+    if (name) return name;
+  }
+  return "data";
 }
 
 function extension(url: string): string {
@@ -383,8 +435,34 @@ async function checkLidarDownloadSize(
  */
 export async function fetchRemoteData(
   url: string,
-  options: { signal?: AbortSignal; fetchImpl?: typeof fetch; dataType?: DataTypeHint | null } = {},
+  options: {
+    signal?: AbortSignal;
+    fetchImpl?: typeof fetch;
+    dataType?: DataTypeHint | null;
+    /**
+     * Plugin file handlers to offer the download to. Left out, the load never
+     * reaches a handler.
+     */
+    fileHandlers?: DataUrlFileHandlers;
+    /** Whether a style accompanies the URL, which a plugin hint cannot take. */
+    hasStyle?: boolean;
+  } = {},
 ): Promise<RemoteData> {
+  const { fileHandlers } = options;
+  // A plugin's hint skips detection. `lidar` is built in and never reaches a handler.
+  let hinted: ReturnType<DataUrlFileHandlers["forDataType"]>;
+  if (fileHandlers && options.dataType && options.dataType !== "lidar") {
+    await waitForReady(fileHandlers.ready, options.signal);
+    hinted = fileHandlers.forDataType(options.dataType);
+  }
+  if (hinted) {
+    // Before downloading anything: a plugin opens the file itself, so a style has nothing to apply to.
+    if (options.hasStyle) throw new Error(STYLE_WITH_HANDLER_MESSAGE);
+    const response = await fetchOk(url, options.signal, options.fetchImpl ?? fetch);
+    const bytes = await readCappedBytes(response, url);
+    const name = remoteFileName(url, response.headers.get("content-disposition"));
+    return { kind: "handled", ...(await openRemoteFileWithHandler(hinted, name, bytes)) };
+  }
   if (options.dataType === "lidar" || isLidarUrl(url)) {
     if (!isStreamedLidarUrl(url)) {
       await checkLidarDownloadSize(url, options.signal, options.fetchImpl ?? fetch);
@@ -416,6 +494,17 @@ export async function fetchRemoteData(
     contentType.includes("zip") ||
     /filename\*?=[^;]*\.zip(?:[;"']|$)/i.test(disposition) ||
     zipSignature;
+  if (fileHandlers) {
+    await waitForReady(fileHandlers.ready, options.signal);
+    const handlers = fileHandlers.list();
+    if (handlers.length > 0) {
+      let name = remoteFileName(url, response.headers.get("content-disposition"));
+      // A file already known to be a zip matches `.zip` handlers whatever the URL calls it.
+      if (isZip && !name.toLowerCase().endsWith(".zip")) name = `${name}.zip`;
+      const result = await offerRemoteFileToHandlers(name, bytes, handlers);
+      if (result.opened.length + result.failed.length > 0) return { kind: "handled", ...result };
+    }
+  }
   if (!isZip) {
     return {
       kind: "geojson",
