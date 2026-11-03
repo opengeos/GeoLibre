@@ -101,6 +101,10 @@ export async function listZipEntryPaths(
   const startsDirectory = async (offset: number, length: number): Promise<boolean> => {
     if (length < CENTRAL_ENTRY_SIZE) return false;
     if (offset + length > size) return false;
+    // A signature inside the tail already read needs no extra read.
+    if (offset >= tailOffset && offset + 4 <= tailOffset + tail.byteLength) {
+      return tailView.getUint32(offset - tailOffset, true) === CENTRAL_ENTRY_SIGNATURE;
+    }
     const head = await readRange(offset, 4);
     return head.byteLength === 4 && viewOf(head).getUint32(0, true) === CENTRAL_ENTRY_SIGNATURE;
   };
@@ -128,7 +132,9 @@ export async function listZipEntryPaths(
       if (tailView.getUint32(locator + 16, true) > 1) return undefined;
       const zip64Offset = Number(tailView.getBigUint64(locator + 8, true));
       if (zip64Offset + ZIP64_EOCD_SIZE > size) return undefined;
-      const zip64 = viewOf(await readRange(zip64Offset, ZIP64_EOCD_SIZE));
+      const zip64Bytes = await readRange(zip64Offset, ZIP64_EOCD_SIZE);
+      if (zip64Bytes.byteLength !== ZIP64_EOCD_SIZE) return undefined;
+      const zip64 = viewOf(zip64Bytes);
       if (zip64.getUint32(0, true) !== ZIP64_EOCD_SIGNATURE) return undefined;
       if (zip64.getUint32(16, true) !== 0 || zip64.getUint32(20, true) !== 0) return undefined;
       recordOffset = zip64Offset;

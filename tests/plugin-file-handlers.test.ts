@@ -264,6 +264,11 @@ describe("listZipEntryPaths", () => {
     assert.deepEqual(await list(endRecord(0, 0, 0)), []);
   });
 
+  it("does not list a zero-length directory that does not sit at the end record", async () => {
+    // An empty directory only counts when it starts where the end record does.
+    assert.equal(await list(endRecord(0, 50, 0)), undefined);
+  });
+
   it("lists an empty zip64 archive", async () => {
     const bytes = new Uint8Array(56 + 20 + 22);
     const view = new DataView(bytes.buffer);
@@ -356,6 +361,11 @@ describe("listZipEntryPaths", () => {
     assert.deepEqual(await list(zip64Bytes(1, 0)), ["a.txt"]);
     assert.equal(await list(zip64Bytes(2, 0)), undefined);
     assert.equal(await list(zip64Bytes(1, 1)), undefined);
+    // A read that comes back short at the ZIP64 record is no record, not a throw.
+    const short = zip64Bytes(1, 0);
+    const truncated = async (offset: number, length: number) =>
+      short.subarray(offset, offset + (offset === eocd ? 10 : length));
+    assert.equal(await listZipEntryPaths(short.byteLength, truncated), undefined);
   });
 
   it("does not take a directory too short to hold an entry as the archive's", async () => {
