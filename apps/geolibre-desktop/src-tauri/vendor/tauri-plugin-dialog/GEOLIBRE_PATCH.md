@@ -23,6 +23,13 @@ The GeoLibre-specific delta is intentionally limited to
   500 from it, against limits of 128 and 512). Grants for documents in the
   current pick are never released. A refusal is logged and leaves the session
   grant in place.
+- `parseFiltersOption`: for the file picker (not the save dialog), a filter
+  that has both mapped extensions and ones with no `MimeTypeMap` entry
+  (`geojson`, `gpkg`, `fgb`, ...) also lists `application/octet-stream`. The
+  document provider types such files as `octet-stream` from the same table, so
+  they were greyed out ("BIN file") whenever another extension in the filter
+  mapped (GeoLibre#3325). A filter of only unmapped extensions still yields no
+  MIME types, which leaves the picker unfiltered as upstream does.
 
 Known limitation: every document pick persists, data files as well as
 projects, so after more distinct picks than the cap the least recently picked
