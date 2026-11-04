@@ -64,7 +64,7 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
   fun showFilePicker(invoke: Invoke) {
     try {
       val args = invoke.parseArgs(FilePickerOptions::class.java)
-      val parsedTypes = parseFiltersOption(args.filters)
+      val parsedTypes = parseFiltersOption(args.filters, keepUnmappedExtensions = true)
 
       // GeoLibre: documents open with ACTION_OPEN_DOCUMENT, whose grant can be
       // made persistable (see takePersistableGrants), so a project or data file
@@ -206,15 +206,32 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     return callResult
   }
 
-  private fun parseFiltersOption(filters: Array<Filter>): Array<String> {
-    val mimeTypes = mutableListOf<String>()
+  /**
+   * Converts dialog filters to the MIME types the Android picker filters by.
+   *
+   * GeoLibre: with [keepUnmappedExtensions], an extension Android has no MIME
+   * mapping for (`geojson`, `gpkg`, `fgb`, ...) adds `application/octet-stream`
+   * instead of being dropped. The document provider derives a file's type from
+   * the same extension table, so such files are listed as `octet-stream` ("BIN
+   * file") and were greyed out whenever another extension in the filter did map
+   * (GeoLibre#3325). Save dialogs keep the upstream behaviour, because the
+   * requested type there names the document being created.
+   */
+  private fun parseFiltersOption(
+    filters: Array<Filter>,
+    keepUnmappedExtensions: Boolean = false
+  ): Array<String> {
+    val mimeTypes = linkedSetOf<String>()
     for (filter in filters) {
       for (ext in filter.extensions) {
         if (ext.contains('/')) {
           mimeTypes.add(if (ext == "text/csv") "text/comma-separated-values" else ext)
         } else {
-          MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)?.let {
-            mimeTypes.add(it)
+          val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase())
+          if (mimeType != null) {
+            mimeTypes.add(mimeType)
+          } else if (keepUnmappedExtensions) {
+            mimeTypes.add("application/octet-stream")
           }
         }
       }
