@@ -209,9 +209,10 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
   /**
    * Converts dialog filters to the MIME types the Android picker filters by.
    *
-   * GeoLibre: with [keepUnmappedExtensions], an extension Android has no MIME
-   * mapping for (`geojson`, `gpkg`, `fgb`, ...) adds `application/octet-stream`
-   * instead of being dropped. The document provider derives a file's type from
+   * GeoLibre: with [keepUnmappedExtensions], a filter that mixes mapped
+   * extensions with ones Android has no MIME mapping for (`geojson`, `gpkg`,
+   * `fgb`, ...) also lists `application/octet-stream`, instead of dropping the
+   * unmapped ones. The document provider derives a file's type from
    * the same extension table, so such files are listed as `octet-stream` ("BIN
    * file") and were greyed out whenever another extension in the filter did map
    * (GeoLibre#3325). Save dialogs keep the upstream behaviour, because the
@@ -222,19 +223,26 @@ class DialogPlugin(private val activity: Activity): Plugin(activity) {
     keepUnmappedExtensions: Boolean = false
   ): Array<String> {
     val mimeTypes = linkedSetOf<String>()
+    var hasUnmappedExtension = false
     for (filter in filters) {
       for (ext in filter.extensions) {
         if (ext.contains('/')) {
           mimeTypes.add(if (ext == "text/csv") "text/comma-separated-values" else ext)
         } else {
-          val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase())
+          val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
           if (mimeType != null) {
             mimeTypes.add(mimeType)
-          } else if (keepUnmappedExtensions) {
-            mimeTypes.add("application/octet-stream")
+          } else {
+            hasUnmappedExtension = true
           }
         }
       }
+    }
+    // A filter of only unmapped extensions yields no MIME types, which leaves
+    // the picker unfiltered; narrowing that to octet-stream would hide files a
+    // provider types some other way.
+    if (keepUnmappedExtensions && hasUnmappedExtension && mimeTypes.isNotEmpty()) {
+      mimeTypes.add("application/octet-stream")
     }
     return mimeTypes.toTypedArray()
   }
