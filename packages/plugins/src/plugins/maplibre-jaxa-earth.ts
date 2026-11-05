@@ -33,6 +33,8 @@ const PANEL_ID = JAXA_EARTH_PLUGIN_ID;
 const DATASET_METADATA_KEY = "jaxaEarthDataset";
 const BAND_METADATA_KEY = "jaxaEarthBand";
 const DATE_METADATA_KEY = "jaxaEarthDate";
+/** The name the panel last gave the layer, to tell it from one the user typed. */
+const NAME_METADATA_KEY = "jaxaEarthName";
 
 /** Pixels on the long side of the sample read for an automatic range. */
 const SAMPLE_SIZE = 360;
@@ -250,11 +252,15 @@ function updateActiveLayer(dataset: JaxaDataset | undefined): void {
   const url = jaxaTileUrl(spec);
   const current = Array.isArray(layer.source.tiles) ? layer.source.tiles[0] : undefined;
   if (current === url) return;
+  const name = layerName(dataset);
+  // Follow the date in the name unless the user renamed the layer.
+  const renamed = layer.name !== layer.metadata[NAME_METADATA_KEY];
   store.updateLayer(id, {
-    name: layerName(dataset),
+    ...(renamed ? {} : { name }),
     source: { ...layer.source, tiles: [url] },
     metadata: {
       ...layer.metadata,
+      [NAME_METADATA_KEY]: renamed ? layer.metadata[NAME_METADATA_KEY] : name,
       [DATASET_METADATA_KEY]: spec.datasetId,
       [BAND_METADATA_KEY]: spec.band,
       [DATE_METADATA_KEY]: spec.date,
@@ -281,12 +287,14 @@ function addLayer(dataset: JaxaDataset): string | null {
       dataset.bbox[2] >= 180 &&
       dataset.bbox[3] >= 85);
   const bounds = global ? undefined : dataset.bbox!;
-  const id = app.addTileLayer(layerName(dataset), jaxaTileUrl(spec), {
+  const name = layerName(dataset);
+  const id = app.addTileLayer(name, jaxaTileUrl(spec), {
     tileSize: JAXA_EARTH_TILE_SIZE,
     maxzoom: jaxaMaxZoom(dataset.resolutionKm),
     attribution: JAXA_EARTH_ATTRIBUTION,
     ...(bounds ? { bounds } : {}),
     metadata: {
+      [NAME_METADATA_KEY]: name,
       [DATASET_METADATA_KEY]: spec.datasetId,
       [BAND_METADATA_KEY]: spec.band,
       [DATE_METADATA_KEY]: spec.date,
@@ -540,10 +548,13 @@ function buildPanel(container: HTMLElement): () => void {
       else next = await collection.next(current);
       if (disposed || token !== selection) return;
       state.busy = false;
-      if (!Number.isNaN(next.getTime())) {
-        state.date = next.toISOString();
-        state.dateLabel = collection.formatDate(next);
+      if (Number.isNaN(next.getTime())) {
+        renderEditor();
+        setStatus(tr("noOtherDate", "There is no other date in that direction."), true);
+        return;
       }
+      state.date = next.toISOString();
+      state.dateLabel = collection.formatDate(next);
       setStatus(null);
       applyChange();
     } catch (error) {

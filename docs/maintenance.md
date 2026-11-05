@@ -885,9 +885,12 @@ The module has no imports of its own, so no CSP change is needed (`blob:` is in
 (`ImageCollection`, `TileGenerator`, `image.ColorMap`, `Resampling`) is typed
 by hand, so the compiler does not check it against JAXA's `jaxa.earth.esm.d.ts`.
 
-To move to a new release, bump the version, recompute the checksum
-(`curl -s <module url> | sha256sum`), diff the new `.d.ts` against the members
-above, and add a dataset from the panel in a browser. If JAXA republishes the
+The checksum is the only trust boundary: once imported, the module runs with
+the app's full privileges, including the Tauri IPC bridge on desktop. To move to
+a new release, bump the version, compute the checksum from the exact bytes JAXA
+serves (`curl -s <module url> | sha256sum`), review the module and the
+new `.d.ts` diff against the members above before committing the hash, and add a
+dataset from the panel in a browser. If JAXA republishes the
 pinned file in place, every JAXA layer fails with a "module changed" error
 until the checksum is updated.
 

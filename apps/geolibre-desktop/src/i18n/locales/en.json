@@ -10567,6 +10567,7 @@
       "climatology": "climatology",
       "datasetPage": "Dataset details",
       "dateFailed": "Could not change the date: {{message}}",
+      "noOtherDate": "There is no other date in that direction.",
       "sampling": "Reading a sample to set the color range…",
       "noValues": "The sample holds no values; set Min and Max by hand.",
       "sampleFailed": "Could not read a sample of {{name}}: {{message}}",
