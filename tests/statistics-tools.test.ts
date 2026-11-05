@@ -593,6 +593,20 @@ describe("average nearest neighbor extent", () => {
     );
     const without = run(averageNearestNeighborTool, base, {});
     assert.ok(withPole.messages.includes("Average nearest neighbor (n=3):"));
+    // A malformed GeometryCollection is left out instead of failing the tool.
+    const malformed: GeoLibreLayer = {
+      ...base,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          ...base.geojson!.features,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { type: "Feature", properties: {}, geometry: { type: "GeometryCollection" } as any },
+        ],
+      },
+    };
+    const run3 = run(averageNearestNeighborTool, malformed, {});
+    assert.ok(run3.messages.includes("Average nearest neighbor (n=3):"));
     assert.equal(
       loggedNumber(withPole.messages, "Expected mean distance:"),
       loggedNumber(without.messages, "Expected mean distance:"),

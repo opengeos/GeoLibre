@@ -161,10 +161,11 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       const [lon, lat] = geometry.coordinates;
       return isLonLat([lon, lat]) ? [lon, lat] : null;
     }
-    // A vertex beyond the poles would drag the centroid too, so such a
-    // feature cannot be located.
-    if (!allLonLat(geometry)) return null;
     try {
+      // A vertex beyond the poles would drag the centroid too, so such a
+      // feature cannot be located. Inside the `try`, so a malformed geometry
+      // is left out as before rather than failing the tool.
+      if (!allLonLat(geometry)) return null;
       if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
         try {
           const point = polygonCentroid(geometry);
