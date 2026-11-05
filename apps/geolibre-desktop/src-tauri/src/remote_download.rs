@@ -615,6 +615,9 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
     if name.contains(['/', '\\']) {
         return Err("Refusing to write: a subfolder must be a single name.".to_string());
     }
+    if name.trim().is_empty() {
+        return Err("Refusing to write: a subfolder needs a name.".to_string());
+    }
     let dir = folder.join(checked_name(name)?);
     // Make it first and look after, so nothing can appear between a check and the making.
     if let Err(error) = fs::create_dir(&dir) {
@@ -859,6 +862,10 @@ mod tests {
         assert_eq!(subfolder_in(&dir, "run-1").unwrap(), sub);
         write_file_to_folder_in_dir(&sub, "a.part", b"x").unwrap();
         assert_eq!(fs::read(sub.join("a.part")).unwrap(), b"x");
+        assert_eq!(
+            subfolder_in(&dir, " ").unwrap_err(),
+            "Refusing to write: a subfolder needs a name."
+        );
         assert!(subfolder_in(&dir, "..").is_err());
         assert!(subfolder_in(&dir, "a/b").is_err());
         assert!(subfolder_in(&dir, "a\\b").is_err());
