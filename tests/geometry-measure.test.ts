@@ -249,6 +249,30 @@ describe("geometry-measure", () => {
     assert.throws(() => measurePerimeter(SMALL_BOX, "kilometre" as any));
   });
 
+  it("throws on a latitude beyond the poles instead of returning NaN", () => {
+    const line: Geometry = {
+      type: "LineString",
+      coordinates: [
+        [0, 89],
+        [0, 95],
+      ],
+    };
+    const box: Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 89],
+          [1, 89],
+          [1, 95],
+          [0, 89],
+        ],
+      ],
+    };
+    assert.throws(() => measureLength(line), /latitude must be within ±90°/);
+    assert.throws(() => measureArea(box), /latitude must be within ±90°/);
+    assert.throws(() => measurePerimeter(box), /latitude must be within ±90°/);
+  });
+
   it("measures and classifies GeometryCollections by their members", () => {
     const collection: Geometry = {
       type: "GeometryCollection",
@@ -366,5 +390,44 @@ describe("geometry helpers in the field calculator", () => {
     const written = (result.patch.geojson as FeatureCollection).features[0].properties
       ?.len_km as number;
     assertClose(written, 111.31949079327357, 1e-9);
+  });
+
+  it("turns a vertex beyond the poles into a per-feature error, not a NaN", () => {
+    const geojson: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", id: "f0", geometry: EQUATOR_SEGMENT, properties: {} },
+        {
+          type: "Feature",
+          id: "f1",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 89],
+              [0, 95],
+            ],
+          },
+          properties: {},
+        },
+      ],
+    };
+    const layer = {
+      id: "l1",
+      name: "L",
+      type: "geojson" as const,
+      source: { type: "geojson" as const },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: {},
+      geojson,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = calculateField(layer as any, [], "len_m", true, "$length()", "number");
+    assert.ok(result && "patch" in result);
+    assert.equal(result.errors, 1);
+    const features = (result.patch.geojson as FeatureCollection).features;
+    assertClose(features[0].properties?.len_m as number, 111319.49079327357, 1e-6);
+    assert.equal(features[1].properties?.len_m ?? null, null);
   });
 });

@@ -267,6 +267,8 @@ describe("latLonBoxArea", () => {
     assert.equal(latLonBoxArea(-180, -95, 180, 95), latLonBoxArea(-180, -90, 180, 90));
     assert.equal(latLonBoxArea(-200, 0, 200, 10), latLonBoxArea(-180, 0, 180, 10));
     assert.equal(latLonBoxArea(10, 0, 10, 10), 0);
+    // A box with east < west crosses the antimeridian: 179°E to 179°W is 2° wide.
+    assert.equal(latLonBoxArea(179, 10, -179, 20), latLonBoxArea(-1, 10, 1, 20));
     setActiveEllipsoidId("moon");
     // On a sphere: R² Δλ (sin φ₂ − sin φ₁).
     assertClose(

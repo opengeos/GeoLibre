@@ -165,7 +165,8 @@ export function geodesicRingArea(
 /**
  * Area in square metres of the box bounded by the meridians `west` and `east`
  * and the parallels `south` and `north` (degrees). `east - west` may span up
- * to 360°; latitudes are clamped to ±90°.
+ * to 360°; a box with `east < west` crosses the antimeridian and spans
+ * `east - west + 360`. Latitudes are clamped to ±90°.
  *
  * Its edges along parallels are not geodesics, so this is the closed form for
  * a zone of the ellipsoid, b² Δλ [F(φ₂) − F(φ₁)] with
@@ -192,7 +193,8 @@ export function latLonBoxArea(
     const tail = e2 > 0 ? Math.atanh(e * s) : Math.atan(e * s);
     return s / (2 * (1 - e2 * s * s)) + tail / (2 * e);
   };
-  const dLon = Math.max(0, Math.min(360, east - west)) * DEG_TO_RAD;
+  const span = east < west ? east - west + 360 : east - west;
+  const dLon = Math.min(360, span) * DEG_TO_RAD;
   return b * b * dLon * Math.abs(zone(north) - zone(south));
 }
 

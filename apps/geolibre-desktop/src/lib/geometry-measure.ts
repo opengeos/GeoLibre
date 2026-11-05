@@ -9,7 +9,7 @@
  * `@geolibre/core`. Coordinates are assumed to be lon/lat degrees (EPSG:4326),
  * which is what every layer in the store carries.
  */
-import { geodesicLength, geodesicRingArea } from "@geolibre/core";
+import { geodesicLength, geodesicRingArea, isLonLat } from "@geolibre/core";
 import type { Feature, Geometry, Position } from "geojson";
 
 /** Length units, matching the Measure tool's `DistanceUnit` set. */
@@ -151,12 +151,29 @@ function areaFactor(unit: AreaUnit): number {
   return factor;
 }
 
+/**
+ * The positions, checked as lon/lat. A latitude beyond ±90° has no geodesic
+ * (GeographicLib returns NaN), so it throws: in a Field Calculator expression
+ * that becomes a per-feature error, a null cell counted in `errors`, like an
+ * unknown unit, rather than a NaN in the column.
+ */
+function lonLatPositions(positions: Position[]): Position[] {
+  for (const position of positions) {
+    if (!isLonLat(position)) {
+      throw new Error(
+        `Invalid position [${position[0]}, ${position[1]}]: latitude must be within ±90°`,
+      );
+    }
+  }
+  return positions;
+}
+
 /** Absolute polygon area (outer ring minus holes) in square meters. */
 function polygonAreaMeters(rings: Position[][]): number {
   if (rings.length === 0) return 0;
-  let area = geodesicRingArea(rings[0]);
+  let area = geodesicRingArea(lonLatPositions(rings[0]));
   for (let i = 1; i < rings.length; i += 1) {
-    area -= geodesicRingArea(rings[i]);
+    area -= geodesicRingArea(lonLatPositions(rings[i]));
   }
   return Math.max(0, area);
 }
@@ -173,7 +190,7 @@ function polygonPerimeterMeters(rings: Position[][]): number {
     const last = ring.at(-1);
     const isClosed = !!last && first[0] === last[0] && first[1] === last[1];
     const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
-    total += geodesicLength(closed);
+    total += geodesicLength(lonLatPositions(closed));
   }
   return total;
 }
@@ -195,9 +212,12 @@ export function measureLength(
 function lengthMeters(geometry: Geometry): number {
   switch (geometry.type) {
     case "LineString":
-      return geodesicLength(geometry.coordinates);
+      return geodesicLength(lonLatPositions(geometry.coordinates));
     case "MultiLineString":
-      return geometry.coordinates.reduce((sum, line) => sum + geodesicLength(line), 0);
+      return geometry.coordinates.reduce(
+        (sum, line) => sum + geodesicLength(lonLatPositions(line)),
+        0,
+      );
     case "GeometryCollection":
       return geometry.geometries.reduce((sum, g) => sum + lengthMeters(g), 0);
     default:
