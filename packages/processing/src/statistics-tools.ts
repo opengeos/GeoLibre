@@ -1,6 +1,6 @@
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
-import { featureCollection, multiPoint, polygon as turfPolygon } from "@turf/helpers";
+import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
@@ -694,9 +694,9 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       ctx.log("Error: layer has no GeoJSON data");
       return;
     }
-    const coords = featureCoords(layer.geojson.features).filter(
-      (c): c is [number, number] => c !== null,
-    );
+    const positions = featureCoords(layer.geojson.features);
+    const located = layer.geojson.features.filter((_, i) => positions[i] !== null);
+    const coords = positions.filter((c): c is [number, number] => c !== null);
     const n = coords.length;
     if (n < 2) {
       ctx.log("Error: need at least 2 points.");
@@ -710,9 +710,9 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
     // Mean observed nearest-neighbor distance (metres).
     const observedMean = meanNearestNeighborDistance(coords);
 
-    // Study area = bounding-box area (m²) of the points measured above, so a
-    // feature left out by `featureCoords` cannot stretch it.
-    const extentBox = horizontalBbox(bbox(multiPoint(coords)));
+    // Study area = bounding-box area (m²) of the input extent, over the features
+    // measured above, so one left out by `featureCoords` cannot stretch it.
+    const extentBox = horizontalBbox(bbox(featureCollection(located)));
     if (!extentBox) {
       ctx.log("Error: the layer has no usable extent.");
       return;
