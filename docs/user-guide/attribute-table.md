@@ -123,6 +123,8 @@ unit for you, offering only the measures that fit the layer's geometry. Lengths
 take `meters` (the default), `kilometers`, `miles`, `feet`, `yards`, or
 `nautical-miles`; areas take `square-meters` (the default),
 `square-kilometers`, `square-miles`, `hectares`, `acres`, or `square-feet`.
+They are geodesic measures on the WGS 84 ellipsoid, or on the project's
+ellipsoid when it describes another body.
 
 ```text
 round($area("square-kilometers"), 2)

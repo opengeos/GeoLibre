@@ -11,8 +11,18 @@ import {
   measurePerimeter,
 } from "../apps/geolibre-desktop/src/lib/geometry-measure";
 
-// A 1° segment along the equator and a small square near the equator give stable
-// reference values against Earth's default mean radius (~6371008.77 m).
+// Expected values marked "pyproj" were computed independently with GeographicLib
+// through pyproj 3.8.0 (PROJ 9.8.1): Geod(ellps="WGS84").inv(...) for lengths and
+// .polygon_area_perimeter(...) for areas and perimeters.
+
+function assertClose(actual: number, expected: number, tolerance: number): void {
+  assert.ok(
+    Math.abs(actual - expected) <= tolerance,
+    `expected ${expected} ± ${tolerance}, got ${actual}`,
+  );
+}
+
+// 1° of the equator: 111,319.491 m on WGS 84 (pyproj).
 const EQUATOR_SEGMENT: Geometry = {
   type: "LineString",
   coordinates: [
@@ -43,7 +53,7 @@ describe("geometry-measure", () => {
 
   it("measures a line's geodesic length, with unit conversion", () => {
     const km = measureLength(EQUATOR_SEGMENT, "kilometers");
-    assert.ok(Math.abs(km - 111.19) < 0.2, `expected ~111.19 km, got ${km}`);
+    assertClose(km, 111.31949079327357, 1e-9);
     // Units are consistent multiples of the base meter value.
     const meters = measureLength(EQUATOR_SEGMENT, "meters");
     assert.ok(Math.abs(meters / km - 1000) < 1e-6);
@@ -77,8 +87,8 @@ describe("geometry-measure", () => {
 
   it("measures polygon area and perimeter", () => {
     const sqm = measureArea(SMALL_BOX, "square-meters");
-    // ~1.11 km per side → ~1.23e6 m².
-    assert.ok(sqm > 1.2e6 && sqm < 1.26e6, `unexpected area ${sqm}`);
+    assertClose(sqm, 1230907.2049932536, 1e-3); // pyproj
+    assertClose(measurePerimeter(SMALL_BOX), 4437.875315681419, 1e-6); // pyproj
     const hectares = measureArea(SMALL_BOX, "hectares");
     assert.ok(Math.abs(sqm / hectares - 10000) < 1e-6);
 
@@ -112,6 +122,78 @@ describe("geometry-measure", () => {
       ],
     };
     assert.ok(measureArea(withHole) < measureArea(SMALL_BOX));
+  });
+
+  it("measures an Italian polygon with a hole, and a MultiPolygon, on WGS 84", () => {
+    // A 0.24° × 0.15° quadrilateral over Milano with a clockwise hole. The
+    // sphere of mean radius gives areas about 0.23 % smaller at this latitude.
+    const outer = [
+      [9.04, 45.39],
+      [9.28, 45.39],
+      [9.28, 45.54],
+      [9.04, 45.54],
+      [9.04, 45.39],
+    ];
+    const hole = [
+      [9.15, 45.44],
+      [9.15, 45.49],
+      [9.21, 45.49],
+      [9.21, 45.44],
+      [9.15, 45.44],
+    ];
+    const milano: Geometry = { type: "Polygon", coordinates: [outer, hole] };
+    // pyproj: outer 312,909,331.942 m², hole 26,075,803.147 m².
+    assertClose(measureArea(milano), 286833528.7953148, 1e-3);
+    assertClose(measureArea(milano, "hectares"), 28683.35287953148, 1e-7);
+    // Outer 70,881.320 m plus hole 20,498.862 m (pyproj).
+    assertClose(measurePerimeter(milano), 91380.1824832992, 1e-6);
+
+    const roma = [
+      [12.4, 41.84],
+      [12.6, 41.84],
+      [12.6, 41.96],
+      [12.4, 41.96],
+      [12.4, 41.84],
+    ];
+    const multi: Geometry = { type: "MultiPolygon", coordinates: [[outer], [roma]] };
+    // Milano's outer ring plus the Roma box, 221,201,620.853 m² (pyproj).
+    assertClose(measureArea(multi), 534110952.7957611, 1e-3);
+    // 70,881.320 m + 59,849.237 m (pyproj).
+    assertClose(measurePerimeter(multi), 70881.3203196475 + 59849.237104673055, 1e-6);
+  });
+
+  it("measures a line with several vertices on WGS 84", () => {
+    // Milano, Bologna, Firenze, Roma (pyproj).
+    const route: Geometry = {
+      type: "LineString",
+      coordinates: [
+        [9.19, 45.4642],
+        [11.3426, 44.4949],
+        [11.2558, 43.7696],
+        [12.4964, 41.9028],
+      ],
+    };
+    assertClose(measureLength(route), 512802.9859581366, 1e-6);
+  });
+
+  it("returns 0 for empty and degenerate geometries", () => {
+    assert.equal(measureLength({ type: "LineString", coordinates: [] }), 0);
+    assert.equal(measureLength({ type: "LineString", coordinates: [[9.19, 45.4642]] }), 0);
+    assert.equal(measureArea({ type: "Polygon", coordinates: [] }), 0);
+    assert.equal(measurePerimeter({ type: "Polygon", coordinates: [] }), 0);
+    // A "polygon" whose ring is only two vertices encloses nothing.
+    const sliver: Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [0, 0],
+        ],
+      ],
+    };
+    assert.equal(measureArea(sliver), 0);
+    assert.equal(measureArea({ type: "MultiPolygon", coordinates: [] }), 0);
   });
 
   it("returns 0 area/perimeter for non-polygon geometries", () => {
@@ -154,8 +236,8 @@ describe("geometry-measure", () => {
       Math.abs(crossingArea - equivArea) / equivArea < 1e-6,
       `crossing ${crossingArea} vs equivalent ${equivArea}`,
     );
-    // Sanity: this is a small (~25k km²) box, not a near-global one.
-    assert.ok(crossingArea < 30000, `unexpectedly large area ${crossingArea}`);
+    // A small box, not a near-global one: 24,619.444 km² (pyproj).
+    assertClose(crossingArea, 24619.443759277203, 1e-6);
   });
 
   it("throws on an unrecognized unit so a typo surfaces as an error", () => {
@@ -192,12 +274,26 @@ describe("geometry-measure", () => {
     );
   });
 
-  it("honors the active ellipsoid's radius", () => {
-    const earth = measureLength(EQUATOR_SEGMENT, "meters");
+  it("measures on the active body's ellipsoid", () => {
     setActiveEllipsoidId("moon");
-    const moon = measureLength(EQUATOR_SEGMENT, "meters");
-    // The Moon's radius is roughly 27% of Earth's, so the same span is shorter.
-    assert.ok(moon < earth * 0.3, `moon ${moon} vs earth ${earth}`);
+    // The Moon is a sphere of 1,737,400 m: Geod(a=1737400, f=0) in pyproj.
+    assertClose(measureLength(EQUATOR_SEGMENT), 30323.35042414948, 1e-6);
+    setActiveEllipsoidId("mars");
+    // Mars (IAU 2000) is oblate: Geod(a=3396190, rf=169.894447) in pyproj.
+    const box: Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 45],
+          [1, 45],
+          [1, 46],
+          [0, 46],
+          [0, 45],
+        ],
+      ],
+    };
+    assertClose(measureArea(box), 2462993724.759857, 1e-3);
+    assertClose(measurePerimeter(box), 201552.9805491792, 1e-6);
   });
 
   it("detects the set of present geometry families", () => {
@@ -269,6 +365,6 @@ describe("geometry helpers in the field calculator", () => {
     assert.ok(result && "patch" in result);
     const written = (result.patch.geojson as FeatureCollection).features[0].properties
       ?.len_km as number;
-    assert.ok(Math.abs(written - 111.19) < 0.2, `got ${written}`);
+    assertClose(written, 111.31949079327357, 1e-9);
   });
 });

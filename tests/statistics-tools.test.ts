@@ -455,6 +455,45 @@ describe("average nearest neighbor", () => {
       loggedNumber(run(averageNearestNeighborTool, flat, {}).messages, "NN ratio:"),
     );
   });
+
+  it("measures distances and the study area on the WGS 84 ellipsoid", () => {
+    // The corners of a 1° box at 45–46° N. Expected values computed with
+    // GeographicLib through pyproj 3.8.0: Geod(ellps="WGS84").inv(...) for the
+    // nearest-neighbour distances (the east-west sides) and
+    // .polygon_area_perimeter(...) for the box, 8,686,379,301.740 m².
+    const corners = pointLayer([
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+      [10, 46, {}],
+    ]);
+    const { messages } = run(averageNearestNeighborTool, corners, {});
+    assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
+    assert.equal(loggedNumber(messages, "Expected mean distance:"), 23300.19);
+    assert.equal(loggedNumber(messages, "NN ratio:"), 3.3542);
+  });
+});
+
+describe("distance-band weights", () => {
+  it("compares the band with the WGS 84 distance", () => {
+    // Torino–Trieste is 480.833 km on WGS 84 (GeographicLib via pyproj 3.8.0)
+    // and 479.510 km on the sphere of mean radius; Palermo is over 800 km from
+    // both. So a 480 km band leaves every point without a neighbour.
+    const layer = pointLayer([
+      [7.6869, 45.0703, { v: 1 }],
+      [13.77, 45.65, { v: 2 }],
+      [13.3615, 38.1157, { v: 3 }],
+    ]);
+    const params = (threshold: number) => ({
+      weightsType: "distance",
+      threshold,
+      permutations: 99,
+    });
+    const narrow = run(globalMoransITool, layer, params(480)).messages;
+    assert.ok(narrow.some((m) => m.includes("no feature has any neighbor")));
+    const wide = run(globalMoransITool, layer, params(481)).messages;
+    assert.ok(wide.some((m) => m.includes("Moran's I:")));
+  });
 });
 
 describe("kernel density", () => {

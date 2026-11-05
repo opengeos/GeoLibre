@@ -59,7 +59,8 @@ describe("presentation annotations", () => {
     assert.ok(line);
     assert.equal(line.properties.chapterId, "chapter-a");
     assert.equal(line.properties.label, "Equator");
-    assert.ok(Math.abs(line.properties.distanceMeters! - 111195) < 100);
+    // 1° of the equator on WGS 84, 111,319.491 m (GeographicLib via pyproj).
+    assert.ok(Math.abs(line.properties.distanceMeters! - 111319.491) < 0.001);
     assert.match(presentationMeasurementLabel(line, "en"), /111\.\d+ km/);
     const collection = presentationAnnotationsCollection([line]);
     collection.features[0].properties.label = "Changed in project";
@@ -81,7 +82,8 @@ describe("presentation annotations", () => {
       "area-1",
     );
     assert.ok(area);
-    assert.ok(area.properties.areaSquareMeters! > 1_000_000);
+    // 1,230,907.205 m² on WGS 84 (GeographicLib via pyproj).
+    assert.ok(Math.abs(area.properties.areaSquareMeters! - 1230907.205) < 0.001);
     assert.match(presentationMeasurementLabel(area, "en"), /km²$/);
     const point = createPresentationAnnotation("text", [[117, 39]], "b", "Site", "point-1");
     assert.ok(point);

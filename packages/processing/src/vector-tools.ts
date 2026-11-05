@@ -39,11 +39,11 @@ import {
   decodePolylineDetailed,
   earthLengthToBody,
   encodePolyline,
-  getActiveBodyRadiusRatio,
   horizontalBbox,
   layerJoinKey,
   type GeoLibreLayer,
 } from "@geolibre/core/worker-safe";
+import { geodesicDistance } from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
@@ -2608,6 +2608,12 @@ export const voronoiTool: ProcessingAlgorithm = {
 /** Linear/angular units shared by the sector and proximity tools. */
 const LINEAR_UNITS = new Set(["kilometers", "meters", "miles"]);
 type LinearUnit = "kilometers" | "meters" | "miles";
+/** Metres in one of each {@link LINEAR_UNITS} unit (the international mile). */
+const METERS_PER_LINEAR_UNIT: Record<LinearUnit, number> = {
+  kilometers: 1000,
+  meters: 1,
+  miles: 1609.344,
+};
 
 /**
  * Read a feature property as a finite number, or null when it is missing or
@@ -2914,15 +2920,12 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
     const segments: Feature<LineString>[] = [];
-    // turf measures on Earth; rescale to this body's ground distance
-    // (GeoLibre#1128) so the derived speeds are correct off Earth too. Read the
-    // ratio once rather than per segment.
-    const bodyRatio = getActiveBodyRadiusRatio();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        const meters = distance(a.coord, b.coord, { units: "meters" }) * bodyRatio;
+        // On the active body's ellipsoid, so speeds are correct off Earth too.
+        const meters = geodesicDistance(a.coord, b.coord);
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -3062,10 +3065,9 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const stops: Feature<Point>[] = [];
-    // Convert the threshold into turf's Earth-based units once, rather than
-    // converting every measured distance inside the O(n²) scan below
-    // (GeoLibre#1128). Equivalent comparison, no per-iteration ellipsoid lookup.
-    const maxTurfDistance = bodyLengthToEarth(maxDistance);
+    // Convert the threshold to metres once, rather than converting every
+    // measured distance inside the O(n²) scan below.
+    const maxMeters = maxDistance * METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -3078,12 +3080,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
         // absorbed into a single stop.
-        while (
-          j < pts.length &&
-          distance(pts[i].coord, pts[j].coord, {
-            units: distanceUnits as LinearUnit,
-          }) <= maxTurfDistance
-        ) {
+        while (j < pts.length && geodesicDistance(pts[i].coord, pts[j].coord) <= maxMeters) {
           j += 1;
         }
         const run = pts.slice(i, j);
@@ -3297,21 +3294,19 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // Sort by time so the inner loop can stop once the time gap is exceeded.
     timed.sort((a, b) => a.time - b.time);
     const pairs: Feature<LineString>[] = [];
-    // As in stop detection: convert the threshold into turf's Earth-based units
-    // once so the O(n²) candidate scan does no per-iteration conversion
-    // (GeoLibre#1128). Only the pairs that survive the test are converted back
-    // to this body's ground distance for the reported `distance` property.
-    const maxTurfDistance = bodyLengthToEarth(maxDistance);
+    // As in stop detection: compare in metres so the O(n²) candidate scan does
+    // no per-iteration conversion. Only the pairs that survive the test are
+    // converted back to the chosen units for the reported `distance` property.
+    const metersPerUnit = METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
+    const maxMeters = maxDistance * metersPerUnit;
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        const turfDistance = distance(timed[i].coord, timed[j].coord, {
-          units: distanceUnits as LinearUnit,
-        });
-        if (turfDistance > maxTurfDistance) continue;
-        const dist = earthLengthToBody(turfDistance);
+        const meters = geodesicDistance(timed[i].coord, timed[j].coord);
+        if (meters > maxMeters) continue;
+        const dist = meters / metersPerUnit;
         pairs.push({
           type: "Feature",
           properties: {

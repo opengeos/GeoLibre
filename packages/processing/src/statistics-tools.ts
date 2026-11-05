@@ -1,10 +1,14 @@
-import area from "@turf/area";
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
-import { earthAreaToBody, getActiveMeanRadiusMeters, horizontalBbox } from "@geolibre/core";
+import {
+  geodesicDistance,
+  geodesicRingArea,
+  getActiveMeanRadiusMeters,
+  horizontalBbox,
+} from "@geolibre/core";
 import type {
   FieldDirection,
   FieldNormalization,
@@ -31,8 +35,8 @@ const MAX_WEIGHTS_FEATURES = 5000;
 const MAX_KDE_CELLS = 40000;
 /**
  * Mean radius of the project's active body in kilometres, for the haversine
- * helper. Read lazily so spatial-stats distances (KDE bandwidth, distance-band
- * weights) are correct on the Moon/Mars, not just Earth.
+ * helper. Read lazily so the KDE bandwidth distances are correct on the
+ * Moon/Mars, not just Earth.
  */
 function activeMeanRadiusKm(): number {
   return getActiveMeanRadiusMeters() / 1000;
@@ -197,7 +201,7 @@ function buildNeighbors(
     const distances: { j: number; d: number }[] = [];
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
-      const d = haversineKm(coords[i][0], coords[i][1], coords[j][0], coords[j][1]);
+      const d = geodesicDistance(coords[i], coords[j]) / 1000;
       distances.push({ j, d });
     }
     if (type === "distance") {
@@ -643,10 +647,10 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       let nearest = Infinity;
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
-        const d = haversineKm(coords[i][0], coords[i][1], coords[j][0], coords[j][1]);
+        const d = geodesicDistance(coords[i], coords[j]);
         if (d < nearest) nearest = d;
       }
-      sumNn += nearest * 1000;
+      sumNn += nearest;
     }
     const observedMean = sumNn / n;
 
@@ -657,19 +661,14 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       return;
     }
     const [west, south, east, north] = extentBox;
-    const extent = turfPolygon([
-      [
-        [west, south],
-        [east, south],
-        [east, north],
-        [west, north],
-        [west, south],
-      ],
+    // Measured on the active body's ellipsoid, like the distances above, so the
+    // NN ratio is meaningful off Earth too (GeoLibre#1128).
+    const studyArea = geodesicRingArea([
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
     ]);
-    // turf's area is Earth-radius based, while the nearest-neighbour distances
-    // above already use the active body's radius. Rescale so the two agree and
-    // the NN ratio is meaningful off Earth (GeoLibre#1128); a no-op on Earth.
-    const studyArea = earthAreaToBody(area(extent));
     if (!(studyArea > 0)) {
       ctx.log("Error: the point extent has zero area (all points coincide).");
       return;

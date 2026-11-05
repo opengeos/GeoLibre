@@ -5,6 +5,7 @@ export * from "./marker-shape";
 export * from "./hyperlink";
 export * from "./photo";
 export * from "./ellipsoids";
+export * from "./geodesic";
 export * from "./regional-basemaps";
 export * from "./cesium-imagery";
 export * from "./arcgis-projection";
