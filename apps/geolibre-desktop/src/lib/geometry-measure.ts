@@ -152,12 +152,13 @@ function areaFactor(unit: AreaUnit): number {
 }
 
 /**
- * The positions, checked as lon/lat. A latitude beyond ±90° has no geodesic
+ * Checks that every position is a lon/lat and returns them unchanged, for
+ * chaining. A latitude beyond ±90° has no geodesic
  * (GeographicLib returns NaN), so it throws: in a Field Calculator expression
  * that becomes a per-feature error, a null cell counted in `errors`, like an
  * unknown unit, rather than a NaN in the column.
  */
-function lonLatPositions(positions: Position[]): Position[] {
+function assertLonLat(positions: Position[]): Position[] {
   for (const position of positions) {
     if (!isLonLat(position)) {
       throw new Error(
@@ -175,9 +176,9 @@ function lonLatPositions(positions: Position[]): Position[] {
  */
 function polygonAreaMeters(rings: Position[][]): number {
   if (rings.length === 0) return 0;
-  let area = geodesicRingArea(lonLatPositions(rings[0]));
+  let area = geodesicRingArea(assertLonLat(rings[0]));
   for (let i = 1; i < rings.length; i += 1) {
-    area -= geodesicRingArea(lonLatPositions(rings[i]));
+    area -= geodesicRingArea(assertLonLat(rings[i]));
   }
   return Math.max(0, area);
 }
@@ -194,7 +195,7 @@ function polygonPerimeterMeters(rings: Position[][]): number {
     const last = ring.at(-1);
     const isClosed = !!last && first[0] === last[0] && first[1] === last[1];
     const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
-    total += geodesicLength(lonLatPositions(closed));
+    total += geodesicLength(assertLonLat(closed));
   }
   return total;
 }
@@ -216,10 +217,10 @@ export function measureLength(
 function lengthMeters(geometry: Geometry): number {
   switch (geometry.type) {
     case "LineString":
-      return geodesicLength(lonLatPositions(geometry.coordinates));
+      return geodesicLength(assertLonLat(geometry.coordinates));
     case "MultiLineString":
       return geometry.coordinates.reduce(
-        (sum, line) => sum + geodesicLength(lonLatPositions(line)),
+        (sum, line) => sum + geodesicLength(assertLonLat(line)),
         0,
       );
     case "GeometryCollection":

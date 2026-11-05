@@ -122,6 +122,21 @@ describe("geodesicRingArea", () => {
     assertClose(geodesicRingArea([...aroundPole].reverse()), 624537055980, 1e-3);
   });
 
+  it("measures a ring enclosing more than half the body as its smaller side", () => {
+    // A ring along 10°S, one vertex per degree, encloses the northern ~59 % of
+    // the ellipsoid. GeographicLib reduces the signed area to at most half the
+    // body, so the ring is measured as the southern ~41 % on the other side; the
+    // cap north of it is the zone area from 10°S to the pole.
+    const along10S: Position[] = Array.from({ length: 360 }, (_, i) => [i - 180, -10]);
+    const whole = latLonBoxArea(-180, -90, 180, 90);
+    const northOf10S = latLonBoxArea(-180, -10, 180, 90);
+    assert.ok(northOf10S > whole / 2);
+    const area = geodesicRingArea(along10S);
+    assert.ok(area < whole / 2);
+    // One-degree geodesic segments bulge slightly towards the pole, hence 1e-4.
+    assertClose(area / (whole - northOf10S), 1, 1e-4);
+  });
+
   it("is zero for degenerate rings", () => {
     assert.equal(geodesicRingArea([]), 0);
     assert.equal(geodesicRingArea([TORINO, TRIESTE]), 0);
