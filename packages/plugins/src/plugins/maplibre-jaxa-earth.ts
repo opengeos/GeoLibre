@@ -354,6 +354,8 @@ function buildPanel(container: HTMLElement): () => void {
   let selection = 0;
   /** The editor control that last had focus, so a rebuild can hand focus back. */
   let focusKey: string | null = null;
+  /** A rebuild could not hand focus back (its control was disabled); the next one should. */
+  let restorePending = false;
   const keyed = <T extends HTMLElement>(node: T, key: string): T => {
     node.dataset.focusKey = key;
     return node;
@@ -421,11 +423,11 @@ function buildPanel(container: HTMLElement): () => void {
       optgroup.label = tr("recommendedGroup", "Recommended: {{group}}", { group: group.title });
       for (const id of ids) {
         const dataset = datasetById(id);
-        if (!dataset) continue;
+        if (!dataset || listed.has(id)) continue;
         optgroup.append(option(dataset));
         listed.add(id);
       }
-      datasetSelect.append(optgroup);
+      if (optgroup.children.length > 0) datasetSelect.append(optgroup);
     }
     const rest = catalog.datasets
       .filter((dataset) => matches.has(dataset.id) && !listed.has(dataset.id))
@@ -618,7 +620,8 @@ function buildPanel(container: HTMLElement): () => void {
       state.colorMapped = sample.photometricInterpretation === 1;
       const range = state.colorMapped ? percentileRange(sample.data) : null;
       // A band with its own colors ignores the range; any valid one will do.
-      [state.min, state.max] = range ?? [0, 1];
+      // A measured band with no values gets none, so Add waits for a hand-set range.
+      [state.min, state.max] = range ?? (state.colorMapped ? [null, null] : [0, 1]);
       state.busy = false;
       setStatus(
         range || !state.colorMapped
@@ -629,7 +632,8 @@ function buildPanel(container: HTMLElement): () => void {
     } catch (error) {
       if (disposed || token !== selection) return;
       state.busy = false;
-      if (state.min === null || state.max === null) [state.min, state.max] = [0, 1];
+      // No made-up range: Add stays disabled until Auto succeeds or the user
+      // sets Min and Max.
       setStatus(
         tr("sampleFailed", "Could not read a sample of {{name}}: {{message}}", {
           name: dataset.title,
@@ -683,9 +687,18 @@ function buildPanel(container: HTMLElement): () => void {
     editor.replaceChildren();
     buildEditor();
     if (!focusKey) return;
-    const lost = hadFocus || !document.activeElement || document.activeElement === document.body;
+    // Focus left on <body> is reclaimed only when a rebuild dropped it there
+    // (a stepper disabled mid-step), not when the user clicked blank space.
+    const dropped =
+      restorePending && (!document.activeElement || document.activeElement === document.body);
+    if (!hadFocus && !dropped) {
+      restorePending = false;
+      return;
+    }
     const target = editor.querySelector<HTMLElement>(`[data-focus-key="${focusKey}"]`);
-    if (lost && target && !(target as HTMLButtonElement).disabled) target.focus();
+    const focusable = target && !(target as HTMLButtonElement).disabled;
+    if (focusable) target.focus();
+    restorePending = !focusable;
   };
 
   const buildEditor = (): void => {
