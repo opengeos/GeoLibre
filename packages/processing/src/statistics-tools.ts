@@ -216,6 +216,8 @@ export function buildNeighbors(
   const { min, max } = bounds;
   const thresholdM = thresholdKm * 1000;
   const angles = new Float64Array(n);
+  // One scratch buffer for the KNN upper bounds, reused by every row.
+  const uppers = new Float64Array(Math.max(0, n - 1));
   const neighbors: number[][] = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) angles[j] = j === i ? 0 : centralAngle(coords[i], coords[j]);
@@ -231,7 +233,6 @@ export function buildNeighbors(
     }
     // The k nearest are all within the k-th smallest upper bound, so only the
     // points whose lower bound reaches it need their geodesic distance.
-    const uppers = new Float64Array(n - 1);
     for (let j = 0, u = 0; j < n; j++) if (j !== i) uppers[u++] = angles[j] * max;
     uppers.sort();
     const cutoff = uppers[Math.min(k, n - 1) - 1];

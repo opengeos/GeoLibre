@@ -1,7 +1,9 @@
 /**
  * Geodesic length, perimeter, and area of GeoJSON geometries for the attribute
- * table's Field Calculator. These mirror the units the Measure tool offers so a
- * "compute Area in hectares" column and a measured area agree.
+ * table's Field Calculator. They offer the same units as the Measure tool. The
+ * Measure tool still measures on a sphere until it moves to the ellipsoid
+ * (GeoLibre#3267, step 4), so until then a `$area` column and a measured area
+ * differ by up to about 0.3 %.
  *
  * Lengths are summed geodesic distances between consecutive vertices and areas
  * are geodesic polygon areas, both on the active body's ellipsoid (WGS 84 on
