@@ -549,14 +549,8 @@ fn encode_reserved_filename_chars(name: &str) -> String {
 
 static WRITE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn write_file_to_folder_in_dir(
-    folder: &Path,
-    file_name: &str,
-    data: &[u8],
-) -> Result<WriteFileResult, String> {
-    if !folder.is_dir() {
-        return Err("The chosen folder does not exist or is no longer accessible.".to_string());
-    }
+/// A file or folder name that is safe to create inside a picked folder.
+fn checked_name(file_name: &str) -> Result<String, String> {
     let raw = file_name.rsplit(['/', '\\']).next().unwrap_or("");
     let stripped = raw.trim().trim_start_matches('.');
     if stripped.is_empty() {
@@ -609,6 +603,35 @@ fn write_file_to_folder_in_dir(
     if sanitized.chars().count() > MAX_FILE_NAME_CHARS {
         return Err("Refusing to write: file name exceeds maximum length.".to_string());
     }
+    Ok(sanitized)
+}
+
+/// The folder `name` directly inside `folder`, made if needed. A symlink or a
+/// file already at that name is refused rather than followed or replaced.
+fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
+    if !folder.is_dir() {
+        return Err("The chosen folder does not exist or is no longer accessible.".to_string());
+    }
+    let dir = folder.join(checked_name(name)?);
+    match dir.symlink_metadata() {
+        Ok(meta) if meta.is_dir() => Ok(dir),
+        Ok(_) => Err("Refusing to write: subfolder name is taken by a file or a symlink.".into()),
+        Err(_) => fs::create_dir(&dir)
+            .or_else(|error| if dir.is_dir() { Ok(()) } else { Err(error) })
+            .map(|()| dir)
+            .map_err(|error| format!("Could not make the subfolder: {error}")),
+    }
+}
+
+fn write_file_to_folder_in_dir(
+    folder: &Path,
+    file_name: &str,
+    data: &[u8],
+) -> Result<WriteFileResult, String> {
+    if !folder.is_dir() {
+        return Err("The chosen folder does not exist or is no longer accessible.".to_string());
+    }
+    let sanitized = checked_name(file_name)?;
     let destination = folder.join(&sanitized);
     if destination.parent() != Some(folder) {
         return Err("Refusing to write: file name resolves outside the picked folder.".into());
@@ -717,7 +740,8 @@ fn write_file_to_folder_core(
 ///
 /// The file arrives as the raw request body and its folder and name as the
 /// `x-folder-id` and `x-file-name` headers, so a large file never passes through
-/// JSON on the main thread.
+/// JSON on the main thread. An `x-subfolder` header writes into that folder
+/// inside the picked one instead, made if needed.
 #[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn write_file_to_folder(
@@ -726,6 +750,11 @@ pub(crate) async fn write_file_to_folder(
 ) -> Result<WriteFileResult, String> {
     let folder_id = decoded_header(request.headers(), "x-folder-id")?;
     let file_name = decoded_header(request.headers(), "x-file-name")?;
+    let subfolder = request
+        .headers()
+        .contains_key("x-subfolder")
+        .then(|| decoded_header(request.headers(), "x-subfolder"))
+        .transpose()?;
     let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
         return Err("write_file_to_folder expects a raw request body.".to_string());
     };
@@ -737,8 +766,12 @@ pub(crate) async fn write_file_to_folder(
             .cloned()
             .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
     };
-    tauri::async_runtime::spawn_blocking(move || {
-        write_file_to_folder_in_dir(&folder, &file_name, &data)
+    tauri::async_runtime::spawn_blocking(move || -> Result<WriteFileResult, String> {
+        let target = match subfolder {
+            Some(name) => subfolder_in(&folder, &name)?,
+            None => folder,
+        };
+        write_file_to_folder_in_dir(&target, &file_name, &data)
     })
     .await
     .map_err(|error| format!("Write task failed: {error}"))?
@@ -793,6 +826,23 @@ mod tests {
         headers.insert("x-file-name", HeaderValue::from_static("%E6%98%A5%20map.geojson"));
         assert_eq!(decoded_header(&headers, "x-file-name").unwrap(), "\u{6625} map.geojson");
         assert!(decoded_header(&headers, "x-folder-id").is_err());
+    }
+
+    #[test]
+    fn subfolder_is_one_level_down_and_reused() {
+        let dir = std::env::temp_dir().join(format!("geolibre-sub-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let sub = subfolder_in(&dir, "run-1").unwrap();
+        assert_eq!(sub, dir.join("run-1"));
+        assert_eq!(subfolder_in(&dir, "run-1").unwrap(), sub);
+        write_file_to_folder_in_dir(&sub, "a.part", b"x").unwrap();
+        assert_eq!(fs::read(sub.join("a.part")).unwrap(), b"x");
+        assert!(subfolder_in(&dir, "..").is_err());
+        assert!(subfolder_in(&dir, "CON").is_err());
+        fs::write(dir.join("taken"), b"x").unwrap();
+        assert!(subfolder_in(&dir, "taken").is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

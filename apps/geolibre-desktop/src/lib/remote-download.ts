@@ -154,8 +154,9 @@ export function createWriteFileToFolder(
   folderId: string,
   fileName: string,
   data: string | Uint8Array | ArrayBuffer | Blob,
+  options?: { subfolder?: string },
 ) => Promise<GeoLibreWriteFileResult> {
-  return async (folderId, fileName, data) => {
+  return async (folderId, fileName, data, options) => {
     if (!folderId || typeof folderId !== "string") {
       throw new TypeError("writeFileToFolder requires a valid folderId from pickDownloadFolder.");
     }
@@ -168,6 +169,7 @@ export function createWriteFileToFolder(
       headers: {
         "x-folder-id": encodeURIComponent(folderId),
         "x-file-name": encodeURIComponent(fileName),
+        ...(options?.subfolder ? { "x-subfolder": encodeURIComponent(options.subfolder) } : {}),
       },
     });
   };

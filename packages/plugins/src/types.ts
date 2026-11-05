@@ -1104,12 +1104,15 @@ export interface GeoLibreAppAPI {
    * @param folderId - The opaque id from {@link pickDownloadFolder}.
    * @param fileName - File name to write inside the folder.
    * @param data - The file content: a string, Uint8Array, ArrayBuffer, or Blob (up to 50 MiB).
+   * @param options - `subfolder`: write into this folder inside the picked one,
+   *   made if needed. One level only; its name is checked like `fileName`.
    * @returns The written file's path and size.
    */
   writeFileToFolder?: (
     folderId: string,
     fileName: string,
     data: string | Uint8Array | ArrayBuffer | Blob,
+    options?: { subfolder?: string },
   ) => Promise<GeoLibreWriteFileResult>;
   /**
    * Resolve a fetchable URL for an asset shipped alongside an external

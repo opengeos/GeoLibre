@@ -191,6 +191,10 @@ describe("native write file to folder glue", () => {
 
     await writer("folder-1", "春 map.geojson", "hello");
     assert.equal(calls[1].headers?.["x-file-name"], "%E6%98%A5%20map.geojson");
+    assert.equal("x-subfolder" in (calls[1].headers ?? {}), false);
+
+    await writer("folder-1", "test.geojson", "hello", { subfolder: "run 春" });
+    assert.equal(calls[2].headers?.["x-subfolder"], "run%20%E6%98%A5");
   });
 
   it("rejects when folderId or fileName is missing or invalid", async () => {
