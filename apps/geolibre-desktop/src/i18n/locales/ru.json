@@ -3429,7 +3429,6 @@
         "openrouterKey": "sk-or-…",
         "vercelKey": "Ключ AI Gateway",
         "ollamaBaseUrl": "http://localhost:11434",
-        "ollamaModel": "llama3.2",
         "awsAccessKey": "AKIA…",
         "awsSecretKey": "wJalrXUtnFEMI…",
         "awsRegion": "us-east-1",

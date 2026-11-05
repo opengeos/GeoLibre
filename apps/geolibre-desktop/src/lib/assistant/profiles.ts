@@ -11,6 +11,34 @@ import {
 } from "./provider";
 import { PROVIDER_FIELDS } from "./provider-fields";
 
+/**
+ * The env var a provider's profile used to carry its model id in, beside the
+ * model selector. A profile now keeps its model only in `modelId`, so a value
+ * saved under this key is folded into `modelId` when settings load.
+ */
+const LEGACY_PROFILE_MODEL_FIELD: Partial<Record<AssistantProviderId, string>> = {
+  ollama: "OLLAMA_MODEL",
+};
+
+/**
+ * Move a model id saved in a profile's credential fields into its `modelId`.
+ *
+ * Ollama profiles once showed an optional `OLLAMA_MODEL` text field next to the
+ * model selector, but the selector's `modelId` always won when the assistant
+ * resolved its config, so a model typed into the field was silently ignored. A
+ * non-blank value there is what the user meant to run, so it replaces `modelId`;
+ * the field is dropped either way so the profile holds a single model id.
+ *
+ * @param profile A normalized profile.
+ * @returns The same profile when there is nothing to fold, else an updated copy.
+ */
+export function foldLegacyProfileModelField(profile: AssistantProfile): AssistantProfile {
+  const key = LEGACY_PROFILE_MODEL_FIELD[profile.provider];
+  if (!key || !(key in profile.fieldValues)) return profile;
+  const { [key]: legacyModel, ...fieldValues } = profile.fieldValues;
+  return { ...profile, modelId: legacyModel?.trim() || profile.modelId, fieldValues };
+}
+
 /** Generate a unique profile id (no UUID dependency). */
 function generateProfileId(): string {
   return `prof_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -73,6 +101,9 @@ export function migrateLegacyAiEnv(
   for (const provider of ASSISTANT_PROVIDER_IDS) {
     const fields = PROVIDER_FIELDS[provider] as readonly { envKey: string }[];
     const fieldKeys = new Set<string>(fields.map((f) => f.envKey));
+    // Carry a legacy model override along so the fold below can apply it.
+    const legacyModelKey = LEGACY_PROFILE_MODEL_FIELD[provider];
+    if (legacyModelKey) fieldKeys.add(legacyModelKey);
     const fieldValues: Record<string, string> = {};
 
     for (const [key, value] of entries) {
@@ -93,13 +124,15 @@ export function migrateLegacyAiEnv(
     );
     if (isDuplicate) continue;
 
-    result.push({
-      id: generateProfileId(),
-      name: PROVIDER_LABELS[provider],
-      provider,
-      modelId: defaultModelFor(provider),
-      fieldValues,
-    });
+    result.push(
+      foldLegacyProfileModelField({
+        id: generateProfileId(),
+        name: PROVIDER_LABELS[provider],
+        provider,
+        modelId: defaultModelFor(provider),
+        fieldValues,
+      }),
+    );
   }
 
   return result;

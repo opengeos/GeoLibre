@@ -85,3 +85,39 @@ export async function discoverOllamaModels(
     ),
   ].sort((a, b) => a.localeCompare(b));
 }
+
+/**
+ * Whether Ollama would serve `modelId` from the `installed` list. Ollama reads
+ * an untagged name as its `:latest` tag, so `llama3.2` matches an installed
+ * `llama3.2:latest` (and the reverse).
+ */
+export function isInstalledOllamaModel(modelId: string, installed: readonly string[]): boolean {
+  const id = modelId.trim();
+  if (!id) return false;
+  const withTag = (name: string) => (name.includes(":") ? name : `${name}:latest`);
+  const wanted = withTag(id);
+  return installed.some((name) => withTag(name) === wanted);
+}
+
+/**
+ * The model a profile should use after discovery returns `installed`.
+ *
+ * A blank model or one of the built-in presets (a guess at what might be
+ * pulled) that the server does not have is swapped for the first installed
+ * model. A model the user typed is kept even when discovery does not list it:
+ * replacing it would silently discard their choice.
+ *
+ * @param current The profile's current model id.
+ * @param installed The model ids the Ollama server reported.
+ * @param presets The provider's built-in preset ids.
+ * @returns The model id to keep or switch to.
+ */
+export function reconcileOllamaModel(
+  current: string,
+  installed: readonly string[],
+  presets: readonly string[],
+): string {
+  if (!installed.length || isInstalledOllamaModel(current, installed)) return current;
+  const id = current.trim();
+  return !id || presets.includes(id) ? installed[0] : current;
+}

@@ -3240,7 +3240,6 @@
         "openrouterKey": "sk-or-…",
         "vercelKey": "Khóa AI Gateway",
         "ollamaBaseUrl": "http://localhost:11434",
-        "ollamaModel": "llama3.2",
         "awsAccessKey": "AKIA…",
         "awsSecretKey": "wJalrXUtnFEMI…",
         "awsRegion": "chúng tôi-đông-1",
