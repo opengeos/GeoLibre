@@ -1,16 +1,14 @@
 /**
  * Geodesic length, perimeter, and area of GeoJSON geometries for the attribute
- * table's Field Calculator. These mirror the units the Measure tool offers so a
- * "compute Area in hectares" column and a measured area agree.
+ * table's Field Calculator, in the same units as the Measure tool.
  *
- * Distances use the great-circle (haversine) length between consecutive
- * vertices; areas use the spherical-excess formula. Both are evaluated on a
- * sphere whose radius is the active body's mean radius (Earth / Moon / Mars),
- * read from `@geolibre/core`, so measurements stay consistent with the rest of
- * the app when a non-Earth ellipsoid is active. Coordinates are assumed to be
- * lon/lat degrees (EPSG:4326), which is what every layer in the store carries.
+ * Lengths are summed geodesic distances between consecutive vertices and areas
+ * are geodesic polygon areas, both on the active body's ellipsoid (WGS 84 on
+ * Earth, the body's own figure on the Moon or Mars) through the helpers in
+ * `@geolibre/core`. Coordinates are assumed to be lon/lat degrees (EPSG:4326),
+ * which is what every layer in the store carries.
  */
-import { getActiveMeanRadiusMeters } from "@geolibre/core";
+import { geodesicLength, geodesicRingArea, isLonLat } from "@geolibre/core";
 import type { Feature, Geometry, Position } from "geojson";
 
 /** Length units, matching the Measure tool's `DistanceUnit` set. */
@@ -152,59 +150,41 @@ function areaFactor(unit: AreaUnit): number {
   return factor;
 }
 
-const DEG_TO_RAD = Math.PI / 180;
-
-/** Great-circle distance in meters between two [lon, lat] positions. */
-function haversineMeters(a: Position, b: Position, radius: number): number {
-  const lat1 = a[1] * DEG_TO_RAD;
-  const lat2 = b[1] * DEG_TO_RAD;
-  const dLat = lat2 - lat1;
-  const dLon = (b[0] - a[0]) * DEG_TO_RAD;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * radius * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** Summed great-circle length in meters along a run of positions. */
-function lineLengthMeters(coords: Position[], radius: number): number {
-  let total = 0;
-  for (let i = 1; i < coords.length; i += 1) {
-    total += haversineMeters(coords[i - 1], coords[i], radius);
+/**
+ * Checks that every position is a lon/lat and returns them unchanged, for
+ * chaining. A latitude beyond ±90° has no geodesic
+ * (GeographicLib returns NaN), so it throws: in a Field Calculator expression
+ * that becomes a per-feature error, a null cell counted in `errors`, like an
+ * unknown unit, rather than a NaN in the column.
+ */
+function assertLonLat(positions: Position[]): Position[] {
+  for (const position of positions) {
+    if (!isLonLat(position)) {
+      throw new Error(
+        `Invalid position [${position[0]}, ${position[1]}]: latitude must be within ±90°`,
+      );
+    }
   }
-  return total;
+  return positions;
 }
 
 /**
- * Spherical area in square meters of a single ring (its coordinates as a closed
- * or open loop). Signed by winding order; callers take the absolute value and
- * subtract holes as needed. The longitude delta is normalized to [-180, 180) so
- * a ring edge that crosses the antimeridian (e.g. 179° → -179°) counts as the
- * short 2° step, not a 358° one, keeping areas correct near ±180°.
+ * Absolute polygon area (outer ring minus holes) in square meters. Each ring is
+ * measured as the smaller side it bounds: a hole enclosing more than half the
+ * body would be measured as its complement and subtracted wrongly. Such holes
+ * are not expected in practice.
  */
-function ringAreaMeters(ring: Position[], radius: number): number {
-  const n = ring.length;
-  if (n < 3) return 0;
-  let total = 0;
-  for (let i = 0; i < n; i += 1) {
-    const p1 = ring[i];
-    const p2 = ring[(i + 1) % n];
-    const dLon = ((p2[0] - p1[0] + 540) % 360) - 180;
-    total += dLon * DEG_TO_RAD * (2 + Math.sin(p1[1] * DEG_TO_RAD) + Math.sin(p2[1] * DEG_TO_RAD));
-  }
-  return (total * radius * radius) / 2;
-}
-
-/** Absolute polygon area (outer ring minus holes) in square meters. */
-function polygonAreaMeters(rings: Position[][], radius: number): number {
+function polygonAreaMeters(rings: Position[][]): number {
   if (rings.length === 0) return 0;
-  let area = Math.abs(ringAreaMeters(rings[0], radius));
+  let area = geodesicRingArea(assertLonLat(rings[0]));
   for (let i = 1; i < rings.length; i += 1) {
-    area -= Math.abs(ringAreaMeters(rings[i], radius));
+    area -= geodesicRingArea(assertLonLat(rings[i]));
   }
   return Math.max(0, area);
 }
 
 /** Summed perimeter in meters of a polygon's rings (outer + holes). */
-function polygonPerimeterMeters(rings: Position[][], radius: number): number {
+function polygonPerimeterMeters(rings: Position[][]): number {
   let total = 0;
   for (const ring of rings) {
     // Close the ring so the final vertex→first vertex segment is counted even
@@ -215,7 +195,7 @@ function polygonPerimeterMeters(rings: Position[][], radius: number): number {
     const last = ring.at(-1);
     const isClosed = !!last && first[0] === last[0] && first[1] === last[1];
     const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
-    total += lineLengthMeters(closed, radius);
+    total += geodesicLength(assertLonLat(closed));
   }
   return total;
 }
@@ -231,17 +211,20 @@ export function measureLength(
 ): number {
   const factor = distanceFactor(unit);
   if (!geometry) return 0;
-  return lengthMeters(geometry, getActiveMeanRadiusMeters()) * factor;
+  return lengthMeters(geometry) * factor;
 }
 
-function lengthMeters(geometry: Geometry, radius: number): number {
+function lengthMeters(geometry: Geometry): number {
   switch (geometry.type) {
     case "LineString":
-      return lineLengthMeters(geometry.coordinates, radius);
+      return geodesicLength(assertLonLat(geometry.coordinates));
     case "MultiLineString":
-      return geometry.coordinates.reduce((sum, line) => sum + lineLengthMeters(line, radius), 0);
+      return geometry.coordinates.reduce(
+        (sum, line) => sum + geodesicLength(assertLonLat(line)),
+        0,
+      );
     case "GeometryCollection":
-      return geometry.geometries.reduce((sum, g) => sum + lengthMeters(g, radius), 0);
+      return geometry.geometries.reduce((sum, g) => sum + lengthMeters(g), 0);
     default:
       return 0;
   }
@@ -257,20 +240,17 @@ export function measurePerimeter(
 ): number {
   const factor = distanceFactor(unit);
   if (!geometry) return 0;
-  return perimeterMeters(geometry, getActiveMeanRadiusMeters()) * factor;
+  return perimeterMeters(geometry) * factor;
 }
 
-function perimeterMeters(geometry: Geometry, radius: number): number {
+function perimeterMeters(geometry: Geometry): number {
   switch (geometry.type) {
     case "Polygon":
-      return polygonPerimeterMeters(geometry.coordinates, radius);
+      return polygonPerimeterMeters(geometry.coordinates);
     case "MultiPolygon":
-      return geometry.coordinates.reduce(
-        (sum, rings) => sum + polygonPerimeterMeters(rings, radius),
-        0,
-      );
+      return geometry.coordinates.reduce((sum, rings) => sum + polygonPerimeterMeters(rings), 0);
     case "GeometryCollection":
-      return geometry.geometries.reduce((sum, g) => sum + perimeterMeters(g, radius), 0);
+      return geometry.geometries.reduce((sum, g) => sum + perimeterMeters(g), 0);
     default:
       return 0;
   }
@@ -286,17 +266,17 @@ export function measureArea(
 ): number {
   const factor = areaFactor(unit);
   if (!geometry) return 0;
-  return areaMeters(geometry, getActiveMeanRadiusMeters()) * factor;
+  return areaMeters(geometry) * factor;
 }
 
-function areaMeters(geometry: Geometry, radius: number): number {
+function areaMeters(geometry: Geometry): number {
   switch (geometry.type) {
     case "Polygon":
-      return polygonAreaMeters(geometry.coordinates, radius);
+      return polygonAreaMeters(geometry.coordinates);
     case "MultiPolygon":
-      return geometry.coordinates.reduce((sum, rings) => sum + polygonAreaMeters(rings, radius), 0);
+      return geometry.coordinates.reduce((sum, rings) => sum + polygonAreaMeters(rings), 0);
     case "GeometryCollection":
-      return geometry.geometries.reduce((sum, g) => sum + areaMeters(g, radius), 0);
+      return geometry.geometries.reduce((sum, g) => sum + areaMeters(g), 0);
     default:
       return 0;
   }

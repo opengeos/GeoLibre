@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import { afterEach, describe, it } from "node:test";
+import {
+  DEFAULT_LAYER_STYLE,
+  geodesicDistance,
+  setActiveEllipsoidId,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import {
   type ProcessingAlgorithm,
   type ResultLayerOptions,
@@ -17,6 +22,10 @@ import {
   kernelDensityTool,
   localMoransITool,
 } from "@geolibre/processing";
+import {
+  buildNeighbors,
+  meanNearestNeighborDistance,
+} from "../packages/processing/src/statistics-tools";
 import type { Feature, FeatureCollection, Point } from "geojson";
 
 /** Build a point layer from [lon, lat, properties] tuples. */
@@ -454,6 +463,193 @@ describe("average nearest neighbor", () => {
       loggedNumber(run(averageNearestNeighborTool, withElevation, {}).messages, "NN ratio:"),
       loggedNumber(run(averageNearestNeighborTool, flat, {}).messages, "NN ratio:"),
     );
+  });
+
+  it("measures distances and the study area on the WGS 84 ellipsoid", () => {
+    // The corners of a 1° box at 45–46° N. Expected values computed with
+    // pyproj 3.8.0: Geod(ellps="WGS84").inv(...) (GeographicLib) for the
+    // nearest-neighbour distances (the east-west sides), and for the box between
+    // the parallels, 8,686,494,956.670 m², its area in the WGS 84 cylindrical
+    // equal-area projection EPSG:6933, where it is a rectangle.
+    const corners = pointLayer([
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+      [10, 46, {}],
+    ]);
+    const { messages } = run(averageNearestNeighborTool, corners, {});
+    assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
+    assert.equal(loggedNumber(messages, "Expected mean distance:"), 23300.34);
+    assert.equal(loggedNumber(messages, "NN ratio:"), 3.3542);
+  });
+
+  it("measures a study area wider than 180° of longitude the long way round", () => {
+    // Same references as above. A ring of geodesics through the four corners
+    // would take the short way round: zero area for the whole globe, and a strip
+    // about 2° wide for -179° to 179°.
+    const globe = run(
+      averageNearestNeighborTool,
+      pointLayer([
+        [-180, -60, {}],
+        [180, 60, {}],
+        [0, 0, {}],
+        [90, 30, {}],
+        [-90, -30, {}],
+      ]),
+      {},
+    ).messages;
+    // Study area 441,233,920,694,280.7 m² (-180..180, -60..60).
+    assert.equal(loggedNumber(globe, "Observed mean distance:"), 7737790.92);
+    assert.equal(loggedNumber(globe, "Expected mean distance:"), 4696987.97);
+    assert.equal(loggedNumber(globe, "NN ratio:"), 1.6474);
+
+    const wide = run(
+      averageNearestNeighborTool,
+      pointLayer([
+        [-179, 10, {}],
+        [179, 20, {}],
+        [0, 15, {}],
+      ]),
+      {},
+    ).messages;
+    // Study area 42,550,157,488,306.9 m² (-179..179, 10..20).
+    assert.equal(loggedNumber(wide, "Observed mean distance:"), 6128459.07);
+    assert.equal(loggedNumber(wide, "Expected mean distance:"), 1883041.81);
+    assert.equal(loggedNumber(wide, "NN ratio:"), 3.2546);
+  });
+
+  it("skips a point whose latitude is beyond the pole", () => {
+    // GeographicLib has no distance to latitude 95°, so the point is left out
+    // like any other unlocatable geometry.
+    const corners: Array<[number, number, Record<string, unknown>]> = [
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+      [10, 46, {}],
+    ];
+    const { messages } = run(
+      averageNearestNeighborTool,
+      pointLayer([...corners, [9.5, 95, {}]]),
+      {},
+    );
+    assert.ok(messages.includes("Average nearest neighbor (n=4):"));
+    assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
+    // The skipped point does not stretch the study area either.
+    const without = run(averageNearestNeighborTool, pointLayer(corners), {});
+    assert.equal(
+      loggedNumber(messages, "Expected mean distance:"),
+      loggedNumber(without.messages, "Expected mean distance:"),
+    );
+  });
+});
+
+describe("average nearest neighbor extent", () => {
+  it("keeps a MultiPoint's full extent and leaves out one with a vertex beyond the pole", () => {
+    const base = pointLayer([
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+    ]);
+    const withMulti = (coordinates: number[][]): GeoLibreLayer => ({
+      ...base,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          ...base.geojson!.features,
+          { type: "Feature", properties: {}, geometry: { type: "MultiPoint", coordinates } },
+        ],
+      },
+    });
+    // A MultiPoint stretching north widens the box beyond its centroid.
+    const near = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 46],
+        [10, 46.01],
+      ]),
+      {},
+    );
+    const far = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 45.6],
+        [10, 47],
+      ]),
+      {},
+    );
+    assert.ok(
+      loggedNumber(far.messages, "Expected mean distance:") >
+        loggedNumber(near.messages, "Expected mean distance:"),
+    );
+    // A MultiPoint with a vertex at 95° cannot be located, so the run is the
+    // one without it.
+    const withPole = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 46],
+        [10, 95],
+      ]),
+      {},
+    );
+    const without = run(averageNearestNeighborTool, base, {});
+    assert.ok(withPole.messages.includes("Average nearest neighbor (n=3):"));
+    // A malformed GeometryCollection is left out instead of failing the tool.
+    const malformed: GeoLibreLayer = {
+      ...base,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          ...base.geojson!.features,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { type: "Feature", properties: {}, geometry: { type: "GeometryCollection" } as any },
+        ],
+      },
+    };
+    const run3 = run(averageNearestNeighborTool, malformed, {});
+    assert.ok(run3.messages.includes("Average nearest neighbor (n=3):"));
+    assert.equal(
+      loggedNumber(withPole.messages, "Expected mean distance:"),
+      loggedNumber(without.messages, "Expected mean distance:"),
+    );
+  });
+});
+
+describe("distance-band weights", () => {
+  it("leaves out a point whose latitude is beyond the pole", () => {
+    const valid: Array<[number, number, Record<string, unknown>]> = [
+      [7.6869, 45.0703, { v: 1 }],
+      [13.77, 45.65, { v: 2 }],
+      [13.3615, 38.1157, { v: 3 }],
+      [12.4964, 41.9028, { v: 5 }],
+    ];
+    const params = { weightsType: "knn", k: 2, permutations: 99 };
+    const withInvalid = run(globalMoransITool, pointLayer([...valid, [10, 120, { v: 9 }]]), params);
+    const without = run(globalMoransITool, pointLayer(valid), params);
+    assert.ok(withInvalid.messages.some((m) => m.includes("(n=4)")));
+    assert.equal(
+      loggedNumber(withInvalid.messages, "Moran's I:"),
+      loggedNumber(without.messages, "Moran's I:"),
+    );
+  });
+
+  it("compares the band with the WGS 84 distance", () => {
+    // Torino–Trieste is 480.833 km on WGS 84 (GeographicLib via pyproj 3.8.0)
+    // and 479.510 km on the sphere of mean radius; Palermo is over 800 km from
+    // both. So a 480 km band leaves every point without a neighbour.
+    const layer = pointLayer([
+      [7.6869, 45.0703, { v: 1 }],
+      [13.77, 45.65, { v: 2 }],
+      [13.3615, 38.1157, { v: 3 }],
+    ]);
+    const params = (threshold: number) => ({
+      weightsType: "distance",
+      threshold,
+      permutations: 99,
+    });
+    const narrow = run(globalMoransITool, layer, params(480)).messages;
+    assert.ok(narrow.some((m) => m.includes("no feature has any neighbor")));
+    const wide = run(globalMoransITool, layer, params(481)).messages;
+    assert.ok(wide.some((m) => m.includes("Moran's I:")));
   });
 });
 
@@ -1038,4 +1234,94 @@ describe("composite score tool", () => {
     });
     assert.ok(messages.some((m) => m.includes('"label" has no numeric values')));
   });
+});
+
+describe("bounded neighbor search", () => {
+  // buildNeighbors and meanNearestNeighborDistance skip the geodesic for pairs
+  // their central-angle bounds already decide. Pin that the result is exactly
+  // what measuring every pair gives.
+  afterEach(() => setActiveEllipsoidId("earth"));
+
+  /** Mulberry32: a small seeded generator, so the point sets are reproducible. */
+  function seeded(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Every pair measured: the reference the bounded search must match. */
+  function bruteNeighbors(
+    coords: [number, number][],
+    type: string,
+    k: number,
+    thresholdKm: number,
+  ): number[][] {
+    return coords.map((p, i) => {
+      const distances = coords
+        .map((q, j) => ({ j, d: geodesicDistance(p, q) }))
+        .filter((e) => e.j !== i);
+      if (type === "distance") {
+        return distances.filter((e) => e.d <= thresholdKm * 1000).map((e) => e.j);
+      }
+      return distances
+        .sort((a, b) => a.d - b.d)
+        .slice(0, k)
+        .map((e) => e.j);
+    });
+  }
+
+  function bruteMeanNearest(coords: [number, number][]): number {
+    let sum = 0;
+    coords.forEach((p, i) => {
+      let nearest = Infinity;
+      coords.forEach((q, j) => {
+        if (j !== i) nearest = Math.min(nearest, geodesicDistance(p, q));
+      });
+      sum += nearest;
+    });
+    return sum / coords.length;
+  }
+
+  /**
+   * 300 points: 200 over northern Italy, 90 anywhere on the globe, and pairs
+   * that stress the bounds: duplicates (ties), short meridian steps at the
+   * equator (where the lower bound is tight) and points around the pole and
+   * across the antimeridian.
+   */
+  function pointSet(seed: number): [number, number][] {
+    const random = seeded(seed);
+    const coords: [number, number][] = [];
+    for (let i = 0; i < 200; i++) coords.push([7 + random() * 6, 44 + random() * 3]);
+    for (let i = 0; i < 90; i++) {
+      coords.push([random() * 360 - 180, (Math.asin(2 * random() - 1) * 180) / Math.PI]);
+    }
+    coords.push([9.19, 45.4642], [9.19, 45.4642], [0, 0], [0, 0.001], [0, 0.002]);
+    coords.push([179.999, 10], [-179.999, 10], [0, 89.9], [120, 89.9], [-120, 89.9]);
+    return coords;
+  }
+
+  const cases: [string, number, number][] = [
+    ["earth", 1, 25],
+    ["earth", 8, 60],
+    ["earth", 30, 3000],
+    ["mars", 8, 40],
+    ["moon", 8, 40],
+  ];
+  for (const [body, k, thresholdKm] of cases) {
+    it(`matches every-pair KNN, distance bands and nearest distances on ${body} (k=${k}, ${thresholdKm} km)`, () => {
+      setActiveEllipsoidId(body);
+      const coords = pointSet(k * 7919 + thresholdKm);
+      assert.deepEqual(buildNeighbors(coords, "knn", k, 0), bruteNeighbors(coords, "knn", k, 0));
+      assert.deepEqual(
+        buildNeighbors(coords, "distance", k, thresholdKm),
+        bruteNeighbors(coords, "distance", k, thresholdKm),
+      );
+      assert.equal(meanNearestNeighborDistance(coords), bruteMeanNearest(coords));
+    });
+  }
 });

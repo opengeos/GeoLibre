@@ -158,16 +158,15 @@ describe("trajectory speed", () => {
 });
 
 describe("the active celestial body", () => {
-  // These tools convert their distance threshold into turf's Earth-based units
-  // once, outside the O(n²) scans, rather than converting every measured
-  // distance (issue #1128). Pin that the hoisted comparison is still the body's
-  // ground distance, not Earth's.
-  it("scales the trajectory speed by the body's radius ratio", () => {
+  // These tools measure on the active body's ellipsoid (issue #3267). Expected
+  // distances were computed with GeographicLib through pyproj 3.8.0:
+  // Geod(ellps="WGS84") for Earth and Geod(a=3396190, rf=169.894447) for Mars.
+  it("measures trajectory segments on the body's ellipsoid", () => {
     const track = pointLayer("track", [
       [0, 0, { t: 0 }],
       [0, 0.01, { t: 3600 }],
     ]);
-    const speedOn = (body: string): number => {
+    const segmentOn = (body: string): Record<string, unknown> => {
       setActiveEllipsoidId(body);
       try {
         const { result } = runTool("trajectory-speed", [track], {
@@ -175,19 +174,23 @@ describe("the active celestial body", () => {
           timeField: "t",
           speedUnits: "km/h",
         });
-        return result!.features[0].properties?.speed as number;
+        return result!.features[0].properties ?? {};
       } finally {
         setActiveEllipsoidId("earth");
       }
     };
-    // Mars' mean radius is ~0.532x Earth's, so the same fixes an hour apart
-    // cover about half the ground.
-    assert.ok(Math.abs(speedOn("mars") / speedOn("earth") - 0.532) < 0.002);
+    // 0.01° of meridian at the equator: 1,105.743 m on Earth, 585.790 m on Mars.
+    const earth = segmentOn("earth");
+    assert.equal(earth.distance_m, 1105.74);
+    assert.equal(earth.speed, 1.106);
+    const mars = segmentOn("mars");
+    assert.equal(mars.distance_m, 585.79);
+    assert.equal(mars.speed, 0.586);
   });
 
   it("holds the stop-detection threshold in the body's ground distance", () => {
-    // ~1.1 km apart on Earth, which is ~590 m of Martian ground. A 800 m
-    // threshold therefore separates them on Earth but merges them on Mars.
+    // 1,105.743 m apart on Earth and 585.790 m on Mars. A 800 m threshold
+    // therefore separates them on Earth but merges them on Mars.
     const track = pointLayer("track", [
       [0, 0, { t: 0 }],
       [0, 0.01, { t: 600 }],
@@ -214,6 +217,51 @@ describe("the active celestial body", () => {
 });
 
 describe("detect stops", () => {
+  it("skips fixes whose latitude is beyond the pole", () => {
+    // GeographicLib has no distance to latitude 95°; the fix is reported and left
+    // out instead of giving a NaN distance.
+    const track = pointLayer("track", [
+      [0, 0, { t: 0 }],
+      [0, 95, { t: 30 }],
+      [0, 0.0001, { t: 120 }],
+    ]);
+    for (const tool of ["detect-stops", "trajectory-speed", "space-time-proximity"]) {
+      const { result, messages } = runTool(tool, [track], {
+        layer: "track",
+        timeField: "t",
+        maxDistance: 50,
+        minDuration: 60,
+        maxTime: 5,
+        timeUnits: "minutes",
+      });
+      assert.ok(messages.includes("Skipped 1 point(s) with an invalid position"), tool);
+      assert.equal(result!.features.length, 1, tool);
+      const props = result!.features[0].properties ?? {};
+      for (const key of ["distance", "distance_m"]) {
+        if (key in props) assert.ok(Number.isFinite(props[key]), `${tool} ${key}`);
+      }
+    }
+  });
+
+  it("compares the threshold with the WGS 84 distance", () => {
+    // 0.01° of meridian at the equator is 1,105.743 m on WGS 84 (GeographicLib
+    // via pyproj 3.8.0) and 1,111.95 m on the sphere of mean radius, so a
+    // 1,108 m threshold keeps both fixes in one stop only on the ellipsoid.
+    const track = pointLayer("track", [
+      [0, 0, { t: 0 }],
+      [0, 0.01, { t: 600 }],
+    ]);
+    const { result } = runTool("detect-stops", [track], {
+      layer: "track",
+      timeField: "t",
+      maxDistance: 1108,
+      distanceUnits: "meters",
+      minDuration: 1,
+    });
+    assert.equal(result!.features.length, 1);
+    assert.equal(result!.features[0].properties?.n_points, 2);
+  });
+
   it("merges scattered fixes into one stop and ignores brief/lone fixes", () => {
     const track = pointLayer("track", [
       [0, 0, { t: 1700000000 }], // epoch seconds
@@ -335,5 +383,28 @@ describe("space-time proximity", () => {
     assert.equal(result!.features.length, 1);
     // Without an id field the result carries no id columns.
     assert.equal("id_a" in (result!.features[0].properties ?? {}), false);
+  });
+
+  it("measures the pair distance on the WGS 84 ellipsoid", () => {
+    // Torino–Trieste is 480,833.088 m on WGS 84 (GeographicLib via pyproj
+    // 3.8.0). The sphere of mean radius gave 479,510 m, inside a 480 km band.
+    const points = pointLayer("points", [
+      [7.6869, 45.0703, { t: 0 }],
+      [13.77, 45.65, { t: 30 }],
+    ]);
+    const pairsWithin = (maxDistance: number, distanceUnits: string) =>
+      runTool("space-time-proximity", [points], {
+        layer: "points",
+        timeField: "t",
+        maxDistance,
+        distanceUnits,
+        maxTime: 1,
+        timeUnits: "minutes",
+      }).result!.features;
+    assert.equal(pairsWithin(480, "kilometers").length, 0);
+    const [pair] = pairsWithin(481, "kilometers");
+    assert.equal(pair.properties?.distance, 480.833);
+    // 480,833.088 m / 1,609.344 m.
+    assert.equal(pairsWithin(300, "miles")[0].properties?.distance, 298.776);
   });
 });

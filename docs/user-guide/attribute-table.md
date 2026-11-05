@@ -123,6 +123,10 @@ unit for you, offering only the measures that fit the layer's geometry. Lengths
 take `meters` (the default), `kilometers`, `miles`, `feet`, `yards`, or
 `nautical-miles`; areas take `square-meters` (the default),
 `square-kilometers`, `square-miles`, `hectares`, `acres`, or `square-feet`.
+They are geodesic measures on the WGS 84 ellipsoid, or on the project's
+ellipsoid when it describes another body. A polygon is measured as the smaller
+of the two areas its ring bounds, so one covering more than half the globe gets
+the area outside it.
 
 ```text
 round($area("square-kilometers"), 2)

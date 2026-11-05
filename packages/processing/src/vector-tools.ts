@@ -39,11 +39,18 @@ import {
   decodePolylineDetailed,
   earthLengthToBody,
   encodePolyline,
-  getActiveBodyRadiusRatio,
+  getActiveEllipsoid,
   horizontalBbox,
   layerJoinKey,
   type GeoLibreLayer,
 } from "@geolibre/core/worker-safe";
+import {
+  centralAngle,
+  geodesicDistance,
+  geodesicRadiusBounds,
+  isLonLat,
+  withinGeodesicDistance,
+} from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
@@ -2608,6 +2615,12 @@ export const voronoiTool: ProcessingAlgorithm = {
 /** Linear/angular units shared by the sector and proximity tools. */
 const LINEAR_UNITS = new Set(["kilometers", "meters", "miles"]);
 type LinearUnit = "kilometers" | "meters" | "miles";
+/** Metres in one of each {@link LINEAR_UNITS} unit (the international mile). */
+const METERS_PER_LINEAR_UNIT: Record<LinearUnit, number> = {
+  kilometers: 1000,
+  meters: 1,
+  miles: 1609.344,
+};
 
 /**
  * Read a feature property as a finite number, or null when it is missing or
@@ -2671,11 +2684,22 @@ function collectTimedPoints(
   fc: FeatureCollection,
   timeField: string,
   idField: string | undefined,
-): { groups: Map<string, TimedPoint[]>; skipped: number; skippedNoId: number } {
+): {
+  groups: Map<string, TimedPoint[]>;
+  skipped: number;
+  skippedNoId: number;
+  skippedPosition: number;
+} {
   const groups = new Map<string, TimedPoint[]>();
   let skipped = 0;
   let skippedNoId = 0;
+  let skippedPosition = 0;
   for (const point of collectPoints(fc)) {
+    // A latitude beyond ±90° has no geodesic distance (GeographicLib gives NaN).
+    if (!isLonLat(point.geometry.coordinates)) {
+      skippedPosition += 1;
+      continue;
+    }
     const time = parseTimestamp(point.properties?.[timeField]);
     if (time === null) {
       skipped += 1;
@@ -2704,7 +2728,7 @@ function collectTimedPoints(
     else groups.set(key, [entry]);
   }
   for (const bucket of groups.values()) bucket.sort((a, b) => a.time - b.time);
-  return { groups, skipped, skippedNoId };
+  return { groups, skipped, skippedNoId, skippedPosition };
 }
 
 export const cellSectorsTool: ProcessingAlgorithm = {
@@ -2912,17 +2936,19 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       ctx.log(`Error: unknown speed units '${speedUnits}'`);
       return;
     }
-    const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId, skippedPosition } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     const segments: Feature<LineString>[] = [];
-    // turf measures on Earth; rescale to this body's ground distance
-    // (GeoLibre#1128) so the derived speeds are correct off Earth too. Read the
-    // ratio once rather than per segment.
-    const bodyRatio = getActiveBodyRadiusRatio();
+    const ellipsoid = getActiveEllipsoid();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
-        const meters = distance(a.coord, b.coord, { units: "meters" }) * bodyRatio;
+        // On the active body's ellipsoid, so speeds are correct off Earth too.
+        const meters = geodesicDistance(a.coord, b.coord, ellipsoid);
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2944,6 +2970,7 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     if (!segments.length) {
       ctx.log("Error: need at least two timed fixes in a target to build a segment");
       return;
@@ -2962,9 +2989,11 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
 
 /**
  * Point cap for the stop scan. The scan re-anchors on every non-stop advance
- * (see the loop below), so its worst case is O(n²) Haversine calls on the UI
- * thread. 5,000 points bounds that to ~12.5M calls (~1-2 s) in the degenerate
- * case; the typical case is far cheaper because a formed stop jumps the anchor.
+ * (see the loop below), so its worst case is O(n²) distance checks on the UI
+ * thread. Each check is decided from a haversine bound and reaches the geodesic
+ * (about 1 µs) only near the threshold. 5,000 points bounds that to ~12.5M
+ * checks in the degenerate case; the typical case is far cheaper because a
+ * formed stop jumps the anchor.
  * Larger inputs get a clear "split the layer" error rather than a frozen tab.
  */
 const STOPS_MAX_POINTS = 5_000;
@@ -3048,7 +3077,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const minDurationMs = numberParam(ctx, "minDuration", 60) * 1000;
-    const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId, skippedPosition } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     let totalPoints = 0;
     for (const pts of groups.values()) totalPoints += pts.length;
     if (totalPoints === 0) {
@@ -3062,10 +3095,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const stops: Feature<Point>[] = [];
-    // Convert the threshold into turf's Earth-based units once, rather than
-    // converting every measured distance inside the O(n²) scan below
-    // (GeoLibre#1128). Equivalent comparison, no per-iteration ellipsoid lookup.
-    const maxTurfDistance = bodyLengthToEarth(maxDistance);
+    // Convert the threshold to metres once, rather than converting every
+    // measured distance inside the O(n²) scan below.
+    const maxMeters = maxDistance * METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
+    const ellipsoid = getActiveEllipsoid();
+    const bounds = geodesicRadiusBounds(ellipsoid);
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -3080,9 +3114,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // absorbed into a single stop.
         while (
           j < pts.length &&
-          distance(pts[i].coord, pts[j].coord, {
-            units: distanceUnits as LinearUnit,
-          }) <= maxTurfDistance
+          withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters, ellipsoid, bounds)
         ) {
           j += 1;
         }
@@ -3126,6 +3158,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     ctx.log(`Detect stops: found ${stops.length} stop(s) across ${groups.size} target(s)`);
     ctx.addResultLayer?.("Stops", featureCollection(stops));
   },
@@ -3133,8 +3166,9 @@ export const detectStopsTool: ProcessingAlgorithm = {
 
 /**
  * Worst-case pair cap for the space-time proximity scan. Each pair within the
- * time window costs one Haversine call on the UI thread, so this bounds the
- * absolute worst case (all points inside the window) to ~2M calls (~1s). Typical
+ * time window costs one distance check on the UI thread: a haversine bound, and
+ * the geodesic (about 1 µs) only near the threshold. This bounds the absolute
+ * worst case (all points inside the window) to ~2M checks. Typical
  * runs are far cheaper because the time-sorted loop breaks out once the gap is
  * exceeded; the cap only rejects layers whose worst case would freeze the tab.
  */
@@ -3245,7 +3279,13 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       [];
     let skipped = 0;
     let skippedNoId = 0;
+    let skippedPosition = 0;
     for (const point of collectPoints(fc)) {
+      // A latitude beyond ±90° has no geodesic distance (GeographicLib gives NaN).
+      if (!isLonLat(point.geometry.coordinates)) {
+        skippedPosition += 1;
+        continue;
+      }
       const time = parseTimestamp(point.properties?.[timeField]);
       if (time === null) {
         skipped += 1;
@@ -3297,21 +3337,23 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // Sort by time so the inner loop can stop once the time gap is exceeded.
     timed.sort((a, b) => a.time - b.time);
     const pairs: Feature<LineString>[] = [];
-    // As in stop detection: convert the threshold into turf's Earth-based units
-    // once so the O(n²) candidate scan does no per-iteration conversion
-    // (GeoLibre#1128). Only the pairs that survive the test are converted back
-    // to this body's ground distance for the reported `distance` property.
-    const maxTurfDistance = bodyLengthToEarth(maxDistance);
+    // As in stop detection: compare in metres so the O(n²) candidate scan does
+    // no per-iteration conversion. Only the pairs that survive the test are
+    // converted back to the chosen units for the reported `distance` property.
+    const metersPerUnit = METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
+    const maxMeters = maxDistance * metersPerUnit;
+    // Pairs whose lower bound is already past the threshold skip the geodesic.
+    const ellipsoid = getActiveEllipsoid();
+    const minRadius = geodesicRadiusBounds(ellipsoid).min;
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
-        const turfDistance = distance(timed[i].coord, timed[j].coord, {
-          units: distanceUnits as LinearUnit,
-        });
-        if (turfDistance > maxTurfDistance) continue;
-        const dist = earthLengthToBody(turfDistance);
+        if (centralAngle(timed[i].coord, timed[j].coord) * minRadius > maxMeters) continue;
+        const meters = geodesicDistance(timed[i].coord, timed[j].coord, ellipsoid);
+        if (meters > maxMeters) continue;
+        const dist = meters / metersPerUnit;
         pairs.push({
           type: "Feature",
           properties: {
@@ -3331,6 +3373,7 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     ctx.log(
       `Space-time proximity: found ${pairs.length} pair(s) within ${maxDistance} ${distanceUnits} and ${maxTimeValue} ${timeUnits}`,
     );

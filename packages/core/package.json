@@ -27,7 +27,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./worker-safe": "./src/worker-safe.ts"
+    "./worker-safe": "./src/worker-safe.ts",
+    "./geodesic": "./src/geodesic.ts"
   },
   "publishConfig": {
     "main": "./dist/index.mjs",
@@ -40,15 +41,20 @@
       "./worker-safe": {
         "types": "./dist/worker-safe.d.mts",
         "import": "./dist/worker-safe.mjs"
+      },
+      "./geodesic": {
+        "types": "./dist/geodesic.d.mts",
+        "import": "./dist/geodesic.mjs"
       }
     },
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/worker-safe.ts --format esm --dts"
+    "build": "tsdown src/index.ts src/worker-safe.ts src/geodesic.ts --format esm --dts"
   },
   "dependencies": {
     "@maplibre/maplibre-gl-style-spec": "^26.5.0",
+    "geographiclib-geodesic": "^2.2.0",
     "uuid": "^14.0.3",
     "zundo": "^2.3.0",
     "zustand": "^5.0.16"
