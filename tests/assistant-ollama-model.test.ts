@@ -141,6 +141,10 @@ describe("Ollama model discovery reconciliation", () => {
     assert.equal(isInstalledOllamaModel("llama3.2:latest", ["llama3.2"]), true);
     assert.equal(isInstalledOllamaModel("llama3.2", ["llama3.2:3b"]), false);
     assert.equal(isInstalledOllamaModel("", ["llama3.2:latest"]), false);
+    // A registry port is not a tag.
+    const hosted = "registry.local:5000/team/model";
+    assert.equal(isInstalledOllamaModel(hosted, [`${hosted}:latest`]), true);
+    assert.equal(isInstalledOllamaModel(`${hosted}:q4`, [`${hosted}:latest`]), false);
   });
 
   it("keeps an installed model", () => {

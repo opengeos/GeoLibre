@@ -94,7 +94,9 @@ export async function discoverOllamaModels(
 export function isInstalledOllamaModel(modelId: string, installed: readonly string[]): boolean {
   const id = modelId.trim();
   if (!id) return false;
-  const withTag = (name: string) => (name.includes(":") ? name : `${name}:latest`);
+  // The tag is the text after the last colon with no `/` following it, so a
+  // registry port (`registry.local:5000/team/model`) is not mistaken for one.
+  const withTag = (name: string) => (/:[^/]*$/.test(name) ? name : `${name}:latest`);
   const wanted = withTag(id);
   return installed.some((name) => withTag(name) === wanted);
 }
