@@ -10555,7 +10555,7 @@
       "home": "JAXA Earth API",
       "terms": "Terms of use",
       "attribution": "Data courtesy of JAXA. Some datasets come from other agencies and keep their own terms; check the dataset's page before reuse.",
-      "polarLabel": "{{title}} (polar, not supported)",
+      "projectionLabel": "{{title}} (projection not supported)",
       "chooseDataset": "Choose a dataset…",
       "loading": "Loading the catalog…",
       "recommendedGroup": "Recommended: {{group}}",

@@ -260,7 +260,7 @@ function updateActiveLayer(dataset: JaxaDataset | undefined): void {
       [DATE_METADATA_KEY]: spec.date,
     },
   });
-  // engine-audit-allow: arcgis-null-map -- the globe and ArcGIS redraw from the store write
+  // The globe has no style map; it redraws from the store write above.
   const map = getStyleMap(appRef);
   const source = map?.getSource(rasterSourceId(id)) as RasterTileSource | undefined;
   source?.setTiles?.([url]);
@@ -349,11 +349,20 @@ function buildPanel(container: HTMLElement): () => void {
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bumped whenever the dataset or band changes, so a stale async result is dropped. */
   let selection = 0;
+  /** The editor control that last had focus, so a rebuild can hand focus back. */
+  let focusKey: string | null = null;
+  const keyed = <T extends HTMLElement>(node: T, key: string): T => {
+    node.dataset.focusKey = key;
+    return node;
+  };
 
   const statusBox = element("div");
   const datasetSelect = element("select", CSS.input);
   const card = element("div", CSS.card);
   const editor = element("div", CSS.editor);
+  editor.addEventListener("focusin", (event) => {
+    focusKey = (event.target as HTMLElement).dataset.focusKey ?? null;
+  });
 
   const datasetById = (id: string | null): JaxaDataset | undefined =>
     id ? catalog?.datasets.find((dataset) => dataset.id === id) : undefined;
@@ -378,7 +387,7 @@ function buildPanel(container: HTMLElement): () => void {
   const datasetLabel = (dataset: JaxaDataset): string =>
     isJaxaDatasetMappable(dataset)
       ? dataset.title
-      : tr("polarLabel", "{{title}} (polar, not supported)", { title: dataset.title });
+      : tr("projectionLabel", "{{title}} (projection not supported)", { title: dataset.title });
 
   const renderDatasetOptions = (): void => {
     const placeholder = element(
@@ -668,7 +677,17 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const renderEditor = (): void => {
+    // Rebuilding drops the focused control; remember it to restore below.
+    const hadFocus = editor.contains(document.activeElement);
     editor.replaceChildren();
+    buildEditor();
+    if (!focusKey) return;
+    const lost = hadFocus || !document.activeElement || document.activeElement === document.body;
+    const target = editor.querySelector<HTMLElement>(`[data-focus-key="${focusKey}"]`);
+    if (lost && target && !(target as HTMLButtonElement).disabled) target.focus();
+  };
+
+  const buildEditor = (): void => {
     const dataset = datasetById(state.datasetId);
     if (!dataset) {
       editor.style.display = "none";
@@ -685,6 +704,7 @@ function buildPanel(container: HTMLElement): () => void {
         bandSelect.append(option);
       }
       bandSelect.value = state.band ?? dataset.bands[0];
+      keyed(bandSelect, "band");
       bandSelect.disabled = state.busy;
       bandSelect.addEventListener("change", () => {
         state.band = bandSelect.value;
@@ -703,7 +723,10 @@ function buildPanel(container: HTMLElement): () => void {
       const stepper = element("div", CSS.row);
       const disabled = state.busy;
       const step = (text: string, title: string, direction: Parameters<typeof stepDate>[0]) => {
-        const node = button(text, CSS.step, () => void stepDate(direction), title);
+        const node = keyed(
+          button(text, CSS.step, () => void stepDate(direction), title),
+          `date-${direction}`,
+        );
         node.disabled = disabled;
         return node;
       };
@@ -718,6 +741,7 @@ function buildPanel(container: HTMLElement): () => void {
       if (!dataset.normal && dataset.temporalResolution !== "none") {
         const dateInput = element("input", CSS.input);
         dateInput.type = "date";
+        keyed(dateInput, "date");
         dateInput.value = state.date.slice(0, 10);
         dateInput.disabled = disabled;
         dateInput.setAttribute("aria-label", tr("pickDate", "Go to date"));
@@ -736,6 +760,7 @@ function buildPanel(container: HTMLElement): () => void {
         colormapSelect.append(option);
       }
       colormapSelect.value = state.colormap;
+      keyed(colormapSelect, "colormap");
       colormapSelect.addEventListener("change", () => {
         state.colormap = colormapSelect.value;
         applyChange();
@@ -746,6 +771,7 @@ function buildPanel(container: HTMLElement): () => void {
       const rangeInput = (key: "min" | "max", label: string): HTMLElement => {
         const input = element("input", CSS.input);
         input.type = "number";
+        keyed(input, key);
         input.step = "any";
         input.value = state[key] === null ? "" : String(state[key]);
         input.disabled = state.busy;
@@ -770,7 +796,10 @@ function buildPanel(container: HTMLElement): () => void {
         return wrapper;
       };
       const rangeRow = element("div", `${CSS.row}align-items:flex-end;`);
-      const auto = button(tr("auto", "Auto"), CSS.secondary, () => void sampleBand(true));
+      const auto = keyed(
+        button(tr("auto", "Auto"), CSS.secondary, () => void sampleBand(true)),
+        "auto",
+      );
       auto.title = tr("autoTitle", "Set Min and Max from the data at this date");
       auto.disabled = state.busy;
       rangeRow.append(
@@ -803,6 +832,7 @@ function buildPanel(container: HTMLElement): () => void {
       resamplingSelect.append(option);
     }
     resamplingSelect.value = state.resampling;
+    keyed(resamplingSelect, "resampling");
     // Classes and RGB colors cannot be interpolated.
     resamplingSelect.disabled = !state.colorMapped;
     resamplingSelect.addEventListener("change", () => {
@@ -813,21 +843,24 @@ function buildPanel(container: HTMLElement): () => void {
     resamplingLabel.append(resamplingSelect);
     editor.append(resamplingLabel);
 
-    const add = button(tr("addToMap", "Add to map"), CSS.primary, () => {
-      const id = addLayer(dataset);
-      if (!id) {
-        setStatus(tr("addUnavailable", "This map cannot add tile layers."), true);
-        return;
-      }
-      state.activeLayerId = id;
-      setStatus(
-        tr(
-          "added",
-          "Added {{name}}. Changing the date or colors now updates that layer; add again to keep another copy.",
-          { name: layerName(dataset) },
-        ),
-      );
-    });
+    const add = keyed(
+      button(tr("addToMap", "Add to map"), CSS.primary, () => {
+        const id = addLayer(dataset);
+        if (!id) {
+          setStatus(tr("addUnavailable", "This map cannot add tile layers."), true);
+          return;
+        }
+        state.activeLayerId = id;
+        setStatus(
+          tr(
+            "added",
+            "Added {{name}}. Changing the date or colors now updates that layer; add again to keep another copy.",
+            { name: layerName(dataset) },
+          ),
+        );
+      }),
+      "add",
+    );
     add.disabled = state.busy || currentSpec() === null;
     editor.append(add);
   };
