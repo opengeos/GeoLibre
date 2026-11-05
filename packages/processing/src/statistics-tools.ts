@@ -1,6 +1,6 @@
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
-import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
+import { featureCollection, multiPoint, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
@@ -143,6 +143,16 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
  * Returns null entries for features whose geometry can't be located,
  * including positions with a non-finite coordinate or a latitude beyond ±90°.
  */
+/** Whether every position of a geometry is a lon/lat (see `isLonLat`). */
+function allLonLat(geometry: Geometry): boolean {
+  if (geometry.type === "GeometryCollection") return geometry.geometries.every(allLonLat);
+  const walk = (value: unknown): boolean =>
+    Array.isArray(value) && typeof value[0] === "number"
+      ? isLonLat(value as [number, number])
+      : Array.isArray(value) && value.every(walk);
+  return walk(geometry.coordinates);
+}
+
 function featureCoords(features: Feature[]): ([number, number] | null)[] {
   return features.map((feature) => {
     const geometry = feature.geometry;
@@ -151,6 +161,9 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       const [lon, lat] = geometry.coordinates;
       return isLonLat([lon, lat]) ? [lon, lat] : null;
     }
+    // A vertex beyond the poles would drag the centroid too, so such a
+    // feature cannot be located.
+    if (!allLonLat(geometry)) return null;
     try {
       if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
         try {
@@ -166,6 +179,26 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       return null;
     }
   });
+}
+
+/**
+ * The positions that span the input's extent: each feature's position from
+ * `featureCoords` plus every vertex of a located Point or MultiPoint, so a
+ * MultiPoint keeps its full extent. Located features have only lon/lat
+ * vertices (`allLonLat`).
+ */
+function locatedVertices(features: Feature[], coords: [number, number][]): [number, number][] {
+  const vertices = [...coords];
+  for (const { geometry } of features) {
+    const points =
+      geometry?.type === "MultiPoint"
+        ? geometry.coordinates
+        : geometry?.type === "Point"
+          ? [geometry.coordinates]
+          : [];
+    for (const [lon, lat] of points) vertices.push([lon, lat]);
+  }
+  return vertices;
 }
 
 /**
@@ -216,8 +249,9 @@ export function buildNeighbors(
   const { min, max } = bounds;
   const thresholdM = thresholdKm * 1000;
   const angles = new Float64Array(n);
-  // One scratch buffer for the KNN upper bounds, reused by every row.
-  const uppers = new Float64Array(Math.max(0, n - 1));
+  // The k smallest upper bounds of a row, kept sorted; one buffer for all rows.
+  const kk = Math.max(0, Math.min(k, n - 1));
+  const smallest = new Float64Array(kk);
   const neighbors: number[][] = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) angles[j] = j === i ? 0 : centralAngle(coords[i], coords[j]);
@@ -233,9 +267,21 @@ export function buildNeighbors(
     }
     // The k nearest are all within the k-th smallest upper bound, so only the
     // points whose lower bound reaches it need their geodesic distance.
-    for (let j = 0, u = 0; j < n; j++) if (j !== i) uppers[u++] = angles[j] * max;
-    uppers.sort();
-    const cutoff = uppers[Math.min(k, n - 1) - 1];
+    // An insertion into the k smallest is O(k), so a row costs O(n k), not a
+    // full sort of its n - 1 bounds.
+    let count = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const upper = angles[j] * max;
+      if (count === kk && upper >= smallest[kk - 1]) continue;
+      let at = count < kk ? count++ : kk - 1;
+      while (at > 0 && smallest[at - 1] > upper) {
+        smallest[at] = smallest[at - 1];
+        at--;
+      }
+      smallest[at] = upper;
+    }
+    const cutoff = smallest[kk - 1];
     const candidates: { j: number; d: number }[] = [];
     for (let j = 0; j < n; j++) {
       if (j === i || angles[j] * min > cutoff) continue;
@@ -710,7 +756,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
 
     // Study area = bounding-box area (m²) of the input extent, over the features
     // measured above, so one left out by `featureCoords` cannot stretch it.
-    const extentBox = horizontalBbox(bbox(featureCollection(located)));
+    const extentBox = horizontalBbox(bbox(multiPoint(locatedVertices(located, coords))));
     if (!extentBox) {
       ctx.log("Error: the layer has no usable extent.");
       return;

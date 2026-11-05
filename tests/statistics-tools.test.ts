@@ -543,6 +543,63 @@ describe("average nearest neighbor", () => {
   });
 });
 
+describe("average nearest neighbor extent", () => {
+  it("keeps a MultiPoint's full extent and leaves out one with a vertex beyond the pole", () => {
+    const base = pointLayer([
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+    ]);
+    const withMulti = (coordinates: number[][]): GeoLibreLayer => ({
+      ...base,
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          ...base.geojson!.features,
+          { type: "Feature", properties: {}, geometry: { type: "MultiPoint", coordinates } },
+        ],
+      },
+    });
+    // A MultiPoint stretching north widens the box beyond its centroid.
+    const near = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 46],
+        [10, 46.01],
+      ]),
+      {},
+    );
+    const far = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 45.6],
+        [10, 47],
+      ]),
+      {},
+    );
+    assert.ok(
+      loggedNumber(far.messages, "Expected mean distance:") >
+        loggedNumber(near.messages, "Expected mean distance:"),
+    );
+    // A MultiPoint with a vertex at 95° cannot be located, so the run is the
+    // one without it.
+    const withPole = run(
+      averageNearestNeighborTool,
+      withMulti([
+        [10, 46],
+        [10, 95],
+      ]),
+      {},
+    );
+    const without = run(averageNearestNeighborTool, base, {});
+    assert.ok(withPole.messages.includes("Average nearest neighbor (n=3):"));
+    assert.equal(
+      loggedNumber(withPole.messages, "Expected mean distance:"),
+      loggedNumber(without.messages, "Expected mean distance:"),
+    );
+  });
+});
+
 describe("distance-band weights", () => {
   it("leaves out a point whose latitude is beyond the pole", () => {
     const valid: Array<[number, number, Record<string, unknown>]> = [
