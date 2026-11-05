@@ -208,7 +208,7 @@ function OllamaModelField({
     const discovered = await discovery.refresh(baseUrl());
     if (!discovered) return;
     const current = valueRef.current;
-    const next = reconcileOllamaModel(current, discovered, PROVIDER_MODELS.ollama);
+    const next = reconcileOllamaModel(current, discovered, PROVIDER_MODELS.ollama, fallbackModel);
     if (next !== current) onChange(next);
   };
 
@@ -359,7 +359,12 @@ export function AiSectionContent({
       id,
       name,
       provider: newProfileProvider,
-      modelId: newProfileModel.trim() || defaultModelFor(newProfileProvider, modelEnv),
+      // A blank box saves the model its placeholder showed.
+      modelId:
+        newProfileModel.trim() ||
+        (newProfileProvider === "ollama"
+          ? blankOllamaModel(modelEnv)
+          : defaultModelFor(newProfileProvider, modelEnv)),
       fieldValues: { ...newProfileFieldValues },
     };
     setDraftDesktopSettings((current: any) => ({

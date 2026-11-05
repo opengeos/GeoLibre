@@ -144,19 +144,32 @@ describe("Ollama model discovery reconciliation", () => {
   });
 
   it("keeps an installed model", () => {
-    assert.equal(reconcileOllamaModel("qwen3:8b", ["gemma3:4b", "qwen3:8b"], presets), "qwen3:8b");
+    assert.equal(
+      reconcileOllamaModel("qwen3:8b", ["gemma3:4b", "qwen3:8b"], presets, presets[0]),
+      "qwen3:8b",
+    );
   });
 
-  it("swaps a preset or blank model the server lacks for an installed one", () => {
-    assert.equal(reconcileOllamaModel(presets[0], ["qwen3:8b"], presets), "qwen3:8b");
-    assert.equal(reconcileOllamaModel("", ["qwen3:8b"], presets), "qwen3:8b");
+  it("swaps a preset the server lacks for an installed one", () => {
+    assert.equal(reconcileOllamaModel(presets[0], ["qwen3:8b"], presets, presets[0]), "qwen3:8b");
+  });
+
+  it("keeps a blank box while the server has its fallback model", () => {
+    assert.equal(reconcileOllamaModel("", ["qwen3:8b", "phi4:14b"], presets, "phi4:14b"), "");
+  });
+
+  it("fills a blank box when the server lacks its fallback model", () => {
+    assert.equal(reconcileOllamaModel("", ["qwen3:8b"], presets, presets[0]), "qwen3:8b");
   });
 
   it("keeps a model the user typed even when discovery does not list it", () => {
-    assert.equal(reconcileOllamaModel("my-finetune:q4", ["qwen3:8b"], presets), "my-finetune:q4");
+    assert.equal(
+      reconcileOllamaModel("my-finetune:q4", ["qwen3:8b"], presets, presets[0]),
+      "my-finetune:q4",
+    );
   });
 
   it("changes nothing when discovery found no models", () => {
-    assert.equal(reconcileOllamaModel(presets[0], [], presets), presets[0]);
+    assert.equal(reconcileOllamaModel(presets[0], [], presets, presets[0]), presets[0]);
   });
 });

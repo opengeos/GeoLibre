@@ -102,22 +102,27 @@ export function isInstalledOllamaModel(modelId: string, installed: readonly stri
 /**
  * The model a profile should use after discovery returns `installed`.
  *
- * A blank model or one of the built-in presets (a guess at what might be
- * pulled) that the server does not have is swapped for the first installed
- * model. A model the user typed is kept even when discovery does not list it:
- * replacing it would silently discard their choice.
+ * A blank box runs `fallback`, so it stays blank while the server has that
+ * model, and is filled with the first installed model otherwise. A built-in
+ * preset (a guess at what might be pulled) that the server does not have is
+ * swapped the same way. A model the user typed is kept even when discovery
+ * does not list it: replacing it would silently discard their choice.
  *
  * @param current The profile's current model id.
  * @param installed The model ids the Ollama server reported.
  * @param presets The provider's built-in preset ids.
+ * @param fallback The model a blank box runs.
  * @returns The model id to keep or switch to.
  */
 export function reconcileOllamaModel(
   current: string,
   installed: readonly string[],
   presets: readonly string[],
+  fallback: string,
 ): string {
-  if (!installed.length || isInstalledOllamaModel(current, installed)) return current;
+  if (!installed.length) return current;
   const id = current.trim();
-  return !id || presets.includes(id) ? installed[0] : current;
+  if (!id) return isInstalledOllamaModel(fallback, installed) ? current : installed[0];
+  if (isInstalledOllamaModel(id, installed)) return current;
+  return presets.includes(id) ? installed[0] : current;
 }
