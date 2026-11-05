@@ -414,6 +414,19 @@ Browses the open weather data catalog of [dynamical.org](https://dynamical.org/c
 !!! note "Regional datasets draw when zoomed in"
     A map draws one slice, but the reader has to decode whole chunks. The forecasts dynamical.org stores one run per chunk (NOAA GFS forecast, NOAA HRRR 48-hour forecast, ECMWF AIFS Single, DWD ICON-EU, ECCC HRDPS) and the virtual datasets (one GRIB2 message per chunk) draw the whole globe in seconds. The analyses and ensembles (NOAA GFS, GEFS, HRRR and MRMS analyses, GEFS 35-day, ECMWF AIFS and IFS ensembles, NASA IMERG) pack hundreds to thousands of time steps or members into each chunk, so a whole-globe map would read gigabytes. They are listed as **Regional** and draw from a minimum zoom, worked out from the chunk size and the size of the map so a view reads at most about 256 MB: around zoom 3 to 6 for the global ones, 8 for HRRR and 9 to 10 for MRMS. The panel names that zoom, **Add to map** zooms the map in to it (over the dataset, if the view is elsewhere), and the layer hides when you zoom out past it. Moving the sliders while zoomed out reads nothing until you zoom back in, and stepping through time is quick once a region is loaded, since its chunks already hold the neighbouring steps. The data is free under CC BY 4.0; credit the source shown under the panel.
 
+## JAXA Earth
+
+Browses the [JAXA Earth API](https://data.earth.jaxa.jp/en/), JAXA's catalog of Earth observation datasets published as cloud-optimized GeoTIFFs: ALOS World 3D (AW3D30) elevation and PALSAR-2 forest maps, GSMaP precipitation, GCOM-C and MODIS land and sea surface temperature, vegetation index, aerosols, chlorophyll-a, AMSR2 soil moisture, land cover, and monthly climatologies of many of them. No account or API key is needed.
+
+- Pick a **Dataset**: JAXA's recommended datasets come first, grouped by theme, then the rest of the catalog alphabetically. **Search** filters the list by title, satellite, sensor, or keyword. The card shows the provider, resolution, time step and range, and a **Dataset details** link to JAXA's page for it.
+- Pick a **Band** when the dataset has more than one, and a **Date**: the panel opens on the latest date, and the arrows step to the first, previous, next, or latest date with data. **Go to date** jumps to a calendar day, rounded down to the nearest date JAXA has. A climatology steps through its months (or half-months).
+- **Colormap**, **Min**, and **Max** color the band's values. Opening a dataset reads a coarse sample of it at that date and sets the range to the 2nd to 98th percentile of the values; **Auto** reads it again for the date shown. Land cover, forest maps, and other bands that carry their own colors ignore the color map.
+- **Add to map** adds the band as a tile layer named after the dataset and date. Changing the date, colors, or resampling afterward updates that layer in place, so you can step through a time series; add it again to keep a date side by side. The layer is saved with the project and draws again when the project is reopened.
+- Tiles are drawn in the browser by JAXA's own [JavaScript API](https://data.earth.jaxa.jp/api/javascript/v2.0.1/en/docs/), which reads only the resolution and area each map tile covers. GeoLibre loads that module from JAXA's server the first time a JAXA layer draws and checks it against a pinned checksum.
+- The sea ice datasets on polar stereographic grids are listed but cannot be added yet. JAXA Earth layers draw on the MapLibre, globe, and ArcGIS renderers, not on Mapbox.
+
+Most datasets can be used commercially; a few, noted on their dataset pages, cannot. See JAXA's [terms of use](https://earth.jaxa.jp/en/data/policy/).
+
 ## GeoLens
 
 Connects to a self-hosted [GeoLens](https://getgeolens.com) catalog — an open-source spatial catalog (FastAPI + PostGIS) you run on your own infrastructure, which makes it the recommended way to work with private data in GeoLibre.

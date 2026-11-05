@@ -873,6 +873,24 @@ manual check, not a Dependabot event:
   the `geolibre-arcgis-sdk` service-worker rule in `vite.config.ts`. The
   version is in every URL, so a bump mints new cache entries.
 
+### JAXA Earth API for JavaScript — loaded from JAXA's server
+
+The JAXA Earth plugin draws its tiles with JAXA's "JAXA Earth API for
+JavaScript", which is not published to npm.
+`packages/plugins/src/plugins/jaxa-earth-api.ts` fetches the release named by
+`JAXA_EARTH_API_VERSION` from `data.earth.jaxa.jp`, refuses it unless its
+SHA-256 equals `JAXA_EARTH_MODULE_SHA256`, and imports it from a `blob:` URL.
+The module has no imports of its own, so no CSP change is needed (`blob:` is in
+`script-src` and the fetch runs under `connect-src`). The surface it uses
+(`ImageCollection`, `TileGenerator`, `image.ColorMap`, `Resampling`) is typed
+by hand, so the compiler does not check it against JAXA's `jaxa.earth.esm.d.ts`.
+
+To move to a new release, bump the version, recompute the checksum
+(`curl -s <module url> | sha256sum`), diff the new `.d.ts` against the members
+above, and add a dataset from the panel in a browser. If JAXA republishes the
+pinned file in place, every JAXA layer fails with a "module changed" error
+until the checksum is updated.
+
 ### Desktop CSP `script-src` allowlist
 
 The desktop CSP (`apps/geolibre-desktop/src-tauri/tauri.conf.json`) does not

@@ -68,6 +68,8 @@ import {
   registerSentinel2CompositeProtocol,
   maplibreOceanDataPlatformPlugin,
   maplibreDynamicalPlugin,
+  maplibreJaxaEarthPlugin,
+  registerJaxaEarthProtocol,
   maplibreGeoLensPlugin,
   setGeoLensDefaultServerUrl,
   maplibreVantorPlugin,
@@ -254,6 +256,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreSentinel2ExplorerPlugin,
   maplibreOceanDataPlatformPlugin,
   maplibreDynamicalPlugin,
+  maplibreJaxaEarthPlugin,
   maplibreGeoLensPlugin,
   maplibreStreetViewPlugin,
   maplibreMapillaryPlugin,
@@ -478,6 +481,10 @@ setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, descr
 // Sentinel-2 Explorer composites are tiles of a MapLibre protocol; register it
 // up front so a saved project's composite layers draw before the plugin opens.
 registerSentinel2CompositeProtocol();
+
+// JAXA Earth layers are tiles of a MapLibre protocol too; the JAXA module
+// itself loads on the first tile.
+registerJaxaEarthProtocol();
 
 // The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
 // same way.

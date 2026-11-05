@@ -56,6 +56,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "geolibre-sentinel2-explorer",
   "geolibre-ocean-data-platform",
   "geolibre-dynamical",
+  "geolibre-jaxa-earth",
   "maplibre-gl-geolens",
   "maplibre-gl-usgs-lidar",
 ] as const;
