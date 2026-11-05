@@ -126,10 +126,18 @@ describe("native remote download glue", () => {
 
 describe("native write file to folder glue", () => {
   it("normalizes strings, Blobs, ArrayBuffers, and Uint8Arrays", async () => {
-    assert.deepEqual(await normalizeBinaryData("hello"), [104, 101, 108, 108, 111]);
-    assert.deepEqual(await normalizeBinaryData(new Uint8Array([1, 2, 3])), [1, 2, 3]);
-    assert.deepEqual(await normalizeBinaryData(new Uint8Array([4, 5, 6]).buffer), [4, 5, 6]);
-    assert.deepEqual(await normalizeBinaryData(new Blob(["world"])), [119, 111, 114, 108, 100]);
+    const asList = async (data: Parameters<typeof normalizeBinaryData>[0]) =>
+      Array.from(await normalizeBinaryData(data));
+    assert.deepEqual(await asList("hello"), [104, 101, 108, 108, 111]);
+    assert.deepEqual(await asList(new Uint8Array([1, 2, 3])), [1, 2, 3]);
+    assert.deepEqual(await asList(new Uint8Array([4, 5, 6]).buffer), [4, 5, 6]);
+    assert.deepEqual(await asList(new Blob(["world"])), [119, 111, 114, 108, 100]);
+    // A view stays a view: only its own bytes, without copying the buffer behind it.
+    const whole = new Uint8Array([9, 8, 7, 6]);
+    const part = whole.subarray(1, 3);
+    const sent = await normalizeBinaryData(part);
+    assert.equal(sent.buffer, whole.buffer);
+    assert.deepEqual(Array.from(sent), [8, 7]);
     await assert.rejects(
       normalizeBinaryData(123 as unknown as string),
       /Unsupported data type for writeFileToFolder/,
@@ -157,10 +165,14 @@ describe("native write file to folder glue", () => {
     );
   });
 
-  it("passes folderId, fileName, and data to write_file_to_folder command", async () => {
-    const calls: { cmd: string; args: Record<string, unknown> }[] = [];
-    const invoke = (async (cmd: string, args?: Record<string, unknown>) => {
-      calls.push({ cmd, args: args ?? {} });
+  it("sends the file as a raw body, with its folder and name as encoded headers", async () => {
+    const calls: { cmd: string; args: unknown; headers?: Record<string, string> }[] = [];
+    const invoke = (async (
+      cmd: string,
+      args?: unknown,
+      options?: { headers?: Record<string, string> },
+    ) => {
+      calls.push({ cmd, args, headers: options?.headers });
       if (cmd === "write_file_to_folder") {
         return { path: "/picked/folder/test.geojson", size: 5 };
       }
@@ -173,9 +185,12 @@ describe("native write file to folder glue", () => {
     assert.deepEqual(result, { path: "/picked/folder/test.geojson", size: 5 });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].cmd, "write_file_to_folder");
-    assert.equal(calls[0].args.folderId, "folder-1");
-    assert.equal(calls[0].args.fileName, "test.geojson");
-    assert.deepEqual(calls[0].args.data, [104, 101, 108, 108, 111]);
+    assert.ok(calls[0].args instanceof Uint8Array, "the body is raw bytes, not a JSON list");
+    assert.deepEqual(Array.from(calls[0].args), [104, 101, 108, 108, 111]);
+    assert.deepEqual(calls[0].headers, { "x-folder-id": "folder-1", "x-file-name": "test.geojson" });
+
+    await writer("folder-1", "春 map.geojson", "hello");
+    assert.equal(calls[1].headers?.["x-file-name"], "%E6%98%A5%20map.geojson");
   });
 
   it("rejects when folderId or fileName is missing or invalid", async () => {

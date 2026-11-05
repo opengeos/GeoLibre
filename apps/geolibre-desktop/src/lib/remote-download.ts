@@ -109,11 +109,12 @@ export const MAX_WRITE_FILE_BYTES = 50 * 1024 * 1024;
 
 /**
  * Normalize arbitrary file data (string, Blob, ArrayBuffer, ArrayBufferView) into
- * a number array suitable for native command serialization.
+ * the bytes sent to the native command. They go as a raw request body: as a JSON
+ * number array they cost the main thread ~80 ms per MB, and the text is 3.6x larger.
  */
 export async function normalizeBinaryData(
   data: string | Uint8Array | ArrayBuffer | Blob,
-): Promise<number[]> {
+): Promise<Uint8Array> {
   let bytes: Uint8Array;
   if (typeof data === "string") {
     bytes = new TextEncoder().encode(data);
@@ -138,7 +139,7 @@ export async function normalizeBinaryData(
       `writeFileToFolder data exceeds the 50 MiB limit (received ${bytes.byteLength} bytes).`,
     );
   }
-  return Array.from(bytes);
+  return bytes;
 }
 
 /**
@@ -162,10 +163,12 @@ export function createWriteFileToFolder(
       throw new TypeError("writeFileToFolder requires a non-empty fileName.");
     }
     const bytes = await normalizeBinaryData(data);
-    return invoke<GeoLibreWriteFileResult>("write_file_to_folder", {
-      folderId,
-      fileName,
-      data: bytes,
+    // Raw body, so the names travel as headers; percent-encoded, as headers carry only ASCII.
+    return invoke<GeoLibreWriteFileResult>("write_file_to_folder", bytes, {
+      headers: {
+        "x-folder-id": encodeURIComponent(folderId),
+        "x-file-name": encodeURIComponent(fileName),
+      },
     });
   };
 }

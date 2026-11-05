@@ -33,6 +33,7 @@ use reqwest::{
     redirect::Policy,
     Url,
 };
+use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
@@ -676,6 +677,18 @@ fn write_file_to_folder_in_dir(
     })
 }
 
+/// A header the frontend percent-encoded with `encodeURIComponent`, decoded.
+fn decoded_header(headers: &HeaderMap, name: &str) -> Result<String, String> {
+    let value = headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| format!("Missing {name} header."))?;
+    percent_decode_str(value)
+        .decode_utf8()
+        .map(|decoded| decoded.into_owned())
+        .map_err(|_| format!("The {name} header is not valid UTF-8."))
+}
+
 #[cfg(test)]
 fn write_file_to_folder_core(
     folder_id: &str,
@@ -701,14 +714,22 @@ fn write_file_to_folder_core(
 /// atomically replaced, allowing plugins to checkpoint or update saved progress.
 /// Blocking file I/O runs on a worker thread via
 /// [`tauri::async_runtime::spawn_blocking`].
+///
+/// The file arrives as the raw request body and its folder and name as the
+/// `x-folder-id` and `x-file-name` headers, so a large file never passes through
+/// JSON on the main thread.
 #[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn write_file_to_folder(
-    folder_id: String,
-    file_name: String,
-    data: Vec<u8>,
+    request: tauri::ipc::Request<'_>,
     downloads: tauri::State<'_, RemoteDownloads>,
 ) -> Result<WriteFileResult, String> {
+    let folder_id = decoded_header(request.headers(), "x-folder-id")?;
+    let file_name = decoded_header(request.headers(), "x-file-name")?;
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("write_file_to_folder expects a raw request body.".to_string());
+    };
+    let data = data.clone();
     let folder = {
         let folders = downloads.folders.lock().unwrap();
         folders
@@ -727,11 +748,7 @@ pub(crate) async fn write_file_to_folder(
 /// desktop-only.
 #[cfg(mobile)]
 #[tauri::command]
-pub(crate) async fn write_file_to_folder(
-    _folder_id: String,
-    _file_name: String,
-    _data: Vec<u8>,
-) -> Result<WriteFileResult, String> {
+pub(crate) async fn write_file_to_folder() -> Result<WriteFileResult, String> {
     Err("Writing files to a chosen folder is not supported on this platform.".into())
 }
 
@@ -769,6 +786,21 @@ fn read_and_remove(path: &Path) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decoded_header_undoes_encode_uri_component() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-file-name", HeaderValue::from_static("%E6%98%A5%20map.geojson"));
+        assert_eq!(decoded_header(&headers, "x-file-name").unwrap(), "\u{6625} map.geojson");
+        assert!(decoded_header(&headers, "x-folder-id").is_err());
+    }
+
+    #[test]
+    fn decoded_header_refuses_bytes_that_are_not_utf8() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-file-name", HeaderValue::from_static("%FF"));
+        assert!(decoded_header(&headers, "x-file-name").is_err());
+    }
 
     #[test]
     fn sanitizes_file_names_to_one_component() {

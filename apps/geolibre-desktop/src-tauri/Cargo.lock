@@ -1817,6 +1817,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac 0.13.0",
  "keyring",
+ "percent-encoding",
  "reqwest 0.12.28",
  "rusqlite",
  "rustls",
