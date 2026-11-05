@@ -168,7 +168,11 @@ function lonLatPositions(positions: Position[]): Position[] {
   return positions;
 }
 
-/** Absolute polygon area (outer ring minus holes) in square meters. */
+/**
+ * Absolute polygon area (outer ring minus holes) in square meters. Each ring is
+ * measured as the smaller side it bounds, so a hole enclosing more than half
+ * the body would be subtracted wrongly; no real polygon has one.
+ */
 function polygonAreaMeters(rings: Position[][]): number {
   if (rings.length === 0) return 0;
   let area = geodesicRingArea(lonLatPositions(rings[0]));

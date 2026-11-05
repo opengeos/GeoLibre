@@ -534,6 +534,12 @@ describe("average nearest neighbor", () => {
     );
     assert.ok(messages.includes("Average nearest neighbor (n=4):"));
     assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
+    // The skipped point does not stretch the study area either.
+    const without = run(averageNearestNeighborTool, pointLayer(corners), {});
+    assert.equal(
+      loggedNumber(messages, "Expected mean distance:"),
+      loggedNumber(without.messages, "Expected mean distance:"),
+    );
   });
 });
 

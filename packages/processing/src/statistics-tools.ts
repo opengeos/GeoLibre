@@ -1,6 +1,6 @@
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
-import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
+import { featureCollection, multiPoint, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
@@ -221,6 +221,7 @@ export function buildNeighbors(
       const within: number[] = [];
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
+        // The rule of `withinGeodesicDistance`, on the angle computed once above.
         if (angles[j] * max <= thresholdM) within.push(j);
         else if (
           angles[j] * min <= thresholdM &&
@@ -709,8 +710,9 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
     // Mean observed nearest-neighbor distance (metres).
     const observedMean = meanNearestNeighborDistance(coords);
 
-    // Study area = bounding-box area (m²) of the input extent.
-    const extentBox = horizontalBbox(bbox(layer.geojson));
+    // Study area = bounding-box area (m²) of the points measured above, so a
+    // feature left out by `featureCoords` cannot stretch it.
+    const extentBox = horizontalBbox(bbox(multiPoint(coords)));
     if (!extentBox) {
       ctx.log("Error: the layer has no usable extent.");
       return;
