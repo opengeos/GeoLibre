@@ -49,8 +49,6 @@ export {
   localMoransITool,
   getisOrdTool,
   averageNearestNeighborTool,
-  buildNeighbors,
-  meanNearestNeighborDistance,
   kernelDensityTool,
   emergingHotSpotTool,
   emergingPattern,

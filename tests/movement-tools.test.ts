@@ -217,6 +217,32 @@ describe("the active celestial body", () => {
 });
 
 describe("detect stops", () => {
+  it("skips fixes whose latitude is beyond the pole", () => {
+    // GeographicLib has no distance to latitude 95°; the fix is reported and left
+    // out instead of giving a NaN distance.
+    const track = pointLayer("track", [
+      [0, 0, { t: 0 }],
+      [0, 95, { t: 30 }],
+      [0, 0.0001, { t: 120 }],
+    ]);
+    for (const tool of ["detect-stops", "trajectory-speed", "space-time-proximity"]) {
+      const { result, messages } = runTool(tool, [track], {
+        layer: "track",
+        timeField: "t",
+        maxDistance: 50,
+        minDuration: 60,
+        maxTime: 5,
+        timeUnits: "minutes",
+      });
+      assert.ok(messages.includes("Skipped 1 point(s) with an invalid position"), tool);
+      assert.equal(result!.features.length, 1, tool);
+      const props = result!.features[0].properties ?? {};
+      for (const key of ["distance", "distance_m"]) {
+        if (key in props) assert.ok(Number.isFinite(props[key]), `${tool} ${key}`);
+      }
+    }
+  });
+
   it("compares the threshold with the WGS 84 distance", () => {
     // 0.01° of meridian at the equator is 1,105.743 m on WGS 84 (GeographicLib
     // via pyproj 3.8.0) and 1,111.95 m on the sphere of mean radius, so a

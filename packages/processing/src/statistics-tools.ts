@@ -7,9 +7,11 @@ import {
   centralAngle,
   geodesicDistance,
   geodesicRadiusBounds,
-  geodesicRingArea,
+  getActiveEllipsoid,
   getActiveMeanRadiusMeters,
   horizontalBbox,
+  isLonLat,
+  latLonBoxArea,
 } from "@geolibre/core";
 import type {
   FieldDirection,
@@ -137,7 +139,8 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
 /**
  * Representative lon/lat for each feature: the point itself, a polygon's
  * area-weighted centroid, or Turf's centroid for other geometries.
- * Returns null entries for features whose geometry can't be located.
+ * Returns null entries for features whose geometry can't be located,
+ * including positions with a non-finite coordinate or a latitude beyond ±90°.
  */
 function featureCoords(features: Feature[]): ([number, number] | null)[] {
   return features.map((feature) => {
@@ -145,19 +148,19 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
     if (!geometry) return null;
     if (geometry.type === "Point") {
       const [lon, lat] = geometry.coordinates;
-      return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+      return isLonLat([lon, lat]) ? [lon, lat] : null;
     }
     try {
       if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
         try {
           const point = polygonCentroid(geometry);
-          if (point) return point;
+          if (point) return isLonLat(point) ? point : null;
         } catch {
           // A malformed part (e.g. an empty first polygon): use Turf's centroid below.
         }
       }
       const [lon, lat] = centroid(feature).geometry.coordinates;
-      return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+      return isLonLat([lon, lat]) ? [lon, lat] : null;
     } catch {
       return null;
     }
@@ -197,7 +200,8 @@ function collectNumericSample(features: Feature[], field: string): NumericSample
  * The geodesic costs about twenty haversines, so each pair is first bounded
  * from its central angle ({@link geodesicRadiusBounds}) and the geodesic is
  * computed only where the bounds cannot decide. The result is the same as
- * measuring every pair.
+ * measuring every pair. The positions must pass `isLonLat`, as those from
+ * `featureCoords` do, so that every distance and bound is finite.
  */
 export function buildNeighbors(
   coords: [number, number][],
@@ -206,7 +210,8 @@ export function buildNeighbors(
   thresholdKm: number,
 ): number[][] {
   const n = coords.length;
-  const { min, max } = geodesicRadiusBounds();
+  const ellipsoid = getActiveEllipsoid();
+  const { min, max } = geodesicRadiusBounds(ellipsoid);
   const thresholdM = thresholdKm * 1000;
   const angles = new Float64Array(n);
   const neighbors: number[][] = [];
@@ -219,7 +224,7 @@ export function buildNeighbors(
         if (angles[j] * max <= thresholdM) within.push(j);
         else if (
           angles[j] * min <= thresholdM &&
-          geodesicDistance(coords[i], coords[j]) <= thresholdM
+          geodesicDistance(coords[i], coords[j], ellipsoid) <= thresholdM
         )
           within.push(j);
       }
@@ -235,7 +240,7 @@ export function buildNeighbors(
     const candidates: { j: number; d: number }[] = [];
     for (let j = 0; j < n; j++) {
       if (j === i || angles[j] * min > cutoff) continue;
-      candidates.push({ j, d: geodesicDistance(coords[i], coords[j]) });
+      candidates.push({ j, d: geodesicDistance(coords[i], coords[j], ellipsoid) });
     }
     // Stable sort, so ties keep index order as when every pair is measured.
     candidates.sort((a, b) => a.d - b.d);
@@ -252,7 +257,8 @@ export function buildNeighbors(
  */
 export function meanNearestNeighborDistance(coords: [number, number][]): number {
   const n = coords.length;
-  const { min, max } = geodesicRadiusBounds();
+  const ellipsoid = getActiveEllipsoid();
+  const { min, max } = geodesicRadiusBounds(ellipsoid);
   const angles = new Float64Array(n);
   let sum = 0;
   for (let i = 0; i < n; i++) {
@@ -265,7 +271,7 @@ export function meanNearestNeighborDistance(coords: [number, number][]): number 
     let nearest = Infinity;
     for (let j = 0; j < n; j++) {
       if (j === i || angles[j] * min > Math.min(bestUpper, nearest)) continue;
-      const d = geodesicDistance(coords[i], coords[j]);
+      const d = geodesicDistance(coords[i], coords[j], ellipsoid);
       if (d < nearest) nearest = d;
     }
     sum += nearest;
@@ -710,14 +716,13 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
       return;
     }
     const [west, south, east, north] = extentBox;
-    // Measured on the active body's ellipsoid, like the distances above, so the
-    // NN ratio is meaningful off Earth too (GeoLibre#1128).
-    const studyArea = geodesicRingArea([
-      [west, south],
-      [east, south],
-      [east, north],
-      [west, north],
-    ]);
+    // The box is bounded by parallels, as Turf's formula assumed, so it is
+    // measured with the exact zone area rather than as a ring of geodesics:
+    // those would cut inside the parallels and, for an extent wider than 180°,
+    // take the short way round. It is on the active body's ellipsoid, like the
+    // distances above, so the NN ratio is meaningful off Earth too
+    // (GeoLibre#1128).
+    const studyArea = latLonBoxArea(west, south, east, north);
     if (!(studyArea > 0)) {
       ctx.log("Error: the point extent has zero area (all points coincide).");
       return;

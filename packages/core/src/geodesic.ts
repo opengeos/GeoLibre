@@ -57,10 +57,10 @@ const DEG_TO_RAD = Math.PI / 180;
 
 /**
  * Central angle in radians between two positions, taking their geodetic
- * latitude and longitude as coordinates on a sphere (the haversine formula).
- * About twenty times cheaper than {@link geodesicDistance}; with
- * {@link geodesicRadiusBounds} it bounds a geodesic distance without computing
- * it, which lets the O(n²) loops skip most pairs.
+ * latitude and longitude as coordinates on a sphere. Much cheaper than
+ * {@link geodesicDistance}; with {@link geodesicRadiusBounds} it bounds a
+ * geodesic distance without computing it, which lets the O(n²) loops skip most
+ * pairs.
  */
 export function centralAngle(from: Position, to: Position): number {
   const lat1 = from[1] * DEG_TO_RAD;
@@ -68,7 +68,19 @@ export function centralAngle(from: Position, to: Position): number {
   const dLon = (to[0] - from[0]) * DEG_TO_RAD;
   const h =
     Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  // The haversine is well conditioned up to 90° (h <= 0.5), the common case
+  // in the neighbour searches. Beyond, asin loses precision towards the
+  // antipode, so the atan2 form takes over.
+  if (h <= 0.5) return 2 * Math.asin(Math.sqrt(h));
+  const sinLat1 = Math.sin(lat1);
+  const cosLat1 = Math.cos(lat1);
+  const sinLat2 = Math.sin(lat2);
+  const cosLat2 = Math.cos(lat2);
+  const cosDLon = Math.cos(dLon);
+  const x = cosLat2 * Math.sin(dLon);
+  const y = cosLat1 * sinLat2 - sinLat1 * cosLat2 * cosDLon;
+  const z = sinLat1 * sinLat2 + cosLat1 * cosLat2 * cosDLon;
+  return Math.atan2(Math.hypot(x, y), z);
 }
 
 /**
@@ -82,8 +94,10 @@ export function centralAngle(from: Position, to: Position): number {
  * equator) and a²/b (both at the poles). Every curve on one surface is
  * therefore between b²/a and a²/b times as long as its image on the other, and
  * so are the shortest paths. On Earth that is 6,335,439 m to 6,399,594 m, within
- * 0.6 % of the mean radius; on a sphere both radii equal its radius. The
- * 1e-9 margin covers rounding in the haversine and in GeographicLib.
+ * 0.6 % of the mean radius; on a sphere both radii equal its radius. On a
+ * prolate figure (b > a, a negative inverse flattening) the two swap, hence the
+ * min and max. The 1e-9 margin covers rounding in the central angle and in
+ * GeographicLib.
  */
 export function geodesicRadiusBounds(ellipsoid: Ellipsoid = getActiveEllipsoid()): {
   min: number;
@@ -91,7 +105,12 @@ export function geodesicRadiusBounds(ellipsoid: Ellipsoid = getActiveEllipsoid()
 } {
   const a = ellipsoid.semiMajorAxisMeters;
   const b = ellipsoid.inverseFlattening ? a * (1 - 1 / ellipsoid.inverseFlattening) : a;
-  return { min: ((b * b) / a) * (1 - 1e-9), max: ((a * a) / b) * (1 + 1e-9) };
+  const meridianAtEquator = (b * b) / a;
+  const atPole = (a * a) / b;
+  return {
+    min: Math.min(meridianAtEquator, atPole) * (1 - 1e-9),
+    max: Math.max(meridianAtEquator, atPole) * (1 + 1e-9),
+  };
 }
 
 /**
@@ -136,7 +155,52 @@ export function geodesicRingArea(
   if (ring.length < 3) return 0;
   const polygon = solverFor(ellipsoid).Polygon(false);
   for (const position of ring) polygon.AddPoint(position[1], position[0]);
-  // Signed result (counter-clockwise positive), so a clockwise ring gives the
-  // negative of its own area rather than the area of the rest of the body.
+  // `sign = true` reports a signed area, counter-clockwise positive, in
+  // (-half, +half] of the body. Its absolute value is the area the ring
+  // encloses for either winding, including a ring around a pole; a ring that
+  // bounds more than half the body is measured as the smaller side.
   return Math.abs(polygon.Compute(false, true).area ?? 0);
+}
+
+/**
+ * Area in square metres of the box bounded by the meridians `west` and `east`
+ * and the parallels `south` and `north` (degrees). `east - west` may span up
+ * to 360°; latitudes are clamped to ±90°.
+ *
+ * Its edges along parallels are not geodesics, so this is the closed form for
+ * a zone of the ellipsoid, b² Δλ [F(φ₂) − F(φ₁)] with
+ * F(φ) = sin φ / (2 (1 − e² sin² φ)) + atanh(e sin φ) / (2e), which reduces to
+ * R² Δλ (sin φ₂ − sin φ₁) on a sphere and uses atan for a prolate figure
+ * (e² < 0). It holds up to the whole body, unlike a ring of geodesics, which
+ * would go the short way round a box wider than 180°.
+ */
+export function latLonBoxArea(
+  west: number,
+  south: number,
+  east: number,
+  north: number,
+  ellipsoid: Ellipsoid = getActiveEllipsoid(),
+): number {
+  const a = ellipsoid.semiMajorAxisMeters;
+  const f = ellipsoid.inverseFlattening ? 1 / ellipsoid.inverseFlattening : 0;
+  const b = a * (1 - f);
+  const e2 = f * (2 - f);
+  const e = Math.sqrt(Math.abs(e2));
+  const zone = (lat: number): number => {
+    const s = Math.sin(Math.max(-90, Math.min(90, lat)) * DEG_TO_RAD);
+    if (e === 0) return s;
+    const tail = e2 > 0 ? Math.atanh(e * s) : Math.atan(e * s);
+    return s / (2 * (1 - e2 * s * s)) + tail / (2 * e);
+  };
+  const dLon = Math.max(0, Math.min(360, east - west)) * DEG_TO_RAD;
+  return b * b * dLon * Math.abs(zone(north) - zone(south));
+}
+
+/**
+ * Whether a position is a usable lon/lat: both finite and |lat| <= 90°.
+ * GeographicLib returns NaN for latitudes beyond the poles.
+ */
+export function isLonLat(position: Position): boolean {
+  const [lon, lat] = position;
+  return Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lat) <= 90;
 }

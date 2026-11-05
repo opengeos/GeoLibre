@@ -11,7 +11,6 @@ import {
   type ResultLayerOptions,
   STATISTICS_TOOLS,
   averageNearestNeighborTool,
-  buildNeighbors,
   compositeScoreTool,
   computeCompositeScores,
   normalizeFieldValues,
@@ -22,8 +21,11 @@ import {
   globalMoransITool,
   kernelDensityTool,
   localMoransITool,
-  meanNearestNeighborDistance,
 } from "@geolibre/processing";
+import {
+  buildNeighbors,
+  meanNearestNeighborDistance,
+} from "../packages/processing/src/statistics-tools";
 import type { Feature, FeatureCollection, Point } from "geojson";
 
 /** Build a point layer from [lon, lat, properties] tuples. */
@@ -465,9 +467,10 @@ describe("average nearest neighbor", () => {
 
   it("measures distances and the study area on the WGS 84 ellipsoid", () => {
     // The corners of a 1° box at 45–46° N. Expected values computed with
-    // GeographicLib through pyproj 3.8.0: Geod(ellps="WGS84").inv(...) for the
-    // nearest-neighbour distances (the east-west sides) and
-    // .polygon_area_perimeter(...) for the box, 8,686,379,301.740 m².
+    // pyproj 3.8.0: Geod(ellps="WGS84").inv(...) (GeographicLib) for the
+    // nearest-neighbour distances (the east-west sides), and for the box between
+    // the parallels, 8,686,494,956.670 m², its area in the WGS 84 cylindrical
+    // equal-area projection EPSG:6933, where it is a rectangle.
     const corners = pointLayer([
       [9, 45, {}],
       [10, 45, {}],
@@ -476,12 +479,82 @@ describe("average nearest neighbor", () => {
     ]);
     const { messages } = run(averageNearestNeighborTool, corners, {});
     assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
-    assert.equal(loggedNumber(messages, "Expected mean distance:"), 23300.19);
+    assert.equal(loggedNumber(messages, "Expected mean distance:"), 23300.34);
     assert.equal(loggedNumber(messages, "NN ratio:"), 3.3542);
+  });
+
+  it("measures a study area wider than 180° of longitude the long way round", () => {
+    // Same references as above. A ring of geodesics through the four corners
+    // would take the short way round: zero area for the whole globe, and a strip
+    // about 2° wide for -179° to 179°.
+    const globe = run(
+      averageNearestNeighborTool,
+      pointLayer([
+        [-180, -60, {}],
+        [180, 60, {}],
+        [0, 0, {}],
+        [90, 30, {}],
+        [-90, -30, {}],
+      ]),
+      {},
+    ).messages;
+    // Study area 441,233,920,694,280.7 m² (-180..180, -60..60).
+    assert.equal(loggedNumber(globe, "Observed mean distance:"), 7737790.92);
+    assert.equal(loggedNumber(globe, "Expected mean distance:"), 4696987.97);
+    assert.equal(loggedNumber(globe, "NN ratio:"), 1.6474);
+
+    const wide = run(
+      averageNearestNeighborTool,
+      pointLayer([
+        [-179, 10, {}],
+        [179, 20, {}],
+        [0, 15, {}],
+      ]),
+      {},
+    ).messages;
+    // Study area 42,550,157,488,306.9 m² (-179..179, 10..20).
+    assert.equal(loggedNumber(wide, "Observed mean distance:"), 6128459.07);
+    assert.equal(loggedNumber(wide, "Expected mean distance:"), 1883041.81);
+    assert.equal(loggedNumber(wide, "NN ratio:"), 3.2546);
+  });
+
+  it("skips a point whose latitude is beyond the pole", () => {
+    // GeographicLib has no distance to latitude 95°, so the point is left out
+    // like any other unlocatable geometry.
+    const corners: Array<[number, number, Record<string, unknown>]> = [
+      [9, 45, {}],
+      [10, 45, {}],
+      [9, 46, {}],
+      [10, 46, {}],
+    ];
+    const { messages } = run(
+      averageNearestNeighborTool,
+      pointLayer([...corners, [9.5, 95, {}]]),
+      {},
+    );
+    assert.ok(messages.includes("Average nearest neighbor (n=4):"));
+    assert.equal(loggedNumber(messages, "Observed mean distance:"), 78154.56);
   });
 });
 
 describe("distance-band weights", () => {
+  it("leaves out a point whose latitude is beyond the pole", () => {
+    const valid: Array<[number, number, Record<string, unknown>]> = [
+      [7.6869, 45.0703, { v: 1 }],
+      [13.77, 45.65, { v: 2 }],
+      [13.3615, 38.1157, { v: 3 }],
+      [12.4964, 41.9028, { v: 5 }],
+    ];
+    const params = { weightsType: "knn", k: 2, permutations: 99 };
+    const withInvalid = run(globalMoransITool, pointLayer([...valid, [10, 120, { v: 9 }]]), params);
+    const without = run(globalMoransITool, pointLayer(valid), params);
+    assert.ok(withInvalid.messages.some((m) => m.includes("(n=4)")));
+    assert.equal(
+      loggedNumber(withInvalid.messages, "Moran's I:"),
+      loggedNumber(without.messages, "Moran's I:"),
+    );
+  });
+
   it("compares the band with the WGS 84 distance", () => {
     // Torino–Trieste is 480.833 km on WGS 84 (GeographicLib via pyproj 3.8.0)
     // and 479.510 km on the sphere of mean radius; Palermo is over 800 km from

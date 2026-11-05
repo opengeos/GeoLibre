@@ -16,6 +16,8 @@ import {
   geodesicLength,
   geodesicRingArea,
   getEllipsoid,
+  isLonLat,
+  latLonBoxArea,
   setActiveEllipsoidId,
   withinGeodesicDistance,
 } from "@geolibre/core";
@@ -186,6 +188,11 @@ describe("geodesicRadiusBounds", () => {
         [-70, -50],
         [120, 60],
       ],
+      // Near-antipodal, where a haversine central angle loses precision.
+      [
+        [0, 0.3],
+        [179.9999, -0.3],
+      ],
     ];
     for (const id of ["earth", "mars", "moon"]) {
       const ellipsoid = getEllipsoid(id);
@@ -198,5 +205,84 @@ describe("geodesicRadiusBounds", () => {
         assert.equal(withinGeodesicDistance(p, q, d * (1 - 1e-12), ellipsoid), false);
       }
     }
+  });
+});
+
+describe("a prolate figure", () => {
+  // Not in ELLIPSOIDS, but the helpers take any ellipsoid: b > a here.
+  const prolate = {
+    id: "prolate",
+    name: "Prolate test figure",
+    semiMajorAxisMeters: 6378137,
+    inverseFlattening: -298.257223563,
+  };
+
+  it("keeps min below max and bounds the geodesic", () => {
+    const { min, max } = geodesicRadiusBounds(prolate);
+    assert.ok(min < max);
+    const pairs: [Position, Position][] = [
+      [TORINO, TRIESTE],
+      [
+        [0, 0],
+        [0, 0.001],
+      ],
+      [
+        [0, 89.99],
+        [90, 89.99],
+      ],
+    ];
+    for (const [p, q] of pairs) {
+      const angle = centralAngle(p, q);
+      const d = geodesicDistance(p, q, prolate);
+      assert.ok(angle * min <= d && d <= angle * max, `${p} → ${q}`);
+    }
+  });
+
+  it("measures the whole spheroid like the closed form for its surface", () => {
+    // S = 2πa² (1 + b / (a ε) · asin ε), ε = sqrt(1 − a²/b²), for b > a.
+    const a = prolate.semiMajorAxisMeters;
+    const b = a * (1 - 1 / prolate.inverseFlattening);
+    const eps = Math.sqrt(1 - (a * a) / (b * b));
+    const surface = 2 * Math.PI * a * a * (1 + (b / (a * eps)) * Math.asin(eps));
+    assertClose(latLonBoxArea(-180, -90, 180, 90, prolate), surface, 1);
+  });
+});
+
+describe("latLonBoxArea", () => {
+  // References: the box's area in the WGS 84 cylindrical equal-area projection
+  // EPSG:6933 (pyproj 3.8.0), where a box between meridians and parallels is a
+  // rectangle, so its area is Δx · Δy.
+  it("measures boxes between parallels, including ones wider than 180°", () => {
+    // The global box is more than half the ellipsoid, where a ring of geodesics
+    // measured with geodesicRingArea would give the smaller side.
+    assertClose(latLonBoxArea(9, 45, 10, 46), 8686494956.670462, 1e-3);
+    assertClose(latLonBoxArea(-179, 10, 179, 20), 42550157488306.87, 1);
+    assertClose(latLonBoxArea(-180, -60, 180, 60), 441233920694280.7, 1);
+    // The whole ellipsoid: 510,065,621,724,088.4 m², 4π times the square of
+    // WGS 84's authalic radius.
+    assertClose(latLonBoxArea(-180, -90, 180, 90), 510065621724088.4, 1);
+  });
+
+  it("clamps latitudes and longitude spans, and uses the active body", () => {
+    assert.equal(latLonBoxArea(-180, -95, 180, 95), latLonBoxArea(-180, -90, 180, 90));
+    assert.equal(latLonBoxArea(-200, 0, 200, 10), latLonBoxArea(-180, 0, 180, 10));
+    assert.equal(latLonBoxArea(10, 0, 10, 10), 0);
+    setActiveEllipsoidId("moon");
+    // On a sphere: R² Δλ (sin φ₂ − sin φ₁).
+    assertClose(
+      latLonBoxArea(0, 0, 1, 1),
+      1737400 ** 2 * (Math.PI / 180) * Math.sin(Math.PI / 180),
+      1e-3,
+    );
+  });
+});
+
+describe("isLonLat", () => {
+  it("accepts finite positions with |lat| <= 90 and rejects the rest", () => {
+    assert.equal(isLonLat([190, 90]), true);
+    assert.equal(isLonLat([0, -90]), true);
+    assert.equal(isLonLat([0, 90.0001]), false);
+    assert.equal(isLonLat([Number.NaN, 0]), false);
+    assert.equal(isLonLat([0, Number.POSITIVE_INFINITY]), false);
   });
 });

@@ -39,6 +39,7 @@ import {
   decodePolylineDetailed,
   earthLengthToBody,
   encodePolyline,
+  getActiveEllipsoid,
   horizontalBbox,
   layerJoinKey,
   type GeoLibreLayer,
@@ -47,6 +48,7 @@ import {
   centralAngle,
   geodesicDistance,
   geodesicRadiusBounds,
+  isLonLat,
   withinGeodesicDistance,
 } from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
@@ -2682,11 +2684,22 @@ function collectTimedPoints(
   fc: FeatureCollection,
   timeField: string,
   idField: string | undefined,
-): { groups: Map<string, TimedPoint[]>; skipped: number; skippedNoId: number } {
+): {
+  groups: Map<string, TimedPoint[]>;
+  skipped: number;
+  skippedNoId: number;
+  skippedPosition: number;
+} {
   const groups = new Map<string, TimedPoint[]>();
   let skipped = 0;
   let skippedNoId = 0;
+  let skippedPosition = 0;
   for (const point of collectPoints(fc)) {
+    // A latitude beyond ±90° has no geodesic distance (GeographicLib gives NaN).
+    if (!isLonLat(point.geometry.coordinates)) {
+      skippedPosition += 1;
+      continue;
+    }
     const time = parseTimestamp(point.properties?.[timeField]);
     if (time === null) {
       skipped += 1;
@@ -2715,7 +2728,7 @@ function collectTimedPoints(
     else groups.set(key, [entry]);
   }
   for (const bucket of groups.values()) bucket.sort((a, b) => a.time - b.time);
-  return { groups, skipped, skippedNoId };
+  return { groups, skipped, skippedNoId, skippedPosition };
 }
 
 export const cellSectorsTool: ProcessingAlgorithm = {
@@ -2923,14 +2936,19 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
       ctx.log(`Error: unknown speed units '${speedUnits}'`);
       return;
     }
-    const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId, skippedPosition } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     const segments: Feature<LineString>[] = [];
+    const ellipsoid = getActiveEllipsoid();
     for (const [key, pts] of groups) {
       for (let i = 1; i < pts.length; i += 1) {
         const a = pts[i - 1];
         const b = pts[i];
         // On the active body's ellipsoid, so speeds are correct off Earth too.
-        const meters = geodesicDistance(a.coord, b.coord);
+        const meters = geodesicDistance(a.coord, b.coord, ellipsoid);
         const seconds = (b.time - a.time) / 1000;
         // Equal timestamps (the only non-positive gap after sorting) give an
         // undefined speed; emit the segment with null rather than Infinity.
@@ -2952,6 +2970,7 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     if (!segments.length) {
       ctx.log("Error: need at least two timed fixes in a target to build a segment");
       return;
@@ -3056,7 +3075,11 @@ export const detectStopsTool: ProcessingAlgorithm = {
       return;
     }
     const minDurationMs = numberParam(ctx, "minDuration", 60) * 1000;
-    const { groups, skipped, skippedNoId } = collectTimedPoints(fc, timeField, idField);
+    const { groups, skipped, skippedNoId, skippedPosition } = collectTimedPoints(
+      fc,
+      timeField,
+      idField,
+    );
     let totalPoints = 0;
     for (const pts of groups.values()) totalPoints += pts.length;
     if (totalPoints === 0) {
@@ -3073,6 +3096,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
     // Convert the threshold to metres once, rather than converting every
     // measured distance inside the O(n²) scan below.
     const maxMeters = maxDistance * METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
+    const ellipsoid = getActiveEllipsoid();
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -3085,7 +3109,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
         // absorbed into a single stop.
-        while (j < pts.length && withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters)) {
+        while (
+          j < pts.length &&
+          withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters, ellipsoid)
+        ) {
           j += 1;
         }
         const run = pts.slice(i, j);
@@ -3128,6 +3155,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     ctx.log(`Detect stops: found ${stops.length} stop(s) across ${groups.size} target(s)`);
     ctx.addResultLayer?.("Stops", featureCollection(stops));
   },
@@ -3247,7 +3275,13 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
       [];
     let skipped = 0;
     let skippedNoId = 0;
+    let skippedPosition = 0;
     for (const point of collectPoints(fc)) {
+      // A latitude beyond ±90° has no geodesic distance (GeographicLib gives NaN).
+      if (!isLonLat(point.geometry.coordinates)) {
+        skippedPosition += 1;
+        continue;
+      }
       const time = parseTimestamp(point.properties?.[timeField]);
       if (time === null) {
         skipped += 1;
@@ -3305,14 +3339,15 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     const metersPerUnit = METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
     const maxMeters = maxDistance * metersPerUnit;
     // Pairs whose lower bound is already past the threshold skip the geodesic.
-    const minRadius = geodesicRadiusBounds().min;
+    const ellipsoid = getActiveEllipsoid();
+    const minRadius = geodesicRadiusBounds(ellipsoid).min;
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
         if (centralAngle(timed[i].coord, timed[j].coord) * minRadius > maxMeters) continue;
-        const meters = geodesicDistance(timed[i].coord, timed[j].coord);
+        const meters = geodesicDistance(timed[i].coord, timed[j].coord, ellipsoid);
         if (meters > maxMeters) continue;
         const dist = meters / metersPerUnit;
         pairs.push({
@@ -3334,6 +3369,7 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     }
     if (skipped) ctx.log(`Skipped ${skipped} point(s) with no parseable time`);
     if (skippedNoId) ctx.log(`Skipped ${skippedNoId} point(s) with no '${idField}' value`);
+    if (skippedPosition) ctx.log(`Skipped ${skippedPosition} point(s) with an invalid position`);
     ctx.log(
       `Space-time proximity: found ${pairs.length} pair(s) within ${maxDistance} ${distanceUnits} and ${maxTimeValue} ${timeUnits}`,
     );
