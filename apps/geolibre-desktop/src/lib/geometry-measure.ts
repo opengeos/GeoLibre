@@ -1,7 +1,6 @@
 /**
  * Geodesic length, perimeter, and area of GeoJSON geometries for the attribute
- * table's Field Calculator. They offer the same units as the Measure tool,
- * which may not measure on the ellipsoid yet, so the two can differ slightly.
+ * table's Field Calculator, in the same units as the Measure tool.
  *
  * Lengths are summed geodesic distances between consecutive vertices and areas
  * are geodesic polygon areas, both on the active body's ellipsoid (WGS 84 on

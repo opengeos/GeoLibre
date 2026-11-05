@@ -1,6 +1,6 @@
 import bbox from "@turf/bbox";
 import centroid from "@turf/centroid";
-import { featureCollection, multiPoint, polygon as turfPolygon } from "@turf/helpers";
+import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
@@ -179,26 +179,6 @@ function featureCoords(features: Feature[]): ([number, number] | null)[] {
       return null;
     }
   });
-}
-
-/**
- * The positions that span the input's extent: each feature's position from
- * `featureCoords` plus every vertex of a located Point or MultiPoint, so a
- * MultiPoint keeps its full extent. Located features have only lon/lat
- * vertices (`allLonLat`).
- */
-function locatedVertices(features: Feature[], coords: [number, number][]): [number, number][] {
-  const vertices = [...coords];
-  for (const { geometry } of features) {
-    const points =
-      geometry?.type === "MultiPoint"
-        ? geometry.coordinates
-        : geometry?.type === "Point"
-          ? [geometry.coordinates]
-          : [];
-    for (const [lon, lat] of points) vertices.push([lon, lat]);
-  }
-  return vertices;
 }
 
 /**
@@ -756,7 +736,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
 
     // Study area = bounding-box area (m²) of the input extent, over the features
     // measured above, so one left out by `featureCoords` cannot stretch it.
-    const extentBox = horizontalBbox(bbox(multiPoint(locatedVertices(located, coords))));
+    const extentBox = horizontalBbox(bbox(featureCollection(located)));
     if (!extentBox) {
       ctx.log("Error: the layer has no usable extent.");
       return;
