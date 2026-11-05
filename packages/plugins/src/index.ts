@@ -694,6 +694,8 @@ export {
   type OceanDataPlatformFileSaver,
 } from "./plugins/maplibre-ocean-data-platform";
 export { DYNAMICAL_PLUGIN_ID, maplibreDynamicalPlugin } from "./plugins/maplibre-dynamical";
+export { JAXA_EARTH_PLUGIN_ID, maplibreJaxaEarthPlugin } from "./plugins/maplibre-jaxa-earth";
+export { registerJaxaEarthProtocol } from "./plugins/jaxa-earth-api";
 export {
   maplibreSatelliteEmbeddingsPlugin,
   SATELLITE_EMBEDDINGS_PLUGIN_ID,

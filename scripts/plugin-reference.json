@@ -146,6 +146,10 @@
     "description": "dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers.",
     "docs": "web-services.md#dynamical"
   },
+  "geolibre-jaxa-earth": {
+    "description": "JAXA Earth API datasets (ALOS elevation and forest maps, GSMaP precipitation, GCOM-C land and sea surface temperature, vegetation, soil moisture) drawn as color-mapped tiles.",
+    "docs": "web-services.md#jaxa-earth"
+  },
   "maplibre-gl-geolens": {
     "description": "A self-hosted GeoLens spatial catalog.",
     "docs": "web-services.md#geolens"
