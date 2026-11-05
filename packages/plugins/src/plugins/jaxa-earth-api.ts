@@ -44,6 +44,12 @@ export const JAXA_EARTH_PROTOCOL = "jaxa-earth";
 export const JAXA_EARTH_ATTRIBUTION =
   '<a href="https://data.earth.jaxa.jp/en/" target="_blank" rel="noreferrer">JAXA Earth API</a>';
 
+/**
+ * How long the catalog and module downloads may take. A stalled request would
+ * otherwise stay cached as pending and leave the panel loading forever.
+ */
+export const FETCH_TIMEOUT_MS = 30_000;
+
 /** Tile size of the PNGs the protocol serves. */
 export const JAXA_EARTH_TILE_SIZE = 256;
 
@@ -503,9 +509,17 @@ function toHex(buffer: ArrayBuffer): string {
  * blob URL.
  */
 async function importJaxaEarthModule(): Promise<JaxaEarthModule> {
-  const response = await fetch(JAXA_EARTH_MODULE_URL);
+  const response = await fetch(JAXA_EARTH_MODULE_URL, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`HTTP ${response.status} loading the JAXA Earth API module`);
   const source = await response.arrayBuffer();
+  // `crypto.subtle` exists only in secure contexts (https or localhost).
+  if (!globalThis.crypto?.subtle) {
+    throw new Error(
+      "The JAXA Earth API module can only be verified when GeoLibre is served over https or from localhost.",
+    );
+  }
   const digest = toHex(await crypto.subtle.digest("SHA-256", source));
   if (digest !== JAXA_EARTH_MODULE_SHA256) {
     throw new Error(
@@ -680,7 +694,7 @@ export function registerJaxaEarthProtocol(): void {
  *   values: Sampled pixel values (NaN for no data).
  *
  * Returns:
- *   `[min, max]` rounded to three significant digits, or null when the sample
+ *   `[min, max]` rounded outward to a clean step, or null when the sample
  *   holds no finite value.
  */
 export function percentileRange(values: ArrayLike<number>): [number, number] | null {
@@ -693,21 +707,24 @@ export function percentileRange(values: ArrayLike<number>): [number, number] | n
   finite.sort((a, b) => a - b);
   const at = (fraction: number): number =>
     finite[Math.min(finite.length - 1, Math.max(0, Math.round(fraction * (finite.length - 1))))];
-  let min = roundSignificant(at(0.02));
-  let max = roundSignificant(at(0.98));
-  if (!(max > min)) {
-    min = roundSignificant(finite[0]);
-    max = roundSignificant(finite[finite.length - 1]);
+  let low = at(0.02);
+  let high = at(0.98);
+  if (!(high > low)) {
+    low = finite[0];
+    high = finite[finite.length - 1];
   }
-  if (!(max > min)) {
-    min -= 0.5;
-    max += 0.5;
-  }
-  return [min, max];
+  if (!(high > low)) return [low - 0.5, high + 0.5];
+  return roundOutward(low, high);
 }
 
-/** Rounds to three significant digits. */
-function roundSignificant(value: number): number {
-  if (value === 0) return 0;
-  return Number(value.toPrecision(3));
+/**
+ * Rounds a range outward to a step two orders of magnitude below its span, so
+ * the bounds read cleanly without collapsing a narrow range at a large offset
+ * (a pressure band at 101175..101475 keeps that range rather than becoming
+ * 101000..101000).
+ */
+function roundOutward(low: number, high: number): [number, number] {
+  const step = 10 ** (Math.floor(Math.log10(high - low)) - 2);
+  const clean = (value: number): number => Number(value.toPrecision(12));
+  return [clean(Math.floor(low / step) * step), clean(Math.ceil(high / step) * step)];
 }

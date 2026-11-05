@@ -13,6 +13,7 @@ import {
   type JaxaTileSpec,
   defaultJaxaColormap,
   fetchJaxaCatalog,
+  FETCH_TIMEOUT_MS,
   getJaxaImageCollection,
   isJaxaDatasetMappable,
   jaxaColorsFor,
@@ -189,10 +190,12 @@ function errorMessage(error: unknown): string {
 }
 
 function loadCatalog(): Promise<JaxaCatalog> {
-  catalogPromise ??= fetchJaxaCatalog().catch((error: unknown) => {
-    catalogPromise = null;
-    throw error;
-  });
+  catalogPromise ??= fetchJaxaCatalog(fetch, AbortSignal.timeout(FETCH_TIMEOUT_MS)).catch(
+    (error: unknown) => {
+      catalogPromise = null;
+      throw error;
+    },
+  );
   return catalogPromise;
 }
 
@@ -212,7 +215,8 @@ function currentSpec(): JaxaTileSpec | null {
     min: state.min,
     max: state.max,
     colormap: state.colormap,
-    resampling: state.resampling,
+    // Classes and RGB colors cannot be interpolated; the control is disabled for them.
+    resampling: state.colorMapped ? state.resampling : "nearest",
   };
 }
 
@@ -918,9 +922,10 @@ export const maplibreJaxaEarthPlugin: GeoLibrePlugin = {
   name: "JAXA Earth",
   version: "0.1.0",
   // Layers are XYZ templates of the `jaxa-earth://` MapLibre protocol, which
-  // the globe and ArcGIS read through the shared protocol registry. mapbox-gl
-  // has no protocol registry, so it cannot draw them.
-  engines: ["maplibre", "cesium", "arcgis"],
+  // the globe reads through the shared protocol registry. mapbox-gl has no
+  // protocol registry. ArcGIS reads protocol tiles too but has not been checked
+  // with JAXA layers yet, so it is left out until it is.
+  engines: ["maplibre", "cesium"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

@@ -275,6 +275,14 @@ describe("percentileRange", () => {
     assert.ok(range[1] >= 970 && range[1] <= 985, `max ${range[1]}`);
   });
 
+  it("keeps a narrow range at a large offset and rounds outward", () => {
+    const pressure = Array.from({ length: 101 }, (_, i) => 101175 + i * 3);
+    assert.deepEqual(percentileRange(pressure), [101181, 101469]);
+    assert.deepEqual(percentileRange([0.123, 0.5, 0.987]), [0.123, 0.987]);
+    const [low, high] = percentileRange(Array.from({ length: 101 }, (_, i) => 250.37 + i * 0.7))!;
+    assert.ok(low <= 251.77 && high >= 318.97, `${low}..${high}`);
+  });
+
   it("widens a constant sample and gives up on an empty one", () => {
     assert.deepEqual(percentileRange([5, 5, 5]), [4.5, 5.5]);
     assert.equal(percentileRange([Number.NaN]), null);

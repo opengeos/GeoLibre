@@ -423,7 +423,7 @@ Browses the [JAXA Earth API](https://data.earth.jaxa.jp/en/), JAXA's catalog of 
 - **Colormap**, **Min**, and **Max** color the band's values. Opening a dataset reads a coarse sample of it at that date and sets the range to the 2nd to 98th percentile of the values; **Auto** reads it again for the date shown. Land cover, forest maps, and other bands that carry their own colors ignore the color map.
 - **Add to map** adds the band as a tile layer named after the dataset and date. Changing the date, colors, or resampling afterward updates that layer in place, so you can step through a time series; add it again to keep a date side by side. The layer is saved with the project and draws again when the project is reopened.
 - Tiles are drawn in the browser by JAXA's own [JavaScript API](https://data.earth.jaxa.jp/api/javascript/v2.0.1/en/docs/), which reads only the resolution and area each map tile covers. GeoLibre loads that module from JAXA's server the first time a JAXA layer draws and checks it against a pinned checksum.
-- The sea ice datasets on polar stereographic grids are listed but cannot be added yet. JAXA Earth layers draw on the MapLibre, globe, and ArcGIS renderers, not on Mapbox.
+- The sea ice datasets on polar stereographic grids are listed but cannot be added yet. The plugin runs on the MapLibre and globe (Cesium) renderers.
 
 Most datasets can be used commercially; a few, noted on their dataset pages, cannot. See JAXA's [terms of use](https://earth.jaxa.jp/en/data/policy/).
 
