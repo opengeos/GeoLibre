@@ -43,7 +43,12 @@ import {
   layerJoinKey,
   type GeoLibreLayer,
 } from "@geolibre/core/worker-safe";
-import { geodesicDistance } from "@geolibre/core/geodesic";
+import {
+  centralAngle,
+  geodesicDistance,
+  geodesicRadiusBounds,
+  withinGeodesicDistance,
+} from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
@@ -3080,7 +3085,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // Extend the run while each later fix stays within maxDistance of the
         // anchor (the run's first fix), so brief GPS scatter around one spot is
         // absorbed into a single stop.
-        while (j < pts.length && geodesicDistance(pts[i].coord, pts[j].coord) <= maxMeters) {
+        while (j < pts.length && withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters)) {
           j += 1;
         }
         const run = pts.slice(i, j);
@@ -3299,11 +3304,14 @@ export const spaceTimeProximityTool: ProcessingAlgorithm = {
     // converted back to the chosen units for the reported `distance` property.
     const metersPerUnit = METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
     const maxMeters = maxDistance * metersPerUnit;
+    // Pairs whose lower bound is already past the threshold skip the geodesic.
+    const minRadius = geodesicRadiusBounds().min;
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
         const dt = timed[j].time - timed[i].time; // >= 0 (sorted)
         if (dt > maxTimeMs) break; // later j only widens the gap
         if (idField && timed[i].id === timed[j].id) continue;
+        if (centralAngle(timed[i].coord, timed[j].coord) * minRadius > maxMeters) continue;
         const meters = geodesicDistance(timed[i].coord, timed[j].coord);
         if (meters > maxMeters) continue;
         const dist = meters / metersPerUnit;

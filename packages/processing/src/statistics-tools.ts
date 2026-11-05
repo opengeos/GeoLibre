@@ -4,7 +4,9 @@ import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  centralAngle,
   geodesicDistance,
+  geodesicRadiusBounds,
   geodesicRingArea,
   getActiveMeanRadiusMeters,
   horizontalBbox,
@@ -188,30 +190,87 @@ function collectNumericSample(features: Feature[], field: string): NumericSample
   return out;
 }
 
-/** Neighbor index lists for a set of points (excludes self). */
-function buildNeighbors(
+/**
+ * Neighbor index lists for a set of points (excludes self), by geodesic
+ * distance on the active body's ellipsoid.
+ *
+ * The geodesic costs about twenty haversines, so each pair is first bounded
+ * from its central angle ({@link geodesicRadiusBounds}) and the geodesic is
+ * computed only where the bounds cannot decide. The result is the same as
+ * measuring every pair.
+ */
+export function buildNeighbors(
   coords: [number, number][],
   type: string,
   k: number,
   thresholdKm: number,
 ): number[][] {
   const n = coords.length;
+  const { min, max } = geodesicRadiusBounds();
+  const thresholdM = thresholdKm * 1000;
+  const angles = new Float64Array(n);
   const neighbors: number[][] = [];
   for (let i = 0; i < n; i++) {
-    const distances: { j: number; d: number }[] = [];
-    for (let j = 0; j < n; j++) {
-      if (j === i) continue;
-      const d = geodesicDistance(coords[i], coords[j]) / 1000;
-      distances.push({ j, d });
-    }
+    for (let j = 0; j < n; j++) angles[j] = j === i ? 0 : centralAngle(coords[i], coords[j]);
     if (type === "distance") {
-      neighbors.push(distances.filter((entry) => entry.d <= thresholdKm).map((e) => e.j));
-    } else {
-      distances.sort((a, b) => a.d - b.d);
-      neighbors.push(distances.slice(0, k).map((e) => e.j));
+      const within: number[] = [];
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (angles[j] * max <= thresholdM) within.push(j);
+        else if (
+          angles[j] * min <= thresholdM &&
+          geodesicDistance(coords[i], coords[j]) <= thresholdM
+        )
+          within.push(j);
+      }
+      neighbors.push(within);
+      continue;
     }
+    // The k nearest are all within the k-th smallest upper bound, so only the
+    // points whose lower bound reaches it need their geodesic distance.
+    const uppers = new Float64Array(n - 1);
+    for (let j = 0, u = 0; j < n; j++) if (j !== i) uppers[u++] = angles[j] * max;
+    uppers.sort();
+    const cutoff = uppers[Math.min(k, n - 1) - 1];
+    const candidates: { j: number; d: number }[] = [];
+    for (let j = 0; j < n; j++) {
+      if (j === i || angles[j] * min > cutoff) continue;
+      candidates.push({ j, d: geodesicDistance(coords[i], coords[j]) });
+    }
+    // Stable sort, so ties keep index order as when every pair is measured.
+    candidates.sort((a, b) => a.d - b.d);
+    neighbors.push(candidates.slice(0, k).map((e) => e.j));
   }
   return neighbors;
+}
+
+/**
+ * Mean geodesic distance in metres from each point to its nearest neighbor,
+ * with the same central-angle bounds as {@link buildNeighbors}: a point is
+ * measured only if its lower bound can beat the nearest upper bound and the
+ * nearest distance found so far.
+ */
+export function meanNearestNeighborDistance(coords: [number, number][]): number {
+  const n = coords.length;
+  const { min, max } = geodesicRadiusBounds();
+  const angles = new Float64Array(n);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    let bestUpper = Infinity;
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      angles[j] = centralAngle(coords[i], coords[j]);
+      if (angles[j] * max < bestUpper) bestUpper = angles[j] * max;
+    }
+    let nearest = Infinity;
+    for (let j = 0; j < n; j++) {
+      if (j === i || angles[j] * min > Math.min(bestUpper, nearest)) continue;
+      const d = geodesicDistance(coords[i], coords[j]);
+      if (d < nearest) nearest = d;
+    }
+    sum += nearest;
+  }
+  return sum / n;
 }
 
 /** Fisher-Yates in place; uses Math.random (browser runtime, deterministic seeding not required). */
@@ -642,17 +701,7 @@ export const averageNearestNeighborTool: ProcessingAlgorithm = {
     }
 
     // Mean observed nearest-neighbor distance (metres).
-    let sumNn = 0;
-    for (let i = 0; i < n; i++) {
-      let nearest = Infinity;
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        const d = geodesicDistance(coords[i], coords[j]);
-        if (d < nearest) nearest = d;
-      }
-      sumNn += nearest;
-    }
-    const observedMean = sumNn / n;
+    const observedMean = meanNearestNeighborDistance(coords);
 
     // Study area = bounding-box area (m²) of the input extent.
     const extentBox = horizontalBbox(bbox(layer.geojson));

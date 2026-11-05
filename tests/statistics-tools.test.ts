@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import { afterEach, describe, it } from "node:test";
+import {
+  DEFAULT_LAYER_STYLE,
+  geodesicDistance,
+  setActiveEllipsoidId,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import {
   type ProcessingAlgorithm,
   type ResultLayerOptions,
   STATISTICS_TOOLS,
   averageNearestNeighborTool,
+  buildNeighbors,
   compositeScoreTool,
   computeCompositeScores,
   normalizeFieldValues,
@@ -16,6 +22,7 @@ import {
   globalMoransITool,
   kernelDensityTool,
   localMoransITool,
+  meanNearestNeighborDistance,
 } from "@geolibre/processing";
 import type { Feature, FeatureCollection, Point } from "geojson";
 
@@ -1077,4 +1084,94 @@ describe("composite score tool", () => {
     });
     assert.ok(messages.some((m) => m.includes('"label" has no numeric values')));
   });
+});
+
+describe("bounded neighbor search", () => {
+  // buildNeighbors and meanNearestNeighborDistance skip the geodesic for pairs
+  // their central-angle bounds already decide. Pin that the result is exactly
+  // what measuring every pair gives.
+  afterEach(() => setActiveEllipsoidId("earth"));
+
+  /** Mulberry32: a small seeded generator, so the point sets are reproducible. */
+  function seeded(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Every pair measured: the reference the bounded search must match. */
+  function bruteNeighbors(
+    coords: [number, number][],
+    type: string,
+    k: number,
+    thresholdKm: number,
+  ): number[][] {
+    return coords.map((p, i) => {
+      const distances = coords
+        .map((q, j) => ({ j, d: geodesicDistance(p, q) }))
+        .filter((e) => e.j !== i);
+      if (type === "distance") {
+        return distances.filter((e) => e.d <= thresholdKm * 1000).map((e) => e.j);
+      }
+      return distances
+        .sort((a, b) => a.d - b.d)
+        .slice(0, k)
+        .map((e) => e.j);
+    });
+  }
+
+  function bruteMeanNearest(coords: [number, number][]): number {
+    let sum = 0;
+    coords.forEach((p, i) => {
+      let nearest = Infinity;
+      coords.forEach((q, j) => {
+        if (j !== i) nearest = Math.min(nearest, geodesicDistance(p, q));
+      });
+      sum += nearest;
+    });
+    return sum / coords.length;
+  }
+
+  /**
+   * 300 points: 200 over northern Italy, 90 anywhere on the globe, and pairs
+   * that stress the bounds: duplicates (ties), short meridian steps at the
+   * equator (where the lower bound is tight) and points around the pole and
+   * across the antimeridian.
+   */
+  function pointSet(seed: number): [number, number][] {
+    const random = seeded(seed);
+    const coords: [number, number][] = [];
+    for (let i = 0; i < 200; i++) coords.push([7 + random() * 6, 44 + random() * 3]);
+    for (let i = 0; i < 90; i++) {
+      coords.push([random() * 360 - 180, (Math.asin(2 * random() - 1) * 180) / Math.PI]);
+    }
+    coords.push([9.19, 45.4642], [9.19, 45.4642], [0, 0], [0, 0.001], [0, 0.002]);
+    coords.push([179.999, 10], [-179.999, 10], [0, 89.9], [120, 89.9], [-120, 89.9]);
+    return coords;
+  }
+
+  const cases: [string, number, number][] = [
+    ["earth", 1, 25],
+    ["earth", 8, 60],
+    ["earth", 30, 3000],
+    ["mars", 8, 40],
+    ["moon", 8, 40],
+  ];
+  for (const [body, k, thresholdKm] of cases) {
+    it(`matches every-pair KNN, distance bands and nearest distances on ${body} (k=${k}, ${thresholdKm} km)`, () => {
+      setActiveEllipsoidId(body);
+      const coords = pointSet(k * 7919 + thresholdKm);
+      assert.deepEqual(buildNeighbors(coords, "knn", k, 0), bruteNeighbors(coords, "knn", k, 0));
+      assert.deepEqual(
+        buildNeighbors(coords, "distance", k, thresholdKm),
+        bruteNeighbors(coords, "distance", k, thresholdKm),
+      );
+      assert.equal(meanNearestNeighborDistance(coords), bruteMeanNearest(coords));
+    });
+  }
 });

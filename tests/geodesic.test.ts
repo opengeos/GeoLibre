@@ -10,11 +10,14 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
+  centralAngle,
   geodesicDistance,
+  geodesicRadiusBounds,
   geodesicLength,
   geodesicRingArea,
   getEllipsoid,
   setActiveEllipsoidId,
+  withinGeodesicDistance,
 } from "@geolibre/core";
 import type { Position } from "geojson";
 
@@ -140,5 +143,60 @@ describe("geodesicRingArea", () => {
       [0, 46],
     ];
     assertClose(geodesicRingArea(box), 2462993724.759857, 1e-3);
+  });
+});
+
+describe("geodesicRadiusBounds", () => {
+  it("are b²/a and a²/b, with a 1e-9 margin", () => {
+    // WGS 84: b = 6,356,752.314 m.
+    const { min, max } = geodesicRadiusBounds(getEllipsoid("earth"));
+    assertClose(min, 6335439.327, 0.01);
+    assertClose(max, 6399593.626, 0.01);
+    const moon = geodesicRadiusBounds(getEllipsoid("moon"));
+    assertClose(moon.min, 1737400, 0.01);
+    assertClose(moon.max, 1737400, 0.01);
+  });
+
+  it("bound the geodesic distance from the central angle", () => {
+    // Pairs from short to near-antipodal, including meridian steps at the
+    // equator and parallels near the pole, where the bounds are tightest.
+    const pairs: [Position, Position][] = [
+      [TORINO, TRIESTE],
+      [
+        [0, 0],
+        [0, 0.001],
+      ],
+      [
+        [0, 0],
+        [0.001, 0],
+      ],
+      [
+        [0, 89.99],
+        [90, 89.99],
+      ],
+      [
+        [179.9, -30],
+        [-179.9, -30.1],
+      ],
+      [
+        [0, 0],
+        [179.5, 0.4],
+      ],
+      [
+        [-70, -50],
+        [120, 60],
+      ],
+    ];
+    for (const id of ["earth", "mars", "moon"]) {
+      const ellipsoid = getEllipsoid(id);
+      const { min, max } = geodesicRadiusBounds(ellipsoid);
+      for (const [p, q] of pairs) {
+        const angle = centralAngle(p, q);
+        const d = geodesicDistance(p, q, ellipsoid);
+        assert.ok(angle * min <= d && d <= angle * max, `${id} ${p} → ${q}`);
+        assert.equal(withinGeodesicDistance(p, q, d, ellipsoid), true);
+        assert.equal(withinGeodesicDistance(p, q, d * (1 - 1e-12), ellipsoid), false);
+      }
+    }
   });
 });
