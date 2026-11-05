@@ -612,6 +612,9 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
     if !folder.is_dir() {
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
+    if name.contains(['/', '\\']) {
+        return Err("Refusing to write: a subfolder must be a single name.".to_string());
+    }
     let dir = folder.join(checked_name(name)?);
     // Make it first and look after, so nothing can appear between a check and the making.
     if let Err(error) = fs::create_dir(&dir) {
@@ -628,7 +631,7 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
 fn body_bytes(body: &tauri::ipc::InvokeBody) -> Result<Vec<u8>, String> {
     match body {
         tauri::ipc::InvokeBody::Raw(data) => Ok(data.clone()),
-        tauri::ipc::InvokeBody::Json(list) => serde_json::from_value(list.clone())
+        tauri::ipc::InvokeBody::Json(list) => Vec::<u8>::deserialize(list)
             .map_err(|_| "write_file_to_folder expects a list of bytes.".to_string()),
     }
 }
@@ -774,6 +777,7 @@ pub(crate) async fn write_file_to_folder(
             .ok_or_else(|| "Unknown download folder id; call pick_download_folder first.".to_string())?
     };
     tauri::async_runtime::spawn_blocking(move || -> Result<WriteFileResult, String> {
+        checked_name(&file_name)?; // first, so a refused name leaves no empty subfolder behind
         let target = match subfolder {
             Some(name) => subfolder_in(&folder, &name)?,
             None => folder,
@@ -856,6 +860,8 @@ mod tests {
         write_file_to_folder_in_dir(&sub, "a.part", b"x").unwrap();
         assert_eq!(fs::read(sub.join("a.part")).unwrap(), b"x");
         assert!(subfolder_in(&dir, "..").is_err());
+        assert!(subfolder_in(&dir, "a/b").is_err());
+        assert!(subfolder_in(&dir, "a\\b").is_err());
         assert!(subfolder_in(&dir, "CON").is_err());
         fs::write(dir.join("taken"), b"x").unwrap();
         assert!(subfolder_in(&dir, "taken").is_err());

@@ -1106,6 +1106,8 @@ export interface GeoLibreAppAPI {
    * @param data - The file content: a string, Uint8Array, ArrayBuffer, or Blob (up to 50 MiB).
    * @param options - `subfolder`: write into this folder inside the picked one,
    *   made if needed. One level only; its name is checked like `fileName`.
+   *   A host without this option writes to the picked folder itself, and the
+   *   returned `path` shows where the file went.
    * @returns The written file's path and size.
    */
   writeFileToFolder?: (
