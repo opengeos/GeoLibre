@@ -356,6 +356,8 @@ function buildPanel(container: HTMLElement): () => void {
   let focusKey: string | null = null;
   /** A rebuild could not hand focus back (its control was disabled); the next one should. */
   let restorePending = false;
+  /** The editor's Add to map button, refreshed when a range edit skips the rebuild. */
+  let addButton: HTMLButtonElement | null = null;
   const keyed = <T extends HTMLElement>(node: T, key: string): T => {
     node.dataset.focusKey = key;
     return node;
@@ -808,6 +810,7 @@ function buildPanel(container: HTMLElement): () => void {
           // and a rebuild would hold focus on it instead of moving on.
           updateActiveLayer(datasetById(state.datasetId));
           void renderColorbar(colorbar);
+          if (addButton) addButton.disabled = state.busy || currentSpec() === null;
         });
         const wrapper = element("label", `${CSS.label}${CSS.grow}`, label);
         wrapper.append(input);
@@ -879,6 +882,7 @@ function buildPanel(container: HTMLElement): () => void {
       "add",
     );
     add.disabled = state.busy || currentSpec() === null;
+    addButton = add;
     editor.append(add);
   };
 
