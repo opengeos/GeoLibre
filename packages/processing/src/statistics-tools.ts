@@ -12,6 +12,7 @@ import {
   horizontalBbox,
   isLonLat,
   latLonBoxArea,
+  withinGeodesicDistance,
 } from "@geolibre/core";
 import type {
   FieldDirection,
@@ -211,7 +212,8 @@ export function buildNeighbors(
 ): number[][] {
   const n = coords.length;
   const ellipsoid = getActiveEllipsoid();
-  const { min, max } = geodesicRadiusBounds(ellipsoid);
+  const bounds = geodesicRadiusBounds(ellipsoid);
+  const { min, max } = bounds;
   const thresholdM = thresholdKm * 1000;
   const angles = new Float64Array(n);
   const neighbors: number[][] = [];
@@ -221,12 +223,7 @@ export function buildNeighbors(
       const within: number[] = [];
       for (let j = 0; j < n; j++) {
         if (j === i) continue;
-        // The rule of `withinGeodesicDistance`, on the angle computed once above.
-        if (angles[j] * max <= thresholdM) within.push(j);
-        else if (
-          angles[j] * min <= thresholdM &&
-          geodesicDistance(coords[i], coords[j], ellipsoid) <= thresholdM
-        )
+        if (withinGeodesicDistance(coords[i], coords[j], thresholdM, ellipsoid, bounds, angles[j]))
           within.push(j);
       }
       neighbors.push(within);

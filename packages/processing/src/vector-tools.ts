@@ -3097,6 +3097,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
     // measured distance inside the O(n²) scan below.
     const maxMeters = maxDistance * METERS_PER_LINEAR_UNIT[distanceUnits as LinearUnit];
     const ellipsoid = getActiveEllipsoid();
+    const bounds = geodesicRadiusBounds(ellipsoid);
     for (const [key, pts] of groups) {
       let i = 0;
       while (i < pts.length) {
@@ -3111,7 +3112,7 @@ export const detectStopsTool: ProcessingAlgorithm = {
         // absorbed into a single stop.
         while (
           j < pts.length &&
-          withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters, ellipsoid)
+          withinGeodesicDistance(pts[i].coord, pts[j].coord, maxMeters, ellipsoid, bounds)
         ) {
           j += 1;
         }

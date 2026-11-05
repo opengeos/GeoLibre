@@ -116,16 +116,18 @@ export function geodesicRadiusBounds(ellipsoid: Ellipsoid = getActiveEllipsoid()
 /**
  * Whether two positions are at most `meters` apart along the geodesic. The
  * answer is the same as comparing {@link geodesicDistance}, which is only
- * computed when the {@link geodesicRadiusBounds} cannot decide.
+ * computed when the {@link geodesicRadiusBounds} cannot decide. A loop can pass
+ * the bounds once, and the central angle when it already has it, so this stays
+ * the one place the rule is written.
  */
 export function withinGeodesicDistance(
   from: Position,
   to: Position,
   meters: number,
   ellipsoid: Ellipsoid = getActiveEllipsoid(),
+  bounds: { min: number; max: number } = geodesicRadiusBounds(ellipsoid),
+  angle: number = centralAngle(from, to),
 ): boolean {
-  const bounds = geodesicRadiusBounds(ellipsoid);
-  const angle = centralAngle(from, to);
   if (angle * bounds.max <= meters) return true;
   if (angle * bounds.min > meters) return false;
   return geodesicDistance(from, to, ellipsoid) <= meters;
@@ -193,7 +195,10 @@ export function latLonBoxArea(
     const tail = e2 > 0 ? Math.atanh(e * s) : Math.atan(e * s);
     return s / (2 * (1 - e2 * s * s)) + tail / (2 * e);
   };
-  const span = east < west ? east - west + 360 : east - west;
+  // A negative span crosses the antimeridian; wrapping it into [0°, 360°)
+  // also keeps unwrapped longitudes such as 200 to -200 from giving a
+  // negative area.
+  const span = east < west ? (((east - west) % 360) + 360) % 360 : east - west;
   const dLon = Math.min(360, span) * DEG_TO_RAD;
   return b * b * dLon * Math.abs(zone(north) - zone(south));
 }

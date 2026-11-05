@@ -284,6 +284,9 @@ describe("latLonBoxArea", () => {
     assert.equal(latLonBoxArea(10, 0, 10, 10), 0);
     // A box with east < west crosses the antimeridian: 179°E to 179°W is 2° wide.
     assert.equal(latLonBoxArea(179, 10, -179, 20), latLonBoxArea(-1, 10, 1, 20));
+    // Unwrapped longitudes are wrapped too, never giving a negative area:
+    // 200° to -200° is the 320° span from 200° round to 520°.
+    assert.equal(latLonBoxArea(200, 10, -200, 20), latLonBoxArea(-160, 10, 160, 20));
     setActiveEllipsoidId("moon");
     // On a sphere: R² Δλ (sin φ₂ − sin φ₁).
     assertClose(
