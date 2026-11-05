@@ -3,7 +3,8 @@
  * table's Field Calculator. They offer the same units as the Measure tool. The
  * Measure tool still measures on a sphere until it moves to the ellipsoid
  * (GeoLibre#3267, step 4), so until then a `$area` column and a measured area
- * differ by up to about 0.3 %.
+ * differ: by about 0.2 % at mid-latitudes, and by up to about 0.5 % at the
+ * equator and 0.9 % at the poles (the ratio M·N / R² of the area elements).
  *
  * Lengths are summed geodesic distances between consecutive vertices and areas
  * are geodesic polygon areas, both on the active body's ellipsoid (WGS 84 on

@@ -2989,9 +2989,11 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
 
 /**
  * Point cap for the stop scan. The scan re-anchors on every non-stop advance
- * (see the loop below), so its worst case is O(n²) Haversine calls on the UI
- * thread. 5,000 points bounds that to ~12.5M calls (~1-2 s) in the degenerate
- * case; the typical case is far cheaper because a formed stop jumps the anchor.
+ * (see the loop below), so its worst case is O(n²) distance checks on the UI
+ * thread. Each check is decided from a haversine bound and reaches the geodesic
+ * (about 1 µs) only near the threshold. 5,000 points bounds that to ~12.5M
+ * checks in the degenerate case; the typical case is far cheaper because a
+ * formed stop jumps the anchor.
  * Larger inputs get a clear "split the layer" error rather than a frozen tab.
  */
 const STOPS_MAX_POINTS = 5_000;
@@ -3164,8 +3166,9 @@ export const detectStopsTool: ProcessingAlgorithm = {
 
 /**
  * Worst-case pair cap for the space-time proximity scan. Each pair within the
- * time window costs one Haversine call on the UI thread, so this bounds the
- * absolute worst case (all points inside the window) to ~2M calls (~1s). Typical
+ * time window costs one distance check on the UI thread: a haversine bound, and
+ * the geodesic (about 1 µs) only near the threshold. This bounds the absolute
+ * worst case (all points inside the window) to ~2M checks. Typical
  * runs are far cheaper because the time-sorted loop breaks out once the gap is
  * exceeded; the cap only rejects layers whose worst case would freeze the tab.
  */
