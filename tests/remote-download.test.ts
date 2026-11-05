@@ -187,7 +187,10 @@ describe("native write file to folder glue", () => {
     assert.equal(calls[0].cmd, "write_file_to_folder");
     assert.ok(calls[0].args instanceof Uint8Array, "the body is raw bytes, not a JSON list");
     assert.deepEqual(Array.from(calls[0].args), [104, 101, 108, 108, 111]);
-    assert.deepEqual(calls[0].headers, { "x-folder-id": "folder-1", "x-file-name": "test.geojson" });
+    assert.deepEqual(calls[0].headers, {
+      "x-folder-id": "folder-1",
+      "x-file-name": "test.geojson",
+    });
 
     await writer("folder-1", "春 map.geojson", "hello");
     assert.equal(calls[1].headers?.["x-file-name"], "%E6%98%A5%20map.geojson");
