@@ -34,10 +34,8 @@ function ollamaProfile(overrides: Partial<AssistantProfile> = {}): AssistantProf
 
 describe("Ollama profile model id", () => {
   it("has no separate OLLAMA_MODEL field beside the model selector", () => {
-    assert.equal(
-      PROVIDER_FIELDS.ollama.some((field) => field.envKey === "OLLAMA_MODEL"),
-      false,
-    );
+    const envKeys: readonly string[] = PROVIDER_FIELDS.ollama.map((field) => field.envKey);
+    assert.equal(envKeys.includes("OLLAMA_MODEL"), false);
   });
 
   it("runs the model id stored on the profile, tag included", () => {
@@ -75,6 +73,19 @@ describe("Ollama profile model id", () => {
     assert.equal(foldLegacyProfileModelField(profile), profile);
   });
 
+  it("drops a stale OLLAMA_MODEL from a profile switched to another provider", () => {
+    const profile: AssistantProfile = {
+      id: "prof_switched",
+      name: "Switched",
+      provider: "google",
+      modelId: "gemini-x",
+      fieldValues: { GEMINI_API_KEY: "k", OLLAMA_MODEL: "qwen3:8b" },
+    };
+    const folded = foldLegacyProfileModelField(profile);
+    assert.equal(folded.modelId, "gemini-x");
+    assert.deepEqual(folded.fieldValues, { GEMINI_API_KEY: "k" });
+  });
+
   it("folds the legacy field when saved settings load", () => {
     const settings = normalizeDesktopSettings({
       aiProfiles: [
@@ -96,6 +107,24 @@ describe("Ollama profile model id", () => {
     assert.ok(ollama);
     assert.equal(ollama.modelId, "phi4:14b");
     assert.equal("OLLAMA_MODEL" in ollama.fieldValues, false);
+  });
+
+  it("does not duplicate a folded profile when legacy env is still stored", () => {
+    const legacy = { OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "phi4:14b" };
+    const settings = normalizeDesktopSettings({
+      aiProfiles: [ollamaProfile({ fieldValues: { ...legacy } })],
+      aiProviderEnv: legacy,
+    });
+    assert.equal(settings.aiProfiles.filter((p) => p.provider === "ollama").length, 1);
+  });
+
+  it("still migrates a legacy env whose model differs from the saved profile", () => {
+    const settings = normalizeDesktopSettings({
+      aiProfiles: [ollamaProfile({ modelId: "qwen3:8b" })],
+      aiProviderEnv: { OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "phi4:14b" },
+    });
+    const models = settings.aiProfiles.filter((p) => p.provider === "ollama").map((p) => p.modelId);
+    assert.deepEqual(models, ["qwen3:8b", "phi4:14b"]);
   });
 
   it("seeds a new profile from the OS OLLAMA_MODEL", () => {

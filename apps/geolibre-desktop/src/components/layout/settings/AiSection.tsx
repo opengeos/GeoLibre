@@ -96,12 +96,19 @@ export function AiSection({
     () => ({
       OPENROUTER_MODEL: draftEnv.OPENROUTER_MODEL ?? scopedOsEnv.OPENROUTER_MODEL ?? "",
       AI_GATEWAY_MODEL: draftEnv.AI_GATEWAY_MODEL ?? scopedOsEnv.AI_GATEWAY_MODEL ?? "",
+      OLLAMA_MODEL: draftEnv.OLLAMA_MODEL ?? scopedOsEnv.OLLAMA_MODEL ?? "",
+      GEOLIBRE_ASSISTANT_MODEL:
+        draftEnv.GEOLIBRE_ASSISTANT_MODEL ?? scopedOsEnv.GEOLIBRE_ASSISTANT_MODEL ?? "",
     }),
     [
       scopedOsEnv.OPENROUTER_MODEL,
       scopedOsEnv.AI_GATEWAY_MODEL,
+      scopedOsEnv.OLLAMA_MODEL,
+      scopedOsEnv.GEOLIBRE_ASSISTANT_MODEL,
       draftEnv.OPENROUTER_MODEL,
       draftEnv.AI_GATEWAY_MODEL,
+      draftEnv.OLLAMA_MODEL,
+      draftEnv.GEOLIBRE_ASSISTANT_MODEL,
     ],
   );
 

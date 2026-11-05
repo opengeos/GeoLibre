@@ -156,6 +156,15 @@ function useOllamaModels() {
   return { models, loading, error, refresh, reset };
 }
 
+/**
+ * The model an Ollama profile with a blank model box runs, using the same
+ * precedence as request resolution: the global assistant override, then
+ * `OLLAMA_MODEL`, then the provider default.
+ */
+function blankOllamaModel(modelEnv: Record<string, string>): string {
+  return modelEnv.GEOLIBRE_ASSISTANT_MODEL?.trim() || defaultModelFor("ollama", modelEnv);
+}
+
 interface OllamaModelFieldProps {
   /** DOM id for the text input, so its label can point at it. */
   inputId: string;
@@ -188,12 +197,19 @@ function OllamaModelField({
   const { t } = useTranslation();
   const listId = `${inputId}-suggestions`;
   const suggestions = discovery.models.length > 0 ? discovery.models : PROVIDER_MODELS.ollama;
+  // Discovery can take seconds, and the user may keep typing meanwhile, so
+  // reconcile against the value at the time the list arrives, not at the click.
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   const refresh = async () => {
     const discovered = await discovery.refresh(baseUrl());
     if (!discovered) return;
-    const next = reconcileOllamaModel(value, discovered, PROVIDER_MODELS.ollama);
-    if (next !== value) onChange(next);
+    const current = valueRef.current;
+    const next = reconcileOllamaModel(current, discovered, PROVIDER_MODELS.ollama);
+    if (next !== current) onChange(next);
   };
 
   return (
@@ -437,11 +453,13 @@ export function AiSectionContent({
                   discovery={ollamaDiscovery}
                   baseUrl={() =>
                     newProfileFieldValues.OLLAMA_BASE_URL ||
+                    draftEnv.OLLAMA_BASE_URL ||
+                    draftEnv.OLLAMA_HOST ||
                     scopedOsEnv.OLLAMA_BASE_URL ||
                     scopedOsEnv.OLLAMA_HOST ||
                     ""
                   }
-                  fallbackModel={defaultModelFor("ollama", modelEnv)}
+                  fallbackModel={blankOllamaModel(modelEnv)}
                 />
               ) : hasModelPicker(newProfileProvider) ? (
                 <ProviderModelPicker
@@ -791,7 +809,7 @@ function ProfileEditor({
               onChange={updateModel}
               discovery={ollamaDiscovery}
               baseUrl={ollamaBaseUrl}
-              fallbackModel={defaultModelFor("ollama", modelEnv)}
+              fallbackModel={blankOllamaModel(modelEnv)}
             />
           ) : hasModelPicker(profile.provider) ? (
             <ProviderModelPicker
