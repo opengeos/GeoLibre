@@ -137,12 +137,6 @@ function polygonCentroid(geometry: Polygon | MultiPolygon): [number, number] | n
   return Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : null;
 }
 
-/**
- * Representative lon/lat for each feature: the point itself, a polygon's
- * area-weighted centroid, or Turf's centroid for other geometries.
- * Returns null entries for features whose geometry can't be located,
- * including positions with a non-finite coordinate or a latitude beyond ±90°.
- */
 /** Whether every position of a geometry is a lon/lat (see `isLonLat`). */
 function allLonLat(geometry: Geometry): boolean {
   if (geometry.type === "GeometryCollection") return geometry.geometries.every(allLonLat);
@@ -153,6 +147,12 @@ function allLonLat(geometry: Geometry): boolean {
   return walk(geometry.coordinates);
 }
 
+/**
+ * Representative lon/lat for each feature: the point itself, a polygon's
+ * area-weighted centroid, or Turf's centroid for other geometries.
+ * Returns null entries for features whose geometry can't be located,
+ * including positions with a non-finite coordinate or a latitude beyond ±90°.
+ */
 function featureCoords(features: Feature[]): ([number, number] | null)[] {
   return features.map((feature) => {
     const geometry = feature.geometry;
