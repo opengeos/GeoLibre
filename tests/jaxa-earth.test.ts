@@ -93,6 +93,11 @@ JAXA.G-Portal_GCOM-C.SGLI_standard.L3-LST.daytime.v3_global_monthly
 * temporalResolution: daily
 * normal: false
 
+## No EPSG
+* id: JAXA.no_epsg
+* title: No EPSG
+* bands: X
+
 ## No bands
 * id: JAXA.no_bands
 * title: Broken
@@ -112,6 +117,7 @@ describe("parseJaxaCatalog", () => {
         "JAXA.EORC_ALOS.PRISM_AW3D30.v4.1_global",
         "JAXA.G-Portal_GCOM-C.SGLI_standard.L3-LST.daytime.v3_global_monthly",
         "JAXA.JASMES_GCOM-W.AMSR2_ic0.v201_north_daily",
+        "JAXA.no_epsg",
       ],
     );
   });
@@ -130,6 +136,7 @@ describe("parseJaxaCatalog", () => {
     assert.equal(ice.epsg, 3995);
     assert.equal(isJaxaDatasetMappable(ice), false);
     assert.equal(isJaxaDatasetMappable(aw3d), true);
+    assert.equal(isJaxaDatasetMappable(catalog.datasets[3]), false, "no EPSG code");
   });
 
   it("keeps recommended groups to listed ids, with or without bullets", () => {
@@ -145,7 +152,7 @@ describe("parseJaxaCatalog", () => {
   it("searches across titles, keywords and bands, requiring every term", () => {
     const ids = (query: string) =>
       searchJaxaDatasets(catalog.datasets, query).map((dataset) => dataset.id);
-    assert.equal(ids("").length, 3);
+    assert.equal(ids("").length, 4);
     assert.deepEqual(ids("gcom-c lst"), [
       "JAXA.G-Portal_GCOM-C.SGLI_standard.L3-LST.daytime.v3_global_monthly",
     ]);
@@ -162,7 +169,7 @@ describe("fetchJaxaCatalog", () => {
       return new Response(CATALOG);
     }) as typeof fetch);
     assert.equal(requested, JAXA_EARTH_CATALOG_URL);
-    assert.equal(catalog.datasets.length, 3);
+    assert.equal(catalog.datasets.length, 4);
   });
 
   it("rejects an HTTP error and an empty catalog", async () => {
@@ -229,6 +236,14 @@ describe("tile URLs", () => {
     assert.equal(bad({ date: "soon" }), null);
     assert.equal(bad({ min: "2", max: "1" }), null);
     assert.equal(bad({ max: "NaN" }), null);
+    assert.equal(bad({ min: "" }), null, "a blank bound is not 0");
+    assert.equal(
+      parseJaxaTileUrl(
+        `jaxa-earth://tile/1/0/0?id=${spec.datasetId}&band=DSM&date=${spec.date}&max=1`,
+      ),
+      null,
+      "an absent bound is not 0",
+    );
     assert.equal(parseJaxaTileUrl("https://example.com/1/0/0?id=x"), null);
     assert.equal(bad({ colormap: "nope" })?.colormap, "jet", "unknown colormap falls back");
     assert.equal(bad({ resampling: "cubic" })?.resampling, "nearest");

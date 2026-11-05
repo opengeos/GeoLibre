@@ -183,7 +183,8 @@ export function parseJaxaCatalog(markdown: string): JaxaCatalog {
         provider: fields.dataProvider ?? "",
         bands,
         bbox: fields.bbox ? parseBbox(fields.bbox) : null,
-        epsg: Number.isFinite(epsg) && epsg > 0 ? epsg : 4326,
+        // An entry without a valid code stays listed but disabled (not mappable).
+        epsg: Number.isFinite(epsg) && epsg > 0 ? epsg : 0,
         resolutionKm: Number.isFinite(resolution) && resolution > 0 ? resolution : null,
         startDate: parseDate(fields.startDate),
         endDate: parseDate(fields.endDate),
@@ -401,8 +402,11 @@ export function parseJaxaTileUrl(
   const datasetId = params.get("id") ?? "";
   const band = params.get("band") ?? "";
   const date = params.get("date") ?? "";
-  const min = Number(params.get("min"));
-  const max = Number(params.get("max"));
+  // `Number(null)` and `Number("")` are 0, so an absent bound must not pass.
+  const bound = (value: string | null): number =>
+    value === null || value.trim() === "" ? Number.NaN : Number(value);
+  const min = bound(params.get("min"));
+  const max = bound(params.get("max"));
   const colormap = params.get("colormap") ?? "jet";
   const resampling = params.get("resampling") === "bilinear" ? "bilinear" : "nearest";
   if (!isJaxaDatasetId(datasetId) || !BAND_PATTERN.test(band)) return null;
@@ -509,17 +513,17 @@ function toHex(buffer: ArrayBuffer): string {
  * blob URL.
  */
 async function importJaxaEarthModule(): Promise<JaxaEarthModule> {
-  const response = await fetch(JAXA_EARTH_MODULE_URL, {
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status} loading the JAXA Earth API module`);
-  const source = await response.arrayBuffer();
   // `crypto.subtle` exists only in secure contexts (https or localhost).
   if (!globalThis.crypto?.subtle) {
     throw new Error(
       "The JAXA Earth API module can only be verified when GeoLibre is served over https or from localhost.",
     );
   }
+  const response = await fetch(JAXA_EARTH_MODULE_URL, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status} loading the JAXA Earth API module`);
+  const source = await response.arrayBuffer();
   const digest = toHex(await crypto.subtle.digest("SHA-256", source));
   if (digest !== JAXA_EARTH_MODULE_SHA256) {
     throw new Error(

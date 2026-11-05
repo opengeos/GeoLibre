@@ -508,8 +508,12 @@ function buildPanel(container: HTMLElement): () => void {
 
   const stepDate = async (direction: "first" | "prev" | "next" | "last"): Promise<void> => {
     const id = state.datasetId;
-    if (!id || !state.date) return;
+    // One date request at a time: overlapping steps would race, and the
+    // controls (Auto included) stay disabled until this one lands.
+    if (!id || !state.date || state.busy) return;
     const token = selection;
+    state.busy = true;
+    renderEditor();
     try {
       const collection = await getJaxaImageCollection(id);
       const current = new Date(state.date);
@@ -518,13 +522,18 @@ function buildPanel(container: HTMLElement): () => void {
       else if (direction === "last") next = collection.last();
       else if (direction === "prev") next = await collection.prev(current);
       else next = await collection.next(current);
-      if (disposed || token !== selection || Number.isNaN(next.getTime())) return;
-      state.date = next.toISOString();
-      state.dateLabel = collection.formatDate(next);
+      if (disposed || token !== selection) return;
+      state.busy = false;
+      if (!Number.isNaN(next.getTime())) {
+        state.date = next.toISOString();
+        state.dateLabel = collection.formatDate(next);
+      }
       setStatus(null);
       applyChange();
     } catch (error) {
       if (disposed || token !== selection) return;
+      state.busy = false;
+      renderEditor();
       setStatus(
         tr("dateFailed", "Could not change the date: {{message}}", {
           message: errorMessage(error),
@@ -536,20 +545,25 @@ function buildPanel(container: HTMLElement): () => void {
 
   const jumpToDate = async (value: string): Promise<void> => {
     const id = state.datasetId;
-    if (!id || !state.band || !value) return;
+    if (!id || !state.band || !value || state.busy) return;
     const token = selection;
+    state.busy = true;
+    renderEditor();
     try {
       const collection = await getJaxaImageCollection(id);
       const requested = new Date(`${value}T23:59:59Z`);
       // JAXA rounds a date down to the latest one it has data for.
       const image = await collection.getImage({ date: requested, band: state.band });
       if (disposed || token !== selection) return;
+      state.busy = false;
       state.date = image.getDate().toISOString();
       state.dateLabel = image.getFormattedDate();
       setStatus(null);
       applyChange();
     } catch (error) {
       if (disposed || token !== selection) return;
+      state.busy = false;
+      renderEditor();
       setStatus(
         tr("dateFailed", "Could not change the date: {{message}}", {
           message: errorMessage(error),
@@ -568,18 +582,26 @@ function buildPanel(container: HTMLElement): () => void {
     const dataset = datasetById(state.datasetId);
     if (!dataset || !state.band || !state.date) return;
     const token = selection;
+    const date = state.date;
     state.busy = true;
     setStatus(tr("sampling", "Reading a sample to set the color range…"));
     renderEditor();
     try {
       const collection = await getJaxaImageCollection(dataset.id);
-      const image = await collection.getImage({ date: new Date(state.date), band: state.band });
+      const image = await collection.getImage({ date: new Date(date), band: state.band });
       const bbox: [number, number, number, number] = dataset.bbox ?? [-180, -90, 180, 90];
       const aspect = Math.max(0.1, (bbox[3] - bbox[1]) / Math.max(1e-9, bbox[2] - bbox[0]));
       const width = aspect <= 1 ? SAMPLE_SIZE : Math.max(16, Math.round(SAMPLE_SIZE / aspect));
       const height = aspect <= 1 ? Math.max(16, Math.round(SAMPLE_SIZE * aspect)) : SAMPLE_SIZE;
       const sample = await image.getDataObject({ bbox, width, height });
       if (disposed || token !== selection) return;
+      if (state.date !== date) {
+        // The date moved on while the sample was read; its range would be stale.
+        state.busy = false;
+        setStatus(null);
+        renderEditor();
+        return;
+      }
       state.unit = sample.unit ?? "";
       state.colorMapped = sample.photometricInterpretation === 1;
       const range = state.colorMapped ? percentileRange(sample.data) : null;
