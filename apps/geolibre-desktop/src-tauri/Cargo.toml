@@ -53,6 +53,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+percent-encoding = "2"
 # rustls-tls stays the default backend for every request. rustls-tls-native-roots
 # also trusts the OS/system certificate store (enterprise CAs). native-tls (which
 # drags in openssl-sys) is used only on the opt-in mTLS path for PKCS#12 client
