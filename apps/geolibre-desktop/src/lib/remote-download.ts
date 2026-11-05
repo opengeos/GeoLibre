@@ -126,9 +126,9 @@ export async function normalizeBinaryData(
     }
     bytes = new Uint8Array(await data.arrayBuffer());
   } else if (data instanceof ArrayBuffer) {
-    bytes = new Uint8Array(data);
+    bytes = new Uint8Array(data.slice(0)); // a copy: the caller may reuse its buffer
   } else if (ArrayBuffer.isView(data)) {
-    bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    bytes = new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
   } else {
     throw new TypeError(
       "Unsupported data type for writeFileToFolder; expected string, Blob, ArrayBuffer, or ArrayBufferView.",
@@ -169,7 +169,9 @@ export function createWriteFileToFolder(
       headers: {
         "x-folder-id": encodeURIComponent(folderId),
         "x-file-name": encodeURIComponent(fileName),
-        ...(options?.subfolder ? { "x-subfolder": encodeURIComponent(options.subfolder) } : {}),
+        ...(typeof options?.subfolder === "string"
+          ? { "x-subfolder": encodeURIComponent(options.subfolder) }
+          : {}),
       },
     });
   };

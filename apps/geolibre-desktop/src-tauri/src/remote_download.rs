@@ -613,13 +613,23 @@ fn subfolder_in(folder: &Path, name: &str) -> Result<PathBuf, String> {
         return Err("The chosen folder does not exist or is no longer accessible.".to_string());
     }
     let dir = folder.join(checked_name(name)?);
-    match dir.symlink_metadata() {
-        Ok(meta) if meta.is_dir() => Ok(dir),
-        Ok(_) => Err("Refusing to write: subfolder name is taken by a file or a symlink.".into()),
-        Err(_) => fs::create_dir(&dir)
-            .or_else(|error| if dir.is_dir() { Ok(()) } else { Err(error) })
-            .map(|()| dir)
-            .map_err(|error| format!("Could not make the subfolder: {error}")),
+    // Make it first and look after, so nothing can appear between a check and the making.
+    if let Err(error) = fs::create_dir(&dir) {
+        let is_real_folder = dir.symlink_metadata().is_ok_and(|meta| meta.is_dir());
+        if error.kind() != std::io::ErrorKind::AlreadyExists || !is_real_folder {
+            return Err(format!("Refusing to write: could not use the subfolder: {error}"));
+        }
+    }
+    Ok(dir)
+}
+
+/// The file's bytes: the raw request body, or the JSON list Tauri's postMessage
+/// fallback turns it into when the webview blocks the custom protocol.
+fn body_bytes(body: &tauri::ipc::InvokeBody) -> Result<Vec<u8>, String> {
+    match body {
+        tauri::ipc::InvokeBody::Raw(data) => Ok(data.clone()),
+        tauri::ipc::InvokeBody::Json(list) => serde_json::from_value(list.clone())
+            .map_err(|_| "write_file_to_folder expects a list of bytes.".to_string()),
     }
 }
 
@@ -755,10 +765,7 @@ pub(crate) async fn write_file_to_folder(
         .contains_key("x-subfolder")
         .then(|| decoded_header(request.headers(), "x-subfolder"))
         .transpose()?;
-    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
-        return Err("write_file_to_folder expects a raw request body.".to_string());
-    };
-    let data = data.clone();
+    let data = body_bytes(request.body())?;
     let folder = {
         let folders = downloads.folders.lock().unwrap();
         folders
@@ -826,6 +833,16 @@ mod tests {
         headers.insert("x-file-name", HeaderValue::from_static("%E6%98%A5%20map.geojson"));
         assert_eq!(decoded_header(&headers, "x-file-name").unwrap(), "\u{6625} map.geojson");
         assert!(decoded_header(&headers, "x-folder-id").is_err());
+    }
+
+    #[test]
+    fn body_bytes_takes_raw_bytes_and_the_postmessage_list() {
+        use tauri::ipc::InvokeBody;
+        assert_eq!(body_bytes(&InvokeBody::Raw(vec![1, 2])).unwrap(), vec![1, 2]);
+        let list = InvokeBody::Json(serde_json::json!([1, 255]));
+        assert_eq!(body_bytes(&list).unwrap(), vec![1, 255]);
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!([256]))).is_err());
+        assert!(body_bytes(&InvokeBody::Json(serde_json::json!({"a": 1}))).is_err());
     }
 
     #[test]

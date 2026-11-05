@@ -132,12 +132,11 @@ describe("native write file to folder glue", () => {
     assert.deepEqual(await asList(new Uint8Array([1, 2, 3])), [1, 2, 3]);
     assert.deepEqual(await asList(new Uint8Array([4, 5, 6]).buffer), [4, 5, 6]);
     assert.deepEqual(await asList(new Blob(["world"])), [119, 111, 114, 108, 100]);
-    // A view stays a view: only its own bytes, without copying the buffer behind it.
+    // A view sends only its own bytes, and a later change to the caller's buffer is not sent.
     const whole = new Uint8Array([9, 8, 7, 6]);
-    const part = whole.subarray(1, 3);
-    const sent = await normalizeBinaryData(part);
-    assert.equal(sent.buffer, whole.buffer);
-    assert.deepEqual(Array.from(sent), [8, 7]);
+    const pending = normalizeBinaryData(whole.subarray(1, 3));
+    whole.fill(0);
+    assert.deepEqual(Array.from(await pending), [8, 7]);
     await assert.rejects(
       normalizeBinaryData(123 as unknown as string),
       /Unsupported data type for writeFileToFolder/,
@@ -198,6 +197,10 @@ describe("native write file to folder glue", () => {
 
     await writer("folder-1", "test.geojson", "hello", { subfolder: "run 春" });
     assert.equal(calls[2].headers?.["x-subfolder"], "run%20%E6%98%A5");
+
+    // Empty goes to the host to be refused, rather than quietly writing to the folder root.
+    await writer("folder-1", "test.geojson", "hello", { subfolder: "" });
+    assert.equal(calls[3].headers?.["x-subfolder"], "");
   });
 
   it("rejects when folderId or fileName is missing or invalid", async () => {
