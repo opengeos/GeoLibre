@@ -223,5 +223,9 @@ describe("native write file to folder glue", () => {
       writer("folder-1", null as unknown as string, "data"),
       /writeFileToFolder requires a non-empty fileName/,
     );
+    await assert.rejects(
+      writer("folder-1", "test.geojson", "data", { subfolder: 1 as unknown as string }),
+      /writeFileToFolder subfolder must be a string/,
+    );
   });
 });

@@ -163,6 +163,9 @@ export function createWriteFileToFolder(
     if (!fileName || typeof fileName !== "string") {
       throw new TypeError("writeFileToFolder requires a non-empty fileName.");
     }
+    if (options?.subfolder !== undefined && typeof options.subfolder !== "string") {
+      throw new TypeError("writeFileToFolder subfolder must be a string.");
+    }
     const bytes = await normalizeBinaryData(data);
     // Raw body, so the names travel as headers; percent-encoded, as headers carry only ASCII.
     return invoke<GeoLibreWriteFileResult>("write_file_to_folder", bytes, {
