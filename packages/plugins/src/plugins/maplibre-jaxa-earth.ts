@@ -261,6 +261,9 @@ function updateActiveLayer(dataset: JaxaDataset | undefined): void {
     },
   });
   // The globe has no style map; it redraws from the store write above.
+  // The layer sync never re-reads a raster source's tiles (only vector
+  // sources'), so the store write alone would not redraw on MapLibre; set
+  // them on the live source, as weather-layer.ts does for its frames.
   const map = getStyleMap(appRef);
   const source = map?.getSource(rasterSourceId(id)) as RasterTileSource | undefined;
   source?.setTiles?.([url]);
@@ -587,7 +590,7 @@ function buildPanel(container: HTMLElement): () => void {
    * extent, to learn its unit, whether it carries its own colors, and (when
    * asked) a display range.
    */
-  const sampleBand = async (setRange: boolean): Promise<void> => {
+  const sampleBand = async (): Promise<void> => {
     const dataset = datasetById(state.datasetId);
     if (!dataset || !state.band || !state.date) return;
     const token = selection;
@@ -614,10 +617,8 @@ function buildPanel(container: HTMLElement): () => void {
       state.unit = sample.unit ?? "";
       state.colorMapped = sample.photometricInterpretation === 1;
       const range = state.colorMapped ? percentileRange(sample.data) : null;
-      if (setRange || state.min === null || state.max === null) {
-        // A band with its own colors ignores the range; any valid one will do.
-        [state.min, state.max] = range ?? [0, 1];
-      }
+      // A band with its own colors ignores the range; any valid one will do.
+      [state.min, state.max] = range ?? [0, 1];
       state.busy = false;
       setStatus(
         range || !state.colorMapped
@@ -661,7 +662,7 @@ function buildPanel(container: HTMLElement): () => void {
         state.date = last.toISOString();
         state.dateLabel = collection.formatDate(last);
       }
-      await sampleBand(true);
+      await sampleBand();
     } catch (error) {
       if (disposed || token !== selection) return;
       state.busy = false;
@@ -768,6 +769,7 @@ function buildPanel(container: HTMLElement): () => void {
       const colormapLabel = element("label", CSS.label, tr("colormap", "Colormap"));
       colormapLabel.append(colormapSelect);
 
+      const colorbar = element("div", "display:flex;flex-direction:column;gap:2px;");
       const rangeInput = (key: "min" | "max", label: string): HTMLElement => {
         const input = element("input", CSS.input);
         input.type = "number";
@@ -789,7 +791,10 @@ function buildPanel(container: HTMLElement): () => void {
           }
           state[key] = value;
           setStatus(null);
-          applyChange();
+          // No editor rebuild here: the change fires as Tab leaves the field,
+          // and a rebuild would hold focus on it instead of moving on.
+          updateActiveLayer(datasetById(state.datasetId));
+          void renderColorbar(colorbar);
         });
         const wrapper = element("label", `${CSS.label}${CSS.grow}`, label);
         wrapper.append(input);
@@ -797,7 +802,7 @@ function buildPanel(container: HTMLElement): () => void {
       };
       const rangeRow = element("div", `${CSS.row}align-items:flex-end;`);
       const auto = keyed(
-        button(tr("auto", "Auto"), CSS.secondary, () => void sampleBand(true)),
+        button(tr("auto", "Auto"), CSS.secondary, () => void sampleBand()),
         "auto",
       );
       auto.title = tr("autoTitle", "Set Min and Max from the data at this date");
@@ -808,7 +813,6 @@ function buildPanel(container: HTMLElement): () => void {
         auto,
       );
 
-      const colorbar = element("div", "display:flex;flex-direction:column;gap:2px;");
       void renderColorbar(colorbar);
       editor.append(colormapLabel, rangeRow, colorbar);
     } else if (!state.busy) {

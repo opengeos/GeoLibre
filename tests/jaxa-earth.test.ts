@@ -267,6 +267,12 @@ describe("color maps and zoom", () => {
     assert.equal(defaultJaxaColormap("JAXA.EORC_ALOS.PRISM_AW3D30.v4.1_global", "DSM"), "spectral");
     assert.equal(defaultJaxaColormap("JAXA.x_L3-LST", "LST"), "turbo");
     assert.equal(defaultJaxaColormap("JAXA.other", "X"), "viridis");
+    assert.equal(defaultJaxaColormap("JAXA.JASMES_GCOM-W.AMSR2_ic0.v201_north_daily", "IC0"), "ic");
+    assert.equal(
+      defaultJaxaColormap("JAXA.EORC_GSMaP_standard.Gauge.v6_hourly", "PRECIP"),
+      "blues",
+    );
+    assert.equal(defaultJaxaColormap("JAXA.device_service", "X"), "viridis", "whole tokens only");
   });
 
   it("caps the zoom at the dataset's resolution", () => {

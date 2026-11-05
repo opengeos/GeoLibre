@@ -323,13 +323,16 @@ export function jaxaColorsFor(name: string): string | string[] {
  * read from the data itself (see the panel's Auto range).
  */
 export function defaultJaxaColormap(datasetId: string, band: string): string {
-  const key = `${datasetId} ${band}`.toLowerCase();
-  if (/ndvi/.test(key)) return "ndvi";
-  if (/smc|ssw/.test(key)) return "smc";
-  if (/ic0|ice/.test(key)) return "ic";
-  if (/dsm|aw3d/.test(key)) return "spectral";
-  if (/precip|gsmap|spi/.test(key)) return "blues";
-  if (/lst|sst|temperature/.test(key)) return "turbo";
+  // Whole tokens of the id and band (split on . _ - and spaces), so "ice"
+  // does not match inside "device".
+  const tokens = new Set(`${datasetId} ${band}`.toLowerCase().split(/[\s._-]+/));
+  const has = (...names: string[]): boolean => names.some((name) => tokens.has(name));
+  if (has("ndvi")) return "ndvi";
+  if (has("smc", "ssw")) return "smc";
+  if (has("ic0")) return "ic";
+  if (has("dsm", "aw3d30")) return "spectral";
+  if (has("precip", "gsmap", "spi")) return "blues";
+  if (has("lst", "sst")) return "turbo";
   return "viridis";
 }
 
