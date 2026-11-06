@@ -1,5 +1,6 @@
 import {
   compileFeatureExpression,
+  extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
   isStyleSpecColor,
@@ -15,9 +16,9 @@ import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
  * binary STL (discussion #2825).
  *
  * Each polygon feature becomes one closed solid (floor, roof and walls) built
- * from the very height and colour the map paints (`extrusionHeightValue` /
- * `extrusionColorValue`), so categorized, graduated and expression-driven
- * styles export as drawn. Coordinates are metres in a local tangent plane
+ * from the very base, height and colour the map paints (`extrusionBaseValue`
+ * / `extrusionHeightValue` / `extrusionColorValue`), so categorized, graduated
+ * and expression-driven styles export as drawn. Coordinates are metres in a local tangent plane
  * centred on the layer's bounding box (x east, y north, z up), which keeps
  * city-scale models accurate and small enough for single-precision floats.
  * glTF and OBJ are written Y-up as those formats expect; STL stays Z-up, the
@@ -288,8 +289,7 @@ export function buildExtrusionModel(
     (lat - origin[1]) * metresPerLat,
   ];
 
-  const baseValue = styleValue(style, "extrusionBase");
-  const base = Number.isFinite(baseValue) ? baseValue : 0;
+  const readBase = featureReader(extrusionBaseValue(style), "number", zoom);
   const fallbackColor = styleValue(style, "extrusionColor") || style.fillColor || "#3b82f6";
   const readHeight = featureReader(extrusionHeightValue(style), "number", zoom);
   const readColor = featureReader(extrusionColorValue(style), "color", zoom);
@@ -314,6 +314,8 @@ export function buildExtrusionModel(
     if (polygons.length === 0) return;
     const height = Number(readHeight(feature));
     const top = Number.isFinite(height) ? height : 0;
+    const baseValue = Number(readBase(feature));
+    const base = Number.isFinite(baseValue) ? baseValue : 0;
     if (!(top > base)) {
       skipped += 1;
       return;

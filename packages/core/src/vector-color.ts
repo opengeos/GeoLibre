@@ -984,6 +984,34 @@ export function extrusionHeightValue(style: LayerStyle): number | unknown[] {
 }
 
 /**
+ * Resolves the 3D-extrusion base for a layer style into a MapLibre value: a
+ * plain meters number, or a data-driven expression. In advanced mode a valid
+ * `extrusionBaseExpression` wins; otherwise, with `extrusionBaseProperty` set,
+ * the base is `extrusionBase` plus the property scaled by `extrusionBaseScale`
+ * (so floors stack from a `level` field), else the flat `extrusionBase`. Like
+ * {@link extrusionHeightValue} it is an altitude: MapLibre draws a feature
+ * only where its height is above its base.
+ *
+ * @param style - The layer style.
+ * @returns The extrusion base as a number or a MapLibre expression array.
+ */
+export function extrusionBaseValue(style: LayerStyle): number | unknown[] {
+  const advancedExpression = parseJsonExpression(
+    styleValue(style, "extrusionAdvancedStyleEnabled")
+      ? styleValue(style, "extrusionBaseExpression")
+      : "",
+  );
+  if (advancedExpression) return advancedExpression;
+  const rawOffset = styleValue(style, "extrusionBase");
+  const offset = Number.isFinite(rawOffset) ? rawOffset : 0;
+  const property = styleValue(style, "extrusionBaseProperty").trim();
+  if (!property) return offset;
+  const scale = styleValue(style, "extrusionBaseScale");
+  const scaled = ["*", ["to-number", ["get", property], 0], Number.isFinite(scale) ? scale : 1];
+  return offset === 0 ? scaled : ["+", scaled, offset];
+}
+
+/**
  * Resolves the 3D-extrusion color for a layer style: a data-driven expression
  * when the layer's symbology mode produces one (categorized/graduated/rule/
  * expression) or an advanced `extrusionColorExpression` is set, otherwise the

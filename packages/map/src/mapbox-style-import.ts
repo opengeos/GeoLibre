@@ -660,6 +660,45 @@ function parseExtrusionHeight(
   patch.extrusionHeightExpression = JSON.stringify(value);
 }
 
+/**
+ * Recover the extrusion base config from a `fill-extrusion-base` value, the
+ * inverse of `extrusionBaseValue`: a flat number is the base; the exporter's
+ * `["*", ["to-number", ["get", p], 0], scale]`, optionally wrapped in
+ * `["+", …, offset]`, is the base property, scale and offset; any other
+ * expression round-trips through the advanced base expression.
+ */
+function parseExtrusionBase(value: unknown, patch: Partial<Omit<LayerStyle, "labels">>): void {
+  const flat = asFiniteNumber(value);
+  if (flat !== null) {
+    patch.extrusionBase = flat;
+    return;
+  }
+  const array = asArray(value);
+  if (!array) return;
+  let scaled: unknown = array;
+  let offset = 0;
+  if (array[0] === "+" && array.length === 3) {
+    const addend = asFiniteNumber(array[2]);
+    if (addend !== null) {
+      scaled = array[1];
+      offset = addend;
+    }
+  }
+  const product = asArray(scaled);
+  if (product && product[0] === "*" && product.length === 3) {
+    const property = wrappedProperty(product[1]);
+    const scale = asFiniteNumber(product[2]);
+    if (property && scale !== null) {
+      patch.extrusionBase = offset;
+      patch.extrusionBaseProperty = property;
+      patch.extrusionBaseScale = scale;
+      return;
+    }
+  }
+  patch.extrusionAdvancedStyleEnabled = true;
+  patch.extrusionBaseExpression = JSON.stringify(value);
+}
+
 function clampZoom(value: unknown): number | null {
   const number = asFiniteNumber(value);
   if (number === null) return null;
@@ -908,8 +947,9 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["fill-extrusion-height"] !== undefined) {
       parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
     }
-    const base = asFiniteNumber(paint["fill-extrusion-base"]);
-    if (base !== null) patch.extrusionBase = base;
+    if (paint["fill-extrusion-base"] !== undefined) {
+      parseExtrusionBase(paint["fill-extrusion-base"], patch);
+    }
     applyZoomRange(extrusion, patch);
   } else if (fill) {
     Object.assign(patch, readQueryStyleFillPattern(fill.metadata, warnings));

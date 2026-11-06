@@ -2,6 +2,7 @@ import {
   applyGroupEffects,
   DEFAULT_LAYER_STYLE,
   DUCKDB_VECTOR_FEATURE_WARN_COUNT,
+  extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
   isVectorColorExpression,
@@ -954,6 +955,10 @@ function savedVectorStyle(raw: unknown): Partial<VectorLayerStyle> | null {
     candidate.extrusionBase >= 0
   ) {
     style.extrusionBase = candidate.extrusionBase;
+  } else if (colorExpression(candidate.extrusionBase)) {
+    // A data-driven base (floors stacked from a level field), bounded the
+    // same way as the height expression below.
+    style.extrusionBase = candidate.extrusionBase as VectorLayerStyle["extrusionBase"];
   }
   if (
     typeof candidate.extrusionHeight === "number" &&
@@ -1069,7 +1074,7 @@ function layerStyleToVectorStyle(style: LayerStyle): VectorLayerStyle {
     extrusionColorExpression: colorExpressionField(extrusionColorValue(style)),
     extrusionOpacity: style.extrusionOpacity,
     extrusionHeight: extrusionHeightValue(style) as VectorLayerStyle["extrusionHeight"],
-    extrusionBase: style.extrusionBase,
+    extrusionBase: extrusionBaseValue(style) as VectorLayerStyle["extrusionBase"],
     // Point renderer: GeoLibre's "single" maps to the control's "circle".
     pointMode:
       (style.pointRenderer ?? "single") === "single"
@@ -1230,7 +1235,7 @@ function vectorStylesEqual(left: VectorLayerStyle, right: VectorLayerStyle): boo
     left.extrusionEnabled === right.extrusionEnabled &&
     left.extrusionColor === right.extrusionColor &&
     left.extrusionOpacity === right.extrusionOpacity &&
-    left.extrusionBase === right.extrusionBase &&
+    valuesEqual(left.extrusionBase, right.extrusionBase) &&
     valuesEqual(left.extrusionHeight, right.extrusionHeight) &&
     valuesEqual(left.extrusionColorExpression, right.extrusionColorExpression) &&
     // Point renderer fields: a pointMode/heatmap/cluster change must register so

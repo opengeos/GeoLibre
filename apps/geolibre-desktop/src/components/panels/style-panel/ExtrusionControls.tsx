@@ -5,6 +5,9 @@ import { validateExpressionJson } from "./classification-helpers";
 import { NumericStyleInput } from "./style-inputs";
 import type { StylePanelDrafts } from "./useStylePanelDrafts";
 
+/** Example base expression: 3.5 m per floor from a `level` attribute. */
+const BASE_EXPRESSION_PLACEHOLDER = '["*", ["to-number", ["get", "level"], 0], 3.5]';
+
 interface ExtrusionControlsProps {
   layer: GeoLibreLayer;
   drafts: StylePanelDrafts;
@@ -12,7 +15,8 @@ interface ExtrusionControlsProps {
 }
 
 /**
- * The 3D extrusion controls: drafted color, opacity, height source and base,
+ * The 3D extrusion controls: drafted color, opacity, height source and base
+ * (flat, or per feature from a property or expression so floors can stack),
  * applied together with the Apply button.
  *
  * @param props - The layer, its draft state and the height attribute options.
@@ -41,6 +45,12 @@ export function ExtrusionControls({
     setDraftExtrusionHeightScale,
     draftExtrusionBase,
     setDraftExtrusionBase,
+    draftExtrusionBaseProperty,
+    setDraftExtrusionBaseProperty,
+    draftExtrusionBaseScale,
+    setDraftExtrusionBaseScale,
+    draftBaseExpression,
+    setDraftBaseExpression,
     draftAdvancedExtrusionEnabled,
     setDraftAdvancedExtrusionEnabled,
     extrusionError,
@@ -52,6 +62,9 @@ export function ExtrusionControls({
     draftExtrusionHeightProperty !== styleValue(style, "extrusionHeightProperty") ||
     draftExtrusionHeightScale !== styleValue(style, "extrusionHeightScale") ||
     draftExtrusionBase !== styleValue(style, "extrusionBase") ||
+    draftExtrusionBaseProperty !== styleValue(style, "extrusionBaseProperty") ||
+    draftExtrusionBaseScale !== styleValue(style, "extrusionBaseScale") ||
+    draftBaseExpression !== styleValue(style, "extrusionBaseExpression") ||
     draftAdvancedExtrusionEnabled !== styleValue(style, "extrusionAdvancedStyleEnabled") ||
     draftColorExpression !== styleValue(style, "extrusionColorExpression") ||
     draftHeightExpression !== styleValue(style, "extrusionHeightExpression");
@@ -76,6 +89,16 @@ export function ExtrusionControls({
         setExtrusionError(heightError);
         return;
       }
+
+      const baseError = validateExpressionJson(
+        draftBaseExpression,
+        t("style.expressionLabels.base"),
+        t,
+      );
+      if (baseError) {
+        setExtrusionError(baseError);
+        return;
+      }
     }
 
     setExtrusionError(null);
@@ -85,6 +108,9 @@ export function ExtrusionControls({
       extrusionHeightProperty: draftExtrusionHeightProperty,
       extrusionHeightScale: draftExtrusionHeightScale,
       extrusionBase: draftExtrusionBase,
+      extrusionBaseProperty: draftExtrusionBaseProperty,
+      extrusionBaseScale: draftExtrusionBaseScale,
+      extrusionBaseExpression: draftBaseExpression.trim(),
       extrusionAdvancedStyleEnabled: draftAdvancedExtrusionEnabled,
       extrusionColorExpression: draftColorExpression.trim(),
       extrusionHeightExpression: draftHeightExpression.trim(),
@@ -138,6 +164,17 @@ export function ExtrusionControls({
               setExtrusionError(null);
             }}
           />
+          <Label htmlFor="extrusionBaseExpression">{t("style.extrusion.baseExpression")}</Label>
+          <textarea
+            id="extrusionBaseExpression"
+            className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+            placeholder={BASE_EXPRESSION_PLACEHOLDER}
+            value={draftBaseExpression}
+            onChange={(event) => {
+              setDraftBaseExpression(event.target.value);
+              setExtrusionError(null);
+            }}
+          />
         </div>
       ) : (
         <>
@@ -178,6 +215,39 @@ export function ExtrusionControls({
             value={draftExtrusionBase}
             onChange={setDraftExtrusionBase}
           />
+          <div className="space-y-2">
+            <Label htmlFor="extrusionBaseProperty">{t("style.extrusion.baseProperty")}</Label>
+            <Select
+              id="extrusionBaseProperty"
+              value={draftExtrusionBaseProperty}
+              onChange={(event) => setDraftExtrusionBaseProperty(event.target.value)}
+            >
+              <option value="">{t("style.extrusion.baseNone")}</option>
+              {extrusionHeightPropertyOptions.map((property) => (
+                <option key={property} value={property}>
+                  {property}
+                </option>
+              ))}
+              {draftExtrusionBaseProperty &&
+              !extrusionHeightPropertyOptions.includes(draftExtrusionBaseProperty) ? (
+                <option value={draftExtrusionBaseProperty}>{draftExtrusionBaseProperty}</option>
+              ) : null}
+            </Select>
+          </div>
+          {draftExtrusionBaseProperty ? (
+            <>
+              <NumericStyleInput
+                id="extrusionBaseScale"
+                label={t("style.extrusion.baseScale")}
+                min={0}
+                max={10000}
+                step={0.00001}
+                value={draftExtrusionBaseScale}
+                onChange={setDraftExtrusionBaseScale}
+              />
+              <p className="text-xs text-muted-foreground">{t("style.extrusion.baseHint")}</p>
+            </>
+          ) : null}
         </>
       )}
       <Button

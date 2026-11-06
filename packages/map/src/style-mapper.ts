@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   circleRadiusValue,
+  extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
   heatmapRampColors,
@@ -87,7 +88,7 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
     "fill-extrusion-color": extrusionColorPaintValue(style),
     "fill-extrusion-opacity": styleValue(style, "extrusionOpacity") * opacity,
     "fill-extrusion-height": extrusionHeightPaintValue(style),
-    "fill-extrusion-base": styleValue(style, "extrusionBase"),
+    "fill-extrusion-base": extrusionBaseValue(style) as PropertyValueSpecification<number>,
     "fill-extrusion-vertical-gradient": true,
   };
 }

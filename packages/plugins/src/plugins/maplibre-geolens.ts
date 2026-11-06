@@ -700,14 +700,18 @@ function attributePropertiesInUse(layer: GeoLibreLayer): string[] {
   if (styleValue(style, "extrusionEnabled")) {
     const advanced = styleValue(style, "extrusionAdvancedStyleEnabled");
     const heightExpression = advanced ? styleValue(style, "extrusionHeightExpression") : "";
+    const baseExpression = advanced ? styleValue(style, "extrusionBaseExpression") : "";
     if (advanced) {
       addRefs(heightExpression);
+      addRefs(baseExpression);
       addRefs(styleValue(style, "extrusionColorExpression"));
     }
     // The height expression wins over the property, but only when it parses: a
     // blank or half-typed one falls back to the property (`extrusionHeightValue`),
     // so gating on the advanced flag alone would drop a column still being read.
     if (!parseJsonExpression(heightExpression)) add(styleValue(style, "extrusionHeightProperty"));
+    // Same fallback for the base (`extrusionBaseValue`).
+    if (!parseJsonExpression(baseExpression)) add(styleValue(style, "extrusionBaseProperty"));
   }
   if (styleValue(style, "diagramType") !== "none") {
     for (const field of styleValue(style, "diagramFields")) add(field?.property);

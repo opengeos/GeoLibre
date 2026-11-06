@@ -6,6 +6,7 @@ import {
   documentLocale,
   DEFAULT_LAYER_STYLE,
   extrusionColorValue,
+  extrusionBaseValue,
   extrusionHeightValue,
   generatorCircleRadiusValue,
   isAdoptedVectorAwaitingFeatures,
@@ -85,6 +86,11 @@ export const ARCGIS_LABEL_FIELD = "gl__label";
 export const ARCGIS_LABEL_CLASS_FIELD = "gl__lcls";
 /** Extrusion height in metres, read by the 3D renderer's size visual variable. */
 export const ARCGIS_HEIGHT_FIELD = "gl__height";
+/**
+ * Data-driven extrusion base in metres, read by the layer's elevation
+ * expression. Only written when the base varies per feature.
+ */
+export const ARCGIS_BASE_FIELD = "gl__base";
 export const ARCGIS_WEIGHT_FIELD = "gl__weight";
 
 /** The SDK's geometry kinds a GeoJSONLayer can hold; one layer per kind. */
@@ -168,9 +174,16 @@ export interface ArcgisGeoJsonPart {
   patternStyle?: LayerStyle;
   /**
    * How the SDK places the features vertically in a `SceneView`. Set on
-   * extruded polygons so the extrusion starts at the style's base height.
+   * extruded polygons so the extrusion starts at the style's base height: a
+   * flat `offset`, or an Arcade expression reading a per-feature base.
    */
-  elevationInfo?: { mode: "relative-to-ground" | "absolute-height"; offset: number };
+  elevationInfo?:
+    | { mode: "relative-to-ground" | "absolute-height"; offset: number }
+    | {
+        mode: "relative-to-ground";
+        featureExpressionInfo: { expression: string };
+        unit: "meters";
+      };
   hasZ?: boolean;
   featureReduction?: Record<string, unknown>;
   /**
@@ -938,9 +951,16 @@ function explodePoints(geometry: Geometry): Geometry[] {
  * rule-based colours, the advanced expressions, and an empty height property
  * (a flat extrusion) behave as on the 2D map. As there, the height is the top
  * of the extrusion and the base its bottom, both in metres above the ground.
+ * A data-driven base (`extrusionBaseValue`, e.g. floors stacked from a level
+ * field) is written per feature to {@link ARCGIS_BASE_FIELD}; a flat one stays
+ * the layer's elevation offset.
  */
 interface ExtrusionReader {
+  /** The flat base, used as the elevation offset when `dataDrivenBase` is false. */
   base: number;
+  /** Whether the base varies per feature (so it is written per feature). */
+  dataDrivenBase: boolean;
+  baseAt(feature: Feature, zoom: number): number;
   zoomDependent: boolean;
   height(feature: Feature, zoom: number): number;
   symbol(feature: Feature, zoom: number): ArcgisSymbolJson;
@@ -972,18 +992,29 @@ function featureValue(
 }
 
 function compileExtrusion(style: LayerStyle): ExtrusionReader {
-  const base = Number.isFinite(style.extrusionBase) ? style.extrusionBase : 0;
+  const baseValue = extrusionBaseValue(style);
+  const flatBase = typeof baseValue === "number" && Number.isFinite(baseValue) ? baseValue : 0;
+  const dataDrivenBase = Array.isArray(baseValue);
   const opacity = Number.isFinite(style.extrusionOpacity) ? style.extrusionOpacity : 0.8;
   const fallbackColor = style.extrusionColor || style.fillColor || "#3b82f6";
   const height = featureValue(extrusionHeightValue(style), "number");
   const color = featureValue(extrusionColorValue(style), "color");
+  const baseReader = featureValue(baseValue, "number");
+  const baseAt = (feature: Feature, zoom: number): number => {
+    if (!dataDrivenBase) return flatBase;
+    const value = Number(baseReader.read(feature, zoom));
+    // MapLibre clamps a negative fill-extrusion-base to the ground.
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
   return {
-    base,
-    zoomDependent: height.zoomDependent || color.zoomDependent,
+    base: flatBase,
+    dataDrivenBase,
+    baseAt,
+    zoomDependent: height.zoomDependent || color.zoomDependent || baseReader.zoomDependent,
     height(feature, zoom) {
       const value = Number(height.read(feature, zoom));
       // The SDK extrudes by a size above the base; a top below the base is flat.
-      return Math.max(0, (Number.isFinite(value) ? value : 0) - base);
+      return Math.max(0, (Number.isFinite(value) ? value : 0) - baseAt(feature, zoom));
     },
     symbol(feature, zoom) {
       const value = color.read(feature, zoom);
@@ -1160,6 +1191,9 @@ function compileGeoJson(
             ? { [ARCGIS_WEIGHT_FIELD]: heatmapWeight(feature, style) }
             : {}),
           ...(extruded ? { [ARCGIS_HEIGHT_FIELD]: extrusion.height(feature, zoom) } : {}),
+          ...(extruded && extrusion.dataDrivenBase
+            ? { [ARCGIS_BASE_FIELD]: extrusion.baseAt(feature, zoom) }
+            : {}),
         },
       };
       if (override) overridden.set(out, override);
@@ -1299,7 +1333,15 @@ function compileGeoJson(
               ? { patternStyle: style }
               : {}),
             ...(extruded
-              ? { elevationInfo: { mode: "relative-to-ground" as const, offset: extrusion.base } }
+              ? {
+                  elevationInfo: extrusion.dataDrivenBase
+                    ? {
+                        mode: "relative-to-ground" as const,
+                        featureExpressionInfo: { expression: `$feature.${ARCGIS_BASE_FIELD}` },
+                        unit: "meters" as const,
+                      }
+                    : { mode: "relative-to-ground" as const, offset: extrusion.base },
+                }
               : {}),
             ...(elevated
               ? { hasZ: true, elevationInfo: { mode: "absolute-height" as const, offset: 0 } }

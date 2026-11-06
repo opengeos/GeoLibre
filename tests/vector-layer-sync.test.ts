@@ -1507,6 +1507,17 @@ describe("savedVectorState", () => {
     assert.deepEqual(restored.extrusionHeight, heightExpr);
   });
 
+  it("restores a data-driven extrusion base expression", () => {
+    const baseExpr = ["*", ["to-number", ["get", "level"], 0], 3.5];
+    const layer = createVectorStoreLayer(vectorInfo());
+    (layer.metadata.vectorState as Record<string, unknown>).style = {
+      ...vectorStyle(),
+      extrusionEnabled: true,
+      extrusionBase: baseExpr,
+    };
+    assert.deepEqual(savedVectorState(layer).style?.extrusionBase, baseExpr);
+  });
+
   it("restores a flat numeric extrusion height", () => {
     const layer = createVectorStoreLayer(vectorInfo());
     (layer.metadata.vectorState as Record<string, unknown>).style = {

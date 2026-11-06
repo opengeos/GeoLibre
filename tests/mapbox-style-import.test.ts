@@ -407,6 +407,35 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     assert.equal(result.extrusionBase, 5);
   });
 
+  it("recovers a data-driven extrusion base property, scale, and offset", () => {
+    const { style: result } = roundTrip(
+      style({
+        extrusionEnabled: true,
+        extrusionBase: 2,
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 3.5,
+      }),
+      polygons(),
+    );
+    assert.equal(result.extrusionBase, 2);
+    assert.equal(result.extrusionBaseProperty, "level");
+    assert.equal(result.extrusionBaseScale, 3.5);
+  });
+
+  it("round-trips an advanced extrusion base expression", () => {
+    const expression = ["match", ["get", "floor"], "B1", 0, 10];
+    const { style: result } = roundTrip(
+      style({
+        extrusionEnabled: true,
+        extrusionAdvancedStyleEnabled: true,
+        extrusionBaseExpression: JSON.stringify(expression),
+      }),
+      polygons(),
+    );
+    assert.equal(result.extrusionAdvancedStyleEnabled, true);
+    assert.deepEqual(JSON.parse(result.extrusionBaseExpression ?? ""), expression);
+  });
+
   it("does not write a line-only renderer's stroke fallback into fillColor", () => {
     const original = style({
       vectorStyleMode: "categorized",

@@ -8890,18 +8890,24 @@
     "extrusion": {
       "color": "Extrusion color",
       "opacity": "Extrusion opacity",
-      "advanced": "Advanced height expression",
+      "advanced": "Advanced height and base expressions",
       "heightExpression": "Height expression",
       "heightProperty": "Height property",
       "heightScale": "Height scale",
       "base": "Base height",
+      "baseProperty": "Base property",
+      "baseNone": "None (flat base)",
+      "baseScale": "Base scale",
+      "baseHint": "Each feature starts at base height + base property × base scale, so floors stack from a level field. Height is the roof's altitude, so it must be above the base.",
+      "baseExpression": "Base expression",
       "apply": "Apply 3D extrusion",
       "footer": "3D extrusion settings apply when saved."
     },
     "expressionLabels": {
       "style": "Style expression",
       "color": "Color expression",
-      "height": "Height expression"
+      "height": "Height expression",
+      "base": "Base expression"
     },
     "expressionErrors": {
       "notArray": "{{label}} must be a JSON array expression.",

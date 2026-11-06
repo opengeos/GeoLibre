@@ -252,7 +252,8 @@ In a scene:
 - Polygon layers whose style extrudes (the Style panel's **3D extrusion**) draw as
   extruded 3D shapes with the same height and colour as MapLibre's
   fill-extrusion: the height property times the height scale (or the advanced
-  height expression) is the top and the base height the bottom, and the colour
+  height expression) is the top and the base (flat, or per feature from the
+  base property or expression) the bottom, and the colour
   follows the layer's categorized, graduated or rule-based symbology, the
   advanced colour expression, or the extrusion colour. On a 2D `MapView` they
   stay flat fills.

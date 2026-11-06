@@ -1753,13 +1753,64 @@ describe("CesiumLayerSync", () => {
     assert.ok(ds, "dataSource should be added");
     const poly = ds.entities.values[0]?.polygon;
     assert.ok(poly, "polygon should be present");
-    // height = 10 * 2 + 5 = 25
-    assert.equal(poly.extrudedHeight.value, 25);
+    // As on the 2D map the height is the roof altitude: 10 * 2 = 20, above
+    // the 5 m base (not 10 * 2 + 5).
+    assert.equal(poly.extrudedHeight.value, 20);
     assert.equal(poly.height.value, 5);
     assert.equal(poly.heightReference.value, 2);
     assert.equal(poly.extrudedHeightReference.value, 2);
     assert.equal(poly.material.color.css, "#ff0000");
     assert.equal(poly.material.color.alpha, 0.9);
+  });
+
+  it("stacks floors from a data-driven extrusion base", async () => {
+    const sync = newSync(f);
+    const floor = (id: string, level: number) => ({
+      type: "Feature" as const,
+      id,
+      properties: { level, top: level * 3.5 + 3 },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    const layer = mkLayer({
+      id: "floors",
+      type: "geojson",
+      geojson: { type: "FeatureCollection", features: [floor("f0", 0), floor("f2", 2)] },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "top",
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 3.5,
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: {
+        values: Array<{
+          polygon: { extrudedHeight: { value: number }; height: { value: number } };
+        }>;
+      };
+    };
+    const polys = ds.entities.values.map((entity) => entity.polygon);
+    assert.deepEqual(
+      polys.map((p) => [p.height.value, p.extrudedHeight.value]),
+      [
+        [0, 3],
+        [7, 10],
+      ],
+    );
   });
 
   it("evaluates advanced extrusion expressions for height and color", async () => {

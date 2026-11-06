@@ -5,6 +5,7 @@ import {
   arcgisRasterEffect,
   arcgisUnsupportedStyleSettings,
   isArcgisRasterPlan,
+  ARCGIS_BASE_FIELD,
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
@@ -1133,6 +1134,50 @@ describe("compileArcgisLayer extrusion", () => {
       [10, 0],
     );
     assert.deepEqual(part.elevationInfo, { mode: "relative-to-ground", offset: 2 });
+  });
+
+  it("writes a data-driven base per feature and reads it by elevation expression", () => {
+    const plan = compileArcgisLayer(
+      {
+        ...buildings,
+        style: {
+          ...buildings.style,
+          // Floors stacked from `levels`: base = 1 + levels * 2, roof = base + 3.
+          extrusionBase: 1,
+          extrusionBaseProperty: "levels",
+          extrusionBaseScale: 2,
+          extrusionAdvancedStyleEnabled: true,
+          extrusionHeightExpression: '["+", ["*", ["to-number", ["get", "levels"], 0], 2], 4]',
+        },
+      },
+      { scene: true },
+    );
+    assert.equal(plan.kind, "geojson");
+    if (plan.kind !== "geojson") return;
+    const [part] = plan.parts;
+    // Feature a: base 1 + 4 * 2 = 9, roof 4 * 2 + 4 = 12, so 3 m tall. Feature
+    // b's base (1 - 2 = -1) is clamped to the ground as MapLibre clamps it.
+    assert.deepEqual(
+      part.features?.features.map((f) => f.properties?.[ARCGIS_BASE_FIELD]),
+      [9, 0],
+    );
+    assert.deepEqual(
+      part.features?.features.map((f) => f.properties?.[ARCGIS_HEIGHT_FIELD]),
+      [3, 2],
+    );
+    assert.deepEqual(part.elevationInfo, {
+      mode: "relative-to-ground",
+      featureExpressionInfo: { expression: `$feature.${ARCGIS_BASE_FIELD}` },
+      unit: "meters",
+    });
+  });
+
+  it("keeps a flat base out of the per-feature attributes", () => {
+    const plan = compileArcgisLayer(buildings, { scene: true });
+    if (plan.kind !== "geojson") return assert.fail("expected a geojson plan");
+    assert.ok(
+      plan.parts[0].features?.features.every((f) => !(ARCGIS_BASE_FIELD in (f.properties ?? {}))),
+    );
   });
 
   it("colours and sizes by the advanced expressions", () => {

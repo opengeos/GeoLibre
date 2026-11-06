@@ -126,6 +126,19 @@ describe("buildExtrusionModel", () => {
     assert.deepEqual(model.solids[0].color, [0, 1, 0]);
   });
 
+  it("starts each solid at its own data-driven base", () => {
+    const model = buildExtrusionModel(
+      collection(square(13, false, { level: 2 }), square(6, false, { level: 2 })),
+      style({ extrusionBaseProperty: "level", extrusionBaseScale: 3.5 }),
+    );
+    // Base 2 * 3.5 = 7: the 13 m roof gets a 6 m solid, the 6 m one is flat.
+    assert.equal(model.solids.length, 1);
+    assert.equal(model.skipped, 1);
+    const zs = model.solids[0].positions.filter((_, i) => i % 3 === 2);
+    assert.equal(Math.min(...zs), 7);
+    assert.equal(Math.max(...zs), 13);
+  });
+
   it("ignores non-polygon features and names solids", () => {
     const point: Feature = {
       type: "Feature",

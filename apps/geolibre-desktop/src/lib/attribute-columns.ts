@@ -41,6 +41,7 @@ const COLUMN_SETTINGS_KEY = "columnSettings";
 const STYLE_FIELD_KEYS = [
   "vectorStyleProperty",
   "extrusionHeightProperty",
+  "extrusionBaseProperty",
 ] as const satisfies ReadonlyArray<keyof LayerStyle>;
 
 function stringArray(value: unknown): string[] | undefined {
