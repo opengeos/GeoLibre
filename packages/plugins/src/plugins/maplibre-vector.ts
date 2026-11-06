@@ -87,6 +87,12 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
     url: "https://data.source.coop/giswqs/opengeos/las-vegas-buildings.geojson",
   },
   {
+    // OpenStreetMap indoor mapping (rooms and corridors with a `level`), for
+    // 3D indoor views (#3341). Data © OpenStreetMap contributors, ODbL.
+    label: "Berlin Hbf indoor (OSM)",
+    url: "https://data.source.coop/giswqs/opengeos/berlin-hbf-indoor.geojson",
+  },
+  {
     label: "H3 building counts",
     url: "https://data.source.coop/giswqs/opengeos/building_count_h3.parquet",
   },
