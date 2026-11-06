@@ -131,6 +131,9 @@ map with one button per floor, highest first.
   grip under the list to make it taller or shorter (or focus the grip and use
   the arrow keys, Home and End); double-click it to go back to the default
   height. The height is remembered in this browser, not saved in the project.
+- With **All** chosen, click a room (any feature of a linked layer) to go to its
+  floor: the picker switches to that floor and the map centres on the room.
+  Labels follow the floor, so each floor shows only its own room names.
 - **+ below** keeps the floors under the chosen one as well, the cutaway view of
   a building with the upper storeys lifted off. Combined with a stacked
   extrusion (see **Stacking floors** above) it shows the building up to the

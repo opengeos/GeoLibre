@@ -379,3 +379,15 @@ describe("clampFloorListHeight", () => {
     assert.equal(clampFloorListHeight(5000, 25, null), 5000);
   });
 });
+
+describe("featureLevel", () => {
+  it("names the first listed floor a feature is on", async () => {
+    const { featureLevel, collectLevels } = await import("@geolibre/core");
+    const levels = collectLevels(ROOMS, "level");
+    assert.equal(featureLevel("1", levels), "1");
+    assert.equal(featureLevel("0;1", levels), "0");
+    assert.equal(featureLevel(0, levels), "0");
+    assert.equal(featureLevel("7", levels), null);
+    assert.equal(featureLevel(null, levels), null);
+  });
+});

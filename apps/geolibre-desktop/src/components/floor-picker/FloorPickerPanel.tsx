@@ -2,6 +2,8 @@ import {
   applyGroupEffects,
   collectLevels,
   currentLevelChoice,
+  featureLevel,
+  isMapClickClaimed,
   mergeLevels,
   resolveLevelLinks,
   useAppStore,
@@ -147,6 +149,38 @@ export function FloorPickerPanel({
     observer.observe(map);
     return () => observer.disconnect();
   }, [host, listHeight]);
+
+  // Indoor navigation: on All, clicking a room (any feature of a linked
+  // layer) goes to its floor and centres the map on it. On a chosen floor the
+  // click is left to the usual identify popup; All returns to the overview.
+  useEffect(() => {
+    const engine = mapControllerRef.current;
+    if (!host || !engine || choice.level !== null) return;
+    const fields = new Map(
+      visibleLinked.map((layer) => [layer.id, layer.levelFilter?.field ?? ""]),
+    );
+    return engine.onMapClick((lngLat) => {
+      // A drawing, measuring or editing tool owns this click.
+      if (isMapClickClaimed()) return;
+      for (const feature of engine.identifyFeatures(lngLat)) {
+        const field = fields.get(feature.layerId);
+        if (!field) continue;
+        const level = featureLevel(feature.properties[field], levels);
+        if (level === null) continue;
+        setLevelSelection(level, "only");
+        engine.flyTo({ center: lngLat, duration: 600 });
+        return;
+      }
+    });
+  }, [
+    host,
+    mapControllerRef,
+    choice.level,
+    visibleLinked,
+    levels,
+    setLevelSelection,
+    mapReadyGeneration,
+  ]);
 
   if (!visible || !host) return null;
 

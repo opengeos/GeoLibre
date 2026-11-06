@@ -374,6 +374,23 @@ export function compileLevelFilter(filter: LayerLevelFilter | null | undefined):
 }
 
 /**
+ * The floor a feature is on, as the floor picker labels it: the first floor its
+ * level value names that the picker lists (a room spanning floors `0;1` goes
+ * to floor 0), or `null` when it names none of them.
+ *
+ * @param raw - The feature's level attribute.
+ * @param levels - The floors the picker lists.
+ * @returns The floor's label, or `null`.
+ */
+export function featureLevel(raw: unknown, levels: readonly LevelEntry[]): string | null {
+  const listed = new Set(levels.map((entry) => entry.label));
+  for (const token of parseLevelValue(raw)) {
+    if (listed.has(token.label)) return token.label;
+  }
+  return null;
+}
+
+/**
  * Guess which field holds the floor.
  *
  * @param fields - The layer's field names.
