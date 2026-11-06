@@ -623,9 +623,12 @@ function parseLineWidth(
   );
 }
 
-/** The note for a `line-opacity` that is not a number, an expression or a function. */
+/**
+ * The note for a `line-opacity` that is not a number in [0, 1], an expression
+ * or a stops function.
+ */
 const UNREADABLE_LINE_OPACITY_NOTE =
-  "The line opacity is not a valid number and was not applied; the lines import at the layer opacity.";
+  "The line opacity is not a valid number between 0 and 1 and was not applied; the lines import at the layer opacity.";
 
 /** The note for a `line-opacity` the layer style cannot hold as one number. */
 const VARYING_LINE_OPACITY_NOTE =
@@ -661,14 +664,18 @@ function warnUnsupportedLinePaint(
 ): void {
   const rawOpacity = unwrapLiteral(paint["line-opacity"]);
   const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
-  if (opacity !== null) {
+  if (opacity !== null && (opacity < 0 || opacity > 1)) {
+    // The spec bounds `line-opacity` to [0, 1]; a value outside it is invalid,
+    // not something to copy into the layer opacity.
+    report("line-opacity", UNREADABLE_LINE_OPACITY_NOTE);
+  } else if (opacity !== null) {
     if (opacity < 1) {
       report(
         "line-opacity",
         `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
       );
     }
-  } else if (typeof rawOpacity === "object" && rawOpacity !== null) {
+  } else if (Array.isArray(rawOpacity) || isStopsFunction(rawOpacity)) {
     // An expression or a legacy `{ stops }` function: zoom- or data-driven.
     report("line-opacity", VARYING_LINE_OPACITY_NOTE);
   } else if (rawOpacity != null) {
@@ -719,6 +726,15 @@ function warnUnsupportedLinePaint(
       "The line gradient cannot be represented; the lines import with a single flat color.",
     );
   }
+}
+
+/** Whether a value is a legacy `{ stops: [...] }` style function. */
+function isStopsFunction(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { stops?: unknown }).stops)
+  );
 }
 
 /** A `["literal", value]` wrapper's value, or the value itself. */
