@@ -151,6 +151,18 @@ export function setI3sBuildingNodeVisible(
 }
 
 /**
+ * A Scene Layer document path: `.../SceneServer/layers/<n>`, optionally a
+ * Building Scene Layer's `/sublayers/<m>`, with nothing after it.
+ */
+export const I3S_LAYER_DOCUMENT_RE = /\/SceneServer\/layers\/\d+(?:\/sublayers\/\d+)?\/?$/i;
+
+/** Split a URL at its first `?`: the path, and the query (without the `?`) or `""`. */
+function splitQuery(url: string): [string, string] {
+  const at = url.indexOf("?");
+  return at < 0 ? [url, ""] : [url.slice(0, at), url.slice(at + 1)];
+}
+
+/**
  * A sublayer's URL under a Building Scene Layer URL, keeping any query
  * (a token) on the end.
  *
@@ -159,7 +171,7 @@ export function setI3sBuildingNodeVisible(
  * @returns `.../SceneServer/layers/<n>/sublayers/<id>`.
  */
 export function i3sBuildingSublayerUrl(layerUrl: string, sublayerId: number): string {
-  const [path, query] = layerUrl.split("?", 2);
+  const [path, query] = splitQuery(layerUrl);
   const base = path.replace(/\/+$/, "");
   return `${base}/sublayers/${sublayerId}${query ? `?${query}` : ""}`;
 }
@@ -172,9 +184,9 @@ export function i3sBuildingSublayerUrl(layerUrl: string, sublayerId: number): st
  * @returns The layer document URL, or `null` when it cannot be derived.
  */
 export function i3sLayerDocumentUrl(url: string): string | null {
-  const [path, query] = url.trim().split("?", 2);
+  const [path, query] = splitQuery(url.trim());
   const suffix = query ? `?${query}` : "";
-  if (/\/SceneServer\/layers\/\d+(?:\/sublayers\/\d+)?\/?$/i.test(path)) {
+  if (I3S_LAYER_DOCUMENT_RE.test(path)) {
     return path.replace(/\/+$/, "") + suffix;
   }
   if (/\/SceneServer\/?$/i.test(path)) return path.replace(/\/+$/, "") + "/layers/0" + suffix;

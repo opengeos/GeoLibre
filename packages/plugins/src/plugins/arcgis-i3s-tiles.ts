@@ -10,6 +10,7 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
+  I3S_LAYER_DOCUMENT_RE,
   i3sBuildingSublayerUrl,
   i3sLayerDocumentUrl,
   isI3sBuildingLayerDocument,
@@ -93,12 +94,6 @@ export const THREE_D_TILES_DECK_LOAD_OPTIONS = {
   core: { worker: false },
 } as const;
 /**
- * A Scene Layer document URL: `.../SceneServer/layers/<n>`, optionally a
- * Building Scene Layer's `/sublayers/<m>`, with nothing after it but a query.
- */
-const I3S_LAYER_DOCUMENT_RE = /\/SceneServer\/layers\/\d+(?:\/sublayers\/\d+)?\/?$/i;
-
-/**
  * Ask an ArcGIS Server for a Scene Layer document as JSON.
  *
  * A server answers `.../SceneServer/layers/<n>` with its HTML REST page unless
@@ -124,8 +119,11 @@ export function i3sDocumentRequestUrl(url: string): string {
 
 /** `fetch` for the I3S loader: layer documents as JSON, everything else as asked. */
 function fetchI3sResource(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  return fetch(i3sDocumentRequestUrl(url), init);
+  if (typeof input === "string" || input instanceof URL) {
+    return fetch(i3sDocumentRequestUrl(input instanceof URL ? input.href : input), init);
+  }
+  // Keep a Request's own method, headers and body; only its URL changes.
+  return fetch(new Request(i3sDocumentRequestUrl(input.url), input), init);
 }
 
 // ~1s at 60fps, matching GOOGLE_TILES_MAX_MOUNT_RETRIES so a slow project
@@ -316,7 +314,12 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
   if (!app.getDeckGL) return;
   i3sDeckGL ??= await app.getDeckGL();
   i3sLoader ??= await loadI3sLoader();
-  i3sMeshLayerClass ??= await loadI3sMeshLayerClass(i3sDeckGL);
+  // Without the replacement layer deck.gl's own mesh layer is used: the scene
+  // may not draw on deck.gl 9.4, but the overlay, fly-to and visibility work.
+  i3sMeshLayerClass ??= await loadI3sMeshLayerClass(i3sDeckGL).catch((error) => {
+    console.warn("[GeoLibre] Using deck.gl's default I3S mesh layer", error);
+    return null;
+  });
 
   const map = app.getMap?.() ?? app.getMapboxMap?.() ?? null;
   if (i3sOverlay && i3sBoundMap === map) {
@@ -421,7 +424,9 @@ function renderArcgisI3sTilesLayers(): void {
   lastI3sLayerSignature = signature;
 
   for (const layer of layers) {
-    if (layer.metadata.i3sKind === undefined) void probeI3sLayerKind(layer);
+    if (layer.metadata.i3sKind === undefined && !i3sProbesFailed.has(layer.id)) {
+      void probeI3sLayerKind(layer);
+    }
   }
   const deckLayers = layers
     .filter((layer) => layer.visible)
@@ -457,7 +462,7 @@ function i3sLayerSignature(layers: GeoLibreLayer[]): string {
       const sublayers = building ? visibleI3sBuildingSublayers(building).join(",") : "";
       return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${
         typeof layer.source.url === "string" ? layer.source.url : ""
-      }:${String(layer.metadata.i3sKind ?? "")}:${sublayers}`;
+      }:${String(i3sLayerKind(layer) ?? "")}:${sublayers}`;
     })
     .join("|");
 }
@@ -531,7 +536,7 @@ export function buildArcgisI3sTilesDeckLayer(
  * @returns Its deck.gl layers (none while its type is still being probed).
  */
 export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
-  const kind = layer.metadata.i3sKind;
+  const kind = i3sLayerKind(layer);
   if (kind === "building") {
     const state = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
     const base = layer.metadata.i3sBuildingUrl;
@@ -552,14 +557,27 @@ export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
 
 /** I3S layers whose type probe is in flight, so each is probed once. */
 const i3sProbesInFlight = new Set<string>();
+/**
+ * I3S layers whose layer document could not be read this session. They are
+ * drawn as mesh layers, so the loader reports its own error, but nothing is
+ * written to the layer: a transient failure must not turn a Building Scene
+ * Layer into a mesh layer in the saved project, and the next session (or a
+ * reopened project) probes again.
+ */
+const i3sProbesFailed = new Set<string>();
+
+/** A layer's I3S kind: the probed one, `mesh` after a failed probe, else unknown. */
+function i3sLayerKind(layer: GeoLibreLayer): unknown {
+  return layer.metadata.i3sKind ?? (i3sProbesFailed.has(layer.id) ? "mesh" : undefined);
+}
 
 /**
  * Find out whether an I3S layer is a Building Scene Layer, from its layer
  * document, and record it on the layer (`metadata.i3sKind`, plus the sublayer
  * tree for a Building layer). A layer is drawn only once this is known, so a
  * Building layer's root, which the I3S loader cannot draw, is never loaded.
- * Anything that cannot be probed is treated as a mesh layer, so the loader
- * reports its own error.
+ * A URL that names no layer document is recorded as a mesh layer; a document
+ * that cannot be read is drawn as one for this session only.
  *
  * @param layer - The store layer to probe.
  */
@@ -572,7 +590,8 @@ async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
   if (docUrl) {
     try {
       const response = await fetch(i3sDocumentRequestUrl(docUrl));
-      const doc: unknown = response.ok ? await response.json() : null;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const doc: unknown = await response.json();
       if (isI3sBuildingLayerDocument(doc)) {
         patch = {
           i3sKind: "building",
@@ -582,6 +601,11 @@ async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       }
     } catch (error) {
       console.warn(`[GeoLibre] Could not read the I3S layer document ${docUrl}`, error);
+      i3sProbesInFlight.delete(layer.id);
+      i3sProbesFailed.add(layer.id);
+      lastI3sLayerSignature = null;
+      renderArcgisI3sTilesLayers();
+      return;
     }
   }
   i3sProbesInFlight.delete(layer.id);

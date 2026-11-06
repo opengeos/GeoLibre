@@ -222,8 +222,27 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     };
     assert.deepEqual(options.tileset, THREE_D_TILES_DECK_LOAD_OPTIONS.tileset);
     assert.equal(options.core.worker, false);
-    // Layer documents are fetched as JSON (see i3sDocumentRequestUrl).
-    assert.equal(typeof options.core.fetch, "function");
+  });
+
+  it("fetches layer documents as JSON and leaves other requests alone", async () => {
+    const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
+    const seen: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seen.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const base = "https://example.com/arcgis/rest/services/B/SceneServer/layers/0";
+      await fetchImpl(base);
+      await fetchImpl(new Request(`${base}/nodepages/0`));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(seen, [
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0?f=json",
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0/nodepages/0",
+    ]);
   });
 
   it("draws I3S meshes with GeoLibre's mesh layer when it is loaded", () => {

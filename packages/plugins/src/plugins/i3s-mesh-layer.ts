@@ -117,7 +117,10 @@ export interface I3sMeshLayerLuma {
 
 type MeshAttributes = Record<string, { value: ArrayLike<number>; size: number } | undefined>;
 
-/** Give a mesh without vertex colours a white colour attribute (as deck.gl does). */
+/**
+ * Give a mesh without vertex colours a white colour attribute, as deck.gl
+ * does. It changes the mesh's own attribute object, in place.
+ */
 function ensureVertexColors(attributes: MeshAttributes): void {
   const positions = attributes.positions ?? attributes.POSITION;
   if (!positions || attributes.COLOR_0 || attributes.colors) return;
@@ -175,7 +178,10 @@ export function createI3sMeshLayerClass(SimpleMeshLayer: unknown, luma: I3sMeshL
     updateState(params: any) {
       super.updateState(params);
       const { props, oldProps } = params;
-      if (props.pbrMaterial !== oldProps.pbrMaterial) this.updateTexture(props.pbrMaterial);
+      // A new mesh means a new model, which starts without the texture.
+      if (props.pbrMaterial !== oldProps.pbrMaterial || props.mesh !== oldProps.mesh) {
+        this.updateTexture(props.pbrMaterial);
+      }
     }
 
     draw(opts: any) {
@@ -193,9 +199,11 @@ export function createI3sMeshLayerClass(SimpleMeshLayer: unknown, luma: I3sMeshL
         id: this.props.id,
         geometry: mesh,
         bufferLayout: this.getAttributeManager().getBufferLayouts(),
+        // luma.gl writes `#define NAME 0` for a 0, which `#ifdef` still takes,
+        // so the define is left out for a mesh without UV regions.
         defines: {
           ...shaders.defines,
-          HAS_UV_REGIONS: mesh.attributes.uvRegions ? 1 : 0,
+          ...(mesh.attributes.uvRegions ? { HAS_UV_REGIONS: 1 } : {}),
         },
         isInstanced: true,
       });
