@@ -724,6 +724,44 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
+  it("reports a malformed line opacity as unreadable, not as zoom- or data-driven", () => {
+    for (const lineOpacity of ["0.5", true]) {
+      const result = parseMapboxStyle({
+        version: 8,
+        layers: [{ id: "rivers", type: "line", paint: { "line-opacity": lineOpacity } }],
+      });
+      assert.deepEqual(result.warnings, [
+        "The line opacity is not a valid number and was not applied; the lines import at the layer opacity.",
+      ]);
+    }
+  });
+
+  it("checks the line layer a hidden-only style imports, and skips hidden layers beside drawn ones", () => {
+    const dashed = { "line-color": "#8be6ff", "line-dasharray": [2, 1] };
+    // Every layer hidden: the importer still reads this line, so its dropped dashes are named.
+    const hiddenOnly = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "rivers", type: "line", layout: { visibility: "none" }, paint: dashed }],
+    });
+    assert.ok(
+      hiddenOnly.warnings.includes(
+        "The line dash pattern cannot be represented; the lines import as solid.",
+      ),
+    );
+    // A hidden dashed line beside a drawn solid one is not imported, so it is not reported.
+    const besideDrawn = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "solid", type: "line", paint: { "line-color": "#336699" } },
+        { id: "rivers", type: "line", layout: { visibility: "none" }, paint: dashed },
+      ],
+    });
+    assert.equal(
+      besideDrawn.warnings.some((warning) => warning.startsWith("The line dash")),
+      false,
+    );
+  });
+
   it("names the opacity once when stacked line layers differ, and keeps one shared value", () => {
     const stack = (first: number, second: number) =>
       parseMapboxStyle({

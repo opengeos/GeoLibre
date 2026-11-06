@@ -623,6 +623,10 @@ function parseLineWidth(
   );
 }
 
+/** The note for a `line-opacity` that is not a number, an expression or a function. */
+const UNREADABLE_LINE_OPACITY_NOTE =
+  "The line opacity is not a valid number and was not applied; the lines import at the layer opacity.";
+
 /** The note for a `line-opacity` the layer style cannot hold as one number. */
 const VARYING_LINE_OPACITY_NOTE =
   "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.";
@@ -663,8 +667,11 @@ function warnUnsupportedLinePaint(
         `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
       );
     }
-  } else if (rawOpacity != null) {
+  } else if (typeof rawOpacity === "object" && rawOpacity !== null) {
+    // An expression or a legacy `{ stops }` function: zoom- or data-driven.
     report("line-opacity", VARYING_LINE_OPACITY_NOTE);
+  } else if (rawOpacity != null) {
+    report("line-opacity", UNREADABLE_LINE_OPACITY_NOTE);
   }
   if (paint["line-dasharray"] != null) {
     report(
@@ -1112,7 +1119,9 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       if (previous === undefined) lineNotes.set(property, message);
       else if (previous !== message) lineNotes.set(property, MIXED_LINE_OPACITY_NOTE);
     };
-    for (const lineLayer of drawnLines.length > 1 ? drawnLines : [line]) {
+    // Drawn layers only; a style with every line layer hidden still imports
+    // the one `line` the rest of the importer reads, so that one is checked.
+    for (const lineLayer of drawnLines.length > 0 ? drawnLines : [line]) {
       warnUnsupportedLinePaint(lineLayer.paint ?? {}, reportLineNote);
     }
     warnings.push(...lineNotes.values());
