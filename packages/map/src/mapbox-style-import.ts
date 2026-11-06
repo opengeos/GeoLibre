@@ -690,26 +690,40 @@ function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: stri
   }
 }
 
-/** Whether an expression reads the simplestyle `stroke-opacity` feature property anywhere. */
-function readsStrokeOpacity(node: unknown): boolean {
+/**
+ * Whether a node is exactly the simplestyle lookup `simpleStyleNumberValue`
+ * (core `vector-color.ts`) writes for `stroke-opacity`:
+ * `["to-number", ["coalesce", ["get", "stroke-opacity"], 1], 1]`. Anything
+ * else that merely mentions the property is an author's own expression and is
+ * reported.
+ */
+function isStrokeOpacityLookup(node: unknown): boolean {
   const array = asArray(node);
-  if (!array) return false;
-  return getProperty(array) === "stroke-opacity" || array.some(readsStrokeOpacity);
+  if (!array || array.length !== 3 || array[0] !== "to-number" || array[2] !== 1) return false;
+  const coalesce = asArray(array[1]);
+  return (
+    coalesce !== null &&
+    coalesce.length === 3 &&
+    coalesce[0] === "coalesce" &&
+    getProperty(coalesce[1]) === "stroke-opacity" &&
+    coalesce[2] === 1
+  );
 }
 
 /**
  * The layer opacity folded into the exporter's simplestyle `line-opacity`, or
- * `null` when the value is something else. The exporter writes the lookup on
- * its own for a fully opaque layer (scale 1), and `["*", lookup, opacity]`
- * otherwise (`scaleByOpacity` in style-mapper).
+ * `null` when the value is something else. The exporter always writes the
+ * lookup as `["*", lookup, opacity]` (`scaleByOpacity` in style-mapper), so a
+ * fully opaque layer carries `["*", lookup, 1]`; the bare lookup is accepted
+ * too.
  */
 function simpleStyleOpacityScale(value: unknown): number | null {
   const array = asArray(value);
   if (!array) return null;
-  if (array[0] === "*" && array.length === 3 && readsStrokeOpacity(array[1])) {
+  if (array[0] === "*" && array.length === 3 && isStrokeOpacityLookup(array[1])) {
     return asFiniteNumber(array[2]);
   }
-  return array[0] !== "*" && readsStrokeOpacity(array) ? 1 : null;
+  return isStrokeOpacityLookup(array) ? 1 : null;
 }
 
 /**

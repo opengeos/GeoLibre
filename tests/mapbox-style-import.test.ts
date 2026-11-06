@@ -638,6 +638,9 @@ describe("parseMapboxStyle imports hand-written styles", () => {
       },
       ["interpolate", ["linear"], ["zoom"], 0, 0.2, 10, 1],
       ["get", "opacity"],
+      // Author expressions that read `stroke-opacity` but are not the simplestyle lookup.
+      ["case", ["has", "stroke-opacity"], ["get", "stroke-opacity"], 0.4],
+      ["interpolate", ["linear"], ["get", "stroke-opacity"], 0, 0.2, 1, 1],
     ]) {
       const result = parseMapboxStyle({
         version: 8,
