@@ -18,9 +18,10 @@ import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
  * Each polygon feature becomes one closed solid (floor, roof and walls) built
  * from the very base, height and colour the map paints (`extrusionBaseValue`
  * / `extrusionHeightValue` / `extrusionColorValue`), so categorized, graduated
- * and expression-driven styles export as drawn. Coordinates are metres in a local tangent plane
- * centred on the layer's bounding box (x east, y north, z up), which keeps
- * city-scale models accurate and small enough for single-precision floats.
+ * and expression-driven styles export as drawn. Coordinates are metres in a
+ * local tangent plane centred on the layer's bounding box (x east, y north,
+ * z up), which keeps city-scale models accurate and small enough for
+ * single-precision floats.
  * glTF and OBJ are written Y-up as those formats expect; STL stays Z-up, the
  * convention of the CAD and printing tools that read it.
  */

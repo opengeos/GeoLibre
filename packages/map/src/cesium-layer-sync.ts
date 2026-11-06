@@ -1455,7 +1455,11 @@ function applyGeoJsonExtrusion(
     ? (style.extrusionHeightScale as number)
     : 1;
   const baseVal = extrusionBaseValue(style);
-  const flatBase = typeof baseVal === "number" && Number.isFinite(baseVal) ? baseVal : 0;
+  // The flat base, which is also the fallback when a base expression throws
+  // for a feature (as a throwing height expression falls back to the
+  // property): with a base property it is the property's offset.
+  const flatBaseValue = typeof baseVal === "number" ? baseVal : style.extrusionBase;
+  const flatBase = Number.isFinite(flatBaseValue) ? Math.max(0, flatBaseValue as number) : 0;
   const extColorVal = extrusionColorValue(style);
   const extColorStr =
     typeof extColorVal === "string"
@@ -1489,9 +1493,10 @@ function applyGeoJsonExtrusion(
     // otherwise put the roof under the floor.
     const relativeTop = Math.max(base, top);
     // With perPositionHeight Cesium takes each vertex's own height as the
-    // base but reads extrudedHeight as an absolute altitude, so lift the
-    // roof by the ring's highest vertex; otherwise it would extrude down
-    // to `relativeTop` metres above the ellipsoid.
+    // base (so neither a flat nor a data-driven base moves the floor of a
+    // polygon with Z coordinates) but reads extrudedHeight as an absolute
+    // altitude, so lift the roof by the ring's highest vertex; otherwise it
+    // would extrude down to `relativeTop` metres above the ellipsoid.
     const extrudedHeight = perPositionHeight(entity.polygon)
       ? ringTopAltitude(feat) + relativeTop
       : relativeTop;
@@ -1548,7 +1553,8 @@ function extrusionFeatureHeight(
 /**
  * A polygon entity's extrusion base in metres: the per-feature base
  * expression's value (clamped to the ground, as MapLibre clamps
- * `fill-extrusion-base`), else the flat base.
+ * `fill-extrusion-base`), else the flat base, which is also the fallback when
+ * the expression throws for this feature.
  */
 function extrusionFeatureBase(
   feat: Feature | null,
@@ -1560,7 +1566,7 @@ function extrusionFeatureBase(
   try {
     value = Number(baseEvaluator(feat));
   } catch {
-    return 0;
+    return flatBase;
   }
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }

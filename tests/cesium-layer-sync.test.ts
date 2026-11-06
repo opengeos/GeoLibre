@@ -1808,6 +1808,51 @@ describe("CesiumLayerSync", () => {
     assert.equal(ds.entities.values[0].polygon.extrudedHeight.value, 20);
   });
 
+  it("falls back to the flat base when the base expression throws", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "throwing-base",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "b1",
+            properties: { height: 20, level: "mezzanine" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionBase: 4,
+        extrusionAdvancedStyleEnabled: true,
+        // `to-number` of "mezzanine" throws at evaluation time.
+        extrusionBaseExpression: '["*", ["to-number", ["get", "level"]], 3]',
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ polygon: { height: { value: number } } }> };
+    };
+    assert.equal(ds.entities.values[0].polygon.height.value, 4);
+  });
+
   it("stacks floors from a data-driven extrusion base", async () => {
     const sync = newSync(f);
     const floor = (id: string, level: number) => ({
