@@ -53,16 +53,6 @@ function translate(key: string, english: string, params: Record<string, string>)
   return english.replace(/\{\{(\w+)\}\}/g, (_, name: string) => params[name] ?? "");
 }
 
-/**
- * Whether an error came from reading a recognized IMDF archive.
- *
- * @param error - Anything thrown.
- * @returns True for an {@link ImdfArchiveError}.
- */
-export function isImdfArchiveError(error: unknown): error is ImdfArchiveError {
-  return error instanceof ImdfArchiveError;
-}
-
 /** One layer to add, in drawing order (bottom first). */
 export interface ImdfLayer {
   /** The IMDF feature type: `unit`, `opening`, `amenity`, `occupant`, ... */
@@ -120,17 +110,6 @@ function entryType(path: string): string | null {
   const name = path.split("/").pop()?.toLowerCase() ?? "";
   const match = /^([a-z_]+)\.geojson$/.exec(name);
   return match ? match[1] : null;
-}
-
-/**
- * Whether a set of archive entries looks like IMDF: a `manifest.json` and at
- * least one of the core feature files. The shared rule in `@geolibre/core`.
- *
- * @param paths - The zip's entry names.
- * @returns True for an IMDF archive.
- */
-export function isImdfArchive(paths: readonly string[]): boolean {
-  return isImdfArchiveEntries(paths);
 }
 
 /**
@@ -342,8 +321,10 @@ const MAX_TOTAL_BYTES = 512 * 1024 * 1024;
  * resource-fork entries (`__MACOSX/`, `._name`) are skipped. An entry, or the
  * entries together, larger than the read limits is reported by name rather
  * than dropped, so a venue never loads with a floor silently missing. The
- * sizes come from the archive's own directory, so the check runs before
- * anything is inflated.
+ * sizes come from the archive's own directory and can be understated, so the
+ * filter is only a first cut. The checks after inflating bound the bytes kept,
+ * not the peak memory: `unzipSync` inflates each selected entry in full first.
+ * A hard memory bound would need a streaming reader.
  *
  * @param bytes - The zip file's bytes.
  * @returns The parsed archive, or `null` when the zip is not IMDF.

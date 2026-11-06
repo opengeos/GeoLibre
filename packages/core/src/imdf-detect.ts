@@ -90,7 +90,8 @@ export interface ImdfUrlProbe {
   imdf: boolean;
   /**
    * The whole archive when the probe had to download it (a server that ignores
-   * `Range` requests), so the caller does not download it again.
+   * `Range` requests). An IMDF archive is then not downloaded again; a zip that
+   * is not IMDF is downloaded again by the caller's control.
    */
   bytes?: Uint8Array;
 }
@@ -105,7 +106,13 @@ export interface ImdfUrlProbe {
  * `Content-Range` leaves the archive's size unknown. Either way the archive is
  * read whole instead, up to {@link MAX_PROBE_DOWNLOAD_BYTES}: a larger one is
  * reported as not IMDF without reading its body, so the control downloads it
- * once rather than twice.
+ * once rather than twice. Below the cap, a non-IMDF archive read this way is
+ * downloaded again by the control.
+ *
+ * Detection also needs the page to send `Range` cross-origin: a host whose
+ * preflight refuses it makes the first request reject, which throws here. The
+ * caller then passes the URL to the control, which loads an IMDF zip as a
+ * zipped shapefile.
  *
  * @param url - The archive's URL.
  * @param fetchImpl - `fetch`, injectable for tests.

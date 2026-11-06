@@ -1316,8 +1316,9 @@ export function wireImdfUrlImports(control: Pick<VectorControl, "addData">): voi
     if (typeof source !== "string" || options.id || !kmlFileImportHandler || !isZipUrl(source)) {
       return addData(source, options);
     }
-    // Range requests read only the zip's central directory, so a shapefile
-    // zip is downloaded once, by the control.
+    // Range requests read only the zip's central directory. On a host that
+    // ignores Range, a non-IMDF zip of up to 32 MB is downloaded by the probe
+    // and again by the control (see probeImdfZipUrl).
     let probe: ImdfUrlProbe;
     try {
       probe = await probeImdfZipUrl(source);
@@ -1327,9 +1328,12 @@ export function wireImdfUrlImports(control: Pick<VectorControl, "addData">): voi
     if (!probe.imdf) return addData(source, options);
     let bytes = probe.bytes;
     if (!bytes) {
-      const response = await fetch(source);
-      if (!response.ok) return addData(source, options);
-      bytes = new Uint8Array(await response.arrayBuffer());
+      // A network failure here still falls back to the control, as the probe does.
+      const body = await fetch(source)
+        .then((response) => (response.ok ? response.arrayBuffer() : null))
+        .catch(() => null);
+      if (!body) return addData(source, options);
+      bytes = new Uint8Array(body);
     }
     const rawName = new URL(source).pathname.split("/").pop() || "venue.zip";
     let name = rawName;

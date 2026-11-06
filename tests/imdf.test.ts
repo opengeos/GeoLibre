@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  isImdfArchive,
-  localizedText,
-  parseImdfArchive,
-} from "../apps/geolibre-desktop/src/lib/imdf";
+import { isImdfArchiveEntries } from "@geolibre/core";
+import { localizedText, parseImdfArchive } from "../apps/geolibre-desktop/src/lib/imdf";
 
 const square = (x: number) => ({
   type: "Polygon",
@@ -91,14 +88,14 @@ function archive(): Map<string, string> {
   ]);
 }
 
-describe("isImdfArchive", () => {
+describe("isImdfArchiveEntries", () => {
   it("needs a manifest and a core feature file", () => {
-    assert.equal(isImdfArchive(["x/manifest.json", "x/unit.geojson"]), true);
-    assert.equal(isImdfArchive(["manifest.json", "venue.geojson"]), true);
-    assert.equal(isImdfArchive(["unit.geojson", "level.geojson"]), false);
-    assert.equal(isImdfArchive(["manifest.json", "roads.shp"]), false);
+    assert.equal(isImdfArchiveEntries(["x/manifest.json", "x/unit.geojson"]), true);
+    assert.equal(isImdfArchiveEntries(["manifest.json", "venue.geojson"]), true);
+    assert.equal(isImdfArchiveEntries(["unit.geojson", "level.geojson"]), false);
+    assert.equal(isImdfArchiveEntries(["manifest.json", "roads.shp"]), false);
     // macOS resource forks do not count.
-    assert.equal(isImdfArchive(["__MACOSX/x/._manifest.json", "x/unit.geojson"]), false);
+    assert.equal(isImdfArchiveEntries(["__MACOSX/x/._manifest.json", "x/unit.geojson"]), false);
   });
 });
 

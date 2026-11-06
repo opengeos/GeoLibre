@@ -92,6 +92,24 @@ describe("wireImdfUrlImports", () => {
     assert.equal(fetched.length, 1);
   });
 
+  it("passes an IMDF zip to the control when its download fails after the probe", async () => {
+    const imports: KmlFileImport[][] = [];
+    setKmlFileImportHandler((files) => {
+      imports.push(files);
+    });
+    serve(imdfZip());
+    const rangedFetch = globalThis.fetch;
+    // The probe's range requests succeed; the full download then drops.
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (!new Headers(init?.headers).get("range")) throw new TypeError("connection reset");
+      return rangedFetch(url, init);
+    }) as typeof fetch;
+    const { control, calls } = wiredControl();
+    await control.addData(IMDF_URL, {});
+    assert.deepEqual(calls, [IMDF_URL]);
+    assert.equal(imports.length, 0);
+  });
+
   it("passes any other zip, URL or restore replay to the control", async () => {
     const imports: KmlFileImport[][] = [];
     setKmlFileImportHandler((files) => {
