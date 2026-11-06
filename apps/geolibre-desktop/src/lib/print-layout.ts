@@ -492,6 +492,9 @@ export interface LayoutOptions {
 }
 
 const PAGE_BACKGROUND = "#ffffff";
+/** The smallest footer text size, as a share of the normal one, before the
+ * canvas compresses the glyphs instead. */
+const FOOTER_MIN_FONT_RATIO = 0.75;
 const INK = "#111827";
 const MUTED = "#6b7280";
 const BORDER = "#9ca3af";
@@ -793,20 +796,36 @@ export function drawLayoutContext(
     ctx.fillStyle = MUTED;
     ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "middle";
-    // Give each of the three slots a third of the printable width so a long
-    // left attribution cannot visually bleed into the centred footer text.
+    // The attribution and the date keep at most a third of the printable width
+    // each, so a long one cannot visually bleed into the centred footer text.
     const slotMax = (W - margin * 2) / 3;
     if (attributionText) {
       ctx.textAlign = "left";
       ctx.fillText(attributionText, margin, baselineY, slotMax);
     }
-    if (footerText) {
-      ctx.textAlign = "center";
-      ctx.fillText(footerText, W / 2, baselineY, slotMax);
-    }
     if (dateText) {
       ctx.textAlign = "right";
       ctx.fillText(dateText, W - margin, baselineY, slotMax);
+    }
+    if (footerText) {
+      // The centred text gets the room the side texts actually leave, not a
+      // fixed third, so it is not squeezed when the date or attribution is off.
+      const sideWidth = (text: string | false) =>
+        text ? Math.min(ctx.measureText(text).width, slotMax) : 0;
+      const side = Math.max(sideWidth(attributionText), sideWidth(dateText));
+      const gap = side > 0 ? unit * 2 : 0;
+      const footerMax = Math.max(0, W - margin * 2 - (side + gap) * 2);
+      // Still too long: shrink the font (down to 3/4) before the canvas
+      // compresses the glyphs to fit the width.
+      const natural = ctx.measureText(footerText).width;
+      ctx.save();
+      if (natural > footerMax && natural > 0) {
+        const size = Math.max(footSize * FOOTER_MIN_FONT_RATIO, (footSize * footerMax) / natural);
+        ctx.font = `400 ${size}px system-ui, -apple-system, sans-serif`;
+      }
+      ctx.textAlign = "center";
+      ctx.fillText(footerText, W / 2, baselineY, footerMax);
+      ctx.restore();
     }
   }
 
