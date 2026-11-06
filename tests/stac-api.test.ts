@@ -11,6 +11,7 @@ import {
   openCatalogNode,
   searchStacApi,
   searchStaticStac,
+  stacDateInterval,
   assetTargets,
   canAddAsset,
   icechunkBranch,
@@ -2501,4 +2502,70 @@ test("assetFormat recognizes COPC, LAZ, and EPT point cloud assets", () => {
   );
   assert.equal(assetFormat({ href: "https://example.com/concept.json" }), null);
   assert.equal(assetFormat({ href: "s3://bucket/tile.copc.laz" }), null);
+});
+
+test("stacDateInterval sends RFC 3339 bounds that cover the whole end day", () => {
+  assert.equal(stacDateInterval("", ""), undefined);
+  assert.equal(
+    stacDateInterval("2025-07-01", "2025-08-31"),
+    "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999999Z",
+  );
+  assert.equal(stacDateInterval("2025-07-01", ""), "2025-07-01T00:00:00Z/..");
+  assert.equal(stacDateInterval("", "2025-08-31"), "../2025-08-31T23:59:59.999999Z");
+});
+
+test("searchStacApi posts the RFC 3339 date interval, and a static search keeps end-day items", async () => {
+  let posted: Record<string, unknown> | undefined;
+  const apiFetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    posted = JSON.parse(String(init?.body));
+    return jsonResponse({ type: "FeatureCollection", features: [], links: [] });
+  }) as typeof fetch;
+  await searchStacApi(
+    {
+      url: "https://example.com/v1",
+      title: "API",
+      isApi: true,
+      searchUrl: "https://example.com/v1/search",
+      collections: [],
+      children: [],
+      root: {},
+    },
+    { datetime: stacDateInterval("2025-07-01", "2025-08-31"), limit: 20 },
+    apiFetcher,
+  );
+  assert.equal(posted?.datetime, "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999999Z");
+
+  const docs: Record<string, unknown> = {
+    "https://example.com/stac/catalog.json": {
+      type: "Catalog",
+      id: "root",
+      links: [{ rel: "item", href: "afternoon.json" }],
+    },
+    "https://example.com/stac/afternoon.json": {
+      type: "Feature",
+      id: "end-day-afternoon",
+      bbox: [0, 0, 1, 1],
+      geometry: null,
+      properties: { datetime: "2025-08-31T18:30:00Z" },
+      assets: {},
+    },
+  };
+  const staticFetcher = (async (input: RequestInfo | URL) =>
+    jsonResponse(docs[String(input)])) as typeof fetch;
+  const result = await searchStaticStac(
+    {
+      url: "https://example.com/stac/catalog.json",
+      title: "Static",
+      isApi: false,
+      collections: [],
+      children: [],
+      root: docs["https://example.com/stac/catalog.json"] as Record<string, unknown>,
+    },
+    { datetime: stacDateInterval("2025-07-01", "2025-08-31"), limit: 20 },
+    staticFetcher,
+  );
+  assert.deepEqual(
+    result.items.map((item) => item.id),
+    ["end-day-afternoon"],
+  );
 });
