@@ -223,6 +223,7 @@ const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = new Set([
   "tile-service",
   "map-image",
   "imagery",
+  "imagery-tile",
   "cog",
   "zarr",
   "archive",
@@ -320,6 +321,13 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
     | { kind: "tile-service"; url: string }
     | { kind: "map-image"; url: string }
     | { kind: "imagery"; url: string }
+    /** A tiled imagery layer whose cache holds raw (LERC) pixel values. */
+    | {
+        kind: "imagery-tile";
+        url: string;
+        /** The access token the ArcGIS Layer panel put in the tile template. */
+        token?: string;
+      }
     | {
         kind: "media-image";
         url: string;
@@ -1915,6 +1923,53 @@ export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true)
   return supported;
 }
 
+/**
+ * Whether an ImageServer record is a tiled imagery layer whose cache holds raw
+ * LERC pixel values, which only the SDK's ImageryTileLayer can draw.
+ *
+ * The ArcGIS Layer panel flags it from the service description
+ * (`arcgisRawTiles`). A record without the flag (a hand-written project, or
+ * one saved before the flag existed) is recognized by ArcGIS Online's hosted
+ * tiled imagery host, `tiledimageservices*.arcgis.com`: it hosts only tiled
+ * imagery layers, which are `TilesOnly` (no `/exportImage` for the SDK's
+ * ImageryLayer to call), and ImageryTileLayer draws such a layer whatever its
+ * tile encoding. `arcgisRawTiles: false` opts a record out.
+ *
+ * @param layer - The store layer.
+ * @param serviceUrl - The layer's ImageServer URL.
+ * @returns True when the layer should draw as an ImageryTileLayer.
+ */
+function isArcgisRawImageryTiles(layer: GeoLibreLayer, serviceUrl: string): boolean {
+  // A rendering rule is applied by the service's `/exportImage`, which the
+  // cache-reading ImageryTileLayer cannot honor.
+  if (layer.metadata.arcgisRenderingRule) return false;
+  if (layer.metadata.arcgisRawTiles === true) return true;
+  if (layer.metadata.arcgisRawTiles === false) return false;
+  try {
+    return /^tiledimageservices\d*\.arcgis\.com$/i.test(new URL(serviceUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The `token` query parameter of a tile template, if it has one.
+ *
+ * @param template - A tile URL template, possibly with `{z}`-style tokens.
+ * @returns The token, or undefined.
+ */
+function tileTemplateToken(template: string | undefined): string | undefined {
+  // Read the raw query rather than `URLSearchParams`, which decodes a literal
+  // `+` in a hand-edited, unencoded token as a space.
+  const raw = template ? /[?&]token=([^&#]*)/.exec(template)?.[1] : undefined;
+  if (!raw) return undefined;
+  try {
+    return decodeURIComponent(raw) || undefined;
+  } catch {
+    return raw;
+  }
+}
+
 const ARCGIS_SERVICE = /\/(FeatureServer|MapServer|ImageServer)(?:\/\d+)?\/?(?:\?|$)/i;
 
 const zarrSignatures = new WeakMap<GeoLibreLayer["source"], string>();
@@ -2068,7 +2123,9 @@ export function compileArcgisLayer(
       };
     }
     const kind = /ImageServer/i.test(serviceUrl)
-      ? "imagery"
+      ? isArcgisRawImageryTiles(layer, serviceUrl)
+        ? "imagery-tile"
+        : "imagery"
       : layer.metadata.arcgisTiled === true
         ? "tile-service"
         : "map-image";
@@ -2116,6 +2173,24 @@ export function compileArcgisLayer(
       sourceId,
       styleLayers,
       tileOptions,
+    };
+  }
+  // An image service added through the ArcGIS Layer panel is a raster
+  // template record; one whose cache is raw LERC data has no template the SDK
+  // could draw, so it is drawn by the service itself. The panel carries a
+  // token in the tile template, which the SDK layer sends with each request.
+  if (
+    layer.metadata.sourceKind === "arcgis-image-service" &&
+    typeof layer.sourcePath === "string" &&
+    ARCGIS_SERVICE.test(layer.sourcePath) &&
+    isArcgisRawImageryTiles(layer, layer.sourcePath)
+  ) {
+    const token = tileTemplateToken(tiles[0]);
+    return {
+      ...base,
+      kind: "imagery-tile",
+      url: layer.sourcePath,
+      ...(token ? { token } : {}),
     };
   }
   // A GetMap template naming its layers is a WMS service the SDK can draw

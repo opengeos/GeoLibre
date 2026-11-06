@@ -171,6 +171,57 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.ok(north > 49 && north < 51, `north ${north}`);
   });
 
+  it("flags an image service whose cache holds raw LERC values", async () => {
+    // A hosted tiled imagery layer: a fused Web Mercator cache of LERC2D
+    // float tiles and no `/exportImage` (capabilities `Image,TilesOnly`).
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,TilesOnly",
+      singleFusedMapCache: true,
+      tileInfo: { ...CACHED_MAP_SERVICE.tileInfo, format: "LERC2D" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    // The ArcGIS renderer reads the flag to draw it with ImageryTileLayer.
+    assert.equal(layer?.metadata.arcgisRawTiles, true);
+    assert.equal(layer?.sourcePath, IMAGE_SERVICE_URL);
+  });
+
+  it("does not flag a raw-LERC image service drawn through a rendering rule", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      singleFusedMapCache: true,
+      tileInfo: { ...CACHED_MAP_SERVICE.tileInfo, format: "LERC2D" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+      renderingRule: '{"rasterFunction":"Hillshade"}',
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisRawTiles, undefined);
+  });
+
+  it("does not flag an image service with a rendered tile cache", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      singleFusedMapCache: true,
+      tileInfo: { ...CACHED_MAP_SERVICE.tileInfo, format: "JPGPNG" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisRawTiles, undefined);
+  });
+
   it("uses the tile cache when the service has a standard Web Mercator one", async () => {
     respondWith(CACHED_MAP_SERVICE);
     const id = await addArcGISLayer(app, {

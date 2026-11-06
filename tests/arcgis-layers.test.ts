@@ -912,6 +912,69 @@ describe("ArcGIS raster, service and media compilation", () => {
       source: { type: "raster", url: "https://host/arcgis/rest/services/X/ImageServer" },
     };
     assert.equal(compileArcgisLayer(image).kind, "imagery");
+    // A hosted tiled imagery layer caches raw LERC values: flagged, or
+    // recognized by its ArcGIS Online host when the flag is absent.
+    assert.equal(
+      compileArcgisLayer({ ...image, metadata: { arcgisRawTiles: true } }).kind,
+      "imagery-tile",
+    );
+    const hosted: GeoLibreLayer = {
+      ...base,
+      type: "arcgis",
+      source: {
+        type: "raster",
+        url: "https://tiledimageservices.arcgis.com/Org/arcgis/rest/services/W/ImageServer",
+      },
+    };
+    assert.equal(compileArcgisLayer(hosted).kind, "imagery-tile");
+    assert.equal(
+      compileArcgisLayer({ ...hosted, metadata: { arcgisRawTiles: false } }).kind,
+      "imagery",
+    );
+    // The ArcGIS Layer panel's raster record of such a service draws from the
+    // service, not from its LERC tile template.
+    const panel = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}"],
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
+    });
+    assert.deepEqual(
+      { kind: panel.kind, url: (panel as { url?: string }).url },
+      { kind: "imagery-tile", url: "https://host/arcgis/rest/services/X/ImageServer" },
+    );
+    // A token the panel put in the tile template travels with the plan.
+    const secured = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}?token=abc"],
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
+    });
+    assert.equal((secured as { token?: string }).token, "abc");
+    const plus = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}?token=a+b%2Fc"],
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
+    });
+    assert.equal((plus as { token?: string }).token, "a+b/c");
+    // A rendering rule needs `/exportImage`, so the record keeps that path.
+    assert.equal(
+      compileArcgisLayer({ ...hosted, metadata: { arcgisRenderingRule: "{}" } }).kind,
+      "imagery",
+    );
     const tiled: GeoLibreLayer = {
       ...base,
       type: "arcgis",

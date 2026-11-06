@@ -1722,6 +1722,17 @@ export class ArcgisEngine implements MapEngine {
         return [new layers.MapImageLayer({ ...common, url: plan.url })];
       case "imagery":
         return [new layers.ImageryLayer({ ...common, url: plan.url })];
+      case "imagery-tile":
+        return [
+          new layers.ImageryTileLayer({
+            ...common,
+            url: plan.url,
+            // ImageryTileLayer has no `apiKey` (SDK 5.1 omits APIKeyMixin);
+            // custom parameters ride on every request it makes, the raster
+            // tile fetches included.
+            ...(plan.token ? { customParameters: { token: plan.token } } : {}),
+          }),
+        ];
       case "media-image": {
         // The four corners are an arbitrary quad (the georeferencer fits an
         // affine transform), which only a control-point georeference can
