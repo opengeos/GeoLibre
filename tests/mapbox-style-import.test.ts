@@ -531,7 +531,9 @@ describe("parseMapboxStyle imports hand-written styles", () => {
             "line-blur": 3,
             "line-gap-width": 2,
             "line-offset": 4,
+            "line-translate": [2, -2],
             "line-pattern": "hatch",
+            "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, "blue", 1, "red"],
           },
         },
       ],
@@ -540,12 +542,40 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.strokeColor, "#8be6ff");
     assert.equal(result.style.strokeWidth, 1.2);
     assert.deepEqual(result.warnings, [
-      "The line opacity (0.6) has no equivalent in the layer style; set the layer opacity to match it.",
+      "The line opacity (0.6) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.",
       "The line dash pattern cannot be represented; the lines import as solid.",
       "The line blur cannot be represented; the lines import with sharp edges.",
       "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
       "The line offset cannot be represented; the lines import centered on the geometry.",
+      "The line translation cannot be represented; the lines import in place on the geometry.",
       "The line pattern image cannot be represented; the lines import as a flat color.",
+      "The line gradient cannot be represented; the lines import with a single flat color.",
+    ]);
+  });
+
+  it("reports an expression-valued line translation", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "rivers",
+          type: "line",
+          paint: {
+            "line-translate": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              5,
+              ["literal", [0, 0]],
+              10,
+              ["literal", [3, 3]],
+            ],
+          },
+        },
+      ],
+    });
+    assert.deepEqual(result.warnings, [
+      "The line translation cannot be represented; the lines import in place on the geometry.",
     ]);
   });
 
@@ -563,6 +593,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
             "line-blur": 0,
             "line-gap-width": 0,
             "line-offset": 0,
+            "line-translate": [0, 0],
           },
         },
       ],
@@ -629,7 +660,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
       const { warnings } = parseMapboxStyle(exported.style);
       assert.ok(
         warnings.includes(
-          "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it.",
+          "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.",
         ),
         `simpleStyleEnabled=${simpleStyleEnabled}: ${JSON.stringify(warnings)}`,
       );

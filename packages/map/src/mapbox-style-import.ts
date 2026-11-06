@@ -625,7 +625,7 @@ function parseLineWidth(
 /**
  * Report the `line` paint properties the import drops. A GeoLibre layer style
  * stores a line's colour and width only, so opacity, dashes, blur, casing gap,
- * offset and pattern have nowhere to go. Naming them keeps the promise on
+ * offset, translation, pattern and gradient have nowhere to go. Naming them keeps the promise on
  * {@link MapboxStyleImportResult.warnings} that symbology is never dropped
  * silently. A property left at its spec default (or a `line-opacity` of 1,
  * which the exporter writes for a fully opaque layer) is not reported.
@@ -643,7 +643,7 @@ function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: stri
   if (opacity !== null) {
     if (opacity < 1) {
       warnings.push(
-        `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it.`,
+        `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
       );
     }
   } else if (rawOpacity != null) {
@@ -670,9 +670,22 @@ function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: stri
       "The line offset cannot be represented; the lines import centered on the geometry.",
     );
   }
+  const translate = asArray(paint["line-translate"]);
+  const untranslated =
+    translate?.length === 2 && translate.every((component) => asFiniteNumber(component) === 0);
+  if (paint["line-translate"] != null && !untranslated) {
+    warnings.push(
+      "The line translation cannot be represented; the lines import in place on the geometry.",
+    );
+  }
   if (paint["line-pattern"] != null) {
     warnings.push(
       "The line pattern image cannot be represented; the lines import as a flat color.",
+    );
+  }
+  if (paint["line-gradient"] != null) {
+    warnings.push(
+      "The line gradient cannot be represented; the lines import with a single flat color.",
     );
   }
 }
