@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, Label, Select } from "@geolibre/ui";
+import { DEFAULT_PRINT_LAYOUT } from "@geolibre/core";
+import { BackgroundColorField } from "./BackgroundColorField";
 import {
   PAPER_SIZES,
   type Orientation,
@@ -9,8 +11,13 @@ import {
 } from "../../../lib/print-layout";
 import type { LayoutEditorProps } from "./state";
 
-/** The page: paper / screen size, orientation, custom dimensions and margin. */
-export function PageEditor({ layout, dispatch }: LayoutEditorProps) {
+interface PageEditorProps extends LayoutEditorProps {
+  /** The free-form page background hex field's text (may be half-typed). */
+  pageBackgroundDraft: string;
+}
+
+/** The page: paper / screen size, orientation, custom dimensions, margin and background. */
+export function PageEditor({ layout, dispatch, pageBackgroundDraft }: PageEditorProps) {
   const { t } = useTranslation();
   const { paperSize, orientation, customWidth, customHeight, customUnit, pageMargin } = layout;
   const isCustom = paperSize === "custom";
@@ -132,6 +139,15 @@ export function PageEditor({ layout, dispatch }: LayoutEditorProps) {
           <option value="none">{t("printLayout.marginOption.none")}</option>
         </Select>
       </div>
+
+      <BackgroundColorField
+        id="layout-page-bg"
+        label={t("printLayout.pageBackground")}
+        value={layout.pageBackground}
+        draft={pageBackgroundDraft}
+        resetValue={DEFAULT_PRINT_LAYOUT.pageBackground}
+        onCommit={(value) => dispatch({ type: "commitPageBackground", value })}
+      />
     </>
   );
 }

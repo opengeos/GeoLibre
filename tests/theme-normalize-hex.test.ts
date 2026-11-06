@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeHexColor } from "../apps/geolibre-desktop/src/lib/theme-schemes";
+import {
+  foregroundForHex,
+  normalizeHexColor,
+  prefersLightForeground,
+} from "../apps/geolibre-desktop/src/lib/theme-schemes";
 
 describe("normalizeHexColor", () => {
   it("accepts 6-digit hex with or without a leading #", () => {
@@ -28,5 +32,25 @@ describe("normalizeHexColor", () => {
     for (const bad of ["", "   ", "#", "nothex", "#12", "#1234", "#12345", "#1234567", "ggg"]) {
       assert.equal(normalizeHexColor(bad), null, `expected null for ${bad}`);
     }
+  });
+});
+
+describe("prefersLightForeground", () => {
+  it("wants light text on dark colours and dark text on light ones", () => {
+    assert.equal(prefersLightForeground("#0d1b2a"), true);
+    assert.equal(prefersLightForeground("#000"), true);
+    assert.equal(prefersLightForeground("#ffffff"), false);
+    assert.equal(prefersLightForeground("#e5e7eb"), false);
+  });
+
+  it("has no answer for a value that is not a hex colour", () => {
+    assert.equal(prefersLightForeground("navy"), null);
+    assert.equal(prefersLightForeground(""), null);
+  });
+
+  it("keeps foregroundForHex's answers, white for invalid input included", () => {
+    assert.equal(foregroundForHex("#0d1b2a"), "0 0% 100%");
+    assert.equal(foregroundForHex("#ffffff"), "222.2 47.4% 11.2%");
+    assert.equal(foregroundForHex("navy"), "0 0% 100%");
   });
 });

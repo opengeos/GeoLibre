@@ -142,7 +142,8 @@ carries no `printLayout` key.
   `title` follows the project name rather than freezing a copy of it.
 - Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
   `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
-  `customUnit` for `custom`, `pageMargin`, and the page/map frame colours.
+  `customUnit` for `custom`, `pageMargin`, `pageBackground`, `panelTheme`
+  (`light` or `dark`), and the page/map frame colours.
 - Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
   date, attribution, colorbar, custom legend and info block, with their
   per-element settings.

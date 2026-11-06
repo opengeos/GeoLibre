@@ -152,15 +152,14 @@ export function hexToHslChannels(hex: string): string | null {
 }
 
 /**
- * Pick a readable foreground (white or near-black, as HSL channels) for text
- * placed on `hex`, choosing whichever has the higher WCAG contrast ratio.
+ * Whether white text reads better than near-black on `hex`, by WCAG contrast
+ * ratio. `null` when `hex` is not a valid 3- or 6-digit hex colour.
  *
- * @param hex - The background color the foreground sits on.
+ * @param hex - The background color the text sits on.
  */
-export function foregroundForHex(hex: string): string {
+export function prefersLightForeground(hex: string): boolean | null {
   const digits = expandHex(hex);
-  // Fall back to white for invalid input (matches the default light-on-accent).
-  if (!digits) return "0 0% 100%";
+  if (!digits) return null;
 
   const linearize = (value: number) => {
     const channel = value / 255;
@@ -173,8 +172,19 @@ export function foregroundForHex(hex: string): string {
 
   const contrastWithWhite = 1.05 / (luminance + 0.05);
   const contrastWithBlack = (luminance + 0.05) / 0.05;
+  return contrastWithWhite >= contrastWithBlack;
+}
+
+/**
+ * Pick a readable foreground (white or near-black, as HSL channels) for text
+ * placed on `hex`, choosing whichever has the higher WCAG contrast ratio.
+ *
+ * @param hex - The background color the foreground sits on.
+ */
+export function foregroundForHex(hex: string): string {
+  // Fall back to white for invalid input (matches the default light-on-accent).
   // White text, or the palette's near-black foreground.
-  return contrastWithWhite >= contrastWithBlack ? "0 0% 100%" : "222.2 47.4% 11.2%";
+  return (prefersLightForeground(hex) ?? true) ? "0 0% 100%" : "222.2 47.4% 11.2%";
 }
 
 /** Accent tokens the custom scheme overrides inline (cleared on other schemes). */
