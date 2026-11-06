@@ -49,5 +49,7 @@ export function compileLayerFilters(layer: LayerFilterSource): unknown[] | null 
  * @returns True when at least one persisted expression or Quick Filter is active.
  */
 export function hasActiveLayerFilter(layer: LayerFilterSource): boolean {
-  return activeLayerFilterExpression(layer) !== null || compileQuickFilters(layer.quickFilters) !== null;
+  return (
+    activeLayerFilterExpression(layer) !== null || compileQuickFilters(layer.quickFilters) !== null
+  );
 }

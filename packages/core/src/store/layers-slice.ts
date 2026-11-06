@@ -386,8 +386,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   setLayerFilterExpression: (id, expression) =>
     get().updateLayer(id, { filterExpression: expression ?? undefined }),
 
-  setLayerLevelFilter: (id, filter) =>
-    get().updateLayer(id, { levelFilter: filter ?? undefined }),
+  setLayerLevelFilter: (id, filter) => get().updateLayer(id, { levelFilter: filter ?? undefined }),
 
   setLevelSelection: (level, mode) =>
     set((s) => {

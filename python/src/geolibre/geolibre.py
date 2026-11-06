@@ -1756,9 +1756,7 @@ class Map(anywidget.AnyWidget):
         """
         handle = self._resolve_layer(layer)
         self._update_project(
-            lambda project: _authoring.set_floor_picker(
-                project, handle.id, field, level, mode=mode
-            )
+            lambda project: _authoring.set_floor_picker(project, handle.id, field, level, mode=mode)
         )
 
     def set_labels(
