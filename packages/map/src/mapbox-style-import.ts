@@ -1006,10 +1006,14 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     if (paint["fill-extrusion-base"] !== undefined) {
       parseExtrusionBase(paint["fill-extrusion-base"], patch);
-    } else if (floorHeight !== null) {
-      // The floor height was measured from Mapbox's default base of 0, so the
-      // layer's own base must not shift the roof.
-      parseExtrusionBase(0, patch);
+    } else {
+      // No base in the imported style means Mapbox's default of 0: drop a base
+      // property or expression the layer kept, so it stops stacking from it.
+      patch.extrusionBaseProperty = "";
+      patch.extrusionBaseExpression = "";
+      // The floor height was measured from that 0 base, so the layer's own
+      // flat base must not shift the roof either.
+      if (floorHeight !== null) parseExtrusionBase(0, patch);
     }
     applyZoomRange(extrusion, patch);
   } else if (fill) {
