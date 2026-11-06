@@ -11,15 +11,15 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 
+/** Field lists per feature array, so reopening the Style panel does not rescan. */
+const fieldCache = new WeakMap<object, string[]>();
+
 /**
  * The property names seen in a layer's features, the likely floor field first.
  *
  * @param features - The layer's local features.
  * @returns Field names, sorted, with {@link guessLevelField}'s pick moved to the front.
  */
-/** Field lists per feature array, so reopening the Style panel does not rescan. */
-const fieldCache = new WeakMap<object, string[]>();
-
 function fieldOptions(
   features: readonly { properties?: Record<string, unknown> | null }[] = [],
 ): string[] {

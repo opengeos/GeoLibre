@@ -210,9 +210,13 @@ export function FloorPickerPanel({
     applyHeight(current.startHeight + event.clientY - current.startY, false);
   };
   const onGripPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
     drag.current = null;
-    if (listRef.current) writeListHeight(listRef.current.clientHeight);
+    // A press without a move keeps the default height instead of pinning it.
+    if (listRef.current && listRef.current.clientHeight !== current.startHeight) {
+      writeListHeight(listRef.current.clientHeight);
+    }
   };
   const resetHeight = () => {
     setListHeight(null);
