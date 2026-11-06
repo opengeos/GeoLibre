@@ -31,7 +31,7 @@ GeoLibre has no IFC reader of its own. Convert the model with one of these route
 
 ### Rooms to GeoJSON with IfcOpenShell
 
-The script below reads every room (`IfcSpace`), takes its footprint from the IFC geometry, places it from the site's reference latitude and longitude (`IfcSite.RefLatitude` / `RefLongitude`), and writes `level` (0 for the lowest storey), `storey`, `elevation`, `name` and `number`. It needs `pip install ifcopenshell shapely`.
+The script below reads every room (`IfcSpace`), takes its footprint from the IFC geometry, places it from the site's reference latitude and longitude (`IfcSite.RefLatitude` / `RefLongitude`), and writes `level` (0 for the lowest storey), `storey`, `elevation`, `name` and `number`. It needs `pip install ifcopenshell shapely`. Save it as `ifc_rooms_to_geojson.py` and run:
 
 ```bash
 python ifc_rooms_to_geojson.py model.ifc rooms.geojson
@@ -49,6 +49,8 @@ import sys
 import ifcopenshell
 import ifcopenshell.geom
 import ifcopenshell.util.element
+import ifcopenshell.util.placement
+import ifcopenshell.util.unit
 from shapely.geometry import MultiPolygon, Polygon, mapping
 from shapely.ops import unary_union
 
@@ -60,6 +62,40 @@ def dms(angle):
     return sign * (d + m / 60 + (s + (rest[0] if rest else 0) / 1e6) / 3600)
 
 
+def storey_of(space):
+    """The storey a room belongs to, through any rooms it is nested in."""
+    node = space
+    while node is not None:
+        # Rooms are usually aggregated into their storey (IfcRelAggregates),
+        # sometimes contained in it (IfcRelContainedInSpatialStructure), and
+        # sometimes nested in a larger room.
+        parent = ifcopenshell.util.element.get_aggregate(node) or ifcopenshell.util.element.get_container(node)
+        if parent is None or parent.is_a("IfcBuildingStorey"):
+            return parent
+        node = parent if parent.is_a("IfcSpace") else None
+    return None
+
+
+def placement_origin(element):
+    """The origin of an element's placement, in project units."""
+    if not element.ObjectPlacement:
+        return (0.0, 0.0, 0.0)
+    matrix = ifcopenshell.util.placement.get_local_placement(element.ObjectPlacement)
+    return (matrix[0][3], matrix[1][3], matrix[2][3])
+
+
+def to_lnglat(geom, origin):
+    """Shapely geometry in metres east/north of the site origin to lon/lat."""
+    lon0, lat0, m_per_deg_lon, m_per_deg_lat = origin
+
+    def ring(coords):
+        return [(lon0 + x / m_per_deg_lon, lat0 + y / m_per_deg_lat) for x, y in coords]
+
+    polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
+    out = [Polygon(ring(p.exterior.coords), [ring(r.coords) for r in p.interiors]) for p in polys]
+    return out[0] if len(out) == 1 else MultiPolygon(out)
+
+
 def main(src, dst):
     model = ifcopenshell.open(src)
     site = model.by_type("IfcSite")[0]
@@ -67,10 +103,17 @@ def main(src, dst):
         sys.exit("The IfcSite has no RefLatitude/RefLongitude, so the model cannot be placed on the map.")
     lat0, lon0 = dms(site.RefLatitude), dms(site.RefLongitude)
     # Metres east/north to degrees, around the site's reference point.
-    m_per_deg_lat = 111_132.954
-    m_per_deg_lon = 111_319.488 * math.cos(math.radians(lat0))
+    origin = (lon0, lat0, 111_319.488 * math.cos(math.radians(lat0)), 111_132.954)
+    # The geometry comes in metres from the project origin, but the reference
+    # latitude/longitude locate the site's own placement, so measure from that.
+    scale = ifcopenshell.util.unit.calculate_unit_scale(model)
+    site_x, site_y, _ = (v * scale for v in placement_origin(site))
 
-    storeys = sorted(model.by_type("IfcBuildingStorey"), key=lambda s: s.Elevation or 0)
+    # Lowest storey first; a storey with no Elevation is placed by its placement.
+    storeys = sorted(
+        model.by_type("IfcBuildingStorey"),
+        key=lambda s: s.Elevation if s.Elevation is not None else placement_origin(s)[2],
+    )
     level_of = {storey.id(): index for index, storey in enumerate(storeys)}
     settings = ifcopenshell.geom.settings()
     settings.set("use-world-coords", True)
@@ -85,24 +128,14 @@ def main(src, dst):
         faces = shape.geometry.faces
         triangles = []
         for i in range(0, len(faces), 3):
-            pts = [(verts[3 * j], verts[3 * j + 1]) for j in faces[i : i + 3]]
+            pts = [(verts[3 * j] - site_x, verts[3 * j + 1] - site_y) for j in faces[i : i + 3]]
             tri = Polygon(pts)
             if tri.area > 1e-6:
                 triangles.append(tri)
         if not triangles:
             continue
         footprint = unary_union(triangles).buffer(0)
-        # Rooms are usually aggregated into their storey (IfcRelAggregates),
-        # sometimes contained in it (IfcRelContainedInSpatialStructure).
-        storey = ifcopenshell.util.element.get_aggregate(space) or ifcopenshell.util.element.get_container(space)
-        if storey is not None and not storey.is_a("IfcBuildingStorey"):
-            storey = None
-        def to_lnglat(geom):
-            def ring(coords):
-                return [(lon0 + x / m_per_deg_lon, lat0 + y / m_per_deg_lat) for x, y in coords]
-            polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
-            out = [Polygon(ring(p.exterior.coords), [ring(r.coords) for r in p.interiors]) for p in polys]
-            return out[0] if len(out) == 1 else MultiPolygon(out)
+        storey = storey_of(space)
         features.append({
             "type": "Feature",
             "properties": {
@@ -113,7 +146,7 @@ def main(src, dst):
                 "elevation": storey.Elevation if storey else None,
                 "global_id": space.GlobalId,
             },
-            "geometry": mapping(to_lnglat(footprint)),
+            "geometry": mapping(to_lnglat(footprint, origin)),
         })
     with open(dst, "w") as out:
         json.dump({"type": "FeatureCollection", "features": features}, out)
@@ -124,9 +157,9 @@ if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2])
 ```
 
-Then add `rooms.geojson` with **Add Data → Vector Layer**, stack the floors with **Base property** `level`, and choose `level` as the **Floor field**. With the KIT FZK-Haus sample model (`AC20-FZK-Haus.ifc`), this gives the six ground-floor rooms on level 0 and the gallery on level 1.
+Then add `rooms.geojson` with **Add Data → Vector Layer** and set it up as in [Floor plans with a level attribute](#floor-plans-with-a-level-attribute): **3D extrusion** with **Base property** `level`, a **Base scale** of the storey height and a **Floor height**, then `level` as the **Floor field**. With the KIT FZK-Haus sample model (`AC20-FZK-Haus.ifc`), this gives the six ground-floor rooms on level 0 and the gallery on level 1.
 
-The placement assumes the model's x/y axes point east and north. A model whose site has a true north rotation, or that is georeferenced through `IfcMapConversion` instead, needs that transform applied first.
+The placement assumes the model's x/y axes point east and north. A model whose site has a true north rotation, or that is georeferenced through `IfcMapConversion` instead, needs that transform applied first. Levels count the storeys of the whole file from the lowest up, so a file with several buildings whose storeys sit at different elevations numbers them together; export one building at a time if their floors should line up.
 
 ### Why there is no built-in IFC converter
 
