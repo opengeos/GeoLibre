@@ -42,7 +42,7 @@ import {
   type LayerVirtualField,
 } from "../types";
 import { featureCollectionToGeoArrow, type GeoArrowBatch } from "../geoarrow";
-import { selectLevel } from "../level-filter";
+import { sameLevelLink, selectLevel } from "../level-filter";
 import { resolveLayerTileAddress } from "../tile-address";
 import { hasSimpleStyleProperties } from "../vector-color";
 import {
@@ -399,11 +399,11 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       let changed = false;
       const layers = s.layers.map((layer) => {
         if (!layer.levelFilter) return layer;
+        const next = selectLevel(layer.levelFilter, layer.geojson?.features, level, mode);
+        // Re-clicking the floor already shown is not an edit.
+        if (sameLevelLink(layer.levelFilter, next)) return layer;
         changed = true;
-        return {
-          ...layer,
-          levelFilter: selectLevel(layer.levelFilter, layer.geojson?.features, level, mode),
-        };
+        return { ...layer, levelFilter: next };
       });
       return changed ? { layers, isDirty: true } : {};
     }),

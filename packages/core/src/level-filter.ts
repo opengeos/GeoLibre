@@ -296,10 +296,9 @@ const resolvedLinks = new WeakMap<object, Map<string, LayerLevelFilter>>();
 /** {@link selectLevel}, memoized on the feature array (replaced whenever the data changes). */
 function cachedSelectLevel(
   link: LayerLevelFilter,
-  features: readonly LevelFeature[] | null | undefined,
+  features: readonly LevelFeature[],
   choice: LevelChoice,
 ): LayerLevelFilter {
-  if (!features) return selectLevel(link, features, choice.level, choice.mode);
   const key = JSON.stringify([link.field, choice.level, choice.mode]);
   let byChoice = resolvedLinks.get(features);
   if (!byChoice) {
@@ -332,7 +331,11 @@ export function resolveLevelLinks(
   for (const layer of linked) {
     const link = layer.levelFilter;
     if (!link) continue;
-    const next = cachedSelectLevel(link, layer.geojson?.features, choice);
+    // Data still loading (a project re-reading its source file): keep the saved
+    // link, values included, until the features arrive.
+    const features = layer.geojson?.features;
+    if (!features) continue;
+    const next = cachedSelectLevel(link, features, choice);
     if (!sameLevelLink(link, next)) updates.push({ id: layer.id, levelFilter: next });
   }
   return updates;

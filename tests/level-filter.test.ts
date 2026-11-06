@@ -333,3 +333,36 @@ describe("reconcileLevelLinks", () => {
     );
   });
 });
+
+describe("floor picker bookkeeping", () => {
+  it("keeps a saved link while the layer's data is still loading", () => {
+    const saved = { field: "level", mode: "only" as const, level: "0", values: ["0"] };
+    assert.deepEqual(resolveLevelLinks([{ id: "rooms", levelFilter: saved }]), []);
+  });
+
+  it("does not mark the project unsaved when the floor shown is chosen again", () => {
+    useAppStore.setState({
+      layers: [
+        {
+          id: "rooms",
+          name: "rooms",
+          type: "geojson",
+          visible: true,
+          opacity: 1,
+          source: {},
+          metadata: {},
+          style: {},
+          geojson: { type: "FeatureCollection", features: ROOMS },
+          levelFilter: { field: "level" },
+        } as unknown as GeoLibreLayer,
+      ],
+      isDirty: false,
+    });
+    useAppStore.getState().setLevelSelection("1", "only");
+    useAppStore.setState({ isDirty: false });
+    const before = useAppStore.getState().layers;
+    useAppStore.getState().setLevelSelection("1", "only");
+    assert.equal(useAppStore.getState().isDirty, false);
+    assert.equal(useAppStore.getState().layers, before);
+  });
+});

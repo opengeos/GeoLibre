@@ -134,9 +134,11 @@ export function FloorPickerPanel({
     choose(target.label);
     // Move focus with the choice, so Enter or Space does not re-press the
     // button that had focus (All, say) and undo the step.
+    // Focus whatever is chosen when the frame runs, so a quicker second key
+    // press is never undone by focusing the floor before it.
     requestAnimationFrame(() => {
       listRef.current
-        ?.querySelector<HTMLElement>(`[data-level="${CSS.escape(target.label)}"]`)
+        ?.querySelector<HTMLElement>("[data-active='true']")
         ?.focus({ preventScroll: true });
     });
   };

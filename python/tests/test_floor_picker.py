@@ -212,3 +212,19 @@ def test_set_floor_picker_keeps_the_floor_in_view_when_level_is_omitted():
 
 def test_level_label_for_a_value_too_long_for_a_double():
     assert project.parse_level_value("9" * 400) == [("Infinity", float("inf"))]
+
+
+def test_set_floor_picker_mode_without_level_applies_to_the_shown_floor():
+    p = _two_layer_project()
+    authoring.set_floor_picker(p, "Rooms", "level", "0")
+    authoring.set_floor_picker(p, "Doors", "level", mode="below")
+    rooms, doors = p["layers"]
+    assert rooms["levelFilter"]["level"] == doors["levelFilter"]["level"] == "0"
+    assert rooms["levelFilter"]["mode"] == doors["levelFilter"]["mode"] == "below"
+
+
+def test_set_floor_picker_skips_malformed_layer_entries():
+    p = _two_layer_project()
+    p["layers"].append("not a layer")
+    authoring.set_floor_picker(p, "Rooms", "level", "0")
+    assert p["layers"][0]["levelFilter"]["level"] == "0"

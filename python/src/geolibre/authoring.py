@@ -1652,9 +1652,11 @@ def set_floor_picker(
     if field is None:
         layer.pop("levelFilter", None)
         return {**layer_summary(layer), "levelFilter": None}
-    if level is None and mode is None:
-        # Keep the shared choice, as the app's Style panel does on linking.
-        for item in project.get("layers", []):
+    layers = [item for item in project.get("layers", []) if isinstance(item, dict)]
+    if level is None and mode != "all":
+        # Keep the shared floor, as the app's Style panel does on linking; a
+        # given mode (e.g. "below", the app's "+ below") applies to it.
+        for item in layers:
             link = item.get("levelFilter")
             if (
                 item is not layer
@@ -1662,12 +1664,12 @@ def set_floor_picker(
                 and link.get("mode") in ("only", "below")
                 and isinstance(link.get("level"), str)
             ):
-                level, mode = link["level"], link["mode"]
+                level, mode = link["level"], mode or link["mode"]
                 break
     # Resolve every link first and assign them only once all succeed, so an
     # invalid field, level or mode leaves the project untouched.
     updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for item in project.get("layers", []):
+    for item in layers:
         if item is layer:
             link_field: Any = field
         else:
