@@ -515,6 +515,99 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.vectorStyleMode, "single");
   });
 
+  it("names each line paint property the layer style cannot hold", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "rivers",
+          type: "line",
+          source: "s",
+          paint: {
+            "line-color": "#8be6ff",
+            "line-width": 1.2,
+            "line-opacity": 0.6,
+            "line-dasharray": [2, 1],
+            "line-blur": 3,
+            "line-gap-width": 2,
+            "line-offset": 4,
+            "line-pattern": "hatch",
+          },
+        },
+      ],
+    });
+    // Colour and width still import; the rest is reported, one note per property.
+    assert.equal(result.style.strokeColor, "#8be6ff");
+    assert.equal(result.style.strokeWidth, 1.2);
+    assert.deepEqual(result.warnings, [
+      "The line opacity (0.6) has no equivalent in the layer style; set the layer opacity to match it.",
+      "The line dash pattern cannot be represented; the lines import as solid.",
+      "The line blur cannot be represented; the lines import with sharp edges.",
+      "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
+      "The line offset cannot be represented; the lines import centered on the geometry.",
+      "The line pattern image cannot be represented; the lines import as a flat color.",
+    ]);
+  });
+
+  it("does not report line paint left at its spec default", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "rivers",
+          type: "line",
+          source: "s",
+          paint: {
+            "line-color": "#8be6ff",
+            "line-opacity": 1,
+            "line-blur": 0,
+            "line-gap-width": 0,
+            "line-offset": 0,
+          },
+        },
+      ],
+    });
+    assert.deepEqual(result.warnings, []);
+  });
+
+  it("reports a data-driven line blur but not a data-driven line opacity", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "rivers",
+          type: "line",
+          source: "s",
+          paint: {
+            "line-color": "#8be6ff",
+            // The shape the exporter writes for simplestyle `stroke-opacity`.
+            "line-opacity": ["to-number", ["coalesce", ["get", "stroke-opacity"], 1], 1],
+            "line-blur": ["get", "blur"],
+          },
+        },
+      ],
+    });
+    assert.deepEqual(result.warnings, [
+      "The line blur cannot be represented; the lines import with sharp edges.",
+    ]);
+  });
+
+  it("round-trips an exported line layer without line paint warnings", () => {
+    const { warnings } = roundTrip(style({ strokeColor: "#336699", strokeWidth: 3 }), lines());
+    assert.deepEqual(warnings, []);
+  });
+
+  it("does not report the line opacity the exporter writes for simplestyle", () => {
+    const { warnings } = roundTrip(
+      style({ strokeColor: "#336699", strokeWidth: 3, simpleStyleEnabled: true }),
+      lines(),
+    );
+    assert.equal(
+      warnings.some((warning) => warning.startsWith("The line opacity")),
+      false,
+    );
+  });
+
   it("warns and imports nothing when there is no layers array", () => {
     const result = parseMapboxStyle({ hello: "world" });
     assert.equal(result.matchedLayerCount, 0);

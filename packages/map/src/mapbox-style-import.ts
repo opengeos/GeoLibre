@@ -623,6 +623,49 @@ function parseLineWidth(
 }
 
 /**
+ * Report the `line` paint properties the import drops. A GeoLibre layer style
+ * stores a line's colour and width only, so opacity, dashes, blur, casing gap,
+ * offset and pattern have nowhere to go. Naming them keeps the promise on
+ * {@link MapboxStyleImportResult.warnings} that symbology is never dropped
+ * silently. A property left at its spec default (or a `line-opacity` of 1,
+ * which the exporter writes for a fully opaque layer) is not reported, and a
+ * data-driven `line-opacity` is left alone: the exporter emits one for
+ * simplestyle `stroke-opacity`, which the renderer re-derives from the style.
+ */
+function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: string[]): void {
+  const opacity = asFiniteNumber(paint["line-opacity"]);
+  if (opacity !== null && opacity < 1) {
+    warnings.push(
+      `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it.`,
+    );
+  }
+  if (paint["line-dasharray"] != null) {
+    warnings.push("The line dash pattern cannot be represented; the lines import as solid.");
+  }
+  const blur = asFiniteNumber(paint["line-blur"]);
+  if (paint["line-blur"] != null && blur !== 0) {
+    warnings.push("The line blur cannot be represented; the lines import with sharp edges.");
+  }
+  const gap = asFiniteNumber(paint["line-gap-width"]);
+  if (paint["line-gap-width"] != null && gap !== 0) {
+    warnings.push(
+      "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
+    );
+  }
+  const offset = asFiniteNumber(paint["line-offset"]);
+  if (paint["line-offset"] != null && offset !== 0) {
+    warnings.push(
+      "The line offset cannot be represented; the lines import centered on the geometry.",
+    );
+  }
+  if (paint["line-pattern"] != null) {
+    warnings.push(
+      "The line pattern image cannot be represented; the lines import as a flat color.",
+    );
+  }
+}
+
+/**
  * Recover the extrusion height config from a `fill-extrusion-height` value. The
  * exporter emits `["*", ["to-number", ["get", p], 0], scale]` (property +
  * scale) in the common case, or an arbitrary advanced expression; reverse each.
@@ -970,6 +1013,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["line-width"] !== undefined) {
       parseLineWidth(paint["line-width"], patch, warnings);
     }
+    warnUnsupportedLinePaint(paint, warnings);
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
   }
