@@ -51,7 +51,7 @@ Start a new project named `NGIS 2026 - 4 STAC and web services`. Search for
 California**, then zoom out until the whole lake and Reno are in view (zoom
 about 9). Clear the search box to remove the pin.
 
-### Exercise 4.1: Search Sentinel-2 with STAC (15 min)
+### Exercise 4.1: Search Sentinel-2 with STAC (17 min)
 
 1. Choose **Plugins → Web services → STAC catalogs**. The panel docks on the
    right.

@@ -22,10 +22,12 @@ differs: at the start of a COG, at the end of a GeoParquet file (the footer),
 and in separate small files for Zarr and EPT, whose chunks are separate
 objects fetched by key rather than byte ranges within one file.
 
-All of this needs a server that answers HTTP `Range` requests and sends CORS
-headers. A server that ignores `Range` returns the whole file, so the read
-still works but loses its efficiency. Object stores such as S3, GitHub Pages,
-and Source Cooperative support both.
+Every format needs a host that sends CORS headers. The single-file formats
+(COG, GeoParquet, FlatGeobuf, PMTiles, COPC) also need HTTP `Range` support:
+if a server ignores `Range`, a reader either falls back to downloading the
+whole file or fails outright (the PMTiles reader rejects it). Zarr and EPT
+fetch each chunk as its own object, so they need no range support. Object
+stores such as S3, GitHub Pages, and Source Cooperative support both.
 
 | Format | Data type | Index | Chunk | Typical use |
 | --- | --- | --- | --- | --- |

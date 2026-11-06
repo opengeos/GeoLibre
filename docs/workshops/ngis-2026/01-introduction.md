@@ -29,7 +29,10 @@ Three ideas make that work:
    2,000 of a file instead of the whole file. Formats designed for this keep a
    small index that a client reads first (a COG header at the start of the
    file, a GeoParquet footer at the end, Zarr metadata in its own small file),
-   then fetch only the tiles, rows, or chunks that cover the current map view.
+   then fetch the tiles or chunks for the current view. For GeoParquet, how
+   much can be skipped depends on the file: spatially sorted row groups with
+   bounding-box statistics, like the workshop files, let a reader skip most of
+   them.
 2. **Cloud-optimized formats.** Cloud-Optimized GeoTIFF (COG) for rasters,
    GeoParquet and FlatGeobuf for vectors, PMTiles for tiled maps, Zarr for
    multidimensional arrays, and COPC or EPT for point clouds. Section 3 looks
@@ -52,7 +55,9 @@ GeoLibre is a free, open-source (MIT) GIS application built for this model.
 - **Client-side by default**: rendering (MapLibre GL JS and deck.gl), SQL
   (DuckDB-WASM), and many processing tools run in your browser. Your data
   leaves your machine only when you share or export it, or when you send a
-  request to a remote AI provider through the AI Assistant.
+  request to a remote AI provider through the AI Assistant. Searching places
+  sends the search text to a geocoding service, and catalog and service
+  searches send the map extent to that service.
 - **Projects are small JSON files**: a `.geolibre.json` project stores layer
   sources, styles, the map view, and plugin state, so a whole map can be
   reopened from one URL.

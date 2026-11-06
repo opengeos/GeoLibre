@@ -41,7 +41,9 @@ catch up after a break.
 1. Open [web.geolibre.app](https://web.geolibre.app) in Chrome, Edge, or
    Firefox. If a welcome wizard appears, close it. Everything in this workshop
    runs in the browser. Your data leaves your machine only when you share or
-   export it, or when you use the AI Assistant with a remote provider.
+   export it, or when you use the AI Assistant with a remote provider. Place
+   searches go to a geocoding service, and catalog searches send the map
+   extent to the catalog.
 2. Optional: install the [desktop app](../../downloads.md). It adds local file
    access and a Python sidecar for extra processing tools, but no exercise
    requires it.
