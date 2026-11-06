@@ -95,7 +95,9 @@ export function PluginPaintedStylePanel({
               />
             </>
           ) : null}
-          {layer.geojson ? (
+          {/* Same gate as Quick filters: a custom or deck.gl layer takes no
+              MapLibre filter, so a floor choice could not narrow it. */}
+          {hasQuickFilterControls && layer.geojson ? (
             <>
               <Separator />
               <FloorPickerSection key={`fp-${layer.id}`} layer={layer} />

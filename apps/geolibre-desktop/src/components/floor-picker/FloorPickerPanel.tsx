@@ -1,12 +1,12 @@
 import {
+  applyGroupEffects,
   collectLevels,
+  currentLevelChoice,
   mergeLevels,
-  selectLevel,
+  resolveLevelLinks,
   useAppStore,
   type GeoLibreLayer,
-  type LayerLevelFilter,
   type LevelEntry,
-  type LevelFilterMode,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { cn } from "@geolibre/ui";
@@ -47,41 +47,6 @@ function layerLevels(layer: GeoLibreLayer): LevelEntry[] {
 }
 
 /**
- * Whether two links store the same choice, independent of key order (a
- * project written by the Python API may order the keys differently).
- */
-export function sameLevelLink(a: LayerLevelFilter, b: LayerLevelFilter): boolean {
-  if (a.field !== b.field) return false;
-  if ((a.mode ?? "all") !== (b.mode ?? "all")) return false;
-  if ((a.level ?? null) !== (b.level ?? null)) return false;
-  const av = a.values;
-  const bv = b.values;
-  if (av === undefined || bv === undefined) return av === bv;
-  return av.length === bv.length && av.every((value, index) => value === bv[index]);
-}
-
-/**
- * The shared floor choice the picker shows: the first linked layer that has a
- * floor chosen, so a layer linked later (still on `all`) does not reset the
- * display.
- *
- * @param linked - The linked layers.
- * @returns The chosen level (`null` for every floor) and mode.
- */
-export function currentLevelChoice(linked: readonly GeoLibreLayer[]): {
-  level: string | null;
-  mode: LevelFilterMode;
-} {
-  for (const layer of linked) {
-    const link = layer.levelFilter;
-    if (link && link.mode && link.mode !== "all" && typeof link.level === "string") {
-      return { level: link.level, mode: link.mode };
-    }
-  }
-  return { level: null, mode: "all" };
-}
-
-/**
  * The on-map floor picker (issue #3341): lists the floors of every visible
  * layer linked in its Style panel and narrows those layers to one floor, or to
  * a floor and the ones below it.
@@ -106,25 +71,27 @@ export function FloorPickerPanel({
   const setLevelSelection = useAppStore((state) => state.setLevelSelection);
   const updateLayer = useAppStore((state) => state.updateLayer);
 
-  const visibleLinked = useMemo(() => linked.filter((layer) => layer.visible), [linked]);
+  const layerGroups = useAppStore((state) => state.layerGroups);
+  // Effective primary-map visibility: a linked layer inside a hidden group is
+  // not drawn, so it contributes no floors.
+  const visibleLinked = useMemo(
+    () => applyGroupEffects(linked, layerGroups).filter((layer) => layer.visible),
+    [linked, layerGroups],
+  );
   const levels = useMemo(() => mergeLevels(visibleLinked.map(layerLevels)), [visibleLinked]);
   const choice = useMemo(() => currentLevelChoice(linked), [linked]);
 
-  // Keep every linked layer on the shared choice, with its matching values
-  // resolved from its own features: a layer linked after a floor was chosen,
-  // a project authored without the values (the Python API without inline
-  // data), or data that changed since the choice was made.
+  // Keep every linked layer on the shared choice (see resolveLevelLinks).
   useEffect(() => {
-    for (const layer of linked) {
-      const link = layer.levelFilter;
-      if (!link || !layer.geojson) continue;
-      const next = selectLevel(link, layer.geojson.features, choice.level, choice.mode);
-      if (!sameLevelLink(link, next)) updateLayer(layer.id, { levelFilter: next });
+    for (const { id, levelFilter } of resolveLevelLinks(linked, choice)) {
+      updateLayer(id, { levelFilter });
     }
   }, [linked, choice, updateLayer]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const visible = visibleLinked.length > 0 && levels.length > 0;
+  // Stay mounted while a floor is chosen even if the data no longer lists
+  // any floors, so All can still clear the filter.
+  const visible = visibleLinked.length > 0 && (levels.length > 0 || choice.level !== null);
   const host = useMapPanelControl(
     mapControllerRef,
     visible,

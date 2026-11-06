@@ -81,6 +81,8 @@ def test_level_filter_resolves_matching_values():
         {"field": "level", "mode": "below"},
         {"field": "level", "level": True},
         {"field": "level", "level": " "},
+        {"field": "level", "level": float("nan")},
+        {"field": "level", "level": float("inf")},
     ],
 )
 def test_level_filter_rejects_bad_input(kwargs):
@@ -165,3 +167,30 @@ def test_mcp_set_floor_picker(tmp_path):
         "level": "1",
         "values": ["0;1", "1"],
     }
+
+
+@pytest.mark.parametrize(
+    ("value", "label"),
+    [
+        (0.0000001, "1e-7"),
+        (0.00001, "0.00001"),
+        (1e16, "10000000000000000"),
+        (1e21, "1e+21"),
+        (2.5e-8, "2.5e-8"),
+        (-0.0, "0"),
+        (3.0, "3"),
+    ],
+)
+def test_level_labels_match_javascript_string(value, label):
+    """Labels match the app's ``String(number)``, or the saved floor would match nothing."""
+    assert project.level_filter("level", value)["level"] == label
+
+
+def test_set_floor_picker_is_atomic():
+    p = _two_layer_project()
+    authoring.set_floor_picker(p, "Rooms", "level")
+    p["layers"][0]["levelFilter"]["field"] = ""  # a corrupt sibling link
+    before = json.dumps(p, sort_keys=True)
+    with pytest.raises(ValueError):
+        authoring.set_floor_picker(p, "Doors", "level", "1")
+    assert json.dumps(p, sort_keys=True) == before

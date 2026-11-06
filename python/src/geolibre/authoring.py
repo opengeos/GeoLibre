@@ -1651,16 +1651,27 @@ def set_floor_picker(
     if field is None:
         layer.pop("levelFilter", None)
         return {**layer_summary(layer), "levelFilter": None}
-    # Validate before touching anything, so a bad mode leaves no half link.
-    _project.level_filter(field, level, mode=mode)
-    layer["levelFilter"] = {"field": field}
+    # Resolve every link first and assign them only once all succeed, so an
+    # invalid field, level or mode leaves the project untouched.
+    updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for item in project.get("layers", []):
-        link = item.get("levelFilter")
-        if not isinstance(link, dict) or not isinstance(link.get("field"), str):
-            continue
-        item["levelFilter"] = _project.level_filter(
-            link["field"], level, mode=mode, features=_layer_features(item)
+        if item is layer:
+            link_field: Any = field
+        else:
+            link = item.get("levelFilter")
+            if not isinstance(link, dict):
+                continue
+            link_field = link.get("field")
+        updates.append(
+            (
+                item,
+                _project.level_filter(
+                    link_field, level, mode=mode, features=_layer_features(item)
+                ),
+            )
         )
+    for item, link in updates:
+        item["levelFilter"] = link
     return {**layer_summary(layer), "levelFilter": layer.get("levelFilter")}
 
 

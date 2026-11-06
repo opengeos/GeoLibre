@@ -13,6 +13,7 @@ import copy
 import ipaddress
 import json
 import math
+from decimal import Decimal
 import re
 import socket
 import time
@@ -3315,8 +3316,35 @@ _LEVEL_MAX_RANGE_STEPS = 200
 
 
 def _level_label(value: float) -> str:
-    """Format a floor number as JavaScript's ``String(number)`` does for the picker."""
-    return str(int(value)) if float(value).is_integer() else repr(float(value))
+    """Format a floor number exactly as JavaScript's ``String(number)`` does.
+
+    The app labels floors with ``String(number)``, so a label written here must
+    match it byte for byte, including where the two languages switch to
+    exponent notation (JavaScript: below 1e-6 or from 1e21; Python's ``repr``:
+    below 1e-4 or from 1e16).
+
+    Args:
+        value: A finite floor number.
+
+    Returns:
+        The label JavaScript would produce.
+    """
+    number = float(value)
+    if number == 0:
+        return "0"
+    magnitude = abs(number)
+    if 1e-6 <= magnitude < 1e21:
+        if number.is_integer():
+            return str(int(number))
+        # Shortest round-trip digits, in plain positional notation.
+        return format(Decimal(repr(number)), "f")
+    mantissa, _, exponent = repr(number).partition("e")
+    if not exponent:  # repr chose positional notation for a large integer
+        mantissa, _, exponent = f"{number:e}".partition("e")
+        mantissa = repr(float(mantissa))
+    mantissa = mantissa.removesuffix(".0")
+    exp = int(exponent)
+    return f"{mantissa}e{'+' if exp >= 0 else '-'}{abs(exp)}"
 
 
 def parse_level_value(raw: Any) -> list[tuple[str, float | None]]:
@@ -3416,6 +3444,8 @@ def level_filter(
         return {"field": field, "mode": "all", "level": None}
     if isinstance(level, bool) or not isinstance(level, (str, int, float)):
         raise ValueError(f"a floor level must be text or a number, got {level!r}")
+    if isinstance(level, float) and not math.isfinite(level):
+        raise ValueError(f"a floor level must be a finite number, got {level!r}")
     label = level.strip() if isinstance(level, str) else _level_label(level)
     if not label:
         raise ValueError("a floor level must not be blank")

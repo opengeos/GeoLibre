@@ -87,7 +87,8 @@ export function parseLevelValue(raw: unknown): LevelToken[] {
       const b = Number(range[2]);
       const lo = Math.min(a, b);
       const hi = Math.max(a, b);
-      if (Number.isInteger(lo) && Number.isInteger(hi) && hi - lo <= MAX_RANGE_STEPS) {
+      // Safe integers only: past 2^53, `level += 1` no longer advances.
+      if (Number.isSafeInteger(lo) && Number.isSafeInteger(hi) && hi - lo <= MAX_RANGE_STEPS) {
         for (let level = lo; level <= hi; level += 1) tokens.push(numericToken(level));
       } else {
         tokens.push(numericToken(lo), numericToken(hi));
@@ -212,8 +213,12 @@ export function matchingLevelValues(
  * Apply a floor choice to a layer's link, resolving the matching values from
  * the layer's features.
  *
+ * Without features (a tile-backed layer, or data not loaded yet) the values
+ * stay unresolved, which draws every floor, rather than resolving to an empty
+ * list that would hide the layer once its data arrives.
+ *
  * @param filter - The layer's current link.
- * @param features - The layer's features.
+ * @param features - The layer's features, or `null`/`undefined` when none are loaded.
  * @param level - The chosen floor's label, or `null` for every floor.
  * @param mode - The floor picker mode.
  * @returns The updated link.
@@ -227,12 +232,85 @@ export function selectLevel(
   if (level === null || mode === "all") {
     return { field: filter.field, mode: "all", level: null };
   }
+  if (!features) return { field: filter.field, mode, level };
   return {
     field: filter.field,
     mode,
     level,
     values: matchingLevelValues(features, filter.field, level, mode),
   };
+}
+
+/** The floor shown by the picker: a level (`null` for every floor) and a mode. */
+export interface LevelChoice {
+  level: string | null;
+  mode: LevelFilterMode;
+}
+
+/** A layer as far as the floor picker reads it. */
+interface LevelLinkedLayer {
+  id: string;
+  levelFilter?: LayerLevelFilter;
+  geojson?: { features: readonly LevelFeature[] } | null;
+}
+
+/**
+ * The floor choice the picker shows: the first linked layer that has a floor
+ * chosen, so a layer linked later (still on `all`) does not reset the display.
+ *
+ * @param linked - The linked layers.
+ * @returns The chosen level and mode, or every floor.
+ */
+export function currentLevelChoice(linked: readonly LevelLinkedLayer[]): LevelChoice {
+  for (const layer of linked) {
+    const link = layer.levelFilter;
+    if (link && link.mode && link.mode !== "all" && typeof link.level === "string") {
+      return { level: link.level, mode: link.mode };
+    }
+  }
+  return { level: null, mode: "all" };
+}
+
+/**
+ * Whether two links store the same choice, independent of key order (a
+ * project written by the Python API may order the keys differently).
+ *
+ * @param a - One link.
+ * @param b - The other.
+ * @returns True when they draw the same features.
+ */
+export function sameLevelLink(a: LayerLevelFilter, b: LayerLevelFilter): boolean {
+  if (a.field !== b.field) return false;
+  if ((a.mode ?? "all") !== (b.mode ?? "all")) return false;
+  if ((a.level ?? null) !== (b.level ?? null)) return false;
+  const av = a.values;
+  const bv = b.values;
+  if (av === undefined || bv === undefined) return av === bv;
+  return av.length === bv.length && av.every((value, index) => value === bv[index]);
+}
+
+/**
+ * The link updates that put every linked layer on one floor choice, with the
+ * matching values resolved from each layer's own features: a layer linked
+ * after a floor was chosen, a project written without the values (the Python
+ * API without inline data), or data that changed since the choice was made.
+ *
+ * @param linked - The linked layers.
+ * @param choice - The floor to apply; defaults to {@link currentLevelChoice}.
+ * @returns One update per layer whose stored link differs.
+ */
+export function resolveLevelLinks(
+  linked: readonly LevelLinkedLayer[],
+  choice: LevelChoice = currentLevelChoice(linked),
+): { id: string; levelFilter: LayerLevelFilter }[] {
+  const updates: { id: string; levelFilter: LayerLevelFilter }[] = [];
+  for (const layer of linked) {
+    const link = layer.levelFilter;
+    if (!link) continue;
+    const next = selectLevel(link, layer.geojson?.features, choice.level, choice.mode);
+    if (!sameLevelLink(link, next)) updates.push({ id: layer.id, levelFilter: next });
+  }
+  return updates;
 }
 
 /**

@@ -5,12 +5,14 @@ import {
   collectLevels,
   compileLayerFilters,
   compileLevelFilter,
+  currentLevelChoice,
   guessLevelField,
   hasActiveLayerFilter,
   levelValueMatches,
   matchingLevelValues,
   mergeLevels,
   parseLevelValue,
+  resolveLevelLinks,
   selectLevel,
   useAppStore,
   type GeoLibreLayer,
@@ -68,6 +70,11 @@ describe("parseLevelValue", () => {
     assert.deepEqual(parseLevelValue(null), []);
     assert.deepEqual(parseLevelValue(true), []);
     assert.deepEqual(parseLevelValue(" ; "), []);
+  });
+
+  it("reads a span past the safe-integer range as its ends instead of looping", () => {
+    const tokens = parseLevelValue("9007199254740992-9007199254740992");
+    assert.equal(tokens.length, 2);
   });
 });
 
@@ -234,5 +241,42 @@ describe("setLevelSelection", () => {
   it("unlinks a layer", () => {
     useAppStore.getState().setLayerLevelFilter("rooms", null);
     assert.equal(useAppStore.getState().layers[0].levelFilter, undefined);
+  });
+});
+
+describe("unresolved and re-resolved links", () => {
+  it("leaves the values unresolved without local features", () => {
+    const link = selectLevel({ field: "level" }, undefined, "0", "only");
+    assert.deepEqual(link, { field: "level", mode: "only", level: "0" });
+    assert.equal(compileLevelFilter(link), null);
+  });
+
+  it("puts a newly linked layer on the floor in view", () => {
+    const rooms = {
+      id: "rooms",
+      levelFilter: selectLevel({ field: "level" }, ROOMS, "1", "below"),
+      geojson: { features: ROOMS },
+    };
+    const doors = { id: "doors", levelFilter: { field: "level" }, geojson: { features: [feature(0), feature(2)] } };
+    assert.deepEqual(currentLevelChoice([doors, rooms]), { level: "1", mode: "below" });
+    assert.deepEqual(resolveLevelLinks([rooms, doors]), [
+      { id: "doors", levelFilter: { field: "level", mode: "below", level: "1", values: [0] } },
+    ]);
+  });
+
+  it("re-resolves the values when the layer's data changes", () => {
+    // A project authored without the values (or before an edit added a floor).
+    const stale = { field: "level", mode: "only" as const, level: "0" };
+    const replaced = [feature("0"), feature("0;1"), feature("-1")];
+    const [update] = resolveLevelLinks([{ id: "rooms", levelFilter: stale, geojson: { features: replaced } }]);
+    assert.deepEqual(update.levelFilter.values, ["0", "0;1"]);
+    const composed = compileLayerFilters({ levelFilter: update.levelFilter });
+    assert.equal(matches(composed, "0;1"), true);
+    assert.equal(matches(composed, "-1"), false);
+    // Already current: nothing to write.
+    assert.deepEqual(
+      resolveLevelLinks([{ id: "rooms", levelFilter: update.levelFilter, geojson: { features: replaced } }]),
+      [],
+    );
   });
 });

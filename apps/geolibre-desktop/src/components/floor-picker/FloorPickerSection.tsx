@@ -1,5 +1,6 @@
 import {
   collectLevels,
+  currentLevelChoice,
   guessLevelField,
   selectLevel,
   useAppStore,
@@ -9,21 +10,20 @@ import { Label, Select } from "@geolibre/ui";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
-import { currentLevelChoice } from "./FloorPickerPanel";
-
-/** Features sampled for field names; a floor field is on every indoor feature. */
-const FIELD_SAMPLE = 500;
 
 /**
  * The property names seen in a layer's features, the likely floor field first.
  *
- * @param layer - A layer with local features.
+ * @param features - The layer's local features.
  * @returns Field names, sorted, with {@link guessLevelField}'s pick moved to the front.
  */
-function fieldOptions(layer: GeoLibreLayer): string[] {
+function fieldOptions(
+  features: readonly { properties?: Record<string, unknown> | null }[] = [],
+): string[] {
   const names = new Set<string>();
-  const features = layer.geojson?.features ?? [];
-  for (const feature of features.slice(0, FIELD_SAMPLE)) {
+  // Every feature, not a sample: a floor field may appear only on features
+  // late in the file (a collection that lists outdoor features first).
+  for (const feature of features) {
     for (const key of Object.keys(feature?.properties ?? {})) names.add(key);
   }
   const sorted = [...names].sort((a, b) => a.localeCompare(b));
@@ -44,7 +44,8 @@ export function FloorPickerSection({ layer }: { layer: GeoLibreLayer }) {
   const linked = useAppStore(
     useShallow((state) => state.layers.filter((item) => item.levelFilter !== undefined)),
   );
-  const fields = useMemo(() => fieldOptions(layer), [layer]);
+  const features = layer.geojson?.features;
+  const fields = useMemo(() => fieldOptions(features), [features]);
   const field = layer.levelFilter?.field ?? "";
   const levelCount = useMemo(
     () => (field ? collectLevels(layer.geojson?.features, field).length : 0),
