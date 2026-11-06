@@ -6,6 +6,7 @@ import {
   compileLayerFilters,
   compileLevelFilter,
   currentLevelChoice,
+  featureLevel,
   guessLevelField,
   hasActiveLayerFilter,
   levelValueMatches,
@@ -377,5 +378,18 @@ describe("clampFloorListHeight", () => {
     // Too little room keeps the three-floor minimum.
     assert.equal(clampFloorListHeight(400, 25, 40), 75);
     assert.equal(clampFloorListHeight(5000, 25, null), 5000);
+  });
+});
+
+describe("featureLevel", () => {
+  it("names the first listed floor a feature is on", () => {
+    const levels = collectLevels(ROOMS, "level");
+    assert.equal(featureLevel("1", levels), "1");
+    assert.equal(featureLevel("0;1", levels), "0");
+    assert.equal(featureLevel(0, levels), "0");
+    assert.equal(featureLevel("7", levels), null);
+    // An unlisted first floor is skipped for the next one the picker lists.
+    assert.equal(featureLevel("7;1", levels), "1");
+    assert.equal(featureLevel(null, levels), null);
   });
 });
