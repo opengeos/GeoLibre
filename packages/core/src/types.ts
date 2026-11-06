@@ -464,6 +464,12 @@ export interface LayerStyle {
   extrusionBaseProperty: string;
   /** Multiplier for {@link extrusionBaseProperty} (e.g. metres per floor). */
   extrusionBaseScale: number;
+  /**
+   * When above 0, every feature is this many metres tall on top of its base
+   * (roof = base + floor height), and the height property and expression are
+   * ignored. 0 keeps the height as the roof's altitude.
+   */
+  extrusionFloorHeight: number;
   extrusionAdvancedStyleEnabled: boolean;
   extrusionColorExpression: string;
   extrusionHeightExpression: string;
@@ -710,6 +716,7 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   extrusionBase: 0,
   extrusionBaseProperty: "",
   extrusionBaseScale: 1,
+  extrusionFloorHeight: 0,
   extrusionAdvancedStyleEnabled: false,
   extrusionColorExpression: "",
   extrusionHeightExpression: "",

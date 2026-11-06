@@ -15,6 +15,7 @@ import {
   DEFAULT_LAYER_STYLE,
   extrusionBaseValue,
   extrusionColorValue,
+  extrusionFloorHeightValue,
   geojsonHasZCoordinates,
   getCesiumIonToken,
   isCzmlLayer,
@@ -1460,6 +1461,7 @@ function applyGeoJsonExtrusion(
   // property): with a base property it is the property's offset.
   const flatBaseValue = typeof baseVal === "number" ? baseVal : style.extrusionBase;
   const flatBase = Number.isFinite(flatBaseValue) ? Math.max(0, flatBaseValue as number) : 0;
+  const floorHeight = extrusionFloorHeightValue(style);
   const extColorVal = extrusionColorValue(style);
   const extColorStr =
     typeof extColorVal === "string"
@@ -1488,10 +1490,13 @@ function applyGeoJsonExtrusion(
       heightScale,
     );
     const base = extrusionFeatureBase(feat, baseEvaluator, flatBase);
+    // A floor height makes the roof relative to this feature's base, as
+    // `extrusionHeightValue` does on the 2D map.
+    const roof = floorHeight > 0 ? base + floorHeight : top;
 
     // Never below the base: a negative height property or expression would
     // otherwise put the roof under the floor.
-    const relativeTop = Math.max(base, top);
+    const relativeTop = Math.max(base, roof);
     // With perPositionHeight Cesium takes each vertex's own height as the
     // base (so neither a flat nor a data-driven base moves the floor of a
     // polygon with Z coordinates) but reads extrudedHeight as an absolute

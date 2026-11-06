@@ -8898,7 +8898,9 @@
       "baseProperty": "Base property",
       "baseNone": "None (flat base)",
       "baseScale": "Base scale",
-      "baseHint": "Each feature starts at base height + base property × base scale, so floors stack from a level field. Height is the roof's altitude, so it must be above the base.",
+      "baseHint": "Each feature starts at base height + base property × base scale, so floors stack from a level field. Set a floor height to give every feature that thickness on its base; otherwise the height is the roof's altitude and must be above the base.",
+      "floorHeight": "Floor height",
+      "floorHeightHint": "When above 0, each feature is this many meters tall on top of its base and the height settings are ignored. 0 uses the height as the roof's altitude.",
       "baseExpression": "Base expression",
       "apply": "Apply 3D extrusion",
       "footer": "3D extrusion settings apply when saved."

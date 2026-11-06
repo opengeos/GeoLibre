@@ -37,6 +37,7 @@
         "extrusionBase": 0,
         "extrusionBaseProperty": "",
         "extrusionBaseScale": 1,
+        "extrusionFloorHeight": 0,
         "extrusionAdvancedStyleEnabled": false,
         "extrusionColorExpression": "",
         "extrusionHeightExpression": "",

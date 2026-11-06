@@ -13,7 +13,7 @@ For vector layers the Style panel covers fill, stroke, points, labels, and 3D ex
 - **Points**: circle radius for point layers, or **Use marker icon** to draw a marker instead: a built-in shape (circle, square, triangle, diamond, star, cross, or pin) with a color and size, or a **Custom image**. **Upload image…** accepts SVG, PNG, JPEG, or GIF; raster images draw as they are, so the marker color and per-class colors apply only to SVG markers.
 - **Labels**: text color, size, halo color, and halo width.
 - **3D extrusion**: turn polygons into extruded blocks, with a height field, height scale, base height, and color. Advanced expressions are available for height, base, and color.
-    - **Stacking floors**: pick a **Base property** (such as `level`) and a **Base scale** (meters per floor) so each feature starts at *base height + property × scale*. One layer of floor plans then draws as a stacked building. The height is the roof's altitude, not a thickness, so it must be above the base: for 3 m floors at 3.5 m spacing, use a height field or expression of `level × 3.5 + 3`.
+    - **Stacking floors**: pick a **Base property** (such as `level`) and a **Base scale** (meters per floor) so each feature starts at *base height + property × scale*. One layer of floor plans then draws as a stacked building. Set a **Floor height** (such as 3 m) to give every feature that thickness on top of its base. With a floor height of 0 the height field is the roof's altitude instead, so it must be above the base. A negative base (a basement level) is clamped to the ground, as on the 2D map.
 
 You can also set a per-style minimum and maximum zoom so a style only applies within a zoom range.
 

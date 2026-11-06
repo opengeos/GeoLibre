@@ -727,6 +727,30 @@ function exporterBaseProperty(value: unknown): { name: string; scale: number } |
   return scale === null ? null : { name: get[1], scale };
 }
 
+/**
+ * The floor height a `fill-extrusion-height` encodes relative to its
+ * `fill-extrusion-base`, the inverse of `extrusionHeightValue` with a floor
+ * height: `["+", ["max", 0, base], n]` for a data-driven base, or a constant
+ * roof above a constant (or absent) base. Null when the height is not of
+ * that form, so it is read as a roof altitude instead.
+ */
+function floorHeightOf(height: unknown, base: unknown): number | null {
+  const constantRoof = asFiniteNumber(height);
+  if (constantRoof !== null) {
+    const constantBase = base === undefined ? 0 : asFiniteNumber(base);
+    if (constantBase === null) return null;
+    const floor = constantRoof - Math.max(0, constantBase);
+    return floor > 0 ? floor : null;
+  }
+  const sum = asArray(height);
+  if (!sum || sum[0] !== "+" || sum.length !== 3) return null;
+  const floor = asFiniteNumber(sum[2]);
+  const clamped = asArray(sum[1]);
+  if (floor === null || floor <= 0 || !clamped || clamped.length !== 3) return null;
+  if (clamped[0] !== "max" || clamped[1] !== 0) return null;
+  return JSON.stringify(clamped[2]) === JSON.stringify(base) ? floor : null;
+}
+
 function clampZoom(value: unknown): number | null {
   const number = asFiniteNumber(value);
   if (number === null) return null;
@@ -972,7 +996,11 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     const opacity = asFiniteNumber(paint["fill-extrusion-opacity"]);
     if (opacity !== null) patch.extrusionOpacity = opacity;
-    if (paint["fill-extrusion-height"] !== undefined) {
+    const floorHeight = floorHeightOf(paint["fill-extrusion-height"], paint["fill-extrusion-base"]);
+    if (floorHeight !== null) {
+      patch.extrusionFloorHeight = floorHeight;
+    } else if (paint["fill-extrusion-height"] !== undefined) {
+      patch.extrusionFloorHeight = 0;
       parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
     }
     if (paint["fill-extrusion-base"] !== undefined) {

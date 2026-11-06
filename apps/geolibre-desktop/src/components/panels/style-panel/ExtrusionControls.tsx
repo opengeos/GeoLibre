@@ -51,11 +51,15 @@ export function ExtrusionControls({
     setDraftExtrusionBaseScale,
     draftBaseExpression,
     setDraftBaseExpression,
+    draftExtrusionFloorHeight,
+    setDraftExtrusionFloorHeight,
     draftAdvancedExtrusionEnabled,
     setDraftAdvancedExtrusionEnabled,
     extrusionError,
     setExtrusionError,
   } = drafts;
+  // A floor height replaces the height settings, so they are hidden while set.
+  const floorHeightSet = draftExtrusionFloorHeight > 0;
   const extrusionSettingsChanged =
     draftExtrusionColor !== styleValue(style, "extrusionColor") ||
     draftExtrusionOpacity !== styleValue(style, "extrusionOpacity") ||
@@ -65,6 +69,7 @@ export function ExtrusionControls({
     draftExtrusionBaseProperty !== styleValue(style, "extrusionBaseProperty") ||
     draftExtrusionBaseScale !== styleValue(style, "extrusionBaseScale") ||
     draftBaseExpression !== styleValue(style, "extrusionBaseExpression") ||
+    draftExtrusionFloorHeight !== styleValue(style, "extrusionFloorHeight") ||
     draftAdvancedExtrusionEnabled !== styleValue(style, "extrusionAdvancedStyleEnabled") ||
     draftColorExpression !== styleValue(style, "extrusionColorExpression") ||
     draftHeightExpression !== styleValue(style, "extrusionHeightExpression");
@@ -111,6 +116,7 @@ export function ExtrusionControls({
       extrusionBaseProperty: draftExtrusionBaseProperty,
       extrusionBaseScale: draftExtrusionBaseScale,
       extrusionBaseExpression: draftBaseExpression.trim(),
+      extrusionFloorHeight: draftExtrusionFloorHeight,
       extrusionAdvancedStyleEnabled: draftAdvancedExtrusionEnabled,
       extrusionColorExpression: draftColorExpression.trim(),
       extrusionHeightExpression: draftHeightExpression.trim(),
@@ -154,16 +160,22 @@ export function ExtrusionControls({
       </label>
       {draftAdvancedExtrusionEnabled ? (
         <div className="space-y-2">
-          <Label htmlFor="extrusionHeightExpression">{t("style.extrusion.heightExpression")}</Label>
-          <textarea
-            id="extrusionHeightExpression"
-            className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-            value={draftHeightExpression}
-            onChange={(event) => {
-              setDraftHeightExpression(event.target.value);
-              setExtrusionError(null);
-            }}
-          />
+          {floorHeightSet ? null : (
+            <>
+              <Label htmlFor="extrusionHeightExpression">
+                {t("style.extrusion.heightExpression")}
+              </Label>
+              <textarea
+                id="extrusionHeightExpression"
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+                value={draftHeightExpression}
+                onChange={(event) => {
+                  setDraftHeightExpression(event.target.value);
+                  setExtrusionError(null);
+                }}
+              />
+            </>
+          )}
           <Label htmlFor="extrusionBaseExpression">{t("style.extrusion.baseExpression")}</Label>
           <textarea
             id="extrusionBaseExpression"
@@ -178,34 +190,40 @@ export function ExtrusionControls({
         </div>
       ) : (
         <>
-          <div className="space-y-2">
-            <Label htmlFor="extrusionHeightProperty">{t("style.extrusion.heightProperty")}</Label>
-            <Select
-              id="extrusionHeightProperty"
-              value={draftExtrusionHeightProperty}
-              onChange={(event) => setDraftExtrusionHeightProperty(event.target.value)}
-              disabled={extrusionHeightPropertyOptions.length === 0}
-            >
-              {extrusionHeightPropertyOptions.length === 0 ? (
-                <option value="">{t("style.labels.noAttributes")}</option>
-              ) : (
-                extrusionHeightPropertyOptions.map((property) => (
-                  <option key={property} value={property}>
-                    {property}
-                  </option>
-                ))
-              )}
-            </Select>
-          </div>
-          <NumericStyleInput
-            id="extrusionHeightScale"
-            label={t("style.extrusion.heightScale")}
-            min={0}
-            max={10000}
-            step={0.00001}
-            value={draftExtrusionHeightScale}
-            onChange={setDraftExtrusionHeightScale}
-          />
+          {floorHeightSet ? null : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="extrusionHeightProperty">
+                  {t("style.extrusion.heightProperty")}
+                </Label>
+                <Select
+                  id="extrusionHeightProperty"
+                  value={draftExtrusionHeightProperty}
+                  onChange={(event) => setDraftExtrusionHeightProperty(event.target.value)}
+                  disabled={extrusionHeightPropertyOptions.length === 0}
+                >
+                  {extrusionHeightPropertyOptions.length === 0 ? (
+                    <option value="">{t("style.labels.noAttributes")}</option>
+                  ) : (
+                    extrusionHeightPropertyOptions.map((property) => (
+                      <option key={property} value={property}>
+                        {property}
+                      </option>
+                    ))
+                  )}
+                </Select>
+              </div>
+              <NumericStyleInput
+                id="extrusionHeightScale"
+                label={t("style.extrusion.heightScale")}
+                min={0}
+                max={10000}
+                step={0.00001}
+                value={draftExtrusionHeightScale}
+                onChange={setDraftExtrusionHeightScale}
+              />
+            </>
+          )}
           <NumericStyleInput
             id="extrusionBase"
             label={t("style.extrusion.base")}
@@ -250,6 +268,16 @@ export function ExtrusionControls({
           ) : null}
         </>
       )}
+      <NumericStyleInput
+        id="extrusionFloorHeight"
+        label={t("style.extrusion.floorHeight")}
+        tooltip={t("style.extrusion.floorHeightHint")}
+        min={0}
+        max={10000}
+        step={0.1}
+        value={draftExtrusionFloorHeight}
+        onChange={setDraftExtrusionFloorHeight}
+      />
       <Button
         type="button"
         size="sm"

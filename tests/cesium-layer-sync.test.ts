@@ -1808,6 +1808,57 @@ describe("CesiumLayerSync", () => {
     assert.equal(ds.entities.values[0].polygon.extrudedHeight.value, 20);
   });
 
+  it("puts each roof a floor height above its base", async () => {
+    const sync = newSync(f);
+    const floor = (id: string, level: number) => ({
+      type: "Feature" as const,
+      id,
+      properties: { level, height: 99 },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    const layer = mkLayer({
+      id: "floor-height",
+      type: "geojson",
+      geojson: { type: "FeatureCollection", features: [floor("b", -1), floor("f1", 1)] },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionBase: 2,
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 5,
+        extrusionFloorHeight: 4,
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: {
+        values: Array<{
+          polygon: { extrudedHeight: { value: number }; height: { value: number } };
+        }>;
+      };
+    };
+    assert.deepEqual(
+      ds.entities.values.map((e) => [e.polygon.height.value, e.polygon.extrudedHeight.value]),
+      [
+        [0, 4],
+        [7, 11],
+      ],
+    );
+  });
+
   it("falls back to the flat base when the base expression throws", async () => {
     const sync = newSync(f);
     const layer = mkLayer({

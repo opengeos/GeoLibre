@@ -422,6 +422,23 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     assert.equal(result.extrusionBaseScale, 3.5);
   });
 
+  it("round-trips a floor height on a data-driven base", () => {
+    const { style: result } = roundTrip(
+      style({
+        extrusionEnabled: true,
+        extrusionBase: 5,
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 5,
+        extrusionFloorHeight: 4,
+      }),
+      polygons(),
+    );
+    assert.equal(result.extrusionFloorHeight, 4);
+    assert.equal(result.extrusionBaseProperty, "level");
+    assert.equal(result.extrusionBaseScale, 5);
+    assert.equal(result.extrusionBase, 5);
+  });
+
   it("keeps base expressions that only resemble the exporter's shape", () => {
     const extrusion = (base: unknown) =>
       parseMapboxStyle({
@@ -900,7 +917,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.strokeWidthUnit, "pixels");
   });
 
-  it("warns on a constant extrusion height it cannot represent", () => {
+  it("reads a constant extrusion height as a floor height above the base", () => {
     const external = {
       version: 8,
       sources: {},
@@ -915,6 +932,24 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     };
     const result = parseMapboxStyle(external);
     assert.equal(result.style.extrusionHeightProperty, undefined);
+    assert.equal(result.style.extrusionFloorHeight, 30);
+    assert.ok(!result.warnings.some((w) => /constant extrusion height/.test(w)));
+  });
+
+  it("warns on a constant extrusion roof below a constant base", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill-extrusion",
+          source: "s",
+          paint: { "fill-extrusion-height": 30, "fill-extrusion-base": 40 },
+        },
+      ],
+    });
+    assert.equal(result.style.extrusionFloorHeight, 0);
     assert.ok(result.warnings.some((w) => /constant extrusion height/.test(w)));
   });
 

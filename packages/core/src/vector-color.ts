@@ -959,18 +959,29 @@ function ruleBasedLineColorExpression(style: LayerStyle): VectorColorValue {
 }
 
 /**
- * Resolves the 3D-extrusion height for a layer style into a MapLibre value: a
- * plain meters number, or a data-driven expression. In advanced mode a valid
- * `extrusionHeightExpression` wins; otherwise the height is the chosen property
- * scaled by `extrusionHeightScale` (`["*", ["to-number", ["get", prop], 0],
- * scale]`), or a flat `0` when no property is set (so the layer renders flat
- * rather than erroring). Shared by the map's fill-extrusion paint and the
- * Add Vector Layer control's extrusion mapping so both extrude identically.
+ * Resolves the 3D-extrusion height (the roof's altitude) for a layer style
+ * into a MapLibre value: a plain meters number, or a data-driven expression.
+ * With a positive `extrusionFloorHeight` the roof sits that far above the
+ * base (`extrusionBaseValue`, clamped to the ground as MapLibre clamps
+ * `fill-extrusion-base`), whatever the height settings say. Otherwise, in
+ * advanced mode a valid `extrusionHeightExpression` wins; else the height is
+ * the chosen property scaled by `extrusionHeightScale` (`["*", ["to-number",
+ * ["get", prop], 0], scale]`), or a flat `0` when no property is set (so the
+ * layer renders flat rather than erroring). Shared by the map's
+ * fill-extrusion paint and the Add Vector Layer control's extrusion mapping
+ * so both extrude identically.
  *
  * @param style - The layer style.
  * @returns The extrusion height as a number or a MapLibre expression array.
  */
 export function extrusionHeightValue(style: LayerStyle): number | unknown[] {
+  const floorHeight = extrusionFloorHeightValue(style);
+  if (floorHeight > 0) {
+    const base = extrusionBaseValue(style);
+    return typeof base === "number"
+      ? Math.max(0, base) + floorHeight
+      : ["+", ["max", 0, base], floorHeight];
+  }
   const advancedExpression = parseJsonExpression(
     styleValue(style, "extrusionAdvancedStyleEnabled")
       ? styleValue(style, "extrusionHeightExpression")
@@ -981,6 +992,19 @@ export function extrusionHeightValue(style: LayerStyle): number | unknown[] {
   if (!property) return 0;
   const scale = styleValue(style, "extrusionHeightScale");
   return ["*", ["to-number", ["get", property], 0], scale];
+}
+
+/**
+ * The layer's floor height in metres: a finite `extrusionFloorHeight` above
+ * 0, else 0 (the height is then the roof's altitude). Also 0 for a project
+ * saved before the field existed.
+ *
+ * @param style - The layer style.
+ * @returns The floor height, or 0 when it is off.
+ */
+export function extrusionFloorHeightValue(style: LayerStyle): number {
+  const value = styleValue(style, "extrusionFloorHeight");
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 /**

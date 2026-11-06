@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, extrusionBaseValue, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  extrusionBaseValue,
+  extrusionHeightValue,
+  type LayerStyle,
+} from "@geolibre/core";
 import { fillExtrusionPaint } from "../packages/map/src/style-mapper";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
@@ -73,5 +78,40 @@ describe("extrusionBaseValue", () => {
       ["*", ["to-number", ["get", "level"], 0], 3.5],
     );
     assert.equal(fillExtrusionPaint(style({ extrusionBase: 7 }), 1)["fill-extrusion-base"], 7);
+  });
+});
+
+describe("extrusionHeightValue with a floor height", () => {
+  it("puts the roof a floor height above a data-driven base, clamped to the ground", () => {
+    assert.deepEqual(
+      extrusionHeightValue(
+        style({
+          extrusionBase: 5,
+          extrusionBaseProperty: "level",
+          extrusionBaseScale: 5,
+          extrusionFloorHeight: 4,
+          // Ignored while a floor height is set.
+          extrusionHeightProperty: "height",
+          extrusionAdvancedStyleEnabled: true,
+          extrusionHeightExpression: '["get", "top"]',
+        }),
+      ),
+      ["+", ["max", 0, ["+", ["*", ["to-number", ["get", "level"], 0], 5], 5]], 4],
+    );
+  });
+
+  it("adds the floor height to a flat base", () => {
+    assert.equal(extrusionHeightValue(style({ extrusionBase: 6, extrusionFloorHeight: 3 })), 9);
+    assert.equal(extrusionHeightValue(style({ extrusionBase: -2, extrusionFloorHeight: 3 })), 3);
+  });
+
+  it("keeps the height settings when the floor height is 0 or missing", () => {
+    const heightStyle = style({ extrusionHeightProperty: "height", extrusionHeightScale: 2 });
+    const expected = ["*", ["to-number", ["get", "height"], 0], 2];
+    assert.deepEqual(extrusionHeightValue(heightStyle), expected);
+    const legacy = { ...heightStyle } as Partial<LayerStyle>;
+    delete legacy.extrusionFloorHeight;
+    assert.deepEqual(extrusionHeightValue(legacy as LayerStyle), expected);
+    assert.deepEqual(extrusionHeightValue({ ...heightStyle, extrusionFloorHeight: -1 }), expected);
   });
 });

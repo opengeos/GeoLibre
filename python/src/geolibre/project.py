@@ -344,6 +344,7 @@ DEFAULT_LAYER_STYLE: dict[str, Any] = {
     "extrusionBase": 0,
     "extrusionBaseProperty": "",
     "extrusionBaseScale": 1,
+    "extrusionFloorHeight": 0,
     "extrusionAdvancedStyleEnabled": False,
     "extrusionColorExpression": "",
     "extrusionHeightExpression": "",
