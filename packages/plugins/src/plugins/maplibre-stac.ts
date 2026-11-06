@@ -51,6 +51,7 @@ import {
   zarrTargetCheck,
   zarrStorePath,
   zarrStoreTakesKeys,
+  stacDateInterval,
 } from "./stac-api";
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
@@ -1498,7 +1499,7 @@ function buildPanel(container: HTMLElement): () => void {
         .filter(Boolean);
       const start = startField.input.value;
       const end = endField.input.value;
-      const datetime = start || end ? `${start || ".."}/${end || ".."}` : undefined;
+      const datetime = stacDateInterval(start, end);
       walking?.abort();
       walking = new AbortController();
       const reading = AbortSignal.any([walking.signal, controller.signal]);
