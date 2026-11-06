@@ -11,6 +11,42 @@ import {
 } from "./provider";
 import { PROVIDER_FIELDS } from "./provider-fields";
 
+/**
+ * The env var a provider's profile used to carry its model id in, beside the
+ * model selector. A profile now keeps its model only in `modelId`, so a value
+ * saved under this key is folded into `modelId` when settings load.
+ */
+const LEGACY_PROFILE_MODEL_FIELD: Partial<Record<AssistantProviderId, string>> = {
+  ollama: "OLLAMA_MODEL",
+};
+
+/**
+ * Move a model id saved in a profile's credential fields into its `modelId`.
+ *
+ * Ollama profiles once showed an optional `OLLAMA_MODEL` text field next to the
+ * model selector, but the selector's `modelId` always won when the assistant
+ * resolved its config, so a model typed into the field was silently ignored. A
+ * non-blank value there is what the user meant to run, so it replaces `modelId`;
+ * the field is dropped either way so the profile holds a single model id.
+ *
+ * @param profile A normalized profile.
+ * @returns The same profile when there is nothing to fold, else an updated copy.
+ */
+export function foldLegacyProfileModelField(profile: AssistantProfile): AssistantProfile {
+  const own = LEGACY_PROFILE_MODEL_FIELD[profile.provider];
+  // A profile switched away from Ollama by an older build kept its
+  // OLLAMA_MODEL. Drop it too, or switching back would resurrect it on the
+  // next load over the model the user typed.
+  const legacyKeys = Object.values(LEGACY_PROFILE_MODEL_FIELD).filter(
+    (key) => key in profile.fieldValues,
+  );
+  if (legacyKeys.length === 0) return profile;
+  const fieldValues = { ...profile.fieldValues };
+  for (const key of legacyKeys) delete fieldValues[key];
+  const legacyModel = own ? profile.fieldValues[own]?.trim() : "";
+  return { ...profile, modelId: legacyModel || profile.modelId, fieldValues };
+}
+
 /** Generate a unique profile id (no UUID dependency). */
 function generateProfileId(): string {
   return `prof_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -73,6 +109,9 @@ export function migrateLegacyAiEnv(
   for (const provider of ASSISTANT_PROVIDER_IDS) {
     const fields = PROVIDER_FIELDS[provider] as readonly { envKey: string }[];
     const fieldKeys = new Set<string>(fields.map((f) => f.envKey));
+    // Carry a legacy model override along so the fold below can apply it.
+    const legacyModelKey = LEGACY_PROFILE_MODEL_FIELD[provider];
+    if (legacyModelKey) fieldKeys.add(legacyModelKey);
     const fieldValues: Record<string, string> = {};
 
     for (const [key, value] of entries) {
@@ -84,22 +123,30 @@ export function migrateLegacyAiEnv(
     // Only create a profile if at least one field has a value.
     if (Object.keys(fieldValues).length === 0) continue;
 
-    // Skip if a profile with the exact same field values already exists.
-    const isDuplicate = existingProfiles.some(
-      (p) =>
-        p.provider === provider &&
-        Object.entries(fieldValues).every(([k, v]) => p.fieldValues[k] === v) &&
-        Object.keys(p.fieldValues).length === Object.keys(fieldValues).length,
-    );
-    if (isDuplicate) continue;
-
-    result.push({
+    // Fold first: profiles already loaded were folded, so compare like with
+    // like. A folded legacy model counts too, since before the fold it was one
+    // of the compared field values.
+    const candidate = foldLegacyProfileModelField({
       id: generateProfileId(),
       name: PROVIDER_LABELS[provider],
       provider,
       modelId: defaultModelFor(provider),
       fieldValues,
     });
+    const foldedModel = legacyModelKey !== undefined && legacyModelKey in fieldValues;
+    const candidateKeys = Object.keys(candidate.fieldValues);
+
+    // Skip if a profile with the exact same field values already exists.
+    const isDuplicate = existingProfiles.some(
+      (p) =>
+        p.provider === provider &&
+        candidateKeys.every((k) => p.fieldValues[k] === candidate.fieldValues[k]) &&
+        Object.keys(p.fieldValues).length === candidateKeys.length &&
+        (!foldedModel || p.modelId === candidate.modelId),
+    );
+    if (isDuplicate) continue;
+
+    result.push(candidate);
   }
 
   return result;

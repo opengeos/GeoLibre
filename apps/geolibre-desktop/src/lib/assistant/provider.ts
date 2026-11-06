@@ -56,7 +56,7 @@ export interface AssistantProfile {
   /**
    * Credential values keyed by env-var name, matching {@link PROVIDER_FIELDS}.
    * E.g. for google: `{ GEMINI_API_KEY: "AIza..." }`
-   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "llama3.2" }`
+   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434" }`
    */
   fieldValues: Record<string, string>;
 }
@@ -424,9 +424,10 @@ export function getApiKey(
 /**
  * The default model id for a provider.
  *
- * OpenRouter and Vercel AI Gateway honor their optional model overrides here
- * so a new profile picks that id up. Other providers apply their overrides only
- * when a request is resolved, not when the settings form proposes a default.
+ * OpenRouter, Vercel AI Gateway and Ollama honor their optional model
+ * overrides here so a new profile picks that id up. Other providers apply their
+ * overrides only when a request is resolved, not when the settings form
+ * proposes a default.
  */
 export function defaultModelFor(
   provider: AssistantProviderId,
@@ -437,7 +438,9 @@ export function defaultModelFor(
       ? env.OPENROUTER_MODEL
       : provider === "vercel"
         ? env.AI_GATEWAY_MODEL
-        : undefined;
+        : provider === "ollama"
+          ? env.OLLAMA_MODEL
+          : undefined;
   return override?.trim() || DEFAULT_MODEL[provider];
 }
 

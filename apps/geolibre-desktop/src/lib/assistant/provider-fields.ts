@@ -80,13 +80,10 @@ export const PROVIDER_FIELDS = {
       // reads "configured".
       aliases: ["OLLAMA_HOST"],
     },
-    {
-      envKey: "OLLAMA_MODEL",
-      labelKey: "settings.ai.field.model",
-      placeholderKey: "settings.ai.placeholder.ollamaModel",
-      secret: false,
-      required: false,
-    },
+    // No OLLAMA_MODEL field: the profile's model selector is the one place to
+    // set the model (any installed id, tag included), so a second box cannot
+    // disagree with it. The OS `OLLAMA_MODEL` still seeds a new profile's model
+    // through `defaultModelFor`.
   ],
   bedrock: [
     {

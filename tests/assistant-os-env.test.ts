@@ -41,6 +41,8 @@ describe("OS_ENV_VAR_NAMES", () => {
       "GEOLIBRE_ASSISTANT_MODEL",
       "OPENROUTER_MODEL",
       "AI_GATEWAY_MODEL",
+      // Seeds a new Ollama profile's model; the profile has no field for it.
+      "OLLAMA_MODEL",
       "TAVILY_API_KEY",
       "JEV_API_KEY",
     ]);

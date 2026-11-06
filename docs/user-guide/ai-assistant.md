@@ -37,7 +37,10 @@ providers in **Settings → AI Providers**:
 
 - **Ollama** runs models on your own machine — no API key and nothing leaves your
   computer. Point `OLLAMA_BASE_URL` at your Ollama host (the `/v1` suffix is added
-  automatically); set `OLLAMA_MODEL` to pick which pulled model to use.
+  automatically). In an Ollama profile, type any pulled model into the **Model**
+  box, tag included (for example `qwen3:8b`), or pick one of the suggestions;
+  **Refresh model list** suggests the models your server actually has. An
+  `OLLAMA_MODEL` set in the OS environment pre-fills the model of a new profile.
 - **Bedrock** calls AWS from the browser using your credentials (and the model
   id is an inference-profile id such as `global.anthropic.claude-sonnet-4-6`; set
   `BEDROCK_MODEL` to choose another).

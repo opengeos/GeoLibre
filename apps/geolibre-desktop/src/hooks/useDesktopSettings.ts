@@ -29,7 +29,7 @@ import {
   type ThemeScheme,
 } from "../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../lib/updates";
-import { migrateLegacyAiEnv } from "../lib/assistant/profiles";
+import { foldLegacyProfileModelField, migrateLegacyAiEnv } from "../lib/assistant/profiles";
 import {
   normalizeS3Connections,
   normalizeS3DefaultLocation,
@@ -518,7 +518,7 @@ function normalizeAssistantProfiles(value: unknown, legacyEnv: unknown): Assista
         }
       }
 
-      profiles.push({ id, name, provider, modelId, fieldValues });
+      profiles.push(foldLegacyProfileModelField({ id, name, provider, modelId, fieldValues }));
     }
   }
 
