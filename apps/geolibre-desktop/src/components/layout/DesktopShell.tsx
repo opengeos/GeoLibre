@@ -180,6 +180,7 @@ interface DesktopShellProps {
   layoutOptions: LayoutOptions;
   projectUrlLoadState?: ProjectUrlLoadState;
   dataUrlLoadState?: DataUrlLoadState;
+  startupProjectSettled?: boolean;
   mapAppAPI: ReturnType<typeof createAppAPI> | null;
   themeMode: ThemeMode;
   onToggleThemeMode: () => void;
@@ -190,6 +191,7 @@ export function DesktopShell({
   layoutOptions,
   projectUrlLoadState,
   dataUrlLoadState,
+  startupProjectSettled,
   mapAppAPI,
   themeMode,
   onToggleThemeMode,
@@ -469,8 +471,11 @@ export function DesktopShell({
   useStartupPanels({
     mapControllerRef,
     viewer: layoutOptions.viewer,
+    panelsHidden: layoutOptions.panelsHidden,
     externalPluginsReady,
     mapReadyGeneration,
+    projectUrlSettled,
+    startupProjectSettled,
   });
 
   const handleMapControllerReady = useCallback(() => {

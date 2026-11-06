@@ -410,3 +410,30 @@ test("catalog id and name are stored trimmed", () => {
   assert.equal(policy?.services?.catalog?.[0].id, "city");
   assert.equal(policy?.services?.catalog?.[0].name, "City WMS");
 });
+
+test("plugins.openPanel parses trimmed and drops invalid values", () => {
+  const good = resolveDeploymentPolicy({
+    version: 1,
+    plugins: { sideload: true, openPanel: "  custom-panel  " },
+  });
+  assert.equal(good?.plugins?.openPanel, "custom-panel");
+  assert.equal(good?.plugins?.sideload, true);
+
+  const blank = resolveDeploymentPolicy({
+    version: 1,
+    capabilities: ["data:add"],
+    plugins: { sideload: true, openPanel: "   " },
+  });
+  assert.equal(blank?.version, 1);
+  assert.deepEqual(blank?.capabilities, ["data:add"]);
+  assert.equal(blank?.plugins, undefined);
+
+  const nonString = resolveDeploymentPolicy({
+    version: 1,
+    capabilities: ["data:add"],
+    plugins: { sideload: true, openPanel: 42 as unknown as string },
+  });
+  assert.equal(nonString?.version, 1);
+  assert.deepEqual(nonString?.capabilities, ["data:add"]);
+  assert.equal(nonString?.plugins, undefined);
+});

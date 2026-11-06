@@ -43,6 +43,15 @@ SHARE_LOOPBACK = ("localhost", "127.0.0.1")
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
 SAFE_INTEGER = 2**53 - 1
 
+# Unicode whitespace characters removed by JavaScript's String.prototype.trim()
+# (ECMAScript 2024 §12.3 WhiteSpace + LineTerminator + BOM U+FEFF).
+# Used for all 'nonblank' fields so the Docker container validator enforces the
+# exact same trimming semantics as the client desktop parser (readNonBlank).
+JS_TRIM_WHITESPACE = (
+    " \t\n\r\v\f\ufeff\u00a0\u1680\u2000\u2001\u2002\u2003\u2004"
+    "\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+
 # Section -> {field: value kind}, in schema order.
 FIELD_KINDS = {
     "interface": {
@@ -60,6 +69,7 @@ FIELD_KINDS = {
         "blocked": "ids",
         "sideload": "bool",
         "defaultActive": "ids",
+        "openPanel": "nonblank",
     },
     "services": {"builtins": "bool", "catalog": "catalog"},
     "sharing": {"shareUrl": "share", "collabUrl": "collab", "embedOrigins": "origins"},
@@ -444,7 +454,7 @@ def _validate_field(label, path, kind, value):
             fail(label, path, "must be a boolean")
         return value
     if kind == "nonblank":
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or not value.strip(JS_TRIM_WHITESPACE):
             fail(label, path, "must be a nonblank string")
         return value
     if kind == "level":

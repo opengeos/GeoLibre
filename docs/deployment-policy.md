@@ -154,6 +154,7 @@ An array of the capability names from
 | `blocked` | string[] | External plugin ids never loaded. |
 | `sideload` | boolean | Allow installing from a manifest URL, zip, directory or project file (default true). |
 | `defaultActive` | string[] | Plugin ids active in a fresh project. |
+| `openPanel` | string | Panel id to open automatically on startup in a fresh project. |
 
 ### `services`
 
@@ -230,6 +231,14 @@ fresh project. It does not override a saved project's active plugin list and
 does not allow a denied plugin to load. URL updates preserve these deployment
 defaults for later fresh projects. Without a `plugins` section, existing loading
 and activation behavior is unchanged.
+
+`openPanel` names a registered dockable right-panel or floating panel to open
+automatically when the application starts with a fresh project. If the panel
+registers asynchronously during plugin activation, it opens once it registers
+and startup is ready: plugins have loaded, the map is ready, and any `?url=`
+project has settled. It does not reopen in saved projects and is ignored in the
+read-only viewer preset or when side panels are hidden (`?maponly`,
+`?panels=hidden`, `?hidePanels=true`).
 
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.

@@ -101,6 +101,10 @@
         "defaultActive": {
           "$ref": "#/$defs/idList",
           "description": "Plugin ids active in a fresh project."
+        },
+        "openPanel": {
+          "$ref": "#/$defs/nonBlank",
+          "description": "Panel id to open automatically on startup in a fresh project."
         }
       }
     },

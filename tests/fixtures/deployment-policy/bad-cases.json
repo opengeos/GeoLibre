@@ -90,6 +90,76 @@
       "dropped": ["plugins"]
     }
   },
+  "plugins-open-panel-blank": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "openPanel": "   "
+      }
+    },
+    "container": "plugins.openPanel must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-open-panel-bom": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "openPanel": "\ufeff"
+      }
+    },
+    "container": "plugins.openPanel must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-open-panel-nbsp": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "openPanel": "\u00a0"
+      }
+    },
+    "container": "plugins.openPanel must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "ai-model-nbsp": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "ai": {
+        "model": "\u00a0"
+      }
+    },
+    "container": "ai.model must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["ai"]
+    }
+  },
+  "plugins-open-panel-type": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "openPanel": 123
+      }
+    },
+    "container": "plugins.openPanel must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
   "interface-token-key": {
     "input": {
       "version": 1,

@@ -57,7 +57,8 @@ export default function App() {
   useDesktopSettingsPersistence();
   useThemeScheme();
   useRecentProjectsPersistence();
-  const { restoring: restoringStartupProject } = useStartupProject();
+  const { restoring: restoringStartupProject, settled: startupProjectSettled } =
+    useStartupProject();
   useMapCrsUrl();
   useStyleLibraryPersistence();
   useStartupLayerStyles();
@@ -87,6 +88,7 @@ export default function App() {
             layoutOptions={layoutOptions}
             projectUrlLoadState={projectUrlLoadState}
             dataUrlLoadState={dataUrlLoadState}
+            startupProjectSettled={startupProjectSettled}
             mapAppAPI={mapAppAPI}
             themeMode={themeMode}
             onToggleThemeMode={toggleThemeMode}

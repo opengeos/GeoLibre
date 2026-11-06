@@ -39,6 +39,7 @@ export interface PluginsPolicy {
   blocked?: string[];
   sideload?: boolean;
   defaultActive?: string[];
+  openPanel?: string;
 }
 
 /** One curated web-service library entry. */
@@ -219,7 +220,14 @@ function readInterface(v: unknown): Result<InterfacePolicy> {
 }
 
 function readPlugins(v: unknown): Result<PluginsPolicy> {
-  const obj = readObject(v, ["registryUrl", "allowed", "blocked", "sideload", "defaultActive"]);
+  const obj = readObject(v, [
+    "registryUrl",
+    "allowed",
+    "blocked",
+    "sideload",
+    "defaultActive",
+    "openPanel",
+  ]);
   if ("error" in obj) return obj;
   const r = readFields(obj.value, {
     registryUrl: (x) => readNonBlank(x, "registryUrl"),
@@ -227,6 +235,10 @@ function readPlugins(v: unknown): Result<PluginsPolicy> {
     blocked: (x) => readIdList(x, "blocked"),
     sideload: (x) => readBoolean(x, "sideload"),
     defaultActive: (x) => readIdList(x, "defaultActive"),
+    openPanel: (x) => {
+      const p = readNonBlank(x, "openPanel");
+      return "error" in p ? p : { value: p.value.trim() };
+    },
   });
   return "error" in r ? r : { value: r.value as PluginsPolicy };
 }
