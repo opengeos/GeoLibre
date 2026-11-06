@@ -1000,9 +1000,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const floorHeight = floorHeightOf(paint["fill-extrusion-height"], paint["fill-extrusion-base"]);
     if (floorHeight !== null) {
       patch.extrusionFloorHeight = floorHeight;
-    } else if (paint["fill-extrusion-height"] !== undefined) {
+    } else {
+      // Like the base below, a floor height the layer kept does not survive an
+      // imported extrusion that describes its height differently, or not at all.
       patch.extrusionFloorHeight = 0;
-      parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
+      if (paint["fill-extrusion-height"] !== undefined) {
+        parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
+      }
     }
     if (paint["fill-extrusion-base"] !== undefined) {
       parseExtrusionBase(paint["fill-extrusion-base"], patch);

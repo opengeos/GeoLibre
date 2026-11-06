@@ -991,6 +991,25 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.extrusionBaseExpression, "");
   });
 
+  it("drops a kept floor height when the imported style has no height", () => {
+    const result = applyMapboxStyleImport(
+      style({ extrusionEnabled: true, extrusionFloorHeight: 4 }),
+      parseMapboxStyle({
+        version: 8,
+        sources: {},
+        layers: [
+          {
+            id: "poly",
+            type: "fill-extrusion",
+            source: "s",
+            paint: { "fill-extrusion-color": "#888888" },
+          },
+        ],
+      }),
+    );
+    assert.equal(result.extrusionFloorHeight, 0);
+  });
+
   it("warns on a constant extrusion roof below a constant base", () => {
     const result = parseMapboxStyle({
       version: 8,
