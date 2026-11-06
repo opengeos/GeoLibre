@@ -19,6 +19,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **File Geodatabase (GDB)** | Opens an Esri file geodatabase (`.gdb` folder) and adds one of its feature classes as a layer. It is read by the local GeoLibre server, so it needs the desktop app. |
 | **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
+| **IndoorGML Layer** | Loads an OGC IndoorGML file or URL: rooms, corridors and doors extruded to their real heights, and the navigation network drawn at its own elevations, all linked to the floor picker. See [IndoorGML buildings](#indoorgml-buildings). |
 | **LandXML Layer** | Loads a LandXML file or URL and imports selected TIN surfaces, horizontal alignments, vertical profile metadata, and survey points. Projected coordinates are reprojected from the selected or embedded source CRS. |
 | **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive. The desktop app reads it from disk; the browser build opens it in memory with SQLite/WASM (sql.js), so it is not kept after a reload. Files over 1 GB are refused in the browser; use the desktop app for those. |
@@ -62,6 +63,18 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
     An [IMDF](https://docs.ogc.org/cs/20-094/index.html) archive (Indoor Mapping Data Format, the zip of GeoJSON files that Apple Maps and many indoor-mapping tools export) is recognized when you pick or drop its `.zip`, or load it by URL in the Add Vector panel: GeoLibre looks for its `manifest.json` beside a `venue`, `level` or `unit` file. **Load sample data → Dinoseum indoor venue (IMDF)** opens Apple's IMDF sample venue. It opens as a group named after the venue, with one layer per feature type: the venue and footprint outlines, the levels as thin floor slabs, the units (rooms, corridors, stairs, restrooms) extruded and colored by category, and the openings, amenities and occupants. Each feature gets its level's `ordinal` and short name as attributes, so the floors stack in 3D (4 m apart, the lowest floor on the ground) and every layer on a floor is linked to the [floor picker](styling.md#floor-picker). Open-to-below units, the voids of an atrium, are filtered out of the units layer so they do not plug the hole they describe. Localized names are read in the archive's language.
 
     Openings, amenities and occupants are lines and points, so they are drawn on the ground rather than at their floor's height in a tilted view; pick a floor to see each floor's doors and points of interest in a top-down view.
+
+### IndoorGML buildings
+
+**Add Data → IndoorGML Layer** reads an [OGC IndoorGML](https://www.ogc.org/standards/indoorgml/) 1.0 document (`.gml`), by file or URL, into three layers:
+
+- **cells**: every room, corridor, staircase and door (`CellSpace`, `GeneralSpace`, `TransitionSpace`, `ConnectionSpace`, `AnchorSpace`) as its footprint, extruded from its lowest to its highest point, measured from the lowest point of the building, and colored by kind;
+- **navigation network**: the `Transition` edges, drawn at their own elevations;
+- **navigation nodes**: the `State` points (hidden at first).
+
+Every feature gets a `level` for the [floor picker](styling.md#floor-picker): the storey the file names (InEditor's `storey="2"` description, which may be a range such as `1-2` for a staircase), or else a floor number worked out from the cells' base elevations, with the floor nearest the file's zero as floor 0.
+
+Many IndoorGML files name no coordinate system. When the file has a `srsName` it fills the **Source CRS** field; otherwise enter the EPSG code of the coordinates, or, for a model in a local building frame (metres from an origin), tick **Local coordinates** to place it at the map centre for viewing. **Load sample data → FJK-Haus** opens STEMLab's IndoorGML model of the KIT FZK-Haus (UTM zone 32N).
 
 ## Web services
 

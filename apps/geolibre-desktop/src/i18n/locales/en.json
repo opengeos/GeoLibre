@@ -455,6 +455,10 @@
         "label": "Add LandXML layer",
         "description": "Import LandXML TIN surfaces, horizontal alignments, vertical profile metadata, and survey points with source CRS reprojection."
       },
+      "indoorgml": {
+        "label": "Add IndoorGML layer",
+        "description": "Import an OGC IndoorGML building: rooms extruded to their real heights and the navigation network, linked to the floor picker."
+      },
       "georss": {
         "label": "Add GeoRSS layer",
         "description": "Add a GeoRSS feed (RSS, Atom, or RDF) from a URL or file as a vector layer."
@@ -853,6 +857,29 @@
       "crsPresetLabel": "Common coordinate systems…",
       "crsHelp": "Leave blank only when the coordinates are already WGS84 longitude and latitude. LandXML coordinates are read as northing, easting, and elevation.",
       "detectedCoordinateSystem": "LandXML coordinate system: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML file",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML file data is missing.",
+      "readError": "Could not read this IndoorGML file.",
+      "errorChooseFile": "Choose an IndoorGML file.",
+      "errorUrl": "Enter an IndoorGML URL.",
+      "errorTooLarge": "This IndoorGML file is larger than 200 MB.",
+      "errorMissingCrs": "This IndoorGML file names no coordinate system and its coordinates are not longitude/latitude. Enter its CRS, or choose to place it at the map centre.",
+      "summary": "{{cells}} cells on {{floors}} floors, {{transitions}} navigation edges.",
+      "crs": "Source CRS",
+      "crsPlaceholder": "e.g. EPSG:25832",
+      "crsPresetLabel": "Common coordinate systems…",
+      "local": "Local coordinates: place the building at the map centre",
+      "crsHelp": "Many IndoorGML files have no CRS. Enter the EPSG code of their coordinates, or, for a model in a local building frame (metres from an origin), place it at the map centre to view it.",
+      "layer": {
+        "cells": "{{name}} cells",
+        "transitions": "{{name}} navigation network",
+        "states": "{{name}} navigation nodes"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS layer",
@@ -3717,6 +3744,7 @@
       "photos": "Geotagged photos",
       "gpx": "GPX layer",
       "landxml": "LandXML layer",
+      "indoorgml": "IndoorGML layer",
       "polyline": "Encoded polyline",
       "mbtiles": "MBTiles layer",
       "xyz": "XYZ layer",

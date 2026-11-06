@@ -88,6 +88,7 @@ export function AddDataMenu({
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     landxml: { onSelect: () => onSetAddDataKind("landxml") },
+    indoorgml: { onSelect: () => onSetAddDataKind("indoorgml") },
     polyline: { onSelect: () => onSetAddDataKind("polyline") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },
     "osm-pbf": { onSelect: onOpenOsmPbfDialog, disabled: osmPbfBusy },
