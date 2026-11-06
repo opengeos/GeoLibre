@@ -94,6 +94,12 @@ const SAMPLE_VECTOR_DATASETS: VectorSampleDataset[] = [
     url: "https://data.source.coop/giswqs/opengeos/berlin-hbf-indoor.geojson",
   },
   {
+    // Apple's IMDF sample venue (MIT licensed), opened by GeoLibre's IMDF
+    // importer as stacked, floor-picker-linked layers (#3341).
+    label: "Dinoseum indoor venue (IMDF)",
+    url: "https://data.source.coop/giswqs/opengeos/Dinoseum.zip",
+  },
+  {
     label: "H3 building counts",
     url: "https://data.source.coop/giswqs/opengeos/building_count_h3.parquet",
   },
@@ -993,6 +999,8 @@ function createVectorControl(
   // After the container grouping above, so its addData wrapper runs inside this
   // one and a container's tables are grouped before they are adopted.
   wireVectorAdoption(control);
+  // Outermost: an IMDF zip URL never reaches the control at all.
+  wireImdfUrlImports(control);
   wireVectorStoreSync(control);
   patchVectorControlOnRemove(control, panelStateSyncHandler);
   defaultVectorFitToPreference(control);
@@ -1284,6 +1292,48 @@ export async function routeImdfFileSelection(files: readonly KmlFileImport[]): P
   for (const { file } of files) if (!(await isImdfZipFile(file))) return false;
   await kmlFileImportHandler([...files]);
   return true;
+}
+
+/** Whether a URL's path names a `.zip` (ignoring the query and fragment). */
+function isZipUrl(source: string): boolean {
+  try {
+    return /\.zip$/i.test(new URL(source).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Route an IMDF zip loaded by URL (the panel's Load button or its sample menu)
+ * to the host importer instead of the vector control, which would read it as
+ * a zipped shapefile. Any other URL, a zip that is not IMDF, or a zip that
+ * cannot be fetched is passed to the control unchanged, so its own error
+ * reporting still applies. A restore replay (an explicit `id`) is never IMDF,
+ * since IMDF layers are store layers, and is passed straight through.
+ *
+ * @param control - The vector control whose `addData` is wrapped.
+ */
+export function wireImdfUrlImports(control: Pick<VectorControl, "addData">): void {
+  const addData = control.addData.bind(control);
+  control.addData = async (source, options = {}) => {
+    if (typeof source !== "string" || options.id || !kmlFileImportHandler || !isZipUrl(source)) {
+      return addData(source, options);
+    }
+    let blob: Blob | null = null;
+    try {
+      const response = await fetch(source);
+      if (response.ok) blob = await response.blob();
+    } catch {
+      blob = null;
+    }
+    if (!blob || !(await isImdfZipFile(blob))) return addData(source, options);
+    const name = decodeURIComponent(new URL(source).pathname.split("/").pop() || "venue.zip");
+    await kmlFileImportHandler([{ file: new File([blob], name, { type: "application/zip" }) }]);
+    // The layers are store layers, not the control's: there is no control
+    // layer to report. The panel ignores the value; the URL helpers read the
+    // control's layer list instead.
+    return { id: "", name } as unknown as Awaited<ReturnType<VectorControl["addData"]>>;
+  };
 }
 
 /** Whether every selected file is a KML/KMZ (and there is at least one). */
