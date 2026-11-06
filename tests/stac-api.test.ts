@@ -2508,10 +2508,10 @@ test("stacDateInterval sends RFC 3339 bounds that cover the whole end day", () =
   assert.equal(stacDateInterval("", ""), undefined);
   assert.equal(
     stacDateInterval("2025-07-01", "2025-08-31"),
-    "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999Z",
+    "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999999Z",
   );
   assert.equal(stacDateInterval("2025-07-01", ""), "2025-07-01T00:00:00Z/..");
-  assert.equal(stacDateInterval("", "2025-08-31"), "../2025-08-31T23:59:59.999Z");
+  assert.equal(stacDateInterval("", "2025-08-31"), "../2025-08-31T23:59:59.999999Z");
 });
 
 test("searchStacApi posts the RFC 3339 date interval, and a static search keeps end-day items", async () => {
@@ -2528,11 +2528,12 @@ test("searchStacApi posts the RFC 3339 date interval, and a static search keeps 
       searchUrl: "https://example.com/v1/search",
       collections: [],
       children: [],
+      root: {},
     },
     { datetime: stacDateInterval("2025-07-01", "2025-08-31"), limit: 20 },
     apiFetcher,
   );
-  assert.equal(posted?.datetime, "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999Z");
+  assert.equal(posted?.datetime, "2025-07-01T00:00:00Z/2025-08-31T23:59:59.999999Z");
 
   const docs: Record<string, unknown> = {
     "https://example.com/stac/catalog.json": {

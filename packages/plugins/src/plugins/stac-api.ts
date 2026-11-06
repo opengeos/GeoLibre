@@ -664,10 +664,14 @@ function parseItems(raw: unknown, responseUrl: string): StacSearchResult {
  * Builds a STAC `datetime` interval from the panel's date-only start and end fields.
  *
  * STAC Item Search requires RFC 3339 date-times, so a bare `2025-07-01` is rejected by
- * strict APIs such as Earth Search ("datetime value is invalid"). The start is widened to
- * the first instant of its day and the end to the last, both in UTC, so a range that ends
- * on a given day still includes the scenes captured that afternoon. An empty side becomes
- * the open `..` bound; with both empty there is no filter.
+ * strict APIs such as Earth Search ("datetime value is invalid"). The dates are read as UTC
+ * calendar days, matching the UTC timestamps STAC items carry: the start is widened to the
+ * first instant of its day and the end to the last, so a range that ends on a given day
+ * still includes the scenes captured that afternoon. STAC intervals are closed, so the end
+ * is the day's last microsecond rather than the next midnight, which would also match
+ * items stamped at exactly 00:00 of the following day; microseconds cover the finest
+ * precision common backends store (pgstac's `timestamptz`). An empty side becomes the open
+ * `..` bound; with both empty there is no filter.
  *
  * @param start - Start date as `YYYY-MM-DD`, or empty for an open start.
  * @param end - End date as `YYYY-MM-DD`, or empty for an open end.
@@ -679,7 +683,7 @@ export function stacDateInterval(start: string, end: string): string | undefined
   if (!from && !to) return undefined;
   const bound = (value: string, time: string) =>
     !value ? ".." : /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T${time}Z` : value;
-  return `${bound(from, "00:00:00")}/${bound(to, "23:59:59.999")}`;
+  return `${bound(from, "00:00:00")}/${bound(to, "23:59:59.999999")}`;
 }
 
 export async function searchStacApi(
