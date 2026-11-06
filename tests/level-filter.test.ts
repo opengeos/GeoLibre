@@ -366,3 +366,16 @@ describe("floor picker bookkeeping", () => {
     assert.equal(useAppStore.getState().layers, before);
   });
 });
+
+describe("clampFloorListHeight", () => {
+  it("keeps at least three floors and stays within the room the map leaves", async () => {
+    const { clampFloorListHeight } =
+      await import("../apps/geolibre-desktop/src/components/floor-picker/floor-list-size");
+    assert.equal(clampFloorListHeight(10, 25, 600), 75);
+    assert.equal(clampFloorListHeight(400, 25, 600), 400);
+    assert.equal(clampFloorListHeight(5000, 25, 600), 600);
+    // Too little room keeps the three-floor minimum.
+    assert.equal(clampFloorListHeight(400, 25, 40), 75);
+    assert.equal(clampFloorListHeight(5000, 25, null), 5000);
+  });
+});
