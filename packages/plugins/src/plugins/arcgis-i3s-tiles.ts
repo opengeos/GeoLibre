@@ -140,6 +140,11 @@ let i3sOverlayMounted = false;
 let i3sDeckGL: GeoLibreDeckGL | null = null;
 /** The I3S mesh layer, built on first use (see i3s-mesh-layer.ts). */
 let i3sMeshLayerClass: unknown = null;
+/**
+ * The one attempt to build it. Kept as a promise so a failed load (which falls
+ * back to deck.gl's own mesh layer) is decided, and warned about, once.
+ */
+let i3sMeshLayerLoad: Promise<unknown> | null = null;
 
 /**
  * Build the I3S mesh layer class from the loaded deck.gl and the luma.gl
@@ -316,10 +321,11 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
   i3sLoader ??= await loadI3sLoader();
   // Without the replacement layer deck.gl's own mesh layer is used: the scene
   // may not draw on deck.gl 9.4, but the overlay, fly-to and visibility work.
-  i3sMeshLayerClass ??= await loadI3sMeshLayerClass(i3sDeckGL).catch((error) => {
+  i3sMeshLayerLoad ??= loadI3sMeshLayerClass(i3sDeckGL).catch((error) => {
     console.warn("[GeoLibre] Using deck.gl's default I3S mesh layer", error);
     return null;
   });
+  i3sMeshLayerClass = await i3sMeshLayerLoad;
 
   const map = app.getMap?.() ?? app.getMapboxMap?.() ?? null;
   if (i3sOverlay && i3sBoundMap === map) {
