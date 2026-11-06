@@ -1197,6 +1197,39 @@ export interface LayerQuickFilter {
   text?: string;
 }
 
+/**
+ * Floor picker (issue #3341): which floors of a multi-level layer are drawn.
+ *
+ * `all` (the default) draws every floor; `only` draws the chosen one; `below`
+ * draws it and every floor under it, the cutaway view of a building with the
+ * upper storeys lifted off.
+ */
+export type LevelFilterMode = "all" | "only" | "below";
+
+/**
+ * A layer linked to the on-map floor picker. The picker lists the levels found
+ * in {@link field} across every linked layer and writes the choice back here.
+ *
+ * {@link values} holds the raw attribute values that match the choice, so the
+ * compiled filter is a plain `in` test every renderer evaluates the same way,
+ * even for OpenStreetMap's multi-level values such as `"0;1"` or `"0-2"`.
+ */
+export interface LayerLevelFilter {
+  /** The feature property that holds the floor, e.g. `level` or `ordinal`. */
+  field: string;
+  /** Which floors are drawn. Defaults to `all`. */
+  mode?: LevelFilterMode;
+  /** The chosen level, as the picker labels it (`"-1"`, `"0"`, `"G"`). */
+  level?: string | null;
+  /**
+   * The raw `field` values that match {@link level} under {@link mode},
+   * resolved from the layer's features when the choice is made. Ignored in
+   * `all` mode. Absent while unresolved, which draws every floor until the
+   * picker resolves it.
+   */
+  values?: (string | number)[];
+}
+
 /** Persisted refresh policy and most recent synchronization result for a layer. */
 export interface LayerConnection {
   /** Owning layer id. Repeated here so records remain self-describing when exported. */
@@ -1400,6 +1433,13 @@ export interface GeoLibreLayer {
    * a host page's filter and a user's filter narrow the layer together.
    */
   quickFilters?: LayerQuickFilter[];
+  /**
+   * Floor picker link (issue #3341). Persisted control state: the picker
+   * compiles it into the layer's filter alongside {@link filterExpression} and
+   * {@link quickFilters}, so it narrows the layer together with the Time Slider
+   * window and every other filter.
+   */
+  levelFilter?: LayerLevelFilter;
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the

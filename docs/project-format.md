@@ -522,6 +522,29 @@ The expression is saved with the project and remains active until it is cleared
 from the Select by Expression panel or from the layer's **Clear filters** action.
 It combines with Quick Filters and the transient filters described below.
 
+A layer linked to the on-map floor picker carries a `levelFilter`: the field
+holding each feature's floor, the picker's `mode` (`all`, `only`, or `below`
+for a floor and the ones under it), the chosen `level` as the picker labels it,
+and the raw `values` of that field that match the choice:
+
+```json
+{
+  "levelFilter": {
+    "field": "level",
+    "mode": "only",
+    "level": "0",
+    "values": ["0", "0;1", "-1-0"]
+  }
+}
+```
+
+The `values` are resolved from the layer's features when a floor is chosen
+(they include OpenStreetMap's multi-floor values such as `0;1`), and the layer is
+filtered with `["in", ["get", field], ["literal", values]]`, combined with the
+layer's other filters under one `all`. A link without `values` draws every floor
+until the app resolves them from the layer's features. Every linked layer shares
+one choice.
+
 What is stored is a plain MapLibre expression, so the Expression Builder's `@`
 variables (`@project_name`, `@layer_name`, `@feature_count`, `@map_zoom`,
 `@map_scale`) are resolved to literal values at the moment the filter is

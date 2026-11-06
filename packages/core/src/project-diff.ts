@@ -61,7 +61,7 @@ export interface LayerDiff {
   style: ProjectValueChange[];
   /** Label style keys (`style.labels.*`), without the `labels.` prefix. */
   labels: ProjectValueChange[];
-  /** `filterExpression` and `quickFilters`. */
+  /** `filterExpression`, `quickFilters` and `levelFilter`. */
   filter: ProjectValueChange[];
   /** `type`, `source.*` and `sourcePath`. */
   source: ProjectValueChange[];
@@ -127,6 +127,7 @@ const LAYER_GROUPED_KEYS = new Set([
   "geojson",
   "filterExpression",
   "quickFilters",
+  "levelFilter",
   "source",
   "sourcePath",
   // Derived from the layer order on save; reordering is reported separately.
@@ -541,8 +542,16 @@ function diffLayer(
   }
 
   diffRecords(
-    { filterExpression: a.filterExpression, quickFilters: a.quickFilters },
-    { filterExpression: b.filterExpression, quickFilters: b.quickFilters },
+    {
+      filterExpression: a.filterExpression,
+      quickFilters: a.quickFilters,
+      levelFilter: a.levelFilter,
+    },
+    {
+      filterExpression: b.filterExpression,
+      quickFilters: b.quickFilters,
+      levelFilter: b.levelFilter,
+    },
     { depth: 0, maxLength },
     diff.filter,
   );

@@ -22,6 +22,7 @@ import { EditorTrackingSection } from "../EditorTrackingSection";
 import { LayerJoinsSection } from "../LayerJoinsSection";
 import { PasteStyleDialog } from "../PasteStyleDialog";
 import { PopupSection } from "../PopupSection";
+import { FloorPickerSection } from "../../floor-picker/FloorPickerSection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
 import { VirtualFieldsSection } from "../VirtualFieldsSection";
 import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
@@ -499,6 +500,15 @@ export function VectorStylePanel({
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
               />
+            </>
+          ) : null}
+          {/* The floor picker reads the floors from the layer's own features, so it
+              needs them in the store. Same gate as Quick filters: a custom or deck.gl
+              layer takes no MapLibre filter, so a floor choice could not narrow it. */}
+          {hasQuickFilterControls && layer.geojson ? (
+            <>
+              <Separator />
+              <FloorPickerSection key={`fp-${layer.id}`} layer={layer} />
             </>
           ) : null}
           {/* Persistent attribute joins need the layer's features in the store

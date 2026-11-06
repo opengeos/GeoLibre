@@ -142,6 +142,7 @@ classify_layer(path, layer, column, class_count=5, colormap="viridis",
                scheme="equal-interval")
 list_layer_properties(path, layer)
 set_layer_filter(path, layer, expression=None)
+set_floor_picker(path, layer, field="level", level=None, mode=None)
 set_labels(path, layer, field=None, expression=None, enabled=None,
            placement=None, size=None, color=None, halo_color=None,
            halo_width=None, min_zoom=None, max_zoom=None,
@@ -190,6 +191,11 @@ writes: `[">=", ["get", "pop"], 100000]`, or several combined with `all` /
 `any`. The data is untouched. Omit `expression` to clear it. An expression that
 is not true/false (`["get", "pop"]`) is refused, because the app would drop it
 on load.
+
+`set_floor_picker` links an indoor layer (rooms with a `level` or `ordinal`
+field) to the app's on-map floor picker. `level` picks the floor shown (`"0"`,
+`-1`; omit it to keep the floor in view, `mode="all"` for every floor) and `mode="below"` keeps the floors under it, for
+a cutaway of a stacked extrusion. The floor is shared by every linked layer.
 
 `set_labels` labels features from a property (`field`) or a text `expression`
 (`["concat", ["get", "name"], " (", ["get", "pop"], ")"]`). Settings you omit

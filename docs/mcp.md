@@ -260,6 +260,7 @@ Give it a directory meant for maps, not your home directory.
 | `classify_layer` | Build a graduated choropleth from a numeric column. |
 | `list_layer_properties` | List a layer's feature properties with sample values. |
 | `set_layer_filter` | Hide the features that do not match a boolean MapLibre expression (the saved filter Select by Expression → Filter layer writes); omit the expression to clear it. |
+| `set_floor_picker` | Link a multi-floor layer (indoor rooms with a `level` field) to the app's on-map floor picker and choose the floor shown, or that floor and the ones below it; `field: null` unlinks. |
 | `set_labels` | Label features from a property or a text expression, with size, colors, halo, zoom range, anchor, and the rarer settings under `options`. Settings left out keep their values. |
 
 Layers are addressed by id **or** by display name, so a client can work from
