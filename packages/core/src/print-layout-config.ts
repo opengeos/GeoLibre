@@ -274,6 +274,13 @@ function str(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
 }
 
+/** A `#RGB` / `#RRGGBB` colour, or `fallback` for anything else. */
+function hexColor(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
+    ? value.trim()
+    : fallback;
+}
+
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -379,7 +386,9 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     customHeight: num(raw.customHeight, d.customHeight, 1, 100000),
     customUnit: oneOf(raw.customUnit, ["mm", "px"] as const, d.customUnit),
     pageMargin: oneOf(raw.pageMargin, ["normal", "narrow", "none"] as const, d.pageMargin),
-    pageBackground: str(raw.pageBackground, d.pageBackground),
+    // Drawn behind the page and read for the text contrast, so only a hex
+    // colour is kept: a hand-edited name or typo falls back to white.
+    pageBackground: hexColor(raw.pageBackground, d.pageBackground),
     panelTheme: oneOf(raw.panelTheme, ["light", "dark"] as const, d.panelTheme),
     showPageBorder: bool(raw.showPageBorder, d.showPageBorder),
     pageBorderColor: str(raw.pageBorderColor, d.pageBorderColor),

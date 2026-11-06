@@ -236,7 +236,6 @@ function patchUi(state: PrintLayoutState, patch: Partial<PrintLayoutUiState>): P
   return { ...state, ...patch };
 }
 
-/** Clamp a controls column width to its bounds. */
 /**
  * Record a typed or picked background colour in its draft field, and commit it
  * to the layout only once it is a complete `#RGB` / `#RRGGBB` value, so a
@@ -252,6 +251,7 @@ function commitHexColor(
   return HEX_COLOR.test(value.trim()) ? patchLayout(next, { [field]: value.trim() }) : next;
 }
 
+/** Clamp a controls column width to its bounds. */
 function clampControlsWidth(width: number): number {
   return Math.max(CONTROLS_MIN_WIDTH, Math.min(CONTROLS_MAX_WIDTH, width));
 }

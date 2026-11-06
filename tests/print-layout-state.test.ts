@@ -173,7 +173,11 @@ describe("printLayoutReducer: map frame", () => {
     const typing = run(partial, { type: "commitPageBackground", value: "#0d1b" });
     assert.equal(typing.pageBackgroundDraft, "#0d1b");
     assert.equal(typing.layout.pageBackground, "#0d1");
-    const full = run(typing, { type: "commitPageBackground", value: "#0d1b2a" });
+    // Five digits are neither #RGB nor #RRGGBB: still only a draft.
+    const fiveDigits = run(typing, { type: "commitPageBackground", value: "#0d1b2" });
+    assert.equal(fiveDigits.pageBackgroundDraft, "#0d1b2");
+    assert.equal(fiveDigits.layout.pageBackground, "#0d1");
+    const full = run(fiveDigits, { type: "commitPageBackground", value: "#0d1b2a" });
     assert.equal(full.layout.pageBackground, "#0d1b2a");
     // The map background is a separate colour and stays as it was.
     assert.equal(full.layout.mapBackground, partial.layout.mapBackground);

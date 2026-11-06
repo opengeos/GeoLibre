@@ -1012,7 +1012,7 @@ export function drawLayoutContext(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawInfoBlock(ctx, bodyX + bodyW - inset, bodyY + bodyH - inset, infoLines, unit, colors);
+    drawInfoBlock(ctx, colors, bodyX + bodyW - inset, bodyY + bodyH - inset, infoLines, unit);
     ctx.restore();
   }
 
@@ -1028,6 +1028,7 @@ export function drawLayoutContext(
   if (hasScale) {
     scaleTopY = drawScaleBar(
       ctx,
+      colors,
       navAnchorX,
       bodyY + bodyH - inset,
       bodyW * 0.28,
@@ -1035,7 +1036,6 @@ export function drawLayoutContext(
       unit,
       scaleRatio,
       opts.scaleUnit ?? "metric",
-      colors,
     );
   }
   if (opts.showNorthArrow) {
@@ -1045,12 +1045,12 @@ export function drawLayoutContext(
       // Stack the north arrow directly above the scale bar (the "navigation duo").
       drawNorthArrow(
         ctx,
+        colors,
         navAnchorX - discRadius,
         scaleTopY - unit * 1.4 - discRadius,
         arrowRadius,
         opts.bearingDeg,
         unit,
-        colors,
       );
     } else {
       // Isolated fallback: top-right corner inside the map.
@@ -1058,12 +1058,12 @@ export function drawLayoutContext(
       const arrowMargin = unit * 3;
       drawNorthArrow(
         ctx,
+        colors,
         bodyX + bodyW - arrowMargin - discRadius,
         bodyY + arrowMargin + topExtent,
         arrowRadius,
         opts.bearingDeg,
         unit,
-        colors,
       );
     }
   }
@@ -1077,25 +1077,17 @@ export function drawLayoutContext(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    legendHeight = drawLegend(
-      ctx,
-      bodyX + inset,
-      bodyY + inset,
-      opts.legend,
-      unit,
-      {
-        title: opts.legendTitle,
-        groupByLayer: opts.legendGroupByLayer,
-        markerIcons: opts.markerIcons,
-        // Legend sizes are stored in MapLibre CSS pixels. The capture is in
-        // device pixels and is then fitted into the page body, so apply both
-        // transforms to make the legend symbols match their map counterparts.
-        mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
-        maxHeight: bodyH - inset * 2,
-        formatNote: opts.legendFormatNote,
-      },
-      colors,
-    );
+    legendHeight = drawLegend(ctx, colors, bodyX + inset, bodyY + inset, opts.legend, unit, {
+      title: opts.legendTitle,
+      groupByLayer: opts.legendGroupByLayer,
+      markerIcons: opts.markerIcons,
+      // Legend sizes are stored in MapLibre CSS pixels. The capture is in
+      // device pixels and is then fitted into the page body, so apply both
+      // transforms to make the legend symbols match their map counterparts.
+      mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
+      maxHeight: bodyH - inset * 2,
+      formatNote: opts.legendFormatNote,
+    });
     ctx.restore();
   }
 
@@ -1135,6 +1127,7 @@ export function drawLayoutContext(
     drawCornerPanel(colorbar.position, (corner, stackOffset) =>
       drawColorbar(
         ctx,
+        colors,
         { ...colorbar, position: corner },
         bodyX,
         bodyY,
@@ -1142,7 +1135,6 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
-        colors,
       ),
     );
   }
@@ -1152,6 +1144,7 @@ export function drawLayoutContext(
     drawCornerPanel(customLegend.position, (corner, stackOffset) =>
       drawCustomLegend(
         ctx,
+        colors,
         { ...customLegend, position: corner },
         bodyX,
         bodyY,
@@ -1159,7 +1152,6 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
-        colors,
       ),
     );
   }
@@ -1169,6 +1161,7 @@ export function drawLayoutContext(
     drawCornerPanel(table.position, (corner, stackOffset) =>
       drawDataTable(
         ctx,
+        colors,
         { ...table, position: corner },
         bodyX,
         bodyY,
@@ -1176,7 +1169,6 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
-        colors,
       ),
     );
   }
@@ -1186,6 +1178,7 @@ export function drawLayoutContext(
     drawCornerPanel(chart.position, (corner, stackOffset) =>
       drawDataChart(
         ctx,
+        colors,
         { ...chart, position: corner },
         bodyX,
         bodyY,
@@ -1193,7 +1186,6 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
-        colors,
       ),
     );
   }
@@ -1213,12 +1205,12 @@ export function drawLayoutContext(
 /** Draw a north-pointing arrow rotated to account for map bearing. */
 function drawNorthArrow(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   cx: number,
   cy: number,
   radius: number,
   bearingDeg: number,
   unit: number,
-  colors: PanelColors,
 ): void {
   ctx.save();
   // Translucent backing disc for legibility over imagery.
@@ -1298,6 +1290,7 @@ function formatSpanLabel(span: number, label: string): string {
  */
 function drawScaleBar(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   rightX: number,
   bottomY: number,
   maxWidthPx: number,
@@ -1305,7 +1298,6 @@ function drawScaleBar(
   unit: number,
   scaleRatio = 0,
   scaleUnit: MapScaleUnit = "metric",
-  colors: PanelColors,
 ): number {
   const maxMeters = maxWidthPx * metersPerPixel;
   // Round to a nice number in the target unit (feet, miles, km, ...) so the bar
@@ -1413,11 +1405,11 @@ function buildInfoLines(opts: LayoutOptions, scaleRatio: number): InfoLine[] {
  */
 function drawInfoBlock(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   rightX: number,
   bottomY: number,
   lines: InfoLine[],
   unit: number,
-  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -1488,6 +1480,7 @@ type ColorbarSpec = NonNullable<LayoutOptions["colorbar"]>;
  */
 function drawColorbar(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   cb: ColorbarSpec,
   bodyX: number,
   bodyY: number,
@@ -1495,7 +1488,6 @@ function drawColorbar(
   bodyH: number,
   unit: number,
   stackOffset = 0,
-  colors: PanelColors,
 ): number {
   const vertical = cb.orientation === "vertical";
   const pad = unit * 1.4;
@@ -1665,6 +1657,7 @@ type CustomLegendSpec = NonNullable<LayoutOptions["customLegend"]>;
  */
 function drawCustomLegend(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   cl: CustomLegendSpec,
   bodyX: number,
   bodyY: number,
@@ -1672,7 +1665,6 @@ function drawCustomLegend(
   bodyH: number,
   unit: number,
   stackOffset = 0,
-  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
@@ -1795,6 +1787,7 @@ type DataTableSpec = NonNullable<LayoutOptions["dataTable"]>;
  */
 function drawDataTable(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   table: DataTableSpec,
   bodyX: number,
   bodyY: number,
@@ -1802,7 +1795,6 @@ function drawDataTable(
   bodyH: number,
   unit: number,
   stackOffset = 0,
-  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -1940,6 +1932,7 @@ type DataChartSpec = NonNullable<LayoutOptions["dataChart"]>;
  */
 function drawDataChart(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   chart: DataChartSpec,
   bodyX: number,
   bodyY: number,
@@ -1947,7 +1940,6 @@ function drawDataChart(
   bodyH: number,
   unit: number,
   stackOffset = 0,
-  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -2159,12 +2151,12 @@ function drawDataChart(
  */
 function drawLegendMarker(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   marker: LegendMarker,
   sx: number,
   sy: number,
   size: number,
   fallbackColor: string,
-  colors: PanelColors,
   markerIcons?: ReadonlyMap<string, CanvasImageSource>,
   boxed = true,
 ): void {
@@ -2217,6 +2209,7 @@ function drawLegendMarker(
  */
 function drawLegend(
   ctx: CanvasRenderingContext2D,
+  colors: PanelColors,
   x: number,
   y: number,
   entries: LegendEntry[],
@@ -2231,7 +2224,6 @@ function drawLegend(
     maxHeight?: number;
     formatNote?: (count: number) => string;
   },
-  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const titleSize = unit * 2;
@@ -2448,12 +2440,12 @@ function drawLegend(
       const inset = (rowSwatch - edge) / 2;
       drawLegendMarker(
         ctx,
+        colors,
         r.marker,
         sx + inset,
         sy + inset,
         edge,
         r.color,
-        colors,
         opts.markerIcons,
         r.size === undefined,
       );

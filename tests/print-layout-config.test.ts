@@ -44,6 +44,23 @@ describe("normalizePrintLayoutConfig", () => {
     assert.equal(config.pageBackground, "#ffffff");
   });
 
+  it("keeps only a hex page background", () => {
+    for (const [raw, kept] of [
+      ["#0d1b2a", "#0d1b2a"],
+      [" #0D1 ", "#0D1"],
+      ["navy", "#ffffff"],
+      ["red;", "#ffffff"],
+      ["#0d1b2", "#ffffff"],
+      [42, "#ffffff"],
+    ] as const) {
+      assert.equal(
+        normalizePrintLayoutConfig({ pageBackground: raw })?.pageBackground,
+        kept,
+        String(raw),
+      );
+    }
+  });
+
   it("round-trips every field of a fully populated config", () => {
     const saved = withOverrides({
       title: "Filière dentaire",

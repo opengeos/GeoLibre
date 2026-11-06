@@ -15,6 +15,18 @@ interface BackgroundColorFieldProps {
   onCommit: (value: string) => void;
 }
 
+/**
+ * The value for the native colour picker, which accepts only `#rrggbb`: a
+ * `#rgb` shorthand is expanded, and anything else shows `fallback` instead of
+ * the picker's own black. The draft and the committed colour are unchanged.
+ */
+export function pickerColor(value: string, fallback: string): string {
+  const hex = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
+  return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : fallback;
+}
+
 /** A background colour: a picker, a free-form hex field and a reset button. */
 export function BackgroundColorField({
   id,
@@ -33,7 +45,7 @@ export function BackgroundColorField({
           id={id}
           type="color"
           className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-background"
-          value={value}
+          value={pickerColor(value, resetValue)}
           onChange={(e) => onCommit(e.target.value)}
         />
         <Input
