@@ -1475,11 +1475,15 @@ function applyGeoJsonExtrusion(
     const index = entityFeatureIndex(viewer, entity);
     const feat = Number.isInteger(index) && features ? features[index] : null;
 
-    const height = extrusionFeatureHeight(viewer, entity, feat, heightEvaluator, heightProp);
+    const top = extrusionFeatureHeight(
+      viewer,
+      entity,
+      feat,
+      heightEvaluator,
+      heightProp,
+      heightScale,
+    );
     const base = extrusionFeatureBase(feat, baseEvaluator, flatBase);
-    // The advanced expression is the roof altitude as written; the property is
-    // scaled, matching `extrusionHeightValue` on the 2D map.
-    const top = feat && heightEvaluator ? height : height * heightScale;
 
     // Never below the base: a negative height property or expression would
     // otherwise put the roof under the floor.
@@ -1505,9 +1509,11 @@ function applyGeoJsonExtrusion(
 }
 
 /**
- * A polygon entity's raw extrusion height (before scale and base): the height
- * expression, else the feature's height property, else the entity's own
- * property when the entity maps to no feature; 0 when none is a number.
+ * A polygon entity's roof altitude in metres, as `extrusionHeightValue` gives
+ * it on the 2D map: the height expression's value as written, else the
+ * feature's height property (or, for an entity that maps to no feature, the
+ * entity's own property) times `heightScale`; 0 when none is a number. An
+ * expression that throws falls back to the scaled property.
  */
 function extrusionFeatureHeight(
   viewer: CesiumWidget,
@@ -1515,11 +1521,14 @@ function extrusionFeatureHeight(
   feat: Feature | null,
   heightEvaluator: ((f: Feature) => unknown) | undefined,
   heightProp: string,
+  heightScale: number,
 ): number {
   let rawHeight: unknown;
+  let scale = heightScale;
   if (feat && heightEvaluator) {
     try {
       rawHeight = heightEvaluator(feat);
+      scale = 1;
     } catch {
       rawHeight = feat.properties?.[heightProp];
     }
@@ -1533,7 +1542,7 @@ function extrusionFeatureHeight(
 
   const num =
     typeof rawHeight === "number" && Number.isFinite(rawHeight) ? rawHeight : Number(rawHeight);
-  return Number.isFinite(num) ? num : 0;
+  return Number.isFinite(num) ? num * scale : 0;
 }
 
 /**

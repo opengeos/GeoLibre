@@ -314,8 +314,10 @@ export function buildExtrusionModel(
     if (polygons.length === 0) return;
     const height = Number(readHeight(feature));
     const top = Number.isFinite(height) ? height : 0;
+    // MapLibre clamps a negative fill-extrusion-base to the ground, and so do
+    // the Cesium and ArcGIS scenes; match them so the solid is as drawn.
     const baseValue = Number(readBase(feature));
-    const base = Number.isFinite(baseValue) ? baseValue : 0;
+    const base = Number.isFinite(baseValue) ? Math.max(0, baseValue) : 0;
     if (!(top > base)) {
       skipped += 1;
       return;

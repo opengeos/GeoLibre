@@ -1763,6 +1763,51 @@ describe("CesiumLayerSync", () => {
     assert.equal(poly.material.color.alpha, 0.9);
   });
 
+  it("scales the height property when the height expression throws", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "throwing-height",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "b1",
+            // `to-number` of "abc" throws at evaluation time.
+            properties: { height: 10, label: "abc" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionHeightScale: 2,
+        extrusionAdvancedStyleEnabled: true,
+        extrusionHeightExpression: '["to-number", ["get", "label"]]',
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ polygon: { extrudedHeight: { value: number } } }> };
+    };
+    assert.equal(ds.entities.values[0].polygon.extrudedHeight.value, 20);
+  });
+
   it("stacks floors from a data-driven extrusion base", async () => {
     const sync = newSync(f);
     const floor = (id: string, level: number) => ({

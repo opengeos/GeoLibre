@@ -662,15 +662,19 @@ function parseExtrusionHeight(
 
 /**
  * Recover the extrusion base config from a `fill-extrusion-base` value, the
- * inverse of `extrusionBaseValue`: a flat number is the base; the exporter's
- * `["*", ["to-number", ["get", p], 0], scale]`, optionally wrapped in
- * `["+", …, offset]`, is the base property, scale and offset; any other
- * expression round-trips through the advanced base expression.
+ * inverse of `extrusionBaseValue`: a flat number is the base; exactly the
+ * exporter's `["*", ["to-number", ["get", p], 0], scale]`, optionally wrapped
+ * in `["+", …, offset]`, is the base property, scale and offset; any other
+ * expression round-trips through the advanced base expression. Each branch
+ * clears the base settings it does not use, so a layer's previous base
+ * property or expression cannot outrank the imported base.
  */
 function parseExtrusionBase(value: unknown, patch: Partial<Omit<LayerStyle, "labels">>): void {
   const flat = asFiniteNumber(value);
   if (flat !== null) {
     patch.extrusionBase = flat;
+    patch.extrusionBaseProperty = "";
+    patch.extrusionBaseExpression = "";
     return;
   }
   const array = asArray(value);
@@ -684,19 +688,43 @@ function parseExtrusionBase(value: unknown, patch: Partial<Omit<LayerStyle, "lab
       offset = addend;
     }
   }
-  const product = asArray(scaled);
-  if (product && product[0] === "*" && product.length === 3) {
-    const property = wrappedProperty(product[1]);
-    const scale = asFiniteNumber(product[2]);
-    if (property && scale !== null) {
-      patch.extrusionBase = offset;
-      patch.extrusionBaseProperty = property;
-      patch.extrusionBaseScale = scale;
-      return;
-    }
+  const property = exporterBaseProperty(scaled);
+  if (property) {
+    patch.extrusionBase = offset;
+    patch.extrusionBaseProperty = property.name;
+    patch.extrusionBaseScale = property.scale;
+    patch.extrusionBaseExpression = "";
+    return;
+  }
+  if (!patch.extrusionAdvancedStyleEnabled) {
+    // Turning advanced mode on would wake height and colour expressions the
+    // layer kept while it was off; the imported style did not ask for them.
+    patch.extrusionHeightExpression ??= "";
+    patch.extrusionColorExpression ??= "";
   }
   patch.extrusionAdvancedStyleEnabled = true;
   patch.extrusionBaseExpression = JSON.stringify(value);
+}
+
+/**
+ * The property and scale of exactly the exporter's base shape,
+ * `["*", ["to-number", ["get", p], 0], scale]`, or null for anything else (a
+ * different fallback, an object-qualified `get`), which must stay an
+ * expression to keep its meaning.
+ */
+function exporterBaseProperty(value: unknown): { name: string; scale: number } | null {
+  const product = asArray(value);
+  if (!product || product[0] !== "*" || product.length !== 3) return null;
+  const toNumber = asArray(product[1]);
+  if (!toNumber || toNumber[0] !== "to-number" || toNumber.length !== 3 || toNumber[2] !== 0) {
+    return null;
+  }
+  const get = asArray(toNumber[1]);
+  if (!get || get[0] !== "get" || get.length !== 2 || typeof get[1] !== "string" || !get[1]) {
+    return null;
+  }
+  const scale = asFiniteNumber(product[2]);
+  return scale === null ? null : { name: get[1], scale };
 }
 
 function clampZoom(value: unknown): number | null {

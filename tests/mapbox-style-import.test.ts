@@ -422,6 +422,63 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     assert.equal(result.extrusionBaseScale, 3.5);
   });
 
+  it("keeps base expressions that only resemble the exporter's shape", () => {
+    const extrusion = (base: unknown) =>
+      parseMapboxStyle({
+        version: 8,
+        sources: {},
+        layers: [
+          {
+            id: "floors",
+            type: "fill-extrusion",
+            source: "s",
+            paint: { "fill-extrusion-base": base },
+          },
+        ],
+      }).style;
+    // A non-zero fallback and an object-qualified `get` change the meaning,
+    // so they stay expressions rather than becoming a base property.
+    for (const base of [
+      ["*", ["to-number", ["get", "level"], 10], 3],
+      ["*", ["to-number", ["get", "level", ["properties"]], 0], 3],
+    ]) {
+      const result = extrusion(base);
+      assert.equal(result.extrusionBaseProperty, undefined);
+      assert.deepEqual(JSON.parse(result.extrusionBaseExpression ?? ""), base);
+    }
+    // The exporter's shape clears a competing advanced base; a flat base
+    // clears both.
+    const property = extrusion(["*", ["to-number", ["get", "level"], 0], 3]);
+    assert.equal(property.extrusionBaseProperty, "level");
+    assert.equal(property.extrusionBaseExpression, "");
+    const flat = extrusion(4);
+    assert.equal(flat.extrusionBase, 4);
+    assert.equal(flat.extrusionBaseProperty, "");
+    assert.equal(flat.extrusionBaseExpression, "");
+  });
+
+  it("does not wake dormant height or colour expressions for an advanced base", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "floors",
+          type: "fill-extrusion",
+          source: "s",
+          paint: {
+            "fill-extrusion-height": ["*", ["to-number", ["get", "top"], 0], 1],
+            "fill-extrusion-base": ["match", ["get", "floor"], "B1", 0, 10],
+          },
+        },
+      ],
+    }).style;
+    assert.equal(result.extrusionAdvancedStyleEnabled, true);
+    assert.equal(result.extrusionHeightProperty, "top");
+    assert.equal(result.extrusionHeightExpression, "");
+    assert.equal(result.extrusionColorExpression, "");
+  });
+
   it("round-trips an advanced extrusion base expression", () => {
     const expression = ["match", ["get", "floor"], "B1", 0, 10];
     const { style: result } = roundTrip(

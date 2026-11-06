@@ -139,6 +139,27 @@ describe("buildExtrusionModel", () => {
     assert.equal(Math.max(...zs), 13);
   });
 
+  it("gives each solid its own base and clamps a negative one to the ground", () => {
+    const model = buildExtrusionModel(
+      collection(
+        square(4, false, { level: -1, name: "basement" }),
+        square(5, false, { level: 0, name: "ground" }),
+        square(12, false, { level: 2, name: "second" }),
+      ),
+      style({ extrusionBaseProperty: "level", extrusionBaseScale: 3.5 }),
+    );
+    const range = (name: string) => {
+      const solid = model.solids.find((s) => s.name === name);
+      assert.ok(solid, name);
+      const zs = solid.positions.filter((_, i) => i % 3 === 2);
+      return [Math.min(...zs), Math.max(...zs)];
+    };
+    // -1 * 3.5 is below the ground, so the basement starts at 0 as on the map.
+    assert.deepEqual(range("basement"), [0, 4]);
+    assert.deepEqual(range("ground"), [0, 5]);
+    assert.deepEqual(range("second"), [7, 12]);
+  });
+
   it("ignores non-polygon features and names solids", () => {
     const point: Feature = {
       type: "Feature",
