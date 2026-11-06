@@ -223,6 +223,50 @@ def test_polygonize_writes_geojson(tmp_path: Path) -> None:
     assert len(fc["features"]) >= 1
 
 
+@requires_rasterio
+def test_polygonize_orders_containers_before_islands(tmp_path: Path) -> None:
+    """A polygon is written before the islands in its holes (issue #3335).
+
+    GDAL finishes (and emits) the enclosing region last; drawn last, its hole
+    edges cover one-pixel islands, so the output must be largest first.
+    """
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    arr = np.ones((12, 12), dtype="uint8")
+    arr[2:10, 2:10] = 2  # a block of class 2 ...
+    arr[4, 4] = 3  # ... holding one-pixel islands of class 3
+    arr[7, 6] = 3
+    src = tmp_path / "islands.tif"
+    with rasterio.open(
+        src,
+        "w",
+        driver="GTiff",
+        height=12,
+        width=12,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:32617",
+        transform=from_origin(500000, 4000000, 10, 10),
+    ) as dst:
+        dst.write(arr, 1)
+    out = tmp_path / "islands.geojson"
+    _run_script(
+        _RASTER_TOOL_SCRIPTS["polygonize"],
+        {
+            "input_path": str(src),
+            "output_path": str(out),
+            "band": 1,
+            "connectivity": 4,
+            "field": "value",
+        },
+    )
+    values = [f["properties"]["value"] for f in json.loads(out.read_text())["features"]]
+    # Outer class-1 frame, then the class-2 block, then both islands.
+    assert values == [1, 2, 3, 3]
+
+
 def _write_points(path: Path) -> Path:
     """Write a GeoJSON point layer sampling a planar trend z = x + 2y."""
     import numpy as np
