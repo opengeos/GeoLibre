@@ -160,8 +160,12 @@ export function FloorPickerPanel({
       visibleLinked.map((layer) => [layer.id, layer.levelFilter?.field ?? ""]),
     );
     return engine.onMapClick((lngLat) => {
-      // A drawing, measuring or editing tool owns this click.
+      // A drawing, measuring or editing tool owns this click, and so do a
+      // feature selection gesture and Identify (as in activeMapTool), so a
+      // selection vertex or an Identify popup never moves the map under them.
       if (isMapClickClaimed()) return;
+      const { featureSelectionActive, identifyLayerId } = useAppStore.getState();
+      if (featureSelectionActive || identifyLayerId !== null) return;
       for (const feature of engine.identifyFeatures(lngLat)) {
         const field = fields.get(feature.layerId);
         if (!field) continue;
