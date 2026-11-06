@@ -1172,6 +1172,21 @@ describe("compileArcgisLayer extrusion", () => {
     });
   });
 
+  it("clamps a negative flat base to the ground, as MapLibre does", () => {
+    const plan = compileArcgisLayer(
+      { ...buildings, style: { ...buildings.style, extrusionBase: -2, extrusionFloorHeight: 3 } },
+      { scene: true },
+    );
+    if (plan.kind !== "geojson") return assert.fail("expected a geojson plan");
+    const [part] = plan.parts;
+    assert.deepEqual(part.elevationInfo, { mode: "relative-to-ground", offset: 0 });
+    // Roof max(0, -2) + 3 = 3 above a floor on the ground: 3 m, not 5 m.
+    assert.deepEqual(
+      part.features?.features.map((f) => f.properties?.[ARCGIS_HEIGHT_FIELD]),
+      [3, 3],
+    );
+  });
+
   it("keeps a flat base out of the per-feature attributes", () => {
     const plan = compileArcgisLayer(buildings, { scene: true });
     if (plan.kind !== "geojson") return assert.fail("expected a geojson plan");

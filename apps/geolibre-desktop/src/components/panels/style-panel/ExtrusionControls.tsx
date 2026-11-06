@@ -85,11 +85,11 @@ export function ExtrusionControls({
         return;
       }
 
-      const heightError = validateExpressionJson(
-        draftHeightExpression,
-        t("style.expressionLabels.height"),
-        t,
-      );
+      // A floor height replaces the (then hidden) height expression, so a
+      // leftover invalid one must not block Apply.
+      const heightError = floorHeightSet
+        ? null
+        : validateExpressionJson(draftHeightExpression, t("style.expressionLabels.height"), t);
       if (heightError) {
         setExtrusionError(heightError);
         return;

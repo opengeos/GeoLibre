@@ -993,18 +993,30 @@ function featureValue(
 
 function compileExtrusion(style: LayerStyle): ExtrusionReader {
   const baseValue = extrusionBaseValue(style);
-  const flatBase = typeof baseValue === "number" && Number.isFinite(baseValue) ? baseValue : 0;
+  // MapLibre clamps a negative fill-extrusion-base to the ground; so do the
+  // flat and per-feature bases here.
+  const flatBase =
+    typeof baseValue === "number" && Number.isFinite(baseValue) ? Math.max(0, baseValue) : 0;
   const dataDrivenBase = Array.isArray(baseValue);
   const opacity = Number.isFinite(style.extrusionOpacity) ? style.extrusionOpacity : 0.8;
   const fallbackColor = style.extrusionColor || style.fillColor || "#3b82f6";
   const height = featureValue(extrusionHeightValue(style), "number");
   const color = featureValue(extrusionColorValue(style), "color");
   const baseReader = featureValue(baseValue, "number");
+  // The compiler asks for a feature's base twice in a row (for its height and
+  // for ARCGIS_BASE_FIELD), so remember the last answer rather than
+  // evaluating the expression again.
+  let lastFeature: Feature | null = null;
+  let lastZoom = Number.NaN;
+  let lastBase = 0;
   const baseAt = (feature: Feature, zoom: number): number => {
     if (!dataDrivenBase) return flatBase;
+    if (feature === lastFeature && zoom === lastZoom) return lastBase;
     const value = Number(baseReader.read(feature, zoom));
-    // MapLibre clamps a negative fill-extrusion-base to the ground.
-    return Number.isFinite(value) ? Math.max(0, value) : 0;
+    lastFeature = feature;
+    lastZoom = zoom;
+    lastBase = Number.isFinite(value) ? Math.max(0, value) : 0;
+    return lastBase;
   };
   return {
     base: flatBase,

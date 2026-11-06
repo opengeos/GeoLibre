@@ -703,6 +703,7 @@ function parseExtrusionBase(value: unknown, patch: Partial<Omit<LayerStyle, "lab
     patch.extrusionColorExpression ??= "";
   }
   patch.extrusionAdvancedStyleEnabled = true;
+  patch.extrusionBaseProperty = "";
   patch.extrusionBaseExpression = JSON.stringify(value);
 }
 
@@ -1005,6 +1006,10 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     if (paint["fill-extrusion-base"] !== undefined) {
       parseExtrusionBase(paint["fill-extrusion-base"], patch);
+    } else if (floorHeight !== null) {
+      // The floor height was measured from Mapbox's default base of 0, so the
+      // layer's own base must not shift the roof.
+      parseExtrusionBase(0, patch);
     }
     applyZoomRange(extrusion, patch);
   } else if (fill) {

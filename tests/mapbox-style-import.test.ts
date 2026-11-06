@@ -460,7 +460,7 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
       ["*", ["to-number", ["get", "level", ["properties"]], 0], 3],
     ]) {
       const result = extrusion(base);
-      assert.equal(result.extrusionBaseProperty, undefined);
+      assert.equal(result.extrusionBaseProperty, "");
       assert.deepEqual(JSON.parse(result.extrusionBaseExpression ?? ""), base);
     }
     // The exporter's shape clears a competing advanced base; a flat base
@@ -508,6 +508,7 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     );
     assert.equal(result.extrusionAdvancedStyleEnabled, true);
     assert.deepEqual(JSON.parse(result.extrusionBaseExpression ?? ""), expression);
+    assert.equal(result.extrusionBaseProperty, "");
   });
 
   it("does not write a line-only renderer's stroke fallback into fillColor", () => {
@@ -934,6 +935,33 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.extrusionHeightProperty, undefined);
     assert.equal(result.style.extrusionFloorHeight, 30);
     assert.ok(!result.warnings.some((w) => /constant extrusion height/.test(w)));
+  });
+
+  it("resets the base when a floor height comes from a style with no base", () => {
+    const layer = style({
+      extrusionEnabled: true,
+      extrusionBase: 5,
+      extrusionBaseProperty: "level",
+      extrusionBaseScale: 5,
+    });
+    const result = applyMapboxStyleImport(
+      layer,
+      parseMapboxStyle({
+        version: 8,
+        sources: {},
+        layers: [
+          {
+            id: "poly",
+            type: "fill-extrusion",
+            source: "s",
+            paint: { "fill-extrusion-height": 30 },
+          },
+        ],
+      }),
+    );
+    assert.equal(result.extrusionFloorHeight, 30);
+    assert.equal(result.extrusionBase, 0);
+    assert.equal(result.extrusionBaseProperty, "");
   });
 
   it("warns on a constant extrusion roof below a constant base", () => {
