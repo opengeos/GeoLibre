@@ -322,7 +322,12 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
     | { kind: "map-image"; url: string }
     | { kind: "imagery"; url: string }
     /** A tiled imagery layer whose cache holds raw (LERC) pixel values. */
-    | { kind: "imagery-tile"; url: string }
+    | {
+        kind: "imagery-tile";
+        url: string;
+        /** The access token the ArcGIS Layer panel put in the tile template. */
+        token?: string;
+      }
     | {
         kind: "media-image";
         url: string;
@@ -1925,8 +1930,10 @@ export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true)
  * The ArcGIS Layer panel flags it from the service description
  * (`arcgisRawTiles`). A record without the flag (a hand-written project, or
  * one saved before the flag existed) is recognized by ArcGIS Online's hosted
- * tiled imagery host, `tiledimageservices.arcgis.com`, which serves only such
- * layers.
+ * tiled imagery host, `tiledimageservices*.arcgis.com`: it hosts only tiled
+ * imagery layers, which are `TilesOnly` (no `/exportImage` for the SDK's
+ * ImageryLayer to call), and ImageryTileLayer draws such a layer whatever its
+ * tile encoding. `arcgisRawTiles: false` opts a record out.
  *
  * @param layer - The store layer.
  * @param serviceUrl - The layer's ImageServer URL.
@@ -1939,6 +1946,21 @@ function isArcgisRawImageryTiles(layer: GeoLibreLayer, serviceUrl: string): bool
     return /^tiledimageservices\d*\.arcgis\.com$/i.test(new URL(serviceUrl).hostname);
   } catch {
     return false;
+  }
+}
+
+/**
+ * The `token` query parameter of a tile template, if it has one.
+ *
+ * @param template - A tile URL template, possibly with `{z}`-style tokens.
+ * @returns The token, or undefined.
+ */
+function tileTemplateToken(template: string | undefined): string | undefined {
+  if (!template) return undefined;
+  try {
+    return new URL(template).searchParams.get("token") || undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -2147,6 +2169,24 @@ export function compileArcgisLayer(
       tileOptions,
     };
   }
+  // An image service added through the ArcGIS Layer panel is a raster
+  // template record; one whose cache is raw LERC data has no template the SDK
+  // could draw, so it is drawn by the service itself. The panel carries a
+  // token in the tile template, which the SDK layer is handed as its key.
+  if (
+    layer.metadata.sourceKind === "arcgis-image-service" &&
+    typeof layer.sourcePath === "string" &&
+    ARCGIS_SERVICE.test(layer.sourcePath) &&
+    isArcgisRawImageryTiles(layer, layer.sourcePath)
+  ) {
+    const token = tileTemplateToken(tiles[0]);
+    return {
+      ...base,
+      kind: "imagery-tile",
+      url: layer.sourcePath,
+      ...(token ? { token } : {}),
+    };
+  }
   // A GetMap template naming its layers is a WMS service the SDK can draw
   // natively. Other bounding-box templates typed `wms` (an ArcGIS
   // `/exportImage`, say) are plain image requests, drawn tile by tile below.
@@ -2154,16 +2194,6 @@ export function compileArcgisLayer(
   // WMSLayer builds its own requests from the service URL and cannot be pointed
   // through that proxy (it wraps the whole template in `?url=`), so a proxied
   // service is drawn tile by tile below instead.
-  // An image service added through the ArcGIS Layer panel is a raster
-  // template record; one whose cache is raw LERC data has no template the SDK
-  // could draw, so it is drawn by the service itself.
-  if (
-    layer.metadata.sourceKind === "arcgis-image-service" &&
-    typeof layer.sourcePath === "string" &&
-    ARCGIS_SERVICE.test(layer.sourcePath) &&
-    isArcgisRawImageryTiles(layer, layer.sourcePath)
-  )
-    return { ...base, kind: "imagery-tile", url: layer.sourcePath };
   const proxied = proxyWmsTiles(layer.type, tiles);
   if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]) && proxied[0] === tiles[0])
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };

@@ -947,6 +947,18 @@ describe("ArcGIS raster, service and media compilation", () => {
       { kind: panel.kind, url: (panel as { url?: string }).url },
       { kind: "imagery-tile", url: "https://host/arcgis/rest/services/X/ImageServer" },
     );
+    // A token the panel put in the tile template travels with the plan.
+    const secured = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}?token=abc"],
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
+    });
+    assert.equal((secured as { token?: string }).token, "abc");
     const tiled: GeoLibreLayer = {
       ...base,
       type: "arcgis",

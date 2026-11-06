@@ -1723,7 +1723,14 @@ export class ArcgisEngine implements MapEngine {
       case "imagery":
         return [new layers.ImageryLayer({ ...common, url: plan.url })];
       case "imagery-tile":
-        return [new layers.ImageryTileLayer({ ...common, url: plan.url })];
+        return [
+          new layers.ImageryTileLayer({
+            ...common,
+            url: plan.url,
+            // The SDK sends a layer's key as the `token` of each request.
+            ...(plan.token ? { apiKey: plan.token } : {}),
+          }),
+        ];
       case "media-image": {
         // The four corners are an arbitrary quad (the georeferencer fits an
         // affine transform), which only a control-point georeference can

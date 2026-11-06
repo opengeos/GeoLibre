@@ -313,7 +313,7 @@ interface ArcGISTileInfo {
  * @param info - The service's `?f=json` description.
  * @returns True when the cache is LERC-encoded.
  */
-export function isArcGISRawTileCache(info: { tileInfo?: { format?: string } }): boolean {
+function isArcGISRawTileCache(info: { tileInfo?: { format?: string } }): boolean {
   return /^lerc/i.test(info.tileInfo?.format?.trim() ?? "");
 }
 
