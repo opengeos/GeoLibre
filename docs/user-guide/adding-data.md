@@ -125,7 +125,7 @@ were rendered before the choice existed and cannot honor it.
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
 | **Gaussian Splatting** | Gaussian splat scenes. |
-| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
+| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. Also takes an ArcGIS I3S `.../SceneServer/layers/<n>` URL: 3D Object and Integrated Mesh scene layers, and Building Scene Layers (BIM models), which open on their Overview; the Style panel's **Building** section switches to the **Full model** and turns its disciplines (Architectural, Structural, Electrical, ...) and categories (Walls, Windows, Doors, ...) on and off. The choice is saved with the project. |
 | **Cesium Ion Asset** | Adds a 3D Tiles tileset or imagery from Cesium ion by asset ID, using your Cesium ion token. Cesium engine only; the entry is disabled on the 2D engines. |
 | **CZML Dynamic 3D Scene** | Loads a CZML document of orbits, trajectories, vehicle paths, and other time-varying 3D scenes. Cesium engine only. |
 | **KML / KMZ** | Loads KML or KMZ with native globe styling, overlays, and network links on the Cesium globe, and through the regular KML importer on the 2D engines. |

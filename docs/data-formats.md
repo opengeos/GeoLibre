@@ -77,7 +77,7 @@ are described in [Web Services](user-guide/web-services.md) and
 | LiDAR point clouds | LiDAR Layer | LAS/LAZ and cloud-optimized point-cloud data. The layer menu exports a cloud to LAS, LAZ or COPC, and Whitebox LiDAR tool outputs load as new point cloud layers. LAS, LAZ and COPC files can also be dropped on the map. |
 | Gaussian splats | Gaussian Splatting | Point-based scene rendering. |
 | OGC 3D Tiles | 3D Tiles Layer | Streamed 3D tilesets; authenticated tilesets can use request headers. |
-| ArcGIS I3S | 3D Tiles Layer (SceneServer URL) | Integrated Mesh and 3D Object scene layers. |
+| ArcGIS I3S | 3D Tiles Layer (SceneServer URL) | Integrated Mesh and 3D Object scene layers, and Building Scene Layers (BIM): draw the Overview or the full model, and choose its disciplines and categories in the Style panel. Scene layers must be in WGS84 to draw on the 2D map. |
 | Cesium ion assets | Cesium Ion Asset | 3D Tiles tilesets or imagery hosted on Cesium ion; requires the Cesium renderer. |
 | CZML | CZML Dynamic 3D Scene | Time-dependent scene descriptions; requires the Cesium renderer. |
 | glTF / GLB | 3D Model (glTF) | Place a local or remote model at coordinates with scale, rotation, and altitude. |

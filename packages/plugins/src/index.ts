@@ -12,6 +12,12 @@ export {
   type AssistantToolEntry,
 } from "./assistant-tool-registry";
 export * from "./types";
+export {
+  setI3sBuildingNodeVisible,
+  visibleI3sBuildingSublayers,
+  type I3sBuildingNode,
+  type I3sBuildingState,
+} from "./plugins/i3s-building";
 export { openControlPanel, closeControlPanel, isControlPanelVisible } from "./control-panels";
 export { PluginManager } from "./plugin-manager";
 export {

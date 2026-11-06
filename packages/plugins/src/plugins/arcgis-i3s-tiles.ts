@@ -9,6 +9,14 @@
 // its visibility/opacity/removal, which this overlay reflects.
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  i3sBuildingSublayerUrl,
+  i3sLayerDocumentUrl,
+  isI3sBuildingLayerDocument,
+  parseI3sBuildingLayer,
+  visibleI3sBuildingSublayers,
+  type I3sBuildingState,
+} from "./i3s-building";
 import { createI3sMeshLayerClass, type I3sMeshLayerLuma } from "./i3s-mesh-layer";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
@@ -412,10 +420,12 @@ function renderArcgisI3sTilesLayers(): void {
   if (signature === lastI3sLayerSignature) return;
   lastI3sLayerSignature = signature;
 
+  for (const layer of layers) {
+    if (layer.metadata.i3sKind === undefined) void probeI3sLayerKind(layer);
+  }
   const deckLayers = layers
     .filter((layer) => layer.visible)
-    .map((layer) => buildArcgisI3sTilesDeckLayer(layer))
-    .filter((layer): layer is Layer => layer !== null)
+    .flatMap((layer) => buildArcgisI3sTilesDeckLayers(layer))
     .reverse();
 
   i3sOverlay.setProps({ layers: deckLayers });
@@ -442,12 +452,13 @@ function scheduleI3sMountRetry(): void {
 
 function i3sLayerSignature(layers: GeoLibreLayer[]): string {
   return layers
-    .map(
-      (layer) =>
-        `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${
-          typeof layer.source.url === "string" ? layer.source.url : ""
-        }`,
-    )
+    .map((layer) => {
+      const building = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
+      const sublayers = building ? visibleI3sBuildingSublayers(building).join(",") : "";
+      return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${
+        typeof layer.source.url === "string" ? layer.source.url : ""
+      }:${String(layer.metadata.i3sKind ?? "")}:${sublayers}`;
+    })
     .join("|");
 }
 
@@ -462,10 +473,11 @@ export function buildArcgisI3sTilesDeckLayer(
     loader: i3sLoader,
     meshLayer: i3sMeshLayerClass,
   },
+  sublayer?: { url: string; id: number },
 ): Layer | null {
   const { deckGL, loader, meshLayer } = deps;
   if (!deckGL || !loader) return null;
-  const url = typeof layer.source.url === "string" ? layer.source.url : "";
+  const url = sublayer?.url ?? (typeof layer.source.url === "string" ? layer.source.url : "");
   if (!url) return null;
 
   const Tile3DLayer = deckGL.geoLayers.Tile3DLayer as unknown as new (
@@ -473,7 +485,7 @@ export function buildArcgisI3sTilesDeckLayer(
   ) => Layer;
 
   return new Tile3DLayer({
-    id: `${layer.id}-deck`,
+    id: sublayer ? `${layer.id}-deck-${sublayer.id}` : `${layer.id}-deck`,
     data: url,
     loader,
     // Tile detail/memory caps + main-thread parsing, shared with the Google
@@ -509,6 +521,73 @@ export function buildArcgisI3sTilesDeckLayer(
     onTileError: (_tile: unknown, message: string, tileUrl: string) =>
       console.error(`[GeoLibre] ArcGIS I3S tile failed to load: ${message} (${tileUrl})`),
   });
+}
+
+/**
+ * The deck.gl layers for one I3S store layer: a single Tile3DLayer for a mesh
+ * scene layer, or one per visible sublayer of a Building Scene Layer.
+ *
+ * @param layer - The store layer.
+ * @returns Its deck.gl layers (none while its type is still being probed).
+ */
+export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
+  const kind = layer.metadata.i3sKind;
+  if (kind === "building") {
+    const state = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
+    const base = layer.metadata.i3sBuildingUrl;
+    if (!state || typeof base !== "string") return [];
+    return visibleI3sBuildingSublayers(state)
+      .map((id) =>
+        buildArcgisI3sTilesDeckLayer(layer, undefined, {
+          url: i3sBuildingSublayerUrl(base, id),
+          id,
+        }),
+      )
+      .filter((deckLayer): deckLayer is Layer => deckLayer !== null);
+  }
+  if (kind !== "mesh") return [];
+  const single = buildArcgisI3sTilesDeckLayer(layer);
+  return single ? [single] : [];
+}
+
+/** I3S layers whose type probe is in flight, so each is probed once. */
+const i3sProbesInFlight = new Set<string>();
+
+/**
+ * Find out whether an I3S layer is a Building Scene Layer, from its layer
+ * document, and record it on the layer (`metadata.i3sKind`, plus the sublayer
+ * tree for a Building layer). A layer is drawn only once this is known, so a
+ * Building layer's root, which the I3S loader cannot draw, is never loaded.
+ * Anything that cannot be probed is treated as a mesh layer, so the loader
+ * reports its own error.
+ *
+ * @param layer - The store layer to probe.
+ */
+async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
+  if (i3sProbesInFlight.has(layer.id)) return;
+  i3sProbesInFlight.add(layer.id);
+  const url = typeof layer.source.url === "string" ? layer.source.url : "";
+  const docUrl = i3sLayerDocumentUrl(url);
+  let patch: Record<string, unknown> = { i3sKind: "mesh" };
+  if (docUrl) {
+    try {
+      const response = await fetch(i3sDocumentRequestUrl(docUrl));
+      const doc: unknown = response.ok ? await response.json() : null;
+      if (isI3sBuildingLayerDocument(doc)) {
+        patch = {
+          i3sKind: "building",
+          i3sBuildingUrl: docUrl,
+          i3sBuilding: parseI3sBuildingLayer(doc),
+        };
+      }
+    } catch (error) {
+      console.warn(`[GeoLibre] Could not read the I3S layer document ${docUrl}`, error);
+    }
+  }
+  i3sProbesInFlight.delete(layer.id);
+  const current = useAppStore.getState().layers.find((item) => item.id === layer.id);
+  if (!current) return;
+  useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
 }
 
 /** deck.gl 9 numeric coordinate-system codes → their string equivalents. */
