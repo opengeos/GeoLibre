@@ -333,7 +333,7 @@ export function PrintLayoutDialog({
 
             <Separator />
 
-            <PageEditor {...editorProps} />
+            <PageEditor {...editorProps} pageBackgroundDraft={state.pageBackgroundDraft} />
             <MapFrameEditor {...editorProps} mapBackgroundDraft={state.mapBackgroundDraft} />
             {isMmPage && (
               <MapScaleEditor
