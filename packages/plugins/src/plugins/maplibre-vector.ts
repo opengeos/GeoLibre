@@ -1,3 +1,4 @@
+import { unzipSync } from "fflate";
 import {
   DUCKDB_VECTOR_FEATURE_WARN_COUNT,
   DUCKDB_VECTOR_ROUTE_BYTES,
@@ -1228,9 +1229,8 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
         // This handler preempts the native input's `change` event entirely, so
         // a KML/KMZ-only selection has to be routed to the host importer here
         // too — `wireKmlFileImporter` never sees a desktop pick.
-        if (
-          await routeKmlFileSelection(picked.map(({ file, sourcePath }) => ({ file, sourcePath })))
-        ) {
+        const selection = picked.map(({ file, sourcePath }) => ({ file, sourcePath }));
+        if ((await routeKmlFileSelection(selection)) || (await routeImdfFileSelection(selection))) {
           return;
         }
         await addPickedVectorFiles(control, picked);
@@ -1239,6 +1239,51 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
       }
     })();
   });
+}
+
+/** Whether every selected file is a `.zip` (and there is at least one). */
+function isZipFileSelection(files: readonly KmlFileImport[]): boolean {
+  return files.length > 0 && files.every(({ file }) => /\.zip$/i.test(file.name));
+}
+
+/**
+ * Whether a zip is an IMDF indoor venue archive (issue #3341): a
+ * `manifest.json` beside a `venue`, `level` or `unit` GeoJSON. Only the
+ * central directory is read; no entry is decompressed.
+ *
+ * @param file - A picked zip.
+ * @returns True for an IMDF archive.
+ */
+export async function isImdfZipFile(file: Blob): Promise<boolean> {
+  const names: string[] = [];
+  try {
+    unzipSync(new Uint8Array(await file.arrayBuffer()), {
+      filter: (entry) => {
+        names.push(entry.name.split("/").pop()?.toLowerCase() ?? "");
+        return false;
+      },
+    });
+  } catch {
+    return false;
+  }
+  return (
+    names.includes("manifest.json") &&
+    names.some(
+      (name) => name === "venue.geojson" || name === "level.geojson" || name === "unit.geojson",
+    )
+  );
+}
+
+/**
+ * Hands an IMDF-only selection to the host importer (which builds the
+ * venue's stacked, floor-picker-linked layers). Returns whether it was
+ * consumed; other zips are left to the vector control.
+ */
+export async function routeImdfFileSelection(files: readonly KmlFileImport[]): Promise<boolean> {
+  if (!kmlFileImportHandler || !isZipFileSelection(files)) return false;
+  for (const { file } of files) if (!(await isImdfZipFile(file))) return false;
+  await kmlFileImportHandler([...files]);
+  return true;
 }
 
 /** Whether every selected file is a KML/KMZ (and there is at least one). */
@@ -1268,6 +1313,24 @@ function wireKmlFileImporter(control: VectorControl): void {
     (event) => {
       // A browser File has no filesystem path, so no `sourcePath` here.
       const files = Array.from(fileInput.files ?? [], (file) => ({ file }));
+      if (kmlFileImportHandler && isZipFileSelection(files)) {
+        // Whether a zip is IMDF takes an async read, so hold the selection
+        // back from the control and hand it over unchanged when it is not.
+        event.stopImmediatePropagation();
+        fileInput.value = "";
+        void (async () => {
+          try {
+            if (await routeImdfFileSelection(files)) return;
+            await addPickedVectorFiles(
+              control,
+              files.map(({ file }) => ({ file, companionFiles: [] })),
+            );
+          } catch (error) {
+            console.error("[GeoLibre] Failed to load the selected zip", error);
+          }
+        })();
+        return;
+      }
       if (!kmlFileImportHandler || !isKmlFileSelection(files)) return;
       // Capture-phase interception keeps the vector control from reporting
       // "Dataset does not contain any layers" for overlay-only documents.

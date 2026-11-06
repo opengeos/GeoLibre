@@ -395,6 +395,22 @@
     "openWebApp": "Open the GeoLibre web app"
   },
   "addData": {
+    "imdf": {
+      "layer": {
+        "venue": "Venue",
+        "footprint": "Footprints",
+        "level": "Levels",
+        "section": "Sections",
+        "unit": "Units",
+        "fixture": "Fixtures",
+        "detail": "Details",
+        "opening": "Openings",
+        "kiosk": "Kiosks",
+        "geofence": "Geofences",
+        "amenity": "Amenities",
+        "occupant": "Occupants"
+      }
+    },
     "title": "Add data",
     "kind": {
       "xyz": {

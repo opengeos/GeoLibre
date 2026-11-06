@@ -58,6 +58,11 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
 
     KML imports also render `GroundOverlay` images as map overlays (which animate through the Time Slider when they are time-tagged) and show embedded Collada `.dae` models. **Super-Overlays** — the tiled, `NetworkLink`-driven KML that large imagery exports use — are supported too: GeoLibre serves the archive's tiles to the map instead of trying to load the whole pyramid at once.
 
+!!! tip "IMDF indoor venues"
+    An [IMDF](https://docs.ogc.org/cs/20-094/index.html) archive (Indoor Mapping Data Format, the zip of GeoJSON files that Apple Maps and many indoor-mapping tools export) is recognized when you pick or drop its `.zip`: GeoLibre looks for its `manifest.json` beside a `venue`, `level` or `unit` file. It opens as a group named after the venue, with one layer per feature type: the venue and footprint outlines, the levels as thin floor slabs, the units (rooms, corridors, stairs, restrooms) extruded and colored by category, and the openings, amenities and occupants. Each feature gets its level's `ordinal` and short name as attributes, so the floors stack in 3D (4 m apart, the lowest floor on the ground) and every layer on a floor is linked to the [floor picker](styling.md#floor-picker). Open-to-below units, the voids of an atrium, are filtered out of the units layer so they do not plug the hole they describe. Localized names are read in the archive's language.
+
+    Openings, amenities and occupants are lines and points, so they are drawn on the ground rather than at their floor's height in a tilted view; pick a floor to see each floor's doors and points of interest in a top-down view.
+
 ## Web services
 
 | Item | Notes |

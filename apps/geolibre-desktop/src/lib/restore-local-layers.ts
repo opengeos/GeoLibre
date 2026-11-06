@@ -74,7 +74,14 @@ export async function restoreLocalFileLayers(): Promise<void> {
           // One layer per file is the common case; for a multi-layer file match
           // by the layer's display name, then fall back to the first entry.
           let match = loaded[0];
-          if (loaded.length > 1) {
+          const entryKey = layer.metadata?.sourceEntry;
+          const byEntry =
+            typeof entryKey === "string"
+              ? loaded.find((entry) => entry.sourceEntry === entryKey)
+              : undefined;
+          if (byEntry) {
+            match = byEntry;
+          } else if (loaded.length > 1) {
             const named = loaded.find((entry) => entry.name === layer.name);
             if (named) {
               match = named;
