@@ -254,3 +254,11 @@ def test_integers_too_large_for_a_double():
         project.level_filter("level", huge)
     link = project.level_filter("level", "0", features=_fc(huge, "0")["features"])
     assert link["values"] == ["0"]
+
+
+def test_relinking_the_only_linked_layer_keeps_its_floor():
+    p = _two_layer_project()
+    authoring.set_floor_picker(p, "Rooms", "level", "1", mode="below")
+    authoring.set_floor_picker(p, "Rooms", "level")
+    link = p["layers"][0]["levelFilter"]
+    assert (link["level"], link["mode"]) == ("1", "below")
