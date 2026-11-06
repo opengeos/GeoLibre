@@ -223,6 +223,7 @@ const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = new Set([
   "tile-service",
   "map-image",
   "imagery",
+  "imagery-tile",
   "cog",
   "zarr",
   "archive",
@@ -320,6 +321,8 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
     | { kind: "tile-service"; url: string }
     | { kind: "map-image"; url: string }
     | { kind: "imagery"; url: string }
+    /** A tiled imagery layer whose cache holds raw (LERC) pixel values. */
+    | { kind: "imagery-tile"; url: string }
     | {
         kind: "media-image";
         url: string;
@@ -1915,6 +1918,30 @@ export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true)
   return supported;
 }
 
+/**
+ * Whether an ImageServer record is a tiled imagery layer whose cache holds raw
+ * LERC pixel values, which only the SDK's ImageryTileLayer can draw.
+ *
+ * The ArcGIS Layer panel flags it from the service description
+ * (`arcgisRawTiles`). A record without the flag (a hand-written project, or
+ * one saved before the flag existed) is recognized by ArcGIS Online's hosted
+ * tiled imagery host, `tiledimageservices.arcgis.com`, which serves only such
+ * layers.
+ *
+ * @param layer - The store layer.
+ * @param serviceUrl - The layer's ImageServer URL.
+ * @returns True when the layer should draw as an ImageryTileLayer.
+ */
+function isArcgisRawImageryTiles(layer: GeoLibreLayer, serviceUrl: string): boolean {
+  if (layer.metadata.arcgisRawTiles === true) return true;
+  if (layer.metadata.arcgisRawTiles === false) return false;
+  try {
+    return /^tiledimageservices\d*\.arcgis\.com$/i.test(new URL(serviceUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
 const ARCGIS_SERVICE = /\/(FeatureServer|MapServer|ImageServer)(?:\/\d+)?\/?(?:\?|$)/i;
 
 const zarrSignatures = new WeakMap<GeoLibreLayer["source"], string>();
@@ -2068,7 +2095,9 @@ export function compileArcgisLayer(
       };
     }
     const kind = /ImageServer/i.test(serviceUrl)
-      ? "imagery"
+      ? isArcgisRawImageryTiles(layer, serviceUrl)
+        ? "imagery-tile"
+        : "imagery"
       : layer.metadata.arcgisTiled === true
         ? "tile-service"
         : "map-image";
@@ -2125,6 +2154,16 @@ export function compileArcgisLayer(
   // WMSLayer builds its own requests from the service URL and cannot be pointed
   // through that proxy (it wraps the whole template in `?url=`), so a proxied
   // service is drawn tile by tile below instead.
+  // An image service added through the ArcGIS Layer panel is a raster
+  // template record; one whose cache is raw LERC data has no template the SDK
+  // could draw, so it is drawn by the service itself.
+  if (
+    layer.metadata.sourceKind === "arcgis-image-service" &&
+    typeof layer.sourcePath === "string" &&
+    ARCGIS_SERVICE.test(layer.sourcePath) &&
+    isArcgisRawImageryTiles(layer, layer.sourcePath)
+  )
+    return { ...base, kind: "imagery-tile", url: layer.sourcePath };
   const proxied = proxyWmsTiles(layer.type, tiles);
   if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]) && proxied[0] === tiles[0])
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };

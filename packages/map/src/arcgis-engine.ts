@@ -1722,6 +1722,8 @@ export class ArcgisEngine implements MapEngine {
         return [new layers.MapImageLayer({ ...common, url: plan.url })];
       case "imagery":
         return [new layers.ImageryLayer({ ...common, url: plan.url })];
+      case "imagery-tile":
+        return [new layers.ImageryTileLayer({ ...common, url: plan.url })];
       case "media-image": {
         // The four corners are an arbitrary quad (the georeferencer fits an
         // affine transform), which only a control-point georeference can

@@ -295,6 +295,8 @@ export interface ArcGISImageServiceRasterFunction {
 
 interface ArcGISTileInfo {
   cols?: number;
+  /** The cache's tile encoding: `PNG`, `JPEG`, `MIXED`, or `LERC`/`LERC2D` raw data. */
+  format?: string;
   lods?: Array<{ level?: number; resolution?: number }>;
   origin?: { x?: number; y?: number };
   rows?: number;
@@ -302,6 +304,17 @@ interface ArcGISTileInfo {
     latestWkid?: number;
     wkid?: number;
   };
+}
+
+/**
+ * Whether an ImageServer's tile cache holds raw pixel values (LERC) instead of
+ * rendered images, as a hosted tiled imagery layer's does.
+ *
+ * @param info - The service's `?f=json` description.
+ * @returns True when the cache is LERC-encoded.
+ */
+export function isArcGISRawTileCache(info: { tileInfo?: { format?: string } }): boolean {
+  return /^lerc/i.test(info.tileInfo?.format?.trim() ?? "");
 }
 
 /** A cached service's tile endpoint, resolved to what a raster source needs. */
@@ -1389,6 +1402,13 @@ async function addArcGISImageServiceLayer(
       arcgisLayerType: options.layerType,
       arcgisSourceType: options.sourceType,
       arcgisTiled: tileScheme !== null,
+      // A hosted tiled imagery layer caches raw LERC pixel values rather than
+      // rendered images, and is usually `TilesOnly` (no `/exportImage`), so
+      // neither MapLibre template above can draw it. The ArcGIS renderer's
+      // ImageryTileLayer decodes and symbolizes those tiles client-side.
+      ...(options.layerType === "image-service" && isArcGISRawTileCache(info)
+        ? { arcgisRawTiles: true }
+        : {}),
       ...(bounds ? { bounds } : {}),
       // The token has to travel in the tile URL for the tiles to render at all,
       // unlike the feature path where it is only on the live requests. It is

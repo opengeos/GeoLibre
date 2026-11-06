@@ -1263,6 +1263,23 @@ describe("ArcgisEngine layer sync", () => {
       /ImageServer\/exportImage\?/,
     );
   });
+  it("draws a raw-LERC image service with ImageryTileLayer", () => {
+    const { engine, created } = makeEngine();
+    engine.syncLayers([
+      {
+        ...geojsonLayer({ id: "wind", name: "wind", geojson: undefined }),
+        type: "arcgis" as const,
+        source: { url: "https://h/rest/services/W/ImageServer" },
+        metadata: { arcgisRawTiles: true },
+      },
+    ]);
+    const native = created.find((layer) => layer.kind === "imagery-tile");
+    assert.ok(native, "an ImageryTileLayer was created");
+    assert.equal(native.props.url, "https://h/rest/services/W/ImageServer");
+    assert.ok(!created.some((layer) => layer.kind === "imagery"));
+    // Its LERC tiles have no plain raster template to hand an export.
+    assert.equal(engine.getLayerRasterSource("wind"), null);
+  });
   it("fades a story chapter's layer opacity over the transition", () => {
     const { engine, created } = makeEngine();
     const frames: FrameRequestCallback[] = [];
