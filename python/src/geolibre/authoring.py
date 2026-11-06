@@ -1661,11 +1661,12 @@ def set_floor_picker(
     if level is None and mode != "all":
         # Keep the shared floor, as the app's Style panel does on linking; a
         # given mode (e.g. "below", the app's "+ below") applies to it.
+        # The first link with a floor decides, the target's own included, as
+        # the app's currentLevelChoice does.
         for item in layers:
             link = item.get("levelFilter")
             if (
-                item is not layer
-                and isinstance(link, dict)
+                isinstance(link, dict)
                 and link.get("mode") in ("only", "below")
                 and isinstance(link.get("level"), str)
             ):
