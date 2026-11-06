@@ -56,7 +56,7 @@ export interface AssistantProfile {
   /**
    * Credential values keyed by env-var name, matching {@link PROVIDER_FIELDS}.
    * E.g. for google: `{ GEMINI_API_KEY: "AIza..." }`
-   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434", OLLAMA_MODEL: "llama3.2" }`
+   *      for ollama: `{ OLLAMA_BASE_URL: "http://localhost:11434" }`
    */
   fieldValues: Record<string, string>;
 }
