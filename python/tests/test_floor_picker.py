@@ -189,11 +189,20 @@ def test_level_labels_match_javascript_string(value, label):
 def test_set_floor_picker_is_atomic():
     p = _two_layer_project()
     authoring.set_floor_picker(p, "Rooms", "level")
-    p["layers"][0]["levelFilter"]["field"] = ""  # a corrupt sibling link
     before = json.dumps(p, sort_keys=True)
     with pytest.raises(ValueError):
-        authoring.set_floor_picker(p, "Doors", "level", "1")
+        authoring.set_floor_picker(p, "Doors", "level", "1", mode="sideways")
     assert json.dumps(p, sort_keys=True) == before
+
+
+def test_set_floor_picker_skips_a_sibling_link_without_a_field():
+    p = _two_layer_project()
+    authoring.set_floor_picker(p, "Rooms", "level")
+    p["layers"][0]["levelFilter"]["field"] = ""  # a hand-edited, broken link
+    broken = dict(p["layers"][0]["levelFilter"])
+    authoring.set_floor_picker(p, "Doors", "level", "1")
+    assert p["layers"][0]["levelFilter"] == broken
+    assert p["layers"][1]["levelFilter"]["values"] == [1]
 
 
 def test_non_ascii_digits_are_named_floors_like_the_app():

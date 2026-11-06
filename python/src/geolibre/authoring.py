@@ -1679,9 +1679,13 @@ def set_floor_picker(
             link_field: Any = field
         else:
             link = item.get("levelFilter")
-            if not isinstance(link, dict):
+            # A hand-edited link without a usable field is left alone rather
+            # than blocking every floor change.
+            if not isinstance(link, dict) or not isinstance(link.get("field"), str):
                 continue
-            link_field = link.get("field")
+            if not link["field"].strip():
+                continue
+            link_field = link["field"]
         updates.append(
             (
                 item,
