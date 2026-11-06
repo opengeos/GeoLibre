@@ -509,6 +509,15 @@ describe("buildElevation3dLayers filters", () => {
     assert.deepEqual(levels, ["1", "0;1"]);
     const [rebuilt] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
     assert.equal(rebuilt.props.data, built.props.data);
+    // Another floor on the same collection is filtered again, not served from the cache.
+    const [ground] = buildElevation3dLayers(fakeDeckGL, {
+      ...layer,
+      levelFilter: { field: "level", mode: "only", level: "0", values: ["0", "0;1"] },
+    }) as unknown as FakeGeoJsonLayer[];
+    assert.deepEqual(
+      (ground.props.data as FeatureCollection).features.map((feature) => feature.properties?.level),
+      ["0", "0;1"],
+    );
   });
 
   it("draws everything while no filter is active", () => {

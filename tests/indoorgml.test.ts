@@ -187,16 +187,78 @@ describe("parseIndoorGml", () => {
     assert.equal(result.coordinatesLookGeographic, false);
   });
 
-  it("reads a 2D cell, posList rings and an srsName", () => {
-    const polygon = `<core:Geometry2D><gml:Polygon srsName="urn:ogc:def:crs:EPSG::4326"><gml:exterior><gml:LinearRing><gml:posList srsDimension="2">8.43 49.1 8.4301 49.1 8.4301 49.1001 8.43 49.1 </gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></core:Geometry2D>`;
+  it("reads a 2D cell, posList rings and an srsName, latitude first for an EPSG URN", () => {
+    // urn:ogc:def:crs:EPSG::4326 is latitude, longitude.
+    const polygon = `<core:Geometry2D><gml:Polygon srsName="urn:ogc:def:crs:EPSG::4326"><gml:exterior><gml:LinearRing><gml:posList srsDimension="2">49.1 8.43 49.1 8.4301 49.1001 8.4301 49.1 8.43 </gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></core:Geometry2D>`;
     const result = parseIndoorGml(document(cell("F", polygon)));
     assert.equal(result.detectedCrs, "EPSG:4326");
     assert.equal(result.coordinatesLookGeographic, true);
     assert.equal(result.levelSource, "none");
     const feature = result.cells.features[0];
-    assert.equal((feature.geometry as Polygon).coordinates[0].length, 4);
+    const ring = (feature.geometry as Polygon).coordinates[0];
+    assert.equal(ring.length, 4);
+    assert.deepEqual(ring[0], [8.43, 49.1]);
     assert.equal(feature.properties?.top_z, 3);
     assert.equal(feature.properties?.level, null);
+  });
+
+  it("keeps longitude first for a short EPSG:4326 srsName", () => {
+    const polygon = `<core:Geometry2D><gml:Polygon srsName="EPSG:4326"><gml:exterior><gml:LinearRing><gml:posList srsDimension="2">8.43 49.1 8.4301 49.1 8.4301 49.1001 8.43 49.1</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></core:Geometry2D>`;
+    const ring = (
+      parseIndoorGml(document(cell("F", polygon))).cells.features[0].geometry as Polygon
+    ).coordinates[0];
+    assert.deepEqual(ring[0], [8.43, 49.1]);
+  });
+
+  it("reads an untagged 2D posList as 2D, whatever its ordinate count", () => {
+    // Six numbers: three 2D positions, not two 3D ones.
+    const polygon = `<core:Geometry2D><gml:Polygon><gml:exterior><gml:LinearRing><gml:posList>0 0 4 0 4 3</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></core:Geometry2D>`;
+    const ring = (
+      parseIndoorGml(document(cell("T", polygon))).cells.features[0].geometry as Polygon
+    ).coordinates[0];
+    assert.deepEqual(ring.slice(0, 3), [
+      [0, 0],
+      [4, 0],
+      [4, 3],
+    ]);
+  });
+
+  it("resolves solid surfaces referenced with xlink:href", () => {
+    const floor = `<gml:Polygon gml:id="floor-1"><gml:exterior>${ring([
+      [0, 0, 0],
+      [0, 2, 0],
+      [2, 2, 0],
+      [2, 0, 0],
+      [0, 0, 0],
+    ])}</gml:exterior></gml:Polygon>`;
+    const roof = `<gml:Polygon gml:id="roof-1"><gml:exterior>${ring([
+      [0, 0, 3],
+      [2, 0, 3],
+      [2, 2, 3],
+      [0, 2, 3],
+      [0, 0, 3],
+    ])}</gml:exterior></gml:Polygon>`;
+    const solid = `<core:Geometry3D><gml:Solid><gml:exterior><gml:Shell><gml:surfaceMember>${floor}</gml:surfaceMember><gml:surfaceMember xlink:href="#roof-1"/></gml:Shell></gml:exterior></gml:Solid></core:Geometry3D>`;
+    const other = `<core:Geometry3D><gml:Solid><gml:exterior><gml:Shell><gml:surfaceMember>${roof}</gml:surfaceMember></gml:Shell></gml:exterior></gml:Solid></core:Geometry3D>`;
+    const result = parseIndoorGml(document(cell("R", solid) + cell("O", other)));
+    // The roof the first cell references gives it its height.
+    assert.equal(result.cells.features[0].properties?.top_z, 3);
+  });
+
+  it("keeps a missing transition weight missing, and finds a state's cell from the cell side", () => {
+    const withDuality = (id: string, z0: number, z1: number, state: string) =>
+      cell(id, box(0, 0, z0, 4, 4, z1), `<core:duality xlink:href="#${state}"/>`);
+    const graphXml = `<core:multiLayeredGraph><core:MultiLayeredGraph gml:id="M"><core:spaceLayers gml:id="L"><core:spaceLayerMember><core:SpaceLayer gml:id="S"><core:nodes gml:id="N"><core:stateMember><core:State gml:id="a"><core:geometry><gml:Point><gml:pos>2 2 1</gml:pos></gml:Point></core:geometry></core:State></core:stateMember><core:stateMember><core:State gml:id="b"><core:geometry><gml:Point><gml:pos>2 2 4</gml:pos></gml:Point></core:geometry></core:State></core:stateMember></core:nodes><core:edges gml:id="E"><core:transitionMember><core:Transition gml:id="t"><core:connects xlink:href="#a"/><core:connects xlink:href="#b"/><core:geometry><gml:LineString><gml:pos>2 2 1</gml:pos><gml:pos>2 2 4</gml:pos></gml:LineString></core:geometry></core:Transition></core:transitionMember></core:edges></core:SpaceLayer></core:spaceLayerMember></core:spaceLayers></core:MultiLayeredGraph></core:multiLayeredGraph>`;
+    const result = parseIndoorGml(
+      document(withDuality("c0", 0, 3, "a") + withDuality("c1", 3, 6, "b"), graphXml),
+    );
+    assert.deepEqual(
+      result.states.features.map((feature) => feature.properties?.level),
+      ["0", "1"],
+    );
+    const edge = result.transitions.features[0];
+    assert.equal(edge.properties?.weight, null);
+    assert.equal(edge.properties?.level, "0;1");
   });
 
   it("skips a cell with no geometry and reports it", () => {
@@ -260,6 +322,33 @@ describe("placeLocalCoordinates", () => {
     assert.ok(Math.abs(coords[0][0] - (10 - 0.0005)) < 1e-9);
     assert.ok(Math.abs(coords[1][1] - 0.001) < 1e-9);
     assert.equal(coords[1][2], 2);
+  });
+
+  it("widens degrees of longitude away from the equator", () => {
+    const [placed] = placeLocalCoordinates(
+      [
+        {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [0, 0],
+                  [111.32, 0],
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      [10, 60],
+    );
+    const coords = (placed.features[0].geometry as { coordinates: Position[] }).coordinates;
+    // 111.32 m spans 0.001° at the equator and twice that at 60° (cos 60° = 0.5).
+    assert.ok(Math.abs(coords[1][0] - coords[0][0] - 0.002) < 1e-9);
   });
 });
 

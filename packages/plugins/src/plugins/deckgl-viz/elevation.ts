@@ -170,6 +170,9 @@ export function buildElevation3dLayers(deckGL: GeoLibreDeckGL, layer: GeoLibreLa
   // The floor picker, Quick Filters and an expression filter narrow this
   // layer as they do its 2D render (the filtered collection is cached, so the
   // elevation cache keyed on it still hits while the filter is unchanged).
+  // The overlay rebuilds on store changes, not on zoom, so a ["zoom"] term in
+  // a filter is read at zoom 0 here; floor, attribute and expression filters
+  // need no zoom.
   const geojson = applyLayerFilters(layer, layer.geojson as FeatureCollection);
   const data = elevationData(geojson, verticalScale, offset);
   const { nonPointData, pointData } = splitPointFeatures(data);

@@ -136,6 +136,41 @@ function srsDimension(element: Element): number | null {
   return null;
 }
 
+/**
+ * How the document being parsed writes its coordinates. Set at the start of
+ * {@link parseIndoorGml}, which is synchronous, so one parse never sees
+ * another's.
+ */
+const context = {
+  /** The dimension of a `posList` with no `srsDimension` in scope. */
+  dimension: 3,
+  /** Whether positions are latitude first (an EPSG URN or URL for a geographic CRS). */
+  swapAxes: false,
+  /** Polygons by `gml:id`, for surfaces a solid references with `xlink:href`. */
+  polygons: new Map<string, Element>(),
+};
+
+/** Geographic CRSs whose EPSG axis order is latitude, longitude. */
+const LATITUDE_FIRST = new Set(["EPSG:4326", "EPSG:4258", "EPSG:4269", "EPSG:4979", "EPSG:4937"]);
+
+/** A position as GeoJSON wants it: X (or longitude) first. */
+function position(values: number[]): Position {
+  const out = values.slice(0, 3);
+  if (context.swapAxes) [out[0], out[1]] = [out[1], out[0]];
+  return out;
+}
+
+/** The smallest and largest of some numbers, without spreading them into an argument list. */
+function extremes(values: Iterable<number>): [number, number] {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of values) {
+    if (value < low) low = value;
+    if (value > high) high = value;
+  }
+  return [low, high];
+}
+
 /** The positions of a `LinearRing`, `LineString` or `Point` (`pos`, `posList` or `coordinates`). */
 function readPositions(element: Element): Position[] {
   const out: Position[] = [];
@@ -143,18 +178,21 @@ function readPositions(element: Element): Position[] {
     const name = localName(item);
     if (name === "pos") {
       const values = numbers(item.textContent);
-      if (values.length >= 2 && values.every(Number.isFinite)) out.push(values.slice(0, 3));
+      if (values.length >= 2 && values.every(Number.isFinite)) out.push(position(values));
     } else if (name === "posList") {
+      // The ordinate count cannot tell 2D from 3D (six numbers are three 2D
+      // or two 3D positions), so the dimension comes from srsDimension or the
+      // document (see parseIndoorGml).
       const values = numbers(item.textContent);
-      const dimension = srsDimension(item) ?? (values.length % 3 === 0 ? 3 : 2);
+      const dimension = srsDimension(item) ?? context.dimension;
       for (let index = 0; index + dimension <= values.length; index += dimension) {
-        const position = values.slice(index, index + dimension);
-        if (position.every(Number.isFinite)) out.push(position);
+        const tuple = values.slice(index, index + dimension);
+        if (tuple.every(Number.isFinite)) out.push(position(tuple));
       }
     } else if (name === "coordinates") {
       for (const tuple of (item.textContent ?? "").trim().split(/\s+/)) {
         const values = tuple.split(",").map(Number);
-        if (values.length >= 2 && values.every(Number.isFinite)) out.push(values.slice(0, 3));
+        if (values.length >= 2 && values.every(Number.isFinite)) out.push(position(values));
       }
     }
   }
@@ -177,6 +215,7 @@ function readPolygon(polygon: Element): Position[][] {
 }
 
 const POLYGON = new Set(["Polygon"]);
+const SURFACE_MEMBER = new Set(["surfaceMember", "patches"]);
 
 /** The Z of a position, or 0 for a 2D one. */
 function zOf(position: Position): number {
@@ -261,14 +300,17 @@ function readCellGeometry(
 ): Pick<RawCell, "footprint" | "minZ" | "maxZ" | "has3d"> | null {
   const geometry = child(cell, "cellSpaceGeometry");
   if (!geometry) return null;
-  const polygons = descendants(geometry, POLYGON)
+  // Surfaces are inline, or referenced by xlink:href from a surfaceMember.
+  const referenced = descendants(geometry, SURFACE_MEMBER)
+    .filter((member) => !childElements(member).length)
+    .map((member) => context.polygons.get(hrefId(member) ?? ""))
+    .filter((polygon): polygon is Element => polygon !== undefined);
+  const polygons = [...descendants(geometry, POLYGON), ...referenced]
     .map(readPolygon)
     .filter((rings) => rings.length > 0);
   if (polygons.length === 0) return null;
   const all = polygons.flat(2);
-  const zs = all.map(zOf);
-  const minZ = Math.min(...zs);
-  const maxZ = Math.max(...zs);
+  const [minZ, maxZ] = extremes(all.map(zOf));
   const has3d = child(geometry, "Geometry3D") !== undefined || maxZ - minZ > FLAT_TOLERANCE;
   if (!has3d) {
     return {
@@ -279,9 +321,8 @@ function readCellGeometry(
     };
   }
   const floors = polygons.filter((rings) => {
-    const faceZs = rings.flat().map(zOf);
-    const low = Math.min(...faceZs);
-    return Math.max(...faceZs) - low <= FLAT_TOLERANCE && low - minZ <= FLAT_TOLERANCE;
+    const [low, high] = extremes(rings.flat().map(zOf));
+    return high - low <= FLAT_TOLERANCE && low - minZ <= FLAT_TOLERANCE;
   });
   const footprint = floors.length
     ? floors.map((rings) => rings.map((ring, index) => flatRing(ring, index === 0)))
@@ -342,6 +383,19 @@ function looksGeographic([minX, minY, maxX, maxY]: number[]): boolean {
 /** The widest a building can be, in degrees, for its coordinates to read as lon/lat. */
 const MAX_GEOGRAPHIC_SPAN = 0.05;
 
+/** The first value of an attribute on `root` or any element below it. */
+function firstAttribute(root: Element, name: string): string | null {
+  const stack = [root];
+  while (stack.length) {
+    const element = stack.pop()!;
+    const value = attribute(element, name);
+    if (value) return value;
+    const children = childElements(element);
+    for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+  }
+  return null;
+}
+
 /** The id an `xlink:href` points to (`#C1` → `C1`). */
 function hrefId(element: Element | undefined): string | null {
   const href = element ? attribute(element, "href") : null;
@@ -371,11 +425,22 @@ export function parseIndoorGml(text: string): IndoorGmlParseResult {
   }
 
   const warnings: string[] = [];
-  let detectedCrs: string | undefined;
-  const srsHolders = [root, ...descendants(root, new Set(["Envelope", "Solid", "Polygon"]))];
-  for (const element of srsHolders) {
-    detectedCrs = epsgFromSrsName(attribute(element, "srsName"));
-    if (detectedCrs) break;
+  // The first srsName anywhere (an Envelope, a Solid, a CompositeSurface...).
+  const srsName = firstAttribute(root, "srsName");
+  const detectedCrs = epsgFromSrsName(srsName);
+  context.swapAxes =
+    !!detectedCrs && LATITUDE_FIRST.has(detectedCrs) && /^(urn:|https?:)/i.test(srsName ?? "");
+  context.dimension =
+    Number(firstAttribute(root, "srsDimension")) === 2
+      ? 2
+      : descendants(root, new Set(["Geometry3D", "Solid"])).length > 0 ||
+          Number(firstAttribute(root, "srsDimension")) === 3
+        ? 3
+        : 2;
+  context.polygons = new Map();
+  for (const polygon of descendants(root, POLYGON)) {
+    const id = attribute(polygon, "id");
+    if (id) context.polygons.set(id, polygon);
   }
 
   const raw: RawCell[] = [];
@@ -403,7 +468,7 @@ export function parseIndoorGml(text: string): IndoorGmlParseResult {
 
   // Elevations are measured from the lowest point of the building, so the
   // cells stand on the map's ground.
-  const zero = Math.min(...raw.map((cell) => cell.minZ));
+  const zero = extremes(raw.map((cell) => cell.minZ))[0];
   const levelSource = raw.some((cell) => cell.storey !== null)
     ? "storey"
     : raw.some((cell) => cell.has3d)
@@ -459,13 +524,22 @@ export function parseIndoorGml(text: string): IndoorGmlParseResult {
       : [position[0], position[1]];
   };
 
+  // A state names its cell (duality); some documents only say it the other
+  // way round, from the cell to its state.
+  const cellOfState = new Map<string, string>();
+  for (const member of descendants(root, new Set(["cellSpaceMember"]))) {
+    const cell = childElements(member).find((item) => CELL_TYPES.has(localName(item)));
+    const stateId = cell ? hrefId(child(cell, "duality")) : null;
+    const cellId = cell ? attribute(cell, "id") : null;
+    if (stateId && cellId) cellOfState.set(stateId, cellId);
+  }
   const stateLevel = new Map<string, string | null>();
   const states: Feature[] = [];
   for (const state of descendants(root, new Set(["State"]))) {
     const id = attribute(state, "id") ?? `state-${states.length + 1}`;
     const point = descendants(state, new Set(["Point"]))[0];
     const position = point ? readPositions(point)[0] : undefined;
-    const cellId = hrefId(child(state, "duality"));
+    const cellId = hrefId(child(state, "duality")) ?? cellOfState.get(id) ?? null;
     const level = cellId ? (levelOf.get(cellId) ?? null) : null;
     stateLevel.set(id, level);
     if (!position) continue;
@@ -486,7 +560,8 @@ export function parseIndoorGml(text: string): IndoorGmlParseResult {
     const ends = childElements(transition)
       .filter((item) => localName(item) === "connects")
       .map(hrefId);
-    const weight = Number(childText(transition, "weight"));
+    const weightText = childText(transition, "weight");
+    const weight = weightText === null ? NaN : Number(weightText);
     transitions.push({
       type: "Feature",
       id,
