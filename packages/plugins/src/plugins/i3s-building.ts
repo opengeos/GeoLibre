@@ -156,8 +156,13 @@ export function setI3sBuildingNodeVisible(
  */
 export const I3S_LAYER_DOCUMENT_RE = /\/SceneServer\/layers\/\d+(?:\/sublayers\/\d+)?\/?$/i;
 
-/** Split a URL at its first `?`: the path, and the query (without the `?`) or `""`. */
+/**
+ * Split a URL at its first `?`: the path, and the query (without the `?`) or
+ * `""`. A `#fragment` is dropped first; it never reaches the server.
+ */
 function splitQuery(url: string): [string, string] {
+  const hash = url.indexOf("#");
+  if (hash >= 0) url = url.slice(0, hash);
   const at = url.indexOf("?");
   return at < 0 ? [url, ""] : [url.slice(0, at), url.slice(at + 1)];
 }
