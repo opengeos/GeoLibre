@@ -60,6 +60,8 @@ export interface PrintLayoutConfig {
   customHeight: number;
   customUnit: "mm" | "px";
   pageMargin: "normal" | "narrow" | "none";
+  /** Colour of the page around the map: title block, footer row and margins. */
+  pageBackground: string;
   showPageBorder: boolean;
   pageBorderColor: string;
   pageBorderWidth: number;
@@ -172,6 +174,7 @@ export const DEFAULT_PRINT_LAYOUT: PrintLayoutConfig = {
   customHeight: 720,
   customUnit: "px",
   pageMargin: "normal",
+  pageBackground: "#ffffff",
   showPageBorder: false,
   pageBorderColor: "#111827",
   pageBorderWidth: 2,
@@ -373,6 +376,7 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     customHeight: num(raw.customHeight, d.customHeight, 1, 100000),
     customUnit: oneOf(raw.customUnit, ["mm", "px"] as const, d.customUnit),
     pageMargin: oneOf(raw.pageMargin, ["normal", "narrow", "none"] as const, d.pageMargin),
+    pageBackground: str(raw.pageBackground, d.pageBackground),
     showPageBorder: bool(raw.showPageBorder, d.showPageBorder),
     pageBorderColor: str(raw.pageBorderColor, d.pageBorderColor),
     // A page border is drawn only when `showPageBorder` is on, so a zero width

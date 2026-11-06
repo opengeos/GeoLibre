@@ -33,7 +33,10 @@ same page, elements, and atlas settings. A project has one layout.
 
 **Custom…** takes a **Width** and **Height** in px or mm. **Orientation**
 switches between **Portrait** and **Landscape** (not for custom sizes), and
-**Margin** is **Normal**, **Narrow**, or **None (borderless)**.
+**Margin** is **Normal**, **Narrow**, or **None (borderless)**. **Page
+background** colours the page around the map: the title block, the footer row
+and the margins. On a dark colour the title and the footer switch to light text,
+so a dark map can sit on a dark page.
 
 ## Map frame, scale, and extent
 

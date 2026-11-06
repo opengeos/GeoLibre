@@ -2207,6 +2207,7 @@
       "none": "None (borderless)"
     },
     "mapBackground": "Map background",
+    "pageBackground": "Page background",
     "scaleLabel": "Scale (1:N)",
     "scalePlaceholder": "e.g. 25000",
     "scalePresets": "Presets…",

@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Button, Input, Label } from "@geolibre/ui";
+import { Input, Label } from "@geolibre/ui";
+import { DEFAULT_PRINT_LAYOUT } from "@geolibre/core";
+import { BackgroundColorField } from "./BackgroundColorField";
 import type { LayoutEditorProps } from "./state";
 
 interface MapFrameEditorProps extends LayoutEditorProps {
@@ -11,30 +13,16 @@ interface MapFrameEditorProps extends LayoutEditorProps {
 export function MapFrameEditor({ layout, dispatch, mapBackgroundDraft }: MapFrameEditorProps) {
   const { t } = useTranslation();
   const { mapBackground, mapBorderColor, mapBorderWidth } = layout;
-  const commitMapBackground = (value: string) => dispatch({ type: "commitMapBackground", value });
   return (
     <>
-      <div className="space-y-1.5">
-        <Label htmlFor="layout-map-bg">{t("printLayout.mapBackground")}</Label>
-        <div className="flex items-center gap-2">
-          <input
-            id="layout-map-bg"
-            type="color"
-            className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-background"
-            value={mapBackground}
-            onChange={(e) => commitMapBackground(e.target.value)}
-          />
-          <Input
-            aria-label={t("printLayout.mapBackground")}
-            className="flex-1"
-            value={mapBackgroundDraft}
-            onChange={(e) => commitMapBackground(e.target.value)}
-          />
-          <Button variant="ghost" size="sm" onClick={() => commitMapBackground("#e5e7eb")}>
-            {t("common.reset")}
-          </Button>
-        </div>
-      </div>
+      <BackgroundColorField
+        id="layout-map-bg"
+        label={t("printLayout.mapBackground")}
+        value={mapBackground}
+        draft={mapBackgroundDraft}
+        resetValue={DEFAULT_PRINT_LAYOUT.mapBackground}
+        onCommit={(value) => dispatch({ type: "commitMapBackground", value })}
+      />
 
       {/* Map frame border (color + thickness; 0 hides it). GH #749. */}
       <div className="grid grid-cols-2 gap-3">

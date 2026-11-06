@@ -40,6 +40,8 @@ describe("normalizePrintLayoutConfig", () => {
     assert.equal(config.orientation, DEFAULT_PRINT_LAYOUT.orientation);
     assert.equal(config.showNorthArrow, DEFAULT_PRINT_LAYOUT.showNorthArrow);
     assert.deepEqual(config.tableColumns, []);
+    // A project saved before the page background existed keeps a white page.
+    assert.equal(config.pageBackground, "#ffffff");
   });
 
   it("round-trips every field of a fully populated config", () => {
@@ -53,6 +55,7 @@ describe("normalizePrintLayoutConfig", () => {
       customWidth: 900,
       customHeight: 1600,
       customUnit: "mm",
+      pageBackground: "#0d1b2a",
       showLegend: false,
       showColorbar: true,
       colorbarRamp: "magma",

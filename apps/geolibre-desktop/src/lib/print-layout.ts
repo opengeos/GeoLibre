@@ -16,6 +16,7 @@ import {
   type MapScaleUnit,
   type MarkerShape,
 } from "@geolibre/core";
+import { prefersLightForeground } from "./theme-schemes";
 
 export type PaperSizeId =
   | "a4"
@@ -356,6 +357,12 @@ export interface LayoutOptions {
   attributionText?: string;
   /** Outer page padding preset: full margins, narrow, or borderless. */
   pageMargin?: "normal" | "narrow" | "none";
+  /**
+   * Colour of the page around the map body (title block, footer row, margins).
+   * Defaults to white. On a dark colour the title and footer switch to light
+   * text so they stay readable.
+   */
+  pageBackground?: string;
   /** Draw a customizable border around the whole page (useful for PNG export). */
   showPageBorder?: boolean;
   pageBorderColor?: string;
@@ -497,6 +504,9 @@ const PAGE_BACKGROUND = "#ffffff";
 const FOOTER_MIN_FONT_RATIO = 0.75;
 const INK = "#111827";
 const MUTED = "#6b7280";
+/** Title and footer text on a page background dark enough to want light text. */
+const INK_ON_DARK = "#f9fafb";
+const MUTED_ON_DARK = "#cbd5e1";
 const BORDER = "#9ca3af";
 
 /** Resolved presence of the optional title/footer content, shared by the body
@@ -761,8 +771,15 @@ export function drawLayoutContext(
 
   const titleAlign = opts.titleAlign ?? "center";
 
+  const pageBackground = opts.pageBackground ?? PAGE_BACKGROUND;
+  // Text drawn on the page itself (not on a panel over the map) follows the
+  // page colour; an unreadable colour value keeps the default dark text.
+  const lightPage = prefersLightForeground(pageBackground) === true;
+  const pageInk = lightPage ? INK_ON_DARK : INK;
+  const pageMuted = lightPage ? MUTED_ON_DARK : MUTED;
+
   ctx.save();
-  ctx.fillStyle = PAGE_BACKGROUND;
+  ctx.fillStyle = pageBackground;
   ctx.fillRect(0, 0, W, H);
 
   // X anchor + canvas textAlign for the chosen title alignment.
@@ -774,7 +791,7 @@ export function drawLayoutContext(
     const subtitleSize = unit * 2.4;
     let y = margin + titleSize;
     if (hasTitleText) {
-      ctx.fillStyle = INK;
+      ctx.fillStyle = pageInk;
       ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = titleAlign;
       ctx.textBaseline = "alphabetic";
@@ -782,7 +799,7 @@ export function drawLayoutContext(
     }
     if (hasSubtitleText) {
       y += subtitleSize * 1.4;
-      ctx.fillStyle = MUTED;
+      ctx.fillStyle = pageMuted;
       ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = titleAlign;
       ctx.fillText(opts.subtitle.trim(), titleX, y, W - margin * 2);
@@ -793,7 +810,7 @@ export function drawLayoutContext(
   if (hasFooterRow) {
     const footSize = unit * 2.2;
     const baselineY = H - margin - footSize * 0.6;
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = pageMuted;
     ctx.font = `400 ${footSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "middle";
     // The attribution and the date keep at most a third of the printable width

@@ -53,6 +53,8 @@ export interface PrintLayoutUiState {
    * half-typed "#" never corrupts the layout colour.
    */
   mapBackgroundDraft: string;
+  /** Draft for the page background hex field, committed the same way. */
+  pageBackgroundDraft: string;
   /** True while the dialog is hidden for the user to draw a print extent. */
   drawingExtent: boolean;
   /** Current atlas page (may go stale when a filter shrinks the series). */
@@ -97,6 +99,8 @@ export type PrintLayoutAction =
   | { type: "setCustomSize"; width?: number; height?: number }
   /** Type or pick a map background; complete hex colours are committed. */
   | { type: "commitMapBackground"; value: string }
+  /** Type or pick a page background; complete hex colours are committed. */
+  | { type: "commitPageBackground"; value: string }
   /** Toggle the atlas; (re-)enabling starts the series from its first page. */
   | { type: "setAtlasEnabled"; enabled: boolean }
   /** Pick the atlas coverage layer (by hand or by the defaulting effect). */
@@ -171,6 +175,7 @@ export function createPrintLayoutState(layout: PrintLayoutConfig): PrintLayoutSt
     legendDict: "",
     legendDictError: null,
     mapBackgroundDraft: layout.mapBackground,
+    pageBackgroundDraft: layout.pageBackground,
     drawingExtent: false,
     atlasIndex: 0,
     atlasBusy: false,
@@ -232,6 +237,21 @@ function patchUi(state: PrintLayoutState, patch: Partial<PrintLayoutUiState>): P
 }
 
 /** Clamp a controls column width to its bounds. */
+/**
+ * Record a typed or picked background colour in its draft field, and commit it
+ * to the layout only once it is a complete `#RGB` / `#RRGGBB` value, so a
+ * half-typed "#" never corrupts the layout colour.
+ */
+function commitHexColor(
+  state: PrintLayoutState,
+  field: "mapBackground" | "pageBackground",
+  draft: "mapBackgroundDraft" | "pageBackgroundDraft",
+  value: string,
+): PrintLayoutState {
+  const next = patchUi(state, { [draft]: value });
+  return HEX_COLOR.test(value.trim()) ? patchLayout(next, { [field]: value.trim() }) : next;
+}
+
 function clampControlsWidth(width: number): number {
   return Math.max(CONTROLS_MIN_WIDTH, Math.min(CONTROLS_MAX_WIDTH, width));
 }
@@ -259,13 +279,10 @@ export function printLayoutReducer(
       if (action.height !== undefined) patch.customHeight = Math.max(1, action.height);
       return patchLayout(state, patch);
     }
-    case "commitMapBackground": {
-      const value = action.value;
-      const next = patchUi(state, { mapBackgroundDraft: value });
-      return HEX_COLOR.test(value.trim())
-        ? patchLayout(next, { mapBackground: value.trim() })
-        : next;
-    }
+    case "commitMapBackground":
+      return commitHexColor(state, "mapBackground", "mapBackgroundDraft", action.value);
+    case "commitPageBackground":
+      return commitHexColor(state, "pageBackground", "pageBackgroundDraft", action.value);
     case "setAtlasEnabled": {
       const next = patchLayout(state, { atlasEnabled: action.enabled });
       return action.enabled ? patchUi(next, { atlasIndex: 0 }) : next;

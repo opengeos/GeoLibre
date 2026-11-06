@@ -815,6 +815,75 @@ describe("drawLayout cartographic furniture", () => {
     });
   });
 
+  describe("page background", () => {
+    // Records the colour each rectangle and each text is filled with.
+    function colourCanvas() {
+      const rects: string[] = [];
+      const texts: { text: string; fillStyle: string }[] = [];
+      const state: Record<string, unknown> = {};
+      const ctx = new Proxy(state, {
+        get(target, prop) {
+          if (prop === "measureText") return () => ({ width: 10 });
+          if (prop === "fillRect") return () => rects.push(String(target.fillStyle));
+          if (prop === "fillText") {
+            return (text: string) => texts.push({ text, fillStyle: String(target.fillStyle) });
+          }
+          if (prop in target) return target[prop as string];
+          return () => {};
+        },
+        set(target, prop, value) {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+      const canvas = {
+        width: 400,
+        height: 400,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      return { canvas, rects, texts };
+    }
+    const page = (overrides: Partial<LayoutOptions>) => {
+      const { canvas, rects, texts } = colourCanvas();
+      drawLayout(
+        canvas,
+        baseOptions({
+          title: "Fiumi",
+          subtitle: "Veneto",
+          showLegend: false,
+          showFooter: true,
+          footerText: "Dati ARPAV",
+          ...overrides,
+        }),
+      );
+      const colourOf = (text: string) => texts.find((t) => t.text === text)?.fillStyle;
+      return { pageFill: rects[0], colourOf };
+    };
+
+    it("paints a white page with dark text by default", () => {
+      const { pageFill, colourOf } = page({});
+      assert.equal(pageFill, "#ffffff");
+      assert.equal(colourOf("Fiumi"), "#111827");
+      assert.equal(colourOf("Veneto"), "#6b7280");
+      assert.equal(colourOf("Dati ARPAV"), "#6b7280");
+    });
+
+    it("paints the chosen colour and switches the page text to light on a dark page", () => {
+      const { pageFill, colourOf } = page({ pageBackground: "#0d1b2a" });
+      assert.equal(pageFill, "#0d1b2a");
+      assert.equal(colourOf("Fiumi"), "#f9fafb");
+      assert.equal(colourOf("Veneto"), "#cbd5e1");
+      assert.equal(colourOf("Dati ARPAV"), "#cbd5e1");
+      assert.equal(colourOf("Created with GeoLibre"), "#cbd5e1");
+    });
+
+    it("keeps dark text on a light page colour", () => {
+      const { pageFill, colourOf } = page({ pageBackground: "#f5f0e6" });
+      assert.equal(pageFill, "#f5f0e6");
+      assert.equal(colourOf("Fiumi"), "#111827");
+    });
+  });
+
   it("omits the attribution when showAttribution is false", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(canvas, baseOptions({ showAttribution: false }));
