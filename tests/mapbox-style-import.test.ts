@@ -597,6 +597,79 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.deepEqual(warnings, []);
   });
 
+  it("reports a zoom- or data-driven line opacity", () => {
+    for (const lineOpacity of [
+      {
+        stops: [
+          [0, 0.2],
+          [10, 1],
+        ],
+      },
+      ["interpolate", ["linear"], ["zoom"], 0, 0.2, 10, 1],
+      ["get", "opacity"],
+    ]) {
+      const result = parseMapboxStyle({
+        version: 8,
+        layers: [{ id: "rivers", type: "line", paint: { "line-opacity": lineOpacity } }],
+      });
+      assert.deepEqual(result.warnings, [
+        "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.",
+      ]);
+    }
+  });
+
+  it("reports the layer opacity a semi-transparent line export carries, simplestyle or not", () => {
+    // The exporter folds the layer opacity into `line-opacity`; the import restores the
+    // layer style only, so the user is told to set the layer opacity again.
+    for (const simpleStyleEnabled of [false, true]) {
+      const exported = buildMapboxStyle(
+        layer({ style: style({ strokeColor: "#336699", simpleStyleEnabled }), opacity: 0.5 }),
+        lines(),
+      );
+      const { warnings } = parseMapboxStyle(exported.style);
+      assert.ok(
+        warnings.includes(
+          "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it.",
+        ),
+        `simpleStyleEnabled=${simpleStyleEnabled}: ${JSON.stringify(warnings)}`,
+      );
+    }
+  });
+
+  it("checks every drawn line layer in a stack and names each property once", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "casing",
+          type: "line",
+          paint: { "line-color": "#0b3a57", "line-width": 6, "line-blur": 2 },
+        },
+        {
+          id: "stroke",
+          type: "line",
+          paint: {
+            "line-color": "#8be6ff",
+            "line-width": 1,
+            "line-blur": 1,
+            "line-dasharray": [2, 1],
+          },
+        },
+        {
+          id: "hidden",
+          type: "line",
+          layout: { visibility: "none" },
+          paint: { "line-color": "#ffffff", "line-offset": 3 },
+        },
+      ],
+    });
+    const lineNotes = result.warnings.filter((warning) => warning.startsWith("The line "));
+    assert.deepEqual(lineNotes, [
+      "The line blur cannot be represented; the lines import with sharp edges.",
+      "The line dash pattern cannot be represented; the lines import as solid.",
+    ]);
+  });
+
   it("does not report the line opacity the exporter writes for simplestyle", () => {
     const { warnings } = roundTrip(
       style({ strokeColor: "#336699", strokeWidth: 3, simpleStyleEnabled: true }),

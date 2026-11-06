@@ -628,15 +628,27 @@ function parseLineWidth(
  * offset and pattern have nowhere to go. Naming them keeps the promise on
  * {@link MapboxStyleImportResult.warnings} that symbology is never dropped
  * silently. A property left at its spec default (or a `line-opacity` of 1,
- * which the exporter writes for a fully opaque layer) is not reported, and a
- * data-driven `line-opacity` is left alone: the exporter emits one for
- * simplestyle `stroke-opacity`, which the renderer re-derives from the style.
+ * which the exporter writes for a fully opaque layer) is not reported.
+ *
+ * A flat `line-opacity` below 1 is what the exporter writes for a layer below
+ * full opacity, and it is reported too: the import sets the layer style, not
+ * the layer opacity, so the user has to restore that by hand. The one opacity
+ * left alone is the exporter's simplestyle `stroke-opacity` lookup, which the
+ * renderer re-derives from the style; any other zoom- or data-driven opacity
+ * is reported.
  */
 function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: string[]): void {
-  const opacity = asFiniteNumber(paint["line-opacity"]);
-  if (opacity !== null && opacity < 1) {
+  const rawOpacity = paint["line-opacity"];
+  const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
+  if (opacity !== null) {
+    if (opacity < 1) {
+      warnings.push(
+        `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it.`,
+      );
+    }
+  } else if (rawOpacity != null) {
     warnings.push(
-      `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it.`,
+      "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.",
     );
   }
   if (paint["line-dasharray"] != null) {
@@ -663,6 +675,28 @@ function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: stri
       "The line pattern image cannot be represented; the lines import as a flat color.",
     );
   }
+}
+
+/** Whether an expression reads the simplestyle `stroke-opacity` feature property anywhere. */
+function readsStrokeOpacity(node: unknown): boolean {
+  const array = asArray(node);
+  if (!array) return false;
+  return getProperty(array) === "stroke-opacity" || array.some(readsStrokeOpacity);
+}
+
+/**
+ * The layer opacity folded into the exporter's simplestyle `line-opacity`, or
+ * `null` when the value is something else. The exporter writes the lookup on
+ * its own for a fully opaque layer (scale 1), and `["*", lookup, opacity]`
+ * otherwise (`scaleByOpacity` in style-mapper).
+ */
+function simpleStyleOpacityScale(value: unknown): number | null {
+  const array = asArray(value);
+  if (!array) return null;
+  if (array[0] === "*" && array.length === 3 && readsStrokeOpacity(array[1])) {
+    return asFiniteNumber(array[2]);
+  }
+  return array[0] !== "*" && readsStrokeOpacity(array) ? 1 : null;
 }
 
 /**
@@ -1013,7 +1047,15 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["line-width"] !== undefined) {
       parseLineWidth(paint["line-width"], patch, warnings);
     }
-    warnUnsupportedLinePaint(paint, warnings);
+    // Several drawn line layers (class stacks, a casing under a stroke) each
+    // carry their own paint, so check them all and name each dropped property
+    // once rather than once per layer.
+    const drawnLines = byType("line").filter(isDrawn);
+    const lineNotes: string[] = [];
+    for (const lineLayer of drawnLines.length > 1 ? drawnLines : [line]) {
+      warnUnsupportedLinePaint(lineLayer.paint ?? {}, lineNotes);
+    }
+    warnings.push(...new Set(lineNotes));
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
   }
