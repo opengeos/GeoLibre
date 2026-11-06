@@ -12,14 +12,30 @@ import {
 import type { MapEngine } from "@geolibre/map";
 import { cn } from "@geolibre/ui";
 import { Layers2 } from "lucide-react";
-import { useEffect, useMemo, useRef, type KeyboardEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { useMapPanelControl } from "../../hooks/useMapPanelControl";
+import {
+  MIN_ROWS,
+  clampFloorListHeight,
+  floorListRoom,
+  mapContainerOf,
+  readListHeight,
+  writeListHeight,
+} from "./floor-list-size";
 
 /** Class on the floor picker's map-control host, for scoped CSS and tests. */
-export const FLOOR_PICKER_CLASS = "geolibre-floor-picker";
+const FLOOR_PICKER_CLASS = "geolibre-floor-picker";
 
 /** Floor lists per FeatureCollection and field, so re-renders do not rescan. */
 const levelCache = new WeakMap<object, Map<string, LevelEntry[]>>();
@@ -91,6 +107,11 @@ export function FloorPickerPanel({
   }, [linked, choice, reconcileLevelLinks]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  // A user-chosen list height (dragging the grip), remembered per browser;
+  // `null` keeps the default min(16rem, 40vh).
+  const [listHeight, setListHeight] = useState<number | null>(readListHeight);
+  const drag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   // Stay mounted while a floor is chosen even if the data no longer lists
   // any floors, so All can still clear the filter.
   const visible = visibleLinked.length > 0 && (levels.length > 0 || choice.level !== null);
@@ -108,6 +129,24 @@ export function FloorPickerPanel({
     const active = listRef.current?.querySelector<HTMLElement>("[data-active='true']");
     active?.scrollIntoView({ block: "nearest" });
   }, [host, choice.level, levels]);
+
+  // A height remembered on a taller window must still fit this map.
+  useEffect(() => {
+    if (!host || listHeight === null) return;
+    const map = mapContainerOf(host);
+    const fit = () => {
+      const list = listRef.current;
+      const panel = panelRef.current;
+      if (!list || !panel) return;
+      const clamped = clampFloorListHeight(listHeight, 25, floorListRoom(list, panel, map));
+      if (clamped < listHeight) setListHeight(clamped);
+    };
+    fit();
+    if (!map) return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(map);
+    return () => observer.disconnect();
+  }, [host, listHeight]);
 
   if (!visible || !host) return null;
 
@@ -133,14 +172,72 @@ export function FloorPickerPanel({
     if (!target) return;
     choose(target.label);
     // Move focus with the choice, so Enter or Space does not re-press the
-    // button that had focus (All, say) and undo the step.
-    // Focus whatever is chosen when the frame runs, so a quicker second key
-    // press is never undone by focusing the floor before it.
+    // button that had focus (All, say). Focus whatever is chosen when the
+    // frame runs, so a quicker second key press is never undone.
     requestAnimationFrame(() => {
       listRef.current
         ?.querySelector<HTMLElement>("[data-active='true']")
         ?.focus({ preventScroll: true });
     });
+  };
+  // Resizing the floor list: drag the grip, or focus it and use the arrow keys
+  // (one floor per press), Home/End for the smallest/largest, Enter to reset.
+  const rowHeight = () =>
+    listRef.current?.querySelector<HTMLElement>("[data-testid='floor-picker-level']")
+      ?.offsetHeight || 25;
+  const room = () =>
+    listRef.current && panelRef.current
+      ? floorListRoom(listRef.current, panelRef.current, mapContainerOf(host))
+      : null;
+  const applyHeight = (height: number, persist: boolean) => {
+    const next = clampFloorListHeight(height, rowHeight(), room());
+    setListHeight(next);
+    if (persist) writeListHeight(next);
+  };
+  const onGripPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: listRef.current?.clientHeight ?? 0,
+    };
+  };
+  const onGripPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    applyHeight(current.startHeight + event.clientY - current.startY, false);
+  };
+  const onGripPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    drag.current = null;
+    if (listRef.current) writeListHeight(listRef.current.clientHeight);
+  };
+  const resetHeight = () => {
+    setListHeight(null);
+    writeListHeight(null);
+  };
+  const onGripKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const current = listRef.current?.clientHeight ?? 0;
+    const step = rowHeight();
+    const byKey: Record<string, number> = {
+      ArrowUp: current - step,
+      ArrowDown: current + step,
+      Home: 0,
+      End: Number.POSITIVE_INFINITY,
+    };
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      resetHeight();
+      return;
+    }
+    if (!(event.key in byKey)) return;
+    // Keep the arrow keys from also stepping floors (the group's handler).
+    event.preventDefault();
+    event.stopPropagation();
+    applyHeight(byKey[event.key], true);
   };
   const toggleBelow = () => {
     if (choice.level === null) return;
@@ -155,6 +252,7 @@ export function FloorPickerPanel({
       role="group"
       aria-label={t("floorPicker.title")}
       className="geolibre-floor-picker-panel flex w-14 flex-col items-stretch overflow-hidden rounded text-xs shadow"
+      ref={panelRef}
       data-testid="floor-picker"
       onKeyDown={onKeyDown}
     >
@@ -176,7 +274,15 @@ export function FloorPickerPanel({
       >
         {t("floorPicker.all")}
       </button>
-      <div ref={listRef} className="max-h-[min(16rem,40vh)] overflow-y-auto overscroll-contain">
+      <div
+        ref={listRef}
+        className={cn(
+          "overflow-y-auto overscroll-contain",
+          listHeight === null && "max-h-[min(16rem,40vh)]",
+        )}
+        style={listHeight === null ? undefined : { maxHeight: listHeight }}
+        data-testid="floor-picker-list"
+      >
         {levels.map((entry) => {
           const active = choice.level === entry.label;
           const shown =
@@ -206,6 +312,25 @@ export function FloorPickerPanel({
           );
         })}
       </div>
+      {levels.length > MIN_ROWS ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("floorPicker.resize")}
+          title={t("floorPicker.resizeTitle")}
+          tabIndex={0}
+          className="geolibre-floor-picker-grip"
+          onPointerDown={onGripPointerDown}
+          onPointerMove={onGripPointerMove}
+          onPointerUp={onGripPointerUp}
+          onPointerCancel={onGripPointerUp}
+          onDoubleClick={resetHeight}
+          onKeyDown={onGripKeyDown}
+          data-testid="floor-picker-grip"
+        >
+          <span aria-hidden="true" />
+        </div>
+      ) : null}
       <button
         type="button"
         className={cn(

@@ -9220,6 +9220,8 @@
     "levelTitle_other": "Floor {{level}} ({{count}} features)",
     "below": "+ below",
     "belowTitle": "Also show the floors below the chosen one",
+    "resize": "Resize the floor list",
+    "resizeTitle": "Drag to resize the floor list. Double-click to reset.",
     "heading": "Floor picker",
     "field": "Floor field",
     "off": "Off",

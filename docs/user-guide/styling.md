@@ -127,7 +127,10 @@ map with one button per floor, highest first.
 
 - Click a floor to draw only that floor. **All** draws every floor again. With
   the picker focused, the up and down arrow keys step one floor at a time. A
-  tall building's list scrolls and keeps the chosen floor in view.
+  tall building's list scrolls and keeps the chosen floor in view. Drag the
+  grip under the list to make it taller or shorter (or focus the grip and use
+  the arrow keys, Home and End); double-click it to go back to the default
+  height. The height is remembered in this browser, not saved in the project.
 - **+ below** keeps the floors under the chosen one as well, the cutaway view of
   a building with the upper storeys lifted off. Combined with a stacked
   extrusion (see **Stacking floors** above) it shows the building up to the

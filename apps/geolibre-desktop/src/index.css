@@ -5920,6 +5920,34 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   color: hsl(var(--primary-foreground));
 }
 
+/* The grip under the floor list: drag (or arrow keys) to resize the list. */
+.geolibre-floor-picker .geolibre-floor-picker-grip {
+  display: flex;
+  height: 8px;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid hsl(var(--border));
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip > span {
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip:hover > span,
+.geolibre-floor-picker .geolibre-floor-picker-grip:focus-visible > span {
+  background-color: hsl(var(--foreground));
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
 /* "+ below" switched on: foreground text on the muted fill (readable in every
    accent theme; primary-colored text is not, e.g. amber or emerald), marked by
    a primary bar on the leading edge so the on state still reads at a glance. */
