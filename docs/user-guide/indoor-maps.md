@@ -13,7 +13,7 @@ Rooms, corridors and doors from OpenStreetMap indoor mapping, a GeoPackage, a Sh
 
 ## IMDF venues
 
-An IMDF archive (Indoor Mapping Data Format, the zip of GeoJSON files that Apple Maps and many indoor-mapping tools export) opens as a ready-made venue: one layer per feature type, the floors stacked and linked to the floor picker. Pick or drop the `.zip`, or load it by URL in the Add Vector panel. **Load sample data → Dinoseum indoor venue (IMDF)** opens Apple's IMDF sample. See [Adding data](adding-data.md).
+An IMDF archive (Indoor Mapping Data Format, the zip of GeoJSON files that Apple Maps and many indoor-mapping tools export) opens as a ready-made venue: one layer per feature type, the floors stacked and linked to the floor picker. Pick or drop the `.zip`, or load it by URL with **Add Data → Vector Layer**. **Load sample data → Dinoseum indoor venue (IMDF)** opens Apple's IMDF sample. See [Adding data](adding-data.md).
 
 ## BIM models as I3S Building Scene Layers
 
@@ -63,6 +63,8 @@ def dms(angle):
 def main(src, dst):
     model = ifcopenshell.open(src)
     site = model.by_type("IfcSite")[0]
+    if site.RefLatitude is None or site.RefLongitude is None:
+        sys.exit("The IfcSite has no RefLatitude/RefLongitude, so the model cannot be placed on the map.")
     lat0, lon0 = dms(site.RefLatitude), dms(site.RefLongitude)
     # Metres east/north to degrees, around the site's reference point.
     m_per_deg_lat = 111_132.954
@@ -75,7 +77,10 @@ def main(src, dst):
 
     features = []
     for space in model.by_type("IfcSpace"):
-        shape = ifcopenshell.geom.create_shape(settings, space)
+        try:
+            shape = ifcopenshell.geom.create_shape(settings, space)
+        except RuntimeError:
+            continue  # a room with no usable geometry
         verts = shape.geometry.verts
         faces = shape.geometry.faces
         triangles = []
@@ -84,6 +89,8 @@ def main(src, dst):
             tri = Polygon(pts)
             if tri.area > 1e-6:
                 triangles.append(tri)
+        if not triangles:
+            continue
         footprint = unary_union(triangles).buffer(0)
         # Rooms are usually aggregated into their storey (IfcRelAggregates),
         # sometimes contained in it (IfcRelContainedInSpatialStructure).
