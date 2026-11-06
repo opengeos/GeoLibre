@@ -17,9 +17,14 @@ import { useShallow } from "zustand/react/shallow";
  * @param features - The layer's local features.
  * @returns Field names, sorted, with {@link guessLevelField}'s pick moved to the front.
  */
+/** Field lists per feature array, so reopening the Style panel does not rescan. */
+const fieldCache = new WeakMap<object, string[]>();
+
 function fieldOptions(
   features: readonly { properties?: Record<string, unknown> | null }[] = [],
 ): string[] {
+  const cached = fieldCache.get(features);
+  if (cached) return cached;
   const names = new Set<string>();
   // Every feature, not a sample: a floor field may appear only on features
   // late in the file (a collection that lists outdoor features first).
@@ -28,7 +33,9 @@ function fieldOptions(
   }
   const sorted = [...names].sort((a, b) => a.localeCompare(b));
   const guess = guessLevelField(sorted);
-  return guess ? [guess, ...sorted.filter((name) => name !== guess)] : sorted;
+  const options = guess ? [guess, ...sorted.filter((name) => name !== guess)] : sorted;
+  fieldCache.set(features, options);
+  return options;
 }
 
 /**
@@ -57,8 +64,10 @@ export function FloorPickerSection({ layer }: { layer: GeoLibreLayer }) {
       setLayerLevelFilter(layer.id, null);
       return;
     }
-    const others = linked.filter((item) => item.id !== layer.id);
-    const choice = currentLevelChoice(others);
+    // The floor the picker shows, this layer's own link included, so changing
+    // the field of the only linked layer keeps that floor instead of
+    // resetting to All.
+    const choice = currentLevelChoice(linked);
     setLayerLevelFilter(
       layer.id,
       selectLevel({ field: next }, layer.geojson?.features, choice.level, choice.mode),
