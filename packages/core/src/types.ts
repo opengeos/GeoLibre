@@ -455,9 +455,29 @@ export interface LayerStyle {
   extrusionHeightProperty: string;
   extrusionHeightScale: number;
   extrusionBase: number;
+  /**
+   * Attribute whose value, times {@link extrusionBaseScale}, is added to
+   * {@link extrusionBase} per feature, so one layer can stack floors from a
+   * `level` field. Empty keeps the flat base. Like the height, the base is an
+   * altitude in metres, not a thickness: the roof still comes from the height.
+   */
+  extrusionBaseProperty: string;
+  /** Multiplier for {@link extrusionBaseProperty} (e.g. metres per floor). */
+  extrusionBaseScale: number;
+  /**
+   * When above 0, every feature is this many metres tall on top of its base
+   * (roof = base + floor height), and the height property and expression are
+   * ignored. 0 keeps the height as the roof's altitude.
+   */
+  extrusionFloorHeight: number;
   extrusionAdvancedStyleEnabled: boolean;
   extrusionColorExpression: string;
   extrusionHeightExpression: string;
+  /**
+   * Advanced-mode MapLibre expression for the extrusion base, as JSON. When it
+   * parses it wins over {@link extrusionBase} and {@link extrusionBaseProperty}.
+   */
+  extrusionBaseExpression: string;
   /**
    * When true, a vector layer whose coordinates carry Z values (e.g. a GPX
    * track with elevations) renders in true 3D through the shared deck.gl
@@ -694,9 +714,13 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   extrusionHeightProperty: "height",
   extrusionHeightScale: 1,
   extrusionBase: 0,
+  extrusionBaseProperty: "",
+  extrusionBaseScale: 1,
+  extrusionFloorHeight: 0,
   extrusionAdvancedStyleEnabled: false,
   extrusionColorExpression: "",
   extrusionHeightExpression: "",
+  extrusionBaseExpression: "",
   elevation3dEnabled: false,
   elevation3dVerticalScale: 1,
   elevation3dOffset: 0,

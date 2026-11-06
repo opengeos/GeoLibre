@@ -660,6 +660,98 @@ function parseExtrusionHeight(
   patch.extrusionHeightExpression = JSON.stringify(value);
 }
 
+/**
+ * Recover the extrusion base config from a `fill-extrusion-base` value, the
+ * inverse of `extrusionBaseValue`: a flat number is the base; exactly the
+ * exporter's `["*", ["to-number", ["get", p], 0], scale]`, optionally wrapped
+ * in `["+", …, offset]`, is the base property, scale and offset; any other
+ * expression round-trips through the advanced base expression. Each branch
+ * clears the base settings it does not use, so a layer's previous base
+ * property or expression cannot outrank the imported base.
+ */
+function parseExtrusionBase(value: unknown, patch: Partial<Omit<LayerStyle, "labels">>): void {
+  const flat = asFiniteNumber(value);
+  if (flat !== null) {
+    patch.extrusionBase = flat;
+    patch.extrusionBaseProperty = "";
+    patch.extrusionBaseExpression = "";
+    return;
+  }
+  const array = asArray(value);
+  if (!array) return;
+  let scaled: unknown = array;
+  let offset = 0;
+  if (array[0] === "+" && array.length === 3) {
+    const addend = asFiniteNumber(array[2]);
+    if (addend !== null) {
+      scaled = array[1];
+      offset = addend;
+    }
+  }
+  const property = exporterBaseProperty(scaled);
+  if (property) {
+    patch.extrusionBase = offset;
+    patch.extrusionBaseProperty = property.name;
+    patch.extrusionBaseScale = property.scale;
+    patch.extrusionBaseExpression = "";
+    return;
+  }
+  if (!patch.extrusionAdvancedStyleEnabled) {
+    // Turning advanced mode on would wake height and colour expressions the
+    // layer kept while it was off; the imported style did not ask for them.
+    patch.extrusionHeightExpression ??= "";
+    patch.extrusionColorExpression ??= "";
+  }
+  patch.extrusionAdvancedStyleEnabled = true;
+  patch.extrusionBaseProperty = "";
+  patch.extrusionBaseExpression = JSON.stringify(value);
+}
+
+/**
+ * The property and scale of exactly the exporter's base shape,
+ * `["*", ["to-number", ["get", p], 0], scale]`, or null for anything else (a
+ * different fallback, an object-qualified `get`), which must stay an
+ * expression to keep its meaning.
+ */
+function exporterBaseProperty(value: unknown): { name: string; scale: number } | null {
+  const product = asArray(value);
+  if (!product || product[0] !== "*" || product.length !== 3) return null;
+  const toNumber = asArray(product[1]);
+  if (!toNumber || toNumber[0] !== "to-number" || toNumber.length !== 3 || toNumber[2] !== 0) {
+    return null;
+  }
+  const get = asArray(toNumber[1]);
+  if (!get || get[0] !== "get" || get.length !== 2 || typeof get[1] !== "string" || !get[1]) {
+    return null;
+  }
+  const scale = asFiniteNumber(product[2]);
+  return scale === null ? null : { name: get[1], scale };
+}
+
+/**
+ * The floor height a `fill-extrusion-height` encodes relative to its
+ * `fill-extrusion-base`, the inverse of `extrusionHeightValue` with a floor
+ * height: `["+", ["max", 0, base], n]` for a data-driven base, or a constant
+ * roof above a constant (or absent) base. Null when the height is not of
+ * that form, so it is read as a roof altitude instead.
+ */
+function floorHeightOf(height: unknown, base: unknown): number | null {
+  const constantRoof = asFiniteNumber(height);
+  if (constantRoof !== null) {
+    const constantBase = base === undefined ? 0 : asFiniteNumber(base);
+    if (constantBase === null) return null;
+    const floor = constantRoof - Math.max(0, constantBase);
+    return floor > 0 ? floor : null;
+  }
+  const sum = asArray(height);
+  if (!sum || sum[0] !== "+" || sum.length !== 3) return null;
+  const floor = asFiniteNumber(sum[2]);
+  const clamped = asArray(sum[1]);
+  if (floor === null || floor <= 0 || !clamped || clamped.length !== 3) return null;
+  if (clamped[0] !== "max" || clamped[1] !== 0) return null;
+  return JSON.stringify(clamped[2]) === JSON.stringify(base) ? floor : null;
+}
+
 function clampZoom(value: unknown): number | null {
   const number = asFiniteNumber(value);
   if (number === null) return null;
@@ -905,11 +997,28 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     const opacity = asFiniteNumber(paint["fill-extrusion-opacity"]);
     if (opacity !== null) patch.extrusionOpacity = opacity;
-    if (paint["fill-extrusion-height"] !== undefined) {
-      parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
+    const floorHeight = floorHeightOf(paint["fill-extrusion-height"], paint["fill-extrusion-base"]);
+    if (floorHeight !== null) {
+      patch.extrusionFloorHeight = floorHeight;
+    } else {
+      // Like the base below, a floor height the layer kept does not survive an
+      // imported extrusion that describes its height differently, or not at all.
+      patch.extrusionFloorHeight = 0;
+      if (paint["fill-extrusion-height"] !== undefined) {
+        parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
+      }
     }
-    const base = asFiniteNumber(paint["fill-extrusion-base"]);
-    if (base !== null) patch.extrusionBase = base;
+    if (paint["fill-extrusion-base"] !== undefined) {
+      parseExtrusionBase(paint["fill-extrusion-base"], patch);
+    } else {
+      // No base in the imported style means Mapbox's default of 0: drop a base
+      // property or expression the layer kept, so it stops stacking from it.
+      patch.extrusionBaseProperty = "";
+      patch.extrusionBaseExpression = "";
+      // The floor height was measured from that 0 base, so the layer's own
+      // flat base must not shift the roof either.
+      if (floorHeight !== null) parseExtrusionBase(0, patch);
+    }
     applyZoomRange(extrusion, patch);
   } else if (fill) {
     Object.assign(patch, readQueryStyleFillPattern(fill.metadata, warnings));

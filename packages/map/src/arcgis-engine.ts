@@ -40,6 +40,7 @@ import {
   type MapRenderSurface,
 } from "./map-engine";
 import {
+  ARCGIS_BASE_FIELD,
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_CLASS_FIELD,
@@ -285,6 +286,7 @@ const ARCGIS_GEOJSON_FIELDS = [
   { name: ARCGIS_LABEL_FIELD, type: "string", length: 4000 },
   { name: ARCGIS_LABEL_CLASS_FIELD, type: "string", length: 16 },
   { name: ARCGIS_HEIGHT_FIELD, type: "double" },
+  { name: ARCGIS_BASE_FIELD, type: "double" },
   { name: ARCGIS_WEIGHT_FIELD, type: "double" },
 ];
 

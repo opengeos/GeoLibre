@@ -187,6 +187,15 @@ describe("renameColumn (destructive)", () => {
     const patch = renameColumn(layer, DISCOVERED, "pop", "Population");
     assert.equal(patch?.style?.vectorStyleProperty, "Population");
     assert.equal(patch?.style?.extrusionHeightProperty, "Population");
+    assert.equal(
+      renameColumn(
+        makeLayer({ style: { ...DEFAULT_LAYER_STYLE, extrusionBaseProperty: "pop" } }),
+        DISCOVERED,
+        "pop",
+        "Population",
+      )?.style?.extrusionBaseProperty,
+      "Population",
+    );
   });
 
   it("is a no-op for empty, unchanged, colliding, or absent names", () => {

@@ -1753,13 +1753,205 @@ describe("CesiumLayerSync", () => {
     assert.ok(ds, "dataSource should be added");
     const poly = ds.entities.values[0]?.polygon;
     assert.ok(poly, "polygon should be present");
-    // height = 10 * 2 + 5 = 25
-    assert.equal(poly.extrudedHeight.value, 25);
+    // As on the 2D map the height is the roof altitude: 10 * 2 = 20, above
+    // the 5 m base (not 10 * 2 + 5).
+    assert.equal(poly.extrudedHeight.value, 20);
     assert.equal(poly.height.value, 5);
     assert.equal(poly.heightReference.value, 2);
     assert.equal(poly.extrudedHeightReference.value, 2);
     assert.equal(poly.material.color.css, "#ff0000");
     assert.equal(poly.material.color.alpha, 0.9);
+  });
+
+  it("scales the height property when the height expression throws", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "throwing-height",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "b1",
+            // `to-number` of "abc" throws at evaluation time.
+            properties: { height: 10, label: "abc" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionHeightScale: 2,
+        extrusionAdvancedStyleEnabled: true,
+        extrusionHeightExpression: '["to-number", ["get", "label"]]',
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ polygon: { extrudedHeight: { value: number } } }> };
+    };
+    assert.equal(ds.entities.values[0].polygon.extrudedHeight.value, 20);
+  });
+
+  it("puts each roof a floor height above its base", async () => {
+    const sync = newSync(f);
+    const floor = (id: string, level: number) => ({
+      type: "Feature" as const,
+      id,
+      properties: { level, height: 99 },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    const layer = mkLayer({
+      id: "floor-height",
+      type: "geojson",
+      geojson: { type: "FeatureCollection", features: [floor("b", -1), floor("f1", 1)] },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionBase: 2,
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 5,
+        extrusionFloorHeight: 4,
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: {
+        values: Array<{
+          polygon: { extrudedHeight: { value: number }; height: { value: number } };
+        }>;
+      };
+    };
+    assert.deepEqual(
+      ds.entities.values.map((e) => [e.polygon.height.value, e.polygon.extrudedHeight.value]),
+      [
+        [0, 4],
+        [7, 11],
+      ],
+    );
+  });
+
+  it("falls back to the flat base when the base expression throws", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "throwing-base",
+      type: "geojson",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "b1",
+            properties: { height: 20, level: "mezzanine" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "height",
+        extrusionBase: 4,
+        extrusionAdvancedStyleEnabled: true,
+        // `to-number` of "mezzanine" throws at evaluation time.
+        extrusionBaseExpression: '["*", ["to-number", ["get", "level"]], 3]',
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ polygon: { height: { value: number } } }> };
+    };
+    assert.equal(ds.entities.values[0].polygon.height.value, 4);
+  });
+
+  it("stacks floors from a data-driven extrusion base", async () => {
+    const sync = newSync(f);
+    const floor = (id: string, level: number) => ({
+      type: "Feature" as const,
+      id,
+      properties: { level, top: level * 3.5 + 3 },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    const layer = mkLayer({
+      id: "floors",
+      type: "geojson",
+      geojson: { type: "FeatureCollection", features: [floor("f0", 0), floor("f2", 2)] },
+      style: {
+        extrusionEnabled: true,
+        extrusionHeightProperty: "top",
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 3.5,
+      },
+    });
+
+    sync.sync([layer]);
+    await f.flush();
+
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: {
+        values: Array<{
+          polygon: { extrudedHeight: { value: number }; height: { value: number } };
+        }>;
+      };
+    };
+    const polys = ds.entities.values.map((entity) => entity.polygon);
+    assert.deepEqual(
+      polys.map((p) => [p.height.value, p.extrudedHeight.value]),
+      [
+        [0, 3],
+        [7, 10],
+      ],
+    );
   });
 
   it("evaluates advanced extrusion expressions for height and color", async () => {

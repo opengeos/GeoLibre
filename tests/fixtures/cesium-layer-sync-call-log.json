@@ -949,7 +949,7 @@
       "e0.polygon.extrudedHeight",
       {
         "__instance": "ConstantProperty",
-        "value": 21
+        "value": 20
       }
     ],
     [
@@ -1037,7 +1037,7 @@
       "e2.polygon.extrudedHeight",
       {
         "__instance": "ConstantProperty",
-        "value": 61
+        "value": 60
       }
     ],
     [
@@ -1081,7 +1081,7 @@
       "e3.polygon.extrudedHeight",
       {
         "__instance": "ConstantProperty",
-        "value": 61
+        "value": 60
       }
     ],
     [

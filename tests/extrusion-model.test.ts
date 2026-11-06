@@ -126,6 +126,64 @@ describe("buildExtrusionModel", () => {
     assert.deepEqual(model.solids[0].color, [0, 1, 0]);
   });
 
+  it("starts each solid at its own data-driven base", () => {
+    const model = buildExtrusionModel(
+      collection(square(13, false, { level: 2 }), square(6, false, { level: 2 })),
+      style({ extrusionBaseProperty: "level", extrusionBaseScale: 3.5 }),
+    );
+    // Base 2 * 3.5 = 7: the 13 m roof gets a 6 m solid, the 6 m one is flat.
+    assert.equal(model.solids.length, 1);
+    assert.equal(model.skipped, 1);
+    const zs = model.solids[0].positions.filter((_, i) => i % 3 === 2);
+    assert.equal(Math.min(...zs), 7);
+    assert.equal(Math.max(...zs), 13);
+  });
+
+  it("gives each solid its own base and clamps a negative one to the ground", () => {
+    const model = buildExtrusionModel(
+      collection(
+        square(4, false, { level: -1, name: "basement" }),
+        square(5, false, { level: 0, name: "ground" }),
+        square(12, false, { level: 2, name: "second" }),
+      ),
+      style({ extrusionBaseProperty: "level", extrusionBaseScale: 3.5 }),
+    );
+    const range = (name: string) => {
+      const solid = model.solids.find((s) => s.name === name);
+      assert.ok(solid, name);
+      const zs = solid.positions.filter((_, i) => i % 3 === 2);
+      return [Math.min(...zs), Math.max(...zs)];
+    };
+    // -1 * 3.5 is below the ground, so the basement starts at 0 as on the map.
+    assert.deepEqual(range("basement"), [0, 4]);
+    assert.deepEqual(range("ground"), [0, 5]);
+    assert.deepEqual(range("second"), [7, 12]);
+  });
+
+  it("gives every solid the floor height on top of its base", () => {
+    const model = buildExtrusionModel(
+      collection(
+        square(99, false, { level: -1, name: "basement" }),
+        square(99, false, { level: 1, name: "first" }),
+      ),
+      style({
+        extrusionBase: 2,
+        extrusionBaseProperty: "level",
+        extrusionBaseScale: 5,
+        extrusionFloorHeight: 4,
+      }),
+    );
+    const range = (name: string) => {
+      const solid = model.solids.find((s) => s.name === name);
+      assert.ok(solid, name);
+      const zs = solid.positions.filter((_, i) => i % 3 === 2);
+      return [Math.min(...zs), Math.max(...zs)];
+    };
+    // Base 2 - 5 = -3 clamps to the ground; the 99 m height is ignored.
+    assert.deepEqual(range("basement"), [0, 4]);
+    assert.deepEqual(range("first"), [7, 11]);
+  });
+
   it("ignores non-polygon features and names solids", () => {
     const point: Feature = {
       type: "Feature",

@@ -13,7 +13,9 @@ import {
   compileLayerFilters,
   czmlSource,
   DEFAULT_LAYER_STYLE,
+  extrusionBaseValue,
   extrusionColorValue,
+  extrusionFloorHeightValue,
   geojsonHasZCoordinates,
   getCesiumIonToken,
   isCzmlLayer,
@@ -1390,14 +1392,16 @@ function ringTopAltitude(feature: Feature | null): number {
 }
 
 /**
- * The extrusion's optional per-feature height and colour expressions,
- * compiled once per layer; either is undefined when unset or invalid.
+ * The extrusion's optional per-feature height, base and colour expressions,
+ * compiled once per layer; each is undefined when unset or invalid.
  */
 function compileExtrusionEvaluators(
   style: LayerStyle,
   extColorVal: ReturnType<typeof extrusionColorValue>,
+  baseVal: ReturnType<typeof extrusionBaseValue>,
 ): {
   heightEvaluator: ((f: Feature) => unknown) | undefined;
+  baseEvaluator: ((f: Feature) => unknown) | undefined;
   colorEvaluator: ((f: Feature) => unknown) | undefined;
 } {
   let heightEvaluator: ((f: Feature) => unknown) | undefined;
@@ -1421,13 +1425,21 @@ function compileExtrusionEvaluators(
     });
     if (res.ok && res.evaluate) colorEvaluator = res.evaluate;
   }
-  return { heightEvaluator, colorEvaluator };
+
+  let baseEvaluator: ((f: Feature) => unknown) | undefined;
+  if (Array.isArray(baseVal)) {
+    const res = compileFeatureExpression(JSON.stringify(baseVal), { expectedType: "number" });
+    if (res.ok && res.evaluate) baseEvaluator = res.evaluate;
+  }
+  return { heightEvaluator, baseEvaluator, colorEvaluator };
 }
 
 /**
  * Extrude every polygon entity: its roof height from the height expression
- * or property, its colour from the colour expression or the flat extrusion
- * colour, both faded by the extrusion opacity.
+ * or property, its floor from the base (flat, or per feature from the base
+ * property or expression), its colour from the colour expression or the flat
+ * extrusion colour, faded by the extrusion opacity. As on the 2D map the
+ * height is the roof's altitude, not a thickness above the base.
  */
 function applyGeoJsonExtrusion(
   Cesium: CesiumNs,
@@ -1443,13 +1455,23 @@ function applyGeoJsonExtrusion(
   const heightScale = Number.isFinite(style.extrusionHeightScale)
     ? (style.extrusionHeightScale as number)
     : 1;
-  const base = Number.isFinite(style.extrusionBase) ? (style.extrusionBase as number) : 0;
+  const baseVal = extrusionBaseValue(style);
+  // The flat base, which is also the fallback when a base expression throws
+  // for a feature (as a throwing height expression falls back to the
+  // property): with a base property it is the property's offset.
+  const flatBaseValue = typeof baseVal === "number" ? baseVal : style.extrusionBase;
+  const flatBase = Number.isFinite(flatBaseValue) ? Math.max(0, flatBaseValue as number) : 0;
+  const floorHeight = extrusionFloorHeightValue(style);
   const extColorVal = extrusionColorValue(style);
   const extColorStr =
     typeof extColorVal === "string"
       ? extColorVal
       : style.extrusionColor || style.fillColor || "#3b82f6";
-  const { heightEvaluator, colorEvaluator } = compileExtrusionEvaluators(style, extColorVal);
+  const { heightEvaluator, baseEvaluator, colorEvaluator } = compileExtrusionEvaluators(
+    style,
+    extColorVal,
+    baseVal,
+  );
 
   // Parsed once: a full 3D-buildings layer would otherwise re-parse the
   // same CSS string per polygon. withAlpha() below returns a fresh Color.
@@ -1459,15 +1481,27 @@ function applyGeoJsonExtrusion(
     const index = entityFeatureIndex(viewer, entity);
     const feat = Number.isInteger(index) && features ? features[index] : null;
 
-    const height = extrusionFeatureHeight(viewer, entity, feat, heightEvaluator, heightProp);
+    const top = extrusionFeatureHeight(
+      viewer,
+      entity,
+      feat,
+      heightEvaluator,
+      heightProp,
+      heightScale,
+    );
+    const base = extrusionFeatureBase(feat, baseEvaluator, flatBase);
+    // A floor height makes the roof relative to this feature's base, as
+    // `extrusionHeightValue` does on the 2D map.
+    const roof = floorHeight > 0 ? base + floorHeight : top;
 
     // Never below the base: a negative height property or expression would
     // otherwise put the roof under the floor.
-    const relativeTop = Math.max(base, height * heightScale + base);
+    const relativeTop = Math.max(base, roof);
     // With perPositionHeight Cesium takes each vertex's own height as the
-    // base but reads extrudedHeight as an absolute altitude, so lift the
-    // roof by the ring's highest vertex; otherwise it would extrude down
-    // to `relativeTop` metres above the ellipsoid.
+    // base (so neither a flat nor a data-driven base moves the floor of a
+    // polygon with Z coordinates) but reads extrudedHeight as an absolute
+    // altitude, so lift the roof by the ring's highest vertex; otherwise it
+    // would extrude down to `relativeTop` metres above the ellipsoid.
     const extrudedHeight = perPositionHeight(entity.polygon)
       ? ringTopAltitude(feat) + relativeTop
       : relativeTop;
@@ -1485,9 +1519,11 @@ function applyGeoJsonExtrusion(
 }
 
 /**
- * A polygon entity's raw extrusion height (before scale and base): the height
- * expression, else the feature's height property, else the entity's own
- * property when the entity maps to no feature; 0 when none is a number.
+ * A polygon entity's roof altitude in metres, as `extrusionHeightValue` gives
+ * it on the 2D map: the height expression's value as written, else the
+ * feature's height property (or, for an entity that maps to no feature, the
+ * entity's own property) times `heightScale`; 0 when none is a number. An
+ * expression that throws falls back to the scaled property.
  */
 function extrusionFeatureHeight(
   viewer: CesiumWidget,
@@ -1495,11 +1531,14 @@ function extrusionFeatureHeight(
   feat: Feature | null,
   heightEvaluator: ((f: Feature) => unknown) | undefined,
   heightProp: string,
+  heightScale: number,
 ): number {
   let rawHeight: unknown;
+  let scale = heightScale;
   if (feat && heightEvaluator) {
     try {
       rawHeight = heightEvaluator(feat);
+      scale = 1;
     } catch {
       rawHeight = feat.properties?.[heightProp];
     }
@@ -1513,7 +1552,28 @@ function extrusionFeatureHeight(
 
   const num =
     typeof rawHeight === "number" && Number.isFinite(rawHeight) ? rawHeight : Number(rawHeight);
-  return Number.isFinite(num) ? num : 0;
+  return Number.isFinite(num) ? num * scale : 0;
+}
+
+/**
+ * A polygon entity's extrusion base in metres: the per-feature base
+ * expression's value (clamped to the ground, as MapLibre clamps
+ * `fill-extrusion-base`), else the flat base, which is also the fallback when
+ * the expression throws for this feature.
+ */
+function extrusionFeatureBase(
+  feat: Feature | null,
+  baseEvaluator: ((f: Feature) => unknown) | undefined,
+  flatBase: number,
+): number {
+  if (!feat || !baseEvaluator) return flatBase;
+  let value: number;
+  try {
+    value = Number(baseEvaluator(feat));
+  } catch {
+    return flatBase;
+  }
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 /** A polygon entity's extrusion colour: the colour expression's, else `baseColor`. */
