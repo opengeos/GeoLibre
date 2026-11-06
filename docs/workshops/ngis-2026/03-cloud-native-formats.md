@@ -25,8 +25,10 @@ objects fetched by key rather than byte ranges within one file.
 Every format needs a host that sends CORS headers. The single-file formats
 (COG, GeoParquet, FlatGeobuf, PMTiles, COPC) also need HTTP `Range` support:
 if a server ignores `Range`, a reader either falls back to downloading the
-whole file or fails outright (the PMTiles reader rejects it). Zarr and EPT
-fetch each chunk as its own object, so they need no range support. Object
+whole file or fails outright (the PMTiles reader rejects it). EPT and
+unsharded Zarr fetch each chunk as its own object, so they need no range
+support; sharded Zarr v3 packs many chunks into one object and reads them
+with ranges again. Object
 stores such as S3, GitHub Pages, and Source Cooperative support both.
 
 | Format | Data type | Index | Chunk | Typical use |
@@ -60,7 +62,8 @@ standard open tools:
 ```bash
 ogr2ogr -f FlatGeobuf us_counties.fgb cb_2023_us_county_500k.shp -t_srs EPSG:4326
 ogr2ogr -f Parquet us_counties.parquet us_counties.fgb \
-  -lco COMPRESSION=ZSTD -lco SORT_BY_BBOX=YES -lco WRITE_COVERING_BBOX=YES
+  -lco COMPRESSION=ZSTD -lco SORT_BY_BBOX=YES -lco WRITE_COVERING_BBOX=YES \
+  -lco ROW_GROUP_SIZE=256
 ogr2ogr -f PMTiles us_counties.pmtiles us_counties.fgb -dsco MAXZOOM=10
 gdalwarp -of COG -co COMPRESS=DEFLATE -co OVERVIEWS=AUTO dem.vrt reno_tahoe_dem.tif
 ```
@@ -116,7 +119,8 @@ Start a new project: **Project → New...**, name it
 
 !!! tip "Streaming or not?"
     Streaming suits large, spatially sorted files. This file was written with
-    `SORT_BY_BBOX`, so nearby counties sit in the same row groups. For small
+    `SORT_BY_BBOX` and 256-row groups (14 in all), so nearby counties sit in
+    the same row groups and a reader can skip the rest. For small
     files, leave streaming off: you get the full Style panel and the attribute
     table.
 
@@ -142,8 +146,8 @@ Start a new project: **Project → New...**, name it
 ### Exercise 3.4: Zarr (7 min)
 
 1. Hide the PMTiles layer.
-2. **Add data → Zarr layer**. Open **Load sample data...** and pick **Sea
-   surface temperature, monthly (NOAA)**. The form fills in the URL, the
+2. **Add data → Zarr layer**. Open **Load sample data...** and pick the NOAA
+   monthly **Sea surface temperature** sample (OISST). The form fills in the URL, the
    variable `sst`, and a display range of -2 to 32 °C.
 3. Tick **Pickable (click to show pixel value)**, set **Layer Name** to
    `Sea surface temperature (Zarr)`, and click **Add Layer**.
