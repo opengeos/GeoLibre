@@ -751,7 +751,17 @@ describe("parseMapboxStyle imports hand-written styles", () => {
   });
 
   it("reports a malformed or out-of-range line opacity as unreadable, not as zoom- or data-driven", () => {
-    for (const lineOpacity of ["0.5", true, {}, ["literal", "bad"], ["literal", []], 1.2, -0.2]) {
+    for (const lineOpacity of [
+      "0.5",
+      true,
+      {},
+      ["literal", "bad"],
+      ["literal", []],
+      1.2,
+      -0.2,
+      // The simplestyle lookup scaled by something that is not a number.
+      ["*", ["to-number", ["coalesce", ["get", "stroke-opacity"], 1], 1], "0.5"],
+    ]) {
       const result = parseMapboxStyle({
         version: 8,
         layers: [{ id: "rivers", type: "line", paint: { "line-opacity": lineOpacity } }],

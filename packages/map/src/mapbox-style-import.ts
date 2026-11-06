@@ -639,53 +639,54 @@ const MIXED_LINE_OPACITY_NOTE =
   "The stacked line layers use different opacities, which the layer style cannot hold; the lines import at the layer opacity.";
 
 /**
- * Report the `line` paint properties the import drops. A GeoLibre layer style
- * stores a line's colour and width only, so opacity, dashes, blur, casing gap,
- * offset, translation, pattern and gradient have nowhere to go. Naming them
- * keeps the promise on {@link MapboxStyleImportResult.warnings} that symbology
- * is never dropped silently. A property left at its spec default (or a
- * `line-opacity` of 1, which the exporter writes for a fully opaque layer) is
- * not reported. Only paint is checked: the `line` layout properties
- * (`line-cap`, `line-join` and the like) shape the stroke ends and corners
- * rather than carry symbology, and are left to a separate change.
+ * The note for a `line` layer's `line-opacity`, or `null` when there is
+ * nothing to report: the property is unset, 1, or the exporter's simplestyle
+ * `stroke-opacity` lookup at full opacity. That lookup is left alone because
+ * GeoLibre turns simplestyle on when a layer is added with simplestyle
+ * properties (`hasSimpleStyleProperties`), so the lookup applies wherever the
+ * data carries `stroke-opacity` and evaluates to 1 where it does not.
  *
- * A flat `line-opacity` below 1 is what the exporter writes for a layer below
- * full opacity, and it is reported too: the import sets the layer style, not
- * the layer opacity, so the user has to restore that by hand. The one opacity
- * left alone is the exporter's simplestyle `stroke-opacity` lookup: the
- * renderer rebuilds it from the layer's simplestyle switch, the same way the
- * importer already treats the exporter's simplestyle colour lookup
- * (`parseStrokeColor`); any other zoom- or data-driven opacity is reported.
- *
- * Each note goes through `report` keyed by its paint property, so a caller
- * checking several stacked layers can name each property once.
+ * A flat opacity below 1, also the one the exporter folds into the lookup as
+ * `["*", lookup, opacity]`, is reported because the import sets the layer
+ * style, not the layer opacity. Other expressions and `{ stops }` functions
+ * are reported as varying; anything else, or a value outside [0, 1], as
+ * invalid.
+ */
+function lineOpacityNote(givenOpacity: unknown): string | null {
+  const rawOpacity = unwrapLiteral(givenOpacity);
+  if (rawOpacity == null) return null;
+  const simpleStyle = simpleStyleOpacityScale(rawOpacity);
+  const opacity = simpleStyle ? simpleStyle.scale : asFiniteNumber(rawOpacity);
+  if (opacity !== null) {
+    if (opacity < 0 || opacity > 1) return UNREADABLE_LINE_OPACITY_NOTE;
+    return opacity < 1
+      ? `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`
+      : null;
+  }
+  // A lookup scaled by something other than a number is malformed, not varying.
+  if (simpleStyle) return UNREADABLE_LINE_OPACITY_NOTE;
+  // An array only counts as an expression when it was not a `literal`'s value.
+  const isExpression = Array.isArray(rawOpacity) && rawOpacity === givenOpacity;
+  return isExpression || isStopsFunction(rawOpacity)
+    ? VARYING_LINE_OPACITY_NOTE
+    : UNREADABLE_LINE_OPACITY_NOTE;
+}
+
+/**
+ * Report the `line` paint properties a GeoLibre layer style cannot hold (it
+ * keeps a line's colour and width only), so that, as
+ * {@link MapboxStyleImportResult.warnings} promises, none is dropped silently.
+ * Values at their spec default are not reported. Only paint is checked: layout
+ * properties such as `line-cap` and `line-join` are left to a separate change.
+ * Each note goes through `report` keyed by its paint property, and the opacity
+ * note is returned as well so a caller can tell stacked layers apart.
  */
 function warnUnsupportedLinePaint(
   paint: Record<string, unknown>,
   report: (property: string, message: string) => void,
-): void {
-  const givenOpacity = paint["line-opacity"];
-  const rawOpacity = unwrapLiteral(givenOpacity);
-  // An array only counts as an expression when it was not a `literal`'s value.
-  const isExpression = Array.isArray(rawOpacity) && rawOpacity === givenOpacity;
-  const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
-  if (opacity !== null && (opacity < 0 || opacity > 1)) {
-    // The spec bounds `line-opacity` to [0, 1]; a value outside it is invalid,
-    // not something to copy into the layer opacity.
-    report("line-opacity", UNREADABLE_LINE_OPACITY_NOTE);
-  } else if (opacity !== null) {
-    if (opacity < 1) {
-      report(
-        "line-opacity",
-        `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
-      );
-    }
-  } else if (isExpression || isStopsFunction(rawOpacity)) {
-    // An expression or a legacy `{ stops }` function: zoom- or data-driven.
-    report("line-opacity", VARYING_LINE_OPACITY_NOTE);
-  } else if (rawOpacity != null) {
-    report("line-opacity", UNREADABLE_LINE_OPACITY_NOTE);
-  }
+): string | null {
+  const opacityNote = lineOpacityNote(paint["line-opacity"]);
+  if (opacityNote) report("line-opacity", opacityNote);
   if (paint["line-dasharray"] != null) {
     report(
       "line-dasharray",
@@ -731,6 +732,7 @@ function warnUnsupportedLinePaint(
       "The line gradient cannot be represented; the lines import with a single flat color.",
     );
   }
+  return opacityNote;
 }
 
 /** Whether a value is a legacy `{ stops: [...] }` style function. */
@@ -766,19 +768,19 @@ function isStrokeOpacityLookup(node: unknown): boolean {
 }
 
 /**
- * The layer opacity folded into the exporter's simplestyle `line-opacity`, or
- * `null` when the value is something else. The exporter always writes the
- * lookup as `["*", lookup, opacity]` (`scaleByOpacity` in style-mapper), so a
- * fully opaque layer carries `["*", lookup, 1]`; the bare lookup is accepted
- * too.
+ * The exporter's simplestyle `line-opacity`, or `null` when the value is
+ * something else. The exporter writes `["*", lookup, opacity]`
+ * (`scaleByOpacity` in style-mapper), so a fully opaque layer carries
+ * `["*", lookup, 1]`; the bare lookup is accepted too. `scale` is the folded
+ * layer opacity, or `null` when the multiplier is not a number.
  */
-function simpleStyleOpacityScale(value: unknown): number | null {
+function simpleStyleOpacityScale(value: unknown): { scale: number | null } | null {
   const array = asArray(value);
   if (!array) return null;
   if (array[0] === "*" && array.length === 3 && isStrokeOpacityLookup(array[1])) {
-    return asFiniteNumber(array[2]);
+    return { scale: asFiniteNumber(array[2]) };
   }
-  return isStrokeOpacityLookup(array) ? 1 : null;
+  return isStrokeOpacityLookup(array) ? { scale: 1 } : null;
 }
 
 /**
@@ -1135,18 +1137,16 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // dropped property is named once however many classes set it.
     const importedLines = appliedStackTypes.has("line") ? byType("line").filter(isDrawn) : [line];
     const lineNotes = new Map<string, string>();
-    // The opacity note of each layer, or "opaque" when it has none, so a stack
-    // mixing an opaque class with a translucent one is reported as mixed.
-    const layerOpacities = new Set<string>();
+    // Each layer's opacity note (`null` when opaque): more than one distinct
+    // value means the stacked layers differ, an opaque one included.
+    const layerOpacityNotes = new Set<string | null>();
     for (const lineLayer of importedLines) {
-      let opacityNote = "opaque";
-      warnUnsupportedLinePaint(lineLayer.paint ?? {}, (property, message) => {
-        if (property === "line-opacity") opacityNote = message;
+      const opacityNote = warnUnsupportedLinePaint(lineLayer.paint ?? {}, (property, message) => {
         if (!lineNotes.has(property)) lineNotes.set(property, message);
       });
-      layerOpacities.add(opacityNote);
+      layerOpacityNotes.add(opacityNote);
     }
-    if (layerOpacities.size > 1) lineNotes.set("line-opacity", MIXED_LINE_OPACITY_NOTE);
+    if (layerOpacityNotes.size > 1) lineNotes.set("line-opacity", MIXED_LINE_OPACITY_NOTE);
     warnings.push(...lineNotes.values());
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
