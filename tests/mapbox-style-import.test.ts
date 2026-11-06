@@ -621,7 +621,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.deepEqual(result.warnings, []);
   });
 
-  it("reports a data-driven line blur but not a data-driven line opacity", () => {
+  it("reports a data-driven line blur but not the simplestyle line opacity", () => {
     const result = parseMapboxStyle({
       version: 8,
       layers: [
@@ -751,7 +751,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
   });
 
   it("reports a malformed or out-of-range line opacity as unreadable, not as zoom- or data-driven", () => {
-    for (const lineOpacity of ["0.5", true, {}, ["literal", "bad"], 1.2, -0.2]) {
+    for (const lineOpacity of ["0.5", true, {}, ["literal", "bad"], ["literal", []], 1.2, -0.2]) {
       const result = parseMapboxStyle({
         version: 8,
         layers: [{ id: "rivers", type: "line", paint: { "line-opacity": lineOpacity } }],

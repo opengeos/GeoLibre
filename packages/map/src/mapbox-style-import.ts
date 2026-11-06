@@ -645,7 +645,9 @@ const MIXED_LINE_OPACITY_NOTE =
  * keeps the promise on {@link MapboxStyleImportResult.warnings} that symbology
  * is never dropped silently. A property left at its spec default (or a
  * `line-opacity` of 1, which the exporter writes for a fully opaque layer) is
- * not reported.
+ * not reported. Only paint is checked: the `line` layout properties
+ * (`line-cap`, `line-join` and the like) shape the stroke ends and corners
+ * rather than carry symbology, and are left to a separate change.
  *
  * A flat `line-opacity` below 1 is what the exporter writes for a layer below
  * full opacity, and it is reported too: the import sets the layer style, not
@@ -662,7 +664,10 @@ function warnUnsupportedLinePaint(
   paint: Record<string, unknown>,
   report: (property: string, message: string) => void,
 ): void {
-  const rawOpacity = unwrapLiteral(paint["line-opacity"]);
+  const givenOpacity = paint["line-opacity"];
+  const rawOpacity = unwrapLiteral(givenOpacity);
+  // An array only counts as an expression when it was not a `literal`'s value.
+  const isExpression = Array.isArray(rawOpacity) && rawOpacity === givenOpacity;
   const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
   if (opacity !== null && (opacity < 0 || opacity > 1)) {
     // The spec bounds `line-opacity` to [0, 1]; a value outside it is invalid,
@@ -675,7 +680,7 @@ function warnUnsupportedLinePaint(
         `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
       );
     }
-  } else if (Array.isArray(rawOpacity) || isStopsFunction(rawOpacity)) {
+  } else if (isExpression || isStopsFunction(rawOpacity)) {
     // An expression or a legacy `{ stops }` function: zoom- or data-driven.
     report("line-opacity", VARYING_LINE_OPACITY_NOTE);
   } else if (rawOpacity != null) {
