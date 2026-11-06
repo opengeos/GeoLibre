@@ -690,21 +690,23 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     }
   });
 
-  it("checks every drawn line layer in a stack and names each property once", () => {
+  it("checks every drawn class of a combined line stack and names each property once", () => {
     const result = parseMapboxStyle({
       version: 8,
       layers: [
         {
-          id: "casing",
+          id: "minor",
           type: "line",
-          paint: { "line-color": "#0b3a57", "line-width": 6, "line-blur": 2 },
+          filter: ["==", ["get", "rank"], "minor"],
+          paint: { "line-color": "#0b3a57", "line-width": 1, "line-blur": 2 },
         },
         {
-          id: "stroke",
+          id: "major",
           type: "line",
+          filter: ["==", ["get", "rank"], "major"],
           paint: {
             "line-color": "#8be6ff",
-            "line-width": 1,
+            "line-width": 3,
             "line-blur": 1,
             "line-dasharray": [2, 1],
           },
@@ -712,16 +714,40 @@ describe("parseMapboxStyle imports hand-written styles", () => {
         {
           id: "hidden",
           type: "line",
+          filter: ["==", ["get", "rank"], "other"],
           layout: { visibility: "none" },
           paint: { "line-color": "#ffffff", "line-offset": 3 },
         },
       ],
     });
+    // The stack became rules, so both drawn classes are read; the hidden one is not.
+    assert.equal(result.style.vectorStyleMode, "rule-based");
     const lineNotes = result.warnings.filter((warning) => warning.startsWith("The line "));
     assert.deepEqual(lineNotes, [
       "The line blur cannot be represented; the lines import with sharp edges.",
       "The line dash pattern cannot be represented; the lines import as solid.",
     ]);
+  });
+
+  it("checks only the line layer it imports when unfiltered layers are not combined", () => {
+    // Without filters the layers do not combine into rules: only the first drawn line is
+    // imported, so the second one's dashes are not described as imported solid.
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "casing", type: "line", paint: { "line-color": "#0b3a57", "line-width": 6 } },
+        {
+          id: "stroke",
+          type: "line",
+          paint: { "line-color": "#8be6ff", "line-width": 1, "line-dasharray": [2, 1] },
+        },
+      ],
+    });
+    assert.equal(result.style.strokeColor, "#0b3a57");
+    assert.equal(
+      result.warnings.some((warning) => warning.startsWith("The line dash")),
+      false,
+    );
   });
 
   it("reports a malformed line opacity as unreadable, not as zoom- or data-driven", () => {
@@ -762,22 +788,36 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     );
   });
 
-  it("names the opacity once when stacked line layers differ, and keeps one shared value", () => {
-    const stack = (first: number, second: number) =>
+  it("names the opacity once when stacked line classes differ, and keeps one shared value", () => {
+    const opacityPaint = (color: string, opacity: number | undefined) =>
+      opacity === undefined
+        ? { "line-color": color }
+        : { "line-color": color, "line-opacity": opacity };
+    const stack = (first: number | undefined, second: number | undefined) =>
       parseMapboxStyle({
         version: 8,
         layers: [
-          { id: "casing", type: "line", paint: { "line-color": "#0b3a57", "line-opacity": first } },
           {
-            id: "stroke",
+            id: "minor",
             type: "line",
-            paint: { "line-color": "#8be6ff", "line-opacity": second },
+            filter: ["==", ["get", "rank"], "minor"],
+            paint: opacityPaint("#0b3a57", first),
+          },
+          {
+            id: "major",
+            type: "line",
+            filter: ["==", ["get", "rank"], "major"],
+            paint: opacityPaint("#8be6ff", second),
           },
         ],
       }).warnings.filter((warning) => warning.includes("opacit"));
-    assert.deepEqual(stack(0.5, 0.6), [
+    const mixed = [
       "The stacked line layers use different opacities, which the layer style cannot hold; the lines import at the layer opacity.",
-    ]);
+    ];
+    assert.deepEqual(stack(0.5, 0.6), mixed);
+    // An opaque class beside a translucent one is mixed too, whether its opacity is 1 or unset.
+    assert.deepEqual(stack(1, 0.5), mixed);
+    assert.deepEqual(stack(undefined, 0.5), mixed);
     assert.deepEqual(stack(0.5, 0.5), [
       "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.",
     ]);

@@ -647,9 +647,10 @@ const MIXED_LINE_OPACITY_NOTE =
  * A flat `line-opacity` below 1 is what the exporter writes for a layer below
  * full opacity, and it is reported too: the import sets the layer style, not
  * the layer opacity, so the user has to restore that by hand. The one opacity
- * left alone is the exporter's simplestyle `stroke-opacity` lookup, which the
- * renderer re-derives from the style; any other zoom- or data-driven opacity
- * is reported.
+ * left alone is the exporter's simplestyle `stroke-opacity` lookup: the
+ * renderer rebuilds it from the layer's simplestyle switch, the same way the
+ * importer already treats the exporter's simplestyle colour lookup
+ * (`parseStrokeColor`); any other zoom- or data-driven opacity is reported.
  *
  * Each note goes through `report` keyed by its paint property, so a caller
  * checking several stacked layers can name each property once.
@@ -1107,25 +1108,24 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["line-width"] !== undefined) {
       parseLineWidth(paint["line-width"], patch, warnings);
     }
-    // Several drawn line layers (class stacks, a casing under a stroke) each
-    // carry their own paint, so check them all and name each dropped property
-    // once rather than once per layer.
-    const drawnLines = byType("line").filter(isDrawn);
-    // Notes are keyed by paint property; the only one that can differ between
-    // layers is the opacity, whose note carries the value.
+    // Check the line layers this import reads: every drawn class of a stack it
+    // combined into rules, otherwise the one `line` above (which is also what
+    // a hidden-only style imports). Notes are keyed by paint property, so each
+    // dropped property is named once however many classes set it.
+    const importedLines = appliedStackTypes.has("line") ? byType("line").filter(isDrawn) : [line];
     const lineNotes = new Map<string, string>();
-    const reportLineNote = (property: string, message: string) => {
-      const previous = lineNotes.get(property);
-      if (previous === undefined) lineNotes.set(property, message);
-      else if (property === "line-opacity" && previous !== message) {
-        lineNotes.set(property, MIXED_LINE_OPACITY_NOTE);
-      }
-    };
-    // Drawn layers only; a style with every line layer hidden still imports
-    // the one `line` the rest of the importer reads, so that one is checked.
-    for (const lineLayer of drawnLines.length > 0 ? drawnLines : [line]) {
-      warnUnsupportedLinePaint(lineLayer.paint ?? {}, reportLineNote);
+    // The opacity note of each layer, or "opaque" when it has none, so a stack
+    // mixing an opaque class with a translucent one is reported as mixed.
+    const layerOpacities = new Set<string>();
+    for (const lineLayer of importedLines) {
+      let opacityNote = "opaque";
+      warnUnsupportedLinePaint(lineLayer.paint ?? {}, (property, message) => {
+        if (property === "line-opacity") opacityNote = message;
+        if (!lineNotes.has(property)) lineNotes.set(property, message);
+      });
+      layerOpacities.add(opacityNote);
     }
+    if (layerOpacities.size > 1) lineNotes.set("line-opacity", MIXED_LINE_OPACITY_NOTE);
     warnings.push(...lineNotes.values());
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
