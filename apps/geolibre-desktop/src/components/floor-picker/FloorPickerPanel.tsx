@@ -5,6 +5,7 @@ import {
   mergeLevels,
   resolveLevelLinks,
   useAppStore,
+  withoutHistory,
   type GeoLibreLayer,
   type LevelEntry,
 } from "@geolibre/core";
@@ -69,7 +70,7 @@ export function FloorPickerPanel({
     useShallow((state) => state.layers.filter((layer) => layer.levelFilter !== undefined)),
   );
   const setLevelSelection = useAppStore((state) => state.setLevelSelection);
-  const updateLayer = useAppStore((state) => state.updateLayer);
+  const reconcileLevelLinks = useAppStore((state) => state.reconcileLevelLinks);
 
   const layerGroups = useAppStore((state) => state.layerGroups);
   // Effective primary-map visibility: a linked layer inside a hidden group is
@@ -82,11 +83,12 @@ export function FloorPickerPanel({
   const choice = useMemo(() => currentLevelChoice(linked), [linked]);
 
   // Keep every linked layer on the shared choice (see resolveLevelLinks).
+  // This is bookkeeping, not an edit: it neither marks a freshly opened
+  // project unsaved nor adds an undo step that undo would only re-trigger.
   useEffect(() => {
-    for (const { id, levelFilter } of resolveLevelLinks(linked, choice)) {
-      updateLayer(id, { levelFilter });
-    }
-  }, [linked, choice, updateLayer]);
+    const updates = resolveLevelLinks(linked, choice);
+    if (updates.length > 0) withoutHistory(() => reconcileLevelLinks(updates));
+  }, [linked, choice, reconcileLevelLinks]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   // Stay mounted while a floor is chosen even if the data no longer lists
@@ -128,7 +130,15 @@ export function FloorPickerPanel({
           : levels.length - 1
         : Math.max(0, Math.min(levels.length - 1, index + (up ? -1 : 1)));
     const target = levels[next];
-    if (target) choose(target.label);
+    if (!target) return;
+    choose(target.label);
+    // Move focus with the choice, so Enter or Space does not re-press the
+    // button that had focus (All, say) and undo the step.
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector<HTMLElement>(`[data-level="${CSS.escape(target.label)}"]`)
+        ?.focus({ preventScroll: true });
+    });
   };
   const toggleBelow = () => {
     if (choice.level === null) return;

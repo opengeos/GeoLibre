@@ -117,7 +117,7 @@ def test_set_floor_picker_shares_the_floor_across_linked_layers():
     assert summary["levelFilter"] == doors["levelFilter"]
     assert doors["levelFilter"]["values"] == [1]
     assert rooms["levelFilter"]["values"] == ["0;1", "1"]
-    authoring.set_floor_picker(p, "Rooms", "level", None)
+    authoring.set_floor_picker(p, "Rooms", "level", None, mode="all")
     assert rooms["levelFilter"] == {"field": "level", "mode": "all", "level": None}
     assert doors["levelFilter"]["mode"] == "all"
     authoring.set_floor_picker(p, "Rooms", None)
@@ -198,3 +198,17 @@ def test_set_floor_picker_is_atomic():
 
 def test_non_ascii_digits_are_named_floors_like_the_app():
     assert project.parse_level_value("\u0663") == [("\u0663", None)]
+
+
+def test_set_floor_picker_keeps_the_floor_in_view_when_level_is_omitted():
+    p = _two_layer_project()
+    authoring.set_floor_picker(p, "Rooms", "level", "1", mode="below")
+    authoring.set_floor_picker(p, "Doors", "level")
+    rooms, doors = p["layers"]
+    assert rooms["levelFilter"]["level"] == doors["levelFilter"]["level"] == "1"
+    assert doors["levelFilter"]["mode"] == "below"
+    assert doors["levelFilter"]["values"] == [0, 1]
+
+
+def test_level_label_for_a_value_too_long_for_a_double():
+    assert project.parse_level_value("9" * 400) == [("Infinity", float("inf"))]

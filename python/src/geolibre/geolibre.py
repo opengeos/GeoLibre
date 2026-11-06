@@ -1746,10 +1746,11 @@ class Map(anywidget.AnyWidget):
         Args:
             layer: The layer, by id, name, or handle.
             field: The property holding the floor; ``None`` unlinks the layer.
-            level: The floor to show, e.g. ``"0"`` or ``-1``; ``None`` shows
-                every floor. Applies to every linked layer.
-            mode: ``"only"`` (the default for a level) or ``"below"`` to also
-                show the floors under it.
+            level: The floor to show, e.g. ``"0"`` or ``-1``. Applies to every
+                linked layer. ``None`` keeps the floor already shown; pass
+                ``mode="all"`` to show every floor.
+            mode: ``"only"`` (the default for a level), ``"below"`` to also
+                show the floors under it, or ``"all"``.
 
         Example:
             >>> m.set_floor_picker("Rooms", "level", "0", mode="below")

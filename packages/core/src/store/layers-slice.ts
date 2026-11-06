@@ -170,6 +170,12 @@ export interface LayersSlice {
    * matching values resolved from each layer's own features.
    */
   setLevelSelection: (level: string | null, mode: LevelFilterMode) => void;
+  /**
+   * Write floor picker links the picker re-resolved on its own (values missing
+   * from a saved project, or data that changed). Not a user edit: the project
+   * stays clean and, called through `withoutHistory`, no undo step is added.
+   */
+  reconcileLevelLinks: (updates: { id: string; levelFilter: LayerLevelFilter }[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   moveLayersRelative: (
@@ -400,6 +406,17 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
         };
       });
       return changed ? { layers, isDirty: true } : {};
+    }),
+
+  reconcileLevelLinks: (updates) =>
+    set((s) => {
+      if (updates.length === 0) return {};
+      const byId = new Map(updates.map((update) => [update.id, update.levelFilter]));
+      return {
+        layers: s.layers.map((layer) =>
+          byId.has(layer.id) ? { ...layer, levelFilter: byId.get(layer.id) } : layer,
+        ),
+      };
     }),
 
   setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),

@@ -1641,10 +1641,11 @@ def build_server(workspace: Workspace) -> MCPServer:
             path: Path to the `.geolibre.json` file.
             layer: The layer's id or display name.
             field: The property holding the floor. Pass null to unlink the layer.
-            level: The floor to show, e.g. "0" or -1. Omit it to show every
-                floor. Applies to every linked layer.
-            mode: "only" (the default for a level) or "below" to also show
-                the floors under it.
+            level: The floor to show, e.g. "0" or -1. Applies to every linked
+                layer. Omit it to keep the floor already shown; pass mode "all"
+                to show every floor.
+            mode: "only" (the default for a level), "below" to also show the
+                floors under it, or "all".
 
         Returns:
             The layer summary with its `levelFilter`.

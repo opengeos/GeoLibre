@@ -502,10 +502,9 @@ export function VectorStylePanel({
               />
             </>
           ) : null}
-          {/* The floor picker reads the floors from the layer's own features,
-              so it needs them in the store. */}
-          {/* Same gate as Quick filters: a custom or deck.gl layer takes no
-              MapLibre filter, so a floor choice could not narrow it. */}
+          {/* The floor picker reads the floors from the layer's own features, so it
+              needs them in the store. Same gate as Quick filters: a custom or deck.gl
+              layer takes no MapLibre filter, so a floor choice could not narrow it. */}
           {hasQuickFilterControls && layer.geojson ? (
             <>
               <Separator />

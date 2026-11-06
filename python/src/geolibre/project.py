@@ -3332,6 +3332,8 @@ def _level_label(value: float) -> str:
         The label JavaScript would produce.
     """
     number = float(value)
+    if math.isinf(number):  # a numeric text too long for a double
+        return "Infinity" if number > 0 else "-Infinity"
     if number == 0:
         return "0"
     magnitude = abs(number)

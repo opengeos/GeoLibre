@@ -1636,9 +1636,10 @@ def set_floor_picker(
         ref: A layer id or display name.
         field: The feature property holding the floor, e.g. ``"level"``;
             ``None`` unlinks the layer.
-        level: The floor to show, e.g. ``"0"`` or ``-1``; ``None`` shows every
-            floor.
-        mode: ``"only"`` (the default for a level) or ``"below"``.
+        level: The floor to show, e.g. ``"0"`` or ``-1``. ``None`` keeps the
+            floor the picker already shows (a layer linked later joins it, as
+            in the app); with ``mode="all"`` it shows every floor.
+        mode: ``"only"`` (the default for a level), ``"below"``, or ``"all"``.
 
     Returns:
         A summary of the layer with its ``levelFilter`` (or ``None``).
@@ -1651,6 +1652,18 @@ def set_floor_picker(
     if field is None:
         layer.pop("levelFilter", None)
         return {**layer_summary(layer), "levelFilter": None}
+    if level is None and mode is None:
+        # Keep the shared choice, as the app's Style panel does on linking.
+        for item in project.get("layers", []):
+            link = item.get("levelFilter")
+            if (
+                item is not layer
+                and isinstance(link, dict)
+                and link.get("mode") in ("only", "below")
+                and isinstance(link.get("level"), str)
+            ):
+                level, mode = link["level"], link["mode"]
+                break
     # Resolve every link first and assign them only once all succeed, so an
     # invalid field, level or mode leaves the project untouched.
     updates: list[tuple[dict[str, Any], dict[str, Any]]] = []

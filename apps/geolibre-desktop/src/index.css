@@ -5920,10 +5920,15 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   color: hsl(var(--primary-foreground));
 }
 
+/* "+ below" switched on: foreground text on the muted fill (readable in every
+   accent theme; primary-colored text is not, e.g. amber or emerald), marked by
+   a primary bar on the leading edge so the on state still reads at a glance. */
 .geolibre-floor-picker.maplibregl-ctrl .geolibre-floor-picker-below[data-on="true"],
 .geolibre-floor-picker.maplibregl-ctrl
   .geolibre-floor-picker-below[data-on="true"]:not(:disabled):hover {
-  color: hsl(var(--primary));
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-inline-start: 3px solid hsl(var(--primary));
 }
 
 /* ---------------------------------------------------------------------------

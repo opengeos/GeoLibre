@@ -194,7 +194,7 @@ on load.
 
 `set_floor_picker` links an indoor layer (rooms with a `level` or `ordinal`
 field) to the app's on-map floor picker. `level` picks the floor shown (`"0"`,
-`-1`; omit it for every floor) and `mode="below"` keeps the floors under it, for
+`-1`; omit it to keep the floor in view, `mode="all"` for every floor) and `mode="below"` keeps the floors under it, for
 a cutaway of a stacked extrusion. The floor is shared by every linked layer.
 
 `set_labels` labels features from a property (`field`) or a text `expression`

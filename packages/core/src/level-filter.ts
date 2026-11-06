@@ -285,7 +285,8 @@ export function sameLevelLink(a: LayerLevelFilter, b: LayerLevelFilter): boolean
   if ((a.level ?? null) !== (b.level ?? null)) return false;
   const av = a.values;
   const bv = b.values;
-  if (av === undefined || bv === undefined) return av === bv;
+  // A hand-edited project can hold anything in `values`; never throw on it.
+  if (!Array.isArray(av) || !Array.isArray(bv)) return av === bv;
   return av.length === bv.length && av.every((value, index) => value === bv[index]);
 }
 

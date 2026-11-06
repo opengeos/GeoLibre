@@ -298,3 +298,38 @@ describe("unresolved and re-resolved links", () => {
     );
   });
 });
+
+describe("reconcileLevelLinks", () => {
+  it("writes re-resolved links without marking the project unsaved", () => {
+    useAppStore.setState({
+      layers: [
+        {
+          id: "rooms",
+          name: "rooms",
+          type: "geojson",
+          visible: true,
+          opacity: 1,
+          source: {},
+          metadata: {},
+          style: {},
+          geojson: { type: "FeatureCollection", features: ROOMS },
+          levelFilter: { field: "level", mode: "only", level: "1" },
+        } as unknown as GeoLibreLayer,
+      ],
+      isDirty: false,
+    });
+    const updates = resolveLevelLinks(useAppStore.getState().layers);
+    useAppStore.getState().reconcileLevelLinks(updates);
+    assert.deepEqual(useAppStore.getState().layers[0].levelFilter?.values, ["0;1", "1"]);
+    assert.equal(useAppStore.getState().isDirty, false);
+  });
+
+  it("does not throw on a hand-edited link whose values are not a list", () => {
+    const bad = { field: "level", mode: "only" as const, level: "0", values: "ab" as never };
+    assert.doesNotThrow(() =>
+      resolveLevelLinks([
+        { id: "x", levelFilter: bad, geojson: { features: [feature("0"), feature("1")] } },
+      ]),
+    );
+  });
+});
