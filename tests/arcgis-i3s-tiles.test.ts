@@ -245,6 +245,47 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     ]);
   });
 
+  it("keeps a Request's method, headers and body, and lets init override them", async () => {
+    const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
+    const seen: {
+      url: string;
+      method: string;
+      header: string | null;
+      body: string;
+      init?: RequestInit;
+    }[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input as Request;
+      seen.push({
+        url: request.url,
+        method: request.method,
+        header: request.headers.get("x-test"),
+        body: await request.text(),
+        init,
+      });
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const base = "https://example.com/arcgis/rest/services/B/SceneServer/layers/0";
+      await fetchImpl(
+        new Request(base, { method: "POST", headers: { "x-test": "1" }, body: "payload" }),
+        { headers: { "x-test": "2" } },
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.equal(
+      seen[0].url,
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0?f=json",
+    );
+    assert.equal(seen[0].method, "POST");
+    assert.equal(seen[0].header, "1");
+    assert.equal(seen[0].body, "payload");
+    // init is passed on as given, so fetch applies it over the Request.
+    assert.deepEqual(seen[0].init, { headers: { "x-test": "2" } });
+  });
+
   it("draws I3S meshes with GeoLibre's mesh layer when it is loaded", () => {
     class MeshLayer {}
     assert.deepEqual(build(MeshLayer)?._subLayerProps, { mesh: { type: MeshLayer } });

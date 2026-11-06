@@ -87,6 +87,8 @@ describe("I3S Building Scene Layers", () => {
   it("builds sublayer and layer document URLs", () => {
     const base = "https://host/arcgis/rest/services/Lib/SceneServer";
     assert.equal(i3sBuildingSublayerUrl(`${base}/layers/0`, 19), `${base}/layers/0/sublayers/19`);
+    // A fragment never reaches the server, so it does not stop the match.
+    assert.equal(i3sLayerDocumentUrl(`${base}/layers/0#x`), `${base}/layers/0`);
     assert.equal(
       i3sBuildingSublayerUrl(`${base}/layers/0/?token=t`, 19),
       `${base}/layers/0/sublayers/19?token=t`,
