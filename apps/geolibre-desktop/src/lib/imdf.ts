@@ -16,6 +16,7 @@
  *
  * Pure (no DOM, no store), so it is unit tested directly.
  */
+import { isImdfArchiveEntries, isMacOsZipMetadata } from "@geolibre/core";
 import { strFromU8, unzipSync } from "fflate";
 
 /** A GeoJSON feature as read from the archive. */
@@ -106,21 +107,13 @@ function entryType(path: string): string | null {
 
 /**
  * Whether a set of archive entries looks like IMDF: a `manifest.json` and at
- * least one of the core feature files.
+ * least one of the core feature files. The shared rule in `@geolibre/core`.
  *
  * @param paths - The zip's entry names.
  * @returns True for an IMDF archive.
  */
 export function isImdfArchive(paths: readonly string[]): boolean {
-  let manifest = false;
-  let core = false;
-  for (const path of paths) {
-    const name = path.split("/").pop()?.toLowerCase() ?? "";
-    if (name === "manifest.json") manifest = true;
-    if (name === "venue.geojson" || name === "level.geojson" || name === "unit.geojson")
-      core = true;
-  }
-  return manifest && core;
+  return isImdfArchiveEntries(paths);
 }
 
 /**
@@ -217,7 +210,10 @@ export function parseImdfArchive(files: ReadonlyMap<string, string>): ImdfImport
 
   const levels = new Map<string, LevelInfo>();
   for (const level of collections.get("level") ?? []) {
-    const ordinal = Number(level.properties?.ordinal);
+    // IMDF requires a numeric ordinal; `Number(null)` would put a level with a
+    // missing one on the ground floor.
+    const raw = level.properties?.ordinal;
+    const ordinal = typeof raw === "number" ? raw : Number.NaN;
     if (level.id === undefined || !Number.isFinite(ordinal)) continue;
     levels.set(String(level.id), {
       ordinal,
@@ -314,39 +310,53 @@ export function parseImdfArchive(files: ReadonlyMap<string, string>): ImdfImport
 
 /** Largest uncompressed entry read from an archive (a whole airport fits well under it). */
 const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+/** Largest total read from one archive, so many large entries cannot exhaust memory. */
+const MAX_TOTAL_BYTES = 512 * 1024 * 1024;
 
 /**
- * Read an IMDF zip archive.
+ * Read an IMDF zip archive in one pass.
  *
  * Only `.geojson` and `manifest.json` entries are decompressed, and macOS
- * resource-fork entries (`__MACOSX/`, `._name`) are skipped.
+ * resource-fork entries (`__MACOSX/`, `._name`) are skipped. An entry, or the
+ * entries together, larger than the read limits is reported by name rather
+ * than dropped, so a venue never loads with a floor silently missing. The
+ * sizes come from the archive's own directory, so the check runs before
+ * anything is inflated.
  *
  * @param bytes - The zip file's bytes.
  * @returns The parsed archive, or `null` when the zip is not IMDF.
- * @throws Error when the zip cannot be read or a feature file is not JSON.
+ * @throws ImdfArchiveError when an entry is too large or a feature file is not
+ *   JSON; Error when the zip cannot be read.
  */
 export function readImdfZip(bytes: Uint8Array): ImdfImport | null {
   const isEntry = (name: string) => {
-    const base = name.split("/").pop() ?? "";
-    if (name.startsWith("__MACOSX/") || base.startsWith("._")) return false;
-    const lower = base.toLowerCase();
+    if (isMacOsZipMetadata(name)) return false;
+    const lower = (name.split("/").pop() ?? "").toLowerCase();
     return lower === "manifest.json" || lower.endsWith(".geojson");
   };
-  // First pass reads only the central directory (the filter rejects every
-  // entry), so a large shapefile zip costs nothing to rule out.
-  const allNames: string[] = [];
-  unzipSync(bytes, {
+  const names: string[] = [];
+  const oversized: string[] = [];
+  let total = 0;
+  const entries = unzipSync(bytes, {
     filter: (file) => {
-      allNames.push(file.name);
-      return false;
+      names.push(file.name);
+      if (!isEntry(file.name)) return false;
+      if (file.originalSize > MAX_ENTRY_BYTES) {
+        oversized.push(file.name);
+        return false;
+      }
+      total += file.originalSize;
+      return total <= MAX_TOTAL_BYTES;
     },
   });
-  if (!isImdfArchive(allNames.filter(isEntry))) return null;
-  const entries = unzipSync(bytes, {
-    filter: (file) => isEntry(file.name) && file.originalSize <= MAX_ENTRY_BYTES,
-  });
-  const names = Object.keys(entries);
+  if (!isImdfArchiveEntries(names)) return null;
+  if (oversized.length > 0) {
+    throw new ImdfArchiveError(`${oversized.join(", ")} is larger than 256 MB`);
+  }
+  if (total > MAX_TOTAL_BYTES) {
+    throw new ImdfArchiveError("its GeoJSON files add up to more than 512 MB");
+  }
   const files = new Map<string, string>();
-  for (const name of names) files.set(name, strFromU8(entries[name]));
+  for (const name of Object.keys(entries)) files.set(name, strFromU8(entries[name]));
   return parseImdfArchive(files);
 }

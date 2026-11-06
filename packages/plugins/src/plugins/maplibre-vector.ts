@@ -1,14 +1,15 @@
-import { unzipSync } from "fflate";
 import {
   DUCKDB_VECTOR_FEATURE_WARN_COUNT,
   DUCKDB_VECTOR_ROUTE_BYTES,
   effectiveLayerRenderState,
   getSpatialExtensionPath,
   hasPathTraversal,
+  isImdfZipBlob,
+  probeImdfZipUrl,
   shouldZoomToNewLayers,
   useAppStore,
 } from "@geolibre/core";
-import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import type { GeoLibreLayer, ImdfUrlProbe, LayerGroup } from "@geolibre/core";
 // Imported from the `/errors` subpath, a standalone entry point holding just
 // these helpers. The package root re-exports VectorControl, so importing from
 // there would statically pull the control's module graph in and undo the
@@ -1238,10 +1239,15 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
         // a KML/KMZ-only selection has to be routed to the host importer here
         // too — `wireKmlFileImporter` never sees a desktop pick.
         const selection = picked.map(({ file, sourcePath }) => ({ file, sourcePath }));
-        if ((await routeKmlFileSelection(selection)) || (await routeImdfFileSelection(selection))) {
-          return;
-        }
-        await addPickedVectorFiles(control, picked);
+        if (await routeKmlFileSelection(selection)) return;
+        // IMDF zips go to the host importer one by one; the rest of the
+        // selection (shapefile zips, other formats) loads as before.
+        const rest = new Set((await routeImdfFileSelection(selection)).map(({ file }) => file));
+        if (rest.size === 0) return;
+        await addPickedVectorFiles(
+          control,
+          picked.filter(({ file }) => rest.has(file)),
+        );
       } catch (error) {
         console.error("[GeoLibre] Failed to load vector files from the desktop picker", error);
       }
@@ -1249,49 +1255,40 @@ function wireDesktopFilePicker(control: VectorControl, app: GeoLibreAppAPI): voi
   });
 }
 
-/** Whether every selected file is a `.zip` (and there is at least one). */
-function isZipFileSelection(files: readonly KmlFileImport[]): boolean {
-  return files.length > 0 && files.every(({ file }) => /\.zip$/i.test(file.name));
+/** Whether a selected file is named like a zip. */
+function isZipFileName(file: File): boolean {
+  return /\.zip$/i.test(file.name);
 }
 
 /**
- * Whether a zip is an IMDF indoor venue archive (issue #3341): a
- * `manifest.json` beside a `venue`, `level` or `unit` GeoJSON. Only the
- * central directory is read; no entry is decompressed.
+ * Hand the IMDF zips of a selection to the host importer (which builds each
+ * venue's stacked, floor-picker-linked layers) and return the rest, which the
+ * vector control loads as before. Only each zip's central directory is read
+ * to decide (see `isImdfZipBlob` in `@geolibre/core`). Without a host importer
+ * everything is returned.
  *
- * @param file - A picked zip.
- * @returns True for an IMDF archive.
+ * @param files - The selected files.
+ * @returns The files that are not IMDF archives, in selection order.
  */
-export async function isImdfZipFile(file: Blob): Promise<boolean> {
-  const names: string[] = [];
-  try {
-    unzipSync(new Uint8Array(await file.arrayBuffer()), {
-      filter: (entry) => {
-        names.push(entry.name.split("/").pop()?.toLowerCase() ?? "");
-        return false;
-      },
-    });
-  } catch {
-    return false;
+export async function routeImdfFileSelection(
+  files: readonly KmlFileImport[],
+): Promise<KmlFileImport[]> {
+  if (!kmlFileImportHandler) return [...files];
+  const imdf: KmlFileImport[] = [];
+  const rest: KmlFileImport[] = [];
+  for (const entry of files) {
+    if (isZipFileName(entry.file) && (await isImdfZipBlob(entry.file))) imdf.push(entry);
+    else rest.push(entry);
   }
-  return (
-    names.includes("manifest.json") &&
-    names.some(
-      (name) => name === "venue.geojson" || name === "level.geojson" || name === "unit.geojson",
-    )
-  );
-}
-
-/**
- * Hands an IMDF-only selection to the host importer (which builds the
- * venue's stacked, floor-picker-linked layers). Returns whether it was
- * consumed; other zips are left to the vector control.
- */
-export async function routeImdfFileSelection(files: readonly KmlFileImport[]): Promise<boolean> {
-  if (!kmlFileImportHandler || !isZipFileSelection(files)) return false;
-  for (const { file } of files) if (!(await isImdfZipFile(file))) return false;
-  await kmlFileImportHandler([...files]);
-  return true;
+  if (imdf.length > 0) {
+    try {
+      await kmlFileImportHandler(imdf);
+    } catch (error) {
+      // The host importer reports its own failures; the rest still loads.
+      console.error("[GeoLibre] Failed to import the IMDF archive", error);
+    }
+  }
+  return rest;
 }
 
 /** Whether a URL's path names a `.zip` (ignoring the query and fragment). */
@@ -1319,16 +1316,31 @@ export function wireImdfUrlImports(control: Pick<VectorControl, "addData">): voi
     if (typeof source !== "string" || options.id || !kmlFileImportHandler || !isZipUrl(source)) {
       return addData(source, options);
     }
-    let blob: Blob | null = null;
+    // Range requests read only the zip's central directory, so a shapefile
+    // zip is downloaded once, by the control.
+    let probe: ImdfUrlProbe;
     try {
-      const response = await fetch(source);
-      if (response.ok) blob = await response.blob();
+      probe = await probeImdfZipUrl(source);
     } catch {
-      blob = null;
+      return addData(source, options);
     }
-    if (!blob || !(await isImdfZipFile(blob))) return addData(source, options);
-    const name = decodeURIComponent(new URL(source).pathname.split("/").pop() || "venue.zip");
-    await kmlFileImportHandler([{ file: new File([blob], name, { type: "application/zip" }) }]);
+    if (!probe.imdf) return addData(source, options);
+    let bytes = probe.bytes;
+    if (!bytes) {
+      const response = await fetch(source);
+      if (!response.ok) return addData(source, options);
+      bytes = new Uint8Array(await response.arrayBuffer());
+    }
+    const rawName = new URL(source).pathname.split("/").pop() || "venue.zip";
+    let name = rawName;
+    try {
+      name = decodeURIComponent(rawName);
+    } catch {
+      // A malformed escape keeps the raw name; the import still proceeds.
+    }
+    await kmlFileImportHandler([
+      { file: new File([bytes as BlobPart], name, { type: "application/zip" }) },
+    ]);
     // The layers are store layers, not the control's: there is no control
     // layer to report. The panel ignores the value; the URL helpers read the
     // control's layer list instead.
@@ -1358,27 +1370,54 @@ function wireKmlFileImporter(control: VectorControl): void {
   const fileInput = panel?.querySelector<HTMLInputElement>('input[type="file"]');
   if (!fileInput || fileInput.dataset.geolibreKmlImporterWired === "true") return;
   fileInput.dataset.geolibreKmlImporterWired = "true";
+  // `change` events this listener re-dispatched after taking the IMDF zips
+  // out of a selection; they go on to the KML check and the control.
+  const redispatched = new WeakSet<Event>();
+  /** Hand the remaining files back to the control through its own `change` handling. */
+  const redispatch = (rest: File[], all: number) => {
+    if (rest.length === 0) {
+      fileInput.value = "";
+      return;
+    }
+    if (rest.length < all) {
+      try {
+        const transfer = new DataTransfer();
+        for (const file of rest) transfer.items.add(file);
+        fileInput.files = transfer.files;
+      } catch {
+        // No DataTransfer (an old engine): load the rest directly instead.
+        fileInput.value = "";
+        void addPickedVectorFiles(
+          control,
+          rest.map((file) => ({ file, companionFiles: [] })),
+        ).catch((error) => console.error("[GeoLibre] Failed to load the selected files", error));
+        return;
+      }
+    }
+    const next = new Event("change", { bubbles: true });
+    redispatched.add(next);
+    fileInput.dispatchEvent(next);
+  };
   fileInput.addEventListener(
     "change",
     (event) => {
       // A browser File has no filesystem path, so no `sourcePath` here.
       const files = Array.from(fileInput.files ?? [], (file) => ({ file }));
-      if (kmlFileImportHandler && isZipFileSelection(files)) {
-        // Whether a zip is IMDF takes an async read, so hold the selection
-        // back from the control and hand it over unchanged when it is not.
+      if (
+        !redispatched.has(event) &&
+        kmlFileImportHandler &&
+        files.some(({ file }) => isZipFileName(file))
+      ) {
+        // Whether a zip is IMDF takes an async read (of its central directory
+        // only), so hold the event back, then hand every non-IMDF file to the
+        // control's own change handling, untouched.
         event.stopImmediatePropagation();
-        fileInput.value = "";
-        void (async () => {
-          try {
-            if (await routeImdfFileSelection(files)) return;
-            await addPickedVectorFiles(
-              control,
-              files.map(({ file }) => ({ file, companionFiles: [] })),
-            );
-          } catch (error) {
-            console.error("[GeoLibre] Failed to load the selected zip", error);
-          }
-        })();
+        void routeImdfFileSelection(files).then((rest) =>
+          redispatch(
+            rest.map(({ file }) => file),
+            files.length,
+          ),
+        );
         return;
       }
       if (!kmlFileImportHandler || !isKmlFileSelection(files)) return;

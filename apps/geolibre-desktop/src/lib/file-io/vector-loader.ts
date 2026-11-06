@@ -10,7 +10,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
-import { isImdfArchiveError, readImdfZip } from "../imdf";
+import { isImdfZipBlob, isImdfZipRange } from "@geolibre/core";
+import { readImdfZip } from "../imdf";
 import { imdfLoadedLayers } from "../imdf-layers";
 import { IS_MAS_BUILD } from "../build-flags";
 import {
@@ -37,7 +38,12 @@ import {
   type LoadedLayer,
   type LoadedVectorLayer,
 } from "./loaded-layer";
-import { localFileSizeBytes, readLocalFileBytes, readLocalFileText } from "./local-fs";
+import {
+  localFileSizeBytes,
+  readLocalFileBytes,
+  readLocalFileRange,
+  readLocalFileText,
+} from "./local-fs";
 import {
   browserSafeFileName,
   fileExtension,
@@ -311,21 +317,6 @@ async function loadBrowserVectorFile(
 }
 
 /** A vector file picked from the desktop dialog, with any shapefile sidecars. */
-
-/**
- * Read a zip as IMDF when it is one. A zip fflate cannot read returns `null`
- * so the shapefile loader reports it as usual, but a broken feature file
- * inside a real IMDF archive is reported as such.
- */
-function peekImdfZip(bytes: Uint8Array): ReturnType<typeof readImdfZip> {
-  try {
-    return readImdfZip(bytes);
-  } catch (error) {
-    if (isImdfArchiveError(error)) throw error;
-    return null;
-  }
-}
-
 export interface PickedVectorFile {
   /** The main vector file (the `.shp` for a shapefile). */
   file: File;
@@ -696,10 +687,14 @@ export async function loadDroppedVectorFiles(
       if (extension === "zip") {
         // An IMDF venue is a zip of GeoJSON, not a shapefile: it becomes a
         // group of stacked, floor-picker-linked layers.
-        const imdf = peekImdfZip(new Uint8Array(await file.arrayBuffer()));
-        if (imdf) {
-          layers.push(...imdfLoadedLayers(imdf, file.name));
-          continue;
+        // Only the zip's central directory is read to decide, so a shapefile
+        // zip is read once, by the shapefile loader below.
+        if (await isImdfZipBlob(file)) {
+          const imdf = readImdfZip(new Uint8Array(await file.arrayBuffer()));
+          if (imdf) {
+            layers.push(...imdfLoadedLayers(imdf, file.name));
+            continue;
+          }
         }
       }
 
@@ -814,10 +809,16 @@ export async function loadDroppedVectorPaths(
         continue;
       }
       if (extension === "zip") {
-        const imdf = peekImdfZip(await readLocalFileBytes(path));
-        if (imdf) {
-          layers.push(...imdfLoadedLayers(imdf, path));
-          continue;
+        const size = await localFileSizeBytes(path);
+        if (
+          size !== undefined &&
+          (await isImdfZipRange(size, (offset, length) => readLocalFileRange(path, offset, length)))
+        ) {
+          const imdf = readImdfZip(await readLocalFileBytes(path));
+          if (imdf) {
+            layers.push(...imdfLoadedLayers(imdf, path));
+            continue;
+          }
         }
       }
       if (extension === "kmz") {

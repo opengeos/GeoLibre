@@ -97,6 +97,8 @@ describe("isImdfArchive", () => {
     assert.equal(isImdfArchive(["manifest.json", "venue.geojson"]), true);
     assert.equal(isImdfArchive(["unit.geojson", "level.geojson"]), false);
     assert.equal(isImdfArchive(["manifest.json", "roads.shp"]), false);
+    // macOS resource forks do not count.
+    assert.equal(isImdfArchive(["__MACOSX/x/._manifest.json", "x/unit.geojson"]), false);
   });
 });
 
@@ -158,6 +160,22 @@ describe("parseImdfArchive", () => {
     assert.deepEqual(occupants[0].geometry, point(1));
     assert.equal(occupants[0].properties.name, "Café");
     assert.equal(occupants[0].properties.ordinal, 0);
+  });
+
+  it("skips a level without a numeric ordinal instead of putting it on the ground floor", () => {
+    const files = archive();
+    files.set(
+      "IMDF/level.geojson",
+      collection("level", [
+        { id: "L0", geometry: square(0), ordinal: 0 },
+        { id: "L1", geometry: square(0), ordinal: null },
+        { id: "L2", geometry: square(0), ordinal: "1" },
+      ]),
+    );
+    const result = parseImdfArchive(files);
+    assert.deepEqual(result.ordinalRange, { min: 0, max: 0 });
+    const units = result.layers.find((item) => item.featureType === "unit")!.geojson.features;
+    assert.equal(units.find((unit) => unit.properties.id === "u1")?.properties.ordinal, undefined);
   });
 
   it("reports a broken feature file by name", () => {
