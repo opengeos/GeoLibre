@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Input, Label } from "@geolibre/ui";
+import { Input, Label, Select } from "@geolibre/ui";
 import { DEFAULT_PRINT_LAYOUT } from "@geolibre/core";
 import { BackgroundColorField } from "./BackgroundColorField";
 import type { LayoutEditorProps } from "./state";
@@ -9,7 +9,7 @@ interface MapFrameEditorProps extends LayoutEditorProps {
   mapBackgroundDraft: string;
 }
 
-/** The map frame: its background colour and its border (GH #749). */
+/** The map frame: its background colour, its border (GH #749) and the panels over it. */
 export function MapFrameEditor({ layout, dispatch, mapBackgroundDraft }: MapFrameEditorProps) {
   const { t } = useTranslation();
   const { mapBackground, mapBorderColor, mapBorderWidth } = layout;
@@ -23,6 +23,23 @@ export function MapFrameEditor({ layout, dispatch, mapBackgroundDraft }: MapFram
         resetValue={DEFAULT_PRINT_LAYOUT.mapBackground}
         onCommit={(value) => dispatch({ type: "commitMapBackground", value })}
       />
+
+      <div className="space-y-1.5">
+        <Label htmlFor="layout-panel-theme">{t("printLayout.panelTheme")}</Label>
+        <Select
+          id="layout-panel-theme"
+          value={layout.panelTheme}
+          onChange={(e) =>
+            dispatch({
+              type: "setLayout",
+              patch: { panelTheme: e.target.value as "light" | "dark" },
+            })
+          }
+        >
+          <option value="light">{t("printLayout.panelThemeOption.light")}</option>
+          <option value="dark">{t("printLayout.panelThemeOption.dark")}</option>
+        </Select>
+      </div>
 
       {/* Map frame border (color + thickness; 0 hides it). GH #749. */}
       <div className="grid grid-cols-2 gap-3">

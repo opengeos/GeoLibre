@@ -56,6 +56,7 @@ describe("normalizePrintLayoutConfig", () => {
       customHeight: 1600,
       customUnit: "mm",
       pageBackground: "#0d1b2a",
+      panelTheme: "dark",
       showLegend: false,
       showColorbar: true,
       colorbarRamp: "magma",
@@ -84,8 +85,10 @@ describe("normalizePrintLayoutConfig", () => {
       orientation: "sideways",
       tablePosition: "middle",
       chartType: "sunburst",
+      panelTheme: "sepia",
     });
     assert.ok(config);
+    assert.equal(config.panelTheme, "light");
     assert.equal(config.paperSize, DEFAULT_PRINT_LAYOUT.paperSize);
     assert.equal(config.orientation, DEFAULT_PRINT_LAYOUT.orientation);
     assert.equal(config.tablePosition, DEFAULT_PRINT_LAYOUT.tablePosition);

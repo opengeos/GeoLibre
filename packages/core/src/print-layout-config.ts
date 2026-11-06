@@ -62,6 +62,8 @@ export interface PrintLayoutConfig {
   pageMargin: "normal" | "narrow" | "none";
   /** Colour of the page around the map: title block, footer row and margins. */
   pageBackground: string;
+  /** Look of the panels over the map: white or dark. */
+  panelTheme: "light" | "dark";
   showPageBorder: boolean;
   pageBorderColor: string;
   pageBorderWidth: number;
@@ -175,6 +177,7 @@ export const DEFAULT_PRINT_LAYOUT: PrintLayoutConfig = {
   customUnit: "px",
   pageMargin: "normal",
   pageBackground: "#ffffff",
+  panelTheme: "light",
   showPageBorder: false,
   pageBorderColor: "#111827",
   pageBorderWidth: 2,
@@ -377,6 +380,7 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     customUnit: oneOf(raw.customUnit, ["mm", "px"] as const, d.customUnit),
     pageMargin: oneOf(raw.pageMargin, ["normal", "narrow", "none"] as const, d.pageMargin),
     pageBackground: str(raw.pageBackground, d.pageBackground),
+    panelTheme: oneOf(raw.panelTheme, ["light", "dark"] as const, d.panelTheme),
     showPageBorder: bool(raw.showPageBorder, d.showPageBorder),
     pageBorderColor: str(raw.pageBorderColor, d.pageBorderColor),
     // A page border is drawn only when `showPageBorder` is on, so a zero width

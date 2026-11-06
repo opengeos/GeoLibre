@@ -2208,6 +2208,11 @@
     },
     "mapBackground": "Map background",
     "pageBackground": "Page background",
+    "panelTheme": "Map panels",
+    "panelThemeOption": {
+      "light": "Light",
+      "dark": "Dark"
+    },
     "scaleLabel": "Scale (1:N)",
     "scalePlaceholder": "e.g. 25000",
     "scalePresets": "Presets…",

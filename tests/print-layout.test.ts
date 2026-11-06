@@ -884,6 +884,76 @@ describe("drawLayout cartographic furniture", () => {
     });
   });
 
+  describe("map panel theme", () => {
+    // Records the colour each path or rectangle is filled with, and each text's colour.
+    function themeCanvas() {
+      const fills: string[] = [];
+      const texts: { text: string; fillStyle: string }[] = [];
+      const state: Record<string, unknown> = {};
+      const ctx = new Proxy(state, {
+        get(target, prop) {
+          if (prop === "measureText") return () => ({ width: 10 });
+          if (prop === "fill" || prop === "fillRect")
+            return () => fills.push(String(target.fillStyle));
+          if (prop === "fillText") {
+            return (text: string) => texts.push({ text, fillStyle: String(target.fillStyle) });
+          }
+          if (prop in target) return target[prop as string];
+          return () => {};
+        },
+        set(target, prop, value) {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+      const canvas = {
+        width: 400,
+        height: 400,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      return { canvas, fills, texts };
+    }
+    const draw = (panelTheme?: "light" | "dark") => {
+      const { canvas, fills, texts } = themeCanvas();
+      drawLayout(
+        canvas,
+        baseOptions({
+          title: "Fiumi",
+          titlePlacement: "inside",
+          showNorthArrow: true,
+          showScaleBar: true,
+          metersPerPixel: 10,
+          mapImage: {} as CanvasImageSource,
+          mapImageWidth: 400,
+          mapImageHeight: 400,
+          ...(panelTheme ? { panelTheme } : {}),
+        }),
+      );
+      const colourOf = (text: string) => texts.find((t) => t.text === text)?.fillStyle;
+      return { fills, colourOf };
+    };
+
+    it("draws white panels with dark text by default", () => {
+      const { fills, colourOf } = draw();
+      assert.ok(fills.includes("rgba(255,255,255,0.7)"), "inside title band");
+      assert.ok(fills.includes("rgba(255,255,255,0.78)"), "north arrow and scale bar");
+      assert.ok(fills.includes("rgba(255,255,255,0.85)"), "legend");
+      assert.equal(colourOf("Fiumi"), "#111827");
+      assert.equal(colourOf("Roads"), "#111827");
+    });
+
+    it("draws dark panels with light text when asked", () => {
+      const { fills, colourOf } = draw("dark");
+      assert.ok(!fills.some((f) => f.startsWith("rgba(255,255,255")), JSON.stringify(fills));
+      assert.ok(fills.includes("rgba(17,24,39,0.7)"), "inside title band");
+      assert.ok(fills.includes("rgba(17,24,39,0.78)"), "north arrow and scale bar");
+      assert.ok(fills.includes("rgba(17,24,39,0.85)"), "legend");
+      assert.equal(colourOf("Fiumi"), "#f9fafb");
+      assert.equal(colourOf("Roads"), "#f9fafb");
+      assert.equal(colourOf("N"), "#f9fafb");
+    });
+  });
+
   it("omits the attribution when showAttribution is false", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(canvas, baseOptions({ showAttribution: false }));

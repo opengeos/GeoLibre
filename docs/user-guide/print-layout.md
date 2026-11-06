@@ -42,7 +42,10 @@ so a dark map can sit on a dark page.
 
 - **Map frame**: the **Map background** color shows where the map has no data;
   **Map frame color** and **Map frame width** draw the border around the map
-  (width `0` hides it).
+  (width `0` hides it). **Map panels** sets the look of everything drawn over
+  the map (a title placed inside the frame, the north arrow, the scale bar, the
+  legend and the other blocks): **Light** panels with dark text, or **Dark**
+  panels with light text for dark maps.
 - **Scale (1:N)**: type a scale or pick one from **Presets…** (1:500 up to
   1:100,000). Applying it zooms the live map to that scale and recaptures. It
   is available on paper (mm) pages once the map has been captured. If the map's

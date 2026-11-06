@@ -358,6 +358,11 @@ export interface LayoutOptions {
   /** Outer page padding preset: full margins, narrow, or borderless. */
   pageMargin?: "normal" | "narrow" | "none";
   /**
+   * Look of the panels drawn over the map: white with dark text (the default)
+   * or dark with light text, for dark maps.
+   */
+  panelTheme?: "light" | "dark";
+  /**
    * Colour of the page around the map body (title block, footer row, margins).
    * Defaults to white. On a dark colour the title and footer switch to light
    * text so they stay readable.
@@ -508,6 +513,38 @@ const MUTED = "#6b7280";
 const INK_ON_DARK = "#f9fafb";
 const MUTED_ON_DARK = "#cbd5e1";
 const BORDER = "#9ca3af";
+
+/**
+ * Colours of the panels drawn over the map (the inside title band, north
+ * arrow, scale bar, legend, info block, colorbar, data table and chart).
+ */
+interface PanelColors {
+  /** The translucent panel fill at a given opacity. */
+  surface: (alpha: number) => string;
+  ink: string;
+  muted: string;
+  border: string;
+  /** The scale bar's alternate segment, contrasting with `ink`. */
+  paper: string;
+}
+
+/** White panels with dark text: the default, for light maps. */
+const LIGHT_PANELS: PanelColors = {
+  surface: (alpha) => `rgba(255,255,255,${alpha})`,
+  ink: INK,
+  muted: MUTED,
+  border: BORDER,
+  paper: "#ffffff",
+};
+
+/** Dark panels with light text, for dark maps. */
+const DARK_PANELS: PanelColors = {
+  surface: (alpha) => `rgba(17,24,39,${alpha})`,
+  ink: "#f9fafb",
+  muted: "#cbd5e1",
+  border: "#4b5563",
+  paper: "#111827",
+};
 
 /** Resolved presence of the optional title/footer content, shared by the body
  * geometry computation and the drawing pass so they never disagree. */
@@ -770,6 +807,7 @@ export function drawLayoutContext(
   } = resolveContentFlags(opts);
 
   const titleAlign = opts.titleAlign ?? "center";
+  const colors = opts.panelTheme === "dark" ? DARK_PANELS : LIGHT_PANELS;
 
   const pageBackground = opts.pageBackground ?? PAGE_BACKGROUND;
   // Text drawn on the page itself (not on a panel over the map) follows the
@@ -926,7 +964,7 @@ export function drawLayoutContext(
     // intrudes into the body; inset the fill by exactly that so it starts at the
     // frame's inner edge with no gap and no overlap.
     const frameInset = mapBorderWidth / 2;
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillStyle = colors.surface(0.7);
     ctx.fillRect(
       bodyX + frameInset,
       bodyY + frameInset,
@@ -936,7 +974,7 @@ export function drawLayoutContext(
       blockH - frameInset,
     );
     if (hasTitleText) {
-      ctx.fillStyle = INK;
+      ctx.fillStyle = colors.ink;
       ctx.font = `600 ${titleSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = titleAlign;
       ctx.textBaseline = "alphabetic";
@@ -945,7 +983,7 @@ export function drawLayoutContext(
     if (hasSubtitleText) {
       // Only advance past the title line when one was drawn.
       if (hasTitleText) y += subtitleSize * 1.4;
-      ctx.fillStyle = MUTED;
+      ctx.fillStyle = colors.muted;
       ctx.font = `400 ${subtitleSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = titleAlign;
       ctx.fillText(opts.subtitle.trim(), tx, y, bodyW - insetX * 2);
@@ -974,7 +1012,7 @@ export function drawLayoutContext(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawInfoBlock(ctx, bodyX + bodyW - inset, bodyY + bodyH - inset, infoLines, unit);
+    drawInfoBlock(ctx, bodyX + bodyW - inset, bodyY + bodyH - inset, infoLines, unit, colors);
     ctx.restore();
   }
 
@@ -997,6 +1035,7 @@ export function drawLayoutContext(
       unit,
       scaleRatio,
       opts.scaleUnit ?? "metric",
+      colors,
     );
   }
   if (opts.showNorthArrow) {
@@ -1011,6 +1050,7 @@ export function drawLayoutContext(
         arrowRadius,
         opts.bearingDeg,
         unit,
+        colors,
       );
     } else {
       // Isolated fallback: top-right corner inside the map.
@@ -1023,6 +1063,7 @@ export function drawLayoutContext(
         arrowRadius,
         opts.bearingDeg,
         unit,
+        colors,
       );
     }
   }
@@ -1036,17 +1077,25 @@ export function drawLayoutContext(
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    legendHeight = drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit, {
-      title: opts.legendTitle,
-      groupByLayer: opts.legendGroupByLayer,
-      markerIcons: opts.markerIcons,
-      // Legend sizes are stored in MapLibre CSS pixels. The capture is in
-      // device pixels and is then fitted into the page body, so apply both
-      // transforms to make the legend symbols match their map counterparts.
-      mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
-      maxHeight: bodyH - inset * 2,
-      formatNote: opts.legendFormatNote,
-    });
+    legendHeight = drawLegend(
+      ctx,
+      bodyX + inset,
+      bodyY + inset,
+      opts.legend,
+      unit,
+      {
+        title: opts.legendTitle,
+        groupByLayer: opts.legendGroupByLayer,
+        markerIcons: opts.markerIcons,
+        // Legend sizes are stored in MapLibre CSS pixels. The capture is in
+        // device pixels and is then fitted into the page body, so apply both
+        // transforms to make the legend symbols match their map counterparts.
+        mapSymbolScale: Math.max(0, (opts.mapPixelRatio ?? 1) * coverScale),
+        maxHeight: bodyH - inset * 2,
+        formatNote: opts.legendFormatNote,
+      },
+      colors,
+    );
     ctx.restore();
   }
 
@@ -1093,6 +1142,7 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
+        colors,
       ),
     );
   }
@@ -1109,6 +1159,7 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
+        colors,
       ),
     );
   }
@@ -1125,6 +1176,7 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
+        colors,
       ),
     );
   }
@@ -1141,6 +1193,7 @@ export function drawLayoutContext(
         bodyH,
         unit,
         stackOffset,
+        colors,
       ),
     );
   }
@@ -1165,10 +1218,11 @@ function drawNorthArrow(
   radius: number,
   bearingDeg: number,
   unit: number,
+  colors: PanelColors,
 ): void {
   ctx.save();
   // Translucent backing disc for legibility over imagery.
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.fillStyle = colors.surface(0.78);
   ctx.beginPath();
   ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
   ctx.fill();
@@ -1177,7 +1231,7 @@ function drawNorthArrow(
   // North points to -bearing (map rotates clockwise by bearing).
   ctx.rotate((-bearingDeg * Math.PI) / 180);
 
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.beginPath();
   ctx.moveTo(0, -radius);
   ctx.lineTo(radius * 0.55, radius * 0.7);
@@ -1186,7 +1240,7 @@ function drawNorthArrow(
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.font = `700 ${unit * 1.8}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1251,6 +1305,7 @@ function drawScaleBar(
   unit: number,
   scaleRatio = 0,
   scaleUnit: MapScaleUnit = "metric",
+  colors: PanelColors,
 ): number {
   const maxMeters = maxWidthPx * metersPerPixel;
   // Round to a nice number in the target unit (feet, miles, km, ...) so the bar
@@ -1270,7 +1325,7 @@ function drawScaleBar(
 
   ctx.save();
   // Backing for legibility.
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.fillStyle = colors.surface(0.78);
   ctx.fillRect(
     x0 - unit * 0.8,
     backingTop,
@@ -1279,7 +1334,7 @@ function drawScaleBar(
   );
 
   if (hasRatio) {
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `600 ${unit * 1.7}px system-ui, sans-serif`;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
@@ -1288,15 +1343,15 @@ function drawScaleBar(
 
   // Two-tone bar.
   const half = barWidth / 2;
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.fillRect(x0, y0, half, barHeight);
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = colors.paper;
   ctx.fillRect(x0 + half, y0, half, barHeight);
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = colors.ink;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   ctx.strokeRect(x0, y0, barWidth, barHeight);
 
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.font = `500 ${unit * 1.7}px system-ui, sans-serif`;
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
@@ -1362,6 +1417,7 @@ function drawInfoBlock(
   bottomY: number,
   lines: InfoLine[],
   unit: number,
+  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -1381,8 +1437,8 @@ function drawInfoBlock(
   const x = rightX - boxW;
   const y = bottomY - boxH;
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, x, y, boxW, boxH, unit);
   ctx.fill();
@@ -1393,12 +1449,12 @@ function drawInfoBlock(
   let cy = y + pad;
   for (const l of lines) {
     cy += rowH;
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = colors.muted;
     ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
     // Cap each cell to its measured column width so a measureText rounding
     // error can never push a glyph past the box border.
     ctx.fillText(l.label, x + pad, cy, labelW);
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(l.value, x + pad + labelW + gap, cy, valueW);
   }
@@ -1439,6 +1495,7 @@ function drawColorbar(
   bodyH: number,
   unit: number,
   stackOffset = 0,
+  colors: PanelColors,
 ): number {
   const vertical = cb.orientation === "vertical";
   const pad = unit * 1.4;
@@ -1507,8 +1564,8 @@ function drawColorbar(
     stackOffset,
   );
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, px, py, panelW, panelH, unit);
   ctx.fill();
@@ -1528,7 +1585,7 @@ function drawColorbar(
       ctx.save();
       ctx.translate(px + pad + titleSize / 2, barY + barLen / 2);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillStyle = INK;
+      ctx.fillStyle = colors.ink;
       ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1540,7 +1597,7 @@ function drawColorbar(
     addStops(grad);
     ctx.fillStyle = grad;
     ctx.fillRect(barX, barY, barThick, barLen);
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = colors.ink;
     ctx.lineWidth = lineW;
     ctx.strokeRect(barX, barY, barThick, barLen);
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
@@ -1548,12 +1605,12 @@ function drawColorbar(
     ctx.textBaseline = "middle";
     for (const tk of ticks) {
       const ty = barY + barLen - tk.t * barLen;
-      ctx.strokeStyle = INK;
+      ctx.strokeStyle = colors.ink;
       ctx.beginPath();
       ctx.moveTo(barX + barThick, ty);
       ctx.lineTo(barX + barThick + tickLen, ty);
       ctx.stroke();
-      ctx.fillStyle = INK;
+      ctx.fillStyle = colors.ink;
       ctx.fillText(tk.text, barX + barThick + tickLen + tickGap, ty);
     }
   } else {
@@ -1561,7 +1618,7 @@ function drawColorbar(
     let cursorY = py + pad;
     // Label: horizontal, centred above the bar.
     if (hasTitle) {
-      ctx.fillStyle = INK;
+      ctx.fillStyle = colors.ink;
       ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -1575,21 +1632,21 @@ function drawColorbar(
     addStops(grad);
     ctx.fillStyle = grad;
     ctx.fillRect(barX, barY, barLen, barThick);
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = colors.ink;
     ctx.lineWidth = lineW;
     ctx.strokeRect(barX, barY, barLen, barThick);
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
     ctx.textBaseline = "top";
     for (const tk of ticks) {
       const tx = barX + tk.t * barLen;
-      ctx.strokeStyle = INK;
+      ctx.strokeStyle = colors.ink;
       ctx.beginPath();
       ctx.moveTo(tx, barY + barThick);
       ctx.lineTo(tx, barY + barThick + tickLen);
       ctx.stroke();
       // Keep the end labels inside the panel.
       ctx.textAlign = tk.t === 0 ? "left" : tk.t === 1 ? "right" : "center";
-      ctx.fillStyle = INK;
+      ctx.fillStyle = colors.ink;
       ctx.fillText(tk.text, tx, barY + barThick + tickLen + tickGap);
     }
   }
@@ -1615,6 +1672,7 @@ function drawCustomLegend(
   bodyH: number,
   unit: number,
   stackOffset = 0,
+  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
@@ -1650,8 +1708,8 @@ function drawCustomLegend(
     stackOffset,
   );
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, x, y, boxW, boxH, unit);
   ctx.fill();
@@ -1662,7 +1720,7 @@ function drawCustomLegend(
   let cy = y + pad;
   if (hasTitle) {
     cy += titleSize;
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
     ctx.fillText(title, x + pad, cy, boxW - pad * 2);
     cy += unit;
@@ -1672,10 +1730,10 @@ function drawCustomLegend(
     cy += rowH;
     ctx.fillStyle = e.color;
     ctx.fillRect(x + pad, cy - swatch * 0.85, swatch, swatch);
-    ctx.strokeStyle = BORDER;
+    ctx.strokeStyle = colors.border;
     ctx.lineWidth = Math.max(1, unit * 0.15);
     ctx.strokeRect(x + pad, cy - swatch * 0.85, swatch, swatch);
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.fillText(e.label, x + pad + swatch + gap, cy, boxW - pad * 2 - swatch - gap);
   }
   ctx.restore();
@@ -1744,6 +1802,7 @@ function drawDataTable(
   bodyH: number,
   unit: number,
   stackOffset = 0,
+  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -1815,8 +1874,8 @@ function drawDataTable(
     stackOffset,
   );
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, x, y, boxW, boxH, unit);
   ctx.fill();
@@ -1827,7 +1886,7 @@ function drawDataTable(
   let cy = y + pad;
   if (hasTitle) {
     cy += titleSize;
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
     ctx.fillText(truncateToWidth(ctx, title, boxW - pad * 2), x + pad, cy);
     cy += unit;
@@ -1835,21 +1894,21 @@ function drawDataTable(
 
   // Header row, with a hairline separating it from the data rows.
   cy += rowH;
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
   let cx = x + pad;
   table.columns.forEach((header, i) => {
     ctx.fillText(truncateToWidth(ctx, header, colW[i]), cx, cy);
     cx += colW[i] + colGap;
   });
-  ctx.strokeStyle = BORDER;
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.12);
   ctx.beginPath();
   ctx.moveTo(x + pad, cy + unit * 0.7);
   ctx.lineTo(x + boxW - pad, cy + unit * 0.7);
   ctx.stroke();
 
-  ctx.fillStyle = INK;
+  ctx.fillStyle = colors.ink;
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   for (const row of rows) {
     cy += rowH;
@@ -1862,7 +1921,7 @@ function drawDataTable(
 
   if (hasNote) {
     cy += rowH;
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = colors.muted;
     ctx.fillText(truncateToWidth(ctx, note, boxW - pad * 2), x + pad, cy);
   }
   ctx.restore();
@@ -1888,6 +1947,7 @@ function drawDataChart(
   bodyH: number,
   unit: number,
   stackOffset = 0,
+  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
@@ -1936,19 +1996,19 @@ function drawDataChart(
       let cy = cy0;
       for (const bar of data.bars) {
         cy += rowH;
-        ctx.fillStyle = INK;
+        ctx.fillStyle = colors.ink;
         ctx.textAlign = "left";
         ctx.fillText(truncateToWidth(ctx, bar.label, labelCap), cx0, cy);
         const barW = (Math.abs(bar.value) / span) * barAreaW;
         const barX = bar.value < 0 ? zeroX - barW : zeroX;
         ctx.fillStyle = bar.color;
         ctx.fillRect(barX, cy - labelSize * 0.85, barW, labelSize);
-        ctx.fillStyle = INK;
+        ctx.fillStyle = colors.ink;
         ctx.fillText(formatColorbarTick(bar.value), cx0 + labelW + gap + barAreaW + gap, cy);
       }
       if (barNote) {
         cy += rowH;
-        ctx.fillStyle = MUTED;
+        ctx.fillStyle = colors.muted;
         ctx.textAlign = "left";
         ctx.fillText(truncateToWidth(ctx, barNote, contentW), cx0, cy);
       }
@@ -1981,7 +2041,7 @@ function drawDataChart(
         ctx.fill();
         angle += sweep;
       }
-      ctx.strokeStyle = BORDER;
+      ctx.strokeStyle = colors.border;
       ctx.lineWidth = Math.max(1, unit * 0.12);
       ctx.beginPath();
       ctx.arc(cx, cyMid, r, 0, Math.PI * 2);
@@ -1993,10 +2053,10 @@ function drawDataChart(
         cy += rowH;
         ctx.fillStyle = slice.color;
         ctx.fillRect(cx0 + diameter + gap * 2, cy - swatch * 0.85, swatch, swatch);
-        ctx.strokeStyle = BORDER;
+        ctx.strokeStyle = colors.border;
         ctx.strokeRect(cx0 + diameter + gap * 2, cy - swatch * 0.85, swatch, swatch);
         const pct = Math.round((slice.value / data.total) * 100);
-        ctx.fillStyle = INK;
+        ctx.fillStyle = colors.ink;
         ctx.fillText(
           truncateToWidth(ctx, `${slice.label} (${pct}%)`, unit * 22),
           cx0 + diameter + gap * 2 + swatch + gap,
@@ -2014,10 +2074,10 @@ function drawDataChart(
     contentH = plotH;
     drawContent = (cx0, cy0) => {
       const plotX = cx0 + axisW + gap;
-      ctx.strokeStyle = BORDER;
+      ctx.strokeStyle = colors.border;
       ctx.lineWidth = Math.max(1, unit * 0.12);
       ctx.strokeRect(plotX, cy0, plotW, plotH);
-      ctx.fillStyle = MUTED;
+      ctx.fillStyle = colors.muted;
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       ctx.fillText(maxLabel, plotX - gap * 0.6, cy0);
@@ -2063,8 +2123,8 @@ function drawDataChart(
     stackOffset,
   );
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, x, y, boxW, boxH, unit);
   ctx.fill();
@@ -2074,7 +2134,7 @@ function drawDataChart(
   ctx.textBaseline = "alphabetic";
   let topY = y + pad;
   if (hasTitle) {
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
     ctx.fillText(truncateToWidth(ctx, title, boxW - pad * 2), x + pad, topY + titleSize);
     topY += titleBlock;
@@ -2104,6 +2164,7 @@ function drawLegendMarker(
   sy: number,
   size: number,
   fallbackColor: string,
+  colors: PanelColors,
   markerIcons?: ReadonlyMap<string, CanvasImageSource>,
   boxed = true,
 ): void {
@@ -2114,7 +2175,7 @@ function drawLegendMarker(
       if (boxed) {
         // Border for parity with every other swatch (built-in shapes, the
         // fallback square, fill/ramp squares).
-        ctx.strokeStyle = BORDER;
+        ctx.strokeStyle = colors.border;
         ctx.strokeRect(sx, sy, size, size);
       }
       return;
@@ -2125,7 +2186,7 @@ function drawLegendMarker(
     // symbol; the outline stays either way, since a pale fallback color would
     // otherwise vanish against the legend box.
     ctx.fillStyle = fallbackColor || "#999999";
-    ctx.strokeStyle = BORDER;
+    ctx.strokeStyle = colors.border;
     if (!boxed) {
       ctx.beginPath();
       ctx.arc(sx + size / 2, sy + size / 2, size / 2, 0, Math.PI * 2);
@@ -2140,7 +2201,7 @@ function drawLegendMarker(
   ctx.save();
   ctx.translate(sx, sy);
   ctx.fillStyle = marker.color;
-  ctx.strokeStyle = BORDER;
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, size * 0.06);
   ctx.lineJoin = "round";
   drawMarkerPath(ctx, marker.shape, size);
@@ -2170,6 +2231,7 @@ function drawLegend(
     maxHeight?: number;
     formatNote?: (count: number) => string;
   },
+  colors: PanelColors,
 ): number {
   const pad = unit * 1.4;
   const titleSize = unit * 2;
@@ -2346,8 +2408,8 @@ function drawLegend(
   const rowsHeight = rows.reduce((sum, row) => sum + rowHeight(row), 0);
   const boxH = pad * 2 + titleBlock + rowsHeight + (hasNote ? baseRowH : 0);
 
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.strokeStyle = BORDER;
+  ctx.fillStyle = colors.surface(0.85);
+  ctx.strokeStyle = colors.border;
   ctx.lineWidth = Math.max(1, unit * 0.15);
   roundRect(ctx, x, y, boxW, boxH, unit);
   ctx.fill();
@@ -2362,7 +2424,7 @@ function drawLegend(
   ctx.textBaseline = "alphabetic";
   if (hasTitle) {
     const titleY = rowTop + titleSize;
-    ctx.fillStyle = INK;
+    ctx.fillStyle = colors.ink;
     ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
     ctx.fillText(title, x + pad, titleY);
     rowTop += titleBlock;
@@ -2391,6 +2453,7 @@ function drawLegend(
         sy + inset,
         edge,
         r.color,
+        colors,
         opts.markerIcons,
         r.size === undefined,
       );
@@ -2402,23 +2465,23 @@ function drawLegend(
       ctx.arc(cx, cyc, radius, 0, Math.PI * 2);
       ctx.fillStyle = r.color;
       ctx.fill();
-      ctx.strokeStyle = BORDER;
+      ctx.strokeStyle = colors.border;
       ctx.lineWidth = Math.max(1, unit * 0.1);
       ctx.stroke();
     } else if (r.color) {
       ctx.fillStyle = r.color;
       ctx.fillRect(sx, sy, rowSwatch, rowSwatch);
-      ctx.strokeStyle = BORDER;
+      ctx.strokeStyle = colors.border;
       ctx.strokeRect(sx, sy, rowSwatch, rowSwatch);
     }
-    ctx.fillStyle = hasSwatch ? INK : MUTED;
+    ctx.fillStyle = hasSwatch ? colors.ink : colors.muted;
     ctx.font = `${hasSwatch ? 400 : 600} ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(r.text, textX, cy);
     rowTop += height;
   }
   if (hasNote) {
     const cy = rowTop + baseRowH / 2 + labelSize * 0.35;
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = colors.muted;
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
     ctx.fillText(note, x + pad, cy);
   }
