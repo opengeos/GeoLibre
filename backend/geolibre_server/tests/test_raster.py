@@ -234,10 +234,11 @@ def test_polygonize_orders_containers_before_islands(tmp_path: Path) -> None:
     import rasterio
     from rasterio.transform import from_origin
 
-    # Class values run opposite to the expected order, so sorting by value
-    # instead of by size would fail.
-    arr = np.full((12, 12), 3, dtype="uint8")
-    arr[2:10, 2:10] = 2  # a block of class 2 ...
+    # The expected order (2, 3, 1, 1) follows neither ascending nor descending
+    # class value. The class-2 frame is one pixel wide, so its net area (44)
+    # is below the block's (98): only the exterior-ring area ranks it first.
+    arr = np.full((12, 12), 2, dtype="uint8")
+    arr[1:11, 1:11] = 3  # a block of class 3 ...
     arr[4, 4] = 1  # ... holding one-pixel islands of class 1
     arr[7, 6] = 1
     src = tmp_path / "islands.tif"
@@ -265,8 +266,8 @@ def test_polygonize_orders_containers_before_islands(tmp_path: Path) -> None:
         },
     )
     values = [f["properties"]["value"] for f in json.loads(out.read_text())["features"]]
-    # Outer class-3 frame, then the class-2 block, then both islands.
-    assert values == [3, 2, 1, 1]
+    # Outer class-2 frame, then the class-3 block, then both islands.
+    assert values == [2, 3, 1, 1]
 
 
 def _write_points(path: Path) -> Path:
