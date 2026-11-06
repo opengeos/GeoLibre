@@ -35,3 +35,7 @@ Work through them in order for a guided tour, or jump to the one that matches yo
 - [100 Interactive Maps from Open Data: Explore, Fork, and Build Your Own with GeoLibre](https://youtu.be/2r5OhvEa3AA)
 
 All of them, with chapters and summaries, are on [Video Tutorials](videos.md).
+
+## Workshops
+
+For a full day of lectures and hands-on exercises with real Nevada data, follow the [NGIS 2026 workshop](../workshops/ngis-2026/index.md): eight one-hour sections from a first map to cloud-native formats, STAC, spatial SQL, LiDAR, plugins, AI, and sharing.
