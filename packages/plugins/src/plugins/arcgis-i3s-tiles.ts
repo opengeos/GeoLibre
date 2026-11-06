@@ -9,6 +9,7 @@
 // its visibility/opacity/removal, which this overlay reflects.
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { createI3sMeshLayerClass, type I3sMeshLayerLuma } from "./i3s-mesh-layer";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
@@ -83,6 +84,42 @@ export const THREE_D_TILES_DECK_LOAD_OPTIONS = {
   tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
   core: { worker: false },
 } as const;
+/**
+ * A Scene Layer document URL: `.../SceneServer/layers/<n>`, optionally a
+ * Building Scene Layer's `/sublayers/<m>`, with nothing after it but a query.
+ */
+const I3S_LAYER_DOCUMENT_RE = /\/SceneServer\/layers\/\d+(?:\/sublayers\/\d+)?\/?$/i;
+
+/**
+ * Ask an ArcGIS Server for a Scene Layer document as JSON.
+ *
+ * A server answers `.../SceneServer/layers/<n>` with its HTML REST page unless
+ * the request says `f=json` (ArcGIS Online's `tiles.arcgis.com` hosts return
+ * JSON either way, which is why the bundled sample loads). The query cannot go
+ * on the URL the loader is given, because loaders.gl derives the node-page
+ * URLs from it, so it is added here, per request, to the layer document only.
+ *
+ * @param url - A URL the I3S loader is about to fetch.
+ * @returns The URL with `f=json` for a layer document, otherwise unchanged.
+ */
+export function i3sDocumentRequestUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (!I3S_LAYER_DOCUMENT_RE.test(parsed.pathname) || parsed.searchParams.has("f")) return url;
+  parsed.searchParams.set("f", "json");
+  return parsed.toString();
+}
+
+/** `fetch` for the I3S loader: layer documents as JSON, everything else as asked. */
+function fetchI3sResource(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  return fetch(i3sDocumentRequestUrl(url), init);
+}
+
 // ~1s at 60fps, matching GOOGLE_TILES_MAX_MOUNT_RETRIES so a slow project
 // restore has the same budget to wait for the map before giving up.
 const I3S_MAX_MOUNT_RETRIES = 60;
@@ -95,6 +132,23 @@ const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
 let i3sOverlay: MapboxOverlay | null = null;
 let i3sOverlayMounted = false;
 let i3sDeckGL: GeoLibreDeckGL | null = null;
+/** The I3S mesh layer, built on first use (see i3s-mesh-layer.ts). */
+let i3sMeshLayerClass: unknown = null;
+
+/**
+ * Build the I3S mesh layer class from the loaded deck.gl and the luma.gl
+ * modules it shares, so the overlay draws I3S content on deck.gl 9.4.
+ */
+async function loadI3sMeshLayerClass(deckGL: GeoLibreDeckGL): Promise<unknown> {
+  const [{ Model }, { parsePBRMaterial }] = await Promise.all([
+    import("@luma.gl/engine"),
+    import("@luma.gl/gltf"),
+  ]);
+  return createI3sMeshLayerClass(deckGL.meshLayers.SimpleMeshLayer, {
+    Model: Model as unknown as I3sMeshLayerLuma["Model"],
+    parsePBRMaterial: parsePBRMaterial as unknown as I3sMeshLayerLuma["parsePBRMaterial"],
+  });
+}
 let i3sApp: GeoLibreAppAPI | null = null;
 let i3sBoundMap: unknown;
 let i3sStoreUnsubscribe: (() => void) | null = null;
@@ -254,6 +308,7 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
   if (!app.getDeckGL) return;
   i3sDeckGL ??= await app.getDeckGL();
   i3sLoader ??= await loadI3sLoader();
+  i3sMeshLayerClass ??= await loadI3sMeshLayerClass(i3sDeckGL);
 
   const map = app.getMap?.() ?? app.getMapboxMap?.() ?? null;
   if (i3sOverlay && i3sBoundMap === map) {
@@ -402,12 +457,13 @@ function i3sLayerSignature(layers: GeoLibreLayer[]): string {
 // up the lazily-populated module globals.
 export function buildArcgisI3sTilesDeckLayer(
   layer: GeoLibreLayer,
-  deps: { deckGL: GeoLibreDeckGL | null; loader: unknown } = {
+  deps: { deckGL: GeoLibreDeckGL | null; loader: unknown; meshLayer?: unknown } = {
     deckGL: i3sDeckGL,
     loader: i3sLoader,
+    meshLayer: i3sMeshLayerClass,
   },
 ): Layer | null {
-  const { deckGL, loader } = deps;
+  const { deckGL, loader, meshLayer } = deps;
   if (!deckGL || !loader) return null;
   const url = typeof layer.source.url === "string" ? layer.source.url : "";
   if (!url) return null;
@@ -424,10 +480,16 @@ export function buildArcgisI3sTilesDeckLayer(
     // overlay. See THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled.
     // Spread into a fresh object per layer (matching the Google call site) so no
     // two layers share one loadOptions reference.
-    loadOptions: { ...THREE_D_TILES_DECK_LOAD_OPTIONS },
+    loadOptions: {
+      ...THREE_D_TILES_DECK_LOAD_OPTIONS,
+      core: { ...THREE_D_TILES_DECK_LOAD_OPTIONS.core, fetch: fetchI3sResource },
+    },
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",
+    // deck.gl 9.4's own I3S mesh layer draws nothing on WebGL (its luma.gl
+    // PBR shading leaves every fragment transparent); see i3s-mesh-layer.ts.
+    ...(meshLayer ? { _subLayerProps: { mesh: { type: meshLayer } } } : {}),
     onTilesetLoad: (tileset: unknown) => {
       applyThreeDTilesTilesetMemoryLimit(tileset);
       warnOnUnsupportedI3sSceneLayerType(url, tileset);
