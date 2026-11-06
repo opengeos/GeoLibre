@@ -72,17 +72,13 @@ interface BrowserPanelProps {
   onAddFilePath?: (path: string) => Promise<string | null>;
 }
 
-/** The section nodes are expanded by default so their contents are visible. */
-const DEFAULT_EXPANDED = new Set([
-  "section:favorites",
-  "section:my-data",
-  "section:services",
-  "section:recent",
-  "section:databases",
-  "database-engine:postgres",
-  "database-engine:mssql",
-  "section:files",
-]);
+/**
+ * Group nodes expanded on first render. The top-level sections (Favorites, My
+ * Data, Services, Recent, Databases, Files) start collapsed so the sidebar stays
+ * short; the database engine groups start expanded so opening Databases shows
+ * PostgreSQL and SQL Server's connections without a second click.
+ */
+const DEFAULT_EXPANDED = new Set(["database-engine:postgres", "database-engine:mssql"]);
 
 /**
  * Whether a layer records `path` as the file it was read from. The vector import
