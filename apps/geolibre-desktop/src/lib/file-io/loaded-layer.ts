@@ -1,5 +1,6 @@
 /** The layer records a vector-file load produces, and their type guards. */
 
+import type { LayerLevelFilter, LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { unregisterKmlSuperOverlay } from "../kml-super-overlay";
 
@@ -19,6 +20,21 @@ export interface LoadedVectorLayer {
   groupId?: string;
   /** Initial visibility: only the first time step of a sequence starts visible. */
   visible?: boolean;
+  /**
+   * Style settings applied over the default style once the layer is added
+   * (an IMDF import's stacked floors and per-type colors).
+   */
+  style?: Partial<LayerStyle>;
+  /** Floor picker link set when the layer is added (an IMDF import). */
+  levelFilter?: LayerLevelFilter;
+  /** A persistent expression filter set when the layer is added. */
+  filterExpression?: unknown[];
+  /**
+   * Which part of a multi-layer file this is (an IMDF feature type), saved as
+   * `metadata.sourceEntry` so a reopened project re-reads the right layer even
+   * when its display name was translated or renamed.
+   */
+  sourceEntry?: string;
 }
 
 /**

@@ -395,6 +395,28 @@
     "openWebApp": "Open the GeoLibre web app"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "This IMDF archive could not be read: {{reason}}",
+        "invalidJson": "{{file}} is not valid JSON ({{detail}})",
+        "entryTooLarge": "{{file}} is larger than 256 MB",
+        "tooLarge": "its GeoJSON files add up to more than 512 MB"
+      },
+      "layer": {
+        "venue": "Venue",
+        "footprint": "Footprints",
+        "level": "Levels",
+        "section": "Sections",
+        "unit": "Units",
+        "fixture": "Fixtures",
+        "detail": "Details",
+        "opening": "Openings",
+        "kiosk": "Kiosks",
+        "geofence": "Geofences",
+        "amenity": "Amenities",
+        "occupant": "Occupants"
+      }
+    },
     "title": "Add data",
     "kind": {
       "xyz": {

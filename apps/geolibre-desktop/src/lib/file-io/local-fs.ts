@@ -4,7 +4,15 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { readDir, readFile, readTextFile, stat, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  open as openLocalFile,
+  readDir,
+  readFile,
+  readTextFile,
+  SeekMode,
+  stat,
+  writeTextFile,
+} from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import { isTauri } from "../is-tauri";
 import { joinLocalPath } from "./paths";
@@ -150,4 +158,26 @@ export async function writeLocalGeojsonFile(
     path,
     contents: JSON.stringify(geojson, null, 2),
   });
+}
+
+/** Range-read a local file through the `fs` plugin, without loading all of it. */
+export async function readLocalFileRange(
+  path: string,
+  offset: number,
+  length: number,
+): Promise<Uint8Array> {
+  const handle = await openLocalFile(path, { read: true });
+  try {
+    await handle.seek(offset, SeekMode.Start);
+    const bytes = new Uint8Array(length);
+    let filled = 0;
+    while (filled < length) {
+      const count = await handle.read(bytes.subarray(filled));
+      if (!count) break;
+      filled += count;
+    }
+    return bytes.subarray(0, filled);
+  } finally {
+    await handle.close();
+  }
 }
