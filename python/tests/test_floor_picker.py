@@ -228,3 +228,20 @@ def test_set_floor_picker_skips_malformed_layer_entries():
     p["layers"].append("not a layer")
     authoring.set_floor_picker(p, "Rooms", "level", "0")
     assert p["layers"][0]["levelFilter"]["level"] == "0"
+
+
+def test_mode_all_with_a_level_shows_every_floor():
+    assert project.level_filter("level", "0", mode="all") == {
+        "field": "level",
+        "mode": "all",
+        "level": None,
+    }
+
+
+def test_integers_too_large_for_a_double():
+    huge = int("9" * 400)
+    assert project.parse_level_value(huge) == []
+    with pytest.raises(ValueError):
+        project.level_filter("level", huge)
+    link = project.level_filter("level", "0", features=_fc(huge, "0")["features"])
+    assert link["values"] == ["0"]

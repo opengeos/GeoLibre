@@ -1631,6 +1631,11 @@ def set_floor_picker(
     ``"0;1"`` and ``"-1-0"``, plain numbers, and IMDF ordinals. The choice is
     shared, so ``level`` and ``mode`` apply to every linked layer.
 
+    The matching values are resolved from a layer's inline GeoJSON. A layer
+    without inline features is linked unresolved: the app resolves it once it
+    loads the layer's features (a local file re-read on open), and a layer the
+    app holds no features for (vector tiles) is not narrowed.
+
     Args:
         project: The project dict (mutated in place).
         ref: A layer id or display name.
