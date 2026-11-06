@@ -107,8 +107,10 @@ function presentation(
           extrusionColorExpression: JSON.stringify(unitColorExpression("#bfdbfe")),
         },
         // An open-to-below unit is the void of an atrium; drawing it as a solid
-        // would plug the hole it describes.
-        filterExpression: ["!=", ["get", "category"], "opentobelow"],
+        // would plug the hole it describes. A unit with no resolvable level has
+        // no ordinal, so it cannot be stacked and is left out rather than placed
+        // on the ground floor.
+        filterExpression: ["all", ["!=", ["get", "category"], "opentobelow"], ["has", "ordinal"]],
       };
     case "opening":
       return { style: { strokeColor: "#dc2626", strokeWidth: 3 } };

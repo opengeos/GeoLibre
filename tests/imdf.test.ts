@@ -225,7 +225,11 @@ describe("imdfLoadedLayers", () => {
     assert.equal(units.style?.extrusionBaseProperty, "ordinal");
     assert.equal(units.style?.extrusionBaseScale, IMDF_FLOOR_SPACING);
     assert.equal(units.style?.extrusionBase, IMDF_FLOOR_SPACING);
-    assert.deepEqual(units.filterExpression, ["!=", ["get", "category"], "opentobelow"]);
+    assert.deepEqual(units.filterExpression, [
+      "all",
+      ["!=", ["get", "category"], "opentobelow"],
+      ["has", "ordinal"],
+    ]);
     assert.deepEqual(units.levelFilter, { field: "ordinal", mode: "all", level: null });
     assert.match(units.style?.extrusionColorExpression ?? "", /"match"/);
     // The venue outline is not on a floor, so it stays out of the picker.
