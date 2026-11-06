@@ -183,6 +183,8 @@ describe("parseIndoorGml", () => {
       result.cells.features.map((feature) => feature.properties?.level),
       ["1", "2", "1-2"],
     );
+    // The staircase's range is two floors, not a third one.
+    assert.deepEqual(result.levels, ["1", "2"]);
     // A local frame a few metres wide fits lon/lat bounds but is not lon/lat.
     assert.equal(result.coordinatesLookGeographic, false);
   });

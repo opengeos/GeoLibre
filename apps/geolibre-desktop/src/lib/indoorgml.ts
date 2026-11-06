@@ -28,6 +28,7 @@
  *
  * Pure apart from `DOMParser`, so it is unit tested directly.
  */
+import { parseLevelValue } from "@geolibre/core";
 import type { Feature, FeatureCollection, Position } from "geojson";
 
 /** Cell element names: the core `CellSpace` and the navigation module's spaces. */
@@ -334,6 +335,8 @@ function readCellGeometry(
     const [low, high] = extremes(rings.flat().map(zOf));
     return high - low <= FLAT_TOLERANCE && low - minZ <= FLAT_TOLERANCE;
   });
+  // No floor face (a sloped stair, an open shell): the outline of all its
+  // vertices stands in. A concave room drawn that way fills its corners in.
   const footprint = floors.length
     ? floors.map((rings) => rings.map((ring, index) => flatRing(ring, index === 0)))
     : [[convexHull(all)]].filter((rings) => rings[0].length > 0);
@@ -451,11 +454,11 @@ function parseDocument(text: string): IndoorGmlParseResult {
   const detectedCrs = epsgFromSrsName(srsName);
   context.swapAxes =
     !!detectedCrs && LATITUDE_FIRST.has(detectedCrs) && /^(urn:|https?:)/i.test(srsName ?? "");
+  const declaredDimension = Number(firstAttribute(root, "srsDimension"));
   context.dimension =
-    Number(firstAttribute(root, "srsDimension")) === 2
-      ? 2
-      : descendants(root, new Set(["Geometry3D", "Solid"])).length > 0 ||
-          Number(firstAttribute(root, "srsDimension")) === 3
+    declaredDimension === 2 || declaredDimension === 3
+      ? declaredDimension
+      : descendants(root, new Set(["Geometry3D", "Solid"])).length > 0
         ? 3
         : 2;
   context.polygons = new Map();
@@ -601,9 +604,25 @@ function parseDocument(text: string): IndoorGmlParseResult {
     });
   }
 
-  const levels = [
-    ...new Set(raw.map((cell) => levelOf.get(cell.id)).filter((l): l is string => !!l)),
-  ];
+  // The floors themselves: a staircase's `1-2` is floors 1 and 2, not a
+  // floor of its own (the floor picker expands it the same way), lowest first.
+  const tokens = new Map<string, number | null>();
+  for (const cell of raw) {
+    for (const token of parseLevelValue(levelOf.get(cell.id) ?? null)) {
+      tokens.set(token.label, token.ordinal);
+    }
+  }
+  const levels = [...tokens.entries()]
+    .sort(([a, ao], [b, bo]) =>
+      ao !== null && bo !== null
+        ? ao - bo
+        : ao !== null
+          ? -1
+          : bo !== null
+            ? 1
+            : a.localeCompare(b),
+    )
+    .map(([label]) => label);
   return {
     cells: { type: "FeatureCollection", features: cells },
     states: { type: "FeatureCollection", features: states },

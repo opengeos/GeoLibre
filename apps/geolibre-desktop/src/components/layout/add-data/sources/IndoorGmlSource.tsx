@@ -13,7 +13,10 @@ import {
   type IndoorGmlParseResult,
 } from "../../../../lib/indoorgml";
 import { reprojectLandXmlCollection } from "../../../../lib/landxml";
-import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
+import {
+  FileTooLargeError,
+  openLocalDataFileWithFallback,
+} from "../../../../lib/file-io/file-dialogs";
 import { COMMON_CRS_PRESETS, INDOORGML_SAMPLES } from "../constants";
 import {
   createBaseLayer,
@@ -67,7 +70,11 @@ export function IndoorGmlSource() {
   const adoptDetected = (parsed: IndoorGmlParseResult) => {
     // A CRS the user typed is kept when the file names none.
     if (parsed.detectedCrs) setSourceCrs(parsed.detectedCrs);
-    setLocal(!parsed.detectedCrs && !parsed.coordinatesLookGeographic);
+    setLocal((current) =>
+      parsed.detectedCrs
+        ? false
+        : current || (!parsed.coordinatesLookGeographic && !sourceCrs.trim()),
+    );
   };
 
   const handleChooseFile = async () => {
@@ -77,13 +84,11 @@ export function IndoorGmlSource() {
         filters: [{ name: "IndoorGML", extensions: ["gml", "xml", "igml"] }],
         accept: ".gml,.xml,.igml",
         readText: true,
+        // Refused before reading where the size is known.
+        maxBytes: INDOORGML_MAX_BYTES,
       });
       if (!result) return;
       if (!result.text) throw new Error(t("addData.indoorgml.errorFileMissing"));
-      // The text is already read; this keeps a huge file from being parsed.
-      if (result.text.length > INDOORGML_MAX_BYTES) {
-        throw new Error(t("addData.indoorgml.errorTooLarge"));
-      }
       const parsed = parseIndoorGml(result.text);
       reportIndoorGmlWarnings(parsed);
       setSelectedFile({ path: result.path, parsed });
@@ -94,7 +99,11 @@ export function IndoorGmlSource() {
           : layerNameFromPath(result.path, defaultName),
       );
     } catch (error) {
-      source.setError(errorMessage(error, t("addData.indoorgml.readError")));
+      source.setError(
+        error instanceof FileTooLargeError
+          ? t("addData.indoorgml.errorTooLarge")
+          : errorMessage(error, t("addData.indoorgml.readError")),
+      );
     }
   };
 
