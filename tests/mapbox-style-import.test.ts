@@ -799,11 +799,11 @@ describe("parseMapboxStyle imports hand-written styles", () => {
   });
 
   it("names the opacity once when stacked line classes differ, and keeps one shared value", () => {
-    const opacityPaint = (color: string, opacity: number | undefined) =>
+    const opacityPaint = (color: string, opacity: unknown) =>
       opacity === undefined
         ? { "line-color": color }
         : { "line-color": color, "line-opacity": opacity };
-    const stack = (first: number | undefined, second: number | undefined) =>
+    const stack = (first: unknown, second: unknown) =>
       parseMapboxStyle({
         version: 8,
         layers: [
@@ -828,6 +828,10 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     // An opaque class beside a translucent one is mixed too, whether its opacity is 1 or unset.
     assert.deepEqual(stack(1, 0.5), mixed);
     assert.deepEqual(stack(undefined, 0.5), mixed);
+    // A data-driven class beside a flat one keeps the more specific note.
+    assert.deepEqual(stack(["get", "alpha"], 0.5), [
+      "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.",
+    ]);
     assert.deepEqual(stack(0.5, 0.5), [
       "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.",
     ]);

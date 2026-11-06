@@ -641,10 +641,13 @@ const MIXED_LINE_OPACITY_NOTE =
 /**
  * The note for a `line` layer's `line-opacity`, or `null` when there is
  * nothing to report: the property is unset, 1, or the exporter's simplestyle
- * `stroke-opacity` lookup at full opacity. That lookup is left alone because
- * GeoLibre turns simplestyle on when a layer is added with simplestyle
- * properties (`hasSimpleStyleProperties`), so the lookup applies wherever the
- * data carries `stroke-opacity` and evaluates to 1 where it does not.
+ * `stroke-opacity` lookup at full opacity. That lookup is left alone on one
+ * precondition: the target layer has `simpleStyleEnabled` whenever its data
+ * carries `stroke-opacity`. The importer does not set that flag, but GeoLibre
+ * turns it on when a layer is added with simplestyle properties
+ * (`hasSimpleStyleProperties`), so the lookup applies where the data has the
+ * property and evaluates to 1 where it does not. A layer whose flag was
+ * switched off by hand would lose the per-feature opacity without a note.
  *
  * A flat opacity below 1, also the one the exporter folds into the lookup as
  * `["*", lookup, opacity]`, is reported because the import sets the layer
@@ -674,7 +677,7 @@ function lineOpacityNote(givenOpacity: unknown): string | null {
 
 /**
  * Report the `line` paint properties a GeoLibre layer style cannot hold (it
- * keeps a line's colour and width only), so that, as
+ * keeps a line's color and width only), so that, as
  * {@link MapboxStyleImportResult.warnings} promises, none is dropped silently.
  * Values at their spec default are not reported. Only paint is checked: layout
  * properties such as `line-cap` and `line-join` are left to a separate change.
@@ -1146,7 +1149,14 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       });
       layerOpacityNotes.add(opacityNote);
     }
-    if (layerOpacityNotes.size > 1) lineNotes.set("line-opacity", MIXED_LINE_OPACITY_NOTE);
+    // Layers that disagree get one note. A varying or invalid opacity says more
+    // than "different opacities", so it is kept when any layer has one.
+    if (layerOpacityNotes.size > 1) {
+      const specific = [...layerOpacityNotes].find(
+        (note) => note === VARYING_LINE_OPACITY_NOTE || note === UNREADABLE_LINE_OPACITY_NOTE,
+      );
+      lineNotes.set("line-opacity", specific ?? MIXED_LINE_OPACITY_NOTE);
+    }
     warnings.push(...lineNotes.values());
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
