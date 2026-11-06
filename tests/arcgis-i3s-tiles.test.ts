@@ -5,6 +5,7 @@ import {
   applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
+  i3sDocumentRequestUrl,
   i3sTilesetLngLat,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
@@ -195,7 +196,7 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
   } as unknown as GeoLibreLayer;
 
-  function build() {
+  function build(meshLayer?: unknown) {
     const props: Record<string, unknown>[] = [];
     class FakeTile3DLayer {
       constructor(p: Record<string, unknown>) {
@@ -205,7 +206,7 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     const deckGL = {
       geoLayers: { Tile3DLayer: FakeTile3DLayer },
     } as unknown as GeoLibreDeckGL;
-    buildArcgisI3sTilesDeckLayer(layer, { deckGL, loader: {} });
+    buildArcgisI3sTilesDeckLayer(layer, { deckGL, loader: {}, meshLayer });
     return props[0];
   }
 
@@ -215,8 +216,39 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     // call site spreads the shared constant into a fresh object, so compare by
     // value rather than reference.
     const props = build();
-    assert.deepEqual(props?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
-    assert.equal((props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker, false);
+    const options = props?.loadOptions as {
+      tileset: unknown;
+      core: { worker: boolean; fetch?: unknown };
+    };
+    assert.deepEqual(options.tileset, THREE_D_TILES_DECK_LOAD_OPTIONS.tileset);
+    assert.equal(options.core.worker, false);
+  });
+
+  it("fetches layer documents as JSON and leaves other requests alone", async () => {
+    const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
+    const seen: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seen.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const base = "https://example.com/arcgis/rest/services/B/SceneServer/layers/0";
+      await fetchImpl(base);
+      await fetchImpl(new Request(`${base}/nodepages/0`));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(seen, [
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0?f=json",
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0/nodepages/0",
+    ]);
+  });
+
+  it("draws I3S meshes with GeoLibre's mesh layer when it is loaded", () => {
+    class MeshLayer {}
+    assert.deepEqual(build(MeshLayer)?._subLayerProps, { mesh: { type: MeshLayer } });
+    assert.equal(build()?._subLayerProps, undefined);
   });
 
   it("returns null when the deck.gl class or loader is missing", () => {
@@ -287,5 +319,32 @@ describe("persistI3sTilesetCenter", () => {
     assert.doesNotThrow(() =>
       persistI3sTilesetCenter("missing", { cartographicCenter: [1, 2, 3] }),
     );
+  });
+});
+
+describe("i3sDocumentRequestUrl", () => {
+  const base = "https://services5.arcgis.com/x/ArcGIS/rest/services/Library/SceneServer";
+
+  it("asks an ArcGIS Server for a layer document as JSON", () => {
+    assert.equal(i3sDocumentRequestUrl(`${base}/layers/0`), `${base}/layers/0?f=json`);
+    assert.equal(
+      i3sDocumentRequestUrl(`${base}/layers/0/sublayers/23`),
+      `${base}/layers/0/sublayers/23?f=json`,
+    );
+    assert.equal(
+      i3sDocumentRequestUrl(`${base}/layers/0?token=t`),
+      `${base}/layers/0?token=t&f=json`,
+    );
+  });
+
+  it("leaves node pages, resources and an explicit format alone", () => {
+    for (const url of [
+      `${base}/layers/0/nodepages/3`,
+      `${base}/layers/0/nodes/1/geometries/0`,
+      `${base}/layers/0?f=pjson`,
+      "not a url",
+    ]) {
+      assert.equal(i3sDocumentRequestUrl(url), url);
+    }
   });
 });

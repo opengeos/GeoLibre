@@ -179,6 +179,23 @@ down once that cache fills. After bumping deck.gl or loaders.gl, run
 is renamed or no longer starts at 32 MB. If upstream starts honouring the
 option, the helper can go.
 
+### `@deck.gl/geo-layers` — I3S mesh layer replaced
+
+deck.gl's `Tile3DLayer` draws ArcGIS I3S nodes with its own `MeshLayer`, which
+shades them through luma.gl's PBR material module. From deck.gl 9.4 / luma.gl
+9.4 that draws nothing on WebGL (every fragment transparent, no error), so no
+I3S scene layer rendered from the 9.3 → 9.4 bump (#2395) until GeoLibre
+replaced the layer. `packages/plugins/src/plugins/i3s-mesh-layer.ts` is deck.gl
+9.3's I3S mesh layer without the PBR module, passed to `Tile3DLayer` as
+`_subLayerProps.mesh.type` in `arcgis-i3s-tiles.ts`.
+
+After bumping deck.gl or luma.gl, load **Add data → 3D Tiles layer → Load sample
+data → San Francisco Buildings (ArcGIS I3S)** on the Positron background (Liberty
+draws its own 3D buildings, which look like I3S ones) and check the textured
+buildings draw. To see whether upstream fixed its layer, drop the
+`_subLayerProps` override and check again; if it draws, delete
+`i3s-mesh-layer.ts`.
+
 ### `@maplibre/maplibre-gl-style-spec`
 
 `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the
