@@ -56,7 +56,8 @@ Plugins**), from a zip, or from a `plugin.json` manifest URL. The
 ## Hands-on (35 min)
 
 Start a new project named `NGIS 2026 - 7 Plugins and AI`. Load the earthquakes
-CSV with **Add data → Delimited text layer**, as in Exercise 2.2:
+CSV with **Add data → Delimited text layer**, as in Exercise 2.2,
+with the **Layer name** `Nevada earthquakes`:
 
 ```text
 https://assets.geolibre.app/data/workshops/ngis-2026/nv_earthquakes.csv
