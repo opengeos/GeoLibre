@@ -622,13 +622,22 @@ function parseLineWidth(
   );
 }
 
+/** The note for a `line-opacity` the layer style cannot hold as one number. */
+const VARYING_LINE_OPACITY_NOTE =
+  "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.";
+
+/** The note when stacked line layers set different opacities. */
+const MIXED_LINE_OPACITY_NOTE =
+  "The stacked line layers use different opacities, which the layer style cannot hold; the lines import at the layer opacity.";
+
 /**
  * Report the `line` paint properties the import drops. A GeoLibre layer style
  * stores a line's colour and width only, so opacity, dashes, blur, casing gap,
- * offset, translation, pattern and gradient have nowhere to go. Naming them keeps the promise on
- * {@link MapboxStyleImportResult.warnings} that symbology is never dropped
- * silently. A property left at its spec default (or a `line-opacity` of 1,
- * which the exporter writes for a fully opaque layer) is not reported.
+ * offset, translation, pattern and gradient have nowhere to go. Naming them
+ * keeps the promise on {@link MapboxStyleImportResult.warnings} that symbology
+ * is never dropped silently. A property left at its spec default (or a
+ * `line-opacity` of 1, which the exporter writes for a fully opaque layer) is
+ * not reported.
  *
  * A flat `line-opacity` below 1 is what the exporter writes for a layer below
  * full opacity, and it is reported too: the import sets the layer style, not
@@ -636,37 +645,47 @@ function parseLineWidth(
  * left alone is the exporter's simplestyle `stroke-opacity` lookup, which the
  * renderer re-derives from the style; any other zoom- or data-driven opacity
  * is reported.
+ *
+ * Each note goes through `report` keyed by its paint property, so a caller
+ * checking several stacked layers can name each property once.
  */
-function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: string[]): void {
+function warnUnsupportedLinePaint(
+  paint: Record<string, unknown>,
+  report: (property: string, message: string) => void,
+): void {
   const rawOpacity = paint["line-opacity"];
   const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
   if (opacity !== null) {
     if (opacity < 1) {
-      warnings.push(
+      report(
+        "line-opacity",
         `The line opacity (${opacity}) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.`,
       );
     }
   } else if (rawOpacity != null) {
-    warnings.push(
-      "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines import at the layer opacity.",
-    );
+    report("line-opacity", VARYING_LINE_OPACITY_NOTE);
   }
   if (paint["line-dasharray"] != null) {
-    warnings.push("The line dash pattern cannot be represented; the lines import as solid.");
+    report(
+      "line-dasharray",
+      "The line dash pattern cannot be represented; the lines import as solid.",
+    );
   }
   const blur = asFiniteNumber(paint["line-blur"]);
   if (paint["line-blur"] != null && blur !== 0) {
-    warnings.push("The line blur cannot be represented; the lines import with sharp edges.");
+    report("line-blur", "The line blur cannot be represented; the lines import with sharp edges.");
   }
   const gap = asFiniteNumber(paint["line-gap-width"]);
   if (paint["line-gap-width"] != null && gap !== 0) {
-    warnings.push(
+    report(
+      "line-gap-width",
       "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
     );
   }
   const offset = asFiniteNumber(paint["line-offset"]);
   if (paint["line-offset"] != null && offset !== 0) {
-    warnings.push(
+    report(
+      "line-offset",
       "The line offset cannot be represented; the lines import centered on the geometry.",
     );
   }
@@ -674,17 +693,20 @@ function warnUnsupportedLinePaint(paint: Record<string, unknown>, warnings: stri
   const untranslated =
     translate?.length === 2 && translate.every((component) => asFiniteNumber(component) === 0);
   if (paint["line-translate"] != null && !untranslated) {
-    warnings.push(
+    report(
+      "line-translate",
       "The line translation cannot be represented; the lines import in place on the geometry.",
     );
   }
   if (paint["line-pattern"] != null) {
-    warnings.push(
+    report(
+      "line-pattern",
       "The line pattern image cannot be represented; the lines import as a flat color.",
     );
   }
   if (paint["line-gradient"] != null) {
-    warnings.push(
+    report(
+      "line-gradient",
       "The line gradient cannot be represented; the lines import with a single flat color.",
     );
   }
@@ -1078,11 +1100,18 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // carry their own paint, so check them all and name each dropped property
     // once rather than once per layer.
     const drawnLines = byType("line").filter(isDrawn);
-    const lineNotes: string[] = [];
+    // Notes are keyed by paint property; the only one that can differ between
+    // layers is the opacity, whose note carries the value.
+    const lineNotes = new Map<string, string>();
+    const reportLineNote = (property: string, message: string) => {
+      const previous = lineNotes.get(property);
+      if (previous === undefined) lineNotes.set(property, message);
+      else if (previous !== message) lineNotes.set(property, MIXED_LINE_OPACITY_NOTE);
+    };
     for (const lineLayer of drawnLines.length > 1 ? drawnLines : [line]) {
-      warnUnsupportedLinePaint(lineLayer.paint ?? {}, lineNotes);
+      warnUnsupportedLinePaint(lineLayer.paint ?? {}, reportLineNote);
     }
-    warnings.push(...new Set(lineNotes));
+    warnings.push(...lineNotes.values());
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
   }

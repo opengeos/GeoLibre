@@ -704,6 +704,27 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
+  it("names the opacity once when stacked line layers differ, and keeps one shared value", () => {
+    const stack = (first: number, second: number) =>
+      parseMapboxStyle({
+        version: 8,
+        layers: [
+          { id: "casing", type: "line", paint: { "line-color": "#0b3a57", "line-opacity": first } },
+          {
+            id: "stroke",
+            type: "line",
+            paint: { "line-color": "#8be6ff", "line-opacity": second },
+          },
+        ],
+      }).warnings.filter((warning) => warning.includes("opacit"));
+    assert.deepEqual(stack(0.5, 0.6), [
+      "The stacked line layers use different opacities, which the layer style cannot hold; the lines import at the layer opacity.",
+    ]);
+    assert.deepEqual(stack(0.5, 0.5), [
+      "The line opacity (0.5) has no equivalent in the layer style; set the layer opacity to match it, which also fades the layer's fill and labels.",
+    ]);
+  });
+
   it("does not report the line opacity the exporter writes for simplestyle", () => {
     const { warnings } = roundTrip(
       style({ strokeColor: "#336699", strokeWidth: 3, simpleStyleEnabled: true }),
