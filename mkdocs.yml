@@ -57,6 +57,7 @@ nav:
       - Chrome Extension: user-guide/chrome-extension.md
       - Managing Layers: user-guide/layers.md
       - Styling Layers: user-guide/styling.md
+      - Indoor Maps & BIM: user-guide/indoor-maps.md
       - Attribute Table: user-guide/attribute-table.md
       - Map Controls & Tools: user-guide/map-controls.md
       - GPS Tracking & Field Collection: user-guide/field-collection.md
