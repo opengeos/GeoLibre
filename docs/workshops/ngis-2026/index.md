@@ -40,8 +40,8 @@ catch up after a break.
 
 1. Open [web.geolibre.app](https://web.geolibre.app) in Chrome, Edge, or
    Firefox. If a welcome wizard appears, close it. Everything in this workshop
-   runs in the browser, and your data stays on your machine unless you choose
-   to share it.
+   runs in the browser. Your data leaves your machine only when you share or
+   export it, or when you use the AI Assistant with a remote provider.
 2. Optional: install the [desktop app](../../downloads.md). It adds local file
    access and a Python sidecar for extra processing tools, but no exercise
    requires it.
@@ -59,10 +59,12 @@ catch up after a break.
 
 ## Workshop data
 
-All workshop data is real, public-domain data for the Reno, Lake Tahoe, and
-Nevada area, hosted as plain files on
-`https://assets.geolibre.app/data/workshops/ngis-2026/`. You never need to
-download it: every exercise reads it by URL.
+The core workshop data is real, public-domain data for the Reno, Lake Tahoe,
+and Nevada area, with national county and state layers for comparison, hosted
+as plain files on `https://assets.geolibre.app/data/workshops/ngis-2026/`. You
+never need to download it: every exercise reads it by URL. Some exercises
+also read public services on other hosts (listed below the table), so make
+sure the venue network does not block them.
 
 | Dataset | File | Format | Source |
 | --- | --- | --- | --- |

@@ -13,11 +13,19 @@
 
 ## Lecture (20 min)
 
-### The common trick: an index up front
+### The common trick: a small index, read first
 
-Every cloud-native format does the same two things: it puts an **index**
-(metadata) where a client can read it with one small request, and it
-**chunks** the data so each request returns a useful piece.
+Every cloud-native format does the same two things: it keeps an **index**
+(metadata) that a client can read with one small request, and it **chunks**
+the data so each request returns a useful piece. Where the index lives
+differs: at the start of a COG, at the end of a GeoParquet file (the footer),
+and in separate small files for Zarr and EPT, whose chunks are separate
+objects fetched by key rather than byte ranges within one file.
+
+All of this needs a server that answers HTTP `Range` requests and sends CORS
+headers. A server that ignores `Range` returns the whole file, so the read
+still works but loses its efficiency. Object stores such as S3, GitHub Pages,
+and Source Cooperative support both.
 
 | Format | Data type | Index | Chunk | Typical use |
 | --- | --- | --- | --- | --- |
@@ -43,8 +51,9 @@ reads only the columns the query needs.
 
 ### How the workshop data was made
 
-Every file in the workshop bucket came from the same Census counties
-shapefile, converted with standard open tools:
+The county files in the workshop bucket all came from one Census counties
+shapefile, and the elevation COG from four USGS 3DEP tiles, converted with
+standard open tools:
 
 ```bash
 ogr2ogr -f FlatGeobuf us_counties.fgb cb_2023_us_county_500k.shp -t_srs EPSG:4326
@@ -159,7 +168,8 @@ hidden. Toggle them on in the Layers panel.
 ## Going further
 
 - Open your browser's developer tools (F12), go to the **Network** tab, and pan
-  the COG. Look for `206 Partial Content` responses with a `Range` header.
+  the COG. Look for `206 Partial Content` responses: the request carries a
+  `Range` header and the response a matching `Content-Range` header.
 - Convert a file of your own with **Processing → GeoLibre toolbox →
   Conversion**.
 - Browse more cloud-native datasets with **Plugins → Web services → Source

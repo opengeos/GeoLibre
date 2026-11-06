@@ -26,9 +26,10 @@ over HTTP.
 Three ideas make that work:
 
 1. **HTTP range requests.** A browser can ask a server for bytes 1,000 to
-   2,000 of a file instead of the whole file. Formats designed for this put an
-   index at the front of the file, so a client reads the index first and then
-   fetches only the tiles, rows, or chunks that cover the current map view.
+   2,000 of a file instead of the whole file. Formats designed for this keep a
+   small index that a client reads first (a COG header at the start of the
+   file, a GeoParquet footer at the end, Zarr metadata in its own small file),
+   then fetch only the tiles, rows, or chunks that cover the current map view.
 2. **Cloud-optimized formats.** Cloud-Optimized GeoTIFF (COG) for rasters,
    GeoParquet and FlatGeobuf for vectors, PMTiles for tiled maps, Zarr for
    multidimensional arrays, and COPC or EPT for point clouds. Section 3 looks
@@ -49,8 +50,9 @@ GeoLibre is a free, open-source (MIT) GIS application built for this model.
   [web.geolibre.app](https://web.geolibre.app), a desktop app (Windows,
   macOS, Linux), and a Jupyter widget through the `geolibre` Python package.
 - **Client-side by default**: rendering (MapLibre GL JS and deck.gl), SQL
-  (DuckDB-WASM), and many processing tools run in your browser. Your data is
-  not uploaded anywhere unless you choose to share it.
+  (DuckDB-WASM), and many processing tools run in your browser. Your data
+  leaves your machine only when you share or export it, or when you send a
+  request to a remote AI provider through the AI Assistant.
 - **Projects are small JSON files**: a `.geolibre.json` project stores layer
   sources, styles, the map view, and plugin state, so a whole map can be
   reopened from one URL.

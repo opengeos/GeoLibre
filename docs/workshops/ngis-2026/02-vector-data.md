@@ -32,7 +32,9 @@ cross-origin (CORS) headers, GeoLibre can read it directly in the browser.
 GeoLibre's **Add data → Vector layer** reads all of these. In the browser,
 formats MapLibre cannot draw natively are converted on the fly by DuckDB-WASM
 Spatial. Vector data is reprojected to WGS84 (EPSG:4326) on load, using the CRS
-stored in the file.
+stored in the file. If a layer lands in the wrong place or not at all, its CRS
+is probably missing or not an EPSG code: convert it to WGS84 first, or set
+**Source CRS override** in the Add Vector Layer panel.
 
 ### Symbology in one slide
 

@@ -162,8 +162,9 @@ This time the earthquakes come from **GeoParquet** instead of CSV.
    `reno_tahoe_dem.tif`. Keep **Azimuth** 315, **Altitude** 45, **Z factor** 1.
 4. Click **Run**. The log reports the raster size (2520 × 3240, 8.2 million
    pixels), then **Added "hillshade.tif" to the map.**
-5. Close the dialog. Set the hillshade layer's opacity to about 0.6 and move the
-   DEM above it to combine color and relief. Try **Slope** and **Aspect** too.
+5. Close the dialog. The new `hillshade` layer sits above the DEM. Set its
+   opacity to about 0.5 and give the DEM a **terrain** color ramp to combine
+   color and relief. Try **Slope** and **Aspect** too.
 
 ![A client-side hillshade of the Reno-Tahoe DEM with the county choropleth and 10 km buffers](https://assets.geolibre.app/images/workshops/ngis-2026/s05-hillshade.webp)
 
@@ -184,7 +185,10 @@ Save the project.
 
 - Write the per-county result to a file with **Export GeoParquet** in the SQL
   workspace.
-- Switch the SQL workspace engine to **PostGIS** and run the same join.
+- Switch the SQL workspace engine to **PostGIS** and run the same join. The
+  queries above are written for DuckDB; in PostgreSQL, quote mixed-case
+  columns (`c."NAME"`) and cast before rounding
+  (`round(max(q.mag)::numeric, 1)`).
 - Chain tools into a reusable workflow with **Processing → Model builder**.
 - Read [SQL Workspace](../../user-guide/sql-workspace.md),
   [Processing Tools](../../user-guide/processing.md), and

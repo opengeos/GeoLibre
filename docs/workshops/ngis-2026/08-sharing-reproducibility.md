@@ -21,8 +21,11 @@ without you. GeoLibre projects get there by design:
 - A `.geolibre.json` project records **where** every layer comes from (a URL,
   service, or query), **how** it is styled, the camera, and plugin state. It
   is plain JSON, so it diffs cleanly in Git.
-- Cloud-hosted data means the project points at the **same bytes** for
-  everyone, not at a copy on one person's laptop.
+- Cloud-hosted data means the project points at the **same source** for
+  everyone, not at a copy on one person's laptop. Static files (COG,
+  GeoParquet, PMTiles) give everyone identical bytes as long as the file is
+  not replaced; live services (WMS, WFS, OGC API, STAC searches) can return
+  different results over time, so record the date you used them.
 - Layers computed in the browser (a hillshade, a SQL result) are either
   embedded in the project (small vector results) or flagged as not saved
   (rasters), so you know what a recipient will see.
@@ -32,10 +35,10 @@ without you. GeoLibre projects get there by design:
 | Method | Result | Needs |
 | --- | --- | --- |
 | **Project → Save** | A `.geolibre.json` file | Nothing |
-| Host the file anywhere public, open with `?url=` | A link anyone can open | Any static host (GitHub Pages, S3, a website) |
+| Host the file anywhere public, open with `?url=` | A link anyone can open | A static host that allows cross-origin (CORS) requests, such as GitHub Pages or a public S3 bucket with a CORS rule |
 | **Project → Share...** | A public link on `share.geolibre.app` | A free share.geolibre.app sign-in |
 | `?url=...&layout=viewer` in an `<iframe>` | An embedded, read-only map | A web page |
-| **Project → Export → Export as HTML...** | One standalone HTML file that runs offline | Nothing |
+| **Project → Export → Export as HTML...** | One self-contained HTML file with the project embedded | Nothing to host; it still loads the GeoLibre viewer, basemap, and data from their URLs |
 | **Project → Story map...** | A chapter-by-chapter narrative, presented in the app or exported as HTML | Nothing |
 | Python `geolibre` package | The same map built from code in Jupyter | `pip install geolibre` |
 
@@ -83,6 +86,10 @@ Pick at least one:
     https://web.geolibre.app/?url=https://YOUR-HOST/your-map.geolibre.json
     ```
 
+    The host must send CORS headers that allow `https://web.geolibre.app`
+    (GitHub Pages does). If the project URL itself contains `?` or `&`, encode
+    it first, for example with JavaScript's `encodeURIComponent`.
+
 - **share.geolibre.app.** Choose **Project → Share...**, click **Sign in**,
   approve the popup, review the readiness list, and share. You get a public
   URL like `https://share.geolibre.app/you/my-map.geolibre.json`.
@@ -90,6 +97,7 @@ Pick at least one:
 
     ```html
     <iframe
+      title="Ten Years of Nevada Earthquakes story map"
       src="https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/08-story-map.geolibre.json&layout=viewer"
       width="100%" height="600" style="border:0" allowfullscreen>
     </iframe>
@@ -105,7 +113,8 @@ In any Jupyter environment (a local notebook, JupyterLab, VS Code, or Google
 Colab):
 
 ```python
-# pip install geolibre
+%pip install geolibre
+
 from geolibre import Map
 
 base = "https://assets.geolibre.app/data/workshops/ngis-2026/"
@@ -118,10 +127,13 @@ m.save_project("my-workshop.geolibre.json")
 m
 ```
 
-The full GeoLibre app renders inside the cell. The saved
+The full GeoLibre app renders inside the cell. This is a partial map (the
+layers, without the story chapters), but the saved
 `my-workshop.geolibre.json` opens in the web and desktop apps, so a notebook
-and a point-and-click session produce the same artifact. To open a project in
-a notebook, use `m.load_project("08-story-map.geolibre.json")`.
+and a point-and-click session produce the same kind of artifact. To reopen a
+saved project in a notebook, including one you saved from the web app with
+its story map, use `m.load_project("my-workshop.geolibre.json")` with that
+file's path.
 
 ## Wrap-up (10 min)
 
