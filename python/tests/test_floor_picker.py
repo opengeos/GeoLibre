@@ -194,3 +194,7 @@ def test_set_floor_picker_is_atomic():
     with pytest.raises(ValueError):
         authoring.set_floor_picker(p, "Doors", "level", "1")
     assert json.dumps(p, sort_keys=True) == before
+
+
+def test_non_ascii_digits_are_named_floors_like_the_app():
+    assert project.parse_level_value("\u0663") == [("\u0663", None)]

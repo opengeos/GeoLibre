@@ -3309,8 +3309,10 @@ def filter_expression(expression: Any) -> list[Any]:
 #: Mirror of ``LevelFilterMode`` in ``packages/core/src/types.ts``.
 LEVEL_FILTER_MODES = ("all", "only", "below")
 
-_LEVEL_NUMBER = re.compile(r"^-?\d+(?:\.\d+)?$")
-_LEVEL_RANGE = re.compile(r"^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$")
+# ASCII digits only, as in the app's JavaScript `\d` (Python's `\d` also
+# matches other scripts' digits, which the app reads as named floors).
+_LEVEL_NUMBER = re.compile(r"^-?[0-9]+(?:\.[0-9]+)?$")
+_LEVEL_RANGE = re.compile(r"^(-?[0-9]+(?:\.[0-9]+)?)\s*-\s*(-?[0-9]+(?:\.[0-9]+)?)$")
 #: A span wider than this is read as its two ends (``MAX_RANGE_STEPS`` in level-filter.ts).
 _LEVEL_MAX_RANGE_STEPS = 200
 

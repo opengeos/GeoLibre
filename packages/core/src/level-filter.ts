@@ -289,6 +289,30 @@ export function sameLevelLink(a: LayerLevelFilter, b: LayerLevelFilter): boolean
   return av.length === bv.length && av.every((value, index) => value === bv[index]);
 }
 
+/** Resolved links per feature array and choice, so an unrelated layer edit does not rescan. */
+const resolvedLinks = new WeakMap<object, Map<string, LayerLevelFilter>>();
+
+/** {@link selectLevel}, memoized on the feature array (replaced whenever the data changes). */
+function cachedSelectLevel(
+  link: LayerLevelFilter,
+  features: readonly LevelFeature[] | null | undefined,
+  choice: LevelChoice,
+): LayerLevelFilter {
+  if (!features) return selectLevel(link, features, choice.level, choice.mode);
+  const key = JSON.stringify([link.field, choice.level, choice.mode]);
+  let byChoice = resolvedLinks.get(features);
+  if (!byChoice) {
+    byChoice = new Map();
+    resolvedLinks.set(features, byChoice);
+  }
+  let next = byChoice.get(key);
+  if (!next) {
+    next = selectLevel(link, features, choice.level, choice.mode);
+    byChoice.set(key, next);
+  }
+  return next;
+}
+
 /**
  * The link updates that put every linked layer on one floor choice, with the
  * matching values resolved from each layer's own features: a layer linked
@@ -307,7 +331,7 @@ export function resolveLevelLinks(
   for (const layer of linked) {
     const link = layer.levelFilter;
     if (!link) continue;
-    const next = selectLevel(link, layer.geojson?.features, choice.level, choice.mode);
+    const next = cachedSelectLevel(link, layer.geojson?.features, choice);
     if (!sameLevelLink(link, next)) updates.push({ id: layer.id, levelFilter: next });
   }
   return updates;

@@ -165,6 +165,16 @@ describe("compileLevelFilter", () => {
     assert.equal(matches(filter, 2), false);
   });
 
+  it("matches a layer whose level values mix numbers and text", () => {
+    const features = [feature(0), feature("0;1"), feature("1")];
+    const link = selectLevel({ field: "level" }, features, "0", "only");
+    assert.deepEqual(link.values, [0, "0;1"]);
+    const filter = compileLevelFilter(link);
+    assert.equal(matches(filter, 0), true);
+    assert.equal(matches(filter, "0;1"), true);
+    assert.equal(matches(filter, "1"), false);
+  });
+
   it("draws nothing for a floor with no features", () => {
     const filter = compileLevelFilter(selectLevel({ field: "level" }, ROOMS, "7", "only"));
     assert.equal(matches(filter, "0"), false);
