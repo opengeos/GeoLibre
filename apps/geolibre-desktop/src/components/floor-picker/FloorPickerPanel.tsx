@@ -11,7 +11,7 @@ import {
 import type { MapEngine } from "@geolibre/map";
 import { cn } from "@geolibre/ui";
 import { Layers2 } from "lucide-react";
-import { useEffect, useMemo, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
@@ -123,6 +123,7 @@ export function FloorPickerPanel({
     }
   }, [linked, choice, updateLayer]);
 
+  const listRef = useRef<HTMLDivElement | null>(null);
   const visible = visibleLinked.length > 0 && levels.length > 0;
   const host = useMapPanelControl(
     mapControllerRef,
@@ -131,6 +132,14 @@ export function FloorPickerPanel({
     `${FLOOR_PICKER_CLASS} maplibregl-ctrl`,
     mapReadyGeneration,
   );
+  // A tall building's list scrolls; keep the chosen floor in view (also when
+  // a project reopens on an upper floor, or the floor changes by keyboard).
+  useEffect(() => {
+    if (!host || choice.level === null) return;
+    const active = listRef.current?.querySelector<HTMLElement>("[data-active='true']");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [host, choice.level, levels]);
+
   if (!visible || !host) return null;
 
   const below = choice.mode === "below";
@@ -138,23 +147,40 @@ export function FloorPickerPanel({
     if (level === null) setLevelSelection(null, "all");
     else setLevelSelection(level, below ? "below" : "only");
   };
+  // Arrow keys step one floor up or down, like a lift panel; from All they
+  // start at the top or bottom floor.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const index = levels.findIndex((entry) => entry.label === choice.level);
+    const up = event.key === "ArrowUp";
+    const next =
+      index === -1
+        ? up
+          ? 0
+          : levels.length - 1
+        : Math.max(0, Math.min(levels.length - 1, index + (up ? -1 : 1)));
+    const target = levels[next];
+    if (target) choose(target.label);
+  };
   const toggleBelow = () => {
     if (choice.level === null) return;
     setLevelSelection(choice.level, below ? "only" : "below");
   };
 
-  // A fixed light palette, not theme tokens: GeoLibre keeps the map chrome
-  // (zoom, compass, layer controls) white in both themes, and the theme's
-  // primary turns pale in dark mode, which would hide the chosen floor.
+  // Colors live in index.css (`.geolibre-floor-picker`), not Tailwind
+  // utilities: MapLibre's `.maplibregl-ctrl button:hover` rule outranks a
+  // `hover:bg-*` utility and would grey out the chosen floor's white label.
   const panel = (
     <div
       role="group"
       aria-label={t("floorPicker.title")}
-      className="geolibre-floor-picker-panel flex w-14 flex-col items-stretch overflow-hidden rounded bg-white text-xs text-neutral-800 shadow"
+      className="geolibre-floor-picker-panel flex w-14 flex-col items-stretch overflow-hidden rounded text-xs shadow"
       data-testid="floor-picker"
+      onKeyDown={onKeyDown}
     >
       <div
-        className="flex items-center justify-center gap-1 border-b border-neutral-200 py-1 font-medium"
+        className="geolibre-floor-picker-header flex items-center justify-center gap-1 py-1 font-medium"
         title={t("floorPicker.title")}
       >
         <Layers2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -162,10 +188,8 @@ export function FloorPickerPanel({
       </div>
       <button
         type="button"
-        className={cn(
-          "px-1 py-1 hover:bg-neutral-100",
-          choice.level === null && "bg-blue-600 text-white hover:bg-blue-600",
-        )}
+        className="px-1 py-1"
+        data-active={choice.level === null}
         aria-pressed={choice.level === null}
         title={t("floorPicker.allTitle")}
         onClick={() => choose(null)}
@@ -173,7 +197,7 @@ export function FloorPickerPanel({
       >
         {t("floorPicker.all")}
       </button>
-      <div className="max-h-64 overflow-y-auto">
+      <div ref={listRef} className="max-h-[min(16rem,40vh)] overflow-y-auto overscroll-contain">
         {levels.map((entry) => {
           const active = choice.level === entry.label;
           const shown =
@@ -187,10 +211,11 @@ export function FloorPickerPanel({
               key={entry.label}
               type="button"
               className={cn(
-                "block w-full truncate border-t border-neutral-100 px-1 py-1 tabular-nums hover:bg-neutral-100",
-                active && "bg-blue-600 font-semibold text-white hover:bg-blue-600",
-                !active && shown && "bg-neutral-100",
+                "geolibre-floor-picker-level block w-full truncate px-1 py-1 tabular-nums",
+                active && "font-semibold",
               )}
+              data-active={active}
+              data-shown={!active && shown}
               aria-pressed={active}
               title={t("floorPicker.levelTitle", { level: entry.label, count: entry.count })}
               onClick={() => choose(entry.label)}
@@ -205,9 +230,10 @@ export function FloorPickerPanel({
       <button
         type="button"
         className={cn(
-          "border-t border-neutral-200 px-1 py-1 text-[10px] leading-tight hover:bg-neutral-100 disabled:opacity-50",
-          below && "font-semibold text-blue-700",
+          "geolibre-floor-picker-below px-1 py-1 text-[10px] leading-tight disabled:opacity-50",
+          below && "font-semibold",
         )}
+        data-on={below}
         aria-pressed={below}
         disabled={choice.level === null}
         title={t("floorPicker.belowTitle")}

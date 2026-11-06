@@ -125,7 +125,9 @@ floor picker: choose the **Floor field** that holds the floor, such as `level`
 or `ordinal`, and a **Floor** control appears in the top-right corner of the
 map with one button per floor, highest first.
 
-- Click a floor to draw only that floor. **All** draws every floor again.
+- Click a floor to draw only that floor. **All** draws every floor again. With
+  the picker focused, the up and down arrow keys step one floor at a time. A
+  tall building's list scrolls and keeps the chosen floor in view.
 - **+ below** keeps the floors under the chosen one as well, the cutaway view of
   a building with the upper storeys lifted off. Combined with a stacked
   extrusion (see **Stacking floors** above) it shows the building up to the
