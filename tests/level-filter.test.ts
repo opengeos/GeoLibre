@@ -257,7 +257,11 @@ describe("unresolved and re-resolved links", () => {
       levelFilter: selectLevel({ field: "level" }, ROOMS, "1", "below"),
       geojson: { features: ROOMS },
     };
-    const doors = { id: "doors", levelFilter: { field: "level" }, geojson: { features: [feature(0), feature(2)] } };
+    const doors = {
+      id: "doors",
+      levelFilter: { field: "level" },
+      geojson: { features: [feature(0), feature(2)] },
+    };
     assert.deepEqual(currentLevelChoice([doors, rooms]), { level: "1", mode: "below" });
     assert.deepEqual(resolveLevelLinks([rooms, doors]), [
       { id: "doors", levelFilter: { field: "level", mode: "below", level: "1", values: [0] } },
@@ -268,14 +272,18 @@ describe("unresolved and re-resolved links", () => {
     // A project authored without the values (or before an edit added a floor).
     const stale = { field: "level", mode: "only" as const, level: "0" };
     const replaced = [feature("0"), feature("0;1"), feature("-1")];
-    const [update] = resolveLevelLinks([{ id: "rooms", levelFilter: stale, geojson: { features: replaced } }]);
+    const [update] = resolveLevelLinks([
+      { id: "rooms", levelFilter: stale, geojson: { features: replaced } },
+    ]);
     assert.deepEqual(update.levelFilter.values, ["0", "0;1"]);
     const composed = compileLayerFilters({ levelFilter: update.levelFilter });
     assert.equal(matches(composed, "0;1"), true);
     assert.equal(matches(composed, "-1"), false);
     // Already current: nothing to write.
     assert.deepEqual(
-      resolveLevelLinks([{ id: "rooms", levelFilter: update.levelFilter, geojson: { features: replaced } }]),
+      resolveLevelLinks([
+        { id: "rooms", levelFilter: update.levelFilter, geojson: { features: replaced } },
+      ]),
       [],
     );
   });

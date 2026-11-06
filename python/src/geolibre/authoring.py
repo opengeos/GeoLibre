@@ -1665,9 +1665,7 @@ def set_floor_picker(
         updates.append(
             (
                 item,
-                _project.level_filter(
-                    link_field, level, mode=mode, features=_layer_features(item)
-                ),
+                _project.level_filter(link_field, level, mode=mode, features=_layer_features(item)),
             )
         )
     for item, link in updates:

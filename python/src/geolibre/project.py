@@ -13,13 +13,13 @@ import copy
 import ipaddress
 import json
 import math
-from decimal import Decimal
 import re
 import socket
 import time
 import uuid
 import warnings
 import zlib
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import URLError
