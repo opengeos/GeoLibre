@@ -1727,8 +1727,10 @@ export class ArcgisEngine implements MapEngine {
           new layers.ImageryTileLayer({
             ...common,
             url: plan.url,
-            // The SDK sends a layer's key as the `token` of each request.
-            ...(plan.token ? { apiKey: plan.token } : {}),
+            // ImageryTileLayer has no `apiKey` (SDK 5.1 omits APIKeyMixin);
+            // custom parameters ride on every request it makes, the raster
+            // tile fetches included.
+            ...(plan.token ? { customParameters: { token: plan.token } } : {}),
           }),
         ];
       case "media-image": {

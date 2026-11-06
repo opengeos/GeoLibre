@@ -1406,7 +1406,8 @@ async function addArcGISImageServiceLayer(
       // rendered images, and is usually `TilesOnly` (no `/exportImage`), so
       // neither MapLibre template above can draw it. The ArcGIS renderer's
       // ImageryTileLayer decodes and symbolizes those tiles client-side.
-      ...(options.layerType === "image-service" && isArcGISRawTileCache(info)
+      // A rendering rule needs `/exportImage`, which that layer does not apply.
+      ...(options.layerType === "image-service" && !renderingRule && isArcGISRawTileCache(info)
         ? { arcgisRawTiles: true }
         : {}),
       ...(bounds ? { bounds } : {}),

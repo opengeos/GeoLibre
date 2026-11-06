@@ -1940,6 +1940,9 @@ export function isArcgisSupportedLayer(layer: GeoLibreLayer, deckOverlay = true)
  * @returns True when the layer should draw as an ImageryTileLayer.
  */
 function isArcgisRawImageryTiles(layer: GeoLibreLayer, serviceUrl: string): boolean {
+  // A rendering rule is applied by the service's `/exportImage`, which the
+  // cache-reading ImageryTileLayer cannot honor.
+  if (layer.metadata.arcgisRenderingRule) return false;
   if (layer.metadata.arcgisRawTiles === true) return true;
   if (layer.metadata.arcgisRawTiles === false) return false;
   try {
@@ -1956,11 +1959,14 @@ function isArcgisRawImageryTiles(layer: GeoLibreLayer, serviceUrl: string): bool
  * @returns The token, or undefined.
  */
 function tileTemplateToken(template: string | undefined): string | undefined {
-  if (!template) return undefined;
+  // Read the raw query rather than `URLSearchParams`, which decodes a literal
+  // `+` in a hand-edited, unencoded token as a space.
+  const raw = template ? /[?&]token=([^&#]*)/.exec(template)?.[1] : undefined;
+  if (!raw) return undefined;
   try {
-    return new URL(template).searchParams.get("token") || undefined;
+    return decodeURIComponent(raw) || undefined;
   } catch {
-    return undefined;
+    return raw;
   }
 }
 
@@ -2172,7 +2178,7 @@ export function compileArcgisLayer(
   // An image service added through the ArcGIS Layer panel is a raster
   // template record; one whose cache is raw LERC data has no template the SDK
   // could draw, so it is drawn by the service itself. The panel carries a
-  // token in the tile template, which the SDK layer is handed as its key.
+  // token in the tile template, which the SDK layer sends with each request.
   if (
     layer.metadata.sourceKind === "arcgis-image-service" &&
     typeof layer.sourcePath === "string" &&

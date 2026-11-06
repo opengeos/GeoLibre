@@ -959,6 +959,22 @@ describe("ArcGIS raster, service and media compilation", () => {
       metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
     });
     assert.equal((secured as { token?: string }).token, "abc");
+    const plus = compileArcgisLayer({
+      ...base,
+      type: "raster",
+      source: {
+        type: "raster",
+        tiles: ["https://host/arcgis/rest/services/X/ImageServer/tile/{z}/{y}/{x}?token=a+b%2Fc"],
+      },
+      sourcePath: "https://host/arcgis/rest/services/X/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service", arcgisRawTiles: true },
+    });
+    assert.equal((plus as { token?: string }).token, "a+b/c");
+    // A rendering rule needs `/exportImage`, so the record keeps that path.
+    assert.equal(
+      compileArcgisLayer({ ...hosted, metadata: { arcgisRenderingRule: "{}" } }).kind,
+      "imagery",
+    );
     const tiled: GeoLibreLayer = {
       ...base,
       type: "arcgis",

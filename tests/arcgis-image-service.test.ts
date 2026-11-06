@@ -191,6 +191,22 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.equal(layer?.sourcePath, IMAGE_SERVICE_URL);
   });
 
+  it("does not flag a raw-LERC image service drawn through a rendering rule", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      singleFusedMapCache: true,
+      tileInfo: { ...CACHED_MAP_SERVICE.tileInfo, format: "LERC2D" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+      renderingRule: '{"rasterFunction":"Hillshade"}',
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisRawTiles, undefined);
+  });
+
   it("does not flag an image service with a rendered tile cache", async () => {
     respondWith({
       ...IMAGE_SERVICE,
