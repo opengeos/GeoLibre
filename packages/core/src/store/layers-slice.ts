@@ -35,11 +35,14 @@ import {
   type LayerJoin,
   type LayerDescriptiveMetadata,
   type LayerPopupConfig,
+  type LayerLevelFilter,
   type LayerQuickFilter,
   type LayerStyle,
+  type LevelFilterMode,
   type LayerVirtualField,
 } from "../types";
 import { featureCollectionToGeoArrow, type GeoArrowBatch } from "../geoarrow";
+import { selectLevel } from "../level-filter";
 import { resolveLayerTileAddress } from "../tile-address";
 import { hasSimpleStyleProperties } from "../vector-color";
 import {
@@ -156,6 +159,17 @@ export interface LayersSlice {
   setLayerQuickFilters: (id: string, filters: LayerQuickFilter[]) => void;
   /** Set or clear the project-persisted expression filter for a layer. */
   setLayerFilterExpression: (id: string, expression: unknown[] | null) => void;
+  /**
+   * Link a layer to the floor picker (issue #3341), or unlink it with `null`.
+   * Linking a layer draws every floor until a floor is chosen.
+   */
+  setLayerLevelFilter: (id: string, filter: LayerLevelFilter | null) => void;
+  /**
+   * Choose a floor in the floor picker: every linked layer is narrowed to
+   * `level` (`null` for every floor) under `mode`, in one update, with the
+   * matching values resolved from each layer's own features.
+   */
+  setLevelSelection: (level: string | null, mode: LevelFilterMode) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   moveLayersRelative: (
@@ -371,6 +385,23 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   setLayerFilterExpression: (id, expression) =>
     get().updateLayer(id, { filterExpression: expression ?? undefined }),
+
+  setLayerLevelFilter: (id, filter) =>
+    get().updateLayer(id, { levelFilter: filter ?? undefined }),
+
+  setLevelSelection: (level, mode) =>
+    set((s) => {
+      let changed = false;
+      const layers = s.layers.map((layer) => {
+        if (!layer.levelFilter) return layer;
+        changed = true;
+        return {
+          ...layer,
+          levelFilter: selectLevel(layer.levelFilter, layer.geojson?.features, level, mode),
+        };
+      });
+      return changed ? { layers, isDirty: true } : {};
+    }),
 
   setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 

@@ -1623,6 +1623,37 @@ def build_server(workspace: Workspace) -> MCPServer:
         return _summarize(file, project, layer=summary)
 
     @tool()
+    def set_floor_picker(
+        path: str,
+        layer: str,
+        field: str | None = "level",
+        level: str | float | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Link a multi-floor layer to the app's on-map floor picker.
+
+        The picker lists the floors found in `field` across every linked layer
+        and draws one floor, or a floor and the ones below it. It reads
+        OpenStreetMap `level` values ("0", "0;1", "-1-0"), numbers and IMDF
+        ordinals.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            field: The property holding the floor. Pass null to unlink the layer.
+            level: The floor to show, e.g. "0" or -1. Omit it to show every
+                floor. Applies to every linked layer.
+            mode: "only" (the default for a level) or "below" to also show
+                the floors under it.
+
+        Returns:
+            The layer summary with its `levelFilter`.
+        """
+        with edit(path) as (file, project):
+            summary = authoring.set_floor_picker(project, layer, field, level, mode=mode)
+        return _summarize(file, project, layer=summary)
+
+    @tool()
     def set_labels(
         path: str,
         layer: str,

@@ -9195,6 +9195,23 @@
     "viewportSampleHint": "Values come from the tiles currently loaded, so the list grows as you pan and zoom.",
     "layerFilteredHint": "A quick filter is hiding some of this layer's features."
   },
+  "floorPicker": {
+    "title": "Floor picker",
+    "short": "Floor",
+    "all": "All",
+    "allTitle": "Show every floor",
+    "levelTitle_one": "Floor {{level}} ({{count}} feature)",
+    "levelTitle_other": "Floor {{level}} ({{count}} features)",
+    "below": "+ below",
+    "belowTitle": "Also show the floors below the chosen one",
+    "heading": "Floor picker",
+    "field": "Floor field",
+    "off": "Off",
+    "hint": "Choose the field that holds each feature's floor to list this layer in the on-map floor picker.",
+    "linkedHint_one": "{{count}} floor listed in the on-map floor picker.",
+    "linkedHint_other": "{{count}} floors listed in the on-map floor picker.",
+    "noLevels": "No floors found in \"{{field}}\". Choose the field that holds a number or a level such as \"0\" or \"-1;0\"."
+  },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML export could not write feature {{position}} because it has invalid coordinates.",
     "invalidKmlCoordinatesById": "KML export could not write feature ID {{id}} because it has invalid coordinates."

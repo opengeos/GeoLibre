@@ -73,7 +73,8 @@ export interface MapboxStyleExportResult {
 export type ExportableLayer = Pick<
   GeoLibreLayer,
   "id" | "name" | "type" | "style" | "opacity" | "visible" | "quickFilters" | "filterExpression"
->;
+> &
+  Partial<Pick<GeoLibreLayer, "levelFilter">>;
 
 export interface MapboxStyleExportOptions {
   /**

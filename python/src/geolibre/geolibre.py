@@ -1727,6 +1727,40 @@ class Map(anywidget.AnyWidget):
             lambda project: _authoring.set_layer_filter(project, handle.id, expression)
         )
 
+    def set_floor_picker(
+        self,
+        layer: str | Layer,
+        field: str | None = "level",
+        level: Any = None,
+        *,
+        mode: str | None = None,
+    ) -> None:
+        """Link a multi-floor layer to the app's on-map floor picker.
+
+        The picker lists the floors in ``field`` across every linked layer and
+        draws one floor, or a floor and the ones below it. It reads
+        OpenStreetMap ``level`` values (``"0"``, ``"0;1"``, ``"-1-0"``),
+        numbers and IMDF ordinals. Combine it with an extrusion base from the
+        same field to stack the floors in 3D.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            field: The property holding the floor; ``None`` unlinks the layer.
+            level: The floor to show, e.g. ``"0"`` or ``-1``; ``None`` shows
+                every floor. Applies to every linked layer.
+            mode: ``"only"`` (the default for a level) or ``"below"`` to also
+                show the floors under it.
+
+        Example:
+            >>> m.set_floor_picker("Rooms", "level", "0", mode="below")
+        """
+        handle = self._resolve_layer(layer)
+        self._update_project(
+            lambda project: _authoring.set_floor_picker(
+                project, handle.id, field, level, mode=mode
+            )
+        )
+
     def set_labels(
         self,
         layer: str | Layer,

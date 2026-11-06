@@ -1607,6 +1607,63 @@ def set_layer_filter(project: dict[str, Any], ref: str, expression: Any) -> dict
     return {**layer_summary(layer), "filterExpression": layer.get("filterExpression")}
 
 
+def _layer_features(layer: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """A layer's inline features, or ``None`` when it has no local copy."""
+    geojson = layer.get("geojson")
+    if isinstance(geojson, dict) and isinstance(geojson.get("features"), list):
+        return geojson["features"]
+    return None
+
+
+def set_floor_picker(
+    project: dict[str, Any],
+    ref: str,
+    field: str | None,
+    level: Any = None,
+    *,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """Link a multi-floor layer to the app's on-map floor picker, or unlink it.
+
+    The floor picker lists the floors found in ``field`` across every linked
+    layer and draws one floor (``mode="only"``) or a floor and the ones below
+    it (``mode="below"``). It reads OpenStreetMap ``level`` values such as
+    ``"0;1"`` and ``"-1-0"``, plain numbers, and IMDF ordinals. The choice is
+    shared, so ``level`` and ``mode`` apply to every linked layer.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        field: The feature property holding the floor, e.g. ``"level"``;
+            ``None`` unlinks the layer.
+        level: The floor to show, e.g. ``"0"`` or ``-1``; ``None`` shows every
+            floor.
+        mode: ``"only"`` (the default for a level) or ``"below"``.
+
+    Returns:
+        A summary of the layer with its ``levelFilter`` (or ``None``).
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, or
+            the field, level or mode is invalid.
+    """
+    layer = find_layer(project, ref)
+    if field is None:
+        layer.pop("levelFilter", None)
+        return {**layer_summary(layer), "levelFilter": None}
+    # Validate before touching anything, so a bad mode leaves no half link.
+    _project.level_filter(field, level, mode=mode)
+    layer["levelFilter"] = {"field": field}
+    for item in project.get("layers", []):
+        link = item.get("levelFilter")
+        if not isinstance(link, dict) or not isinstance(link.get("field"), str):
+            continue
+        item["levelFilter"] = _project.level_filter(
+            link["field"], level, mode=mode, features=_layer_features(item)
+        )
+    return {**layer_summary(layer), "levelFilter": layer.get("levelFilter")}
+
+
 def set_labels(
     project: dict[str, Any],
     ref: str,

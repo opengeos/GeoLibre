@@ -157,6 +157,12 @@
             "rel": "license"
           }
         ]
+      },
+      "levelFilter": {
+        "field": "pop",
+        "mode": "below",
+        "level": "50",
+        "values": [10]
       }
     }
   ],
