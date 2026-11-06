@@ -3342,10 +3342,8 @@ def _level_label(value: float) -> str:
             return str(int(number))
         # Shortest round-trip digits, in plain positional notation.
         return format(Decimal(repr(number)), "f")
+    # repr uses exponent notation below 1e-4 and from 1e16, so both ranges here have one.
     mantissa, _, exponent = repr(number).partition("e")
-    if not exponent:  # repr chose positional notation for a large integer
-        mantissa, _, exponent = f"{number:e}".partition("e")
-        mantissa = repr(float(mantissa))
     mantissa = mantissa.removesuffix(".0")
     exp = int(exponent)
     return f"{mantissa}e{'+' if exp >= 0 else '-'}{abs(exp)}"
