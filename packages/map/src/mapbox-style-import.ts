@@ -668,8 +668,10 @@ function lineOpacityNote(givenOpacity: unknown): string | null {
   }
   // A lookup scaled by something other than a number is malformed, not varying.
   if (simpleStyle) return UNREADABLE_LINE_OPACITY_NOTE;
-  // An array only counts as an expression when it was not a `literal`'s value.
-  const isExpression = Array.isArray(rawOpacity) && rawOpacity === givenOpacity;
+  // An array only counts as an expression when it was not a `literal`'s value,
+  // and an expression always starts with its operator name.
+  const isExpression =
+    Array.isArray(rawOpacity) && rawOpacity === givenOpacity && typeof rawOpacity[0] === "string";
   return isExpression || isStopsFunction(rawOpacity)
     ? VARYING_LINE_OPACITY_NOTE
     : UNREADABLE_LINE_OPACITY_NOTE;

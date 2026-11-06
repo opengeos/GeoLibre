@@ -757,6 +757,9 @@ describe("parseMapboxStyle imports hand-written styles", () => {
       {},
       ["literal", "bad"],
       ["literal", []],
+      // A bare array is not an expression: it has no operator name.
+      [],
+      [1, 2],
       1.2,
       -0.2,
       // The simplestyle lookup scaled by something that is not a number.
