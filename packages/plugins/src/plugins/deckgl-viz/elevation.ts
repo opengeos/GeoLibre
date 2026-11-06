@@ -1,4 +1,5 @@
 import {
+  applyLayerFilters,
   type GeoLibreLayer,
   geojsonHasZCoordinates,
   styleValue,
@@ -166,7 +167,10 @@ export function buildElevation3dLayers(deckGL: GeoLibreDeckGL, layer: GeoLibreLa
   const rawOffset = styleValue(style, "elevation3dOffset");
   const verticalScale = Number.isFinite(rawScale) ? rawScale : 1;
   const offset = Number.isFinite(rawOffset) ? rawOffset : 0;
-  const geojson = layer.geojson as FeatureCollection;
+  // The floor picker, Quick Filters and an expression filter narrow this
+  // layer as they do its 2D render (the filtered collection is cached, so the
+  // elevation cache keyed on it still hits while the filter is unchanged).
+  const geojson = applyLayerFilters(layer, layer.geojson as FeatureCollection);
   const data = elevationData(geojson, verticalScale, offset);
   const { nonPointData, pointData } = splitPointFeatures(data);
   const fillColor = colorToRgba(styleValue(style, "fillColor"), styleValue(style, "fillOpacity"));

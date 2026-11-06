@@ -22,6 +22,7 @@ export type KindI18nKey =
   | "ogcVectorTiles"
   | "gpx"
   | "landxml"
+  | "indoorgml"
   | "georss"
   | "geoBoundaries"
   | "delimitedText"
@@ -59,6 +60,7 @@ export const KIND_I18N_KEY: Record<
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
   landxml: "landxml",
+  indoorgml: "indoorgml",
   georss: "georss",
   geoboundaries: "geoBoundaries",
   "delimited-text": "delimitedText",
@@ -151,6 +153,24 @@ export const LANDXML_SAMPLES: readonly {
     label: "London earthworks (British National Grid)",
     url: "https://data.source.coop/opengeos/geolibre/landxml-samples/landxml-london-earthworks-bng.xml",
     crs: "EPSG:27700",
+  },
+];
+/**
+ * IndoorGML samples (issue #3341). FJK-Haus is STEMLab's IndoorGML 1.0.3 model
+ * of the KIT FZK-Haus (MIT licence), in UTM zone 32N with no `srsName`, so the
+ * CRS is given here.
+ */
+export const INDOORGML_SAMPLES: readonly {
+  label: string;
+  name: string;
+  url: string;
+  crs: string;
+}[] = [
+  {
+    label: "FJK-Haus (IndoorGML 1.0, UTM 32N)",
+    name: "FJK-Haus",
+    url: "https://data.source.coop/giswqs/opengeos/FJK-Haus_IndoorGML.gml",
+    crs: "EPSG:25832",
   },
 ];
 // USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed (Simple georss:point).

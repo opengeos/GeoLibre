@@ -73,6 +73,7 @@ const FULL_REGISTRY_IDS = [
   "add.cad",
   "add.gpx",
   "add.landxml",
+  "add.indoorgml",
   "add.mbtiles",
   "add.xyz",
   "add.wms",

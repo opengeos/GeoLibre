@@ -130,6 +130,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
   { kind: "landxml", titleKey: "toolbar.layerType.landxml" },
+  { kind: "indoorgml", titleKey: "toolbar.layerType.indoorgml" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
   { kind: "xyz", titleKey: "toolbar.layerType.xyz" },
   { kind: "wms", titleKey: "toolbar.layerType.wms" },

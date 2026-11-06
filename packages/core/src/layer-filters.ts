@@ -1,3 +1,5 @@
+import { featureFilter } from "@maplibre/maplibre-gl-style-spec";
+import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "./types";
 import { compileLevelFilter } from "./level-filter";
 import { compileQuickFilters } from "./quick-filters";
@@ -52,4 +54,65 @@ export function hasActiveLayerFilter(layer: LayerFilterSource): boolean {
   return (
     activeLayerFilterExpression(layer) !== null || compileQuickFilters(layer.quickFilters) !== null
   );
+}
+
+/** MapLibre's feature type codes, which `featureFilter` reads for `$type`. */
+const FEATURE_TYPE_CODES: Record<string, 1 | 2 | 3> = {
+  Point: 1,
+  MultiPoint: 1,
+  LineString: 2,
+  MultiLineString: 2,
+  Polygon: 3,
+  MultiPolygon: 3,
+};
+
+/** The last filtered result per collection, so an unchanged filter reuses it. */
+const filteredCollections = new WeakMap<object, { key: string; result: FeatureCollection }>();
+
+/**
+ * A layer's features narrowed by its authored filters (an expression, Quick
+ * Filters, the floor picker), for a renderer that draws GeoJSON itself rather
+ * than through a MapLibre layer filter, such as the deck.gl 3D Z-value path.
+ *
+ * The same collection comes back while no filter is active, and the same
+ * filtered collection while the filter is unchanged, so caches keyed on the
+ * collection keep hitting. A filter that does not compile leaves every
+ * feature in, as MapLibre would refuse it rather than hide the layer.
+ *
+ * @param layer - The layer whose filters apply.
+ * @param geojson - The features to filter.
+ * @param zoom - The zoom a `["zoom"]` expression sees.
+ * @returns The matching features.
+ */
+export function applyLayerFilters(
+  layer: LayerFilterSource,
+  geojson: FeatureCollection,
+  zoom = 0,
+): FeatureCollection {
+  const filter = compileLayerFilters(layer);
+  if (!filter) return geojson;
+  const key = `${zoom}|${JSON.stringify(filter)}`;
+  const cached = filteredCollections.get(geojson);
+  if (cached?.key === key) return cached.result;
+  let compiled: ReturnType<typeof featureFilter>;
+  try {
+    compiled = featureFilter(filter as never, "layers[0].filter");
+  } catch {
+    return geojson;
+  }
+  const result: FeatureCollection = {
+    ...geojson,
+    features: geojson.features.filter((feature) =>
+      compiled.filter(
+        { zoom } as never,
+        {
+          type: FEATURE_TYPE_CODES[feature.geometry?.type ?? ""] ?? 1,
+          properties: feature.properties ?? {},
+          ...(feature.id !== undefined ? { id: feature.id } : {}),
+        } as never,
+      ),
+    ),
+  };
+  filteredCollections.set(geojson, { key, result });
+  return result;
 }
