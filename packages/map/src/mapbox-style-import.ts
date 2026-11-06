@@ -1117,7 +1117,9 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const reportLineNote = (property: string, message: string) => {
       const previous = lineNotes.get(property);
       if (previous === undefined) lineNotes.set(property, message);
-      else if (previous !== message) lineNotes.set(property, MIXED_LINE_OPACITY_NOTE);
+      else if (property === "line-opacity" && previous !== message) {
+        lineNotes.set(property, MIXED_LINE_OPACITY_NOTE);
+      }
     };
     // Drawn layers only; a style with every line layer hidden still imports
     // the one `line` the rest of the importer reads, so that one is checked.
