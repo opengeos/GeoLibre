@@ -11,6 +11,12 @@ import { listZipEntryPaths, type ReadRange } from "./zip-directory";
 
 /** Bytes read from the end of an archive: the longest zip comment plus its end record. */
 const TAIL_BYTES = 0xffff + 22;
+/**
+ * Largest archive downloaded whole just to look inside it, when a server will
+ * not serve a byte range. IMDF venues are small; a larger zip is left to the
+ * vector control, which downloads it once anyway.
+ */
+const MAX_PROBE_DOWNLOAD_BYTES = 32 * 1024 * 1024;
 
 /** Whether an archive entry is macOS resource-fork noise (`__MACOSX/`, `._name`). */
 export function isMacOsZipMetadata(path: string): boolean {
@@ -92,8 +98,14 @@ export interface ImdfUrlProbe {
 /**
  * Probe a zip URL for IMDF with HTTP range requests: the tail first (which
  * also gives the archive's size), then the central directory if it starts
- * before the tail. A server that answers the first request with the whole
- * file (status 200) is handled from those bytes.
+ * before the tail.
+ *
+ * Two hosts need more. One that ignores `Range` answers with the whole file
+ * (status 200); one that serves ranges cross-origin without exposing
+ * `Content-Range` leaves the archive's size unknown. Either way the archive is
+ * read whole instead, up to {@link MAX_PROBE_DOWNLOAD_BYTES}: a larger one is
+ * reported as not IMDF without reading its body, so the control downloads it
+ * once rather than twice.
  *
  * @param url - The archive's URL.
  * @param fetchImpl - `fetch`, injectable for tests.
@@ -106,12 +118,16 @@ export async function probeImdfZipUrl(
 ): Promise<ImdfUrlProbe> {
   const first = await fetchImpl(url, { headers: { Range: `bytes=-${TAIL_BYTES}` } });
   if (!first.ok) throw new Error(`HTTP ${first.status}`);
-  if (first.status !== 206) {
-    const bytes = new Uint8Array(await first.arrayBuffer());
-    return { imdf: await isImdfZipRange(bytes.byteLength, bytesRangeReader(bytes)), bytes };
-  }
+  if (first.status !== 206) return probeWholeResponse(first);
   const total = Number(/\/(\d+)\s*$/.exec(first.headers.get("content-range") ?? "")?.[1]);
-  if (!Number.isFinite(total) || total <= 0) return { imdf: false };
+  if (!Number.isFinite(total) || total <= 0) {
+    // Ranges work but the size is hidden (no Access-Control-Expose-Headers):
+    // not a reason to call an IMDF zip a shapefile.
+    await first.body?.cancel().catch(() => {});
+    const whole = await fetchImpl(url);
+    if (!whole.ok) throw new Error(`HTTP ${whole.status}`);
+    return probeWholeResponse(whole);
+  }
   const tail = new Uint8Array(await first.arrayBuffer());
   const tailOffset = total - tail.byteLength;
   const readRange: ReadRange = async (offset, length) => {
@@ -125,4 +141,22 @@ export async function probeImdfZipUrl(
     return new Uint8Array(await response.arrayBuffer());
   };
   return { imdf: await isImdfZipRange(total, readRange) };
+}
+
+/**
+ * Classify an archive from a response carrying all of it, reading the body
+ * only when it is small enough to be an IMDF venue.
+ *
+ * @param response - A full (status 200) response.
+ * @returns The probe, with the bytes when they were read.
+ */
+async function probeWholeResponse(response: Response): Promise<ImdfUrlProbe> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_PROBE_DOWNLOAD_BYTES) {
+    await response.body?.cancel().catch(() => {});
+    return { imdf: false };
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_PROBE_DOWNLOAD_BYTES) return { imdf: false };
+  return { imdf: await isImdfZipRange(bytes.byteLength, bytesRangeReader(bytes)), bytes };
 }

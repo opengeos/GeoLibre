@@ -59,3 +59,40 @@ describe("imdf-detect", () => {
     assert.ok(ranges[0].startsWith("bytes=-"));
   });
 });
+
+describe("probeImdfZipUrl on awkward hosts", () => {
+  it("reads the whole archive when ranges work but Content-Range is hidden", async () => {
+    const bytes = venue();
+    const requests: string[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      const range = new Headers(init?.headers).get("range");
+      requests.push(range ?? "full");
+      // A cross-origin 206 whose Content-Range the browser does not expose.
+      if (range) return new Response(new Blob([bytes.subarray(-100) as BlobPart]), { status: 206 });
+      return new Response(new Blob([bytes as BlobPart]), { status: 200 });
+    }) as typeof fetch;
+    const probe = await probeImdfZipUrl("https://example.org/Museum.zip", fetchImpl);
+    assert.equal(probe.imdf, true);
+    assert.equal(probe.bytes?.byteLength, bytes.byteLength);
+    assert.deepEqual(requests, [requests[0], "full"]);
+  });
+
+  it("does not download a large zip from a server without range support", async () => {
+    let cancelled = false;
+    const fetchImpl = (async () => {
+      // A body that never ends: reading it would hang, cancelling it ends the probe.
+      const body = new ReadableStream({
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-length": String(64 * 1024 * 1024) },
+      });
+    }) as typeof fetch;
+    const probe = await probeImdfZipUrl("https://example.org/roads.zip", fetchImpl);
+    assert.deepEqual(probe, { imdf: false });
+    assert.equal(cancelled, true);
+  });
+});

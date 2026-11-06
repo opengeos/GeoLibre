@@ -356,6 +356,17 @@ export function readImdfZip(bytes: Uint8Array): ImdfImport | null {
   if (total > MAX_TOTAL_BYTES) {
     throw new ImdfArchiveError("its GeoJSON files add up to more than 512 MB");
   }
+  // The sizes above are the archive's own claims; check what was inflated too.
+  let inflated = 0;
+  for (const [name, data] of Object.entries(entries)) {
+    if (data.byteLength > MAX_ENTRY_BYTES) {
+      throw new ImdfArchiveError(`${name} is larger than 256 MB`);
+    }
+    inflated += data.byteLength;
+  }
+  if (inflated > MAX_TOTAL_BYTES) {
+    throw new ImdfArchiveError("its GeoJSON files add up to more than 512 MB");
+  }
   const files = new Map<string, string>();
   for (const name of Object.keys(entries)) files.set(name, strFromU8(entries[name]));
   return parseImdfArchive(files);

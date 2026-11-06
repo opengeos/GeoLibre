@@ -5,6 +5,7 @@
  * handler works the same on web and desktop.
  */
 
+import { listZipEntryPaths, type ReadRange } from "@geolibre/core";
 import type { TFunction } from "i18next";
 import { stat } from "@tauri-apps/plugin-fs";
 import type {
@@ -15,9 +16,6 @@ import type {
 import { listDirectory, readLocalFileBytes, readLocalFileRange } from "./file-io/local-fs";
 import { browserSafeFileName } from "./file-io/paths";
 import { toArrayBuffer } from "./file-io/shared";
-
-/** Reads `length` bytes of a file from `offset`. */
-import { listZipEntryPaths, type ReadRange } from "@geolibre/core";
 
 export { listZipEntryPaths };
 
