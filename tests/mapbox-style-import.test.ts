@@ -601,6 +601,26 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.deepEqual(result.warnings, []);
   });
 
+  it("does not report spec defaults wrapped in a literal", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "rivers",
+          type: "line",
+          paint: {
+            "line-opacity": ["literal", 1],
+            "line-blur": ["literal", 0],
+            "line-gap-width": ["literal", 0],
+            "line-offset": ["literal", 0],
+            "line-translate": ["literal", [0, 0]],
+          },
+        },
+      ],
+    });
+    assert.deepEqual(result.warnings, []);
+  });
+
   it("reports a data-driven line blur but not a data-driven line opacity", () => {
     const result = parseMapboxStyle({
       version: 8,

@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYER_STYLE,
   VECTOR_COLOR_RAMPS,
   mercatorMetersPerPixelAtZoom0,
+  simpleStyleNumberValue,
   type LabelStyle,
   type LayerStyle,
   type VectorStyleStop,
@@ -653,7 +654,7 @@ function warnUnsupportedLinePaint(
   paint: Record<string, unknown>,
   report: (property: string, message: string) => void,
 ): void {
-  const rawOpacity = paint["line-opacity"];
+  const rawOpacity = unwrapLiteral(paint["line-opacity"]);
   const opacity = asFiniteNumber(rawOpacity) ?? simpleStyleOpacityScale(rawOpacity);
   if (opacity !== null) {
     if (opacity < 1) {
@@ -671,25 +672,25 @@ function warnUnsupportedLinePaint(
       "The line dash pattern cannot be represented; the lines import as solid.",
     );
   }
-  const blur = asFiniteNumber(paint["line-blur"]);
+  const blur = asFiniteNumber(unwrapLiteral(paint["line-blur"]));
   if (paint["line-blur"] != null && blur !== 0) {
     report("line-blur", "The line blur cannot be represented; the lines import with sharp edges.");
   }
-  const gap = asFiniteNumber(paint["line-gap-width"]);
+  const gap = asFiniteNumber(unwrapLiteral(paint["line-gap-width"]));
   if (paint["line-gap-width"] != null && gap !== 0) {
     report(
       "line-gap-width",
       "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
     );
   }
-  const offset = asFiniteNumber(paint["line-offset"]);
+  const offset = asFiniteNumber(unwrapLiteral(paint["line-offset"]));
   if (paint["line-offset"] != null && offset !== 0) {
     report(
       "line-offset",
       "The line offset cannot be represented; the lines import centered on the geometry.",
     );
   }
-  const translate = asArray(paint["line-translate"]);
+  const translate = asArray(unwrapLiteral(paint["line-translate"]));
   const untranslated =
     translate?.length === 2 && translate.every((component) => asFiniteNumber(component) === 0);
   if (paint["line-translate"] != null && !untranslated) {
@@ -712,24 +713,27 @@ function warnUnsupportedLinePaint(
   }
 }
 
+/** A `["literal", value]` wrapper's value, or the value itself. */
+function unwrapLiteral(value: unknown): unknown {
+  const array = asArray(value);
+  return array && array.length === 2 && array[0] === "literal" ? array[1] : value;
+}
+
 /**
- * Whether a node is exactly the simplestyle lookup `simpleStyleNumberValue`
- * (core `vector-color.ts`) writes for `stroke-opacity`:
- * `["to-number", ["coalesce", ["get", "stroke-opacity"], 1], 1]`. Anything
- * else that merely mentions the property is an author's own expression and is
- * reported.
+ * The simplestyle `stroke-opacity` lookup the exporter writes into
+ * `line-opacity`, built with the same core helper (`simpleStyleNumberValue`)
+ * so the importer cannot drift from the exporter's shape.
+ */
+const SIMPLE_STYLE_STROKE_OPACITY_LOOKUP = JSON.stringify(
+  simpleStyleNumberValue({ ...DEFAULT_LAYER_STYLE, simpleStyleEnabled: true }, "stroke-opacity", 1),
+);
+
+/**
+ * Whether a node is exactly that lookup. Anything else that merely mentions
+ * `stroke-opacity` is an author's own expression and is reported.
  */
 function isStrokeOpacityLookup(node: unknown): boolean {
-  const array = asArray(node);
-  if (!array || array.length !== 3 || array[0] !== "to-number" || array[2] !== 1) return false;
-  const coalesce = asArray(array[1]);
-  return (
-    coalesce !== null &&
-    coalesce.length === 3 &&
-    coalesce[0] === "coalesce" &&
-    getProperty(coalesce[1]) === "stroke-opacity" &&
-    coalesce[2] === 1
-  );
+  return Array.isArray(node) && JSON.stringify(node) === SIMPLE_STYLE_STROKE_OPACITY_LOOKUP;
 }
 
 /**
