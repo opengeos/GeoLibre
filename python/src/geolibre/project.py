@@ -3368,7 +3368,11 @@ def parse_level_value(raw: Any) -> list[tuple[str, float | None]]:
     if isinstance(raw, bool):
         return []
     if isinstance(raw, (int, float)):
-        return [(_level_label(raw), float(raw))] if math.isfinite(raw) else []
+        try:
+            number = float(raw)
+        except OverflowError:  # an integer too large for a double: no floor, as in the app
+            return []
+        return [(_level_label(number), number)] if math.isfinite(number) else []
     if not isinstance(raw, str):
         return []
     tokens: list[tuple[str, float | None]] = []
@@ -3431,8 +3435,10 @@ def level_filter(
         mode: ``"only"`` (the default once a level is given) or ``"below"`` to
             also show the floors under it.
         features: The layer's features, used to resolve the raw values that
-            match. Without them the app resolves the values when it opens the
-            project.
+            match. Without them the link is saved unresolved and the app
+            resolves it once it has the layer's features (a local file it
+            re-reads); a layer whose features the app never holds (vector
+            tiles) is not narrowed.
 
     Returns:
         The ``levelFilter`` record.
@@ -3442,14 +3448,20 @@ def level_filter(
     """
     if not isinstance(field, str) or not field.strip():
         raise ValueError("the floor field must be a non-empty property name")
-    if level is None:
-        if mode not in (None, "all"):
+    if level is None or mode == "all":
+        # "all" draws every floor whatever the level, as the app's selectLevel does.
+        if level is None and mode not in (None, "all"):
             raise ValueError("choose a level for the 'only' and 'below' modes")
         return {"field": field, "mode": "all", "level": None}
     if isinstance(level, bool) or not isinstance(level, (str, int, float)):
         raise ValueError(f"a floor level must be text or a number, got {level!r}")
-    if isinstance(level, float) and not math.isfinite(level):
-        raise ValueError(f"a floor level must be a finite number, got {level!r}")
+    if isinstance(level, (int, float)):
+        try:
+            finite = math.isfinite(float(level))
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise ValueError(f"a floor level must be a finite number, got {level!r}")
     label = level.strip() if isinstance(level, str) else _level_label(level)
     if not label:
         raise ValueError("a floor level must not be blank")
