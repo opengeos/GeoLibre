@@ -96,3 +96,22 @@ describe("probeImdfZipUrl on awkward hosts", () => {
     assert.equal(cancelled, true);
   });
 });
+
+describe("probeImdfZipUrl size cap", () => {
+  it("stops reading a body without a Content-Length once it passes the cap", async () => {
+    let served = 0;
+    const chunk = new Uint8Array(1024 * 1024);
+    const fetchImpl = (async () => {
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          served += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as typeof fetch;
+    const probe = await probeImdfZipUrl("https://example.org/huge.zip", fetchImpl);
+    assert.deepEqual(probe, { imdf: false });
+    assert.ok(served <= 40 * 1024 * 1024, `served ${served} bytes`);
+  });
+});

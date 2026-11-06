@@ -17,6 +17,7 @@
  * Pure (no DOM, no store), so it is unit tested directly.
  */
 import { isImdfArchiveEntries, isMacOsZipMetadata } from "@geolibre/core";
+import i18next from "i18next";
 import { strFromU8, unzipSync } from "fflate";
 
 /** A GeoJSON feature as read from the archive. */
@@ -30,10 +31,26 @@ interface ImdfFeature {
 
 /** A problem inside an archive already recognized as IMDF. */
 export class ImdfArchiveError extends Error {
-  constructor(message: string) {
-    super(`This IMDF archive could not be read: ${message}`);
+  constructor(reason: string) {
+    super(
+      translate(
+        "addData.imdf.error.unreadable",
+        "This IMDF archive could not be read: {{reason}}",
+        { reason },
+      ),
+    );
     this.name = "ImdfArchiveError";
   }
+}
+
+/**
+ * A translated message, with the English text as the fallback so the parser
+ * also works where i18next is not set up (a script, a unit test).
+ */
+function translate(key: string, english: string, params: Record<string, string>): string {
+  if (i18next.isInitialized && i18next.exists(key))
+    return i18next.t(key as never, params) as string;
+  return english.replace(/\{\{(\w+)\}\}/g, (_, name: string) => params[name] ?? "");
 }
 
 /**
@@ -200,7 +217,12 @@ export function parseImdfArchive(files: ReadonlyMap<string, string>): ImdfImport
     try {
       parsed = JSON.parse(text);
     } catch (error) {
-      throw new ImdfArchiveError(`${name} is not valid JSON: ${(error as Error).message}`);
+      throw new ImdfArchiveError(
+        translate("addData.imdf.error.invalidJson", "{{file}} is not valid JSON ({{detail}})", {
+          file: name,
+          detail: (error as Error).message,
+        }),
+      );
     }
     const features = (parsed as { features?: unknown })?.features;
     if (Array.isArray(features)) {
@@ -351,21 +373,33 @@ export function readImdfZip(bytes: Uint8Array): ImdfImport | null {
   });
   if (!isImdfArchiveEntries(names)) return null;
   if (oversized.length > 0) {
-    throw new ImdfArchiveError(`${oversized.join(", ")} is larger than 256 MB`);
+    throw new ImdfArchiveError(
+      translate("addData.imdf.error.entryTooLarge", "{{file}} is larger than 256 MB", {
+        file: oversized.join(", "),
+      }),
+    );
   }
   if (total > MAX_TOTAL_BYTES) {
-    throw new ImdfArchiveError("its GeoJSON files add up to more than 512 MB");
+    throw new ImdfArchiveError(
+      translate("addData.imdf.error.tooLarge", "its GeoJSON files add up to more than 512 MB", {}),
+    );
   }
   // The sizes above are the archive's own claims; check what was inflated too.
   let inflated = 0;
   for (const [name, data] of Object.entries(entries)) {
     if (data.byteLength > MAX_ENTRY_BYTES) {
-      throw new ImdfArchiveError(`${name} is larger than 256 MB`);
+      throw new ImdfArchiveError(
+        translate("addData.imdf.error.entryTooLarge", "{{file}} is larger than 256 MB", {
+          file: name,
+        }),
+      );
     }
     inflated += data.byteLength;
   }
   if (inflated > MAX_TOTAL_BYTES) {
-    throw new ImdfArchiveError("its GeoJSON files add up to more than 512 MB");
+    throw new ImdfArchiveError(
+      translate("addData.imdf.error.tooLarge", "its GeoJSON files add up to more than 512 MB", {}),
+    );
   }
   const files = new Map<string, string>();
   for (const name of Object.keys(entries)) files.set(name, strFromU8(entries[name]));

@@ -396,6 +396,12 @@
   },
   "addData": {
     "imdf": {
+      "error": {
+        "unreadable": "This IMDF archive could not be read: {{reason}}",
+        "invalidJson": "{{file}} is not valid JSON ({{detail}})",
+        "entryTooLarge": "{{file}} is larger than 256 MB",
+        "tooLarge": "its GeoJSON files add up to more than 512 MB"
+      },
       "layer": {
         "venue": "Venue",
         "footprint": "Footprints",

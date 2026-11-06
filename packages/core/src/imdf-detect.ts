@@ -151,12 +151,48 @@ export async function probeImdfZipUrl(
  * @returns The probe, with the bytes when they were read.
  */
 async function probeWholeResponse(response: Response): Promise<ImdfUrlProbe> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_PROBE_DOWNLOAD_BYTES) {
-    await response.body?.cancel().catch(() => {});
-    return { imdf: false };
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_PROBE_DOWNLOAD_BYTES) return { imdf: false };
+  const bytes = await readBodyUpTo(response, MAX_PROBE_DOWNLOAD_BYTES);
+  if (!bytes) return { imdf: false };
   return { imdf: await isImdfZipRange(bytes.byteLength, bytesRangeReader(bytes)), bytes };
+}
+
+/**
+ * Read a response body, giving up (and cancelling the rest) once it passes
+ * `limit` bytes. The size header cannot be trusted for this: it may be absent
+ * (a chunked response) or hidden from script on a cross-origin one.
+ *
+ * @param response - The response.
+ * @param limit - The most bytes to read.
+ * @returns The body, or `null` when it is larger than `limit`.
+ */
+async function readBodyUpTo(response: Response, limit: number): Promise<Uint8Array | null> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null && Number(declared) > limit) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength > limit ? null : bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
