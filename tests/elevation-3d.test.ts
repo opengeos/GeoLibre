@@ -518,6 +518,12 @@ describe("buildElevation3dLayers filters", () => {
       (ground.props.data as FeatureCollection).features.map((feature) => feature.properties?.level),
       ["0", "0;1"],
     );
+    // Back to floor 1: the cache now holds floor 0, so this is filtered afresh.
+    const [again] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
+    assert.deepEqual(
+      (again.props.data as FeatureCollection).features.map((feature) => feature.properties?.level),
+      ["1", "0;1"],
+    );
   });
 
   it("draws everything while no filter is active", () => {

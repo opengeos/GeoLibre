@@ -223,6 +223,13 @@ describe("parseIndoorGml", () => {
     ]);
   });
 
+  it("reads an untagged 2D cell as 2D in a document that also has solids", () => {
+    const flat = `<core:Geometry2D><gml:Polygon><gml:exterior><gml:LinearRing><gml:posList>0 0 4 0 4 3</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></core:Geometry2D>`;
+    const result = parseIndoorGml(document(cell("S", box(10, 0, 0, 12, 2, 3)) + cell("T", flat)));
+    assert.equal(result.cells.features.length, 2);
+    assert.deepEqual((result.cells.features[1].geometry as Polygon).coordinates[0][1], [4, 0]);
+  });
+
   it("resolves solid surfaces referenced with xlink:href", () => {
     const floor = `<gml:Polygon gml:id="floor-1"><gml:exterior>${ring([
       [0, 0, 0],

@@ -171,6 +171,16 @@ function extremes(values: Iterable<number>): [number, number] {
   return [low, high];
 }
 
+/** 2 inside a cell's `Geometry2D`, 3 inside a `Geometry3D` or `Solid`, else unknown. */
+function geometryDimension(element: Element): 2 | 3 | null {
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const name = localName(node);
+    if (name === "Geometry2D") return 2;
+    if (name === "Geometry3D" || name === "Solid") return 3;
+  }
+  return null;
+}
+
 /** The positions of a `LinearRing`, `LineString` or `Point` (`pos`, `posList` or `coordinates`). */
 function readPositions(element: Element): Position[] {
   const out: Position[] = [];
@@ -184,7 +194,7 @@ function readPositions(element: Element): Position[] {
       // or two 3D positions), so the dimension comes from srsDimension or the
       // document (see parseIndoorGml).
       const values = numbers(item.textContent);
-      const dimension = srsDimension(item) ?? context.dimension;
+      const dimension = srsDimension(item) ?? geometryDimension(item) ?? context.dimension;
       for (let index = 0; index + dimension <= values.length; index += dimension) {
         const tuple = values.slice(index, index + dimension);
         if (tuple.every(Number.isFinite)) out.push(position(tuple));
@@ -416,6 +426,17 @@ function joinLevels(a: string | null, b: string | null): string | null {
  * @throws Error when the text is not XML, not IndoorGML, or holds no cell geometry.
  */
 export function parseIndoorGml(text: string): IndoorGmlParseResult {
+  try {
+    return parseDocument(text);
+  } finally {
+    // The polygon index holds the parsed DOM; drop it so a large file's tree
+    // is not kept alive until the next parse.
+    context.polygons = new Map();
+  }
+}
+
+/** {@link parseIndoorGml}'s body, run with the parse context set. */
+function parseDocument(text: string): IndoorGmlParseResult {
   const document = new DOMParser().parseFromString(text, "application/xml");
   if (document.querySelector("parsererror"))
     throw new Error("The IndoorGML file is not valid XML.");

@@ -65,7 +65,8 @@ export function IndoorGmlSource() {
 
   /** Fill the CRS field (or the local option) from what a parsed file says. */
   const adoptDetected = (parsed: IndoorGmlParseResult) => {
-    setSourceCrs(parsed.detectedCrs ?? "");
+    // A CRS the user typed is kept when the file names none.
+    if (parsed.detectedCrs) setSourceCrs(parsed.detectedCrs);
     setLocal(!parsed.detectedCrs && !parsed.coordinatesLookGeographic);
   };
 
@@ -79,6 +80,10 @@ export function IndoorGmlSource() {
       });
       if (!result) return;
       if (!result.text) throw new Error(t("addData.indoorgml.errorFileMissing"));
+      // The text is already read; this keeps a huge file from being parsed.
+      if (result.text.length > INDOORGML_MAX_BYTES) {
+        throw new Error(t("addData.indoorgml.errorTooLarge"));
+      }
       const parsed = parseIndoorGml(result.text);
       reportIndoorGmlWarnings(parsed);
       setSelectedFile({ path: result.path, parsed });
