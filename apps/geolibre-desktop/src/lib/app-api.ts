@@ -597,11 +597,11 @@ export function createAppAPI(
     // appends the owner id (as it does for `credentials`), so a plugin cannot
     // name another plugin's allowlist.
     readAllowedFile: isTauriRuntime()
-      ? ((path: string, ownerPluginId: string) =>
+      ? (((path: string, ownerPluginId: string) =>
           invoke<string>("read_allowed_file", {
             pluginId: ownerPluginId,
             path,
-          })) as unknown as GeoLibrePlugins.GeoLibreAppAPI["readAllowedFile"]
+          })) as unknown as GeoLibrePlugins.GeoLibreAppAPI["readAllowedFile"])
       : undefined,
     downloadRemoteFile: isDesktopRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())
