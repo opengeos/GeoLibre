@@ -226,6 +226,9 @@ function readFileAccess(v: unknown): Result<Record<string, string[]>> {
   for (const [key, val] of Object.entries(v)) {
     const trimmedKey = key.trim();
     if (!trimmedKey) return err("'fileAccess' keys must be non-blank strings");
+    if (Object.hasOwn(result, trimmedKey)) {
+      return err(`'fileAccess.${trimmedKey}' is a duplicate key after trimming`);
+    }
     const listRes = readIdList(val, `fileAccess.${trimmedKey}`);
     if ("error" in listRes) return listRes;
     result[trimmedKey] = listRes.value;
@@ -481,12 +484,33 @@ async function readDeploymentPolicy(): Promise<DeploymentPolicy | null> {
       const contents = await invoke<string | null>("read_deployment_policy");
       // An existing config-dir file owns the whole policy, even when invalid.
       // Only absence or a failed read permits the bundled web-file fallback.
-      if (contents !== null) return parseDeploymentPolicy(contents);
+      if (contents !== null) {
+        const policy = parseDeploymentPolicy(contents);
+        if (policy?.plugins?.fileAccess) {
+          const isMachine = await invoke<boolean>("is_machine_deployment_policy").catch(
+            () => false,
+          );
+          if (!isMachine) {
+            console.warn(
+              "[deployment-policy] ignoring 'plugins.fileAccess' in per-user deployment policy; only machine-wide deployment.json is honoured",
+            );
+            delete policy.plugins.fileAccess;
+          }
+        }
+        return policy;
+      }
     } catch (error) {
       console.warn("[deployment-policy] read_deployment_policy failed:", error);
     }
   }
-  return fetchDeploymentPolicy();
+  const policy = await fetchDeploymentPolicy();
+  if (policy?.plugins?.fileAccess) {
+    console.warn(
+      "[deployment-policy] ignoring 'plugins.fileAccess' in web deployment policy; only machine-wide deployment.json is honoured",
+    );
+    delete policy.plugins.fileAccess;
+  }
+  return policy;
 }
 
 let loading: Promise<DeploymentPolicy | null> | null = null;

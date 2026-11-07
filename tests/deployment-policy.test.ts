@@ -460,3 +460,94 @@ test("plugins.openPanel parses trimmed and drops invalid values", () => {
   assert.deepEqual(nonString?.capabilities, ["data:add"]);
   assert.equal(nonString?.plugins, undefined);
 });
+
+test("plugins.fileAccess is ignored with warning from per-user or web policy", async (t) => {
+  const globals = globalThis as unknown as { window?: unknown };
+  const previousWindow = globals.window;
+  try {
+    const warnings = captureWarnings(t);
+    // 1. Web runtime: fetchDeploymentPolicy ignores fileAccess
+    delete globals.window;
+    t.mock.method(globalThis, "fetch", async () => {
+      return new Response(
+        JSON.stringify({
+          version: 1,
+          plugins: {
+            fileAccess: {
+              "my-plugin": ["/etc/data.json"],
+            },
+          },
+        }),
+      );
+    });
+    const { loadDeploymentPolicy: loadWeb } =
+      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=web-file-access");
+    const webPolicy = await loadWeb();
+    assert.equal(webPolicy?.plugins?.fileAccess, undefined);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /ignoring 'plugins.fileAccess'/);
+
+    // 2. Desktop runtime with per-user policy: is_machine_deployment_policy returns false
+    const warningsDesktop = captureWarnings(t);
+    globals.window = {
+      __TAURI_INTERNALS__: {
+        invoke: async (command: string) => {
+          if (command === "read_deployment_policy") {
+            return JSON.stringify({
+              version: 1,
+              plugins: {
+                fileAccess: {
+                  "my-plugin": ["/etc/data.json"],
+                },
+              },
+            });
+          }
+          if (command === "is_machine_deployment_policy") {
+            return false;
+          }
+          throw new Error(`Unexpected command: ${command}`);
+        },
+      },
+    };
+    const { loadDeploymentPolicy: loadPerUser } =
+      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=desktop-peruser-file-access");
+    const perUserPolicy = await loadPerUser();
+    assert.equal(perUserPolicy?.plugins?.fileAccess, undefined);
+    assert.equal(warningsDesktop.length, 1);
+    assert.match(warningsDesktop[0], /ignoring 'plugins.fileAccess' in per-user/);
+
+    // 3. Desktop runtime with machine policy: is_machine_deployment_policy returns true
+    const warningsMachine = captureWarnings(t);
+    globals.window = {
+      __TAURI_INTERNALS__: {
+        invoke: async (command: string) => {
+          if (command === "read_deployment_policy") {
+            return JSON.stringify({
+              version: 1,
+              plugins: {
+                fileAccess: {
+                  "my-plugin": ["/etc/data.json"],
+                },
+              },
+            });
+          }
+          if (command === "is_machine_deployment_policy") {
+            return true;
+          }
+          throw new Error(`Unexpected command: ${command}`);
+        },
+      },
+    };
+    const { loadDeploymentPolicy: loadMachine } =
+      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=desktop-machine-file-access");
+    const machinePolicy = await loadMachine();
+    assert.deepEqual(machinePolicy?.plugins?.fileAccess, {
+      "my-plugin": ["/etc/data.json"],
+    });
+    assert.equal(warningsMachine.length, 0);
+  } finally {
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
+    setDeploymentPolicy(null);
+  }
+});

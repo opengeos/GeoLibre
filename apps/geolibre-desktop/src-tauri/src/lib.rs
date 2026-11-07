@@ -523,6 +523,8 @@ pub fn run() {
             read_selected_image,
             read_admin_profile,
             read_deployment_policy,
+            is_machine_deployment_policy,
+            read_allowed_file,
             read_env_vars,
             take_pending_project_paths,
             allow_raster_asset,
@@ -1337,16 +1339,163 @@ fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
     read_admin_profile_file(&path)
 }
 
-/// Read the optional deployment policy (`<app_config_dir>/deployment.json`).
-/// Returns its raw UTF-8 text, or `None` only when the file is absent.
+const MAX_PLUGIN_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Returns the platform-specific machine-wide deployment policy path, if any.
+/// Windows: `%ProgramData%\GeoLibre\deployment.json`
+/// Linux: `/etc/geolibre/deployment.json`
+/// macOS: `/Library/Application Support/GeoLibre/deployment.json`
+fn machine_deployment_policy_path() -> Option<std::path::PathBuf> {
+    #[cfg(test)]
+    {
+        if let Ok(path) = std::env::var("GEOLIBRE_TEST_MACHINE_DEPLOYMENT_PATH") {
+            return Some(std::path::PathBuf::from(path));
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let base = std::env::var_os("ProgramData")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(r"C:\ProgramData"));
+        Some(base.join("GeoLibre").join("deployment.json"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Some(std::path::PathBuf::from("/Library/Application Support/GeoLibre/deployment.json"))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Some(std::path::PathBuf::from("/etc/geolibre/deployment.json"))
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+    {
+        None
+    }
+}
+
+/// Whether the active deployment policy originates from a machine-wide deployment.json file.
+#[tauri::command]
+fn is_machine_deployment_policy() -> bool {
+    machine_deployment_policy_path()
+        .and_then(|p| fs::metadata(p).ok())
+        .is_some_and(|m| m.is_file())
+}
+
+/// Read the optional deployment policy. Honours machine-wide deployment.json
+/// with documented precedence over per-user `<app_config_dir>/deployment.json`.
+/// Returns raw UTF-8 text, or `None` only when both files are absent.
 #[tauri::command]
 fn read_deployment_policy(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    if let Some(machine_path) = machine_deployment_policy_path() {
+        if let Some(policy) = read_optional_config_file(&machine_path)
+            .map_err(|error| format!("Could not read machine deployment policy: {error}"))?
+        {
+            return Ok(Some(policy));
+        }
+    }
+
     let config_dir = app
         .path()
         .app_config_dir()
         .map_err(|error| format!("Could not resolve config directory: {error}"))?;
     read_optional_config_file(&config_dir.join("deployment.json"))
         .map_err(|error| format!("Could not read deployment policy: {error}"))
+}
+
+/// Read an allowed file for an external plugin, gated by the machine-wide
+/// deployment policy (`plugins.fileAccess`).
+///
+/// Returns the file text as UTF-8, capped at 50 MB.
+/// Bypasses the webview fs scope. Both the requested path and the policy allowlist
+/// entries are canonicalised before comparison to prevent path traversal and symlink
+/// escapes.
+#[tauri::command]
+fn read_allowed_file(plugin_id: String, path: String) -> Result<String, String> {
+    read_allowed_file_impl(&plugin_id, &path, machine_deployment_policy_path().as_deref())
+}
+
+fn read_allowed_file_impl(
+    plugin_id: &str,
+    path: &str,
+    policy_path: Option<&std::path::Path>,
+) -> Result<String, String> {
+    let trimmed_id = plugin_id.trim();
+    if trimmed_id.is_empty() {
+        return Err("Plugin ID must be a non-blank string".to_string());
+    }
+
+    let Some(policy_path) = policy_path else {
+        return Err("No machine deployment policy configured; plugin fileAccess is denied".to_string());
+    };
+    let Some(policy_contents) = read_optional_config_file(policy_path)
+        .map_err(|error| format!("Could not read machine deployment policy: {error}"))?
+    else {
+        return Err("Machine deployment policy does not exist; plugin fileAccess is denied".to_string());
+    };
+
+    let policy: serde_json::Value = serde_json::from_str(&policy_contents)
+        .map_err(|error| format!("Could not parse machine deployment policy: {error}"))?;
+
+    let allowlist = policy
+        .get("plugins")
+        .and_then(|p| p.get("fileAccess"))
+        .and_then(|f| f.get(trimmed_id))
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            format!("Plugin '{trimmed_id}' has no fileAccess allowlist configured in machine deployment policy")
+        })?;
+
+    if !is_safe_absolute_path(path) {
+        return Err(format!(
+            "Refusing to read \"{path}\": not a safe absolute local file path"
+        ));
+    }
+
+    let canonical_requested = fs::canonicalize(path)
+        .map_err(|error| format!("Could not resolve path \"{path}\": {error}"))?;
+
+    let metadata = fs::metadata(&canonical_requested)
+        .map_err(|error| format!("Could not inspect path \"{path}\": {error}"))?;
+    if metadata.is_dir() {
+        return Err(format!("Refusing to read \"{path}\": path is a directory"));
+    }
+
+    let mut is_allowed = false;
+    for entry in allowlist {
+        let Some(entry_str) = entry.as_str() else {
+            continue;
+        };
+        let trimmed_entry = entry_str.trim();
+        if !is_safe_absolute_path(trimmed_entry) {
+            continue;
+        }
+        if let Ok(canonical_entry) = fs::canonicalize(trimmed_entry) {
+            if canonical_entry == canonical_requested {
+                is_allowed = true;
+                break;
+            }
+        }
+    }
+
+    if !is_allowed {
+        return Err(format!(
+            "Path \"{path}\" is not in the fileAccess allowlist for plugin '{trimmed_id}'"
+        ));
+    }
+
+    let file = File::open(&canonical_requested)
+        .map_err(|error| format!("Could not open file \"{path}\": {error}"))?;
+    let mut text = String::new();
+    file.take(MAX_PLUGIN_ENTRY_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| format!("Could not read file \"{path}\" as UTF-8: {error}"))?;
+    if text.len() as u64 > MAX_PLUGIN_ENTRY_BYTES {
+        return Err(format!(
+            "File \"{path}\" exceeds the {}-MB size limit",
+            MAX_PLUGIN_ENTRY_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(text)
 }
 
 /// The only environment variable names `read_env_vars` will ever return. This
@@ -2313,8 +2462,7 @@ fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<Stri
     Ok(text)
 }
 
-#[cfg(not(feature = "mas"))]
-const MAX_PLUGIN_ENTRY_BYTES: u64 = 50 * 1024 * 1024;
+// MAX_PLUGIN_ENTRY_BYTES defined at module level above
 
 #[cfg(not(feature = "mas"))]
 fn read_zip_text_entry<R: Read + std::io::Seek>(
@@ -5427,6 +5575,82 @@ mod tests {
                 format!("Could not read admin profile: {original_error}")
             );
         }
+    }
+
+    #[test]
+    fn read_allowed_file_honors_machine_policy_and_blocks_unauthorized() {
+        let root = ScratchDir::new("plugin-file-access");
+        let allowed_file = root.path().join("allowed.json");
+        fs::write(&allowed_file, "{\"hello\":\"world\"}").unwrap();
+        let unlisted_file = root.path().join("secret.json");
+        fs::write(&unlisted_file, "{\"secret\":123}").unwrap();
+
+        let allowed_str = allowed_file.to_str().unwrap().replace('\\', "/");
+        let unlisted_str = unlisted_file.to_str().unwrap().replace('\\', "/");
+
+        let policy_path = root.path().join("deployment.json");
+        let policy_json = format!(
+            r#"{{"version":1,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#,
+            allowed_str
+        );
+        fs::write(&policy_path, policy_json).unwrap();
+
+        // 1. Allowed path matches and reads
+        let res = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&policy_path));
+        assert_eq!(res.unwrap(), "{\"hello\":\"world\"}");
+
+        // 2. Unlisted path is rejected
+        let res_unlisted = super::read_allowed_file_impl("my-plugin", &unlisted_str, Some(&policy_path));
+        assert!(res_unlisted.is_err());
+        assert!(res_unlisted.unwrap_err().contains("not in the fileAccess allowlist"));
+
+        // 3. Wrong plugin id is rejected
+        let res_wrong_id = super::read_allowed_file_impl("other-plugin", &allowed_str, Some(&policy_path));
+        assert!(res_wrong_id.is_err());
+        assert!(res_wrong_id.unwrap_err().contains("has no fileAccess allowlist"));
+
+        // 4. Traversal using .. is rejected
+        let traversal_str = format!("{}/../secret.json", allowed_file.parent().unwrap().to_str().unwrap().replace('\\', "/"));
+        let res_traversal = super::read_allowed_file_impl("my-plugin", &traversal_str, Some(&policy_path));
+        assert!(res_traversal.is_err());
+        assert!(res_traversal.unwrap_err().contains("not a safe absolute local file path"));
+
+        // 5. Per-user policy ignored (None or absent machine policy)
+        let res_none = super::read_allowed_file_impl("my-plugin", &allowed_str, None);
+        assert!(res_none.is_err());
+        assert!(res_none.unwrap_err().contains("No machine deployment policy configured"));
+
+        let absent_policy = root.path().join("absent.json");
+        let res_absent = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&absent_policy));
+        assert!(res_absent.is_err());
+        assert!(res_absent.unwrap_err().contains("does not exist"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_allowed_file_blocks_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        let root = ScratchDir::new("plugin-symlink-escape");
+        let secret_file = root.path().join("secret.txt");
+        fs::write(&secret_file, "forbidden").unwrap();
+
+        let link = root.path().join("link_to_secret.txt");
+        symlink(&secret_file, &link).unwrap();
+
+        let safe_file = root.path().join("safe.txt");
+        fs::write(&safe_file, "safe").unwrap();
+
+        let policy_path = root.path().join("deployment.json");
+        let policy_json = format!(
+            r#"{{"version":1,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#,
+            safe_file.to_str().unwrap()
+        );
+        fs::write(&policy_path, policy_json).unwrap();
+
+        let link_str = link.to_str().unwrap();
+        let res = super::read_allowed_file_impl("my-plugin", link_str, Some(&policy_path));
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("not in the fileAccess allowlist"));
     }
 
     // Only a regular marker file next to the exe marks the portable build: an

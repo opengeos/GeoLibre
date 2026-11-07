@@ -261,9 +261,15 @@ and `sideload`, with a console warning naming the field. The container validator
 rejects the whole file instead, so validate desktop policy files against
 `schema/deployment.schema.json`.
 
-`fileAccess` configures an administrator-side allowlist of file paths per plugin
-id (e.g. `{"my-plugin": ["/etc/geolibre/app.cfg"]}`). Only paths explicitly
-listed for a given plugin id are accessible to that plugin.
+`fileAccess` configures an administrator-side allowlist of literal absolute file
+paths per plugin id (e.g. `{"my-plugin": ["/etc/geolibre/app.cfg"]}`). To prevent
+unprivileged tampering, `fileAccess` is honoured exclusively from a machine-wide
+`deployment.json` (`%ProgramData%/GeoLibre/` on Windows, `/etc/geolibre/` on Linux,
+`/Library/Application Support/GeoLibre/` on macOS); if defined in a per-user policy,
+it is ignored with a console warning. The allowlist gates the native
+`readAllowedFile(pluginId, path)` API on the desktop, where both the requested path
+and allowlist entries are canonicalised to prevent path traversal and symlink escapes.
+Reads enforce a 50 MB size limit.
 
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.

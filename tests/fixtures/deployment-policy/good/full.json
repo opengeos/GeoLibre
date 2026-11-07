@@ -25,7 +25,7 @@
     "defaultActive": ["acme-tools"],
     "openPanel": "acme-tools",
     "fileAccess": {
-      "acme-tools": ["/etc/geolibre/acme.cfg", "/var/data/profiles/*.json"]
+      "acme-tools": ["/etc/geolibre/acme.cfg", "/var/data/profiles/default.json"]
     }
   },
   "services": {

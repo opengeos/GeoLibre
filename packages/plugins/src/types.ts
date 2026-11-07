@@ -1036,6 +1036,15 @@ export interface GeoLibreAppAPI {
    */
   nativeFetch?: typeof globalThis.fetch;
   /**
+   * Read the UTF-8 text of a local file allowed for this plugin by the
+   * machine-wide deployment policy (`plugins.fileAccess`).
+   *
+   * Gated on the Rust side: path traversal and symlink escapes are rejected,
+   * reads are capped at 50 MB, and policies from per-user locations are ignored.
+   * Desktop only.
+   */
+  readAllowedFile?: (pluginId: string, path: string) => Promise<string>;
+  /**
    * Download a large file through the desktop app's native HTTP: no CORS, no
    * size cap, streamed to disk rather than buffered. `target: "save"` asks the
    * user where to save it and resolves with the path; `target: "memory"`

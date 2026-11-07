@@ -463,9 +463,9 @@ def _validate_file_access(label, path, value):
     seen_keys = set()
     out = {}
     for raw_key, raw_list in value.items():
-        if not isinstance(raw_key, str) or not raw_key.strip():
+        if not isinstance(raw_key, str) or not raw_key.strip(JS_TRIM_WHITESPACE):
             fail(label, path, "keys must be nonblank strings")
-        key = raw_key.strip()
+        key = raw_key.strip(JS_TRIM_WHITESPACE)
         if key in seen_keys:
             fail(label, f"{path}.{key}", "is a duplicate key after trimming")
         seen_keys.add(key)
