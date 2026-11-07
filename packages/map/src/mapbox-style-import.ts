@@ -143,11 +143,7 @@ function asLayerNumber(value: unknown, foldsOpacity = false): number | null {
   return readSimpleStyleNumberLookup(array)?.base ?? null;
 }
 
-/**
- * The paint properties the exporter writes simplestyle lookups into and the
- * import reads. `circle-stroke-opacity` carries one too, but nothing reads it,
- * so a lookup there alone does not turn simplestyle on.
- */
+/** The paint properties the exporter writes simplestyle lookups into and the import reads. */
 const SIMPLE_STYLE_PAINT = [
   "fill-color",
   "fill-opacity",
@@ -157,6 +153,7 @@ const SIMPLE_STYLE_PAINT = [
   "line-opacity",
   "circle-color",
   "circle-opacity",
+  "circle-stroke-opacity",
 ] as const;
 
 /**

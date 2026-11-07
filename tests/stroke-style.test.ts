@@ -8,7 +8,74 @@ import {
   strokeDashValue,
   type LayerStyle,
 } from "@geolibre/core";
+import type { GeoLibreLayer } from "@geolibre/core";
+import { syncLayer } from "../packages/map/src/layer-sync";
 import { circlePaint, fillPaint, linePaint } from "../packages/map/src/style-mapper";
+
+/** A fake map that reads paint back, as MapLibre does, and logs dash writes. */
+function makeMap() {
+  const sources = new Map<string, Record<string, unknown>>();
+  const layers = new Map<string, Record<string, unknown> & { paint: Record<string, unknown> }>();
+  const dashWrites: unknown[] = [];
+  const map = {
+    getSource: (id: string) =>
+      sources.has(id) ? { type: sources.get(id)?.type, setData: () => {} } : undefined,
+    addSource: (id: string, spec: Record<string, unknown>) => void sources.set(id, spec),
+    removeSource: (id: string) => sources.delete(id),
+    getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
+    addLayer: (spec: Record<string, unknown>) =>
+      void layers.set(spec.id as string, {
+        ...spec,
+        paint: { ...((spec.paint as Record<string, unknown>) ?? {}) },
+      }),
+    removeLayer: (id: string) => layers.delete(id),
+    getFilter: (id: string) => layers.get(id)?.filter,
+    setFilter: () => {},
+    // An unset (or reset) property reads back as undefined.
+    getPaintProperty: (id: string, key: string) => layers.get(id)?.paint[key] ?? undefined,
+    setPaintProperty: (id: string, key: string, value: unknown) => {
+      if (key === "line-dasharray") dashWrites.push(value);
+      const layer = layers.get(id);
+      if (layer) layer.paint[key] = value;
+    },
+    getLayoutProperty: () => undefined,
+    setLayoutProperty: () => {},
+    setLayerZoomRange: () => {},
+    moveLayer: () => {},
+    getStyle: () => ({ layers: [], sources: Object.fromEntries(sources) }),
+    once: () => {},
+  };
+  return { map, dashWrites };
+}
+
+function lineLayer(patch: Partial<LayerStyle>): GeoLibreLayer {
+  return {
+    id: "lyr",
+    name: "Layer",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE, ...patch },
+    metadata: {},
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
@@ -82,5 +149,18 @@ describe("line opacity, dashes and blur (#3350)", () => {
       strokeOpacity: 0.5,
       strokeBlur: 2,
     });
+  });
+
+  it("resets a cleared dash once, and never re-sends the reset for a solid line", () => {
+    const { map, dashWrites } = makeMap();
+    syncLayer(map as never, lineLayer({}));
+    syncLayer(map as never, lineLayer({}));
+    // A solid line never had a dash: nothing to reset on either sync.
+    assert.deepEqual(dashWrites, []);
+    syncLayer(map as never, lineLayer({ strokeDash: [4, 2] }));
+    syncLayer(map as never, lineLayer({}));
+    syncLayer(map as never, lineLayer({}));
+    // The dash is set, then reset exactly once.
+    assert.deepEqual(dashWrites, [[4, 2], null]);
   });
 });

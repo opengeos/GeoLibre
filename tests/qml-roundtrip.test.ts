@@ -444,4 +444,16 @@ describe("QML round-trip of a switched-off else rule (#1312)", () => {
       [1, 2],
     );
   });
+
+  it("ignores a pen style name that is not a QGIS pen style, inherited names included", () => {
+    for (const penStyle of ["constructor", "toString", "zigzag"]) {
+      const qml = `<qgis><renderer-v2 type="singleSymbol"><symbols>
+<symbol type="line" name="0" alpha="1"><layer class="SimpleLine"><Option type="Map">
+<Option name="line_color" type="QString" value="0,0,255,255"/>
+<Option name="line_style" type="QString" value="${penStyle}"/>
+</Option></layer></symbol></symbols></renderer-v2></qgis>`;
+      const out = applyQmlImport(style({ strokeDash: [1, 2] }), parseQml(qml));
+      assert.deepEqual(out.strokeDash, [1, 2], penStyle);
+    }
+  });
 });

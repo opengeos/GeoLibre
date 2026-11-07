@@ -3498,11 +3498,15 @@ function ensureLayer(
 ): void {
   if (map.getLayer(id)) {
     if (spec.paint) {
+      const readsPaint =
+        typeof (map as { getPaintProperty?: unknown }).getPaintProperty === "function";
       for (const [key, value] of Object.entries(spec.paint)) {
-        // An unset property reads back as undefined; compare it as null so a
-        // reset that already happened (a dash cleared back to solid) is not
-        // repeated on every sync.
-        if (!styleValuesEqual(getDynamicPaintProperty(map, id, key) ?? null, value ?? null)) {
+        const current = getDynamicPaintProperty(map, id, key);
+        // A `null` reset of a property that already reads back unset is done:
+        // re-sending it would trigger a style update on every sync. Only a map
+        // that can read paint back says "unset"; otherwise the reset is sent.
+        if (value === null && current === undefined && readsPaint) continue;
+        if (!styleValuesEqual(current, value)) {
           setDynamicPaintProperty(map, id, key, value);
         }
       }

@@ -1175,8 +1175,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
   it("recognizes every simplestyle lookup the exporter writes into paint the import reads", () => {
     // A drift guard for the importer's list of paint properties: each property
     // a simplestyle export wraps in a lookup, taken alone, turns the flag on.
-    // circle-stroke-opacity is written but not read, so it is the exception.
-    const unread = new Set(["circle-stroke-opacity"]);
+    const unread = new Set<string>();
     const checked = new Set<string>();
     for (const geojson of [points(), lines(), polygons()]) {
       const exported = buildMapboxStyle(
