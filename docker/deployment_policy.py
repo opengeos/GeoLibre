@@ -282,6 +282,11 @@ def normalize_share_url(raw):
     if raw.lower() == "off":
         return "off"
     _reject_whitespace("GEOLIBRE_SHARE_URL", raw)
+    parsed = _urlsplit("GEOLIBRE_SHARE_URL", raw)
+    if parsed.query or parsed.fragment:
+        raise SystemExit(
+            "ERROR: GEOLIBRE_SHARE_URL must not include query parameters or a fragment."
+        )
     return service_url("GEOLIBRE_SHARE_URL", raw, ("https",), ("http",), SHARE_LOOPBACK)
 
 

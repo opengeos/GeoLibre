@@ -51,6 +51,7 @@ import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import type { Command } from "../../../lib/commands";
+import { resolveProjectStorage } from "../../../lib/project-storage";
 import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import { CVD_MODES } from "../../../lib/cvd-simulation";
 import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
@@ -132,6 +133,8 @@ export interface ToolbarCommandContext {
   /** Open New Project with its Examples (starter projects) section expanded. */
   openStarterExamples: () => void;
   setShareDialogOpen: SetOpen;
+  setGalleryDialogOpen?: SetOpen;
+  openGalleryScope?: (scope?: "mine") => void;
   setPrintLayoutOpen: SetOpen;
   setGeoreferencerOpen: SetOpen;
   setFieldCollectionOpen: SetOpen;
@@ -204,6 +207,8 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setNewProjectDialogOpen,
     openStarterExamples,
     setShareDialogOpen,
+    setGalleryDialogOpen,
+    openGalleryScope,
     setPrintLayoutOpen,
     setGeoreferencerOpen,
     setFieldCollectionOpen,
@@ -264,7 +269,17 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "load",
       icon: FolderOpen,
       shortcut: { key: "o", mod: true, shift: false },
-      run: () => void projectFiles.handleOpenFromFile(),
+      run: () => {
+        if (resolveProjectStorage() === "server") {
+          if (openGalleryScope) {
+            openGalleryScope("mine");
+          } else {
+            setGalleryDialogOpen?.(true);
+          }
+        } else {
+          void projectFiles.handleOpenFromFile();
+        }
+      },
     },
     {
       id: "project.open-url",

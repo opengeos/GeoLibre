@@ -64,7 +64,9 @@ import {
   shareHostLabel,
   ShareUploadError,
   updateSharedProjectContent,
+  uploadProjectToShare,
 } from "../lib/share-geolibre";
+import { resolveProjectStorage } from "../lib/project-storage";
 import {
   resolveShareRequestToken,
   ShareOAuthError,
@@ -190,6 +192,13 @@ export interface SaveNamePrompt {
   label: string;
   /** Placeholder for the file-name input. */
   placeholder: string;
+}
+
+export interface RemoteSignInPrompt {
+  projectGeneration: number;
+  shareHost: string;
+  oauthSupported: boolean;
+  resolve: (signedIn: boolean) => void;
 }
 
 export interface RemoteSharedProjectTarget {
@@ -355,6 +364,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   );
   const [saveNamePrompt, setSaveNamePrompt] = useState<SaveNamePrompt | null>(null);
   const [saveNameInput, setSaveNameInput] = useState("");
+  const [remoteSignInPrompt, setRemoteSignInPrompt] = useState<RemoteSignInPrompt | null>(null);
   const [remoteSaveWarning, setRemoteSaveWarning] = useState<RemoteSharedProjectTarget | null>(
     null,
   );
@@ -416,6 +426,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveNamePrompt(null);
     setSaveNameInput("");
   }, []);
+  const settleRemoteSignInPrompt = useCallback(
+    (prompt: RemoteSignInPrompt | null, signedIn: boolean) => {
+      prompt?.resolve(signedIn);
+      setRemoteSignInPrompt((current) => (current === prompt ? null : current));
+    },
+    [],
+  );
 
   // A project can be replaced by an external open action while a modal save
   // prompt is visible. Cancel the stale promise immediately so its dialog does
@@ -439,6 +456,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (saveNamePrompt && saveNamePrompt.projectGeneration !== projectGeneration) {
       settleSaveNamePrompt(saveNamePrompt, null);
     }
+    if (remoteSignInPrompt && remoteSignInPrompt.projectGeneration !== projectGeneration) {
+      settleRemoteSignInPrompt(remoteSignInPrompt, false);
+    }
     if (droppedProjectPrompt && droppedProjectPrompt.projectGeneration !== projectGeneration) {
       droppedProjectPromptRef.current = null;
       setDroppedProjectPrompt(null);
@@ -449,9 +469,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     droppedProjectPrompt,
     embedVectorDataPrompt,
     projectGeneration,
+    remoteSignInPrompt,
     saveNamePrompt,
     settleCredentialStripPrompt,
     settleEmbedVectorDataPrompt,
+    settleRemoteSignInPrompt,
     settleSaveNamePrompt,
   ]);
 
@@ -1415,6 +1437,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   const cancelSaveNamePrompt = () => settleSaveNamePrompt(saveNamePrompt, null);
 
+  const askRemoteSignIn = (shareHost: string, promptProjectGeneration: number) =>
+    new Promise<boolean>((resolve) => {
+      setRemoteSignInPrompt({
+        projectGeneration: promptProjectGeneration,
+        shareHost,
+        oauthSupported: supportsShareOAuth(),
+        resolve,
+      });
+    });
+
   // Saving back to an editable shared project writes the version every group
   // member opens, so it is built like Share: local vector data is embedded (never
   // file references) and credentials are redacted. The local-save prompts do not
@@ -1505,6 +1537,175 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  const createProjectOnShare = async (saveProjectGeneration: number): Promise<boolean> => {
+    const shareBaseUrl = resolveShareBaseUrl();
+    if (!shareBaseUrl) return false;
+    const hostLabel = shareHostLabel();
+
+    // 1. Resolve token
+    let oauthSessionRevision = supportsShareOAuth()
+      ? useShareOAuthStore.getState().sessionRevision
+      : undefined;
+    let personalToken = (
+      useDesktopSettingsStore.getState().desktopSettings.shareToken ?? ""
+    ).trim();
+    let token = "";
+    try {
+      token = await resolveShareRequestToken(personalToken, shareBaseUrl);
+    } catch {
+      token = "";
+    }
+    if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
+
+    // 2. Sign-in prompt if needed
+    if (!token) {
+      const signedIn = await askRemoteSignIn(hostLabel, saveProjectGeneration);
+      if (!signedIn || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
+        return false;
+      }
+      oauthSessionRevision = supportsShareOAuth()
+        ? useShareOAuthStore.getState().sessionRevision
+        : undefined;
+      personalToken = (useDesktopSettingsStore.getState().desktopSettings.shareToken ?? "").trim();
+      try {
+        token = await resolveShareRequestToken(personalToken, shareBaseUrl);
+      } catch {
+        token = "";
+      }
+      if (!token || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
+        if (!token) setActionError(t("share.oauthFailed"));
+        return false;
+      }
+    }
+
+    // 3. Name prompt
+    const { defaultProjectName } = buildCurrentProject();
+    const currentName = useAppStore.getState().projectName.trim();
+    const promptDefaultName =
+      currentName && currentName !== DEFAULT_PROJECT_NAME ? currentName : defaultProjectName;
+    const chosen = await askSaveName(
+      promptDefaultName,
+      {
+        title: t("toolbar.item.saveProjectAsTitle"),
+        description: t("toolbar.item.saveProjectAsDesc"),
+        label: t("toolbar.item.saveProjectFileName"),
+        placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
+      },
+      saveProjectGeneration,
+    );
+    if (chosen === null || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
+      return false;
+    }
+    const chosenTitle = chosen.trim().replace(/\.geolibre$/i, "");
+    if (!chosenTitle) return false;
+
+    // Unembedded snapshot, compared after the upload to tell whether the user
+    // changed the project while the save was in flight.
+    const startContent = serializeForSave(
+      excludeHiddenFieldsFromProject(buildCurrentProject(chosenTitle).project),
+    );
+
+    // 4. Build
+    let projectContent: string | null = null;
+    let builtLayers: GeoLibreLayer[] = [];
+    try {
+      const built = await buildEmbeddedProject(chosenTitle);
+      if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
+      builtLayers = built.project.layers;
+      const redacted = redactProjectCredentials(excludeHiddenFieldsFromProject(built.project));
+      projectContent = serializeForSave(redacted.project);
+    } catch (error) {
+      console.error("Failed to prepare project for server save", error);
+      setActionError(
+        isSerializationTooLargeError(error)
+          ? t("toolbar.error.projectTooLargeToSave")
+          : t("toolbar.error.couldNotSaveProject"),
+      );
+      return false;
+    }
+    if (
+      projectContent === null ||
+      useAppStore.getState().projectGeneration !== saveProjectGeneration
+    ) {
+      return false;
+    }
+
+    // 5. POST to server
+    try {
+      const uploaded = await uploadProjectToShare({
+        token,
+        filename: ensureProjectFileName(chosenTitle),
+        content: projectContent,
+        visibility: "private",
+        baseUrl: shareBaseUrl,
+      });
+      if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
+
+      if (!uploaded.id) {
+        throw new Error("The share server returned no project ID.");
+      }
+      if (
+        oauthSessionRevision !== undefined &&
+        oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
+      ) {
+        return false;
+      }
+      const liveProjectName = useAppStore.getState().projectName;
+      if (
+        liveProjectName.trim() === currentName ||
+        !liveProjectName.trim() ||
+        liveProjectName === DEFAULT_PROJECT_NAME
+      ) {
+        useAppStore.getState().setProjectName(chosenTitle);
+      }
+      setProjectPath(null);
+      remoteProjectRef.current = {
+        id: uploaded.id,
+        versionCount: uploaded.versionCount,
+        canEdit: true,
+        token: personalToken,
+        baseUrl: shareBaseUrl,
+        oauthSessionRevision,
+        projectGeneration: useAppStore.getState().projectGeneration,
+      };
+      setRemoteSaveWarning(null);
+
+      let liveContent: string | null = null;
+      try {
+        liveContent = serializeProject(
+          excludeHiddenFieldsFromProject(buildCurrentProject().project),
+        );
+      } catch (error) {
+        console.error("Failed to compare the saved shared project", error);
+      }
+      if (startContent && liveContent && sharedProjectContentMatches(startContent, liveContent)) {
+        markSaved();
+        recordExplicitProjectSave();
+      }
+      notifyUnsavedLocalRasters(builtLayers);
+      return true;
+    } catch (error) {
+      console.error("Failed to create project on share server", error);
+      setActionError(
+        error instanceof ShareOAuthError
+          ? t(shareOAuthErrorKey(error.code))
+          : error instanceof ShareUploadError && error.code === "unauthorized"
+            ? t(
+                supportsShareOAuth()
+                  ? "gallery.errorUnauthorizedOAuth"
+                  : "gallery.errorUnauthorized",
+                { shareHost: hostLabel },
+              )
+            : isSerializationTooLargeError(error)
+              ? t("toolbar.error.projectTooLargeToSave")
+              : error instanceof Error
+                ? error.message
+                : t("toolbar.error.couldNotSaveProject"),
+      );
+      return false;
+    }
+  };
+
   // Saving moves credentials to the device-wide keychain before the file is
   // written, so the prompt below has nothing to ask about. A save that never
   // writes (cancelled prompt or picker, failed write, a project switched in
@@ -1547,6 +1748,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       remoteProject.projectGeneration === saveProjectGeneration
     ) {
       return saveBackToShare(remoteProject, saveProjectGeneration);
+    }
+    if (resolveProjectStorage() === "server") {
+      return createProjectOnShare(saveProjectGeneration);
     }
     // Offer to embed local vector data (or, on desktop, save file references)
     // first, so the serialized content below reflects the user's choice.
@@ -2038,6 +2242,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setSaveNameInput,
     submitSaveNamePrompt,
     cancelSaveNamePrompt,
+    remoteSignInPrompt,
+    settleRemoteSignInPrompt,
     handleOpenFromFile,
     handleDroppedProject,
     handleNativeProjectOpen,
