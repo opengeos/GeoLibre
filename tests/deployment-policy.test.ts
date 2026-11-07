@@ -482,9 +482,9 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
     });
     const importFreshPolicy = async (tag: string) => {
       const modulePath = `../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=${tag}`;
-      const mod = (await import(modulePath)) as typeof import(
-        "../apps/geolibre-desktop/src/lib/deployment-policy"
-      );
+      const mod = (await import(
+        modulePath
+      )) as typeof import("../apps/geolibre-desktop/src/lib/deployment-policy");
       return mod.loadDeploymentPolicy;
     };
 
