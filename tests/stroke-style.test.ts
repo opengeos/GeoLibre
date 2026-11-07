@@ -11,7 +11,13 @@ import {
 import type { GeoLibreLayer } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
 import { createFeatureStyleResolver } from "../packages/map/src/feature-style";
-import { circlePaint, fillPaint, linePaint } from "../packages/map/src/style-mapper";
+import { OwnedPaintResets } from "../packages/map/src/owned-paint-resets";
+import {
+  circlePaint,
+  fillPaint,
+  linePaint,
+  withPaintResets,
+} from "../packages/map/src/style-mapper";
 
 /** A fake map that reads paint back, as MapLibre does, and logs dash writes. */
 function makeMap() {
@@ -89,11 +95,11 @@ function style(patch: Partial<LayerStyle> = {}): LayerStyle {
 }
 
 describe("line opacity, dashes and blur (#3350)", () => {
-  it("draws a solid, sharp, opaque line by default and resets the dash with null", () => {
+  it("draws a solid, sharp, opaque line by default as valid style spec, with no null", () => {
     const paint = linePaint(style(), 1);
     assert.equal(paint["line-opacity"], 1);
-    assert.equal(paint["line-dasharray"], null);
-    assert.equal(paint["line-blur"], null);
+    assert.equal(paint["line-dasharray"], undefined);
+    assert.equal(paint["line-blur"], undefined);
   });
 
   it("folds the stroke opacity into the layer opacity and passes dashes and blur through", () => {
@@ -105,11 +111,14 @@ describe("line opacity, dashes and blur (#3350)", () => {
 
   it("drops the fill's hairline outline under a dashed or translucent stroke", () => {
     assert.equal(fillPaint(style(), 1)["fill-outline-color"], DEFAULT_LAYER_STYLE.strokeColor);
-    assert.equal(fillPaint(style({ strokeDash: [4, 2] }), 1)["fill-outline-color"], null);
-    assert.equal(fillPaint(style({ strokeOpacity: 0.5 }), 1)["fill-outline-color"], null);
+    assert.equal(fillPaint(style({ strokeDash: [4, 2] }), 1)["fill-outline-color"], undefined);
+    assert.equal(fillPaint(style({ strokeOpacity: 0.5 }), 1)["fill-outline-color"], undefined);
     // A simplestyle feature's own stroke-opacity can make its outline
     // translucent, so a simplestyle layer drops the hairline too.
-    assert.equal(fillPaint(style({ simpleStyleEnabled: true }), 1)["fill-outline-color"], null);
+    assert.equal(
+      fillPaint(style({ simpleStyleEnabled: true }), 1)["fill-outline-color"],
+      undefined,
+    );
   });
 
   it("fades point outlines with the stroke opacity", () => {
@@ -132,12 +141,12 @@ describe("line opacity, dashes and blur (#3350)", () => {
     delete legacy.strokeBlur;
     const paint = linePaint(legacy as LayerStyle, 1);
     assert.equal(paint["line-opacity"], 1);
-    assert.equal(paint["line-dasharray"], null);
-    assert.equal(paint["line-blur"], null);
+    assert.equal(paint["line-dasharray"], undefined);
+    assert.equal(paint["line-blur"], undefined);
     const bad = linePaint(style({ strokeOpacity: 4, strokeDash: [0, 0], strokeBlur: -2 }), 1);
     assert.equal(bad["line-opacity"], 1);
-    assert.equal(bad["line-dasharray"], null);
-    assert.equal(bad["line-blur"], null);
+    assert.equal(bad["line-dasharray"], undefined);
+    assert.equal(bad["line-blur"], undefined);
   });
 
   it("names the preset a pattern matches", () => {
@@ -228,6 +237,13 @@ describe("line opacity, dashes and blur (#3350)", () => {
     nativeLayer = { id: "plugin-line", type: "line" };
     syncLayer(map as never, pluginLayer({}));
     assert.deepEqual(writes, [[4, 2], null, [4, 2]]);
+    // A dash equal to the plugin's own is not written, so it is not owned, and
+    // going back to solid leaves the plugin's dash alone.
+    nativeLayer = { id: "plugin-line", type: "line" };
+    writes.length = 0;
+    syncLayer(map as never, pluginLayer({ strokeDash: [2, 2] }));
+    syncLayer(map as never, pluginLayer({}));
+    assert.deepEqual(writes, []);
   });
 
   it("gives the 3D and ArcGIS feature symbols the stroke opacity too", () => {
@@ -249,5 +265,39 @@ describe("line opacity, dashes and blur (#3350)", () => {
       0.9,
     );
     assert.equal(simple.resolve(point, 5).strokeOpacity, 0.4);
+  });
+
+  it("adds a reset for each property a builder left out, only on the update path", () => {
+    const solid = linePaint(style(), 1);
+    assert.equal((Object.values(solid) as unknown[]).includes(null), false);
+    const update = withPaintResets("line", solid);
+    assert.equal(update["line-dasharray"], null);
+    assert.equal(update["line-blur"], null);
+    assert.deepEqual(
+      withPaintResets("line", linePaint(style({ strokeDash: [4, 2] }), 1))["line-dasharray"],
+      [4, 2],
+    );
+    assert.equal(
+      withPaintResets("fill", fillPaint(style({ strokeDash: [4, 2] }), 1))["fill-outline-color"],
+      null,
+    );
+    assert.equal(withPaintResets("circle", { "circle-radius": 3 })["line-dasharray"], undefined);
+  });
+
+  it("owns only what it wrote, and resets nothing without a stable layer object", () => {
+    const owned = new OwnedPaintResets();
+    const layer = {};
+    const stable = () => layer;
+    // Not written (the plugin already had the value): not owned, not reset.
+    assert.equal(owned.mayReset(stable, "l", "line-dasharray"), false);
+    owned.recordWrite(stable, "l", "line-dasharray");
+    assert.equal(owned.mayReset(stable, "l", "line-dasharray"), true);
+    assert.equal(owned.mayReset(stable, "l", "line-dasharray"), false);
+    // A lookup with no stable object (Mapbox without getOwnLayer) owns nothing.
+    owned.recordWrite(() => undefined, "m", "line-dasharray");
+    assert.equal(
+      owned.mayReset(() => undefined, "m", "line-dasharray"),
+      false,
+    );
   });
 });

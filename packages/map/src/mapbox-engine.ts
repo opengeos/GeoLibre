@@ -18,7 +18,7 @@ import {
   redactUrlCredentials,
   styleValue,
 } from "@geolibre/core";
-import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
+import { circlePaint, fillPaint, linePaint, rasterPaint, withPaintResets } from "./style-mapper";
 import { OwnedPaintResets } from "./owned-paint-resets";
 import {
   DEFAULT_BUILT_IN_CONTROL_POSITIONS,
@@ -39,7 +39,6 @@ import {
   compileMapboxLayer,
   DEFAULT_MAPBOX_TEXT_FONT,
   type MapboxLayerPlan,
-  mapboxPaint,
 } from "./gl-style-compiler";
 import {
   isInternalMapboxLayer,
@@ -994,20 +993,28 @@ export class MapboxEngine implements MapEngine {
                 ? circlePaint(style, layer.opacity)
                 : null;
       if (!paint) continue;
-      // Not through `mapboxPaint`, which drops `null`: here a `null` is the
-      // reset of a property the style no longer sets (a dash cleared back to
-      // solid), and setPaintProperty takes it as such.
-      for (const [property, value] of Object.entries(paint)) {
+      // Mapbox's map.getLayer serializes a fresh copy on every call, so the
+      // style's own layer object stands in for the layer's identity. Without
+      // it nothing is owned and nothing is reset (see OwnedPaintResets).
+      const lookup = (layerId: string): object | undefined =>
+        (
+          map as unknown as { style?: { getOwnLayer?: (id: string) => object | undefined } }
+        ).style?.getOwnLayer?.(layerId) ?? undefined;
+      // A `null` from withPaintResets is the reset of a property the style no
+      // longer sets (a dash cleared back to solid); setPaintProperty takes it.
+      for (const [property, value] of Object.entries(withPaintResets(native.type, paint))) {
         if (value === undefined || property.endsWith("-layer-opacity")) continue;
-        // As on MapLibre (`setExternalNativeLayerPaint`): a `null` reset only
-        // clears a value GeoLibre wrote, never the plugin's own (its dashes).
-        if (!this.ownedPaintResets.shouldWrite(map, id, property, value)) continue;
+        // As on MapLibre (`setExternalNativeLayerPaint`): a reset only clears a
+        // value GeoLibre wrote, never the plugin's own (its dashes).
+        if (value === null && !this.ownedPaintResets.mayReset(lookup, id, property)) continue;
         const key = property as keyof mapboxgl.AnyPaint;
         try {
           // An unset property reads back as undefined; compare it as null so a
           // reset that already happened is not repeated on every sync.
-          if (JSON.stringify(map.getPaintProperty(id, key) ?? null) !== JSON.stringify(value))
+          if (JSON.stringify(map.getPaintProperty(id, key) ?? null) !== JSON.stringify(value)) {
             map.setPaintProperty(id, key, value as mapboxgl.AnyPaint[keyof mapboxgl.AnyPaint]);
+            if (value !== null) this.ownedPaintResets.recordWrite(lookup, id, property);
+          }
         } catch {
           // A control's native layers can be heterogeneous; skip a paint
           // property that does not apply to this one.

@@ -107,6 +107,7 @@ import {
   heatmapPaint,
   linePaint,
   rasterPaint,
+  withPaintResets,
 } from "./style-mapper";
 import { OwnedPaintResets } from "./owned-paint-resets";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
@@ -1740,14 +1741,17 @@ function setExternalNativeLayerPaint(
   if (!paint) return;
 
   const ownedResets = ownedPaintResetsFor(map);
-  for (const [property, value] of Object.entries(paint)) {
+  // MapLibre's getLayer returns the style's own layer object, stable for the
+  // layer's life.
+  const lookup = (id: string): object | undefined => map.getLayer(id) ?? undefined;
+  for (const [property, value] of Object.entries(withPaintResets(nativeLayerType, paint))) {
     try {
-      // On a layer a plugin or control created, a `null` reset may hit the
-      // control's own value (its dashed lines), so only one GeoLibre wrote is
-      // reset, once.
-      if (!ownedResets.shouldWrite(map, nativeLayerId, property, value)) continue;
+      // On a layer a plugin or control created, a reset may hit the control's
+      // own value (its dashed lines), so only one GeoLibre wrote is reset, once.
+      if (value === null && !ownedResets.mayReset(lookup, nativeLayerId, property)) continue;
       if (!styleValuesEqual(getDynamicPaintProperty(map, nativeLayerId, property), value)) {
         setDynamicPaintProperty(map, nativeLayerId, property, value);
+        if (value !== null) ownedResets.recordWrite(lookup, nativeLayerId, property);
       }
     } catch {
       // External controls can create heterogeneous style layers. Ignore paint
@@ -3517,7 +3521,9 @@ function ensureLayer(
 ): void {
   if (map.getLayer(id)) {
     if (spec.paint) {
-      for (const [key, value] of Object.entries(spec.paint)) {
+      // Clear a dash, blur or hairline the layer's previous paint set and this
+      // one leaves out (see withPaintResets).
+      for (const [key, value] of Object.entries(withPaintResets(spec.type, spec.paint))) {
         const current = getDynamicPaintProperty(map, id, key);
         // A `null` reset of a property that already reads back unset is done:
         // re-sending it would trigger a style update on every sync.

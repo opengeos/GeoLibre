@@ -1,51 +1,63 @@
 import { paintBuilderMayReset } from "./style-mapper";
 
-/** The slice of a map (MapLibre or Mapbox) the ownership check reads. */
-interface LayerLookup {
-  getLayer(id: string): unknown;
-}
+/**
+ * Resolves a native layer id to an object that stays the same for the life of
+ * that layer (MapLibre's `map.getLayer`; on Mapbox the style's own layer, since
+ * Mapbox's `map.getLayer` returns a fresh serialized copy on every call).
+ * `undefined` when there is no such layer or no stable object to use.
+ */
+export type StableLayerLookup = (id: string) => object | undefined;
 
 /**
- * Which nullable paint properties GeoLibre itself wrote on a plugin's or
- * control's native layers, so a `null` from the paint builders (a dash cleared
- * back to solid, the fill hairline under a dashed outline) resets only what
- * GeoLibre set and never the plugin's own value, such as its dashed lines.
+ * Which resettable paint properties (see `paintBuilderMayReset`) GeoLibre
+ * itself wrote on a plugin's or control's native layers, so a reset from
+ * `withPaintResets` (a dash cleared back to solid, a blur back to sharp, the
+ * fill hairline under a dashed outline) clears only what GeoLibre set and
+ * never the plugin's own value, such as its dashed lines.
  *
- * Ownership is tied to the native layer object the map returned when GeoLibre
- * wrote the value. A plugin that removes and recreates its layer under the same
- * id, or a style swap, gives a new object, so a stale entry cannot reset the
- * new layer's own paint. A plugin rewriting the property on the same layer
- * object is not seen, so in that case the ownership is best-effort.
+ * Ownership is keyed by the native layer object, so a removed layer is not
+ * kept alive, and a plugin that recreates its layer under the same id, or a
+ * style swap, starts with nothing owned. A plugin rewriting the property on
+ * the same layer object is not seen, so in that case ownership is best-effort.
+ * Without a stable layer object nothing is owned, so nothing is reset: the
+ * plugin's paint is left alone rather than risked.
  */
 export class OwnedPaintResets {
-  // Keyed by the native layer object, so a removed layer is not kept alive and
-  // a recreated one (a new object) starts with nothing owned.
   private readonly owned = new WeakMap<object, Set<string>>();
 
   /**
-   * Whether `value` should be written to `property` on native layer `id`, and
-   * record ownership when GeoLibre writes a value it may later reset.
+   * Whether a `null` reset of `property` on native layer `id` may be written:
+   * only when GeoLibre wrote that property on this layer. Ownership ends with
+   * the reset.
    *
-   * @param map - The map the native layer lives on.
+   * @param lookup - Resolves the native layer id to its stable object.
    * @param id - The native layer id.
    * @param property - The paint property.
-   * @param value - The value the paint builders produced.
-   * @returns False for a `null` reset of a property GeoLibre does not own on
-   *   this layer; true otherwise.
+   * @returns True when GeoLibre owns the value to reset.
    */
-  shouldWrite(map: LayerLookup, id: string, property: string, value: unknown): boolean {
-    if (!paintBuilderMayReset(property)) return true;
-    const layer = map.getLayer(id);
-    if (typeof layer !== "object" || layer === null) return value !== null;
+  mayReset(lookup: StableLayerLookup, id: string, property: string): boolean {
+    const layer = lookup(id);
+    return layer !== undefined && (this.owned.get(layer)?.delete(property) ?? false);
+  }
+
+  /**
+   * Record that GeoLibre wrote a non-null value to `property` on native layer
+   * `id`. Call it only after an actual write: a value the plugin already had
+   * stays the plugin's.
+   *
+   * @param lookup - Resolves the native layer id to its stable object.
+   * @param id - The native layer id.
+   * @param property - The paint property.
+   */
+  recordWrite(lookup: StableLayerLookup, id: string, property: string): void {
+    if (!paintBuilderMayReset(property)) return;
+    const layer = lookup(id);
+    if (layer === undefined) return;
     let properties = this.owned.get(layer);
-    if (value !== null) {
-      if (!properties) {
-        properties = new Set();
-        this.owned.set(layer, properties);
-      }
-      properties.add(property);
-      return true;
+    if (!properties) {
+      properties = new Set();
+      this.owned.set(layer, properties);
     }
-    return properties?.delete(property) ?? false;
+    properties.add(property);
   }
 }

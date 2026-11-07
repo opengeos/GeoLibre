@@ -5,6 +5,7 @@ import {
   extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
+  isHexColor,
   isInlineImageValue,
   isPopupClickEnabled,
   isPopupHoverEnabled,
@@ -524,6 +525,20 @@ function seedOpacity(
   return seeded;
 }
 
+/**
+ * The story-map polygon hairline colour: the stroke colour, carrying the
+ * stroke opacity as alpha when the colour is a flat hex, since this hairline is
+ * the polygon's only outline there. A data-driven colour stays as it is.
+ */
+function storyOutlineColor(style: GeoLibreLayer["style"]): unknown {
+  const color = vectorLineColorValue(style);
+  const opacity = strokeOpacityValue(style);
+  if (opacity >= 1 || typeof color !== "string" || !isHexColor(color)) return color;
+  const hex = color.trim().slice(1);
+  const [r, g, b] = [0, 2, 4].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function opacityProperties(type: string): string[] {
   switch (type) {
     case "fill":
@@ -780,7 +795,7 @@ function buildLayerSpec(
         // transparent stroke hides the outline in the app, so it leaves the
         // edge in the fill colour here too rather than drawing one.
         ...(strokeOpacityValue(layer.style) > 0
-          ? { "fill-outline-color": vectorLineColorValue(layer.style) }
+          ? { "fill-outline-color": storyOutlineColor(layer.style) }
           : {}),
       },
     };

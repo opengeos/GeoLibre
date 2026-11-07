@@ -77,24 +77,52 @@ export function fillOutlineDrawn(style: LayerStyle): boolean {
 }
 
 /**
- * The paint properties the builders here may emit as a `null` reset: a solid
- * line's dash, a sharp line's blur, and the fill hairline under a dashed or
- * translucent stroke.
- * Layer sync and the Mapbox engine use it to reset only what GeoLibre set on a
- * plugin's own native layers.
+ * Paint properties the builders here leave out when the style does not set
+ * them (a solid line's dash, a sharp line's blur, the fill hairline under a
+ * dashed or translucent stroke), by layer type. The builders stay valid style
+ * spec, so their output can go straight to `addLayer`; an update of an
+ * existing layer has to clear a value an earlier style set, which is what
+ * {@link withPaintResets} adds.
+ */
+const RESETTABLE_PAINT: Readonly<Record<string, readonly string[]>> = {
+  line: ["line-dasharray", "line-blur"],
+  fill: ["fill-outline-color"],
+};
+
+/**
+ * Whether a paint property is one the builders may leave out, and so one an
+ * update may reset (see {@link withPaintResets}).
+ *
+ * @param property - A paint property name.
+ * @returns True for `line-dasharray`, `line-blur` and `fill-outline-color`.
  */
 export function paintBuilderMayReset(property: string): boolean {
-  return (
-    property === "line-dasharray" || property === "line-blur" || property === "fill-outline-color"
-  );
+  return Object.values(RESETTABLE_PAINT).some((keys) => keys.includes(property));
 }
 
 /**
- * The fill paint for a layer style. `fill-outline-color` may be `null`, which
- * `setPaintProperty` takes as a reset; MapLibre's `addLayer` rejects it, so a
- * caller adding a layer drops `null` values first (as `ensureLayer` and the
- * Mapbox GL exporter do).
+ * A builder's paint for updating an existing layer of `type`: each property
+ * the builder left out gets `null`, the value `setPaintProperty` takes as a
+ * reset, so a dash, blur or hairline an earlier style set is cleared. Not for
+ * `addLayer`, which rejects `null`.
+ *
+ * @param type - The style layer type (`line`, `fill`, ...).
+ * @param paint - The builder's paint.
+ * @returns The paint plus a `null` for each property to reset.
  */
+export function withPaintResets(
+  type: string,
+  paint: Record<string, unknown>,
+): Record<string, unknown> {
+  const keys = RESETTABLE_PAINT[type];
+  if (!keys) return paint;
+  const resets = Object.fromEntries(
+    keys.filter((key) => !(key in paint)).map((key) => [key, null]),
+  );
+  return { ...paint, ...resets };
+}
+
+/** The fill paint for a layer style, as valid style spec (no `null` values). */
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
@@ -108,11 +136,12 @@ export function fillPaint(style: LayerStyle, opacity: number) {
     // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
     // expression mode it also applies the user's expression to the hairline
     // outline (matching the separate line layer that draws the polygon stroke).
-    // A dashed or translucent stroke drops the hairline (`null` resets it to the
-    // fill color), or its solid, opaque edge would show through the gaps.
-    "fill-outline-color": (fillOutlineDrawn(style)
-      ? vectorLineColorValue(style)
-      : null) as PropertyValueSpecification<string>,
+    // A dashed or translucent stroke leaves the hairline out (MapLibre then
+    // draws the fill's own edge in the fill color), or its solid, opaque edge
+    // would show through the gaps. See withPaintResets for the update path.
+    ...(fillOutlineDrawn(style)
+      ? { "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string> }
+      : {}),
     // Elects MapLibre's render-to-texture composite so the layer blends as one
     // surface instead of once per overlapping polygon. Always emitted (rather
     // than only while blending) because `ensureLayer` only writes the paint
@@ -142,22 +171,18 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
 }
 
 /**
- * The line paint for a layer style. `line-dasharray` is `null` for a solid
- * line, the reset `setPaintProperty` takes; drop `null` values before passing
- * the object to `addLayer` (see {@link fillPaint}).
+ * The line paint for a layer style, as valid style spec: a solid line has no
+ * `line-dasharray` and a sharp one no `line-blur` (see withPaintResets).
  */
 export function linePaint(style: LayerStyle, opacity: number) {
+  const dash = strokeDashValue(style);
+  const blur = strokeBlurValue(style);
   return {
     "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
     "line-width": lineWidthValue(style) as unknown as PropertyValueSpecification<number>,
     "line-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
-    // `null` for a solid line, so the setPaintProperty update path resets a
-    // dash the user has cleared (ensureLayer strips it on first add, and the
-    // Mapbox GL exporter and compiler leave it out).
-    "line-dasharray": strokeDashValue(style) as unknown as PropertyValueSpecification<number[]>,
-    // `null` for a sharp line, like the dash, so a plugin's own blur on its
-    // native layer is reset only when GeoLibre set one (OwnedPaintResets).
-    "line-blur": (strokeBlurValue(style) || null) as unknown as number,
+    ...(dash ? { "line-dasharray": dash as unknown as PropertyValueSpecification<number[]> } : {}),
+    ...(blur > 0 ? { "line-blur": blur } : {}),
     // See the note on `fill-layer-opacity` in fillPaint.
     "line-layer-opacity": layerOpacityForBlend(style),
   };
