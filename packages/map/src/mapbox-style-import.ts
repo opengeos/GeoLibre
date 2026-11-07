@@ -162,7 +162,8 @@ const SIMPLE_STYLE_PAINT = [
  * how `fill-opacity` is handled.
  */
 function warnUnreadableNumber(value: unknown, description: string, warnings: string[]): void {
-  if (value !== undefined && asLayerNumber(value) === null) {
+  // Plain numbers only: the callers apply no simplestyle lookup, so a lookup here is unread.
+  if (value !== undefined && asFiniteNumber(value) === null) {
     warnings.push(
       `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
     );
