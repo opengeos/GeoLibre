@@ -1051,6 +1051,36 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
+  it("rejects a flat fill opacity above 1 and reports a simplestyle lookup on a radius", () => {
+    const flat = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "f", type: "fill", paint: { "fill-opacity": 1.5 } }],
+    });
+    assert.equal(flat.style.fillOpacity, undefined);
+    assert.deepEqual(flat.warnings, [
+      "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+    ]);
+    const lookup = ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3];
+    const circle = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "p", type: "circle", paint: { "circle-radius": lookup } }],
+    });
+    assert.equal(circle.style.circleRadius, undefined);
+    assert.ok(
+      circle.warnings.some((w) => /circle radius is data-driven/.test(w)),
+      JSON.stringify(circle.warnings),
+    );
+    const heat = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "h", type: "heatmap", paint: { "heatmap-radius": lookup } }],
+    });
+    assert.equal(heat.style.heatmapRadius, undefined);
+    assert.ok(
+      heat.warnings.some((w) => /heatmap radius is data-driven/.test(w)),
+      JSON.stringify(heat.warnings),
+    );
+  });
+
   it("turns simplestyle on only for lookups in paint the import reads", () => {
     const blurOnly = parseMapboxStyle({
       version: 8,
