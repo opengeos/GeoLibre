@@ -3499,7 +3499,10 @@ function ensureLayer(
   if (map.getLayer(id)) {
     if (spec.paint) {
       for (const [key, value] of Object.entries(spec.paint)) {
-        if (!styleValuesEqual(getDynamicPaintProperty(map, id, key), value)) {
+        // An unset property reads back as undefined; compare it as null so a
+        // reset that already happened (a dash cleared back to solid) is not
+        // repeated on every sync.
+        if (!styleValuesEqual(getDynamicPaintProperty(map, id, key) ?? null, value ?? null)) {
           setDynamicPaintProperty(map, id, key, value);
         }
       }

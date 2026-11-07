@@ -327,17 +327,22 @@ function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const dash = styleValue(layer.style, "strokeDash");
   const presetName = strokeDashPresetName(dash);
-  // Picking "Custom" keeps the custom field open even while the typed pattern
-  // happens to equal a preset; an imported pattern that matches none opens it.
-  const [customOpen, setCustomOpen] = useState(presetName === "custom");
-  const [draft, setDraft] = useState<string | null>(null);
-  const showCustom = customOpen || presetName === "custom";
   const patternText = isStrokeDashPattern(dash) ? dash.join(" ") : "";
+  // The pattern the custom field was opened for. Picking "Custom" keeps the
+  // field open even while the typed pattern happens to equal a preset; keying
+  // it to the pattern (not a flag) closes it when a preset is applied from
+  // elsewhere, such as the Style Manager, rather than leaving "Custom" selected.
+  const [customFor, setCustomFor] = useState<string | null>(null);
+  const showCustom = presetName === "custom" || customFor === patternText;
+  const [draft, setDraft] = useState<string | null>(null);
   const draftValid = draft === null || parseDashPattern(draft) !== null;
   const commitDraft = () => {
     if (draft === null) return;
     const parsed = parseDashPattern(draft);
-    if (parsed) setLayerStyle(layer.id, { strokeDash: parsed });
+    if (parsed) {
+      setLayerStyle(layer.id, { strokeDash: parsed });
+      setCustomFor(parsed.join(" "));
+    }
     setDraft(null);
   };
   return (
@@ -351,14 +356,15 @@ function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
             const next = event.target.value;
             setDraft(null);
             if (next === "custom") {
-              setCustomOpen(true);
               // Start from the current pattern, or a plain dash from a solid line.
+              const start = isStrokeDashPattern(dash) ? dash : STROKE_DASH_PRESETS.dashed;
+              setCustomFor(start.join(" "));
               if (!isStrokeDashPattern(dash)) {
-                setLayerStyle(layer.id, { strokeDash: [...STROKE_DASH_PRESETS.dashed] });
+                setLayerStyle(layer.id, { strokeDash: [...start] });
               }
               return;
             }
-            setCustomOpen(false);
+            setCustomFor(null);
             setLayerStyle(layer.id, {
               strokeDash: [...STROKE_DASH_PRESETS[next as StrokeDashPreset]],
             });

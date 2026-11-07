@@ -186,7 +186,11 @@ function readDash(
   }
   const penStyle = opts.get(styleKey);
   if (penStyle === undefined) return [];
-  const dash = QGIS_PEN_STYLE_DASH[penStyle];
+  // Own keys only: an attribute such as "constructor" would otherwise resolve
+  // to an inherited function and break the spread below.
+  const dash = Object.hasOwn(QGIS_PEN_STYLE_DASH, penStyle)
+    ? QGIS_PEN_STYLE_DASH[penStyle]
+    : undefined;
   return dash ? [...dash] : undefined;
 }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import type { FeatureCollection } from "geojson";
+import { STROKE_DASH_PRESETS } from "@geolibre/core";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
@@ -140,6 +141,22 @@ describe("StylePanel", () => {
     fireEvent.change(input("Fill opacity"), { target: { value: "0.25" } });
 
     assert.equal(style("blocks").fillOpacity, 0.25);
+  });
+
+  it("drops Custom once a preset is applied elsewhere while the custom field is open", () => {
+    selectPolygonLayer();
+    renderStylePanel();
+
+    fireEvent.change(screen.getByLabelText("Line style"), { target: { value: "custom" } });
+    assert.equal((screen.getByLabelText("Line style") as HTMLSelectElement).value, "custom");
+
+    act(() => {
+      useAppStore.getState().setLayerStyle("blocks", {
+        strokeDash: [...STROKE_DASH_PRESETS.dotted],
+      });
+    });
+
+    assert.equal((screen.getByLabelText("Line style") as HTMLSelectElement).value, "dotted");
   });
 
   it("steps stroke width with the increase button", () => {

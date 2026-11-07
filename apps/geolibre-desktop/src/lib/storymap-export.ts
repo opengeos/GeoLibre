@@ -21,7 +21,6 @@ import {
   strokeBlurValue,
   strokeDashValue,
   strokeOpacityPaintValue,
-  strokeOpacityValue,
   styleValue,
   vectorCircleColorValue,
   vectorFillColorValue,
@@ -34,6 +33,7 @@ import {
   type PopupRow,
   type StoryMap,
 } from "@geolibre/core";
+import { fillOutlineDrawn } from "@geolibre/map/headless";
 import { buildMapboxStyle } from "@geolibre/map/style-export";
 import { NO_EXTERNAL_CDN } from "./build-flags";
 import { sanitizeStoryHtml } from "./sanitize-html";
@@ -773,15 +773,16 @@ function buildLayerSpec(
             styleValue(layer.style, "fillOpacity"),
           ),
         ),
-        // As on the map (fillOutlineDrawn), a dashed or translucent stroke
-        // leaves the fill without its hairline.
-        ...(strokeDashValue(layer.style) === null && strokeOpacityValue(layer.style) >= 1
+        // As on the map, a dashed or translucent stroke leaves the fill
+        // without its hairline.
+        ...(fillOutlineDrawn(layer.style)
           ? { "fill-outline-color": vectorLineColorValue(layer.style) }
           : {}),
       },
     };
   }
   if (kind === "line") {
+    const dash = strokeDashValue(layer.style);
     return {
       type: "line",
       paint: {
@@ -790,7 +791,7 @@ function buildLayerSpec(
         "line-opacity": strokeOpacityPaintValue(layer.style),
         // A solid line has no dash; the key is left out rather than null,
         // which a style document cannot carry.
-        ...(strokeDashValue(layer.style) ? { "line-dasharray": strokeDashValue(layer.style) } : {}),
+        ...(dash ? { "line-dasharray": dash } : {}),
         "line-blur": strokeBlurValue(layer.style),
       },
     };
