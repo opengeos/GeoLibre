@@ -8,7 +8,10 @@ import {
   parseIndoorGml,
   placeLocalCoordinates,
 } from "../apps/geolibre-desktop/src/lib/indoorgml";
-import { indoorGmlCellColorExpression } from "../apps/geolibre-desktop/src/lib/indoorgml-layers";
+import {
+  adoptIndoorGmlDetectedCrs,
+  indoorGmlCellColorExpression,
+} from "../apps/geolibre-desktop/src/lib/indoorgml-layers";
 
 const originalParser = Object.getOwnPropertyDescriptor(globalThis, "DOMParser");
 Object.defineProperty(globalThis, "DOMParser", { configurable: true, value: DOMParser });
@@ -367,5 +370,51 @@ describe("indoorGmlCellColorExpression", () => {
     assert.deepEqual(expression.slice(0, 2), ["match", ["get", "kind"]]);
     assert.equal(expression.at(-1), "#000");
     assert.ok(expression.includes("TransitionSpace"));
+  });
+});
+
+describe("adoptIndoorGmlDetectedCrs", () => {
+  it("clears a previously detected or sample CRS and turns on local for a CRS-less local file", () => {
+    const afterDetected = adoptIndoorGmlDetectedCrs(
+      { sourceCrs: "", sourceCrsOrigin: null, local: false },
+      { detectedCrs: "EPSG:25832", coordinatesLookGeographic: false },
+    );
+    assert.deepEqual(afterDetected, {
+      sourceCrs: "EPSG:25832",
+      sourceCrsOrigin: "detected",
+      local: false,
+    });
+
+    const afterLocalFile = adoptIndoorGmlDetectedCrs(afterDetected, {
+      detectedCrs: undefined,
+      coordinatesLookGeographic: false,
+    });
+    assert.deepEqual(afterLocalFile, {
+      sourceCrs: "",
+      sourceCrsOrigin: null,
+      local: true,
+    });
+
+    const afterSampleThenLocal = adoptIndoorGmlDetectedCrs(
+      { sourceCrs: "EPSG:32632", sourceCrsOrigin: "sample", local: false },
+      { detectedCrs: undefined, coordinatesLookGeographic: false },
+    );
+    assert.deepEqual(afterSampleThenLocal, {
+      sourceCrs: "",
+      sourceCrsOrigin: null,
+      local: true,
+    });
+  });
+
+  it("keeps a user-typed CRS when the chosen file names none", () => {
+    const next = adoptIndoorGmlDetectedCrs(
+      { sourceCrs: "EPSG:25832", sourceCrsOrigin: "explicit", local: false },
+      { detectedCrs: undefined, coordinatesLookGeographic: false },
+    );
+    assert.deepEqual(next, {
+      sourceCrs: "EPSG:25832",
+      sourceCrsOrigin: "explicit",
+      local: false,
+    });
   });
 });

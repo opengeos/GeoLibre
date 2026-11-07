@@ -294,6 +294,8 @@ const i3sFlyToRequested = new Set<string>();
  * after a project is reopened.
  */
 export function restoreArcgisI3sTilesLayers(app: GeoLibreAppAPI): void {
+  // Clear session-scoped failed probes so reopening a project probes again.
+  i3sProbesFailed.clear();
   if (useAppStore.getState().layers.some(isArcgisI3sTilesLayer)) {
     void ensureArcgisI3sTilesOverlay(app);
   }
@@ -363,6 +365,7 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
       for (const layer of previous.layers) {
         if (isArcgisI3sTilesLayer(layer) && !currentIds.has(layer.id)) {
           i3sFlyToRequested.delete(layer.id);
+          i3sProbesFailed.delete(i3sProbeKey(layer));
         }
       }
       renderArcgisI3sTilesLayers();
@@ -430,7 +433,7 @@ function renderArcgisI3sTilesLayers(): void {
   lastI3sLayerSignature = signature;
 
   for (const layer of layers) {
-    if (layer.metadata.i3sKind === undefined && !i3sProbesFailed.has(layer.id)) {
+    if (layer.metadata.i3sKind === undefined && !i3sProbesFailed.has(i3sProbeKey(layer))) {
       void probeI3sLayerKind(layer);
     }
   }
@@ -572,9 +575,15 @@ const i3sProbesInFlight = new Set<string>();
  */
 const i3sProbesFailed = new Set<string>();
 
+/** Key for a layer's probe state, including its URL so a URL edit probes again. */
+function i3sProbeKey(layer: GeoLibreLayer): string {
+  const url = typeof layer.source.url === "string" ? layer.source.url : "";
+  return `${layer.id}:${url}`;
+}
+
 /** A layer's I3S kind: the probed one, `mesh` after a failed probe, else unknown. */
 function i3sLayerKind(layer: GeoLibreLayer): unknown {
-  return layer.metadata.i3sKind ?? (i3sProbesFailed.has(layer.id) ? "mesh" : undefined);
+  return layer.metadata.i3sKind ?? (i3sProbesFailed.has(i3sProbeKey(layer)) ? "mesh" : undefined);
 }
 
 /**
@@ -587,9 +596,10 @@ function i3sLayerKind(layer: GeoLibreLayer): unknown {
  *
  * @param layer - The store layer to probe.
  */
-async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
-  if (i3sProbesInFlight.has(layer.id)) return;
-  i3sProbesInFlight.add(layer.id);
+export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
+  const key = i3sProbeKey(layer);
+  if (i3sProbesInFlight.has(key)) return;
+  i3sProbesInFlight.add(key);
   const url = typeof layer.source.url === "string" ? layer.source.url : "";
   const docUrl = i3sLayerDocumentUrl(url);
   let patch: Record<string, unknown> = { i3sKind: "mesh" };
@@ -607,16 +617,18 @@ async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       }
     } catch (error) {
       console.warn(`[GeoLibre] Could not read the I3S layer document ${docUrl}`, error);
-      i3sProbesInFlight.delete(layer.id);
-      i3sProbesFailed.add(layer.id);
+      i3sProbesInFlight.delete(key);
+      i3sProbesFailed.add(key);
       lastI3sLayerSignature = null;
       renderArcgisI3sTilesLayers();
       return;
     }
   }
-  i3sProbesInFlight.delete(layer.id);
+  i3sProbesInFlight.delete(key);
   const current = useAppStore.getState().layers.find((item) => item.id === layer.id);
-  if (!current) return;
+  if (!current || (typeof current.source.url === "string" ? current.source.url : "") !== url) {
+    return;
+  }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
 }
 

@@ -5,11 +5,13 @@ import {
   applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
+  buildArcgisI3sTilesDeckLayers,
   i3sDocumentRequestUrl,
   i3sTilesetLngLat,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
   persistI3sTilesetCenter,
+  probeI3sLayerKind,
   ARCGIS_I3S_SOURCE_KIND,
   THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "../packages/plugins/src/plugins/arcgis-i3s-tiles";
@@ -386,6 +388,61 @@ describe("i3sDocumentRequestUrl", () => {
       "not a url",
     ]) {
       assert.equal(i3sDocumentRequestUrl(url), url);
+    }
+  });
+});
+
+describe("probeI3sLayerKind", () => {
+  const base = "https://services5.arcgis.com/x/ArcGIS/rest/services/Library/SceneServer";
+
+  it("keys failed probes by URL so updating a layer's URL probes the new endpoint", async () => {
+    const badLayer = {
+      id: "i3s-probe-1",
+      name: "Scene",
+      type: "3d-tiles",
+      source: { sourceId: "i3s-probe-1", type: ARCGIS_I3S_SOURCE_KIND, url: `${base}/layers/99` },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [badLayer] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/layers/99")) {
+        return new Response("Not Found", { status: 404 });
+      }
+      return new Response(
+        JSON.stringify({
+          layerType: "Building",
+          sublayers: [
+            {
+              id: 0,
+              name: "Overview",
+              layerType: "3DObject",
+              visibility: true,
+            },
+          ],
+        }),
+      );
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(badLayer);
+      // Failed probe does not write to metadata, and updated URL starts unprobed again.
+      assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, undefined);
+      const updatedLayer = {
+        ...badLayer,
+        source: { ...badLayer.source, url: `${base}/layers/0` },
+      } as unknown as GeoLibreLayer;
+      useAppStore.setState({ layers: [updatedLayer] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(updatedLayer), []);
+
+      await probeI3sLayerKind(updatedLayer);
+      assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, "building");
+    } finally {
+      globalThis.fetch = realFetch;
     }
   });
 });

@@ -1,3 +1,5 @@
+import type { IndoorGmlParseResult } from "./indoorgml";
+
 /**
  * How IndoorGML cells are drawn (issue #3341): one colour per kind of space,
  * so rooms, corridors and stairs, doors and anchors read apart.
@@ -23,4 +25,42 @@ export function indoorGmlCellColorExpression(fallback: string): unknown[] {
   for (const [kind, color] of CELL_KIND_COLORS) match.push(kind, color);
   match.push(fallback);
   return match;
+}
+
+export type IndoorGmlCrsOrigin = "explicit" | "detected" | "sample" | null;
+
+export interface IndoorGmlCrsState {
+  sourceCrs: string;
+  sourceCrsOrigin: IndoorGmlCrsOrigin;
+  local: boolean;
+}
+
+/**
+ * Update the IndoorGML dialog's CRS and local-coordinates state when a file is
+ * parsed. A CRS the user typed or picked from the preset menu (`"explicit"`) is
+ * kept when the new file names no CRS; a CRS detected from an earlier file or
+ * filled by a sample is cleared so a CRS-less file is not reprojected with the
+ * previous file's CRS and can auto-enable local coordinates.
+ *
+ * @param current - The current CRS and local-coordinates state.
+ * @param parsed - The parsed IndoorGML file's CRS and coordinate bounds summary.
+ * @returns The next CRS and local-coordinates state.
+ */
+export function adoptIndoorGmlDetectedCrs(
+  current: IndoorGmlCrsState,
+  parsed: Pick<IndoorGmlParseResult, "detectedCrs" | "coordinatesLookGeographic">,
+): IndoorGmlCrsState {
+  if (parsed.detectedCrs) {
+    return {
+      sourceCrs: parsed.detectedCrs,
+      sourceCrsOrigin: "detected",
+      local: false,
+    };
+  }
+  const explicitCrs = current.sourceCrsOrigin === "explicit" ? current.sourceCrs : "";
+  return {
+    sourceCrs: explicitCrs,
+    sourceCrsOrigin: explicitCrs ? "explicit" : null,
+    local: current.local || (!parsed.coordinatesLookGeographic && !explicitCrs.trim()),
+  };
 }
