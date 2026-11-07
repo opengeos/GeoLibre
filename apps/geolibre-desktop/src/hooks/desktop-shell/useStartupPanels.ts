@@ -108,6 +108,9 @@ export function useStartupPanels({
       () => {
         panelAbandoned.current = true;
         clearTimeout(warnTimer);
+        console.warn(
+          `[GeoLibre] Deployment openPanel "${openPanelId}" was not opened because another right panel opened first`,
+        );
       },
     );
 

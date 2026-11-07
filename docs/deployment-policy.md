@@ -239,8 +239,9 @@ and startup is ready: plugins have loaded, the map is ready, and any `?url=`
 project has settled. A native startup restore must finish (or fail) first, so a
 restore that never completes keeps the panel closed. A panel that registers late
 still opens while the project is fresh, unless another right panel was opened
-while waiting, so it never displaces one. A console warning is logged after 10
-seconds without it. It does not reopen in saved projects and is ignored in the
+while waiting (by the user or by a plugin activating at startup), so it never
+displaces one; a console warning names the skipped panel. A console warning is
+also logged after 10 seconds without it. It does not reopen in saved projects and is ignored in the
 read-only viewer preset or when side panels are hidden (`?maponly`,
 `?panels=hidden`, `?hidePanels=true`).
 
