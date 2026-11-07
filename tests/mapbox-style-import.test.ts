@@ -1144,32 +1144,34 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
-  it("still warns about a lookup on a paint value the import reads flat", () => {
-    const result = parseMapboxStyle({
-      version: 8,
-      layers: [
-        {
-          id: "c",
-          type: "circle",
-          paint: { "circle-radius": ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3] },
-        },
-      ],
-    });
-    assert.equal(result.style.circleRadius, undefined);
-    assert.ok(
-      result.warnings.includes(
-        "The circle radius is data-driven in a way that could not be read; the layer keeps its current circle radius.",
-      ),
-      JSON.stringify(result.warnings),
-    );
-  });
-
-  it("takes a flat fill opacity as written, as before", () => {
-    const result = parseMapboxStyle({
+  it("rejects a flat fill opacity above 1 and reports a simplestyle lookup on a radius", () => {
+    const flat = parseMapboxStyle({
       version: 8,
       layers: [{ id: "f", type: "fill", paint: { "fill-opacity": 1.5 } }],
     });
-    assert.equal(result.style.fillOpacity, 1.5);
+    assert.equal(flat.style.fillOpacity, undefined);
+    assert.deepEqual(flat.warnings, [
+      "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+    ]);
+    const lookup = ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3];
+    const circle = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "p", type: "circle", paint: { "circle-radius": lookup } }],
+    });
+    assert.equal(circle.style.circleRadius, undefined);
+    assert.ok(
+      circle.warnings.some((w) => /circle radius is data-driven/.test(w)),
+      JSON.stringify(circle.warnings),
+    );
+    const heat = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "h", type: "heatmap", paint: { "heatmap-radius": lookup } }],
+    });
+    assert.equal(heat.style.heatmapRadius, undefined);
+    assert.ok(
+      heat.warnings.some((w) => /heatmap radius is data-driven/.test(w)),
+      JSON.stringify(heat.warnings),
+    );
   });
 
   it("recognizes every simplestyle lookup the exporter writes into paint the import reads", () => {
