@@ -383,6 +383,7 @@ describe("adoptIndoorGmlDetectedCrs", () => {
       sourceCrs: "EPSG:25832",
       sourceCrsOrigin: "detected",
       local: false,
+      localOrigin: null,
     });
 
     const afterLocalFile = adoptIndoorGmlDetectedCrs(afterDetected, {
@@ -393,6 +394,19 @@ describe("adoptIndoorGmlDetectedCrs", () => {
       sourceCrs: "",
       sourceCrsOrigin: null,
       local: true,
+      localOrigin: "auto",
+    });
+
+    // A following CRS-less geographic file resets the auto-enabled local flag.
+    const afterGeographicFile = adoptIndoorGmlDetectedCrs(afterLocalFile, {
+      detectedCrs: undefined,
+      coordinatesLookGeographic: true,
+    });
+    assert.deepEqual(afterGeographicFile, {
+      sourceCrs: "",
+      sourceCrsOrigin: null,
+      local: false,
+      localOrigin: null,
     });
 
     const afterSampleThenLocal = adoptIndoorGmlDetectedCrs(
@@ -403,10 +417,11 @@ describe("adoptIndoorGmlDetectedCrs", () => {
       sourceCrs: "",
       sourceCrsOrigin: null,
       local: true,
+      localOrigin: "auto",
     });
   });
 
-  it("keeps a user-typed CRS when the chosen file names none", () => {
+  it("keeps a user-typed CRS or user-checked local option when the chosen file names no CRS", () => {
     const next = adoptIndoorGmlDetectedCrs(
       { sourceCrs: "EPSG:25832", sourceCrsOrigin: "explicit", local: false },
       { detectedCrs: undefined, coordinatesLookGeographic: false },
@@ -415,6 +430,18 @@ describe("adoptIndoorGmlDetectedCrs", () => {
       sourceCrs: "EPSG:25832",
       sourceCrsOrigin: "explicit",
       local: false,
+      localOrigin: null,
+    });
+
+    const explicitLocal = adoptIndoorGmlDetectedCrs(
+      { sourceCrs: "", sourceCrsOrigin: null, local: true, localOrigin: "explicit" },
+      { detectedCrs: undefined, coordinatesLookGeographic: true },
+    );
+    assert.deepEqual(explicitLocal, {
+      sourceCrs: "",
+      sourceCrsOrigin: null,
+      local: true,
+      localOrigin: "explicit",
     });
   });
 });

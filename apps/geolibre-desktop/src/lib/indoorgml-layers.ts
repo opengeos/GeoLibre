@@ -28,11 +28,13 @@ export function indoorGmlCellColorExpression(fallback: string): unknown[] {
 }
 
 export type IndoorGmlCrsOrigin = "explicit" | "detected" | "sample" | null;
+export type IndoorGmlLocalOrigin = "explicit" | "auto" | null;
 
 export interface IndoorGmlCrsState {
   sourceCrs: string;
   sourceCrsOrigin: IndoorGmlCrsOrigin;
   local: boolean;
+  localOrigin?: IndoorGmlLocalOrigin;
 }
 
 /**
@@ -40,7 +42,8 @@ export interface IndoorGmlCrsState {
  * parsed. A CRS the user typed or picked from the preset menu (`"explicit"`) is
  * kept when the new file names no CRS; a CRS detected from an earlier file or
  * filled by a sample is cleared so a CRS-less file is not reprojected with the
- * previous file's CRS and can auto-enable local coordinates.
+ * previous file's CRS and can auto-enable local coordinates. An auto-enabled
+ * `local` flag is also reset when a subsequent CRS-less file looks geographic.
  *
  * @param current - The current CRS and local-coordinates state.
  * @param parsed - The parsed IndoorGML file's CRS and coordinate bounds summary.
@@ -55,12 +58,16 @@ export function adoptIndoorGmlDetectedCrs(
       sourceCrs: parsed.detectedCrs,
       sourceCrsOrigin: "detected",
       local: false,
+      localOrigin: null,
     };
   }
   const explicitCrs = current.sourceCrsOrigin === "explicit" ? current.sourceCrs : "";
+  const explicitLocal = current.localOrigin === "explicit" && current.local;
+  const autoLocal = !parsed.coordinatesLookGeographic && !explicitCrs.trim();
   return {
     sourceCrs: explicitCrs,
     sourceCrsOrigin: explicitCrs ? "explicit" : null,
-    local: current.local || (!parsed.coordinatesLookGeographic && !explicitCrs.trim()),
+    local: explicitLocal || autoLocal,
+    localOrigin: explicitLocal ? "explicit" : autoLocal ? "auto" : null,
   };
 }

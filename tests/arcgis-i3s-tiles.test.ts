@@ -443,6 +443,41 @@ describe("probeI3sLayerKind", () => {
       assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, "building");
     } finally {
       globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  });
+
+  it("does not cache a failed probe when the layer was removed while the probe was in flight", async () => {
+    const layer = {
+      id: "i3s-probe-removed",
+      name: "Scene",
+      type: "3d-tiles",
+      source: {
+        sourceId: "i3s-probe-removed",
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: `${base}/layers/77`,
+      },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [layer] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      // Simulate the layer being removed while the request is in flight.
+      useAppStore.setState({ layers: [] });
+      return new Response("Server Error", { status: 500 });
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(layer);
+      // If the layer is restored (e.g. via undo), it is not treated as a failed mesh fallback.
+      useAppStore.setState({ layers: [layer] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(layer), []);
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
     }
   });
 });

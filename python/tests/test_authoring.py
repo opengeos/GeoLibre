@@ -264,6 +264,15 @@ def test_apply_style_merges_rather_than_replaces(proj):
     assert merged["strokeWidth"] == project.DEFAULT_LAYER_STYLE["strokeWidth"]
 
 
+def test_apply_style_synchronizes_top_level_project_styles(proj):
+    layer_id = proj["layers"][0]["id"]
+    proj["styles"] = {layer_id: {**project.DEFAULT_LAYER_STYLE, "strokeDash": []}}
+    merged = authoring.apply_style(proj, "Cities", {"strokeDash": [4, 2], "strokeOpacity": 0.5})
+    assert merged["strokeDash"] == [4, 2]
+    assert proj["styles"][layer_id]["strokeDash"] == [4, 2]
+    assert proj["styles"][layer_id]["strokeOpacity"] == 0.5
+
+
 def test_apply_style_rejects_a_non_mapping(proj):
     with pytest.raises(ValueError, match="must be an object"):
         authoring.apply_style(proj, "Cities", ["fillColor", "#ff0000"])

@@ -10,6 +10,7 @@ import {
   adoptIndoorGmlDetectedCrs,
   indoorGmlCellColorExpression,
   type IndoorGmlCrsOrigin,
+  type IndoorGmlLocalOrigin,
 } from "../../../../lib/indoorgml-layers";
 import {
   parseIndoorGml,
@@ -63,21 +64,28 @@ export function IndoorGmlSource() {
   const [sourceCrs, setSourceCrs] = useState("");
   const [sourceCrsOrigin, setSourceCrsOrigin] = useState<IndoorGmlCrsOrigin>(null);
   const [local, setLocal] = useState(false);
+  const [localOrigin, setLocalOrigin] = useState<IndoorGmlLocalOrigin>(null);
 
+  /** Switch between URL and file mode and clear file-specific CRS state. */
   const handleModeChange = (next: IndoorGmlMode) => {
     setMode(next);
     setSelectedFile(null);
     setSourceCrs("");
     setSourceCrsOrigin(null);
     setLocal(false);
+    setLocalOrigin(null);
   };
 
   /** Fill the CRS field (or the local option) from what a parsed file says. */
   const adoptDetected = (parsed: IndoorGmlParseResult) => {
-    const next = adoptIndoorGmlDetectedCrs({ sourceCrs, sourceCrsOrigin, local }, parsed);
+    const next = adoptIndoorGmlDetectedCrs(
+      { sourceCrs, sourceCrsOrigin, local, localOrigin },
+      parsed,
+    );
     setSourceCrs(next.sourceCrs);
     setSourceCrsOrigin(next.sourceCrsOrigin);
     setLocal(next.local);
+    setLocalOrigin(next.localOrigin ?? null);
   };
 
   const handleChooseFile = async () => {
@@ -348,7 +356,10 @@ export function IndoorGmlSource() {
               type="checkbox"
               className="mt-0.5"
               checked={local}
-              onChange={(event) => setLocal(event.target.checked)}
+              onChange={(event) => {
+                setLocal(event.target.checked);
+                setLocalOrigin("explicit");
+              }}
             />
             <span>{t("addData.indoorgml.local")}</span>
           </label>
@@ -364,6 +375,7 @@ export function IndoorGmlSource() {
             setSourceCrs(sample.crs);
             setSourceCrsOrigin("sample");
             setLocal(false);
+            setLocalOrigin(null);
             source.setLayerName((current) =>
               current.trim() && current !== defaultName ? current : sample.name,
             );

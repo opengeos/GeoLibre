@@ -316,6 +316,12 @@ function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   return i3sEnsureInFlight;
 }
 
+/**
+ * Load deck.gl, the I3S loader, and the replacement mesh layer, then bind the
+ * MapboxOverlay and store subscription to the active map instance.
+ *
+ * @param app - The GeoLibre app API.
+ */
 async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   i3sApp = app;
   if (!app.getDeckGL) return;
@@ -388,6 +394,11 @@ function loadI3sLoader(): Promise<unknown> {
   return i3sLoaderPromise;
 }
 
+/**
+ * Synchronize the mounted deck.gl I3S overlay with the store's current I3S
+ * layers, probing any unprobed layers and tearing the overlay down when the
+ * last I3S layer is removed.
+ */
 function renderArcgisI3sTilesLayers(): void {
   if (!i3sOverlay || !i3sDeckGL || !i3sApp) return;
 
@@ -618,9 +629,18 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
     } catch (error) {
       console.warn(`[GeoLibre] Could not read the I3S layer document ${docUrl}`, error);
       i3sProbesInFlight.delete(key);
-      i3sProbesFailed.add(key);
-      lastI3sLayerSignature = null;
-      renderArcgisI3sTilesLayers();
+      const stillPresent = useAppStore
+        .getState()
+        .layers.some(
+          (item) =>
+            item.id === layer.id &&
+            (typeof item.source.url === "string" ? item.source.url : "") === url,
+        );
+      if (stillPresent) {
+        i3sProbesFailed.add(key);
+        lastI3sLayerSignature = null;
+        renderArcgisI3sTilesLayers();
+      }
       return;
     }
   }

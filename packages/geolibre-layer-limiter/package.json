@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/layer-limiter",
-  "version": "3.6.1",
+  "version": "3.5.2",
   "private": true,
   "description": "Area-Priority Viewport Feature Limiter for GeoLibre and MapLibre GL JS",
   "keywords": [
