@@ -172,9 +172,11 @@ describe("line opacity, dashes and blur (#3350)", () => {
 
   it("never resets a plugin layer's own dash, only one GeoLibre set", () => {
     const writes: unknown[] = [];
+    // A real map returns the same layer object until the layer is removed.
+    let nativeLayer = { id: "plugin-line", type: "line" };
     const map = {
       getStyle: () => ({ layers: [{ id: "plugin-line", type: "line" }] }),
-      getLayer: (id: string) => (id === "plugin-line" ? { id, type: "line" } : undefined),
+      getLayer: (id: string) => (id === "plugin-line" ? nativeLayer : undefined),
       getSource: () => undefined,
       // The plugin drew its line dashed.
       getPaintProperty: (_id: string, key: string) =>
@@ -213,5 +215,11 @@ describe("line opacity, dashes and blur (#3350)", () => {
     syncLayer(map as never, pluginLayer({}));
     syncLayer(map as never, pluginLayer({}));
     assert.deepEqual(writes, [[4, 2], null]);
+    // A plugin that recreates its layer under the same id draws a new one, so
+    // what GeoLibre set on the old layer is not reset on it.
+    syncLayer(map as never, pluginLayer({ strokeDash: [4, 2] }));
+    nativeLayer = { id: "plugin-line", type: "line" };
+    syncLayer(map as never, pluginLayer({}));
+    assert.deepEqual(writes, [[4, 2], null, [4, 2]]);
   });
 });

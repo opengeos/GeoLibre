@@ -457,6 +457,16 @@ describe("QML round-trip of a switched-off else rule (#1312)", () => {
 <Option name="outline_style" type="QString" value="no"/>
 </Option></layer></symbol></symbols></renderer-v2></qgis>`;
     assert.equal(applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml)).strokeOpacity, 0);
+    // A line with no pen is invisible too, and keeps the layer's dash, since
+    // "no" is not a dash pattern.
+    const line = `<qgis><renderer-v2 type="singleSymbol"><symbols>
+<symbol type="line" name="0" alpha="1"><layer class="SimpleLine"><Option type="Map">
+<Option name="line_color" type="QString" value="0,0,0,255"/>
+<Option name="line_style" type="QString" value="no"/>
+</Option></layer></symbol></symbols></renderer-v2></qgis>`;
+    const out = applyQmlImport(style({ strokeDash: [4, 2] }), parseQml(line));
+    assert.equal(out.strokeOpacity, 0);
+    assert.deepEqual(out.strokeDash, [4, 2]);
   });
 
   it("ignores a pen style name that is not a QGIS pen style, inherited names included", () => {

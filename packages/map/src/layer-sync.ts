@@ -106,9 +106,9 @@ import {
   fillPaint,
   heatmapPaint,
   linePaint,
-  paintBuilderMayReset,
   rasterPaint,
 } from "./style-mapper";
+import { OwnedPaintResets } from "./owned-paint-resets";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
 import { getActiveMapCrs, tileTemplatesForMapCrs } from "./active-map-crs";
 import { resolveTextFontFromStyleLayers } from "./text-font";
@@ -1707,16 +1707,15 @@ function restoreOverriddenCircleRadius(
   map.setPaintProperty(circleNativeId, "circle-radius", styleValue(layer.style, "circleRadius"));
 }
 
-// Native layers (keyed `${layerId}\0${property}`) whose nullable paint
-// property GeoLibre has written, per map, so a later `null` from the paint
-// builders resets only what GeoLibre set and never a control's own value.
-const ownedNullablePaint = new WeakMap<maplibregl.Map, Set<string>>();
+// The nullable paint GeoLibre wrote on plugin and control native layers, per
+// map (see OwnedPaintResets).
+const ownedPaintResets = new WeakMap<maplibregl.Map, OwnedPaintResets>();
 
-function ownedNullablePaintFor(map: maplibregl.Map): Set<string> {
-  let owned = ownedNullablePaint.get(map);
+function ownedPaintResetsFor(map: maplibregl.Map): OwnedPaintResets {
+  let owned = ownedPaintResets.get(map);
   if (!owned) {
-    owned = new Set();
-    ownedNullablePaint.set(map, owned);
+    owned = new OwnedPaintResets();
+    ownedPaintResets.set(map, owned);
   }
   return owned;
 }
@@ -1740,20 +1739,13 @@ function setExternalNativeLayerPaint(
 
   if (!paint) return;
 
-  const ownedResets = ownedNullablePaintFor(map);
+  const ownedResets = ownedPaintResetsFor(map);
   for (const [property, value] of Object.entries(paint)) {
     try {
-      // A `null` from the paint builders resets a property GeoLibre no longer
-      // sets (a dash cleared back to solid, the fill hairline under a dashed
-      // outline). On a layer a plugin or control created, that property may be
-      // the control's own (its dashed lines), so only a value GeoLibre itself
-      // wrote is reset, once.
-      const key = `${nativeLayerId}\0${property}`;
-      if (value === null) {
-        if (!ownedResets.delete(key)) continue;
-      } else if (paintBuilderMayReset(property)) {
-        ownedResets.add(key);
-      }
+      // On a layer a plugin or control created, a `null` reset may hit the
+      // control's own value (its dashed lines), so only one GeoLibre wrote is
+      // reset, once.
+      if (!ownedResets.shouldWrite(map, nativeLayerId, property, value)) continue;
       if (!styleValuesEqual(getDynamicPaintProperty(map, nativeLayerId, property), value)) {
         setDynamicPaintProperty(map, nativeLayerId, property, value);
       }

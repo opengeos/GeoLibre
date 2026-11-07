@@ -77,6 +77,12 @@ export function paintBuilderMayReset(property: string): boolean {
   return property === "line-dasharray" || property === "fill-outline-color";
 }
 
+/**
+ * The fill paint for a layer style. `fill-outline-color` may be `null`, which
+ * `setPaintProperty` takes as a reset; MapLibre's `addLayer` rejects it, so a
+ * caller adding a layer drops `null` values first (as `ensureLayer` and the
+ * Mapbox GL exporter do).
+ */
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
@@ -123,6 +129,11 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
   };
 }
 
+/**
+ * The line paint for a layer style. `line-dasharray` is `null` for a solid
+ * line, the reset `setPaintProperty` takes; drop `null` values before passing
+ * the object to `addLayer` (see {@link fillPaint}).
+ */
 export function linePaint(style: LayerStyle, opacity: number) {
   return {
     "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,

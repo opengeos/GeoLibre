@@ -18,13 +18,8 @@ import {
   redactUrlCredentials,
   styleValue,
 } from "@geolibre/core";
-import {
-  circlePaint,
-  fillPaint,
-  linePaint,
-  paintBuilderMayReset,
-  rasterPaint,
-} from "./style-mapper";
+import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
+import { OwnedPaintResets } from "./owned-paint-resets";
 import {
   DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -202,6 +197,8 @@ export class MapboxEngine implements MapEngine {
   private plans = new Map<string, MapboxLayerPlan>();
   private previous = new Map<string, GeoLibreLayer>();
   private errors = new Map<string, string>();
+  /** The nullable paint GeoLibre wrote on plugin native layers (see OwnedPaintResets). */
+  private readonly ownedPaintResets = new OwnedPaintResets();
   private basemap: mapboxgl.LayerSpecification[] = [];
   // Label font borrowed from the basemap: a style only serves its own glyphs.
   private textFont: string[] = DEFAULT_MAPBOX_TEXT_FONT;
@@ -952,9 +949,6 @@ export class MapboxEngine implements MapEngine {
     entries.push([BASEMAP_LABEL_KEY, this.backgroundLabel]);
     publishLayerLabels(entries);
   }
-  /** Plugin native layers (`${id}\0${property}`) whose nullable paint GeoLibre wrote. */
-  private readonly ownedNullablePaint = new Set<string>();
-
   /**
    * Apply a plugin-owned store layer's visibility and paint to the native
    * style layers its plugin registered under `metadata.nativeLayerIds` (the
@@ -1007,12 +1001,7 @@ export class MapboxEngine implements MapEngine {
         if (value === undefined || property.endsWith("-layer-opacity")) continue;
         // As on MapLibre (`setExternalNativeLayerPaint`): a `null` reset only
         // clears a value GeoLibre wrote, never the plugin's own (its dashes).
-        const owned = `${id}\0${property}`;
-        if (value === null) {
-          if (!this.ownedNullablePaint.delete(owned)) continue;
-        } else if (paintBuilderMayReset(property)) {
-          this.ownedNullablePaint.add(owned);
-        }
+        if (!this.ownedPaintResets.shouldWrite(map, id, property, value)) continue;
         const key = property as keyof mapboxgl.AnyPaint;
         try {
           // An unset property reads back as undefined; compare it as null so a
