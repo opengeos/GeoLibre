@@ -4332,7 +4332,10 @@
       "signInDescriptionOAuth": "Sign in to {{shareHost}} to save your project on the server.",
       "signInDescriptionToken": "A personal API token is required to save projects to {{shareHost}}. Add your token in Settings to continue.",
       "signInButton": "Sign in",
-      "openSettingsButton": "Open Settings"
+      "openSettingsButton": "Open Settings",
+      "saveTitle": "Save project to server",
+      "saveDesc": "Enter a project name. The project will be saved as a private project on {{shareHost}}.",
+      "uploadedNotLinked": "\"{{name}}\" was saved to {{shareHost}}, but the session or project changed during the save, so it was not linked to this map. Open it from the Gallery to keep working on it."
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",

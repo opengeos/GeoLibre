@@ -23,21 +23,23 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState<RemoteSignInPrompt | null>(prompt);
-  const cancelledRef = useRef(false);
+  // Bumped on every sign-in attempt, dismissal, and new prompt, so a result
+  // from a superseded attempt never touches the current dialog.
+  const attemptRef = useRef(0);
 
   useEffect(() => {
     if (prompt !== null) {
       setLastPrompt(prompt);
       setSigningIn(false);
       setSignInError(null);
-      cancelledRef.current = false;
+      attemptRef.current += 1;
     }
   }, [prompt]);
 
   const displayPrompt = prompt ?? lastPrompt;
 
   const handleDismiss = () => {
-    cancelledRef.current = true;
+    attemptRef.current += 1;
     setSigningIn(false);
     onSettle(prompt, false);
   };
@@ -85,10 +87,10 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
                 onClick={() => {
                   setSignInError(null);
                   setSigningIn(true);
-                  cancelledRef.current = false;
+                  const attempt = ++attemptRef.current;
                   signInToShare()
                     .then((signedIn) => {
-                      if (cancelledRef.current) return;
+                      if (attempt !== attemptRef.current) return;
                       setSigningIn(false);
                       if (!signedIn) {
                         setSignInError(t("share.oauthFailed"));
@@ -97,7 +99,7 @@ export function RemoteSignInDialog({ prompt, onSettle }: RemoteSignInDialogProps
                       onSettle(prompt, true);
                     })
                     .catch((err: unknown) => {
-                      if (cancelledRef.current) return;
+                      if (attempt !== attemptRef.current) return;
                       setSigningIn(false);
                       setSignInError(
                         t(

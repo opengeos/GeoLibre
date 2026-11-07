@@ -4,7 +4,10 @@ import {
   PROJECT_STORAGE_ENV,
   resolveProjectStorage,
 } from "../apps/geolibre-desktop/src/lib/project-storage";
-import { SHARE_URL_ENV } from "../apps/geolibre-desktop/src/lib/share-geolibre";
+import {
+  DEFAULT_SHARE_BASE_URL,
+  SHARE_URL_ENV,
+} from "../apps/geolibre-desktop/src/lib/share-geolibre";
 
 describe("resolveProjectStorage", () => {
   it("defaults to 'local' when unset or blank", () => {
@@ -41,6 +44,15 @@ describe("resolveProjectStorage", () => {
     assert.equal(resolveProjectStorage("  server  ", customEnv), "server");
     assert.equal(
       resolveProjectStorage("server", {}, "https://projects.example.internal"),
+      "server",
+    );
+  });
+
+  it("honors the hosted share URL only when it is named explicitly", () => {
+    // Unset falls back to the hosted default for sharing, never for storage.
+    assert.equal(resolveProjectStorage("server", {}), "local");
+    assert.equal(
+      resolveProjectStorage("server", { [SHARE_URL_ENV]: DEFAULT_SHARE_BASE_URL }),
       "server",
     );
   });

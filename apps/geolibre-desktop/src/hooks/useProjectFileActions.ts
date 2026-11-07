@@ -1586,8 +1586,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const chosen = await askSaveName(
       promptDefaultName,
       {
-        title: t("toolbar.item.saveProjectAsTitle"),
-        description: t("toolbar.item.saveProjectAsDesc"),
+        title: t("toolbar.remoteSave.saveTitle"),
+        description: t("toolbar.remoteSave.saveDesc", { shareHost: hostLabel }),
         label: t("toolbar.item.saveProjectFileName"),
         placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
       },
@@ -1639,15 +1639,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         visibility: "private",
         baseUrl: shareBaseUrl,
       });
-      if (useAppStore.getState().projectGeneration !== saveProjectGeneration) return false;
-
       if (!uploaded.id) {
         throw new Error("The share server returned no project ID.");
       }
+      // The upload succeeded, but linking it to a project that was switched
+      // away or to a changed sign-in would be wrong. Say where it went, so the
+      // next Save is not a silent duplicate.
       if (
-        oauthSessionRevision !== undefined &&
-        oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
+        useAppStore.getState().projectGeneration !== saveProjectGeneration ||
+        (oauthSessionRevision !== undefined &&
+          oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision)
       ) {
+        setActionError(
+          t("toolbar.remoteSave.uploadedNotLinked", { name: chosenTitle, shareHost: hostLabel }),
+        );
         return false;
       }
       const liveProjectName = useAppStore.getState().projectName;

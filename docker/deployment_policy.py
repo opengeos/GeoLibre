@@ -283,7 +283,9 @@ def normalize_share_url(raw):
         return "off"
     _reject_whitespace("GEOLIBRE_SHARE_URL", raw)
     parsed = _urlsplit("GEOLIBRE_SHARE_URL", raw)
-    if parsed.query or parsed.fragment:
+    # A bare "?" or "#" leaves query/fragment empty, but the client still
+    # rejects the URL, so check the raw delimiters too.
+    if parsed.query or parsed.fragment or "?" in raw or "#" in raw:
         raise SystemExit(
             "ERROR: GEOLIBRE_SHARE_URL must not include query parameters or a fragment."
         )

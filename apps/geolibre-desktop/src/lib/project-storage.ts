@@ -15,9 +15,10 @@ export type ProjectStorageMode = "local" | "server";
  * Resolves the active project storage mode ("local" | "server").
  *
  * Returns "server" only if the configured value is "server" (case-insensitive)
- * and an explicit custom share host is configured (`shareHost.status === "configured"`).
- * Unset or default share hosts (e.g. public hosted share) return "local" to avoid
- * silently uploading projects to a public service.
+ * and a share host is explicitly configured (`shareHost.status === "configured"`).
+ * An unset share URL returns "local" rather than falling back to the public
+ * hosted default, so projects are never uploaded there silently. Naming the
+ * hosted service explicitly is an operator's deliberate choice and is honored.
  *
  * @param configured - The raw value; read from the env when omitted.
  * @param deploymentEnv - Runtime env override, for tests.

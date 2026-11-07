@@ -225,3 +225,7 @@ def test_share_url_rejects_query_and_fragment():
     assert "must not include query parameters or a fragment" in error_of(
         dp.normalize_share_url, "https://share.example.com/#frag"
     )
+    for bare in ("https://share.example.com/?", "https://share.example.com/#"):
+        assert "must not include query parameters or a fragment" in error_of(
+            dp.normalize_share_url, bare
+        )

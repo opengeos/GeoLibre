@@ -133,8 +133,8 @@ export interface ToolbarCommandContext {
   /** Open New Project with its Examples (starter projects) section expanded. */
   openStarterExamples: () => void;
   setShareDialogOpen: SetOpen;
-  setGalleryDialogOpen?: SetOpen;
-  openGalleryScope?: (scope?: "mine") => void;
+  /** Open the Gallery, optionally on the signed-in user's own projects. */
+  openGalleryScope: (scope?: "mine") => void;
   setPrintLayoutOpen: SetOpen;
   setGeoreferencerOpen: SetOpen;
   setFieldCollectionOpen: SetOpen;
@@ -207,7 +207,6 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setNewProjectDialogOpen,
     openStarterExamples,
     setShareDialogOpen,
-    setGalleryDialogOpen,
     openGalleryScope,
     setPrintLayoutOpen,
     setGeoreferencerOpen,
@@ -271,11 +270,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       shortcut: { key: "o", mod: true, shift: false },
       run: () => {
         if (resolveProjectStorage() === "server") {
-          if (openGalleryScope) {
-            openGalleryScope("mine");
-          } else {
-            setGalleryDialogOpen?.(true);
-          }
+          openGalleryScope("mine");
         } else {
           void projectFiles.handleOpenFromFile();
         }
