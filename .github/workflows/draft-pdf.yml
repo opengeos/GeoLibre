@@ -1,0 +1,38 @@
+name: Draft JOSS paper
+
+# Builds the Journal of Open Source Software draft PDF from paper/paper.md.
+# Download it from the run's "paper" artifact.
+on:
+  push:
+    paths:
+      - paper/**
+      - .github/workflows/draft-pdf.yml
+  pull_request:
+    paths:
+      - paper/**
+      - .github/workflows/draft-pdf.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paper:
+    name: Paper draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build draft PDF
+        uses: openjournals/openjournals-draft-action@master
+        with:
+          journal: joss
+          paper-path: paper/paper.md
+
+      - name: Upload draft PDF
+        uses: actions/upload-artifact@v7
+        with:
+          name: paper
+          path: paper/paper.pdf

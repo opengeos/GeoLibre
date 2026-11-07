@@ -33,3 +33,6 @@ Branch off `main` (never commit to it directly), keep changes focused, follow
 [Conventional Commits](https://www.conventionalcommits.org/) for messages, and
 open your pull request against `main`. Found a bug or have an idea? Open an
 [issue](https://github.com/opengeos/GeoLibre/issues).
+
+Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+For questions and usage help, see [SUPPORT.md](SUPPORT.md).
