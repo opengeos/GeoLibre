@@ -187,6 +187,22 @@ describe("mapbox-gl", () => {
       ),
     );
   });
+
+  it("still serializes map.getLayer and keeps a style's own layer on getOwnLayer", () => {
+    // The Mapbox engine's plugin mirror identifies a native layer by
+    // style.getOwnLayer (OwnedPaintResets), because map.getLayer returns a
+    // fresh serialized copy. If getOwnLayer goes, dashes on plugin layers stop
+    // resetting to solid with no error, so pin both halves here.
+    const text = readPublishedText("mapbox-gl", { workspace: "packages/map", dir: "dist" });
+    const message = contractMessage(
+      "mapbox-gl",
+      "`mapbox-gl`",
+      "map.getLayer no longer serializes, or Style.getOwnLayer is gone (OwnedPaintResets reads it)",
+      "packages/map",
+    );
+    assert.match(text, /getOwnLayer\(\w+(,\w+)?\)\{/, message);
+    assert.match(text, /getLayer\(\w+\)\{[^}]*getOwnLayer\(\w+\)[^}]*serialize\(\)/, message);
+  });
 });
 
 describe("@carbonplan/zarr-layer", () => {

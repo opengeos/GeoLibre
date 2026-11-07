@@ -158,6 +158,15 @@ loading. `apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry.ts` renam
 MapLibre's copy at build time. A CI run can't see this failure without a real
 Mapbox token, so after a bump of either package, load a Mapbox style with one.
 
+The Mapbox engine's plugin-layer mirror (`mirrorPluginLayerState` in
+`packages/map/src/mapbox-engine.ts`) identifies a plugin's native layer by the
+style's own layer object, `style.getOwnLayer(id)`, an internal, because
+`map.getLayer` returns a fresh `serialize()` copy on every call.
+`OwnedPaintResets` keys what GeoLibre wrote on that object, so a cleared dash
+or blur resets only GeoLibre's own value. Without `getOwnLayer` nothing is
+owned and dashes on plugin layers stop resetting to solid, silently;
+`tests/upstream-contracts.test.ts` checks both halves in the bundle.
+
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 
 `bridgeArcgisDeckControl` (`packages/plugins/src/plugins/arcgis-deck/control-adapter.ts`)
