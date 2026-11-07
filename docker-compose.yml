@@ -12,7 +12,7 @@ services:
       # These are browser-reachable URLs, not Compose service names. Override
       # them with the public TLS origins when deploying behind an ingress.
       GEOLIBRE_SHARE_URL: "${GEOLIBRE_SHARE_URL:-http://localhost:8000}"
-      GEOLIBRE_PROJECT_STORAGE: "${GEOLIBRE_PROJECT_STORAGE:-local}"
+      GEOLIBRE_PROJECT_STORAGE: "${GEOLIBRE_PROJECT_STORAGE:-}"
       GEOLIBRE_COLLAB_URL: "${GEOLIBRE_COLLAB_URL:-ws://localhost:8787}"
       # Optional sign-in gate: configure either Clerk or Auth0, not both.
       GEOLIBRE_CLERK_PUBLISHABLE_KEY: "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}"

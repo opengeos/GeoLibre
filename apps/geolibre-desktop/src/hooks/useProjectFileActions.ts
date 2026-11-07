@@ -1601,7 +1601,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (chosen === null || useAppStore.getState().projectGeneration !== saveProjectGeneration) {
       return false;
     }
-    const chosenTitle = chosen.trim().replace(/\.geolibre$/i, "");
+    const chosenTitle = chosen.trim().replace(/\.(geolibre\.json|geolibre|json)$/i, "");
     if (!chosenTitle) return false;
 
     // Unembedded snapshot, compared after the upload to tell whether the user
