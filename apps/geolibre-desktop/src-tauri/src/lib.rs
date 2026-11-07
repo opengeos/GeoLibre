@@ -1414,6 +1414,56 @@ fn read_allowed_file(plugin_id: String, path: String) -> Result<String, String> 
     read_allowed_file_impl(&plugin_id, &path, machine_deployment_policy_path().as_deref())
 }
 
+/// The `plugins.fileAccess` entries for `plugin_id`, validated with the UI
+/// parser's rules. The UI drops the whole `plugins` section when `fileAccess`
+/// is malformed (a non-object, a blank or duplicate key after trimming, or a
+/// non-string, blank or duplicate entry), so the native gate denies every read
+/// in that case rather than granting from a section the app ignores.
+fn machine_file_access_allowlist(
+    policy: &serde_json::Value,
+    plugin_id: &str,
+) -> Result<Vec<String>, String> {
+    let malformed = || {
+        "Machine deployment policy has an invalid plugins.fileAccess section; plugin fileAccess is denied"
+            .to_string()
+    };
+    let Some(file_access) = policy.get("plugins").and_then(|p| p.get("fileAccess")) else {
+        return Err(format!(
+            "Plugin '{plugin_id}' has no fileAccess allowlist configured in machine deployment policy"
+        ));
+    };
+    let file_access = file_access.as_object().ok_or_else(malformed)?;
+    let mut keys = HashSet::new();
+    let mut found = None;
+    for (raw_key, raw_list) in file_access {
+        // JS `trim()` also strips a BOM, which Rust's `trim()` does not.
+        let key = raw_key.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
+        if key.is_empty() || !keys.insert(key) {
+            return Err(malformed());
+        }
+        let list = raw_list.as_array().ok_or_else(malformed)?;
+        let mut entries = Vec::with_capacity(list.len());
+        let mut seen = HashSet::new();
+        for raw_entry in list {
+            let entry = raw_entry
+                .as_str()
+                .map(|e| e.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}'))
+                .filter(|e| !e.is_empty())
+                .ok_or_else(malformed)?;
+            if !seen.insert(entry) {
+                return Err(malformed());
+            }
+            entries.push(entry.to_string());
+        }
+        if key == plugin_id {
+            found = Some(entries);
+        }
+    }
+    found.ok_or_else(|| {
+        format!("Plugin '{plugin_id}' has no fileAccess allowlist configured in machine deployment policy")
+    })
+}
+
 fn read_allowed_file_impl(
     plugin_id: &str,
     path: &str,
@@ -1444,16 +1494,7 @@ fn read_allowed_file_impl(
         return Err("Machine deployment policy has an unsupported version; plugin fileAccess is denied".to_string());
     }
 
-    // Keys are matched after trimming, as the UI parser normalises them.
-    let allowlist = policy
-        .get("plugins")
-        .and_then(|p| p.get("fileAccess"))
-        .and_then(|f| f.as_object())
-        .and_then(|f| f.iter().find(|(key, _)| key.trim() == trimmed_id))
-        .and_then(|(_, v)| v.as_array())
-        .ok_or_else(|| {
-            format!("Plugin '{trimmed_id}' has no fileAccess allowlist configured in machine deployment policy")
-        })?;
+    let allowlist = machine_file_access_allowlist(&policy, trimmed_id)?;
 
     if !is_safe_absolute_path(path) {
         return Err(format!(
@@ -1473,11 +1514,8 @@ fn read_allowed_file_impl(
     }
 
     let mut is_allowed = false;
-    for entry in allowlist {
-        let Some(entry_str) = entry.as_str() else {
-            continue;
-        };
-        let trimmed_entry = entry_str.trim();
+    for trimmed_entry in &allowlist {
+        let trimmed_entry = trimmed_entry.as_str();
         if !is_safe_absolute_path(trimmed_entry) {
             continue;
         }
@@ -5675,7 +5713,28 @@ mod tests {
         let res_v2 = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&v2_policy));
         assert!(res_v2.unwrap_err().contains("unsupported version"));
 
-        // 9. A directory listed in the allowlist is not a regular file.
+        // 9. A fileAccess section the UI would drop grants nothing natively.
+        for bad in [
+            format!(r#"{{"my-plugin":["{allowed_str}",""]}}"#),
+            format!(r#"{{"my-plugin":["{allowed_str}"],"other":[" {allowed_str} ","{allowed_str}"]}}"#),
+            format!(r#"{{"my-plugin":["{allowed_str}"]," my-plugin":["{allowed_str}"]}}"#),
+            format!(r#"{{"my-plugin":["{allowed_str}"],"   ":[]}}"#),
+            r#"["not-an-object"]"#.to_string(),
+        ] {
+            let bad_policy = root.path().join("bad.json");
+            fs::write(
+                &bad_policy,
+                format!(r#"{{"version":1,"plugins":{{"fileAccess":{bad}}}}}"#),
+            )
+            .unwrap();
+            let res_bad = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&bad_policy));
+            assert!(
+                res_bad.unwrap_err().contains("invalid plugins.fileAccess"),
+                "{bad}"
+            );
+        }
+
+        // 10. A directory listed in the allowlist is not a regular file.
         let dir_str = root.path().to_str().unwrap().replace('\\', "/");
         let dir_policy = root.path().join("dir.json");
         fs::write(
