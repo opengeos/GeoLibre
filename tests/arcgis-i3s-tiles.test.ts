@@ -5,10 +5,13 @@ import {
   applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
+  buildArcgisI3sTilesDeckLayers,
+  i3sDocumentRequestUrl,
   i3sTilesetLngLat,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
   persistI3sTilesetCenter,
+  probeI3sLayerKind,
   ARCGIS_I3S_SOURCE_KIND,
   THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "../packages/plugins/src/plugins/arcgis-i3s-tiles";
@@ -195,7 +198,7 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
   } as unknown as GeoLibreLayer;
 
-  function build() {
+  function build(meshLayer?: unknown) {
     const props: Record<string, unknown>[] = [];
     class FakeTile3DLayer {
       constructor(p: Record<string, unknown>) {
@@ -205,7 +208,7 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     const deckGL = {
       geoLayers: { Tile3DLayer: FakeTile3DLayer },
     } as unknown as GeoLibreDeckGL;
-    buildArcgisI3sTilesDeckLayer(layer, { deckGL, loader: {} });
+    buildArcgisI3sTilesDeckLayer(layer, { deckGL, loader: {}, meshLayer });
     return props[0];
   }
 
@@ -215,8 +218,80 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     // call site spreads the shared constant into a fresh object, so compare by
     // value rather than reference.
     const props = build();
-    assert.deepEqual(props?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
-    assert.equal((props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker, false);
+    const options = props?.loadOptions as {
+      tileset: unknown;
+      core: { worker: boolean; fetch?: unknown };
+    };
+    assert.deepEqual(options.tileset, THREE_D_TILES_DECK_LOAD_OPTIONS.tileset);
+    assert.equal(options.core.worker, false);
+  });
+
+  it("fetches layer documents as JSON and leaves other requests alone", async () => {
+    const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
+    const seen: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seen.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const base = "https://example.com/arcgis/rest/services/B/SceneServer/layers/0";
+      await fetchImpl(base);
+      await fetchImpl(new Request(`${base}/nodepages/0`));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(seen, [
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0?f=json",
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0/nodepages/0",
+    ]);
+  });
+
+  it("keeps a Request's method, headers and body, and lets init override them", async () => {
+    const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
+    const seen: {
+      url: string;
+      method: string;
+      header: string | null;
+      body: string;
+      init?: RequestInit;
+    }[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input as Request;
+      seen.push({
+        url: request.url,
+        method: request.method,
+        header: request.headers.get("x-test"),
+        body: await request.text(),
+        init,
+      });
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const base = "https://example.com/arcgis/rest/services/B/SceneServer/layers/0";
+      await fetchImpl(
+        new Request(base, { method: "POST", headers: { "x-test": "1" }, body: "payload" }),
+        { headers: { "x-test": "2" } },
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.equal(
+      seen[0].url,
+      "https://example.com/arcgis/rest/services/B/SceneServer/layers/0?f=json",
+    );
+    assert.equal(seen[0].method, "POST");
+    assert.equal(seen[0].header, "1");
+    assert.equal(seen[0].body, "payload");
+    // init is passed on as given, so fetch applies it over the Request.
+    assert.deepEqual(seen[0].init, { headers: { "x-test": "2" } });
+  });
+
+  it("draws I3S meshes with GeoLibre's mesh layer when it is loaded", () => {
+    class MeshLayer {}
+    assert.deepEqual(build(MeshLayer)?._subLayerProps, { mesh: { type: MeshLayer } });
+    assert.equal(build()?._subLayerProps, undefined);
   });
 
   it("returns null when the deck.gl class or loader is missing", () => {
@@ -287,5 +362,193 @@ describe("persistI3sTilesetCenter", () => {
     assert.doesNotThrow(() =>
       persistI3sTilesetCenter("missing", { cartographicCenter: [1, 2, 3] }),
     );
+  });
+});
+
+describe("i3sDocumentRequestUrl", () => {
+  const base = "https://services5.arcgis.com/x/ArcGIS/rest/services/Library/SceneServer";
+
+  it("asks an ArcGIS Server for a layer document as JSON", () => {
+    assert.equal(i3sDocumentRequestUrl(`${base}/layers/0`), `${base}/layers/0?f=json`);
+    assert.equal(
+      i3sDocumentRequestUrl(`${base}/layers/0/sublayers/23`),
+      `${base}/layers/0/sublayers/23?f=json`,
+    );
+    assert.equal(
+      i3sDocumentRequestUrl(`${base}/layers/0?token=t`),
+      `${base}/layers/0?token=t&f=json`,
+    );
+  });
+
+  it("leaves node pages, resources and an explicit format alone", () => {
+    for (const url of [
+      `${base}/layers/0/nodepages/3`,
+      `${base}/layers/0/nodes/1/geometries/0`,
+      `${base}/layers/0?f=pjson`,
+      "not a url",
+    ]) {
+      assert.equal(i3sDocumentRequestUrl(url), url);
+    }
+  });
+});
+
+describe("probeI3sLayerKind", () => {
+  const base = "https://services5.arcgis.com/x/ArcGIS/rest/services/Library/SceneServer";
+  const stubDeps = {
+    deckGL: {
+      geoLayers: {
+        Tile3DLayer: class FakeTile3DLayer {
+          props: Record<string, unknown>;
+          constructor(props: Record<string, unknown>) {
+            this.props = props;
+          }
+        },
+      },
+    } as unknown as GeoLibreDeckGL,
+    loader: {},
+  };
+
+  it("keys failed probes by URL so updating a layer's URL probes the new endpoint", async () => {
+    const badLayer = {
+      id: "i3s-probe-1",
+      name: "Scene",
+      type: "3d-tiles",
+      source: { sourceId: "i3s-probe-1", type: ARCGIS_I3S_SOURCE_KIND, url: `${base}/layers/99` },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [badLayer] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/layers/99")) {
+        return new Response("Not Found", { status: 404 });
+      }
+      return new Response(
+        JSON.stringify({
+          layerType: "Building",
+          sublayers: [
+            {
+              id: 0,
+              name: "Overview",
+              layerType: "3DObject",
+              visibility: true,
+            },
+          ],
+        }),
+      );
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(badLayer);
+      // Failed probe does not write to metadata, draws badLayer as a mesh fallback,
+      // and leaves an updated URL unprobed until its own probe finishes.
+      assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, undefined);
+      assert.equal(buildArcgisI3sTilesDeckLayers(badLayer, stubDeps).length, 1);
+      const updatedLayer = {
+        ...badLayer,
+        source: { ...badLayer.source, url: `${base}/layers/0` },
+      } as unknown as GeoLibreLayer;
+      useAppStore.setState({ layers: [updatedLayer] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(updatedLayer, stubDeps), []);
+
+      await probeI3sLayerKind(updatedLayer);
+      assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, "building");
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  });
+
+  it("re-probes a successfully probed layer after its URL changes", async () => {
+    const building = {
+      id: "i3s-probe-url-change",
+      name: "Scene",
+      type: "3d-tiles",
+      source: {
+        sourceId: "i3s-probe-url-change",
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: `${base}/layers/0`,
+      },
+      visible: true,
+      opacity: 1,
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [building] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/layers/5")) {
+        return new Response(JSON.stringify({ layerType: "3DObject" }));
+      }
+      return new Response(
+        JSON.stringify({
+          layerType: "Building",
+          sublayers: [{ id: 0, name: "Overview", layerType: "3DObject", visibility: true }],
+        }),
+      );
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(building);
+      const probed = useAppStore.getState().layers[0];
+      assert.equal(probed.metadata.i3sKind, "building");
+      assert.equal(probed.metadata.i3sProbedUrl, `${base}/layers/0`);
+
+      // A URL edit keeps the old Building metadata until the new probe lands,
+      // but the stale sublayer tree is not drawn in the meantime.
+      const moved = {
+        ...probed,
+        source: { ...probed.source, url: `${base}/layers/5` },
+      } as unknown as GeoLibreLayer;
+      useAppStore.setState({ layers: [moved] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(moved, stubDeps), []);
+
+      await probeI3sLayerKind(moved);
+      const reprobed = useAppStore.getState().layers[0];
+      assert.equal(reprobed.metadata.i3sKind, "mesh");
+      assert.equal(reprobed.metadata.i3sProbedUrl, `${base}/layers/5`);
+      assert.equal(reprobed.metadata.i3sBuilding, undefined);
+      assert.equal(buildArcgisI3sTilesDeckLayers(reprobed, stubDeps).length, 1);
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  });
+
+  it("does not cache a failed probe when the layer was removed while the probe was in flight", async () => {
+    const layer = {
+      id: "i3s-probe-removed",
+      name: "Scene",
+      type: "3d-tiles",
+      source: {
+        sourceId: "i3s-probe-removed",
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: `${base}/layers/77`,
+      },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [layer] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      // Simulate the layer being removed while the request is in flight.
+      useAppStore.setState({ layers: [] });
+      return new Response("Server Error", { status: 500 });
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(layer);
+      // If the layer is restored (e.g. via undo), it is not treated as a failed mesh fallback.
+      useAppStore.setState({ layers: [layer] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(layer, stubDeps), []);
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
   });
 });

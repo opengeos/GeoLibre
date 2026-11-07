@@ -158,6 +158,15 @@ loading. `apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry.ts` renam
 MapLibre's copy at build time. A CI run can't see this failure without a real
 Mapbox token, so after a bump of either package, load a Mapbox style with one.
 
+The Mapbox engine's plugin-layer mirror (`mirrorPluginLayerState` in
+`packages/map/src/mapbox-engine.ts`) identifies a plugin's native layer by the
+style's own layer object, `style.getOwnLayer(id)`, an internal, because
+`map.getLayer` returns a fresh `serialize()` copy on every call.
+`OwnedPaintResets` keys what GeoLibre wrote on that object, so a cleared dash
+or blur resets only GeoLibre's own value. Without `getOwnLayer` nothing is
+owned and dashes on plugin layers stop resetting to solid, silently;
+`tests/upstream-contracts.test.ts` checks both halves in the bundle.
+
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 
 `bridgeArcgisDeckControl` (`packages/plugins/src/plugins/arcgis-deck/control-adapter.ts`)
@@ -178,6 +187,23 @@ down once that cache fills. After bumping deck.gl or loaders.gl, run
 `tests/arcgis-i3s-tiles.test.ts`: its real-`Tileset3D` case fails if the field
 is renamed or no longer starts at 32 MB. If upstream starts honouring the
 option, the helper can go.
+
+### `@deck.gl/geo-layers` — I3S mesh layer replaced
+
+deck.gl's `Tile3DLayer` draws ArcGIS I3S nodes with its own `MeshLayer`, which
+shades them through luma.gl's PBR material module. From deck.gl 9.4 / luma.gl
+9.4 that draws nothing on WebGL (every fragment transparent, no error), so no
+I3S scene layer rendered from the 9.3 → 9.4 bump (#2395) until GeoLibre
+replaced the layer. `packages/plugins/src/plugins/i3s-mesh-layer.ts` is deck.gl
+9.3's I3S mesh layer without the PBR module, passed to `Tile3DLayer` as
+`_subLayerProps.mesh.type` in `arcgis-i3s-tiles.ts`.
+
+After bumping deck.gl or luma.gl, load **Add data → 3D Tiles layer → Load sample
+data → San Francisco Buildings (ArcGIS I3S)** on the Positron background (Liberty
+draws its own 3D buildings, which look like I3S ones) and check the textured
+buildings draw. To see whether upstream fixed its layer, drop the
+`_subLayerProps` override and check again; if it draws, delete
+`i3s-mesh-layer.ts`.
 
 ### `@maplibre/maplibre-gl-style-spec`
 

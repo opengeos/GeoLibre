@@ -462,6 +462,9 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     layer = find_layer(project, ref)
     layers_of(project).remove(layer)
     layer_id = str(layer["id"])
+    styles = project.get("styles")
+    if isinstance(styles, dict):
+        styles.pop(layer_id, None)
     _drop_swipe_reference(project, layer)
     return layer_id
 
@@ -546,12 +549,19 @@ def apply_style(project: dict[str, Any], ref: str, style: dict[str, Any]) -> dic
     if not isinstance(style, dict):
         raise ValueError(f"style must be an object of style keys, got {type(style).__name__}")
     layer = find_layer(project, ref)
+    layer_id = str(layer.get("id", ""))
+    styles = project.get("styles")
+    top_level = styles.get(layer_id) if isinstance(styles, dict) else None
     current = layer.get("style")
     merged = (
         dict(current) if isinstance(current, dict) else copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
     )
+    if isinstance(top_level, dict):
+        merged.update(top_level)
     merged.update(style)
     layer["style"] = merged
+    if isinstance(styles, dict) and layer_id in styles:
+        styles[layer_id] = copy.deepcopy(merged)
     return merged
 
 
@@ -1607,6 +1617,97 @@ def set_layer_filter(project: dict[str, Any], ref: str, expression: Any) -> dict
     return {**layer_summary(layer), "filterExpression": layer.get("filterExpression")}
 
 
+def _layer_features(layer: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """A layer's inline features, or ``None`` when it has no local copy."""
+    geojson = layer.get("geojson")
+    if isinstance(geojson, dict) and isinstance(geojson.get("features"), list):
+        return geojson["features"]
+    return None
+
+
+def set_floor_picker(
+    project: dict[str, Any],
+    ref: str,
+    field: str | None,
+    level: Any = None,
+    *,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """Link a multi-floor layer to the app's on-map floor picker, or unlink it.
+
+    The floor picker lists the floors found in ``field`` across every linked
+    layer and draws one floor (``mode="only"``) or a floor and the ones below
+    it (``mode="below"``). It reads OpenStreetMap ``level`` values such as
+    ``"0;1"`` and ``"-1-0"``, plain numbers, and IMDF ordinals. The choice is
+    shared, so ``level`` and ``mode`` apply to every linked layer.
+
+    The matching values are resolved from a layer's inline GeoJSON. A layer
+    without inline features is linked unresolved: the app resolves it once it
+    loads the layer's features (a local file re-read on open), and a layer the
+    app holds no features for (vector tiles) is not narrowed.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        field: The feature property holding the floor, e.g. ``"level"``;
+            ``None`` unlinks the layer.
+        level: The floor to show, e.g. ``"0"`` or ``-1``. ``None`` keeps the
+            floor the picker already shows (a layer linked later joins it, as
+            in the app); with ``mode="all"`` it shows every floor.
+        mode: ``"only"`` (the default for a level), ``"below"``, or ``"all"``.
+
+    Returns:
+        A summary of the layer with its ``levelFilter`` (or ``None``).
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, or
+            the field, level or mode is invalid.
+    """
+    layer = find_layer(project, ref)
+    if field is None:
+        layer.pop("levelFilter", None)
+        return {**layer_summary(layer), "levelFilter": None}
+    layers = [item for item in project.get("layers", []) if isinstance(item, dict)]
+    if level is None and mode != "all":
+        # Keep the shared floor, as the app's Style panel does on linking; a
+        # given mode (e.g. "below", the app's "+ below") applies to it.
+        # The first link with a floor decides, the target's own included, as
+        # the app's currentLevelChoice does.
+        for item in layers:
+            link = item.get("levelFilter")
+            if (
+                isinstance(link, dict)
+                and link.get("mode") in ("only", "below")
+                and isinstance(link.get("level"), str)
+            ):
+                level, mode = link["level"], mode or link["mode"]
+                break
+    # Resolve every link first and assign them only once all succeed, so an
+    # invalid field, level or mode leaves the project untouched.
+    updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for item in layers:
+        if item is layer:
+            link_field: Any = field
+        else:
+            link = item.get("levelFilter")
+            # A hand-edited link without a usable field is left alone rather
+            # than blocking every floor change.
+            if not isinstance(link, dict) or not isinstance(link.get("field"), str):
+                continue
+            if not link["field"].strip():
+                continue
+            link_field = link["field"]
+        updates.append(
+            (
+                item,
+                _project.level_filter(link_field, level, mode=mode, features=_layer_features(item)),
+            )
+        )
+    for item, link in updates:
+        item["levelFilter"] = link
+    return {**layer_summary(layer), "levelFilter": layer.get("levelFilter")}
+
+
 def set_labels(
     project: dict[str, Any],
     ref: str,
@@ -1640,11 +1741,18 @@ def set_labels(
             an option is invalid.
     """
     layer = find_layer(project, ref)
+    layer_id = str(layer.get("id", ""))
+    styles = project.get("styles")
+    top_level = styles.get(layer_id) if isinstance(styles, dict) else None
     style = layer.get("style")
     if not isinstance(style, dict):
         style = copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
         layer["style"] = style
-    current = style.get("labels")
+    current = (
+        top_level.get("labels")
+        if isinstance(top_level, dict) and isinstance(top_level.get("labels"), dict)
+        else style.get("labels")
+    )
     labels = _project.label_style(
         field,
         expression=expression,
@@ -1653,6 +1761,8 @@ def set_labels(
         **options,
     )
     style["labels"] = labels
+    if isinstance(top_level, dict):
+        top_level["labels"] = copy.deepcopy(labels)
     return copy.deepcopy(labels)
 
 

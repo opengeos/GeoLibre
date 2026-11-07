@@ -103,9 +103,14 @@ reprojected.
 ```
 
 Useful style keys: `minZoom`, `maxZoom`, `fillColor`, `fillOpacity`,
-`strokeColor`, `strokeWidth`, `strokeWidthUnit`, `circleRadius`, `textColor`,
-`textSize`, and for rasters `rasterBrightnessMin`, `rasterBrightnessMax`,
-`rasterSaturation`, `rasterContrast`, `rasterHueRotate`.
+`strokeColor`, `strokeWidth`, `strokeWidthUnit`, `strokeOpacity` (0-1, fades
+lines and outlines only), `strokeDash` (dash and gap lengths in multiples of
+the stroke width, `[]` for solid, e.g. `[4, 2]`), `strokeBlur` (px),
+`circleRadius`, `textColor`, `textSize`, for 3D extrusions `extrusionEnabled`,
+`extrusionHeightProperty`, `extrusionHeightScale`, `extrusionBase`,
+`extrusionBaseProperty`, `extrusionBaseScale`, `extrusionFloorHeight`,
+`extrusionColor`, `extrusionOpacity`, and for rasters `rasterBrightnessMin`,
+`rasterBrightnessMax`, `rasterSaturation`, `rasterContrast`, `rasterHueRotate`.
 
 ### Layer types
 

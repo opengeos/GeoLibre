@@ -88,3 +88,7 @@ apps/geolibre-desktop/src-tauri/mas/embedded.provisionprofile
 
 # Local Android Gradle cache for the vendored Tauri geolocation plugin.
 apps/geolibre-desktop/src-tauri/vendor/tauri-plugin-geolocation/android/.gradle/
+
+# JOSS paper build outputs (openjournals/inara)
+paper/paper.pdf
+paper/jats/

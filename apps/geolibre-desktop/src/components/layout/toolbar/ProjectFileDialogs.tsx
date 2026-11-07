@@ -32,6 +32,7 @@ import {
   shareOAuthErrorKey,
   supportsShareOAuth,
 } from "../../../lib/share-oauth";
+import { RemoteSignInDialog } from "./RemoteSignInDialog";
 import { SaveTemplateDialog } from "../SaveTemplateDialog";
 import { ImportWarningList } from "./ImportWarningList";
 
@@ -341,6 +342,10 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           </form>
         </DialogContent>
       </Dialog>
+      <RemoteSignInDialog
+        prompt={projectFiles.remoteSignInPrompt}
+        onSettle={projectFiles.settleRemoteSignInPrompt}
+      />
       <Dialog
         open={projectFiles.credentialStripPrompt !== null}
         onOpenChange={(open: boolean) => {

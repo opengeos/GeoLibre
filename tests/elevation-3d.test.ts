@@ -473,3 +473,66 @@ describe("buildElevation3dLayers", () => {
     assert.equal(rebuilt.props.data, data);
   });
 });
+
+describe("buildElevation3dLayers filters", () => {
+  class FakeGeoJsonLayer {
+    constructor(public props: Record<string, unknown>) {}
+  }
+  const fakeDeckGL = {
+    layers: { GeoJsonLayer: FakeGeoJsonLayer, IconLayer: FakeGeoJsonLayer },
+  } as unknown as GeoLibreDeckGL;
+  const floors: FeatureCollection = {
+    type: "FeatureCollection",
+    features: ["0", "1", "0;1"].map((level, index) => ({
+      type: "Feature",
+      properties: { level },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [8, 49, index + 1],
+          [8.001, 49, index + 2],
+        ],
+      },
+    })),
+  };
+
+  it("draws only the floor the floor picker chose, and reuses the result", () => {
+    const layer = geojsonLayer({
+      geojson: floors,
+      style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+      levelFilter: { field: "level", mode: "only", level: "1", values: ["1", "0;1"] },
+    });
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
+    const levels = (built.props.data as FeatureCollection).features.map(
+      (feature) => feature.properties?.level,
+    );
+    assert.deepEqual(levels, ["1", "0;1"]);
+    const [rebuilt] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
+    assert.equal(rebuilt.props.data, built.props.data);
+    // Another floor on the same collection is filtered again, not served from the cache.
+    const [ground] = buildElevation3dLayers(fakeDeckGL, {
+      ...layer,
+      levelFilter: { field: "level", mode: "only", level: "0", values: ["0", "0;1"] },
+    }) as unknown as FakeGeoJsonLayer[];
+    assert.deepEqual(
+      (ground.props.data as FeatureCollection).features.map((feature) => feature.properties?.level),
+      ["0", "0;1"],
+    );
+    // Back to floor 1: the cache now holds floor 0, so this is filtered afresh.
+    const [again] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
+    assert.deepEqual(
+      (again.props.data as FeatureCollection).features.map((feature) => feature.properties?.level),
+      ["1", "0;1"],
+    );
+  });
+
+  it("draws everything while no filter is active", () => {
+    const layer = geojsonLayer({
+      geojson: floors,
+      style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+      levelFilter: { field: "level", mode: "all", level: null },
+    });
+    const [built] = buildElevation3dLayers(fakeDeckGL, layer) as unknown as FakeGeoJsonLayer[];
+    assert.equal((built.props.data as FeatureCollection).features.length, 3);
+  });
+});

@@ -9,11 +9,11 @@ The **Style panel** on the right edits the appearance of the layer selected in t
 For vector layers the Style panel covers fill, stroke, points, labels, and 3D extrusion:
 
 - **Fill**: fill color and fill opacity for polygons.
-- **Stroke**: line color and width for lines and polygon outlines.
+- **Stroke**: line color and width for lines and polygon outlines, and a **Stroke opacity** that fades the lines, outlines and point outlines without fading the fill. Lines and polygon outlines also take a **Line style** (solid, dashed, dotted, dash-dot, long dash, or a **Custom** pattern of dash and gap lengths in multiples of the stroke width, such as `4 2 1 2`) and a **Line blur** in pixels for soft edges; a wide blurred line under a thin one makes a soft halo. Layers added through **Add data → Vector layer** draw their lines through the vector control, which does not take these three settings yet. In an exported story map, polygon outlines are drawn as a thin line in the stroke color, faded by the stroke opacity when the stroke color is a single color, but without the dash or blur; lines keep all three. A layer whose features carry their own simplestyle colors draws its polygon outlines with the line only, without the fill's thin edge line under it.
 - **Points**: circle radius for point layers, or **Use marker icon** to draw a marker instead: a built-in shape (circle, square, triangle, diamond, star, cross, or pin) with a color and size, or a **Custom image**. **Upload image…** accepts SVG, PNG, JPEG, or GIF; raster images draw as they are, so the marker color and per-class colors apply only to SVG markers.
 - **Labels**: text color, size, halo color, and halo width.
 - **3D extrusion**: turn polygons into extruded blocks, with a height field, height scale, base height, and color. Advanced expressions are available for height, base, and color.
-    - **Stacking floors**: pick a **Base property** (such as `level`) and a **Base scale** (meters per floor) so each feature starts at *base height + property × scale*. One layer of floor plans then draws as a stacked building. Set a **Floor height** (such as 3 m) to give every feature that thickness on top of its base. With a floor height of 0 the height field is the roof's altitude instead, so it must be above the base. A negative base (a basement level) is clamped to the ground, as on the 2D map.
+    - **Stacking floors**: pick a **Base property** (such as `level`) and a **Base scale** (meters per floor) so each feature starts at *base height + property × scale*. One layer of floor plans then draws as a stacked building. Set a **Floor height** (such as 3 m) to give every feature that thickness on top of its base. With a floor height of 0 the height field is the roof's altitude instead, so it must be above the base. A negative base (a basement level) is clamped to the ground, as on the 2D map. To look at one floor at a time, link the layer to the [floor picker](#floor-picker).
 
 You can also set a per-style minimum and maximum zoom so a style only applies within a zoom range.
 
@@ -116,6 +116,44 @@ clustering is on the bubbles and their counts still describe data those have not
 narrowed. Switch the point renderer back to **Single symbol** to see the
 filtered features drawn individually, one circle each, with no cluster counts to
 misread.
+
+### Floor picker
+
+Indoor data (rooms, corridors, doors) usually carries the floor each feature is
+on. The **Floor picker** section of the Style panel links a layer to an on-map
+floor picker: choose the **Floor field** that holds the floor, such as `level`
+or `ordinal`, and a **Floor** control appears in the top-right corner of the
+map with one button per floor, highest first.
+
+- Click a floor to draw only that floor. **All** draws every floor again. With
+  the picker focused, the up and down arrow keys step one floor at a time. A
+  tall building's list scrolls and keeps the chosen floor in view. Drag the
+  grip under the list to make it taller or shorter (or focus the grip and use
+  the arrow keys, Home and End); double-click it to go back to the default
+  height. The height is remembered in this browser, not saved in the project.
+- With **All** chosen, click a room (any feature of a linked layer) to go to its
+  floor: the picker switches to that floor and the map centres on the room.
+  Labels follow the floor, so each floor shows only its own room names.
+- **+ below** keeps the floors under the chosen one as well, the cutaway view of
+  a building with the upper storeys lifted off. Combined with a stacked
+  extrusion (see **Stacking floors** above) it shows the building up to the
+  floor you are looking at.
+
+The field may hold numbers, or text as in OpenStreetMap's `level` tag,
+including features that span several floors (`0;1`) or a range (`-1-2`): a room
+spanning floors 0 and 1 is drawn on both. Text floors such as `G` or `B1` are
+listed after the numbered ones and match only themselves.
+
+Link several layers of the same building (rooms, doors, points of interest) and
+the picker lists the floors of all of them and moves them together; a layer
+linked later joins on the floor in view. Set the field back to **Off** to unlink
+a layer. The choice is saved with the project, works with every renderer
+(MapLibre, Mapbox, Cesium and ArcGIS), and narrows the layer together with its
+Quick filters, expression filter, and a Time Slider window. The picker reads the
+floors from the layer's own features, so it is offered for layers whose features
+are loaded into GeoLibre (GeoJSON, GeoPackage, Shapefile and similar), not
+tile-backed ones. Add Data → Vector Layer → **Load sample data** → *Berlin
+Hauptbahnhof indoor (OSM)* is a ready-made example with three floors.
 
 ### Style interchange and URL styles
 

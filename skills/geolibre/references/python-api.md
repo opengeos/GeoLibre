@@ -280,6 +280,7 @@ These write the project, so they work headless too:
 ```python
 m.set_labels("Cities", "name", size=14, halo_width=2, anchor="top")
 m.set_layer_filter("Cities", [">=", ["get", "pop"], 100000])   # None clears
+m.set_floor_picker("Rooms", "level", "0", mode="below")  # on-map floor picker
 m.set_plugin_state("maplibre-gl-graticule", {...})  # a plugin's own saved state
 
 m.set_story_map(title="A tour", theme="light", start_slide="global")

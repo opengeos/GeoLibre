@@ -1,7 +1,7 @@
 /**
  * Deep-linking support for the GeoLibre integration: an elevation profile can be
  * shared by adding the line's coordinates to the GeoLibre URL, e.g.
- * `https://geolibre.app/?elevation-line=13.41,52.52;8.23,46.85`.
+ * `https://web.geolibre.app/?elevation-line=13.41,52.52;8.23,46.85`.
  *
  * GeoLibre auto-activates a plugin when a URL carries a parameter the plugin
  * declared in `urlParameterNames`, then dispatches the parsed query parameters

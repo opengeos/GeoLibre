@@ -91,6 +91,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     tier: "advanced",
   },
   {
+    id: "indoorgml",
+    section: "files",
+    labelKey: "toolbar.layerType.indoorgml",
+    tier: "advanced",
+  },
+  {
     id: "polyline",
     section: "files",
     labelKey: "toolbar.layerType.polyline",

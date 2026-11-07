@@ -77,6 +77,7 @@ import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
 import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
 import { AlongTrackProfileWindow } from "./AlongTrackProfileWindow";
 import { hasElevationConsent } from "../../lib/elevation-consent";
+import { FloorPickerPanel } from "../floor-picker/FloorPickerPanel";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
@@ -885,6 +886,12 @@ export function DesktopShell({
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}
                   />
+                  <SilentErrorBoundary label="Floor picker">
+                    <FloorPickerPanel
+                      mapControllerRef={mapControllerRef}
+                      mapReadyGeneration={mapReadyGeneration}
+                    />
+                  </SilentErrorBoundary>
                   <MapContextMenu
                     mapControllerRef={mapControllerRef}
                     mapReadyGeneration={mapReadyGeneration}

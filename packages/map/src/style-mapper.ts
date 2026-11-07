@@ -8,6 +8,10 @@ import {
   lineWidthValue,
   mapZoomStepOutputs,
   simpleStyleNumberValue,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityPaintValue,
+  strokeOpacityValue,
   vectorCircleColorValue,
   vectorFillColorValue,
   vectorFillOpacityValue,
@@ -51,6 +55,74 @@ function layerOpacityForBlend(style: LayerStyle): number {
   return isBlending(style.blendMode) && layerBlendModesSupported() ? LAYER_OPACITY_FOR_BLEND : 1;
 }
 
+/**
+ * Whether a polygon's fill draws its 1px hairline outline in the stroke color.
+ * Only a solid, opaque stroke keeps it: the line layer draws the real outline,
+ * and a hairline under a dashed or translucent one would show through. A
+ * simplestyle layer drops it too, since any feature's own `stroke-opacity` can
+ * make its outline translucent. That is deliberately per layer rather than per
+ * feature: scanning the data for the property would cost a pass over every
+ * feature on each sync, and the line layer draws the outline either way, so
+ * only the hairline under it goes.
+ *
+ * @param style - The layer style.
+ * @returns True when the fill layer should outline polygons in the stroke color.
+ */
+export function fillOutlineDrawn(style: LayerStyle): boolean {
+  return (
+    strokeDashValue(style) === null &&
+    strokeOpacityValue(style) >= 1 &&
+    styleValue(style, "simpleStyleEnabled") !== true
+  );
+}
+
+/**
+ * Paint properties the builders here leave out when the style does not set
+ * them (a solid line's dash, a sharp line's blur, the fill hairline under a
+ * dashed or translucent stroke), by layer type. The builders stay valid style
+ * spec, so their output can go straight to `addLayer`; an update of an
+ * existing layer has to clear a value an earlier style set, which is what
+ * {@link withPaintResets} adds.
+ */
+const RESETTABLE_PAINT: Readonly<Record<string, readonly string[]>> = {
+  line: ["line-dasharray", "line-blur"],
+  fill: ["fill-outline-color"],
+};
+
+/**
+ * Whether a paint property is one the builders may leave out, and so one an
+ * update may reset (see {@link withPaintResets}).
+ *
+ * @param property - A paint property name.
+ * @returns True for `line-dasharray`, `line-blur` and `fill-outline-color`.
+ */
+export function paintBuilderMayReset(property: string): boolean {
+  return Object.values(RESETTABLE_PAINT).some((keys) => keys.includes(property));
+}
+
+/**
+ * A builder's paint for updating an existing layer of `type`: each property
+ * the builder left out gets `null`, the value `setPaintProperty` takes as a
+ * reset, so a dash, blur or hairline an earlier style set is cleared. Not for
+ * `addLayer`, which rejects `null`.
+ *
+ * @param type - The style layer type (`line`, `fill`, ...).
+ * @param paint - The builder's paint.
+ * @returns The paint plus a `null` for each property to reset.
+ */
+export function withPaintResets(
+  type: string,
+  paint: Record<string, unknown>,
+): Record<string, unknown> {
+  const keys = RESETTABLE_PAINT[type];
+  if (!keys) return paint;
+  const resets = Object.fromEntries(
+    keys.filter((key) => !(key in paint)).map((key) => [key, null]),
+  );
+  return { ...paint, ...resets };
+}
+
+/** The fill paint for a layer style, as valid style spec (no `null` values). */
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
@@ -64,7 +136,12 @@ export function fillPaint(style: LayerStyle, opacity: number) {
     // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
     // expression mode it also applies the user's expression to the hairline
     // outline (matching the separate line layer that draws the polygon stroke).
-    "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
+    // A dashed or translucent stroke leaves the hairline out (MapLibre then
+    // draws the fill's own edge in the fill color), or its solid, opaque edge
+    // would show through the gaps. See withPaintResets for the update path.
+    ...(fillOutlineDrawn(style)
+      ? { "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string> }
+      : {}),
     // Elects MapLibre's render-to-texture composite so the layer blends as one
     // surface instead of once per overlapping polygon. Always emitted (rather
     // than only while blending) because `ensureLayer` only writes the paint
@@ -93,11 +170,19 @@ export function fillExtrusionPaint(style: LayerStyle, opacity: number) {
   };
 }
 
+/**
+ * The line paint for a layer style, as valid style spec: a solid line has no
+ * `line-dasharray` and a sharp one no `line-blur` (see withPaintResets).
+ */
 export function linePaint(style: LayerStyle, opacity: number) {
+  const dash = strokeDashValue(style);
+  const blur = strokeBlurValue(style);
   return {
     "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
     "line-width": lineWidthValue(style) as unknown as PropertyValueSpecification<number>,
-    "line-opacity": scaleByOpacity(simpleStyleNumberValue(style, "stroke-opacity", 1), opacity),
+    "line-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
+    ...(dash ? { "line-dasharray": dash as unknown as PropertyValueSpecification<number[]> } : {}),
+    ...(blur > 0 ? { "line-blur": blur } : {}),
     // See the note on `fill-layer-opacity` in fillPaint.
     "line-layer-opacity": layerOpacityForBlend(style),
   };
@@ -122,10 +207,7 @@ export function circlePaint(style: LayerStyle, opacity: number) {
     // Fade the outline with the layer opacity (and let it be set explicitly)
     // so story playback can fully hide a point instead of leaving a hollow
     // ring, and so the stroke is restored when playback ends (#934).
-    "circle-stroke-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "stroke-opacity", 1),
-      opacity,
-    ),
+    "circle-stroke-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
   };
 }
 
@@ -178,10 +260,7 @@ export function clusterCirclePaint(style: LayerStyle, opacity: number) {
     "circle-stroke-width": styleValue(style, "strokeWidth"),
     // Keep the cluster outline in step with its fill so the layer opacity (and
     // story fades) hide the whole bubble, mirroring {@link circlePaint} (#934).
-    "circle-stroke-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "stroke-opacity", 1),
-      opacity,
-    ),
+    "circle-stroke-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
   };
 }
 

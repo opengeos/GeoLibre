@@ -161,6 +161,29 @@ export function useLayerImport({
         }
         lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
         recordSourceLayer(layer.path, lastLayerId);
+        // Loader-supplied presentation (an IMDF import's stacked floors and
+        // floor picker links). `addGeoJsonLayer` picks the default style, so
+        // the overrides are merged over it rather than replacing it.
+        if (
+          layer.style ||
+          layer.levelFilter ||
+          layer.filterExpression ||
+          layer.sourceEntry ||
+          layer.visible === false
+        ) {
+          const added = useAppStore.getState().layers.find((item) => item.id === lastLayerId);
+          if (added) {
+            useAppStore.getState().updateLayer(lastLayerId, {
+              ...(layer.sourceEntry
+                ? { metadata: { ...added.metadata, sourceEntry: layer.sourceEntry } }
+                : {}),
+              ...(layer.style ? { style: { ...added.style, ...layer.style } } : {}),
+              ...(layer.levelFilter ? { levelFilter: layer.levelFilter } : {}),
+              ...(layer.filterExpression ? { filterExpression: layer.filterExpression } : {}),
+              ...(layer.visible === false && !layer.timeSpan ? { visible: false } : {}),
+            });
+          }
+        }
         // Time-tagged KML placemarks are Time Slider frames, animated through
         // the same `metadata.timeSpan` visibility toggling as ground overlays.
         if (layer.timeSpan) {

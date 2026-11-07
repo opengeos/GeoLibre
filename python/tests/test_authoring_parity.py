@@ -652,6 +652,7 @@ def build_round_trip_project() -> dict:
         temporal_extent=("2019-01-01", "2019-12-31T12:00:00Z"),
         links=["https://example.org", {"href": "https://example.org/l", "rel": "license"}],
     )
+    authoring.set_floor_picker(p, "cities", "pop", 50, mode="below")
     authoring.set_plugin_state(
         p, "maplibre-gl-graticule", {"interval": 10, "color": "#888888"}, position="top-left"
     )

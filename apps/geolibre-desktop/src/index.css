@@ -5874,6 +5874,92 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 }
 
 /* ---------------------------------------------------------------------------
+ * On-map floor picker (FloorPickerPanel). Theme-aware like the legend panel.
+ * Every button rule is scoped under `.geolibre-floor-picker.maplibregl-ctrl`
+ * and repeated for `:hover`, because MapLibre's
+ * `.maplibregl-ctrl button:not(:disabled):hover { background: rgba(0,0,0,.05) }`
+ * outranks Tailwind utilities and would replace the chosen floor's fill on
+ * hover, leaving its label unreadable.
+ * ------------------------------------------------------------------------- */
+.geolibre-floor-picker .geolibre-floor-picker-panel {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-header {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.geolibre-floor-picker.maplibregl-ctrl button {
+  background-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+.geolibre-floor-picker.maplibregl-ctrl .geolibre-floor-picker-level,
+.geolibre-floor-picker.maplibregl-ctrl .geolibre-floor-picker-below {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.geolibre-floor-picker.maplibregl-ctrl button:not(:disabled):hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* A floor drawn because "+ below" is on. */
+.geolibre-floor-picker.maplibregl-ctrl button[data-shown="true"],
+.geolibre-floor-picker.maplibregl-ctrl button[data-shown="true"]:not(:disabled):hover {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+/* The chosen floor (or All): keeps its fill and label while hovered. */
+.geolibre-floor-picker.maplibregl-ctrl button[data-active="true"],
+.geolibre-floor-picker.maplibregl-ctrl button[data-active="true"]:not(:disabled):hover {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+/* The grip under the floor list: drag (or arrow keys) to resize the list. */
+.geolibre-floor-picker .geolibre-floor-picker-grip {
+  display: flex;
+  height: 8px;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid hsl(var(--border));
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip > span {
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip:hover > span,
+.geolibre-floor-picker .geolibre-floor-picker-grip:focus-visible > span {
+  background-color: hsl(var(--foreground));
+}
+
+.geolibre-floor-picker .geolibre-floor-picker-grip:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+/* "+ below" switched on: foreground text on the muted fill (readable in every
+   accent theme; primary-colored text is not, e.g. amber or emerald), marked by
+   a primary bar on the leading edge so the on state still reads at a glance. */
+.geolibre-floor-picker.maplibregl-ctrl .geolibre-floor-picker-below[data-on="true"],
+.geolibre-floor-picker.maplibregl-ctrl
+  .geolibre-floor-picker-below[data-on="true"]:not(:disabled):hover {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border-inline-start: 3px solid hsl(var(--primary));
+}
+
+/* ---------------------------------------------------------------------------
  * Cesium's toolbar widgets on the globe (`cesium-widget-controls.ts`): the
  * home button, the scene-mode picker, and the fullscreen button.
  *

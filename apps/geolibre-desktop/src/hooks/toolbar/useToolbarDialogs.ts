@@ -32,6 +32,15 @@ export function useToolbarDialogs() {
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
+  const [galleryDefaultScope, setGalleryDefaultScope] = useState<"mine" | undefined>(undefined);
+  const openGalleryScope = useCallback((scope?: "mine") => {
+    setGalleryDefaultScope(scope);
+    setGalleryDialogOpen(true);
+  }, []);
+  const handleGalleryDialogOpenChange = useCallback((open: boolean) => {
+    setGalleryDialogOpen(open);
+    if (!open) setGalleryDefaultScope(undefined);
+  }, []);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
@@ -62,6 +71,9 @@ export function useToolbarDialogs() {
     setShareDialogOpen,
     galleryDialogOpen,
     setGalleryDialogOpen,
+    galleryDefaultScope,
+    openGalleryScope,
+    handleGalleryDialogOpenChange,
     aboutOpen,
     setAboutOpen,
     printLayoutOpen,

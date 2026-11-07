@@ -4,6 +4,8 @@ import {
   lineWidthValue,
   normalizeHexColor,
   simpleStyleNumberValue,
+  strokeOpacityPaintValue,
+  strokeOpacityValue,
   styleValue,
   vectorCircleColorValue,
   vectorColorExpression,
@@ -215,10 +217,12 @@ export function createFeatureStyleResolver(style: LayerStyle | undefined): Featu
     styleValue(s, "strokeWidth"),
     asNumber,
   );
+  // The layer's stroke opacity, which a per-feature simplestyle
+  // stroke-opacity replaces, as on the 2D map (strokeOpacityPaintValue).
   const strokeOpacity = compileChannel(
-    simpleStyleNumberValue(s, "stroke-opacity", 1),
+    strokeOpacityPaintValue(s),
     "number",
-    1,
+    strokeOpacityValue(s),
     asNumber,
   );
   const radius = compileChannel(

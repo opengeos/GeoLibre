@@ -163,6 +163,26 @@ describe("printLayoutReducer: map frame", () => {
     assert.equal(full.layout.mapBackground, "#123");
   });
 
+  it("commits only complete hex page backgrounds but always keeps the draft", () => {
+    const partial = run(stateWith({ pageBackground: "#ffffff" }), {
+      type: "commitPageBackground",
+      value: "#0d1",
+    });
+    assert.equal(partial.pageBackgroundDraft, "#0d1");
+    assert.equal(partial.layout.pageBackground, "#0d1");
+    const typing = run(partial, { type: "commitPageBackground", value: "#0d1b" });
+    assert.equal(typing.pageBackgroundDraft, "#0d1b");
+    assert.equal(typing.layout.pageBackground, "#0d1");
+    // Five digits are neither #RGB nor #RRGGBB: still only a draft.
+    const fiveDigits = run(typing, { type: "commitPageBackground", value: "#0d1b2" });
+    assert.equal(fiveDigits.pageBackgroundDraft, "#0d1b2");
+    assert.equal(fiveDigits.layout.pageBackground, "#0d1");
+    const full = run(fiveDigits, { type: "commitPageBackground", value: "#0d1b2a" });
+    assert.equal(full.layout.pageBackground, "#0d1b2a");
+    // The map background is a separate colour and stays as it was.
+    assert.equal(full.layout.mapBackground, partial.layout.mapBackground);
+  });
+
   it("switches to the extent when one is drawn and back when cleared", () => {
     const drawn = run(stateWith(), { type: "extentDrawn", extent: [1, 2, 3, 4] });
     assert.deepEqual(drawn.layout.extentBbox, [1, 2, 3, 4]);

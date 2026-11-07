@@ -395,6 +395,28 @@
     "openWebApp": "Open the GeoLibre web app"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "This IMDF archive could not be read: {{reason}}",
+        "invalidJson": "{{file}} is not valid JSON ({{detail}})",
+        "entryTooLarge": "{{file}} is larger than 256 MB",
+        "tooLarge": "its GeoJSON files add up to more than 512 MB"
+      },
+      "layer": {
+        "venue": "Venue",
+        "footprint": "Footprints",
+        "level": "Levels",
+        "section": "Sections",
+        "unit": "Units",
+        "fixture": "Fixtures",
+        "detail": "Details",
+        "opening": "Openings",
+        "kiosk": "Kiosks",
+        "geofence": "Geofences",
+        "amenity": "Amenities",
+        "occupant": "Occupants"
+      }
+    },
     "title": "Add data",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "Add LandXML layer",
         "description": "Import LandXML TIN surfaces, horizontal alignments, vertical profile metadata, and survey points with source CRS reprojection."
+      },
+      "indoorgml": {
+        "label": "Add IndoorGML layer",
+        "description": "Import an OGC IndoorGML building: rooms extruded to their real heights and the navigation network, linked to the floor picker."
       },
       "georss": {
         "label": "Add GeoRSS layer",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Common coordinate systems…",
       "crsHelp": "Leave blank only when the coordinates are already WGS84 longitude and latitude. LandXML coordinates are read as northing, easting, and elevation.",
       "detectedCoordinateSystem": "LandXML coordinate system: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML file",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML file data is missing.",
+      "readError": "Could not read this IndoorGML file.",
+      "errorChooseFile": "Choose an IndoorGML file.",
+      "errorUrl": "Enter an IndoorGML URL.",
+      "errorTooLarge": "This IndoorGML file is larger than 200 MB.",
+      "errorMissingCrs": "This IndoorGML file names no coordinate system and its coordinates are not longitude/latitude. Enter its CRS, or choose to place it at the map centre.",
+      "summary": "{{cells}} cells on {{floors}} floors, {{transitions}} navigation edges.",
+      "crs": "Source CRS",
+      "crsPlaceholder": "e.g. EPSG:25832",
+      "crsPresetLabel": "Common coordinate systems…",
+      "local": "Local coordinates: place the building at the map centre",
+      "crsHelp": "Many IndoorGML files have no CRS. Enter the EPSG code of their coordinates, or, for a model in a local building frame (metres from an origin), place it at the map centre to view it.",
+      "layer": {
+        "cells": "{{name}} cells",
+        "transitions": "{{name}} navigation network",
+        "states": "{{name}} navigation nodes"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS layer",
@@ -2207,6 +2256,12 @@
       "none": "None (borderless)"
     },
     "mapBackground": "Map background",
+    "pageBackground": "Page background",
+    "panelTheme": "Map panels",
+    "panelThemeOption": {
+      "light": "Light",
+      "dark": "Dark"
+    },
     "scaleLabel": "Scale (1:N)",
     "scalePlaceholder": "e.g. 25000",
     "scalePresets": "Presets…",
@@ -3689,6 +3744,7 @@
       "photos": "Geotagged photos",
       "gpx": "GPX layer",
       "landxml": "LandXML layer",
+      "indoorgml": "IndoorGML layer",
       "polyline": "Encoded polyline",
       "mbtiles": "MBTiles layer",
       "xyz": "XYZ layer",
@@ -4328,6 +4384,17 @@
     "windowClose": {
       "savePromptTitle": "Save changes before closing?",
       "savePromptDescription": "The current project has unsaved changes. Save them before closing GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "Sign in to save project",
+      "signInDescriptionOAuth": "Sign in to {{shareHost}} to save your project on the server.",
+      "signInDescriptionToken": "A personal API token is required to save projects to {{shareHost}}. Add your token in Settings to continue.",
+      "signInButton": "Sign in",
+      "openSettingsButton": "Open Settings",
+      "saveTitle": "Save project to server",
+      "saveDesc": "Enter a project name. The project will be saved as a private project on {{shareHost}}.",
+      "noProjectId": "The project server did not return a project ID.",
+      "uploadedNotLinked": "\"{{name}}\" was saved to {{shareHost}}, but the session or project changed during the save, so it was not linked to this map. Open it from the Gallery to keep working on it."
     },
     "error": {
       "couldNotOpenProject": "Could not open project.",
@@ -8515,6 +8582,14 @@
     "noLayer": "Select a vector layer to save or apply styles."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Building",
+      "overview": "Overview",
+      "fullModel": "Full model",
+      "disciplinesHint": "Choose the disciplines and categories of the building model to draw.",
+      "drawnCount_one": "{{count}} sublayer drawn.",
+      "drawnCount_other": "{{count}} sublayers drawn."
+    },
     "panelLabel": "Layer style",
     "panelLabelCollapsed": "Layer style (collapsed)",
     "heading": "Style",
@@ -8845,6 +8920,17 @@
       "strokeWidthUnit": "Stroke width unit",
       "strokeWidthUnitPixels": "Pixels (constant on screen)",
       "strokeWidthUnitMeters": "Meters (scales with map)",
+      "strokeOpacity": "Stroke opacity",
+      "lineStyle": "Line style",
+      "lineStyleSolid": "Solid",
+      "lineStyleDashed": "Dashed",
+      "lineStyleDotted": "Dotted",
+      "lineStyleDashDot": "Dash-dot",
+      "lineStyleLongDash": "Long dash",
+      "lineStyleCustom": "Custom",
+      "lineDashPattern": "Dash pattern",
+      "lineDashPatternHint": "Dash and gap lengths in multiples of the stroke width, such as 4 2 1 2.",
+      "lineBlur": "Line blur (px)",
       "textHaloColor": "Text halo color",
       "textHaloWidth": "Text halo width",
       "schemeEqualInterval": "Equal interval",
@@ -9194,6 +9280,25 @@
     "noTileFeatures": "No features are loaded yet. Pan or zoom to the data, then reopen this section.",
     "viewportSampleHint": "Values come from the tiles currently loaded, so the list grows as you pan and zoom.",
     "layerFilteredHint": "A quick filter is hiding some of this layer's features."
+  },
+  "floorPicker": {
+    "title": "Floor picker",
+    "short": "Floor",
+    "all": "All",
+    "allTitle": "Show every floor",
+    "levelTitle_one": "Floor {{level}} ({{count}} feature)",
+    "levelTitle_other": "Floor {{level}} ({{count}} features)",
+    "below": "+ below",
+    "belowTitle": "Also show the floors below the chosen one",
+    "resize": "Resize the floor list",
+    "resizeTitle": "Drag to resize the floor list. Double-click to reset.",
+    "heading": "Floor picker",
+    "field": "Floor field",
+    "off": "Off",
+    "hint": "Choose the field that holds each feature's floor to list this layer in the on-map floor picker.",
+    "linkedHint_one": "{{count}} floor listed in the on-map floor picker.",
+    "linkedHint_other": "{{count}} floors listed in the on-map floor picker.",
+    "noLevels": "No floors found in \"{{field}}\". Choose the field that holds a number or a level such as \"0\" or \"-1;0\"."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML export could not write feature {{position}} because it has invalid coordinates.",

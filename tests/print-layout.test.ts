@@ -738,6 +738,222 @@ describe("drawLayout cartographic furniture", () => {
     assert.equal(footer.textAlign, "center");
   });
 
+  describe("footer text fit", () => {
+    // A context whose text width grows with the string and the font size, and
+    // which records the maximum width and the font each fillText was given.
+    function footerCanvas() {
+      const fills: { text: string; maxWidth?: number; fontPx: number }[] = [];
+      const state: Record<string, unknown> = { font: "10px sans-serif" };
+      const fontPx = () => Number(/([\d.]+)px/.exec(String(state.font))?.[1] ?? 10);
+      const ctx = new Proxy(state, {
+        get(target, prop) {
+          if (prop === "measureText") {
+            return (text: string) => ({ width: text.length * fontPx() * 0.5 });
+          }
+          if (prop === "fillText") {
+            return (text: string, _x: number, _y: number, maxWidth?: number) =>
+              fills.push({ text, maxWidth, fontPx: fontPx() });
+          }
+          if (prop in target) return target[prop as string];
+          return () => {};
+        },
+        set(target, prop, value) {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+      const canvas = {
+        width: 400,
+        height: 400,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      return { canvas, fills };
+    }
+    // 400 × 400 page, normal margin: unit 4, margin 20, footer font 8.8 px.
+    const footerOf = (overrides: Partial<LayoutOptions>, text: string) => {
+      const { canvas, fills } = footerCanvas();
+      drawLayout(canvas, baseOptions({ showFooter: true, footerText: text, ...overrides }));
+      const footer = fills.find((f) => f.text === text);
+      assert.ok(footer, "expected the footer text to be drawn");
+      return footer;
+    };
+
+    it("gives the footer the whole printable width when nothing sits beside it", () => {
+      const footer = footerOf({ showAttribution: false, showDate: false }, "My Org");
+      assert.equal(footer.maxWidth, 360);
+      assert.equal(footer.fontPx, 8.8);
+    });
+
+    it("gives the footer the room the attribution leaves, not a fixed third", () => {
+      // "Created with GeoLibre" is 21 × 4.4 = 92.4 px wide; with a 8 px gap on
+      // each side the footer keeps 360 - 2 × 100.4 px, more than the old 120.
+      const footer = footerOf({ showAttribution: true, showDate: false }, "My Org");
+      assert.ok(Math.abs((footer.maxWidth ?? 0) - 159.2) < 1e-9, String(footer.maxWidth));
+    });
+
+    it("shrinks a long footer's font before letting the canvas compress it", () => {
+      // 100 characters are 440 px at 8.8 px: the font drops to 8.8 × 360 / 440.
+      const footer = footerOf({ showAttribution: false }, "x".repeat(100));
+      assert.ok(Math.abs(footer.fontPx - 7.2) < 1e-9, String(footer.fontPx));
+      assert.equal(footer.maxWidth, 360);
+    });
+
+    it("stops shrinking at three quarters of the footer font", () => {
+      const footer = footerOf({ showAttribution: false }, "x".repeat(200));
+      assert.ok(Math.abs(footer.fontPx - 6.6) < 1e-9, String(footer.fontPx));
+      assert.equal(footer.maxWidth, 360);
+    });
+
+    it("keeps the attribution within a third of the printable width", () => {
+      const { canvas, fills } = footerCanvas();
+      drawLayout(
+        canvas,
+        baseOptions({ showAttribution: true, showFooter: true, footerText: "My Org" }),
+      );
+      const attribution = fills.find((f) => f.text === "Created with GeoLibre");
+      assert.equal(attribution?.maxWidth, 120);
+    });
+  });
+
+  describe("page background", () => {
+    // Records the colour each rectangle and each text is filled with.
+    function colourCanvas() {
+      const rects: string[] = [];
+      const texts: { text: string; fillStyle: string }[] = [];
+      const state: Record<string, unknown> = {};
+      const ctx = new Proxy(state, {
+        get(target, prop) {
+          if (prop === "measureText") return () => ({ width: 10 });
+          if (prop === "fillRect") return () => rects.push(String(target.fillStyle));
+          if (prop === "fillText") {
+            return (text: string) => texts.push({ text, fillStyle: String(target.fillStyle) });
+          }
+          if (prop in target) return target[prop as string];
+          return () => {};
+        },
+        set(target, prop, value) {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+      const canvas = {
+        width: 400,
+        height: 400,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      return { canvas, rects, texts };
+    }
+    const page = (overrides: Partial<LayoutOptions>) => {
+      const { canvas, rects, texts } = colourCanvas();
+      drawLayout(
+        canvas,
+        baseOptions({
+          title: "Fiumi",
+          subtitle: "Veneto",
+          showLegend: false,
+          showFooter: true,
+          footerText: "Dati ARPAV",
+          ...overrides,
+        }),
+      );
+      const colourOf = (text: string) => texts.find((t) => t.text === text)?.fillStyle;
+      return { pageFill: rects[0], colourOf };
+    };
+
+    it("paints a white page with dark text by default", () => {
+      const { pageFill, colourOf } = page({});
+      assert.equal(pageFill, "#ffffff");
+      assert.equal(colourOf("Fiumi"), "#111827");
+      assert.equal(colourOf("Veneto"), "#6b7280");
+      assert.equal(colourOf("Dati ARPAV"), "#6b7280");
+    });
+
+    it("paints the chosen colour and switches the page text to light on a dark page", () => {
+      const { pageFill, colourOf } = page({ pageBackground: "#0d1b2a" });
+      assert.equal(pageFill, "#0d1b2a");
+      assert.equal(colourOf("Fiumi"), "#f9fafb");
+      assert.equal(colourOf("Veneto"), "#cbd5e1");
+      assert.equal(colourOf("Dati ARPAV"), "#cbd5e1");
+      assert.equal(colourOf("Created with GeoLibre"), "#cbd5e1");
+    });
+
+    it("keeps dark text on a light page colour", () => {
+      const { pageFill, colourOf } = page({ pageBackground: "#f5f0e6" });
+      assert.equal(pageFill, "#f5f0e6");
+      assert.equal(colourOf("Fiumi"), "#111827");
+    });
+  });
+
+  describe("map panel theme", () => {
+    // Records the colour each path or rectangle is filled with, and each text's colour.
+    function themeCanvas() {
+      const fills: string[] = [];
+      const texts: { text: string; fillStyle: string }[] = [];
+      const state: Record<string, unknown> = {};
+      const ctx = new Proxy(state, {
+        get(target, prop) {
+          if (prop === "measureText") return () => ({ width: 10 });
+          if (prop === "fill" || prop === "fillRect")
+            return () => fills.push(String(target.fillStyle));
+          if (prop === "fillText") {
+            return (text: string) => texts.push({ text, fillStyle: String(target.fillStyle) });
+          }
+          if (prop in target) return target[prop as string];
+          return () => {};
+        },
+        set(target, prop, value) {
+          target[prop as string] = value;
+          return true;
+        },
+      });
+      const canvas = {
+        width: 400,
+        height: 400,
+        getContext: () => ctx,
+      } as unknown as HTMLCanvasElement;
+      return { canvas, fills, texts };
+    }
+    const draw = (panelTheme?: "light" | "dark") => {
+      const { canvas, fills, texts } = themeCanvas();
+      drawLayout(
+        canvas,
+        baseOptions({
+          title: "Fiumi",
+          titlePlacement: "inside",
+          showNorthArrow: true,
+          showScaleBar: true,
+          metersPerPixel: 10,
+          mapImage: {} as CanvasImageSource,
+          mapImageWidth: 400,
+          mapImageHeight: 400,
+          ...(panelTheme ? { panelTheme } : {}),
+        }),
+      );
+      const colourOf = (text: string) => texts.find((t) => t.text === text)?.fillStyle;
+      return { fills, colourOf };
+    };
+
+    it("draws white panels with dark text by default", () => {
+      const { fills, colourOf } = draw();
+      assert.ok(fills.includes("rgba(255,255,255,0.7)"), "inside title band");
+      assert.ok(fills.includes("rgba(255,255,255,0.78)"), "north arrow and scale bar");
+      assert.ok(fills.includes("rgba(255,255,255,0.85)"), "legend");
+      assert.equal(colourOf("Fiumi"), "#111827");
+      assert.equal(colourOf("Roads"), "#111827");
+    });
+
+    it("draws dark panels with light text when asked", () => {
+      const { fills, colourOf } = draw("dark");
+      assert.ok(!fills.some((f) => f.startsWith("rgba(255,255,255")), JSON.stringify(fills));
+      assert.ok(fills.includes("rgba(17,24,39,0.7)"), "inside title band");
+      assert.ok(fills.includes("rgba(17,24,39,0.78)"), "north arrow and scale bar");
+      assert.ok(fills.includes("rgba(17,24,39,0.85)"), "legend");
+      assert.equal(colourOf("Fiumi"), "#f9fafb");
+      assert.equal(colourOf("Roads"), "#f9fafb");
+      assert.equal(colourOf("N"), "#f9fafb");
+    });
+  });
+
   it("omits the attribution when showAttribution is false", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(canvas, baseOptions({ showAttribution: false }));

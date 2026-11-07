@@ -337,6 +337,23 @@ share_url = os.environ.get("GEOLIBRE_SHARE_URL", "").strip()
 if share_url:
     deployment["VITE_GEOLIBRE_SHARE_URL"] = normalize_share_url(share_url)
 
+# Default project storage backend ("local" or "server"). Default is "local" (unset).
+# "server" routes Save and Save As to the configured projects server.
+project_storage = os.environ.get("GEOLIBRE_PROJECT_STORAGE", "").strip().lower()
+if project_storage:
+    if project_storage not in ("local", "server"):
+        raise SystemExit("ERROR: GEOLIBRE_PROJECT_STORAGE must be local or server.")
+    if project_storage == "server":
+        if not share_url:
+            raise SystemExit(
+                "ERROR: GEOLIBRE_PROJECT_STORAGE=server requires GEOLIBRE_SHARE_URL to be set."
+            )
+        if share_url.lower() == "off":
+            raise SystemExit(
+                "ERROR: GEOLIBRE_PROJECT_STORAGE=server cannot be used with GEOLIBRE_SHARE_URL=off."
+            )
+    deployment["VITE_GEOLIBRE_PROJECT_STORAGE"] = project_storage
+
 # Display name for the app chrome (toolbar label, browser tab). Unset keeps
 # "GeoLibre". It is rendered as text, never markup, and json.dump below escapes
 # it for the generated script, so no further validation is needed here.
@@ -387,6 +404,11 @@ if [ -n "$(trim "${GEOLIBRE_SHARE_URL:-}")" ]; then
     [oO][fF][fF]) echo "Project sharing disabled (GEOLIBRE_SHARE_URL=off)." ;;
     *) echo "Project sharing server: $SHARE_URL_LOG" ;;
   esac
+fi
+
+if [ -n "$(trim "${GEOLIBRE_PROJECT_STORAGE:-}")" ]; then
+  PROJECT_STORAGE_LOG=$(trim "$GEOLIBRE_PROJECT_STORAGE" | tr '[:upper:]' '[:lower:]')
+  echo "Default project storage: $PROJECT_STORAGE_LOG"
 fi
 
 if [ -n "$(trim "${GEOLIBRE_COLLAB_URL:-}")" ]; then

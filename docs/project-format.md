@@ -142,7 +142,8 @@ carries no `printLayout` key.
   `title` follows the project name rather than freezing a copy of it.
 - Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
   `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
-  `customUnit` for `custom`, `pageMargin`, and the page/map frame colours.
+  `customUnit` for `custom`, `pageMargin`, `pageBackground`, `panelTheme`
+  (`light` or `dark`), and the page/map frame colours.
 - Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
   date, attribution, colorbar, custom legend and info block, with their
   per-element settings.
@@ -320,6 +321,9 @@ off in the app does not edit it.
     "strokeColor": "#1e40af",
     "strokeWidth": 2,
     "strokeWidthUnit": "pixels",
+    "strokeOpacity": 1,
+    "strokeDash": [],
+    "strokeBlur": 0,
     "fillOpacity": 0.6,
     "circleRadius": 6,
     "rasterBrightnessMin": 0,
@@ -520,6 +524,29 @@ non-matching features without changing or copying the source data:
 The expression is saved with the project and remains active until it is cleared
 from the Select by Expression panel or from the layer's **Clear filters** action.
 It combines with Quick Filters and the transient filters described below.
+
+A layer linked to the on-map floor picker carries a `levelFilter`: the field
+holding each feature's floor, the picker's `mode` (`all`, `only`, or `below`
+for a floor and the ones under it), the chosen `level` as the picker labels it,
+and the raw `values` of that field that match the choice:
+
+```json
+{
+  "levelFilter": {
+    "field": "level",
+    "mode": "only",
+    "level": "0",
+    "values": ["0", "0;1", "-1-0"]
+  }
+}
+```
+
+The `values` are resolved from the layer's features when a floor is chosen
+(they include OpenStreetMap's multi-floor values such as `0;1`), and the layer is
+filtered with `["in", ["get", field], ["literal", values]]`, combined with the
+layer's other filters under one `all`. A link without `values` draws every floor
+until the app resolves them from the layer's features. Every linked layer shares
+one choice.
 
 What is stored is a plain MapLibre expression, so the Expression Builder's `@`
 variables (`@project_name`, `@layer_name`, `@feature_count`, `@map_zoom`,

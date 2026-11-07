@@ -1,0 +1,3 @@
+# basemaps
+
+::: geolibre.basemaps

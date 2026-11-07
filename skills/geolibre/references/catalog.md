@@ -126,6 +126,6 @@ typed iframe client published to npm. See
   raster tools. Not needed to author a project.
 - **AI Assistant** — the app's own in-panel chat, which acts through the app's
   store so its edits are undoable. A different thing from this skill.
-- **Processing** — ~800 Whitebox WASM tools plus a client-side Turf.js registry,
+- **Processing** — 1,000+ Whitebox WASM tools plus a client-side Turf.js registry,
   reachable from Python via `Map.run_algorithm` / `Map.run_whitebox_tool` in a
   notebook.

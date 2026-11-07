@@ -57,6 +57,7 @@ nav:
       - Chrome Extension: user-guide/chrome-extension.md
       - Managing Layers: user-guide/layers.md
       - Styling Layers: user-guide/styling.md
+      - Indoor Maps and BIM: user-guide/indoor-maps.md
       - Attribute Table: user-guide/attribute-table.md
       - Map Controls & Tools: user-guide/map-controls.md
       - GPS Tracking & Field Collection: user-guide/field-collection.md
@@ -74,6 +75,8 @@ nav:
       - Cloud Storage (S3): user-guide/cloud-storage.md
       - Plugins & Marketplace: user-guide/plugins.md
       - Web Services: user-guide/web-services.md
+      - Editing ArcGIS Services: arcgis-editing.md
+      - USGS NLDI Workflows: user-guide/usgs-nldi.md
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
@@ -121,6 +124,18 @@ nav:
       - Deployment Policy: deployment-policy.md
       - Internationalization: i18n.md
       - Python Package: python.md
+      - Python API Reference:
+          - Overview: python-api/index.md
+          - Map, Layer and Feature: python-api/map.md
+          - authoring: python-api/authoring.md
+          - project: python-api/project.md
+          - color_ramp: python-api/color_ramp.md
+          - legends: python-api/legends.md
+          - basemaps: python-api/basemaps.md
+          - polyline: python-api/polyline.md
+          - pointcloud: python-api/pointcloud.md
+          - spaceborne_lidar: python-api/spaceborne_lidar.md
+          - dash_component: python-api/dash_component.md
       - R Package: r.md
       - MCP Server: mcp.md
       - Agent Skill: agent-skill.md
@@ -136,6 +151,30 @@ nav:
 
 plugins:
   - search
+  # Python API reference (docs/python-api/), rendered from the geolibre
+  # package's docstrings. Griffe reads python/src statically, so the docs build
+  # does not need to install geolibre or its optional dependencies.
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python/src]
+          options:
+            # Render the docstrings' Sphinx roles (:meth:`x`) as inline code.
+            extensions:
+              - scripts/griffe_sphinx_roles.py:SphinxRoles
+            docstring_style: google
+            show_source: false
+            show_root_heading: false
+            show_root_toc_entry: false
+            heading_level: 2
+            members_order: source
+            filters: ["!^_"]
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
 
 markdown_extensions:
   - admonition

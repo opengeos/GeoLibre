@@ -46,6 +46,26 @@ capabilities, credentials, and current compatibility.
 - **[Rendering engines](https://geolibre.app/user-guide/rendering-engines/)** — compare MapLibre, Mapbox, Cesium, and ArcGIS and learn how to switch or combine them.
 - **[Open data gallery](https://geolibre.app/gallery/)** — 105 live projects built from public open data, grouped by theme: health, natural hazards, climate, oceans and water, nature, transport, cities, energy, space, history and culture, society and economy, and food.
 
+## Statement of need
+
+Working with geospatial data usually means installing and maintaining a desktop GIS on every machine, or moving data and computation onto a hosted cloud platform behind an account. Both are barriers in teaching and workshops, in the field, on locked-down institutional computers, and whenever data are sensitive. GeoLibre is a GIS that opens from a URL, reads cloud-native formats (e.g., COG, GeoParquet, PMTiles, FlatGeobuf, Zarr, STAC) in place, runs its analysis on your own device by default (an optional, self-hosted Python sidecar can take over some tools), and saves the whole map as an open, documented project file that anyone can reopen, share, or keep under version control.
+
+It is built for researchers and students who need to inspect and analyze geospatial data without setting up a software environment, for instructors who need every participant on the same working tool within minutes, and for data scientists who want an interactive GIS tied to their Python or R code. See [GeoLibre vs. other GIS platforms](https://geolibre.app/comparison/) for how it relates to QGIS, ArcGIS, kepler.gl, and others.
+
+## Installation
+
+| Where | How |
+| --- | --- |
+| Web browser | Open [web.geolibre.app](https://web.geolibre.app/). Nothing to install. |
+| Windows, macOS, Linux | Installers and package managers on the [Downloads](https://geolibre.app/downloads/) page, or the Microsoft Store, Mac App Store, AUR, and Flatpak links above. |
+| Android and iOS | Google Play and the App Store (links above). |
+| Python and Jupyter | `pip install geolibre` or `conda install -c conda-forge geolibre`; optional extras such as `geolibre[all]` are described in the [Python guide](https://geolibre.app/python/). |
+| R | See the [R package](https://r.geolibre.app/) website. |
+| From source | `git clone https://github.com/opengeos/GeoLibre.git && cd GeoLibre && npm install && npm run dev` (Node.js 22+; the desktop build also needs Rust). See [Run from source](https://geolibre.app/getting-started/#run-from-source). |
+| Docker / self-hosting | See [Run with Docker](https://geolibre.app/getting-started/#run-with-docker) and [Self-hosting](https://geolibre.app/self-hosting/). |
+
+JavaScript dependencies are pinned in `package-lock.json` and installed by `npm install`; Python dependencies are declared in `python/pyproject.toml` and `backend/geolibre_server/pyproject.toml`.
+
 ## Demos
 
 **Click any screenshot to open it at full resolution, or any animation to play the full-quality video.**
@@ -181,8 +201,31 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [How to Cite](docs/citation.md)
   - [Become a Sponsor](docs/sponsor.md)
 
-Contributions are welcome. See the [Contributing](docs/contributing.md) guide
-for the development setup, repository layout, and quality gate.
+## Testing
+
+Every pull request runs the test suites in continuous integration. To run them locally from a source checkout:
+
+```bash
+npm install                                          # JavaScript dependencies, needed by the npm scripts below
+npm run test:frontend                                # TypeScript unit and component tests
+pip install -e "backend/geolibre_server[test]"
+npm run test:backend                                 # Python sidecar tests (pytest)
+pip install -e "python[dev]" && (cd python && pytest)  # the geolibre Python package
+npx playwright install chromium && npm run test:e2e  # end-to-end tests against the built web app
+npm run ci                                           # the full gate CI runs
+```
+
+See [Quality checks](https://geolibre.app/contributing/#quality-checks) for what each gate covers.
+
+## Contributing and support
+
+Contributions are welcome. See the [Contributing](docs/contributing.md) guide for the development setup, repository layout, and quality gate.
+
+- **Questions:** ask in [GitHub Discussions](https://github.com/opengeos/GeoLibre/discussions).
+- **Bugs and feature requests:** open an [issue](https://github.com/opengeos/GeoLibre/issues/new/choose).
+- **Security vulnerabilities:** report them privately through [GitHub security advisories](https://github.com/opengeos/GeoLibre/security/advisories/new).
+
+See [SUPPORT.md](SUPPORT.md) for details. Everyone taking part in the project is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Sponsor
 
@@ -211,7 +254,7 @@ If you use GeoLibre in your work, please cite it. GeoLibre is archived on [Zenod
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
 
-> Wu, Q. (2026). GeoLibre: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. Zenodo. <https://doi.org/10.5281/zenodo.20785400>
+> Wu, Q., & Hofbauer, D. (2026). GeoLibre: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. Zenodo. <https://doi.org/10.5281/zenodo.20785400>
 
 You can also use GitHub's **"Cite this repository"** button (which reads [`CITATION.cff`](CITATION.cff)) to copy a ready-made APA or BibTeX entry. See the [How to Cite](https://geolibre.app/citation/) page for more formats.
 

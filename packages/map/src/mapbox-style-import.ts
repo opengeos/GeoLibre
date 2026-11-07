@@ -2,6 +2,9 @@ import {
   DEFAULT_LAYER_STYLE,
   VECTOR_COLOR_RAMPS,
   mercatorMetersPerPixelAtZoom0,
+  readSimpleStyleNumberLookup,
+  isStrokeDashPattern,
+  readsSimpleStyleProperties,
   type LabelStyle,
   type LayerStyle,
   type VectorStyleStop,
@@ -120,11 +123,60 @@ function asFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * A number paint value, also read through the simplestyle lookup the exporter
+ * writes when a layer has `simpleStyleEnabled`: the bare
+ * `["to-number", ["coalesce", ["get", key], base], base]` gives `base`. For an
+ * opacity (`foldsOpacity`), the exporter's fold `["*", lookup, opacity]` gives
+ * `base * opacity`, the same value a flat export of that layer carries; the
+ * exporter never folds anything into a width, so there it stays unread.
+ * `key` is the simplestyle property the paint value's own lookup reads (as
+ * `stroke-opacity` for `line-opacity`); a lookup of another property is not
+ * the exporter's and stays unread, since the renderer would read `key`.
+ */
+function asLayerNumber(
+  value: unknown,
+  key: SimpleStyleNumberKey,
+  foldsOpacity = false,
+): number | null {
+  const flat = asFiniteNumber(value);
+  if (flat !== null) return flat;
+  const array = asArray(value);
+  if (!array) return null;
+  const read = (node: unknown) => {
+    const lookup = readSimpleStyleNumberLookup(node);
+    return lookup?.property === key ? lookup : null;
+  };
+  if (foldsOpacity && array[0] === "*" && array.length === 3) {
+    const lookup = read(array[1]);
+    const scale = asFiniteNumber(array[2]);
+    return lookup && scale !== null ? lookup.base * scale : null;
+  }
+  return read(array)?.base ?? null;
+}
+
+/** The simplestyle number properties the exporter's lookups read. */
+type SimpleStyleNumberKey = NonNullable<ReturnType<typeof readSimpleStyleNumberLookup>>["property"];
+
+/** The paint properties the exporter writes simplestyle lookups into and the import reads. */
+const SIMPLE_STYLE_PAINT = [
+  "fill-color",
+  "fill-opacity",
+  "fill-outline-color",
+  "line-color",
+  "line-width",
+  "line-opacity",
+  "circle-color",
+  "circle-opacity",
+  "circle-stroke-opacity",
+] as const;
+
+/**
  * Warn (rather than silently keep the old value) when a numeric paint property
  * is present but data-driven in a shape the importer cannot flatten, mirroring
  * how `fill-opacity` is handled.
  */
 function warnUnreadableNumber(value: unknown, description: string, warnings: string[]): void {
+  // Plain numbers only: the callers apply no simplestyle lookup, so a lookup here is unread.
   if (value !== undefined && asFiniteNumber(value) === null) {
     warnings.push(
       `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
@@ -585,7 +637,7 @@ function parseLineWidth(
   patch: Partial<Omit<LayerStyle, "labels">>,
   warnings: string[],
 ): void {
-  const flat = asFiniteNumber(value);
+  const flat = asLayerNumber(value, "stroke-width");
   if (flat !== null) {
     patch.strokeWidth = flat;
     patch.strokeWidthUnit = "pixels";
@@ -620,6 +672,192 @@ function parseLineWidth(
   warnings.push(
     "A line width expression could not be read; the layer keeps its current stroke width.",
   );
+}
+
+/**
+ * What a style says about one line paint property the layer style holds: a
+ * value to import, a note when it cannot be imported, or `null` when the
+ * property is unset (its spec default).
+ */
+type LinePaintRead<T> = { value: T } | { note: string } | null;
+
+/** Whether a paint value is an expression (an array led by its operator name). */
+function isExpression(value: unknown): boolean {
+  return Array.isArray(value) && typeof value[0] === "string";
+}
+
+/**
+ * Read a `line-opacity` into a stroke opacity. A flat number in [0, 1] is
+ * taken as is; so is the exporter's simplestyle `stroke-opacity` lookup,
+ * whose base is the stroke opacity (times the layer opacity the exporter
+ * folds in as `["*", lookup, opacity]`, read like a flat export's folded
+ * value). Other expressions and `{ stops }` functions vary, which one number
+ * cannot hold; anything else is invalid.
+ */
+function readLineOpacity(given: unknown): LinePaintRead<number> {
+  const raw = unwrapLiteral(given);
+  if (raw == null) return null;
+  const opacity =
+    raw === given || !Array.isArray(raw) ? asLayerNumber(raw, "stroke-opacity", true) : null;
+  if (opacity !== null) {
+    return opacity >= 0 && opacity <= 1
+      ? { value: opacity }
+      : { note: UNREADABLE_LINE_OPACITY_NOTE };
+  }
+  // A simplestyle lookup scaled by something other than a number is malformed, not varying.
+  const array = asArray(raw);
+  if (array?.[0] === "*" && readSimpleStyleNumberLookup(array[1])) {
+    return { note: UNREADABLE_LINE_OPACITY_NOTE };
+  }
+  // A `literal`'s array value is data, not an expression.
+  return (raw === given && isExpression(raw)) || isStopsFunction(raw)
+    ? { note: VARYING_LINE_OPACITY_NOTE }
+    : { note: UNREADABLE_LINE_OPACITY_NOTE };
+}
+
+/**
+ * Read a `line-dasharray` into a dash pattern: a list of non-negative lengths,
+ * bare or wrapped in `literal`. Mapbox GL also accepts an expression here
+ * (a zoom `step` between patterns), which one pattern cannot hold.
+ */
+function readLineDash(given: unknown): LinePaintRead<number[]> {
+  if (given == null) return null;
+  const literal = unwrapLiteral(given);
+  if (Array.isArray(literal) && (literal !== given || !isExpression(literal))) {
+    if (literal.length === 0) return { value: [] };
+    return isStrokeDashPattern(literal)
+      ? { value: [...literal] }
+      : {
+          note: "The line dash pattern is not a list of non-negative lengths and was not applied.",
+        };
+  }
+  return isExpression(given) || isStopsFunction(given)
+    ? {
+        note: "The line dash pattern changes with zoom, which the layer style cannot hold; the lines keep their current dash pattern.",
+      }
+    : { note: "The line dash pattern is not a list of non-negative lengths and was not applied." };
+}
+
+/** Read a `line-blur` into a blur in pixels. */
+function readLineBlur(given: unknown): LinePaintRead<number> {
+  const raw = unwrapLiteral(given);
+  if (raw == null) return null;
+  const blur = asFiniteNumber(raw);
+  if (blur !== null) {
+    return blur >= 0 ? { value: blur } : { note: "The line blur is negative and was not applied." };
+  }
+  return isExpression(raw) || isStopsFunction(raw)
+    ? {
+        note: "The line blur varies by zoom or by feature, which the layer style cannot hold; the lines keep their current blur.",
+      }
+    : { note: "The line blur is not a valid number and was not applied." };
+}
+
+/**
+ * Apply one line paint property to the patch from the layer the import reads
+ * (`own`), resetting it to `unset` when that layer leaves it at the spec
+ * default, and return the note to report, if any. `stack` holds the same
+ * property read from every class of a stack combined into rules. The imported
+ * layer's own note (a varying or unreadable value) is reported as is; when
+ * that layer's value applied or reset, classes that disagree with it, a class
+ * with an unreadable value included, get `mixedNote`, which says whose value
+ * was used. A class's own note would claim the layer kept its value, which is
+ * not what happened.
+ */
+function applyLinePaint<T>(
+  own: LinePaintRead<T>,
+  stack: LinePaintRead<T>[],
+  unset: T,
+  mixedNote: string,
+  apply: (value: T) => void,
+): string | null {
+  if (own === null) apply(unset);
+  else if ("value" in own) apply(own.value);
+  // The imported layer's own note says what happened to the value. When that
+  // layer's value applied, a class with a note of its own (or another value)
+  // still differs from it, which the mixed note describes.
+  if (own !== null && "note" in own) return own.note;
+  const values = new Set(
+    stack.map((read) =>
+      read !== null && "note" in read
+        ? `note:${read.note}`
+        : JSON.stringify(read === null ? unset : read.value),
+    ),
+  );
+  return values.size > 1 ? mixedNote : null;
+}
+
+/** The note for a `line-opacity` that is not a number in [0, 1], an expression or a stops function. */
+const UNREADABLE_LINE_OPACITY_NOTE =
+  "The line opacity is not a valid number between 0 and 1 and was not applied; the lines keep their current stroke opacity.";
+
+/** The note for a `line-opacity` the layer style cannot hold as one number. */
+const VARYING_LINE_OPACITY_NOTE =
+  "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines keep their current stroke opacity.";
+
+/**
+ * Report the `line` paint properties a GeoLibre layer style cannot hold, so
+ * that, as {@link MapboxStyleImportResult.warnings} promises, none is dropped
+ * silently. Opacity, dash pattern and blur are read separately
+ * ({@link readLineOpacity}, {@link readLineDash}, {@link readLineBlur}).
+ * Values at their spec default are not reported. Only paint is checked: layout
+ * properties such as `line-cap` and `line-join` are left to a separate change.
+ * Each note goes through `report` keyed by its paint property.
+ */
+function warnUnsupportedLinePaint(
+  paint: Record<string, unknown>,
+  report: (property: string, message: string) => void,
+): void {
+  const gap = asFiniteNumber(unwrapLiteral(paint["line-gap-width"]));
+  if (paint["line-gap-width"] != null && gap !== 0) {
+    report(
+      "line-gap-width",
+      "The line gap width (a casing around a gap) cannot be represented; the lines import as single strokes.",
+    );
+  }
+  const offset = asFiniteNumber(unwrapLiteral(paint["line-offset"]));
+  if (paint["line-offset"] != null && offset !== 0) {
+    report(
+      "line-offset",
+      "The line offset cannot be represented; the lines import centered on the geometry.",
+    );
+  }
+  const translate = asArray(unwrapLiteral(paint["line-translate"]));
+  const untranslated =
+    translate?.length === 2 && translate.every((component) => asFiniteNumber(component) === 0);
+  if (paint["line-translate"] != null && !untranslated) {
+    report(
+      "line-translate",
+      "The line translation cannot be represented; the lines import in place on the geometry.",
+    );
+  }
+  if (paint["line-pattern"] != null) {
+    report(
+      "line-pattern",
+      "The line pattern image cannot be represented; the lines import as a flat color.",
+    );
+  }
+  if (paint["line-gradient"] != null) {
+    report(
+      "line-gradient",
+      "The line gradient cannot be represented; the lines import with a single flat color.",
+    );
+  }
+}
+
+/** Whether a value is a legacy `{ stops: [...] }` style function. */
+function isStopsFunction(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { stops?: unknown }).stops)
+  );
+}
+
+/** A `["literal", value]` wrapper's value, or the value itself. */
+function unwrapLiteral(value: unknown): unknown {
+  const array = asArray(value);
+  return array && array.length === 2 && array[0] === "literal" ? array[1] : value;
 }
 
 /**
@@ -1033,9 +1271,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // line/circle layer from contributing the color.
     if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
-    const flatOpacity = asFiniteNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, "fill-opacity", true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The fill opacity is data-driven; the layer keeps its current fill opacity.");
     }
@@ -1079,6 +1321,54 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (paint["line-width"] !== undefined) {
       parseLineWidth(paint["line-width"], patch, warnings);
     }
+    // Check the line layers this import reads: every drawn class of a stack it
+    // combined into rules, otherwise the one `line` above (which is also what
+    // a hidden-only style imports). Notes are keyed by paint property, so each
+    // dropped property is named once however many classes set it. Opacity,
+    // dash and blur come from `line`, like the width; a stack whose classes
+    // disagree on one of them says so.
+    const stacked = appliedStackTypes.has("line");
+    const importedLines = stacked ? byType("line").filter(isDrawn) : [line];
+    const stackPaint = (property: string) =>
+      stacked ? importedLines.map((lineLayer) => (lineLayer.paint ?? {})[property]) : [];
+    const lineNotes = new Map<string, string>();
+    const note = (property: string, message: string | null) => {
+      if (message && !lineNotes.has(property)) lineNotes.set(property, message);
+    };
+    note(
+      "line-opacity",
+      applyLinePaint(
+        readLineOpacity(paint["line-opacity"]),
+        stackPaint("line-opacity").map(readLineOpacity),
+        1,
+        "The stacked line layers use different opacities, which the layer style cannot hold; the lines import at the bottom-most layer's opacity.",
+        (strokeOpacity) => (patch.strokeOpacity = strokeOpacity),
+      ),
+    );
+    note(
+      "line-dasharray",
+      applyLinePaint(
+        readLineDash(paint["line-dasharray"]),
+        stackPaint("line-dasharray").map(readLineDash),
+        [],
+        "The stacked line layers use different dash patterns, which the layer style cannot hold; the lines import with the bottom-most layer's pattern.",
+        (strokeDash) => (patch.strokeDash = strokeDash),
+      ),
+    );
+    note(
+      "line-blur",
+      applyLinePaint(
+        readLineBlur(paint["line-blur"]),
+        stackPaint("line-blur").map(readLineBlur),
+        0,
+        "The stacked line layers use different blurs, which the layer style cannot hold; the lines import with the bottom-most layer's blur.",
+        (strokeBlur) => (patch.strokeBlur = strokeBlur),
+      ),
+    );
+    for (const lineLayer of importedLines) {
+      warnUnsupportedLinePaint(lineLayer.paint ?? {}, note);
+    }
+    warnings.push(...lineNotes.values());
     if (appliedStackTypes.has("line")) applyStackedZoomRange(byType("line"), patch);
     else applyZoomRange(line, patch);
   }
@@ -1110,9 +1400,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // circlePaint writes the layer's fillOpacity into circle-opacity, so a
     // point-only export (no fill layer) recovers its opacity here.
     const opacity = paint["circle-opacity"];
-    const flatOpacity = asFiniteNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, "marker-opacity", true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The circle opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The circle opacity is data-driven; the layer keeps its current fill opacity.");
     }
@@ -1126,6 +1420,35 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       patch.strokeWidthUnit = "pixels";
     } else {
       warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
+    }
+    // A line layer, when there is one, already set the shared stroke opacity;
+    // a point outline that asks for another one cannot have it.
+    if (line) {
+      const pointStrokeOpacity = paint["circle-stroke-opacity"];
+      const readPoint =
+        pointStrokeOpacity === undefined
+          ? 1
+          : asLayerNumber(unwrapLiteral(pointStrokeOpacity), "stroke-opacity", true);
+      if (readPoint === null || readPoint < 0 || readPoint > 1) {
+        warnings.push(
+          "The point outline opacity could not be read as one number between 0 and 1; the point outlines import at the line opacity.",
+        );
+      } else if (patch.strokeOpacity !== undefined && readPoint !== patch.strokeOpacity) {
+        warnings.push(
+          "The point outlines use a different opacity from the lines, which the layer style cannot hold; both import at the line opacity.",
+        );
+      }
+    } else {
+      const strokeOpacity = paint["circle-stroke-opacity"];
+      const flatStrokeOpacity = asLayerNumber(unwrapLiteral(strokeOpacity), "stroke-opacity", true);
+      if (strokeOpacity === undefined) patch.strokeOpacity = 1;
+      else if (flatStrokeOpacity !== null && flatStrokeOpacity >= 0 && flatStrokeOpacity <= 1) {
+        patch.strokeOpacity = flatStrokeOpacity;
+      } else {
+        warnings.push(
+          "The point stroke opacity could not be read as one number between 0 and 1; the layer keeps its current stroke opacity.",
+        );
+      }
     }
     if (appliedStackTypes.has("circle")) applyStackedZoomRange(byType("circle"), patch);
     else applyZoomRange(circle, patch);
@@ -1217,6 +1540,25 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   detectHiddenElse(patch, [extrusion, fill, line, circle]);
+
+  // The exporter only writes per-feature simplestyle lookups for a layer with
+  // `simpleStyleEnabled`, and they only apply on a layer that has it, so carry
+  // the flag over. It is never switched off here: a style without lookups says
+  // nothing about the target layer's own data, which may still carry them.
+  // The layers read are the ones chosen above plus every drawn class of a
+  // stack combined into rules.
+  const readLayers = [
+    ...[extrusion, fill, line, circle].filter((layer) => layer !== undefined),
+    ...[...appliedStackTypes].flatMap((type) => byType(type).filter(isDrawn)),
+  ];
+  // Only the paint the exporter writes lookups into, and the import reads,
+  // counts: a lookup elsewhere (in `line-blur`, say) is dropped with its
+  // property, and must not switch on per-feature colours the style never set.
+  const readsSimpleStyle = (layer: RawStyleLayer) =>
+    SIMPLE_STYLE_PAINT.some((property) =>
+      readsSimpleStyleProperties((layer.paint ?? {})[property]),
+    );
+  if (readLayers.some(readsSimpleStyle)) patch.simpleStyleEnabled = true;
 
   return { style: patch, labels, warnings, matchedLayerCount };
 }

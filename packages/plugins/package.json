@@ -45,6 +45,7 @@
     "@loaders.gl/i3s": "^4.5.4",
     "@luma.gl/core": "^9.4.2",
     "@luma.gl/engine": "^9.4.2",
+    "@luma.gl/gltf": "^9.4.2",
     "@luma.gl/webgl": "^9.4.2",
     "@mapbox/vector-tile": "^3.0.0",
     "@maplibre/maplibre-gl-directions": "^0.10.1",

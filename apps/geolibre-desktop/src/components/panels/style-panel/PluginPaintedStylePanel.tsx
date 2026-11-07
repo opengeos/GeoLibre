@@ -4,6 +4,7 @@ import type { MapEngine } from "@geolibre/map";
 import { PanelRightClose } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { FloorPickerSection } from "../../floor-picker/FloorPickerSection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
 import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
 import { RasterStyleSlider } from "./style-inputs";
@@ -92,6 +93,14 @@ export function PluginPaintedStylePanel({
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}
               />
+            </>
+          ) : null}
+          {/* Same gate as Quick filters: a custom or deck.gl layer takes no
+              MapLibre filter, so a floor choice could not narrow it. */}
+          {hasQuickFilterControls && layer.geojson ? (
+            <>
+              <Separator />
+              <FloorPickerSection key={`fp-${layer.id}`} layer={layer} />
             </>
           ) : null}
         </div>

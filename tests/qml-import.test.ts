@@ -18,6 +18,20 @@ function fillSymbol(name: string, color: string, outline = "30,64,175,255", widt
 }
 
 describe("parseQml", () => {
+  // A pen style is an attribute of the file, so an inherited object key ("constructor") must not
+  // read as a dash pattern and break the spread that copies it.
+  it("ignores a pen style that names an inherited object key", () => {
+    const result = parseQml(
+      qgis(
+        `<renderer-v2 type="singleSymbol"><symbols><symbol type="line" name="0"><layer class="SimpleLine"><Option type="Map">
+    <Option name="line_style" type="QString" value="constructor"/>
+    <Option name="line_width" type="QString" value="0.5"/>
+  </Option></layer></symbol></symbols></renderer-v2>`,
+      ),
+    );
+    assert.equal(result.style.strokeDash, undefined);
+  });
+
   it("reads a single SimpleFill into a single-symbol style", () => {
     const result = parseQml(
       qgis(

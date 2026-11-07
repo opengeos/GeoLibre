@@ -226,6 +226,22 @@ export type GeometryGeneratorType = "none" | "centroid" | "bounding-box" | "conv
 export type StrokeWidthUnit = "pixels" | "meters";
 
 /**
+ * The named dash patterns the Style panel offers for {@link LayerStyle.strokeDash},
+ * in MapLibre `line-dasharray` units (multiples of the line width). `solid` is
+ * the empty pattern. QGIS pen styles map onto the same names.
+ */
+export const STROKE_DASH_PRESETS = {
+  solid: [],
+  dashed: [4, 2],
+  dotted: [1, 2],
+  "dash-dot": [4, 2, 1, 2],
+  "long-dash": [8, 3],
+} as const satisfies Record<string, readonly number[]>;
+
+/** A named entry of {@link STROKE_DASH_PRESETS}. */
+export type StrokeDashPreset = keyof typeof STROKE_DASH_PRESETS;
+
+/**
  * The chart drawn on top of each feature by the diagram renderer (QGIS-style
  * diagram symbology), or `"none"` when diagrams are off. Diagrams visualize
  * several numeric attributes per feature at once — e.g. election results by
@@ -442,6 +458,21 @@ export interface LayerStyle {
    *   point/circle outlines remain pixel-based.
    */
   strokeWidthUnit: StrokeWidthUnit;
+  /**
+   * Opacity (0..1) of lines, polygon outlines and point outlines, applied on
+   * top of the layer opacity, so a translucent outline can sit over an opaque
+   * fill. A per-feature simplestyle `stroke-opacity` replaces it for features
+   * that carry one, as `fill-opacity` replaces {@link fillOpacity}.
+   */
+  strokeOpacity: number;
+  /**
+   * Dash pattern of lines and polygon outlines: alternating dash and gap
+   * lengths in multiples of the stroke width, as MapLibre's `line-dasharray`
+   * takes them. Empty draws a solid line. See {@link STROKE_DASH_PRESETS}.
+   */
+  strokeDash: number[];
+  /** Blur in pixels applied to lines and polygon outlines; 0 keeps them sharp. */
+  strokeBlur: number;
   fillOpacity: number;
   circleRadius: number;
   textColor: string;
@@ -674,6 +705,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   strokeColor: "#1e40af",
   strokeWidth: 2,
   strokeWidthUnit: "pixels",
+  strokeOpacity: 1,
+  strokeDash: [],
+  strokeBlur: 0,
   fillOpacity: 0.6,
   circleRadius: 6,
   textColor: "#111827",
@@ -1197,6 +1231,39 @@ export interface LayerQuickFilter {
   text?: string;
 }
 
+/**
+ * Floor picker (issue #3341): which floors of a multi-level layer are drawn.
+ *
+ * `all` (the default) draws every floor; `only` draws the chosen one; `below`
+ * draws it and every floor under it, the cutaway view of a building with the
+ * upper storeys lifted off.
+ */
+export type LevelFilterMode = "all" | "only" | "below";
+
+/**
+ * A layer linked to the on-map floor picker. The picker lists the levels found
+ * in {@link field} across every linked layer and writes the choice back here.
+ *
+ * {@link values} holds the raw attribute values that match the choice, so the
+ * compiled filter is a plain `in` test every renderer evaluates the same way,
+ * even for OpenStreetMap's multi-level values such as `"0;1"` or `"0-2"`.
+ */
+export interface LayerLevelFilter {
+  /** The feature property that holds the floor, e.g. `level` or `ordinal`. */
+  field: string;
+  /** Which floors are drawn. Defaults to `all`. */
+  mode?: LevelFilterMode;
+  /** The chosen level, as the picker labels it (`"-1"`, `"0"`, `"G"`). */
+  level?: string | null;
+  /**
+   * The raw `field` values that match {@link level} under {@link mode},
+   * resolved from the layer's features when the choice is made. Ignored in
+   * `all` mode. Absent while unresolved, which draws every floor until the
+   * picker resolves it.
+   */
+  values?: (string | number)[];
+}
+
 /** Persisted refresh policy and most recent synchronization result for a layer. */
 export interface LayerConnection {
   /** Owning layer id. Repeated here so records remain self-describing when exported. */
@@ -1400,6 +1467,13 @@ export interface GeoLibreLayer {
    * a host page's filter and a user's filter narrow the layer together.
    */
   quickFilters?: LayerQuickFilter[];
+  /**
+   * Floor picker link (issue #3341). Persisted control state: the picker
+   * compiles it into the layer's filter alongside {@link filterExpression} and
+   * {@link quickFilters}, so it narrows the layer together with the Time Slider
+   * window and every other filter.
+   */
+  levelFilter?: LayerLevelFilter;
   sourcePath?: string;
   /**
    * Id of the {@link LayerGroup} this layer belongs to, or `undefined` when the

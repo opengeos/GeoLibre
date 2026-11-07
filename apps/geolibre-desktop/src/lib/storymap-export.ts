@@ -5,6 +5,7 @@ import {
   extrusionBaseValue,
   extrusionColorValue,
   extrusionHeightValue,
+  isHexColor,
   isInlineImageValue,
   isPopupClickEnabled,
   isPopupHoverEnabled,
@@ -18,6 +19,10 @@ import {
   resolvePopupRows,
   resolvePopupTitle,
   simpleStyleNumberValue,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityPaintValue,
+  strokeOpacityValue,
   styleValue,
   vectorCircleColorValue,
   vectorFillColorValue,
@@ -520,6 +525,20 @@ function seedOpacity(
   return seeded;
 }
 
+/**
+ * The story-map polygon hairline colour: the stroke colour, carrying the
+ * stroke opacity as alpha when the colour is a flat hex, since this hairline is
+ * the polygon's only outline there. A data-driven colour stays as it is.
+ */
+function storyOutlineColor(style: GeoLibreLayer["style"]): unknown {
+  const color = vectorLineColorValue(style);
+  const opacity = strokeOpacityValue(style);
+  if (opacity >= 1 || typeof color !== "string" || !isHexColor(color)) return color;
+  const hex = color.trim().slice(1);
+  const [r, g, b] = [0, 2, 4].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function opacityProperties(type: string): string[] {
   switch (type) {
     case "fill":
@@ -769,17 +788,30 @@ function buildLayerSpec(
             styleValue(layer.style, "fillOpacity"),
           ),
         ),
-        "fill-outline-color": vectorLineColorValue(layer.style),
+        // The story map draws a polygon as this one fill layer, with no line
+        // layer for the outline, so the hairline is its only outline and stays
+        // in the stroke colour even under a dashed or translucent stroke (the
+        // map drops it there because its line layer draws the outline). A fully
+        // transparent stroke hides the outline in the app, so it leaves the
+        // edge in the fill colour here too rather than drawing one.
+        ...(strokeOpacityValue(layer.style) > 0
+          ? { "fill-outline-color": storyOutlineColor(layer.style) }
+          : {}),
       },
     };
   }
   if (kind === "line") {
+    const dash = strokeDashValue(layer.style);
     return {
       type: "line",
       paint: {
         "line-color": vectorLineColorValue(layer.style),
         "line-width": lineWidthValue(layer.style),
-        "line-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
+        "line-opacity": strokeOpacityPaintValue(layer.style),
+        // A solid line has no dash; the key is left out rather than null,
+        // which a style document cannot carry.
+        ...(dash ? { "line-dasharray": dash } : {}),
+        "line-blur": strokeBlurValue(layer.style),
       },
     };
   }
@@ -816,7 +848,7 @@ function buildLayerSpec(
           styleValue(layer.style, "fillOpacity"),
         ),
       ),
-      "circle-stroke-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
+      "circle-stroke-opacity": strokeOpacityPaintValue(layer.style),
     },
   };
 }

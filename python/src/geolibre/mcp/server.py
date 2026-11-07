@@ -1132,6 +1132,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Set style properties on a layer, merging with what is already there.
 
         Common keys: `fillColor`, `fillOpacity`, `strokeColor`, `strokeWidth`,
+        `strokeOpacity` (0-1), `strokeDash` (dash and gap lengths in multiples
+        of the width, `[]` for solid, e.g. `[4, 2]`), `strokeBlur` (px),
         `circleRadius` (point size), `textColor`, `textSize`, `minZoom`,
         `maxZoom`. For a data-driven choropleth use `classify_layer` instead of
         writing the `vectorStyle*` keys by hand.
@@ -1620,6 +1622,38 @@ def build_server(workspace: Workspace) -> MCPServer:
         """
         with edit(path) as (file, project):
             summary = authoring.set_layer_filter(project, layer, expression)
+        return _summarize(file, project, layer=summary)
+
+    @tool()
+    def set_floor_picker(
+        path: str,
+        layer: str,
+        field: str | None = "level",
+        level: str | float | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Link a multi-floor layer to the app's on-map floor picker.
+
+        The picker lists the floors found in `field` across every linked layer
+        and draws one floor, or a floor and the ones below it. It reads
+        OpenStreetMap `level` values ("0", "0;1", "-1-0"), numbers and IMDF
+        ordinals.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            field: The property holding the floor. Pass null to unlink the layer.
+            level: The floor to show, e.g. "0" or -1. Applies to every linked
+                layer. Omit it to keep the floor already shown; pass mode "all"
+                to show every floor.
+            mode: "only" (the default for a level), "below" to also show the
+                floors under it, or "all".
+
+        Returns:
+            The layer summary with its `levelFilter`.
+        """
+        with edit(path) as (file, project):
+            summary = authoring.set_floor_picker(project, layer, field, level, mode=mode)
         return _summarize(file, project, layer=summary)
 
     @tool()
