@@ -247,7 +247,15 @@ by the user or by a plugin activating at startup); a console warning then names
 the skipped panel. A warning is also logged if the panel has not registered
 after 10 seconds. A right panel the user opens before startup is ready (for
 example during a slow restore) is not protected: if the deployment panel is
-already registered at that point, it opens in its place.
+already registered at that point, it opens in its place. The S3 Browser opened
+by the Settings → Startup option is a startup plugin too: whichever of the two
+panels opens last keeps the right dock.
+
+Like every other field, an invalid `openPanel` (blank or not a string) makes the
+desktop parser drop the whole `plugins` section, including `blocked`, `allowed`
+and `sideload`, with a console warning naming the field. The container validator
+rejects the whole file instead, so validate desktop policy files against
+`schema/deployment.schema.json`.
 
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.
