@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { S3_BROWSER_PLUGIN_ID } from "@geolibre/plugins";
 import { useEffect, useRef, type RefObject } from "react";
@@ -64,9 +65,13 @@ export function useStartupPanels({
   }, [externalPluginsReady, mapControllerRef, mapReadyGeneration, openS3Browser, viewer]);
 
   const panelOpened = useRef(false);
+  // Set when the user's first edit ends the wait, so a later re-run of the
+  // effect does not start waiting again.
+  const panelAbandoned = useRef(false);
   useEffect(() => {
     if (
       panelOpened.current ||
+      panelAbandoned.current ||
       !isStartupPanelGateOpen({
         viewer,
         panelsHidden,
@@ -83,22 +88,28 @@ export function useStartupPanels({
     if (!openPanelId) return;
     if (!isStartupProjectFresh()) return;
 
+    // Bound the late-registration wait by the user's first edit: once they
+    // start working, a panel that registers late must not displace their
+    // right panel. Startup seeding may already have marked the workspace
+    // dirty, so only a dirty transition after this point cancels the wait.
+    const dirtyAtStart = useAppStore.getState().isDirty;
+    const stillWaiting = () => {
+      if (!dirtyAtStart && useAppStore.getState().isDirty) panelAbandoned.current = true;
+      return !panelOpened.current && !panelAbandoned.current && isStartupProjectFresh();
+    };
+
     const warnTimer = setTimeout(() => {
-      if (!panelOpened.current && isStartupProjectFresh()) {
+      if (stillWaiting()) {
         console.warn(
           `[GeoLibre] Deployment openPanel "${openPanelId}" is not registered after 10 seconds; it opens if it registers later`,
         );
       }
     }, 10000);
 
-    const dispose = openStartupPanel(
-      openPanelId,
-      () => !panelOpened.current && isStartupProjectFresh(),
-      () => {
-        panelOpened.current = true;
-        clearTimeout(warnTimer);
-      },
-    );
+    const dispose = openStartupPanel(openPanelId, stillWaiting, () => {
+      panelOpened.current = true;
+      clearTimeout(warnTimer);
+    });
 
     return () => {
       clearTimeout(warnTimer);
