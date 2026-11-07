@@ -1,4 +1,11 @@
-import { DEFAULT_LAYER_STYLE, styleValue, type LayerStyle, type VectorRule } from "./types";
+import {
+  DEFAULT_LAYER_STYLE,
+  STROKE_DASH_PRESETS,
+  styleValue,
+  type LayerStyle,
+  type StrokeDashPreset,
+  type VectorRule,
+} from "./types";
 import { getVectorColorRamp } from "./color-ramp";
 import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
 import { removeTrailingJsonCommas } from "./expressions";
@@ -291,6 +298,94 @@ export function lineWidthValue(style: LayerStyle): number | unknown[] {
     style,
     simpleStyleNumberValue(style, "stroke-width", styleValue(style, "strokeWidth")),
   );
+}
+
+/**
+ * The layer's stroke opacity, clamped to [0, 1]. A missing or non-finite value
+ * (an older project, a hand-edited file) reads as fully opaque.
+ *
+ * @param style - The layer style.
+ * @returns The stroke opacity.
+ */
+export function strokeOpacityValue(style: LayerStyle): number {
+  const value = styleValue(style, "strokeOpacity");
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+}
+
+/**
+ * A stroke opacity paint value: the layer's {@link LayerStyle.strokeOpacity},
+ * which a per-feature simplestyle `stroke-opacity` replaces when
+ * {@link LayerStyle.simpleStyleEnabled} is set.
+ *
+ * @param style - The layer style.
+ * @returns A number, or the simplestyle lookup expression.
+ */
+export function strokeOpacityPaintValue(style: LayerStyle): number | unknown[] {
+  return simpleStyleNumberValue(style, "stroke-opacity", strokeOpacityValue(style));
+}
+
+/**
+ * Whether a value is a usable dash pattern: finite, non-negative lengths with
+ * at least one dash longer than zero. Exported so the style sanitizer and the
+ * importers apply the same rule the renderer does.
+ *
+ * @param value - The candidate pattern.
+ * @returns True when the value can be drawn as a dash pattern.
+ */
+export function isStrokeDashPattern(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((length) => typeof length === "number" && Number.isFinite(length) && length >= 0) &&
+    value.some((length) => length > 0)
+  );
+}
+
+/**
+ * The `line-dasharray` for the layer, or `null` for a solid line. `null` is
+ * what MapLibre's `setPaintProperty` takes to reset a property, so returning it
+ * (rather than leaving the key out) clears a dash when the user goes back to
+ * solid.
+ *
+ * @param style - The layer style.
+ * @returns The dash pattern, or `null` when the line is solid.
+ */
+export function strokeDashValue(style: LayerStyle): number[] | null {
+  const dash = styleValue(style, "strokeDash");
+  return isStrokeDashPattern(dash) ? [...dash] : null;
+}
+
+/**
+ * The {@link STROKE_DASH_PRESETS} name matching a pattern, or `"custom"` when
+ * none does. An empty or unusable pattern is `"solid"`.
+ *
+ * @param dash - A dash pattern.
+ * @returns The preset name, or `"custom"`.
+ */
+export function strokeDashPresetName(
+  dash: readonly number[] | undefined,
+): StrokeDashPreset | "custom" {
+  if (!isStrokeDashPattern(dash)) return "solid";
+  for (const [name, pattern] of Object.entries(STROKE_DASH_PRESETS)) {
+    if (
+      pattern.length === dash.length &&
+      pattern.every((length, index) => length === dash[index])
+    ) {
+      return name as StrokeDashPreset;
+    }
+  }
+  return "custom";
+}
+
+/**
+ * The layer's line blur in pixels; a missing, negative or non-finite value is 0.
+ *
+ * @param style - The layer style.
+ * @returns The blur in pixels.
+ */
+export function strokeBlurValue(style: LayerStyle): number {
+  const value = styleValue(style, "strokeBlur");
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 /**

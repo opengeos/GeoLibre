@@ -10,6 +10,7 @@ import {
   type StyleLibraryEntry,
   type StyleLibraryEntryKind,
 } from "./types";
+import { isStrokeDashPattern } from "./vector-color";
 
 /**
  * Layer types whose symbology is driven by the vector {@link LayerStyle}
@@ -48,6 +49,9 @@ export const SYMBOL_STYLE_KEYS = [
   "strokeColor",
   "strokeWidth",
   "strokeWidthUnit",
+  "strokeOpacity",
+  "strokeDash",
+  "strokeBlur",
   "fillOpacity",
   "circleRadius",
   "fillPattern",
@@ -260,6 +264,9 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
             },
           ];
         });
+      } else if (key === "strokeDash") {
+        // An empty pattern is solid; anything else must be drawable.
+        if (given.length === 0 || isStrokeDashPattern(given)) out[key] = given;
       } else {
         out[key] = given;
       }

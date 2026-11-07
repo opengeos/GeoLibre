@@ -2,6 +2,10 @@ import {
   DEFAULT_LAYER_STYLE,
   isHexColor,
   parseJsonExpression,
+  STROKE_DASH_PRESETS,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityValue,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -92,12 +96,44 @@ function option(name: string, value: string): string {
   return `<Option name="${name}" type="QString" value="${xmlEscape(value)}"/>`;
 }
 
+/**
+ * QGIS pen styles (`line_style` / `outline_style`) and the dash pattern each
+ * draws, in multiples of the line width, the unit Qt pens and MapLibre's
+ * `line-dasharray` share. Shared with the QML importer so the two directions
+ * agree.
+ */
+export const QGIS_PEN_STYLE_DASH: Readonly<Record<string, readonly number[]>> = {
+  solid: [],
+  dash: STROKE_DASH_PRESETS.dashed,
+  dot: STROKE_DASH_PRESETS.dotted,
+  "dash dot": STROKE_DASH_PRESETS["dash-dot"],
+  "dash dot dot": [4, 2, 1, 2, 1, 2],
+};
+
+/** The QGIS pen style drawing exactly `dash`, or `null` when none does. */
+function qgisPenStyle(dash: readonly number[] | null): string | null {
+  if (!dash) return "solid";
+  for (const [name, pattern] of Object.entries(QGIS_PEN_STYLE_DASH)) {
+    if (
+      pattern.length === dash.length &&
+      pattern.every((length, index) => length === dash[index])
+    ) {
+      return name;
+    }
+  }
+  return null;
+}
+
 /** The fill/stroke/marker fields a symbol layer draws with. */
 interface SymbolPaint {
   fillColor: string;
   fillOpacity: number;
   strokeColor: string;
   strokeWidth: number;
+  /** Stroke opacity (0..1), folded into the outline and line color alpha. */
+  strokeOpacity: number;
+  /** Dash pattern in multiples of the stroke width, or `null` for a solid line. */
+  strokeDash: number[] | null;
   markerShape: string;
   markerSize: number;
 }
@@ -112,6 +148,8 @@ function basePaint(style: LayerStyle): SymbolPaint {
     fillOpacity: styleValue(style, "fillOpacity"),
     strokeColor: styleValue(style, "strokeColor"),
     strokeWidth: styleValue(style, "strokeWidth"),
+    strokeOpacity: strokeOpacityValue(style),
+    strokeDash: strokeDashValue(style),
     markerShape: markerEnabled ? styleValue(style, "markerShape") : "circle",
     markerSize: markerEnabled
       ? styleValue(style, "markerSize")
@@ -150,10 +188,12 @@ function symbolXml(
       '<layer class="SimpleFill" enabled="1" locked="0" pass="0">',
       '<Option type="Map">',
       option("color", hexToRgba(color, paint.fillOpacity * opacity)),
-      option("outline_color", hexToRgba(paint.strokeColor, opacity)),
+      option("outline_color", hexToRgba(paint.strokeColor, paint.strokeOpacity * opacity)),
       option("outline_width", num(paint.strokeWidth)),
       option("outline_width_unit", "Pixel"),
-      option("outline_style", "solid"),
+      // A SimpleFill outline takes a pen style only, with no custom dash, so
+      // a pattern no pen style draws is exported as a plain dash.
+      option("outline_style", qgisPenStyle(paint.strokeDash) ?? "dash"),
       option("style", "solid"),
       "</Option>",
       "</layer>",
@@ -162,10 +202,10 @@ function symbolXml(
     layer = [
       '<layer class="SimpleLine" enabled="1" locked="0" pass="0">',
       '<Option type="Map">',
-      option("line_color", hexToRgba(color, opacity)),
+      option("line_color", hexToRgba(color, paint.strokeOpacity * opacity)),
       option("line_width", num(paint.strokeWidth)),
       option("line_width_unit", "Pixel"),
-      option("line_style", "solid"),
+      ...lineDashOptions(paint),
       option("capstyle", "round"),
       option("joinstyle", "round"),
       "</Option>",
@@ -189,7 +229,7 @@ function symbolXml(
       option("color", hexToRgba(color, paint.fillOpacity * opacity)),
       option("size", num(size)),
       option("size_unit", "Pixel"),
-      option("outline_color", hexToRgba(paint.strokeColor, opacity)),
+      option("outline_color", hexToRgba(paint.strokeColor, paint.strokeOpacity * opacity)),
       option("outline_width", num(paint.strokeWidth)),
       option("outline_width_unit", "Pixel"),
       option("outline_style", "solid"),
@@ -198,6 +238,28 @@ function symbolXml(
     ].join("");
   }
   return `${open}${layer}</symbol>`;
+}
+
+/**
+ * A SimpleLine's dash options: the matching pen style, or a custom dash for a
+ * pattern no pen style draws. A QGIS custom dash is in absolute lengths (here
+ * pixels, like the width), not multiples of the width, so it is scaled by it.
+ */
+function lineDashOptions(paint: SymbolPaint): string[] {
+  const penStyle = qgisPenStyle(paint.strokeDash);
+  if (penStyle || !paint.strokeDash) return [option("line_style", penStyle ?? "solid")];
+  // A zero-width line draws nothing, and a custom dash would scale to all
+  // zeros, which no importer can read back; a plain dash keeps it dashed.
+  if (paint.strokeWidth <= 0) return [option("line_style", "dash")];
+  return [
+    option("line_style", "dash"),
+    option("use_custom_dash", "1"),
+    option(
+      "customdash",
+      paint.strokeDash.map((length) => num(length * paint.strokeWidth)).join(";"),
+    ),
+    option("customdash_unit", "Pixel"),
+  ];
 }
 
 /** Pick the QGIS symbol geometry class from the layer's geometry profile. */
@@ -657,6 +719,17 @@ export function buildQml(
     warnings.push(
       "The stroke width is in map units (meters); it is exported as a fixed pixel width.",
     );
+  }
+  if (geometry !== "marker" && strokeBlurValue(style) > 0) {
+    warnings.push("The line blur has no QML equivalent; the lines are exported with sharp edges.");
+  }
+  if (geometry === "fill") {
+    const dash = strokeDashValue(style);
+    if (dash && !qgisPenStyle(dash)) {
+      warnings.push(
+        "A QGIS polygon outline takes only its built-in dash styles; the outline is exported with a plain dash.",
+      );
+    }
   }
   if (styleValue(style, "proportionalSizeEnabled")) {
     warnings.push(

@@ -1132,6 +1132,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         """Set style properties on a layer, merging with what is already there.
 
         Common keys: `fillColor`, `fillOpacity`, `strokeColor`, `strokeWidth`,
+        `strokeOpacity` (0-1), `strokeDash` (dash and gap lengths in multiples
+        of the width, `[]` for solid, e.g. `[4, 2]`), `strokeBlur` (px),
         `circleRadius` (point size), `textColor`, `textSize`, `minZoom`,
         `maxZoom`. For a data-driven choropleth use `classify_layer` instead of
         writing the `vectorStyle*` keys by hand.

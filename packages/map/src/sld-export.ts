@@ -3,6 +3,9 @@ import {
   effectiveVectorRules,
   isHexColor,
   parseJsonExpression,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityValue,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -133,6 +136,8 @@ interface SymbolPaint {
   strokeColor: string;
   strokeWidth: number;
   strokeOpacity: number;
+  /** Dash pattern in multiples of the stroke width, or `null` for a solid line. */
+  strokeDash: number[] | null;
   /** Per-rule circle radius override (pixels); pointSymbolizer doubles it. */
   circleRadius?: number;
 }
@@ -144,7 +149,8 @@ function basePaint(style: LayerStyle, opacity: number): SymbolPaint {
     fillOpacity: styleValue(style, "fillOpacity") * opacity,
     strokeColor: styleValue(style, "strokeColor"),
     strokeWidth: styleValue(style, "strokeWidth"),
-    strokeOpacity: opacity,
+    strokeOpacity: strokeOpacityValue(style) * opacity,
+    strokeDash: strokeDashValue(style),
   };
 }
 
@@ -163,6 +169,15 @@ function strokeElement(paint: SymbolPaint): string {
     cssParam("stroke", paint.strokeColor),
     cssParam("stroke-width", num(paint.strokeWidth)),
     cssParam("stroke-opacity", num(paint.strokeOpacity)),
+    // SLD dash lengths are in the stroke's own units, not multiples of its
+    // width as in MapLibre, so each rule's pattern scales with its width.
+    // A zero-width stroke draws nothing, and its dash would scale to all zeros.
+    paint.strokeDash && paint.strokeWidth > 0
+      ? cssParam(
+          "stroke-dasharray",
+          paint.strokeDash.map((length) => num(length * paint.strokeWidth)).join(" "),
+        )
+      : "",
     "</Stroke>",
   ].join("");
 }
@@ -809,6 +824,9 @@ export function buildSld(
     warnings.push(
       "Proportional (attribute-driven) symbol size has no portable SLD equivalent; a fixed size is exported instead.",
     );
+  }
+  if ((profile.hasLine || profile.hasPolygon) && strokeBlurValue(style) > 0) {
+    warnings.push("The line blur has no SLD equivalent; the lines are exported with sharp edges.");
   }
 
   const scale = scaleDenominators(style);

@@ -535,4 +535,97 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.vectorStyleMode, "rule-based");
     assert.equal(out.vectorRules.find((rule) => rule.isElse)?.enabled, false);
   });
+
+  it("round-trips stroke opacity and dashes, and warns that blur has no SLD form", () => {
+    for (const geometry of ["line", "polygon"] as const) {
+      const input = style({ strokeWidth: 3, strokeOpacity: 0.4, strokeDash: [4, 2, 1, 2] });
+      const out = roundTrip(input, geometry);
+      assert.equal(out.strokeOpacity, 0.4, geometry);
+      assert.deepEqual(out.strokeDash, [4, 2, 1, 2], geometry);
+    }
+    // A solid line imports as solid, replacing a dash the target layer had.
+    const { sld } = buildSld(layer(style()), fc("line"));
+    assert.deepEqual(applySldImport(style({ strokeDash: [1, 2] }), parseSld(sld)).strokeDash, []);
+    // SLD dash lengths are absolute: a 3px stroke dashed "4 2" writes 12 6.
+    const dashed = buildSld(layer(style({ strokeWidth: 3, strokeDash: [4, 2] })), fc("line"));
+    assert.match(dashed.sld, /stroke-dasharray">12 6</);
+    const blurred = buildSld(layer(style({ strokeBlur: 2 })), fc("line"));
+    assert.ok(
+      blurred.warnings.includes(
+        "The line blur has no SLD equivalent; the lines are exported with sharp edges.",
+      ),
+    );
+  });
+
+  it("does not take a point outline's dash or reset a dash from a point-only SLD", () => {
+    const { sld } = buildSld(layer(style({ strokeOpacity: 0.5 })), fc("point"));
+    const out = applySldImport(style({ strokeDash: [1, 2] }), parseSld(sld));
+    assert.equal(out.strokeOpacity, 0.5);
+    assert.deepEqual(out.strokeDash, [1, 2]);
+  });
+
+  it("ignores stray separators in a dash array and keeps the layer's dash for an unreadable one", () => {
+    const sld = (dash: string) =>
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-width">2</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">${dash}</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    assert.deepEqual(applySldImport(style(), parseSld(sld("8 4,"))).strokeDash, [4, 2]);
+    const unreadable = parseSld(sld("5 2 px"));
+    assert.deepEqual(applySldImport(style({ strokeDash: [1, 2] }), unreadable).strokeDash, [1, 2]);
+    assert.ok(
+      unreadable.warnings.some((warning) => warning.startsWith("The stroke dash array")),
+      JSON.stringify(unreadable.warnings),
+    );
+  });
+
+  it("imports a stroke without stroke-opacity as opaque and reports an out-of-range one", () => {
+    const sld = (opacity: string | null) =>
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      (opacity === null ? "" : `<CssParameter name="stroke-opacity">${opacity}</CssParameter>`) +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    assert.equal(
+      applySldImport(style({ strokeOpacity: 0.3 }), parseSld(sld(null))).strokeOpacity,
+      1,
+    );
+    const outOfRange = parseSld(sld("1.5"));
+    assert.equal(applySldImport(style({ strokeOpacity: 0.3 }), outOfRange).strokeOpacity, 0.3);
+    assert.ok(
+      outOfRange.warnings.some((warning) => warning.startsWith("The stroke opacity")),
+      JSON.stringify(outOfRange.warnings),
+    );
+  });
+
+  it("applies SLD's default width to a line stroke without one, so its dash keeps its length", () => {
+    const sld =
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">4 2</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    const out = applySldImport(style({ strokeWidth: 3 }), parseSld(sld));
+    assert.equal(out.strokeWidth, 1);
+    assert.deepEqual(out.strokeDash, [4, 2]);
+  });
+
+  it("keeps the layer width for a stroke whose dash cannot be read", () => {
+    const sld =
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">5 2 px</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    const out = applySldImport(style({ strokeWidth: 3, strokeDash: [1, 2] }), parseSld(sld));
+    assert.equal(out.strokeWidth, 3);
+    assert.deepEqual(out.strokeDash, [1, 2]);
+  });
+
+  it("writes no all-zero dash for a zero-width line, so re-import does not warn", () => {
+    const { sld } = buildSld(layer(style({ strokeWidth: 0, strokeDash: [4, 2] })), fc("line"));
+    assert.doesNotMatch(sld, /stroke-dasharray/);
+    assert.equal(
+      parseSld(sld).warnings.some((warning) => warning.startsWith("The stroke dash array")),
+      false,
+    );
+  });
 });

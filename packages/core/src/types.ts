@@ -226,6 +226,22 @@ export type GeometryGeneratorType = "none" | "centroid" | "bounding-box" | "conv
 export type StrokeWidthUnit = "pixels" | "meters";
 
 /**
+ * The named dash patterns the Style panel offers for {@link LayerStyle.strokeDash},
+ * in MapLibre `line-dasharray` units (multiples of the line width). `solid` is
+ * the empty pattern. QGIS pen styles map onto the same names.
+ */
+export const STROKE_DASH_PRESETS = {
+  solid: [],
+  dashed: [4, 2],
+  dotted: [1, 2],
+  "dash-dot": [4, 2, 1, 2],
+  "long-dash": [8, 3],
+} as const satisfies Record<string, readonly number[]>;
+
+/** A named entry of {@link STROKE_DASH_PRESETS}. */
+export type StrokeDashPreset = keyof typeof STROKE_DASH_PRESETS;
+
+/**
  * The chart drawn on top of each feature by the diagram renderer (QGIS-style
  * diagram symbology), or `"none"` when diagrams are off. Diagrams visualize
  * several numeric attributes per feature at once — e.g. election results by
@@ -442,6 +458,21 @@ export interface LayerStyle {
    *   point/circle outlines remain pixel-based.
    */
   strokeWidthUnit: StrokeWidthUnit;
+  /**
+   * Opacity (0..1) of lines, polygon outlines and point outlines, applied on
+   * top of the layer opacity, so a translucent outline can sit over an opaque
+   * fill. A per-feature simplestyle `stroke-opacity` replaces it for features
+   * that carry one, as `fill-opacity` replaces {@link fillOpacity}.
+   */
+  strokeOpacity: number;
+  /**
+   * Dash pattern of lines and polygon outlines: alternating dash and gap
+   * lengths in multiples of the stroke width, as MapLibre's `line-dasharray`
+   * takes them. Empty draws a solid line. See {@link STROKE_DASH_PRESETS}.
+   */
+  strokeDash: number[];
+  /** Blur in pixels applied to lines and polygon outlines; 0 keeps them sharp. */
+  strokeBlur: number;
   fillOpacity: number;
   circleRadius: number;
   textColor: string;
@@ -674,6 +705,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   strokeColor: "#1e40af",
   strokeWidth: 2,
   strokeWidthUnit: "pixels",
+  strokeOpacity: 1,
+  strokeDash: [],
+  strokeBlur: 0,
   fillOpacity: 0.6,
   circleRadius: 6,
   textColor: "#111827",

@@ -32,17 +32,21 @@ const DEFAULT_TEXT_FONT = ["Open Sans Regular", "Arial Unicode MS Regular"];
 
 /**
  * Strip the `*-layer-opacity` properties `fillPaint` / `linePaint` emit to
- * elect MapLibre's blend-mode composite path (see `layer-blend-modes`).
+ * elect MapLibre's blend-mode composite path (see `layer-blend-modes`), and
+ * the `null` resets they emit for an unset property (a solid line's
+ * `line-dasharray`), which a style document cannot carry.
  *
- * They are MapLibre 6 additions that Mapbox GL rejects outright, and an
- * exported style is a portable fragment meant to drop into either renderer.
- * Nothing is lost by dropping them: a blend mode is a GeoLibre render-loop
- * concern with no style-spec representation, so it cannot travel in a style
- * file at all.
+ * The layer opacities are MapLibre 6 additions that Mapbox GL rejects
+ * outright, and an exported style is a portable fragment meant to drop into
+ * either renderer. Nothing is lost by dropping them: a blend mode is a GeoLibre
+ * render-loop concern with no style-spec representation, so it cannot travel
+ * in a style file at all.
  */
 function withoutLayerOpacity<T extends Record<string, unknown>>(paint: T): T {
   const { "fill-layer-opacity": _fill, "line-layer-opacity": _line, ...rest } = paint;
-  return rest as unknown as T;
+  return Object.fromEntries(
+    Object.entries(rest).filter(([, value]) => value !== null),
+  ) as unknown as T;
 }
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;

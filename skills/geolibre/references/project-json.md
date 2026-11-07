@@ -103,8 +103,10 @@ reprojected.
 ```
 
 Useful style keys: `minZoom`, `maxZoom`, `fillColor`, `fillOpacity`,
-`strokeColor`, `strokeWidth`, `strokeWidthUnit`, `circleRadius`, `textColor`,
-`textSize`, and for rasters `rasterBrightnessMin`, `rasterBrightnessMax`,
+`strokeColor`, `strokeWidth`, `strokeWidthUnit`, `strokeOpacity` (0-1, fades
+lines and outlines only), `strokeDash` (dash and gap lengths in multiples of
+the stroke width, `[]` for solid, e.g. `[4, 2]`), `strokeBlur` (px),
+`circleRadius`, `textColor`, `textSize`, and for rasters `rasterBrightnessMin`, `rasterBrightnessMax`,
 `rasterSaturation`, `rasterContrast`, `rasterHueRotate`.
 
 ### Layer types

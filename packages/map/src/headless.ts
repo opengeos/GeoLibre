@@ -94,6 +94,7 @@ export { readRemotePMTilesInfo, readPMTilesArchiveInfo } from "./pmtiles-layer";
 // Style engine outputs (standard MapLibre style-spec objects).
 export {
   fillPaint,
+  fillOutlineDrawn,
   linePaint,
   circlePaint,
   heatmapPaint,

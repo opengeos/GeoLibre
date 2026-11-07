@@ -220,7 +220,7 @@ export function shadowOverlayGraphics(
           // MapLibre strokes a fill only when told to; the SDK's default is a
           // black outline, so say "none" explicitly otherwise.
           const outlineColor =
-            paint["fill-outline-color"] !== undefined
+            paint["fill-outline-color"] != null
               ? rgba(value("paint", "fill-outline-color"), value("paint", "fill-opacity"))
               : null;
           if (!color && !outlineColor) return;
@@ -241,7 +241,7 @@ export function shadowOverlayGraphics(
             type: "simple-line",
             color,
             width: px(value("paint", "line-width"), 1),
-            style: paint["line-dasharray"] !== undefined ? "dash" : "solid",
+            style: paint["line-dasharray"] != null ? "dash" : "solid",
             cap: value("layout", "line-cap") === "round" ? "round" : "butt",
             join: value("layout", "line-join") === "round" ? "round" : "miter",
           });
