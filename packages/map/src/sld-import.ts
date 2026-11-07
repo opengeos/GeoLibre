@@ -221,7 +221,11 @@ function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   const params = paramMap(stroke);
   const color = params.get("stroke");
   if (color) paint.strokeColor = color;
-  const width = toNum(params.get("stroke-width") ?? null);
+  const readWidth = toNum(params.get("stroke-width") ?? null);
+  // A line or polygon stroke without a width draws at SLD's default of 1, and
+  // its dash lengths are measured against that, so the width is applied too.
+  // A point outline keeps the layer's width, as before.
+  const width = readWidth ?? (withDash ? 1 : null);
   if (width !== null) paint.strokeWidth = width;
   // SLD's default stroke-opacity is 1, so a stroke without one is opaque, as a
   // stroke without a dash array is solid. An out-of-range one is reported and

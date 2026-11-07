@@ -597,4 +597,15 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
       JSON.stringify(outOfRange.warnings),
     );
   });
+
+  it("applies SLD's default width to a line stroke without one, so its dash keeps its length", () => {
+    const sld =
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">4 2</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    const out = applySldImport(style({ strokeWidth: 3 }), parseSld(sld));
+    assert.equal(out.strokeWidth, 1);
+    assert.deepEqual(out.strokeDash, [4, 2]);
+  });
 });

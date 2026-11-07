@@ -10,6 +10,7 @@ import {
 } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
+import { createFeatureStyleResolver } from "../packages/map/src/feature-style";
 import { circlePaint, fillPaint, linePaint } from "../packages/map/src/style-mapper";
 
 /** A fake map that reads paint back, as MapLibre does, and logs dash writes. */
@@ -221,5 +222,26 @@ describe("line opacity, dashes and blur (#3350)", () => {
     nativeLayer = { id: "plugin-line", type: "line" };
     syncLayer(map as never, pluginLayer({}));
     assert.deepEqual(writes, [[4, 2], null, [4, 2]]);
+  });
+
+  it("gives the 3D and ArcGIS feature symbols the stroke opacity too", () => {
+    const point = {
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "Point" as const, coordinates: [0, 0] },
+    };
+    assert.equal(
+      createFeatureStyleResolver(style({ strokeOpacity: 0.4 })).resolve(point, 5).strokeOpacity,
+      0.4,
+    );
+    // A per-feature simplestyle stroke-opacity still wins for that feature.
+    const simple = createFeatureStyleResolver(
+      style({ strokeOpacity: 0.4, simpleStyleEnabled: true }),
+    );
+    assert.equal(
+      simple.resolve({ ...point, properties: { "stroke-opacity": 0.9 } }, 5).strokeOpacity,
+      0.9,
+    );
+    assert.equal(simple.resolve(point, 5).strokeOpacity, 0.4);
   });
 });
