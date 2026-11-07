@@ -757,9 +757,12 @@ function readLineBlur(given: unknown): LinePaintRead<number> {
  * Apply one line paint property to the patch from the layer the import reads
  * (`own`), resetting it to `unset` when that layer leaves it at the spec
  * default, and return the note to report, if any. `stack` holds the same
- * property read from every class of a stack combined into rules: classes that
- * disagree get `mixedNote`, unless one of them has a note of its own, which
- * says more.
+ * property read from every class of a stack combined into rules. The imported
+ * layer's own note (a varying or unreadable value) is reported as is; when
+ * that layer's value applied or reset, classes that disagree with it, a class
+ * with an unreadable value included, get `mixedNote`, which says whose value
+ * was used. A class's own note would claim the layer kept its value, which is
+ * not what happened.
  */
 function applyLinePaint<T>(
   own: LinePaintRead<T>,

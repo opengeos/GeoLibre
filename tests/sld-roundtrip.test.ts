@@ -608,4 +608,15 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.strokeWidth, 1);
     assert.deepEqual(out.strokeDash, [4, 2]);
   });
+
+  it("keeps the layer width for a stroke whose dash cannot be read", () => {
+    const sld =
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">5 2 px</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    const out = applySldImport(style({ strokeWidth: 3, strokeDash: [1, 2] }), parseSld(sld));
+    assert.equal(out.strokeWidth, 3);
+    assert.deepEqual(out.strokeDash, [1, 2]);
+  });
 });

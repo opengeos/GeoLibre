@@ -222,11 +222,20 @@ function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   const color = params.get("stroke");
   if (color) paint.strokeColor = color;
   const readWidth = toNum(params.get("stroke-width") ?? null);
+  const dashText = params.get("stroke-dasharray")?.trim();
+  // The dash lengths as written (absolute, in the stroke's units).
+  const lengths = dashText
+    ? dashText
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .map(Number)
+    : [];
   // A dashed line or polygon stroke without a width draws at SLD's default of
   // 1, the width its dash lengths are measured against, so that width is
-  // applied with the dash. Without a dash the layer keeps its own width, as
-  // before, and a point outline always does.
-  const dashed = withDash && Boolean(params.get("stroke-dasharray")?.trim());
+  // applied with a dash that imports. Without one (no dash, or one that cannot
+  // be read) the layer keeps its own width, as before, and a point outline
+  // always does.
+  const dashed = withDash && isStrokeDashPattern(lengths);
   const width = readWidth ?? (dashed ? 1 : null);
   if (width !== null) paint.strokeWidth = width;
   // SLD's default stroke-opacity is 1, so a stroke without one is opaque, as a
@@ -237,16 +246,12 @@ function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   if (opacity !== null && opacity >= 0 && opacity <= 1) paint.strokeOpacity = opacity;
   else paint.unreadOpacity = true;
   if (!withDash) return;
-  const dashText = params.get("stroke-dasharray")?.trim();
   const unit = width !== null && width > 0 ? width : 1;
   if (!dashText) {
     paint.strokeDash = [];
     return;
   }
-  const dash = dashText
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .map((length) => Number(length) / unit);
+  const dash = lengths.map((length) => length / unit);
   // An unreadable pattern (a unit suffix, a negative length) keeps the layer's
   // own and is reported, rather than turning the stroke solid.
   if (isStrokeDashPattern(dash)) paint.strokeDash = dash;

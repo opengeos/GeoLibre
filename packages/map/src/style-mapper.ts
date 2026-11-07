@@ -60,7 +60,10 @@ function layerOpacityForBlend(style: LayerStyle): number {
  * Only a solid, opaque stroke keeps it: the line layer draws the real outline,
  * and a hairline under a dashed or translucent one would show through. A
  * simplestyle layer drops it too, since any feature's own `stroke-opacity` can
- * make its outline translucent.
+ * make its outline translucent. That is deliberately per layer rather than per
+ * feature: scanning the data for the property would cost a pass over every
+ * feature on each sync, and the line layer draws the outline either way, so
+ * only the hairline under it goes.
  *
  * @param style - The layer style.
  * @returns True when the fill layer should outline polygons in the stroke color.

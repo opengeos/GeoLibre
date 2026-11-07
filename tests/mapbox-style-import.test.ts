@@ -1088,6 +1088,9 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     // When the imported (bottom-most) class applied and another class cannot
     // be read, the note says which value was used, not that none was.
     assert.deepEqual(notes(stack(0.5, ["get", "alpha"])), mixed);
+    // The same when the bottom-most class leaves the opacity unset: it resets
+    // to opaque, so the stack is mixed rather than kept.
+    assert.deepEqual(notes(stack(undefined, ["get", "alpha"])), mixed);
     assert.equal(stack(0.5, ["get", "alpha"]).style.strokeOpacity, 0.5);
     // A shared translucent opacity imports with nothing to report.
     assert.deepEqual(notes(stack(0.5, 0.5)), []);
@@ -1234,7 +1237,6 @@ describe("parseMapboxStyle imports hand-written styles", () => {
   it("recognizes every simplestyle lookup the exporter writes into paint the import reads", () => {
     // A drift guard for the importer's list of paint properties: each property
     // a simplestyle export wraps in a lookup, taken alone, turns the flag on.
-    const unread = new Set<string>();
     const checked = new Set<string>();
     for (const geojson of [points(), lines(), polygons()]) {
       const exported = buildMapboxStyle(
@@ -1250,11 +1252,7 @@ describe("parseMapboxStyle imports hand-written styles", () => {
             version: 8,
             layers: [{ id: "x", type: styleLayer.type, paint: { [property]: value } }],
           });
-          assert.equal(
-            alone.style.simpleStyleEnabled,
-            unread.has(property) ? undefined : true,
-            `${styleLayer.type} ${property}`,
-          );
+          assert.equal(alone.style.simpleStyleEnabled, true, `${styleLayer.type} ${property}`);
         }
       }
     }
