@@ -480,8 +480,15 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
         }),
       );
     });
-    const { loadDeploymentPolicy: loadWeb } =
-      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=web-file-access");
+    const importFreshPolicy = async (tag: string) => {
+      const modulePath = `../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=${tag}`;
+      const mod = (await import(modulePath)) as typeof import(
+        "../apps/geolibre-desktop/src/lib/deployment-policy"
+      );
+      return mod.loadDeploymentPolicy;
+    };
+
+    const loadWeb = await importFreshPolicy("web-file-access");
     const webPolicy = await loadWeb();
     assert.equal(webPolicy?.plugins?.fileAccess, undefined);
     assert.equal(warnings.length, 1);
@@ -509,8 +516,7 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
         },
       },
     };
-    const { loadDeploymentPolicy: loadPerUser } =
-      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=desktop-peruser-file-access");
+    const loadPerUser = await importFreshPolicy("desktop-peruser-file-access");
     const perUserPolicy = await loadPerUser();
     assert.equal(perUserPolicy?.plugins?.fileAccess, undefined);
     assert.equal(warningsDesktop.length, 1);
@@ -538,8 +544,7 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
         },
       },
     };
-    const { loadDeploymentPolicy: loadMachine } =
-      await import("../apps/geolibre-desktop/src/lib/deployment-policy.ts?test=desktop-machine-file-access");
+    const loadMachine = await importFreshPolicy("desktop-machine-file-access");
     const machinePolicy = await loadMachine();
     assert.deepEqual(machinePolicy?.plugins?.fileAccess, {
       "my-plugin": ["/etc/data.json"],
