@@ -248,6 +248,9 @@ function symbolXml(
 function lineDashOptions(paint: SymbolPaint): string[] {
   const penStyle = qgisPenStyle(paint.strokeDash);
   if (penStyle || !paint.strokeDash) return [option("line_style", penStyle ?? "solid")];
+  // A zero-width line draws nothing, and a custom dash would scale to all
+  // zeros, which no importer can read back; a plain dash keeps it dashed.
+  if (paint.strokeWidth <= 0) return [option("line_style", "dash")];
   return [
     option("line_style", "dash"),
     option("use_custom_dash", "1"),

@@ -480,4 +480,11 @@ describe("QML round-trip of a switched-off else rule (#1312)", () => {
       assert.deepEqual(out.strokeDash, [1, 2], penStyle);
     }
   });
+
+  it("writes no all-zero dash for a zero-width line", () => {
+    const zero = style({ strokeWidth: 0, strokeDash: [8, 3] });
+    const qml = buildQml(layer(zero), fc("line"));
+    assert.doesNotMatch(qml.qml, /customdash" type="QString" value="0;0"/);
+    assert.match(qml.qml, /name="line_style" type="QString" value="dash"/);
+  });
 });

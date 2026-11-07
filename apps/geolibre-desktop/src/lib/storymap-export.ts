@@ -21,6 +21,7 @@ import {
   strokeBlurValue,
   strokeDashValue,
   strokeOpacityPaintValue,
+  strokeOpacityValue,
   styleValue,
   vectorCircleColorValue,
   vectorFillColorValue,
@@ -775,8 +776,12 @@ function buildLayerSpec(
         // The story map draws a polygon as this one fill layer, with no line
         // layer for the outline, so the hairline is its only outline and stays
         // in the stroke colour even under a dashed or translucent stroke (the
-        // map drops it there because its line layer draws the outline).
-        "fill-outline-color": vectorLineColorValue(layer.style),
+        // map drops it there because its line layer draws the outline). A fully
+        // transparent stroke hides the outline in the app, so it leaves the
+        // edge in the fill colour here too rather than drawing one.
+        ...(strokeOpacityValue(layer.style) > 0
+          ? { "fill-outline-color": vectorLineColorValue(layer.style) }
+          : {}),
       },
     };
   }

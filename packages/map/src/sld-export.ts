@@ -171,7 +171,8 @@ function strokeElement(paint: SymbolPaint): string {
     cssParam("stroke-opacity", num(paint.strokeOpacity)),
     // SLD dash lengths are in the stroke's own units, not multiples of its
     // width as in MapLibre, so each rule's pattern scales with its width.
-    paint.strokeDash
+    // A zero-width stroke draws nothing, and its dash would scale to all zeros.
+    paint.strokeDash && paint.strokeWidth > 0
       ? cssParam(
           "stroke-dasharray",
           paint.strokeDash.map((length) => num(length * paint.strokeWidth)).join(" "),

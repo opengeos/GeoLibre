@@ -619,4 +619,13 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.strokeWidth, 3);
     assert.deepEqual(out.strokeDash, [1, 2]);
   });
+
+  it("writes no all-zero dash for a zero-width line, so re-import does not warn", () => {
+    const { sld } = buildSld(layer(style({ strokeWidth: 0, strokeDash: [4, 2] })), fc("line"));
+    assert.doesNotMatch(sld, /stroke-dasharray/);
+    assert.equal(
+      parseSld(sld).warnings.some((warning) => warning.startsWith("The stroke dash array")),
+      false,
+    );
+  });
 });
