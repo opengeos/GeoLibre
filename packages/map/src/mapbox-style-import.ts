@@ -2,6 +2,8 @@ import {
   DEFAULT_LAYER_STYLE,
   VECTOR_COLOR_RAMPS,
   mercatorMetersPerPixelAtZoom0,
+  readSimpleStyleNumberLookup,
+  readsSimpleStyleProperties,
   simpleStyleNumberValue,
   type LabelStyle,
   type LayerStyle,
@@ -121,11 +123,45 @@ function asFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * A number paint value, also read through the simplestyle lookup the exporter
+ * writes when a layer has `simpleStyleEnabled`: the bare
+ * `["to-number", ["coalesce", ["get", key], base], base]` gives `base`. For an
+ * opacity (`foldsOpacity`), the exporter's fold `["*", lookup, opacity]` gives
+ * `base * opacity`, the same value a flat export of that layer carries; the
+ * exporter never folds anything into a width, so there it stays unread.
+ */
+function asLayerNumber(value: unknown, foldsOpacity = false): number | null {
+  const flat = asFiniteNumber(value);
+  if (flat !== null) return flat;
+  const array = asArray(value);
+  if (!array) return null;
+  if (foldsOpacity && array[0] === "*" && array.length === 3) {
+    const lookup = readSimpleStyleNumberLookup(array[1]);
+    const scale = asFiniteNumber(array[2]);
+    return lookup && scale !== null ? lookup.base * scale : null;
+  }
+  return readSimpleStyleNumberLookup(array)?.base ?? null;
+}
+
+/** The paint properties the exporter writes simplestyle lookups into. */
+const SIMPLE_STYLE_PAINT = [
+  "fill-color",
+  "fill-opacity",
+  "fill-outline-color",
+  "line-color",
+  "line-width",
+  "line-opacity",
+  "circle-color",
+  "circle-opacity",
+] as const;
+
+/**
  * Warn (rather than silently keep the old value) when a numeric paint property
  * is present but data-driven in a shape the importer cannot flatten, mirroring
  * how `fill-opacity` is handled.
  */
 function warnUnreadableNumber(value: unknown, description: string, warnings: string[]): void {
+  // Plain numbers only: the callers apply no simplestyle lookup, so a lookup here is unread.
   if (value !== undefined && asFiniteNumber(value) === null) {
     warnings.push(
       `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
@@ -586,7 +622,7 @@ function parseLineWidth(
   patch: Partial<Omit<LayerStyle, "labels">>,
   warnings: string[],
 ): void {
-  const flat = asFiniteNumber(value);
+  const flat = asLayerNumber(value);
   if (flat !== null) {
     patch.strokeWidth = flat;
     patch.strokeWidthUnit = "pixels";
@@ -641,13 +677,10 @@ const MIXED_LINE_OPACITY_NOTE =
 /**
  * The note for a `line` layer's `line-opacity`, or `null` when there is
  * nothing to report: the property is unset, 1, or the exporter's simplestyle
- * `stroke-opacity` lookup at full opacity. That lookup is left alone on one
- * precondition: the target layer has `simpleStyleEnabled` whenever its data
- * carries `stroke-opacity`. The importer does not set that flag, but GeoLibre
- * turns it on when a layer is added with simplestyle properties
- * (`hasSimpleStyleProperties`), so the lookup applies where the data has the
- * property and evaluates to 1 where it does not. A layer whose flag was
- * switched off by hand would lose the per-feature opacity without a note.
+ * `stroke-opacity` lookup at full opacity. That lookup is left alone because
+ * the import turns `simpleStyleEnabled` on whenever the style reads simplestyle
+ * properties, so it applies where the data has the property and evaluates to 1
+ * where it does not.
  *
  * A flat opacity below 1, also the one the exporter folds into the lookup as
  * `["*", lookup, opacity]`, is reported because the import sets the layer
@@ -1199,9 +1232,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // line/circle layer from contributing the color.
     if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
-    const flatOpacity = asFiniteNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The fill opacity is data-driven; the layer keeps its current fill opacity.");
     }
@@ -1300,15 +1337,19 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // circlePaint writes the layer's fillOpacity into circle-opacity, so a
     // point-only export (no fill layer) recovers its opacity here.
     const opacity = paint["circle-opacity"];
-    const flatOpacity = asFiniteNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The circle opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The circle opacity is data-driven; the layer keeps its current fill opacity.");
     }
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
-    const strokeWidth = asFiniteNumber(paint["circle-stroke-width"]);
+    const strokeWidth = asLayerNumber(paint["circle-stroke-width"]);
     if (strokeWidth !== null) {
       patch.strokeWidth = strokeWidth;
       // circle-stroke-width is always literal pixels, so reset the shared unit in
@@ -1407,6 +1448,25 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   }
 
   detectHiddenElse(patch, [extrusion, fill, line, circle]);
+
+  // The exporter only writes per-feature simplestyle lookups for a layer with
+  // `simpleStyleEnabled`, and they only apply on a layer that has it, so carry
+  // the flag over. It is never switched off here: a style without lookups says
+  // nothing about the target layer's own data, which may still carry them.
+  // The layers read are the ones chosen above plus every drawn class of a
+  // stack combined into rules.
+  const readLayers = [
+    ...[extrusion, fill, line, circle].filter((layer) => layer !== undefined),
+    ...[...appliedStackTypes].flatMap((type) => byType(type).filter(isDrawn)),
+  ];
+  // Only the paint the exporter writes lookups into, and the import reads,
+  // counts: a lookup elsewhere (in `line-blur`, say) is dropped with its
+  // property, and must not switch on per-feature colours the style never set.
+  const readsSimpleStyle = (layer: RawStyleLayer) =>
+    SIMPLE_STYLE_PAINT.some((property) =>
+      readsSimpleStyleProperties((layer.paint ?? {})[property]),
+    );
+  if (readLayers.some(readsSimpleStyle)) patch.simpleStyleEnabled = true;
 
   return { style: patch, labels, warnings, matchedLayerCount };
 }

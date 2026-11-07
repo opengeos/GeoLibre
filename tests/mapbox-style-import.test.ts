@@ -955,6 +955,174 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     );
   });
 
+  it("turns simplestyle on and reads the base values of a simplestyle export", () => {
+    // The target layer has simplestyle off (DEFAULT_LAYER_STYLE), so without the
+    // flag the per-feature colors, widths and opacities would not apply (#3351).
+    const source = style({
+      fillColor: "#aa3300",
+      strokeColor: "#336699",
+      strokeWidth: 3,
+      fillOpacity: 0.4,
+      simpleStyleEnabled: true,
+    });
+    for (const [name, geojson] of [
+      ["points", points()],
+      ["lines", lines()],
+      ["polygons", polygons()],
+    ] as const) {
+      const { style: imported, warnings } = roundTrip(source, geojson);
+      assert.equal(imported.simpleStyleEnabled, true, name);
+      assert.deepEqual(warnings, [], name);
+      assert.equal(imported.strokeWidth, 3, name);
+      assert.equal(imported.strokeColor, "#336699", name);
+      if (name !== "lines") {
+        assert.equal(imported.fillColor, "#aa3300", name);
+        assert.equal(imported.fillOpacity, 0.4, name);
+      }
+    }
+  });
+
+  it("folds the layer opacity into a simplestyle fill opacity like a flat one", () => {
+    const exported = buildMapboxStyle(
+      layer({ style: style({ fillOpacity: 0.8, simpleStyleEnabled: true }), opacity: 0.5 }),
+      polygons(),
+    );
+    const { style: patch } = parseMapboxStyle(exported.style);
+    assert.equal(patch.fillOpacity, 0.4);
+  });
+
+  it("does not turn simplestyle on for a style without simplestyle lookups", () => {
+    const { style: imported } = roundTrip(style({ strokeColor: "#336699" }), lines());
+    assert.equal(imported.simpleStyleEnabled, DEFAULT_LAYER_STYLE.simpleStyleEnabled);
+    const external = parseMapboxStyle({
+      version: 8,
+      layers: [
+        // A coalesce over a property that is not a simplestyle key.
+        { id: "l", type: "line", paint: { "line-color": ["coalesce", ["get", "colour"], "#000"] } },
+      ],
+    });
+    assert.equal(external.style.simpleStyleEnabled, undefined);
+  });
+
+  it("turns simplestyle on for a hidden-only style and ignores a hidden class beside drawn ones", () => {
+    const lookup = ["coalesce", ["get", "stroke"], "#112233"];
+    const hiddenOnly = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "l", type: "line", layout: { visibility: "none" }, paint: { "line-color": lookup } },
+      ],
+    });
+    assert.equal(hiddenOnly.style.simpleStyleEnabled, true);
+    const hiddenBesideDrawn = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "f", type: "fill", paint: { "fill-color": "#ffffff" } },
+        { id: "l", type: "line", layout: { visibility: "none" }, paint: { "line-color": lookup } },
+      ],
+    });
+    assert.equal(hiddenBesideDrawn.style.simpleStyleEnabled, undefined);
+  });
+
+  it("does not read an opacity fold on a width, and rejects a folded opacity above 1", () => {
+    const lookup = (key: string, base: number) => [
+      "to-number",
+      ["coalesce", ["get", key], base],
+      base,
+    ];
+    const width = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "l", type: "line", paint: { "line-width": ["*", lookup("stroke-width", 2), 1.5] } },
+      ],
+    });
+    assert.equal(width.style.strokeWidth, undefined);
+    assert.deepEqual(width.warnings, [
+      "A line width expression could not be read; the layer keeps its current stroke width.",
+    ]);
+    const opacity = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "f", type: "fill", paint: { "fill-opacity": ["*", lookup("fill-opacity", 1), 3] } },
+      ],
+    });
+    assert.equal(opacity.style.fillOpacity, undefined);
+    assert.deepEqual(opacity.warnings, [
+      "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+    ]);
+  });
+
+  it("rejects a flat fill opacity above 1 and reports a simplestyle lookup on a radius", () => {
+    const flat = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "f", type: "fill", paint: { "fill-opacity": 1.5 } }],
+    });
+    assert.equal(flat.style.fillOpacity, undefined);
+    assert.deepEqual(flat.warnings, [
+      "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+    ]);
+    const lookup = ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3];
+    const circle = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "p", type: "circle", paint: { "circle-radius": lookup } }],
+    });
+    assert.equal(circle.style.circleRadius, undefined);
+    assert.ok(
+      circle.warnings.some((w) => /circle radius is data-driven/.test(w)),
+      JSON.stringify(circle.warnings),
+    );
+    const heat = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "h", type: "heatmap", paint: { "heatmap-radius": lookup } }],
+    });
+    assert.equal(heat.style.heatmapRadius, undefined);
+    assert.ok(
+      heat.warnings.some((w) => /heatmap radius is data-driven/.test(w)),
+      JSON.stringify(heat.warnings),
+    );
+  });
+
+  it("turns simplestyle on only for lookups in paint the import reads", () => {
+    const blurOnly = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "l",
+          type: "line",
+          paint: {
+            "line-color": "#112233",
+            "line-blur": ["to-number", ["coalesce", ["get", "stroke-width"], 1], 1],
+          },
+        },
+      ],
+    });
+    assert.equal(blurOnly.style.simpleStyleEnabled, undefined);
+  });
+
+  it("turns simplestyle on for a lookup in any drawn class of a combined stack", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "minor",
+          type: "line",
+          filter: ["==", ["get", "rank"], "minor"],
+          paint: { "line-color": "#0b3a57" },
+        },
+        {
+          id: "major",
+          type: "line",
+          filter: ["==", ["get", "rank"], "major"],
+          paint: {
+            "line-color": "#8be6ff",
+            "line-width": ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3],
+          },
+        },
+      ],
+    });
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.equal(result.style.simpleStyleEnabled, true);
+  });
+
   it("warns and imports nothing when there is no layers array", () => {
     const result = parseMapboxStyle({ hello: "world" });
     assert.equal(result.matchedLayerCount, 0);
