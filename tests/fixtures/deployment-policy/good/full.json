@@ -22,7 +22,8 @@
     "allowed": ["acme-tools"],
     "blocked": ["bad-plugin"],
     "sideload": false,
-    "defaultActive": ["acme-tools"]
+    "defaultActive": ["acme-tools"],
+    "openPanel": "acme-tools"
   },
   "services": {
     "builtins": true,

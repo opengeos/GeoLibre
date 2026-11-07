@@ -60,6 +60,7 @@ export interface ProjectSlice {
   projectName: string;
   projectPath: string | null;
   projectGeneration: number;
+  projectLoaded: boolean;
   isDirty: boolean;
   projectPlugins: ProjectPluginState | null;
   legend: LegendConfig;
@@ -105,6 +106,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
   projectName: DEFAULT_PROJECT_NAME,
   projectPath: null,
   projectGeneration: 0,
+  projectLoaded: false,
   isDirty: false,
   projectPlugins: null,
   legend: { ...DEFAULT_LEGEND_CONFIG },
@@ -158,6 +160,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       hoverTooltipsEnabled: true,
       projectPath: null,
       projectGeneration: s.projectGeneration + 1,
+      projectLoaded: false,
       isDirty: false,
       selectedLayerId: null,
       selectedFeatureId: null,
@@ -219,6 +222,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       hoverTooltipsEnabled: true,
       projectPath: path,
       projectGeneration: s.projectGeneration + 1,
+      projectLoaded: true,
       isDirty: false,
       selectedLayerId,
       selectedFeatureId: null,

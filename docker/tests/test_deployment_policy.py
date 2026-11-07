@@ -69,6 +69,14 @@ def test_python_constants_match_schema():
     assert props["branding"]["properties"]["appName"]["maxLength"] == dp.APP_NAME_MAX
 
 
+@pytest.mark.parametrize("whitespace", [" ", "\t", "\ufeff", "\u00a0", "\u3000"])
+def test_nonblank_fields_reject_js_trim_whitespace(whitespace):
+    for section, field in [("plugins", "openPanel"), ("plugins", "registryUrl"), ("ai", "model")]:
+        doc = {"version": 1, section: {field: whitespace}}
+        msg = error_of(dp.validate_policy, doc, LABEL)
+        assert f"{section}.{field} must be a nonblank string" in msg
+
+
 def write_file(tmp_path, doc):
     path = tmp_path / "deployment.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
@@ -229,3 +237,37 @@ def test_share_url_rejects_query_and_fragment():
         assert "must not include query parameters or a fragment" in error_of(
             dp.normalize_share_url, bare
         )
+
+
+@pytest.mark.parametrize("whitespace", ["\ufeff", "\u00a0", "\u3000"])
+def test_service_entry_ids_and_names_use_js_trim(whitespace):
+    def problem(kind, key):
+        raise ValueError(f"{kind}:{key}")
+
+    for key in ("id", "name"):
+        entry = {"id": "a", "name": "A", "kind": "wms", "fields": {"url": "u"}}
+        entry[key] = whitespace
+        with pytest.raises(ValueError, match=f"nonblank:{key}"):
+            dp.check_service_entry(entry, set(), problem)
+    entry = {
+        "id": f"{whitespace}a",
+        "name": f"A{whitespace}",
+        "kind": "wms",
+        "fields": {"url": "u"},
+    }
+    service = dp.check_service_entry(entry, set(), problem)
+    assert (service["id"], service["name"]) == ("a", "A")
+
+
+@pytest.mark.parametrize("whitespace", ["\ufeff", "\u00a0", "\u3000"])
+def test_ids_and_app_name_reject_js_trim_whitespace(whitespace):
+    doc = {"version": 1, "plugins": {"allowed": [whitespace]}}
+    assert "plugins.allowed[0] must be a nonblank string" in error_of(
+        dp.validate_policy, doc, LABEL
+    )
+    doc = {"version": 1, "branding": {"appName": whitespace}}
+    assert "branding.appName must be a nonblank string" in error_of(dp.validate_policy, doc, LABEL)
+    policy = dp.validate_policy(
+        {"version": 1, "plugins": {"allowed": [f"{whitespace}a{whitespace}"]}}, LABEL
+    )
+    assert policy["plugins"]["allowed"] == ["a"]

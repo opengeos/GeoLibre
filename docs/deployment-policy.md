@@ -154,6 +154,7 @@ An array of the capability names from
 | `blocked` | string[] | External plugin ids never loaded. |
 | `sideload` | boolean | Allow installing from a manifest URL, zip, directory or project file (default true). |
 | `defaultActive` | string[] | Plugin ids active in a fresh project. |
+| `openPanel` | string | Panel id to open automatically on startup in a fresh project. |
 
 ### `services`
 
@@ -230,6 +231,34 @@ fresh project. It does not override a saved project's active plugin list and
 does not allow a denied plugin to load. URL updates preserve these deployment
 defaults for later fresh projects. Without a `plugins` section, existing loading
 and activation behavior is unchanged.
+
+`openPanel` names a registered dockable right-panel or floating panel to open
+automatically when the application starts with a fresh project. It opens once
+startup is ready: plugins have loaded, the map is ready, any `?url=` project has
+settled, and any native startup restore has finished (or failed). A restore that
+never completes keeps the panel closed (a console warning notes when it outlasts
+the startup gate). A `?url=` project that loads is a saved project, so the panel
+does not open for it; the wait only matters when that load fails and the app
+falls back to a fresh project.
+
+The panel never opens in a saved project, in the read-only viewer preset, or
+when side panels are hidden (`?maponly`, `?panels=hidden`, `?hidePanels=true`).
+
+If the panel registers asynchronously during plugin activation, it opens once it
+registers. A right-panel target is skipped if another right panel became active
+while it was waiting (opened by the user or by a plugin activating at startup),
+and a console warning names it; a floating target still opens. A warning is also logged if the panel has not registered
+after 10 seconds. A right panel the user opens before startup is ready (for
+example during a slow restore) is not protected: if the deployment panel is
+already registered at that point, it opens in its place. The S3 Browser opened
+by the Settings → Startup option is a startup plugin too: whichever of the two
+panels opens last keeps the right dock.
+
+Like every other field, an invalid `openPanel` (blank or not a string) makes the
+desktop parser drop the whole `plugins` section, including `blocked`, `allowed`
+and `sideload`, with a console warning naming the field. The container validator
+rejects the whole file instead, so validate desktop policy files against
+`schema/deployment.schema.json`.
 
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.

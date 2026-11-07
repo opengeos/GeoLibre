@@ -152,6 +152,7 @@ function seedLinkedMapCrs(location: CoordinateTarget | null): void {
 
 export function useStartupProject(): {
   restoring: boolean;
+  settled: boolean;
 } {
   const { t } = useTranslation();
   // Consume a direct-file export before the shell and MapCanvas mount. Loading
@@ -210,6 +211,7 @@ export function useStartupProject(): {
     seedLinkedMapCrs(location);
     return false;
   });
+  const [settled, setSettled] = useState(!restoring);
 
   // Fetch the features of the URL layers the seeding above added, and only
   // those. In an effect, not the initializer, so a render that is thrown away
@@ -270,6 +272,9 @@ export function useStartupProject(): {
     // spinner would break it, and this call would need the same guard.
     const gateTimer = window.setTimeout(() => {
       if (cancelled) return;
+      console.warn(
+        "[GeoLibre] Startup project restore is still pending; showing the default workspace meanwhile",
+      );
       openDefaultWorkspace({ seedLayers: true });
       // Seeding the Startup setting's layers starts a new project. The restore
       // may still replace this workspace while the user has not touched it, so
@@ -338,7 +343,13 @@ export function useStartupProject(): {
         openDefaultWorkspace({ seedLayers: true });
       } finally {
         window.clearTimeout(gateTimer);
-        if (!cancelled) setRestoring(false);
+        // `settled` deliberately waits for the restore itself, not the gate
+        // timer: opening the deployment `openPanel` over the default workspace
+        // would leave it open once a late restore replaces that workspace.
+        if (!cancelled) {
+          setRestoring(false);
+          setSettled(true);
+        }
       }
     })();
     return () => {
@@ -351,5 +362,5 @@ export function useStartupProject(): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inlineProject, openedProjectPath]);
 
-  return { restoring };
+  return { restoring, settled };
 }

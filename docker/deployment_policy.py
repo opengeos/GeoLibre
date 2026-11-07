@@ -43,6 +43,16 @@ SHARE_LOOPBACK = ("localhost", "127.0.0.1")
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
 SAFE_INTEGER = 2**53 - 1
 
+# Unicode whitespace characters removed by JavaScript's String.prototype.trim()
+# (ECMAScript 2024 §12.3 WhiteSpace + LineTerminator + BOM U+FEFF).
+# Used for all 'nonblank', 'ids' and 'appname' fields and service entry
+# ids/names so the Docker container validator enforces the exact same trimming
+# semantics as the client desktop parser (JS trim()).
+JS_TRIM_WHITESPACE = (
+    " \t\n\r\v\f\ufeff\u00a0\u1680\u2000\u2001\u2002\u2003\u2004"
+    "\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+
 # Section -> {field: value kind}, in schema order.
 FIELD_KINDS = {
     "interface": {
@@ -60,6 +70,7 @@ FIELD_KINDS = {
         "blocked": "ids",
         "sideload": "bool",
         "defaultActive": "ids",
+        "openPanel": "nonblank",
     },
     "services": {"builtins": "bool", "catalog": "catalog"},
     "sharing": {"shareUrl": "share", "collabUrl": "collab", "embedOrigins": "origins"},
@@ -163,9 +174,9 @@ def check_service_entry(entry, seen_ids, problem):
     if not isinstance(entry, dict):
         problem("object", None)
     for key in ("id", "name"):
-        if not isinstance(entry.get(key), str) or not entry[key].strip():
+        if not isinstance(entry.get(key), str) or not entry[key].strip(JS_TRIM_WHITESPACE):
             problem("nonblank", key)
-    service_id = entry["id"].strip()
+    service_id = entry["id"].strip(JS_TRIM_WHITESPACE)
     if service_id in seen_ids:
         problem("duplicate", "id")
     if entry.get("kind") not in SERVICE_KINDS:
@@ -182,7 +193,7 @@ def check_service_entry(entry, seen_ids, problem):
     seen_ids.add(service_id)
     service = {
         "id": service_id,
-        "name": entry["name"].strip(),
+        "name": entry["name"].strip(JS_TRIM_WHITESPACE),
         "kind": entry["kind"],
         "fields": fields,
     }
@@ -361,9 +372,9 @@ def _validate_ids(label, path, value):
     seen = set()
     out = []
     for index, item in enumerate(value):
-        if not isinstance(item, str) or not item.strip():
+        if not isinstance(item, str) or not item.strip(JS_TRIM_WHITESPACE):
             fail(label, f"{path}[{index}]", "must be a nonblank string")
-        item = item.strip()
+        item = item.strip(JS_TRIM_WHITESPACE)
         if item in seen:
             fail(label, f"{path}[{index}]", "is a duplicate after trimming")
         seen.add(item)
@@ -451,7 +462,7 @@ def _validate_field(label, path, kind, value):
             fail(label, path, "must be a boolean")
         return value
     if kind == "nonblank":
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or not value.strip(JS_TRIM_WHITESPACE):
             fail(label, path, "must be a nonblank string")
         return value
     if kind == "level":
@@ -465,7 +476,7 @@ def _validate_field(label, path, kind, value):
     if kind == "origins":
         return _validate_origins(label, path, value)
     if kind == "appname":
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or not value.strip(JS_TRIM_WHITESPACE):
             fail(label, path, "must be a nonblank string")
         if len(value) > APP_NAME_MAX:
             fail(label, path, f"must be at most {APP_NAME_MAX} characters")
