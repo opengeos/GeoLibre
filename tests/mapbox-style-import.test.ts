@@ -1023,6 +1023,76 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(hiddenBesideDrawn.style.simpleStyleEnabled, undefined);
   });
 
+  it("does not read an opacity fold on a width, and rejects a folded opacity above 1", () => {
+    const lookup = (key: string, base: number) => [
+      "to-number",
+      ["coalesce", ["get", key], base],
+      base,
+    ];
+    const width = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "l", type: "line", paint: { "line-width": ["*", lookup("stroke-width", 2), 1.5] } },
+      ],
+    });
+    assert.equal(width.style.strokeWidth, undefined);
+    assert.deepEqual(width.warnings, [
+      "A line width expression could not be read; the layer keeps its current stroke width.",
+    ]);
+    const opacity = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "f", type: "fill", paint: { "fill-opacity": ["*", lookup("fill-opacity", 1), 3] } },
+      ],
+    });
+    assert.equal(opacity.style.fillOpacity, undefined);
+    assert.deepEqual(opacity.warnings, [
+      "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+    ]);
+  });
+
+  it("turns simplestyle on only for lookups in paint the import reads", () => {
+    const blurOnly = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "l",
+          type: "line",
+          paint: {
+            "line-color": "#112233",
+            "line-blur": ["to-number", ["coalesce", ["get", "stroke-width"], 1], 1],
+          },
+        },
+      ],
+    });
+    assert.equal(blurOnly.style.simpleStyleEnabled, undefined);
+  });
+
+  it("turns simplestyle on for a lookup in any drawn class of a combined stack", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "minor",
+          type: "line",
+          filter: ["==", ["get", "rank"], "minor"],
+          paint: { "line-color": "#0b3a57" },
+        },
+        {
+          id: "major",
+          type: "line",
+          filter: ["==", ["get", "rank"], "major"],
+          paint: {
+            "line-color": "#8be6ff",
+            "line-width": ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3],
+          },
+        },
+      ],
+    });
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.equal(result.style.simpleStyleEnabled, true);
+  });
+
   it("warns and imports nothing when there is no layers array", () => {
     const result = parseMapboxStyle({ hello: "world" });
     assert.equal(result.matchedLayerCount, 0);

@@ -125,22 +125,36 @@ function asFiniteNumber(value: unknown): number | null {
 /**
  * A number paint value, also read through the simplestyle lookup the exporter
  * writes when a layer has `simpleStyleEnabled`: the bare
- * `["to-number", ["coalesce", ["get", key], base], base]` gives `base`, and the
- * opacity fold `["*", lookup, opacity]` gives `base * opacity`, the same value
- * a flat export of that layer carries.
+ * `["to-number", ["coalesce", ["get", key], base], base]` gives `base`. For an
+ * opacity (`foldsOpacity`), the exporter's fold `["*", lookup, opacity]` gives
+ * `base * opacity`, the same value a flat export of that layer carries; the
+ * exporter never folds anything into a width, so there it stays unread.
  */
-function asLayerNumber(value: unknown): number | null {
+function asLayerNumber(value: unknown, foldsOpacity = false): number | null {
   const flat = asFiniteNumber(value);
   if (flat !== null) return flat;
   const array = asArray(value);
   if (!array) return null;
-  if (array[0] === "*" && array.length === 3) {
+  if (foldsOpacity && array[0] === "*" && array.length === 3) {
     const lookup = readSimpleStyleNumberLookup(array[1]);
     const scale = asFiniteNumber(array[2]);
     return lookup && scale !== null ? lookup.base * scale : null;
   }
   return readSimpleStyleNumberLookup(array)?.base ?? null;
 }
+
+/** The paint properties the exporter writes simplestyle lookups into. */
+const SIMPLE_STYLE_PAINT = [
+  "fill-color",
+  "fill-opacity",
+  "fill-outline-color",
+  "line-color",
+  "line-width",
+  "line-opacity",
+  "circle-color",
+  "circle-opacity",
+  "circle-stroke-opacity",
+] as const;
 
 /**
  * Warn (rather than silently keep the old value) when a numeric paint property
@@ -1218,9 +1232,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // line/circle layer from contributing the color.
     if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
-    const flatOpacity = asLayerNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The fill opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The fill opacity is data-driven; the layer keeps its current fill opacity.");
     }
@@ -1319,9 +1337,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // circlePaint writes the layer's fillOpacity into circle-opacity, so a
     // point-only export (no fill layer) recovers its opacity here.
     const opacity = paint["circle-opacity"];
-    const flatOpacity = asLayerNumber(opacity);
-    if (flatOpacity !== null) {
+    const flatOpacity = asLayerNumber(opacity, true);
+    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
+    } else if (flatOpacity !== null) {
+      warnings.push(
+        "The circle opacity is not between 0 and 1 and was not applied; the layer keeps its current fill opacity.",
+      );
     } else if (opacity !== undefined) {
       warnings.push("The circle opacity is data-driven; the layer keeps its current fill opacity.");
     }
@@ -1437,8 +1459,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     ...[extrusion, fill, line, circle].filter((layer) => layer !== undefined),
     ...[...appliedStackTypes].flatMap((type) => byType(type).filter(isDrawn)),
   ];
+  // Only the paint the exporter writes lookups into, and the import reads,
+  // counts: a lookup elsewhere (in `line-blur`, say) is dropped with its
+  // property, and must not switch on per-feature colours the style never set.
   const readsSimpleStyle = (layer: RawStyleLayer) =>
-    Object.values(layer.paint ?? {}).some(readsSimpleStyleProperties);
+    SIMPLE_STYLE_PAINT.some((property) =>
+      readsSimpleStyleProperties((layer.paint ?? {})[property]),
+    );
   if (readLayers.some(readsSimpleStyle)) patch.simpleStyleEnabled = true;
 
   return { style: patch, labels, warnings, matchedLayerCount };

@@ -150,7 +150,7 @@ function simpleStyleGet<K extends string>(node: unknown, keys: readonly K[]): K 
  * @returns The simplestyle key and the layer-level base, or `null` when the
  *   node is not that lookup.
  */
-export function readSimpleStyleColorLookup(
+function readSimpleStyleColorLookup(
   node: unknown,
 ): { property: (typeof SIMPLE_STYLE_COLOR_KEYS)[number]; base: unknown } | null {
   if (!Array.isArray(node) || node.length !== 3 || node[0] !== "coalesce") return null;
