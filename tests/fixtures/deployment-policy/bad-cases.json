@@ -160,6 +160,69 @@
       "dropped": ["plugins"]
     }
   },
+  "plugins-file-access-string": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "fileAccess": "not-an-object"
+      }
+    },
+    "container": "plugins.fileAccess must be an object",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-file-access-key-duplicate": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "fileAccess": {
+          "plugin-a": ["/etc/cfg"],
+          " plugin-a ": ["/etc/other"]
+        }
+      }
+    },
+    "container": "plugins.fileAccess.plugin-a is a duplicate key after trimming",
+    "schema": "accept",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-file-access-item-duplicate": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "fileAccess": {
+          "plugin-a": ["/etc/cfg", " /etc/cfg"]
+        }
+      }
+    },
+    "container": "plugins.fileAccess.plugin-a[1] is a duplicate after trimming",
+    "schema": "accept",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
+  "plugins-file-access-item-blank": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "plugins": {
+        "fileAccess": {
+          "plugin-a": ["   "]
+        }
+      }
+    },
+    "container": "plugins.fileAccess.plugin-a[0] must be a nonblank string",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["plugins"]
+    }
+  },
   "interface-token-key": {
     "input": {
       "version": 1,

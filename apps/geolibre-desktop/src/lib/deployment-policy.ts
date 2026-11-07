@@ -40,6 +40,7 @@ export interface PluginsPolicy {
   sideload?: boolean;
   defaultActive?: string[];
   openPanel?: string;
+  fileAccess?: Record<string, string[]>;
 }
 
 /** One curated web-service library entry. */
@@ -219,6 +220,29 @@ function readInterface(v: unknown): Result<InterfacePolicy> {
   return "error" in r ? r : { value: r.value as InterfacePolicy };
 }
 
+function readFileAccess(v: unknown): Result<Record<string, string[]>> {
+  if (!isPlainObject(v)) return err("'fileAccess' must be an object");
+  const result: Record<string, string[]> = {};
+  for (const [key, val] of Object.entries(v)) {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) return err("'fileAccess' keys must be non-blank strings");
+    if (Object.hasOwn(result, trimmedKey)) {
+      return err(`'fileAccess.${trimmedKey}' is a duplicate key after trimming`);
+    }
+    const listRes = readIdList(val, `fileAccess.${trimmedKey}`);
+    if ("error" in listRes) return listRes;
+    // defineProperty, not assignment: a `__proto__` key must become an own
+    // entry rather than replace the result's prototype.
+    Object.defineProperty(result, trimmedKey, {
+      value: listRes.value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return { value: result };
+}
+
 function readPlugins(v: unknown): Result<PluginsPolicy> {
   const obj = readObject(v, [
     "registryUrl",
@@ -227,6 +251,7 @@ function readPlugins(v: unknown): Result<PluginsPolicy> {
     "sideload",
     "defaultActive",
     "openPanel",
+    "fileAccess",
   ]);
   if ("error" in obj) return obj;
   const r = readFields(obj.value, {
@@ -239,6 +264,7 @@ function readPlugins(v: unknown): Result<PluginsPolicy> {
       const p = readNonBlank(x, "openPanel");
       return "error" in p ? p : { value: p.value.trim() };
     },
+    fileAccess: (x) => readFileAccess(x),
   });
   return "error" in r ? r : { value: r.value as PluginsPolicy };
 }
@@ -465,12 +491,33 @@ async function readDeploymentPolicy(): Promise<DeploymentPolicy | null> {
       const contents = await invoke<string | null>("read_deployment_policy");
       // An existing config-dir file owns the whole policy, even when invalid.
       // Only absence or a failed read permits the bundled web-file fallback.
-      if (contents !== null) return parseDeploymentPolicy(contents);
+      if (contents !== null) {
+        const policy = parseDeploymentPolicy(contents);
+        if (policy?.plugins?.fileAccess) {
+          const isMachine = await invoke<boolean>("is_machine_deployment_policy").catch(
+            () => false,
+          );
+          if (!isMachine) {
+            console.warn(
+              "[deployment-policy] ignoring 'plugins.fileAccess' in per-user deployment policy; only machine-wide deployment.json is honoured",
+            );
+            delete policy.plugins.fileAccess;
+          }
+        }
+        return policy;
+      }
     } catch (error) {
       console.warn("[deployment-policy] read_deployment_policy failed:", error);
     }
   }
-  return fetchDeploymentPolicy();
+  const policy = await fetchDeploymentPolicy();
+  if (policy?.plugins?.fileAccess) {
+    console.warn(
+      "[deployment-policy] ignoring 'plugins.fileAccess' in web deployment policy; only machine-wide deployment.json is honoured",
+    );
+    delete policy.plugins.fileAccess;
+  }
+  return policy;
 }
 
 let loading: Promise<DeploymentPolicy | null> | null = null;

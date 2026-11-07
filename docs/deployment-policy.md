@@ -155,6 +155,7 @@ An array of the capability names from
 | `sideload` | boolean | Allow installing from a manifest URL, zip, directory or project file (default true). |
 | `defaultActive` | string[] | Plugin ids active in a fresh project. |
 | `openPanel` | string | Panel id to open automatically on startup in a fresh project. |
+| `fileAccess` | object (plugin id → string[]) | Literal absolute file paths each plugin may read; honoured only from a machine-wide policy file. |
 
 ### `services`
 
@@ -260,6 +261,18 @@ and `sideload`, with a console warning naming the field. The container validator
 rejects the whole file instead, so validate desktop policy files against
 `schema/deployment.schema.json`.
 
+`fileAccess` configures an administrator-side allowlist of literal absolute file
+paths per plugin id (e.g. `{"my-plugin": ["/etc/geolibre/app.cfg"]}`). To prevent
+unprivileged tampering, `fileAccess` is honoured exclusively from a machine-wide
+`deployment.json` (`%ProgramData%/GeoLibre/` on Windows, `/etc/geolibre/` on Linux,
+`/Library/Application Support/GeoLibre/` on macOS); if defined in a per-user policy,
+it is ignored with a console warning. The allowlist gates the native
+`readAllowedFile(pluginId, path)` API on the desktop, where both the requested path
+and allowlist entries are canonicalised to prevent path traversal and symlink escapes.
+Reads enforce a 50 MB size limit. Plugins call `app.readAllowedFile(path)`; the host
+binds the calling plugin's id. Plugins still share one unsandboxed webview, so this
+scopes well-behaved plugins to their own list rather than isolating a hostile one.
+
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.
 
@@ -297,7 +310,14 @@ beyond the safe-integer range, none of which JSON Schema alone can all express.
 
 ## Desktop
 
-Place `deployment.json` in Tauri's `<app_config_dir>` (see
+A machine-wide `deployment.json` takes precedence: when
+`%ProgramData%\GeoLibre\deployment.json` (Windows), `/etc/geolibre/deployment.json`
+(Linux) or `/Library/Application Support/GeoLibre/deployment.json` (macOS) exists,
+it is the whole desktop policy and the per-user file below is not read. Use it when
+users must not be able to edit the policy; it is the only source that can grant
+`plugins.fileAccess`.
+
+Otherwise, place `deployment.json` in Tauri's `<app_config_dir>` (see
 [UI Profiles](ui-profiles.md) for the legacy profile locations). For the
 standard `org.geolibre.desktop` application identifier, the paths are:
 
