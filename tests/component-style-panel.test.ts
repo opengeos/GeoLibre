@@ -157,6 +157,15 @@ describe("StylePanel", () => {
     });
 
     assert.equal((screen.getByLabelText("Line style") as HTMLSelectElement).value, "dotted");
+
+    // Custom was opened for the dashed seed; applying Dashed again from
+    // elsewhere shows Dashed, not the stale Custom.
+    act(() => {
+      useAppStore.getState().setLayerStyle("blocks", {
+        strokeDash: [...STROKE_DASH_PRESETS.dashed],
+      });
+    });
+    assert.equal((screen.getByLabelText("Line style") as HTMLSelectElement).value, "dashed");
   });
 
   it("steps stroke width with the increase button", () => {

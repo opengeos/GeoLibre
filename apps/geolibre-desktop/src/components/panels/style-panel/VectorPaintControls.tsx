@@ -16,7 +16,7 @@ import {
   type VectorStyleMode,
 } from "@geolibre/core";
 import { ColorField, ColorRampSelect, Input, Label, Select, Separator } from "@geolibre/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isControlPaintedVectorLayer } from "./layer-capabilities";
 import { NumericFieldSelect, NumericStyleInput } from "./style-inputs";
@@ -338,6 +338,11 @@ function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
   // elsewhere, such as the Style Manager, rather than leaving "Custom" selected.
   const [customFor, setCustomFor] = useState<string | null>(null);
   const showCustom = presetName === "custom" || customFor === patternText;
+  // A pattern set from elsewhere ends the open custom field at once, so a
+  // later preset with the same lengths shows as that preset, not as Custom.
+  useEffect(() => {
+    if (customFor !== null && customFor !== patternText) setCustomFor(null);
+  }, [customFor, patternText]);
   const [draft, setDraft] = useState<string | null>(null);
   const draftValid = draft === null || parseDashPattern(draft) !== null;
   const commitDraft = () => {
