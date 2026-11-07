@@ -105,6 +105,16 @@
         "openPanel": {
           "$ref": "#/$defs/nonBlank",
           "description": "Panel id to open automatically on startup in a fresh project."
+        },
+        "fileAccess": {
+          "type": "object",
+          "description": "Administrator-designated file path allowlists per plugin id.",
+          "additionalProperties": {
+            "$ref": "#/$defs/idList"
+          },
+          "propertyNames": {
+            "pattern": "\\S"
+          }
         }
       }
     },

@@ -155,6 +155,7 @@ An array of the capability names from
 | `sideload` | boolean | Allow installing from a manifest URL, zip, directory or project file (default true). |
 | `defaultActive` | string[] | Plugin ids active in a fresh project. |
 | `openPanel` | string | Panel id to open automatically on startup in a fresh project. |
+| `fileAccess` | Record<string, string[]> | Administrator-allowlisted file paths/patterns per plugin id. |
 
 ### `services`
 
@@ -259,6 +260,10 @@ desktop parser drop the whole `plugins` section, including `blocked`, `allowed`
 and `sideload`, with a console warning naming the field. The container validator
 rejects the whole file instead, so validate desktop policy files against
 `schema/deployment.schema.json`.
+
+`fileAccess` configures an administrator-side allowlist of file paths per plugin
+id (e.g. `{"my-plugin": ["/etc/geolibre/app.cfg"]}`). Only paths explicitly
+listed for a given plugin id are accessible to that plugin.
 
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.

@@ -40,6 +40,7 @@ export interface PluginsPolicy {
   sideload?: boolean;
   defaultActive?: string[];
   openPanel?: string;
+  fileAccess?: Record<string, string[]>;
 }
 
 /** One curated web-service library entry. */
@@ -219,6 +220,19 @@ function readInterface(v: unknown): Result<InterfacePolicy> {
   return "error" in r ? r : { value: r.value as InterfacePolicy };
 }
 
+function readFileAccess(v: unknown): Result<Record<string, string[]>> {
+  if (!isPlainObject(v)) return err("'fileAccess' must be an object");
+  const result: Record<string, string[]> = {};
+  for (const [key, val] of Object.entries(v)) {
+    const trimmedKey = key.trim();
+    if (!trimmedKey) return err("'fileAccess' keys must be non-blank strings");
+    const listRes = readIdList(val, `fileAccess.${trimmedKey}`);
+    if ("error" in listRes) return listRes;
+    result[trimmedKey] = listRes.value;
+  }
+  return { value: result };
+}
+
 function readPlugins(v: unknown): Result<PluginsPolicy> {
   const obj = readObject(v, [
     "registryUrl",
@@ -227,6 +241,7 @@ function readPlugins(v: unknown): Result<PluginsPolicy> {
     "sideload",
     "defaultActive",
     "openPanel",
+    "fileAccess",
   ]);
   if ("error" in obj) return obj;
   const r = readFields(obj.value, {
@@ -239,6 +254,7 @@ function readPlugins(v: unknown): Result<PluginsPolicy> {
       const p = readNonBlank(x, "openPanel");
       return "error" in p ? p : { value: p.value.trim() };
     },
+    fileAccess: (x) => readFileAccess(x),
   });
   return "error" in r ? r : { value: r.value as PluginsPolicy };
 }

@@ -182,6 +182,29 @@ test("id lists are trimmed", () => {
   assert.deepEqual(policy?.plugins?.blocked, ["a"]);
 });
 
+test("plugins.fileAccess is parsed, trimmed, and drops invalid entries", () => {
+  const policy = resolveDeploymentPolicy({
+    version: 1,
+    plugins: {
+      fileAccess: {
+        " my-plugin ": [" /etc/geolibre/app.cfg "],
+      },
+    },
+  });
+  assert.deepEqual(policy?.plugins?.fileAccess, {
+    "my-plugin": ["/etc/geolibre/app.cfg"],
+  });
+
+  const bad = resolveDeploymentPolicy({
+    version: 1,
+    capabilities: ["data:add"],
+    plugins: {
+      fileAccess: "not-an-object",
+    },
+  });
+  assert.deepEqual(bad, { version: 1, capabilities: ["data:add"] });
+});
+
 test("schema enums stay in sync with code", () => {
   assert.equal(
     schema.$id,
