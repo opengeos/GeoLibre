@@ -237,6 +237,27 @@ describe("openStartupPanel", () => {
     dispose();
   });
 
+  it("keeps the original baseline when a wait restarts after another panel opened", () => {
+    registerRightPanel({ id: "user-panel", title: "User Panel", render: () => undefined });
+    // The first wait began with no active panel; the user opened one before it restarted
+    openRightPanel("user-panel");
+    let displaced = false;
+    const dispose = openStartupPanel(
+      "late-panel",
+      () => true,
+      undefined,
+      () => {
+        displaced = true;
+      },
+      null,
+    );
+    assert.equal(displaced, true);
+
+    registerRightPanel({ id: "late-panel", title: "Late Panel", render: () => undefined });
+    assert.equal(getActiveRightPanel(), "user-panel");
+    dispose();
+  });
+
   it("still opens a late panel when no other right panel was opened", () => {
     const dispose = openStartupPanel("late-panel", () => true);
     registerRightPanel({ id: "other-panel", title: "Other", render: () => undefined });

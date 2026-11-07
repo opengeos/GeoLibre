@@ -71,6 +71,9 @@ export function isStartupPanelGateOpen(gate: StartupPanelGate): boolean {
  * @param onOpened - Optional callback invoked when the panel successfully opens.
  * @param onDisplaced - Optional callback invoked when the wait ends because another
  *   right panel became active.
+ * @param activeBaseline - The right panel that was active when waiting first began.
+ *   Defaults to the current one; pass the original value when restarting a wait so a
+ *   panel opened in between still counts as displacement.
  * @returns A disposer that unsubscribes any active registry listeners.
  */
 export function openStartupPanel(
@@ -78,6 +81,7 @@ export function openStartupPanel(
   isFreshProject: () => boolean = isStartupProjectFresh,
   onOpened?: () => void,
   onDisplaced?: () => void,
+  activeBaseline: string | null = getActiveRightPanel(),
 ): () => void {
   const trimmed = panelId.trim();
   if (!trimmed || !isFreshProject()) return () => {};
@@ -122,19 +126,22 @@ export function openStartupPanel(
     return false;
   };
 
-  if (tryOpen()) {
+  const displaced = (): boolean => {
+    const active = getActiveRightPanel();
+    if (active === null || active === activeBaseline || active === trimmed) return false;
+    cleanup();
+    onDisplaced?.();
+    return true;
+  };
+
+  if (displaced() || tryOpen()) {
     return cleanup;
   }
 
-  const activeAtStart = getActiveRightPanel();
   const onRegistryChange = () => {
     if (unsubscribed) return;
-    if (tryOpen()) return;
-    const active = getActiveRightPanel();
-    if (active !== null && active !== activeAtStart) {
-      cleanup();
-      onDisplaced?.();
-    }
+    if (displaced()) return;
+    tryOpen();
   };
 
   unsubRight = subscribeRightPanels(onRegistryChange);

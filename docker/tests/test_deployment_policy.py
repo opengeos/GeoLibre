@@ -257,3 +257,17 @@ def test_service_entry_ids_and_names_use_js_trim(whitespace):
     }
     service = dp.check_service_entry(entry, set(), problem)
     assert (service["id"], service["name"]) == ("a", "A")
+
+
+@pytest.mark.parametrize("whitespace", ["\ufeff", "\u00a0", "\u3000"])
+def test_ids_and_app_name_reject_js_trim_whitespace(whitespace):
+    doc = {"version": 1, "plugins": {"allowed": [whitespace]}}
+    assert "plugins.allowed[0] must be a nonblank string" in error_of(
+        dp.validate_policy, doc, LABEL
+    )
+    doc = {"version": 1, "branding": {"appName": whitespace}}
+    assert "branding.appName must be a nonblank string" in error_of(dp.validate_policy, doc, LABEL)
+    policy = dp.validate_policy(
+        {"version": 1, "plugins": {"allowed": [f"{whitespace}a{whitespace}"]}}, LABEL
+    )
+    assert policy["plugins"]["allowed"] == ["a"]

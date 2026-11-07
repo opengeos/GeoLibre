@@ -45,9 +45,9 @@ SAFE_INTEGER = 2**53 - 1
 
 # Unicode whitespace characters removed by JavaScript's String.prototype.trim()
 # (ECMAScript 2024 §12.3 WhiteSpace + LineTerminator + BOM U+FEFF).
-# Used for all 'nonblank' fields and service entry ids/names so the Docker
-# container validator enforces the exact same trimming semantics as the client
-# desktop parser (readNonBlank and the service catalog's trim()).
+# Used for all 'nonblank', 'ids' and 'appname' fields and service entry
+# ids/names so the Docker container validator enforces the exact same trimming
+# semantics as the client desktop parser (JS trim()).
 JS_TRIM_WHITESPACE = (
     " \t\n\r\v\f\ufeff\u00a0\u1680\u2000\u2001\u2002\u2003\u2004"
     "\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
@@ -372,9 +372,9 @@ def _validate_ids(label, path, value):
     seen = set()
     out = []
     for index, item in enumerate(value):
-        if not isinstance(item, str) or not item.strip():
+        if not isinstance(item, str) or not item.strip(JS_TRIM_WHITESPACE):
             fail(label, f"{path}[{index}]", "must be a nonblank string")
-        item = item.strip()
+        item = item.strip(JS_TRIM_WHITESPACE)
         if item in seen:
             fail(label, f"{path}[{index}]", "is a duplicate after trimming")
         seen.add(item)
@@ -476,7 +476,7 @@ def _validate_field(label, path, kind, value):
     if kind == "origins":
         return _validate_origins(label, path, value)
     if kind == "appname":
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or not value.strip(JS_TRIM_WHITESPACE):
             fail(label, path, "must be a nonblank string")
         if len(value) > APP_NAME_MAX:
             fail(label, path, f"must be at most {APP_NAME_MAX} characters")

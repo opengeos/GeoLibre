@@ -1,5 +1,6 @@
 import type { MapEngine } from "@geolibre/map";
 import { S3_BROWSER_PLUGIN_ID } from "@geolibre/plugins";
+import { getActiveRightPanel } from "@geolibre/plugins/right-panel-registry";
 import { useEffect, useRef, type RefObject } from "react";
 import { getDeploymentPolicy } from "../../lib/deployment-env";
 import {
@@ -67,6 +68,9 @@ export function useStartupPanels({
   // Set when another right panel opened while waiting, so a later re-run of
   // the effect does not start waiting again.
   const panelAbandoned = useRef(false);
+  // The right panel active when the wait first began, kept across effect
+  // re-runs so a panel the user opened in between still counts as displacement.
+  const activeBaseline = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (
       panelOpened.current ||
@@ -98,6 +102,7 @@ export function useStartupPanels({
       }
     }, 10000);
 
+    if (activeBaseline.current === undefined) activeBaseline.current = getActiveRightPanel();
     const dispose = openStartupPanel(
       openPanelId,
       stillWaiting,
@@ -112,6 +117,7 @@ export function useStartupPanels({
           `[GeoLibre] Deployment openPanel "${openPanelId}" was not opened because another right panel opened first`,
         );
       },
+      activeBaseline.current,
     );
 
     return () => {
