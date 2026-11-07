@@ -211,9 +211,7 @@ test("plugins.fileAccess keeps a __proto__ plugin id as an own entry", () => {
   );
   const fileAccess = policy?.plugins?.fileAccess;
   assert.ok(fileAccess && Object.hasOwn(fileAccess, "__proto__"));
-  assert.deepEqual(Object.getOwnPropertyDescriptor(fileAccess, "__proto__")?.value, [
-    "/etc/a.cfg",
-  ]);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(fileAccess, "__proto__")?.value, ["/etc/a.cfg"]);
   assert.equal(Object.getPrototypeOf(fileAccess), Object.prototype);
 });
 
