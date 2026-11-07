@@ -668,7 +668,8 @@ def spaceborne_lidar_layer(
         source: Path to the HDF5 granule.
         name: Layer name; ``"<product> <file name>"`` by default.
         missions: Accepted missions (``"ICESat-2"``, ``"GEDI"``); any when None.
-        product: Product short name; see :func:`read_spaceborne_lidar`.
+        product: Product id; detected from the granule when omitted. See
+            :func:`read_spaceborne_lidar`.
         beams: Beams to read; see :func:`read_spaceborne_lidar`.
         fields: Fields to read; see :func:`read_spaceborne_lidar`.
         quality_filter: Drop low-quality footprints; see
