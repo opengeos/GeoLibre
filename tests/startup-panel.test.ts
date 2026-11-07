@@ -122,11 +122,11 @@ describe("openStartupPanel", () => {
     dispose();
   });
 
-  it("cancels waiting when project becomes non-fresh before registration", () => {
+  it("cancels waiting when the freshness predicate turns false before registration", () => {
     let fresh = true;
     const dispose = openStartupPanel("late-panel", () => fresh);
 
-    // User loads a saved project while waiting
+    // The predicate reports a non-fresh project while waiting
     fresh = false;
 
     // Another panel emits an update
@@ -213,6 +213,35 @@ describe("openStartupPanel", () => {
     });
 
     assert.equal(getActiveRightPanel(), null);
+    dispose();
+  });
+
+  it("stops waiting when another right panel opens before registration", () => {
+    let displaced = false;
+    const dispose = openStartupPanel(
+      "late-panel",
+      () => true,
+      undefined,
+      () => {
+        displaced = true;
+      },
+    );
+
+    // The user opens a different panel while the target is still unregistered
+    registerRightPanel({ id: "user-panel", title: "User Panel", render: () => undefined });
+    openRightPanel("user-panel");
+    assert.equal(displaced, true);
+
+    registerRightPanel({ id: "late-panel", title: "Late Panel", render: () => undefined });
+    assert.equal(getActiveRightPanel(), "user-panel");
+    dispose();
+  });
+
+  it("still opens a late panel when no other right panel was opened", () => {
+    const dispose = openStartupPanel("late-panel", () => true);
+    registerRightPanel({ id: "other-panel", title: "Other", render: () => undefined });
+    registerRightPanel({ id: "late-panel", title: "Late Panel", render: () => undefined });
+    assert.equal(getActiveRightPanel(), "late-panel");
     dispose();
   });
 

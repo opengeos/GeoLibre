@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  getActiveRightPanel,
   getRightPanel,
   openRightPanel,
   subscribeRightPanels,
@@ -61,17 +62,22 @@ export function isStartupPanelGateOpen(gate: StartupPanelGate): boolean {
  * the moment it becomes available, then unsubscribes immediately.
  *
  * If the current project is not fresh (or becomes non-fresh before the panel registers),
- * any pending subscription is cancelled without opening the panel.
+ * any pending subscription is cancelled without opening the panel. A pending wait also
+ * ends, without opening, once a different right panel becomes active, so a late
+ * registration never displaces a panel the user (or a plugin) opened meanwhile.
  *
  * @param panelId - The id of the panel to open.
  * @param isFreshProject - Predicate returning true only while the current project is fresh.
  * @param onOpened - Optional callback invoked when the panel successfully opens.
+ * @param onDisplaced - Optional callback invoked when the wait ends because another
+ *   right panel became active.
  * @returns A disposer that unsubscribes any active registry listeners.
  */
 export function openStartupPanel(
   panelId: string,
   isFreshProject: () => boolean = isStartupProjectFresh,
   onOpened?: () => void,
+  onDisplaced?: () => void,
 ): () => void {
   const trimmed = panelId.trim();
   if (!trimmed || !isFreshProject()) return () => {};
@@ -120,9 +126,15 @@ export function openStartupPanel(
     return cleanup;
   }
 
+  const activeAtStart = getActiveRightPanel();
   const onRegistryChange = () => {
     if (unsubscribed) return;
-    tryOpen();
+    if (tryOpen()) return;
+    const active = getActiveRightPanel();
+    if (active !== null && active !== activeAtStart) {
+      cleanup();
+      onDisplaced?.();
+    }
   };
 
   unsubRight = subscribeRightPanels(onRegistryChange);
