@@ -58,7 +58,7 @@ export interface Atl03PhotonProperties {
   /** Signal confidence for the chosen surface (0-4). */
   signal_conf: number;
   time: string | null;
-  /** Along-track distance from the first photon read on this beam, km (to about 20 m). */
+  /** Along-track distance from the beam's first photon along track that passed the filters (before thinning), km (to about 20 m). */
   distance_km: number;
 }
 

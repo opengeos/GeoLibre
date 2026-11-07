@@ -39,7 +39,9 @@ export interface IndoorGmlCrsState {
 
 /**
  * Update the IndoorGML dialog's CRS and local-coordinates state when a file is
- * parsed. A CRS the user typed or picked from the preset menu (`"explicit"`) is
+ * parsed. A CRS the file itself names always wins: it replaces any CRS in the
+ * field and turns local coordinates off, even ones the user chose, since the
+ * file's own georeferencing is authoritative. A CRS the user typed or picked from the preset menu (`"explicit"`) is
  * kept when the new file names no CRS; a CRS detected from an earlier file or
  * filled by a sample is cleared so a CRS-less file is not reprojected with the
  * previous file's CRS and can auto-enable local coordinates. An auto-enabled

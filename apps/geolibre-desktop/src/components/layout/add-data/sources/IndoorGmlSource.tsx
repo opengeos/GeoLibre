@@ -84,10 +84,7 @@ export function IndoorGmlSource() {
 
   /** Fill the CRS field (or the local option) from what a parsed file says. */
   const adoptDetected = (parsed: IndoorGmlParseResult) =>
-    setCrsState((prev) => {
-      const next = adoptIndoorGmlDetectedCrs(prev, parsed);
-      return { ...next, localOrigin: next.localOrigin ?? null };
-    });
+    setCrsState((prev) => adoptIndoorGmlDetectedCrs(prev, parsed));
 
   const handleChooseFile = async () => {
     source.setError(null);
