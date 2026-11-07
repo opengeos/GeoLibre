@@ -62,12 +62,19 @@ export function adoptIndoorGmlDetectedCrs(
     };
   }
   const explicitCrs = current.sourceCrsOrigin === "explicit" ? current.sourceCrs : "";
-  const explicitLocal = current.localOrigin === "explicit" && current.local;
+  if (current.localOrigin === "explicit") {
+    return {
+      sourceCrs: explicitCrs,
+      sourceCrsOrigin: explicitCrs ? "explicit" : null,
+      local: current.local,
+      localOrigin: "explicit",
+    };
+  }
   const autoLocal = !parsed.coordinatesLookGeographic && !explicitCrs.trim();
   return {
     sourceCrs: explicitCrs,
     sourceCrsOrigin: explicitCrs ? "explicit" : null,
-    local: explicitLocal || autoLocal,
-    localOrigin: explicitLocal ? "explicit" : autoLocal ? "auto" : null,
+    local: autoLocal,
+    localOrigin: autoLocal ? "auto" : null,
   };
 }

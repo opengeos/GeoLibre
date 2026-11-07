@@ -394,6 +394,19 @@ describe("i3sDocumentRequestUrl", () => {
 
 describe("probeI3sLayerKind", () => {
   const base = "https://services5.arcgis.com/x/ArcGIS/rest/services/Library/SceneServer";
+  const stubDeps = {
+    deckGL: {
+      geoLayers: {
+        Tile3DLayer: class FakeTile3DLayer {
+          props: Record<string, unknown>;
+          constructor(props: Record<string, unknown>) {
+            this.props = props;
+          }
+        },
+      },
+    } as unknown as GeoLibreDeckGL,
+    loader: {},
+  };
 
   it("keys failed probes by URL so updating a layer's URL probes the new endpoint", async () => {
     const badLayer = {
@@ -430,14 +443,16 @@ describe("probeI3sLayerKind", () => {
     }) as typeof fetch;
     try {
       await probeI3sLayerKind(badLayer);
-      // Failed probe does not write to metadata, and updated URL starts unprobed again.
+      // Failed probe does not write to metadata, draws badLayer as a mesh fallback,
+      // and leaves an updated URL unprobed until its own probe finishes.
       assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, undefined);
+      assert.equal(buildArcgisI3sTilesDeckLayers(badLayer, stubDeps).length, 1);
       const updatedLayer = {
         ...badLayer,
         source: { ...badLayer.source, url: `${base}/layers/0` },
       } as unknown as GeoLibreLayer;
       useAppStore.setState({ layers: [updatedLayer] });
-      assert.deepEqual(buildArcgisI3sTilesDeckLayers(updatedLayer), []);
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(updatedLayer, stubDeps), []);
 
       await probeI3sLayerKind(updatedLayer);
       assert.equal(useAppStore.getState().layers[0].metadata.i3sKind, "building");
@@ -474,7 +489,7 @@ describe("probeI3sLayerKind", () => {
       await probeI3sLayerKind(layer);
       // If the layer is restored (e.g. via undo), it is not treated as a failed mesh fallback.
       useAppStore.setState({ layers: [layer] });
-      assert.deepEqual(buildArcgisI3sTilesDeckLayers(layer), []);
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(layer, stubDeps), []);
     } finally {
       globalThis.fetch = realFetch;
       useAppStore.setState({ layers: [] });

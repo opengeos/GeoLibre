@@ -443,5 +443,16 @@ describe("adoptIndoorGmlDetectedCrs", () => {
       local: true,
       localOrigin: "explicit",
     });
+
+    const explicitUncheckedLocal = adoptIndoorGmlDetectedCrs(
+      { sourceCrs: "", sourceCrsOrigin: null, local: false, localOrigin: "explicit" },
+      { detectedCrs: undefined, coordinatesLookGeographic: false },
+    );
+    assert.deepEqual(explicitUncheckedLocal, {
+      sourceCrs: "",
+      sourceCrsOrigin: null,
+      local: false,
+      localOrigin: "explicit",
+    });
   });
 });

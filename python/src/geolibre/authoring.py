@@ -1741,11 +1741,18 @@ def set_labels(
             an option is invalid.
     """
     layer = find_layer(project, ref)
+    layer_id = str(layer.get("id", ""))
+    styles = project.get("styles")
+    top_level = styles.get(layer_id) if isinstance(styles, dict) else None
     style = layer.get("style")
     if not isinstance(style, dict):
         style = copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
         layer["style"] = style
-    current = style.get("labels")
+    current = (
+        top_level.get("labels")
+        if isinstance(top_level, dict) and isinstance(top_level.get("labels"), dict)
+        else style.get("labels")
+    )
     labels = _project.label_style(
         field,
         expression=expression,
@@ -1754,10 +1761,8 @@ def set_labels(
         **options,
     )
     style["labels"] = labels
-    layer_id = str(layer.get("id", ""))
-    styles = project.get("styles")
-    if isinstance(styles, dict) and isinstance(styles.get(layer_id), dict):
-        styles[layer_id]["labels"] = copy.deepcopy(labels)
+    if isinstance(top_level, dict):
+        top_level["labels"] = copy.deepcopy(labels)
     return copy.deepcopy(labels)
 
 

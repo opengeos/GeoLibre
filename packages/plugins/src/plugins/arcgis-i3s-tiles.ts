@@ -553,9 +553,13 @@ export function buildArcgisI3sTilesDeckLayer(
  * scene layer, or one per visible sublayer of a Building Scene Layer.
  *
  * @param layer - The store layer.
+ * @param deps - Optional injectable deck.gl and loader dependencies for testing.
  * @returns Its deck.gl layers (none while its type is still being probed).
  */
-export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
+export function buildArcgisI3sTilesDeckLayers(
+  layer: GeoLibreLayer,
+  deps?: { deckGL: GeoLibreDeckGL | null; loader: unknown; meshLayer?: unknown },
+): Layer[] {
   const kind = i3sLayerKind(layer);
   if (kind === "building") {
     const state = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
@@ -563,7 +567,7 @@ export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
     if (!state || typeof base !== "string") return [];
     return visibleI3sBuildingSublayers(state)
       .map((id) =>
-        buildArcgisI3sTilesDeckLayer(layer, undefined, {
+        buildArcgisI3sTilesDeckLayer(layer, deps, {
           url: i3sBuildingSublayerUrl(base, id),
           id,
         }),
@@ -571,7 +575,7 @@ export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
       .filter((deckLayer): deckLayer is Layer => deckLayer !== null);
   }
   if (kind !== "mesh") return [];
-  const single = buildArcgisI3sTilesDeckLayer(layer);
+  const single = buildArcgisI3sTilesDeckLayer(layer, deps);
   return single ? [single] : [];
 }
 
