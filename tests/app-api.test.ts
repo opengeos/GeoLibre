@@ -96,6 +96,7 @@ const DESKTOP_ONLY_MEMBERS = new Set([
   "pickDownloadFolder",
   "writeFileToFolder",
   "pickVectorFilesWithSidecars",
+  "readAllowedFile",
 ]);
 /** Members that are objects rather than functions. */
 const OBJECT_MEMBERS = new Set(["credentials"]);
@@ -272,6 +273,7 @@ describe("plugin app API contract", () => {
       assert.equal(typeof api.downloadRemoteFile, "function");
       assert.equal(typeof api.pickDownloadFolder, "function");
       assert.equal(typeof api.pickVectorFilesWithSidecars, "function");
+      assert.equal(typeof api.readAllowedFile, "function");
     } finally {
       if (previous === undefined) delete globals.window;
       else globals.window = previous;
