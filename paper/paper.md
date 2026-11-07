@@ -101,7 +101,7 @@ an existing one because the gap is architectural. Running a complete GIS in a
 browser tab, without a server, requires the user interface, the data readers,
 and the geoprocessing engines to be compiled for the web platform from the
 start. Retrofitting that onto a native code base designed around GDAL
-[@rouault2026gdal] and a desktop widget toolkit would amount to a rewrite. At
+[@gdal2026] and a desktop widget toolkit would amount to a rewrite. At
 the same time, GeoLibre deliberately reuses existing libraries wherever it can:
 it renders through established web map engines, reads data with DuckDB and
 standard JavaScript format libraries, and exposes the Whitebox algorithms
