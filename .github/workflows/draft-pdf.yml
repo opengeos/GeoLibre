@@ -36,3 +36,4 @@ jobs:
         with:
           name: paper
           path: paper/paper.pdf
+          if-no-files-found: error

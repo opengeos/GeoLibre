@@ -42,7 +42,8 @@ WebAssembly [@haas2017webassembly]. Maps can be drawn by MapLibre GL JS (the
 default), Mapbox GL JS, CesiumJS, or the ArcGIS Maps SDK for JavaScript, and
 an entire session, including layers, styles, the camera, and analysis
 history, is saved to an open, documented JSON project file that can be
-reopened in any of the deployment targets (\autoref{fig:app}).
+reopened in any deployment target that can reach its data sources
+(\autoref{fig:app}).
 
 ![GeoLibre running in the web browser: Manhattan building footprints extruded by height and colored by construction era, with New York City subway lines and stations and a legend generated from the layers' symbology.\label{fig:app}](figure.jpg)
 

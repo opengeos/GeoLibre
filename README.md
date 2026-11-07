@@ -48,7 +48,7 @@ capabilities, credentials, and current compatibility.
 
 ## Statement of need
 
-Working with geospatial data usually means installing and maintaining a desktop GIS on every machine, or moving data and computation onto a hosted cloud platform behind an account. Both are barriers in teaching and workshops, in the field, on locked-down institutional computers, and whenever data are sensitive. GeoLibre is a GIS that opens from a URL, reads cloud-native formats (e.g., COG, GeoParquet, PMTiles, FlatGeobuf, Zarr, STAC) in place, runs its analysis on your own device, and saves the whole map as an open, documented project file that anyone can reopen, share, or keep under version control.
+Working with geospatial data usually means installing and maintaining a desktop GIS on every machine, or moving data and computation onto a hosted cloud platform behind an account. Both are barriers in teaching and workshops, in the field, on locked-down institutional computers, and whenever data are sensitive. GeoLibre is a GIS that opens from a URL, reads cloud-native formats (e.g., COG, GeoParquet, PMTiles, FlatGeobuf, Zarr, STAC) in place, runs its analysis on your own device by default (an optional, self-hosted Python sidecar can take over some tools), and saves the whole map as an open, documented project file that anyone can reopen, share, or keep under version control.
 
 It is built for researchers and students who need to inspect and analyze geospatial data without setting up a software environment, for instructors who need every participant on the same working tool within minutes, and for data scientists who want an interactive GIS tied to their Python or R code. See [GeoLibre vs. other GIS platforms](https://geolibre.app/comparison/) for how it relates to QGIS, ArcGIS, kepler.gl, and others.
 
@@ -206,6 +206,7 @@ Full documentation, including the User Guide and Tutorials, is published at
 Every pull request runs the test suites in continuous integration. To run them locally from a source checkout:
 
 ```bash
+npm install                                          # JavaScript dependencies, needed by the npm scripts below
 npm run test:frontend                                # TypeScript unit and component tests
 pip install -e "backend/geolibre_server[test]"
 npm run test:backend                                 # Python sidecar tests (pytest)
