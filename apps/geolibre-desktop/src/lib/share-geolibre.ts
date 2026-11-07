@@ -83,6 +83,8 @@ export interface ShareUploadResult {
    * returns a plain link, so the UI must not present them as applied.
    */
   unconfirmedSettings: ShareLinkSetting[];
+  /** Authoritative version count on the server (>= 1, defaulting to 1). */
+  versionCount: number;
 }
 
 /** A link setting whose application the server must confirm in its response. */
@@ -323,6 +325,7 @@ interface ShareProjectResponse {
     role?: ShareRole;
     expiresAt?: string | null;
     hasPassword?: boolean;
+    versionCount?: number;
   };
 }
 
@@ -425,6 +428,12 @@ export async function uploadProjectToShare(
   }
   if (options.expiresIn && !project.expiresAt) unconfirmedSettings.push("expiry");
   if (options.password && project.hasPassword !== true) unconfirmedSettings.push("password");
+  const versionCount =
+    typeof project.versionCount === "number" &&
+    Number.isInteger(project.versionCount) &&
+    project.versionCount >= 1
+      ? project.versionCount
+      : 1;
   return {
     id: project.id,
     username: project.username ?? "",
@@ -436,6 +445,7 @@ export async function uploadProjectToShare(
     expiresAt: project.expiresAt,
     hasPassword: project.hasPassword,
     unconfirmedSettings,
+    versionCount,
   };
 }
 

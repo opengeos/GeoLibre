@@ -628,7 +628,8 @@ export function TopToolbar({
       <MountWhenOpened open={dialogs.galleryDialogOpen}>
         <ProjectGalleryDialog
           open={dialogs.galleryDialogOpen}
-          onOpenChange={dialogs.setGalleryDialogOpen}
+          onOpenChange={dialogs.handleGalleryDialogOpenChange}
+          defaultScope={dialogs.galleryDefaultScope}
           onOpenProject={(url, authToken, options) =>
             projectFiles.openProjectFromShareUrl(url, { authToken, ...options })
           }

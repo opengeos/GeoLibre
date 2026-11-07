@@ -216,3 +216,16 @@ def test_url_errors_do_not_echo_a_query_token(url):
 def test_whitespace_in_env_url_names_the_env_var():
     message = error_of(dp.normalize_share_url, "https://example.com/some path")
     assert message == "ERROR: GEOLIBRE_SHARE_URL must not contain whitespace."
+
+
+def test_share_url_rejects_query_and_fragment():
+    assert "must not include query parameters or a fragment" in error_of(
+        dp.normalize_share_url, "https://share.example.com/?query=1"
+    )
+    assert "must not include query parameters or a fragment" in error_of(
+        dp.normalize_share_url, "https://share.example.com/#frag"
+    )
+    for bare in ("https://share.example.com/?", "https://share.example.com/#"):
+        assert "must not include query parameters or a fragment" in error_of(
+            dp.normalize_share_url, bare
+        )

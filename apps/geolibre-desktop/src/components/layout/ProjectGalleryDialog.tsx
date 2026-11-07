@@ -81,6 +81,8 @@ type GalleryScope = "featured" | "all" | "mine" | "organizations" | "groups";
 interface ProjectGalleryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Initial tab to show when the dialog opens; defaults to "featured" / "organizations". */
+  defaultScope?: "mine";
   /**
    * Load a project from its raw `.geolibre.json` URL into the app. `authToken`
    * is passed for the user's own (unlisted/private) projects so the share host
@@ -124,6 +126,7 @@ function searchHaystack(project: SharedProject): string {
 export function ProjectGalleryDialog({
   open,
   onOpenChange,
+  defaultScope,
   onOpenProject,
 }: ProjectGalleryDialogProps) {
   const { t } = useTranslation();
@@ -199,10 +202,15 @@ export function ProjectGalleryDialog({
 
   useEffect(() => {
     if (open) {
-      defaultScopePendingRef.current = true;
-      setScope("featured");
+      if (defaultScope === "mine") {
+        defaultScopePendingRef.current = false;
+        setScope("mine");
+      } else {
+        defaultScopePendingRef.current = true;
+        setScope("featured");
+      }
     }
-  }, [open]);
+  }, [open, defaultScope]);
 
   // Resize the whole dialog from its bottom-right grip. The dialog is centred
   // via a -50% transform, so each edge moves by half the size change; growing
