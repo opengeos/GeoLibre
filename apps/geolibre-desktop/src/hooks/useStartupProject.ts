@@ -152,6 +152,7 @@ function seedLinkedMapCrs(location: CoordinateTarget | null): void {
 
 export function useStartupProject(): {
   restoring: boolean;
+  settled: boolean;
 } {
   const { t } = useTranslation();
   // Consume a direct-file export before the shell and MapCanvas mount. Loading
@@ -210,6 +211,7 @@ export function useStartupProject(): {
     seedLinkedMapCrs(location);
     return false;
   });
+  const [settled, setSettled] = useState(!restoring);
 
   // Fetch the features of the URL layers the seeding above added, and only
   // those. In an effect, not the initializer, so a render that is thrown away
@@ -338,7 +340,10 @@ export function useStartupProject(): {
         openDefaultWorkspace({ seedLayers: true });
       } finally {
         window.clearTimeout(gateTimer);
-        if (!cancelled) setRestoring(false);
+        if (!cancelled) {
+          setRestoring(false);
+          setSettled(true);
+        }
       }
     })();
     return () => {
@@ -351,5 +356,5 @@ export function useStartupProject(): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inlineProject, openedProjectPath]);
 
-  return { restoring };
+  return { restoring, settled };
 }

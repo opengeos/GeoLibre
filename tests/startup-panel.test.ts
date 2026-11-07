@@ -1,0 +1,246 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import { createEmptyProject, useAppStore } from "@geolibre/core";
+import {
+  __resetRightPanelRegistryForTests,
+  collapseRightPanel,
+  getActiveRightPanel,
+  getRightPanel,
+  isRightPanelCollapsed,
+  openRightPanel,
+  registerRightPanel,
+} from "@geolibre/plugins/right-panel-registry";
+import {
+  __resetFloatingPanelRegistryForTests,
+  isFloatingPanelOpen,
+  registerFloatingPanel,
+} from "@geolibre/plugins/floating-panel-registry";
+import {
+  isStartupProjectFresh,
+  openStartupPanel,
+} from "../apps/geolibre-desktop/src/lib/startup-panel";
+
+describe("openStartupPanel", () => {
+  beforeEach(() => {
+    __resetRightPanelRegistryForTests();
+    __resetFloatingPanelRegistryForTests();
+    useAppStore.setState({ projectPath: null, projectLoaded: false });
+    useAppStore.getState().newProject({ name: "Untitled" });
+  });
+
+  it("opens an already registered right panel immediately", () => {
+    registerRightPanel({
+      id: "org-gis-panel",
+      title: "GIS Tools",
+      render: () => undefined,
+    });
+
+    const dispose = openStartupPanel("org-gis-panel", () => true);
+    assert.equal(getActiveRightPanel(), "org-gis-panel");
+    assert.equal(isRightPanelCollapsed(), false);
+    dispose();
+  });
+
+  it("expands an already active right panel if it was collapsed", () => {
+    registerRightPanel({
+      id: "org-gis-panel",
+      title: "GIS Tools",
+      render: () => undefined,
+    });
+
+    // Make the panel active and then collapse it to its rail
+    openRightPanel("org-gis-panel");
+    assert.equal(getActiveRightPanel(), "org-gis-panel");
+
+    collapseRightPanel("org-gis-panel");
+    assert.equal(isRightPanelCollapsed(), true);
+
+    // openStartupPanel re-expands the collapsed active panel
+    let openedCalled = false;
+    openStartupPanel(
+      "org-gis-panel",
+      () => true,
+      () => {
+        openedCalled = true;
+      },
+    );
+    assert.equal(isRightPanelCollapsed(), false);
+    assert.equal(openedCalled, true);
+  });
+
+  it("opens an already registered floating panel immediately", () => {
+    registerFloatingPanel({
+      id: "org-floating-panel",
+      title: "GIS Overview",
+      render: () => undefined,
+    });
+
+    const dispose = openStartupPanel("org-floating-panel", () => true);
+    assert.equal(isFloatingPanelOpen("org-floating-panel"), true);
+    dispose();
+  });
+
+  it("opens a right panel that registers asynchronously", () => {
+    const dispose = openStartupPanel("async-panel", () => true);
+    assert.equal(getActiveRightPanel(), null);
+
+    registerRightPanel({
+      id: "async-panel",
+      title: "Async GIS",
+      render: () => undefined,
+    });
+
+    assert.equal(getActiveRightPanel(), "async-panel");
+    assert.equal(isRightPanelCollapsed(), false);
+    dispose();
+  });
+
+  it("opens a floating panel that registers asynchronously", () => {
+    const dispose = openStartupPanel("async-floating", () => true);
+    assert.equal(isFloatingPanelOpen("async-floating"), false);
+
+    registerFloatingPanel({
+      id: "async-floating",
+      title: "Async Floating",
+      render: () => undefined,
+    });
+
+    assert.equal(isFloatingPanelOpen("async-floating"), true);
+    dispose();
+  });
+
+  it("does not open when project is not fresh", () => {
+    registerRightPanel({
+      id: "existing-panel",
+      title: "Existing Panel",
+      render: () => undefined,
+    });
+
+    const dispose = openStartupPanel("existing-panel", () => false);
+    assert.equal(getActiveRightPanel(), null);
+    dispose();
+  });
+
+  it("cancels waiting when project becomes non-fresh before registration", () => {
+    let fresh = true;
+    let freshChecks = 0;
+    const dispose = openStartupPanel("late-panel", () => {
+      freshChecks++;
+      return fresh;
+    });
+
+    // User loads a saved project while waiting
+    fresh = false;
+
+    // Another panel emits an update
+    registerRightPanel({
+      id: "other-panel",
+      title: "Other",
+      render: () => undefined,
+    });
+
+    // Late panel finally registers
+    registerRightPanel({
+      id: "late-panel",
+      title: "Late Panel",
+      render: () => undefined,
+    });
+
+    assert.equal(getActiveRightPanel(), null);
+    assert.ok(getRightPanel("late-panel") !== undefined);
+    assert.ok(freshChecks >= 2);
+    dispose();
+  });
+
+  it("does not open when a saved project with no plugins key is loaded", () => {
+    registerRightPanel({
+      id: "org-gis-panel",
+      title: "GIS Tools",
+      render: () => undefined,
+    });
+
+    useAppStore.getState().loadProject(createEmptyProject("SavedWithoutPlugins"));
+    const dispose = openStartupPanel("org-gis-panel", isStartupProjectFresh);
+    assert.equal(getActiveRightPanel(), null);
+    dispose();
+  });
+
+  it("opens when a fresh project is started", () => {
+    registerRightPanel({
+      id: "org-gis-panel",
+      title: "GIS Tools",
+      render: () => undefined,
+    });
+
+    useAppStore.getState().newProject({ name: "Untitled" });
+    const dispose = openStartupPanel("org-gis-panel", isStartupProjectFresh);
+    assert.equal(getActiveRightPanel(), "org-gis-panel");
+    dispose();
+  });
+
+  it("does not open when a saved project finishes loading while waiting for panel registration", () => {
+    useAppStore.getState().newProject({ name: "FreshStartup" });
+    assert.equal(isStartupProjectFresh(), true);
+
+    const dispose = openStartupPanel("late-panel", isStartupProjectFresh);
+
+    // Asynchronous project restore completes and loads saved project while waiting
+    useAppStore.getState().loadProject(createEmptyProject("SavedLoadedLater"));
+    assert.equal(isStartupProjectFresh(), false);
+
+    // Late panel finally registers after project was loaded
+    registerRightPanel({
+      id: "late-panel",
+      title: "Late Panel",
+      render: () => undefined,
+    });
+
+    assert.equal(getActiveRightPanel(), null);
+    assert.ok(getRightPanel("late-panel") !== undefined);
+    dispose();
+  });
+
+  it("cancels waiting when a saved project loads, even if a new project is created before registration", () => {
+    const dispose = openStartupPanel("late-after-new", isStartupProjectFresh);
+
+    // Saved project loads (no longer fresh)
+    useAppStore.getState().loadProject(createEmptyProject("SavedIntermediate"));
+    assert.equal(isStartupProjectFresh(), false);
+
+    // User then creates a new project
+    useAppStore.getState().newProject({ name: "NewUntitled" });
+    assert.equal(isStartupProjectFresh(), true);
+
+    // Late panel registers
+    registerRightPanel({
+      id: "late-after-new",
+      title: "Late After New",
+      render: () => undefined,
+    });
+
+    assert.equal(getActiveRightPanel(), null);
+    dispose();
+  });
+
+  it("disposer cancels waiting before registration", () => {
+    const dispose = openStartupPanel("cancelled-panel", () => true);
+    dispose();
+
+    registerRightPanel({
+      id: "cancelled-panel",
+      title: "Cancelled Panel",
+      render: () => undefined,
+    });
+
+    assert.equal(getActiveRightPanel(), null);
+  });
+
+  it("ignores empty or blank panel ids", () => {
+    assert.doesNotThrow(() => {
+      const dispose1 = openStartupPanel("");
+      dispose1();
+      const dispose2 = openStartupPanel("   ");
+      dispose2();
+    });
+  });
+});

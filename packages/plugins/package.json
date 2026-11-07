@@ -13,6 +13,7 @@
     "./earthdata-relay": "./src/plugins/earthdata-relay.ts",
     "./elevation-profile-chart": "./src/plugins/elevation-profile/chart/profileChart.ts",
     "./file-handler-registry": "./src/file-handler-registry.ts",
+    "./floating-panel-registry": "./src/floating-panel-registry.ts",
     "./geo-editor-geometry": "./src/plugins/geo-editor-geometry.ts",
     "./lidar": "./src/plugins/components/lidar.ts",
     "./local-netcdf": "./src/plugins/local-netcdf.ts",

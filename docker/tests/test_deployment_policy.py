@@ -69,6 +69,14 @@ def test_python_constants_match_schema():
     assert props["branding"]["properties"]["appName"]["maxLength"] == dp.APP_NAME_MAX
 
 
+@pytest.mark.parametrize("whitespace", [" ", "\t", "\ufeff", "\u00a0", "\u3000"])
+def test_nonblank_fields_reject_js_trim_whitespace(whitespace):
+    for section, field in [("plugins", "openPanel"), ("plugins", "registryUrl"), ("ai", "model")]:
+        doc = {"version": 1, section: {field: whitespace}}
+        msg = error_of(dp.validate_policy, doc, LABEL)
+        assert f"{section}.{field} must be a nonblank string" in msg
+
+
 def write_file(tmp_path, doc):
     path = tmp_path / "deployment.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
