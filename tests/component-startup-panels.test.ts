@@ -38,6 +38,8 @@ describe("useStartupPanels deployment openPanel", () => {
   beforeEach(() => {
     __resetRightPanelRegistryForTests();
     __resetFloatingPanelRegistryForTests();
+    // The dom harness also resets stores after each test; be explicit here.
+    useAppStore.getState().newProject({ name: "Untitled" });
     setDeploymentPolicy({ version: 1, plugins: { openPanel: "org-panel" } });
     console.warn = () => {};
   });

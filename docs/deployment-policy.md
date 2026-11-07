@@ -236,7 +236,10 @@ and activation behavior is unchanged.
 automatically when the application starts with a fresh project. It opens once
 startup is ready: plugins have loaded, the map is ready, any `?url=` project has
 settled, and any native startup restore has finished (or failed). A restore that
-never completes keeps the panel closed.
+never completes keeps the panel closed (a console warning notes when it outlasts
+the startup gate). A `?url=` project that loads is a saved project, so the panel
+does not open for it; the wait only matters when that load fails and the app
+falls back to a fresh project.
 
 The panel never opens in a saved project, in the read-only viewer preset, or
 when side panels are hidden (`?maponly`, `?panels=hidden`, `?hidePanels=true`).

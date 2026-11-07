@@ -272,6 +272,9 @@ export function useStartupProject(): {
     // spinner would break it, and this call would need the same guard.
     const gateTimer = window.setTimeout(() => {
       if (cancelled) return;
+      console.warn(
+        "[GeoLibre] Startup project restore is still pending; showing the default workspace meanwhile",
+      );
       openDefaultWorkspace({ seedLayers: true });
       // Seeding the Startup setting's layers starts a new project. The restore
       // may still replace this workspace while the user has not touched it, so
