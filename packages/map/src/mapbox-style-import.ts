@@ -1426,11 +1426,11 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
         pointStrokeOpacity === undefined
           ? 1
           : asLayerNumber(unwrapLiteral(pointStrokeOpacity), "stroke-opacity", true);
-      if (
-        readPoint !== null &&
-        patch.strokeOpacity !== undefined &&
-        readPoint !== patch.strokeOpacity
-      ) {
+      if (readPoint === null || readPoint < 0 || readPoint > 1) {
+        warnings.push(
+          "The point outline opacity could not be read as one number between 0 and 1; the point outlines import at the line opacity.",
+        );
+      } else if (patch.strokeOpacity !== undefined && readPoint !== patch.strokeOpacity) {
         warnings.push(
           "The point outlines use a different opacity from the lines, which the layer style cannot hold; both import at the line opacity.",
         );

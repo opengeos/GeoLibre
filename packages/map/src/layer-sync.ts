@@ -106,6 +106,7 @@ import {
   fillPaint,
   heatmapPaint,
   linePaint,
+  paintBuilderMayReset,
   rasterPaint,
 } from "./style-mapper";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
@@ -1718,11 +1719,6 @@ function ownedNullablePaintFor(map: maplibregl.Map): Set<string> {
     ownedNullablePaint.set(map, owned);
   }
   return owned;
-}
-
-/** The paint properties the shared builders may emit as a `null` reset. */
-function paintBuilderMayReset(property: string): boolean {
-  return property === "line-dasharray" || property === "fill-outline-color";
 }
 
 function setExternalNativeLayerPaint(
@@ -3534,8 +3530,9 @@ function ensureLayer(
       for (const [key, value] of Object.entries(spec.paint)) {
         const current = getDynamicPaintProperty(map, id, key);
         // A `null` reset of a property that already reads back unset is done:
-        // re-sending it would trigger a style update on every sync. Only a map
-        // that can read paint back says "unset"; otherwise the reset is sent.
+        // re-sending it would trigger a style update on every sync. A real map
+        // always has getPaintProperty; the check is for test stubs without it,
+        // whose `undefined` means "cannot tell", so the reset is still sent.
         if (value === null && current === undefined && readsPaint) continue;
         if (!styleValuesEqual(current, value)) {
           setDynamicPaintProperty(map, id, key, value);

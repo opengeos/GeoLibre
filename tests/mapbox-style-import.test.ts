@@ -857,6 +857,25 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
+  it("reports a point outline opacity beside lines that cannot be one number", () => {
+    for (const circleStrokeOpacity of [["get", "alpha"], 5]) {
+      const result = parseMapboxStyle({
+        version: 8,
+        layers: [
+          { id: "l", type: "line", paint: { "line-opacity": 0.5 } },
+          { id: "c", type: "circle", paint: { "circle-stroke-opacity": circleStrokeOpacity } },
+        ],
+      });
+      assert.deepEqual(
+        result.warnings.filter((warning) => warning.includes("point outline")),
+        [
+          "The point outline opacity could not be read as one number between 0 and 1; the point outlines import at the line opacity.",
+        ],
+        JSON.stringify(circleStrokeOpacity),
+      );
+    }
+  });
+
   it("says when point outlines ask for another opacity than the lines", () => {
     const result = parseMapboxStyle({
       version: 8,

@@ -67,6 +67,16 @@ export function fillOutlineDrawn(style: LayerStyle): boolean {
   return strokeDashValue(style) === null && strokeOpacityValue(style) >= 1;
 }
 
+/**
+ * The paint properties the builders here may emit as a `null` reset: a solid
+ * line's dash and the fill hairline under a dashed or translucent stroke.
+ * Layer sync and the Mapbox engine use it to reset only what GeoLibre set on a
+ * plugin's own native layers.
+ */
+export function paintBuilderMayReset(property: string): boolean {
+  return property === "line-dasharray" || property === "fill-outline-color";
+}
+
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,

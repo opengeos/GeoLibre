@@ -185,6 +185,8 @@ interface RulePaint {
   strokeDash?: number[];
   /** A `stroke-dasharray` was set but could not be read. */
   unreadDash?: boolean;
+  /** A `stroke-opacity` was set but is not a number in [0, 1]. */
+  unreadOpacity?: boolean;
   pointSize?: number;
   /** Whether the rule has a point `PointSymbolizer`/`Mark` at all. */
   hasPointMark?: boolean;
@@ -221,8 +223,13 @@ function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   if (color) paint.strokeColor = color;
   const width = toNum(params.get("stroke-width") ?? null);
   if (width !== null) paint.strokeWidth = width;
-  const opacity = toNum(params.get("stroke-opacity") ?? null);
+  // SLD's default stroke-opacity is 1, so a stroke without one is opaque, as a
+  // stroke without a dash array is solid. An out-of-range one is reported and
+  // keeps the layer's own.
+  const opacityText = params.get("stroke-opacity");
+  const opacity = opacityText === undefined ? 1 : toNum(opacityText);
   if (opacity !== null && opacity >= 0 && opacity <= 1) paint.strokeOpacity = opacity;
+  else paint.unreadOpacity = true;
   if (!withDash) return;
   const dashText = params.get("stroke-dasharray")?.trim();
   const unit = width !== null && width > 0 ? width : 1;
@@ -640,6 +647,11 @@ function applyPaint(
   }
   if (paint.strokeOpacity !== undefined) patch.strokeOpacity = paint.strokeOpacity;
   if (paint.strokeDash !== undefined) patch.strokeDash = paint.strokeDash;
+  if (paint.unreadOpacity) {
+    warnings.push(
+      "The stroke opacity is not a number between 0 and 1 and was not applied; the layer keeps its current stroke opacity.",
+    );
+  }
   if (paint.unreadDash) {
     warnings.push(
       "The stroke dash array is not a list of non-negative lengths and was not applied; the layer keeps its current dash pattern.",

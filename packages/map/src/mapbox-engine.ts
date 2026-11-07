@@ -18,7 +18,13 @@ import {
   redactUrlCredentials,
   styleValue,
 } from "@geolibre/core";
-import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
+import {
+  circlePaint,
+  fillPaint,
+  linePaint,
+  paintBuilderMayReset,
+  rasterPaint,
+} from "./style-mapper";
 import {
   DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
@@ -946,6 +952,9 @@ export class MapboxEngine implements MapEngine {
     entries.push([BASEMAP_LABEL_KEY, this.backgroundLabel]);
     publishLayerLabels(entries);
   }
+  /** Plugin native layers (`${id}\0${property}`) whose nullable paint GeoLibre wrote. */
+  private readonly ownedNullablePaint = new Set<string>();
+
   /**
    * Apply a plugin-owned store layer's visibility and paint to the native
    * style layers its plugin registered under `metadata.nativeLayerIds` (the
@@ -958,9 +967,6 @@ export class MapboxEngine implements MapEngine {
    * knows, and are left alone; so is paint when the control declares it owns
    * it (`metadata.controlOwnsPaint`).
    */
-  /** Plugin native layers (`${id}\0${property}`) whose nullable paint GeoLibre wrote. */
-  private readonly ownedNullablePaint = new Set<string>();
-
   private mirrorPluginLayerState(layer: GeoLibreLayer): void {
     const map = this.map;
     const ids = layer.metadata.nativeLayerIds;
@@ -1004,7 +1010,7 @@ export class MapboxEngine implements MapEngine {
         const owned = `${id}\0${property}`;
         if (value === null) {
           if (!this.ownedNullablePaint.delete(owned)) continue;
-        } else if (property === "line-dasharray" || property === "fill-outline-color") {
+        } else if (paintBuilderMayReset(property)) {
           this.ownedNullablePaint.add(owned);
         }
         const key = property as keyof mapboxgl.AnyPaint;

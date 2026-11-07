@@ -579,4 +579,22 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
       JSON.stringify(unreadable.warnings),
     );
   });
+
+  it("imports a stroke without stroke-opacity as opaque and reports an out-of-range one", () => {
+    const sld = (opacity: string | null) =>
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      (opacity === null ? "" : `<CssParameter name="stroke-opacity">${opacity}</CssParameter>`) +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    assert.equal(
+      applySldImport(style({ strokeOpacity: 0.3 }), parseSld(sld(null))).strokeOpacity,
+      1,
+    );
+    const outOfRange = parseSld(sld("1.5"));
+    assert.equal(applySldImport(style({ strokeOpacity: 0.3 }), outOfRange).strokeOpacity, 0.3);
+    assert.ok(
+      outOfRange.warnings.some((warning) => warning.startsWith("The stroke opacity")),
+      JSON.stringify(outOfRange.warnings),
+    );
+  });
 });

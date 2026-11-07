@@ -720,10 +720,13 @@ export function buildQml(
   if (geometry !== "marker" && strokeBlurValue(style) > 0) {
     warnings.push("The line blur has no QML equivalent; the lines are exported with sharp edges.");
   }
-  if (geometry === "fill" && strokeDashValue(style) && !qgisPenStyle(strokeDashValue(style))) {
-    warnings.push(
-      "A QGIS polygon outline takes only its built-in dash styles; the outline is exported with a plain dash.",
-    );
+  if (geometry === "fill") {
+    const dash = strokeDashValue(style);
+    if (dash && !qgisPenStyle(dash)) {
+      warnings.push(
+        "A QGIS polygon outline takes only its built-in dash styles; the outline is exported with a plain dash.",
+      );
+    }
   }
   if (styleValue(style, "proportionalSizeEnabled")) {
     warnings.push(
