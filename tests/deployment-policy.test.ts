@@ -205,6 +205,18 @@ test("plugins.fileAccess is parsed, trimmed, and drops invalid entries", () => {
   assert.deepEqual(bad, { version: 1, capabilities: ["data:add"] });
 });
 
+test("plugins.fileAccess keeps a __proto__ plugin id as an own entry", () => {
+  const policy = resolveDeploymentPolicy(
+    JSON.parse('{"version":1,"plugins":{"fileAccess":{"__proto__":["/etc/a.cfg"]}}}'),
+  );
+  const fileAccess = policy?.plugins?.fileAccess;
+  assert.ok(fileAccess && Object.hasOwn(fileAccess, "__proto__"));
+  assert.deepEqual(Object.getOwnPropertyDescriptor(fileAccess, "__proto__")?.value, [
+    "/etc/a.cfg",
+  ]);
+  assert.equal(Object.getPrototypeOf(fileAccess), Object.prototype);
+});
+
 test("schema enums stay in sync with code", () => {
   assert.equal(
     schema.$id,

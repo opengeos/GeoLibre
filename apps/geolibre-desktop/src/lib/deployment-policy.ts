@@ -231,7 +231,14 @@ function readFileAccess(v: unknown): Result<Record<string, string[]>> {
     }
     const listRes = readIdList(val, `fileAccess.${trimmedKey}`);
     if ("error" in listRes) return listRes;
-    result[trimmedKey] = listRes.value;
+    // defineProperty, not assignment: a `__proto__` key must become an own
+    // entry rather than replace the result's prototype.
+    Object.defineProperty(result, trimmedKey, {
+      value: listRes.value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return { value: result };
 }

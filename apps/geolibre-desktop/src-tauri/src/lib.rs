@@ -1433,8 +1433,16 @@ fn read_allowed_file_impl(
         return Err("Machine deployment policy does not exist; plugin fileAccess is denied".to_string());
     };
 
-    let policy: serde_json::Value = serde_json::from_str(&policy_contents)
+    // The UI parser accepts a leading UTF-8 BOM, so the native gate must too.
+    let policy_text = policy_contents
+        .strip_prefix('\u{feff}')
+        .unwrap_or(&policy_contents);
+    let policy: serde_json::Value = serde_json::from_str(policy_text)
         .map_err(|error| format!("Could not parse machine deployment policy: {error}"))?;
+    // The UI ignores a policy with an unsupported version; never grant from one.
+    if policy.get("version").and_then(Value::as_u64) != Some(1) {
+        return Err("Machine deployment policy has an unsupported version; plugin fileAccess is denied".to_string());
+    }
 
     // Keys are matched after trimming, as the UI parser normalises them.
     let allowlist = policy
@@ -1458,8 +1466,10 @@ fn read_allowed_file_impl(
 
     let metadata = fs::metadata(&canonical_requested)
         .map_err(|error| format!("Could not inspect path \"{path}\": {error}"))?;
-    if metadata.is_dir() {
-        return Err(format!("Refusing to read \"{path}\": path is a directory"));
+    // Regular files only: a directory cannot be read, and opening a FIFO or
+    // device with no writer would block this command indefinitely.
+    if !metadata.is_file() {
+        return Err(format!("Refusing to read \"{path}\": not a regular file"));
     }
 
     let mut is_allowed = false;
@@ -1485,7 +1495,8 @@ fn read_allowed_file_impl(
         ));
     }
 
-    let file = File::open(&canonical_requested)
+    // `fs::File`, not `File`: the bare import is compiled out of MAS builds.
+    let file = fs::File::open(&canonical_requested)
         .map_err(|error| format!("Could not open file \"{path}\": {error}"))?;
     let mut text = String::new();
     file.take(MAX_PLUGIN_ENTRY_BYTES + 1)
@@ -5615,7 +5626,7 @@ mod tests {
         assert!(res_traversal.is_err());
         assert!(res_traversal.unwrap_err().contains("not a safe absolute local file path"));
 
-        // 5. Per-user policy ignored (None or absent machine policy)
+        // 5. No machine-wide policy (None, or an absent file) denies every read
         let res_none = super::read_allowed_file_impl("my-plugin", &allowed_str, None);
         assert!(res_none.is_err());
         assert!(res_none.unwrap_err().contains("No machine deployment policy configured"));
@@ -5637,6 +5648,43 @@ mod tests {
         .unwrap();
         let res_padded = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&padded_policy));
         assert_eq!(res_padded.unwrap(), "{\"hello\":\"world\"}");
+
+        // 7. A BOM-prefixed policy parses, as it does in the UI.
+        let bom_policy = root.path().join("bom.json");
+        fs::write(
+            &bom_policy,
+            format!(
+                "\u{feff}{{\"version\":1,\"plugins\":{{\"fileAccess\":{{\"my-plugin\":[\"{}\"]}}}}}}",
+                allowed_str
+            ),
+        )
+        .unwrap();
+        let res_bom = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&bom_policy));
+        assert_eq!(res_bom.unwrap(), "{\"hello\":\"world\"}");
+
+        // 8. An unsupported version never grants access.
+        let v2_policy = root.path().join("v2.json");
+        fs::write(
+            &v2_policy,
+            format!(
+                r#"{{"version":2,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#,
+                allowed_str
+            ),
+        )
+        .unwrap();
+        let res_v2 = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&v2_policy));
+        assert!(res_v2.unwrap_err().contains("unsupported version"));
+
+        // 9. A directory listed in the allowlist is not a regular file.
+        let dir_str = root.path().to_str().unwrap().replace('\\', "/");
+        let dir_policy = root.path().join("dir.json");
+        fs::write(
+            &dir_policy,
+            format!(r#"{{"version":1,"plugins":{{"fileAccess":{{"my-plugin":["{}"]}}}}}}"#, dir_str),
+        )
+        .unwrap();
+        let res_dir = super::read_allowed_file_impl("my-plugin", &dir_str, Some(&dir_policy));
+        assert!(res_dir.unwrap_err().contains("not a regular file"));
     }
 
     #[cfg(unix)]
