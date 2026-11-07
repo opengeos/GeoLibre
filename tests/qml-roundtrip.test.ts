@@ -390,4 +390,58 @@ describe("QML round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.vectorStyleMode, "rule-based");
     assert.equal(out.vectorRules.find((rule) => rule.isElse)?.enabled, false);
   });
+
+  it("round-trips stroke opacity and dashes through pen styles and a custom dash", () => {
+    for (const geometry of ["line", "polygon"] as const) {
+      for (const strokeDash of [
+        [4, 2],
+        [1, 2],
+        [4, 2, 1, 2],
+      ]) {
+        const out = roundTrip(style({ strokeWidth: 2, strokeOpacity: 0.4, strokeDash }), geometry);
+        assert.ok(approx(out.strokeOpacity, 0.4), `${geometry} ${out.strokeOpacity}`);
+        assert.deepEqual(out.strokeDash, strokeDash, geometry);
+      }
+    }
+    // A pattern no pen style draws travels as a custom dash on a line…
+    const custom = buildQml(layer(style({ strokeWidth: 2, strokeDash: [8, 3] })), fc("line"));
+    assert.match(custom.qml, /name="customdash" type="QString" value="16;6"/);
+    assert.deepEqual(
+      roundTrip(style({ strokeWidth: 2, strokeDash: [8, 3] }), "line").strokeDash,
+      [8, 3],
+    );
+    // …but a polygon outline has no custom dash, so it is exported as a plain dash.
+    const outline = buildQml(layer(style({ strokeDash: [8, 3] })), fc("polygon"));
+    assert.match(outline.qml, /name="outline_style" type="QString" value="dash"/);
+    assert.ok(
+      outline.warnings.includes(
+        "A QGIS polygon outline takes only its built-in dash styles; the outline is exported with a plain dash.",
+      ),
+    );
+    const blurred = buildQml(layer(style({ strokeBlur: 2 })), fc("line"));
+    assert.ok(
+      blurred.warnings.includes(
+        "The line blur has no QML equivalent; the lines are exported with sharp edges.",
+      ),
+    );
+  });
+
+  it("reads a QGIS custom dash only when its unit matches the width's", () => {
+    const qml = (unit: string) => `<qgis><renderer-v2 type="singleSymbol"><symbols>
+<symbol type="line" name="0" alpha="1"><layer class="SimpleLine"><Option type="Map">
+<Option name="line_color" type="QString" value="0,0,255,255"/>
+<Option name="line_width" type="QString" value="0.5"/>
+<Option name="line_style" type="QString" value="dot"/>
+<Option name="use_custom_dash" type="QString" value="1"/>
+<Option name="customdash" type="QString" value="2;1"/>
+<Option name="customdash_unit" type="QString" value="${unit}"/>
+</Option></layer></symbol></symbols></renderer-v2></qgis>`;
+    // Both in the default millimetres: 2;1 over a 0.5 width is a 4, 2 pattern.
+    assert.deepEqual(applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml("MM"))).strokeDash, [4, 2]);
+    // Different units cannot be divided, so the pen style (dot) is read instead.
+    assert.deepEqual(
+      applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml("Pixel"))).strokeDash,
+      [1, 2],
+    );
+  });
 });

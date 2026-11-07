@@ -9,7 +9,7 @@ The **Style panel** on the right edits the appearance of the layer selected in t
 For vector layers the Style panel covers fill, stroke, points, labels, and 3D extrusion:
 
 - **Fill**: fill color and fill opacity for polygons.
-- **Stroke**: line color and width for lines and polygon outlines.
+- **Stroke**: line color and width for lines and polygon outlines, and a **Stroke opacity** that fades the lines, outlines and point outlines without fading the fill. Lines and polygon outlines also take a **Line style** (solid, dashed, dotted, dash-dot, long dash, or a **Custom** pattern of dash and gap lengths in multiples of the stroke width, such as `4 2 1 2`) and a **Line blur** in pixels for soft edges; a wide blurred line under a thin one makes a soft halo. Layers added through **Add data → Vector layer** draw their lines through the vector control, which does not take these three settings yet.
 - **Points**: circle radius for point layers, or **Use marker icon** to draw a marker instead: a built-in shape (circle, square, triangle, diamond, star, cross, or pin) with a color and size, or a **Custom image**. **Upload image…** accepts SVG, PNG, JPEG, or GIF; raster images draw as they are, so the marker color and per-class colors apply only to SVG markers.
 - **Labels**: text color, size, halo color, and halo width.
 - **3D extrusion**: turn polygons into extruded blocks, with a height field, height scale, base height, and color. Advanced expressions are available for height, base, and color.

@@ -8,6 +8,10 @@ import {
   lineWidthValue,
   mapZoomStepOutputs,
   simpleStyleNumberValue,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityPaintValue,
+  strokeOpacityValue,
   vectorCircleColorValue,
   vectorFillColorValue,
   vectorFillOpacityValue,
@@ -51,6 +55,18 @@ function layerOpacityForBlend(style: LayerStyle): number {
   return isBlending(style.blendMode) && layerBlendModesSupported() ? LAYER_OPACITY_FOR_BLEND : 1;
 }
 
+/**
+ * Whether a polygon's fill draws its 1px hairline outline in the stroke color.
+ * Only a solid, opaque stroke keeps it: the line layer draws the real outline,
+ * and a hairline under a dashed or translucent one would show through.
+ *
+ * @param style - The layer style.
+ * @returns True when the fill layer should outline polygons in the stroke color.
+ */
+export function fillOutlineDrawn(style: LayerStyle): boolean {
+  return strokeDashValue(style) === null && strokeOpacityValue(style) >= 1;
+}
+
 export function fillPaint(style: LayerStyle, opacity: number) {
   return {
     "fill-color": vectorFillColorValue(style) as PropertyValueSpecification<string>,
@@ -64,7 +80,11 @@ export function fillPaint(style: LayerStyle, opacity: number) {
     // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
     // expression mode it also applies the user's expression to the hairline
     // outline (matching the separate line layer that draws the polygon stroke).
-    "fill-outline-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
+    // A dashed or translucent stroke drops the hairline (`null` resets it to the
+    // fill color), or its solid, opaque edge would show through the gaps.
+    "fill-outline-color": (fillOutlineDrawn(style)
+      ? vectorLineColorValue(style)
+      : null) as PropertyValueSpecification<string>,
     // Elects MapLibre's render-to-texture composite so the layer blends as one
     // surface instead of once per overlapping polygon. Always emitted (rather
     // than only while blending) because `ensureLayer` only writes the paint
@@ -97,7 +117,12 @@ export function linePaint(style: LayerStyle, opacity: number) {
   return {
     "line-color": vectorLineColorValue(style) as PropertyValueSpecification<string>,
     "line-width": lineWidthValue(style) as unknown as PropertyValueSpecification<number>,
-    "line-opacity": scaleByOpacity(simpleStyleNumberValue(style, "stroke-opacity", 1), opacity),
+    "line-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
+    // `null` for a solid line, so the setPaintProperty update path resets a
+    // dash the user has cleared (ensureLayer strips it on first add, and the
+    // Mapbox GL exporter and compiler leave it out).
+    "line-dasharray": strokeDashValue(style) as unknown as PropertyValueSpecification<number[]>,
+    "line-blur": strokeBlurValue(style),
     // See the note on `fill-layer-opacity` in fillPaint.
     "line-layer-opacity": layerOpacityForBlend(style),
   };
@@ -122,10 +147,7 @@ export function circlePaint(style: LayerStyle, opacity: number) {
     // Fade the outline with the layer opacity (and let it be set explicitly)
     // so story playback can fully hide a point instead of leaving a hollow
     // ring, and so the stroke is restored when playback ends (#934).
-    "circle-stroke-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "stroke-opacity", 1),
-      opacity,
-    ),
+    "circle-stroke-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
   };
 }
 
@@ -178,10 +200,7 @@ export function clusterCirclePaint(style: LayerStyle, opacity: number) {
     "circle-stroke-width": styleValue(style, "strokeWidth"),
     // Keep the cluster outline in step with its fill so the layer opacity (and
     // story fades) hide the whole bubble, mirroring {@link circlePaint} (#934).
-    "circle-stroke-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "stroke-opacity", 1),
-      opacity,
-    ),
+    "circle-stroke-opacity": scaleByOpacity(strokeOpacityPaintValue(style), opacity),
   };
 }
 

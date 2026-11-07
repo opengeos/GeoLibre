@@ -991,11 +991,16 @@ export class MapboxEngine implements MapEngine {
                 ? circlePaint(style, layer.opacity)
                 : null;
       if (!paint) continue;
-      for (const [property, value] of Object.entries(mapboxPaint(paint))) {
-        if (value === undefined || value === null) continue;
+      // Not through `mapboxPaint`, which drops `null`: here a `null` is the
+      // reset of a property the style no longer sets (a dash cleared back to
+      // solid), and setPaintProperty takes it as such.
+      for (const [property, value] of Object.entries(paint)) {
+        if (value === undefined || property.endsWith("-layer-opacity")) continue;
         const key = property as keyof mapboxgl.AnyPaint;
         try {
-          if (JSON.stringify(map.getPaintProperty(id, key)) !== JSON.stringify(value))
+          // An unset property reads back as undefined; compare it as null so a
+          // reset that already happened is not repeated on every sync.
+          if (JSON.stringify(map.getPaintProperty(id, key) ?? null) !== JSON.stringify(value))
             map.setPaintProperty(id, key, value as mapboxgl.AnyPaint[keyof mapboxgl.AnyPaint]);
         } catch {
           // A control's native layers can be heterogeneous; skip a paint

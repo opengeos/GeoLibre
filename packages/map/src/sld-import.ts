@@ -5,6 +5,7 @@ import {
   type MarkerShape,
   type VectorRule,
   type VectorStyleStop,
+  isStrokeDashPattern,
 } from "@geolibre/core";
 import { XMLParser } from "fast-xml-parser";
 import { OGC_SCALE_DENOMINATOR_AT_ZOOM_0 } from "./sld-export";
@@ -179,6 +180,9 @@ interface RulePaint {
   fillOpacity?: number;
   strokeColor?: string;
   strokeWidth?: number;
+  strokeOpacity?: number;
+  /** Dash pattern in multiples of the stroke width; empty for a solid stroke. */
+  strokeDash?: number[];
   pointSize?: number;
   /** Whether the rule has a point `PointSymbolizer`/`Mark` at all. */
   hasPointMark?: boolean;
@@ -201,13 +205,27 @@ function readFill(fill: unknown, paint: RulePaint): void {
   if (opacity !== null) paint.fillOpacity = opacity;
 }
 
-/** Read `stroke`/`stroke-width` from a `Stroke` element into the paint. */
-function readStroke(stroke: unknown, paint: RulePaint): void {
+/**
+ * Read `stroke`, `stroke-width`, `stroke-opacity` and `stroke-dasharray` from a
+ * `Stroke` element into the paint. SLD dash lengths are in the stroke's own
+ * units, so they are divided by its width (1 when unset, the SLD default) to
+ * give the multiples of the width a GeoLibre pattern holds. A line or polygon
+ * stroke without a dash array is solid; a point outline (`withDash` false)
+ * cannot be dashed, so it leaves the pattern alone.
+ */
+function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   const params = paramMap(stroke);
   const color = params.get("stroke");
   if (color) paint.strokeColor = color;
   const width = toNum(params.get("stroke-width") ?? null);
   if (width !== null) paint.strokeWidth = width;
+  const opacity = toNum(params.get("stroke-opacity") ?? null);
+  if (opacity !== null && opacity >= 0 && opacity <= 1) paint.strokeOpacity = opacity;
+  if (!withDash) return;
+  const dashText = params.get("stroke-dasharray")?.trim();
+  const unit = width !== null && width > 0 ? width : 1;
+  const dash = dashText ? dashText.split(/[\s,]+/).map((length) => Number(length) / unit) : [];
+  paint.strokeDash = isStrokeDashPattern(dash) ? dash : [];
 }
 
 /** Extract the flat paint from one rule's render symbolizers. */
@@ -243,7 +261,7 @@ function readRulePaint(rule: XmlNode): RulePaint {
         // stroke is a fixed halo (see the exporter), so don't read it into the
         // shared strokeColor/strokeWidth and clobber the layer's real values.
         if (name === "circle" || !WELL_KNOWN_NAME_TO_SHAPE[name]) {
-          readStroke(mark.Stroke, paint);
+          readStroke(mark.Stroke, paint, false);
         }
       }
       const size = toNum(nodeText(graphic.Size));
@@ -608,6 +626,8 @@ function applyPaint(
     // SLD stroke widths are pixel widths, so reset any prior "meters" unit.
     patch.strokeWidthUnit = "pixels";
   }
+  if (paint.strokeOpacity !== undefined) patch.strokeOpacity = paint.strokeOpacity;
+  if (paint.strokeDash !== undefined) patch.strokeDash = paint.strokeDash;
   // Recover a shape marker from the point Mark's WellKnownName. Only act when the
   // rule actually has a point Mark so a polygon/line import never touches the
   // marker fields. A recognized non-circle name enables the shape marker; a

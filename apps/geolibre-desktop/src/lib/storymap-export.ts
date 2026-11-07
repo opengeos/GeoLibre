@@ -18,6 +18,10 @@ import {
   resolvePopupRows,
   resolvePopupTitle,
   simpleStyleNumberValue,
+  strokeBlurValue,
+  strokeDashValue,
+  strokeOpacityPaintValue,
+  strokeOpacityValue,
   styleValue,
   vectorCircleColorValue,
   vectorFillColorValue,
@@ -769,7 +773,11 @@ function buildLayerSpec(
             styleValue(layer.style, "fillOpacity"),
           ),
         ),
-        "fill-outline-color": vectorLineColorValue(layer.style),
+        // As on the map (fillOutlineDrawn), a dashed or translucent stroke
+        // leaves the fill without its hairline.
+        ...(strokeDashValue(layer.style) === null && strokeOpacityValue(layer.style) >= 1
+          ? { "fill-outline-color": vectorLineColorValue(layer.style) }
+          : {}),
       },
     };
   }
@@ -779,7 +787,11 @@ function buildLayerSpec(
       paint: {
         "line-color": vectorLineColorValue(layer.style),
         "line-width": lineWidthValue(layer.style),
-        "line-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
+        "line-opacity": strokeOpacityPaintValue(layer.style),
+        // A solid line has no dash; the key is left out rather than null,
+        // which a style document cannot carry.
+        ...(strokeDashValue(layer.style) ? { "line-dasharray": strokeDashValue(layer.style) } : {}),
+        "line-blur": strokeBlurValue(layer.style),
       },
     };
   }
@@ -816,7 +828,7 @@ function buildLayerSpec(
           styleValue(layer.style, "fillOpacity"),
         ),
       ),
-      "circle-stroke-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
+      "circle-stroke-opacity": strokeOpacityPaintValue(layer.style),
     },
   };
 }

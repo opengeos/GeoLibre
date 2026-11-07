@@ -535,4 +535,32 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.vectorStyleMode, "rule-based");
     assert.equal(out.vectorRules.find((rule) => rule.isElse)?.enabled, false);
   });
+
+  it("round-trips stroke opacity and dashes, and warns that blur has no SLD form", () => {
+    for (const geometry of ["line", "polygon"] as const) {
+      const input = style({ strokeWidth: 3, strokeOpacity: 0.4, strokeDash: [4, 2, 1, 2] });
+      const out = roundTrip(input, geometry);
+      assert.equal(out.strokeOpacity, 0.4, geometry);
+      assert.deepEqual(out.strokeDash, [4, 2, 1, 2], geometry);
+    }
+    // A solid line imports as solid, replacing a dash the target layer had.
+    const { sld } = buildSld(layer(style()), fc("line"));
+    assert.deepEqual(applySldImport(style({ strokeDash: [1, 2] }), parseSld(sld)).strokeDash, []);
+    // SLD dash lengths are absolute: a 3px stroke dashed "4 2" writes 12 6.
+    const dashed = buildSld(layer(style({ strokeWidth: 3, strokeDash: [4, 2] })), fc("line"));
+    assert.match(dashed.sld, /stroke-dasharray">12 6</);
+    const blurred = buildSld(layer(style({ strokeBlur: 2 })), fc("line"));
+    assert.ok(
+      blurred.warnings.includes(
+        "The line blur has no SLD equivalent; the lines are exported with sharp edges.",
+      ),
+    );
+  });
+
+  it("does not take a point outline's dash or reset a dash from a point-only SLD", () => {
+    const { sld } = buildSld(layer(style({ strokeOpacity: 0.5 })), fc("point"));
+    const out = applySldImport(style({ strokeDash: [1, 2] }), parseSld(sld));
+    assert.equal(out.strokeOpacity, 0.5);
+    assert.deepEqual(out.strokeDash, [1, 2]);
+  });
 });

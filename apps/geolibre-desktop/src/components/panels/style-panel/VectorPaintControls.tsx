@@ -1,15 +1,22 @@
 import {
   DEFAULT_LAYER_STYLE,
+  STROKE_DASH_PRESETS,
   VECTOR_COLOR_RAMPS,
   controlRendersLayer,
+  isStrokeDashPattern,
+  strokeBlurValue,
+  strokeDashPresetName,
+  strokeOpacityValue,
   styleValue,
   useAppStore,
   type GeoLibreLayer,
   type PointRenderer,
+  type StrokeDashPreset,
   type StrokeWidthUnit,
   type VectorStyleMode,
 } from "@geolibre/core";
-import { ColorField, ColorRampSelect, Label, Select, Separator } from "@geolibre/ui";
+import { ColorField, ColorRampSelect, Input, Label, Select, Separator } from "@geolibre/ui";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isControlPaintedVectorLayer } from "./layer-capabilities";
 import { NumericFieldSelect, NumericStyleInput } from "./style-inputs";
@@ -210,6 +217,22 @@ export function VectorPaintControls({
               </Select>
             </div>
           )}
+          {/* The vector control paints its own lines and takes none of these. */}
+          {isControlPaintedVectorLayer(layer) ? null : (
+            <NumericStyleInput
+              id="strokeOpacity"
+              label={t("style.symbology.strokeOpacity")}
+              min={0}
+              max={1}
+              step={0.05}
+              value={strokeOpacityValue(style)}
+              onChange={(strokeOpacity) => setLayerStyle(layer.id, { strokeOpacity })}
+            />
+          )}
+          {/* Point outlines are circles, which take no dash or blur. */}
+          {supportsPointRenderer || isControlPaintedVectorLayer(layer) ? null : (
+            <LineStyleControls key={layer.id} layer={layer} />
+          )}
           <NumericStyleInput
             id="fillOpacity"
             label={t("style.elevation3d.fillOpacity")}
@@ -271,6 +294,114 @@ export function VectorPaintControls({
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+/** The {@link STROKE_DASH_PRESETS} names with their catalog keys, in menu order. */
+const LINE_STYLE_OPTIONS = [
+  ["solid", "style.symbology.lineStyleSolid"],
+  ["dashed", "style.symbology.lineStyleDashed"],
+  ["dotted", "style.symbology.lineStyleDotted"],
+  ["dash-dot", "style.symbology.lineStyleDashDot"],
+  ["long-dash", "style.symbology.lineStyleLongDash"],
+] as const satisfies readonly (readonly [StrokeDashPreset, string])[];
+
+/** Parse a typed dash pattern ("4 2", "4, 2"), or `null` when it is not drawable. */
+function parseDashPattern(text: string): number[] | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const lengths = trimmed.split(/[\s,]+/).map(Number);
+  return isStrokeDashPattern(lengths) ? lengths : null;
+}
+
+/**
+ * The line style (a dash preset, or a custom pattern typed as lengths) and the
+ * line blur, for layers drawn with MapLibre line layers.
+ *
+ * @param props - The layer being styled.
+ * @returns The line style controls.
+ */
+function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
+  const { t } = useTranslation();
+  const setLayerStyle = useAppStore((s) => s.setLayerStyle);
+  const dash = styleValue(layer.style, "strokeDash");
+  const presetName = strokeDashPresetName(dash);
+  // Picking "Custom" keeps the custom field open even while the typed pattern
+  // happens to equal a preset; an imported pattern that matches none opens it.
+  const [customOpen, setCustomOpen] = useState(presetName === "custom");
+  const [draft, setDraft] = useState<string | null>(null);
+  const showCustom = customOpen || presetName === "custom";
+  const patternText = isStrokeDashPattern(dash) ? dash.join(" ") : "";
+  const draftValid = draft === null || parseDashPattern(draft) !== null;
+  const commitDraft = () => {
+    if (draft === null) return;
+    const parsed = parseDashPattern(draft);
+    if (parsed) setLayerStyle(layer.id, { strokeDash: parsed });
+    setDraft(null);
+  };
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="strokeDash">{t("style.symbology.lineStyle")}</Label>
+        <Select
+          id="strokeDash"
+          value={showCustom ? "custom" : presetName}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDraft(null);
+            if (next === "custom") {
+              setCustomOpen(true);
+              // Start from the current pattern, or a plain dash from a solid line.
+              if (!isStrokeDashPattern(dash)) {
+                setLayerStyle(layer.id, { strokeDash: [...STROKE_DASH_PRESETS.dashed] });
+              }
+              return;
+            }
+            setCustomOpen(false);
+            setLayerStyle(layer.id, {
+              strokeDash: [...STROKE_DASH_PRESETS[next as StrokeDashPreset]],
+            });
+          }}
+        >
+          {LINE_STYLE_OPTIONS.map(([name, key]) => (
+            <option key={name} value={name}>
+              {t(key)}
+            </option>
+          ))}
+          <option value="custom">{t("style.symbology.lineStyleCustom")}</option>
+        </Select>
+      </div>
+      {showCustom ? (
+        <div className="space-y-2">
+          <Label htmlFor="strokeDashPattern">{t("style.symbology.lineDashPattern")}</Label>
+          <Input
+            id="strokeDashPattern"
+            value={draft ?? patternText}
+            aria-invalid={!draftValid}
+            aria-describedby="strokeDashPatternHint"
+            className={draftValid ? undefined : "border-destructive"}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitDraft();
+              if (event.key === "Escape") setDraft(null);
+            }}
+          />
+          <p id="strokeDashPatternHint" className="text-xs text-muted-foreground">
+            {t("style.symbology.lineDashPatternHint")}
+          </p>
+        </div>
+      ) : null}
+      <NumericStyleInput
+        id="strokeBlur"
+        label={t("style.symbology.lineBlur")}
+        min={0}
+        max={20}
+        step={0.5}
+        value={strokeBlurValue(layer.style)}
+        onChange={(strokeBlur) => setLayerStyle(layer.id, { strokeBlur })}
+      />
     </>
   );
 }
