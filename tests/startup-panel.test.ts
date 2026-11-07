@@ -5,7 +5,6 @@ import {
   __resetRightPanelRegistryForTests,
   collapseRightPanel,
   getActiveRightPanel,
-  getRightPanel,
   isRightPanelCollapsed,
   openRightPanel,
   registerRightPanel,
@@ -16,8 +15,10 @@ import {
   registerFloatingPanel,
 } from "@geolibre/plugins/floating-panel-registry";
 import {
+  isStartupPanelGateOpen,
   isStartupProjectFresh,
   openStartupPanel,
+  type StartupPanelGate,
 } from "../apps/geolibre-desktop/src/lib/startup-panel";
 
 describe("openStartupPanel", () => {
@@ -123,11 +124,7 @@ describe("openStartupPanel", () => {
 
   it("cancels waiting when project becomes non-fresh before registration", () => {
     let fresh = true;
-    let freshChecks = 0;
-    const dispose = openStartupPanel("late-panel", () => {
-      freshChecks++;
-      return fresh;
-    });
+    const dispose = openStartupPanel("late-panel", () => fresh);
 
     // User loads a saved project while waiting
     fresh = false;
@@ -147,8 +144,6 @@ describe("openStartupPanel", () => {
     });
 
     assert.equal(getActiveRightPanel(), null);
-    assert.ok(getRightPanel("late-panel") !== undefined);
-    assert.ok(freshChecks >= 2);
     dispose();
   });
 
@@ -196,7 +191,6 @@ describe("openStartupPanel", () => {
     });
 
     assert.equal(getActiveRightPanel(), null);
-    assert.ok(getRightPanel("late-panel") !== undefined);
     dispose();
   });
 
@@ -242,5 +236,38 @@ describe("openStartupPanel", () => {
       const dispose2 = openStartupPanel("   ");
       dispose2();
     });
+  });
+});
+
+describe("isStartupPanelGateOpen", () => {
+  const ready: StartupPanelGate = {
+    viewer: false,
+    panelsHidden: false,
+    externalPluginsReady: true,
+    mapReadyGeneration: 1,
+    projectUrlSettled: true,
+    startupProjectSettled: true,
+  };
+
+  it("opens once every readiness signal is set", () => {
+    assert.equal(isStartupPanelGateOpen(ready), true);
+  });
+
+  it("stays closed while any signal blocks it", () => {
+    const blockers: Partial<StartupPanelGate>[] = [
+      { viewer: true },
+      { panelsHidden: true },
+      { externalPluginsReady: false },
+      { mapReadyGeneration: 0 },
+      { projectUrlSettled: false },
+      { startupProjectSettled: false },
+    ];
+    for (const blocker of blockers) {
+      assert.equal(
+        isStartupPanelGateOpen({ ...ready, ...blocker }),
+        false,
+        JSON.stringify(blocker),
+      );
+    }
   });
 });

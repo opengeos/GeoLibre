@@ -224,3 +224,23 @@ def test_url_errors_do_not_echo_a_query_token(url):
 def test_whitespace_in_env_url_names_the_env_var():
     message = error_of(dp.normalize_share_url, "https://example.com/some path")
     assert message == "ERROR: GEOLIBRE_SHARE_URL must not contain whitespace."
+
+
+@pytest.mark.parametrize("whitespace", ["﻿", " ", "　"])
+def test_service_entry_ids_and_names_use_js_trim(whitespace):
+    def problem(kind, key):
+        raise ValueError(f"{kind}:{key}")
+
+    for key in ("id", "name"):
+        entry = {"id": "a", "name": "A", "kind": "wms", "fields": {"url": "u"}}
+        entry[key] = whitespace
+        with pytest.raises(ValueError, match=f"nonblank:{key}"):
+            dp.check_service_entry(entry, set(), problem)
+    entry = {
+        "id": f"{whitespace}a",
+        "name": f"A{whitespace}",
+        "kind": "wms",
+        "fields": {"url": "u"},
+    }
+    service = dp.check_service_entry(entry, set(), problem)
+    assert (service["id"], service["name"]) == ("a", "A")

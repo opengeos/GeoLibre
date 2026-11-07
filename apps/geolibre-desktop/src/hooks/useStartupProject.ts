@@ -340,6 +340,9 @@ export function useStartupProject(): {
         openDefaultWorkspace({ seedLayers: true });
       } finally {
         window.clearTimeout(gateTimer);
+        // `settled` deliberately waits for the restore itself, not the gate
+        // timer: opening the deployment `openPanel` over the default workspace
+        // would leave it open once a late restore replaces that workspace.
         if (!cancelled) {
           setRestoring(false);
           setSettled(true);

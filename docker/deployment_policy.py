@@ -45,8 +45,9 @@ SAFE_INTEGER = 2**53 - 1
 
 # Unicode whitespace characters removed by JavaScript's String.prototype.trim()
 # (ECMAScript 2024 §12.3 WhiteSpace + LineTerminator + BOM U+FEFF).
-# Used for all 'nonblank' fields so the Docker container validator enforces the
-# exact same trimming semantics as the client desktop parser (readNonBlank).
+# Used for all 'nonblank' fields and service entry ids/names so the Docker
+# container validator enforces the exact same trimming semantics as the client
+# desktop parser (readNonBlank and the service catalog's trim()).
 JS_TRIM_WHITESPACE = (
     " \t\n\r\v\f\ufeff\u00a0\u1680\u2000\u2001\u2002\u2003\u2004"
     "\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
@@ -173,9 +174,9 @@ def check_service_entry(entry, seen_ids, problem):
     if not isinstance(entry, dict):
         problem("object", None)
     for key in ("id", "name"):
-        if not isinstance(entry.get(key), str) or not entry[key].strip():
+        if not isinstance(entry.get(key), str) or not entry[key].strip(JS_TRIM_WHITESPACE):
             problem("nonblank", key)
-    service_id = entry["id"].strip()
+    service_id = entry["id"].strip(JS_TRIM_WHITESPACE)
     if service_id in seen_ids:
         problem("duplicate", "id")
     if entry.get("kind") not in SERVICE_KINDS:
@@ -192,7 +193,7 @@ def check_service_entry(entry, seen_ids, problem):
     seen_ids.add(service_id)
     service = {
         "id": service_id,
-        "name": entry["name"].strip(),
+        "name": entry["name"].strip(JS_TRIM_WHITESPACE),
         "kind": entry["kind"],
         "fields": fields,
     }

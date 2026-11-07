@@ -236,7 +236,10 @@ and activation behavior is unchanged.
 automatically when the application starts with a fresh project. If the panel
 registers asynchronously during plugin activation, it opens once it registers
 and startup is ready: plugins have loaded, the map is ready, and any `?url=`
-project has settled. It does not reopen in saved projects and is ignored in the
+project has settled. A native startup restore must finish (or fail) first, so a
+restore that never completes keeps the panel closed. A panel that registers late
+still opens while the project is fresh; a console warning is logged after 10
+seconds without it. It does not reopen in saved projects and is ignored in the
 read-only viewer preset or when side panels are hidden (`?maponly`,
 `?panels=hidden`, `?hidePanels=true`).
 

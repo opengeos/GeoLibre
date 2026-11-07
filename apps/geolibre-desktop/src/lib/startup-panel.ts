@@ -19,6 +19,39 @@ export function isStartupProjectFresh(): boolean {
   return !s.projectLoaded && s.projectPath === null;
 }
 
+/** Readiness signals that gate the deployment policy `plugins.openPanel`. */
+export interface StartupPanelGate {
+  /** Whether the app runs in the read-only `layout=viewer` preset. */
+  viewer: boolean;
+  /** Whether the embed hides every side panel. */
+  panelsHidden: boolean;
+  /** Whether external plugins have finished loading. */
+  externalPluginsReady: boolean;
+  /** Non-zero once the map is ready. */
+  mapReadyGeneration: number;
+  /** Whether an initial `?url=` project load has settled. */
+  projectUrlSettled: boolean;
+  /** Whether an initial native startup project restore has settled. */
+  startupProjectSettled: boolean;
+}
+
+/**
+ * Whether startup is ready for the deployment `openPanel` to be attempted.
+ *
+ * @param gate - The readiness signals.
+ * @returns True when the panel may be opened (freshness is checked separately).
+ */
+export function isStartupPanelGateOpen(gate: StartupPanelGate): boolean {
+  return (
+    !gate.viewer &&
+    !gate.panelsHidden &&
+    gate.externalPluginsReady &&
+    gate.mapReadyGeneration > 0 &&
+    gate.projectUrlSettled &&
+    gate.startupProjectSettled
+  );
+}
+
 /**
  * Opens a designated panel (dockable right-panel or floating) on startup for a fresh project.
  *

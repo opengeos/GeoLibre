@@ -2,7 +2,11 @@ import type { MapEngine } from "@geolibre/map";
 import { S3_BROWSER_PLUGIN_ID } from "@geolibre/plugins";
 import { useEffect, useRef, type RefObject } from "react";
 import { getDeploymentPolicy } from "../../lib/deployment-env";
-import { isStartupProjectFresh, openStartupPanel } from "../../lib/startup-panel";
+import {
+  isStartupPanelGateOpen,
+  isStartupProjectFresh,
+  openStartupPanel,
+} from "../../lib/startup-panel";
 import { useDesktopSettingsStore } from "../useDesktopSettings";
 import { createAppAPI, getPluginManager } from "../usePlugins";
 
@@ -63,12 +67,14 @@ export function useStartupPanels({
   useEffect(() => {
     if (
       panelOpened.current ||
-      viewer ||
-      panelsHidden ||
-      !externalPluginsReady ||
-      !mapReadyGeneration ||
-      !projectUrlSettled ||
-      !startupProjectSettled
+      !isStartupPanelGateOpen({
+        viewer,
+        panelsHidden,
+        externalPluginsReady,
+        mapReadyGeneration,
+        projectUrlSettled,
+        startupProjectSettled,
+      })
     ) {
       return;
     }
