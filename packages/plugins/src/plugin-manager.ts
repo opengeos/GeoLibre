@@ -887,7 +887,8 @@ function scopeAppToPlugin(
     !onRightPanelOpened &&
     !activatePlugin &&
     !deactivatePlugin &&
-    !app.credentials
+    !app.credentials &&
+    !app.readAllowedFile
   )
     return app;
 
@@ -930,6 +931,16 @@ function scopeAppToPlugin(
       set: (name, value) => credentials.set(name, value, pluginId),
       location: () => credentials.location(),
     };
+  }
+
+  if (app.readAllowedFile) {
+    // Same host-side owner injection as credentials: the host impl takes the
+    // owner id as a trailing argument, so a plugin reads only its own allowlist.
+    const readWithOwner = app.readAllowedFile as unknown as (
+      path: string,
+      ownerPluginId: string,
+    ) => Promise<string>;
+    scoped.readAllowedFile = (path) => readWithOwner(path, pluginId);
   }
 
   if (register) {

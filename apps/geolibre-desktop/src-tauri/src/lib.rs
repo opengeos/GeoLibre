@@ -1436,11 +1436,13 @@ fn read_allowed_file_impl(
     let policy: serde_json::Value = serde_json::from_str(&policy_contents)
         .map_err(|error| format!("Could not parse machine deployment policy: {error}"))?;
 
+    // Keys are matched after trimming, as the UI parser normalises them.
     let allowlist = policy
         .get("plugins")
         .and_then(|p| p.get("fileAccess"))
-        .and_then(|f| f.get(trimmed_id))
-        .and_then(|v| v.as_array())
+        .and_then(|f| f.as_object())
+        .and_then(|f| f.iter().find(|(key, _)| key.trim() == trimmed_id))
+        .and_then(|(_, v)| v.as_array())
         .ok_or_else(|| {
             format!("Plugin '{trimmed_id}' has no fileAccess allowlist configured in machine deployment policy")
         })?;
@@ -2461,8 +2463,6 @@ fn read_fs_text_entry(root: &Path, entry_name: &str, label: &str) -> Result<Stri
     }
     Ok(text)
 }
-
-// MAX_PLUGIN_ENTRY_BYTES defined at module level above
 
 #[cfg(not(feature = "mas"))]
 fn read_zip_text_entry<R: Read + std::io::Seek>(
@@ -5624,6 +5624,19 @@ mod tests {
         let res_absent = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&absent_policy));
         assert!(res_absent.is_err());
         assert!(res_absent.unwrap_err().contains("does not exist"));
+
+        // 6. Policy keys are matched after trimming, as the UI parser does.
+        let padded_policy = root.path().join("padded.json");
+        fs::write(
+            &padded_policy,
+            format!(
+                r#"{{"version":1,"plugins":{{"fileAccess":{{" my-plugin ":["{}"]}}}}}}"#,
+                allowed_str
+            ),
+        )
+        .unwrap();
+        let res_padded = super::read_allowed_file_impl("my-plugin", &allowed_str, Some(&padded_policy));
+        assert_eq!(res_padded.unwrap(), "{\"hello\":\"world\"}");
     }
 
     #[cfg(unix)]

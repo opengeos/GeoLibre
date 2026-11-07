@@ -593,8 +593,15 @@ export function createAppAPI(
       return untilAborted(resolveReadableUrl(url.trim(), abort), abort);
     },
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
+    // The public signature is path-only; the plugin manager's scoped API
+    // appends the owner id (as it does for `credentials`), so a plugin cannot
+    // name another plugin's allowlist.
     readAllowedFile: isTauriRuntime()
-      ? (pluginId: string, path: string) => invoke<string>("read_allowed_file", { pluginId, path })
+      ? ((path: string, ownerPluginId: string) =>
+          invoke<string>("read_allowed_file", {
+            pluginId: ownerPluginId,
+            path,
+          })) as unknown as GeoLibrePlugins.GeoLibreAppAPI["readAllowedFile"]
       : undefined,
     downloadRemoteFile: isDesktopRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())
@@ -1237,15 +1244,4 @@ function normalizeBytes(bytes: number[] | Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(view.byteLength);
   copy.set(view);
   return copy.buffer;
-}
-
-/**
- * Read the UTF-8 text of a local file allowed by machine-wide deployment policy.
- * Desktop only; throws in web runtime.
- */
-export function readAllowedFile(pluginId: string, path: string): Promise<string> {
-  if (!isTauriRuntime()) {
-    return Promise.reject(new Error("readAllowedFile is only supported in the desktop app"));
-  }
-  return invoke<string>("read_allowed_file", { pluginId, path });
 }

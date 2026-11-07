@@ -813,6 +813,36 @@ describe("PluginManager toolbar menu scoping", () => {
     ]);
   });
 
+  it("binds app.readAllowedFile to the calling plugin's id", async () => {
+    const manager = new PluginManager();
+    const seen: Array<[string, string | undefined]> = [];
+    // Only `readAllowedFile`: a scope must still be built when nothing else needs one.
+    const mockApp = {
+      readAllowedFile: (path: string, ownerPluginId?: string) => {
+        seen.push([path, ownerPluginId]);
+        return Promise.resolve("ok");
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    let read: Promise<string> | undefined;
+    manager.register(
+      testPlugin({
+        id: "file-plugin",
+        activate: (api) => {
+          // A plugin passing a second argument cannot pick another allowlist.
+          read = (api.readAllowedFile as (...args: string[]) => Promise<string>)(
+            "/etc/geolibre/app.cfg",
+            "other-plugin",
+          );
+        },
+      }),
+    );
+    manager.activate("file-plugin", mockApp);
+
+    assert.equal(await read, "ok");
+    assert.deepEqual(seen, [["/etc/geolibre/app.cfg", "file-plugin"]]);
+  });
+
   it("records the owner on the real registry when wired through activate", () => {
     // Guards the TypeScript-invisible contract between scopeAppToPlugin's cast
     // and the real registry's optional second parameter: drive the genuine
