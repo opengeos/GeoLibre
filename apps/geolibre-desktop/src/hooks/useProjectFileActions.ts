@@ -1451,6 +1451,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // member opens, so it is built like Share: local vector data is embedded (never
   // file references) and credentials are redacted. The local-save prompts do not
   // apply, since neither choice can be honoured on the server.
+  /**
+   * The message shown when saving a project to the share server fails.
+   *
+   * @param error - The error the save threw.
+   * @param shareHost - The share host label named in the unauthorized message.
+   * @returns A translated, user-facing error message.
+   */
+  const shareSaveErrorMessage = (error: unknown, shareHost: string): string =>
+    error instanceof ShareOAuthError
+      ? t(shareOAuthErrorKey(error.code))
+      : error instanceof ShareUploadError && error.code === "unauthorized"
+        ? t(supportsShareOAuth() ? "gallery.errorUnauthorizedOAuth" : "gallery.errorUnauthorized", {
+            shareHost,
+          })
+        : isSerializationTooLargeError(error)
+          ? t("toolbar.error.projectTooLargeToSave")
+          : error instanceof Error
+            ? error.message
+            : t("toolbar.error.couldNotSaveProject");
+
   const saveBackToShare = async (
     remoteProject: RemoteSharedProjectTarget & { projectGeneration: number },
     saveProjectGeneration: number,
@@ -1517,22 +1537,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       return true;
     } catch (error) {
       console.error("Failed to update shared project", error);
-      setActionError(
-        error instanceof ShareOAuthError
-          ? t(shareOAuthErrorKey(error.code))
-          : error instanceof ShareUploadError && error.code === "unauthorized"
-            ? t(
-                supportsShareOAuth()
-                  ? "gallery.errorUnauthorizedOAuth"
-                  : "gallery.errorUnauthorized",
-                { shareHost: shareHostLabel() },
-              )
-            : isSerializationTooLargeError(error)
-              ? t("toolbar.error.projectTooLargeToSave")
-              : error instanceof Error
-                ? error.message
-                : t("toolbar.error.couldNotSaveProject"),
-      );
+      setActionError(shareSaveErrorMessage(error, shareHostLabel()));
       return false;
     }
   };
@@ -1691,22 +1696,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       return true;
     } catch (error) {
       console.error("Failed to create project on share server", error);
-      setActionError(
-        error instanceof ShareOAuthError
-          ? t(shareOAuthErrorKey(error.code))
-          : error instanceof ShareUploadError && error.code === "unauthorized"
-            ? t(
-                supportsShareOAuth()
-                  ? "gallery.errorUnauthorizedOAuth"
-                  : "gallery.errorUnauthorized",
-                { shareHost: hostLabel },
-              )
-            : isSerializationTooLargeError(error)
-              ? t("toolbar.error.projectTooLargeToSave")
-              : error instanceof Error
-                ? error.message
-                : t("toolbar.error.couldNotSaveProject"),
-      );
+      setActionError(shareSaveErrorMessage(error, hostLabel));
       return false;
     }
   };

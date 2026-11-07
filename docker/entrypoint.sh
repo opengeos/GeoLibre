@@ -342,7 +342,7 @@ if share_url:
 project_storage = os.environ.get("GEOLIBRE_PROJECT_STORAGE", "").strip().lower()
 if project_storage:
     if project_storage not in ("local", "server"):
-        raise SystemExit("ERROR: GEOLIBRE_PROJECT_STORAGE must be 'local' or 'server'.")
+        raise SystemExit("ERROR: GEOLIBRE_PROJECT_STORAGE must be local or server.")
     if project_storage == "server":
         if not share_url:
             raise SystemExit(
