@@ -8,7 +8,7 @@ import { createLayerSync } from "../packages/map/src/headless";
 // not as the `null` that set it. This stub mirrors that, so a solid line whose
 // `line-dasharray` is already unset must not be reset again on every sync.
 function makeMapStub() {
-  const layers: { id: string; source?: string }[] = [];
+  const layers: { id: string; source?: string; filter?: unknown }[] = [];
   const sources = new Map<string, Record<string, unknown>>();
   const paint = new Map<string, Record<string, unknown>>();
   const dashCalls: { id: string; value: unknown }[] = [];
@@ -23,7 +23,7 @@ function makeMapStub() {
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
     },
-    addLayer: (spec: { id: string; source?: string }, beforeId?: string) => {
+    addLayer: (spec: { id: string; source?: string; filter?: unknown }, beforeId?: string) => {
       const index = beforeId ? layers.findIndex((layer) => layer.id === beforeId) : -1;
       if (index >= 0) layers.splice(index, 0, spec);
       else layers.push(spec);
