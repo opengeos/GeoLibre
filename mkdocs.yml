@@ -75,6 +75,8 @@ nav:
       - Cloud Storage (S3): user-guide/cloud-storage.md
       - Plugins & Marketplace: user-guide/plugins.md
       - Web Services: user-guide/web-services.md
+      - Editing ArcGIS Services: arcgis-editing.md
+      - USGS NLDI Workflows: user-guide/usgs-nldi.md
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md

@@ -462,6 +462,9 @@ def remove_layer(project: dict[str, Any], ref: str) -> str:
     layer = find_layer(project, ref)
     layers_of(project).remove(layer)
     layer_id = str(layer["id"])
+    styles = project.get("styles")
+    if isinstance(styles, dict):
+        styles.pop(layer_id, None)
     _drop_swipe_reference(project, layer)
     return layer_id
 
@@ -546,12 +549,19 @@ def apply_style(project: dict[str, Any], ref: str, style: dict[str, Any]) -> dic
     if not isinstance(style, dict):
         raise ValueError(f"style must be an object of style keys, got {type(style).__name__}")
     layer = find_layer(project, ref)
+    layer_id = str(layer.get("id", ""))
+    styles = project.get("styles")
+    top_level = styles.get(layer_id) if isinstance(styles, dict) else None
     current = layer.get("style")
     merged = (
         dict(current) if isinstance(current, dict) else copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
     )
+    if isinstance(top_level, dict):
+        merged.update(top_level)
     merged.update(style)
     layer["style"] = merged
+    if isinstance(styles, dict) and layer_id in styles:
+        styles[layer_id] = copy.deepcopy(merged)
     return merged
 
 
@@ -1731,11 +1741,18 @@ def set_labels(
             an option is invalid.
     """
     layer = find_layer(project, ref)
+    layer_id = str(layer.get("id", ""))
+    styles = project.get("styles")
+    top_level = styles.get(layer_id) if isinstance(styles, dict) else None
     style = layer.get("style")
     if not isinstance(style, dict):
         style = copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
         layer["style"] = style
-    current = style.get("labels")
+    current = (
+        top_level.get("labels")
+        if isinstance(top_level, dict) and isinstance(top_level.get("labels"), dict)
+        else style.get("labels")
+    )
     labels = _project.label_style(
         field,
         expression=expression,
@@ -1744,6 +1761,8 @@ def set_labels(
         **options,
     )
     style["labels"] = labels
+    if isinstance(top_level, dict):
+        top_level["labels"] = copy.deepcopy(labels)
     return copy.deepcopy(labels)
 
 

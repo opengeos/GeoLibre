@@ -264,6 +264,29 @@ def test_apply_style_merges_rather_than_replaces(proj):
     assert merged["strokeWidth"] == project.DEFAULT_LAYER_STYLE["strokeWidth"]
 
 
+def test_apply_style_synchronizes_top_level_project_styles(proj):
+    layer_id = proj["layers"][0]["id"]
+    proj["styles"] = {layer_id: {**project.DEFAULT_LAYER_STYLE, "strokeDash": []}}
+    merged = authoring.apply_style(proj, "Cities", {"strokeDash": [4, 2], "strokeOpacity": 0.5})
+    assert merged["strokeDash"] == [4, 2]
+    assert proj["styles"][layer_id]["strokeDash"] == [4, 2]
+    assert proj["styles"][layer_id]["strokeOpacity"] == 0.5
+
+
+def test_set_labels_and_remove_layer_synchronize_top_level_project_styles(proj):
+    layer_id = proj["layers"][0]["id"]
+    proj["styles"] = {layer_id: {**project.DEFAULT_LAYER_STYLE}}
+    labels = authoring.set_labels(proj, "Cities", "name", size=14)
+    assert proj["styles"][layer_id]["labels"] == labels
+    # When layer.style["labels"] is stale, set_labels merges from the authoritative top-level entry.
+    proj["layers"][0]["style"]["labels"] = {**labels, "field": "stale_field"}
+    hidden = authoring.set_labels(proj, "Cities", enabled=False)
+    assert hidden["field"] == "name"
+    assert proj["styles"][layer_id]["labels"] == hidden
+    authoring.remove_layer(proj, "Cities")
+    assert layer_id not in proj["styles"]
+
+
 def test_apply_style_rejects_a_non_mapping(proj):
     with pytest.raises(ValueError, match="must be an object"):
         authoring.apply_style(proj, "Cities", ["fillColor", "#ff0000"])

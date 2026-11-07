@@ -294,6 +294,8 @@ const i3sFlyToRequested = new Set<string>();
  * after a project is reopened.
  */
 export function restoreArcgisI3sTilesLayers(app: GeoLibreAppAPI): void {
+  // Clear session-scoped failed probes so reopening a project probes again.
+  i3sProbesFailed.clear();
   if (useAppStore.getState().layers.some(isArcgisI3sTilesLayer)) {
     void ensureArcgisI3sTilesOverlay(app);
   }
@@ -314,6 +316,12 @@ function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   return i3sEnsureInFlight;
 }
 
+/**
+ * Load deck.gl, the I3S loader, and the replacement mesh layer, then bind the
+ * MapboxOverlay and store subscription to the active map instance.
+ *
+ * @param app - The GeoLibre app API.
+ */
 async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   i3sApp = app;
   if (!app.getDeckGL) return;
@@ -363,6 +371,7 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
       for (const layer of previous.layers) {
         if (isArcgisI3sTilesLayer(layer) && !currentIds.has(layer.id)) {
           i3sFlyToRequested.delete(layer.id);
+          i3sProbesFailed.delete(i3sProbeKey(layer));
         }
       }
       renderArcgisI3sTilesLayers();
@@ -385,6 +394,11 @@ function loadI3sLoader(): Promise<unknown> {
   return i3sLoaderPromise;
 }
 
+/**
+ * Synchronize the mounted deck.gl I3S overlay with the store's current I3S
+ * layers, probing any unprobed layers and tearing the overlay down when the
+ * last I3S layer is removed.
+ */
 function renderArcgisI3sTilesLayers(): void {
   if (!i3sOverlay || !i3sDeckGL || !i3sApp) return;
 
@@ -430,7 +444,7 @@ function renderArcgisI3sTilesLayers(): void {
   lastI3sLayerSignature = signature;
 
   for (const layer of layers) {
-    if (layer.metadata.i3sKind === undefined && !i3sProbesFailed.has(layer.id)) {
+    if (!i3sProbeIsCurrent(layer) && !i3sProbesFailed.has(i3sProbeKey(layer))) {
       void probeI3sLayerKind(layer);
     }
   }
@@ -539,9 +553,13 @@ export function buildArcgisI3sTilesDeckLayer(
  * scene layer, or one per visible sublayer of a Building Scene Layer.
  *
  * @param layer - The store layer.
+ * @param deps - Optional injectable deck.gl and loader dependencies for testing.
  * @returns Its deck.gl layers (none while its type is still being probed).
  */
-export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
+export function buildArcgisI3sTilesDeckLayers(
+  layer: GeoLibreLayer,
+  deps?: { deckGL: GeoLibreDeckGL | null; loader: unknown; meshLayer?: unknown },
+): Layer[] {
   const kind = i3sLayerKind(layer);
   if (kind === "building") {
     const state = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
@@ -549,7 +567,7 @@ export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
     if (!state || typeof base !== "string") return [];
     return visibleI3sBuildingSublayers(state)
       .map((id) =>
-        buildArcgisI3sTilesDeckLayer(layer, undefined, {
+        buildArcgisI3sTilesDeckLayer(layer, deps, {
           url: i3sBuildingSublayerUrl(base, id),
           id,
         }),
@@ -557,7 +575,7 @@ export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer): Layer[] {
       .filter((deckLayer): deckLayer is Layer => deckLayer !== null);
   }
   if (kind !== "mesh") return [];
-  const single = buildArcgisI3sTilesDeckLayer(layer);
+  const single = buildArcgisI3sTilesDeckLayer(layer, deps);
   return single ? [single] : [];
 }
 
@@ -572,9 +590,39 @@ const i3sProbesInFlight = new Set<string>();
  */
 const i3sProbesFailed = new Set<string>();
 
+/** Key for a layer's probe state, including its URL so a URL edit probes again. */
+function i3sProbeKey(layer: GeoLibreLayer): string {
+  const url = typeof layer.source.url === "string" ? layer.source.url : "";
+  return `${layer.id}:${url}`;
+}
+
+/** The layer's source URL, or `""` when it has none. */
+function i3sLayerUrl(layer: GeoLibreLayer): string {
+  return typeof layer.source.url === "string" ? layer.source.url : "";
+}
+
+/**
+ * Whether the layer's recorded I3S kind was probed from its current URL. A
+ * layer saved before `i3sProbedUrl` was recorded is probed again once.
+ */
+function i3sProbeIsCurrent(layer: GeoLibreLayer): boolean {
+  return layer.metadata.i3sKind !== undefined && layer.metadata.i3sProbedUrl === i3sLayerUrl(layer);
+}
+
+/**
+ * Whether the recorded kind was probed from a different URL than the current
+ * one, so its kind and Building sublayer tree must not be drawn.
+ */
+function i3sProbeIsStale(layer: GeoLibreLayer): boolean {
+  const probedUrl = layer.metadata.i3sProbedUrl;
+  return typeof probedUrl === "string" && probedUrl !== i3sLayerUrl(layer);
+}
+
 /** A layer's I3S kind: the probed one, `mesh` after a failed probe, else unknown. */
 function i3sLayerKind(layer: GeoLibreLayer): unknown {
-  return layer.metadata.i3sKind ?? (i3sProbesFailed.has(layer.id) ? "mesh" : undefined);
+  const failed = i3sProbesFailed.has(i3sProbeKey(layer));
+  if (i3sProbeIsStale(layer)) return failed ? "mesh" : undefined;
+  return layer.metadata.i3sKind ?? (failed ? "mesh" : undefined);
 }
 
 /**
@@ -587,12 +635,18 @@ function i3sLayerKind(layer: GeoLibreLayer): unknown {
  *
  * @param layer - The store layer to probe.
  */
-async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
-  if (i3sProbesInFlight.has(layer.id)) return;
-  i3sProbesInFlight.add(layer.id);
+export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
+  const key = i3sProbeKey(layer);
+  if (i3sProbesInFlight.has(key)) return;
+  i3sProbesInFlight.add(key);
   const url = typeof layer.source.url === "string" ? layer.source.url : "";
   const docUrl = i3sLayerDocumentUrl(url);
-  let patch: Record<string, unknown> = { i3sKind: "mesh" };
+  let patch: Record<string, unknown> = {
+    i3sKind: "mesh",
+    i3sProbedUrl: url,
+    i3sBuildingUrl: undefined,
+    i3sBuilding: undefined,
+  };
   if (docUrl) {
     try {
       const response = await fetch(i3sDocumentRequestUrl(docUrl));
@@ -601,22 +655,34 @@ async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       if (isI3sBuildingLayerDocument(doc)) {
         patch = {
           i3sKind: "building",
+          i3sProbedUrl: url,
           i3sBuildingUrl: docUrl,
           i3sBuilding: parseI3sBuildingLayer(doc),
         };
       }
     } catch (error) {
       console.warn(`[GeoLibre] Could not read the I3S layer document ${docUrl}`, error);
-      i3sProbesInFlight.delete(layer.id);
-      i3sProbesFailed.add(layer.id);
-      lastI3sLayerSignature = null;
-      renderArcgisI3sTilesLayers();
+      i3sProbesInFlight.delete(key);
+      const stillPresent = useAppStore
+        .getState()
+        .layers.some(
+          (item) =>
+            item.id === layer.id &&
+            (typeof item.source.url === "string" ? item.source.url : "") === url,
+        );
+      if (stillPresent) {
+        i3sProbesFailed.add(key);
+        lastI3sLayerSignature = null;
+        renderArcgisI3sTilesLayers();
+      }
       return;
     }
   }
-  i3sProbesInFlight.delete(layer.id);
+  i3sProbesInFlight.delete(key);
   const current = useAppStore.getState().layers.find((item) => item.id === layer.id);
-  if (!current) return;
+  if (!current || (typeof current.source.url === "string" ? current.source.url : "") !== url) {
+    return;
+  }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
 }
 

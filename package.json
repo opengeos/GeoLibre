@@ -19,7 +19,7 @@
     "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
     "bundle:report": "node scripts/bundle-report.mjs",
     "typecheck": "npm run build",
-    "lint": "eslint apps packages workers tests --max-warnings 242",
+    "lint": "eslint apps packages workers tests --max-warnings 241",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:frontend:coverage": "node scripts/coverage-check.mjs",

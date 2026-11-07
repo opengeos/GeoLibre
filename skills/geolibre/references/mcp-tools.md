@@ -153,9 +153,10 @@ set_labels(path, layer, field=None, expression=None, enabled=None,
 
 `style_layer` merges keys into the layer's existing style rather than replacing
 it. Common keys: `fillColor`, `fillOpacity`, `strokeColor`, `strokeWidth`,
-`circleRadius`, `minZoom`, `maxZoom`, and for rasters `rasterBrightnessMin` /
-`rasterBrightnessMax` / `rasterSaturation` / `rasterContrast` /
-`rasterHueRotate`. Colors are CSS strings (`"#3b82f6"`).
+`strokeOpacity`, `strokeDash`, `strokeBlur`, `circleRadius`, `minZoom`,
+`maxZoom`, and for rasters `rasterBrightnessMin` / `rasterBrightnessMax` /
+`rasterSaturation` / `rasterContrast` / `rasterHueRotate`. Colors are CSS
+strings (`"#3b82f6"`).
 
 `set_layer_popup` chooses what a click (and, with `tooltip`, a hover) shows.
 Without it a layer shows its name plus every visible property. Each `fields`

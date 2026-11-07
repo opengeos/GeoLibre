@@ -7,13 +7,23 @@ GeoLibre can show the inside of a building in 3D: floor plans stacked by level, 
 Rooms, corridors and doors from OpenStreetMap indoor mapping, a GeoPackage, a Shapefile or GeoJSON usually carry the floor each feature is on (`level`, `floor`, `ordinal`, ...).
 
 1. **Stack the floors.** In the Style panel, turn on **3D extrusion**, set **Base property** to the level field and **Base scale** to the storey height (for example 3.5 m), and give every feature a **Floor height** (for example 3 m). See [Stacking floors](styling.md#vector-styling).
-2. **Pick a floor.** In the Style panel's **Floor picker** section, choose the **Floor field**. A **Floor** control appears on the map: click a floor to draw only that floor, or add **+ below** to keep the floors under it. See [Floor picker](styling.md#floor-picker).
+2. **Pick a floor.** In the Style panel's **Floor picker** section, choose the **Floor field**. A **Floor** control appears on the map: click a floor to draw only that floor, add **+ below** to keep the floors under it, or while **All** is selected click a room on the map to switch to its floor and center on it. See [Floor picker](styling.md#floor-picker).
 
 **Add Data → Vector Layer → Load sample data → Berlin Hbf indoor (OSM)** is a ready-made example with three floors.
 
 ## IMDF venues
 
 An IMDF archive (Indoor Mapping Data Format, the zip of GeoJSON files that Apple Maps and many indoor-mapping tools export) opens as a ready-made venue: one layer per feature type, the floors stacked and linked to the floor picker. Pick or drop the `.zip`, or load it by URL with **Add Data → Vector Layer**. **Load sample data → Dinoseum indoor venue (IMDF)** opens Apple's IMDF sample. See [Adding data](adding-data.md).
+
+## IndoorGML buildings
+
+An OGC IndoorGML 1.0 document (`.gml` or `.xml`) opens with **Add Data → IndoorGML Layer** as three layers linked to the floor picker:
+
+- **Cells** — rooms (`GeneralSpace`), corridors and stairs (`TransitionSpace`), doors (`ConnectionSpace`) and anchors (`AnchorSpace`), extruded from each cell's floor (`base_z`) to its ceiling (`top_z`) and colored by space kind.
+- **Navigation network** — the transitions of the dual graph, drawn in 3D at their node elevations.
+- **Navigation nodes** — the states of the dual graph (hidden at first).
+
+Floors come from a cell's `storey` when the file names one, or from grouping cell base elevations (counting floor `0` from the floor nearest elevation zero). When the file does not name an EPSG coordinate reference system (`srsName`), enter the **Source CRS** or check **Local coordinates (place at map centre)** for a model in local building metres. **Load sample data → FJK-Haus (OGC IndoorGML sample)** opens a two-storey house with its navigation graph. See [IndoorGML buildings](adding-data.md#indoorgml-buildings).
 
 ## BIM models as I3S Building Scene Layers
 
