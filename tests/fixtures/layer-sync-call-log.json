@@ -140,7 +140,6 @@
               "line-color": "#1e40af",
               "line-width": 2,
               "line-opacity": 0.8,
-              "line-blur": 0,
               "line-layer-opacity": 1
             },
             "layout": {
@@ -2844,7 +2843,6 @@
               "line-color": "#1e40af",
               "line-width": 2,
               "line-opacity": 0.8,
-              "line-blur": 0,
               "line-layer-opacity": 1
             },
             "layout": {
@@ -3388,7 +3386,6 @@
               "line-color": "#1e40af",
               "line-width": 2,
               "line-opacity": 0.8,
-              "line-blur": 0,
               "line-layer-opacity": 1
             },
             "layout": {
@@ -6218,7 +6215,6 @@
               "line-color": "#1e40af",
               "line-width": 2,
               "line-opacity": 0.8,
-              "line-blur": 0,
               "line-layer-opacity": 1
             },
             "layout": {

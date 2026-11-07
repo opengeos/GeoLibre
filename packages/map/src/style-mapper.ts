@@ -69,12 +69,15 @@ export function fillOutlineDrawn(style: LayerStyle): boolean {
 
 /**
  * The paint properties the builders here may emit as a `null` reset: a solid
- * line's dash and the fill hairline under a dashed or translucent stroke.
+ * line's dash, a sharp line's blur, and the fill hairline under a dashed or
+ * translucent stroke.
  * Layer sync and the Mapbox engine use it to reset only what GeoLibre set on a
  * plugin's own native layers.
  */
 export function paintBuilderMayReset(property: string): boolean {
-  return property === "line-dasharray" || property === "fill-outline-color";
+  return (
+    property === "line-dasharray" || property === "line-blur" || property === "fill-outline-color"
+  );
 }
 
 /**
@@ -143,7 +146,9 @@ export function linePaint(style: LayerStyle, opacity: number) {
     // dash the user has cleared (ensureLayer strips it on first add, and the
     // Mapbox GL exporter and compiler leave it out).
     "line-dasharray": strokeDashValue(style) as unknown as PropertyValueSpecification<number[]>,
-    "line-blur": strokeBlurValue(style),
+    // `null` for a sharp line, like the dash, so a plugin's own blur on its
+    // native layer is reset only when GeoLibre set one (OwnedPaintResets).
+    "line-blur": (strokeBlurValue(style) || null) as unknown as number,
     // See the note on `fill-layer-opacity` in fillPaint.
     "line-layer-opacity": layerOpacityForBlend(style),
   };

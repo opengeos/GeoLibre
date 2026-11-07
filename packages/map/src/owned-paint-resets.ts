@@ -18,7 +18,9 @@ interface LayerLookup {
  * object is not seen, so in that case the ownership is best-effort.
  */
 export class OwnedPaintResets {
-  private readonly owners = new Map<string, unknown>();
+  // Keyed by the native layer object, so a removed layer is not kept alive and
+  // a recreated one (a new object) starts with nothing owned.
+  private readonly owned = new WeakMap<object, Set<string>>();
 
   /**
    * Whether `value` should be written to `property` on native layer `id`, and
@@ -33,14 +35,17 @@ export class OwnedPaintResets {
    */
   shouldWrite(map: LayerLookup, id: string, property: string, value: unknown): boolean {
     if (!paintBuilderMayReset(property)) return true;
-    const key = `${id}\0${property}`;
     const layer = map.getLayer(id);
+    if (typeof layer !== "object" || layer === null) return value !== null;
+    let properties = this.owned.get(layer);
     if (value !== null) {
-      this.owners.set(key, layer);
+      if (!properties) {
+        properties = new Set();
+        this.owned.set(layer, properties);
+      }
+      properties.add(property);
       return true;
     }
-    const owner = this.owners.get(key);
-    this.owners.delete(key);
-    return owner !== undefined && owner === layer;
+    return properties?.delete(property) ?? false;
   }
 }

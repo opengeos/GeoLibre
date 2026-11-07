@@ -93,7 +93,7 @@ describe("line opacity, dashes and blur (#3350)", () => {
     const paint = linePaint(style(), 1);
     assert.equal(paint["line-opacity"], 1);
     assert.equal(paint["line-dasharray"], null);
-    assert.equal(paint["line-blur"], 0);
+    assert.equal(paint["line-blur"], null);
   });
 
   it("folds the stroke opacity into the layer opacity and passes dashes and blur through", () => {
@@ -130,11 +130,11 @@ describe("line opacity, dashes and blur (#3350)", () => {
     const paint = linePaint(legacy as LayerStyle, 1);
     assert.equal(paint["line-opacity"], 1);
     assert.equal(paint["line-dasharray"], null);
-    assert.equal(paint["line-blur"], 0);
+    assert.equal(paint["line-blur"], null);
     const bad = linePaint(style({ strokeOpacity: 4, strokeDash: [0, 0], strokeBlur: -2 }), 1);
     assert.equal(bad["line-opacity"], 1);
     assert.equal(bad["line-dasharray"], null);
-    assert.equal(bad["line-blur"], 0);
+    assert.equal(bad["line-blur"], null);
   });
 
   it("names the preset a pattern matches", () => {
@@ -173,17 +173,19 @@ describe("line opacity, dashes and blur (#3350)", () => {
 
   it("never resets a plugin layer's own dash, only one GeoLibre set", () => {
     const writes: unknown[] = [];
+    const blurWrites: unknown[] = [];
     // A real map returns the same layer object until the layer is removed.
     let nativeLayer = { id: "plugin-line", type: "line" };
     const map = {
       getStyle: () => ({ layers: [{ id: "plugin-line", type: "line" }] }),
       getLayer: (id: string) => (id === "plugin-line" ? nativeLayer : undefined),
       getSource: () => undefined,
-      // The plugin drew its line dashed.
+      // The plugin drew its line dashed and blurred.
       getPaintProperty: (_id: string, key: string) =>
-        key === "line-dasharray" ? [2, 2] : undefined,
+        key === "line-dasharray" ? [2, 2] : key === "line-blur" ? 3 : undefined,
       setPaintProperty: (_id: string, key: string, value: unknown) => {
         if (key === "line-dasharray") writes.push(value);
+        if (key === "line-blur") blurWrites.push(value);
       },
       setLayoutProperty: () => {},
       setLayerZoomRange: () => {},
@@ -208,9 +210,10 @@ describe("line opacity, dashes and blur (#3350)", () => {
         sourceIds: ["plugin-line"],
       },
     });
-    // A solid layer style leaves the plugin's dash alone.
+    // A solid, sharp layer style leaves the plugin's dash and blur alone.
     syncLayer(map as never, pluginLayer({}));
     assert.deepEqual(writes, []);
+    assert.deepEqual(blurWrites, []);
     // A dash the user sets is written, and clearing it resets it once.
     syncLayer(map as never, pluginLayer({ strokeDash: [4, 2] }));
     syncLayer(map as never, pluginLayer({}));
