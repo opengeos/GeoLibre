@@ -15,7 +15,7 @@ DOI shown for that release.
 
 ## Recommended citation
 
-> Wu, Q. (2026). GeoLibre: A lightweight, cloud-native GIS platform for
+> Wu, Q., & Hofbauer, D. (2026). GeoLibre: A lightweight, cloud-native GIS platform for
 > visualizing, exploring, and analyzing geospatial data. Zenodo.
 > <https://doi.org/10.5281/zenodo.20785400>
 
@@ -23,7 +23,7 @@ DOI shown for that release.
 
 ```bibtex
 @software{wu_geolibre,
-  author    = {Wu, Qiusheng},
+  author    = {Wu, Qiusheng and Hofbauer, Daniel},
   title     = {{GeoLibre: A lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data}},
   year      = {2026},
   publisher = {Zenodo},
@@ -34,7 +34,7 @@ DOI shown for that release.
 
 ## APA
 
-> Wu, Q. (2026). GeoLibre: A lightweight, cloud-native GIS platform for
+> Wu, Q., & Hofbauer, D. (2026). GeoLibre: A lightweight, cloud-native GIS platform for
 > visualizing, exploring, and analyzing geospatial data [Computer software].
 > Zenodo. <https://doi.org/10.5281/zenodo.20785400>
 

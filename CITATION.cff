@@ -9,6 +9,9 @@ authors:
     email: giswqs@gmail.com
     affiliation: "University of Tennessee, Knoxville, USA"
     orcid: "https://orcid.org/0000-0001-5437-4073"
+  - given-names: Daniel
+    family-names: Hofbauer
+    affiliation: "Independent Researcher, Vienna, Austria"
 version: 3.6.1
 date-released: 2026-11-02
 doi: "10.5281/zenodo.20785400"

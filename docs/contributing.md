@@ -5,7 +5,10 @@ a development environment, the project layout, the local quality gate, and the
 pull request workflow. Contributions of all sizes are welcome, from fixing a
 typo to adding a new processing tool or plugin.
 
-By participating, you agree to keep interactions respectful and constructive.
+By participating, you agree to follow the project's
+[Code of Conduct](https://github.com/opengeos/GeoLibre/blob/main/CODE_OF_CONDUCT.md).
+For questions and usage help, see
+[Getting help](https://github.com/opengeos/GeoLibre/blob/main/SUPPORT.md).
 
 ## Ways to Contribute
 
@@ -20,6 +23,13 @@ By participating, you agree to keep interactions respectful and constructive.
 
 If you plan a large change, open an issue first so we can agree on the approach
 before you invest time in a pull request.
+
+- **Ask a question** in
+  [GitHub Discussions (Q&A)](https://github.com/opengeos/GeoLibre/discussions/new?category=q-a)
+  rather than the issue tracker.
+- **Report a security vulnerability** privately through
+  [GitHub security advisories](https://github.com/opengeos/GeoLibre/security/advisories/new),
+  not in a public issue.
 
 ## Prerequisites
 
