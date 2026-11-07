@@ -14,6 +14,10 @@ an iframe. State syncs both ways through a single `.geolibre.json` project, so
 data you add from Python appears in the UI, and edits you make in the UI
 (panning, zooming, adding layers) are readable back from Python.
 
+Every public class and function is documented in the
+[Python API Reference](python-api/index.md), generated from the package's
+docstrings.
+
 ## Install
 
 ```bash

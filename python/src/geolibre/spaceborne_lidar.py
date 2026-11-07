@@ -668,8 +668,13 @@ def spaceborne_lidar_layer(
         source: Path to the HDF5 granule.
         name: Layer name; ``"<product> <file name>"`` by default.
         missions: Accepted missions (``"ICESat-2"``, ``"GEDI"``); any when None.
-        product, beams, fields, quality_filter, bbox, max_points: See
+        product: Product short name; see :func:`read_spaceborne_lidar`.
+        beams: Beams to read; see :func:`read_spaceborne_lidar`.
+        fields: Fields to read; see :func:`read_spaceborne_lidar`.
+        quality_filter: Drop low-quality footprints; see
             :func:`read_spaceborne_lidar`.
+        bbox: Bounding box filter; see :func:`read_spaceborne_lidar`.
+        max_points: Point cap; see :func:`read_spaceborne_lidar`.
         color_by: Field to color by; the product's main field by default. Pass
             ``""`` for a single color.
         colormap: Color ramp for the graduated colors.
