@@ -33,7 +33,6 @@ import {
   type PopupRow,
   type StoryMap,
 } from "@geolibre/core";
-import { fillOutlineDrawn } from "@geolibre/map/headless";
 import { buildMapboxStyle } from "@geolibre/map/style-export";
 import { NO_EXTERNAL_CDN } from "./build-flags";
 import { sanitizeStoryHtml } from "./sanitize-html";
@@ -773,11 +772,11 @@ function buildLayerSpec(
             styleValue(layer.style, "fillOpacity"),
           ),
         ),
-        // As on the map, a dashed or translucent stroke leaves the fill
-        // without its hairline.
-        ...(fillOutlineDrawn(layer.style)
-          ? { "fill-outline-color": vectorLineColorValue(layer.style) }
-          : {}),
+        // The story map draws a polygon as this one fill layer, with no line
+        // layer for the outline, so the hairline is its only outline and stays
+        // in the stroke colour even under a dashed or translucent stroke (the
+        // map drops it there because its line layer draws the outline).
+        "fill-outline-color": vectorLineColorValue(layer.style),
       },
     };
   }

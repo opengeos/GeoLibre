@@ -23,11 +23,17 @@ function makeMap() {
     addSource: (id: string, spec: Record<string, unknown>) => void sources.set(id, spec),
     removeSource: (id: string) => sources.delete(id),
     getLayer: (id: string) => (layers.has(id) ? { id, ...layers.get(id) } : undefined),
-    addLayer: (spec: Record<string, unknown>) =>
-      void layers.set(spec.id as string, {
+    addLayer: (spec: Record<string, unknown>) => {
+      // MapLibre drops a layer whose paint carries an explicit null on add;
+      // ensureLayer strips it, and this fails loudly if it ever stops.
+      if (Object.values((spec.paint as Record<string, unknown>) ?? {}).includes(null)) {
+        throw new Error(`null paint on add: ${String(spec.id)}`);
+      }
+      layers.set(spec.id as string, {
         ...spec,
         paint: { ...((spec.paint as Record<string, unknown>) ?? {}) },
-      }),
+      });
+    },
     removeLayer: (id: string) => layers.delete(id),
     getFilter: (id: string) => layers.get(id)?.filter,
     setFilter: () => {},
@@ -162,5 +168,50 @@ describe("line opacity, dashes and blur (#3350)", () => {
     syncLayer(map as never, lineLayer({}));
     // The dash is set, then reset exactly once.
     assert.deepEqual(dashWrites, [[4, 2], null]);
+  });
+
+  it("never resets a plugin layer's own dash, only one GeoLibre set", () => {
+    const writes: unknown[] = [];
+    const map = {
+      getStyle: () => ({ layers: [{ id: "plugin-line", type: "line" }] }),
+      getLayer: (id: string) => (id === "plugin-line" ? { id, type: "line" } : undefined),
+      getSource: () => undefined,
+      // The plugin drew its line dashed.
+      getPaintProperty: (_id: string, key: string) =>
+        key === "line-dasharray" ? [2, 2] : undefined,
+      setPaintProperty: (_id: string, key: string, value: unknown) => {
+        if (key === "line-dasharray") writes.push(value);
+      },
+      setLayoutProperty: () => {},
+      setLayerZoomRange: () => {},
+      moveLayer: () => {},
+      removeLayer: () => {},
+      addLayer: () => {},
+      addSource: () => {},
+      getFilter: () => undefined,
+      setFilter: () => {},
+    };
+    const pluginLayer = (patch: Partial<LayerStyle>): GeoLibreLayer => ({
+      id: "plugin-line-store",
+      name: "Plugin line",
+      type: "geojson",
+      source: { type: "geojson" },
+      visible: true,
+      opacity: 1,
+      style: { ...DEFAULT_LAYER_STYLE, ...patch },
+      metadata: {
+        externalNativeLayer: true,
+        nativeLayerIds: ["plugin-line"],
+        sourceIds: ["plugin-line"],
+      },
+    });
+    // A solid layer style leaves the plugin's dash alone.
+    syncLayer(map as never, pluginLayer({}));
+    assert.deepEqual(writes, []);
+    // A dash the user sets is written, and clearing it resets it once.
+    syncLayer(map as never, pluginLayer({ strokeDash: [4, 2] }));
+    syncLayer(map as never, pluginLayer({}));
+    syncLayer(map as never, pluginLayer({}));
+    assert.deepEqual(writes, [[4, 2], null]);
   });
 });

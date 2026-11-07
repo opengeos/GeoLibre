@@ -311,7 +311,11 @@ const LINE_STYLE_OPTIONS = [
 function parseDashPattern(text: string): number[] | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  const lengths = trimmed.split(/[\s,]+/).map(Number);
+  // A leading or trailing separator leaves an empty token, which is not a 0.
+  const lengths = trimmed
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number);
   return isStrokeDashPattern(lengths) ? lengths : null;
 }
 
@@ -339,10 +343,11 @@ function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
   const commitDraft = () => {
     if (draft === null) return;
     const parsed = parseDashPattern(draft);
-    if (parsed) {
-      setLayerStyle(layer.id, { strokeDash: parsed });
-      setCustomFor(parsed.join(" "));
-    }
+    // An invalid draft stays in the field, flagged, until it is fixed or
+    // Escape drops it, so a rejected edit is not silently replaced.
+    if (!parsed) return;
+    setLayerStyle(layer.id, { strokeDash: parsed });
+    setCustomFor(parsed.join(" "));
     setDraft(null);
   };
   return (
@@ -390,6 +395,8 @@ function LineStyleControls({ layer }: { layer: GeoLibreLayer }) {
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commitDraft}
             onKeyDown={(event) => {
+              // Enter that confirms an input-method candidate is not a commit.
+              if (event.nativeEvent.isComposing) return;
               if (event.key === "Enter") commitDraft();
               if (event.key === "Escape") setDraft(null);
             }}

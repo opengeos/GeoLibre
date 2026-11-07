@@ -438,11 +438,25 @@ describe("QML round-trip of a switched-off else rule (#1312)", () => {
 </Option></layer></symbol></symbols></renderer-v2></qgis>`;
     // Both in the default millimetres: 2;1 over a 0.5 width is a 4, 2 pattern.
     assert.deepEqual(applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml("MM"))).strokeDash, [4, 2]);
-    // Different units cannot be divided, so the pen style (dot) is read instead.
-    assert.deepEqual(
-      applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml("Pixel"))).strokeDash,
-      [1, 2],
+    // Different units cannot be divided. The pen style QGIS writes beside a
+    // custom dash is not the pattern drawn, so the layer keeps its own and the
+    // import says so.
+    const mismatched = parseQml(qml("Pixel"));
+    assert.deepEqual(applyQmlImport(style({ strokeDash: [8, 3] }), mismatched).strokeDash, [8, 3]);
+    assert.ok(
+      mismatched.warnings.some((warning) => warning.startsWith("The line's custom dash")),
+      JSON.stringify(mismatched.warnings),
     );
+  });
+
+  it("imports QGIS's no pen as an invisible stroke", () => {
+    const qml = `<qgis><renderer-v2 type="singleSymbol"><symbols>
+<symbol type="fill" name="0" alpha="1"><layer class="SimpleFill"><Option type="Map">
+<Option name="color" type="QString" value="255,0,0,255"/>
+<Option name="outline_color" type="QString" value="0,0,0,255"/>
+<Option name="outline_style" type="QString" value="no"/>
+</Option></layer></symbol></symbols></renderer-v2></qgis>`;
+    assert.equal(applyQmlImport(DEFAULT_LAYER_STYLE, parseQml(qml)).strokeOpacity, 0);
   });
 
   it("ignores a pen style name that is not a QGIS pen style, inherited names included", () => {

@@ -1706,6 +1706,25 @@ function restoreOverriddenCircleRadius(
   map.setPaintProperty(circleNativeId, "circle-radius", styleValue(layer.style, "circleRadius"));
 }
 
+// Native layers (keyed `${layerId}\0${property}`) whose nullable paint
+// property GeoLibre has written, per map, so a later `null` from the paint
+// builders resets only what GeoLibre set and never a control's own value.
+const ownedNullablePaint = new WeakMap<maplibregl.Map, Set<string>>();
+
+function ownedNullablePaintFor(map: maplibregl.Map): Set<string> {
+  let owned = ownedNullablePaint.get(map);
+  if (!owned) {
+    owned = new Set();
+    ownedNullablePaint.set(map, owned);
+  }
+  return owned;
+}
+
+/** The paint properties the shared builders may emit as a `null` reset. */
+function paintBuilderMayReset(property: string): boolean {
+  return property === "line-dasharray" || property === "fill-outline-color";
+}
+
 function setExternalNativeLayerPaint(
   map: maplibregl.Map,
   nativeLayerId: string,
@@ -1725,8 +1744,20 @@ function setExternalNativeLayerPaint(
 
   if (!paint) return;
 
+  const ownedResets = ownedNullablePaintFor(map);
   for (const [property, value] of Object.entries(paint)) {
     try {
+      // A `null` from the paint builders resets a property GeoLibre no longer
+      // sets (a dash cleared back to solid, the fill hairline under a dashed
+      // outline). On a layer a plugin or control created, that property may be
+      // the control's own (its dashed lines), so only a value GeoLibre itself
+      // wrote is reset, once.
+      const key = `${nativeLayerId}\0${property}`;
+      if (value === null) {
+        if (!ownedResets.delete(key)) continue;
+      } else if (paintBuilderMayReset(property)) {
+        ownedResets.add(key);
+      }
       if (!styleValuesEqual(getDynamicPaintProperty(map, nativeLayerId, property), value)) {
         setDynamicPaintProperty(map, nativeLayerId, property, value);
       }

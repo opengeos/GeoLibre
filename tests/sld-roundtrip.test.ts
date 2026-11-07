@@ -563,4 +563,20 @@ describe("SLD round-trip of a switched-off else rule (#1312)", () => {
     assert.equal(out.strokeOpacity, 0.5);
     assert.deepEqual(out.strokeDash, [1, 2]);
   });
+
+  it("ignores stray separators in a dash array and keeps the layer's dash for an unreadable one", () => {
+    const sld = (dash: string) =>
+      `<StyledLayerDescriptor><NamedLayer><UserStyle><FeatureTypeStyle><Rule><LineSymbolizer><Stroke>` +
+      `<CssParameter name="stroke">#000000</CssParameter>` +
+      `<CssParameter name="stroke-width">2</CssParameter>` +
+      `<CssParameter name="stroke-dasharray">${dash}</CssParameter>` +
+      `</Stroke></LineSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+    assert.deepEqual(applySldImport(style(), parseSld(sld("8 4,"))).strokeDash, [4, 2]);
+    const unreadable = parseSld(sld("5 2 px"));
+    assert.deepEqual(applySldImport(style({ strokeDash: [1, 2] }), unreadable).strokeDash, [1, 2]);
+    assert.ok(
+      unreadable.warnings.some((warning) => warning.startsWith("The stroke dash array")),
+      JSON.stringify(unreadable.warnings),
+    );
+  });
 });

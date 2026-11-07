@@ -958,6 +958,9 @@ export class MapboxEngine implements MapEngine {
    * knows, and are left alone; so is paint when the control declares it owns
    * it (`metadata.controlOwnsPaint`).
    */
+  /** Plugin native layers (`${id}\0${property}`) whose nullable paint GeoLibre wrote. */
+  private readonly ownedNullablePaint = new Set<string>();
+
   private mirrorPluginLayerState(layer: GeoLibreLayer): void {
     const map = this.map;
     const ids = layer.metadata.nativeLayerIds;
@@ -996,6 +999,14 @@ export class MapboxEngine implements MapEngine {
       // solid), and setPaintProperty takes it as such.
       for (const [property, value] of Object.entries(paint)) {
         if (value === undefined || property.endsWith("-layer-opacity")) continue;
+        // As on MapLibre (`setExternalNativeLayerPaint`): a `null` reset only
+        // clears a value GeoLibre wrote, never the plugin's own (its dashes).
+        const owned = `${id}\0${property}`;
+        if (value === null) {
+          if (!this.ownedNullablePaint.delete(owned)) continue;
+        } else if (property === "line-dasharray" || property === "fill-outline-color") {
+          this.ownedNullablePaint.add(owned);
+        }
         const key = property as keyof mapboxgl.AnyPaint;
         try {
           // An unset property reads back as undefined; compare it as null so a

@@ -840,6 +840,40 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     }
   });
 
+  it("reads only a stroke-opacity lookup as the line opacity", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "l",
+          type: "line",
+          paint: { "line-opacity": ["to-number", ["coalesce", ["get", "stroke-width"], 0.5], 0.5] },
+        },
+      ],
+    });
+    assert.equal(result.style.strokeOpacity, undefined);
+    assert.deepEqual(result.warnings, [
+      "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines keep their current stroke opacity.",
+    ]);
+  });
+
+  it("says when point outlines ask for another opacity than the lines", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "l", type: "line", paint: { "line-opacity": 0.5 } },
+        { id: "c", type: "circle", paint: { "circle-stroke-opacity": 0.2 } },
+      ],
+    });
+    assert.equal(result.style.strokeOpacity, 0.5);
+    assert.ok(
+      result.warnings.includes(
+        "The point outlines use a different opacity from the lines, which the layer style cannot hold; both import at the line opacity.",
+      ),
+      JSON.stringify(result.warnings),
+    );
+  });
+
   it("reports a zoom- or data-driven line opacity", () => {
     for (const lineOpacity of [
       {
@@ -1032,6 +1066,10 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.deepEqual(notes(stack(["get", "alpha"], 0.5)), [
       "The line opacity varies by zoom or by feature, which the layer style cannot hold; the lines keep their current stroke opacity.",
     ]);
+    // When the imported (bottom-most) class applied and another class cannot
+    // be read, the note says which value was used, not that none was.
+    assert.deepEqual(notes(stack(0.5, ["get", "alpha"])), mixed);
+    assert.equal(stack(0.5, ["get", "alpha"]).style.strokeOpacity, 0.5);
     // A shared translucent opacity imports with nothing to report.
     assert.deepEqual(notes(stack(0.5, 0.5)), []);
     assert.equal(stack(0.5, 0.5).style.strokeOpacity, 0.5);

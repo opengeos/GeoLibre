@@ -129,19 +129,33 @@ function asFiniteNumber(value: unknown): number | null {
  * opacity (`foldsOpacity`), the exporter's fold `["*", lookup, opacity]` gives
  * `base * opacity`, the same value a flat export of that layer carries; the
  * exporter never folds anything into a width, so there it stays unread.
+ * `key` is the simplestyle property the paint value's own lookup reads (as
+ * `stroke-opacity` for `line-opacity`); a lookup of another property is not
+ * the exporter's and stays unread, since the renderer would read `key`.
  */
-function asLayerNumber(value: unknown, foldsOpacity = false): number | null {
+function asLayerNumber(
+  value: unknown,
+  key: SimpleStyleNumberKey,
+  foldsOpacity = false,
+): number | null {
   const flat = asFiniteNumber(value);
   if (flat !== null) return flat;
   const array = asArray(value);
   if (!array) return null;
+  const read = (node: unknown) => {
+    const lookup = readSimpleStyleNumberLookup(node);
+    return lookup?.property === key ? lookup : null;
+  };
   if (foldsOpacity && array[0] === "*" && array.length === 3) {
-    const lookup = readSimpleStyleNumberLookup(array[1]);
+    const lookup = read(array[1]);
     const scale = asFiniteNumber(array[2]);
     return lookup && scale !== null ? lookup.base * scale : null;
   }
-  return readSimpleStyleNumberLookup(array)?.base ?? null;
+  return read(array)?.base ?? null;
 }
+
+/** The simplestyle number properties the exporter's lookups read. */
+type SimpleStyleNumberKey = NonNullable<ReturnType<typeof readSimpleStyleNumberLookup>>["property"];
 
 /** The paint properties the exporter writes simplestyle lookups into and the import reads. */
 const SIMPLE_STYLE_PAINT = [
@@ -623,7 +637,7 @@ function parseLineWidth(
   patch: Partial<Omit<LayerStyle, "labels">>,
   warnings: string[],
 ): void {
-  const flat = asLayerNumber(value);
+  const flat = asLayerNumber(value, "stroke-width");
   if (flat !== null) {
     patch.strokeWidth = flat;
     patch.strokeWidthUnit = "pixels";
@@ -683,7 +697,8 @@ function isExpression(value: unknown): boolean {
 function readLineOpacity(given: unknown): LinePaintRead<number> {
   const raw = unwrapLiteral(given);
   if (raw == null) return null;
-  const opacity = raw === given || !Array.isArray(raw) ? asLayerNumber(raw, true) : null;
+  const opacity =
+    raw === given || !Array.isArray(raw) ? asLayerNumber(raw, "stroke-opacity", true) : null;
   if (opacity !== null) {
     return opacity >= 0 && opacity <= 1
       ? { value: opacity }
@@ -755,12 +770,16 @@ function applyLinePaint<T>(
 ): string | null {
   if (own === null) apply(unset);
   else if ("value" in own) apply(own.value);
-  const specific = [own, ...stack].find(
-    (read): read is { note: string } => read !== null && "note" in read,
-  );
-  if (specific) return specific.note;
+  // The imported layer's own note says what happened to the value. When that
+  // layer's value applied, a class with a note of its own (or another value)
+  // still differs from it, which the mixed note describes.
+  if (own !== null && "note" in own) return own.note;
   const values = new Set(
-    stack.map((read) => JSON.stringify(read === null ? unset : (read as { value: T }).value)),
+    stack.map((read) =>
+      read !== null && "note" in read
+        ? `note:${read.note}`
+        : JSON.stringify(read === null ? unset : read.value),
+    ),
   );
   return values.size > 1 ? mixedNote : null;
 }
@@ -1249,7 +1268,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // line/circle layer from contributing the color.
     if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
-    const flatOpacity = asLayerNumber(opacity, true);
+    const flatOpacity = asLayerNumber(opacity, "fill-opacity", true);
     if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
     } else if (flatOpacity !== null) {
@@ -1378,7 +1397,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // circlePaint writes the layer's fillOpacity into circle-opacity, so a
     // point-only export (no fill layer) recovers its opacity here.
     const opacity = paint["circle-opacity"];
-    const flatOpacity = asLayerNumber(opacity, true);
+    const flatOpacity = asLayerNumber(opacity, "marker-opacity", true);
     if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
       patch.fillOpacity = flatOpacity;
     } else if (flatOpacity !== null) {
@@ -1399,10 +1418,26 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     } else {
       warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
     }
-    // A line layer, when there is one, already set the shared stroke opacity.
-    if (!line) {
+    // A line layer, when there is one, already set the shared stroke opacity;
+    // a point outline that asks for another one cannot have it.
+    if (line) {
+      const pointStrokeOpacity = paint["circle-stroke-opacity"];
+      const readPoint =
+        pointStrokeOpacity === undefined
+          ? 1
+          : asLayerNumber(unwrapLiteral(pointStrokeOpacity), "stroke-opacity", true);
+      if (
+        readPoint !== null &&
+        patch.strokeOpacity !== undefined &&
+        readPoint !== patch.strokeOpacity
+      ) {
+        warnings.push(
+          "The point outlines use a different opacity from the lines, which the layer style cannot hold; both import at the line opacity.",
+        );
+      }
+    } else {
       const strokeOpacity = paint["circle-stroke-opacity"];
-      const flatStrokeOpacity = asLayerNumber(unwrapLiteral(strokeOpacity), true);
+      const flatStrokeOpacity = asLayerNumber(unwrapLiteral(strokeOpacity), "stroke-opacity", true);
       if (strokeOpacity === undefined) patch.strokeOpacity = 1;
       else if (flatStrokeOpacity !== null && flatStrokeOpacity >= 0 && flatStrokeOpacity <= 1) {
         patch.strokeOpacity = flatStrokeOpacity;

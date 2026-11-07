@@ -158,6 +158,8 @@ interface SymbolInfo {
   strokeOpacity?: number;
   /** Dash pattern of a line or polygon outline, in multiples of its width. */
   strokeDash?: number[];
+  /** A custom dash was set but could not be converted, so the layer keeps its own. */
+  unreadDash?: boolean;
   markerSize?: number;
   markerName?: string;
 }
@@ -166,23 +168,27 @@ interface SymbolInfo {
  * Read a line or polygon outline's dash pattern. A QGIS pen style is already
  * in multiples of the width; a SimpleLine's custom dash (`use_custom_dash`) is
  * in absolute lengths, so it is divided by the width when both are in the same
- * unit (QGIS defaults both to millimetres). `undefined` when the pattern cannot
- * be read, which leaves the layer's own alone.
+ * unit (QGIS defaults both to millimetres). `"unread"` when a custom dash is
+ * set but cannot be converted (different units, a zero width), and `undefined`
+ * for a pen style that is not one; both leave the layer's own pattern alone.
  */
 function readDash(
   opts: Map<string, string>,
   styleKey: "line_style" | "outline_style",
   widthKey: "line_width" | "outline_width",
-): number[] | undefined {
+): number[] | "unread" | undefined {
   if (styleKey === "line_style" && opts.get("use_custom_dash") === "1") {
     const width = toNum(opts.get(widthKey) ?? null);
     const dashUnit = opts.get("customdash_unit") ?? "MM";
     const widthUnit = opts.get(`${widthKey}_unit`) ?? "MM";
-    const lengths = (opts.get("customdash") ?? "").split(";").map(Number);
+    const lengths = (opts.get("customdash") ?? "").split(";").filter(Boolean).map(Number);
     if (width !== null && width > 0 && dashUnit === widthUnit) {
       const dash = lengths.map((length) => length / width);
       if (isStrokeDashPattern(dash)) return dash;
     }
+    // QGIS writes a pen style beside a custom dash too, but it is not the
+    // pattern drawn, so falling back to it would import the wrong one.
+    return "unread";
   }
   const penStyle = opts.get(styleKey);
   if (penStyle === undefined) return [];
@@ -192,6 +198,12 @@ function readDash(
     ? QGIS_PEN_STYLE_DASH[penStyle]
     : undefined;
   return dash ? [...dash] : undefined;
+}
+
+/** Record what {@link readDash} read on the symbol. */
+function applyDash(info: SymbolInfo, dash: ReturnType<typeof readDash>): void {
+  if (dash === "unread") info.unreadDash = true;
+  else if (dash !== undefined) info.strokeDash = dash;
 }
 
 /** Parse one `<symbol>` element into a {@link SymbolInfo}. */
@@ -226,7 +238,9 @@ function readSymbol(symbol: unknown): SymbolInfo {
     }
     const width = toNum(opts.get("line_width") ?? null);
     if (width !== null) info.strokeWidth = width;
-    info.strokeDash = readDash(opts, "line_style", "line_width");
+    applyDash(info, readDash(opts, "line_style", "line_width"));
+    // QGIS's "no" pen draws no line at all.
+    if (opts.get("line_style") === "no") info.strokeOpacity = 0;
     return info;
   }
 
@@ -244,7 +258,9 @@ function readSymbol(symbol: unknown): SymbolInfo {
   const outlineWidth = toNum(opts.get("outline_width") ?? null);
   if (outlineWidth !== null) info.strokeWidth = outlineWidth;
   // A point outline cannot be dashed in GeoLibre, so only a fill's is read.
-  if (geometry === "fill") info.strokeDash = readDash(opts, "outline_style", "outline_width");
+  if (geometry === "fill") applyDash(info, readDash(opts, "outline_style", "outline_width"));
+  // QGIS's "no" pen draws no outline at all.
+  if (opts.get("outline_style") === "no") info.strokeOpacity = 0;
   if (geometry === "marker") {
     const size = toNum(opts.get("size") ?? null);
     if (size !== null) info.markerSize = size;
@@ -525,6 +541,11 @@ function applySymbol(
   }
   if (info.strokeOpacity !== undefined) patch.strokeOpacity = info.strokeOpacity;
   if (info.strokeDash !== undefined) patch.strokeDash = info.strokeDash;
+  if (info.unreadDash) {
+    warnings.push(
+      "The line's custom dash is in a different unit from its width (or the width is 0), so it could not be read; the layer keeps its current dash pattern.",
+    );
+  }
   if (info.geometry === "marker") {
     const name = info.markerName;
     const shape = name && name !== "circle" ? QGIS_NAME_TO_SHAPE[name] : undefined;

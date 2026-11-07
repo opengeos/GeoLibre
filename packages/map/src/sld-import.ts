@@ -183,6 +183,8 @@ interface RulePaint {
   strokeOpacity?: number;
   /** Dash pattern in multiples of the stroke width; empty for a solid stroke. */
   strokeDash?: number[];
+  /** A `stroke-dasharray` was set but could not be read. */
+  unreadDash?: boolean;
   pointSize?: number;
   /** Whether the rule has a point `PointSymbolizer`/`Mark` at all. */
   hasPointMark?: boolean;
@@ -224,8 +226,18 @@ function readStroke(stroke: unknown, paint: RulePaint, withDash = true): void {
   if (!withDash) return;
   const dashText = params.get("stroke-dasharray")?.trim();
   const unit = width !== null && width > 0 ? width : 1;
-  const dash = dashText ? dashText.split(/[\s,]+/).map((length) => Number(length) / unit) : [];
-  paint.strokeDash = isStrokeDashPattern(dash) ? dash : [];
+  if (!dashText) {
+    paint.strokeDash = [];
+    return;
+  }
+  const dash = dashText
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((length) => Number(length) / unit);
+  // An unreadable pattern (a unit suffix, a negative length) keeps the layer's
+  // own and is reported, rather than turning the stroke solid.
+  if (isStrokeDashPattern(dash)) paint.strokeDash = dash;
+  else paint.unreadDash = true;
 }
 
 /** Extract the flat paint from one rule's render symbolizers. */
@@ -628,6 +640,11 @@ function applyPaint(
   }
   if (paint.strokeOpacity !== undefined) patch.strokeOpacity = paint.strokeOpacity;
   if (paint.strokeDash !== undefined) patch.strokeDash = paint.strokeDash;
+  if (paint.unreadDash) {
+    warnings.push(
+      "The stroke dash array is not a list of non-negative lengths and was not applied; the layer keeps its current dash pattern.",
+    );
+  }
   // Recover a shape marker from the point Mark's WellKnownName. Only act when the
   // rule actually has a point Mark so a polygon/line import never touches the
   // marker fields. A recognized non-circle name enables the shape marker; a
