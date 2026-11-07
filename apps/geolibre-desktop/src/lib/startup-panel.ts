@@ -63,8 +63,9 @@ export function isStartupPanelGateOpen(gate: StartupPanelGate): boolean {
  *
  * If the current project is not fresh (or becomes non-fresh before the panel registers),
  * any pending subscription is cancelled without opening the panel. A pending wait also
- * ends, without opening, once a different right panel becomes active, so a late
- * registration never displaces a panel the user (or a plugin) opened meanwhile.
+ * ends, without opening, if a different right panel became active and the target then
+ * registers as a right panel, so a late registration never displaces a panel the user
+ * (or a plugin) opened meanwhile. Floating targets do not compete for the dock.
  *
  * @param panelId - The id of the panel to open.
  * @param isFreshProject - Predicate returning true only while the current project is fresh.
@@ -126,22 +127,29 @@ export function openStartupPanel(
     return false;
   };
 
-  const displaced = (): boolean => {
+  // Only a right-panel target competes for the right dock, and the target's kind
+  // is unknown until it registers, so a change of the active right panel is
+  // remembered and only applied once the target turns out to be a right panel.
+  let sawOtherRightPanel = false;
+  const step = (): void => {
     const active = getActiveRightPanel();
-    if (active === null || active === activeBaseline || active === trimmed) return false;
-    cleanup();
-    onDisplaced?.();
-    return true;
+    if (active !== null && active !== activeBaseline && active !== trimmed) {
+      sawOtherRightPanel = true;
+    }
+    if (sawOtherRightPanel && getRightPanel(trimmed)) {
+      cleanup();
+      onDisplaced?.();
+      return;
+    }
+    tryOpen();
   };
 
-  if (displaced() || tryOpen()) {
-    return cleanup;
-  }
+  step();
+  if (unsubscribed) return cleanup;
 
   const onRegistryChange = () => {
     if (unsubscribed) return;
-    if (displaced()) return;
-    tryOpen();
+    step();
   };
 
   unsubRight = subscribeRightPanels(onRegistryChange);

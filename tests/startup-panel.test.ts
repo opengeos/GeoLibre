@@ -230,9 +230,9 @@ describe("openStartupPanel", () => {
     // The user opens a different panel while the target is still unregistered
     registerRightPanel({ id: "user-panel", title: "User Panel", render: () => undefined });
     openRightPanel("user-panel");
-    assert.equal(displaced, true);
 
     registerRightPanel({ id: "late-panel", title: "Late Panel", render: () => undefined });
+    assert.equal(displaced, true);
     assert.equal(getActiveRightPanel(), "user-panel");
     dispose();
   });
@@ -251,9 +251,28 @@ describe("openStartupPanel", () => {
       },
       null,
     );
-    assert.equal(displaced, true);
 
     registerRightPanel({ id: "late-panel", title: "Late Panel", render: () => undefined });
+    assert.equal(displaced, true);
+    assert.equal(getActiveRightPanel(), "user-panel");
+    dispose();
+  });
+
+  it("still opens a late floating panel after a right panel opened while waiting", () => {
+    let displaced = false;
+    const dispose = openStartupPanel(
+      "late-floating",
+      () => true,
+      undefined,
+      () => {
+        displaced = true;
+      },
+    );
+    registerRightPanel({ id: "user-panel", title: "User Panel", render: () => undefined });
+    openRightPanel("user-panel");
+    registerFloatingPanel({ id: "late-floating", title: "Late Floating", render: () => undefined });
+    assert.equal(displaced, false);
+    assert.equal(isFloatingPanelOpen("late-floating"), true);
     assert.equal(getActiveRightPanel(), "user-panel");
     dispose();
   });

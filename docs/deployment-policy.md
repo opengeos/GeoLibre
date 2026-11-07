@@ -242,9 +242,9 @@ The panel never opens in a saved project, in the read-only viewer preset, or
 when side panels are hidden (`?maponly`, `?panels=hidden`, `?hidePanels=true`).
 
 If the panel registers asynchronously during plugin activation, it opens once it
-registers, unless another right panel became active while it was waiting (opened
-by the user or by a plugin activating at startup); a console warning then names
-the skipped panel. A warning is also logged if the panel has not registered
+registers. A right-panel target is skipped if another right panel became active
+while it was waiting (opened by the user or by a plugin activating at startup),
+and a console warning names it; a floating target still opens. A warning is also logged if the panel has not registered
 after 10 seconds. A right panel the user opens before startup is ready (for
 example during a slow restore) is not protected: if the deployment panel is
 already registered at that point, it opens in its place. The S3 Browser opened
