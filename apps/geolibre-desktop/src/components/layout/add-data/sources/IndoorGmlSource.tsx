@@ -9,8 +9,7 @@ import { isGeographicCrs } from "../../../../lib/crs-utils";
 import {
   adoptIndoorGmlDetectedCrs,
   indoorGmlCellColorExpression,
-  type IndoorGmlCrsOrigin,
-  type IndoorGmlLocalOrigin,
+  type IndoorGmlCrsState,
 } from "../../../../lib/indoorgml-layers";
 import {
   parseIndoorGml,
@@ -42,6 +41,13 @@ interface SelectedIndoorGml {
 
 const INDOORGML_MAX_BYTES = 200 * 1024 * 1024;
 
+const EMPTY_CRS_STATE: IndoorGmlCrsState = {
+  sourceCrs: "",
+  sourceCrsOrigin: null,
+  local: false,
+  localOrigin: null,
+};
+
 function reportIndoorGmlWarnings(parsed: IndoorGmlParseResult): void {
   for (const warning of parsed.warnings) console.warn(`[IndoorGML] ${warning}`);
 }
@@ -61,32 +67,27 @@ export function IndoorGmlSource() {
   const [mode, setMode] = useState<IndoorGmlMode>("url");
   const [url, setUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<SelectedIndoorGml | null>(null);
-  const [sourceCrs, setSourceCrs] = useState("");
-  const [sourceCrsOrigin, setSourceCrsOrigin] = useState<IndoorGmlCrsOrigin>(null);
-  const [local, setLocal] = useState(false);
-  const [localOrigin, setLocalOrigin] = useState<IndoorGmlLocalOrigin>(null);
+  // One state object so the post-await file pick updates it functionally,
+  // never from a stale render's closure.
+  const [crsState, setCrsState] = useState<IndoorGmlCrsState>(EMPTY_CRS_STATE);
+  const { sourceCrs, sourceCrsOrigin, local } = crsState;
+  /** Merge a partial update into the CRS state. */
+  const updateCrs = (patch: Partial<IndoorGmlCrsState>) =>
+    setCrsState((prev) => ({ ...prev, ...patch }));
 
   /** Switch between URL and file mode and clear file-specific CRS state. */
   const handleModeChange = (next: IndoorGmlMode) => {
     setMode(next);
     setSelectedFile(null);
-    setSourceCrs("");
-    setSourceCrsOrigin(null);
-    setLocal(false);
-    setLocalOrigin(null);
+    setCrsState(EMPTY_CRS_STATE);
   };
 
   /** Fill the CRS field (or the local option) from what a parsed file says. */
-  const adoptDetected = (parsed: IndoorGmlParseResult) => {
-    const next = adoptIndoorGmlDetectedCrs(
-      { sourceCrs, sourceCrsOrigin, local, localOrigin },
-      parsed,
-    );
-    setSourceCrs(next.sourceCrs);
-    setSourceCrsOrigin(next.sourceCrsOrigin);
-    setLocal(next.local);
-    setLocalOrigin(next.localOrigin ?? null);
-  };
+  const adoptDetected = (parsed: IndoorGmlParseResult) =>
+    setCrsState((prev) => {
+      const next = adoptIndoorGmlDetectedCrs(prev, parsed);
+      return { ...next, localOrigin: next.localOrigin ?? null };
+    });
 
   const handleChooseFile = async () => {
     source.setError(null);
@@ -303,8 +304,7 @@ export function IndoorGmlSource() {
               onChange={(event) => {
                 setUrl(event.target.value);
                 if (sourceCrsOrigin === "sample") {
-                  setSourceCrs("");
-                  setSourceCrsOrigin(null);
+                  updateCrs({ sourceCrs: "", sourceCrsOrigin: null });
                 }
               }}
             />
@@ -329,8 +329,7 @@ export function IndoorGmlSource() {
             disabled={local}
             placeholder={t("addData.indoorgml.crsPlaceholder")}
             onChange={(event) => {
-              setSourceCrs(event.target.value);
-              setSourceCrsOrigin("explicit");
+              updateCrs({ sourceCrs: event.target.value, sourceCrsOrigin: "explicit" });
             }}
           />
           <Select
@@ -339,8 +338,7 @@ export function IndoorGmlSource() {
             disabled={local}
             onChange={(event) => {
               if (event.target.value) {
-                setSourceCrs(event.target.value);
-                setSourceCrsOrigin("explicit");
+                updateCrs({ sourceCrs: event.target.value, sourceCrsOrigin: "explicit" });
               }
             }}
           >
@@ -357,8 +355,7 @@ export function IndoorGmlSource() {
               className="mt-0.5"
               checked={local}
               onChange={(event) => {
-                setLocal(event.target.checked);
-                setLocalOrigin("explicit");
+                updateCrs({ local: event.target.checked, localOrigin: "explicit" });
               }}
             />
             <span>{t("addData.indoorgml.local")}</span>
@@ -372,10 +369,12 @@ export function IndoorGmlSource() {
             setMode("url");
             setSelectedFile(null);
             setUrl(sample.url);
-            setSourceCrs(sample.crs);
-            setSourceCrsOrigin("sample");
-            setLocal(false);
-            setLocalOrigin(null);
+            setCrsState({
+              sourceCrs: sample.crs,
+              sourceCrsOrigin: "sample",
+              local: false,
+              localOrigin: null,
+            });
             source.setLayerName((current) =>
               current.trim() && current !== defaultName ? current : sample.name,
             );

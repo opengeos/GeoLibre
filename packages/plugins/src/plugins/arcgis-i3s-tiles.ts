@@ -444,7 +444,7 @@ function renderArcgisI3sTilesLayers(): void {
   lastI3sLayerSignature = signature;
 
   for (const layer of layers) {
-    if (layer.metadata.i3sKind === undefined && !i3sProbesFailed.has(i3sProbeKey(layer))) {
+    if (!i3sProbeIsCurrent(layer) && !i3sProbesFailed.has(i3sProbeKey(layer))) {
       void probeI3sLayerKind(layer);
     }
   }
@@ -596,9 +596,33 @@ function i3sProbeKey(layer: GeoLibreLayer): string {
   return `${layer.id}:${url}`;
 }
 
+/** The layer's source URL, or `""` when it has none. */
+function i3sLayerUrl(layer: GeoLibreLayer): string {
+  return typeof layer.source.url === "string" ? layer.source.url : "";
+}
+
+/**
+ * Whether the layer's recorded I3S kind was probed from its current URL. A
+ * layer saved before `i3sProbedUrl` was recorded is probed again once.
+ */
+function i3sProbeIsCurrent(layer: GeoLibreLayer): boolean {
+  return layer.metadata.i3sKind !== undefined && layer.metadata.i3sProbedUrl === i3sLayerUrl(layer);
+}
+
+/**
+ * Whether the recorded kind was probed from a different URL than the current
+ * one, so its kind and Building sublayer tree must not be drawn.
+ */
+function i3sProbeIsStale(layer: GeoLibreLayer): boolean {
+  const probedUrl = layer.metadata.i3sProbedUrl;
+  return typeof probedUrl === "string" && probedUrl !== i3sLayerUrl(layer);
+}
+
 /** A layer's I3S kind: the probed one, `mesh` after a failed probe, else unknown. */
 function i3sLayerKind(layer: GeoLibreLayer): unknown {
-  return layer.metadata.i3sKind ?? (i3sProbesFailed.has(i3sProbeKey(layer)) ? "mesh" : undefined);
+  const failed = i3sProbesFailed.has(i3sProbeKey(layer));
+  if (i3sProbeIsStale(layer)) return failed ? "mesh" : undefined;
+  return layer.metadata.i3sKind ?? (failed ? "mesh" : undefined);
 }
 
 /**
@@ -617,7 +641,12 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
   i3sProbesInFlight.add(key);
   const url = typeof layer.source.url === "string" ? layer.source.url : "";
   const docUrl = i3sLayerDocumentUrl(url);
-  let patch: Record<string, unknown> = { i3sKind: "mesh" };
+  let patch: Record<string, unknown> = {
+    i3sKind: "mesh",
+    i3sProbedUrl: url,
+    i3sBuildingUrl: undefined,
+    i3sBuilding: undefined,
+  };
   if (docUrl) {
     try {
       const response = await fetch(i3sDocumentRequestUrl(docUrl));
@@ -626,6 +655,7 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       if (isI3sBuildingLayerDocument(doc)) {
         patch = {
           i3sKind: "building",
+          i3sProbedUrl: url,
           i3sBuildingUrl: docUrl,
           i3sBuilding: parseI3sBuildingLayer(doc),
         };

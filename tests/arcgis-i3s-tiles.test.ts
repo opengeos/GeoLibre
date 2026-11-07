@@ -462,6 +462,62 @@ describe("probeI3sLayerKind", () => {
     }
   });
 
+  it("re-probes a successfully probed layer after its URL changes", async () => {
+    const building = {
+      id: "i3s-probe-url-change",
+      name: "Scene",
+      type: "3d-tiles",
+      source: {
+        sourceId: "i3s-probe-url-change",
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: `${base}/layers/0`,
+      },
+      visible: true,
+      opacity: 1,
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [building] });
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/layers/5")) {
+        return new Response(JSON.stringify({ layerType: "3DObject" }));
+      }
+      return new Response(
+        JSON.stringify({
+          layerType: "Building",
+          sublayers: [{ id: 0, name: "Overview", layerType: "3DObject", visibility: true }],
+        }),
+      );
+    }) as typeof fetch;
+    try {
+      await probeI3sLayerKind(building);
+      const probed = useAppStore.getState().layers[0];
+      assert.equal(probed.metadata.i3sKind, "building");
+      assert.equal(probed.metadata.i3sProbedUrl, `${base}/layers/0`);
+
+      // A URL edit keeps the old Building metadata until the new probe lands,
+      // but the stale sublayer tree is not drawn in the meantime.
+      const moved = {
+        ...probed,
+        source: { ...probed.source, url: `${base}/layers/5` },
+      } as unknown as GeoLibreLayer;
+      useAppStore.setState({ layers: [moved] });
+      assert.deepEqual(buildArcgisI3sTilesDeckLayers(moved, stubDeps), []);
+
+      await probeI3sLayerKind(moved);
+      const reprobed = useAppStore.getState().layers[0];
+      assert.equal(reprobed.metadata.i3sKind, "mesh");
+      assert.equal(reprobed.metadata.i3sProbedUrl, `${base}/layers/5`);
+      assert.equal(reprobed.metadata.i3sBuilding, undefined);
+      assert.equal(buildArcgisI3sTilesDeckLayers(reprobed, stubDeps).length, 1);
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  });
+
   it("does not cache a failed probe when the layer was removed while the probe was in flight", async () => {
     const layer = {
       id: "i3s-probe-removed",
