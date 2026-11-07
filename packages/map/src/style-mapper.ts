@@ -58,13 +58,19 @@ function layerOpacityForBlend(style: LayerStyle): number {
 /**
  * Whether a polygon's fill draws its 1px hairline outline in the stroke color.
  * Only a solid, opaque stroke keeps it: the line layer draws the real outline,
- * and a hairline under a dashed or translucent one would show through.
+ * and a hairline under a dashed or translucent one would show through. A
+ * simplestyle layer drops it too, since any feature's own `stroke-opacity` can
+ * make its outline translucent.
  *
  * @param style - The layer style.
  * @returns True when the fill layer should outline polygons in the stroke color.
  */
 export function fillOutlineDrawn(style: LayerStyle): boolean {
-  return strokeDashValue(style) === null && strokeOpacityValue(style) >= 1;
+  return (
+    strokeDashValue(style) === null &&
+    strokeOpacityValue(style) >= 1 &&
+    styleValue(style, "simpleStyleEnabled") !== true
+  );
 }
 
 /**

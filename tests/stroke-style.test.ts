@@ -107,6 +107,9 @@ describe("line opacity, dashes and blur (#3350)", () => {
     assert.equal(fillPaint(style(), 1)["fill-outline-color"], DEFAULT_LAYER_STYLE.strokeColor);
     assert.equal(fillPaint(style({ strokeDash: [4, 2] }), 1)["fill-outline-color"], null);
     assert.equal(fillPaint(style({ strokeOpacity: 0.5 }), 1)["fill-outline-color"], null);
+    // A simplestyle feature's own stroke-opacity can make its outline
+    // translucent, so a simplestyle layer drops the hairline too.
+    assert.equal(fillPaint(style({ simpleStyleEnabled: true }), 1)["fill-outline-color"], null);
   });
 
   it("fades point outlines with the stroke opacity", () => {
