@@ -1051,6 +1051,65 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     ]);
   });
 
+  it("still warns about a lookup on a paint value the import reads flat", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [
+        {
+          id: "c",
+          type: "circle",
+          paint: { "circle-radius": ["to-number", ["coalesce", ["get", "stroke-width"], 3], 3] },
+        },
+      ],
+    });
+    assert.equal(result.style.circleRadius, undefined);
+    assert.ok(
+      result.warnings.includes(
+        "The circle radius is data-driven in a way that could not be read; the layer keeps its current circle radius.",
+      ),
+      JSON.stringify(result.warnings),
+    );
+  });
+
+  it("takes a flat fill opacity as written, as before", () => {
+    const result = parseMapboxStyle({
+      version: 8,
+      layers: [{ id: "f", type: "fill", paint: { "fill-opacity": 1.5 } }],
+    });
+    assert.equal(result.style.fillOpacity, 1.5);
+  });
+
+  it("recognizes every simplestyle lookup the exporter writes into paint the import reads", () => {
+    // A drift guard for the importer's list of paint properties: each property
+    // a simplestyle export wraps in a lookup, taken alone, turns the flag on.
+    // circle-stroke-opacity is written but not read, so it is the exception.
+    const unread = new Set(["circle-stroke-opacity"]);
+    const checked = new Set<string>();
+    for (const geojson of [points(), lines(), polygons()]) {
+      const exported = buildMapboxStyle(
+        layer({ style: style({ simpleStyleEnabled: true }) }),
+        geojson,
+      );
+      for (const styleLayer of exported.style.layers) {
+        const paint = (styleLayer as { paint?: Record<string, unknown> }).paint ?? {};
+        for (const [property, value] of Object.entries(paint)) {
+          if (!JSON.stringify(value).includes('["get"')) continue;
+          checked.add(property);
+          const alone = parseMapboxStyle({
+            version: 8,
+            layers: [{ id: "x", type: styleLayer.type, paint: { [property]: value } }],
+          });
+          assert.equal(
+            alone.style.simpleStyleEnabled,
+            unread.has(property) ? undefined : true,
+            `${styleLayer.type} ${property}`,
+          );
+        }
+      }
+    }
+    assert.ok(checked.has("line-width") && checked.has("circle-color"), [...checked].join());
+  });
+
   it("turns simplestyle on only for lookups in paint the import reads", () => {
     const blurOnly = parseMapboxStyle({
       version: 8,

@@ -143,7 +143,11 @@ function asLayerNumber(value: unknown, foldsOpacity = false): number | null {
   return readSimpleStyleNumberLookup(array)?.base ?? null;
 }
 
-/** The paint properties the exporter writes simplestyle lookups into. */
+/**
+ * The paint properties the exporter writes simplestyle lookups into and the
+ * import reads. `circle-stroke-opacity` carries one too, but nothing reads it,
+ * so a lookup there alone does not turn simplestyle on.
+ */
 const SIMPLE_STYLE_PAINT = [
   "fill-color",
   "fill-opacity",
@@ -153,7 +157,6 @@ const SIMPLE_STYLE_PAINT = [
   "line-opacity",
   "circle-color",
   "circle-opacity",
-  "circle-stroke-opacity",
 ] as const;
 
 /**
@@ -162,7 +165,7 @@ const SIMPLE_STYLE_PAINT = [
  * how `fill-opacity` is handled.
  */
 function warnUnreadableNumber(value: unknown, description: string, warnings: string[]): void {
-  if (value !== undefined && asLayerNumber(value) === null) {
+  if (value !== undefined && asFiniteNumber(value) === null) {
     warnings.push(
       `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
     );
@@ -1233,7 +1236,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
     const flatOpacity = asLayerNumber(opacity, true);
-    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
+    // A flat value is taken as written, as before; only an opacity read
+    // through the simplestyle lookup is range-checked, since its folded
+    // product is the importer's own arithmetic.
+    if (
+      flatOpacity !== null &&
+      (asFiniteNumber(opacity) !== null || (flatOpacity >= 0 && flatOpacity <= 1))
+    ) {
       patch.fillOpacity = flatOpacity;
     } else if (flatOpacity !== null) {
       warnings.push(
@@ -1338,7 +1347,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     // point-only export (no fill layer) recovers its opacity here.
     const opacity = paint["circle-opacity"];
     const flatOpacity = asLayerNumber(opacity, true);
-    if (flatOpacity !== null && flatOpacity >= 0 && flatOpacity <= 1) {
+    // A flat value is taken as written, as before; only an opacity read
+    // through the simplestyle lookup is range-checked, since its folded
+    // product is the importer's own arithmetic.
+    if (
+      flatOpacity !== null &&
+      (asFiniteNumber(opacity) !== null || (flatOpacity >= 0 && flatOpacity <= 1))
+    ) {
       patch.fillOpacity = flatOpacity;
     } else if (flatOpacity !== null) {
       warnings.push(
@@ -1349,7 +1364,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
-    const strokeWidth = asLayerNumber(paint["circle-stroke-width"]);
+    const strokeWidth = asFiniteNumber(paint["circle-stroke-width"]);
     if (strokeWidth !== null) {
       patch.strokeWidth = strokeWidth;
       // circle-stroke-width is always literal pixels, so reset the shared unit in
