@@ -4335,6 +4335,7 @@
       "openSettingsButton": "Open Settings",
       "saveTitle": "Save project to server",
       "saveDesc": "Enter a project name. The project will be saved as a private project on {{shareHost}}.",
+      "noProjectId": "The project server did not return a project ID.",
       "uploadedNotLinked": "\"{{name}}\" was saved to {{shareHost}}, but the session or project changed during the save, so it was not linked to this map. Open it from the Gallery to keep working on it."
     },
     "error": {

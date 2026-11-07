@@ -1447,10 +1447,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       });
     });
 
-  // Saving back to an editable shared project writes the version every group
-  // member opens, so it is built like Share: local vector data is embedded (never
-  // file references) and credentials are redacted. The local-save prompts do not
-  // apply, since neither choice can be honoured on the server.
   /**
    * The message shown when saving a project to the share server fails.
    *
@@ -1471,6 +1467,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             ? error.message
             : t("toolbar.error.couldNotSaveProject");
 
+  // Saving back to an editable shared project writes the version every group
+  // member opens, so it is built like Share: local vector data is embedded (never
+  // file references) and credentials are redacted. The local-save prompts do not
+  // apply, since neither choice can be honoured on the server.
   const saveBackToShare = async (
     remoteProject: RemoteSharedProjectTarget & { projectGeneration: number },
     saveProjectGeneration: number,
@@ -1645,7 +1645,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         baseUrl: shareBaseUrl,
       });
       if (!uploaded.id) {
-        throw new Error("The share server returned no project ID.");
+        throw new Error(t("toolbar.remoteSave.noProjectId"));
       }
       // The upload succeeded, but linking it to a project that was switched
       // away or to a changed sign-in would be wrong. Say where it went, so the
