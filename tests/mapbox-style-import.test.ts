@@ -955,6 +955,74 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     );
   });
 
+  it("turns simplestyle on and reads the base values of a simplestyle export", () => {
+    // The target layer has simplestyle off (DEFAULT_LAYER_STYLE), so without the
+    // flag the per-feature colors, widths and opacities would not apply (#3351).
+    const source = style({
+      fillColor: "#aa3300",
+      strokeColor: "#336699",
+      strokeWidth: 3,
+      fillOpacity: 0.4,
+      simpleStyleEnabled: true,
+    });
+    for (const [name, geojson] of [
+      ["points", points()],
+      ["lines", lines()],
+      ["polygons", polygons()],
+    ] as const) {
+      const { style: imported, warnings } = roundTrip(source, geojson);
+      assert.equal(imported.simpleStyleEnabled, true, name);
+      assert.deepEqual(warnings, [], name);
+      assert.equal(imported.strokeWidth, 3, name);
+      assert.equal(imported.strokeColor, "#336699", name);
+      if (name !== "lines") {
+        assert.equal(imported.fillColor, "#aa3300", name);
+        assert.equal(imported.fillOpacity, 0.4, name);
+      }
+    }
+  });
+
+  it("folds the layer opacity into a simplestyle fill opacity like a flat one", () => {
+    const exported = buildMapboxStyle(
+      layer({ style: style({ fillOpacity: 0.8, simpleStyleEnabled: true }), opacity: 0.5 }),
+      polygons(),
+    );
+    const { style: patch } = parseMapboxStyle(exported.style);
+    assert.equal(patch.fillOpacity, 0.4);
+  });
+
+  it("does not turn simplestyle on for a style without simplestyle lookups", () => {
+    const { style: imported } = roundTrip(style({ strokeColor: "#336699" }), lines());
+    assert.equal(imported.simpleStyleEnabled, DEFAULT_LAYER_STYLE.simpleStyleEnabled);
+    const external = parseMapboxStyle({
+      version: 8,
+      layers: [
+        // A coalesce over a property that is not a simplestyle key.
+        { id: "l", type: "line", paint: { "line-color": ["coalesce", ["get", "colour"], "#000"] } },
+      ],
+    });
+    assert.equal(external.style.simpleStyleEnabled, undefined);
+  });
+
+  it("turns simplestyle on for a hidden-only style and ignores a hidden class beside drawn ones", () => {
+    const lookup = ["coalesce", ["get", "stroke"], "#112233"];
+    const hiddenOnly = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "l", type: "line", layout: { visibility: "none" }, paint: { "line-color": lookup } },
+      ],
+    });
+    assert.equal(hiddenOnly.style.simpleStyleEnabled, true);
+    const hiddenBesideDrawn = parseMapboxStyle({
+      version: 8,
+      layers: [
+        { id: "f", type: "fill", paint: { "fill-color": "#ffffff" } },
+        { id: "l", type: "line", layout: { visibility: "none" }, paint: { "line-color": lookup } },
+      ],
+    });
+    assert.equal(hiddenBesideDrawn.style.simpleStyleEnabled, undefined);
+  });
+
   it("warns and imports nothing when there is no layers array", () => {
     const result = parseMapboxStyle({ hello: "world" });
     assert.equal(result.matchedLayerCount, 0);

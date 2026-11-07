@@ -135,6 +135,66 @@ export function simpleStyleNumberValue(
   return ["to-number", ["coalesce", ["get", property], base], base];
 }
 
+/** Whether `node` is `["get", key]` for one of `keys`, returning the key. */
+function simpleStyleGet<K extends string>(node: unknown, keys: readonly K[]): K | null {
+  if (!Array.isArray(node) || node.length !== 2 || node[0] !== "get") return null;
+  return (keys as readonly unknown[]).includes(node[1]) ? (node[1] as K) : null;
+}
+
+/**
+ * Read back the per-feature color lookup {@link withSimpleStyleColor} writes,
+ * `["coalesce", ["get", key], base]` with a simplestyle color key, so a style
+ * importer recognizes exactly what the exporter emits.
+ *
+ * @param node - A paint value or a node inside one.
+ * @returns The simplestyle key and the layer-level base, or `null` when the
+ *   node is not that lookup.
+ */
+export function readSimpleStyleColorLookup(
+  node: unknown,
+): { property: (typeof SIMPLE_STYLE_COLOR_KEYS)[number]; base: unknown } | null {
+  if (!Array.isArray(node) || node.length !== 3 || node[0] !== "coalesce") return null;
+  const property = simpleStyleGet(node[1], SIMPLE_STYLE_COLOR_KEYS);
+  return property ? { property, base: node[2] } : null;
+}
+
+/**
+ * Read back the per-feature number lookup {@link simpleStyleNumberValue}
+ * writes, `["to-number", ["coalesce", ["get", key], base], base]` with a
+ * simplestyle number key and a numeric base.
+ *
+ * @param node - A paint value or a node inside one.
+ * @returns The simplestyle key and the layer-level base, or `null` when the
+ *   node is not that lookup.
+ */
+export function readSimpleStyleNumberLookup(
+  node: unknown,
+): { property: (typeof SIMPLE_STYLE_NUMBER_KEYS)[number]; base: number } | null {
+  if (!Array.isArray(node) || node.length !== 3 || node[0] !== "to-number") return null;
+  const inner = node[1];
+  if (!Array.isArray(inner) || inner.length !== 3 || inner[0] !== "coalesce") return null;
+  const property = simpleStyleGet(inner[1], SIMPLE_STYLE_NUMBER_KEYS);
+  const base = node[2];
+  if (!property || typeof base !== "number" || !Number.isFinite(base) || inner[2] !== base) {
+    return null;
+  }
+  return { property, base };
+}
+
+/**
+ * Whether a paint value reads per-feature simplestyle properties the way the
+ * GeoLibre exporter writes them, anywhere inside it (a lookup can sit inside a
+ * zoom step, a per-rule `case` or an opacity multiplication).
+ *
+ * @param value - A paint value.
+ * @returns `true` when a color or number lookup is found.
+ */
+export function readsSimpleStyleProperties(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  if (readSimpleStyleColorLookup(value) || readSimpleStyleNumberLookup(value)) return true;
+  return value.some(readsSimpleStyleProperties);
+}
+
 /**
  * Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
  * the Web Mercator projection: earth circumference (2*pi*6378137) over the
