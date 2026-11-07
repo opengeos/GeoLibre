@@ -1,0 +1,3 @@
+# authoring
+
+::: geolibre.authoring

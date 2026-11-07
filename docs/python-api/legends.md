@@ -1,0 +1,3 @@
+# legends
+
+::: geolibre.legends
