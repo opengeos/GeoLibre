@@ -835,6 +835,9 @@ export function resolvePluginAssetUrlForLoadedPlugin(
 // command re-derives the same root list to contain a recorded plugin source.
 let currentAdditionalPluginDirectories: string[] = [];
 
+/** Deadline for one URL asset read, covering the body as well as the headers. */
+const PLUGIN_ASSET_TIMEOUT_MS = 30_000;
+
 /**
  * Read one asset file from a loaded external plugin's own bundle, as raw
  * bytes. Filesystem plugins (an installed zip or a development directory) read
@@ -856,9 +859,11 @@ export async function readPluginAssetForLoadedPlugin(
   if (isManagedUrlSource(source)) {
     try {
       // Revalidate like the loader does: the asset may change at the same URL
-      // between the scan and this read.
+      // between the scan and this read. The deadline covers the body read too,
+      // since the signal stays live until the body is consumed.
       const response = await fetch(resolvePluginAssetUrl(source, relativePath), {
         cache: "no-cache",
+        signal: AbortSignal.timeout(PLUGIN_ASSET_TIMEOUT_MS),
       });
       if (!response.ok) {
         return null;

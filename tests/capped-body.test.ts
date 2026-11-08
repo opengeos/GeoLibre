@@ -38,6 +38,19 @@ describe("readCappedBody", () => {
     assert.equal(bytes?.byteLength, 16);
   });
 
+  it("propagates a stream error instead of reporting it as over-cap", async () => {
+    const failure = new Error("connection reset");
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      pull(controller) {
+        controller.error(failure);
+      },
+    });
+    await assert.rejects(readCappedBody(new Response(body), 16), /connection reset/);
+  });
+
   it("reads a body that has no stream", async () => {
     const response = new Response(new Uint8Array([7, 8, 9]));
     const bytes = await readCappedBody(response, 16);

@@ -45,7 +45,9 @@ export async function readCappedBody(
     }
     total += value.byteLength;
     if (total > limit) {
-      await reader.cancel();
+      // Not awaited: a cancel that never settles (or rejects) must not hold the
+      // caller, and the answer is already known.
+      void reader.cancel().catch(() => {});
       return null;
     }
     chunks.push(value);
