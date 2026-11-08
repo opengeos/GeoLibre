@@ -1200,6 +1200,14 @@ export interface GeoLibreAppAPI {
   listLayerGroups?: () => GeoLibreLayerGroupSummary[];
   fitBounds?: (bounds: [number, number, number, number]) => void;
   /**
+   * Frame a store layer's extent, as the Layers panel's zoom-to does. Returns
+   * false, without moving the camera, when the layer is missing or its extent
+   * is unknown. On the 3D globe a layer still loading (a 3D tileset or scene
+   * layer just added) is framed once it has loaded, so this can be called
+   * right after adding the layer.
+   */
+  fitLayer?: (layerId: string) => boolean;
+  /**
    * The geographic extent the primary map currently shows, as
    * `[west, south, east, north]` in degrees, or `null` when no map is mounted
    * (or the globe is mid-morph and has no bounded view).

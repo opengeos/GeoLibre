@@ -273,6 +273,9 @@ export interface GeoLibreAppAPI {
   // Desktop only: fetch through the native client (see "Signing in with a session cookie").
   nativeFetch?: typeof globalThis.fetch;
   fitBounds?: (bounds: [number, number, number, number]) => void;
+  // Frame a store layer, as the Layers panel's zoom-to does; false when its
+  // extent is unknown. On the globe a layer still loading is framed once loaded.
+  fitLayer?: (layerId: string) => boolean;
   // The extent the primary map currently shows, [west, south, east, north] in
   // degrees, on either renderer. The engine-neutral replacement for
   // getMap()?.getBounds() — see "Reading the viewport" below.

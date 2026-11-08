@@ -649,6 +649,10 @@ export function createAppAPI(
     ...createPluginLayerVisibilityActions(),
     fitBounds: (bounds: [number, number, number, number]) =>
       mapControllerRef?.current?.fitBounds(bounds),
+    fitLayer: (layerId: string) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+      return Boolean(layer && mapControllerRef?.current?.fitLayer(layer));
+    },
     getViewBounds: () => mapControllerRef?.current?.getViewBounds() ?? null,
     getMap: () => mapControllerRef?.current?.getMap() ?? null,
     readRasterWindow: (layerId: string, options: GeoLibreRasterWindowOptions) =>

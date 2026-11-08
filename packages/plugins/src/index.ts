@@ -387,6 +387,7 @@ export {
   restoreThreeDTilesLayers,
   THREE_D_TILES_SOURCE_KIND,
 } from "./plugins/maplibre-3d-tiles";
+export { probeArcgisI3sLayers } from "./plugins/arcgis-i3s-tiles";
 export { isRecoverableNonTiledRasterError } from "./plugins/non-tiled-raster-error";
 export {
   addRasterToMap,

@@ -95,6 +95,19 @@ export const THREE_D_TILES_DECK_LOAD_OPTIONS = {
   core: { worker: false },
 } as const;
 /**
+ * I3S loader options for the deck.gl overlay.
+ *
+ * By default loaders.gl turns every I3S vertex into an absolute Earth-centred
+ * position (`meter-offsets`), millions of metres from the origin, and the GPU
+ * stores those as 32-bit floats, which hold about half a metre at that size.
+ * Small geometry (window mullions, glass, railings) then collapsed into jagged
+ * spikes. `lnglat-offsets` keeps the vertices as the small offsets from the
+ * node's centre the service sends, which 32-bit floats hold to well under a
+ * millimetre; deck.gl's own I3S example loads scene layers this way.
+ */
+export const I3S_LOADER_OPTIONS = { coordinateSystem: "lnglat-offsets" } as const;
+
+/**
  * Ask an ArcGIS Server for a Scene Layer document as JSON.
  *
  * A server answers `.../SceneServer/layers/<n>` with its HTML REST page unless
@@ -529,6 +542,7 @@ export function buildArcgisI3sTilesDeckLayer(
     loadOptions: {
       ...THREE_D_TILES_DECK_LOAD_OPTIONS,
       core: { ...THREE_D_TILES_DECK_LOAD_OPTIONS.core, fetch: fetchI3sResource },
+      i3s: I3S_LOADER_OPTIONS,
     },
     opacity: layer.opacity,
     pickable: false,
@@ -700,6 +714,25 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
     return;
   }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
+}
+
+/**
+ * Probe every I3S layer in the store whose kind is not known yet, without the
+ * deck.gl overlay. The globe draws scene layers itself, so on Cesium nothing
+ * else reads the layer document: this records the Building sublayer tree (for
+ * the Style panel's Building section, which the globe honours) and the base
+ * elevation.
+ */
+export function probeArcgisI3sLayers(): void {
+  for (const layer of useAppStore.getState().layers) {
+    if (
+      isArcgisI3sTilesLayer(layer) &&
+      !i3sProbeIsCurrent(layer) &&
+      !i3sProbesFailed.has(i3sProbeKey(layer))
+    ) {
+      void probeI3sLayerKind(layer);
+    }
+  }
 }
 
 /** deck.gl and loader dependencies of the I3S deck layers, injectable for tests. */

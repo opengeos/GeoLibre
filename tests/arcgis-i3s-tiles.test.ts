@@ -228,6 +228,13 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     assert.equal(options.core.worker, false);
   });
 
+  it("loads I3S vertices as small lng/lat offsets, not absolute positions", () => {
+    // Absolute Earth-centred positions lose about half a metre in 32-bit
+    // floats, which shattered small geometry such as window mullions.
+    const options = build()?.loadOptions as { i3s?: { coordinateSystem?: string } };
+    assert.equal(options.i3s?.coordinateSystem, "lnglat-offsets");
+  });
+
   it("fetches layer documents as JSON and leaves other requests alone", async () => {
     const fetchImpl = (build()?.loadOptions as { core: { fetch: typeof fetch } }).core.fetch;
     const seen: string[] = [];
