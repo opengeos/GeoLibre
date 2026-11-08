@@ -8,8 +8,7 @@ const ENDPOINT = "https://mcp.parallel.ai/mcp";
 const USER_AGENT = `GeoLibre/${project.version} (+https://github.com/opengeos/GeoLibre)`;
 
 /** One bounded anonymous MCP session; no caller credentials enter this boundary. */
-export async function parallelSearch(query: string, callerSignal: AbortSignal) {
-  const signal = AbortSignal.any([callerSignal, AbortSignal.timeout(20_000)]);
+export async function parallelSearch(query: string, signal: AbortSignal) {
   const transport = new StreamableHTTPClientTransport(new URL(ENDPOINT), {
     fetch: async (url, init) => {
       // SDK adds only protocol/session headers. Pin the destination and prohibit

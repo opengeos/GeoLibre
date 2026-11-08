@@ -186,3 +186,52 @@ test("Worker refuses redirects without forwarding caller credentials to either l
     ]);
   }
 });
+
+test("Parallel failures keep the upstream response and search query out of Worker logs", async () => {
+  const query = "private sample coordinates";
+  const messages: string[] = [];
+  let attemptedQuery: unknown;
+  globalThis.fetch = async (_url, init) => {
+    const rpc = JSON.parse(String(init?.body));
+    if (rpc.method === "tools/call") {
+      attemptedQuery = rpc.params.arguments.objective;
+      return new Response(`Rejected query: ${attemptedQuery}`, { status: 422 });
+    }
+    if (rpc.id === undefined) return new Response(null, { status: 202 });
+    const result =
+      rpc.method === "initialize"
+        ? {
+            protocolVersion: "2025-03-26",
+            capabilities: { tools: {} },
+            serverInfo: { name: "synthetic", version: "1" },
+          }
+        : { tools: [{ name: "web_search", inputSchema: { type: "object" } }] };
+    return Response.json({ jsonrpc: "2.0", id: rpc.id, result });
+  };
+  const previous = console.error;
+  console.error = (...args) => messages.push(args.join(" "));
+  try {
+    const response = await worker.fetch(request({ query }), env);
+    assert.equal(attemptedQuery, query);
+    assert.equal(response.status, 502);
+    assert.ok(!(await response.text()).includes(query));
+    assert.deepEqual(
+      messages.map((message) => JSON.parse(message)),
+      [{ message: "Parallel search upstream error", code: 422 }],
+    );
+  } finally {
+    console.error = previous;
+  }
+});
+
+test("an in-flight caller cancellation keeps its 504 after the SDK wraps the abort", async () => {
+  const caller = new AbortController();
+  globalThis.fetch = async (_url, init) => {
+    caller.abort();
+    init?.signal?.throwIfAborted();
+    throw new Error("Worker did not propagate cancellation");
+  };
+  const response = await worker.fetch(new Request(request(), { signal: caller.signal }), env);
+  assert.equal(response.status, 504);
+  assert.match(await response.text(), /timed out or cancelled/);
+});

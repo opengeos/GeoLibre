@@ -789,16 +789,23 @@ async function proxyParallel(request: Request, env: Env, origin: string | null):
       responseHeaders(origin),
     );
   }
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
   try {
-    const results = await parallelSearch(query, request.signal);
+    const results = await parallelSearch(query, signal);
     const headers = responseHeaders(origin);
     headers.set("Cache-Control", "no-store");
     return Response.json({ results }, { headers });
   } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+    if (signal.aborted) {
       return jsonError("Search request timed out or cancelled", 504, responseHeaders(origin));
     }
-    throw error;
+    // MCP errors may include the upstream response body, including the search query.
+    const code =
+      error instanceof Error && "code" in error && typeof error.code === "number"
+        ? error.code
+        : undefined;
+    console.error(JSON.stringify({ message: "Parallel search upstream error", code }));
+    return jsonError("Upstream request failed", 502, responseHeaders(origin));
   }
 }
 
