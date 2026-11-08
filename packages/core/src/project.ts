@@ -1910,10 +1910,24 @@ function portableLayer(layer: GeoLibreLayer): GeoLibreLayer {
   return withoutRuntimeGeoArrow(withoutZarrHeaders(withoutLocalRasterBytes(layer)));
 }
 
+/** The path of a URL, or `""` when it does not parse (not a loadable URL). */
+function urlPath(url: string): string {
+  try {
+    return new URL(url.trim()).pathname;
+  } catch {
+    return "";
+  }
+}
+
 /** Source kind of an ArcGIS I3S scene layer (`arcgis-i3s-tiles.ts` in the plugins). */
 const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
-/** A `.../SceneServer` URL; mirrors `isArcgisI3sSceneLayerUrl` in the plugins. */
-const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
+/**
+ * The path of an ArcGIS scene service or one of its layers:
+ * `.../SceneServer` or `.../SceneServer/layers/<n>`. Narrower than the 3D Tiles
+ * panel's `isArcgisI3sSceneLayerUrl` on purpose: a `tileset.json` stored under
+ * a `SceneServer` folder, or a query that mentions one, stays a tileset.
+ */
+const I3S_SCENE_SERVER_PATH_RE = /\/SceneServer(\/layers\/\d+)?\/?$/i;
 
 /**
  * Re-file a 3D Tiles record whose URL is an ArcGIS scene service as an I3S
@@ -1928,22 +1942,13 @@ const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
  * @param layer - A layer from a project file.
  * @returns The layer, re-filed as an I3S scene layer when it is a misfiled one.
  */
-/** The path of a URL, or the trimmed string itself when it does not parse. */
-function urlPath(url: string): string {
-  try {
-    return new URL(url.trim()).pathname;
-  } catch {
-    return url.trim();
-  }
-}
-
 export function withI3sSceneLayerKind(layer: GeoLibreLayer): GeoLibreLayer {
   const url = layer.source?.url;
   if (
     layer.type !== "3d-tiles" ||
     layer.metadata?.sourceKind !== "3d-tiles-url" ||
     typeof url !== "string" ||
-    !I3S_SCENE_SERVER_RE.test(urlPath(url))
+    !I3S_SCENE_SERVER_PATH_RE.test(urlPath(url))
   ) {
     return layer;
   }

@@ -31,10 +31,15 @@ def test_scene_server_urls_are_recognised(url):
         "https://host/SceneServerish/tileset.json",
         "https://host/arcgis/rest/services/City/MapServer",
         "https://host/tileset.json?ref=/SceneServer/x",
+        "https://host/SceneServer/tileset.json",
     ],
 )
 def test_other_urls_are_not_scene_layers(url):
     assert not project.is_i3s_scene_layer_url(url)
+    # The builder files them as plain tilesets, not scene layers.
+    layer = project.three_d_tiles_layer("T", url)
+    assert layer["source"]["type"] == "3d-tiles"
+    assert layer["metadata"]["sourceKind"] == "3d-tiles-url"
 
 
 def test_scene_layer_url_is_filed_as_an_i3s_layer():

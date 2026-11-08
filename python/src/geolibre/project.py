@@ -2130,14 +2130,17 @@ def three_d_tiles_layer(
 ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s"
 """``source.type`` and ``metadata.sourceKind`` of an ArcGIS I3S scene layer."""
 
-_I3S_SCENE_SERVER_RE = re.compile(r"/SceneServer(/|$|\?|#)", re.IGNORECASE)
+_I3S_SCENE_SERVER_PATH_RE = re.compile(r"/SceneServer(/layers/\d+)?/?$", re.IGNORECASE)
 
 
 def is_i3s_scene_layer_url(url: str) -> bool:
     """Return whether a URL points at an ArcGIS I3S scene service.
 
-    Mirrors ``isArcgisI3sSceneLayerUrl`` in the app
-    (``packages/plugins/src/plugins/arcgis-i3s-tiles.ts``).
+    Matches the same URLs as the project migration ``withI3sSceneLayerKind``
+    in ``packages/core/src/project.ts``: the path of the service or one of its
+    layers. That is narrower than the 3D Tiles panel's
+    ``isArcgisI3sSceneLayerUrl`` on purpose, so a ``tileset.json`` stored under
+    a ``SceneServer`` folder stays a tileset.
 
     Args:
         url: The tileset or scene layer URL.
@@ -2145,9 +2148,9 @@ def is_i3s_scene_layer_url(url: str) -> bool:
     Returns:
         True for a ``.../SceneServer`` or ``.../SceneServer/layers/<n>`` URL.
         Only the path is matched, so a query such as ``?ref=/SceneServer/x``
-        on a ``tileset.json`` URL does not count.
+        does not count.
     """
-    return bool(_I3S_SCENE_SERVER_RE.search(urlsplit(url.strip()).path))
+    return bool(_I3S_SCENE_SERVER_PATH_RE.search(urlsplit(url.strip()).path))
 
 
 def _i3s_scene_layer(

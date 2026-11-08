@@ -60,6 +60,9 @@ describe("withI3sSceneLayerKind (issue #3377)", () => {
   it("matches SceneServer in the URL path only", () => {
     const tileset = legacyRecord("https://host/tileset.json?ref=/SceneServer/x");
     assert.equal(withI3sSceneLayerKind(tileset), tileset);
+    // A tileset document stored under a SceneServer folder is not a scene service.
+    const underFolder = legacyRecord("https://host/SceneServer/tileset.json");
+    assert.equal(withI3sSceneLayerKind(underFolder), underFolder);
   });
 
   it("passes a record without a usable URL through unchanged", () => {
