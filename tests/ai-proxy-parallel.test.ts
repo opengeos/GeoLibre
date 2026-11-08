@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { afterEach, test } from "node:test";
 import { handler as worker } from "../workers/ai-proxy/src/index";
 import { parallelSearch } from "../workers/ai-proxy/src/parallel-search";
@@ -59,12 +59,23 @@ test("Parallel route retains instance auth, shared limiter, CORS and query bound
   }
 });
 
+function assertAnonymousRequests(requests: IncomingHttpHeaders[]) {
+  assert.ok(requests.length > 0);
+  for (const headers of requests) {
+    assert.match(headers["user-agent"] ?? "", /^GeoLibre\//);
+    assert.equal(headers.authorization, undefined);
+    assert.equal(headers["x-geolibre-instance-token"], undefined);
+  }
+}
+
 for (const fail of [false, true]) {
   test(`MCP SDK handles held-open ${fail ? "error" : "success"} and closes streams; teardown failure is secondary`, async () => {
     const methods: string[] = [];
+    const requests: IncomingHttpHeaders[] = [];
     let streams = 0;
     // Synthetic MCP fixture: real HTTP, each RPC flushes an event and stays open.
     const server = createServer(async (req, res) => {
+      requests.push(req.headers);
       if (req.method === "DELETE") {
         res.writeHead(500).end();
         return;
@@ -77,9 +88,6 @@ for (const fail of [false, true]) {
       for await (const chunk of req) text += chunk;
       const rpc = JSON.parse(text);
       methods.push(rpc.method);
-      assert.match(req.headers["user-agent"] ?? "", /^GeoLibre\//);
-      assert.equal(req.headers.authorization, undefined);
-      assert.equal(req.headers["x-geolibre-instance-token"], undefined);
       if (rpc.id === undefined) {
         res.writeHead(202).end();
         return;
@@ -130,6 +138,7 @@ for (const fail of [false, true]) {
       const search = parallelSearch("Landsat", new AbortController().signal);
       if (fail) await assert.rejects(search, /synthetic primary/);
       else assert.equal((await search)[0].content, "Unicode\u2028separator retained");
+      assertAnonymousRequests(requests);
       assert.ok(methods.includes("notifications/initialized"));
       await new Promise((resolve) => setTimeout(resolve, 30));
       assert.equal(streams, 0);
@@ -149,6 +158,7 @@ test("cancellation and upstream errors do not become fabricated results", async 
 });
 
 test("Worker refuses redirects without forwarding caller credentials to either local origin", async () => {
+  const requests: IncomingHttpHeaders[] = [];
   let redirected = 0;
   const other = createServer((_req, res) => {
     redirected++;
@@ -157,9 +167,7 @@ test("Worker refuses redirects without forwarding caller credentials to either l
   await new Promise<void>((resolve) => other.listen(0, "127.0.0.1", resolve));
   const otherPort = (other.address() as import("node:net").AddressInfo).port;
   const first = createServer((req, res) => {
-    assert.equal(req.headers.authorization, undefined);
-    assert.equal(req.headers["x-geolibre-instance-token"], undefined);
-    assert.match(req.headers["user-agent"] ?? "", /^GeoLibre\//);
+    requests.push(req.headers);
     res.writeHead(302, { Location: `http://127.0.0.1:${otherPort}/capture` }).end();
   });
   await new Promise<void>((resolve) => first.listen(0, "127.0.0.1", resolve));
@@ -167,6 +175,7 @@ test("Worker refuses redirects without forwarding caller credentials to either l
   globalThis.fetch = (_url, init) => originalFetch(`http://127.0.0.1:${port}`, init);
   try {
     assert.equal((await worker.fetch(request(), env)).status, 502);
+    assertAnonymousRequests(requests);
     assert.equal(redirected, 0);
   } finally {
     first.closeAllConnections();

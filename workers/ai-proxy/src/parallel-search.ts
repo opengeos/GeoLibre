@@ -2,9 +2,10 @@ import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import project from "../../../package.json";
 
 const ENDPOINT = "https://mcp.parallel.ai/mcp";
-const USER_AGENT = "GeoLibre/3.7.0 (+https://github.com/opengeos/GeoLibre)";
+const USER_AGENT = `GeoLibre/${project.version} (+https://github.com/opengeos/GeoLibre)`;
 
 /** One bounded anonymous MCP session; no caller credentials enter this boundary. */
 export async function parallelSearch(query: string, callerSignal: AbortSignal) {
@@ -30,7 +31,7 @@ export async function parallelSearch(query: string, callerSignal: AbortSignal) {
     },
   });
   const client = new Client(
-    { name: "geolibre", version: "3.7.0" },
+    { name: "geolibre", version: project.version },
     { capabilities: {}, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
   );
   try {

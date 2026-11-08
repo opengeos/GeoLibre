@@ -13,13 +13,23 @@ function Runtime() {
   useRuntimeEnvironmentVariables();
   return null;
 }
-function configure(value: string, enabled = true) {
+function configure(value: string, enabled = true, proxy?: string) {
   const state = useAppStore.getState();
   useAppStore.setState({
     preferences: {
       ...state.preferences,
       environmentVariables: [
         { key: "GEOLIBRE_WEB_SEARCH_PROVIDER", value, enabled, secret: false },
+        ...(proxy
+          ? [
+              {
+                key: "GEOLIBRE_AI_PROXY_BASE_URL",
+                value: proxy,
+                enabled: true,
+                secret: false,
+              },
+            ]
+          : []),
       ],
     },
   });
@@ -38,6 +48,7 @@ test("saved Settings selection goes through runtime loader and registered web_se
   const calls: string[] = [];
   globalThis.fetch = async (url, init) => {
     calls.push(String(url));
+    assert.equal(init?.redirect, "error");
     assert.equal(new Headers(init?.headers).get("Authorization"), null);
     assert.equal(new Headers(init?.headers).get("X-GeoLibre-Instance-Token"), null);
     return Response.json({
@@ -93,18 +104,63 @@ test("unselected personal Tavily remains preferred; disabled managed proxy preve
   try {
     await assert.rejects(webSearch("Landsat"), /requires the managed/);
     assert.deepEqual(calls, []);
-    await assert.rejects(
-      webSearch("Landsat", {
-        GEOLIBRE_WEB_SEARCH_PROVIDER: "parallel",
-        GEOLIBRE_AI_PROXY_BASE_URL: "https://other.example/v1",
-      }),
-      /same-origin/,
-    );
+    setDeploymentPolicy(null);
+    Object.assign(window, {
+      __GEOLIBRE_DEPLOYMENT_ENV__: {
+        VITE_GEOLIBRE_AI_URL: "https://other.example",
+      },
+    });
+    await assert.rejects(webSearch("Landsat"), /same-origin/);
+    assert.deepEqual(calls, []);
   } finally {
     setDeploymentPolicy(null);
     Object.assign(window, {
       __GEOLIBRE_DEPLOYMENT_ENV__: undefined,
       __GEOLIBRE_RUNTIME_ENV__: undefined,
     });
+  }
+});
+
+test("a saved project cannot redirect managed search or enable it against operator policy", async () => {
+  Object.assign(window, { __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_AI_URL: "/ai" } });
+  configure("parallel", true, "/project-chosen/v1");
+  const mounted = render(createElement(Runtime));
+  const calls: string[] = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return Response.json({ results: [] });
+  };
+  try {
+    assert.equal(((await search()) as { provider: string }).provider, "parallel");
+    assert.deepEqual(calls, ["http://localhost:5173/ai/parallel"]);
+    calls.length = 0;
+    setDeploymentPolicy({ version: 1, ai: { enabled: false } });
+    assert.match(((await search()) as { detail: string }).detail, /requires the managed/);
+    assert.deepEqual(calls, []);
+  } finally {
+    mounted.unmount();
+    setDeploymentPolicy(null);
+    Object.assign(window, {
+      __GEOLIBRE_DEPLOYMENT_ENV__: undefined,
+      __GEOLIBRE_RUNTIME_ENV__: undefined,
+    });
+  }
+});
+
+test("search preserves cancellation on older WebViews", async () => {
+  const { webSearch } = await import("../apps/geolibre-desktop/src/lib/assistant/web-search");
+  const original = { any: AbortSignal.any, timeout: AbortSignal.timeout };
+  try {
+    Object.assign(AbortSignal, { any: undefined, timeout: undefined });
+    const controller = new AbortController();
+    globalThis.fetch = async (_url, init) => {
+      init?.signal?.throwIfAborted();
+      return Response.json({});
+    };
+    assert.equal((await webSearch("Landsat", {}, controller.signal)).provider, "duckduckgo");
+    controller.abort();
+    await assert.rejects(webSearch("Landsat", {}, controller.signal), { name: "AbortError" });
+  } finally {
+    Object.assign(AbortSignal, original);
   }
 });
