@@ -40,6 +40,19 @@ const registeredSearch = () =>
   ) as FunctionTool;
 const search = () => registeredSearch().invoke({ query: "Landsat mission" });
 
+function streamSearch(cancelSignal: AbortSignal) {
+  const tool = registeredSearch();
+  return tool
+    .stream({
+      toolUse: { name: tool.name, toolUseId: "cancelled-search", input: { query: "Landsat" } },
+      agent: new Agent({ tools: [tool] }),
+      invocationState: {},
+      interrupt: () => assert.fail("unexpected tool interrupt"),
+      cancelSignal,
+    })
+    .next();
+}
+
 test("saved Settings selection goes through runtime loader and registered web_search", async () => {
   Object.assign(window, { __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_AI_URL: "/ai" } });
   configure("parallel");
@@ -175,28 +188,32 @@ test("search preserves cancellation on older WebViews", async () => {
       started.resolve(signal);
       return held.promise;
     };
-    const tool = registeredSearch();
-    const pending = tool
-      .stream({
-        toolUse: { name: tool.name, toolUseId: "cancelled-search", input: { query: "Landsat" } },
-        agent: new Agent({ tools: [tool] }),
-        invocationState: {},
-        interrupt: () => assert.fail("unexpected tool interrupt"),
-        cancelSignal: running.signal,
-      })
-      .next();
+    const pending = streamSearch(running.signal);
     const active = await Promise.race([
       started.promise,
       pending.then(() => assert.fail("search finished before its fetch started")),
     ]);
     assert.equal(active.aborted, false);
     running.abort();
-    held.resolve(Response.json({ results: [] }));
     assert.equal(active.aborted, true);
     const result = await pending;
     assert.ok(result.done);
     assert.equal(result.value.status, "error");
     assert.equal(result.value.error?.name, "AbortError");
+
+    // A completed response can still resolve after the user presses Stop.
+    const late = new AbortController();
+    globalThis.fetch = async () => {
+      const response = Response.json({
+        results: [{ title: "Late", url: "https://example.org", content: "Late passage" }],
+      });
+      late.abort();
+      return response;
+    };
+    const lateResult = await streamSearch(late.signal);
+    assert.ok(lateResult.done);
+    assert.equal(lateResult.value.status, "error");
+    assert.equal(lateResult.value.error?.name, "AbortError");
   } finally {
     Object.assign(AbortSignal, original);
     Object.assign(window, {

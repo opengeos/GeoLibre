@@ -68,25 +68,28 @@ function assertAnonymousRequests(requests: IncomingHttpHeaders[]) {
   }
 }
 
-for (const [fail, stall] of [
-  [false, false],
-  [true, false],
-  [false, true],
-  [true, true],
+for (const [outcome, cleanup] of [
+  ["success", "fails"],
+  ["error", "fails"],
+  ["success", "stalls"],
+  ["error", "stalls"],
+  ["cancel during DELETE", "stalls"],
 ]) {
-  test(`MCP SDK handles held-open ${fail ? "error" : "success"} when DELETE ${stall ? "stalls" : "fails"} and closes streams`, async () => {
+  test(`MCP SDK handles held-open ${outcome} when DELETE ${cleanup} and closes streams`, async () => {
+    const caller = new AbortController();
     const methods: string[] = [];
     const requests: IncomingHttpHeaders[] = [];
     let streams = 0;
-    let deleted = false;
+    let deleteStarted: number | undefined;
     // Synthetic MCP fixture: real HTTP, each RPC flushes an event and stays open.
     const server = createServer(async (req, res) => {
       requests.push(req.headers);
       if (req.method === "DELETE") {
-        deleted = true;
-        if (stall) {
+        deleteStarted = performance.now();
+        if (cleanup === "stalls") {
           streams++;
           res.on("close", () => streams--);
+          if (outcome === "cancel during DELETE") caller.abort();
         } else {
           res.writeHead(500).end();
         }
@@ -136,7 +139,7 @@ for (const [fail, stall] of [
       streams++;
       res.on("close", () => streams--);
       res.write(
-        `event: message\r\ndata: ${JSON.stringify(fail && rpc.method === "tools/call" ? { jsonrpc: "2.0", id: rpc.id, error: { code: -32000, message: "synthetic primary" } } : { jsonrpc: "2.0", id: rpc.id, result })}\r\n\r\n`,
+        `event: message\r\ndata: ${JSON.stringify(outcome === "error" && rpc.method === "tools/call" ? { jsonrpc: "2.0", id: rpc.id, error: { code: -32000, message: "synthetic primary" } } : { jsonrpc: "2.0", id: rpc.id, result })}\r\n\r\n`,
       );
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -147,12 +150,22 @@ for (const [fail, stall] of [
       return originalFetch(`http://127.0.0.1:${address.port}`, init);
     };
     try {
-      const caller = AbortSignal.timeout(5_000);
-      const search = parallelSearch("Landsat", caller);
-      if (fail) await assert.rejects(search, /synthetic primary/);
-      else assert.equal((await search)[0].content, "Unicode\u2028separator retained");
-      assert.equal(deleted, true);
-      assert.equal(caller.aborted, false, "teardown used the whole caller budget");
+      const deadline = AbortSignal.timeout(5_000);
+      const signal = AbortSignal.any([caller.signal, deadline]);
+      if (outcome === "cancel during DELETE") {
+        const response = await worker.fetch(new Request(request(), { signal }), env);
+        assert.equal(response.status, 504);
+      } else {
+        const search = parallelSearch("Landsat", signal);
+        if (outcome === "error") await assert.rejects(search, /synthetic primary/);
+        else assert.equal((await search)[0].content, "Unicode\u2028separator retained");
+      }
+      assert.ok(deleteStarted !== undefined, "expected a session DELETE");
+      if (cleanup === "stalls") {
+        // Measure teardown independently of tool latency, allowing for CI scheduling.
+        assert.ok(performance.now() - deleteStarted < 1_500, "DELETE exceeded its 500 ms budget");
+      }
+      assert.equal(deadline.aborted, false, "teardown used the whole caller budget");
       assertAnonymousRequests(requests);
       assert.ok(methods.includes("notifications/initialized"));
       await new Promise((resolve) => setTimeout(resolve, 30));

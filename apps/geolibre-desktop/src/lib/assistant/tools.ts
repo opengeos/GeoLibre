@@ -610,6 +610,9 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       const signal = context?.cancelSignal;
       try {
         const response = await webSearch(input.query, undefined, signal);
+        if (signal?.aborted) {
+          throw signal.reason ?? new DOMException("Search cancelled", "AbortError");
+        }
         return json({
           provider: response.provider,
           answer: response.answer ?? null,

@@ -792,6 +792,7 @@ async function proxyParallel(request: Request, env: Env, origin: string | null):
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
   try {
     const results = await parallelSearch(query, signal);
+    signal.throwIfAborted();
     const headers = responseHeaders(origin);
     headers.set("Cache-Control", "no-store");
     return Response.json({ results }, { headers });
