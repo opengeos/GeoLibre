@@ -42,7 +42,7 @@ files or projects, but like any request they reveal your IP address to the host:
   blocklist from plugins.geolibre.app (the registry only when plugin
   installation is allowed, which it is by default);
   see [Plugins from the plugin registry](#plugins-from-the-plugin-registry).
-- **Update check (desktop only)**: at startup, at most once every 6 hours, the
+- **Update check (desktop only)**: at startup, normally at most once every 6 hours, the
   desktop app asks GitHub (api.github.com) for the latest GeoLibre release. Turn
   it off in Settings → Updates. The Microsoft Store build does not check.
 - **DuckDB Spatial extension**: the first time a local vector file needs DuckDB
@@ -50,8 +50,10 @@ files or projects, but like any request they reveal your IP address to the host:
   downloaded from DuckDB's extension repository (extensions.duckdb.org) and
   then cached. The file itself is not sent.
 
-The full list of hosts, including which builds contact them, is on
-[Network Endpoints](network-endpoints.md).
+The hosts the app itself is built to contact, including which builds contact
+them, are listed on [Network Endpoints](network-endpoints.md). That list does
+not cover URLs you add, the data hosts a project's layers use, or hosts that
+external plugins contact.
 
 ## Data sent to third-party services (optional features)
 
@@ -81,9 +83,10 @@ the request you make, and are governed by their own privacy policies:
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.
 
-For the full list of hosts the app can contact, which of them are contacted by
-default, and which go through a GeoLibre relay, see
-[Network Endpoints](network-endpoints.md).
+For the hosts the app itself is built to contact, which of them are contacted
+by default, and which go through a GeoLibre relay, see
+[Network Endpoints](network-endpoints.md). It does not cover URLs you add,
+project data hosts, or external plugins.
 
 ## Plugins from the plugin registry
 

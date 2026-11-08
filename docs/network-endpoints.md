@@ -42,15 +42,15 @@ so add the hosts your projects use.
 
 These are the requests this page found a fresh install making without the user
 choosing a service, from a review of the source rather than an automated check.
-GeoLibre has no telemetry and no crash reporting in any build.
+GeoLibre has no telemetry and no crash reporting in any build; the only analytics are page-visit counts in a web build that sets a Google Analytics measurement ID (see the last row).
 
 | Host | What and when | Builds | Route | How to change it |
 | --- | --- | --- | --- | --- |
 | `tiles.openfreemap.org` | The default basemap (OpenFreeMap Liberty): style, vector tiles, sprites, and glyphs for the visible map, on every start and in every new project. | All | Direct | Pick another basemap or a blank background, or serve your own style (see [Reducing outbound requests](self-hosting.md#reducing-outbound-requests)). A project's saved basemap replaces it when that project opens. |
-| `plugins.geolibre.app` | `blocklist.json` (plugins pulled from the registry for safety), fetched once per session before external plugins load. It is fetched even when no registry plugin is installed. The registry itself (`plugin-registry.json`) is fetched at every start when the deployment allows plugin installation (the `plugins:install` capability, which is on by default; the registry tells saved-project redaction which plugins may keep their state), and again when Settings → Manage Plugins is opened. See [Privacy Policy](privacy.md#plugins-from-the-plugin-registry). | All | Direct | Set `plugins.registryUrl` in [`deployment.json`](deployment-policy.md#plugins) to your own registry; the blocklist is then read from beside it. |
-| `api.github.com` | `GET /repos/opengeos/GeoLibre/releases/latest`, the startup update check. Throttled to once every 6 hours. Not present in the Microsoft Store build. | Desktop | Direct | Settings → Updates: turn off "Check for updates on startup". Help → Check for updates makes the same request on demand. |
+| `plugins.geolibre.app` | `blocklist.json` (plugins pulled from the registry for safety), fetched once per session before external plugins load. It is fetched even when no registry plugin is installed. The registry itself (`plugin-registry.json`) is fetched at every start when the deployment allows plugin installation (the `plugins:install` capability, which is on by default; the registry tells saved-project redaction which plugins may keep their state), and again when Settings → Manage Plugins is opened. It is also fetched at start when `plugins.sideload` is `false` and non-bundled plugins are installed, to check them against the registry. See [Privacy Policy](privacy.md#plugins-from-the-plugin-registry). | All | Direct | Set `plugins.registryUrl` in [`deployment.json`](deployment-policy.md#plugins) to your own registry; the blocklist is then read from beside it. |
+| `api.github.com` | `GET /repos/opengeos/GeoLibre/releases/latest`, the startup update check. Normally at most once every 6 hours; a check that fails on the network, or a browser storage error, can let the next start check again sooner. Not present in the Microsoft Store build. | Desktop | Direct | Settings → Updates: turn off "Check for updates on startup". Help → Check for updates makes the same request on demand. |
 | `extensions.duckdb.org` | The DuckDB Spatial extension, downloaded the first time a local vector file needs DuckDB to read it (Shapefile, GeoPackage, GeoParquet, and similar), then cached. It is triggered by opening a local file, not by picking a remote service. | All | Direct | Set `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` to a mirrored copy (build time, or Settings → Environment variables). See [Getting Started](getting-started.md#optional-runtime-mirrors-offline-and-air-gapped). |
-| `www.googletagmanager.com` | Google Analytics. Loaded only by a web build that sets `VITE_GEOLIBRE_GA_MEASUREMENT_ID`, which the OpenGeos hosted deploys (geolibre.app, geolibre.app/demo, web.geolibre.app) do. | Hosted web only | Direct | Never present in the desktop app or the Jupyter widget, and absent from any web build that leaves the ID unset (the default). The Docker image cannot enable it. See [Privacy Policy](privacy.md#website-analytics). |
+| `www.googletagmanager.com` | Google Analytics. Loaded only by a web build that sets `VITE_GEOLIBRE_GA_MEASUREMENT_ID`, which the OpenGeos hosted deploys (geolibre.app, geolibre.app/demo, web.geolibre.app) do. The tag then sends page-view hits to Google's collection hosts (`*.google-analytics.com`, for example `www.google-analytics.com` and `region1.google-analytics.com`). | Web, when the ID is set | Direct | Never present in the desktop app or the Jupyter widget, and absent from any web build that leaves the ID unset (the default). The Docker image cannot enable it. See [Privacy Policy](privacy.md#website-analytics). |
 
 Two builds go further than this because the OpenGeos project configures them:
 the hosted web builds (geolibre.app/demo, web.geolibre.app, studio.geolibre.app)
@@ -67,7 +67,7 @@ builds a visualization with it.
 
 These hosts are run by the OpenGeos project, currently on Cloudflare (Workers,
 Durable Objects, R2) and GitHub Pages. All of them are opt-in except the
-plugin blocklist above.
+plugin registry and blocklist above.
 
 | Host | Purpose | Source | Configure or replace |
 | --- | --- | --- | --- |
@@ -123,6 +123,7 @@ so and skips the relay; the table notes those cases.
 | Mapbox renderer | `api.mapbox.com` (Mapbox GL JS from Mapbox's CDN, styles, and tiles) with the user's token. | All | Direct |
 | ArcGIS renderer | `js.arcgis.com` (the ArcGIS Maps SDK), `basemaps.arcgis.com` | All | Direct |
 | ArcGIS sign-in and portals | `www.arcgis.com` or the user's portal (`<org>.maps.arcgis.com`, ArcGIS Enterprise) | All | Direct |
+| Sign-in gate (Clerk or Auth0) | Only when an operator configures one (`GEOLIBRE_CLERK_PUBLISHABLE_KEY`, or `GEOLIBRE_AUTH0_DOMAIN` and client ID). Clerk: the Frontend API host encoded in the publishable key, plus `challenges.cloudflare.com` and `*.protect.clerk.com` for bot protection. Auth0: the operator's tenant domain (for example `<tenant>.us.auth0.com`). Default builds configure neither. | Web | Direct |
 | Earth Engine | `accounts.google.com`, `earthengine.googleapis.com`, `www.googleapis.com`, `storage.googleapis.com`, `raw.githubusercontent.com` (dataset catalogs) | All | Direct |
 | Cloud storage (S3 browser) | The user's S3 endpoint; on desktop, AWS STS (`sts.<region>.amazonaws.com`) and the instance or container metadata endpoints (`169.254.169.254`, `169.254.170.2`) only when the chosen AWS profile needs them. | All (STS desktop only) | Direct |
 | SQL workspace engines | PGlite and PostGIS, CereusDB (Sedona), and `gdal3.js` load from `cdn.jsdelivr.net` on first use by default; DuckDB-WASM does too in the `lite:build` variant. | All | Direct |
@@ -176,7 +177,7 @@ under `packages/plugins/src/plugins/`.
 | Overture Maps | `labs.overturemaps.org`, `stac.overturemaps.org`, `overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com` | Direct |
 | Planetary Computer | `planetarycomputer.microsoft.com` (STAC, tiler, SAS token signing), Azure Blob asset hosts | Direct |
 | Precipitation | `api.rainviewer.com`, `tilecache.rainviewer.com` | Direct |
-| Raster and Time Slider panels | User URLs and `data.source.coop` samples. The `titiler` engine, used for COGs on the Mapbox renderer, defaults to `titiler.d2s.org` (third party), which then fetches the COG. CRS lookups can fall back to `epsg.io`. | Direct |
+| Raster and Time Slider panels | User URLs and `data.source.coop` samples. The `titiler` engine, used for COGs on the Mapbox renderer, defaults to `titiler.d2s.org` (third party, `DEFAULT_TITILER_ENDPOINT` in the `maplibre-gl-raster` and `maplibre-gl-time-slider` packages; GeoLibre does not override it), which then fetches the COG. CRS lookups can fall back to `epsg.io`. | Direct |
 | Vector panel | User URLs and `data.source.coop` samples | Direct |
 | Reverse Geocode | The configured geocoder (Nominatim by default), consent first | Direct |
 | S3 Browser | The user's S3 endpoint, `<bucket>.s3.amazonaws.com` | Direct |
@@ -193,7 +194,10 @@ under `packages/plugins/src/plugins/`.
 | Vantor Open Data | `vantor-opendata.s3.amazonaws.com` | Direct |
 
 External plugins (from the registry, a zip, or a manifest URL) can contact any
-host the CSP allows, and GeoLibre does not track which. Review a plugin before
+host the CSP allows, and GeoLibre does not track which. On the desktop,
+`app.nativeFetch` sends a plugin's requests through the native HTTP client,
+which the webview CSP does not govern (it does refuse loopback and private
+addresses). Review a plugin before
 allowing it, and use `plugins.allowed` to limit which ones load (see
 [Plugin API](plugin-api.md)).
 
@@ -208,8 +212,9 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
   sidecar, the geocoders, `share.geolibre.app`, `datasets.geolibre.app`, and
   `api.typesafe.ai` (`src-tauri/capabilities/default.json`).
 - **Web** hosted by the OpenGeos project adds Google Analytics and the baked-in
-  collaboration (and, on studio.geolibre.app, AI) URLs. A Docker or
-  self-built web deployment adds neither.
+  collaboration (and, on studio.geolibre.app, AI) URLs. A Docker deployment
+  adds neither; a self-built web deployment adds them only if it sets the same
+  build variables.
 - **Jupyter** serves the bundled web build from the Jupyter server, so the app
   assets and `deployment.json` are local; map and data requests are the same as
   the web build. The Python package itself makes network requests only for
@@ -246,7 +251,10 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
   sees the request to `tiles.geolibre.app`, not the upstream the relay then
   contacts. If an upstream listed under
   [the relay](#the-tilesgeolibreapp-relay) is not acceptable, block
-  `tiles.geolibre.app` itself, which disables the features that use it.
+  `tiles.geolibre.app` itself, which disables the features that use it. On the
+  desktop some of those features reach the upstream directly instead (see
+  [Differences between builds](#differences-between-builds)), so block the
+  upstream host as well with an egress proxy or firewall.
 
 [Self-Hosting: Reducing outbound requests](self-hosting.md#reducing-outbound-requests)
 has the per-feature checklist.
