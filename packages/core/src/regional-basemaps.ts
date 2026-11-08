@@ -216,8 +216,6 @@ export type RegionalBasemapPolicy = "allow" | "prompt" | "block";
 export interface RegionalBasemapHold {
   /** The regional sentinel the project asked for. */
   styleUrl: string;
-  /** The `projectGeneration` of the load that set it aside. */
-  projectGeneration: number;
   /** Why the default basemap is showing instead. */
   reason: "prompt" | "blocked";
 }

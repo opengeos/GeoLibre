@@ -261,7 +261,6 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       regionalBasemapHold: gated.held
         ? {
             styleUrl: requestedBasemap,
-            projectGeneration: s.projectGeneration + 1,
             reason: gated.held,
           }
         : null,

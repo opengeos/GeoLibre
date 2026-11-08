@@ -459,10 +459,11 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
     const state = get();
     const hold = state.regionalBasemapHold;
     if (!hold) return;
-    const answered =
-      hold.reason === "prompt" &&
-      state.regionalBasemapPolicy !== "block" &&
-      hold.projectGeneration === state.projectGeneration;
+    // Every project load replaces or clears the hold, so the hold read here is
+    // always the one the latest load set. Not comparing `projectGeneration`
+    // here: a collaboration snapshot bumps it without a load, and that must not
+    // drop a pending answer.
+    const answered = hold.reason === "prompt" && state.regionalBasemapPolicy !== "block";
     // Remember a real answer for the session, so the next load of the same
     // basemap does not ask again.
     const regionalBasemapAnswers = answered

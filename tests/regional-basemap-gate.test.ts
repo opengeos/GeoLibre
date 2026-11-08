@@ -94,10 +94,21 @@ describe("store regional-basemap gate", () => {
     assert.equal(state.basemapStyleUrl, DEFAULT_BASEMAP);
     assert.deepEqual(state.regionalBasemapHold, {
       styleUrl: AMAP.styleUrl,
-      projectGeneration: state.projectGeneration,
       reason: "prompt",
     });
     assert.equal(state.isDirty, false);
+  });
+
+  it("Load still applies the held basemap after a collaboration snapshot bumps the generation", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    // useCollaboration bumps projectGeneration ~200 ms after an inbound snapshot,
+    // with no new load: the pending prompt must still be answerable.
+    useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    const state = useAppStore.getState();
+    assert.equal(state.basemapStyleUrl, AMAP.styleUrl);
+    assert.equal(state.regionalBasemapHold, null);
+    assert.equal(state.regionalBasemapAnswers[AMAP.styleUrl], true);
   });
 
   it("Load applies the held basemap without dirtying the project or recording undo", () => {
@@ -118,15 +129,14 @@ describe("store regional-basemap gate", () => {
     assert.equal(state.regionalBasemapHold, null);
   });
 
-  it("a stale answer does not apply to a project opened since", () => {
+  it("a project opened since clears the pending hold, so an old prompt has nothing to answer", () => {
     useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
-    const stale = useAppStore.getState().regionalBasemapHold!;
     useAppStore.getState().loadProject(projectWith(DEFAULT_BASEMAP));
     assert.equal(useAppStore.getState().regionalBasemapHold, null);
-    useAppStore.setState({ regionalBasemapHold: stale });
     useAppStore.getState().resolveRegionalBasemapHold(true);
     assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
     assert.equal(useAppStore.getState().regionalBasemapHold, null);
+    assert.equal(useAppStore.getState().regionalBasemapAnswers[AMAP.styleUrl], undefined);
   });
 
   it("Load does not override a basemap the user picked while the prompt was open", () => {
