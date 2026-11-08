@@ -70,8 +70,9 @@ export async function readBodyBytesWithCap(
     }
   } catch (error) {
     // Release the stream lock on a mid-stream read failure (or the size abort
-    // above) so the connection can be reused or collected.
-    await reader.cancel().catch(() => {});
+    // above) so the connection can be reused or collected. Not awaited: a
+    // cancel that never settles must not delay the error this call reports.
+    void reader.cancel().catch(() => {});
     throw error;
   }
   const merged = new Uint8Array(totalBytes);

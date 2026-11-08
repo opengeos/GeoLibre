@@ -44,6 +44,33 @@ describe("readBodyBytesWithCap", () => {
     assert.deepEqual(Array.from(bytes), [7, 8, 9]);
   });
 
+
+  it("falls back to arrayBuffer when the response has no stream", async () => {
+    const response = {
+      headers: new Headers(),
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]),
+    } as unknown as Response;
+    const bytes = await readBodyBytesWithCap(response, 16, "test");
+    assert.deepEqual(Array.from(bytes), [1, 2, 3]);
+  });
+
+  it("refuses an oversized body that only exposes arrayBuffer", async () => {
+    const response = {
+      headers: new Headers(),
+      arrayBuffer: async () => new Uint8Array(32),
+    } as unknown as Response;
+    await assert.rejects(readBodyBytesWithCap(response, 16, "test"), /size limit/);
+  });
+
+  it("falls back to text when the response exposes neither stream nor bytes", async () => {
+    const response = {
+      headers: new Headers(),
+      text: async () => "hi",
+    } as unknown as Response;
+    const bytes = await readBodyBytesWithCap(response, 16, "test");
+    assert.equal(new TextDecoder().decode(bytes), "hi");
+  });
+
   it("propagates a stream error instead of reporting it as over-cap", async () => {
     const failure = new Error("connection reset");
     const body = new ReadableStream<Uint8Array>({
