@@ -2065,13 +2065,17 @@ def three_d_tiles_layer(
     """Build a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
 
     A URL layer matches what ``restoreThreeDTilesLayers`` replays from a saved
-    project, so the deck.gl 3D-tiles overlay is rebuilt on load. An Ion asset
+    project, so the deck.gl 3D-tiles overlay is rebuilt on load. An ArcGIS I3S
+    scene layer URL (``.../SceneServer/layers/<n>``) is filed as a scene layer,
+    the way the app's 3D Tiles panel files it, so it draws on the 2D map and the
+    globe. An Ion asset
     (``ion_asset_id``) renders only on the 3D globe, which loads it with the
     app's Cesium Ion token; the token itself is never written to the project.
 
     Args:
         name: Layer display name.
-        url: URL of the 3D Tiles ``tileset.json``. Omit for an Ion asset.
+        url: URL of the 3D Tiles ``tileset.json``, or of an ArcGIS I3S scene
+            layer (``.../SceneServer/layers/<n>``). Omit for an Ion asset.
         ion_asset_id: A Cesium Ion asset id (for example 96188, Cesium OSM
             Buildings). Mutually exclusive with ``url``.
         altitude_offset: Vertical offset applied to the tileset, in meters.
@@ -2097,6 +2101,8 @@ def three_d_tiles_layer(
         )
     layer = _layer_base(name, "3d-tiles", **style)
     source_id = layer["id"]
+    if is_i3s_scene_layer_url(url):
+        return _i3s_scene_layer(layer, url, altitude_offset, request_headers)
     source: dict[str, Any] = {
         "type": "3d-tiles",
         "url": url,
@@ -2116,6 +2122,74 @@ def three_d_tiles_layer(
         "altitudeOffset": altitude_offset,
         "panelCollapsed": True,
         "status": "loading",
+    }
+    layer["sourcePath"] = url
+    return layer
+
+
+ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s"
+"""``source.type`` and ``metadata.sourceKind`` of an ArcGIS I3S scene layer."""
+
+_I3S_SCENE_SERVER_RE = re.compile(r"/SceneServer(/|$|\?|#)", re.IGNORECASE)
+
+
+def is_i3s_scene_layer_url(url: str) -> bool:
+    """Return whether a URL points at an ArcGIS I3S scene service.
+
+    Mirrors ``isArcgisI3sSceneLayerUrl`` in the app
+    (``packages/plugins/src/plugins/arcgis-i3s-tiles.ts``).
+
+    Args:
+        url: The tileset or scene layer URL.
+
+    Returns:
+        True for a ``.../SceneServer`` or ``.../SceneServer/layers/<n>`` URL.
+    """
+    return bool(_I3S_SCENE_SERVER_RE.search(url.strip()))
+
+
+def _i3s_scene_layer(
+    layer: dict[str, Any],
+    url: str,
+    altitude_offset: float,
+    request_headers: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Turn a 3D Tiles layer base into an ArcGIS I3S scene layer record.
+
+    The record matches ``createArcgisI3sStoreLayer`` in the app: the app draws a
+    scene layer only when its source kind is ``arcgis-i3s``, through its deck.gl
+    overlay on the 2D map and ``I3SDataProvider`` on the globe. Filed as a plain
+    tileset, the URL is loaded as a ``tileset.json`` and nothing draws.
+
+    Args:
+        layer: The layer from ``_layer_base``.
+        url: The ``.../SceneServer/layers/<n>`` URL.
+        altitude_offset: Vertical offset in metres.
+        request_headers: Optional request headers (used by the globe).
+
+    Returns:
+        The completed layer dict.
+    """
+    source_id = layer["id"]
+    url = url.strip()
+    source: dict[str, Any] = {
+        "type": ARCGIS_I3S_SOURCE_KIND,
+        "url": url,
+        "sourceId": source_id,
+        "altitudeOffset": altitude_offset,
+    }
+    if request_headers:
+        source["requestHeaders"] = request_headers
+    layer["source"] = source
+    layer["metadata"] = {
+        "customLayerType": ARCGIS_I3S_SOURCE_KIND,
+        "externalDeckLayer": True,
+        "externalNativeLayer": True,
+        "identifiable": False,
+        "nativeLayerIds": [f"{source_id}-deck"],
+        "sourceId": source_id,
+        "sourceKind": ARCGIS_I3S_SOURCE_KIND,
+        "altitudeOffset": altitude_offset,
     }
     layer["sourcePath"] = url
     return layer

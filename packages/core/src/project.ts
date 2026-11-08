@@ -1910,8 +1910,52 @@ function portableLayer(layer: GeoLibreLayer): GeoLibreLayer {
   return withoutRuntimeGeoArrow(withoutZarrHeaders(withoutLocalRasterBytes(layer)));
 }
 
+/** Source kind of an ArcGIS I3S scene layer (`arcgis-i3s-tiles.ts` in the plugins). */
+const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
+/** A `.../SceneServer` URL; mirrors `isArcgisI3sSceneLayerUrl` in the plugins. */
+const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
+
+/**
+ * Re-file a 3D Tiles record whose URL is an ArcGIS scene service as an I3S
+ * scene layer (issue #3377).
+ *
+ * The app draws a scene layer only when its source kind is `arcgis-i3s`. The
+ * Python `add_3d_tiles()` used to write a SceneServer URL as a plain tileset
+ * (`3d-tiles-url`), which the 3D Tiles control then loads as a `tileset.json`,
+ * so nothing drew. This gives such a record the shape the app's 3D Tiles panel
+ * writes (`createArcgisI3sStoreLayer`), keeping its id, name and settings.
+ *
+ * @param layer - A layer from a project file.
+ * @returns The layer, re-filed as an I3S scene layer when it is a misfiled one.
+ */
+export function withI3sSceneLayerKind(layer: GeoLibreLayer): GeoLibreLayer {
+  const url = layer.source?.url;
+  if (
+    layer.type !== "3d-tiles" ||
+    layer.metadata?.sourceKind !== "3d-tiles-url" ||
+    typeof url !== "string" ||
+    !I3S_SCENE_SERVER_RE.test(url.trim())
+  ) {
+    return layer;
+  }
+  const { status: _status, panelCollapsed: _panelCollapsed, ...metadata } = layer.metadata;
+  return {
+    ...layer,
+    source: { ...layer.source, type: ARCGIS_I3S_SOURCE_KIND },
+    metadata: {
+      ...metadata,
+      customLayerType: ARCGIS_I3S_SOURCE_KIND,
+      externalDeckLayer: true,
+      externalNativeLayer: true,
+      identifiable: false,
+      nativeLayerIds: [`${layer.id}-deck`],
+      sourceKind: ARCGIS_I3S_SOURCE_KIND,
+    },
+  };
+}
+
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
-  layer = withRasterSourceDefaults(withoutLocalRasterBytes(layer));
+  layer = withI3sSceneLayerKind(withRasterSourceDefaults(withoutLocalRasterBytes(layer)));
   // `capabilities` is split off the spread rather than overwritten: a raw value
   // that normalizes to nothing (`{}`, an array, a string, an object with no
   // boolean flag) must not survive into the normalized layer and be written
