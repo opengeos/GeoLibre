@@ -1928,13 +1928,22 @@ const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
  * @param layer - A layer from a project file.
  * @returns The layer, re-filed as an I3S scene layer when it is a misfiled one.
  */
+/** The path of a URL, or the trimmed string itself when it does not parse. */
+function urlPath(url: string): string {
+  try {
+    return new URL(url.trim()).pathname;
+  } catch {
+    return url.trim();
+  }
+}
+
 export function withI3sSceneLayerKind(layer: GeoLibreLayer): GeoLibreLayer {
   const url = layer.source?.url;
   if (
     layer.type !== "3d-tiles" ||
     layer.metadata?.sourceKind !== "3d-tiles-url" ||
     typeof url !== "string" ||
-    !I3S_SCENE_SERVER_RE.test(url.trim())
+    !I3S_SCENE_SERVER_RE.test(urlPath(url))
   ) {
     return layer;
   }

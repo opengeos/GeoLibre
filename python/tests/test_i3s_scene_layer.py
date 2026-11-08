@@ -30,6 +30,7 @@ def test_scene_server_urls_are_recognised(url):
         "https://example.com/tileset.json",
         "https://host/SceneServerish/tileset.json",
         "https://host/arcgis/rest/services/City/MapServer",
+        "https://host/tileset.json?ref=/SceneServer/x",
     ],
 )
 def test_other_urls_are_not_scene_layers(url):

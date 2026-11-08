@@ -2068,9 +2068,9 @@ def three_d_tiles_layer(
     project, so the deck.gl 3D-tiles overlay is rebuilt on load. An ArcGIS I3S
     scene layer URL (``.../SceneServer/layers/<n>``) is filed as a scene layer,
     the way the app's 3D Tiles panel files it, so it draws on the 2D map and the
-    globe. An Ion asset
-    (``ion_asset_id``) renders only on the 3D globe, which loads it with the
-    app's Cesium Ion token; the token itself is never written to the project.
+    globe. An Ion asset (``ion_asset_id``) renders only on the 3D globe, which
+    loads it with the app's Cesium Ion token; the token itself is never written
+    to the project.
 
     Args:
         name: Layer display name.
@@ -2144,8 +2144,10 @@ def is_i3s_scene_layer_url(url: str) -> bool:
 
     Returns:
         True for a ``.../SceneServer`` or ``.../SceneServer/layers/<n>`` URL.
+        Only the path is matched, so a query such as ``?ref=/SceneServer/x``
+        on a ``tileset.json`` URL does not count.
     """
-    return bool(_I3S_SCENE_SERVER_RE.search(url.strip()))
+    return bool(_I3S_SCENE_SERVER_RE.search(urlsplit(url.strip()).path))
 
 
 def _i3s_scene_layer(

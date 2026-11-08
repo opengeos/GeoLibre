@@ -57,6 +57,21 @@ describe("withI3sSceneLayerKind (issue #3377)", () => {
     assert.equal(withI3sSceneLayerKind(vector), vector);
   });
 
+  it("matches SceneServer in the URL path only", () => {
+    const tileset = legacyRecord("https://host/tileset.json?ref=/SceneServer/x");
+    assert.equal(withI3sSceneLayerKind(tileset), tileset);
+  });
+
+  it("passes a record without a usable URL through unchanged", () => {
+    const noSource = { ...legacyRecord(SF), source: undefined } as unknown as GeoLibreLayer;
+    assert.equal(withI3sSceneLayerKind(noSource), noSource);
+    const numeric = {
+      ...legacyRecord(SF),
+      source: { type: "3d-tiles", url: 42 },
+    } as unknown as GeoLibreLayer;
+    assert.equal(withI3sSceneLayerKind(numeric), numeric);
+  });
+
   it("applies when a project is opened", () => {
     const project = parseProject(
       JSON.stringify({
