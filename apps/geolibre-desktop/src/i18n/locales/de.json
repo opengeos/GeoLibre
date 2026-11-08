@@ -366,6 +366,13 @@
     "sectionRegional": "Regional",
     "regionChina": "China (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Grundkarte aus Festlandchina laden?",
+    "promptDescription": "Dieses Projekt verwendet {{provider}}-Kacheln ({{name}}), die aus Festlandchina bereitgestellt werden. Beim Laden werden Ihre Kartenanfragen an diese Server gesendet. Bis zu Ihrer Auswahl wird die Standard-Grundkarte angezeigt.",
+    "load": "Laden",
+    "useDefault": "Standard-Grundkarte verwenden",
+    "blockedNotice": "Dieses Projekt verwendet eine Grundkarte aus Festlandchina, die in dieser Bereitstellung deaktiviert ist. Stattdessen wird die Standard-Grundkarte angezeigt."
+  },
   "planetSwitcher": {
     "label": "Himmelskörper",
     "earth": "Erde",

@@ -366,6 +366,13 @@
     "sectionRegional": "Bölgesel",
     "regionChina": "Çin (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Anakara Çin'den bir altlık harita yüklensin mi?",
+    "promptDescription": "Bu proje, Anakara Çin'den sunulan {{provider}} karolarını ({{name}}) kullanıyor. Bunları yüklemek harita isteklerinizi bu sunuculara gönderir. Siz seçene kadar varsayılan altlık harita gösterilir.",
+    "load": "Yükle",
+    "useDefault": "Varsayılan altlık haritayı kullan",
+    "blockedNotice": "Bu proje, Anakara Çin'den sunulan bir altlık harita kullanıyor ve bu dağıtım bunu devre dışı bırakıyor. Bunun yerine varsayılan altlık harita gösteriliyor."
+  },
   "planetSwitcher": {
     "label": "Gök cismi",
     "earth": "Dünya",

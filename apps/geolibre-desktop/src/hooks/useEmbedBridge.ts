@@ -132,7 +132,12 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        useAppStore.getState().loadProject(project, null, { rememberRecent: false });
+        // The host (the notebook's own code) chose this basemap, and a held
+        // fallback would echo back to Python as a basemap change, so skip the
+        // regional-basemap prompt. A deployment block still applies.
+        useAppStore
+          .getState()
+          .loadProject(project, null, { rememberRecent: false, trustBasemap: true });
         // Suppress the snapshot this load would otherwise echo. loadProject is
         // synchronous, so cache the post-normalisation project (merged styles,
         // computed defaults) rather than the raw input; otherwise the first

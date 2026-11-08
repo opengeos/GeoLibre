@@ -366,6 +366,13 @@
     "sectionRegional": "Regional",
     "regionChina": "Çin (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Materik Çindən baza xəritəsi yüklənsin?",
+    "promptDescription": "Bu layihə materik Çindən təqdim olunan {{provider}} plitələrindən ({{name}}) istifadə edir. Onları yükləmək xəritə sorğularınızı həmin serverlərə göndərir. Siz seçənə qədər standart baza xəritəsi göstərilir.",
+    "load": "Yüklə",
+    "useDefault": "Standart baza xəritəsindən istifadə et",
+    "blockedNotice": "Bu layihə materik Çindən təqdim olunan baza xəritəsindən istifadə edir, lakin bu yerləşdirmə onu söndürür. Əvəzində standart baza xəritəsi göstərilir."
+  },
   "planetSwitcher": {
     "label": "Göy cismi",
     "earth": "Yer",

@@ -1,4 +1,9 @@
-import { DEFAULT_ELLIPSOID_ID, getPlanetaryBasemapByStyleUrl, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_ELLIPSOID_ID,
+  getPlanetaryBasemapByStyleUrl,
+  getRegionalBasemapByStyleUrl,
+  useAppStore,
+} from "@geolibre/core";
 import { useLayoutEffect } from "react";
 import { readLastBasemap, writeLastBasemap } from "../lib/last-basemap";
 
@@ -6,7 +11,15 @@ import { readLastBasemap, writeLastBasemap } from "../lib/last-basemap";
 export function useLastBasemapPersistence(): void {
   useLayoutEffect(() => {
     const state = useAppStore.getState();
-    const storedBasemap = readLastBasemap();
+    const lastBasemap = readLastBasemap();
+    // A regional basemap remembered from before the deployment disabled them
+    // must not come back through the startup workspace.
+    const storedBasemap =
+      lastBasemap !== null &&
+      state.regionalBasemapPolicy === "block" &&
+      getRegionalBasemapByStyleUrl(lastBasemap)
+        ? null
+        : lastBasemap;
 
     // Never replace a project that another startup source already loaded.
     if (

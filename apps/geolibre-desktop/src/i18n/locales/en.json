@@ -366,6 +366,13 @@
     "sectionRegional": "Regional",
     "regionChina": "China (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Load a basemap from mainland China?",
+    "promptDescription": "This project uses {{provider}} tiles ({{name}}), which are served from mainland China. Loading them sends your map requests to those servers. The default basemap is shown until you choose.",
+    "load": "Load",
+    "useDefault": "Use default basemap",
+    "blockedNotice": "This project uses a basemap served from mainland China, which this deployment disables. The default basemap is shown instead."
+  },
   "planetSwitcher": {
     "label": "Celestial body",
     "earth": "Earth",

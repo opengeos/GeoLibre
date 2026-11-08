@@ -296,6 +296,8 @@ export function undo(): void {
       boundStore().getState().loadProject(entry.before, entry.beforePath, {
         rememberRecent: false,
         presenting: false,
+        // A snapshot of the store, whose basemap already passed the gate.
+        trustBasemap: true,
       });
       projectRestoreUndo = null;
       boundStore().setState({ isDirty: true });
@@ -325,6 +327,8 @@ export function redo(): void {
       boundStore().getState().loadProject(entry.after, entry.afterPath, {
         rememberRecent: false,
         presenting: false,
+        // A snapshot of the store, whose basemap already passed the gate.
+        trustBasemap: true,
       });
       projectRestoreRedo = null;
       boundStore().setState({ isDirty: true });

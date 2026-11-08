@@ -271,3 +271,47 @@ def test_ids_and_app_name_reject_js_trim_whitespace(whitespace):
         {"version": 1, "plugins": {"allowed": [f"{whitespace}a{whitespace}"]}}, LABEL
     )
     assert policy["plugins"]["allowed"] == ["a"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("", None), ("  ", None), ("1", True), ("TRUE", True), (" 0 ", False), ("false", False)],
+)
+def test_regional_basemaps_env_forms(raw, expected):
+    assert dp.regional_basemaps_disabled(raw) is expected
+
+
+@pytest.mark.parametrize("raw", ["yes", "off", "2"])
+def test_regional_basemaps_env_rejects_other_values(raw):
+    assert error_of(dp.regional_basemaps_disabled, raw) == (
+        "ERROR: GEOLIBRE_DISABLE_REGIONAL_BASEMAPS must be 1/true or 0/false."
+    )
+
+
+def test_regional_basemaps_env_disables_them():
+    policy, logs = dp.build_policy({"GEOLIBRE_DISABLE_REGIONAL_BASEMAPS": "1"})
+    assert policy == {"version": 1, "basemaps": {"regional": False}}
+    assert logs == [
+        "Deployment policy: basemaps.regional from GEOLIBRE_DISABLE_REGIONAL_BASEMAPS = false"
+    ]
+
+
+def test_regional_basemaps_env_overrides_file(tmp_path):
+    path = write_file(tmp_path, {"version": 1, "basemaps": {"regional": False}})
+    policy, logs = dp.build_policy(
+        {"GEOLIBRE_DEPLOYMENT_FILE": path, "GEOLIBRE_DISABLE_REGIONAL_BASEMAPS": "0"}
+    )
+    assert policy["basemaps"] == {"regional": True}
+    overrides = [line for line in logs if " from GEOLIBRE_" in line]
+    assert overrides == [
+        "Deployment policy: basemaps.regional from GEOLIBRE_DISABLE_REGIONAL_BASEMAPS = true"
+        " (overrides GEOLIBRE_DEPLOYMENT_FILE)"
+    ]
+
+
+def test_blank_regional_basemaps_env_leaves_file_value(tmp_path):
+    path = write_file(tmp_path, {"version": 1, "basemaps": {"regional": False}})
+    policy, _ = dp.build_policy(
+        {"GEOLIBRE_DEPLOYMENT_FILE": path, "GEOLIBRE_DISABLE_REGIONAL_BASEMAPS": " "}
+    )
+    assert policy["basemaps"] == {"regional": False}

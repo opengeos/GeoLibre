@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { DesktopShell } from "./components/layout/DesktopShell";
 import { NotificationRegion } from "./components/layout/NotificationRegion";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
+import { RegionalBasemapPrompt } from "./components/layout/RegionalBasemapPrompt";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
 import "./lib/s3-signer-setup";
@@ -95,6 +96,9 @@ export default function App() {
             onMapReady={handleMapReady}
           />
           <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
+          {/* Asks before an opened project's regional basemap (tiles from
+              mainland China) loads; the default basemap shows meanwhile. */}
+          <RegionalBasemapPrompt />
         </>
       )}
       {/* Mounted once, outside the startup-restore branch, so a failure raised

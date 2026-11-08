@@ -359,6 +359,13 @@
     "sectionRegional": "区域",
     "regionChina": "中国"
   },
+  "regionalBasemap": {
+    "promptTitle": "加载来自中国大陆的底图？",
+    "promptDescription": "此项目使用 {{provider}} 瓦片（{{name}}），这些瓦片由中国大陆的服务器提供。加载它们会将您的地图请求发送到这些服务器。在您做出选择之前，将显示默认底图。",
+    "load": "加载",
+    "useDefault": "使用默认底图",
+    "blockedNotice": "此项目使用由中国大陆服务器提供的底图，但此部署已将其禁用。已改为显示默认底图。"
+  },
   "planetSwitcher": {
     "label": "天体",
     "earth": "地球",

@@ -324,24 +324,53 @@ function releaseControl(): void {
   styleChangeFallback = null;
 }
 
+/**
+ * Catalog providers whose tiles are served from mainland China. A deployment
+ * that disabled the regional basemaps (`basemaps.regional: false`) drops them
+ * from this panel too, so the switch has no back door here.
+ */
+const MAINLAND_CHINA_PROVIDERS = new Set(["amap", "tencent", "tianditu"]);
+
+/**
+ * The basemap catalog options: the control's defaults, plus Mapbox Standard on
+ * the Mapbox renderer, minus the mainland-China providers when the deployment
+ * disabled regional basemaps.
+ *
+ * @param app - The host app API.
+ * @returns The `basemaps` / `includeDefaultBasemaps` options for the control.
+ */
+function getBasemapCatalogOptions(
+  app: GeoLibreAppAPI,
+): Pick<BasemapControlOptions, "basemaps" | "includeDefaultBasemaps"> {
+  const extra: BasemapDefinition[] = app.getMapboxMap?.()
+    ? [
+        {
+          id: "mapbox-standard",
+          name: "Mapbox Standard",
+          provider: "mapbox",
+          type: "style",
+          source: {
+            type: "style",
+            url: "https://api.mapbox.com/styles/v1/mapbox/standard?access_token={api-key}",
+          },
+        },
+      ]
+    : [];
+  if (useAppStore.getState().regionalBasemapPolicy === "block") {
+    return {
+      includeDefaultBasemaps: false,
+      basemaps: [
+        ...DEFAULT_BASEMAPS.filter((basemap) => !MAINLAND_CHINA_PROVIDERS.has(basemap.provider)),
+        ...extra,
+      ],
+    };
+  }
+  return extra.length > 0 ? { basemaps: extra } : {};
+}
+
 function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
   return {
-    ...(app.getMapboxMap?.()
-      ? {
-          basemaps: [
-            {
-              id: "mapbox-standard",
-              name: "Mapbox Standard",
-              provider: "mapbox",
-              type: "style",
-              source: {
-                type: "style",
-                url: "https://api.mapbox.com/styles/v1/mapbox/standard?access_token={api-key}",
-              },
-            },
-          ],
-        }
-      : {}),
+    ...getBasemapCatalogOptions(app),
     collapsed: false,
     // Not used for layout (the dock owns placement); the control still reads it
     // when it builds its hidden toggle.

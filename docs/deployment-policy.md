@@ -51,6 +51,8 @@ What each section does today:
   matching `GEOLIBRE_*` deployment settings. `sharing.embedOrigins: []` turns
   the embed API off.
 - `branding.welcome: false` suppresses the first-launch wizard.
+- `basemaps.regional: false` disables the regional basemaps (Amap and Tencent,
+  served from mainland China). See [Regional basemaps](#regional-basemaps).
 - `ai.enabled: true` points the assistant at the same-origin `/ai` proxy;
   `false` removes any operator-configured AI proxy (a provider a user enters in
   Settings is unaffected). `ai.model` picks the proxy's model.
@@ -103,6 +105,7 @@ For capability details and Docker route enforcement, see
       }
     ]
   },
+  "basemaps": { "regional": false },
   "sharing": {
     "shareUrl": "https://projects.example.com",
     "collabUrl": "wss://relay.example.com",
@@ -163,6 +166,12 @@ An array of the capability names from
 | --- | --- | --- |
 | `builtins` | boolean | `false` hides the built-in starter services. |
 | `catalog` | object[] | Curated entries: `id`, `name`, `kind` (`wms`, `wfs`, `wmts`, `xyz`, `arcgis`, `csw`), optional `category`, and non-empty `fields` (string, number or boolean values). |
+
+### `basemaps`
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `regional` | boolean | `false` disables the regional basemaps (Amap and Tencent), whose tiles are served from mainland China. Default true. |
 
 ### `sharing`
 
@@ -276,6 +285,34 @@ scopes well-behaved plugins to their own list rather than isolating a hostile on
 Plugin policy is client-side enforcement only, not a server security boundary:
 a modified client can bypass it. It does not provide signing or sandboxing.
 
+## Regional basemaps
+
+The Change basemap and New project dialogs offer a collapsed **Regional**
+section with basemaps served from inside mainland China (Amap and Tencent), for
+users there whom the default providers serve poorly. A project file can name one
+of them as its basemap, so GeoLibre asks before loading it when a project is
+opened (from a file, a URL, a share link, drag and drop, or a startup restore):
+the map shows the default basemap until the user picks **Load** or
+**Use default basemap**. A basemap the user picks in the UI, a new project, a
+template, an undo step, a duplicate, and a project loaded by an embedding host
+(the Jupyter widget, the iframe embed API, or a live collaboration session) do
+not ask.
+
+`basemaps.regional: false` (or `GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` on Docker,
+or `VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` at build time) removes them
+entirely:
+
+- the Regional section disappears from both dialogs, and the Basemaps control
+  plugin no longer lists its mainland-China providers (Amap, Tencent and
+  Tianditu);
+- a project that names one opens on the default basemap without a prompt, with
+  a short notice saying why;
+- plugins, scripts and the assistant cannot set one either, and a regional
+  basemap remembered from an earlier session is not restored.
+
+Like the rest of the policy this is client-side: it stops GeoLibre from
+requesting those tiles, not a modified client.
+
 ## Precedence between sources
 
 The order, highest first, is:
@@ -383,6 +420,7 @@ require rebuilding the image.
 | `GEOLIBRE_CAPABILITIES` | `capabilities`: comma-separated names, or `none` for no grants |
 | `GEOLIBRE_SERVICES_FILE` | `services.catalog` |
 | `GEOLIBRE_BUILTIN_SERVICES=off` | `services.builtins: false` |
+| `GEOLIBRE_DISABLE_REGIONAL_BASEMAPS` | `basemaps.regional`: `1`/`true` sets `false`, `0`/`false` sets `true` |
 | `GEOLIBRE_SHARE_URL` | `sharing.shareUrl` |
 | `GEOLIBRE_COLLAB_URL` | `sharing.collabUrl` |
 | `GEOLIBRE_EMBED_ORIGINS` | `sharing.embedOrigins` |

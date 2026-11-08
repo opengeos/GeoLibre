@@ -359,6 +359,13 @@
     "sectionRegional": "Regional",
     "regionChina": "Tiongkok (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Muat peta dasar dari Tiongkok daratan?",
+    "promptDescription": "Proyek ini menggunakan ubin {{provider}} ({{name}}) yang disajikan dari Tiongkok daratan. Memuatnya akan mengirim permintaan peta Anda ke server tersebut. Peta dasar bawaan ditampilkan sampai Anda memilih.",
+    "load": "Muat",
+    "useDefault": "Gunakan peta dasar bawaan",
+    "blockedNotice": "Proyek ini menggunakan peta dasar yang disajikan dari Tiongkok daratan, yang dinonaktifkan oleh penerapan ini. Peta dasar bawaan ditampilkan sebagai gantinya."
+  },
   "planetSwitcher": {
     "label": "Benda langit",
     "earth": "Bumi",

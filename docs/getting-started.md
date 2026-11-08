@@ -940,6 +940,8 @@ GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland
 
 **New project** and **Change background** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
 
+When you open a project file, link or shared project that uses one of these basemaps, GeoLibre asks before loading tiles from mainland China and shows the default basemap until you choose **Load** or **Use default basemap**. Basemaps you pick yourself never ask. A self-hosted deployment can remove these basemaps entirely; see [Deployment Policy: Regional basemaps](deployment-policy.md#regional-basemaps).
+
 ### The Basemaps control (adds Tianditu)
 
 The Basemaps control plugin carries the same Amap and Tencent tiles plus **Tianditu (天地图)**, China's official National Platform for Common Geospatial Information Services: vector, imagery, and terrain, each with a separate label overlay. Search the panel for `Tianditu`, `Amap`, or `Tencent`, or for their Chinese names.

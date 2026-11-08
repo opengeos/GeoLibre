@@ -1,0 +1,229 @@
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import {
+  BLANK_BASEMAP,
+  CHINA_BASEMAPS,
+  createEmptyProject,
+  DEFAULT_BASEMAP,
+  gateRegionalBasemap,
+  REGIONAL_BASEMAP_SENTINEL_PREFIX,
+  useAppStore,
+} from "@geolibre/core";
+import {
+  policyEnvOverlay,
+  setDeploymentPolicy,
+} from "../apps/geolibre-desktop/src/lib/deployment-env";
+import {
+  DISABLE_REGIONAL_BASEMAPS_ENV,
+  regionalBasemapsDisabled,
+  resolveRegionalBasemapPolicy,
+} from "../apps/geolibre-desktop/src/lib/regional-basemap-policy";
+
+const AMAP = CHINA_BASEMAPS.find((basemap) => basemap.id === "amap-street")!;
+const TENCENT = CHINA_BASEMAPS.find((basemap) => basemap.id === "tencent-street")!;
+
+function projectWith(styleUrl: string) {
+  return createEmptyProject("Regional", { basemapStyleUrl: styleUrl });
+}
+
+describe("gateRegionalBasemap", () => {
+  it("passes non-regional and unknown regional styles through under every policy", () => {
+    for (const policy of ["allow", "prompt", "block"] as const) {
+      assert.deepEqual(gateRegionalBasemap(BLANK_BASEMAP, policy, DEFAULT_BASEMAP), {
+        styleUrl: BLANK_BASEMAP,
+      });
+      const unknown = `${REGIONAL_BASEMAP_SENTINEL_PREFIX}retired`;
+      assert.deepEqual(gateRegionalBasemap(unknown, policy, DEFAULT_BASEMAP), {
+        styleUrl: unknown,
+      });
+    }
+  });
+
+  it("holds an untrusted regional basemap under prompt, but not a trusted one", () => {
+    assert.deepEqual(gateRegionalBasemap(AMAP.styleUrl, "prompt", DEFAULT_BASEMAP), {
+      styleUrl: DEFAULT_BASEMAP,
+      held: "prompt",
+    });
+    assert.deepEqual(gateRegionalBasemap(AMAP.styleUrl, "prompt", DEFAULT_BASEMAP, true), {
+      styleUrl: AMAP.styleUrl,
+    });
+  });
+
+  it("always replaces a regional basemap under block, trusted or not", () => {
+    for (const trusted of [false, true]) {
+      assert.deepEqual(gateRegionalBasemap(AMAP.styleUrl, "block", DEFAULT_BASEMAP, trusted), {
+        styleUrl: DEFAULT_BASEMAP,
+        held: "blocked",
+      });
+    }
+  });
+
+  it("applies the basemap as is under allow", () => {
+    assert.deepEqual(gateRegionalBasemap(AMAP.styleUrl, "allow", DEFAULT_BASEMAP), {
+      styleUrl: AMAP.styleUrl,
+    });
+  });
+});
+
+describe("store regional-basemap gate", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject();
+    useAppStore.getState().setRegionalBasemapPolicy("prompt");
+  });
+  afterEach(() => {
+    useAppStore.getState().setRegionalBasemapPolicy("allow");
+    useAppStore.getState().newProject();
+  });
+
+  it("defaults to allow, so library consumers see no change", () => {
+    useAppStore.getState().setRegionalBasemapPolicy("allow");
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
+  it("opens an untrusted project on the default basemap and holds the regional one", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), "/tmp/shared.geolibre");
+    const state = useAppStore.getState();
+    assert.equal(state.basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.deepEqual(state.regionalBasemapHold, {
+      styleUrl: AMAP.styleUrl,
+      projectGeneration: state.projectGeneration,
+      reason: "prompt",
+    });
+    assert.equal(state.isDirty, false);
+  });
+
+  it("Load applies the held basemap without dirtying the project or recording undo", () => {
+    useAppStore.getState().loadProject(projectWith(TENCENT.styleUrl));
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    const state = useAppStore.getState();
+    assert.equal(state.basemapStyleUrl, TENCENT.styleUrl);
+    assert.equal(state.regionalBasemapHold, null);
+    assert.equal(state.isDirty, false);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+  });
+
+  it("Use default basemap keeps the fallback and clears the hold", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().resolveRegionalBasemapHold(false);
+    const state = useAppStore.getState();
+    assert.equal(state.basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(state.regionalBasemapHold, null);
+  });
+
+  it("a stale answer does not apply to a project opened since", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    const stale = useAppStore.getState().regionalBasemapHold!;
+    useAppStore.getState().loadProject(projectWith(DEFAULT_BASEMAP));
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+    useAppStore.setState({ regionalBasemapHold: stale });
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
+  it("Load does not override a basemap the user picked while the prompt was open", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().setBasemapStyleUrl(BLANK_BASEMAP);
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    assert.equal(useAppStore.getState().basemapStyleUrl, BLANK_BASEMAP);
+  });
+
+  it("a trusted load (template, undo step, embed host) skips the prompt", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), null, { trustBasemap: true });
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
+  it("the user's own pick never prompts", () => {
+    useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    useAppStore.getState().newProject({ basemapStyleUrl: TENCENT.styleUrl });
+    assert.equal(useAppStore.getState().basemapStyleUrl, TENCENT.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
+  it("a non-regional project opens untouched", () => {
+    useAppStore.getState().loadProject(projectWith(BLANK_BASEMAP));
+    assert.equal(useAppStore.getState().basemapStyleUrl, BLANK_BASEMAP);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
+  describe("when the deployment disables regional basemaps", () => {
+    beforeEach(() => useAppStore.getState().setRegionalBasemapPolicy("block"));
+
+    it("opens the project on the default basemap with a blocked notice", () => {
+      useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), null, { trustBasemap: true });
+      const state = useAppStore.getState();
+      assert.equal(state.basemapStyleUrl, DEFAULT_BASEMAP);
+      assert.equal(state.regionalBasemapHold?.reason, "blocked");
+      useAppStore.getState().resolveRegionalBasemapHold(true);
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    });
+
+    it("refuses a regional basemap set directly or seeded into a new project", (t) => {
+      t.mock.method(console, "warn", () => {});
+      useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+      useAppStore.getState().newProject({ basemapStyleUrl: TENCENT.styleUrl });
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    });
+
+    it("switching to block drops a pending prompt", () => {
+      useAppStore.getState().setRegionalBasemapPolicy("prompt");
+      useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+      useAppStore.getState().setRegionalBasemapPolicy("block");
+      assert.equal(useAppStore.getState().regionalBasemapHold, null);
+    });
+  });
+});
+
+describe("regional-basemap deployment switch", () => {
+  afterEach(() => setDeploymentPolicy(null));
+
+  it("reads the VITE_* switch from the deployment env, then the build env", () => {
+    for (const value of ["1", "true", "TRUE", " yes ", "on"]) {
+      assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), true);
+    }
+    for (const value of ["0", "false", "", "  "]) {
+      assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), false);
+    }
+    assert.equal(regionalBasemapsDisabled({}, { [DISABLE_REGIONAL_BASEMAPS_ENV]: "1" }), true);
+    // A deployment "0" beats a build-time "1".
+    assert.equal(
+      regionalBasemapsDisabled(
+        { [DISABLE_REGIONAL_BASEMAPS_ENV]: "0" },
+        { [DISABLE_REGIONAL_BASEMAPS_ENV]: "1" },
+      ),
+      false,
+    );
+    assert.equal(regionalBasemapsDisabled({}, {}), false);
+  });
+
+  it("maps basemaps.regional onto the env overlay", () => {
+    assert.equal(
+      policyEnvOverlay({ version: 1, basemaps: { regional: false } })[
+        DISABLE_REGIONAL_BASEMAPS_ENV
+      ],
+      "1",
+    );
+    assert.equal(
+      policyEnvOverlay({ version: 1, basemaps: { regional: true } })[DISABLE_REGIONAL_BASEMAPS_ENV],
+      "0",
+    );
+    assert.equal(
+      DISABLE_REGIONAL_BASEMAPS_ENV in policyEnvOverlay({ version: 1, basemaps: {} }),
+      false,
+    );
+  });
+
+  it("a policy with regional: false resolves to block, otherwise prompt", () => {
+    setDeploymentPolicy({ version: 1, basemaps: { regional: false } });
+    assert.equal(resolveRegionalBasemapPolicy(), "block");
+    setDeploymentPolicy({ version: 1, basemaps: { regional: true } });
+    assert.equal(resolveRegionalBasemapPolicy(), "prompt");
+    setDeploymentPolicy(null);
+    assert.equal(resolveRegionalBasemapPolicy(), "prompt");
+  });
+});

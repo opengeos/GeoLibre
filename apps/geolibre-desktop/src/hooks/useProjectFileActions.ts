@@ -2199,7 +2199,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleDuplicate = () => {
     const { project } = buildCurrentProject();
     const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
-    loadProject(duplicated, null);
+    // A copy of what is already on screen, so its basemap needs no confirmation.
+    loadProject(duplicated, null, { trustBasemap: true });
     useAppStore.setState({ isDirty: true });
   };
 

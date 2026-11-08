@@ -366,6 +366,13 @@
     "sectionRegional": "Regionaal",
     "regionChina": "China (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Een basiskaart uit het Chinese vasteland laden?",
+    "promptDescription": "Dit project gebruikt {{provider}}-tegels ({{name}}), die vanuit het Chinese vasteland worden geleverd. Bij het laden worden je kaartverzoeken naar die servers gestuurd. De standaardbasiskaart wordt getoond totdat je kiest.",
+    "load": "Laden",
+    "useDefault": "Standaardbasiskaart gebruiken",
+    "blockedNotice": "Dit project gebruikt een basiskaart die vanuit het Chinese vasteland wordt geleverd, en deze installatie schakelt die uit. In plaats daarvan wordt de standaardbasiskaart getoond."
+  },
   "planetSwitcher": {
     "label": "Hemellichaam",
     "earth": "Aarde",

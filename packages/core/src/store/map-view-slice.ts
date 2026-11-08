@@ -8,6 +8,11 @@ import { createDefaultMapView, normalizeBlankBackgroundColor } from "../project"
 import { DEFAULT_ELLIPSOID_ID } from "../ellipsoids";
 import type { PlanetaryBasemap } from "../ellipsoids";
 import {
+  gateRegionalBasemap,
+  type RegionalBasemapHold,
+  type RegionalBasemapPolicy,
+} from "../regional-basemaps";
+import {
   DEFAULT_BASEMAP,
   DEFAULT_MAP_GRID_LAYOUT,
   DEFAULT_PRIMARY_RENDERER,
@@ -20,6 +25,7 @@ import {
   type SecondaryMapView,
 } from "../types";
 import type { AppState, SliceCreator } from "./types";
+import { withoutHistory } from "./undo-history";
 
 /** An explicit background choice replaces the active renderer's override. */
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
@@ -196,9 +202,31 @@ export interface MapViewSlice {
   setBasemapOpacity: (opacity: number) => void;
   setBlankBackgroundColor: (color: string | null) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
+  /**
+   * How a regional basemap (served from mainland China) that a loaded project
+   * names is treated; see {@link RegionalBasemapPolicy}. Not project data: the
+   * app sets it once at startup from the deployment policy.
+   */
+  regionalBasemapPolicy: RegionalBasemapPolicy;
+  /**
+   * The regional basemap the last project load set aside in favour of the
+   * default basemap, or null. The app shell renders a confirmation (or, when
+   * blocked, a notice) from it. Not project data and not in undo history.
+   */
+  regionalBasemapHold: RegionalBasemapHold | null;
+  /** Set the {@link regionalBasemapPolicy}. Switching to `"block"` drops a pending prompt. */
+  setRegionalBasemapPolicy: (policy: RegionalBasemapPolicy) => void;
+  /**
+   * Answer the held regional basemap. With `load` true and the hold still
+   * belonging to the open project, the regional basemap is applied without
+   * marking the project dirty or recording an undo step (it is what the file
+   * already says). Otherwise the default basemap stays. Either way the hold is
+   * cleared.
+   */
+  resolveRegionalBasemapHold: (load: boolean) => void;
 }
 
-export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
+export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
   basemapVisible: true,
@@ -209,6 +237,8 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
   secondaryMapViews: [],
   primaryMapLabel: "",
   primaryRenderer: DEFAULT_PRIMARY_RENDERER,
+  regionalBasemapPolicy: "allow",
+  regionalBasemapHold: null,
 
   setMapView: (view, markDirty = false) =>
     set((s) => ({
@@ -331,11 +361,21 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
       };
     }),
   setBasemapStyleUrl: (url) =>
-    set((state) => ({
-      basemapStyleUrl: url,
-      preferences: preferencesForBasemap(state),
-      isDirty: true,
-    })),
+    set((state) => {
+      // A deployment that disabled regional basemaps refuses them from every
+      // caller (plugins, scripts, the assistant), not only the hidden picker.
+      // Picking a basemap in the UI is the user's own choice, so "prompt"
+      // never applies here.
+      const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
+      if (gated.held) {
+        console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
+      }
+      return {
+        basemapStyleUrl: gated.styleUrl,
+        preferences: preferencesForBasemap(state),
+        isDirty: true,
+      };
+    }),
   applyPlanetaryBasemap: (basemap) =>
     set((state) => ({
       basemapStyleUrl: basemap.styleUrl,
@@ -353,4 +393,30 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
   setBlankBackgroundColor: (color) =>
     set({ blankBackgroundColor: normalizeBlankBackgroundColor(color), isDirty: true }),
   setPreferences: (preferences) => set({ preferences, isDirty: true }),
+  setRegionalBasemapPolicy: (policy) =>
+    set((state) => ({
+      regionalBasemapPolicy: policy,
+      regionalBasemapHold:
+        policy === "block" && state.regionalBasemapHold?.reason === "prompt"
+          ? null
+          : state.regionalBasemapHold,
+    })),
+  resolveRegionalBasemapHold: (load) => {
+    const state = get();
+    const hold = state.regionalBasemapHold;
+    if (!hold) return;
+    const applies =
+      load &&
+      hold.reason === "prompt" &&
+      state.regionalBasemapPolicy !== "block" &&
+      hold.projectGeneration === state.projectGeneration &&
+      // Only replace the fallback the load put in; a basemap chosen since then
+      // is the user's newer decision.
+      state.basemapStyleUrl === DEFAULT_BASEMAP;
+    if (!applies) {
+      set({ regionalBasemapHold: null });
+      return;
+    }
+    withoutHistory(() => set({ basemapStyleUrl: hold.styleUrl, regionalBasemapHold: null }));
+  },
 });

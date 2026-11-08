@@ -50,6 +50,9 @@ export function policyEnvOverlay(policy: DeploymentPolicy | null): Record<string
   if (policy.services?.builtins !== undefined) {
     out.VITE_GEOLIBRE_BUILTIN_SERVICES = policy.services.builtins ? "on" : "off";
   }
+  if (policy.basemaps?.regional !== undefined) {
+    out.VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS = policy.basemaps.regional ? "0" : "1";
+  }
   if (policy.ai?.enabled === true) out.VITE_GEOLIBRE_AI_URL = "/ai";
   return out;
 }

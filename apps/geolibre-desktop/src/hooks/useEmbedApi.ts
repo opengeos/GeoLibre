@@ -144,8 +144,13 @@ export function useEmbedApi(
       if (abort.signal.aborted) return;
       projectSourceUrl = url;
       // Host-driven loads are transient deep links, like `?url=`: they are not
-      // added to the recent-projects list.
-      useAppStore.getState().loadProject(resolved, null, { rememberRecent: false });
+      // added to the recent-projects list. The embedding page (an origin the
+      // deployment allowlisted) picked this project for its own viewers, so its
+      // basemap is the host's choice and skips the regional-basemap prompt. A
+      // deployment block still applies.
+      useAppStore
+        .getState()
+        .loadProject(resolved, null, { rememberRecent: false, trustBasemap: true });
     };
 
     const applySetView = (command: Extract<EmbedCommand, { type: "setView" }>) => {

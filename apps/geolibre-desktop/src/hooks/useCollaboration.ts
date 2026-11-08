@@ -1,6 +1,8 @@
 import {
   applyProjectToStore,
   clearHistory,
+  DEFAULT_BASEMAP,
+  gateRegionalBasemap,
   serializeProject,
   useAppStore,
   type CollaborationMode,
@@ -173,13 +175,24 @@ export function useCollaboration(
     const state = useAppStore.getState();
     const localView = mapControllerRef.current?.readView() ?? state.mapView;
     const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
+    // The basemap is shared session state the user joined deliberately, and a
+    // held fallback would be broadcast back as a basemap change, so live
+    // sessions skip the regional-basemap prompt. A deployment block still
+    // applies, on the join and on every later snapshot.
     if (initial) {
       useAppStore.getState().loadProject(merged, null, {
         rememberRecent: false,
         presenting: false,
+        trustBasemap: true,
       });
     } else {
       const applied = applyProjectToStore(merged);
+      applied.basemapStyleUrl = gateRegionalBasemap(
+        applied.basemapStyleUrl,
+        state.regionalBasemapPolicy,
+        DEFAULT_BASEMAP,
+        true,
+      ).styleUrl;
       // Keep the layers update and the (deferred) generation bump separate:
       // bindNetcdfProfileSamplesToProject treats a bump that lands together
       // with new layers as a project switch and clears the inspected samples.
