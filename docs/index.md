@@ -104,7 +104,7 @@ Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geol
 <div class="feature-card" markdown>
 ### AI Assistant
 
-Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI, OpenRouter, Vercel AI Gateway, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint) with your own credentials, disabled until configured.
+Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI, OpenRouter, Vercel AI Gateway, TrustedRouter, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint) with your own credentials, disabled until configured.
 </div>
 
 <div class="feature-card" markdown>

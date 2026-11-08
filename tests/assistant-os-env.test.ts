@@ -41,6 +41,7 @@ describe("OS_ENV_VAR_NAMES", () => {
       "GEOLIBRE_ASSISTANT_MODEL",
       "OPENROUTER_MODEL",
       "AI_GATEWAY_MODEL",
+      "TRUSTEDROUTER_MODEL",
       // Seeds a new Ollama profile's model; the profile has no field for it.
       "OLLAMA_MODEL",
       "TAVILY_API_KEY",
@@ -66,6 +67,8 @@ describe("OS_ENV_VAR_NAMES", () => {
       "OPENROUTER_MODEL",
       "AI_GATEWAY_API_KEY",
       "AI_GATEWAY_MODEL",
+      "TRUSTEDROUTER_API_KEY",
+      "TRUSTEDROUTER_MODEL",
       "OLLAMA_BASE_URL",
       "OLLAMA_MODEL",
       "OPENAI_COMPATIBLE_BASE_URL",
@@ -147,6 +150,19 @@ describe("OS env feeds provider resolution", () => {
       provider: "vercel",
       apiKey: "os-key",
       baseURL: "https://ai-gateway.vercel.sh/v1",
+      modelId: "vendor/os-model",
+    });
+  });
+  it("configures TrustedRouter from an OS key and its OS model override", () => {
+    const merged = {
+      TRUSTEDROUTER_API_KEY: "os-key",
+      TRUSTEDROUTER_MODEL: "vendor/os-model",
+    };
+    assert.deepEqual(availableProviders(merged), ["trustedrouter"]);
+    assert.deepEqual(configForProvider("trustedrouter", undefined, merged), {
+      provider: "trustedrouter",
+      apiKey: "os-key",
+      baseURL: "https://api.trustedrouter.com/v1",
       modelId: "vendor/os-model",
     });
   });

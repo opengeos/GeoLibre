@@ -3366,6 +3366,7 @@
         "openaiKey": "sk-…",
         "openrouterKey": "sk-or-…",
         "vercelKey": "AI Gateway key",
+        "trustedrouterKey": "sk-tr-v1-…",
         "ollamaBaseUrl": "http://localhost:11434",
         "awsAccessKey": "AKIA…",
         "awsSecretKey": "wJalrXUtnFEMI…",

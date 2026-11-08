@@ -220,6 +220,7 @@ describe("hasModelPicker", () => {
     for (const id of [
       "openrouter",
       "vercel",
+      "trustedrouter",
       "bedrock",
       "openai",
       "anthropic",
@@ -239,6 +240,7 @@ describe("supportsKeyedModelDiscovery", () => {
     assert.equal(supportsKeyedModelDiscovery("google"), true);
     assert.equal(supportsKeyedModelDiscovery("openrouter"), false);
     assert.equal(supportsKeyedModelDiscovery("vercel"), false);
+    assert.equal(supportsKeyedModelDiscovery("trustedrouter"), false);
     assert.equal(supportsKeyedModelDiscovery("bedrock"), false);
     assert.equal(supportsKeyedModelDiscovery("custom"), false);
   });

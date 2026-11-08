@@ -39,18 +39,24 @@ export function supportsKeyedModelDiscovery(
 }
 
 /** Providers the model picker serves: every one with a live catalog. */
-export type PickerProvider = "openrouter" | "vercel" | "bedrock" | KeyedDiscoveryProvider;
+export type PickerProvider =
+  | "openrouter"
+  | "vercel"
+  | "trustedrouter"
+  | "bedrock"
+  | KeyedDiscoveryProvider;
 
 /**
  * Whether a provider gets the searchable model picker with live discovery.
  *
  * @param provider The assistant provider id.
- * @returns True for OpenRouter, Vercel AI Gateway, Bedrock, and the key-based hosted providers.
+ * @returns True for OpenRouter, Vercel AI Gateway, TrustedRouter, Bedrock, and the key-based hosted providers.
  */
 export function hasModelPicker(provider: AssistantProviderId): provider is PickerProvider {
   return (
     provider === "openrouter" ||
     provider === "vercel" ||
+    provider === "trustedrouter" ||
     provider === "bedrock" ||
     supportsKeyedModelDiscovery(provider)
   );
