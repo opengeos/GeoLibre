@@ -91,7 +91,7 @@ so and skips the relay; the table notes those cases.
 | Route | Upstream | Used by | Desktop |
 | --- | --- | --- | --- |
 | `/opm/...`, `/wms/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder`, `planetarymaps.usgs.gov` | Mars, Moon, and other planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
-| `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx, network error, or timeout, then `maps.mail.ru` (`/osm/tools/overpass/api/interpreter`, run by VK) as a last fallback. Each instance that is tried sees the query and its area of interest. | OSM Downloader plugin, God's Eye View road layers | Relay |
+| `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx or network error. No other instance is tried; when both fail the relay answers 502 with an "Overpass is busy" message. Each instance that is tried sees the query and its area of interest, and the `x-overpass-upstream` response header names the one that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
 | `/oam/meta` | `api.openaerialmap.org` | OpenAerialMap search | Direct |
 | `/source-coop/...` | `source.coop` (API and feed) | Source Cooperative and Natural Earth plugins | Direct |
 | `/ckan/search` | `data.humdata.org` | CKAN plugin search | Relay |
@@ -105,16 +105,11 @@ so and skips the relay; the table notes those cases.
 | `/transit/vehicles/...` | `cdn.mbta.com`, `data.texas.gov`, `svc.metrotransit.org`, `realtime.hsl.fi`, `gtfs.ovapi.nl`, `gtfsrt.api.translink.com.au` | God's Eye View transit | Relay |
 | `/cctv/...` | `trafficcam.calgary.ca`, `cctv.austinmobility.io`, `511on.ca`, `www.drivebc.ca`, `data.livetraffic.com`, `webcams.transport.nsw.gov.au`, `cwwp2.dot.ca.gov` | God's Eye View traffic cameras | Relay |
 
-!!! note "Pending change"
-    [#3367](https://github.com/opengeos/GeoLibre/pull/3367) removes `maps.mail.ru`
-    from the `/overpass` chain and adds an `x-overpass-upstream` response header
-    naming the instance that answered. Update the row above when it merges.
-
 ## Opt-in: core features
 
 | Feature | Hosts | Builds | Route |
 | --- | --- | --- | --- |
-| Basemap picker and Basemaps plugin | OpenFreeMap, CARTO (`basemaps.cartocdn.com`), Esri (`server.arcgisonline.com`, `services.arcgisonline.com`), EOX (`tiles.maps.eox.at`), USGS (`basemap.nationalmap.gov`), NASA GIBS, OpenStreetMap, Protomaps, Mapbox, MapTiler, Stadia, TomTom, HERE, Amazon Location, Tianditu, Google, swisstopo, BKG, Waymarked Trails, OpenRailwayMap. Opening the Basemaps panel loads a thumbnail per visible row, which contacts many of these hosts before the user picks one. Keyed providers receive the key the user or build supplies. | All | Direct |
+| Basemap picker and Basemaps plugin | CARTO (`basemaps.cartocdn.com`), Esri (`server.arcgisonline.com`, `services.arcgisonline.com`), EOX (`tiles.maps.eox.at`), USGS (`basemap.nationalmap.gov`), NASA GIBS, OpenStreetMap, Protomaps, Mapbox, MapTiler, Stadia, TomTom, HERE, Amazon Location, Tianditu, Google, swisstopo, BKG, Waymarked Trails, OpenRailwayMap. OpenFreeMap is the default basemap (see above). Opening the Basemaps panel loads a thumbnail per visible row, which contacts many of these hosts before the user picks one. Keyed providers receive the key the user or build supplies. | All | Direct |
 | Regional basemaps (China) | Amap (`webst01.is.autonavi.com`, `wprd01.is.autonavi.com`) and Tencent (`rt0.map.gtimg.com`). Only when the user selects one, or opens a project that selected one. | All | Direct |
 | Place search and reverse geocoding | Nominatim (`nominatim.openstreetmap.org`) by default; Pelias (`api.geocode.earth`), ArcGIS (`geocode.arcgis.com`), Mapbox, Google (`maps.googleapis.com`), and CartoCiudad (`www.cartociudad.es`) when configured. The query text or clicked point is sent. Reverse geocoding asks for consent first. | All | Direct |
 | Routing, isochrones, drive and walk time | `valhalla1.openstreetmap.de` (FOSSGIS Valhalla), or `VITE_ROUTING_ENDPOINT`. The Directions plugin uses `router.project-osrm.org` and asks for consent first. | All | Direct |
