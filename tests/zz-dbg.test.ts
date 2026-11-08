@@ -6,4 +6,8 @@ useAppStore.getState().loadProject(createEmptyProject("R", { basemapStyleUrl: AM
 const stale = useAppStore.getState().regionalBasemapHold!;
 console.log("after A", useAppStore.getState().basemapStyleUrl, stale);
 useAppStore.getState().loadProject(createEmptyProject("R", { basemapStyleUrl: DEFAULT_BASEMAP }));
-console.log("after B", useAppStore.getState().basemapStyleUrl, useAppStore.getState().regionalBasemapHold);
+console.log(
+  "after B",
+  useAppStore.getState().basemapStyleUrl,
+  useAppStore.getState().regionalBasemapHold,
+);
