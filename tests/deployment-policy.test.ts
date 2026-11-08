@@ -36,6 +36,7 @@ const SECTIONS = [
   "services",
   "sharing",
   "geolens",
+  "osm",
   "ai",
   "branding",
 ];

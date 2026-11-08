@@ -117,10 +117,50 @@ export type OverpassFetch = (
   init: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
 
-/** Use Vite's same-origin relay in development, including LAN/Tailscale URLs. */
+// An absolute http(s) URL with no whitespace, query, or fragment. The deployment
+// layers (deployment.json parser, Docker entrypoint) apply the stricter rules
+// (https only, plain http on loopback); this guards a hand-set build env value.
+const CONFIGURED_OVERPASS_URL = /^https?:\/\/[^\s?#]+$/i;
+
+let configuredOverpassEndpoint: string | undefined;
+
+/**
+ * Set the deployment's Overpass API endpoint, used in place of the public relay.
+ *
+ * Called once at startup with the `osm.overpassUrl` deployment setting
+ * (`VITE_GEOLIBRE_OVERPASS_URL`). A blank or undefined value clears it; a value
+ * that is not an absolute http(s) URL is ignored with a warning, so a typo falls
+ * back to the default endpoint rather than breaking every download.
+ *
+ * @param value - The configured Overpass interpreter URL, or undefined.
+ */
+export function setOverpassEndpoint(value: string | undefined): void {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed && !CONFIGURED_OVERPASS_URL.test(trimmed)) {
+    console.warn("[osm] ignoring invalid Overpass endpoint; expected an http(s) URL");
+    configuredOverpassEndpoint = undefined;
+    return;
+  }
+  configuredOverpassEndpoint = trimmed || undefined;
+}
+
+/**
+ * Resolve the Overpass endpoint used when a caller does not pass one.
+ *
+ * A deployment-configured endpoint wins; otherwise Vite development uses its
+ * same-origin relay (including LAN/Tailscale URLs) and production uses the
+ * public GeoLibre relay.
+ *
+ * @param dev - Whether this is a Vite development build.
+ * @param configured - The deployment endpoint; defaults to the value set by
+ *   {@link setOverpassEndpoint}.
+ * @returns The endpoint URL to POST Overpass QL to.
+ */
 export function defaultOverpassEndpoint(
   dev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV),
+  configured: string | undefined = configuredOverpassEndpoint,
 ): string {
+  if (configured) return configured;
   return dev ? OVERPASS_DEV_ENDPOINT : OVERPASS_DEFAULT_ENDPOINT;
 }
 
@@ -227,7 +267,14 @@ export function buildOsmDownloadQuery(
   }out geom;`;
 }
 
-/** Run a bounded Overpass query and convert its JSON response to GeoJSON. */
+/**
+ * Run a bounded Overpass query and convert its JSON response to GeoJSON.
+ *
+ * Without `options.endpoint` the query goes to {@link defaultOverpassEndpoint}
+ * (the deployment-configured endpoint when set), and a small area that hits a
+ * 429 or 5xx response falls back to the OSM editing API's `map.json`, which
+ * serves the same OSM data. An explicit `options.endpoint` never falls back.
+ */
 export async function downloadOsmGeoJson(
   bbox: [number, number, number, number],
   filter: OsmDownloadFilter,

@@ -76,6 +76,7 @@ FIELD_KINDS = {
     "services": {"builtins": "bool", "catalog": "catalog"},
     "sharing": {"shareUrl": "share", "collabUrl": "collab", "embedOrigins": "origins"},
     "geolens": {"url": "geolens"},
+    "osm": {"overpassUrl": "overpass"},
     "ai": {"enabled": "bool", "model": "nonblank"},
     "branding": {"appName": "appname", "welcome": "bool"},
 }
@@ -326,6 +327,33 @@ def normalize_geolens_url(raw):
     return service_url("GEOLIBRE_GEOLENS_URL", raw, ("https",), ("http",), LOOPBACK)
 
 
+def normalize_overpass_url(raw):
+    """Validate a stripped, nonblank GEOLIBRE_OVERPASS_URL.
+
+    Args:
+        raw: The Overpass API interpreter URL from the environment.
+
+    Returns:
+        The URL unchanged when it is an https:// URL (or http:// on loopback)
+        without credentials, whitespace, a query, or a fragment.
+
+    Raises:
+        SystemExit: When the value is not an acceptable URL.
+    """
+    _reject_whitespace("GEOLIBRE_OVERPASS_URL", raw)
+    _check_overpass_url("GEOLIBRE_OVERPASS_URL", raw)
+    return raw
+
+
+def _check_overpass_url(name, value):
+    """Apply the Overpass URL rules shared by the env var and the policy field."""
+    # A bare "?" or "#" leaves query/fragment empty, but the client still
+    # rejects the URL, so check the raw delimiters too.
+    if "?" in value or "#" in value:
+        raise SystemExit(f"ERROR: {name} must not include query parameters or a fragment.")
+    service_url(name, value, ("https",), ("http",), LOOPBACK)
+
+
 # --- New env parsers -----------------------------------------------------------
 
 
@@ -519,6 +547,9 @@ def _validate_field(label, path, kind, value):
                 fail(label, path, "must not include query parameters or a fragment")
             service_url(f"{label} {path}", value, ("https",), ("http",), LOOPBACK)
             _no_whitespace(label, path, value)
+    elif kind == "overpass":
+        _no_whitespace(label, path, value)
+        _check_overpass_url(f"{label} {path}", value)
     return value
 
 
@@ -630,6 +661,9 @@ def build_policy(env: Mapping[str, str]):
     if get("GEOLIBRE_GEOLENS_URL"):
         value = normalize_geolens_url(get("GEOLIBRE_GEOLENS_URL"))
         override("geolens.url", "GEOLIBRE_GEOLENS_URL", value, value)
+    if get("GEOLIBRE_OVERPASS_URL"):
+        value = normalize_overpass_url(get("GEOLIBRE_OVERPASS_URL"))
+        override("osm.overpassUrl", "GEOLIBRE_OVERPASS_URL", value, value)
     if get("GEOLIBRE_APP_NAME"):
         name, truncated = normalize_app_name(get("GEOLIBRE_APP_NAME"))
         shown = name + (f" (truncated to {APP_NAME_MAX} characters)" if truncated else "")

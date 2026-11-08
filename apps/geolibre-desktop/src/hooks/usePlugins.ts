@@ -72,6 +72,7 @@ import {
   registerJaxaEarthProtocol,
   maplibreGeoLensPlugin,
   setGeoLensDefaultServerUrl,
+  setOverpassEndpoint,
   maplibreVantorPlugin,
   maplibrePlanetOpenDataPlugin,
   maplibrePortolanPlugin,
@@ -212,6 +213,15 @@ const manager = new PluginManager();
  */
 export function initGeoLensDefaultUrl(): void {
   setGeoLensDefaultServerUrl(readDeploymentEnvValue("VITE_GEOLENS_DEFAULT_URL"));
+}
+
+/**
+ * Seeds the OSM downloader's Overpass endpoint from the deployment settings
+ * (`osm.overpassUrl`). Called at startup next to {@link initGeoLensDefaultUrl},
+ * once deployment.json has been applied. Unset keeps the built-in default.
+ */
+export function initOverpassEndpoint(): void {
+  setOverpassEndpoint(readDeploymentEnvValue("VITE_GEOLIBRE_OVERPASS_URL"));
 }
 
 const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [

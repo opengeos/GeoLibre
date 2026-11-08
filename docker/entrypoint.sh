@@ -164,6 +164,7 @@ from deployment_policy import (
     builtin_services_hidden,
     normalize_collab_url,
     normalize_geolens_url,
+    normalize_overpass_url,
     normalize_share_url,
     parse_capabilities_env,
     parse_embed_origins,
@@ -372,6 +373,12 @@ geolens_url = os.environ.get("GEOLIBRE_GEOLENS_URL", "").strip()
 if geolens_url:
     deployment["VITE_GEOLENS_DEFAULT_URL"] = normalize_geolens_url(geolens_url)
 
+# Overpass API endpoint for the OSM downloader. Unset keeps the public GeoLibre
+# relay; set it to keep area-of-interest queries on an instance you trust.
+overpass_url = os.environ.get("GEOLIBRE_OVERPASS_URL", "").strip()
+if overpass_url:
+    deployment["VITE_GEOLIBRE_OVERPASS_URL"] = normalize_overpass_url(overpass_url)
+
 # Capabilities also ride in the runtime config, which loads synchronously, so an
 # env-set grant survives a blocked or late deployment.json. "none" grants nothing.
 capabilities_env = os.environ.get("GEOLIBRE_CAPABILITIES", "").strip()
@@ -421,6 +428,10 @@ if [ -n "$(trim "${GEOLIBRE_GEOLENS_URL:-}")" ]; then
     [oO][fF][fF]) echo "GeoLens disabled (GEOLIBRE_GEOLENS_URL=off)." ;;
     *) echo "GeoLens server: $GEOLENS_URL_LOG" ;;
   esac
+fi
+
+if [ -n "$(trim "${GEOLIBRE_OVERPASS_URL:-}")" ]; then
+  echo "Overpass API endpoint: $(trim "$GEOLIBRE_OVERPASS_URL")"
 fi
 
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then

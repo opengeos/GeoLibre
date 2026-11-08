@@ -41,6 +41,9 @@ export function policyEnvOverlay(policy: DeploymentPolicy | null): Record<string
     out.VITE_GEOLIBRE_COLLAB_URL = policy.sharing.collabUrl;
   }
   if (policy.geolens?.url !== undefined) out.VITE_GEOLENS_DEFAULT_URL = policy.geolens.url;
+  if (policy.osm?.overpassUrl !== undefined) {
+    out.VITE_GEOLIBRE_OVERPASS_URL = policy.osm.overpassUrl;
+  }
   if (policy.branding?.appName !== undefined) out.VITE_GEOLIBRE_APP_NAME = policy.branding.appName;
   if (policy.services?.catalog !== undefined) {
     out.VITE_GEOLIBRE_SERVICES = JSON.stringify({

@@ -384,6 +384,58 @@
       "dropped": ["geolens"]
     }
   },
+  "osm-overpass-url-plain-http": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "http://overpass.example.com/api/interpreter"
+      }
+    },
+    "container": "osm.overpassUrl must be a https:// URL",
+    "schema": "accept",
+    "parser": {
+      "dropped": []
+    }
+  },
+  "osm-overpass-url-query": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "https://overpass.example.com/api/interpreter?key=x"
+      }
+    },
+    "container": "osm.overpassUrl must not include query parameters or a fragment",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
+    }
+  },
+  "osm-overpass-url-relative": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "/overpass"
+      }
+    },
+    "container": "osm.overpassUrl must be a https:// URL",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
+    }
+  },
+  "osm-unknown-key": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "nominatimUrl": "https://nominatim.example.com"
+      }
+    },
+    "container": "osm.nominatimUrl is not a known key",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
+    }
+  },
   "ai-token-key": {
     "input": {
       "version": 1,

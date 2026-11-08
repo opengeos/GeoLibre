@@ -70,6 +70,11 @@ export interface GeoLensPolicy {
   url?: string;
 }
 
+/** OpenStreetMap data access. */
+export interface OsmPolicy {
+  overpassUrl?: string;
+}
+
 /** AI assistant settings. */
 export interface AiPolicy {
   enabled?: boolean;
@@ -91,6 +96,7 @@ export interface DeploymentPolicy {
   services?: ServicesPolicy;
   sharing?: SharingPolicy;
   geolens?: GeoLensPolicy;
+  osm?: OsmPolicy;
   ai?: AiPolicy;
   branding?: BrandingPolicy;
 }
@@ -101,6 +107,7 @@ const SHARE_URL = /^(off|https?:\/\/\S+)$/;
 const COLLAB_URL = /^wss?:\/\/\S+$/;
 const EMBED_ORIGIN = /^(\*|https?:\/\/[^/\s]+)$/;
 const GEOLENS_URL = /^(off|same-origin|https?:\/\/\S+)$/;
+const OVERPASS_URL = /^https?:\/\/[^\s?#]+$/;
 const APP_NAME_MAX = 60;
 
 const TOP_LEVEL_KEYS = new Set([
@@ -112,6 +119,7 @@ const TOP_LEVEL_KEYS = new Set([
   "services",
   "sharing",
   "geolens",
+  "osm",
   "ai",
   "branding",
 ]);
@@ -351,6 +359,15 @@ function readGeoLens(v: unknown): Result<GeoLensPolicy> {
   return "error" in r ? r : { value: r.value as GeoLensPolicy };
 }
 
+function readOsm(v: unknown): Result<OsmPolicy> {
+  const obj = readObject(v, ["overpassUrl"]);
+  if ("error" in obj) return obj;
+  const r = readFields(obj.value, {
+    overpassUrl: (x) => readPattern(x, "overpassUrl", OVERPASS_URL),
+  });
+  return "error" in r ? r : { value: r.value as OsmPolicy };
+}
+
 function readAi(v: unknown): Result<AiPolicy> {
   const obj = readObject(v, ["enabled", "model"]);
   if ("error" in obj) return obj;
@@ -384,6 +401,7 @@ const SECTION_READERS: Record<string, (v: unknown) => Result<unknown>> = {
   services: readServices,
   sharing: readSharing,
   geolens: readGeoLens,
+  osm: readOsm,
   ai: readAi,
   branding: readBranding,
 };

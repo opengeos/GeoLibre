@@ -150,6 +150,42 @@ def test_geolens_bare_host_gets_https():
     assert policy["geolens"]["url"] == "https://catalog.example.com"
 
 
+def test_overpass_url_env_sets_policy_field(tmp_path):
+    url = "https://overpass.example.com/api/interpreter"
+    policy, logs = dp.build_policy({"GEOLIBRE_OVERPASS_URL": f"  {url}  "})
+    assert policy["osm"] == {"overpassUrl": url}
+    assert any(f"osm.overpassUrl from GEOLIBRE_OVERPASS_URL = {url}" in line for line in logs)
+
+    path = write_file(tmp_path, {"version": 1, "osm": {"overpassUrl": "https://a.example/i"}})
+    policy, logs = dp.build_policy({"GEOLIBRE_DEPLOYMENT_FILE": path, "GEOLIBRE_OVERPASS_URL": url})
+    assert policy["osm"]["overpassUrl"] == url
+    assert any(line.endswith(dp.OVERRIDE_SUFFIX) for line in logs)
+
+
+def test_overpass_url_allows_plain_http_only_on_loopback():
+    url = "http://localhost:12345/api/interpreter"
+    assert dp.normalize_overpass_url(url) == url
+    assert "must be a https:// URL" in error_of(
+        dp.normalize_overpass_url, "http://overpass.example.com/api/interpreter"
+    )
+
+
+@pytest.mark.parametrize(
+    "value, problem",
+    [
+        ("https://overpass.example.com/api/interpreter?key=x", "query parameters"),
+        ("https://overpass.example.com/api/interpreter#x", "query parameters"),
+        ("https://user:pw@overpass.example.com/api/interpreter", "credentials"),
+        ("https://overpass.example.com/api interpreter", "whitespace"),
+        ("overpass.example.com/api/interpreter", "must be a https:// URL"),
+    ],
+)
+def test_overpass_url_env_rejects_bad_values(value, problem):
+    message = error_of(dp.build_policy, {"GEOLIBRE_OVERPASS_URL": value})
+    assert message.startswith("ERROR: GEOLIBRE_OVERPASS_URL")
+    assert problem in message
+
+
 def test_write_policy_is_atomic_and_world_readable(tmp_path):
     target = tmp_path / "deployment.json"
     dp.write_policy({"version": 1}, str(target))
