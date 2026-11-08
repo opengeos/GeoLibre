@@ -12,9 +12,8 @@ export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/p
 // requests from Cloudflare's edge currently receive a synthetic 521 from the
 // latter. A second explicitly allowlisted public instance handles transient
 // overloads without turning the route into an open proxy. Each instance sees
-// the queried area, so add one only after reviewing who operates it.
-// Reviewed 2026-11: overpass-api.de is run by FOSSGIS e.V. (Germany) and
-// overpass.private.coffee by the Private.coffee association (Austria).
+// the queried area, so add one only after reviewing who operates it, and
+// record its operator in docs/network-endpoints.md.
 export const OVERPASS_API_UPSTREAM = "https://z.overpass-api.de/api/interpreter";
 export const OVERPASS_API_FALLBACK_UPSTREAM = "https://overpass.private.coffee/api/interpreter";
 export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/all";
