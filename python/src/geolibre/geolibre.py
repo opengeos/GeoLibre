@@ -3496,10 +3496,12 @@ class Map(anywidget.AnyWidget):
         request_headers: dict[str, str] | None = None,
         **style: Any,
     ) -> str:
-        """Add a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
+        """Add a 3D Tiles layer, an ArcGIS I3S scene layer, or a Cesium Ion asset.
 
         Args:
-            url: URL of the 3D Tiles ``tileset.json``. Omit for an Ion asset.
+            url: URL of the 3D Tiles ``tileset.json``, or of an ArcGIS I3S
+                scene layer (``.../SceneServer/layers/<n>``), which is added as
+                a scene layer. Omit for an Ion asset.
             name: Layer display name.
             ion_asset_id: A Cesium Ion asset id (for example 96188, Cesium OSM
                 Buildings). Renders on the 3D globe only, with the app's Ion token.

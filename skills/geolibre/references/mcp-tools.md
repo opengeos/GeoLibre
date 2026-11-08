@@ -23,7 +23,7 @@ Pick by what the data **is**:
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
 | A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
 | An ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) `.h5` granule | `add_spaceborne_lidar_layer` | Local file in the workspace; needs `geolibre[spaceborne]`. `bbox` for a regional subset of a GEDI orbit. |
-| An OGC 3D Tiles tileset | `add_3d_tiles_layer` | `altitude_offset` to sit it on the ground; `ion_asset_id` instead of `url` for a Cesium Ion tileset. |
+| An OGC 3D Tiles tileset or an ArcGIS I3S scene layer | `add_3d_tiles_layer` | `altitude_offset` to sit it on the ground; `ion_asset_id` instead of `url` for a Cesium Ion tileset; a `.../SceneServer/layers/<n>` URL is added as a scene layer. |
 | A Cesium Ion asset (tileset or imagery) | `add_cesium_ion_layer` | 3D globe only: pair it with `set_renderer` / `primaryRenderer: "cesium"`. `kind="imagery"` for imagery. |
 | A CZML (Cesium Language) dynamic scene: orbits, tracks, moving models | `add_czml_layer` | 3D globe only: `url` for a `.czml` document, or `data` for its packet array inline. The globe follows the document's `clock`. |
 | Native KML/KMZ with document styling | `add_cesium_kml_layer` | 3D globe only. Supply `url`, inline XML in `data`, or a KMZ data URL. Package local icons and overlays in KMZ for sharing. |

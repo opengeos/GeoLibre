@@ -243,7 +243,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_ogc_layer` | WMS and WMTS endpoints. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |
 | `add_spaceborne_lidar_layer` | ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) footprints from a local HDF5 granule (needs `geolibre[spaceborne]`). |
-| `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id. |
+| `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id, and ArcGIS I3S scene layers (`.../SceneServer/layers/<n>`). |
 | `add_cesium_ion_layer` | Cesium Ion assets (tileset or imagery) by id; rendered by the 3D globe only. |
 | `add_czml_layer` | A CZML (Cesium Language) dynamic 3D scene, by URL or inline packets; rendered by the 3D globe only. |
 | `add_cesium_kml_layer` | Native globe KML/KMZ from a URL, inline XML, or KMZ data URL, preserving document styles and overlays. |

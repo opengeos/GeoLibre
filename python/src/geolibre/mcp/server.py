@@ -88,7 +88,8 @@ Pick the layer tool by what the data *is*, not by file extension alone:
 - `add_tiles_layer`    - PMTiles or a vector tile service.
 - `add_ogc_layer`      - a WMS or WMTS endpoint.
 - `add_lidar_layer`    - a LAS/LAZ/COPC/EPT point cloud by URL.
-- `add_3d_tiles_layer` - an OGC 3D Tiles tileset (URL or Cesium Ion asset id).
+- `add_3d_tiles_layer` - an OGC 3D Tiles tileset (URL or Cesium Ion asset id),
+  or an ArcGIS I3S scene layer URL.
 - `add_cesium_ion_layer` - a Cesium Ion asset (tileset or imagery) by id, 3D globe only.
 - `add_czml_layer`     - a CZML dynamic 3D scene (orbits, vehicle tracks) by URL or
   inline packets, 3D globe only.
@@ -991,7 +992,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         Args:
             path: Path to the `.geolibre.json` file.
             name: The layer's display name.
-            url: URL of the tileset's `tileset.json`.
+            url: URL of the tileset's `tileset.json`, or of an ArcGIS I3S
+                scene layer (`.../SceneServer/layers/<n>`).
             ion_asset_id: A Cesium Ion asset id, instead of `url`.
             altitude_offset: Metres to shift the tileset vertically, to correct
                 a tileset that floats above or sinks below the terrain.
