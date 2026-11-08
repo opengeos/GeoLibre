@@ -28,7 +28,7 @@ import {
   resolvePluginAssetUrl,
   withPluginAssetCacheToken,
 } from "./plugin-asset-url";
-import { readCappedBody } from "./capped-body";
+import { readBodyBytesWithCap } from "./capped-body";
 import { isSafePluginAssetRelativePath } from "./plugin-asset-path";
 import {
   computePluginBundleHash,
@@ -572,11 +572,9 @@ async function fetchPluginText(url: string, label: string, signal?: AbortSignal)
 
   // One bounded reader for every URL path: declared length first, then the
   // stream (a chunked response has no content-length to trust).
-  const bytes = await readCappedBody(response, MAX_PLUGIN_ASSET_BYTES);
-  if (bytes === null) {
-    throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-  }
-  return new TextDecoder().decode(bytes);
+  return new TextDecoder().decode(
+    await readBodyBytesWithCap(response, MAX_PLUGIN_ASSET_BYTES, label),
+  );
 }
 
 /**
@@ -868,7 +866,13 @@ export async function readPluginAssetForLoadedPlugin(
       if (!response.ok) {
         return null;
       }
-      return await readCappedBody(response, MAX_PLUGIN_ASSET_BYTES);
+      // The reader throws on an oversized or failed body; this function
+      // reports both as null.
+      return await readBodyBytesWithCap(
+        response,
+        MAX_PLUGIN_ASSET_BYTES,
+        "plugin asset",
+      );
     } catch {
       return null;
     }

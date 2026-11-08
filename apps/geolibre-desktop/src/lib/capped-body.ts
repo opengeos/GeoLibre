@@ -1,62 +1,77 @@
 /**
- * Bounded body reader for plugin assets fetched over the network.
+ * Bounded body reader for responses fetched over the network on behalf of
+ * plugins.
  *
  * The desktop command caps filesystem reads at `MAX_PLUGIN_ENTRY_BYTES`, so the
- * URL paths need the same cap: a large (or hostile) asset must be refused
- * instead of buffered whole in the webview. The limit is a parameter rather than
- * an import so this module stays dependency-free and unit-testable.
+ * URL paths need the same ceiling or a large (or hostile) asset would be
+ * buffered whole in the webview. This is the one implementation; the text
+ * variant in `plugin-registry.ts` decodes what this returns.
  */
 
 /**
- * Read a response body, refusing anything past `limit` bytes.
+ * Read a response body as bytes, enforcing a hard byte ceiling.
  *
- * The declared length is checked first so an oversized asset is rejected before
- * it is downloaded; the stream is capped again because `content-length` is
- * absent on chunked responses and a server may understate it.
+ * The `Content-Length` header is a fast-fail; the streaming reader is the real
+ * enforcement for responses that omit it (chunked/compressed) or understate it.
  *
  * @param response - response whose body is read.
- * @param limit - maximum accepted body size in bytes.
- * @returns the body bytes, or `null` when the body exceeds `limit`. A stream
- *   error is rethrown rather than reported as `null`, so callers can tell
- *   "too large" apart from "the read failed".
+ * @param maxBytes - the byte ceiling.
+ * @param label - what is being fetched, for the error message.
+ * @returns the body bytes.
+ * @throws when the body exceeds `maxBytes`, or when the stream fails.
  */
-export async function readCappedBody(
+export async function readBodyBytesWithCap(
   response: Response,
-  limit: number,
-): Promise<Uint8Array | null> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > limit) {
-    return null;
+  maxBytes: number,
+  label: string,
+): Promise<Uint8Array> {
+  const tooLarge = () =>
+    new Error(
+      `Could not fetch ${label}: response exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB size limit.`,
+    );
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw tooLarge();
   }
-  if (response.body === null) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // No stream available (some environments/test mocks). arrayBuffer() lets us
+    // measure the byte length before returning, so an oversized body is
+    // rejected without building the full result.
     const buffer = await response.arrayBuffer();
-    return buffer.byteLength > limit ? null : new Uint8Array(buffer);
+    if (buffer.byteLength > maxBytes) {
+      throw tooLarge();
+    }
+    return new Uint8Array(buffer);
   }
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
+  let totalBytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (value === undefined) {
+        continue;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        throw tooLarge();
+      }
+      chunks.push(value);
     }
-    if (value === undefined) {
-      continue;
-    }
-    total += value.byteLength;
-    if (total > limit) {
-      // Not awaited: a cancel that never settles (or rejects) must not hold the
-      // caller, and the answer is already known.
-      void reader.cancel().catch(() => {});
-      return null;
-    }
-    chunks.push(value);
+  } catch (error) {
+    // Release the stream lock on a mid-stream read failure (or the size abort
+    // above) so the connection can be reused or collected.
+    await reader.cancel().catch(() => {});
+    throw error;
   }
-  const bytes = new Uint8Array(total);
+  const merged = new Uint8Array(totalBytes);
   let offset = 0;
   for (const chunk of chunks) {
-    bytes.set(chunk, offset);
+    merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return bytes;
+  return merged;
 }

@@ -7,6 +7,7 @@
 import { isAllowedPluginManifestUrl, setRegistryPublishableSettings } from "@geolibre/core";
 import { getDeploymentPolicy } from "./deployment-env";
 import { pinPluginBundle } from "./plugin-integrity";
+import { readBodyBytesWithCap } from "./capped-body";
 
 /** A single curated plugin in the marketplace registry. */
 export interface PluginRegistryEntry {
@@ -134,11 +135,11 @@ export async function fetchPluginRegistry(
 }
 
 /**
- * Read a response body as text, enforcing a hard byte ceiling. The
- * Content-Length header is a fast-fail; the streaming reader is the real
- * enforcement for responses that omit it (chunked/compressed). Mirrors the
- * cap in fetchPluginText for plugin assets. Also used for the registry's
- * blocklist (plugin-blocklist.ts).
+ * Read a response body as text, enforcing a hard byte ceiling.
+ *
+ * Thin wrapper over {@link readBodyBytesWithCap}, which owns the ceiling and the
+ * stream handling; this decodes the result. Also used for the registry's
+ * blocklist (`plugin-blocklist.ts`).
  *
  * @param response - The response to read.
  * @param maxBytes - The byte ceiling.
@@ -150,50 +151,9 @@ export async function readBodyWithCap(
   maxBytes: number,
   label = "plugin registry",
 ): Promise<string> {
-  const tooLarge = () =>
-    new Error(
-      `Could not fetch ${label}: response exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB size limit.`,
-    );
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw tooLarge();
-  }
-  const reader = response.body?.getReader();
-  if (!reader) {
-    // No stream available (some environments/test mocks). arrayBuffer() lets us
-    // measure the byte length before decoding, so an oversized body is rejected
-    // without first building the full string.
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > maxBytes) {
-      throw tooLarge();
-    }
-    return new TextDecoder().decode(buffer);
-  }
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        throw tooLarge();
-      }
-      chunks.push(value);
-    }
-  } catch (error) {
-    // Release the stream lock on a mid-stream read failure (or the size abort
-    // above) so the connection can be reused or collected.
-    await reader.cancel().catch(() => {});
-    throw error;
-  }
-  const merged = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
+  return new TextDecoder().decode(
+    await readBodyBytesWithCap(response, maxBytes, label),
+  );
 }
 
 // Ids of the plugins that ship with the app. A registry entry may not declare
