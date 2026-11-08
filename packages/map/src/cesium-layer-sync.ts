@@ -2,7 +2,10 @@ import {
   cesiumKmlSource,
   isCesiumKmlLayer,
   installCogTilerDatumShift,
+  i3sGroundOffset,
+  visibleI3sBuildingSublayers,
   withJpegTablesPatch,
+  type I3sBuildingState,
 } from "@geolibre/core";
 import { bindDocumentOpacity } from "./cesium-document-opacity";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
@@ -171,6 +174,13 @@ const ZOOM_TO_LAYER_SECONDS = 0.8;
  * bounds in the store anyway.
  */
 const FLY_TO_KINDS = new Set<EntryKind>(["imagery", "geojson", "kml", "czml", "3dtiles"]);
+
+/** A tileset with a bounding sphere wider than this (metres) is framed at street level. */
+const LARGE_TILESET_RADIUS_M = 20_000;
+/** Above this radius (metres) a tileset is global, not regional, and is framed whole. */
+const REGIONAL_TILESET_MAX_RADIUS_M = 1_000_000;
+/** The camera distance (metres) for framing a large tileset's centre. */
+const LARGE_TILESET_VIEW_RANGE_M = 1_200;
 
 /** The subset of a Cesium `Event` the camera watch needs. */
 interface CameraEvent {
@@ -768,6 +778,50 @@ function i3sTilesets(provider: Partial<I3SDataProvider>): Cesium3DTileset[] {
     if (layer.tileset && !tilesets.includes(layer.tileset)) tilesets.push(layer.tileset);
   }
   return tilesets;
+}
+
+/** The parts of Cesium's `I3SSublayer` the Building visibility walk uses. */
+interface I3sSublayerLike {
+  data?: { id?: unknown; modelName?: unknown };
+  sublayers?: I3sSublayerLike[];
+  visibility: boolean;
+}
+
+/**
+ * Show the Building Scene Layer sublayers the layer's Building settings pick.
+ *
+ * Cesium's `I3SDataProvider` loads every sublayer of a Building Scene Layer and
+ * showed them all at once, the Overview shell over all of the Full Model's
+ * categories. This applies the same choice the 2D overlay draws
+ * (`metadata.i3sBuilding`, set in the Style panel's Building section); a layer
+ * without that state (never opened on the 2D map) shows its Overview, the
+ * same default as there. A provider with no sublayers is left alone.
+ *
+ * @param provider The layer's I3S provider.
+ * @param layer The store layer.
+ */
+export function applyI3sBuildingVisibility(provider: I3SDataProvider, layer: GeoLibreLayer): void {
+  const top = (provider as unknown as { sublayers?: I3sSublayerLike[] }).sublayers;
+  if (!top?.length) return;
+  const state = layer.metadata?.i3sBuilding as I3sBuildingState | undefined;
+  let visible: Set<number>;
+  if (state) {
+    visible = new Set(visibleI3sBuildingSublayers(state));
+  } else {
+    const overview = top.find((sub) => sub.data?.modelName === "Overview");
+    if (!overview) return;
+    visible = new Set([Number(overview.data?.id)]);
+  }
+  const walk = (subs: I3sSublayerLike[]): boolean => {
+    let any = false;
+    for (const sub of subs) {
+      const show = sub.sublayers?.length ? walk(sub.sublayers) : visible.has(Number(sub.data?.id));
+      if (sub.visibility !== show) sub.visibility = show;
+      any ||= show;
+    }
+    return any;
+  };
+  walk(top);
 }
 
 /** Whether a tileset (or every tileset of an I3S provider) has loaded its tiles. */
@@ -2174,6 +2228,7 @@ export class CesiumLayerSync {
       });
       return true;
     }
+    if (this.flyToLargeTilesetCentre(entry)) return true;
     void Promise.resolve(
       viewer.flyTo(handle as ImageryLayer | DataSource | Cesium3DTileset, {
         duration: ZOOM_TO_LAYER_SECONDS,
@@ -2186,6 +2241,48 @@ export class CesiumLayerSync {
         if (completed) this.deps.onFlyToComplete?.();
       })
       .catch(() => this.deps.onFlyToComplete?.());
+    return true;
+  }
+
+  /**
+   * Frame a tileset that spans a region at its centre, from street level.
+   *
+   * `Viewer.flyTo` frames a tileset's whole bounding sphere. For a national
+   * building tileset such as 3D BAG (all of the Netherlands) that is a view
+   * from about 100 km up, where its level of detail loads no buildings, so the
+   * layer looked as if it had not drawn. A tileset wider than
+   * {@link LARGE_TILESET_RADIUS_M} is framed at the ground point under its
+   * centre instead, as the 2D map's fly-to does. (The sphere's own centre lies
+   * kilometres underground for a region that wide, so it cannot be the target.)
+   *
+   * @param entry The entry being framed.
+   * @returns True when it started the flight.
+   */
+  private flyToLargeTilesetCentre(entry: LayerEntry): boolean {
+    if (entry.kind !== "3dtiles") return false;
+    const sphere = (entry.handle as Partial<Cesium3DTileset> | undefined)?.boundingSphere;
+    // A global tileset (a sphere the size of the Earth, centred near its core)
+    // has no meaningful ground point; it keeps the whole-tileset framing.
+    if (
+      !sphere ||
+      !(sphere.radius > LARGE_TILESET_RADIUS_M) ||
+      sphere.radius > REGIONAL_TILESET_MAX_RADIUS_M
+    ) {
+      return false;
+    }
+    const { Cesium, viewer } = this;
+    const centre = Cesium.Cartographic.fromCartesian(sphere.center);
+    if (!centre) return false;
+    const ground = Cesium.Cartesian3.fromRadians(centre.longitude, centre.latitude, 0);
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(ground, 1), {
+      duration: ZOOM_TO_LAYER_SECONDS,
+      offset: new Cesium.HeadingPitchRange(
+        0,
+        Cesium.Math.toRadians(-45),
+        LARGE_TILESET_VIEW_RANGE_M,
+      ),
+      complete: () => this.deps.onFlyToComplete?.(),
+    });
     return true;
   }
 
@@ -2290,6 +2387,26 @@ export class CesiumLayerSync {
   ) {}
 
   private unsubscribeEnvironment: (() => void) | null = null;
+  private unwatchTerrain: (() => void) | null = null;
+
+  /**
+   * Re-ground the I3S scene layers whenever the globe's terrain provider
+   * changes (#3374). Their offset depends on whether there is terrain, and
+   * switching it (including World Terrain arriving asynchronously after the
+   * first sync) changes no layer record, so the store-driven sync never sees it.
+   */
+  private watchTerrain(): void {
+    if (this.unwatchTerrain) return;
+    const scene = this.viewer.scene as {
+      terrainProviderChanged?: { addEventListener(listener: () => void): unknown };
+    };
+    const remove = scene.terrainProviderChanged?.addEventListener(() => {
+      for (const entry of this.entries.values()) {
+        if (entry.kind === "3dtiles" && isI3sLayer(entry.layer)) this.applyTilesetAltitude(entry);
+      }
+    });
+    this.unwatchTerrain = typeof remove === "function" ? (remove as () => void) : () => {};
+  }
 
   /**
    * Rebuild the imagery and 3D Tiles entries whose `${NAME}` request headers
@@ -2369,6 +2486,7 @@ export class CesiumLayerSync {
     this.restoreHighlight();
     this.currentLayers = layers;
     this.watchEnvironment();
+    this.watchTerrain();
     for (const layer of layers) {
       if (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) {
         const d = extractTimeFilterDate(layer.timeFilter);
@@ -2501,6 +2619,8 @@ export class CesiumLayerSync {
     this.entries.clear();
     this.unsubscribeEnvironment?.();
     this.unsubscribeEnvironment = null;
+    this.unwatchTerrain?.();
+    this.unwatchTerrain = null;
     this.removeDrapeLayer();
     this.drape?.destroy();
     this.drape = undefined;
@@ -3714,7 +3834,7 @@ export class CesiumLayerSync {
    */
   private applyTilesetAltitude(entry: LayerEntry): void {
     const raw = Number(entry.layer.source.altitudeOffset);
-    const offset = Number.isFinite(raw) ? raw : 0;
+    const offset = (Number.isFinite(raw) ? raw : 0) + this.i3sEntryGroundOffset(entry);
     if ((entry.appliedAltitude ?? 0) === offset) return;
     const { Cesium } = this;
     const tilesets = this.entryTilesets(entry);
@@ -3738,6 +3858,35 @@ export class CesiumLayerSync {
     }
     entry.appliedAltitude = offset;
     this.viewer.scene.requestRender();
+  }
+
+  /**
+   * How far to lower an I3S scene layer onto a globe without terrain (#3374).
+   *
+   * A scene layer stores absolute elevations (Building E in Redlands sits at
+   * 383 to 445 m, NAVD 88). On the default globe, the bare ellipsoid, the
+   * ground is at 0 m, so the building floated out of sight above the camera.
+   * As on the 2D map, a layer whose geometry starts above 0 m is lowered onto
+   * the ground; with terrain the absolute heights are kept.
+   *
+   * @param entry The 3D Tiles entry.
+   * @returns The offset in metres, or 0.
+   */
+  private i3sEntryGroundOffset(entry: LayerEntry): number {
+    if (!isI3sLayer(entry.layer) || !entry.handle) return 0;
+    const Ellipsoid = this.Cesium.EllipsoidTerrainProvider;
+    if (!Ellipsoid || !(this.viewer.terrainProvider instanceof Ellipsoid)) return 0;
+    const data = (entry.handle as Partial<I3SDataProvider>).data as
+      | { fullExtent?: { zmin?: unknown } }
+      | undefined;
+    // The provider's own document first; the probed value when it has none.
+    const zmin = data?.fullExtent?.zmin;
+    return i3sGroundOffset(
+      typeof zmin === "number" && Number.isFinite(zmin)
+        ? zmin
+        : entry.layer.metadata?.i3sBaseElevation,
+      false,
+    );
   }
 
   /**
@@ -3787,6 +3936,7 @@ export class CesiumLayerSync {
       this.applyGeoJsonFilter(entry);
     } else {
       (handle as Cesium3DTileset | I3SDataProvider).show = layer.visible;
+      if (isI3sLayer(layer)) applyI3sBuildingVisibility(handle as I3SDataProvider, layer);
       this.applyTilesetAltitude(entry);
       this.applyTilesetStyle(entry);
     }

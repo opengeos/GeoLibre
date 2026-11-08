@@ -34,6 +34,7 @@ import {
 import { ensureSharedDeckOverlay, setSharedDeckLayers } from "./shared-deck-overlay";
 import {
   addArcgisI3sTilesLayer,
+  probeArcgisI3sLayers,
   applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
   createArcgisI3sStoreLayer,
@@ -78,6 +79,11 @@ const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
+// Esri's Building E in Redlands, a WGS84 Building Scene Layer (BIM). Its heights
+// are NAVD 88 elevations near 383 m, so it also exercises grounding on a flat map.
+const ARCGIS_I3S_BUILDING_SAMPLE_TILES_URL =
+  "https://tiles.arcgis.com/tiles/cFEFS0EWrhfDeVw9/arcgis/rest/services/BSL__4326__US_Redlands__BuildingE/SceneServer/layers/0";
+const ARCGIS_I3S_BUILDING_SAMPLE_TILES_LABEL = "Redlands Building E (ArcGIS I3S BIM)";
 const THREE_D_BAG_SAMPLE_TILES_URL =
   "https://data.3dbag.nl/v20250903/cesium3dtiles/lod22/tileset.json";
 const THREE_D_BAG_SAMPLE_TILES_LABEL = "3D BAG Netherlands (LoD 2.2)";
@@ -120,6 +126,10 @@ const threeDTilesOptions = (defaultTilesetUrl: string) =>
       {
         label: ARCGIS_I3S_SAMPLE_TILES_LABEL,
         url: ARCGIS_I3S_SAMPLE_TILES_URL,
+      },
+      {
+        label: ARCGIS_I3S_BUILDING_SAMPLE_TILES_LABEL,
+        url: ARCGIS_I3S_BUILDING_SAMPLE_TILES_URL,
       },
       {
         label: THREE_D_BAG_SAMPLE_TILES_LABEL,
@@ -267,7 +277,12 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   // queries nor the deck overlay the Google/I3S restores need (issue #2505).
   // Each engine restores 3D Tiles through its own path.
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
-  if (renderer === "cesium") return;
+  if (renderer === "cesium") {
+    // The globe reads no layer document itself; probe scene layers for the
+    // Building settings it honours (#3374).
+    probeArcgisI3sLayers();
+    return;
+  }
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "arcgis") {
     if (useAppStore.getState().layers.some(isMapboxTilesLayer))
@@ -1237,10 +1252,10 @@ export function createThreeDTilesGlobeStoreLayer(tileset: ThreeDTilesItemState):
  * offset and resolves the same request headers the 2D path resolves, and
  * reports a load failure through the engine's readiness channel rather than
  * back onto the record, so the entry is recorded as loaded rather than left
- * reading "loading" forever. The panel's "Fly to tileset after load" has no
- * effect here for the same reason the Cesium Ion source does not fit either:
- * the extent is only known once the globe has the tileset, and the Layers
- * panel's zoom-to reaches it from there.
+ * reading "loading" forever. The panel's "Fly to tileset after load" asks the
+ * engine to frame the layer (`fitLayer`), which the globe defers until the
+ * tileset has loaded and its extent is known; without it, a tileset added
+ * from the world view loaded out of sight and looked as if it had not drawn.
  *
  * @param control - The panel's control, collapsed once the layer is added.
  * @param panel - The panel DOM holding the form fields.
@@ -1272,7 +1287,14 @@ function addThreeDTilesLayerForGlobe(
     "loaded",
     threeDTilesDefaultLayerName(url),
   );
-  useAppStore.getState().addLayer(createThreeDTilesGlobeStoreLayer(tileset));
+  const layer = createThreeDTilesGlobeStoreLayer(tileset);
+  useAppStore.getState().addLayer(layer);
+  probeArcgisI3sLayers();
+  // The checkbox is on by default, so a panel without it flies, as in 2D.
+  const flyTo =
+    panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
+      ?.checked ?? true;
+  if (flyTo) activeThreeDTilesApp?.fitLayer?.(layer.id);
   control.collapse();
 }
 

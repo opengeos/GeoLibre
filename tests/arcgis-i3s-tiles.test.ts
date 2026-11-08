@@ -6,8 +6,10 @@ import {
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
   buildArcgisI3sTilesDeckLayers,
+  i3sBaseElevation,
   i3sDocumentRequestUrl,
   i3sTilesetLngLat,
+  i3sVerticalOffset,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
   persistI3sTilesetCenter,
@@ -224,6 +226,13 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
     };
     assert.deepEqual(options.tileset, THREE_D_TILES_DECK_LOAD_OPTIONS.tileset);
     assert.equal(options.core.worker, false);
+  });
+
+  it("loads I3S vertices as small lng/lat offsets, not absolute positions", () => {
+    // Absolute Earth-centred positions lose about half a metre in 32-bit
+    // floats, which shattered small geometry such as window mullions.
+    const options = build()?.loadOptions as { i3s?: { coordinateSystem?: string } };
+    assert.equal(options.i3s?.coordinateSystem, "lnglat-offsets");
   });
 
   it("fetches layer documents as JSON and leaves other requests alone", async () => {
@@ -550,5 +559,213 @@ describe("probeI3sLayerKind", () => {
       globalThis.fetch = realFetch;
       useAppStore.setState({ layers: [] });
     }
+  });
+});
+
+describe("i3sBaseElevation", () => {
+  it("reads fullExtent.zmin from a layer document", () => {
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: 383.13, zmax: 445.3 } }), 383.13);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: -148.8 } }), -148.8);
+  });
+
+  it("returns null when the document has no usable zmin", () => {
+    assert.equal(i3sBaseElevation({}), null);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: "383" } }), null);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: Number.NaN } }), null);
+    assert.equal(i3sBaseElevation(null), null);
+  });
+});
+
+describe("i3sVerticalOffset (issue #3374)", () => {
+  const scene = (metadata: Record<string, unknown>, altitudeOffset?: unknown) =>
+    ({
+      id: "i3s-z",
+      type: "3d-tiles",
+      source: {
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: "https://host/B/SceneServer/layers/0",
+        altitudeOffset,
+      },
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, ...metadata },
+    }) as unknown as GeoLibreLayer;
+
+  it("lowers a layer with absolute heights onto a flat map", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }), false), -383);
+  });
+
+  it("keeps absolute heights when the map draws terrain", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }), true), 0);
+  });
+
+  it("leaves a layer that already reaches sea level where it is", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: -148.8 }), false), 0);
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: null }), false), 0);
+    assert.equal(i3sVerticalOffset(scene({}), false), 0);
+  });
+
+  it("adds the user's height offset on top", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }, 10), false), -373);
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }, -5), true), -5);
+    assert.equal(i3sVerticalOffset(scene({}, "bad"), false), 0);
+  });
+});
+
+describe("buildArcgisI3sTilesDeckLayer vertical offset (issue #3374)", () => {
+  const grounded = {
+    id: "i3s-g",
+    name: "Building",
+    type: "3d-tiles",
+    source: {
+      sourceId: "i3s-g",
+      type: ARCGIS_I3S_SOURCE_KIND,
+      url: "https://host/B/SceneServer/layers/0",
+    },
+    visible: true,
+    opacity: 1,
+    style: {},
+    metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, i3sKind: "mesh", i3sBaseElevation: 383 },
+  } as unknown as GeoLibreLayer;
+
+  function props(terrain: boolean): Record<string, unknown> {
+    let captured: Record<string, unknown> = {};
+    class FakeTile3DLayer {
+      constructor(p: Record<string, unknown>) {
+        captured = p;
+      }
+    }
+    const deckGL = { geoLayers: { Tile3DLayer: FakeTile3DLayer } } as unknown as GeoLibreDeckGL;
+    buildArcgisI3sTilesDeckLayer(grounded, { deckGL, loader: {}, terrain });
+    return captured;
+  }
+
+  it("moves a loaded tileset down by its base elevation on a flat map", () => {
+    const onTilesetLoad = props(false).onTilesetLoad as (tileset: unknown) => void;
+    const translations: number[][] = [];
+    let selected = 0;
+    const matrix = {
+      clone: () => ({
+        translate(offset: number[]) {
+          translations.push(offset);
+          return matrix;
+        },
+      }),
+    };
+    onTilesetLoad({
+      cartographicCenter: [0, 0, 400],
+      modelMatrix: matrix,
+      selectTiles: async () => {
+        selected += 1;
+      },
+    });
+    // At lng 0, lat 0 the surface normal is +X in Earth-centred coordinates.
+    assert.equal(translations.length, 1);
+    assert.ok(Math.abs(translations[0][0] + 383) < 1e-9);
+    assert.equal(selected, 1);
+  });
+
+  it("names the deck layer after its offset so a new offset reloads the tileset", () => {
+    assert.equal(props(false).id, "i3s-g-deck@-383");
+    assert.equal(props(true).id, "i3s-g-deck");
+  });
+});
+
+describe("probeI3sLayerKind base elevation (issue #3374)", () => {
+  const url = "https://host/arcgis/rest/services/B/SceneServer/layers/0";
+  const deps = {
+    deckGL: {
+      geoLayers: {
+        Tile3DLayer: class {
+          constructor(public props: Record<string, unknown>) {}
+        },
+      },
+    } as unknown as GeoLibreDeckGL,
+    loader: {},
+    terrain: false,
+  };
+  const scene = (metadata: Record<string, unknown>) =>
+    ({
+      id: "i3s-zmin",
+      name: "Scene",
+      type: "3d-tiles",
+      source: { sourceId: "i3s-zmin", type: ARCGIS_I3S_SOURCE_KIND, url },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, ...metadata },
+    }) as unknown as GeoLibreLayer;
+
+  async function withDocument(doc: unknown, run: () => Promise<void>) {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify(doc))) as typeof fetch;
+    try {
+      await run();
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  }
+
+  it("records fullExtent.zmin, and the layer then draws lowered by it", async () => {
+    const layer = scene({});
+    useAppStore.setState({ layers: [layer] });
+    await withDocument({ layerType: "3DObject", fullExtent: { zmin: 383.1 } }, async () => {
+      await probeI3sLayerKind(layer);
+      const probed = useAppStore.getState().layers[0];
+      assert.equal(probed.metadata.i3sBaseElevation, 383.1);
+      const [deckLayer] = buildArcgisI3sTilesDeckLayers(probed, deps) as unknown as {
+        props: { id: string };
+      }[];
+      assert.equal(deckLayer.props.id, "i3s-zmin-deck@-383.1");
+    });
+  });
+
+  it("does not draw a layer saved before the base elevation until it is re-probed", () => {
+    // Probed by an older version: kind and URL known, no base elevation.
+    const older = scene({ i3sKind: "mesh", i3sProbedUrl: url });
+    assert.deepEqual(buildArcgisI3sTilesDeckLayers(older, deps), []);
+    assert.equal(
+      buildArcgisI3sTilesDeckLayers(scene({ ...older.metadata, i3sBaseElevation: null }), deps)
+        .length,
+      1,
+    );
+  });
+
+  it("keeps the saved Building selection when an older layer is re-probed", async () => {
+    const saved = {
+      mode: "full",
+      overviewId: 0,
+      disciplines: [{ id: 2, name: "Walls", layerType: "3DObject", visible: false }],
+    };
+    const layer = scene({
+      i3sKind: "building",
+      i3sProbedUrl: url,
+      i3sBuildingUrl: url,
+      i3sBuilding: saved,
+    });
+    useAppStore.setState({ layers: [layer] });
+    await withDocument(
+      {
+        layerType: "Building",
+        fullExtent: { zmin: 10 },
+        sublayers: [
+          { id: 0, name: "Overview", modelName: "Overview", layerType: "3DObject" },
+          { id: 2, name: "Walls", layerType: "3DObject", visibility: true },
+        ],
+      },
+      async () => {
+        await probeI3sLayerKind(layer);
+        const probed = useAppStore.getState().layers[0];
+        assert.equal(probed.metadata.i3sBaseElevation, 10);
+        const building = probed.metadata.i3sBuilding as {
+          mode: string;
+          disciplines: { id: number; visible: boolean }[];
+        };
+        assert.equal(building.mode, "full");
+        assert.deepEqual(
+          building.disciplines.map(({ id, visible }) => ({ id, visible })),
+          [{ id: 2, visible: false }],
+        );
+      },
+    );
   });
 });

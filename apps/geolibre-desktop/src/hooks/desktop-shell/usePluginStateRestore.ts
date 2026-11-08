@@ -21,6 +21,7 @@ import {
   restoreRasterLayers,
   restoreReverseGeocode,
   restoreSplattingLayers,
+  probeArcgisI3sLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
   REVERSE_GEOCODE_PLUGIN_ID,
@@ -224,6 +225,11 @@ export function usePluginStateRestore({
     // because the handle it wants is the globe's, which that gate excludes.
     // Reattach only — the per-feed toggles come from its applyProjectState.
     reattachGodsEyeView(appAPI);
+    // ArcGIS scene layers: read each one's layer document once, on any engine.
+    // The 2D overlay probes as it mounts, but the globe draws scene layers
+    // itself and has no other reader for the Building sublayer tree and base
+    // elevation it uses (#3374).
+    probeArcgisI3sLayers();
     if (!engine.capabilities.nativeMapInstance) {
       // eslint-disable-next-line local/no-renderer-kind-checks -- the globe draws COGs from the record; the 2D engines restore through the raster plugin's own per-engine path
       if (engine.kind === "mapbox" || engine.kind === "arcgis") restoreRasterLayers(appAPI);

@@ -14,27 +14,13 @@
  * deck.gl `Tile3DLayer` per visible 3DObject leaf.
  */
 
-/** One node of a Building Scene Layer's sublayer tree. */
-export interface I3sBuildingNode {
-  id: number;
-  name: string;
-  /** The I3S model name: `FullModel`, `Overview`, a discipline or category name. */
-  modelName?: string;
-  /** `group` for a discipline or folder; `3DObject` (or another type) for a drawable leaf. */
-  layerType: string;
-  visible: boolean;
-  children?: I3sBuildingNode[];
-}
+import type { I3sBuildingNode, I3sBuildingState } from "@geolibre/core";
 
-/** What `metadata.i3sBuilding` holds for a Building Scene Layer. */
-export interface I3sBuildingState {
-  /** `overview` draws the Overview sublayer; `full` draws the visible Full Model leaves. */
-  mode: "overview" | "full";
-  /** The Overview sublayer's id, or `null` when the service has none. */
-  overviewId: number | null;
-  /** The Full Model's children (disciplines), or every top-level sublayer when there is no Full Model group. */
-  disciplines: I3sBuildingNode[];
-}
+export {
+  visibleI3sBuildingSublayers,
+  type I3sBuildingNode,
+  type I3sBuildingState,
+} from "@geolibre/core";
 
 /** A raw sublayer entry from the service's layer document. */
 interface RawSublayer {
@@ -103,27 +89,6 @@ export function parseI3sBuildingLayer(doc: unknown): I3sBuildingState {
     overviewId: overview?.id ?? null,
     disciplines,
   };
-}
-
-/** The drawable leaves under the given nodes whose whole branch is visible. */
-function visibleLeaves(nodes: readonly I3sBuildingNode[], out: number[]): number[] {
-  for (const node of nodes) {
-    if (!node.visible) continue;
-    if (node.children?.length) visibleLeaves(node.children, out);
-    else if (node.layerType === "3DObject") out.push(node.id);
-  }
-  return out;
-}
-
-/**
- * The sublayer ids to draw for a Building Scene Layer.
- *
- * @param state - The layer's `metadata.i3sBuilding`.
- * @returns The Overview id in Overview mode; otherwise every visible 3DObject leaf.
- */
-export function visibleI3sBuildingSublayers(state: I3sBuildingState): number[] {
-  if (state.mode === "overview" && state.overviewId !== null) return [state.overviewId];
-  return visibleLeaves(state.disciplines, []);
 }
 
 /**
