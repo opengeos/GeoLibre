@@ -16,7 +16,9 @@ import {
   type PrintLayoutConfig,
 } from "../print-layout-config";
 import { reapplyLayerJoins } from "../joins";
+import { gateRegionalBasemap } from "../regional-basemaps";
 import {
+  DEFAULT_BASEMAP,
   DEFAULT_LEGEND_CONFIG,
   type GeoLibreLayer,
   type GeoLibreProject,
@@ -88,10 +90,20 @@ export interface ProjectSlice {
       layerGroups?: LayerGroup[];
     },
   ) => void;
+  /**
+   * Replace the open project with `project`.
+   *
+   * A regional basemap the project names is gated by `regionalBasemapPolicy`:
+   * under `"prompt"` the default basemap is applied and the regional one is
+   * held in `regionalBasemapHold` for the user to confirm, under `"block"` it is
+   * always replaced. Pass `trustBasemap: true` for a load whose basemap the user
+   * already chose in this session (an undo step, a duplicate, a template, a
+   * host-driven embed load), which skips the prompt but not the block.
+   */
   loadProject: (
     project: GeoLibreProject,
     path?: string | null,
-    options?: { rememberRecent?: boolean; presenting?: boolean },
+    options?: { rememberRecent?: boolean; presenting?: boolean; trustBasemap?: boolean },
   ) => void;
   setProjectPath: (path: string | null) => void;
   setProjectName: (name: string) => void;
@@ -155,8 +167,19 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       ...(options.layerGroups ? { layerGroups: options.layerGroups } : {}),
     };
     const applied = applyProjectToStore(project);
+    // A new project's basemap is the user's own pick in the New Project dialog,
+    // so only a deployment block replaces it.
+    applied.basemapStyleUrl = gateRegionalBasemap(
+      applied.basemapStyleUrl,
+      get().regionalBasemapPolicy,
+      DEFAULT_BASEMAP,
+      true,
+    ).styleUrl;
     set((s) => ({
       ...applied,
+      regionalBasemapHold: null,
+      // The New Project dialog's basemap is the user's pick.
+      basemapChoiceGeneration: s.basemapChoiceGeneration + 1,
       hoverTooltipsEnabled: true,
       projectPath: null,
       projectGeneration: s.projectGeneration + 1,
@@ -205,6 +228,22 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
     // so joined columns reflect the join tables as saved (and a stale
     // saved copy of the joined output self-heals).
     applied.layers = reapplyLayerJoins(applied.layers);
+    // A project file that names a regional basemap would otherwise load tiles
+    // from servers in mainland China without the user choosing that, so the
+    // default basemap renders until the user confirms (or for good, when the
+    // deployment disabled regional basemaps).
+    const requestedBasemap = applied.basemapStyleUrl;
+    // An answer the user already gave this session for the same basemap
+    // stands: Load trusts it, Use default basemap keeps the fallback quietly.
+    const priorAnswer = get().regionalBasemapAnswers[requestedBasemap];
+    const gated = gateRegionalBasemap(
+      requestedBasemap,
+      get().regionalBasemapPolicy,
+      DEFAULT_BASEMAP,
+      options.trustBasemap === true || priorAnswer === true,
+    );
+    if (gated.held === "prompt" && priorAnswer === false) delete gated.held;
+    applied.basemapStyleUrl = gated.styleUrl;
     // A project that ships a story map opens straight into the presentation
     // so the reader sees the story, not the editor. Projects without a story
     // (or with an empty one) open normally. Callers that open a project for
@@ -219,6 +258,12 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
           : (applied.layers[0]?.id ?? null);
     set((s) => ({
       ...applied,
+      regionalBasemapHold: gated.held
+        ? {
+            styleUrl: requestedBasemap,
+            reason: gated.held,
+          }
+        : null,
       hoverTooltipsEnabled: true,
       projectPath: path,
       projectGeneration: s.projectGeneration + 1,

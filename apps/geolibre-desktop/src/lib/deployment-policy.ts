@@ -58,6 +58,15 @@ export interface ServicesPolicy {
   catalog?: DeploymentServiceEntry[];
 }
 
+/** Basemap availability. */
+export interface BasemapsPolicy {
+  /**
+   * `false` disables the regional basemaps (served from mainland China): the
+   * picker hides them and a project that names one opens on the default basemap.
+   */
+  regional?: boolean;
+}
+
 /** Sharing and collaboration endpoints. */
 export interface SharingPolicy {
   shareUrl?: string;
@@ -94,6 +103,7 @@ export interface DeploymentPolicy {
   interface?: InterfacePolicy;
   plugins?: PluginsPolicy;
   services?: ServicesPolicy;
+  basemaps?: BasemapsPolicy;
   sharing?: SharingPolicy;
   geolens?: GeoLensPolicy;
   osm?: OsmPolicy;
@@ -130,6 +140,7 @@ const TOP_LEVEL_KEYS = new Set([
   "interface",
   "plugins",
   "services",
+  "basemaps",
   "sharing",
   "geolens",
   "osm",
@@ -354,6 +365,13 @@ function readServices(v: unknown): Result<ServicesPolicy> {
   return { value: out };
 }
 
+function readBasemaps(v: unknown): Result<BasemapsPolicy> {
+  const obj = readObject(v, ["regional"]);
+  if ("error" in obj) return obj;
+  const r = readFields(obj.value, { regional: (x) => readBoolean(x, "regional") });
+  return "error" in r ? r : { value: r.value as BasemapsPolicy };
+}
+
 function readSharing(v: unknown): Result<SharingPolicy> {
   const obj = readObject(v, ["shareUrl", "collabUrl", "embedOrigins"]);
   if ("error" in obj) return obj;
@@ -412,6 +430,7 @@ const SECTION_READERS: Record<string, (v: unknown) => Result<unknown>> = {
   interface: readInterface,
   plugins: readPlugins,
   services: readServices,
+  basemaps: readBasemaps,
   sharing: readSharing,
   geolens: readGeoLens,
   osm: readOsm,

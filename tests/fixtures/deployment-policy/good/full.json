@@ -54,6 +54,9 @@
       }
     ]
   },
+  "basemaps": {
+    "regional": true
+  },
   "sharing": {
     "shareUrl": "https://projects.example.com",
     "collabUrl": "wss://relay.example.com",

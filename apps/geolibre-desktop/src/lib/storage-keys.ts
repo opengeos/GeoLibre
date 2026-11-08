@@ -11,6 +11,14 @@ export const DESKTOP_SETTINGS_STORAGE_KEY = "geolibre.desktopSettings";
 /** Basemap used to seed the empty workspace on the next app launch. */
 export const LAST_BASEMAP_STORAGE_KEY = "geolibre.lastBasemap";
 
+/**
+ * The regional basemap (served from mainland China) the user chose, recorded
+ * next to {@link LAST_BASEMAP_STORAGE_KEY}. A remembered regional basemap is
+ * restored at launch only when it matches, so one stored without the user's
+ * choice (or before this marker existed) is not loaded unasked.
+ */
+export const CHOSEN_REGIONAL_BASEMAP_STORAGE_KEY = "geolibre.lastBasemap.chosenRegional";
+
 /** Rendering engine used to seed the empty workspace on the next app launch. */
 export const LAST_RENDERER_STORAGE_KEY = "geolibre.lastRenderer";
 

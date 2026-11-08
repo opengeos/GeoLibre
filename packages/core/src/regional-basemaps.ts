@@ -36,6 +36,12 @@ export interface RegionalBasemap {
    * are not translated the way UI strings are.
    */
   name: string;
+  /**
+   * The tile provider's brand name in Latin script ("Amap", "Tencent Maps"),
+   * for messages read outside the region, such as the confirmation shown when
+   * an opened project names this basemap. A proper noun, so not translated.
+   */
+  provider: string;
   /** Sentinel stored as the basemap style URL. */
   styleUrl: string;
   /** XYZ (or TMS, see {@link scheme}) tile template. */
@@ -98,6 +104,7 @@ export const CHINA_BASEMAPS: readonly RegionalBasemap[] = [
     id: "amap-street",
     region: "china",
     name: "高德地图",
+    provider: "Amap",
     styleUrl: sentinel("amap-street"),
     tileUrl: AMAP_STREET_URL,
     maxZoom: 19,
@@ -108,6 +115,7 @@ export const CHINA_BASEMAPS: readonly RegionalBasemap[] = [
     id: "amap-satellite",
     region: "china",
     name: "高德卫星",
+    provider: "Amap",
     styleUrl: sentinel("amap-satellite"),
     tileUrl: AMAP_SATELLITE_URL,
     maxZoom: 18,
@@ -118,6 +126,7 @@ export const CHINA_BASEMAPS: readonly RegionalBasemap[] = [
     id: "amap-hybrid",
     region: "china",
     name: "高德混合",
+    provider: "Amap",
     styleUrl: sentinel("amap-hybrid"),
     tileUrl: AMAP_SATELLITE_URL,
     overlayTileUrl: AMAP_LABELS_URL,
@@ -129,6 +138,7 @@ export const CHINA_BASEMAPS: readonly RegionalBasemap[] = [
     id: "tencent-street",
     region: "china",
     name: "腾讯地图",
+    provider: "Tencent Maps",
     styleUrl: sentinel("tencent-street"),
     tileUrl: tencentUrl(1),
     scheme: "tms",
@@ -140,6 +150,7 @@ export const CHINA_BASEMAPS: readonly RegionalBasemap[] = [
     id: "tencent-dark",
     region: "china",
     name: "腾讯深色",
+    provider: "Tencent Maps",
     styleUrl: sentinel("tencent-dark"),
     tileUrl: tencentUrl(4),
     scheme: "tms",
@@ -180,4 +191,58 @@ export function getRegionalBasemapById(id: string | undefined): RegionalBasemap 
 /** Whether a style URL is a regional-basemap sentinel, resolvable or not. */
 export function isRegionalBasemapSentinel(styleUrl: string | undefined): boolean {
   return Boolean(styleUrl?.startsWith(REGIONAL_BASEMAP_SENTINEL_PREFIX));
+}
+
+/**
+ * How the store treats a regional basemap that arrives without the user picking
+ * it (a project file, share link, or startup restore naming one by its
+ * `styleUrl`). The tiles come from servers in mainland China, so loading them
+ * unasked sends the user's map requests there.
+ *
+ * - `"allow"`: apply it as is. This is the store default, so library consumers
+ *   keep their behaviour; the desktop and web app switch to `"prompt"`.
+ * - `"prompt"`: apply the default basemap and hold the regional one for the
+ *   user to confirm (see {@link RegionalBasemapHold}).
+ * - `"block"`: the deployment disabled regional basemaps. Always fall back to
+ *   the default basemap, including when code sets one directly.
+ */
+export type RegionalBasemapPolicy = "allow" | "prompt" | "block";
+
+/**
+ * A regional basemap the store set aside when a project was loaded. The default
+ * basemap renders in its place until the user answers (`"prompt"`), or for good
+ * (`"blocked"`, which the app shows as a notice only).
+ */
+export interface RegionalBasemapHold {
+  /** The regional sentinel the project asked for. */
+  styleUrl: string;
+  /** Why the default basemap is showing instead. */
+  reason: "prompt" | "blocked";
+}
+
+/**
+ * Decides which basemap a project load actually applies.
+ *
+ * Only a resolvable regional sentinel is gated. Every other style URL (and an
+ * unknown regional id, which the map controller already replaces with the
+ * default basemap) passes through untouched.
+ *
+ * @param styleUrl - The basemap style URL the project requests.
+ * @param policy - The store's current {@link RegionalBasemapPolicy}.
+ * @param fallbackStyleUrl - The basemap to apply instead (the default basemap).
+ * @param trusted - True when the user already chose this basemap in this
+ *   session (a template, an undo step, a duplicate), so `"prompt"` does not
+ *   apply. `"block"` still does.
+ * @returns The style URL to apply and, when it was replaced, why.
+ */
+export function gateRegionalBasemap(
+  styleUrl: string,
+  policy: RegionalBasemapPolicy,
+  fallbackStyleUrl: string,
+  trusted = false,
+): { styleUrl: string; held?: RegionalBasemapHold["reason"] } {
+  if (!getRegionalBasemapByStyleUrl(styleUrl)) return { styleUrl };
+  if (policy === "block") return { styleUrl: fallbackStyleUrl, held: "blocked" };
+  if (policy === "prompt" && !trusted) return { styleUrl: fallbackStyleUrl, held: "prompt" };
+  return { styleUrl };
 }

@@ -36,6 +36,7 @@ const SECTIONS = [
   "interface",
   "plugins",
   "services",
+  "basemaps",
   "sharing",
   "geolens",
   "osm",
@@ -73,6 +74,7 @@ const GOOD_DOCUMENTS: Record<string, string> = {
     sharing: { shareUrl: "off", embedOrigins: ["*"] },
     geolens: { url: "off" },
     services: { builtins: false },
+    basemaps: { regional: false },
     branding: { welcome: false },
   }),
   "with $schema": JSON.stringify({

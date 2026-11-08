@@ -302,7 +302,9 @@ export function NewProjectDialog({
       projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
         ? projectName.trim()
         : templateName;
-    loadProject({ ...copy, name: finalName }, null);
+    // The user is creating a project from a template they picked, so its
+    // basemap is their choice and needs no regional-basemap confirmation.
+    loadProject({ ...copy, name: finalName }, null, { trustBasemap: true });
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
     );

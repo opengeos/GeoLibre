@@ -366,6 +366,13 @@
     "sectionRegional": "Regional",
     "regionChina": "China (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Carregar um mapa base da China continental?",
+    "promptDescription": "Este projeto usa blocos do {{provider}} ({{name}}), servidos a partir da China continental. Carregá-los envia suas solicitações de mapa para esses servidores. O mapa base padrão é exibido até você escolher.",
+    "load": "Carregar",
+    "useDefault": "Usar o mapa base padrão",
+    "blockedNotice": "Este projeto usa um mapa base servido a partir da China continental, que esta implantação desativa. O mapa base padrão é exibido no lugar."
+  },
   "planetSwitcher": {
     "label": "Corpo celeste",
     "earth": "Terra",

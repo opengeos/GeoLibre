@@ -366,6 +366,13 @@
     "sectionRegional": "Regional",
     "regionChina": "China (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "¿Cargar un mapa base desde China continental?",
+    "promptDescription": "Este proyecto usa teselas de {{provider}} ({{name}}), que se sirven desde China continental. Al cargarlas, tus solicitudes de mapa se envían a esos servidores. Se muestra el mapa base predeterminado hasta que elijas.",
+    "load": "Cargar",
+    "useDefault": "Usar el mapa base predeterminado",
+    "blockedNotice": "Este proyecto usa un mapa base servido desde China continental, que esta implementación desactiva. Se muestra el mapa base predeterminado en su lugar."
+  },
   "planetSwitcher": {
     "label": "Cuerpo celeste",
     "earth": "Tierra",

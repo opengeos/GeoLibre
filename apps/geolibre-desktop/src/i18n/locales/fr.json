@@ -366,6 +366,13 @@
     "sectionRegional": "Régional",
     "regionChina": "Chine (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Charger un fond de carte depuis la Chine continentale ?",
+    "promptDescription": "Ce projet utilise des tuiles {{provider}} ({{name}}), servies depuis la Chine continentale. Les charger envoie vos requêtes cartographiques à ces serveurs. Le fond de carte par défaut est affiché jusqu’à votre choix.",
+    "load": "Charger",
+    "useDefault": "Utiliser le fond de carte par défaut",
+    "blockedNotice": "Ce projet utilise un fond de carte servi depuis la Chine continentale, que ce déploiement désactive. Le fond de carte par défaut est affiché à la place."
+  },
   "planetSwitcher": {
     "label": "Corps céleste",
     "earth": "Terre",

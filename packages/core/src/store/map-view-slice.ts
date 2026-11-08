@@ -8,6 +8,12 @@ import { createDefaultMapView, normalizeBlankBackgroundColor } from "../project"
 import { DEFAULT_ELLIPSOID_ID } from "../ellipsoids";
 import type { PlanetaryBasemap } from "../ellipsoids";
 import {
+  gateRegionalBasemap,
+  getRegionalBasemapByStyleUrl,
+  type RegionalBasemapHold,
+  type RegionalBasemapPolicy,
+} from "../regional-basemaps";
+import {
   DEFAULT_BASEMAP,
   DEFAULT_MAP_GRID_LAYOUT,
   DEFAULT_PRIMARY_RENDERER,
@@ -20,6 +26,7 @@ import {
   type SecondaryMapView,
 } from "../types";
 import type { AppState, SliceCreator } from "./types";
+import { replaceHistoryBasemap, withoutHistory } from "./undo-history";
 
 /** An explicit background choice replaces the active renderer's override. */
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
@@ -55,6 +62,49 @@ function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.
       ...(clearArcgis ? { arcgisBasemap: undefined } : {}),
       ellipsoidId,
     },
+  };
+}
+
+/**
+ * The basemap fields for a basemap the user (or code acting for them) picked.
+ *
+ * A deployment that disabled regional basemaps refuses them from every caller
+ * (plugins, scripts, the assistant), not only the hidden picker. An explicit
+ * pick is the user's own choice, so `"prompt"` never applies, and it supersedes
+ * a pending prompt: answering Load afterwards must not replace it.
+ *
+ * Plugins, scripts and the assistant go through here too. They are code the
+ * user installed or ran to act for them, like the picker, so they are trusted
+ * the same way; only a project file (data someone else may have authored) is
+ * gated by `"prompt"`.
+ *
+ * @param state - The current store state.
+ * @param url - The requested basemap style URL.
+ * @returns The `basemapStyleUrl` to apply, the updated hold and choice counter.
+ */
+function explicitBasemapChoice(
+  state: AppState,
+  url: string,
+): Pick<
+  AppState,
+  "basemapStyleUrl" | "regionalBasemapHold" | "basemapChoiceGeneration" | "regionalBasemapAnswers"
+> {
+  const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
+  if (gated.held) {
+    console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
+  }
+  // Picking a regional basemap answers the prompt for it too: a project (or an
+  // embed host re-sending one) that names it later loads it without asking,
+  // even when the user turned it down earlier in the session.
+  const pickedRegional = !gated.held && getRegionalBasemapByStyleUrl(url) !== undefined;
+  return {
+    regionalBasemapAnswers: pickedRegional
+      ? { ...state.regionalBasemapAnswers, [url]: true }
+      : state.regionalBasemapAnswers,
+    basemapStyleUrl: gated.styleUrl,
+    regionalBasemapHold:
+      state.regionalBasemapHold?.reason === "prompt" ? null : state.regionalBasemapHold,
+    basemapChoiceGeneration: state.basemapChoiceGeneration + 1,
   };
 }
 
@@ -196,9 +246,48 @@ export interface MapViewSlice {
   setBasemapOpacity: (opacity: number) => void;
   setBlankBackgroundColor: (color: string | null) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
+  /**
+   * How a regional basemap (served from mainland China) that a loaded project
+   * names is treated; see {@link RegionalBasemapPolicy}. Not project data: the
+   * app sets it once at startup from the deployment policy.
+   */
+  regionalBasemapPolicy: RegionalBasemapPolicy;
+  /**
+   * The regional basemap the last project load set aside in favour of the
+   * default basemap, or null. The app shell renders a confirmation (or, when
+   * blocked, a notice) from it. Not project data and not in undo history.
+   */
+  regionalBasemapHold: RegionalBasemapHold | null;
+  /**
+   * Bumped whenever the basemap changes because the user (or code acting for
+   * them) chose it: a basemap setter, or Load on the regional prompt. Not
+   * bumped by project loads, collaboration snapshots or undo. Lets observers
+   * tell a chosen basemap from one that arrived with data, e.g. so a regional
+   * basemap is only remembered for the next launch when it was chosen.
+   */
+  basemapChoiceGeneration: number;
+  /**
+   * The user's answer to the regional-basemap prompt this session, per
+   * regional style URL (true for Load). A later load naming the same basemap
+   * reuses it instead of asking again, so a host that re-sends its project
+   * (the Jupyter widget on every Python-side change) does not re-prompt.
+   * Session-only: never persisted or saved into a project.
+   */
+  regionalBasemapAnswers: Record<string, boolean>;
+  /** Set the {@link regionalBasemapPolicy}. Switching to `"block"` drops a pending prompt. */
+  setRegionalBasemapPolicy: (policy: RegionalBasemapPolicy) => void;
+  /**
+   * Answer the held regional basemap. With `load` true and the hold still
+   * belonging to the open project, the regional basemap is applied without
+   * marking the project dirty or recording an undo step (it is what the file
+   * already says). Otherwise the default basemap stays. Either way the hold is
+   * cleared. The answer is remembered for the session unless `remember` is
+   * false (the dialog was dismissed rather than answered).
+   */
+  resolveRegionalBasemapHold: (load: boolean, options?: { remember?: boolean }) => void;
 }
 
-export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
+export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
   mapView: createDefaultMapView(),
   basemapStyleUrl: DEFAULT_BASEMAP,
   basemapVisible: true,
@@ -209,6 +298,10 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
   secondaryMapViews: [],
   primaryMapLabel: "",
   primaryRenderer: DEFAULT_PRIMARY_RENDERER,
+  regionalBasemapPolicy: "allow",
+  regionalBasemapHold: null,
+  basemapChoiceGeneration: 0,
+  regionalBasemapAnswers: {},
 
   setMapView: (view, markDirty = false) =>
     set((s) => ({
@@ -332,19 +425,19 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
     }),
   setBasemapStyleUrl: (url) =>
     set((state) => ({
-      basemapStyleUrl: url,
+      ...explicitBasemapChoice(state, url),
       preferences: preferencesForBasemap(state),
       isDirty: true,
     })),
   applyPlanetaryBasemap: (basemap) =>
     set((state) => ({
-      basemapStyleUrl: basemap.styleUrl,
+      ...explicitBasemapChoice(state, basemap.styleUrl),
       preferences: preferencesForBasemap(state, basemap.ellipsoidId),
       isDirty: true,
     })),
   restoreEarthBasemap: (styleUrl) =>
     set((state) => ({
-      basemapStyleUrl: styleUrl,
+      ...explicitBasemapChoice(state, styleUrl),
       preferences: preferencesForBasemap(state, DEFAULT_ELLIPSOID_ID),
       isDirty: true,
     })),
@@ -353,4 +446,63 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set) => ({
   setBlankBackgroundColor: (color) =>
     set({ blankBackgroundColor: normalizeBlankBackgroundColor(color), isDirty: true }),
   setPreferences: (preferences) => set({ preferences, isDirty: true }),
+  setRegionalBasemapPolicy: (policy) => {
+    const state = get();
+    const hold =
+      policy === "block" && state.regionalBasemapHold?.reason === "prompt"
+        ? null
+        : state.regionalBasemapHold;
+    // Blocking while a regional basemap is on screen takes it down too, so the
+    // map stops requesting its tiles. Not the user's edit: no undo step.
+    if (policy === "block" && getRegionalBasemapByStyleUrl(state.basemapStyleUrl)) {
+      withoutHistory(() =>
+        set({
+          regionalBasemapPolicy: policy,
+          regionalBasemapHold: hold,
+          basemapStyleUrl: DEFAULT_BASEMAP,
+        }),
+      );
+      return;
+    }
+    set({ regionalBasemapPolicy: policy, regionalBasemapHold: hold });
+  },
+  resolveRegionalBasemapHold: (load, options = {}) => {
+    const state = get();
+    const hold = state.regionalBasemapHold;
+    if (!hold) return;
+    // Every project load replaces or clears the hold, so the hold read here is
+    // always the one the latest load set. Not comparing `projectGeneration`
+    // here: a collaboration snapshot bumps it without a load, and that must not
+    // drop a pending answer.
+    const answered = hold.reason === "prompt" && state.regionalBasemapPolicy !== "block";
+    // Remember a real answer for the session, so the next load of the same
+    // basemap does not ask again.
+    const regionalBasemapAnswers =
+      answered && options.remember !== false
+        ? { ...state.regionalBasemapAnswers, [hold.styleUrl]: load }
+        : state.regionalBasemapAnswers;
+    const applies =
+      load &&
+      answered &&
+      // Only replace the fallback the load put in. An explicit pick already
+      // clears the hold; this also covers a direct setState.
+      state.basemapStyleUrl === DEFAULT_BASEMAP;
+    if (!applies) {
+      set({ regionalBasemapHold: null, regionalBasemapAnswers });
+      return;
+    }
+    withoutHistory(() =>
+      set({
+        basemapStyleUrl: hold.styleUrl,
+        regionalBasemapHold: null,
+        regionalBasemapAnswers,
+        basemapChoiceGeneration: state.basemapChoiceGeneration + 1,
+      }),
+    );
+    // Edits made while the prompt was open recorded the fallback in their undo
+    // snapshots. No explicit basemap pick happened since the load (that would
+    // have cleared the hold), so every such snapshot gets the accepted basemap,
+    // and undoing one of those edits does not take it away again.
+    replaceHistoryBasemap(DEFAULT_BASEMAP, hold.styleUrl);
+  },
 });

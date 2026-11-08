@@ -359,6 +359,13 @@
     "sectionRegional": "지역",
     "regionChina": "중국 (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "중국 본토의 베이스맵을 불러올까요?",
+    "promptDescription": "이 프로젝트는 중국 본토에서 제공되는 {{provider}} 타일({{name}})을 사용합니다. 불러오면 지도 요청이 해당 서버로 전송됩니다. 선택할 때까지 기본 베이스맵이 표시됩니다.",
+    "load": "불러오기",
+    "useDefault": "기본 베이스맵 사용",
+    "blockedNotice": "이 프로젝트는 중국 본토에서 제공되는 베이스맵을 사용하지만 이 배포에서는 비활성화되어 있습니다. 대신 기본 베이스맵이 표시됩니다."
+  },
   "planetSwitcher": {
     "label": "천체",
     "earth": "지구",

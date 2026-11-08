@@ -168,6 +168,7 @@ from deployment_policy import (
     parse_capabilities_env,
     parse_embed_origins,
     read_services_file,
+    regional_basemaps_disabled,
     service_url,
 )
 
@@ -198,6 +199,16 @@ if services_file:
 # GEOLIBRE_SERVICES_FILE).
 if builtin_services_hidden(os.environ.get("GEOLIBRE_BUILTIN_SERVICES", "")):
     deployment["VITE_GEOLIBRE_BUILTIN_SERVICES"] = "off"
+
+# Optional switch for the regional basemaps (Amap, Tencent), whose tiles are
+# served from mainland China. 1/true hides them in the basemap pickers and makes
+# a project that names one open on the default basemap; 0/false offers them even
+# when the image was built with them disabled. Any other value fails the boot.
+regional_disabled = regional_basemaps_disabled(
+    os.environ.get("GEOLIBRE_DISABLE_REGIONAL_BASEMAPS", "")
+)
+if regional_disabled is not None:
+    deployment["VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS"] = "1" if regional_disabled else "0"
 
 # Optional Clerk sign-in gate. The publishable key is intentionally public and
 # is all the browser needs; Clerk secrets never enter the image or runtime
@@ -451,6 +462,11 @@ fi
 if [ "$(printf '%s' "$(trim "${GEOLIBRE_BUILTIN_SERVICES:-}")" | tr '[:upper:]' '[:lower:]')" = "off" ]; then
   echo "Built-in starter services: hidden (GEOLIBRE_BUILTIN_SERVICES=off)"
 fi
+
+case "$(trim "${GEOLIBRE_DISABLE_REGIONAL_BASEMAPS:-}" | tr '[:upper:]' '[:lower:]')" in
+  1 | true) echo "Regional basemaps (served from mainland China): disabled" ;;
+  0 | false) echo "Regional basemaps (served from mainland China): enabled" ;;
+esac
 
 if [ -n "$(trim "${GEOLIBRE_CLERK_PUBLISHABLE_KEY:-}")" ]; then
   # Lower-cased to match the Python validator above, which compares after

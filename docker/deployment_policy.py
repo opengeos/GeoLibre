@@ -88,6 +88,7 @@ FIELD_KINDS = {
         "fileAccess": "file_access",
     },
     "services": {"builtins": "bool", "catalog": "catalog"},
+    "basemaps": {"regional": "bool"},
     "sharing": {"shareUrl": "share", "collabUrl": "collab", "embedOrigins": "origins"},
     "geolens": {"url": "geolens"},
     "osm": {"overpassUrl": "overpass"},
@@ -266,6 +267,23 @@ def builtin_services_hidden(raw):
             "starter services, or unset to keep them."
         )
     return value == "off"
+
+
+def regional_basemaps_disabled(raw):
+    """Parse GEOLIBRE_DISABLE_REGIONAL_BASEMAPS.
+
+    Returns True for 1/true (disable the regional basemaps served from mainland
+    China), False for 0/false (offer them, overriding the file), and None when
+    blank. Any other value exits, so a typo never leaves them silently enabled.
+    """
+    value = raw.strip().lower()
+    if not value:
+        return None
+    if value in ("1", "true"):
+        return True
+    if value in ("0", "false"):
+        return False
+    raise SystemExit("ERROR: GEOLIBRE_DISABLE_REGIONAL_BASEMAPS must be 1/true or 0/false.")
 
 
 def parse_embed_origins(raw):
@@ -678,6 +696,15 @@ def build_policy(env: Mapping[str, str]):
         override("services.catalog", "GEOLIBRE_SERVICES_FILE", catalog, f"{len(catalog)} entries")
     if builtin_services_hidden(get("GEOLIBRE_BUILTIN_SERVICES")):
         override("services.builtins", "GEOLIBRE_BUILTIN_SERVICES", False, "false")
+    regional_disabled = regional_basemaps_disabled(get("GEOLIBRE_DISABLE_REGIONAL_BASEMAPS"))
+    if regional_disabled is not None:
+        regional = not regional_disabled
+        override(
+            "basemaps.regional",
+            "GEOLIBRE_DISABLE_REGIONAL_BASEMAPS",
+            regional,
+            "true" if regional else "false",
+        )
     if get("GEOLIBRE_SHARE_URL"):
         value = normalize_share_url(get("GEOLIBRE_SHARE_URL"))
         override("sharing.shareUrl", "GEOLIBRE_SHARE_URL", value, _loggable(value))

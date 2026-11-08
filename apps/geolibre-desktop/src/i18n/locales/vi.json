@@ -359,6 +359,13 @@
     "sectionRegional": "Khu vực",
     "regionChina": "Trung Quốc (中国)"
   },
+  "regionalBasemap": {
+    "promptTitle": "Tải bản đồ nền từ Trung Quốc đại lục?",
+    "promptDescription": "Dự án này dùng ô bản đồ {{provider}} ({{name}}), được cung cấp từ Trung Quốc đại lục. Khi tải, các yêu cầu bản đồ của bạn sẽ được gửi đến các máy chủ đó. Bản đồ nền mặc định được hiển thị cho đến khi bạn chọn.",
+    "load": "Tải",
+    "useDefault": "Dùng bản đồ nền mặc định",
+    "blockedNotice": "Dự án này dùng bản đồ nền được cung cấp từ Trung Quốc đại lục, nhưng bản triển khai này đã tắt chúng. Bản đồ nền mặc định được hiển thị thay thế."
+  },
   "planetSwitcher": {
     "label": "Bản đồ nguyên mẫu",
     "earth": "Trái đất",

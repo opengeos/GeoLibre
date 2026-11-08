@@ -371,6 +371,33 @@
       "dropped": ["sharing"]
     }
   },
+  "basemaps-regional-string": {
+    "input": {
+      "version": 1,
+      "capabilities": ["data:add"],
+      "basemaps": {
+        "regional": "off"
+      }
+    },
+    "container": "basemaps.regional must be a boolean",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["basemaps"]
+    }
+  },
+  "basemaps-unknown-key": {
+    "input": {
+      "version": 1,
+      "basemaps": {
+        "planetary": false
+      }
+    },
+    "container": "basemaps.planetary is not a known key",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["basemaps"]
+    }
+  },
   "geolens-bad-value": {
     "input": {
       "version": 1,

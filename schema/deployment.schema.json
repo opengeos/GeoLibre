@@ -164,6 +164,17 @@
         }
       }
     },
+    "basemaps": {
+      "type": "object",
+      "description": "Basemap availability.",
+      "additionalProperties": false,
+      "properties": {
+        "regional": {
+          "type": "boolean",
+          "description": "Set to false to disable the regional basemaps (Amap, Tencent), whose tiles are served from mainland China. The pickers hide them and a project that names one opens on the default basemap."
+        }
+      }
+    },
     "sharing": {
       "type": "object",
       "description": "Project sharing and collaboration endpoints.",
