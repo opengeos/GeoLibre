@@ -382,6 +382,7 @@ with open("/usr/share/nginx/html/deployment.json", encoding="utf-8") as policy_f
     overpass_url = json.load(policy_file).get("osm", {}).get("overpassUrl")
 if overpass_url:
     deployment["VITE_GEOLIBRE_OVERPASS_URL"] = overpass_url
+    print("Overpass API endpoint: " + overpass_url)
 
 # Capabilities also ride in the runtime config, which loads synchronously, so an
 # env-set grant survives a blocked or late deployment.json. "none" grants nothing.
@@ -432,11 +433,6 @@ if [ -n "$(trim "${GEOLIBRE_GEOLENS_URL:-}")" ]; then
     [oO][fF][fF]) echo "GeoLens disabled (GEOLIBRE_GEOLENS_URL=off)." ;;
     *) echo "GeoLens server: $GEOLENS_URL_LOG" ;;
   esac
-fi
-
-OVERPASS_URL_LOG=$(python -c 'import json; print(json.load(open("/usr/share/nginx/html/deployment.json")).get("osm", {}).get("overpassUrl", ""))')
-if [ -n "$OVERPASS_URL_LOG" ]; then
-  echo "Overpass API endpoint: $OVERPASS_URL_LOG"
 fi
 
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then

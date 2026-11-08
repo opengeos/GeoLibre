@@ -118,14 +118,15 @@ export type OverpassFetch = (
 ) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
 
 /**
- * Accepted Overpass endpoint URLs: `https://` on a DNS name or IPv4 address, or
+ * Accepted Overpass endpoint URLs: `https://` on a DNS name (whose last label has
+ * a letter, as browsers parse an all-numeric one as IPv4) or a valid IPv4 address, or
  * plain `http://` on loopback, with an optional port (up to 65535) and path and
  * no credentials, whitespace, query, or fragment. The same source string is the
  * `osm.overpassUrl` pattern in schema/deployment.schema.json, the client policy
  * parser, and docker/deployment_policy.py; tests fail when they drift.
  */
 export const OVERPASS_URL_PATTERN = new RegExp(
-  "^(?:https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\\s?#]*)?$",
+  "^(?:https://(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}|(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)*(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\\s?#]*)?$",
 );
 
 let configuredOverpassEndpoint: string | undefined;
@@ -313,7 +314,10 @@ export async function downloadOsmGeoJson(
   const query = buildOsmDownloadQuery(bbox, filter);
   // Only the built-in endpoints may fall back to the OSM map API. Resolving the
   // default throws while the configured endpoint is invalid (fail closed).
-  const builtInEndpoint = options.endpoint === undefined && !configuredOverpassEndpoint;
+  const builtInEndpoint =
+    options.endpoint === undefined &&
+    !configuredOverpassEndpoint &&
+    !configuredOverpassEndpointInvalid;
   const endpoint = options.endpoint ?? defaultOverpassEndpoint();
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as OverpassFetch);
   const requestController = new AbortController();

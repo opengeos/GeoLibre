@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -163,12 +164,25 @@ def test_overpass_url_env_sets_policy_field(tmp_path):
     assert any(line.endswith(dp.OVERRIDE_SUFFIX) for line in logs)
 
 
-def test_overpass_url_allows_plain_http_only_on_loopback():
+def test_overpass_url_rejects_plain_http_in_the_container():
+    # Loopback http matches the shared pattern (the desktop app can use it), but
+    # the container serves the web build, whose CSP allows https: only.
     url = "http://localhost:12345/api/interpreter"
-    assert dp.normalize_overpass_url(url) == url
+    assert re.fullmatch(dp.OVERPASS_URL_PATTERN, url)
+    assert "must use https:// in the container" in error_of(dp.normalize_overpass_url, url)
+    doc = {"version": 1, "osm": {"overpassUrl": url}}
+    assert "osm.overpassUrl must use https://" in error_of(dp.validate_policy, doc, LABEL)
     assert "must be a https:// URL" in error_of(
         dp.normalize_overpass_url, "http://overpass.example.com/api/interpreter"
     )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["https://999.999.999.999/api/interpreter", "https://overpass.123/api/interpreter"],
+)
+def test_overpass_url_rejects_hosts_browsers_cannot_parse(value):
+    assert "DNS or IPv4 host" in error_of(dp.normalize_overpass_url, value)
 
 
 @pytest.mark.parametrize(

@@ -46,8 +46,12 @@ SAFE_INTEGER = 2**53 - 1
 # and the client parsers' regex (tests compare them), so all three layers accept
 # exactly the same values.
 _OVERPASS_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_OVERPASS_OCTET = r"(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
 OVERPASS_URL_PATTERN = (
-    r"^(?:https://" + _OVERPASS_LABEL + r"(?:\." + _OVERPASS_LABEL + r")*"
+    r"^(?:https://(?:" + _OVERPASS_OCTET + r"(?:\." + _OVERPASS_OCTET + r"){3}"
+    # The last DNS label must contain a letter: browsers parse an all-numeric
+    # last label as IPv4 and reject the URL unless it is a valid address.
+    r"|(?:" + _OVERPASS_LABEL + r"\.)*(?=[A-Za-z0-9-]*[A-Za-z])" + _OVERPASS_LABEL + r")"
     r"|http://(?:localhost|127\.0\.0\.1|\[::1\]))"
     r"(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?"
     r"(?:/[^\s?#]*)?$"
@@ -368,6 +372,14 @@ def _check_overpass_url(name, value):
         raise SystemExit(
             f"ERROR: {name} must be a lowercase https:// URL (or http:// on "
             "localhost/127.0.0.1/[::1]) with a DNS or IPv4 host, a port up to 65535, and a path."
+        )
+    # The pattern allows loopback http for the desktop app, but the container
+    # serves the web build, whose CSP connect-src allows https: only, and
+    # "localhost" there would mean each viewer's own machine anyway.
+    if value.startswith("http://"):
+        raise SystemExit(
+            f"ERROR: {name} must use https:// in the container: the web build's CSP "
+            "blocks plain http://, and loopback would mean each viewer's own machine."
         )
 
 
