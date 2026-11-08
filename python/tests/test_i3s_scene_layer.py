@@ -2,6 +2,7 @@
 
 import pytest
 
+import geolibre.geolibre as gmod
 from geolibre import Map, project
 
 SF = (
@@ -66,7 +67,10 @@ def test_a_tileset_url_stays_a_plain_tileset():
     assert layer["metadata"]["sourceKind"] == "3d-tiles-url"
 
 
-def test_map_add_3d_tiles_writes_the_scene_layer_to_the_project():
+def test_map_add_3d_tiles_writes_the_scene_layer_to_the_project(monkeypatch):
+    # Stub the static server so the test needs no bundled web app.
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
     m = Map()
     layer_id = m.add_3d_tiles(SF, name="SF buildings")
     saved = next(layer for layer in m.to_project()["layers"] if layer["id"] == layer_id)
