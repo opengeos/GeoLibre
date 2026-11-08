@@ -419,10 +419,10 @@ describe("availableProviders", () => {
       "openrouter",
       "vercel",
     ]);
-    assert.deepEqual(
-      availableProviders({ TRUSTEDROUTER_API_KEY: "t", AI_GATEWAY_API_KEY: "v" }),
-      ["vercel", "trustedrouter"],
-    );
+    assert.deepEqual(availableProviders({ TRUSTEDROUTER_API_KEY: "t", AI_GATEWAY_API_KEY: "v" }), [
+      "vercel",
+      "trustedrouter",
+    ]);
   });
 });
 
