@@ -6,6 +6,7 @@ import {
   buildOsmDownloadQuery,
   canDownloadOsmBounds,
   defaultOverpassEndpoint,
+  INVALID_OVERPASS_ENDPOINT_MESSAGE,
   downloadOsmGeoJson,
   MAX_OSM_MAP_API_AREA_SQUARE_DEGREES,
   OSM_MAP_API_ENDPOINT,
@@ -340,11 +341,14 @@ describe("downloadOsmGeoJson", () => {
     assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT);
   });
 
-  it("prefers a deployment-configured endpoint over the dev relay and the default", () => {
+  it("prefers a deployment-configured endpoint over the dev relay and the default", (t) => {
     const configured = "https://overpass.example.com/api/interpreter";
     assert.equal(defaultOverpassEndpoint(true, configured), configured);
     assert.equal(defaultOverpassEndpoint(false, configured), configured);
-    assert.equal(defaultOverpassEndpoint(false, undefined), OVERPASS_DEFAULT_ENDPOINT);
+    t.after(() => setOverpassEndpoint(undefined));
+    setOverpassEndpoint(undefined);
+    assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT);
+    assert.equal(defaultOverpassEndpoint(true), OVERPASS_DEV_ENDPOINT);
   });
 
   it("sends queries to the endpoint set by setOverpassEndpoint", async (t) => {
@@ -369,9 +373,14 @@ describe("downloadOsmGeoJson", () => {
     assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT);
   });
 
-  it("ignores an invalid configured endpoint with a warning", (t) => {
+  it("fails closed on an invalid configured endpoint", async (t) => {
     t.after(() => setOverpassEndpoint(undefined));
     const warn = t.mock.method(console, "warn", () => {});
+    const calls: string[] = [];
+    const fetchImpl: OverpassFetch = async (url) => {
+      calls.push(url);
+      return { ok: true, status: 200, json: async () => ({ elements: [] }), text: async () => "" };
+    };
     for (const bad of [
       "/overpass",
       "ftp://overpass.example.com",
@@ -380,12 +389,33 @@ describe("downloadOsmGeoJson", () => {
     ]) {
       setOverpassEndpoint("https://overpass.example.com/api/interpreter");
       setOverpassEndpoint(bad);
-      assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT, bad);
+      await assert.rejects(
+        () => downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl }),
+        { message: INVALID_OVERPASS_ENDPOINT_MESSAGE },
+        bad,
+      );
     }
+    assert.deepEqual(calls, []);
     assert.equal(warn.mock.callCount(), 4);
+
+    // An explicit caller endpoint is unaffected, and a valid value re-enables downloads.
+    await downloadOsmGeoJson(
+      [0, 0, 0.1, 0.1],
+      { preset: "roads" },
+      {
+        fetchImpl,
+        endpoint: "https://explicit.example/api/interpreter",
+      },
+    );
+    setOverpassEndpoint(undefined);
+    await downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl });
+    assert.deepEqual(calls, [
+      "https://explicit.example/api/interpreter",
+      OVERPASS_DEFAULT_ENDPOINT,
+    ]);
   });
 
-  it("keeps the OSM map API fallback for a deployment-configured endpoint", async (t) => {
+  it("never falls back to the OSM map API from a deployment-configured endpoint", async (t) => {
     const configured = "https://overpass.example.com/api/interpreter";
     t.after(() => setOverpassEndpoint(undefined));
     setOverpassEndpoint(configured);
@@ -397,10 +427,11 @@ describe("downloadOsmGeoJson", () => {
       }
       return { ok: true, status: 200, json: async () => ({ elements: [] }), text: async () => "" };
     };
-    await downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl });
-    assert.equal(calls[0], configured);
-    assert.equal(calls.length, 2);
-    assert.match(calls[1], /^https:\/\/api\.openstreetmap\.org\/api\/0\.6\/map\.json\?/);
+    await assert.rejects(
+      () => downloadOsmGeoJson([0, 0, 0.1, 0.1], { preset: "roads" }, { fetchImpl }),
+      /Overpass request failed \(504\)/,
+    );
+    assert.deepEqual(calls, [configured]);
   });
 
   it("uses GeoLibre's CORS-enabled Overpass relay by default", async () => {

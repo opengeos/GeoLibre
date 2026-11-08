@@ -15,7 +15,7 @@ import {
   fetchDeploymentPolicy,
   loadDeploymentPolicy,
   parseDeploymentPolicy,
-  OVERPASS_URL,
+  OVERPASS_URL_PATTERN as POLICY_OVERPASS_URL_PATTERN,
   resolveDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-policy";
 import { OVERPASS_URL_PATTERN } from "../packages/plugins/src/plugins/osm-downloader-api";
@@ -574,28 +574,31 @@ test("the Overpass URL pattern is identical in the schema and both client parser
   const schemaPattern = schema.properties.osm.properties.overpassUrl.pattern;
   // RegExp#source escapes "/", so compare against a RegExp built from the schema string.
   const schemaSource = new RegExp(schemaPattern).source;
-  assert.equal(OVERPASS_URL.source, schemaSource);
+  assert.equal(POLICY_OVERPASS_URL_PATTERN.source, schemaSource);
   assert.equal(OVERPASS_URL_PATTERN.source, schemaSource);
   for (const ok of [
     "https://overpass.example.com/api/interpreter",
     "https://overpass.example.com:8443",
-    "https://[2001:db8::1]/api/interpreter",
+    "https://203.0.113.7:65535/api/interpreter",
     "http://localhost:12345/api/interpreter",
     "http://127.0.0.1/api/interpreter",
     "http://[::1]:8080/api/interpreter",
   ]) {
-    assert.equal(OVERPASS_URL.test(ok), true, ok);
+    assert.equal(POLICY_OVERPASS_URL_PATTERN.test(ok), true, ok);
   }
   for (const bad of [
     "http://overpass.example.com/api/interpreter",
     "http://localhost.example.com/api/interpreter",
     "https://user:pw@overpass.example.com/api/interpreter",
     "https://[invalid]/api/interpreter",
+    "https://[abcd]/api/interpreter",
+    "https://overpass.example.com:99999/api/interpreter",
+    "https://../api/interpreter",
     "https://overpass.example.com/api/interpreter?key=x",
     "https://overpass.example.com/api interpreter",
     "https://overpass.example.com/api/interpreter\n",
     "/overpass",
   ]) {
-    assert.equal(OVERPASS_URL.test(bad), false, bad);
+    assert.equal(POLICY_OVERPASS_URL_PATTERN.test(bad), false, bad);
   }
 });

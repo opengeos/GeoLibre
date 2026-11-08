@@ -45,9 +45,12 @@ SAFE_INTEGER = 2**53 - 1
 # osm.overpassUrl / GEOLIBRE_OVERPASS_URL. The same string is the schema pattern
 # and the client parsers' regex (tests compare them), so all three layers accept
 # exactly the same values.
+_OVERPASS_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
 OVERPASS_URL_PATTERN = (
-    r"^(?:https://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])|"
-    r"http://(?:localhost|127\.0\.0\.1|\[::1\]))(?::[0-9]{1,5})?(?:/[^\s?#]*)?$"
+    r"^(?:https://" + _OVERPASS_LABEL + r"(?:\." + _OVERPASS_LABEL + r")*"
+    r"|http://(?:localhost|127\.0\.0\.1|\[::1\]))"
+    r"(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?"
+    r"(?:/[^\s?#]*)?$"
 )
 
 # Unicode whitespace characters removed by JavaScript's String.prototype.trim()
@@ -364,7 +367,7 @@ def _check_overpass_url(name, value):
     if not re.fullmatch(OVERPASS_URL_PATTERN, value):
         raise SystemExit(
             f"ERROR: {name} must be a lowercase https:// URL (or http:// on "
-            "localhost/127.0.0.1/[::1]) with a valid host, port, and path."
+            "localhost/127.0.0.1/[::1]) with a DNS or IPv4 host, a port up to 65535, and a path."
         )
 
 

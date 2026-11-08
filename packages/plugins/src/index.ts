@@ -718,6 +718,7 @@ export {
   defaultOverpassEndpoint,
   downloadOsmGeoJson,
   escapeOverpassString,
+  INVALID_OVERPASS_ENDPOINT_MESSAGE,
   overpassJsonToGeoJson,
   OVERPASS_DEFAULT_ENDPOINT,
   OVERPASS_DEV_ENDPOINT,

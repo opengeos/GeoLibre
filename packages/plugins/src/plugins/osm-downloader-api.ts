@@ -118,25 +118,33 @@ export type OverpassFetch = (
 ) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
 
 /**
- * Accepted Overpass endpoint URLs: `https://` on a hostname or bracketed IPv6
- * literal, or plain `http://` on loopback, with an optional port and path and
+ * Accepted Overpass endpoint URLs: `https://` on a DNS name or IPv4 address, or
+ * plain `http://` on loopback, with an optional port (up to 65535) and path and
  * no credentials, whitespace, query, or fragment. The same source string is the
  * `osm.overpassUrl` pattern in schema/deployment.schema.json, the client policy
  * parser, and docker/deployment_policy.py; tests fail when they drift.
  */
 export const OVERPASS_URL_PATTERN = new RegExp(
-  "^(?:https://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+  "^(?:https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\\s?#]*)?$",
 );
 
 let configuredOverpassEndpoint: string | undefined;
+let configuredOverpassEndpointInvalid = false;
+
+/** Thrown instead of querying any endpoint while the configured one is invalid. */
+export const INVALID_OVERPASS_ENDPOINT_MESSAGE =
+  "The deployment's Overpass endpoint (osm.overpassUrl) is invalid, so OSM downloads are " +
+  "disabled until it is fixed.";
 
 /**
  * Set the deployment's Overpass API endpoint, used in place of the public relay.
  *
  * Called once at startup with the `osm.overpassUrl` deployment setting
- * (`VITE_GEOLIBRE_OVERPASS_URL`). A blank or undefined value clears it; a value
- * that does not match {@link OVERPASS_URL_PATTERN} is ignored with a warning, so
- * a typo falls back to the default endpoint rather than breaking every download.
+ * (`VITE_GEOLIBRE_OVERPASS_URL`). A blank or undefined value clears it. A value
+ * that does not match {@link OVERPASS_URL_PATTERN} fails closed: it is reported
+ * with a warning and {@link downloadOsmGeoJson} refuses default-endpoint queries
+ * rather than sending the area of interest to the public relay the deployment
+ * meant to avoid.
  *
  * @param value - The configured Overpass interpreter URL, or undefined.
  */
@@ -144,12 +152,15 @@ export function setOverpassEndpoint(value: string | undefined): void {
   const trimmed = value?.trim() ?? "";
   if (trimmed && !OVERPASS_URL_PATTERN.test(trimmed)) {
     console.warn(
-      "[osm] ignoring invalid Overpass endpoint; expected https:// (or http:// on loopback)",
+      "[osm] invalid Overpass endpoint; expected https:// (or http:// on loopback). " +
+        "OSM downloads are disabled until it is fixed.",
     );
     configuredOverpassEndpoint = undefined;
+    configuredOverpassEndpointInvalid = true;
     return;
   }
   configuredOverpassEndpoint = trimmed || undefined;
+  configuredOverpassEndpointInvalid = false;
 }
 
 /**
@@ -278,10 +289,12 @@ export function buildOsmDownloadQuery(
 /**
  * Run a bounded Overpass query and convert its JSON response to GeoJSON.
  *
- * Without `options.endpoint` the query goes to {@link defaultOverpassEndpoint}
- * (the deployment-configured endpoint when set), and a small area that hits a
- * 429 or 5xx response falls back to the OSM editing API's `map.json`, which
- * serves the same OSM data. An explicit `options.endpoint` never falls back.
+ * Without `options.endpoint` the query goes to {@link defaultOverpassEndpoint}.
+ * On the built-in endpoints, a small area that hits a 429, 502, 503, or 504
+ * response falls back to the OSM editing API's `map.json`, which serves the same
+ * OSM data. A deployment-configured endpoint or an explicit `options.endpoint`
+ * never falls back, so the area of interest stays on that endpoint, and an
+ * invalid configured endpoint rejects with {@link INVALID_OVERPASS_ENDPOINT_MESSAGE}.
  */
 export async function downloadOsmGeoJson(
   bbox: [number, number, number, number],
@@ -294,6 +307,11 @@ export async function downloadOsmGeoJson(
   } = {},
 ): Promise<FeatureCollection> {
   const query = buildOsmDownloadQuery(bbox, filter);
+  if (options.endpoint === undefined && configuredOverpassEndpointInvalid) {
+    throw new Error(INVALID_OVERPASS_ENDPOINT_MESSAGE);
+  }
+  // Only the built-in endpoints may fall back to the OSM map API.
+  const builtInEndpoint = options.endpoint === undefined && !configuredOverpassEndpoint;
   const endpoint = options.endpoint ?? defaultOverpassEndpoint();
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as OverpassFetch);
   const requestController = new AbortController();
@@ -323,7 +341,7 @@ export async function downloadOsmGeoJson(
         // The status is still useful when a proxy supplies no readable body.
       }
       if (
-        options.endpoint === undefined &&
+        builtInEndpoint &&
         [429, 502, 503, 504].includes(response.status) &&
         (osmDownloadBoundsArea(bbox) ?? Infinity) <= MAX_OSM_MAP_API_AREA_SQUARE_DEGREES
       ) {

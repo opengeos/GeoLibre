@@ -181,6 +181,8 @@ def test_overpass_url_allows_plain_http_only_on_loopback():
         ("overpass.example.com/api/interpreter", "must be a https:// URL"),
         ("HTTPS://overpass.example.com/api/interpreter", "lowercase https:// URL"),
         ("https://[bogus]/api/interpreter", "GEOLIBRE_OVERPASS_URL"),
+        ("https://[2001:db8::1]/api/interpreter", "DNS or IPv4 host"),
+        ("https://overpass.example.com:99999/api/interpreter", "port up to 65535"),
     ],
 )
 def test_overpass_url_env_rejects_bad_values(value, problem):

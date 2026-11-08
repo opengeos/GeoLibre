@@ -107,9 +107,13 @@ const SHARE_URL = /^(off|https?:\/\/\S+)$/;
 const COLLAB_URL = /^wss?:\/\/\S+$/;
 const EMBED_ORIGIN = /^(\*|https?:\/\/[^/\s]+)$/;
 const GEOLENS_URL = /^(off|same-origin|https?:\/\/\S+)$/;
-/** Mirrors OVERPASS_URL_PATTERN in osm-downloader-api.ts and the schema. */
-export const OVERPASS_URL = new RegExp(
-  "^(?:https://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+/**
+ * Same source as OVERPASS_URL_PATTERN in osm-downloader-api.ts and the schema.
+ * Copied, not imported, so this parser does not pull @geolibre/plugins into
+ * the startup path; tests/deployment-policy.test.ts fails when they drift.
+ */
+export const OVERPASS_URL_PATTERN = new RegExp(
+  "^(?:https://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\\s?#]*)?$",
 );
 const APP_NAME_MAX = 60;
 
@@ -366,7 +370,7 @@ function readOsm(v: unknown): Result<OsmPolicy> {
   const obj = readObject(v, ["overpassUrl"]);
   if ("error" in obj) return obj;
   const r = readFields(obj.value, {
-    overpassUrl: (x) => readPattern(x, "overpassUrl", OVERPASS_URL),
+    overpassUrl: (x) => readPattern(x, "overpassUrl", OVERPASS_URL_PATTERN),
   });
   return "error" in r ? r : { value: r.value as OsmPolicy };
 }
