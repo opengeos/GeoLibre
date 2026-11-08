@@ -25,3 +25,20 @@ export function isSafePluginAssetRelativePath(relativePath: string): boolean {
   }
   return relativePath.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
+
+/**
+ * Encode a validated asset path so `#` and `?` stay literal path content.
+ *
+ * The desktop read resolves the path against a directory, where both are
+ * ordinary filename characters; a URL would read them as a fragment and a query
+ * instead, so the same asset would resolve to a different file (or a 404)
+ * depending on where the plugin came from. Rejects nothing: callers validate
+ * with {@link isSafePluginAssetRelativePath} first, and encoding each segment
+ * afterwards cannot reintroduce a traversal.
+ */
+export function encodePluginAssetPath(relativePath: string): string {
+  return relativePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isSafePluginAssetRelativePath } from "../apps/geolibre-desktop/src/lib/plugin-asset-path";
+import { encodePluginAssetPath, isSafePluginAssetRelativePath } from "../apps/geolibre-desktop/src/lib/plugin-asset-path";
 
 describe("isSafePluginAssetRelativePath", () => {
   it("accepts plain relative paths", () => {
@@ -34,5 +34,20 @@ describe("isSafePluginAssetRelativePath", () => {
     // Filesystem and zip reads do not percent-decode: "%2e%2e" is a plain
     // directory name, not a traversal, so it stays allowed.
     assert.equal(isSafePluginAssetRelativePath("%2e%2e/notes.txt"), true);
+  });
+});
+
+describe("encodePluginAssetPath", () => {
+  it("keeps # and ? as path content instead of a fragment or query", () => {
+    assert.equal(encodePluginAssetPath("assets/conn#1.json"), "assets/conn%231.json");
+    assert.equal(encodePluginAssetPath("assets/what?.json"), "assets/what%3F.json");
+  });
+
+  it("leaves ordinary segments alone", () => {
+    assert.equal(encodePluginAssetPath("a/b/c/data.bin"), "a/b/c/data.bin");
+  });
+
+  it("keeps the separators as separators", () => {
+    assert.equal(encodePluginAssetPath("a/b").split("/").length, 2);
   });
 });
