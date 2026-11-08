@@ -68,16 +68,28 @@ function assertAnonymousRequests(requests: IncomingHttpHeaders[]) {
   }
 }
 
-for (const fail of [false, true]) {
-  test(`MCP SDK handles held-open ${fail ? "error" : "success"} and closes streams; teardown failure is secondary`, async () => {
+for (const [fail, stall] of [
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+]) {
+  test(`MCP SDK handles held-open ${fail ? "error" : "success"} when DELETE ${stall ? "stalls" : "fails"} and closes streams`, async () => {
     const methods: string[] = [];
     const requests: IncomingHttpHeaders[] = [];
     let streams = 0;
+    let deleted = false;
     // Synthetic MCP fixture: real HTTP, each RPC flushes an event and stays open.
     const server = createServer(async (req, res) => {
       requests.push(req.headers);
       if (req.method === "DELETE") {
-        res.writeHead(500).end();
+        deleted = true;
+        if (stall) {
+          streams++;
+          res.on("close", () => streams--);
+        } else {
+          res.writeHead(500).end();
+        }
         return;
       }
       if (req.method === "GET") {
@@ -135,9 +147,12 @@ for (const fail of [false, true]) {
       return originalFetch(`http://127.0.0.1:${address.port}`, init);
     };
     try {
-      const search = parallelSearch("Landsat", new AbortController().signal);
+      const caller = AbortSignal.timeout(5_000);
+      const search = parallelSearch("Landsat", caller);
       if (fail) await assert.rejects(search, /synthetic primary/);
       else assert.equal((await search)[0].content, "Unicode\u2028separator retained");
+      assert.equal(deleted, true);
+      assert.equal(caller.aborted, false, "teardown used the whole caller budget");
       assertAnonymousRequests(requests);
       assert.ok(methods.includes("notifications/initialized"));
       await new Promise((resolve) => setTimeout(resolve, 30));

@@ -10,17 +10,18 @@ const USER_AGENT = `GeoLibre/${project.version} (+https://github.com/opengeos/Ge
 /** One bounded anonymous MCP session; no caller credentials enter this boundary. */
 export async function parallelSearch(query: string, signal: AbortSignal) {
   const transport = new StreamableHTTPClientTransport(new URL(ENDPOINT), {
+    /** Keep every SDK request on Parallel and cap how long a completed search waits for DELETE. */
     fetch: async (url, init) => {
-      // SDK adds only protocol/session headers. Pin the destination and prohibit
-      // redirects, including on its discovery, notification and teardown calls.
       if (String(url) !== ENDPOINT) throw new Error("Unexpected Parallel destination");
       const headers = new Headers(init?.headers);
       headers.set("User-Agent", USER_AGENT);
+      const signals = [signal, ...(init?.signal ? [init.signal] : [])];
+      if (init?.method === "DELETE") signals.push(AbortSignal.timeout(500));
       const response = await fetch(url, {
         ...init,
         headers,
         redirect: "manual",
-        signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]),
+        signal: AbortSignal.any(signals),
       });
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel();

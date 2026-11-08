@@ -2,7 +2,7 @@ import { act, render, useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { test } from "node:test";
-import type { FunctionTool } from "@strands-agents/sdk";
+import { Agent, type FunctionTool } from "@strands-agents/sdk";
 const { useRuntimeEnvironmentVariables } =
   await import("../apps/geolibre-desktop/src/hooks/useRuntimeEnvironmentVariables");
 const { createHostAssistantTools } =
@@ -34,12 +34,11 @@ function configure(value: string, enabled = true, proxy?: string) {
     },
   });
 }
-const search = () =>
-  (
-    createHostAssistantTools({ getMapController: () => null }).find(
-      (tool) => tool.name === "web_search",
-    ) as FunctionTool
-  ).invoke({ query: "Landsat mission" });
+const registeredSearch = () =>
+  createHostAssistantTools({ getMapController: () => null }).find(
+    (tool) => tool.name === "web_search",
+  ) as FunctionTool;
+const search = () => registeredSearch().invoke({ query: "Landsat mission" });
 
 test("saved Settings selection goes through runtime loader and registered web_search", async () => {
   Object.assign(window, { __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_AI_URL: "/ai" } });
@@ -160,7 +159,49 @@ test("search preserves cancellation on older WebViews", async () => {
     assert.equal((await webSearch("Landsat", {}, controller.signal)).provider, "duckduckgo");
     controller.abort();
     await assert.rejects(webSearch("Landsat", {}, controller.signal), { name: "AbortError" });
+
+    Object.assign(window, {
+      __GEOLIBRE_DEPLOYMENT_ENV__: { VITE_GEOLIBRE_AI_URL: "/ai" },
+      __GEOLIBRE_RUNTIME_ENV__: { GEOLIBRE_WEB_SEARCH_PROVIDER: "parallel" },
+    });
+    const running = new AbortController();
+    const started = Promise.withResolvers<AbortSignal>();
+    const held = Promise.withResolvers<Response>();
+    globalThis.fetch = async (url, init) => {
+      assert.equal(String(url), "http://localhost:5173/ai/parallel");
+      const signal = init?.signal;
+      assert.ok(signal);
+      signal.addEventListener("abort", () => held.reject(signal.reason), { once: true });
+      started.resolve(signal);
+      return held.promise;
+    };
+    const tool = registeredSearch();
+    const pending = tool
+      .stream({
+        toolUse: { name: tool.name, toolUseId: "cancelled-search", input: { query: "Landsat" } },
+        agent: new Agent({ tools: [tool] }),
+        invocationState: {},
+        interrupt: () => assert.fail("unexpected tool interrupt"),
+        cancelSignal: running.signal,
+      })
+      .next();
+    const active = await Promise.race([
+      started.promise,
+      pending.then(() => assert.fail("search finished before its fetch started")),
+    ]);
+    assert.equal(active.aborted, false);
+    running.abort();
+    held.resolve(Response.json({ results: [] }));
+    assert.equal(active.aborted, true);
+    const result = await pending;
+    assert.ok(result.done);
+    assert.equal(result.value.status, "error");
+    assert.equal(result.value.error?.name, "AbortError");
   } finally {
     Object.assign(AbortSignal, original);
+    Object.assign(window, {
+      __GEOLIBRE_DEPLOYMENT_ENV__: undefined,
+      __GEOLIBRE_RUNTIME_ENV__: undefined,
+    });
   }
 });

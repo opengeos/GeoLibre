@@ -607,14 +607,16 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       query: z.string().describe("The search query."),
     }),
     callback: async (input, context) => {
+      const signal = context?.cancelSignal;
       try {
-        const response = await webSearch(input.query, undefined, context?.cancelSignal);
+        const response = await webSearch(input.query, undefined, signal);
         return json({
           provider: response.provider,
           answer: response.answer ?? null,
           results: response.results.slice(0, 8),
         });
       } catch (error) {
+        if (signal?.aborted) throw error;
         // Don't surface a raw fetch/CORS error as a tool crash — tell the model
         // search is unavailable so it can fall back gracefully.
         return json({
