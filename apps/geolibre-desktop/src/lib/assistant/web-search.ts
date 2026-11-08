@@ -9,9 +9,11 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   // Honor an upstream signal (e.g. the agent run being cancelled) too.
-  init.signal?.addEventListener("abort", () => controller.abort());
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -26,7 +28,7 @@ export interface WebSearchResult {
 
 /** A normalized search response across backends. */
 export interface WebSearchResponse {
-  provider: "tavily" | "duckduckgo";
+  provider: "tavily" | "duckduckgo" | "parallel";
   /** A direct answer/abstract when the backend provides one. */
   answer?: string;
   results: WebSearchResult[];
@@ -119,7 +121,8 @@ async function duckDuckGoSearch(query: string, signal?: AbortSignal): Promise<We
  * Search the web. Uses Tavily when `TAVILY_API_KEY` is configured (richer,
  * full-text results) and otherwise falls back to DuckDuckGo's keyless Instant
  * Answer API. Both run directly from the browser, so results depend on each
- * service's CORS policy.
+ * service's CORS policy. Explicit `GEOLIBRE_WEB_SEARCH_PROVIDER=parallel`
+ * instead uses the deployment's same-origin managed AI proxy without a search key.
  *
  * @param query The search query.
  * @param env Runtime environment variables (for `TAVILY_API_KEY`).
@@ -130,6 +133,34 @@ export async function webSearch(
   env: RuntimeEnv = readRuntimeEnv(),
   signal?: AbortSignal,
 ): Promise<WebSearchResponse> {
+  if (env.GEOLIBRE_WEB_SEARCH_PROVIDER?.trim() === "parallel") {
+    const proxy = env.GEOLIBRE_AI_PROXY_BASE_URL?.trim().replace(/\/+$/, "");
+    if (!proxy) throw new Error("Parallel search requires the managed GeoLibre AI proxy.");
+    // Only the same-origin, token-injecting proxy is supported. Never send a
+    // personal provider key or the server-side instance token from the browser.
+    const endpoint = new URL(`${proxy.replace(/\/v1$/, "")}/parallel`, window.location.origin);
+    if (endpoint.origin !== window.location.origin) {
+      throw new Error("Parallel search requires a same-origin GeoLibre AI proxy.");
+    }
+    const response = await fetchWithTimeout(endpoint.href, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal,
+    });
+    if (!response.ok) throw new Error(`Parallel search ${response.status} ${response.statusText}`);
+    const data = (await response.json()) as {
+      results: { title: string; url: string; content: string }[];
+    };
+    return {
+      provider: "parallel",
+      results: data.results.map((hit) => ({
+        title: hit.title,
+        url: hit.url,
+        snippet: hit.content,
+      })),
+    };
+  }
   const tavilyKey = env.TAVILY_API_KEY?.trim();
   if (tavilyKey) {
     try {

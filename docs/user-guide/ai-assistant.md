@@ -563,3 +563,19 @@ The assistant runs **inside** GeoLibre and edits the map you are looking at. To
 have an AI agent *outside* GeoLibre — in a terminal, an editor, or a notebook —
 build a project file for you, see the [agent skill](../agent-skill.md) and the
 [MCP server](../mcp.md).
+
+### Keyless Parallel web search
+
+On an instance using GeoLibre's same-origin managed AI proxy, add an enabled
+`GEOLIBRE_WEB_SEARCH_PROVIDER` variable with value `parallel` in **Settings →
+Environment variables**. The ordinary assistant's **Web search** tool then uses
+anonymous [Parallel Search](https://parallel.ai) through the Worker's `/parallel`
+route. No search API key is needed. Queries leave the instance for Parallel;
+results include source URLs and excerpts. This does not change the chat model.
+
+Remove or disable that setting to restore the existing Tavily (when
+`TAVILY_API_KEY` is set), then DuckDuckGo Instant Answer order. Selecting Parallel
+requires the managed proxy; an unavailable proxy or failed search is reported to
+the assistant without silently switching providers. The instance's authentication
+and shared per-client rate limit still apply. A standalone browser build without
+that proxy cannot use this option.

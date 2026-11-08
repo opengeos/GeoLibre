@@ -163,3 +163,18 @@ curl -u 'admin:change-me' http://localhost:8080/ai/v1/chat/completions \
 
 The client supplies only the Docker username and password. nginx adds the
 instance token when it forwards the request.
+
+## Anonymous Parallel search
+
+`POST /parallel` accepts `{ "query": "Landsat satellite mission" }` and returns
+`{ "results": [{ "title": "...", "url": "...", "content": "..." }] }` using
+anonymous `web_search` at the fixed `https://mcp.parallel.ai/mcp` endpoint. It
+uses the existing instance token, origin handling, body cap and shared rate
+limiter. It needs no additional secret. The MCP exchange has a 20-second total
+bound and sends a GeoLibre User-Agent on every request; redirects are rejected.
+The existing `/search` and `/tavily` routes are unchanged.
+
+Users opt in through `GEOLIBRE_WEB_SEARCH_PROVIDER=parallel` in the ordinary
+assistant's Environment variables on an instance whose same-origin `/ai/` proxy
+routes to this Worker. No browser-side token or provider credential is sent to
+Parallel. This route exposes search only, not arbitrary MCP tools or URL fetch.
