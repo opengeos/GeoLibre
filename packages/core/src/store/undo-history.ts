@@ -366,6 +366,25 @@ export function withoutHistory(change: () => void): void {
   }
 }
 
+/**
+ * Rewrite the basemap recorded in every undo/redo snapshot from `from` to `to`.
+ *
+ * Used when the user accepts a regional basemap a loaded project asked for:
+ * snapshots taken while the confirmation was open recorded the fallback, which
+ * is not a basemap anyone chose, so undo must not bring it back.
+ *
+ * @param from - The basemap style URL to replace (the fallback).
+ * @param to - The basemap style URL to record instead.
+ */
+export function replaceHistoryBasemap(from: string, to: string): void {
+  const temporal = boundStore().temporal;
+  const swap = (states: Partial<HistoryState>[]) =>
+    states.map((s) => (s.basemapStyleUrl === from ? { ...s, basemapStyleUrl: to } : s));
+  const { pastStates, futureStates } = temporal.getState();
+  if (pastStates.length === 0 && futureStates.length === 0) return;
+  temporal.setState({ pastStates: swap(pastStates), futureStates: swap(futureStates) });
+}
+
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */
 export function clearHistory(): void {
   cancelHistoryCoalesce(); // reset any in-flight burst so the next edit records

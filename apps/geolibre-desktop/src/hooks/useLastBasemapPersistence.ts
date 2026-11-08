@@ -41,9 +41,18 @@ export function useLastBasemapPersistence(): void {
 
     writeLastBasemap(useAppStore.getState().basemapStyleUrl);
     return useAppStore.subscribe((next, previous) => {
-      if (next.basemapStyleUrl !== previous.basemapStyleUrl) {
-        writeLastBasemap(next.basemapStyleUrl);
+      if (next.basemapStyleUrl === previous.basemapStyleUrl) return;
+      // The startup restore above applies the remembered basemap without a
+      // prompt, so only remember a regional basemap the user picked or
+      // accepted. One that arrived with a project load (a trusted embed host or
+      // collaboration session skips the prompt) keeps the previous value.
+      if (
+        next.projectGeneration !== previous.projectGeneration &&
+        getRegionalBasemapByStyleUrl(next.basemapStyleUrl)
+      ) {
+        return;
       }
+      writeLastBasemap(next.basemapStyleUrl);
     });
   }, []);
 }

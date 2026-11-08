@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, useAppStore } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { renderHook } from "@testing-library/react";
 import { createElement } from "react";
 
 // Loaded after the harness so its CSS imports and Vite globals are handled.
@@ -10,6 +11,10 @@ const { RegionalBasemapSection } =
   await import("../apps/geolibre-desktop/src/components/panels/RegionalBasemapSection");
 const { CHINA_BASEMAPS, DEFAULT_BASEMAP, createEmptyProject } = await import("@geolibre/core");
 const { useNotificationStore } = await import("../apps/geolibre-desktop/src/lib/notify");
+const { useLastBasemapPersistence } =
+  await import("../apps/geolibre-desktop/src/hooks/useLastBasemapPersistence");
+const { readLastBasemap } = await import("../apps/geolibre-desktop/src/lib/last-basemap");
+const { LAST_BASEMAP_STORAGE_KEY } = await import("../apps/geolibre-desktop/src/lib/storage-keys");
 
 const AMAP = CHINA_BASEMAPS.find((basemap) => basemap.id === "amap-street")!;
 
@@ -67,10 +72,53 @@ describe("RegionalBasemapSection", () => {
   afterEach(() => useAppStore.getState().setRegionalBasemapPolicy("allow"));
 
   it("lists the regional basemaps unless the deployment disabled them", () => {
-    const view = render(createElement(RegionalBasemapSection, { onSelect: () => {} }));
+    // Selecting one auto-expands the section, so its buttons are rendered.
+    const view = render(
+      createElement(RegionalBasemapSection, { selectedId: AMAP.id, onSelect: () => {} }),
+    );
     assert.ok(screen.queryByText("Regional"));
+    for (const basemap of CHINA_BASEMAPS) {
+      assert.ok(screen.queryByRole("button", { name: basemap.name }), basemap.id);
+    }
     act(() => useAppStore.getState().setRegionalBasemapPolicy("block"));
     assert.equal(screen.queryByText("Regional"), null);
+    for (const basemap of CHINA_BASEMAPS) {
+      assert.equal(screen.queryByRole("button", { name: basemap.name }), null, basemap.id);
+    }
     view.unmount();
+  });
+});
+
+describe("useLastBasemapPersistence", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(LAST_BASEMAP_STORAGE_KEY);
+    useAppStore.getState().newProject();
+    useAppStore.getState().setRegionalBasemapPolicy("prompt");
+  });
+  afterEach(() => {
+    useAppStore.getState().setRegionalBasemapPolicy("allow");
+    useAppStore.getState().newProject();
+  });
+
+  it("remembers a regional basemap the user picked or accepted, not one a load applied", () => {
+    const hook = renderHook(() => useLastBasemapPersistence());
+    act(() => {
+      useAppStore
+        .getState()
+        .loadProject(createEmptyProject("Embed", { basemapStyleUrl: AMAP.styleUrl }), null, {
+          trustBasemap: true,
+        });
+    });
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    assert.notEqual(readLastBasemap(), AMAP.styleUrl);
+
+    act(() => useAppStore.getState().setBasemapStyleUrl(DEFAULT_BASEMAP));
+    act(() => useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl));
+    assert.equal(readLastBasemap(), AMAP.styleUrl);
+
+    openRegionalProject();
+    act(() => useAppStore.getState().resolveRegionalBasemapHold(true));
+    assert.equal(readLastBasemap(), AMAP.styleUrl);
+    hook.unmount();
   });
 });

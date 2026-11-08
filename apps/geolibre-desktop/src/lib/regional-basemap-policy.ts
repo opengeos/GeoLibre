@@ -13,7 +13,9 @@ import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
 /** The `VITE_*` variable that disables the regional basemaps. */
 export const DISABLE_REGIONAL_BASEMAPS_ENV = "VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS";
 
-const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
+// The same spellings the Docker entrypoint accepts, so a build-time value and a
+// runtime one mean the same thing.
+const TRUE_VALUES = new Set(["1", "true"]);
 
 /**
  * Whether the deployment disabled the regional basemaps.
@@ -21,7 +23,7 @@ const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
  * @param deploymentEnv - Runtime env (with the policy overlaid); defaults to the
  *   value on `window`.
  * @param buildEnv - Build-time env; defaults to the allowlisted build env.
- * @returns True when the first non-blank value is `1`, `true`, `yes` or `on`.
+ * @returns True when the first non-blank value is `1` or `true` (any case).
  */
 export function regionalBasemapsDisabled(deploymentEnv?: EnvRecord, buildEnv?: EnvRecord): boolean {
   // Undefined arguments fall through to readDeploymentEnvValue's defaults.

@@ -9,6 +9,7 @@ import { DEFAULT_ELLIPSOID_ID } from "../ellipsoids";
 import type { PlanetaryBasemap } from "../ellipsoids";
 import {
   gateRegionalBasemap,
+  getRegionalBasemapByStyleUrl,
   type RegionalBasemapHold,
   type RegionalBasemapPolicy,
 } from "../regional-basemaps";
@@ -25,7 +26,7 @@ import {
   type SecondaryMapView,
 } from "../types";
 import type { AppState, SliceCreator } from "./types";
-import { withoutHistory } from "./undo-history";
+import { replaceHistoryBasemap, withoutHistory } from "./undo-history";
 
 /** An explicit background choice replaces the active renderer's override. */
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
@@ -61,6 +62,33 @@ function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.
       ...(clearArcgis ? { arcgisBasemap: undefined } : {}),
       ellipsoidId,
     },
+  };
+}
+
+/**
+ * The basemap fields for a basemap the user (or code acting for them) picked.
+ *
+ * A deployment that disabled regional basemaps refuses them from every caller
+ * (plugins, scripts, the assistant), not only the hidden picker. An explicit
+ * pick is the user's own choice, so `"prompt"` never applies, and it supersedes
+ * a pending prompt: answering Load afterwards must not replace it.
+ *
+ * @param state - The current store state.
+ * @param url - The requested basemap style URL.
+ * @returns The `basemapStyleUrl` to apply and the updated hold.
+ */
+function explicitBasemapChoice(
+  state: AppState,
+  url: string,
+): Pick<AppState, "basemapStyleUrl" | "regionalBasemapHold"> {
+  const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
+  if (gated.held) {
+    console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
+  }
+  return {
+    basemapStyleUrl: gated.styleUrl,
+    regionalBasemapHold:
+      state.regionalBasemapHold?.reason === "prompt" ? null : state.regionalBasemapHold,
   };
 }
 
@@ -361,30 +389,20 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
       };
     }),
   setBasemapStyleUrl: (url) =>
-    set((state) => {
-      // A deployment that disabled regional basemaps refuses them from every
-      // caller (plugins, scripts, the assistant), not only the hidden picker.
-      // Picking a basemap in the UI is the user's own choice, so "prompt"
-      // never applies here.
-      const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
-      if (gated.held) {
-        console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
-      }
-      return {
-        basemapStyleUrl: gated.styleUrl,
-        preferences: preferencesForBasemap(state),
-        isDirty: true,
-      };
-    }),
+    set((state) => ({
+      ...explicitBasemapChoice(state, url),
+      preferences: preferencesForBasemap(state),
+      isDirty: true,
+    })),
   applyPlanetaryBasemap: (basemap) =>
     set((state) => ({
-      basemapStyleUrl: basemap.styleUrl,
+      ...explicitBasemapChoice(state, basemap.styleUrl),
       preferences: preferencesForBasemap(state, basemap.ellipsoidId),
       isDirty: true,
     })),
   restoreEarthBasemap: (styleUrl) =>
     set((state) => ({
-      basemapStyleUrl: styleUrl,
+      ...explicitBasemapChoice(state, styleUrl),
       preferences: preferencesForBasemap(state, DEFAULT_ELLIPSOID_ID),
       isDirty: true,
     })),
@@ -393,14 +411,26 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
   setBlankBackgroundColor: (color) =>
     set({ blankBackgroundColor: normalizeBlankBackgroundColor(color), isDirty: true }),
   setPreferences: (preferences) => set({ preferences, isDirty: true }),
-  setRegionalBasemapPolicy: (policy) =>
-    set((state) => ({
-      regionalBasemapPolicy: policy,
-      regionalBasemapHold:
-        policy === "block" && state.regionalBasemapHold?.reason === "prompt"
-          ? null
-          : state.regionalBasemapHold,
-    })),
+  setRegionalBasemapPolicy: (policy) => {
+    const state = get();
+    const hold =
+      policy === "block" && state.regionalBasemapHold?.reason === "prompt"
+        ? null
+        : state.regionalBasemapHold;
+    // Blocking while a regional basemap is on screen takes it down too, so the
+    // map stops requesting its tiles. Not the user's edit: no undo step.
+    if (policy === "block" && getRegionalBasemapByStyleUrl(state.basemapStyleUrl)) {
+      withoutHistory(() =>
+        set({
+          regionalBasemapPolicy: policy,
+          regionalBasemapHold: hold,
+          basemapStyleUrl: DEFAULT_BASEMAP,
+        }),
+      );
+      return;
+    }
+    set({ regionalBasemapPolicy: policy, regionalBasemapHold: hold });
+  },
   resolveRegionalBasemapHold: (load) => {
     const state = get();
     const hold = state.regionalBasemapHold;
@@ -410,13 +440,18 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
       hold.reason === "prompt" &&
       state.regionalBasemapPolicy !== "block" &&
       hold.projectGeneration === state.projectGeneration &&
-      // Only replace the fallback the load put in; a basemap chosen since then
-      // is the user's newer decision.
+      // Only replace the fallback the load put in. An explicit pick already
+      // clears the hold; this also covers a direct setState.
       state.basemapStyleUrl === DEFAULT_BASEMAP;
     if (!applies) {
       set({ regionalBasemapHold: null });
       return;
     }
     withoutHistory(() => set({ basemapStyleUrl: hold.styleUrl, regionalBasemapHold: null }));
+    // Edits made while the prompt was open recorded the fallback in their undo
+    // snapshots. No explicit basemap pick happened since the load (that would
+    // have cleared the hold), so every such snapshot gets the accepted basemap,
+    // and undoing one of those edits does not take it away again.
+    replaceHistoryBasemap(DEFAULT_BASEMAP, hold.styleUrl);
   },
 });

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
+import { DEFAULT_BASEMAPS } from "maplibre-gl-basemap-control";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
   PANEL_CREDENTIAL_FIELDS,
   getActiveBasemapControl,
   maplibreBasemapControlPlugin as plugin,
+  withoutMainlandChinaBasemaps,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
 import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
@@ -244,5 +246,21 @@ describe("Basemap control API keys", () => {
     // Clearing the field deletes the saved key.
     typeInto(getPanel(), "basemap-control-maptiler-key", "");
     assert.equal(saved.has("maptiler"), false);
+  });
+});
+
+describe("Basemaps control with regional basemaps disabled", () => {
+  // Matches by id and tile host as well as `provider`, so the test fails if the
+  // upstream catalog renames a provider id and the filter silently goes stale.
+  const servedFromMainlandChina = (basemap: (typeof DEFAULT_BASEMAPS)[number]) =>
+    /^(amap|tencent|tianditu)-/.test(basemap.id) ||
+    /autonavi\.com|gtimg\.com|tianditu\.gov\.cn/.test(JSON.stringify(basemap.source));
+
+  it("drops every mainland-China entry of the real catalog and keeps the rest", () => {
+    const china = DEFAULT_BASEMAPS.filter(servedFromMainlandChina);
+    assert.ok(china.length >= 3, "the catalog still ships Amap, Tencent and Tianditu");
+    const kept = withoutMainlandChinaBasemaps(DEFAULT_BASEMAPS);
+    assert.deepEqual(kept.filter(servedFromMainlandChina), []);
+    assert.equal(kept.length, DEFAULT_BASEMAPS.length - china.length);
   });
 });

@@ -132,9 +132,14 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        // The host (the notebook's own code) chose this basemap, and a held
-        // fallback would echo back to Python as a basemap change, so skip the
-        // regional-basemap prompt. A deployment block still applies.
+        // The framing host chose this basemap, and a held fallback would echo
+        // back to it (to Python, for the widget) as a basemap change, so skip
+        // the regional-basemap prompt. This trusts whatever frames the app, the
+        // same boundary as the rest of this bridge (see embedHost.ts): the
+        // bridge only runs for a same-origin parent or an explicit `?embed=1`,
+        // which must be served from a trusted context, and
+        // GEOLIBRE_EMBED_ORIGINS narrows it further. A deployment block still
+        // applies.
         useAppStore
           .getState()
           .loadProject(project, null, { rememberRecent: false, trustBasemap: true });

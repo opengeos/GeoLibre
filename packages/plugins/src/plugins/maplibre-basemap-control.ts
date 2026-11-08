@@ -332,6 +332,18 @@ function releaseControl(): void {
 const MAINLAND_CHINA_PROVIDERS = new Set(["amap", "tencent", "tianditu"]);
 
 /**
+ * Drop the basemaps served from mainland China from a catalog.
+ *
+ * @param basemaps - A basemap catalog, normally the control's `DEFAULT_BASEMAPS`.
+ * @returns The catalog without the Amap, Tencent and Tianditu entries.
+ */
+export function withoutMainlandChinaBasemaps(
+  basemaps: readonly BasemapDefinition[],
+): BasemapDefinition[] {
+  return basemaps.filter((basemap) => !MAINLAND_CHINA_PROVIDERS.has(basemap.provider));
+}
+
+/**
  * The basemap catalog options: the control's defaults, plus Mapbox Standard on
  * the Mapbox renderer, minus the mainland-China providers when the deployment
  * disabled regional basemaps.
@@ -359,10 +371,7 @@ function getBasemapCatalogOptions(
   if (useAppStore.getState().regionalBasemapPolicy === "block") {
     return {
       includeDefaultBasemaps: false,
-      basemaps: [
-        ...DEFAULT_BASEMAPS.filter((basemap) => !MAINLAND_CHINA_PROVIDERS.has(basemap.provider)),
-        ...extra,
-      ],
+      basemaps: [...withoutMainlandChinaBasemaps(DEFAULT_BASEMAPS), ...extra],
     };
   }
   return extra.length > 0 ? { basemaps: extra } : {};

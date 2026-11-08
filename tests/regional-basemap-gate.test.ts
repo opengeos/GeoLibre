@@ -7,6 +7,7 @@ import {
   DEFAULT_BASEMAP,
   gateRegionalBasemap,
   REGIONAL_BASEMAP_SENTINEL_PREFIX,
+  undo,
   useAppStore,
 } from "@geolibre/core";
 import {
@@ -18,6 +19,9 @@ import {
   regionalBasemapsDisabled,
   resolveRegionalBasemapPolicy,
 } from "../apps/geolibre-desktop/src/lib/regional-basemap-policy";
+
+// Read before any test changes it: a fresh store must not gate anything.
+const INITIAL_POLICY = useAppStore.getState().regionalBasemapPolicy;
 
 const AMAP = CHINA_BASEMAPS.find((basemap) => basemap.id === "amap-street")!;
 const TENCENT = CHINA_BASEMAPS.find((basemap) => basemap.id === "tencent-street")!;
@@ -76,6 +80,7 @@ describe("store regional-basemap gate", () => {
   });
 
   it("defaults to allow, so library consumers see no change", () => {
+    assert.equal(INITIAL_POLICY, "allow");
     useAppStore.getState().setRegionalBasemapPolicy("allow");
     useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
@@ -130,6 +135,25 @@ describe("store regional-basemap gate", () => {
     assert.equal(useAppStore.getState().basemapStyleUrl, BLANK_BASEMAP);
   });
 
+  it("an explicit pick of the default basemap supersedes the prompt", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().setBasemapStyleUrl(DEFAULT_BASEMAP);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+  });
+
+  it("an edit made while the prompt was open does not undo the accepted basemap", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().setBasemapOpacity(0.5);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 1);
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    undo();
+    const state = useAppStore.getState();
+    assert.equal(state.basemapOpacity, 1);
+    assert.equal(state.basemapStyleUrl, AMAP.styleUrl);
+  });
+
   it("a trusted load (template, undo step, embed host) skips the prompt", () => {
     useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), null, { trustBasemap: true });
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
@@ -176,6 +200,19 @@ describe("store regional-basemap gate", () => {
       useAppStore.getState().setRegionalBasemapPolicy("block");
       assert.equal(useAppStore.getState().regionalBasemapHold, null);
     });
+
+    it("switching to block takes down a regional basemap already on screen", () => {
+      useAppStore.getState().setRegionalBasemapPolicy("prompt");
+      useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+      useAppStore.getState().setRegionalBasemapPolicy("block");
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    });
+
+    it("refuses a regional basemap through restoreEarthBasemap", (t) => {
+      t.mock.method(console, "warn", () => {});
+      useAppStore.getState().restoreEarthBasemap(TENCENT.styleUrl);
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    });
   });
 });
 
@@ -183,10 +220,10 @@ describe("regional-basemap deployment switch", () => {
   afterEach(() => setDeploymentPolicy(null));
 
   it("reads the VITE_* switch from the deployment env, then the build env", () => {
-    for (const value of ["1", "true", "TRUE", " yes ", "on"]) {
+    for (const value of ["1", "true", " TRUE "]) {
       assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), true);
     }
-    for (const value of ["0", "false", "", "  "]) {
+    for (const value of ["0", "false", "", "  ", "yes", "on"]) {
       assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), false);
     }
     assert.equal(regionalBasemapsDisabled({}, { [DISABLE_REGIONAL_BASEMAPS_ENV]: "1" }), true);
