@@ -38,7 +38,9 @@ files or projects, but like any request they reveal your IP address to the host:
 - **Default basemap**: a new map loads the OpenFreeMap basemap
   (tiles.openfreemap.org) for the current view. The tiles requested reveal the
   area you are looking at, which OpenFreeMap can associate with your IP address.
-- **Plugin blocklist**: each session downloads the plugin registry's blocklist;
+- **Plugin registry**: each session downloads the plugin registry and its
+  blocklist from plugins.geolibre.app (the registry only when plugin
+  installation is allowed, which it is by default);
   see [Plugins from the plugin registry](#plugins-from-the-plugin-registry).
 - **Update check (desktop only)**: at startup, at most once every 6 hours, the
   desktop app asks GitHub (api.github.com) for the latest GeoLibre release. Turn
@@ -87,10 +89,11 @@ default, and which go through a GeoLibre relay, see
 
 Settings → Manage Plugins lists plugins from the GeoLibre plugin registry at
 <https://plugins.geolibre.app>, operated by the OpenGeos project (currently
-hosted on GitHub Pages and Cloudflare). Opening that dialog downloads the
-registry, and each time GeoLibre starts it downloads the registry's blocklist
-(of plugins pulled for safety) and the files of the plugins you installed from
-it. Like any web server, the registry sees your IP address and which files
+hosted on GitHub Pages and Cloudflare). Each time GeoLibre starts it downloads
+the registry (unless the deployment disables plugin installation), the
+registry's blocklist (of plugins pulled for safety), and the files of the
+plugins you installed from it; opening that dialog downloads the registry
+again. Like any web server, the registry sees your IP address and which files
 you request.
 
 The registry uses those requests to show how often each plugin is used, as

@@ -47,7 +47,7 @@ GeoLibre has no telemetry and no crash reporting in any build.
 | Host | What and when | Builds | Route | How to change it |
 | --- | --- | --- | --- | --- |
 | `tiles.openfreemap.org` | The default basemap (OpenFreeMap Liberty): style, vector tiles, sprites, and glyphs for the visible map, on every start and in every new project. | All | Direct | Pick another basemap or a blank background, or serve your own style (see [Reducing outbound requests](self-hosting.md#reducing-outbound-requests)). A project's saved basemap replaces it when that project opens. |
-| `plugins.geolibre.app` | `blocklist.json` (plugins pulled from the registry for safety), fetched once per session before external plugins load. It is fetched even when no registry plugin is installed. The registry itself (`plugin-registry.json`) is fetched only when Settings → Manage Plugins is opened. See [Privacy Policy](privacy.md#plugins-from-the-plugin-registry). | All | Direct | Set `plugins.registryUrl` in [`deployment.json`](deployment-policy.md#plugins) to your own registry; the blocklist is then read from beside it. |
+| `plugins.geolibre.app` | `blocklist.json` (plugins pulled from the registry for safety), fetched once per session before external plugins load. It is fetched even when no registry plugin is installed. The registry itself (`plugin-registry.json`) is fetched at every start when the deployment allows plugin installation (the `plugins:install` capability, which is on by default; the registry tells saved-project redaction which plugins may keep their state), and again when Settings → Manage Plugins is opened. See [Privacy Policy](privacy.md#plugins-from-the-plugin-registry). | All | Direct | Set `plugins.registryUrl` in [`deployment.json`](deployment-policy.md#plugins) to your own registry; the blocklist is then read from beside it. |
 | `api.github.com` | `GET /repos/opengeos/GeoLibre/releases/latest`, the startup update check. Throttled to once every 6 hours. Not present in the Microsoft Store build. | Desktop | Direct | Settings → Updates: turn off "Check for updates on startup". Help → Check for updates makes the same request on demand. |
 | `extensions.duckdb.org` | The DuckDB Spatial extension, downloaded the first time a local vector file needs DuckDB to read it (Shapefile, GeoPackage, GeoParquet, and similar), then cached. It is triggered by opening a local file, not by picking a remote service. | All | Direct | Set `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` to a mirrored copy (build time, or Settings → Environment variables). See [Getting Started](getting-started.md#optional-runtime-mirrors-offline-and-air-gapped). |
 | `www.googletagmanager.com` | Google Analytics. Loaded only by a web build that sets `VITE_GEOLIBRE_GA_MEASUREMENT_ID`, which the OpenGeos hosted deploys (geolibre.app, geolibre.app/demo, web.geolibre.app) do. | Hosted web only | Direct | Never present in the desktop app or the Jupyter widget, and absent from any web build that leaves the ID unset (the default). The Docker image cannot enable it. See [Privacy Policy](privacy.md#website-analytics). |
@@ -205,11 +205,13 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
 ## Differences between builds
 
 - **Desktop** adds the startup update check and the Python sidecar bootstrap.
-  It reaches some upstreams directly over native HTTP (OpenAerialMap, Source
-  Cooperative, Ocean Data Platform features, Earthdata downloads) where the web
-  build needs the relay. Its native HTTP scope for the fetch plugin is limited
-  to the sidecar, the geocoders, `share.geolibre.app`, `datasets.geolibre.app`,
-  and `api.typesafe.ai` (`src-tauri/capabilities/default.json`).
+  It reaches some upstreams directly (OpenAerialMap, Source Cooperative, Ocean
+  Data Platform features, Earthdata downloads) where the web build needs the
+  relay, through GeoLibre's own Rust commands (`fetch_url_bytes` and related,
+  wrapped by `apps/geolibre-desktop/src/lib/native-http.ts`), which bypass CORS.
+  Separately, the Tauri HTTP plugin that page code can call is scoped to the
+  sidecar, the geocoders, `share.geolibre.app`, `datasets.geolibre.app`, and
+  `api.typesafe.ai` (`src-tauri/capabilities/default.json`).
 - **Web** hosted by the OpenGeos project adds Google Analytics and the baked-in
   collaboration (and, on studio.geolibre.app, AI) URLs. A Docker or
   self-built web deployment adds neither.
