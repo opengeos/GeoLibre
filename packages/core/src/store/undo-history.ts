@@ -21,7 +21,8 @@ import {
   trimHistoryBySize,
 } from "../history";
 import { scrubPrintLayoutForLayers } from "../print-layout-config";
-import type { GeoLibreProject, LayerGroup } from "../types";
+import { getRegionalBasemapByStyleUrl } from "../regional-basemaps";
+import { DEFAULT_BASEMAP, type GeoLibreProject, type LayerGroup } from "../types";
 import { scrubSecondaryPaneLayerVisibility } from "./layer-removal";
 import type { AppState } from "./types";
 
@@ -265,6 +266,12 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           },
         }
       : {};
+  // A step recorded before the deployment disabled regional basemaps must not
+  // bring one back.
+  const basemapPatch =
+    s.regionalBasemapPolicy === "block" && getRegionalBasemapByStyleUrl(s.basemapStyleUrl)
+      ? { basemapStyleUrl: DEFAULT_BASEMAP }
+      : {};
   boundStore().setState(
     selectionDangling
       ? {
@@ -274,8 +281,9 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           selectedFeatureIds: [],
           ...ellipsoidPatch,
           ...referencePatch,
+          ...basemapPatch,
         }
-      : { isDirty: true, ...ellipsoidPatch, ...referencePatch },
+      : { isDirty: true, ...ellipsoidPatch, ...referencePatch, ...basemapPatch },
   );
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();

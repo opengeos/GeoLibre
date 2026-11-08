@@ -72,6 +72,7 @@ describe("gateRegionalBasemap", () => {
 describe("store regional-basemap gate", () => {
   beforeEach(() => {
     useAppStore.getState().newProject();
+    useAppStore.setState({ regionalBasemapAnswers: {} });
     useAppStore.getState().setRegionalBasemapPolicy("prompt");
   });
   afterEach(() => {
@@ -154,6 +155,21 @@ describe("store regional-basemap gate", () => {
     assert.equal(state.basemapStyleUrl, AMAP.styleUrl);
   });
 
+  it("reuses the session's answer for the same basemap instead of asking again", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().resolveRegionalBasemapHold(true);
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+
+    useAppStore.getState().loadProject(projectWith(TENCENT.styleUrl));
+    assert.equal(useAppStore.getState().regionalBasemapHold?.styleUrl, TENCENT.styleUrl);
+    useAppStore.getState().resolveRegionalBasemapHold(false);
+    useAppStore.getState().loadProject(projectWith(TENCENT.styleUrl));
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
   it("a trusted load (template, undo step, embed host) skips the prompt", () => {
     useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), null, { trustBasemap: true });
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
@@ -211,6 +227,15 @@ describe("store regional-basemap gate", () => {
     it("refuses a regional basemap through restoreEarthBasemap", (t) => {
       t.mock.method(console, "warn", () => {});
       useAppStore.getState().restoreEarthBasemap(TENCENT.styleUrl);
+      assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    });
+
+    it("undo cannot bring back a regional basemap recorded before the block", () => {
+      useAppStore.getState().setRegionalBasemapPolicy("prompt");
+      useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+      useAppStore.getState().setBasemapStyleUrl(BLANK_BASEMAP);
+      useAppStore.getState().setRegionalBasemapPolicy("block");
+      undo();
       assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
     });
   });

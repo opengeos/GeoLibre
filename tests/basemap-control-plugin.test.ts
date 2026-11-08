@@ -153,6 +153,29 @@ describe("maplibreBasemapControlPlugin lifecycle", () => {
     assert.ok(state.activeBasemapIds.includes("google-satellite"));
     assert.equal(state.allowMultiple, true);
   });
+
+  it("leaves the mainland-China providers out of the live catalog only under block", () => {
+    const providers = () =>
+      new Set(
+        getActiveBasemapControl()!
+          .getBasemaps()
+          .map((basemap) => basemap.provider),
+      );
+    const app = fakeApp([]);
+    try {
+      plugin.activate(app);
+      assert.ok(providers().has("amap"));
+      plugin.deactivate?.(app);
+
+      useAppStore.getState().setRegionalBasemapPolicy("block");
+      plugin.activate(app);
+      const blocked = providers();
+      for (const id of ["amap", "tencent", "tianditu"]) assert.equal(blocked.has(id), false, id);
+      assert.ok(blocked.size > 0, "the rest of the catalog is still offered");
+    } finally {
+      useAppStore.getState().setRegionalBasemapPolicy("allow");
+    }
+  });
 });
 
 describe("Mapbox basemap control", () => {

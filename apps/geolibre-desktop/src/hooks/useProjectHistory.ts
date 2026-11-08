@@ -238,9 +238,6 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         useAppStore.getState().loadProject(restored, beforePath, {
           rememberRecent: false,
           presenting: false,
-          // An autosaved snapshot of this session's store, whose basemap
-          // already passed the regional-basemap gate.
-          trustBasemap: true,
         });
         registerProjectRestoreHistory(before, beforePath, restored, beforePath);
         useAppStore.setState({ isDirty: true });

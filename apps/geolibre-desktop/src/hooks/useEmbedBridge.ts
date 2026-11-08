@@ -1,6 +1,7 @@
 import { parseProject, serializeProject, useAppStore, type GeoLibreProject } from "@geolibre/core";
 import { type RefObject, useEffect } from "react";
 import type { MapEngine } from "@geolibre/map";
+import { createBasemapEgressTracker } from "../lib/basemap-egress";
 import { buildProjectEgressSnapshot, buildProjectSnapshot } from "../lib/build-project-snapshot";
 import { getEmbedHost, isEmbedded } from "./embedHost";
 
@@ -76,10 +77,14 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
     let lastPostedContent: string | null = null;
     let trustedWidget = false;
 
+    const basemapEgress = createBasemapEgressTracker();
+
     const buildProject = (): GeoLibreProject =>
-      trustedWidget
-        ? buildProjectSnapshot(mapControllerRef)
-        : buildProjectEgressSnapshot(mapControllerRef);
+      basemapEgress.apply(
+        trustedWidget
+          ? buildProjectSnapshot(mapControllerRef)
+          : buildProjectEgressSnapshot(mapControllerRef),
+      );
 
     const postState = () => {
       if (disposed) return;
@@ -132,17 +137,14 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        // The co-located Jupyter widget (`trustedWidget`) is the notebook's own
-        // code choosing the basemap, and a held fallback would echo back to
-        // Python as a basemap change, so it skips the regional-basemap prompt.
-        // Any other host (a Dash page, a page framing a `?embed=1` export) is
-        // showing the map to someone else, so its viewers are asked. The flag
-        // is self-declared (see above), so this narrows who skips the prompt
-        // rather than enforcing it. A deployment block applies either way.
-        useAppStore.getState().loadProject(project, null, {
-          rememberRecent: false,
-          trustBasemap: trustedWidget,
-        });
+        // Gated like any opened project: the host is self-identified (even
+        // `trustedWidget` is self-declared), so a regional basemap it names
+        // waits for the viewer's answer, which the store remembers for the
+        // session so a host re-sending its project does not re-prompt. The
+        // tracker keeps the host's basemap in the snapshots posted back, so
+        // the local fallback never reaches Python as a basemap change.
+        useAppStore.getState().loadProject(project, null, { rememberRecent: false });
+        basemapEgress.noteInbound(project.basemapStyleUrl);
         // Suppress the snapshot this load would otherwise echo. loadProject is
         // synchronous, so cache the post-normalisation project (merged styles,
         // computed defaults) rather than the raw input; otherwise the first

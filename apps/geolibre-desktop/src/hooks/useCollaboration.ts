@@ -18,6 +18,7 @@ import {
   buildCollaborationSnapshot,
   buildProjectEgressSnapshot,
 } from "../lib/build-project-snapshot";
+import { createBasemapEgressTracker } from "../lib/basemap-egress";
 import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   CollabConnection,
@@ -76,11 +77,9 @@ export function useCollaboration(
   const teardownRef = useRef<(() => void) | null>(null);
   const presenceTeardownRef = useRef<(() => void) | null>(null);
   const lastContentRef = useRef<string | null>(null);
-  // The session's regional basemap this client renders as the default because
-  // the deployment disabled regional basemaps. Outgoing snapshots carry it back
-  // unchanged, so an unrelated edit from this client does not switch every
-  // unrestricted peer to the default basemap.
-  const sharedBasemapRef = useRef<{ styleUrl: string; choiceGeneration: number } | null>(null);
+  // Carries a session regional basemap this deployment blocks back out
+  // unchanged, so this client's edits do not reset it for every other peer.
+  const basemapEgressRef = useRef(createBasemapEgressTracker());
   const revRef = useRef(0);
   const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
@@ -146,28 +145,6 @@ export function useCollaboration(
     return participantCanEditLayer(self, c.mode, layerId, c.lockedLayerIds ?? []);
   }, []);
 
-  /**
-   * Put the session's blocked regional basemap back into an outgoing snapshot.
-   *
-   * While this client shows the default basemap in its place, the snapshot
-   * carries the shared one instead. Once the user picks a basemap locally
-   * (the store's `basemapChoiceGeneration` moved, which also catches a
-   * deliberate pick of the default basemap), the shared one is forgotten and
-   * the user's choice goes out.
-   *
-   * @param project - The snapshot built from the local store.
-   * @returns The snapshot to send.
-   */
-  const withSharedBasemap = (project: GeoLibreProject): GeoLibreProject => {
-    const shared = sharedBasemapRef.current;
-    if (!shared) return project;
-    if (useAppStore.getState().basemapChoiceGeneration !== shared.choiceGeneration) {
-      sharedBasemapRef.current = null;
-      return project;
-    }
-    return { ...project, basemapStyleUrl: shared.styleUrl };
-  };
-
   const sendSnapshot = async (): Promise<void> => {
     if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
@@ -181,7 +158,7 @@ export function useCollaboration(
       return;
     }
     if (request !== snapshotRequestRef.current || !canEdit() || syncPausedRef.current) return;
-    project = withSharedBasemap(project);
+    project = basemapEgressRef.current.apply(project);
     const content = serializeProject(project);
     if (content === lastContentRef.current) return;
     lastContentRef.current = content;
@@ -203,20 +180,10 @@ export function useCollaboration(
     const state = useAppStore.getState();
     const localView = mapControllerRef.current?.readView() ?? state.mapView;
     const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
-    // The basemap is shared session state the user joined deliberately, and a
-    // held fallback would be broadcast back as a basemap change, so live
-    // sessions skip the regional-basemap prompt. A deployment block still
-    // applies, on the join and on every later snapshot; the blocked basemap is
-    // remembered so this client does not overwrite it for everyone else.
-    const gated = gateRegionalBasemap(
-      merged.basemapStyleUrl,
-      state.regionalBasemapPolicy,
-      DEFAULT_BASEMAP,
-      true,
-    );
-    sharedBasemapRef.current = gated.held
-      ? { styleUrl: merged.basemapStyleUrl, choiceGeneration: state.basemapChoiceGeneration }
-      : null;
+    // A deliberate exception to the regional-basemap prompt: the basemap is
+    // shared state of a session the user chose to join, so it applies without
+    // asking. A deployment block still applies, on the join and on every later
+    // snapshot (see docs/deployment-policy.md#regional-basemaps).
     if (initial) {
       useAppStore.getState().loadProject(merged, null, {
         rememberRecent: false,
@@ -225,7 +192,12 @@ export function useCollaboration(
       });
     } else {
       const applied = applyProjectToStore(merged);
-      applied.basemapStyleUrl = gated.styleUrl;
+      applied.basemapStyleUrl = gateRegionalBasemap(
+        applied.basemapStyleUrl,
+        state.regionalBasemapPolicy,
+        DEFAULT_BASEMAP,
+        true,
+      ).styleUrl;
       // Keep the layers update and the (deferred) generation bump separate:
       // bindNetcdfProfileSamplesToProject treats a bump that lands together
       // with new layers as a project switch and clears the inspected samples.
@@ -233,8 +205,9 @@ export function useCollaboration(
       clearHistory();
       scheduleRestore();
     }
+    basemapEgressRef.current.noteInbound(merged.basemapStyleUrl);
     lastContentRef.current = serializeProject(
-      withSharedBasemap(buildProjectEgressSnapshot(mapControllerRef)),
+      basemapEgressRef.current.apply(buildProjectEgressSnapshot(mapControllerRef)),
     );
   };
 
@@ -462,7 +435,7 @@ export function useCollaboration(
     syncPausedRef.current = false;
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
-    sharedBasemapRef.current = null;
+    basemapEgressRef.current.reset();
     revRef.current = 0;
 
     const normalizedCode = sessionId.trim().toUpperCase();

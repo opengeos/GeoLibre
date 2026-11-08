@@ -291,16 +291,21 @@ The Change basemap and New project dialogs offer a collapsed **Regional**
 section with basemaps served from inside mainland China (Amap and Tencent), for
 users there whom the default providers serve poorly. A project file can name one
 of them as its basemap, so GeoLibre asks before loading it when a project is
-opened (from a file, a URL, a share link, drag and drop, or a startup restore):
-the map shows the default basemap until the user picks **Load** or
-**Use default basemap**. A basemap the user picks in the UI (or that a plugin,
-script or the assistant sets on their behalf, since that is code the user
-installed or ran), a new project, a template, an undo step, a duplicate, and a
-project loaded by a trusted host (the Jupyter widget, the iframe embed API from
-an `embedOrigins` origin, or a live collaboration session) do not ask. Other
-framing pages, such as one embedding an `?embed=1` export or a Dash app, get the
-prompt like any opened project. Only a regional basemap the user picked or
-accepted is remembered for the next launch.
+opened (from a file, a URL, a share link, drag and drop, a startup or
+project-history restore, or a host framing the app, including the Jupyter
+widget): the map shows the default basemap until the user picks **Load** or
+**Use default basemap**. The answer holds for the rest of the session, so
+opening the same basemap again (or a host re-sending its project) does not ask
+twice, and a framing host keeps seeing its own basemap in the state the app
+reports back.
+
+These do not ask: a basemap the user picks in the UI, or that a plugin, script
+or the assistant sets on their behalf (code the user installed or ran); a new
+project, a template, an undo step or a duplicate; a project the iframe embed API
+loads for an `embedOrigins` origin the deployment allowlisted; and a live
+collaboration session, a deliberate exception, since its basemap is shared
+state of a session the user chose to join. Only a regional basemap the user
+picked or accepted is remembered and restored at the next launch.
 
 `basemaps.regional: false` (or `GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` on Docker,
 or `VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` at build time) removes them
@@ -314,10 +319,12 @@ entirely:
 - plugins, scripts and the assistant cannot set one either, and a regional
   basemap remembered from an earlier session is not restored.
 
-The prompt and the switch cover the basemap (the project's `basemapStyleUrl`).
-Raster basemaps stacked from the Basemaps control, and any XYZ or WMS layer, are
-ordinary project layers: a project can still point one at any tile server, in
-mainland China or elsewhere, the same way it can name any other data source.
+The prompt and the switch cover the built-in regional basemaps (the
+`geolibre://regional-basemap/...` values of a project's `basemapStyleUrl`). A
+custom style URL, raster basemaps stacked from the Basemaps control, and any
+XYZ or WMS layer are ordinary project data: a project can still point one at any
+tile server, in mainland China or elsewhere, the same way it can name any other
+data source.
 
 Like the rest of the policy this is client-side: it stops GeoLibre from
 requesting those tiles, not a modified client.

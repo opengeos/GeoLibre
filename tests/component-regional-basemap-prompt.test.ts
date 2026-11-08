@@ -14,7 +14,8 @@ const { useNotificationStore } = await import("../apps/geolibre-desktop/src/lib/
 const { useLastBasemapPersistence } =
   await import("../apps/geolibre-desktop/src/hooks/useLastBasemapPersistence");
 const { readLastBasemap } = await import("../apps/geolibre-desktop/src/lib/last-basemap");
-const { LAST_BASEMAP_STORAGE_KEY } = await import("../apps/geolibre-desktop/src/lib/storage-keys");
+const { CHOSEN_REGIONAL_BASEMAP_STORAGE_KEY, LAST_BASEMAP_STORAGE_KEY } =
+  await import("../apps/geolibre-desktop/src/lib/storage-keys");
 
 const AMAP = CHINA_BASEMAPS.find((basemap) => basemap.id === "amap-street")!;
 
@@ -29,6 +30,7 @@ function openRegionalProject() {
 describe("RegionalBasemapPrompt", () => {
   beforeEach(() => {
     useAppStore.getState().newProject();
+    useAppStore.setState({ regionalBasemapAnswers: {} });
     useAppStore.getState().setRegionalBasemapPolicy("prompt");
   });
   afterEach(() => {
@@ -92,7 +94,9 @@ describe("RegionalBasemapSection", () => {
 describe("useLastBasemapPersistence", () => {
   beforeEach(() => {
     window.localStorage.removeItem(LAST_BASEMAP_STORAGE_KEY);
+    window.localStorage.removeItem(CHOSEN_REGIONAL_BASEMAP_STORAGE_KEY);
     useAppStore.getState().newProject();
+    useAppStore.setState({ regionalBasemapAnswers: {} });
     useAppStore.getState().setRegionalBasemapPolicy("prompt");
   });
   afterEach(() => {
@@ -122,9 +126,42 @@ describe("useLastBasemapPersistence", () => {
     act(() => useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl));
     assert.equal(readLastBasemap(), AMAP.styleUrl);
 
+    act(() => useAppStore.getState().setBasemapStyleUrl(DEFAULT_BASEMAP));
     openRegionalProject();
     act(() => useAppStore.getState().resolveRegionalBasemapHold(true));
     assert.equal(readLastBasemap(), AMAP.styleUrl);
     hook.unmount();
+  });
+
+  it("records an explicit pick of the regional basemap already on screen", () => {
+    const hook = renderHook(() => useLastBasemapPersistence());
+    act(() => {
+      useAppStore
+        .getState()
+        .loadProject(createEmptyProject("Embed", { basemapStyleUrl: AMAP.styleUrl }), null, {
+          trustBasemap: true,
+        });
+    });
+    assert.notEqual(readLastBasemap(), AMAP.styleUrl);
+    act(() => useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl));
+    assert.equal(readLastBasemap(), AMAP.styleUrl);
+    hook.unmount();
+  });
+
+  it("does not restore a remembered regional basemap with no recorded choice", () => {
+    // What a build before the choice marker could have stored from any load.
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, AMAP.styleUrl);
+    useAppStore.setState({ projectGeneration: 0, projectPath: null, isDirty: false });
+    const hook = renderHook(() => useLastBasemapPersistence());
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    hook.unmount();
+
+    // The mount above recorded the default basemap it restored instead.
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, AMAP.styleUrl);
+    window.localStorage.setItem(CHOSEN_REGIONAL_BASEMAP_STORAGE_KEY, AMAP.styleUrl);
+    useAppStore.setState({ projectGeneration: 0, projectPath: null, isDirty: false });
+    const again = renderHook(() => useLastBasemapPersistence());
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    again.unmount();
   });
 });

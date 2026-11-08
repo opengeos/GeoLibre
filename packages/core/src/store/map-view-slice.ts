@@ -256,6 +256,14 @@ export interface MapViewSlice {
    * basemap is only remembered for the next launch when it was chosen.
    */
   basemapChoiceGeneration: number;
+  /**
+   * The user's answer to the regional-basemap prompt this session, per
+   * regional style URL (true for Load). A later load naming the same basemap
+   * reuses it instead of asking again, so a host that re-sends its project
+   * (the Jupyter widget on every Python-side change) does not re-prompt.
+   * Session-only: never persisted or saved into a project.
+   */
+  regionalBasemapAnswers: Record<string, boolean>;
   /** Set the {@link regionalBasemapPolicy}. Switching to `"block"` drops a pending prompt. */
   setRegionalBasemapPolicy: (policy: RegionalBasemapPolicy) => void;
   /**
@@ -282,6 +290,7 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
   regionalBasemapPolicy: "allow",
   regionalBasemapHold: null,
   basemapChoiceGeneration: 0,
+  regionalBasemapAnswers: {},
 
   setMapView: (view, markDirty = false) =>
     set((s) => ({
@@ -450,22 +459,30 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
     const state = get();
     const hold = state.regionalBasemapHold;
     if (!hold) return;
-    const applies =
-      load &&
+    const answered =
       hold.reason === "prompt" &&
       state.regionalBasemapPolicy !== "block" &&
-      hold.projectGeneration === state.projectGeneration &&
+      hold.projectGeneration === state.projectGeneration;
+    // Remember a real answer for the session, so the next load of the same
+    // basemap does not ask again.
+    const regionalBasemapAnswers = answered
+      ? { ...state.regionalBasemapAnswers, [hold.styleUrl]: load }
+      : state.regionalBasemapAnswers;
+    const applies =
+      load &&
+      answered &&
       // Only replace the fallback the load put in. An explicit pick already
       // clears the hold; this also covers a direct setState.
       state.basemapStyleUrl === DEFAULT_BASEMAP;
     if (!applies) {
-      set({ regionalBasemapHold: null });
+      set({ regionalBasemapHold: null, regionalBasemapAnswers });
       return;
     }
     withoutHistory(() =>
       set({
         basemapStyleUrl: hold.styleUrl,
         regionalBasemapHold: null,
+        regionalBasemapAnswers,
         basemapChoiceGeneration: state.basemapChoiceGeneration + 1,
       }),
     );

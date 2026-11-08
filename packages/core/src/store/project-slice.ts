@@ -232,13 +232,17 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
     // from servers in mainland China without the user choosing that, so the
     // default basemap renders until the user confirms (or for good, when the
     // deployment disabled regional basemaps).
+    const requestedBasemap = applied.basemapStyleUrl;
+    // An answer the user already gave this session for the same basemap
+    // stands: Load trusts it, Use default basemap keeps the fallback quietly.
+    const priorAnswer = get().regionalBasemapAnswers[requestedBasemap];
     const gated = gateRegionalBasemap(
-      applied.basemapStyleUrl,
+      requestedBasemap,
       get().regionalBasemapPolicy,
       DEFAULT_BASEMAP,
-      options.trustBasemap === true,
+      options.trustBasemap === true || priorAnswer === true,
     );
-    const requestedBasemap = applied.basemapStyleUrl;
+    if (gated.held === "prompt" && priorAnswer === false) delete gated.held;
     applied.basemapStyleUrl = gated.styleUrl;
     // A project that ships a story map opens straight into the presentation
     // so the reader sees the story, not the editor. Projects without a story
