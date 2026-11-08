@@ -721,6 +721,7 @@ export {
   overpassJsonToGeoJson,
   OVERPASS_DEFAULT_ENDPOINT,
   OVERPASS_DEV_ENDPOINT,
+  OVERPASS_URL_PATTERN,
   setOverpassEndpoint,
   type OsmDownloadFilter,
   type OsmDownloadPreset,

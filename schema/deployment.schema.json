@@ -209,8 +209,9 @@
       "properties": {
         "overpassUrl": {
           "type": "string",
-          "pattern": "^https?://[^\\s?#]+$",
-          "description": "Overpass API interpreter URL the OSM downloader queries instead of the public GeoLibre relay. No query or fragment."
+          "pattern": "^(?:https://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+          "not": { "pattern": "\\s" },
+          "description": "Overpass API interpreter URL the OSM downloader queries instead of the public GeoLibre relay: https:// (plain http:// only on loopback), no credentials, query, or fragment."
         }
       }
     },

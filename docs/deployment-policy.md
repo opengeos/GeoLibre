@@ -183,7 +183,7 @@ An array of the capability names from
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `overpassUrl` | string | Overpass API interpreter URL for the OSM downloader and the OSM-backed God's Eye View feeds (`https://…`; plain `http://` only on loopback in the container; no query or fragment). Unset uses the public relay `https://tiles.geolibre.app/overpass`. Set it to keep area-of-interest queries on an instance you run or trust. A small area that the endpoint answers with 429 or 5xx still falls back to `api.openstreetmap.org`, the same as the default endpoint. |
+| `overpassUrl` | string | Overpass API interpreter URL for the OSM downloader and the OSM-backed God's Eye View feeds (`https://…`; plain `http://` only on loopback in the container; no query or fragment). Unset uses the public relay `https://tiles.geolibre.app/overpass`. Set it to keep area-of-interest queries on an instance you run or trust. A small area (up to 0.25 square degrees) that the endpoint answers with 429, 502, 503, or 504 still falls back to the OSM editing API at `api.openstreetmap.org`, the same as the default endpoint, so that bounding box reaches the OpenStreetMap Foundation. |
 
 ### `ai`
 

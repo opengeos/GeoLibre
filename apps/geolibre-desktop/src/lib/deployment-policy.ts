@@ -107,7 +107,10 @@ const SHARE_URL = /^(off|https?:\/\/\S+)$/;
 const COLLAB_URL = /^wss?:\/\/\S+$/;
 const EMBED_ORIGIN = /^(\*|https?:\/\/[^/\s]+)$/;
 const GEOLENS_URL = /^(off|same-origin|https?:\/\/\S+)$/;
-const OVERPASS_URL = /^https?:\/\/[^\s?#]+$/;
+/** Mirrors OVERPASS_URL_PATTERN in osm-downloader-api.ts and the schema. */
+export const OVERPASS_URL = new RegExp(
+  "^(?:https://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+);
 const APP_NAME_MAX = 60;
 
 const TOP_LEVEL_KEYS = new Set([

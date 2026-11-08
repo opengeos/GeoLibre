@@ -117,10 +117,16 @@ export type OverpassFetch = (
   init: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
 
-// An absolute http(s) URL with no whitespace, query, or fragment. The deployment
-// layers (deployment.json parser, Docker entrypoint) apply the stricter rules
-// (https only, plain http on loopback); this guards a hand-set build env value.
-const CONFIGURED_OVERPASS_URL = /^https?:\/\/[^\s?#]+$/i;
+/**
+ * Accepted Overpass endpoint URLs: `https://` on a hostname or bracketed IPv6
+ * literal, or plain `http://` on loopback, with an optional port and path and
+ * no credentials, whitespace, query, or fragment. The same source string is the
+ * `osm.overpassUrl` pattern in schema/deployment.schema.json, the client policy
+ * parser, and docker/deployment_policy.py; tests fail when they drift.
+ */
+export const OVERPASS_URL_PATTERN = new RegExp(
+  "^(?:https://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+);
 
 let configuredOverpassEndpoint: string | undefined;
 
@@ -129,15 +135,17 @@ let configuredOverpassEndpoint: string | undefined;
  *
  * Called once at startup with the `osm.overpassUrl` deployment setting
  * (`VITE_GEOLIBRE_OVERPASS_URL`). A blank or undefined value clears it; a value
- * that is not an absolute http(s) URL is ignored with a warning, so a typo falls
- * back to the default endpoint rather than breaking every download.
+ * that does not match {@link OVERPASS_URL_PATTERN} is ignored with a warning, so
+ * a typo falls back to the default endpoint rather than breaking every download.
  *
  * @param value - The configured Overpass interpreter URL, or undefined.
  */
 export function setOverpassEndpoint(value: string | undefined): void {
   const trimmed = value?.trim() ?? "";
-  if (trimmed && !CONFIGURED_OVERPASS_URL.test(trimmed)) {
-    console.warn("[osm] ignoring invalid Overpass endpoint; expected an http(s) URL");
+  if (trimmed && !OVERPASS_URL_PATTERN.test(trimmed)) {
+    console.warn(
+      "[osm] ignoring invalid Overpass endpoint; expected https:// (or http:// on loopback)",
+    );
     configuredOverpassEndpoint = undefined;
     return;
   }

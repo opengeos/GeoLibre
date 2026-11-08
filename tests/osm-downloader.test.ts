@@ -372,12 +372,17 @@ describe("downloadOsmGeoJson", () => {
   it("ignores an invalid configured endpoint with a warning", (t) => {
     t.after(() => setOverpassEndpoint(undefined));
     const warn = t.mock.method(console, "warn", () => {});
-    for (const bad of ["/overpass", "ftp://overpass.example.com", "https://o.example/?k=1"]) {
+    for (const bad of [
+      "/overpass",
+      "ftp://overpass.example.com",
+      "https://o.example/?k=1",
+      "http://overpass.example.com/api/interpreter",
+    ]) {
       setOverpassEndpoint("https://overpass.example.com/api/interpreter");
       setOverpassEndpoint(bad);
       assert.equal(defaultOverpassEndpoint(false), OVERPASS_DEFAULT_ENDPOINT, bad);
     }
-    assert.equal(warn.mock.callCount(), 3);
+    assert.equal(warn.mock.callCount(), 4);
   });
 
   it("keeps the OSM map API fallback for a deployment-configured endpoint", async (t) => {

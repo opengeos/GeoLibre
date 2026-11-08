@@ -42,6 +42,13 @@ CATALOG_ENTRY_KEYS = ("id", "name", "kind", "category", "fields")
 SHARE_LOOPBACK = ("localhost", "127.0.0.1")
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
 SAFE_INTEGER = 2**53 - 1
+# osm.overpassUrl / GEOLIBRE_OVERPASS_URL. The same string is the schema pattern
+# and the client parsers' regex (tests compare them), so all three layers accept
+# exactly the same values.
+OVERPASS_URL_PATTERN = (
+    r"^(?:https://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])|"
+    r"http://(?:localhost|127\.0\.0\.1|\[::1\]))(?::[0-9]{1,5})?(?:/[^\s?#]*)?$"
+)
 
 # Unicode whitespace characters removed by JavaScript's String.prototype.trim()
 # (ECMAScript 2024 §12.3 WhiteSpace + LineTerminator + BOM U+FEFF).
@@ -352,6 +359,13 @@ def _check_overpass_url(name, value):
     if "?" in value or "#" in value:
         raise SystemExit(f"ERROR: {name} must not include query parameters or a fragment.")
     service_url(name, value, ("https",), ("http",), LOOPBACK)
+    # service_url() lowercases the scheme and allows any bracketed host; the
+    # client is stricter, so require its exact pattern for the two to agree.
+    if not re.fullmatch(OVERPASS_URL_PATTERN, value):
+        raise SystemExit(
+            f"ERROR: {name} must be a lowercase https:// URL (or http:// on "
+            "localhost/127.0.0.1/[::1]) with a valid host, port, and path."
+        )
 
 
 # --- New env parsers -----------------------------------------------------------

@@ -392,9 +392,48 @@
       }
     },
     "container": "osm.overpassUrl must be a https:// URL",
-    "schema": "accept",
+    "schema": "reject",
     "parser": {
-      "dropped": []
+      "dropped": ["osm"]
+    }
+  },
+  "osm-overpass-url-credentials": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "https://user:pw@overpass.example.com/api/interpreter"
+      }
+    },
+    "container": "osm.overpassUrl must not embed credentials",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
+    }
+  },
+  "osm-overpass-url-bad-ipv6-host": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "https://[invalid]/api/interpreter"
+      }
+    },
+    "container": "osm.overpassUrl",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
+    }
+  },
+  "osm-overpass-url-uppercase-scheme": {
+    "input": {
+      "version": 1,
+      "osm": {
+        "overpassUrl": "HTTPS://overpass.example.com/api/interpreter"
+      }
+    },
+    "container": "osm.overpassUrl must be a lowercase https:// URL",
+    "schema": "reject",
+    "parser": {
+      "dropped": ["osm"]
     }
   },
   "osm-overpass-url-query": {

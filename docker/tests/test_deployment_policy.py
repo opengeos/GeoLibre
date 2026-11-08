@@ -67,6 +67,7 @@ def test_python_constants_match_schema():
     assert tuple(entry["properties"]) == dp.CATALOG_ENTRY_KEYS
     assert tuple(entry["properties"]["kind"]["enum"]) == dp.SERVICE_KINDS
     assert props["branding"]["properties"]["appName"]["maxLength"] == dp.APP_NAME_MAX
+    assert props["osm"]["properties"]["overpassUrl"]["pattern"] == dp.OVERPASS_URL_PATTERN
 
 
 @pytest.mark.parametrize("whitespace", [" ", "\t", "\ufeff", "\u00a0", "\u3000"])
@@ -178,6 +179,8 @@ def test_overpass_url_allows_plain_http_only_on_loopback():
         ("https://user:pw@overpass.example.com/api/interpreter", "credentials"),
         ("https://overpass.example.com/api interpreter", "whitespace"),
         ("overpass.example.com/api/interpreter", "must be a https:// URL"),
+        ("HTTPS://overpass.example.com/api/interpreter", "lowercase https:// URL"),
+        ("https://[bogus]/api/interpreter", "GEOLIBRE_OVERPASS_URL"),
     ],
 )
 def test_overpass_url_env_rejects_bad_values(value, problem):

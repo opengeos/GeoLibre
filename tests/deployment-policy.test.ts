@@ -15,8 +15,10 @@ import {
   fetchDeploymentPolicy,
   loadDeploymentPolicy,
   parseDeploymentPolicy,
+  OVERPASS_URL,
   resolveDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-policy";
+import { OVERPASS_URL_PATTERN } from "../packages/plugins/src/plugins/osm-downloader-api";
 import { loadAdminProfile } from "../apps/geolibre-desktop/src/lib/admin-profile";
 
 const FIXTURES = fileURLToPath(new URL("./fixtures/deployment-policy/", import.meta.url));
@@ -565,5 +567,35 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
     if (previousWindow === undefined) delete globals.window;
     else globals.window = previousWindow;
     setDeploymentPolicy(null);
+  }
+});
+
+test("the Overpass URL pattern is identical in the schema and both client parsers", () => {
+  const schemaPattern = schema.properties.osm.properties.overpassUrl.pattern;
+  // RegExp#source escapes "/", so compare against a RegExp built from the schema string.
+  const schemaSource = new RegExp(schemaPattern).source;
+  assert.equal(OVERPASS_URL.source, schemaSource);
+  assert.equal(OVERPASS_URL_PATTERN.source, schemaSource);
+  for (const ok of [
+    "https://overpass.example.com/api/interpreter",
+    "https://overpass.example.com:8443",
+    "https://[2001:db8::1]/api/interpreter",
+    "http://localhost:12345/api/interpreter",
+    "http://127.0.0.1/api/interpreter",
+    "http://[::1]:8080/api/interpreter",
+  ]) {
+    assert.equal(OVERPASS_URL.test(ok), true, ok);
+  }
+  for (const bad of [
+    "http://overpass.example.com/api/interpreter",
+    "http://localhost.example.com/api/interpreter",
+    "https://user:pw@overpass.example.com/api/interpreter",
+    "https://[invalid]/api/interpreter",
+    "https://overpass.example.com/api/interpreter?key=x",
+    "https://overpass.example.com/api interpreter",
+    "https://overpass.example.com/api/interpreter\n",
+    "/overpass",
+  ]) {
+    assert.equal(OVERPASS_URL.test(bad), false, bad);
   }
 });
