@@ -3631,7 +3631,7 @@
       "addSplattingLayer": "가우시안 스플래팅 추가",
       "add3dTilesLayer": "3D Tiles 레이어 추가",
       "addDuckdbLayer": "DuckDB 레이어 추가",
-      "whiteboxTools": "Whitebox tools",
+      "whiteboxTools": "Whitebox 도구",
       "sqlWorkspace": "SQL 작업 공간",
       "pythonConsole": "Python 콘솔",
       "notebook": "Jupyter notebook",

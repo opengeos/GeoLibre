@@ -790,7 +790,7 @@
       "authNone": "สาธารณะ / ไม่ระบุตัวตน",
       "authSignIn": "ลงชื่อเข้าใช้ด้วย ArcGIS",
       "authToken": "โทเค็นการเข้าถึง (ขั้นสูง)",
-      "clientId": "OAuth client ID",
+      "clientId": "รหัสไคลเอนต์ OAuth",
       "clientIdPlaceholder": "Client ID ของแอปที่ลงทะเบียนไว้ในพอร์ทัลของคุณ",
       "clientIdHint": "ลงทะเบียนแอปพลิเคชันในพอร์ทัล ArcGIS ของคุณ แล้วเพิ่ม redirect URI ของแอปนี้ลงไป URL พอร์ทัลด้านบนใช้เลือก ArcGIS Online (เว้นว่าง) หรือพอร์ทัล Enterprise ของคุณ",
       "signIn": "ลงชื่อเข้าใช้",
@@ -1037,7 +1037,7 @@
       "database": "ฐานข้อมูล",
       "username": "ชื่อผู้ใช้",
       "password": "รหัสผ่าน",
-      "clientSecret": "Client secret",
+      "clientSecret": "ข้อมูลลับของไคลเอนต์",
       "tenantId": "Tenant ID",
       "clientId": "Client ID",
       "authMethod": "การยืนยันตัวตน",
@@ -1047,7 +1047,7 @@
         "entra_password": "ชื่อผู้ใช้และรหัสผ่าน Microsoft Entra",
         "entra_sp": "Service principal ของ Microsoft Entra",
         "entra_interactive": "Microsoft Entra แบบโต้ตอบ",
-        "msi": "Managed identity",
+        "msi": "ข้อมูลประจำตัวที่มีการจัดการ",
         "token": "โทเค็นการเข้าถึง"
       },
       "authWindowsOnly": "การยืนยันตัวตนแบบ Windows ใช้ได้เฉพาะเมื่อ sidecar ทำงานบน Windows",
@@ -1810,7 +1810,7 @@
     "transform": {
       "affine": "แอฟฟีน (เชิงเส้น)",
       "polynomial": "พหุนาม (อันดับ 2)",
-      "tps": "Thin plate spline"
+      "tps": "สไปลน์แผ่นบาง (TPS)"
     },
     "exporting": "กำลังส่งออก GeoTIFF… (กำลังโหลด GDAL ในการใช้งานครั้งแรก)",
     "exported": "ส่งออก GeoTIFF แล้ว",
@@ -3293,8 +3293,8 @@
         "baseUrl": "URL ฐาน",
         "model": "โมเดล",
         "region": "ภูมิภาค",
-        "accessKeyId": "Access key ID",
-        "secretAccessKey": "Secret access key",
+        "accessKeyId": "รหัสคีย์การเข้าถึง",
+        "secretAccessKey": "คีย์การเข้าถึงลับ",
         "sessionToken": "โทเค็นเซสชัน"
       },
       "placeholder": {
@@ -3868,7 +3868,7 @@
       "inputPoints": "จุดนำเข้า (GeoJSON)",
       "engine": "เอนจิน",
       "engineClient": "ฝั่งไคลเอนต์ (เบราว์เซอร์)",
-      "engineSidecar": "Sidecar (rasterio/GDAL)",
+      "engineSidecar": "บริการเสริม (rasterio/GDAL)",
       "clientHint": "คำนวณในเบราว์เซอร์ของคุณและเพิ่มผลลัพธ์ลงแผนที่ สำหรับแรสเตอร์ขนาดใหญ่หรือภูมิประเทศในระบบพิกัดภูมิศาสตร์ ควรใช้ sidecar แทน",
       "switchToClientHint": "หรือสลับเอนจินเป็นฝั่งไคลเอนต์เพื่อเรียกใช้เครื่องมือนี้ในเบราว์เซอร์ของคุณ",
       "chooseGeoTiff": "เลือกไฟล์ GeoTIFF",
@@ -3986,7 +3986,7 @@
       "georeferencing": "การกำหนดพิกัดภูมิศาสตร์",
       "vectorLayer": "เลเยอร์เวกเตอร์",
       "cadLayer": "เลเยอร์ CAD (DXF/DWG)",
-      "gdbLayer": "File geodatabase (GDB)",
+      "gdbLayer": "ฐานข้อมูลภูมิศาสตร์แบบไฟล์ (GDB)",
       "rasterLayer": "เลเยอร์แรสเตอร์",
       "osmPbfLayer": "เลเยอร์ OSM PBF",
       "vtpkLayer": "เลเยอร์ ArcGIS VTPK/TPKX",
@@ -4241,7 +4241,7 @@
       "geolibre-stac-catalogs": "แคตตาล็อก STAC",
       "geolibre-planet-open-data": "ข้อมูลเปิดของ Planet",
       "maplibre-gl-source-coop": "Source Cooperative",
-      "geolibre-s3-browser": "S3 browser",
+      "geolibre-s3-browser": "เบราว์เซอร์ S3",
       "maplibre-gl-natural-earth": "Natural Earth",
       "maplibre-gl-swipe": "ปัดเปรียบเทียบเลเยอร์",
       "geolibre-elevation-profile": "โปรไฟล์ความสูง",
@@ -4250,7 +4250,7 @@
       "maplibre-gl-huggingface": "Hugging Face",
       "geolibre-satellite-embeddings": "เอ็มเบดดิงภาพดาวเทียม",
       "geolibre-fields-of-the-world": "Fields of the World",
-      "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
+      "geolibre-sentinel2-explorer": "ตัวสำรวจ Sentinel-2",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
       "geolibre-jaxa-earth": "JAXA Earth",
@@ -7512,7 +7512,7 @@
               "label": "วิธีการ",
               "options": {
                 "idw": "การถ่วงน้ำหนักผกผันกับระยะทาง (IDW)",
-                "kriging": "Ordinary kriging"
+                "kriging": "คริกกิงแบบธรรมดา"
               }
             },
             "resolution": {
@@ -8054,7 +8054,7 @@
     "classify": {
       "method": "ตัวจำแนก",
       "methods": {
-        "random-forest": "Random forest",
+        "random-forest": "แรนดอมฟอเรสต์",
         "rules": "กฎค่าเกณฑ์",
         "inherit": "สืบทอดจากระดับบน",
         "ruleset": "ชุดกฎ"
@@ -10111,7 +10111,7 @@
   "plugin": {
     "geolibre-arcgis-portal": {
       "portalPlaceholder": "URL พอร์ทัล (เว้นว่างสำหรับ ArcGIS Online)",
-      "clientIdPlaceholder": "OAuth client ID",
+      "clientIdPlaceholder": "รหัสไคลเอนต์ OAuth",
       "signIn": "ลงชื่อเข้าใช้",
       "signInHint": "ลงชื่อเข้าใช้เพื่อเรียกดูเนื้อหาที่คุณเข้าถึงได้ ป้อน URL ขององค์กรคุณ (https://yourorg.maps.arcgis.com) เพื่อไปยังหน้าลงชื่อเข้าใช้ขององค์กร หรือพอร์ทัล ArcGIS Enterprise ของคุณ",
       "unavailable": "การลงชื่อเข้าใช้ ArcGIS ไม่พร้อมใช้งานในบิลด์นี้",
@@ -10378,7 +10378,7 @@
       "matchCount": "{{count}} จาก {{total}} ฉากตรงกับตัวกรอง",
       "showMore": "แสดงเพิ่มเติม (เหลือ {{count}})",
       "attribution": "ภาพ: Copernicus Sentinel-2 ประมวลผลโดย ESA จัดทำดัชนีโดย Element 84 Earth Search แคตตาล็อก: s2-stac-geoparquet โดย Taylor Geospatial (CC-BY-4.0)",
-      "title": "Sentinel-2 explorer",
+      "title": "ตัวสำรวจ Sentinel-2",
       "bandB01": "ละอองลอยชายฝั่ง (443 nm)",
       "bandB02": "สีน้ำเงิน (490 nm)",
       "bandB03": "สีเขียว (560 nm)",

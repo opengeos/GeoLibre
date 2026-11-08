@@ -3760,7 +3760,7 @@
       "wfs": "Camada WFS",
       "wmts": "Camada WMTS",
       "ogcFeatures": "OGC API - Features",
-      "ogcVectorTiles": "OGC vector tiles",
+      "ogcVectorTiles": "Tiles vetoriais OGC",
       "arcgis": "Camada ArcGIS",
       "georss": "Camada GeoRSS",
       "geoBoundaries": "Limites administrativos",
