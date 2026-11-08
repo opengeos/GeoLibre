@@ -12,8 +12,8 @@ authors:
   - given-names: Daniel
     family-names: Hofbauer
     affiliation: "Independent Researcher, Vienna, Austria"
-version: 3.6.1
-date-released: 2026-11-02
+version: 3.7.0
+date-released: 2026-11-07
 doi: "10.5281/zenodo.20785400"
 repository-code: "https://github.com/opengeos/GeoLibre"
 url: "https://geolibre.app"
