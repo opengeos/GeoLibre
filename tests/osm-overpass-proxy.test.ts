@@ -118,6 +118,23 @@ describe("Overpass edge proxy", () => {
     ]);
   });
 
+  it("reports a busy relay when every instance has a network error", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(String(input));
+      throw new TypeError("network unavailable");
+    };
+    const body =
+      "data=" + encodeURIComponent(buildOsmDownloadQuery([0, 0, 1, 1], { preset: "roads" }));
+
+    const response = await tilesWorker.fetch(request(body), {}, {} as ExecutionContext);
+
+    assert.equal(response.status, 502);
+    assert.match(await response.text(), /Overpass is busy/);
+    assert.equal(response.headers.get("x-overpass-upstream"), null);
+    assert.equal(calls.length, 2);
+  });
+
   it("names the answering instance in an exposed header", async () => {
     let attempt = 0;
     globalThis.fetch = async () => {

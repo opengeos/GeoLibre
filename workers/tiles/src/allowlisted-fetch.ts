@@ -13,7 +13,7 @@ export const HDX_CKAN_SEARCH_UPSTREAM = "https://data.humdata.org/api/3/action/p
 // latter. A second explicitly allowlisted public instance handles transient
 // overloads without turning the route into an open proxy. Each instance sees
 // the queried area, so add one only after reviewing who operates it, and
-// record its operator in docs/network-endpoints.md.
+// record its operator in the network endpoints docs page.
 export const OVERPASS_API_UPSTREAM = "https://z.overpass-api.de/api/interpreter";
 export const OVERPASS_API_FALLBACK_UPSTREAM = "https://overpass.private.coffee/api/interpreter";
 export const OPEN_SKY_STATES_UPSTREAM = "https://opensky-network.org/api/states/all";
