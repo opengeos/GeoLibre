@@ -176,6 +176,8 @@ const FLY_TO_KINDS = new Set<EntryKind>(["imagery", "geojson", "kml", "czml", "3
 
 /** A tileset with a bounding sphere wider than this (metres) is framed at street level. */
 const LARGE_TILESET_RADIUS_M = 20_000;
+/** Above this radius (metres) a tileset is global, not regional, and is framed whole. */
+const REGIONAL_TILESET_MAX_RADIUS_M = 1_000_000;
 /** The camera distance (metres) for framing a large tileset's centre. */
 const LARGE_TILESET_VIEW_RANGE_M = 1_200;
 
@@ -2258,7 +2260,15 @@ export class CesiumLayerSync {
   private flyToLargeTilesetCentre(entry: LayerEntry): boolean {
     if (entry.kind !== "3dtiles") return false;
     const sphere = (entry.handle as Partial<Cesium3DTileset> | undefined)?.boundingSphere;
-    if (!sphere || !(sphere.radius > LARGE_TILESET_RADIUS_M)) return false;
+    // A global tileset (a sphere the size of the Earth, centred near its core)
+    // has no meaningful ground point; it keeps the whole-tileset framing.
+    if (
+      !sphere ||
+      !(sphere.radius > LARGE_TILESET_RADIUS_M) ||
+      sphere.radius > REGIONAL_TILESET_MAX_RADIUS_M
+    ) {
+      return false;
+    }
     const { Cesium, viewer } = this;
     const centre = Cesium.Cartographic.fromCartesian(sphere.center);
     if (!centre) return false;
@@ -2377,6 +2387,26 @@ export class CesiumLayerSync {
   ) {}
 
   private unsubscribeEnvironment: (() => void) | null = null;
+  private unwatchTerrain: (() => void) | null = null;
+
+  /**
+   * Re-ground the I3S scene layers whenever the globe's terrain provider
+   * changes (#3374). Their offset depends on whether there is terrain, and
+   * switching it (including World Terrain arriving asynchronously after the
+   * first sync) changes no layer record, so the store-driven sync never sees it.
+   */
+  private watchTerrain(): void {
+    if (this.unwatchTerrain) return;
+    const scene = this.viewer.scene as {
+      terrainProviderChanged?: { addEventListener(listener: () => void): unknown };
+    };
+    const remove = scene.terrainProviderChanged?.addEventListener(() => {
+      for (const entry of this.entries.values()) {
+        if (entry.kind === "3dtiles" && isI3sLayer(entry.layer)) this.applyTilesetAltitude(entry);
+      }
+    });
+    this.unwatchTerrain = typeof remove === "function" ? (remove as () => void) : () => {};
+  }
 
   /**
    * Rebuild the imagery and 3D Tiles entries whose `${NAME}` request headers
@@ -2456,6 +2486,7 @@ export class CesiumLayerSync {
     this.restoreHighlight();
     this.currentLayers = layers;
     this.watchEnvironment();
+    this.watchTerrain();
     for (const layer of layers) {
       if (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) {
         const d = extractTimeFilterDate(layer.timeFilter);
@@ -2588,6 +2619,8 @@ export class CesiumLayerSync {
     this.entries.clear();
     this.unsubscribeEnvironment?.();
     this.unsubscribeEnvironment = null;
+    this.unwatchTerrain?.();
+    this.unwatchTerrain = null;
     this.removeDrapeLayer();
     this.drape?.destroy();
     this.drape = undefined;

@@ -179,6 +179,11 @@ let i3sBoundMap: unknown;
 let i3sStoreUnsubscribe: (() => void) | null = null;
 let i3sEnsureInFlight: Promise<void> | null = null;
 let lastI3sLayerSignature: string | null = null;
+// The signature without the offsets, to tell an offset-only change apart.
+let lastI3sStructureSignature: string | null = null;
+let i3sOffsetRenderTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long the offsets must stay unchanged before the tileset is reloaded. */
+const I3S_OFFSET_SETTLE_MS = 400;
 // The map the terrain listener is bound to, and the terrain state last drawn.
 let i3sTerrainListenerMap: I3sTerrainEventMap | null = null;
 let i3sLastTerrain = false;
@@ -451,21 +456,38 @@ function renderArcgisI3sTilesLayers(): void {
     i3sMountRetries = 0;
     i3sMountGaveUp = false;
     i3sBoundMap = i3sApp.getMap?.() ?? i3sApp.getMapboxMap?.() ?? null;
+    // Remounting after the last layer was removed can land on a new map.
+    bindI3sTerrainListener(i3sBoundMap);
     lastI3sLayerSignature = null;
+    lastI3sStructureSignature = null;
   }
 
   // The store subscription fires on ANY layer-set change; skip rebuilding the
   // deck layers (which would re-fetch the tileset) when nothing about the I3S
   // layers themselves changed.
-  const signature = i3sLayerSignature(layers);
-  if (signature === lastI3sLayerSignature) return;
-  lastI3sLayerSignature = signature;
-
+  // Probe before the unchanged-signature return, so a restore (which clears
+  // the failed probes) retries them even when nothing else changed.
   for (const layer of layers) {
     if (!i3sProbeIsCurrent(layer) && !i3sProbesFailed.has(i3sProbeKey(layer))) {
       void probeI3sLayerKind(layer);
     }
   }
+
+  const signature = i3sLayerSignature(layers);
+  if (signature === lastI3sLayerSignature) return;
+  // A new offset builds a new deck layer, which reloads the tileset. When only
+  // the offsets changed (typing in the Height offset field, a terrain switch),
+  // wait until they settle rather than reloading on every keystroke.
+  const structure = i3sLayerSignature(layers, false);
+  if (lastI3sLayerSignature !== null && structure === lastI3sStructureSignature) {
+    scheduleI3sOffsetRender();
+    return;
+  }
+  if (i3sOffsetRenderTimer !== null) clearTimeout(i3sOffsetRenderTimer);
+  i3sOffsetRenderTimer = null;
+  lastI3sLayerSignature = signature;
+  lastI3sStructureSignature = structure;
+
   const deckLayers = layers
     .filter((layer) => layer.visible)
     .flatMap((layer) => buildArcgisI3sTilesDeckLayers(layer))
@@ -493,14 +515,33 @@ function scheduleI3sMountRetry(): void {
   });
 }
 
-function i3sLayerSignature(layers: GeoLibreLayer[]): string {
+/** Rebuild the I3S deck layers once the offsets have stopped changing. */
+function scheduleI3sOffsetRender(): void {
+  if (i3sOffsetRenderTimer !== null) clearTimeout(i3sOffsetRenderTimer);
+  i3sOffsetRenderTimer = setTimeout(() => {
+    i3sOffsetRenderTimer = null;
+    lastI3sStructureSignature = null;
+    renderArcgisI3sTilesLayers();
+  }, I3S_OFFSET_SETTLE_MS);
+}
+
+/**
+ * What the I3S deck layers are built from.
+ *
+ * @param layers - The store's I3S layers.
+ * @param withOffsets - Include each layer's vertical offset.
+ * @returns A string that changes whenever the deck layers must be rebuilt.
+ */
+function i3sLayerSignature(layers: GeoLibreLayer[], withOffsets = true): string {
   return layers
     .map((layer) => {
       const building = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
       const sublayers = building ? visibleI3sBuildingSublayers(building).join(",") : "";
       return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${
         typeof layer.source.url === "string" ? layer.source.url : ""
-      }:${String(i3sLayerKind(layer) ?? "")}:${sublayers}:${i3sVerticalOffset(layer, i3sMapHasTerrain())}`;
+      }:${String(i3sLayerKind(layer) ?? "")}:${sublayers}${
+        withOffsets ? `:${i3sVerticalOffset(layer, i3sMapHasTerrain())}` : ""
+      }`;
     })
     .join("|");
 }
@@ -650,6 +691,9 @@ function i3sProbeIsStale(layer: GeoLibreLayer): boolean {
 function i3sLayerKind(layer: GeoLibreLayer): unknown {
   const failed = i3sProbesFailed.has(i3sProbeKey(layer));
   if (i3sProbeIsStale(layer)) return failed ? "mesh" : undefined;
+  // A layer probed before the base elevation was recorded waits for its
+  // re-probe, so it does not draw in the sky and then reload on the ground.
+  if (!failed && layer.metadata.i3sBaseElevation === undefined) return undefined;
   return layer.metadata.i3sKind ?? (failed ? "mesh" : undefined);
 }
 
@@ -703,6 +747,7 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       if (stillPresent) {
         i3sProbesFailed.add(key);
         lastI3sLayerSignature = null;
+        lastI3sStructureSignature = null;
         renderArcgisI3sTilesLayers();
       }
       return;
@@ -712,6 +757,15 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
   const current = useAppStore.getState().layers.find((item) => item.id === layer.id);
   if (!current || (typeof current.source.url === "string" ? current.source.url : "") !== url) {
     return;
+  }
+  // Re-probing the same URL (a layer saved before the base elevation was
+  // recorded) keeps the Building selection the user already made.
+  if (
+    patch.i3sKind === "building" &&
+    current.metadata.i3sProbedUrl === url &&
+    current.metadata.i3sBuilding
+  ) {
+    patch.i3sBuilding = current.metadata.i3sBuilding;
   }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
 }
@@ -766,6 +820,11 @@ export function i3sBaseElevation(doc: unknown): number | null {
  * already reaches 0 m or below (a coastal city such as San Francisco) is left
  * where it is. The user's Height offset (`source.altitudeOffset`) is added on
  * top in either case.
+ *
+ * The shift is one value for the whole layer, from its lowest point. That puts
+ * a single site on the ground; across a city-wide layer on hilly ground,
+ * buildings on higher ground still stand above the flat map by the height
+ * difference, which only 3D terrain (or the Height offset) can correct.
  *
  * @param layer - The I3S store layer.
  * @param terrain - Whether the map draws 3D terrain.

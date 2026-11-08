@@ -668,3 +668,96 @@ describe("buildArcgisI3sTilesDeckLayer vertical offset (issue #3374)", () => {
     assert.equal(props(true).id, "i3s-g-deck");
   });
 });
+
+describe("probeI3sLayerKind base elevation (issue #3374)", () => {
+  const url = "https://host/arcgis/rest/services/B/SceneServer/layers/0";
+  const deps = {
+    deckGL: {
+      geoLayers: {
+        Tile3DLayer: class {
+          constructor(public props: Record<string, unknown>) {}
+        },
+      },
+    } as unknown as GeoLibreDeckGL,
+    loader: {},
+    terrain: false,
+  };
+  const scene = (metadata: Record<string, unknown>) =>
+    ({
+      id: "i3s-zmin",
+      name: "Scene",
+      type: "3d-tiles",
+      source: { sourceId: "i3s-zmin", type: ARCGIS_I3S_SOURCE_KIND, url },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, ...metadata },
+    }) as unknown as GeoLibreLayer;
+
+  async function withDocument(doc: unknown, run: () => Promise<void>) {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify(doc))) as typeof fetch;
+    try {
+      await run();
+    } finally {
+      globalThis.fetch = realFetch;
+      useAppStore.setState({ layers: [] });
+    }
+  }
+
+  it("records fullExtent.zmin, and the layer then draws lowered by it", async () => {
+    const layer = scene({});
+    useAppStore.setState({ layers: [layer] });
+    await withDocument({ layerType: "3DObject", fullExtent: { zmin: 383.1 } }, async () => {
+      await probeI3sLayerKind(layer);
+      const probed = useAppStore.getState().layers[0];
+      assert.equal(probed.metadata.i3sBaseElevation, 383.1);
+      const [deckLayer] = buildArcgisI3sTilesDeckLayers(probed, deps) as unknown as {
+        props: { id: string };
+      }[];
+      assert.equal(deckLayer.props.id, "i3s-zmin-deck@-383.1");
+    });
+  });
+
+  it("does not draw a layer saved before the base elevation until it is re-probed", () => {
+    // Probed by an older version: kind and URL known, no base elevation.
+    const older = scene({ i3sKind: "mesh", i3sProbedUrl: url });
+    assert.deepEqual(buildArcgisI3sTilesDeckLayers(older, deps), []);
+    assert.equal(
+      buildArcgisI3sTilesDeckLayers(scene({ ...older.metadata, i3sBaseElevation: null }), deps)
+        .length,
+      1,
+    );
+  });
+
+  it("keeps the saved Building selection when an older layer is re-probed", async () => {
+    const saved = {
+      mode: "full",
+      overviewId: 0,
+      disciplines: [{ id: 2, name: "Walls", layerType: "3DObject", visible: false }],
+    };
+    const layer = scene({
+      i3sKind: "building",
+      i3sProbedUrl: url,
+      i3sBuildingUrl: url,
+      i3sBuilding: saved,
+    });
+    useAppStore.setState({ layers: [layer] });
+    await withDocument(
+      {
+        layerType: "Building",
+        fullExtent: { zmin: 10 },
+        sublayers: [
+          { id: 0, name: "Overview", modelName: "Overview", layerType: "3DObject" },
+          { id: 2, name: "Walls", layerType: "3DObject", visibility: true },
+        ],
+      },
+      async () => {
+        await probeI3sLayerKind(layer);
+        const probed = useAppStore.getState().layers[0];
+        assert.equal(probed.metadata.i3sBaseElevation, 10);
+        assert.deepEqual(probed.metadata.i3sBuilding, saved);
+      },
+    );
+  });
+});
