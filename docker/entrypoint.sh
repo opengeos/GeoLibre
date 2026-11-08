@@ -164,7 +164,6 @@ from deployment_policy import (
     builtin_services_hidden,
     normalize_collab_url,
     normalize_geolens_url,
-    normalize_overpass_url,
     normalize_share_url,
     parse_capabilities_env,
     parse_embed_origins,
@@ -374,10 +373,15 @@ if geolens_url:
     deployment["VITE_GEOLENS_DEFAULT_URL"] = normalize_geolens_url(geolens_url)
 
 # Overpass API endpoint for the OSM downloader. Unset keeps the public GeoLibre
-# relay; set it to keep area-of-interest queries on an instance you trust.
-overpass_url = os.environ.get("GEOLIBRE_OVERPASS_URL", "").strip()
+# relay; set it to keep area-of-interest queries on an instance you trust. Read
+# from the generated deployment.json, which already applied GEOLIBRE_OVERPASS_URL
+# over the mounted file and validated both, so an endpoint set in either place
+# also rides in this synchronous config and survives a blocked or late
+# deployment.json fetch instead of falling back to the public relay.
+with open("/usr/share/nginx/html/deployment.json", encoding="utf-8") as policy_file:
+    overpass_url = json.load(policy_file).get("osm", {}).get("overpassUrl")
 if overpass_url:
-    deployment["VITE_GEOLIBRE_OVERPASS_URL"] = normalize_overpass_url(overpass_url)
+    deployment["VITE_GEOLIBRE_OVERPASS_URL"] = overpass_url
 
 # Capabilities also ride in the runtime config, which loads synchronously, so an
 # env-set grant survives a blocked or late deployment.json. "none" grants nothing.
@@ -430,8 +434,9 @@ if [ -n "$(trim "${GEOLIBRE_GEOLENS_URL:-}")" ]; then
   esac
 fi
 
-if [ -n "$(trim "${GEOLIBRE_OVERPASS_URL:-}")" ]; then
-  echo "Overpass API endpoint: $(trim "$GEOLIBRE_OVERPASS_URL")"
+OVERPASS_URL_LOG=$(python -c 'import json; print(json.load(open("/usr/share/nginx/html/deployment.json")).get("osm", {}).get("overpassUrl", ""))')
+if [ -n "$OVERPASS_URL_LOG" ]; then
+  echo "Overpass API endpoint: $OVERPASS_URL_LOG"
 fi
 
 if [ -n "$(trim "${GEOLIBRE_NASA_OPERA_NEWS_PROXY_ENDPOINT:-}")" ]; then
