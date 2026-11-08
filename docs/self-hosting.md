@@ -506,9 +506,12 @@ against a private, authenticated, same-origin host:
 
 A private deployment usually also wants to minimize what the browser fetches from
 the public internet. [Network Endpoints](network-endpoints.md) lists every host
-by feature; the main ones are:
+by feature and says which are contacted at startup. The main ones are below; the
+**Default provider** column is what each feature uses out of the box, and most
+of them (geocoding and routing, for example) are contacted only when the feature
+is used:
 
-| Feature | Default | How to keep it internal |
+| Feature | Default provider | How to keep it internal |
 | --- | --- | --- |
 | Basemaps | OpenFreeMap / CARTO tiles | Use the Basemaps plugin's **custom style URL** and serve your own style plus a PMTiles basemap from your server, or use a blank background. Any HTTPS host is already allowed by the CSP; a plain `http://` host needs a CSP change. |
 | Geocoding | Public Nominatim | Point it at a self-hosted Nominatim or Pelias (see [Data Integrations](user-guide/data-integrations.md#geocoding)). |

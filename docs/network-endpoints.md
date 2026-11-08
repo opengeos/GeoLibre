@@ -33,8 +33,10 @@ The **Route** column says how the request travels:
 Requests to the app's own origin (the web build's assets, `deployment.json`,
 `geolibre-runtime-config.js`, and the Docker image's `/sidecar` proxy to the
 local Python sidecar) are not external and are not listed. Neither are user
-supplied URLs (a WMS endpoint, a COG URL, an S3 bucket): GeoLibre fetches
-whatever the user points it at.
+supplied URLs (a WMS endpoint, a COG URL, an S3 bucket) or the data hosts a
+project's layers point at: GeoLibre fetches whatever the user or project points
+it at. A network allowlist built from this page alone will block those layers,
+so add the hosts your projects use.
 
 ## Default requests
 
@@ -88,7 +90,7 @@ so and skips the relay; the table notes those cases.
 | Route | Upstream | Used by | Desktop |
 | --- | --- | --- | --- |
 | `/opm/...`, `/wms/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder`, `planetarymaps.usgs.gov` | Mars, Moon, and other planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
-| `/overpass` (POST) | `z.overpass-api.de`, then `overpass.private.coffee` on a 429, 5xx, or timeout. The `x-overpass-upstream` response header names the instance that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
+| `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx, network error, or timeout, then `maps.mail.ru` (`/osm/tools/overpass/api/interpreter`, run by VK) as a last fallback. Each instance that is tried sees the query and its area of interest. [#3367](https://github.com/opengeos/GeoLibre/pull/3367) removes `maps.mail.ru` and adds an `x-overpass-upstream` response header naming the instance that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
 | `/oam/meta` | `api.openaerialmap.org` | OpenAerialMap search | Direct |
 | `/source-coop/...` | `source.coop` (API and feed) | Source Cooperative and Natural Earth plugins | Direct |
 | `/ckan/search` | `data.humdata.org` | CKAN plugin search | Relay |
@@ -233,7 +235,8 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
   and the Docker image (`docker/nginx.conf`), so the CSP does not limit which
   data hosts are reached. Only `script-src` is pinned to specific CDN paths. An
   operator who needs a host allowlist should enforce it with an egress proxy or
-  firewall, or narrow `connect-src` in a derived image.
+  firewall, or narrow `connect-src` in a derived image, and include the data
+  hosts its projects use as well as the hosts on this page.
 
 [Self-Hosting: Reducing outbound requests](self-hosting.md#reducing-outbound-requests)
 has the per-feature checklist.
@@ -246,8 +249,8 @@ should add it here in the same pull request, and say whether it is default or
 opt-in. Useful starting points for an audit:
 
 ```bash
-grep -rhoE "https://[a-zA-Z0-9.-]+" packages apps/geolibre-desktop/src workers \
-  --include=*.ts --include=*.tsx | sort | uniq -c | sort -rn
+grep -rhoE "https?://[a-zA-Z0-9.-]+" packages apps/geolibre-desktop/src workers \
+  --include='*.ts' --include='*.tsx' | sort | uniq -c | sort -rn
 ```
 
 plus `workers/tiles/src/allowlisted-fetch.ts` for relay upstreams and the

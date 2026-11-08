@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 6, 2026_
+_Last updated: November 7, 2026_
 
 GeoLibre Desktop ("GeoLibre", "the app") is an open-source desktop GIS
 application developed by the OpenGeos community. This policy explains how the app
@@ -29,6 +29,26 @@ raster datasets, project files, and similar) are processed locally on your
 computer. GeoLibre does not upload them to the developer or to any server. An
 optional helper process (a Python component running on your own machine at
 127.0.0.1) performs some geoprocessing entirely on-device.
+
+## Requests the app makes on its own
+
+A few requests happen without you choosing a service. None of them carries your
+data or projects:
+
+- **Default basemap**: a new map loads the OpenFreeMap basemap
+  (tiles.openfreemap.org) for the current view.
+- **Plugin blocklist**: each session downloads the plugin registry's blocklist;
+  see [Plugins from the plugin registry](#plugins-from-the-plugin-registry).
+- **Update check (desktop only)**: at startup, at most once every 6 hours, the
+  desktop app asks GitHub (api.github.com) for the latest GeoLibre release. Turn
+  it off in Settings → Updates. The Microsoft Store build does not check.
+- **DuckDB Spatial extension**: the first time a local vector file needs DuckDB
+  to read it (for example a Shapefile or GeoPackage), the extension is
+  downloaded from DuckDB's extension repository (extensions.duckdb.org) and
+  then cached. The file itself is not sent.
+
+The full list of hosts, including which builds contact them, is on
+[Network Endpoints](network-endpoints.md).
 
 ## Data sent to third-party services (optional features)
 
