@@ -756,7 +756,15 @@ describe("probeI3sLayerKind base elevation (issue #3374)", () => {
         await probeI3sLayerKind(layer);
         const probed = useAppStore.getState().layers[0];
         assert.equal(probed.metadata.i3sBaseElevation, 10);
-        assert.deepEqual(probed.metadata.i3sBuilding, saved);
+        const building = probed.metadata.i3sBuilding as {
+          mode: string;
+          disciplines: { id: number; visible: boolean }[];
+        };
+        assert.equal(building.mode, "full");
+        assert.deepEqual(
+          building.disciplines.map(({ id, visible }) => ({ id, visible })),
+          [{ id: 2, visible: false }],
+        );
       },
     );
   });

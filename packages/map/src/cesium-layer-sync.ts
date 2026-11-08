@@ -2,6 +2,7 @@ import {
   cesiumKmlSource,
   isCesiumKmlLayer,
   installCogTilerDatumShift,
+  i3sGroundOffset,
   visibleI3sBuildingSublayers,
   withJpegTablesPatch,
   type I3sBuildingState,
@@ -2281,7 +2282,6 @@ export class CesiumLayerSync {
         LARGE_TILESET_VIEW_RANGE_M,
       ),
       complete: () => this.deps.onFlyToComplete?.(),
-      cancel: () => this.deps.onFlyToComplete?.(),
     });
     return true;
   }
@@ -3879,8 +3879,7 @@ export class CesiumLayerSync {
     const data = (entry.handle as Partial<I3SDataProvider>).data as
       | { fullExtent?: { zmin?: unknown } }
       | undefined;
-    const zmin = data?.fullExtent?.zmin ?? entry.layer.metadata?.i3sBaseElevation;
-    return typeof zmin === "number" && Number.isFinite(zmin) && zmin > 0 ? -zmin : 0;
+    return i3sGroundOffset(data?.fullExtent?.zmin ?? entry.layer.metadata?.i3sBaseElevation, false);
   }
 
   /**

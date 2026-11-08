@@ -1290,6 +1290,7 @@ function addThreeDTilesLayerForGlobe(
   const layer = createThreeDTilesGlobeStoreLayer(tileset);
   useAppStore.getState().addLayer(layer);
   probeArcgisI3sLayers();
+  // The checkbox is on by default, so a panel without it flies, as in 2D.
   const flyTo =
     panel.querySelector<HTMLInputElement>('input[aria-label="Fly to tileset after load"]')
       ?.checked ?? true;

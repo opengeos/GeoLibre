@@ -8,7 +8,13 @@
 // `3d-tiles` layer with a distinct source kind so the main Layers panel manages
 // its visibility/opacity/removal, which this overlay reflects.
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  i3sGroundOffset,
+  mergeI3sBuildingSelection,
+  type GeoLibreLayer,
+  useAppStore,
+} from "@geolibre/core";
 import {
   I3S_LAYER_DOCUMENT_RE,
   i3sBuildingSublayerUrl,
@@ -182,6 +188,10 @@ let lastI3sLayerSignature: string | null = null;
 // The signature without the offsets, to tell an offset-only change apart.
 let lastI3sStructureSignature: string | null = null;
 let i3sOffsetRenderTimer: ReturnType<typeof setTimeout> | null = null;
+// The signature the pending offset rebuild is waiting to draw.
+let pendingI3sSignature: string | null = null;
+/** How long a layer-document probe may take before the layer draws without it. */
+const I3S_PROBE_TIMEOUT_MS = 15_000;
 /** How long the offsets must stay unchanged before the tileset is reloaded. */
 const I3S_OFFSET_SETTLE_MS = 400;
 // The map the terrain listener is bound to, and the terrain state last drawn.
@@ -474,17 +484,25 @@ function renderArcgisI3sTilesLayers(): void {
   }
 
   const signature = i3sLayerSignature(layers);
-  if (signature === lastI3sLayerSignature) return;
+  if (signature === lastI3sLayerSignature) {
+    // An offset edited and then reverted before the rebuild: nothing to do.
+    cancelI3sOffsetRender();
+    return;
+  }
   // A new offset builds a new deck layer, which reloads the tileset. When only
   // the offsets changed (typing in the Height offset field, a terrain switch),
   // wait until they settle rather than reloading on every keystroke.
   const structure = i3sLayerSignature(layers, false);
   if (lastI3sLayerSignature !== null && structure === lastI3sStructureSignature) {
-    scheduleI3sOffsetRender();
+    // Restart the wait only when the offsets moved again, not when an
+    // unrelated store change re-runs this.
+    if (signature !== pendingI3sSignature) {
+      pendingI3sSignature = signature;
+      scheduleI3sOffsetRender();
+    }
     return;
   }
-  if (i3sOffsetRenderTimer !== null) clearTimeout(i3sOffsetRenderTimer);
-  i3sOffsetRenderTimer = null;
+  cancelI3sOffsetRender();
   lastI3sLayerSignature = signature;
   lastI3sStructureSignature = structure;
 
@@ -520,9 +538,17 @@ function scheduleI3sOffsetRender(): void {
   if (i3sOffsetRenderTimer !== null) clearTimeout(i3sOffsetRenderTimer);
   i3sOffsetRenderTimer = setTimeout(() => {
     i3sOffsetRenderTimer = null;
+    pendingI3sSignature = null;
     lastI3sStructureSignature = null;
     renderArcgisI3sTilesLayers();
   }, I3S_OFFSET_SETTLE_MS);
+}
+
+/** Drop a pending offset rebuild. */
+function cancelI3sOffsetRender(): void {
+  if (i3sOffsetRenderTimer !== null) clearTimeout(i3sOffsetRenderTimer);
+  i3sOffsetRenderTimer = null;
+  pendingI3sSignature = null;
 }
 
 /**
@@ -722,7 +748,11 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
   };
   if (docUrl) {
     try {
-      const response = await fetch(i3sDocumentRequestUrl(docUrl));
+      // Bounded, so a stalled service falls back to drawing the layer (a saved
+      // layer waits for this probe) instead of hiding it indefinitely.
+      const response = await fetch(i3sDocumentRequestUrl(docUrl), {
+        signal: AbortSignal.timeout(I3S_PROBE_TIMEOUT_MS),
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const doc: unknown = await response.json();
       patch.i3sBaseElevation = i3sBaseElevation(doc);
@@ -765,7 +795,10 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
     current.metadata.i3sProbedUrl === url &&
     current.metadata.i3sBuilding
   ) {
-    patch.i3sBuilding = current.metadata.i3sBuilding;
+    patch.i3sBuilding = mergeI3sBuildingSelection(
+      patch.i3sBuilding as I3sBuildingState,
+      current.metadata.i3sBuilding as I3sBuildingState,
+    );
   }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
 }
@@ -832,9 +865,7 @@ export function i3sBaseElevation(doc: unknown): number | null {
  */
 export function i3sVerticalOffset(layer: GeoLibreLayer, terrain: boolean): number {
   const userOffset = Number(layer.source.altitudeOffset);
-  const base = layer.metadata.i3sBaseElevation;
-  const ground =
-    !terrain && typeof base === "number" && Number.isFinite(base) && base > 0 ? -base : 0;
+  const ground = i3sGroundOffset(layer.metadata.i3sBaseElevation, terrain);
   return (Number.isFinite(userOffset) ? userOffset : 0) + ground;
 }
 
