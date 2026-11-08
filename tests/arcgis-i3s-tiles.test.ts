@@ -6,8 +6,10 @@ import {
   arcgisI3sSceneLayerName,
   buildArcgisI3sTilesDeckLayer,
   buildArcgisI3sTilesDeckLayers,
+  i3sBaseElevation,
   i3sDocumentRequestUrl,
   i3sTilesetLngLat,
+  i3sVerticalOffset,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
   persistI3sTilesetCenter,
@@ -550,5 +552,112 @@ describe("probeI3sLayerKind", () => {
       globalThis.fetch = realFetch;
       useAppStore.setState({ layers: [] });
     }
+  });
+});
+
+describe("i3sBaseElevation", () => {
+  it("reads fullExtent.zmin from a layer document", () => {
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: 383.13, zmax: 445.3 } }), 383.13);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: -148.8 } }), -148.8);
+  });
+
+  it("returns null when the document has no usable zmin", () => {
+    assert.equal(i3sBaseElevation({}), null);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: "383" } }), null);
+    assert.equal(i3sBaseElevation({ fullExtent: { zmin: Number.NaN } }), null);
+    assert.equal(i3sBaseElevation(null), null);
+  });
+});
+
+describe("i3sVerticalOffset (issue #3374)", () => {
+  const scene = (metadata: Record<string, unknown>, altitudeOffset?: unknown) =>
+    ({
+      id: "i3s-z",
+      type: "3d-tiles",
+      source: {
+        type: ARCGIS_I3S_SOURCE_KIND,
+        url: "https://host/B/SceneServer/layers/0",
+        altitudeOffset,
+      },
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, ...metadata },
+    }) as unknown as GeoLibreLayer;
+
+  it("lowers a layer with absolute heights onto a flat map", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }), false), -383);
+  });
+
+  it("keeps absolute heights when the map draws terrain", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }), true), 0);
+  });
+
+  it("leaves a layer that already reaches sea level where it is", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: -148.8 }), false), 0);
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: null }), false), 0);
+    assert.equal(i3sVerticalOffset(scene({}), false), 0);
+  });
+
+  it("adds the user's height offset on top", () => {
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }, 10), false), -373);
+    assert.equal(i3sVerticalOffset(scene({ i3sBaseElevation: 383 }, -5), true), -5);
+    assert.equal(i3sVerticalOffset(scene({}, "bad"), false), 0);
+  });
+});
+
+describe("buildArcgisI3sTilesDeckLayer vertical offset (issue #3374)", () => {
+  const grounded = {
+    id: "i3s-g",
+    name: "Building",
+    type: "3d-tiles",
+    source: {
+      sourceId: "i3s-g",
+      type: ARCGIS_I3S_SOURCE_KIND,
+      url: "https://host/B/SceneServer/layers/0",
+    },
+    visible: true,
+    opacity: 1,
+    style: {},
+    metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND, i3sKind: "mesh", i3sBaseElevation: 383 },
+  } as unknown as GeoLibreLayer;
+
+  function props(terrain: boolean): Record<string, unknown> {
+    let captured: Record<string, unknown> = {};
+    class FakeTile3DLayer {
+      constructor(p: Record<string, unknown>) {
+        captured = p;
+      }
+    }
+    const deckGL = { geoLayers: { Tile3DLayer: FakeTile3DLayer } } as unknown as GeoLibreDeckGL;
+    buildArcgisI3sTilesDeckLayer(grounded, { deckGL, loader: {}, terrain });
+    return captured;
+  }
+
+  it("moves a loaded tileset down by its base elevation on a flat map", () => {
+    const onTilesetLoad = props(false).onTilesetLoad as (tileset: unknown) => void;
+    const translations: number[][] = [];
+    let selected = 0;
+    const matrix = {
+      clone: () => ({
+        translate(offset: number[]) {
+          translations.push(offset);
+          return matrix;
+        },
+      }),
+    };
+    onTilesetLoad({
+      cartographicCenter: [0, 0, 400],
+      modelMatrix: matrix,
+      selectTiles: async () => {
+        selected += 1;
+      },
+    });
+    // At lng 0, lat 0 the surface normal is +X in Earth-centred coordinates.
+    assert.equal(translations.length, 1);
+    assert.ok(Math.abs(translations[0][0] + 383) < 1e-9);
+    assert.equal(selected, 1);
+  });
+
+  it("names the deck layer after its offset so a new offset reloads the tileset", () => {
+    assert.equal(props(false).id, "i3s-g-deck@-383");
+    assert.equal(props(true).id, "i3s-g-deck");
   });
 });

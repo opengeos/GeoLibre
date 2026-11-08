@@ -27,7 +27,9 @@ Floors come from a cell's `storey` when the file names one, or from grouping cel
 
 ## BIM models as I3S Building Scene Layers
 
-An ArcGIS I3S **Building Scene Layer** is a BIM model published as a scene service. Add its `.../SceneServer/layers/<n>` URL with **Add Data → 3D Tiles Layer**. It opens on its Overview (the building shell); the Style panel's **Building** section switches to the **Full model** and turns its disciplines (Architectural, Structural, Electrical, ...) and categories (Walls, Windows, Doors, ...) on and off. The choice is saved with the project. Scene layers have to be in WGS84 to draw on the 2D map.
+An ArcGIS I3S **Building Scene Layer** is a BIM model published as a scene service. Add its `.../SceneServer/layers/<n>` URL with **Add Data → 3D Tiles Layer**. It opens on its Overview (the building shell); the Style panel's **Building** section switches to the **Full model** and turns its disciplines (Architectural, Structural, Electrical, ...) and categories (Walls, Windows, Doors, ...) on and off. The choice is saved with the project. Scene layers have to be in WGS84 to draw on the 2D map. **Load sample data → Redlands Building E (ArcGIS I3S BIM)** opens one of Esri's sample buildings.
+
+Scene layers store absolute elevations. On the flat 2D map, without 3D terrain, a layer whose geometry starts above 0 m is lowered so it sits on the ground; with terrain on, it is drawn at its own elevations. Use the Style panel's **Height offset** to nudge it further.
 
 ## IFC files
 

@@ -19,6 +19,7 @@ import {
   type I3sBuildingState,
 } from "./i3s-building";
 import { createI3sMeshLayerClass, type I3sMeshLayerLuma } from "./i3s-mesh-layer";
+import { applyTilesetAltitudeOffset, type PositionedTileset } from "./tiles-altitude-offset";
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
@@ -165,6 +166,9 @@ let i3sBoundMap: unknown;
 let i3sStoreUnsubscribe: (() => void) | null = null;
 let i3sEnsureInFlight: Promise<void> | null = null;
 let lastI3sLayerSignature: string | null = null;
+// The map the terrain listener is bound to, and the terrain state last drawn.
+let i3sTerrainListenerMap: I3sTerrainEventMap | null = null;
+let i3sLastTerrain = false;
 let i3sMountRetryScheduled = false;
 let i3sMountRetries = 0;
 let i3sMountGaveUp = false;
@@ -352,6 +356,7 @@ async function runEnsureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void
     }
   }
   i3sBoundMap = map;
+  bindI3sTerrainListener(map);
   // Overlaid (not interleaved): I3S mesh tiles use the METER_OFFSETS coordinate
   // system, which the interleaved MapboxOverlay renderer rejects ("Invalid
   // coordinateSystem: 2"). Overlaid mode renders deck on its own canvas above
@@ -482,7 +487,7 @@ function i3sLayerSignature(layers: GeoLibreLayer[]): string {
       const sublayers = building ? visibleI3sBuildingSublayers(building).join(",") : "";
       return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${
         typeof layer.source.url === "string" ? layer.source.url : ""
-      }:${String(i3sLayerKind(layer) ?? "")}:${sublayers}`;
+      }:${String(i3sLayerKind(layer) ?? "")}:${sublayers}:${i3sVerticalOffset(layer, i3sMapHasTerrain())}`;
     })
     .join("|");
 }
@@ -493,7 +498,7 @@ function i3sLayerSignature(layers: GeoLibreLayer[]): string {
 // up the lazily-populated module globals.
 export function buildArcgisI3sTilesDeckLayer(
   layer: GeoLibreLayer,
-  deps: { deckGL: GeoLibreDeckGL | null; loader: unknown; meshLayer?: unknown } = {
+  deps: I3sDeckDeps = {
     deckGL: i3sDeckGL,
     loader: i3sLoader,
     meshLayer: i3sMeshLayerClass,
@@ -504,13 +509,17 @@ export function buildArcgisI3sTilesDeckLayer(
   if (!deckGL || !loader) return null;
   const url = sublayer?.url ?? (typeof layer.source.url === "string" ? layer.source.url : "");
   if (!url) return null;
+  const offset = i3sVerticalOffset(layer, deps.terrain ?? i3sMapHasTerrain());
+  const baseId = sublayer ? `${layer.id}-deck-${sublayer.id}` : `${layer.id}-deck`;
 
   const Tile3DLayer = deckGL.geoLayers.Tile3DLayer as unknown as new (
     props: Record<string, unknown>,
   ) => Layer;
 
   return new Tile3DLayer({
-    id: sublayer ? `${layer.id}-deck-${sublayer.id}` : `${layer.id}-deck`,
+    // The offset is applied once, when the tileset loads, so a new offset needs
+    // a new layer (and tileset); an unshifted layer keeps its plain id.
+    id: offset === 0 ? baseId : `${baseId}@${offset}`,
     data: url,
     loader,
     // Tile detail/memory caps + main-thread parsing, shared with the Google
@@ -529,6 +538,9 @@ export function buildArcgisI3sTilesDeckLayer(
     ...(meshLayer ? { _subLayerProps: { mesh: { type: meshLayer } } } : {}),
     onTilesetLoad: (tileset: unknown) => {
       applyThreeDTilesTilesetMemoryLimit(tileset);
+      // Moves the culling bounds, and with them the origin loaders.gl gives each
+      // tile's mesh, so the scene and its tile selection move together.
+      applyTilesetAltitudeOffset(tileset as PositionedTileset, offset);
       warnOnUnsupportedI3sSceneLayerType(url, tileset);
       persistI3sTilesetCenter(layer.id, tileset);
       flyToI3sTileset(layer.id, tileset);
@@ -556,10 +568,7 @@ export function buildArcgisI3sTilesDeckLayer(
  * @param deps - Optional injectable deck.gl and loader dependencies for testing.
  * @returns Its deck.gl layers (none while its type is still being probed).
  */
-export function buildArcgisI3sTilesDeckLayers(
-  layer: GeoLibreLayer,
-  deps?: { deckGL: GeoLibreDeckGL | null; loader: unknown; meshLayer?: unknown },
-): Layer[] {
+export function buildArcgisI3sTilesDeckLayers(layer: GeoLibreLayer, deps?: I3sDeckDeps): Layer[] {
   const kind = i3sLayerKind(layer);
   if (kind === "building") {
     const state = layer.metadata.i3sBuilding as I3sBuildingState | undefined;
@@ -606,7 +615,12 @@ function i3sLayerUrl(layer: GeoLibreLayer): string {
  * layer saved before `i3sProbedUrl` was recorded is probed again once.
  */
 function i3sProbeIsCurrent(layer: GeoLibreLayer): boolean {
-  return layer.metadata.i3sKind !== undefined && layer.metadata.i3sProbedUrl === i3sLayerUrl(layer);
+  return (
+    layer.metadata.i3sKind !== undefined &&
+    layer.metadata.i3sProbedUrl === i3sLayerUrl(layer) &&
+    // Layers probed before the base elevation was recorded are probed once more.
+    layer.metadata.i3sBaseElevation !== undefined
+  );
 }
 
 /**
@@ -646,16 +660,18 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
     i3sProbedUrl: url,
     i3sBuildingUrl: undefined,
     i3sBuilding: undefined,
+    i3sBaseElevation: null,
   };
   if (docUrl) {
     try {
       const response = await fetch(i3sDocumentRequestUrl(docUrl));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const doc: unknown = await response.json();
+      patch.i3sBaseElevation = i3sBaseElevation(doc);
       if (isI3sBuildingLayerDocument(doc)) {
         patch = {
+          ...patch,
           i3sKind: "building",
-          i3sProbedUrl: url,
           i3sBuildingUrl: docUrl,
           i3sBuilding: parseI3sBuildingLayer(doc),
         };
@@ -684,6 +700,93 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
     return;
   }
   useAppStore.getState().updateLayer(layer.id, { metadata: { ...current.metadata, ...patch } });
+}
+
+/** deck.gl and loader dependencies of the I3S deck layers, injectable for tests. */
+export interface I3sDeckDeps {
+  deckGL: GeoLibreDeckGL | null;
+  loader: unknown;
+  meshLayer?: unknown;
+  /** Whether the map draws 3D terrain; read from the bound map when omitted. */
+  terrain?: boolean;
+}
+
+/**
+ * The lowest elevation of an I3S layer's geometry, from its layer document.
+ *
+ * @param doc - The parsed layer document.
+ * @returns `fullExtent.zmin` in metres, or `null` when the document has none.
+ */
+export function i3sBaseElevation(doc: unknown): number | null {
+  const zmin = (doc as { fullExtent?: { zmin?: unknown } } | null)?.fullExtent?.zmin;
+  return typeof zmin === "number" && Number.isFinite(zmin) ? zmin : null;
+}
+
+/**
+ * How far to move an I3S layer vertically on the deck.gl overlay, in metres.
+ *
+ * Scene layers store absolute elevations (above the geoid, or a datum such as
+ * NAVD 88). With 3D terrain the map's ground is at those elevations too, but a
+ * flat map puts the ground at 0 m, so a building in an inland city floated
+ * hundreds of metres in the sky (issue #3374). On a flat map a layer whose
+ * geometry starts above 0 m is lowered so its base sits on the ground; one that
+ * already reaches 0 m or below (a coastal city such as San Francisco) is left
+ * where it is. The user's Height offset (`source.altitudeOffset`) is added on
+ * top in either case.
+ *
+ * @param layer - The I3S store layer.
+ * @param terrain - Whether the map draws 3D terrain.
+ * @returns The vertical offset in metres (positive is up).
+ */
+export function i3sVerticalOffset(layer: GeoLibreLayer, terrain: boolean): number {
+  const userOffset = Number(layer.source.altitudeOffset);
+  const base = layer.metadata.i3sBaseElevation;
+  const ground =
+    !terrain && typeof base === "number" && Number.isFinite(base) && base > 0 ? -base : 0;
+  return (Number.isFinite(userOffset) ? userOffset : 0) + ground;
+}
+
+/** The map events the terrain listener needs (MapLibre and Mapbox share them). */
+interface I3sTerrainEventMap {
+  on?: (type: string, listener: () => void) => unknown;
+  off?: (type: string, listener: () => void) => unknown;
+  getTerrain?: () => unknown;
+}
+
+/** Whether the map the overlay is bound to currently draws 3D terrain. */
+function i3sMapHasTerrain(): boolean {
+  const map = i3sBoundMap as I3sTerrainEventMap | null | undefined;
+  try {
+    return Boolean(map?.getTerrain?.());
+  } catch {
+    // mapbox-gl throws while its style is still loading.
+    return false;
+  }
+}
+
+/** Redraw the I3S layers when the map's terrain is switched on or off. */
+function onI3sMapTerrainChange(): void {
+  const terrain = i3sMapHasTerrain();
+  if (terrain === i3sLastTerrain) return;
+  i3sLastTerrain = terrain;
+  renderArcgisI3sTilesLayers();
+}
+
+/**
+ * Listen for terrain changes on the map the overlay is bound to. MapLibre fires
+ * `terrain`; Mapbox changes terrain through the style, hence `styledata`.
+ *
+ * @param map - The newly bound map, or `null`.
+ */
+function bindI3sTerrainListener(map: unknown): void {
+  for (const type of ["terrain", "styledata"]) {
+    i3sTerrainListenerMap?.off?.(type, onI3sMapTerrainChange);
+  }
+  i3sTerrainListenerMap = (map as I3sTerrainEventMap | null) ?? null;
+  for (const type of ["terrain", "styledata"]) {
+    i3sTerrainListenerMap?.on?.(type, onI3sMapTerrainChange);
+  }
+  i3sLastTerrain = i3sMapHasTerrain();
 }
 
 /** deck.gl 9 numeric coordinate-system codes → their string equivalents. */

@@ -78,6 +78,11 @@ const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
+// Esri's Building E in Redlands, a WGS84 Building Scene Layer (BIM). Its heights
+// are NAVD 88 elevations near 383 m, so it also exercises grounding on a flat map.
+const ARCGIS_I3S_BUILDING_SAMPLE_TILES_URL =
+  "https://tiles.arcgis.com/tiles/cFEFS0EWrhfDeVw9/arcgis/rest/services/BSL__4326__US_Redlands__BuildingE/SceneServer/layers/0";
+const ARCGIS_I3S_BUILDING_SAMPLE_TILES_LABEL = "Redlands Building E (ArcGIS I3S BIM)";
 const THREE_D_BAG_SAMPLE_TILES_URL =
   "https://data.3dbag.nl/v20250903/cesium3dtiles/lod22/tileset.json";
 const THREE_D_BAG_SAMPLE_TILES_LABEL = "3D BAG Netherlands (LoD 2.2)";
@@ -120,6 +125,10 @@ const threeDTilesOptions = (defaultTilesetUrl: string) =>
       {
         label: ARCGIS_I3S_SAMPLE_TILES_LABEL,
         url: ARCGIS_I3S_SAMPLE_TILES_URL,
+      },
+      {
+        label: ARCGIS_I3S_BUILDING_SAMPLE_TILES_LABEL,
+        url: ARCGIS_I3S_BUILDING_SAMPLE_TILES_URL,
       },
       {
         label: THREE_D_BAG_SAMPLE_TILES_LABEL,
