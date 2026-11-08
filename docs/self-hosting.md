@@ -156,6 +156,7 @@ generated final policy; build-only grants do not configure its guards.
 | `GEOLIBRE_COLLAB_URL` | unset, or your own relay | Unset leaves [live collaboration](collaboration.md) dark. Set it to a `wss://` relay you run if you want multiplayer editing without the hosted relay. |
 | `GEOLIBRE_PROJECT_STORAGE` | unset (`local`), or `server` | When set to `server`, projects save to and open from the configured projects server (`GEOLIBRE_SHARE_URL`) by default instead of local `.geolibre` files: Save uploads a private project to the server, and the Open shortcut (Ctrl/Cmd+O) opens the Gallery on your projects instead of a local file picker. **Open from › File…** in the Project menu still opens a local `.geolibre` file. Requires `GEOLIBRE_SHARE_URL` to be set and not `off`. |
 | `GEOLIBRE_GEOLENS_URL` | unset for the image default, `same-origin`, your GeoLens URL, or `off` | Pre-fills and automatically connects the GeoLens plugin. The stock image defaults to the browser origin, which suits a GeoLens API co-located behind the same reverse proxy. A URL must be a server root without a query or fragment. `off` keeps the panel idle until the user chooses a server. The last successful server is remembered per browser. |
+| `GEOLIBRE_OVERPASS_URL` | unset for the public relay, or your own Overpass API interpreter URL | Points the OSM downloader (and the OSM-backed God's Eye View feeds) at an Overpass instance you run or trust, such as `https://overpass.example.com/api/interpreter`, instead of the public relay `https://tiles.geolibre.app/overpass`. Must be `https://` on a DNS name or IPv4 address without credentials, a query, or a fragment; anything else fails the boot. Browsers call it directly, so it must be reachable from every viewer and allow the GeoLibre origin via CORS (or be proxied under the GeoLibre origin). Plain `http://` is rejected, even on loopback, because the web CSP allows `https:` only. A configured endpoint never falls back to `api.openstreetmap.org`. |
 | `GEOLIBRE_AUTH_USER` / `GEOLIBRE_AUTH_PASSWORD` | set, for a quick single credential | nginx Basic Auth over the app and the `/sidecar` API. One shared credential, not accounts. Use a real auth proxy for multi-user or SSO. |
 | `GEOLIBRE_CLERK_PUBLISHABLE_KEY` | unset, or a Clerk publishable key | Unset keeps the app public and does not load Clerk. A key requires individual users to sign in before the web interface renders; protect server APIs separately. |
 | `GEOLIBRE_CLERK_WAITLIST` | unset, or `1` alongside a Clerk key | Adds Clerk's waitlist form to the sign-in screen, so visitors can request access and you approve each one from the Clerk Dashboard. Leave unset for an invite-only ("restricted") instance, where nothing would act on a request. |
@@ -506,9 +507,13 @@ against a private, authenticated, same-origin host:
 ## Reducing outbound requests
 
 A private deployment usually also wants to minimize what the browser fetches from
-the public internet:
+the public internet. [Network Endpoints](network-endpoints.md) lists every host
+by feature and says which are contacted at startup. The main ones are below; the
+**Default provider** column is what each feature uses out of the box, and most
+of them (geocoding and routing, for example) are contacted only when the feature
+is used:
 
-| Feature | Default | How to keep it internal |
+| Feature | Default provider | How to keep it internal |
 | --- | --- | --- |
 | Basemaps | OpenFreeMap / CARTO tiles | Use the Basemaps plugin's **custom style URL** and serve your own style plus a PMTiles basemap from your server, or use a blank background. Any HTTPS host is already allowed by the CSP; a plain `http://` host needs a CSP change. |
 | Geocoding | Public Nominatim | Point it at a self-hosted Nominatim or Pelias (see [Data Integrations](user-guide/data-integrations.md#geocoding)). |
@@ -547,3 +552,4 @@ the public internet:
 - [Data Integrations](user-guide/data-integrations.md#self-hosted-catalogs)
 - [Embedding & Sharing](user-guide/embedding.md)
 - [Privacy Policy](privacy.md)
+- [Network Endpoints](network-endpoints.md) for every external host, by feature

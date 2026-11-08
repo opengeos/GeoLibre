@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 6, 2026_
+_Last updated: November 7, 2026_
 
 GeoLibre Desktop ("GeoLibre", "the app") is an open-source desktop GIS
 application developed by the OpenGeos community. This policy explains how the app
@@ -30,6 +30,31 @@ computer. GeoLibre does not upload them to the developer or to any server. An
 optional helper process (a Python component running on your own machine at
 127.0.0.1) performs some geoprocessing entirely on-device.
 
+## Requests the app makes on its own
+
+A few requests happen without you choosing a service. None of them uploads your
+files or projects, but like any request they reveal your IP address to the host:
+
+- **Default basemap**: a new map loads the OpenFreeMap basemap
+  (tiles.openfreemap.org) for the current view. The tiles requested reveal the
+  area you are looking at, which OpenFreeMap can associate with your IP address.
+- **Plugin registry**: each session downloads the plugin registry and its
+  blocklist from plugins.geolibre.app (the registry only when plugin
+  installation is allowed, which it is by default);
+  see [Plugins from the plugin registry](#plugins-from-the-plugin-registry).
+- **Update check (desktop only)**: at startup, normally at most once every 6 hours, the
+  desktop app asks GitHub (api.github.com) for the latest GeoLibre release. Turn
+  it off in Settings → Updates. The Microsoft Store build does not check.
+- **DuckDB Spatial extension**: the first time a local vector file needs DuckDB
+  to read it (for example a Shapefile or GeoPackage), the extension is
+  downloaded from DuckDB's extension repository (extensions.duckdb.org) and
+  then cached. The file itself is not sent.
+
+The hosts the app itself is built to contact, including which builds contact
+them, are listed on [Network Endpoints](network-endpoints.md). That list does
+not cover URLs you add, the data hosts a project's layers use, or hosts that
+external plugins contact.
+
 ## Data sent to third-party services (optional features)
 
 When you use certain optional features, GeoLibre sends requests directly to the
@@ -58,14 +83,20 @@ the request you make, and are governed by their own privacy policies:
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.
 
+For the hosts the app itself is built to contact, which of them are contacted
+by default, and which go through a GeoLibre relay, see
+[Network Endpoints](network-endpoints.md). It does not cover URLs you add,
+project data hosts, or external plugins.
+
 ## Plugins from the plugin registry
 
 Settings → Manage Plugins lists plugins from the GeoLibre plugin registry at
 <https://plugins.geolibre.app>, operated by the OpenGeos project (currently
-hosted on GitHub Pages and Cloudflare). Opening that dialog downloads the
-registry, and each time GeoLibre starts it downloads the registry's blocklist
-(of plugins pulled for safety) and the files of the plugins you installed from
-it. Like any web server, the registry sees your IP address and which files
+hosted on GitHub Pages and Cloudflare). Each time GeoLibre starts it downloads
+the registry (unless the deployment disables plugin installation), the
+registry's blocklist (of plugins pulled for safety), and the files of the
+plugins you installed from it; opening that dialog downloads the registry
+again. Like any web server, the registry sees your IP address and which files
 you request.
 
 The registry uses those requests to show how often each plugin is used, as

@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -67,6 +68,7 @@ def test_python_constants_match_schema():
     assert tuple(entry["properties"]) == dp.CATALOG_ENTRY_KEYS
     assert tuple(entry["properties"]["kind"]["enum"]) == dp.SERVICE_KINDS
     assert props["branding"]["properties"]["appName"]["maxLength"] == dp.APP_NAME_MAX
+    assert props["osm"]["properties"]["overpassUrl"]["pattern"] == dp.OVERPASS_URL_PATTERN
 
 
 @pytest.mark.parametrize("whitespace", [" ", "\t", "\ufeff", "\u00a0", "\u3000"])
@@ -148,6 +150,59 @@ def test_ai_enabled_without_proxy_env_fails(tmp_path):
 def test_geolens_bare_host_gets_https():
     policy, _ = dp.build_policy({"GEOLIBRE_GEOLENS_URL": "catalog.example.com"})
     assert policy["geolens"]["url"] == "https://catalog.example.com"
+
+
+def test_overpass_url_env_sets_policy_field(tmp_path):
+    url = "https://overpass.example.com/api/interpreter"
+    policy, logs = dp.build_policy({"GEOLIBRE_OVERPASS_URL": f"  {url}  "})
+    assert policy["osm"] == {"overpassUrl": url}
+    assert any(f"osm.overpassUrl from GEOLIBRE_OVERPASS_URL = {url}" in line for line in logs)
+
+    path = write_file(tmp_path, {"version": 1, "osm": {"overpassUrl": "https://a.example/i"}})
+    policy, logs = dp.build_policy({"GEOLIBRE_DEPLOYMENT_FILE": path, "GEOLIBRE_OVERPASS_URL": url})
+    assert policy["osm"]["overpassUrl"] == url
+    assert any(line.endswith(dp.OVERRIDE_SUFFIX) for line in logs)
+
+
+def test_overpass_url_rejects_plain_http_in_the_container():
+    # Loopback http matches the shared pattern (the desktop app can use it), but
+    # the container serves the web build, whose CSP allows https: only.
+    url = "http://localhost:12345/api/interpreter"
+    assert re.fullmatch(dp.OVERPASS_URL_PATTERN, url)
+    assert "must use https:// in the container" in error_of(dp.normalize_overpass_url, url)
+    doc = {"version": 1, "osm": {"overpassUrl": url}}
+    assert "osm.overpassUrl must use https://" in error_of(dp.validate_policy, doc, LABEL)
+    assert "must be a https:// URL" in error_of(
+        dp.normalize_overpass_url, "http://overpass.example.com/api/interpreter"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["https://999.999.999.999/api/interpreter", "https://overpass.123/api/interpreter"],
+)
+def test_overpass_url_rejects_hosts_browsers_cannot_parse(value):
+    assert "DNS or IPv4 host" in error_of(dp.normalize_overpass_url, value)
+
+
+@pytest.mark.parametrize(
+    "value, problem",
+    [
+        ("https://overpass.example.com/api/interpreter?key=x", "query parameters"),
+        ("https://overpass.example.com/api/interpreter#x", "query parameters"),
+        ("https://user:pw@overpass.example.com/api/interpreter", "credentials"),
+        ("https://overpass.example.com/api interpreter", "whitespace"),
+        ("overpass.example.com/api/interpreter", "must be a https:// URL"),
+        ("HTTPS://overpass.example.com/api/interpreter", "lowercase https:// URL"),
+        ("https://[bogus]/api/interpreter", "GEOLIBRE_OVERPASS_URL"),
+        ("https://[2001:db8::1]/api/interpreter", "DNS or IPv4 host"),
+        ("https://overpass.example.com:99999/api/interpreter", "port up to 65535"),
+    ],
+)
+def test_overpass_url_env_rejects_bad_values(value, problem):
+    message = error_of(dp.build_policy, {"GEOLIBRE_OVERPASS_URL": value})
+    assert message.startswith("ERROR: GEOLIBRE_OVERPASS_URL")
+    assert problem in message
 
 
 def test_write_policy_is_atomic_and_world_readable(tmp_path):

@@ -112,6 +112,7 @@ nav:
       - Cesium Renderer: cesium-renderer.md
       - ArcGIS Renderer: arcgis-renderer.md
       - Self-Hosting: self-hosting.md
+      - Network Endpoints: network-endpoints.md
       - Server API: server-api.md
       - Android: android.md
       - iOS: ios.md

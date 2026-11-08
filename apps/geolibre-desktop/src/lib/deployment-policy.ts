@@ -79,6 +79,11 @@ export interface GeoLensPolicy {
   url?: string;
 }
 
+/** OpenStreetMap data access. */
+export interface OsmPolicy {
+  overpassUrl?: string;
+}
+
 /** AI assistant settings. */
 export interface AiPolicy {
   enabled?: boolean;
@@ -101,6 +106,13 @@ export interface DeploymentPolicy {
   basemaps?: BasemapsPolicy;
   sharing?: SharingPolicy;
   geolens?: GeoLensPolicy;
+  osm?: OsmPolicy;
+  /**
+   * Set (never read from the file) when the `osm` section was present but
+   * invalid. The section is still dropped, but OSM downloads fail closed instead
+   * of falling back to the public Overpass relay the operator meant to avoid.
+   */
+  osmInvalid?: true;
   ai?: AiPolicy;
   branding?: BrandingPolicy;
 }
@@ -111,6 +123,14 @@ const SHARE_URL = /^(off|https?:\/\/\S+)$/;
 const COLLAB_URL = /^wss?:\/\/\S+$/;
 const EMBED_ORIGIN = /^(\*|https?:\/\/[^/\s]+)$/;
 const GEOLENS_URL = /^(off|same-origin|https?:\/\/\S+)$/;
+/**
+ * Same source as OVERPASS_URL_PATTERN in osm-downloader-api.ts and the schema.
+ * Copied, not imported, so this parser does not pull @geolibre/plugins into
+ * the startup path; tests/deployment-policy.test.ts fails when they drift.
+ */
+export const OVERPASS_URL_PATTERN = new RegExp(
+  "^(?:https://(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}|(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)*(?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)|http://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]))(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:/[^\\s?#]*)?$",
+);
 const APP_NAME_MAX = 60;
 
 const TOP_LEVEL_KEYS = new Set([
@@ -123,6 +143,7 @@ const TOP_LEVEL_KEYS = new Set([
   "basemaps",
   "sharing",
   "geolens",
+  "osm",
   "ai",
   "branding",
 ]);
@@ -369,6 +390,15 @@ function readGeoLens(v: unknown): Result<GeoLensPolicy> {
   return "error" in r ? r : { value: r.value as GeoLensPolicy };
 }
 
+function readOsm(v: unknown): Result<OsmPolicy> {
+  const obj = readObject(v, ["overpassUrl"]);
+  if ("error" in obj) return obj;
+  const r = readFields(obj.value, {
+    overpassUrl: (x) => readPattern(x, "overpassUrl", OVERPASS_URL_PATTERN),
+  });
+  return "error" in r ? r : { value: r.value as OsmPolicy };
+}
+
 function readAi(v: unknown): Result<AiPolicy> {
   const obj = readObject(v, ["enabled", "model"]);
   if ("error" in obj) return obj;
@@ -403,6 +433,7 @@ const SECTION_READERS: Record<string, (v: unknown) => Result<unknown>> = {
   basemaps: readBasemaps,
   sharing: readSharing,
   geolens: readGeoLens,
+  osm: readOsm,
   ai: readAi,
   branding: readBranding,
 };
@@ -434,6 +465,7 @@ export function resolveDeploymentPolicy(raw: unknown): DeploymentPolicy | null {
     const r = read(raw[section]);
     if ("error" in r) {
       console.warn(`[deployment-policy] ignoring invalid '${section}': ${r.error}`);
+      if (section === "osm") policy.osmInvalid = true;
       continue;
     }
     policy[section] = r.value;

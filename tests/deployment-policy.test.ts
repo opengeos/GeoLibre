@@ -15,8 +15,10 @@ import {
   fetchDeploymentPolicy,
   loadDeploymentPolicy,
   parseDeploymentPolicy,
+  OVERPASS_URL_PATTERN as POLICY_OVERPASS_URL_PATTERN,
   resolveDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-policy";
+import { OVERPASS_URL_PATTERN } from "../packages/plugins/src/plugins/osm-downloader-api";
 import { loadAdminProfile } from "../apps/geolibre-desktop/src/lib/admin-profile";
 
 const FIXTURES = fileURLToPath(new URL("./fixtures/deployment-policy/", import.meta.url));
@@ -37,6 +39,7 @@ const SECTIONS = [
   "basemaps",
   "sharing",
   "geolens",
+  "osm",
   "ai",
   "branding",
 ];
@@ -120,11 +123,13 @@ test("bad cases match expected schema and parser results", (t) => {
     const kept = SECTIONS.filter((s) => json[s] !== undefined && !dropped.includes(s));
     assert.deepEqual(
       Object.keys(result ?? {})
-        .filter((k) => k !== "version")
+        .filter((k) => k !== "version" && k !== "osmInvalid")
         .sort(),
       kept.sort(),
       name,
     );
+    // A dropped osm section is remembered so OSM downloads fail closed.
+    assert.equal(result?.osmInvalid, dropped.includes("osm") ? true : undefined, name);
     const unknownKeyWarning = name === "unknown-top-level-key" ? 1 : 0;
     assert.equal(warnings.length, expected.parser.dropped.length + unknownKeyWarning, name);
   }
@@ -566,5 +571,43 @@ test("plugins.fileAccess is ignored with warning from per-user or web policy", a
     if (previousWindow === undefined) delete globals.window;
     else globals.window = previousWindow;
     setDeploymentPolicy(null);
+  }
+});
+
+test("the Overpass URL pattern is identical in the schema and both client parsers", () => {
+  const schemaPattern = schema.properties.osm.properties.overpassUrl.pattern;
+  // RegExp#source escapes "/", so compare against a RegExp built from the schema string.
+  const schemaSource = new RegExp(schemaPattern).source;
+  assert.equal(POLICY_OVERPASS_URL_PATTERN.source, schemaSource);
+  assert.equal(OVERPASS_URL_PATTERN.source, schemaSource);
+  for (const ok of [
+    "https://overpass.example.com/api/interpreter",
+    "https://overpass.example.com:8443",
+    "https://203.0.113.7:65535/api/interpreter",
+    "https://overpass-1.example.co.uk/api/interpreter",
+    "https://op.1example/api/interpreter",
+    "http://localhost:12345/api/interpreter",
+    "http://127.0.0.1/api/interpreter",
+    "http://[::1]:8080/api/interpreter",
+  ]) {
+    assert.equal(POLICY_OVERPASS_URL_PATTERN.test(ok), true, ok);
+  }
+  for (const bad of [
+    "http://overpass.example.com/api/interpreter",
+    "http://localhost.example.com/api/interpreter",
+    "https://user:pw@overpass.example.com/api/interpreter",
+    "https://[invalid]/api/interpreter",
+    "https://[abcd]/api/interpreter",
+    "https://overpass.example.com:99999/api/interpreter",
+    "https://../api/interpreter",
+    "https://999.999.999.999/api/interpreter",
+    "https://1.2.3/api/interpreter",
+    "https://overpass.123/api/interpreter",
+    "https://overpass.example.com/api/interpreter?key=x",
+    "https://overpass.example.com/api interpreter",
+    "https://overpass.example.com/api/interpreter\n",
+    "/overpass",
+  ]) {
+    assert.equal(POLICY_OVERPASS_URL_PATTERN.test(bad), false, bad);
   }
 });

@@ -429,12 +429,13 @@ void Promise.all([
   // Start App's chunk downloading and evaluating while deployment.json is in
   // flight, then apply the policy-dependent module setup once both are done.
   // Nothing in App's module graph reads deployment settings at import time
-  // (the GeoLens default URL is seeded by initGeoLensDefaultUrl below), so the
+  // (the GeoLens default URL and the Overpass endpoint are seeded below), so the
   // chunk can evaluate before the policy is applied; nothing renders until the
   // policy has been.
   Promise.all([import("./App"), import("./hooks/usePlugins"), deploymentPolicyReady]).then(
     ([app, plugins]) => {
       plugins.initGeoLensDefaultUrl();
+      plugins.initOverpassEndpoint();
       return app;
     },
   ),

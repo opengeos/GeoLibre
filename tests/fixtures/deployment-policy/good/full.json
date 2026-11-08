@@ -65,6 +65,9 @@
   "geolens": {
     "url": "same-origin"
   },
+  "osm": {
+    "overpassUrl": "https://overpass.example.com/api/interpreter"
+  },
   "ai": {
     "enabled": true,
     "model": "gpt-5-mini"

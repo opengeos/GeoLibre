@@ -383,6 +383,18 @@ geolens_url = os.environ.get("GEOLIBRE_GEOLENS_URL", "").strip()
 if geolens_url:
     deployment["VITE_GEOLENS_DEFAULT_URL"] = normalize_geolens_url(geolens_url)
 
+# Overpass API endpoint for the OSM downloader. Unset keeps the public GeoLibre
+# relay; set it to keep area-of-interest queries on an instance you trust. Read
+# from the generated deployment.json, which already applied GEOLIBRE_OVERPASS_URL
+# over the mounted file and validated both, so an endpoint set in either place
+# also rides in this synchronous config and survives a blocked or late
+# deployment.json fetch instead of falling back to the public relay.
+with open("/usr/share/nginx/html/deployment.json", encoding="utf-8") as policy_file:
+    overpass_url = json.load(policy_file).get("osm", {}).get("overpassUrl")
+if overpass_url:
+    deployment["VITE_GEOLIBRE_OVERPASS_URL"] = overpass_url
+    print("Overpass API endpoint: " + overpass_url)
+
 # Capabilities also ride in the runtime config, which loads synchronously, so an
 # env-set grant survives a blocked or late deployment.json. "none" grants nothing.
 capabilities_env = os.environ.get("GEOLIBRE_CAPABILITIES", "").strip()
