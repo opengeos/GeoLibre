@@ -52,7 +52,7 @@ GeoLibre has no telemetry and no crash reporting in any build; the only analytic
 | `extensions.duckdb.org` | The DuckDB Spatial extension, downloaded the first time a local vector file needs DuckDB to read it (Shapefile, GeoPackage, GeoParquet, and similar), then cached. It is triggered by opening a local file, not by picking a remote service. | All | Direct | Set `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` to a mirrored copy (build time, or Settings → Environment variables). See [Getting Started](getting-started.md#optional-runtime-mirrors-offline-and-air-gapped). |
 | `www.googletagmanager.com` | Google Analytics. Loaded only by a web build that sets `VITE_GEOLIBRE_GA_MEASUREMENT_ID`, which the OpenGeos hosted deploys (geolibre.app, geolibre.app/demo, web.geolibre.app) do. The tag then sends page-view hits to Google's collection hosts (`*.google-analytics.com`, for example `www.google-analytics.com` and `region1.google-analytics.com`). | Web, when the ID is set | Direct | Never present in the desktop app or the Jupyter widget, and absent from any web build that leaves the ID unset (the default). The Docker image cannot enable it. See [Privacy Policy](privacy.md#website-analytics). |
 
-Two builds go further than this because the OpenGeos project configures them:
+Three hosted builds go further than this because the OpenGeos project configures them:
 the hosted web builds (geolibre.app/demo, web.geolibre.app, studio.geolibre.app)
 bake in `wss://collab.geolibre.app` so the Collaborate menu works, and
 studio.geolibre.app also bakes in `https://ai.geolibre.app` for the AI
@@ -196,8 +196,12 @@ under `packages/plugins/src/plugins/`.
 External plugins (from the registry, a zip, or a manifest URL) can contact any
 host the CSP allows, and GeoLibre does not track which. On the desktop,
 `app.nativeFetch` sends a plugin's requests through the native HTTP client,
-which the webview CSP does not govern (it does refuse loopback and private
-addresses). Review a plugin before
+which the webview CSP does not govern. It can reach loopback and private LAN
+addresses; it refuses only link-local addresses (including the
+`169.254.169.254` cloud metadata address), unspecified, multicast, and the
+limited broadcast address `255.255.255.255`. Other metadata endpoints, such as
+AWS's IPv6 `fd00:ec2::254`, and subnet-directed broadcasts are not blocked.
+Review a plugin before
 allowing it, and use `plugins.allowed` to limit which ones load (see
 [Plugin API](plugin-api.md)).
 
