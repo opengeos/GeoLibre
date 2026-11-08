@@ -201,15 +201,22 @@ test("search preserves cancellation on older WebViews", async () => {
     assert.equal(result.value.status, "error");
     assert.equal(result.value.error?.name, "AbortError");
 
-    // A completed response can still resolve after the user presses Stop.
     const late = new AbortController();
-    globalThis.fetch = async () => {
-      const response = Response.json({
-        results: [{ title: "Late", url: "https://example.org", content: "Late passage" }],
-      });
-      late.abort();
-      return response;
-    };
+    const payload = JSON.stringify({
+      results: [{ title: "Late", url: "https://example.org", content: "Late passage" }],
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          late.abort();
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      },
+      // Disable read-ahead so Stop happens when response.json() starts reading.
+      { highWaterMark: 0 },
+    );
+    globalThis.fetch = async () => new Response(body);
     const lateResult = await streamSearch(late.signal);
     assert.ok(lateResult.done);
     assert.equal(lateResult.value.status, "error");
