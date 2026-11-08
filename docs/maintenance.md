@@ -1481,6 +1481,12 @@ output when a build actually runs. Rebuild, or delete the stale directory.
 
 ## Generated files and cross-file sync
 
+- **The network endpoints page.** [`network-endpoints.md`](network-endpoints.md)
+  lists every external host the app contacts, by hand. A change that adds one
+  (a basemap, plugin, relay route in `workers/tiles`, CDN asset, or default
+  service), including a `maplibre-gl-*` bump that brings a new host, updates
+  that page in the same PR and marks the host default or opt-in.
+
 - **Native PostGIS tile concurrency.** `MAX_TILES_IN_FLIGHT` in
   `apps/geolibre-desktop/src/lib/postgis-tiles-url.ts` caps tile requests per
   connection at the Rust pool size, `POOL_SIZE` in

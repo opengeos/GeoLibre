@@ -58,6 +58,10 @@ the request you make, and are governed by their own privacy policies:
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.
 
+For the full list of hosts the app can contact, which of them are contacted by
+default, and which go through a GeoLibre relay, see
+[Network Endpoints](network-endpoints.md).
+
 ## Plugins from the plugin registry
 
 Settings → Manage Plugins lists plugins from the GeoLibre plugin registry at

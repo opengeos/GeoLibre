@@ -505,7 +505,8 @@ against a private, authenticated, same-origin host:
 ## Reducing outbound requests
 
 A private deployment usually also wants to minimize what the browser fetches from
-the public internet:
+the public internet. [Network Endpoints](network-endpoints.md) lists every host
+by feature; the main ones are:
 
 | Feature | Default | How to keep it internal |
 | --- | --- | --- |
@@ -546,3 +547,4 @@ the public internet:
 - [Data Integrations](user-guide/data-integrations.md#self-hosted-catalogs)
 - [Embedding & Sharing](user-guide/embedding.md)
 - [Privacy Policy](privacy.md)
+- [Network Endpoints](network-endpoints.md) for every external host, by feature
