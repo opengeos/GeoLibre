@@ -868,11 +868,7 @@ export async function readPluginAssetForLoadedPlugin(
       }
       // The reader throws on an oversized or failed body; this function
       // reports both as null.
-      return await readBodyBytesWithCap(
-        response,
-        MAX_PLUGIN_ASSET_BYTES,
-        "plugin asset",
-      );
+      return await readBodyBytesWithCap(response, MAX_PLUGIN_ASSET_BYTES, "plugin asset");
     } catch {
       return null;
     }

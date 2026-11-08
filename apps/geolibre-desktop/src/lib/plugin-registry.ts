@@ -151,9 +151,7 @@ export async function readBodyWithCap(
   maxBytes: number,
   label = "plugin registry",
 ): Promise<string> {
-  return new TextDecoder().decode(
-    await readBodyBytesWithCap(response, maxBytes, label),
-  );
+  return new TextDecoder().decode(await readBodyBytesWithCap(response, maxBytes, label));
 }
 
 // Ids of the plugins that ship with the app. A registry entry may not declare
