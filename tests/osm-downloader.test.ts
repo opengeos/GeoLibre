@@ -397,6 +397,11 @@ describe("downloadOsmGeoJson", () => {
     }
     assert.deepEqual(calls, []);
     assert.equal(warn.mock.callCount(), 4);
+    // The exported resolver fails closed too, unless a caller passes an endpoint.
+    assert.throws(() => defaultOverpassEndpoint(false), {
+      message: INVALID_OVERPASS_ENDPOINT_MESSAGE,
+    });
+    assert.equal(defaultOverpassEndpoint(false, "https://x.example/i"), "https://x.example/i");
 
     // An explicit caller endpoint is unaffected, and a valid value re-enables downloads.
     await downloadOsmGeoJson(

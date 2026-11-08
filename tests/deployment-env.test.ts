@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  INVALID_OVERPASS_URL,
   policyEnvOverlay,
   readDeploymentEnv,
   readDeploymentEnvValue,
   setDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-env";
+import { OVERPASS_URL_PATTERN } from "../apps/geolibre-desktop/src/lib/deployment-policy";
 
 const KEY = "VITE_GEOLIBRE_SHARE_URL";
 
@@ -90,6 +92,13 @@ describe("deployment policy overlay", () => {
       policyEnvOverlay({ version: 1, services: { builtins: true } }).VITE_GEOLIBRE_BUILTIN_SERVICES,
       "on",
     );
+  });
+
+  it("fails the Overpass endpoint closed when the osm section was invalid", () => {
+    assert.deepEqual(policyEnvOverlay({ version: 1, osmInvalid: true }), {
+      VITE_GEOLIBRE_OVERPASS_URL: INVALID_OVERPASS_URL,
+    });
+    assert.equal(OVERPASS_URL_PATTERN.test(INVALID_OVERPASS_URL), false);
   });
 
   it("contributes nothing for fields a string cannot express", () => {

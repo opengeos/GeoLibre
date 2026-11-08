@@ -121,11 +121,13 @@ test("bad cases match expected schema and parser results", (t) => {
     const kept = SECTIONS.filter((s) => json[s] !== undefined && !dropped.includes(s));
     assert.deepEqual(
       Object.keys(result ?? {})
-        .filter((k) => k !== "version")
+        .filter((k) => k !== "version" && k !== "osmInvalid")
         .sort(),
       kept.sort(),
       name,
     );
+    // A dropped osm section is remembered so OSM downloads fail closed.
+    assert.equal(result?.osmInvalid, dropped.includes("osm") ? true : undefined, name);
     const unknownKeyWarning = name === "unknown-top-level-key" ? 1 : 0;
     assert.equal(warnings.length, expected.parser.dropped.length + unknownKeyWarning, name);
   }

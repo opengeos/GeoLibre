@@ -174,12 +174,16 @@ export function setOverpassEndpoint(value: string | undefined): void {
  * @param configured - The deployment endpoint; defaults to the value set by
  *   {@link setOverpassEndpoint}.
  * @returns The endpoint URL to POST Overpass QL to.
+ * @throws Error with {@link INVALID_OVERPASS_ENDPOINT_MESSAGE} when no endpoint
+ *   is passed and the configured one is invalid, so no caller silently gets
+ *   the public relay.
  */
 export function defaultOverpassEndpoint(
   dev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV),
   configured: string | undefined = configuredOverpassEndpoint,
 ): string {
   if (configured) return configured;
+  if (configuredOverpassEndpointInvalid) throw new Error(INVALID_OVERPASS_ENDPOINT_MESSAGE);
   return dev ? OVERPASS_DEV_ENDPOINT : OVERPASS_DEFAULT_ENDPOINT;
 }
 
@@ -307,10 +311,8 @@ export async function downloadOsmGeoJson(
   } = {},
 ): Promise<FeatureCollection> {
   const query = buildOsmDownloadQuery(bbox, filter);
-  if (options.endpoint === undefined && configuredOverpassEndpointInvalid) {
-    throw new Error(INVALID_OVERPASS_ENDPOINT_MESSAGE);
-  }
-  // Only the built-in endpoints may fall back to the OSM map API.
+  // Only the built-in endpoints may fall back to the OSM map API. Resolving the
+  // default throws while the configured endpoint is invalid (fail closed).
   const builtInEndpoint = options.endpoint === undefined && !configuredOverpassEndpoint;
   const endpoint = options.endpoint ?? defaultOverpassEndpoint();
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as OverpassFetch);

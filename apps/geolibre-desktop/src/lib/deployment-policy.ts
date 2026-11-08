@@ -97,6 +97,12 @@ export interface DeploymentPolicy {
   sharing?: SharingPolicy;
   geolens?: GeoLensPolicy;
   osm?: OsmPolicy;
+  /**
+   * Set (never read from the file) when the `osm` section was present but
+   * invalid. The section is still dropped, but OSM downloads fail closed instead
+   * of falling back to the public Overpass relay the operator meant to avoid.
+   */
+  osmInvalid?: true;
   ai?: AiPolicy;
   branding?: BrandingPolicy;
 }
@@ -440,6 +446,7 @@ export function resolveDeploymentPolicy(raw: unknown): DeploymentPolicy | null {
     const r = read(raw[section]);
     if ("error" in r) {
       console.warn(`[deployment-policy] ignoring invalid '${section}': ${r.error}`);
+      if (section === "osm") policy.osmInvalid = true;
       continue;
     }
     policy[section] = r.value;
