@@ -112,6 +112,12 @@ describe("useLastBasemapPersistence", () => {
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
     assert.notEqual(readLastBasemap(), AMAP.styleUrl);
 
+    // A live-collaboration snapshot writes the store directly, with no
+    // generation bump; it must not be remembered either.
+    act(() => useAppStore.setState({ basemapStyleUrl: DEFAULT_BASEMAP }));
+    act(() => useAppStore.setState({ basemapStyleUrl: AMAP.styleUrl }));
+    assert.notEqual(readLastBasemap(), AMAP.styleUrl);
+
     act(() => useAppStore.getState().setBasemapStyleUrl(DEFAULT_BASEMAP));
     act(() => useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl));
     assert.equal(readLastBasemap(), AMAP.styleUrl);

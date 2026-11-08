@@ -44,10 +44,10 @@ export function useLastBasemapPersistence(): void {
       if (next.basemapStyleUrl === previous.basemapStyleUrl) return;
       // The startup restore above applies the remembered basemap without a
       // prompt, so only remember a regional basemap the user picked or
-      // accepted. One that arrived with a project load (a trusted embed host or
-      // collaboration session skips the prompt) keeps the previous value.
+      // accepted. One that arrived with data (a trusted embed host's project, a
+      // collaboration snapshot, an undo step) keeps the previous value.
       if (
-        next.projectGeneration !== previous.projectGeneration &&
+        next.basemapChoiceGeneration === previous.basemapChoiceGeneration &&
         getRegionalBasemapByStyleUrl(next.basemapStyleUrl)
       ) {
         return;

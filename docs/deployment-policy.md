@@ -293,10 +293,12 @@ users there whom the default providers serve poorly. A project file can name one
 of them as its basemap, so GeoLibre asks before loading it when a project is
 opened (from a file, a URL, a share link, drag and drop, or a startup restore):
 the map shows the default basemap until the user picks **Load** or
-**Use default basemap**. A basemap the user picks in the UI, a new project, a
-template, an undo step, a duplicate, and a project loaded by an embedding host
-(the Jupyter widget, the iframe embed API, or a live collaboration session) do
-not ask.
+**Use default basemap**. A basemap the user picks in the UI (or that a plugin,
+script or the assistant sets on their behalf, since that is code the user
+installed or ran), a new project, a template, an undo step, a duplicate, and a
+project loaded by an embedding host (the Jupyter widget, the iframe embed API,
+or a live collaboration session) do not ask. Only a regional basemap the user
+picked or accepted is remembered for the next launch.
 
 `basemaps.regional: false` (or `GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` on Docker,
 or `VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` at build time) removes them

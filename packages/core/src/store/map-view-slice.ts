@@ -73,14 +73,19 @@ function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.
  * pick is the user's own choice, so `"prompt"` never applies, and it supersedes
  * a pending prompt: answering Load afterwards must not replace it.
  *
+ * Plugins, scripts and the assistant go through here too. They are code the
+ * user installed or ran to act for them, like the picker, so they are trusted
+ * the same way; only a project file (data someone else may have authored) is
+ * gated by `"prompt"`.
+ *
  * @param state - The current store state.
  * @param url - The requested basemap style URL.
- * @returns The `basemapStyleUrl` to apply and the updated hold.
+ * @returns The `basemapStyleUrl` to apply, the updated hold and choice counter.
  */
 function explicitBasemapChoice(
   state: AppState,
   url: string,
-): Pick<AppState, "basemapStyleUrl" | "regionalBasemapHold"> {
+): Pick<AppState, "basemapStyleUrl" | "regionalBasemapHold" | "basemapChoiceGeneration"> {
   const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
   if (gated.held) {
     console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
@@ -89,6 +94,7 @@ function explicitBasemapChoice(
     basemapStyleUrl: gated.styleUrl,
     regionalBasemapHold:
       state.regionalBasemapHold?.reason === "prompt" ? null : state.regionalBasemapHold,
+    basemapChoiceGeneration: state.basemapChoiceGeneration + 1,
   };
 }
 
@@ -242,6 +248,14 @@ export interface MapViewSlice {
    * blocked, a notice) from it. Not project data and not in undo history.
    */
   regionalBasemapHold: RegionalBasemapHold | null;
+  /**
+   * Bumped whenever the basemap changes because the user (or code acting for
+   * them) chose it: a basemap setter, or Load on the regional prompt. Not
+   * bumped by project loads, collaboration snapshots or undo. Lets observers
+   * tell a chosen basemap from one that arrived with data, e.g. so a regional
+   * basemap is only remembered for the next launch when it was chosen.
+   */
+  basemapChoiceGeneration: number;
   /** Set the {@link regionalBasemapPolicy}. Switching to `"block"` drops a pending prompt. */
   setRegionalBasemapPolicy: (policy: RegionalBasemapPolicy) => void;
   /**
@@ -267,6 +281,7 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
   primaryRenderer: DEFAULT_PRIMARY_RENDERER,
   regionalBasemapPolicy: "allow",
   regionalBasemapHold: null,
+  basemapChoiceGeneration: 0,
 
   setMapView: (view, markDirty = false) =>
     set((s) => ({
@@ -447,7 +462,13 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
       set({ regionalBasemapHold: null });
       return;
     }
-    withoutHistory(() => set({ basemapStyleUrl: hold.styleUrl, regionalBasemapHold: null }));
+    withoutHistory(() =>
+      set({
+        basemapStyleUrl: hold.styleUrl,
+        regionalBasemapHold: null,
+        basemapChoiceGeneration: state.basemapChoiceGeneration + 1,
+      }),
+    );
     // Edits made while the prompt was open recorded the fallback in their undo
     // snapshots. No explicit basemap pick happened since the load (that would
     // have cleared the hold), so every such snapshot gets the accepted basemap,

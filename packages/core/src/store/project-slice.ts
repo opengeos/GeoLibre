@@ -178,6 +178,8 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
     set((s) => ({
       ...applied,
       regionalBasemapHold: null,
+      // The New Project dialog's basemap is the user's pick.
+      basemapChoiceGeneration: s.basemapChoiceGeneration + 1,
       hoverTooltipsEnabled: true,
       projectPath: null,
       projectGeneration: s.projectGeneration + 1,
