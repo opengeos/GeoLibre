@@ -32,11 +32,12 @@ optional helper process (a Python component running on your own machine at
 
 ## Requests the app makes on its own
 
-A few requests happen without you choosing a service. None of them carries your
-data or projects:
+A few requests happen without you choosing a service. None of them uploads your
+files or projects, but like any request they reveal your IP address to the host:
 
 - **Default basemap**: a new map loads the OpenFreeMap basemap
-  (tiles.openfreemap.org) for the current view.
+  (tiles.openfreemap.org) for the current view. The tiles requested reveal the
+  area you are looking at, which OpenFreeMap can associate with your IP address.
 - **Plugin blocklist**: each session downloads the plugin registry's blocklist;
   see [Plugins from the plugin registry](#plugins-from-the-plugin-registry).
 - **Update check (desktop only)**: at startup, at most once every 6 hours, the

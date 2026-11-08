@@ -40,8 +40,9 @@ so add the hosts your projects use.
 
 ## Default requests
 
-These are the only requests a fresh install makes without the user choosing a
-service. GeoLibre has no telemetry and no crash reporting in any build.
+These are the requests this page found a fresh install making without the user
+choosing a service, from a review of the source rather than an automated check.
+GeoLibre has no telemetry and no crash reporting in any build.
 
 | Host | What and when | Builds | Route | How to change it |
 | --- | --- | --- | --- | --- |
@@ -90,7 +91,7 @@ so and skips the relay; the table notes those cases.
 | Route | Upstream | Used by | Desktop |
 | --- | --- | --- | --- |
 | `/opm/...`, `/wms/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder`, `planetarymaps.usgs.gov` | Mars, Moon, and other planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
-| `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx, network error, or timeout, then `maps.mail.ru` (`/osm/tools/overpass/api/interpreter`, run by VK) as a last fallback. Each instance that is tried sees the query and its area of interest. [#3367](https://github.com/opengeos/GeoLibre/pull/3367) removes `maps.mail.ru` and adds an `x-overpass-upstream` response header naming the instance that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
+| `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx, network error, or timeout, then `maps.mail.ru` (`/osm/tools/overpass/api/interpreter`, run by VK) as a last fallback. Each instance that is tried sees the query and its area of interest. | OSM Downloader plugin, God's Eye View road layers | Relay |
 | `/oam/meta` | `api.openaerialmap.org` | OpenAerialMap search | Direct |
 | `/source-coop/...` | `source.coop` (API and feed) | Source Cooperative and Natural Earth plugins | Direct |
 | `/ckan/search` | `data.humdata.org` | CKAN plugin search | Relay |
@@ -103,6 +104,11 @@ so and skips the relay; the table notes those cases.
 | `/firms/viirs/...` | `firms.modaps.eosdis.nasa.gov` | God's Eye View active fires | Relay |
 | `/transit/vehicles/...` | `cdn.mbta.com`, `data.texas.gov`, `svc.metrotransit.org`, `realtime.hsl.fi`, `gtfs.ovapi.nl`, `gtfsrt.api.translink.com.au` | God's Eye View transit | Relay |
 | `/cctv/...` | `trafficcam.calgary.ca`, `cctv.austinmobility.io`, `511on.ca`, `www.drivebc.ca`, `data.livetraffic.com`, `webcams.transport.nsw.gov.au`, `cwwp2.dot.ca.gov` | God's Eye View traffic cameras | Relay |
+
+!!! note "Pending change"
+    [#3367](https://github.com/opengeos/GeoLibre/pull/3367) removes `maps.mail.ru`
+    from the `/overpass` chain and adds an `x-overpass-upstream` response header
+    naming the instance that answered. Update the row above when it merges.
 
 ## Opt-in: core features
 
@@ -235,8 +241,15 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
   and the Docker image (`docker/nginx.conf`), so the CSP does not limit which
   data hosts are reached. Only `script-src` is pinned to specific CDN paths. An
   operator who needs a host allowlist should enforce it with an egress proxy or
-  firewall, or narrow `connect-src` in a derived image, and include the data
-  hosts its projects use as well as the hosts on this page.
+  firewall and include the data hosts its projects use as well as the hosts on
+  this page. To restrict browser requests with CSP instead, narrow both
+  `connect-src` and `img-src` (and review `media-src` and `frame-src`) in a
+  derived image.
+- **Relays.** A browser-side control (CSP or an egress rule on the client) only
+  sees the request to `tiles.geolibre.app`, not the upstream the relay then
+  contacts. If an upstream listed under
+  [the relay](#the-tilesgeolibreapp-relay) is not acceptable, block
+  `tiles.geolibre.app` itself, which disables the features that use it.
 
 [Self-Hosting: Reducing outbound requests](self-hosting.md#reducing-outbound-requests)
 has the per-feature checklist.
