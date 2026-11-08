@@ -2130,7 +2130,9 @@ def three_d_tiles_layer(
 ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s"
 """``source.type`` and ``metadata.sourceKind`` of an ArcGIS I3S scene layer."""
 
-_I3S_SCENE_SERVER_PATH_RE = re.compile(r"/SceneServer(/layers/\d+)?/?$", re.IGNORECASE)
+_I3S_SCENE_SERVER_PATH_RE = re.compile(
+    r"/SceneServer(/layers/\d+(/sublayers/\d+)?)?/?$", re.IGNORECASE
+)
 
 
 def is_i3s_scene_layer_url(url: str) -> bool:
@@ -2146,11 +2148,16 @@ def is_i3s_scene_layer_url(url: str) -> bool:
         url: The tileset or scene layer URL.
 
     Returns:
-        True for a ``.../SceneServer`` or ``.../SceneServer/layers/<n>`` URL.
-        Only the path is matched, so a query such as ``?ref=/SceneServer/x``
-        does not count.
+        True for a ``.../SceneServer``, ``.../SceneServer/layers/<n>`` or
+        Building Scene Layer ``.../layers/<n>/sublayers/<m>`` URL. Only the
+        path is matched, so a query such as ``?ref=/SceneServer/x`` does not
+        count, and a URL that does not parse is not a scene layer.
     """
-    return bool(_I3S_SCENE_SERVER_PATH_RE.search(urlsplit(url.strip()).path))
+    try:
+        path = urlsplit(url.strip()).path
+    except ValueError:
+        return False
+    return bool(_I3S_SCENE_SERVER_PATH_RE.search(path))
 
 
 def _i3s_scene_layer(

@@ -17,6 +17,7 @@ SF = (
         SF,
         "https://host/arcgis/rest/services/City/SceneServer",
         "https://host/arcgis/rest/services/City/sceneserver?token=x",
+        "https://host/arcgis/rest/services/B/SceneServer/layers/0/sublayers/3",
         f"  {SF}  ",
     ],
 )
@@ -32,6 +33,7 @@ def test_scene_server_urls_are_recognised(url):
         "https://host/arcgis/rest/services/City/MapServer",
         "https://host/tileset.json?ref=/SceneServer/x",
         "https://host/SceneServer/tileset.json",
+        "https://[bad/SceneServer",
     ],
 )
 def test_other_urls_are_not_scene_layers(url):

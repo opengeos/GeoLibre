@@ -3496,7 +3496,7 @@ class Map(anywidget.AnyWidget):
         request_headers: dict[str, str] | None = None,
         **style: Any,
     ) -> str:
-        """Add a 3D Tiles layer from a ``tileset.json`` URL or a Cesium Ion asset.
+        """Add a 3D Tiles layer, an ArcGIS I3S scene layer, or a Cesium Ion asset.
 
         Args:
             url: URL of the 3D Tiles ``tileset.json``, or of an ArcGIS I3S

@@ -65,6 +65,17 @@ describe("withI3sSceneLayerKind (issue #3377)", () => {
     assert.equal(withI3sSceneLayerKind(underFolder), underFolder);
   });
 
+  it("accepts sublayer and protocol-relative SceneServer URLs", () => {
+    const sub = withI3sSceneLayerKind(
+      legacyRecord("https://host/arcgis/rest/services/B/SceneServer/layers/0/sublayers/3"),
+    );
+    assert.equal(sub.metadata.sourceKind, "arcgis-i3s");
+    const relative = withI3sSceneLayerKind(
+      legacyRecord("//host/arcgis/rest/services/B/SceneServer/layers/0"),
+    );
+    assert.equal(relative.metadata.sourceKind, "arcgis-i3s");
+  });
+
   it("passes a record without a usable URL through unchanged", () => {
     const noSource = { ...legacyRecord(SF), source: undefined } as unknown as GeoLibreLayer;
     assert.equal(withI3sSceneLayerKind(noSource), noSource);
