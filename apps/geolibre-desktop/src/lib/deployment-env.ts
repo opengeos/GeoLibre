@@ -25,6 +25,12 @@ import type { DeploymentPolicy } from "./deployment-policy";
 /** A `VITE_*`-keyed env record, from either the build or the deployment. */
 export type EnvRecord = Record<string, string | undefined> | undefined;
 
+/**
+ * Stand-in `VITE_GEOLIBRE_OVERPASS_URL` for an invalid `osm` policy section. It
+ * is deliberately not a URL, so the OSM downloader rejects it and fails closed.
+ */
+export const INVALID_OVERPASS_URL = "invalid";
+
 let activePolicy: DeploymentPolicy | null = null;
 let policyOverlay: Record<string, string> = {};
 
@@ -41,6 +47,12 @@ export function policyEnvOverlay(policy: DeploymentPolicy | null): Record<string
     out.VITE_GEOLIBRE_COLLAB_URL = policy.sharing.collabUrl;
   }
   if (policy.geolens?.url !== undefined) out.VITE_GEOLENS_DEFAULT_URL = policy.geolens.url;
+  if (policy.osm?.overpassUrl !== undefined) {
+    out.VITE_GEOLIBRE_OVERPASS_URL = policy.osm.overpassUrl;
+  } else if (policy.osmInvalid) {
+    // Any value setOverpassEndpoint rejects makes OSM downloads fail closed.
+    out.VITE_GEOLIBRE_OVERPASS_URL = INVALID_OVERPASS_URL;
+  }
   if (policy.branding?.appName !== undefined) out.VITE_GEOLIBRE_APP_NAME = policy.branding.appName;
   if (policy.services?.catalog !== undefined) {
     out.VITE_GEOLIBRE_SERVICES = JSON.stringify({

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  INVALID_OVERPASS_URL,
   policyEnvOverlay,
   readDeploymentEnv,
   readDeploymentEnvValue,
   setDeploymentPolicy,
 } from "../apps/geolibre-desktop/src/lib/deployment-env";
+import { OVERPASS_URL_PATTERN } from "../apps/geolibre-desktop/src/lib/deployment-policy";
 
 const KEY = "VITE_GEOLIBRE_SHARE_URL";
 
@@ -70,6 +72,7 @@ describe("deployment policy overlay", () => {
         version: 1,
         sharing: { shareUrl: "off", collabUrl: "https://c.example" },
         geolens: { url: "same-origin" },
+        osm: { overpassUrl: "https://overpass.example.com/api/interpreter" },
         branding: { appName: "Acme" },
         services: { builtins: false, catalog: [] },
         ai: { enabled: true },
@@ -78,6 +81,7 @@ describe("deployment policy overlay", () => {
         VITE_GEOLIBRE_SHARE_URL: "off",
         VITE_GEOLIBRE_COLLAB_URL: "https://c.example",
         VITE_GEOLENS_DEFAULT_URL: "same-origin",
+        VITE_GEOLIBRE_OVERPASS_URL: "https://overpass.example.com/api/interpreter",
         VITE_GEOLIBRE_APP_NAME: "Acme",
         VITE_GEOLIBRE_SERVICES: '{"services":[]}',
         VITE_GEOLIBRE_BUILTIN_SERVICES: "off",
@@ -88,6 +92,13 @@ describe("deployment policy overlay", () => {
       policyEnvOverlay({ version: 1, services: { builtins: true } }).VITE_GEOLIBRE_BUILTIN_SERVICES,
       "on",
     );
+  });
+
+  it("fails the Overpass endpoint closed when the osm section was invalid", () => {
+    assert.deepEqual(policyEnvOverlay({ version: 1, osmInvalid: true }), {
+      VITE_GEOLIBRE_OVERPASS_URL: INVALID_OVERPASS_URL,
+    });
+    assert.equal(OVERPASS_URL_PATTERN.test(INVALID_OVERPASS_URL), false);
   });
 
   it("contributes nothing for fields a string cannot express", () => {

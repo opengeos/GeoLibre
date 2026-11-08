@@ -47,7 +47,7 @@ What each section does today:
 - `plugins.registryUrl` sets the plugin registry. `allowed`, `blocked` and
   `sideload` gate external plugin loads and installs; `defaultActive` seeds
   activation in fresh projects.
-- `services`, `sharing`, `geolens` and `branding.appName` override the
+- `services`, `sharing`, `geolens`, `osm` and `branding.appName` override the
   matching `GEOLIBRE_*` deployment settings. `sharing.embedOrigins: []` turns
   the embed API off.
 - `branding.welcome: false` suppresses the first-launch wizard.
@@ -109,6 +109,7 @@ For capability details and Docker route enforcement, see
     "embedOrigins": ["https://portal.example.com"]
   },
   "geolens": { "url": "same-origin" },
+  "osm": { "overpassUrl": "https://overpass.example.com/api/interpreter" },
   "ai": { "enabled": true, "model": "gpt-5-mini" },
   "branding": { "appName": "Acme Maps", "welcome": false }
 }
@@ -177,6 +178,12 @@ An array of the capability names from
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `url` | string | Default GeoLens server (`https://…`; plain `http://` only on loopback in the container), `same-origin`, or `off`. |
+
+### `osm`
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `overpassUrl` | string | Overpass API interpreter URL for the OSM downloader and the OSM-backed God's Eye View feeds, such as `https://overpass.example.com/api/interpreter`: `https://` on a DNS name or IPv4 address, no credentials, query, or fragment. Unset uses the public relay `https://tiles.geolibre.app/overpass`. Set it to keep area-of-interest queries on an instance you run or trust. The viewer's browser calls it directly, so it must be reachable from every viewer and send CORS headers (`Access-Control-Allow-Origin` for the GeoLibre origin, on error responses too), or be served on the GeoLibre origin. Plain `http://` is accepted only on loopback (`localhost`, `127.0.0.1`, `[::1]`), which means the viewer's own machine. Only the desktop app can reach such an endpoint: the container is the enforcement point and rejects plain `http://` at boot, and on a web build served by any other host the client parser still accepts it, but the page's CSP (`connect-src` allows `https:` only) blocks the request. Unlike the public relay, a configured endpoint never falls back to `api.openstreetmap.org`, and an invalid value (which also drops the `osm` section) disables OSM downloads instead of using the public relay. |
 
 ### `ai`
 
@@ -387,6 +394,7 @@ require rebuilding the image.
 | `GEOLIBRE_COLLAB_URL` | `sharing.collabUrl` |
 | `GEOLIBRE_EMBED_ORIGINS` | `sharing.embedOrigins` |
 | `GEOLIBRE_GEOLENS_URL` | `geolens.url` |
+| `GEOLIBRE_OVERPASS_URL` | `osm.overpassUrl` |
 | `GEOLIBRE_APP_NAME` | `branding.appName`: whitespace collapsed, cut to 60 characters |
 | `GEOLIBRE_AI_URL` / `GEOLIBRE_AI_MODEL` | `ai.enabled: true` / `ai.model` |
 
