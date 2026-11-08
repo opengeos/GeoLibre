@@ -16,7 +16,9 @@
  *
  * @param response - response whose body is read.
  * @param limit - maximum accepted body size in bytes.
- * @returns the body bytes, or `null` when the body exceeds `limit`.
+ * @returns the body bytes, or `null` when the body exceeds `limit`. A stream
+ *   error is rethrown rather than reported as `null`, so callers can tell
+ *   "too large" apart from "the read failed".
  */
 export async function readCappedBody(
   response: Response,
@@ -33,24 +35,20 @@ export async function readCappedBody(
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      if (value === undefined) {
-        continue;
-      }
-      total += value.byteLength;
-      if (total > limit) {
-        await reader.cancel();
-        return null;
-      }
-      chunks.push(value);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
     }
-  } catch {
-    return null;
+    if (value === undefined) {
+      continue;
+    }
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
   }
   const bytes = new Uint8Array(total);
   let offset = 0;

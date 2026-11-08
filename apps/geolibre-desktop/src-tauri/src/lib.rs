@@ -5651,9 +5651,10 @@ mod tests {
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
     use super::{
-        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message,
-        clear_appimage_python_env,
-        find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
+        add_main_sidecar_extras, add_sidecar_python_pin, canonical_source_under_roots,
+        child_failure_message, clear_appimage_python_env,
+        find_zip_manifest_path, plugin_archive_file_name, read_directory_plugin_asset_bytes,
+        read_zip_plugin_asset_bytes, resolve_sidecar_in_resource_dir,
         sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
         CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
@@ -6616,7 +6617,12 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     #[test]
     fn reads_directory_plugin_asset_and_refuses_escapes() {
-        let dir = env::temp_dir().join("geolibre-read-asset-dir-test");
+        // A per-run directory: concurrent or interrupted runs must not share
+        // fixtures, and cleanup stays inside this test's own root.
+        let dir = env::temp_dir().join(format!(
+            "geolibre-read-asset-dir-test-{}",
+            std::process::id()
+        ));
         fs::create_dir_all(&dir.join("assets")).unwrap();
         fs::write(dir.join("assets/conn.json"), b"{\"host\":\"db\"}").unwrap();
         let bytes = read_directory_plugin_asset_bytes(&dir, "assets/conn.json").unwrap();

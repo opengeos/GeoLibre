@@ -855,7 +855,11 @@ export async function readPluginAssetForLoadedPlugin(
   }
   if (isManagedUrlSource(source)) {
     try {
-      const response = await fetch(resolvePluginAssetUrl(source, relativePath));
+      // Revalidate like the loader does: the asset may change at the same URL
+      // between the scan and this read.
+      const response = await fetch(resolvePluginAssetUrl(source, relativePath), {
+        cache: "no-cache",
+      });
       if (!response.ok) {
         return null;
       }
