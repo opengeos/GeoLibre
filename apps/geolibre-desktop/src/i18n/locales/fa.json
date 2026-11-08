@@ -395,6 +395,28 @@
     "openWebApp": "باز کردن برنامهٔ وب GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "خواندن این بایگانی IMDF ممکن نشد: {{reason}}",
+        "invalidJson": "{{file}} یک JSON معتبر نیست ({{detail}})",
+        "entryTooLarge": "حجم {{file}} بیش از ۲۵۶ مگابایت است",
+        "tooLarge": "مجموع حجم فایل‌های GeoJSON آن از ۵۱۲ مگابایت بیشتر است"
+      },
+      "layer": {
+        "venue": "مکان",
+        "footprint": "ردپاها",
+        "level": "طبقه‌ها",
+        "section": "بخش‌ها",
+        "unit": "واحدها",
+        "fixture": "تجهیزات ثابت",
+        "detail": "جزئیات",
+        "opening": "بازشوها",
+        "kiosk": "کیوسک‌ها",
+        "geofence": "حصارهای جغرافیایی",
+        "amenity": "امکانات",
+        "occupant": "ساکنان"
+      }
+    },
     "title": "افزودن داده",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "افزودن لایهٔ LandXML",
         "description": "سطوح TIN، محورهای افقی، فرادادهٔ نیم‌رخ‌های قائم و نقاط نقشه‌برداری را از LandXML وارد کنید و از سیستم مختصات مبدأ تبدیل تصویر کنید."
+      },
+      "indoorgml": {
+        "label": "افزودن لایهٔ IndoorGML",
+        "description": "یک ساختمان OGC IndoorGML را وارد کنید: اتاق‌ها تا ارتفاع واقعی‌شان برجسته می‌شوند و شبکهٔ ناوبری نیز به انتخابگر طبقه پیوند می‌خورد."
       },
       "georss": {
         "label": "افزودن لایهٔ GeoRSS",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "سیستم‌های مختصات پرکاربرد...",
       "crsHelp": "فقط هنگامی خالی بگذارید که مختصات از پیش طول و عرض جغرافیایی WGS84 باشد. مختصات LandXML به‌صورت شمالی، شرقی و ارتفاع خوانده می‌شود.",
       "detectedCoordinateSystem": "سیستم مختصات LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "نشانی IndoorGML",
+      "file": "فایل IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "دادهٔ فایل IndoorGML موجود نیست.",
+      "readError": "خواندن این فایل IndoorGML ممکن نشد.",
+      "errorChooseFile": "یک فایل IndoorGML انتخاب کنید.",
+      "errorUrl": "یک نشانی IndoorGML وارد کنید.",
+      "errorTooLarge": "حجم این فایل IndoorGML بیش از ۲۰۰ مگابایت است.",
+      "errorMissingCrs": "این فایل IndoorGML هیچ سیستم مختصاتی را مشخص نکرده و مختصات آن طول/عرض جغرافیایی نیست. CRS آن را وارد کنید یا قرار دادن آن در مرکز نقشه را برگزینید.",
+      "summary": "{{cells}} سلول در {{floors}} طبقه، {{transitions}} یال ناوبری.",
+      "crs": "سیستم مختصات مبدأ",
+      "crsPlaceholder": "مثال: EPSG:25832",
+      "crsPresetLabel": "سیستم‌های مختصات پرکاربرد...",
+      "local": "مختصات محلی: ساختمان را در مرکز نقشه قرار بده",
+      "crsHelp": "بسیاری از فایل‌های IndoorGML سیستم مختصات (CRS) ندارند. کد EPSG مختصات آن‌ها را وارد کنید، یا برای مدلی در چارچوب محلی ساختمان (متر از یک مبدأ)، آن را در مرکز نقشه قرار دهید تا نمایش داده شود.",
+      "layer": {
+        "cells": "سلول‌های {{name}}",
+        "transitions": "شبکهٔ ناوبری {{name}}",
+        "states": "گره‌های ناوبری {{name}}"
+      }
     },
     "georss": {
       "defaultName": "لایهٔ GeoRSS",
@@ -2207,6 +2256,12 @@
       "none": "بدون حاشیه"
     },
     "mapBackground": "پس‌زمینهٔ نقشه",
+    "pageBackground": "پس‌زمینهٔ صفحه",
+    "panelTheme": "پنل‌های نقشه",
+    "panelThemeOption": {
+      "light": "روشن",
+      "dark": "تیره"
+    },
     "scaleLabel": "مقیاس (۱:N)",
     "scalePlaceholder": "مثال: 25000",
     "scalePresets": "پیش‌تنظیم‌ها…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "سیستم مختصات مرجع نقشه",
       "mapCrsHint": "نقشهٔ MapLibre را به‌صورت مسطح در CRS دیگری ترسیم می‌کند، مانند شبکه‌ای قطبی یا استوانه‌ای ساده از زمین، ماه یا مریخ، همراه با نقشهٔ پایه‌ای که در همان شبکه ارائه می‌شود. کاشی‌ها تبدیل تصویر نمی‌شوند: لایه‌های GeoJSON، رونهاده‌های تصویری و لایه‌های خروجی WMS یا ArcGIS (که در آن CRS درخواست می‌شوند) ترسیم می‌شوند، اما XYZ، کاشی‌های برداری و بیشتر لایه‌های افزونه ترسیم نمی‌شوند و کره و ناهمواری خاموش‌اند.",
+      "mapCrsLinkUnknown": "این پیوند CRS نقشهٔ «{{crs}}» را درخواست می‌کند که ناشناخته یا پشتیبانی‌نشده است، بنابراین نادیده گرفته شد.",
       "mapCrsDefault": "Web Mercator / کره (پیش‌فرض)",
       "mapCrsCustom": "کد EPSG سفارشی…",
       "mapCrsEpsg": "کد EPSG",
@@ -3264,6 +3320,7 @@
       "osEnvField": "از متغیر محیطی سیستم شما، {{name}}، خوانده می‌شود.",
       "osEnvPlaceholder": "در محیط سیستم شما تعیین شده است",
       "refreshModels": "تازه‌سازی فهرست مدل‌ها",
+      "ollamaModelHint": "نام هر مدل نصب‌شده در Ollama را همراه با برچسب آن بنویسید (مثلاً qwen3:8b) یا یکی از پیشنهادها را برگزینید. برای دیدن مدل‌های نصب‌شده، فهرست را تازه کنید.",
       "modelsFailedToLoad": "بارگذاری مدل‌ها ممکن نشد: {{message}}",
       "modelsLoading": "در حال بارگیری کاتالوگ مدل‌ها…",
       "searchModels": "جست‌وجو در نام‌ها یا شناسه‌های مدل",
@@ -3687,6 +3744,7 @@
       "photos": "عکس‌های مکان‌دار",
       "gpx": "لایهٔ GPX",
       "landxml": "لایهٔ LandXML",
+      "indoorgml": "لایهٔ IndoorGML",
       "polyline": "چندخطی کدگذاری‌شده",
       "mbtiles": "لایهٔ MBTiles",
       "xyz": "لایهٔ XYZ",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "کاوشگر Sentinel-2",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "نقشهٔ پایهٔ Carto Light",
       "geolibre-flight-simulator": "شبیه‌ساز پرواز",
       "gods-eye-view": "دید خداگونه",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{count}} لایه از {{name}} افزوده شد.",
       "osmPbfNoFeatures": "هیچ عارضه‌ای در {{name}} پیدا نشد.",
       "couldNotParse": "تجزیهٔ {{name}} ممکن نشد: {{message}}",
-      "couldNotImport": "وارد کردن فایل‌ها ممکن نشد."
+      "couldNotImport": "وارد کردن فایل‌ها ممکن نشد.",
+      "openedByHandler": "با {{name}} باز شد.",
+      "handlerFailed": "{{name}} نتوانست فایل‌های رهاشده را باز کند: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "تغییرات پیش از بستن ذخیره شوند؟",
       "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. پیش از بستن GeoLibre ذخیره شوند؟"
+    },
+    "remoteSave": {
+      "signInTitle": "برای ذخیرهٔ پروژه وارد شوید",
+      "signInDescriptionOAuth": "برای ذخیرهٔ پروژه در سرور، به {{shareHost}} وارد شوید.",
+      "signInDescriptionToken": "برای ذخیرهٔ پروژه‌ها در {{shareHost}} به یک توکن API شخصی نیاز است. برای ادامه، توکن خود را در تنظیمات بیفزایید.",
+      "signInButton": "ورود",
+      "openSettingsButton": "باز کردن تنظیمات",
+      "saveTitle": "ذخیرهٔ پروژه در سرور",
+      "saveDesc": "نام پروژه را وارد کنید. پروژه به‌صورت یک پروژهٔ خصوصی در {{shareHost}} ذخیره می‌شود.",
+      "noProjectId": "سرور پروژه شناسهٔ پروژه را برنگرداند.",
+      "uploadedNotLinked": "«{{name}}» در {{shareHost}} ذخیره شد، اما نشست یا پروژه هنگام ذخیره تغییر کرد، بنابراین به این نقشه پیوند داده نشد. برای ادامهٔ کار، آن را از نگارخانه باز کنید."
     },
     "error": {
       "couldNotOpenProject": "باز کردن پروژه ممکن نشد.",
@@ -8446,6 +8518,14 @@
     "noLayer": "برای ذخیره یا اعمال شیوهٔ نمایش، یک لایهٔ برداری برگزینید."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "ساختمان",
+      "overview": "نمای کلی",
+      "fullModel": "مدل کامل",
+      "disciplinesHint": "رشته‌ها و دسته‌های مدل ساختمان را برای ترسیم انتخاب کنید.",
+      "drawnCount_one": "{{count}} زیرلایه ترسیم شد.",
+      "drawnCount_other": "{{count}} زیرلایه ترسیم شد."
+    },
     "panelLabel": "شیوهٔ نمایش لایه",
     "panelLabelCollapsed": "شیوهٔ نمایش لایه (جمع‌شده)",
     "heading": "شیوهٔ نمایش",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "یکای ضخامت خط",
       "strokeWidthUnitPixels": "پیکسل (ثابت روی صفحه)",
       "strokeWidthUnitMeters": "متر (با نقشه مقیاس می‌خورد)",
+      "strokeOpacity": "کدری خط دور",
+      "lineStyle": "سبک خط",
+      "lineStyleSolid": "پیوسته",
+      "lineStyleDashed": "خط‌چین",
+      "lineStyleDotted": "نقطه‌چین",
+      "lineStyleDashDot": "خط‌چین-نقطه",
+      "lineStyleLongDash": "خط‌چین بلند",
+      "lineStyleCustom": "سفارشی",
+      "lineDashPattern": "الگوی خط‌چین",
+      "lineDashPatternHint": "طول خط‌ها و فاصله‌ها به‌صورت مضربی از ضخامت خط، مانند 4 2 1 2.",
+      "lineBlur": "محوشدگی خط (px)",
       "textHaloColor": "رنگ هالهٔ متن",
       "textHaloWidth": "ضخامت هالهٔ متن",
       "schemeEqualInterval": "بازهٔ برابر",
@@ -8826,13 +8917,21 @@
       "heightProperty": "ویژگی ارتفاع",
       "heightScale": "مقیاس ارتفاع",
       "base": "ارتفاع پایه",
+      "baseProperty": "ویژگی پایه",
+      "baseNone": "هیچ (پایهٔ مسطح)",
+      "baseScale": "مقیاس پایه",
+      "baseHint": "هر عارضه از ارتفاع پایه + ویژگی پایه × مقیاس پایه آغاز می‌شود، بنابراین طبقه‌ها بر اساس یک فیلد تراز روی هم قرار می‌گیرند. با تعیین ارتفاع طبقه، هر عارضه همین ضخامت را روی پایهٔ خود می‌گیرد؛ در غیر این صورت ارتفاع، تراز بام است و باید بالاتر از پایه باشد.",
+      "floorHeight": "ارتفاع طبقه",
+      "floorHeightHint": "وقتی بیشتر از 0 باشد، هر عارضه به همین تعداد متر روی پایهٔ خود بلند است و تنظیمات ارتفاع نادیده گرفته می‌شوند. مقدار 0 ارتفاع را تراز بام در نظر می‌گیرد.",
+      "baseExpression": "عبارت پایه",
       "apply": "اعمال برجسته‌سازی سه‌بعدی",
       "footer": "تنظیمات برجسته‌سازی سه‌بعدی هنگام ذخیره اعمال می‌شوند."
     },
     "expressionLabels": {
       "style": "عبارت شیوهٔ نمایش",
       "color": "عبارت رنگ",
-      "height": "عبارت ارتفاع"
+      "height": "عبارت ارتفاع",
+      "base": "عبارت پایه"
     },
     "expressionErrors": {
       "notArray": "{{label}} باید یک عبارت آرایهٔ JSON باشد.",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "هنوز هیچ عارضه‌ای بارگذاری نشده است. نقشه را جابه‌جا یا روی داده‌ها بزرگ‌نمایی کنید، سپس این بخش را دوباره باز کنید.",
     "viewportSampleHint": "مقادیر از کاشی‌هایی می‌آیند که هم‌اکنون بارگذاری شده‌اند، بنابراین با جابه‌جایی و بزرگ‌نمایی نقشه فهرست بزرگ‌تر می‌شود.",
     "layerFilteredHint": "یک فیلتر سریع بخشی از عوارض این لایه را پنهان کرده است."
+  },
+  "floorPicker": {
+    "title": "انتخابگر طبقه",
+    "short": "طبقه",
+    "all": "همه",
+    "allTitle": "نمایش همهٔ طبقه‌ها",
+    "levelTitle_one": "طبقهٔ {{level}} ({{count}} عارضه)",
+    "levelTitle_other": "طبقهٔ {{level}} ({{count}} عارضه)",
+    "below": "+ پایین‌تر",
+    "belowTitle": "طبقه‌های پایین‌تر از طبقهٔ انتخاب‌شده نیز نمایش داده شوند",
+    "resize": "تغییر اندازهٔ فهرست طبقه‌ها",
+    "resizeTitle": "برای تغییر اندازهٔ فهرست طبقه‌ها بکشید. برای بازنشانی دوبار کلیک کنید.",
+    "heading": "انتخابگر طبقه",
+    "field": "فیلد طبقه",
+    "off": "خاموش",
+    "hint": "فیلدی را که طبقهٔ هر عارضه را در خود دارد انتخاب کنید تا این لایه در انتخابگر طبقهٔ روی نقشه فهرست شود.",
+    "linkedHint_one": "{{count}} طبقه در انتخابگر طبقهٔ روی نقشه فهرست شده است.",
+    "linkedHint_other": "{{count}} طبقه در انتخابگر طبقهٔ روی نقشه فهرست شده‌اند.",
+    "noLevels": "هیچ طبقه‌ای در «{{field}}» پیدا نشد. فیلدی را انتخاب کنید که یک عدد یا ترازی مانند «0» یا «-1;0» در خود دارد."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "خروجی KML نتوانست عارضهٔ {{position}} را ایجاد کند، چون مختصات نامعتبر دارد.",
@@ -10203,11 +10321,23 @@
       "north": "شمال",
       "useMapExtent": "استفاده از محدوده نقشه",
       "download": "دانلود داده OSM",
+      "preview": "پیش‌نمایش داده OSM",
+      "addToMap": "افزودن به نقشه",
+      "exportGeoParquet": "ذخیره فایل GeoParquet",
       "ready": "یک محدوده و نوع عارضه انتخاب کنید.",
       "exportGeoJson": "ذخیره فایل GeoJSON",
       "mapUnavailable": "محدوده نقشه هنوز در دسترس نیست.",
       "extentApplied": "محدوده نقشه اعمال شد.",
+      "invalidExtent": "یک کادر محدودهٔ معتبر وارد کنید.",
+      "zoomIn": "بزرگ‌نمایی کنید تا محدودهٔ نقشه {{limit}} درجهٔ مربع یا کمتر شود.",
       "downloading": "در حال دانلود از OpenStreetMap…",
+      "previewing": "در حال بارگذاری پیش‌نمایش OSM…",
+      "previewLayerName": "پیش‌نمایش — {{name}}",
+      "previewed": "پیش‌نمایش {{count}} عارضه: {{points}} نقطه، {{lines}} خط، {{polygons}} چندضلعی.",
+      "preparingExport": "در حال آماده‌سازی خروجی {{format}}…",
+      "exported": "{{count}} عارضه برای خروجی {{format}} آماده شد.",
+      "exportCancelled": "خروجی لغو شد.",
+      "exportError": "خروجی گرفتن {{format}} ممکن نشد: {{message}}",
       "noFeatures": "هیچ عارضه منطبقی در این محدوده یافت نشد.",
       "error": "بارگیری داده‌های OSM انجام نشد: {{message}}",
       "added": "{{count}} عارضه به نقشه افزوده شد."
@@ -10530,6 +10660,59 @@
       "retry": "تلاش دوباره",
       "catalogFailed": "بارگیری کاتالوگ Ocean Data Platform ممکن نشد: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "دربارهٔ JAXA Earth API",
+      "aboutText": "JAXA Earth API مجموعه‌داده‌های رصد زمین از JAXA و سازمان‌های همکار را به‌صورت GeoTIFF بهینه‌شده برای ابر منتشر می‌کند: نقشه‌های ارتفاع و جنگل ALOS، بارش GSMaP، دمای سطح خشکی و دریای GCOM-C و MODIS، پوشش گیاهی، هواویزها، رطوبت خاک و موارد دیگر. به حساب کاربری یا کلید API نیازی نیست.",
+      "aboutAccess": "GeoLibre کاشی‌ها را با API جاوااسکریپت JAXA در مرورگر ترسیم می‌کند و فقط وضوح و محدوده‌ای را که نقشه نشان می‌دهد می‌خواند.",
+      "home": "JAXA Earth API",
+      "terms": "شرایط استفاده",
+      "attribution": "داده‌ها به لطف JAXA. برخی مجموعه‌داده‌ها از سازمان‌های دیگرند و شرایط خود را دارند؛ پیش از استفادهٔ دوباره، صفحهٔ مجموعه‌داده را بررسی کنید.",
+      "projectionLabel": "{{title}} (سیستم تصویر پشتیبانی نمی‌شود)",
+      "chooseDataset": "یک مجموعه‌داده انتخاب کنید…",
+      "loading": "در حال بارگذاری کاتالوگ…",
+      "recommendedGroup": "پیشنهادی: {{group}}",
+      "allGroup": "همهٔ مجموعه‌داده‌ها",
+      "resolutionM": "~{{value}} متر",
+      "resolutionKm": "~{{value}} کیلومتر",
+      "timeRange": "{{start}} تا {{end}}",
+      "present": "اکنون",
+      "climatology": "اقلیم‌شناسی",
+      "datasetPage": "جزئیات مجموعه‌داده",
+      "dateFailed": "تغییر تاریخ ممکن نشد: {{message}}",
+      "noOtherDate": "در این جهت تاریخ دیگری وجود ندارد.",
+      "sampling": "در حال خواندن یک نمونه برای تعیین بازهٔ رنگ…",
+      "noValues": "نمونه هیچ مقداری ندارد؛ کمینه و بیشینه را دستی تعیین کنید.",
+      "sampleFailed": "خواندن نمونه‌ای از {{name}} ممکن نشد: {{message}}",
+      "opening": "در حال باز کردن {{name}}…",
+      "openFailed": "باز کردن {{name}} ممکن نشد: {{message}}",
+      "band": "باند",
+      "date": "تاریخ (UTC)",
+      "firstDate": "نخستین تاریخ",
+      "previousDate": "تاریخ قبلی",
+      "nextDate": "تاریخ بعدی",
+      "latestDate": "آخرین تاریخ",
+      "pickDate": "رفتن به تاریخ",
+      "colormap": "نقشهٔ رنگ",
+      "rangeInvalid": "کمینه باید کمتر از بیشینه باشد.",
+      "auto": "خودکار",
+      "autoTitle": "تعیین کمینه و بیشینه از داده‌های این تاریخ",
+      "min": "کمینه",
+      "max": "بیشینه",
+      "ownColors": "این باند رنگ‌های خودش را دارد، بنابراین نقشهٔ رنگ اعمال نمی‌شود.",
+      "nearest": "نزدیک‌ترین همسایه",
+      "bilinear": "دوخطی",
+      "resampling": "بازنمونه‌گیری",
+      "addToMap": "افزودن به نقشه",
+      "addUnavailable": "این نقشه نمی‌تواند لایهٔ کاشی بیفزاید.",
+      "added": "{{name}} افزوده شد. اکنون تغییر تاریخ یا رنگ‌ها همان لایه را به‌روز می‌کند؛ برای نگه داشتن نسخه‌ای دیگر، دوباره بیفزایید.",
+      "searchPlaceholder": "جستجو در عنوان‌ها، ماهواره‌ها، کلیدواژه‌ها…",
+      "search": "جستجو",
+      "dataset": "مجموعه‌داده",
+      "hint": "مجموعه‌داده‌های رصد زمین JAXA را مرور کنید و به نقشه بیفزایید. یک مجموعه‌داده، یک باند و یک تاریخ برگزینید و سپس رنگ‌ها را تنظیم کنید.",
+      "catalogFailed": "بارگذاری کاتالوگ JAXA Earth ممکن نشد: {{message}}",
+      "retry": "تلاش دوباره",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "باز کردن مخزن {{name}} ممکن نشد.",

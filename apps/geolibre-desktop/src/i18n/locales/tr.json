@@ -395,6 +395,28 @@
     "openWebApp": "GeoLibre web uygulamasını aç"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Bu IMDF arşivi okunamadı: {{reason}}",
+        "invalidJson": "{{file}} geçerli bir JSON değil ({{detail}})",
+        "entryTooLarge": "{{file}} 256 MB'tan büyük",
+        "tooLarge": "GeoJSON dosyalarının toplam boyutu 512 MB'ı aşıyor"
+      },
+      "layer": {
+        "venue": "Yerleşke",
+        "footprint": "Taban izleri",
+        "level": "Katlar",
+        "section": "Bölümler",
+        "unit": "Mekânlar",
+        "fixture": "Donatılar",
+        "detail": "Ayrıntılar",
+        "opening": "Açıklıklar",
+        "kiosk": "Kiosklar",
+        "geofence": "Coğrafi çitler",
+        "amenity": "Tesisler",
+        "occupant": "Kiracılar"
+      }
+    },
     "title": "Veri Ekle",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "LandXML Katmanı Ekle",
         "description": "LandXML TIN yüzeylerini, yatay güzergâhları, düşey profil meta verilerini ve ölçüm noktalarını kaynak KRS'den yeniden izdüşümleyerek içe aktarın."
+      },
+      "indoorgml": {
+        "label": "IndoorGML Katmanı Ekle",
+        "description": "Bir OGC IndoorGML binasını içe aktarın: gerçek yüksekliklerine kadar yükseltilmiş odalar ve kat seçiciye bağlı navigasyon ağı."
       },
       "georss": {
         "label": "GeoRSS Katmanı Ekle",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Yaygın koordinat sistemleri...",
       "crsHelp": "Yalnızca koordinatlar zaten WGS84 boylam ve enlem cinsindense boş bırakın. LandXML koordinatları kuzey, doğu ve yükseklik olarak okunur.",
       "detectedCoordinateSystem": "LandXML koordinat sistemi: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL'si",
+      "file": "IndoorGML dosyası",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML dosya verileri eksik.",
+      "readError": "Bu IndoorGML dosyası okunamadı.",
+      "errorChooseFile": "Bir IndoorGML dosyası seçin.",
+      "errorUrl": "Bir IndoorGML URL'si girin.",
+      "errorTooLarge": "Bu IndoorGML dosyası 200 MB'tan büyük.",
+      "errorMissingCrs": "Bu IndoorGML dosyası bir koordinat sistemi belirtmiyor ve koordinatları boylam/enlem değil. KRS'sini girin ya da harita merkezine yerleştirmeyi seçin.",
+      "summary": "{{floors}} katta {{cells}} hücre, {{transitions}} navigasyon kenarı.",
+      "crs": "Kaynak KRS",
+      "crsPlaceholder": "örn. EPSG:25832",
+      "crsPresetLabel": "Yaygın koordinat sistemleri...",
+      "local": "Yerel koordinatlar: binayı harita merkezine yerleştir",
+      "crsHelp": "Birçok IndoorGML dosyasında KRS bulunmaz. Koordinatlarının EPSG kodunu girin ya da yerel bir bina çerçevesindeki (bir başlangıç noktasından metre cinsinden) bir modeli görüntülemek için harita merkezine yerleştirin.",
+      "layer": {
+        "cells": "{{name}}: hücreler",
+        "transitions": "{{name}}: navigasyon ağı",
+        "states": "{{name}}: navigasyon düğümleri"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS Katmanı",
@@ -2207,6 +2256,12 @@
       "none": "Yok (kenarlıksız)"
     },
     "mapBackground": "Harita arka planı",
+    "pageBackground": "Sayfa arka planı",
+    "panelTheme": "Harita panelleri",
+    "panelThemeOption": {
+      "light": "Açık",
+      "dark": "Koyu"
+    },
     "scaleLabel": "Ölçek (1:N)",
     "scalePlaceholder": "örn. 25000",
     "scalePresets": "Hazır ayarlar…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "Harita koordinat referans sistemi",
       "mapCrsHint": "MapLibre haritasını başka bir KRS'de düz olarak çizer; örneğin Dünya'nın, Ay'ın veya Mars'ın kutupsal ya da basit silindirik ızgarası ve bu ızgarada sunulan bir altlık harita ile. Döşemeler yeniden izdüşümlenmez: GeoJSON katmanları, görüntü bindirmeleri ve WMS veya ArcGIS dışa aktarma katmanları (KRS'de istenen) çizilir; XYZ, vektör döşeme ve çoğu eklenti katmanı çizilmez, küre ve arazi de kapalıdır.",
+      "mapCrsLinkUnknown": "Bu bağlantı \"{{crs}}\" harita KRS'sini istiyor; bu KRS bilinmediği veya desteklenmediği için yok sayıldı.",
       "mapCrsDefault": "Web Mercator / küre (varsayılan)",
       "mapCrsCustom": "Özel EPSG kodu…",
       "mapCrsEpsg": "EPSG kodu",
@@ -3264,6 +3320,7 @@
       "osEnvField": "Sistem ortam değişkeninizden okunur: {{name}}.",
       "osEnvPlaceholder": "Sistem ortamınızda ayarlanmış",
       "refreshModels": "Model listesini yenile",
+      "ollamaModelHint": "Ollama'da yüklü herhangi bir modelin adını etiketiyle birlikte yazın (örneğin qwen3:8b) ya da bir öneri seçin. Yüklü modelleri görmek için listeyi yenileyin.",
       "modelsFailedToLoad": "Modeller yüklenemedi: {{message}}",
       "modelsLoading": "Model kataloğu yükleniyor…",
       "searchModels": "Model adlarında veya kimliklerinde ara",
@@ -3687,6 +3744,7 @@
       "photos": "Coğrafi Etiketli Fotoğraflar",
       "gpx": "GPX Katmanı",
       "landxml": "LandXML Katmanı",
+      "indoorgml": "IndoorGML Katmanı",
       "polyline": "Kodlanmış Çoklu Çizgi",
       "mbtiles": "MBTiles Katmanı",
       "xyz": "XYZ Katmanı",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light Temel Harita",
       "geolibre-flight-simulator": "Uçuş Simülatörü",
       "gods-eye-view": "Tanrısal Bakış",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{name}} dosyasından {{count}} katman eklendi.",
       "osmPbfNoFeatures": "{{name}} içinde öğe bulunamadı.",
       "couldNotParse": "{{name}} ayrıştırılamadı: {{message}}",
-      "couldNotImport": "Dosyalar içe aktarılamadı."
+      "couldNotImport": "Dosyalar içe aktarılamadı.",
+      "openedByHandler": "Açan: {{name}}.",
+      "handlerFailed": "{{name}} bırakılan dosyaları açamadı: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Kapatmadan önce değişiklikler kaydedilsin mi?",
       "savePromptDescription": "Mevcut projede kaydedilmemiş değişiklikler var. GeoLibre kapatılmadan önce kaydedilsin mi?"
+    },
+    "remoteSave": {
+      "signInTitle": "Projeyi kaydetmek için giriş yapın",
+      "signInDescriptionOAuth": "Projenizi sunucuya kaydetmek için {{shareHost}} hesabınızla giriş yapın.",
+      "signInDescriptionToken": "Projeleri {{shareHost}} üzerine kaydetmek için kişisel bir API belirteci gerekir. Devam etmek için belirtecinizi Ayarlar'a ekleyin.",
+      "signInButton": "Giriş yap",
+      "openSettingsButton": "Ayarları aç",
+      "saveTitle": "Projeyi sunucuya kaydet",
+      "saveDesc": "Bir proje adı girin. Proje, {{shareHost}} üzerinde özel bir proje olarak kaydedilecek.",
+      "noProjectId": "Proje sunucusu bir proje kimliği döndürmedi.",
+      "uploadedNotLinked": "\"{{name}}\" {{shareHost}} üzerine kaydedildi, ancak kaydetme sırasında oturum veya proje değiştiği için bu haritaya bağlanmadı. Üzerinde çalışmaya devam etmek için Galeri'den açın."
     },
     "error": {
       "couldNotOpenProject": "Proje açılamadı.",
@@ -8446,6 +8518,14 @@
     "noLayer": "Stil kaydetmek veya uygulamak için bir vektör katmanı seçin."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Bina",
+      "overview": "Genel bakış",
+      "fullModel": "Tam model",
+      "disciplinesHint": "Bina modelinin çizilecek disiplinlerini ve kategorilerini seçin.",
+      "drawnCount_one": "{{count}} alt katman çizildi.",
+      "drawnCount_other": "{{count}} alt katman çizildi."
+    },
     "panelLabel": "Katman stili",
     "panelLabelCollapsed": "Katman stili (daraltıldı)",
     "heading": "Stil",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "Kenarlık kalınlığı birimi",
       "strokeWidthUnitPixels": "Piksel (ekranda sabit)",
       "strokeWidthUnitMeters": "Metre (haritayla ölçeklenir)",
+      "strokeOpacity": "Çizgi opaklığı",
+      "lineStyle": "Çizgi stili",
+      "lineStyleSolid": "Düz",
+      "lineStyleDashed": "Kesikli",
+      "lineStyleDotted": "Noktalı",
+      "lineStyleDashDot": "Tire-nokta",
+      "lineStyleLongDash": "Uzun tire",
+      "lineStyleCustom": "Özel",
+      "lineDashPattern": "Kesik çizgi deseni",
+      "lineDashPatternHint": "Çizgi kalınlığının katları olarak tire ve boşluk uzunlukları, örneğin 4 2 1 2.",
+      "lineBlur": "Çizgi bulanıklığı (px)",
       "textHaloColor": "Metin halesi rengi",
       "textHaloWidth": "Metin halesi kalınlığı",
       "schemeEqualInterval": "Eşit aralık",
@@ -8826,13 +8917,21 @@
       "heightProperty": "Yükseklik özelliği",
       "heightScale": "Yükseklik ölçeği",
       "base": "Taban yüksekliği",
+      "baseProperty": "Taban özelliği",
+      "baseNone": "Yok (düz taban)",
+      "baseScale": "Taban ölçeği",
+      "baseHint": "Her öğe taban yüksekliği + taban özelliği × taban ölçeği değerinden başlar; böylece katlar bir düzey alanına göre üst üste dizilir. Her öğeye tabanı üzerinde bu kalınlığı vermek için bir kat yüksekliği ayarlayın; aksi halde yükseklik çatının rakımıdır ve tabandan yüksek olmalıdır.",
+      "floorHeight": "Kat yüksekliği",
+      "floorHeightHint": "0'dan büyük olduğunda her öğe tabanının üzerinde bu kadar metre yükseklikte olur ve yükseklik ayarları yok sayılır. 0 olduğunda yükseklik çatının rakımı olarak kullanılır.",
+      "baseExpression": "Taban ifadesi",
       "apply": "3B yükseltmeyi uygula",
       "footer": "3B yükseltme ayarları kaydedildiğinde uygulanır."
     },
     "expressionLabels": {
       "style": "Stil ifadesi",
       "color": "Renk ifadesi",
-      "height": "Yükseklik ifadesi"
+      "height": "Yükseklik ifadesi",
+      "base": "Taban ifadesi"
     },
     "expressionErrors": {
       "notArray": "{{label}} bir JSON dizi ifadesi olmalıdır.",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "Henüz hiçbir öğe yüklenmedi. Haritayı verilerin bulunduğu alana kaydırın veya orayı yakınlaştırın, sonra bu bölümü yeniden açın.",
     "viewportSampleHint": "Değerler şu anda yüklü olan döşemelerden gelir, bu yüzden haritayı kaydırıp yakınlaştırdıkça liste büyür.",
     "layerFilteredHint": "Bir hızlı filtre bu katmanın öğelerinin bir kısmını gizliyor."
+  },
+  "floorPicker": {
+    "title": "Kat seçici",
+    "short": "Kat",
+    "all": "Tümü",
+    "allTitle": "Tüm katları göster",
+    "levelTitle_one": "Kat {{level}} ({{count}} öğe)",
+    "levelTitle_other": "Kat {{level}} ({{count}} öğe)",
+    "below": "+ alt",
+    "belowTitle": "Seçilen katın altındaki katları da göster",
+    "resize": "Kat listesini yeniden boyutlandır",
+    "resizeTitle": "Kat listesini yeniden boyutlandırmak için sürükleyin. Sıfırlamak için çift tıklayın.",
+    "heading": "Kat seçici",
+    "field": "Kat alanı",
+    "off": "Kapalı",
+    "hint": "Bu katmanı harita üzerindeki kat seçicide listelemek için her öğenin katını tutan alanı seçin.",
+    "linkedHint_one": "Harita üzerindeki kat seçicide {{count}} kat listeleniyor.",
+    "linkedHint_other": "Harita üzerindeki kat seçicide {{count}} kat listeleniyor.",
+    "noLevels": "\"{{field}}\" alanında kat bulunamadı. Sayı ya da \"0\" veya \"-1;0\" gibi bir düzey içeren alanı seçin."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Koordinatları geçersiz olduğu için KML dışa aktarımı {{position}}. öğeyi yazamadı.",
@@ -10203,11 +10321,23 @@
       "north": "Kuzey",
       "useMapExtent": "Harita kapsamını kullan",
       "download": "OSM verilerini indir",
+      "preview": "OSM verilerini önizle",
+      "addToMap": "Haritaya ekle",
+      "exportGeoParquet": "GeoParquet olarak kaydet",
       "ready": "Bir alan ve özellik türü seçin.",
       "exportGeoJson": "GeoJSON olarak kaydet",
       "mapUnavailable": "Harita kapsamı henüz kullanılamıyor.",
       "extentApplied": "Harita kapsamı uygulandı.",
+      "invalidExtent": "Geçerli bir sınırlayıcı kutu girin.",
+      "zoomIn": "Harita alanı {{limit}} derece kare veya daha küçük olana kadar yakınlaştırın.",
       "downloading": "OpenStreetMap'ten indiriliyor…",
+      "previewing": "OSM önizlemesi yükleniyor…",
+      "previewLayerName": "Önizleme — {{name}}",
+      "previewed": "{{count}} özellik önizleniyor: {{points}} nokta, {{lines}} çizgi, {{polygons}} çokgen.",
+      "preparingExport": "{{format}} dışa aktarımı hazırlanıyor…",
+      "exported": "{{format}} dışa aktarımı için {{count}} özellik hazırlandı.",
+      "exportCancelled": "Dışa aktarma iptal edildi.",
+      "exportError": "{{format}} dışa aktarılamadı: {{message}}",
       "noFeatures": "Bu alanda eşleşen özellik bulunamadı.",
       "error": "OSM verileri indirilemedi: {{message}}",
       "added": "{{count}} özellik haritaya eklendi."
@@ -10530,6 +10660,59 @@
       "retry": "Yeniden dene",
       "catalogFailed": "Ocean Data Platform kataloğu yüklenemedi: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "JAXA Earth API hakkında",
+      "aboutText": "JAXA Earth API, JAXA ve ortak kuruluşların Yer gözlem veri kümelerini bulut için optimize edilmiş GeoTIFF'ler olarak yayımlar: ALOS yükseklik ve orman haritaları, GSMaP yağışı, GCOM-C ve MODIS kara ve deniz yüzeyi sıcaklığı, bitki örtüsü, aerosoller, toprak nemi ve daha fazlası. Hesap veya API anahtarı gerekmez.",
+      "aboutAccess": "GeoLibre, döşemeleri JAXA'nın JavaScript API'si ile tarayıcıda çizer ve yalnızca haritanın gösterdiği çözünürlüğü ve alanı okur.",
+      "home": "JAXA Earth API",
+      "terms": "Kullanım koşulları",
+      "attribution": "Veriler JAXA'nın izniyle sunulmaktadır. Bazı veri kümeleri başka kuruluşlardan gelir ve kendi koşullarına tabidir; yeniden kullanmadan önce veri kümesinin sayfasını inceleyin.",
+      "projectionLabel": "{{title}} (projeksiyon desteklenmiyor)",
+      "chooseDataset": "Bir veri kümesi seçin…",
+      "loading": "Katalog yükleniyor…",
+      "recommendedGroup": "Önerilen: {{group}}",
+      "allGroup": "Tüm veri kümeleri",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} – {{end}}",
+      "present": "günümüz",
+      "climatology": "klimatoloji",
+      "datasetPage": "Veri kümesi ayrıntıları",
+      "dateFailed": "Tarih değiştirilemedi: {{message}}",
+      "noOtherDate": "O yönde başka tarih yok.",
+      "sampling": "Renk aralığını belirlemek için bir örnek okunuyor…",
+      "noValues": "Örnek hiç değer içermiyor; Min ve Maks değerlerini elle ayarlayın.",
+      "sampleFailed": "{{name}} için örnek okunamadı: {{message}}",
+      "opening": "{{name}} açılıyor…",
+      "openFailed": "{{name}} açılamadı: {{message}}",
+      "band": "Bant",
+      "date": "Tarih (UTC)",
+      "firstDate": "İlk tarih",
+      "previousDate": "Önceki tarih",
+      "nextDate": "Sonraki tarih",
+      "latestDate": "En son tarih",
+      "pickDate": "Tarihe git",
+      "colormap": "Renk haritası",
+      "rangeInvalid": "Min, Maks değerinden küçük olmalıdır.",
+      "auto": "Otomatik",
+      "autoTitle": "Min ve Maks değerlerini bu tarihteki verilerden ayarla",
+      "min": "Min",
+      "max": "Maks",
+      "ownColors": "Bu bant kendi renklerini taşıdığından renk haritası uygulanmaz.",
+      "nearest": "En yakın komşu",
+      "bilinear": "Çift doğrusal",
+      "resampling": "Yeniden örnekleme",
+      "addToMap": "Haritaya ekle",
+      "addUnavailable": "Bu harita döşeme katmanı ekleyemez.",
+      "added": "{{name}} eklendi. Tarihi veya renkleri değiştirmek artık o katmanı günceller; başka bir kopya tutmak için yeniden ekleyin.",
+      "searchPlaceholder": "Başlık, uydu, anahtar sözcük ara…",
+      "search": "Ara",
+      "dataset": "Veri kümesi",
+      "hint": "JAXA'nın Yer gözlem veri kümelerine göz atın ve bunları haritaya ekleyin. Bir veri kümesi, bir bant ve bir tarih seçin, ardından renkleri ayarlayın.",
+      "catalogFailed": "JAXA Earth kataloğu yüklenemedi: {{message}}",
+      "retry": "Yeniden dene",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "{{name}} deposu açılamadı.",

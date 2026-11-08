@@ -402,6 +402,28 @@
     "openWebApp": "פתח את אפליקציית הווב של GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "לא ניתן היה לקרוא את ארכיון ה-IMDF הזה: {{reason}}",
+        "invalidJson": "{{file}} אינו JSON תקין ({{detail}})",
+        "entryTooLarge": "{{file}} גדול מ-256 MB",
+        "tooLarge": "קובצי ה-GeoJSON שבו מסתכמים ביותר מ-512 MB"
+      },
+      "layer": {
+        "venue": "אתר",
+        "footprint": "טביעות רגל",
+        "level": "קומות",
+        "section": "אגפים",
+        "unit": "יחידות",
+        "fixture": "מתקנים קבועים",
+        "detail": "פרטים",
+        "opening": "פתחים",
+        "kiosk": "קיוסקים",
+        "geofence": "גדרות גאוגרפיות",
+        "amenity": "שירותים ומתקנים",
+        "occupant": "דיירים"
+      }
+    },
     "title": "הוספת נתונים",
     "kind": {
       "xyz": {
@@ -439,6 +461,10 @@
       "landxml": {
         "label": "הוסף שכבת LandXML",
         "description": "ייבוא משטחי TIN, תוואים אופקיים, מטא-נתונים של חתכי אורך ונקודות מדידה מ-LandXML, עם היטל מחדש ממערכת הקואורדינטות של המקור."
+      },
+      "indoorgml": {
+        "label": "הוסף שכבת IndoorGML",
+        "description": "ייבוא בניין OGC IndoorGML: חדרים מובלטים לגובהם האמיתי ורשת הניווט, מקושרים לבורר הקומות."
       },
       "georss": {
         "label": "הוסף שכבת GeoRSS",
@@ -845,6 +871,29 @@
       "crsPresetLabel": "מערכות קואורדינטות נפוצות...",
       "crsHelp": "יש להשאיר ריק רק כאשר הקואורדינטות כבר בקו אורך וקו רוחב של WGS84. קואורדינטות LandXML נקראות כצפון (northing), מזרח (easting) וגובה.",
       "detectedCoordinateSystem": "מערכת הקואורדינטות של LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "כתובת URL של IndoorGML",
+      "file": "קובץ IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "נתוני קובץ ה-IndoorGML חסרים.",
+      "readError": "לא ניתן היה לקרוא את קובץ ה-IndoorGML הזה.",
+      "errorChooseFile": "יש לבחור קובץ IndoorGML.",
+      "errorUrl": "יש להזין כתובת URL של IndoorGML.",
+      "errorTooLarge": "קובץ IndoorGML זה גדול מ-200 MB.",
+      "errorMissingCrs": "קובץ IndoorGML זה אינו מציין מערכת קואורדינטות, והקואורדינטות שלו אינן קו אורך/רוחב. יש להזין את ה-CRS שלו, או לבחור למקם אותו במרכז המפה.",
+      "summary": "{{cells}} תאים ב-{{floors}} קומות, {{transitions}} קשתות ניווט.",
+      "crs": "מערכת קואורדינטות מקור",
+      "crsPlaceholder": "לדוגמה EPSG:25832",
+      "crsPresetLabel": "מערכות קואורדינטות נפוצות...",
+      "local": "קואורדינטות מקומיות: מקם את הבניין במרכז המפה",
+      "crsHelp": "לקובצי IndoorGML רבים אין CRS. יש להזין את קוד ה-EPSG של הקואורדינטות שלהם, או, עבור מודל במערכת ייחוס מקומית של בניין (מטרים מנקודת מוצא), למקם אותו במרכז המפה כדי להציג אותו.",
+      "layer": {
+        "cells": "תאים של {{name}}",
+        "transitions": "רשת ניווט של {{name}}",
+        "states": "צמתי ניווט של {{name}}"
+      }
     },
     "georss": {
       "defaultName": "שכבת GeoRSS",
@@ -2260,6 +2309,12 @@
       "none": "ללא (ללא שוליים)"
     },
     "mapBackground": "רקע המפה",
+    "pageBackground": "רקע הדף",
+    "panelTheme": "חלוניות המפה",
+    "panelThemeOption": {
+      "light": "בהיר",
+      "dark": "כהה"
+    },
     "scaleLabel": "קנה מידה (1:N)",
     "scalePlaceholder": "לדוגמה: 25000",
     "scalePresets": "ערכים מוגדרים…",
@@ -3062,6 +3117,7 @@
       },
       "mapCrs": "מערכת ייחוס הקואורדינטות של המפה",
       "mapCrsHint": "משרטט את מפת MapLibre שטוחה ב-CRS אחר, כגון רשת קוטבית או גלילית פשוטה של כדור הארץ, הירח או מאדים, עם מפת בסיס המוגשת ברשת זו. האריחים אינם מוטלים מחדש: שכבות GeoJSON, שכבות-על של תמונות ושכבות ייצוא של WMS או ArcGIS (המתבקשות ב-CRS) משורטטות, ואילו XYZ, אריחי וקטור ורוב שכבות התוספים אינם משורטטים, והגלובוס ופני השטח כבויים.",
+      "mapCrsLinkUnknown": "קישור זה מבקש את CRS המפה \"{{crs}}\", שאינו מוכר או אינו נתמך, ולכן המערכת התעלמה ממנו.",
       "mapCrsDefault": "Web Mercator / גלובוס (ברירת מחדל)",
       "mapCrsCustom": "קוד EPSG מותאם אישית…",
       "mapCrsEpsg": "קוד EPSG",
@@ -3326,6 +3382,7 @@
       "osEnvField": "נקרא ממשתנה הסביבה {{name}} של המערכת שלך.",
       "osEnvPlaceholder": "מוגדר בסביבת המערכת שלך",
       "refreshModels": "רענן את רשימת המודלים",
+      "ollamaModelHint": "יש להקליד כל מודל המותקן ב-Ollama, כולל התגית (לדוגמה qwen3:8b), או לבחור הצעה. רענן את הרשימה כדי לראות את המודלים המותקנים.",
       "modelsFailedToLoad": "לא ניתן לטעון מודלים: {{message}}",
       "modelsLoading": "טוען את קטלוג המודלים…",
       "searchModels": "חפש שמות או מזהים של מודלים",
@@ -3750,6 +3807,7 @@
       "photos": "תמונות עם תיוג גאוגרפי",
       "gpx": "שכבת GPX",
       "landxml": "שכבת LandXML",
+      "indoorgml": "שכבת IndoorGML",
       "polyline": "Encoded polyline",
       "mbtiles": "שכבת MBTiles",
       "xyz": "שכבת XYZ",
@@ -4328,6 +4386,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "מפת בסיס Carto Light",
       "geolibre-flight-simulator": "סימולטור טיסה",
       "gods-eye-view": "מבט עין האל",
@@ -4390,6 +4449,8 @@
       "osmPbfNoFeatures": "לא נמצאו ישויות ב-{{name}}.",
       "couldNotParse": "לא ניתן היה לפענח את {{name}}: {{message}}",
       "couldNotImport": "לא ניתן היה לייבא את הקבצים.",
+      "openedByHandler": "נפתח באמצעות {{name}}.",
+      "handlerFailed": "{{name}} לא הצליח לפתוח את הקבצים שנגררו: {{message}}",
       "addedVectorLayers_two": "{{count}} שכבות וקטוריות נוספו לחלונית השכבות.",
       "addedRasterLayers_two": "{{count}} שכבות רסטר נוספו לחלונית השכבות.",
       "bothVectorLayers_two": "{{count}} שכבות וקטוריות",
@@ -4398,6 +4459,17 @@
     "windowClose": {
       "savePromptTitle": "לשמור את השינויים לפני הסגירה?",
       "savePromptDescription": "בפרויקט הנוכחי יש שינויים שלא נשמרו. לשמור אותם לפני סגירת GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "התחבר כדי לשמור את הפרויקט",
+      "signInDescriptionOAuth": "התחבר אל {{shareHost}} כדי לשמור את הפרויקט שלך בשרת.",
+      "signInDescriptionToken": "נדרש אסימון API אישי כדי לשמור פרויקטים ב-{{shareHost}}. יש להוסיף את האסימון בהגדרות כדי להמשיך.",
+      "signInButton": "התחבר",
+      "openSettingsButton": "פתח הגדרות",
+      "saveTitle": "שמור פרויקט בשרת",
+      "saveDesc": "יש להזין שם לפרויקט. הפרויקט יישמר כפרויקט פרטי ב-{{shareHost}}.",
+      "noProjectId": "שרת הפרויקטים לא החזיר מזהה פרויקט.",
+      "uploadedNotLinked": "\"{{name}}\" נשמר ב-{{shareHost}}, אך ההפעלה או הפרויקט השתנו במהלך השמירה, ולכן הוא לא קושר למפה זו. יש לפתוח אותו מהגלריה כדי להמשיך לעבוד עליו."
     },
     "error": {
       "couldNotOpenProject": "לא ניתן היה לפתוח את הפרויקט.",
@@ -8639,6 +8711,15 @@
     "importedCount_two": "יובאו {{count}} סגנונות."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "בניין",
+      "overview": "סקירה כללית",
+      "fullModel": "מודל מלא",
+      "disciplinesHint": "יש לבחור את התחומים והקטגוריות של מודל הבניין שיש לשרטט.",
+      "drawnCount_one": "שורטטה {{count}} שכבת משנה.",
+      "drawnCount_two": "שורטטו {{count}} שכבות משנה.",
+      "drawnCount_other": "שורטטו {{count}} שכבות משנה."
+    },
     "panelLabel": "סגנון שכבה",
     "panelLabelCollapsed": "סגנון שכבה (מכווץ)",
     "heading": "סגנון",
@@ -8972,6 +9053,17 @@
       "strokeWidthUnit": "יחידת עובי קו המתאר",
       "strokeWidthUnitPixels": "פיקסלים (קבוע על המסך)",
       "strokeWidthUnitMeters": "מטרים (משתנה עם המפה)",
+      "strokeOpacity": "אטימות קו המתאר",
+      "lineStyle": "סגנון קו",
+      "lineStyleSolid": "רציף",
+      "lineStyleDashed": "מקווקו",
+      "lineStyleDotted": "מנוקד",
+      "lineStyleDashDot": "מקף-נקודה",
+      "lineStyleLongDash": "מקף ארוך",
+      "lineStyleCustom": "מותאם אישית",
+      "lineDashPattern": "תבנית מקפים",
+      "lineDashPatternHint": "אורכי המקפים והרווחים בכפולות של עובי הקו, כגון 4 2 1 2.",
+      "lineBlur": "טשטוש קו (px)",
       "textHaloColor": "צבע הילת הטקסט",
       "textHaloWidth": "עובי הילת הטקסט",
       "schemeEqualInterval": "מרווח שווה",
@@ -9022,13 +9114,21 @@
       "heightProperty": "מאפיין הגובה",
       "heightScale": "קנה מידה לגובה",
       "base": "גובה הבסיס",
+      "baseProperty": "מאפיין הבסיס",
+      "baseNone": "ללא (בסיס שטוח)",
+      "baseScale": "קנה מידה לבסיס",
+      "baseHint": "כל ישות מתחילה בגובה הבסיס + מאפיין הבסיס × קנה המידה של הבסיס, כך שהקומות נערמות לפי שדה מפלס. יש לקבוע גובה קומה כדי לתת לכל ישות עובי זה מעל הבסיס שלה; אחרת הגובה הוא רום הגג ועליו להיות מעל הבסיס.",
+      "floorHeight": "גובה קומה",
+      "floorHeightHint": "כשהערך גדול מ-0, כל ישות בגובה של מספר מטרים זה מעל הבסיס שלה ומתעלמים מהגדרות הגובה. 0 משתמש בגובה כרום הגג.",
+      "baseExpression": "ביטוי בסיס",
       "apply": "החל הבלטה תלת-ממדית",
       "footer": "הגדרות ההבלטה התלת-ממדית חלות בעת השמירה."
     },
     "expressionLabels": {
       "style": "ביטוי סגנון",
       "color": "ביטוי צבע",
-      "height": "ביטוי גובה"
+      "height": "ביטוי גובה",
+      "base": "ביטוי בסיס"
     },
     "expressionErrors": {
       "notArray": "{{label}} חייב להיות ביטוי מערך JSON.",
@@ -9314,6 +9414,27 @@
     "viewportSampleHint": "הערכים מגיעים מהאריחים שנטענו כרגע, ולכן הרשימה גדלה ככל שמזיזים את המפה ומשנים זום.",
     "layerFilteredHint": "סינון מהיר מסתיר חלק מהישויות של שכבה זו.",
     "selectedCount_two": "{{count}} נבחרו"
+  },
+  "floorPicker": {
+    "title": "בורר קומות",
+    "short": "קומה",
+    "all": "הכול",
+    "allTitle": "הצג את כל הקומות",
+    "levelTitle_one": "קומה {{level}} ({{count}} ישות)",
+    "levelTitle_two": "קומה {{level}} ({{count}} ישויות)",
+    "levelTitle_other": "קומה {{level}} ({{count}} ישויות)",
+    "below": "+ מתחת",
+    "belowTitle": "הצג גם את הקומות שמתחת לקומה שנבחרה",
+    "resize": "שנה את גודל רשימת הקומות",
+    "resizeTitle": "גרור כדי לשנות את גודל רשימת הקומות. לחיצה כפולה לאיפוס.",
+    "heading": "בורר קומות",
+    "field": "שדה קומה",
+    "off": "כבוי",
+    "hint": "יש לבחור את השדה שמכיל את הקומה של כל ישות כדי להציג שכבה זו בבורר הקומות שעל המפה.",
+    "linkedHint_one": "{{count}} קומה מופיעה בבורר הקומות שעל המפה.",
+    "linkedHint_two": "{{count}} קומות מופיעות בבורר הקומות שעל המפה.",
+    "linkedHint_other": "{{count}} קומות מופיעות בבורר הקומות שעל המפה.",
+    "noLevels": "לא נמצאו קומות ב-\"{{field}}\". יש לבחור את השדה שמכיל מספר או מפלס כגון \"0\" או \"-1;0\"."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "ייצוא KML לא הצליח לכתוב את ישות {{position}} כי יש לה קואורדינטות לא תקינות.",
@@ -10347,11 +10468,23 @@
       "north": "צפון",
       "useMapExtent": "השתמש בתיחום המפה",
       "download": "הורד נתוני OSM",
+      "preview": "תצוגה מקדימה של נתוני OSM",
+      "addToMap": "הוסף למפה",
+      "exportGeoParquet": "שמור GeoParquet",
       "ready": "יש לבחור אזור וסוג ישות.",
       "exportGeoJson": "שמור GeoJSON",
       "mapUnavailable": "תיחום המפה עדיין אינו זמין.",
       "extentApplied": "תיחום המפה הוחל.",
+      "invalidExtent": "יש להזין תיבה תוחמת תקינה.",
+      "zoomIn": "יש להתקרב עד ששטח המפה יהיה {{limit}} מעלות רבועות או פחות.",
       "downloading": "מוריד מ-OpenStreetMap…",
+      "previewing": "טוען תצוגה מקדימה של OSM…",
+      "previewLayerName": "תצוגה מקדימה — {{name}}",
+      "previewed": "תצוגה מקדימה של {{count}} ישויות: {{points}} נקודות, {{lines}} קווים, {{polygons}} פוליגונים.",
+      "preparingExport": "מכין ייצוא {{format}}…",
+      "exported": "הוכנו {{count}} ישויות לייצוא {{format}}.",
+      "exportCancelled": "הייצוא בוטל.",
+      "exportError": "לא ניתן לייצא {{format}}: {{message}}",
       "noFeatures": "לא נמצאו ישויות תואמות באזור זה.",
       "error": "לא ניתן להוריד נתוני OSM: {{message}}",
       "added": "נוספו {{count}} ישויות למפה."
@@ -10674,6 +10807,59 @@
       "retry": "נסה שוב",
       "catalogFailed": "לא ניתן היה לטעון את הקטלוג של Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "אודות JAXA Earth API",
+      "aboutText": "JAXA Earth API מפרסם מערכי נתונים של תצפית כדור הארץ מ-JAXA ומסוכנויות שותפות כ-GeoTIFF מותאמים לענן: מפות גובה ויערות של ALOS, משקעים של GSMaP, טמפרטורת פני היבשה והים של GCOM-C ו-MODIS, צמחייה, תרסיסים, לחות קרקע ועוד. אין צורך בחשבון או במפתח API.",
+      "aboutAccess": "GeoLibre משרטט את האריחים בדפדפן באמצעות ה-API של JavaScript של JAXA, וקורא רק את הרזולוציה והאזור שהמפה מציגה.",
+      "home": "JAXA Earth API",
+      "terms": "תנאי שימוש",
+      "attribution": "הנתונים באדיבות JAXA. חלק ממערכי הנתונים מגיעים מסוכנויות אחרות וכפופים לתנאים שלהן; יש לבדוק את דף מערך הנתונים לפני שימוש חוזר.",
+      "projectionLabel": "{{title}} (ההטלה אינה נתמכת)",
+      "chooseDataset": "בחר מערך נתונים…",
+      "loading": "טוען את הקטלוג…",
+      "recommendedGroup": "מומלץ: {{group}}",
+      "allGroup": "כל מערכי הנתונים",
+      "resolutionM": "~{{value}} מ'",
+      "resolutionKm": "~{{value}} ק\"מ",
+      "timeRange": "{{start}} עד {{end}}",
+      "present": "היום",
+      "climatology": "אקלימטולוגיה",
+      "datasetPage": "פרטי מערך הנתונים",
+      "dateFailed": "לא ניתן היה לשנות את התאריך: {{message}}",
+      "noOtherDate": "אין תאריך אחר בכיוון זה.",
+      "sampling": "קורא דגימה כדי לקבוע את טווח הצבעים…",
+      "noValues": "הדגימה אינה מכילה ערכים; יש לקבוע מינימום ומקסימום ידנית.",
+      "sampleFailed": "לא ניתן היה לקרוא דגימה של {{name}}: {{message}}",
+      "opening": "פותח את {{name}}…",
+      "openFailed": "לא ניתן היה לפתוח את {{name}}: {{message}}",
+      "band": "ערוץ",
+      "date": "תאריך (UTC)",
+      "firstDate": "התאריך הראשון",
+      "previousDate": "התאריך הקודם",
+      "nextDate": "התאריך הבא",
+      "latestDate": "התאריך האחרון",
+      "pickDate": "עבור לתאריך",
+      "colormap": "מפת צבעים",
+      "rangeInvalid": "המינימום חייב להיות קטן מהמקסימום.",
+      "auto": "אוטומטי",
+      "autoTitle": "קבע מינימום ומקסימום מהנתונים בתאריך זה",
+      "min": "מינימום",
+      "max": "מקסימום",
+      "ownColors": "לערוץ זה צבעים משלו, ולכן לא חלה עליו מפת צבעים.",
+      "nearest": "שכן קרוב",
+      "bilinear": "בי-לינארית",
+      "resampling": "דגימה מחדש",
+      "addToMap": "הוסף למפה",
+      "addUnavailable": "מפה זו אינה יכולה להוסיף שכבות אריחים.",
+      "added": "{{name}} נוסף. שינוי התאריך או הצבעים יעדכן כעת שכבה זו; יש להוסיף שוב כדי לשמור עותק נוסף.",
+      "searchPlaceholder": "חיפוש בכותרות, לוויינים, מילות מפתח…",
+      "search": "חפש",
+      "dataset": "מערך נתונים",
+      "hint": "עיון במערכי נתונים של תצפית כדור הארץ של JAXA והוספתם למפה. יש לבחור מערך נתונים, ערוץ ותאריך, ולאחר מכן לכוונן את הצבעים.",
+      "catalogFailed": "לא ניתן היה לטעון את קטלוג JAXA Earth: {{message}}",
+      "retry": "נסה שוב",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "לא ניתן היה לפתוח את המאגר {{name}}.",

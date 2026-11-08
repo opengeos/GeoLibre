@@ -395,6 +395,28 @@
     "openWebApp": "Open de GeoLibre-webapp"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Dit IMDF-archief kon niet worden gelezen: {{reason}}",
+        "invalidJson": "{{file}} is geen geldige JSON ({{detail}})",
+        "entryTooLarge": "{{file}} is groter dan 256 MB",
+        "tooLarge": "de GeoJSON-bestanden zijn samen groter dan 512 MB"
+      },
+      "layer": {
+        "venue": "Locatie",
+        "footprint": "Grondvlakken",
+        "level": "Verdiepingen",
+        "section": "Secties",
+        "unit": "Ruimten",
+        "fixture": "Inrichting",
+        "detail": "Details",
+        "opening": "Openingen",
+        "kiosk": "Kiosken",
+        "geofence": "Geofences",
+        "amenity": "Voorzieningen",
+        "occupant": "Huurders"
+      }
+    },
     "title": "Gegevens toevoegen",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "LandXML-laag toevoegen",
         "description": "Importeer LandXML-TIN-oppervlakken, horizontale alignementen, metadata van lengteprofielen en meetpunten, met herprojectie vanuit het bron-CRS."
+      },
+      "indoorgml": {
+        "label": "IndoorGML-laag toevoegen",
+        "description": "Importeer een OGC IndoorGML-gebouw: ruimten geëxtrudeerd tot hun werkelijke hoogte en het navigatienetwerk, gekoppeld aan de verdiepingkiezer."
       },
       "georss": {
         "label": "GeoRSS-laag toevoegen",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Veelgebruikte coördinatenstelsels...",
       "crsHelp": "Laat alleen leeg als de coördinaten al in WGS84-lengte- en breedtegraad zijn. LandXML-coördinaten worden gelezen als noordwaarde, oostwaarde en hoogte.",
       "detectedCoordinateSystem": "LandXML-coördinatenstelsel: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML-URL",
+      "file": "IndoorGML-bestand",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "De gegevens van het IndoorGML-bestand ontbreken.",
+      "readError": "Dit IndoorGML-bestand kon niet worden gelezen.",
+      "errorChooseFile": "Kies een IndoorGML-bestand.",
+      "errorUrl": "Voer een IndoorGML-URL in.",
+      "errorTooLarge": "Dit IndoorGML-bestand is groter dan 200 MB.",
+      "errorMissingCrs": "Dit IndoorGML-bestand noemt geen coördinatenstelsel en de coördinaten zijn geen lengte-/breedtegraden. Voer het CRS in, of kies ervoor het op het middelpunt van de kaart te plaatsen.",
+      "summary": "{{cells}} cellen op {{floors}} verdiepingen, {{transitions}} navigatieverbindingen.",
+      "crs": "Bron-CRS",
+      "crsPlaceholder": "bijv. EPSG:25832",
+      "crsPresetLabel": "Veelgebruikte coördinatenstelsels...",
+      "local": "Lokale coördinaten: plaats het gebouw op het middelpunt van de kaart",
+      "crsHelp": "Veel IndoorGML-bestanden hebben geen CRS. Voer de EPSG-code van hun coördinaten in, of plaats een model in een lokaal gebouwstelsel (meters vanaf een oorsprong) op het middelpunt van de kaart om het te bekijken.",
+      "layer": {
+        "cells": "{{name}}: cellen",
+        "transitions": "{{name}}: navigatienetwerk",
+        "states": "{{name}}: navigatieknooppunten"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS-laag",
@@ -2207,6 +2256,12 @@
       "none": "Geen (randloos)"
     },
     "mapBackground": "Kaartachtergrond",
+    "pageBackground": "Paginaachtergrond",
+    "panelTheme": "Kaartpanelen",
+    "panelThemeOption": {
+      "light": "Licht",
+      "dark": "Donker"
+    },
     "scaleLabel": "Schaal (1:N)",
     "scalePlaceholder": "bijv. 25000",
     "scalePresets": "Voorinstellingen…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "Coördinatenreferentiesysteem van de kaart",
       "mapCrsHint": "Tekent de MapLibre-kaart plat in een ander CRS, zoals een polair of eenvoudig cilindrisch raster van de Aarde, de Maan of Mars, met een basiskaart die in dat raster wordt aangeboden. Tegels worden niet geherprojecteerd: GeoJSON-lagen, afbeeldingsoverlays en WMS- of ArcGIS-exportlagen (opgevraagd in het CRS) worden getekend, maar XYZ-, vectortegel- en de meeste pluginlagen niet, en de globe en het terrein staan uit.",
+      "mapCrsLinkUnknown": "Deze link vraagt om het kaart-CRS ‘{{crs}}’, dat onbekend is of niet wordt ondersteund, en is daarom genegeerd.",
       "mapCrsDefault": "Web Mercator / globe (standaard)",
       "mapCrsCustom": "Aangepaste EPSG-code…",
       "mapCrsEpsg": "EPSG-code",
@@ -3264,6 +3320,7 @@
       "osEnvField": "Gelezen uit uw systeemomgevingsvariabele {{name}}.",
       "osEnvPlaceholder": "Ingesteld in uw systeemomgeving",
       "refreshModels": "Modellijst vernieuwen",
+      "ollamaModelHint": "Typ een willekeurig model dat in Ollama is geïnstalleerd, inclusief tag (bijvoorbeeld qwen3:8b), of kies een suggestie. Vernieuw de lijst om de geïnstalleerde modellen te zien.",
       "modelsFailedToLoad": "Kon de modellen niet laden: {{message}}",
       "modelsLoading": "Modelcatalogus laden…",
       "searchModels": "Zoek op modelnamen of ID's",
@@ -3687,6 +3744,7 @@
       "photos": "Foto's met geotags",
       "gpx": "GPX-laag",
       "landxml": "LandXML-laag",
+      "indoorgml": "IndoorGML-laag",
       "polyline": "Gecodeerde polylijn",
       "mbtiles": "MBTiles-laag",
       "xyz": "XYZ-laag",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light-basiskaart",
       "geolibre-flight-simulator": "Vluchtsimulator",
       "gods-eye-view": "Alziend overzicht",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{count}} lagen toegevoegd uit {{name}}.",
       "osmPbfNoFeatures": "Geen objecten gevonden in {{name}}.",
       "couldNotParse": "Kan {{name}} niet verwerken: {{message}}",
-      "couldNotImport": "Kan de bestanden niet importeren."
+      "couldNotImport": "Kan de bestanden niet importeren.",
+      "openedByHandler": "Geopend door {{name}}.",
+      "handlerFailed": "{{name}} kon de neergezette bestanden niet openen: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Wijzigingen opslaan voor het sluiten?",
       "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Opslaan voordat GeoLibre wordt gesloten?"
+    },
+    "remoteSave": {
+      "signInTitle": "Aanmelden om project op te slaan",
+      "signInDescriptionOAuth": "Meld u aan bij {{shareHost}} om uw project op de server op te slaan.",
+      "signInDescriptionToken": "Er is een persoonlijk API-token nodig om projecten op te slaan op {{shareHost}}. Voeg uw token toe in Instellingen om door te gaan.",
+      "signInButton": "Aanmelden",
+      "openSettingsButton": "Instellingen openen",
+      "saveTitle": "Project opslaan op server",
+      "saveDesc": "Voer een projectnaam in. Het project wordt als privéproject opgeslagen op {{shareHost}}.",
+      "noProjectId": "De projectserver heeft geen project-ID teruggegeven.",
+      "uploadedNotLinked": "‘{{name}}’ is opgeslagen op {{shareHost}}, maar de sessie of het project is tijdens het opslaan gewijzigd, dus het is niet aan deze kaart gekoppeld. Open het vanuit de Galerij om eraan verder te werken."
     },
     "error": {
       "couldNotOpenProject": "Het project kon niet worden geopend.",
@@ -8446,6 +8518,14 @@
     "noLayer": "Selecteer een vectorlaag om stijlen op te slaan of toe te passen."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Gebouw",
+      "overview": "Overzicht",
+      "fullModel": "Volledig model",
+      "disciplinesHint": "Kies de disciplines en categorieën van het gebouwmodel die moeten worden getekend.",
+      "drawnCount_one": "{{count}} sublaag getekend.",
+      "drawnCount_other": "{{count}} sublagen getekend."
+    },
     "panelLabel": "Laagstijl",
     "panelLabelCollapsed": "Laagstijl (ingeklapt)",
     "heading": "Stijl",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "Eenheid van lijndikte",
       "strokeWidthUnitPixels": "Pixels (constant op scherm)",
       "strokeWidthUnitMeters": "Meters (schaalt met de kaart)",
+      "strokeOpacity": "Dekking lijn",
+      "lineStyle": "Lijnstijl",
+      "lineStyleSolid": "Doorgetrokken",
+      "lineStyleDashed": "Gestreept",
+      "lineStyleDotted": "Gestippeld",
+      "lineStyleDashDot": "Streep-punt",
+      "lineStyleLongDash": "Lange streep",
+      "lineStyleCustom": "Aangepast",
+      "lineDashPattern": "Streeppatroon",
+      "lineDashPatternHint": "Lengtes van streepjes en tussenruimten in veelvouden van de lijndikte, zoals 4 2 1 2.",
+      "lineBlur": "Lijnvervaging (px)",
       "textHaloColor": "Teksthalokleur",
       "textHaloWidth": "Teksthalobreedte",
       "schemeEqualInterval": "Gelijk interval",
@@ -8826,13 +8917,21 @@
       "heightProperty": "Hoogte-eigenschap",
       "heightScale": "Hoogteschaal",
       "base": "Basishoogte",
+      "baseProperty": "Basiseigenschap",
+      "baseNone": "Geen (vlakke basis)",
+      "baseScale": "Basisschaal",
+      "baseHint": "Elk object begint op basishoogte + basiseigenschap × basisschaal, zodat verdiepingen vanuit een niveauveld worden gestapeld. Stel een verdiepingshoogte in om elk object die dikte op zijn basis te geven; anders is de hoogte de dakhoogte en moet die boven de basis liggen.",
+      "floorHeight": "Verdiepingshoogte",
+      "floorHeightHint": "Boven 0 is elk object zoveel meter hoog bovenop zijn basis en worden de hoogte-instellingen genegeerd. Bij 0 geldt de hoogte als dakhoogte.",
+      "baseExpression": "Basisexpressie",
       "apply": "3D-extrusie toepassen",
       "footer": "3D-extrusie-instellingen worden toegepast bij het opslaan."
     },
     "expressionLabels": {
       "style": "Stijlexpressie",
       "color": "Kleurexpressie",
-      "height": "Hoogte-expressie"
+      "height": "Hoogte-expressie",
+      "base": "Basisexpressie"
     },
     "expressionErrors": {
       "notArray": "{{label}} moet een JSON-arrayexpressie zijn.",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "Er zijn nog geen objecten geladen. Verschuif of zoom naar de gegevens en open dit onderdeel opnieuw.",
     "viewportSampleHint": "De waarden komen uit de tegels die nu geladen zijn, dus de lijst groeit terwijl u verschuift en inzoomt.",
     "layerFilteredHint": "Een snelfilter verbergt een deel van de objecten van deze laag."
+  },
+  "floorPicker": {
+    "title": "Verdiepingkiezer",
+    "short": "Etage",
+    "all": "Alle",
+    "allTitle": "Alle verdiepingen tonen",
+    "levelTitle_one": "Verdieping {{level}} ({{count}} object)",
+    "levelTitle_other": "Verdieping {{level}} ({{count}} objecten)",
+    "below": "+ lager",
+    "belowTitle": "Ook de verdiepingen onder de gekozen verdieping tonen",
+    "resize": "Formaat van de verdiepingenlijst wijzigen",
+    "resizeTitle": "Sleep om het formaat van de verdiepingenlijst te wijzigen. Dubbelklik om te herstellen.",
+    "heading": "Verdiepingkiezer",
+    "field": "Verdiepingsveld",
+    "off": "Uit",
+    "hint": "Kies het veld dat de verdieping van elk object bevat om deze laag op te nemen in de verdiepingkiezer op de kaart.",
+    "linkedHint_one": "{{count}} verdieping opgenomen in de verdiepingkiezer op de kaart.",
+    "linkedHint_other": "{{count}} verdiepingen opgenomen in de verdiepingkiezer op de kaart.",
+    "noLevels": "Geen verdiepingen gevonden in ‘{{field}}’. Kies het veld dat een getal of een niveau bevat, zoals ‘0’ of ‘-1;0’."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "De KML-export kon het object op positie {{position}} niet wegschrijven omdat het ongeldige coördinaten heeft.",
@@ -10203,11 +10321,23 @@
       "north": "Noord",
       "useMapExtent": "Gebruik kaartbereik",
       "download": "Download OSM-data",
+      "preview": "Voorbeeld van OSM-gegevens",
+      "addToMap": "Aan kaart toevoegen",
+      "exportGeoParquet": "Opslaan als GeoParquet",
       "ready": "Kies een gebied en een type object.",
       "exportGeoJson": "Opslaan als GeoJSON",
       "mapUnavailable": "Het kaartbereik is nog niet beschikbaar.",
       "extentApplied": "Kaartbereik toegepast.",
+      "invalidExtent": "Voer een geldig begrenzingskader in.",
+      "zoomIn": "Zoom in tot het kaartgebied {{limit}} vierkante graden of kleiner is.",
       "downloading": "Downloaden van OpenStreetMap…",
+      "previewing": "OSM-voorbeeld laden…",
+      "previewLayerName": "Voorbeeld — {{name}}",
+      "previewed": "Voorbeeld van {{count}} objecten: {{points}} punten, {{lines}} lijnen, {{polygons}} polygonen.",
+      "preparingExport": "Export naar {{format}} voorbereiden…",
+      "exported": "{{count}} objecten voorbereid voor export naar {{format}}.",
+      "exportCancelled": "Export geannuleerd.",
+      "exportError": "Kan {{format}} niet exporteren: {{message}}",
       "noFeatures": "Geen overeenkomende objecten gevonden in dit gebied.",
       "error": "OSM-data kon niet worden gedownload: {{message}}",
       "added": "{{count}} objecten toegevoegd aan de kaart."
@@ -10530,6 +10660,59 @@
       "retry": "Opnieuw proberen",
       "catalogFailed": "Kan de catalogus van het Ocean Data Platform niet laden: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "Over de JAXA Earth API",
+      "aboutText": "De JAXA Earth API publiceert aardobservatiedatasets van JAXA en partnerorganisaties als cloud-geoptimaliseerde GeoTIFF's: ALOS-hoogte- en boskaarten, GSMaP-neerslag, land- en zeeoppervlaktetemperatuur van GCOM-C en MODIS, vegetatie, aerosolen, bodemvocht en meer. Er is geen account of API-sleutel nodig.",
+      "aboutAccess": "GeoLibre tekent de tegels in de browser met de JavaScript-API van JAXA en leest alleen de resolutie en het gebied die de kaart toont.",
+      "home": "JAXA Earth API",
+      "terms": "Gebruiksvoorwaarden",
+      "attribution": "Gegevens met dank aan JAXA. Sommige datasets komen van andere organisaties en hebben eigen voorwaarden; raadpleeg de pagina van de dataset vóór hergebruik.",
+      "projectionLabel": "{{title}} (projectie niet ondersteund)",
+      "chooseDataset": "Kies een dataset…",
+      "loading": "Catalogus laden…",
+      "recommendedGroup": "Aanbevolen: {{group}}",
+      "allGroup": "Alle datasets",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} tot {{end}}",
+      "present": "heden",
+      "climatology": "klimatologie",
+      "datasetPage": "Details van dataset",
+      "dateFailed": "Kan de datum niet wijzigen: {{message}}",
+      "noOtherDate": "Er is geen andere datum in die richting.",
+      "sampling": "Een steekproef lezen om het kleurbereik in te stellen…",
+      "noValues": "De steekproef bevat geen waarden; stel Min en Max handmatig in.",
+      "sampleFailed": "Kan geen steekproef van {{name}} lezen: {{message}}",
+      "opening": "{{name}} openen…",
+      "openFailed": "Kan {{name}} niet openen: {{message}}",
+      "band": "Band",
+      "date": "Datum (UTC)",
+      "firstDate": "Eerste datum",
+      "previousDate": "Vorige datum",
+      "nextDate": "Volgende datum",
+      "latestDate": "Laatste datum",
+      "pickDate": "Ga naar datum",
+      "colormap": "Kleurenkaart",
+      "rangeInvalid": "Min moet kleiner zijn dan Max.",
+      "auto": "Automatisch",
+      "autoTitle": "Min en Max instellen op basis van de gegevens op deze datum",
+      "min": "Min",
+      "max": "Max",
+      "ownColors": "Deze band heeft eigen kleuren, dus er geldt geen kleurenkaart.",
+      "nearest": "Naaste buur",
+      "bilinear": "Bilineair",
+      "resampling": "Herbemonstering",
+      "addToMap": "Aan kaart toevoegen",
+      "addUnavailable": "Deze kaart kan geen tegellagen toevoegen.",
+      "added": "{{name}} toegevoegd. Als u nu de datum of kleuren wijzigt, wordt die laag bijgewerkt; voeg opnieuw toe om nog een kopie te behouden.",
+      "searchPlaceholder": "Zoek in titels, satellieten, trefwoorden…",
+      "search": "Zoeken",
+      "dataset": "Dataset",
+      "hint": "Blader door de aardobservatiedatasets van JAXA en voeg ze toe aan de kaart. Kies een dataset, een band en een datum en pas daarna de kleuren aan.",
+      "catalogFailed": "Kan de JAXA Earth-catalogus niet laden: {{message}}",
+      "retry": "Opnieuw proberen",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "Kan de repository {{name}} niet openen.",

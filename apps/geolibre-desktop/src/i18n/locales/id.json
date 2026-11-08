@@ -388,6 +388,28 @@
     "openWebApp": "Buka aplikasi web GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Arsip IMDF ini tidak dapat dibaca: {{reason}}",
+        "invalidJson": "{{file}} bukan JSON yang valid ({{detail}})",
+        "entryTooLarge": "{{file}} lebih besar dari 256 MB",
+        "tooLarge": "total ukuran file GeoJSON-nya melebihi 512 MB"
+      },
+      "layer": {
+        "venue": "Lokasi",
+        "footprint": "Tapak",
+        "level": "Lantai",
+        "section": "Bagian",
+        "unit": "Unit",
+        "fixture": "Perlengkapan tetap",
+        "detail": "Detail",
+        "opening": "Bukaan",
+        "kiosk": "Kios",
+        "geofence": "Geofence",
+        "amenity": "Fasilitas",
+        "occupant": "Penghuni"
+      }
+    },
     "title": "Tambah Data",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "Tambahkan Layer LandXML",
         "description": "Impor permukaan TIN, alinyemen horizontal, metadata profil vertikal, dan titik survei LandXML dengan proyeksi ulang dari CRS sumber."
+      },
+      "indoorgml": {
+        "label": "Tambahkan Layer IndoorGML",
+        "description": "Impor bangunan OGC IndoorGML: ruangan diekstrusi sesuai tinggi sebenarnya beserta jaringan navigasinya, terhubung ke pemilih lantai."
       },
       "georss": {
         "label": "Tambahkan Layer GeoRSS",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "Sistem koordinat umum...",
       "crsHelp": "Biarkan kosong hanya jika koordinat sudah dalam bujur dan lintang WGS84. Koordinat LandXML dibaca sebagai northing, easting, dan elevasi.",
       "detectedCoordinateSystem": "Sistem koordinat LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "URL IndoorGML",
+      "file": "File IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "Data file IndoorGML tidak ada.",
+      "readError": "Tidak dapat membaca file IndoorGML ini.",
+      "errorChooseFile": "Pilih file IndoorGML.",
+      "errorUrl": "Masukkan URL IndoorGML.",
+      "errorTooLarge": "File IndoorGML ini lebih besar dari 200 MB.",
+      "errorMissingCrs": "File IndoorGML ini tidak menyebutkan sistem koordinat dan koordinatnya bukan bujur/lintang. Masukkan CRS-nya, atau pilih untuk menempatkannya di tengah peta.",
+      "summary": "{{cells}} sel di {{floors}} lantai, {{transitions}} sisi navigasi.",
+      "crs": "CRS sumber",
+      "crsPlaceholder": "mis. EPSG:25832",
+      "crsPresetLabel": "Sistem koordinat umum...",
+      "local": "Koordinat lokal: tempatkan bangunan di tengah peta",
+      "crsHelp": "Banyak file IndoorGML tidak memiliki CRS. Masukkan kode EPSG koordinatnya, atau, untuk model dalam kerangka bangunan lokal (meter dari titik asal), tempatkan di tengah peta untuk melihatnya.",
+      "layer": {
+        "cells": "Sel {{name}}",
+        "transitions": "Jaringan navigasi {{name}}",
+        "states": "Simpul navigasi {{name}}"
+      }
     },
     "georss": {
       "defaultName": "Layer GeoRSS",
@@ -2154,6 +2203,12 @@
       "none": "Tanpa (tanpa batas)"
     },
     "mapBackground": "Latar belakang peta",
+    "pageBackground": "Latar belakang halaman",
+    "panelTheme": "Panel peta",
+    "panelThemeOption": {
+      "light": "Terang",
+      "dark": "Gelap"
+    },
     "scaleLabel": "Skala (1:N)",
     "scalePlaceholder": "mis. 25000",
     "scalePresets": "Preset…",
@@ -2940,6 +2995,7 @@
       },
       "mapCrs": "Sistem referensi koordinat peta",
       "mapCrsHint": "Menggambar peta MapLibre secara datar dalam CRS lain, seperti grid kutub atau silinder sederhana dari Bumi, Bulan, atau Mars, dengan peta dasar yang disajikan dalam grid tersebut. Ubin tidak diproyeksikan ulang: layer GeoJSON, overlay gambar, dan layer ekspor WMS atau ArcGIS (diminta dalam CRS tersebut) digambar, sedangkan XYZ, ubin vektor, dan sebagian besar layer plugin tidak, serta globe dan medan dinonaktifkan.",
+      "mapCrsLinkUnknown": "Tautan ini meminta CRS peta \"{{crs}}\", yang tidak dikenal atau tidak didukung, sehingga diabaikan.",
       "mapCrsDefault": "Web Mercator / bola dunia (default)",
       "mapCrsCustom": "Kode EPSG kustom…",
       "mapCrsEpsg": "Kode EPSG",
@@ -3202,6 +3258,7 @@
       "osEnvField": "Dibaca dari variabel lingkungan sistem Anda {{name}}.",
       "osEnvPlaceholder": "Atur di lingkungan sistem Anda",
       "refreshModels": "Segarkan daftar model",
+      "ollamaModelHint": "Ketik model apa pun yang terpasang di Ollama, termasuk tag-nya (misalnya qwen3:8b), atau pilih saran. Muat ulang daftar untuk melihat model yang terpasang.",
       "modelsFailedToLoad": "Tidak dapat memuat model: {{message}}",
       "modelsLoading": "Memuat katalog model…",
       "searchModels": "Cari nama atau ID model",
@@ -3624,6 +3681,7 @@
       "photos": "Foto Bertag Geo",
       "gpx": "Layer GPX",
       "landxml": "Layer LandXML",
+      "indoorgml": "Layer IndoorGML",
       "polyline": "Polyline Terenkode",
       "mbtiles": "Layer MBTiles",
       "xyz": "Layer XYZ",
@@ -4188,6 +4246,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Peta Dasar Carto Light",
       "geolibre-flight-simulator": "Simulator Penerbangan",
       "gods-eye-view": "Pandangan Mahatahu",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "{{count}} layer ditambahkan dari {{name}}.",
       "osmPbfNoFeatures": "Tidak ada fitur yang ditemukan di {{name}}.",
       "couldNotParse": "Tidak dapat mengurai {{name}}: {{message}}",
-      "couldNotImport": "Tidak dapat mengimpor file."
+      "couldNotImport": "Tidak dapat mengimpor file.",
+      "openedByHandler": "Dibuka oleh {{name}}.",
+      "handlerFailed": "{{name}} tidak dapat membuka file yang dijatuhkan: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Simpan perubahan sebelum menutup?",
       "savePromptDescription": "Proyek saat ini memiliki perubahan yang belum disimpan. Simpan sebelum menutup GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "Masuk untuk menyimpan proyek",
+      "signInDescriptionOAuth": "Masuk ke {{shareHost}} untuk menyimpan proyek Anda di server.",
+      "signInDescriptionToken": "Token API pribadi diperlukan untuk menyimpan proyek ke {{shareHost}}. Tambahkan token Anda di Pengaturan untuk melanjutkan.",
+      "signInButton": "Masuk",
+      "openSettingsButton": "Buka Pengaturan",
+      "saveTitle": "Simpan proyek ke server",
+      "saveDesc": "Masukkan nama proyek. Proyek akan disimpan sebagai proyek privat di {{shareHost}}.",
+      "noProjectId": "Server proyek tidak mengembalikan ID proyek.",
+      "uploadedNotLinked": "\"{{name}}\" disimpan ke {{shareHost}}, tetapi sesi atau proyek berubah selama penyimpanan, sehingga tidak ditautkan ke peta ini. Buka dari Galeri untuk melanjutkan pekerjaan."
     },
     "error": {
       "couldNotOpenProject": "Tidak dapat membuka proyek.",
@@ -8317,6 +8389,13 @@
     "noLayer": "Pilih layer vektor untuk menyimpan atau menerapkan gaya."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Bangunan",
+      "overview": "Ikhtisar",
+      "fullModel": "Model lengkap",
+      "disciplinesHint": "Pilih disiplin dan kategori model bangunan yang akan digambar.",
+      "drawnCount_other": "{{count}} sublayer digambar."
+    },
     "panelLabel": "Gaya layer",
     "panelLabelCollapsed": "Gaya layer (diciutkan)",
     "heading": "Gaya",
@@ -8644,6 +8723,17 @@
       "strokeWidthUnit": "Satuan lebar garis tepi",
       "strokeWidthUnitPixels": "Piksel (konstan di layar)",
       "strokeWidthUnitMeters": "Meter (menyesuaikan dengan peta)",
+      "strokeOpacity": "Opasitas garis tepi",
+      "lineStyle": "Gaya garis",
+      "lineStyleSolid": "Solid",
+      "lineStyleDashed": "Putus-putus",
+      "lineStyleDotted": "Titik-titik",
+      "lineStyleDashDot": "Garis-titik",
+      "lineStyleLongDash": "Garis panjang",
+      "lineStyleCustom": "Kustom",
+      "lineDashPattern": "Pola putus-putus",
+      "lineDashPatternHint": "Panjang garis putus dan jeda dalam kelipatan lebar garis, misalnya 4 2 1 2.",
+      "lineBlur": "Keburaman garis (px)",
       "textHaloColor": "Warna halo teks",
       "textHaloWidth": "Lebar halo teks",
       "schemeEqualInterval": "Interval sama",
@@ -8694,13 +8784,21 @@
       "heightProperty": "Properti tinggi",
       "heightScale": "Skala tinggi",
       "base": "Tinggi dasar",
+      "baseProperty": "Properti dasar",
+      "baseNone": "Tidak ada (dasar datar)",
+      "baseScale": "Skala dasar",
+      "baseHint": "Setiap fitur dimulai pada tinggi dasar + properti dasar × skala dasar, sehingga lantai bertumpuk berdasarkan kolom tingkat. Atur tinggi lantai untuk memberi setiap fitur ketebalan tersebut di atas dasarnya; jika tidak, tinggi adalah ketinggian atap dan harus berada di atas dasar.",
+      "floorHeight": "Tinggi lantai",
+      "floorHeightHint": "Jika lebih dari 0, setiap fitur setinggi jumlah meter ini di atas dasarnya dan pengaturan tinggi diabaikan. 0 menggunakan tinggi sebagai ketinggian atap.",
+      "baseExpression": "Ekspresi dasar",
       "apply": "Terapkan ekstrusi 3D",
       "footer": "Pengaturan ekstrusi 3D berlaku saat disimpan."
     },
     "expressionLabels": {
       "style": "Ekspresi gaya",
       "color": "Ekspresi warna",
-      "height": "Ekspresi tinggi"
+      "height": "Ekspresi tinggi",
+      "base": "Ekspresi dasar"
     },
     "expressionErrors": {
       "notArray": "{{label}} harus berupa ekspresi array JSON.",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "Belum ada fitur yang dimuat. Geser atau perbesar peta ke data, lalu buka kembali bagian ini.",
     "viewportSampleHint": "Nilai berasal dari tile yang sedang dimuat, jadi daftarnya bertambah seiring Anda menggeser dan memperbesar peta.",
     "layerFilteredHint": "Sebuah filter cepat sedang menyembunyikan sebagian fitur layer ini."
+  },
+  "floorPicker": {
+    "title": "Pemilih lantai",
+    "short": "Lantai",
+    "all": "Semua",
+    "allTitle": "Tampilkan semua lantai",
+    "levelTitle_other": "Lantai {{level}} ({{count}} fitur)",
+    "below": "+ bawah",
+    "belowTitle": "Tampilkan juga lantai di bawah lantai yang dipilih",
+    "resize": "Ubah ukuran daftar lantai",
+    "resizeTitle": "Seret untuk mengubah ukuran daftar lantai. Klik dua kali untuk mengatur ulang.",
+    "heading": "Pemilih lantai",
+    "field": "Kolom lantai",
+    "off": "Mati",
+    "hint": "Pilih kolom yang berisi lantai setiap fitur untuk mencantumkan layer ini di pemilih lantai pada peta.",
+    "linkedHint_other": "{{count}} lantai tercantum di pemilih lantai pada peta.",
+    "noLevels": "Tidak ada lantai yang ditemukan di \"{{field}}\". Pilih kolom yang berisi angka atau tingkat seperti \"0\" atau \"-1;0\"."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Ekspor KML tidak dapat menulis fitur {{position}} karena koordinatnya tidak valid.",
@@ -10059,11 +10174,23 @@
       "north": "Utara",
       "useMapExtent": "Gunakan batas peta",
       "download": "Unduh data OSM",
+      "preview": "Pratinjau data OSM",
+      "addToMap": "Tambahkan ke peta",
+      "exportGeoParquet": "Simpan GeoParquet",
       "ready": "Pilih area dan jenis fitur.",
       "exportGeoJson": "Simpan GeoJSON",
       "mapUnavailable": "Batas peta tidak tersedia saat ini.",
       "extentApplied": "Batas peta diterapkan.",
+      "invalidExtent": "Masukkan kotak pembatas yang valid.",
+      "zoomIn": "Perbesar hingga area peta {{limit}} derajat persegi atau kurang.",
       "downloading": "Mengunduh dari OpenStreetMap…",
+      "previewing": "Memuat pratinjau OSM…",
+      "previewLayerName": "Pratinjau — {{name}}",
+      "previewed": "Pratinjau {{count}} fitur: {{points}} titik, {{lines}} garis, {{polygons}} poligon.",
+      "preparingExport": "Menyiapkan ekspor {{format}}…",
+      "exported": "{{count}} fitur disiapkan untuk ekspor {{format}}.",
+      "exportCancelled": "Ekspor dibatalkan.",
+      "exportError": "Tidak dapat mengekspor {{format}}: {{message}}",
       "noFeatures": "Tidak ada fitur yang cocok ditemukan di area ini.",
       "error": "Tidak dapat mengunduh data OSM: {{message}}",
       "added": "Ditambahkan {{count}} fitur ke peta."
@@ -10386,6 +10513,59 @@
       "retry": "Coba lagi",
       "catalogFailed": "Tidak dapat memuat katalog Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "Tentang JAXA Earth API",
+      "aboutText": "JAXA Earth API menerbitkan dataset observasi Bumi dari JAXA dan lembaga mitra sebagai GeoTIFF yang dioptimalkan untuk cloud: peta elevasi dan hutan ALOS, curah hujan GSMaP, suhu permukaan darat dan laut GCOM-C dan MODIS, vegetasi, aerosol, kelembapan tanah, dan lainnya. Tidak perlu akun atau kunci API.",
+      "aboutAccess": "GeoLibre menggambar ubin di browser dengan API JavaScript JAXA, dan hanya membaca resolusi dan area yang ditampilkan peta.",
+      "home": "JAXA Earth API",
+      "terms": "Ketentuan penggunaan",
+      "attribution": "Data atas kebaikan JAXA. Beberapa dataset berasal dari lembaga lain dan memiliki ketentuannya sendiri; periksa halaman dataset sebelum menggunakannya kembali.",
+      "projectionLabel": "{{title}} (proyeksi tidak didukung)",
+      "chooseDataset": "Pilih dataset…",
+      "loading": "Memuat katalog…",
+      "recommendedGroup": "Direkomendasikan: {{group}}",
+      "allGroup": "Semua dataset",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} hingga {{end}}",
+      "present": "sekarang",
+      "climatology": "klimatologi",
+      "datasetPage": "Detail dataset",
+      "dateFailed": "Tidak dapat mengubah tanggal: {{message}}",
+      "noOtherDate": "Tidak ada tanggal lain ke arah itu.",
+      "sampling": "Membaca sampel untuk mengatur rentang warna…",
+      "noValues": "Sampel tidak berisi nilai; atur Min dan Maks secara manual.",
+      "sampleFailed": "Tidak dapat membaca sampel {{name}}: {{message}}",
+      "opening": "Membuka {{name}}…",
+      "openFailed": "Tidak dapat membuka {{name}}: {{message}}",
+      "band": "Band",
+      "date": "Tanggal (UTC)",
+      "firstDate": "Tanggal pertama",
+      "previousDate": "Tanggal sebelumnya",
+      "nextDate": "Tanggal berikutnya",
+      "latestDate": "Tanggal terbaru",
+      "pickDate": "Buka tanggal",
+      "colormap": "Peta warna",
+      "rangeInvalid": "Min harus lebih kecil dari Maks.",
+      "auto": "Otomatis",
+      "autoTitle": "Atur Min dan Maks dari data pada tanggal ini",
+      "min": "Min",
+      "max": "Maks",
+      "ownColors": "Band ini membawa warnanya sendiri, sehingga peta warna tidak berlaku.",
+      "nearest": "Tetangga terdekat",
+      "bilinear": "Bilinear",
+      "resampling": "Resampling",
+      "addToMap": "Tambahkan ke peta",
+      "addUnavailable": "Peta ini tidak dapat menambahkan layer ubin.",
+      "added": "{{name}} ditambahkan. Mengubah tanggal atau warna sekarang memperbarui layer tersebut; tambahkan lagi untuk menyimpan salinan lain.",
+      "searchPlaceholder": "Cari judul, satelit, kata kunci…",
+      "search": "Cari",
+      "dataset": "Dataset",
+      "hint": "Jelajahi dataset observasi Bumi JAXA dan tambahkan ke peta. Pilih dataset, band, dan tanggal, lalu sesuaikan warnanya.",
+      "catalogFailed": "Tidak dapat memuat katalog JAXA Earth: {{message}}",
+      "retry": "Coba lagi",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "Tidak dapat membuka repositori {{name}}.",

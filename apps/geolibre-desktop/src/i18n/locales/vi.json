@@ -388,6 +388,28 @@
     "cancel": "Hủy"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Không thể đọc kho lưu trữ IMDF này: {{reason}}",
+        "invalidJson": "{{file}} không phải là JSON hợp lệ ({{detail}})",
+        "entryTooLarge": "{{file}} lớn hơn 256 MB",
+        "tooLarge": "tổng dung lượng các tệp GeoJSON của nó vượt quá 512 MB"
+      },
+      "layer": {
+        "venue": "Địa điểm",
+        "footprint": "Đường bao công trình",
+        "level": "Tầng",
+        "section": "Khu vực",
+        "unit": "Không gian",
+        "fixture": "Thiết bị cố định",
+        "detail": "Chi tiết",
+        "opening": "Lối ra vào",
+        "kiosk": "Ki-ốt",
+        "geofence": "Hàng rào địa lý",
+        "amenity": "Tiện ích",
+        "occupant": "Đơn vị thuê"
+      }
+    },
     "title": "Thêm dữ liệu",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "Thêm lớp LandXML",
         "description": "Nhập bề mặt TIN, tuyến bình đồ, siêu dữ liệu trắc dọc và điểm đo đạc từ LandXML, có chiếu lại từ CRS nguồn."
+      },
+      "indoorgml": {
+        "label": "Thêm lớp IndoorGML",
+        "description": "Nhập một tòa nhà OGC IndoorGML: các phòng được đùn lên theo chiều cao thực cùng mạng điều hướng, liên kết với bộ chọn tầng."
       },
       "georss": {
         "label": "Thêm lớp GeoRSS",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "Hệ tọa độ chung...",
       "crsHelp": "Chỉ để trống khi tọa độ đã là kinh độ và vĩ độ WGS84. Tọa độ LandXML được đọc theo thứ tự tọa độ bắc (northing), tọa độ đông (easting) và cao độ.",
       "detectedCoordinateSystem": "Hệ tọa độ LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "URL IndoorGML",
+      "file": "Tệp IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "Thiếu dữ liệu tệp IndoorGML.",
+      "readError": "Không thể đọc tệp IndoorGML này.",
+      "errorChooseFile": "Hãy chọn một tệp IndoorGML.",
+      "errorUrl": "Hãy nhập URL IndoorGML.",
+      "errorTooLarge": "Tệp IndoorGML này lớn hơn 200 MB.",
+      "errorMissingCrs": "Tệp IndoorGML này không chỉ định hệ tọa độ và tọa độ của nó không phải kinh độ/vĩ độ. Hãy nhập CRS của tệp, hoặc chọn đặt nó vào giữa bản đồ.",
+      "summary": "{{cells}} ô trên {{floors}} tầng, {{transitions}} cạnh điều hướng.",
+      "crs": "CRS nguồn",
+      "crsPlaceholder": "ví dụ. EPSG:25832",
+      "crsPresetLabel": "Hệ tọa độ chung...",
+      "local": "Tọa độ cục bộ: đặt tòa nhà vào giữa bản đồ",
+      "crsHelp": "Nhiều tệp IndoorGML không có CRS. Hãy nhập mã EPSG cho tọa độ của tệp, hoặc với mô hình dùng hệ tọa độ cục bộ của tòa nhà (tính bằng mét từ một gốc), hãy đặt nó vào giữa bản đồ để xem.",
+      "layer": {
+        "cells": "Ô của {{name}}",
+        "transitions": "Mạng điều hướng của {{name}}",
+        "states": "Nút điều hướng của {{name}}"
+      }
     },
     "georss": {
       "errorUrl": "Nhập URL GeoRSS.",
@@ -2154,6 +2203,12 @@
       "none": "Không có (không biên giới)"
     },
     "mapBackground": "Nền bản đồ",
+    "pageBackground": "Nền trang",
+    "panelTheme": "Bảng trên bản đồ",
+    "panelThemeOption": {
+      "light": "Sáng",
+      "dark": "Tối"
+    },
     "scaleLabel": "Tỷ lệ (1:N)",
     "scalePlaceholder": "ví dụ. 25000",
     "info": {
@@ -2928,6 +2983,7 @@
       },
       "mapCrs": "Hệ quy chiếu tọa độ của bản đồ",
       "mapCrsHint": "Vẽ bản đồ MapLibre dạng phẳng theo một CRS khác, chẳng hạn lưới cực hoặc lưới trụ đơn giản của Trái Đất, Mặt Trăng hoặc Sao Hỏa, với bản đồ nền được cung cấp theo lưới đó. Các ô không được chiếu lại: lớp GeoJSON, lớp phủ hình ảnh và lớp xuất WMS hoặc ArcGIS (được yêu cầu theo CRS đó) được vẽ, còn lớp XYZ, ô vector và hầu hết lớp plugin thì không, đồng thời quả địa cầu và địa hình bị tắt.",
+      "mapCrsLinkUnknown": "Liên kết này yêu cầu CRS bản đồ \"{{crs}}\", vốn không xác định hoặc không được hỗ trợ, nên đã bị bỏ qua.",
       "mapCrsDefault": "Web Mercator / quả địa cầu (mặc định)",
       "mapCrsCustom": "Mã EPSG tùy chỉnh…",
       "mapCrsEpsg": "Mã EPSG",
@@ -3202,6 +3258,7 @@
       "osEnvField": "Đọc từ biến môi trường hệ thống của bạn {{name}}.",
       "osEnvPlaceholder": "Đặt trong môi trường hệ thống của bạn",
       "refreshModels": "Làm mới danh sách mô hình",
+      "ollamaModelHint": "Nhập bất kỳ mô hình nào đã cài trong Ollama, kèm cả thẻ (ví dụ qwen3:8b), hoặc chọn một gợi ý. Làm mới danh sách để xem các mô hình đã cài.",
       "modelsFailedToLoad": "Không thể tải các mô hình: {{message}}",
       "modelsLoading": "Đang tải danh mục mô hình…",
       "searchModels": "Tìm theo tên hoặc ID mô hình",
@@ -3624,6 +3681,7 @@
       "photos": "Ảnh được gắn thẻ địa lý",
       "gpx": "Lớp GPX",
       "landxml": "Lớp LandXML",
+      "indoorgml": "Lớp IndoorGML",
       "polyline": "Polyline mã hóa",
       "mbtiles": "Lớp MBTiles",
       "xyz": "Lớp XYZ",
@@ -4205,6 +4263,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Sơ đồ cơ sở ánh sáng Carto",
       "geolibre-flight-simulator": "Trình mô phỏng chuyến bay",
       "gods-eye-view": "Góc nhìn toàn tri",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "Đã thêm {{count}} lớp từ {{name}}.",
       "osmPbfNoFeatures": "Không tìm thấy đối tượng nào trong {{name}}.",
       "couldNotParse": "Không thể phân tích cú pháp {{name}}: {{message}}",
-      "couldNotImport": "Không thể nhập tệp."
+      "couldNotImport": "Không thể nhập tệp.",
+      "openedByHandler": "Đã mở bằng {{name}}.",
+      "handlerFailed": "{{name}} không thể mở các tệp được thả: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Lưu thay đổi trước khi đóng?",
       "savePromptDescription": "Dự án hiện tại có thay đổi chưa được lưu. Lưu trước khi đóng GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "Đăng nhập để lưu dự án",
+      "signInDescriptionOAuth": "Đăng nhập vào {{shareHost}} để lưu dự án của bạn trên máy chủ.",
+      "signInDescriptionToken": "Cần có mã thông báo API cá nhân để lưu dự án vào {{shareHost}}. Hãy thêm mã thông báo của bạn trong Cài đặt để tiếp tục.",
+      "signInButton": "Đăng nhập",
+      "openSettingsButton": "Mở Cài đặt",
+      "saveTitle": "Lưu dự án lên máy chủ",
+      "saveDesc": "Nhập tên dự án. Dự án sẽ được lưu dưới dạng dự án riêng tư trên {{shareHost}}.",
+      "noProjectId": "Máy chủ dự án không trả về ID dự án.",
+      "uploadedNotLinked": "\"{{name}}\" đã được lưu vào {{shareHost}}, nhưng phiên hoặc dự án đã thay đổi trong lúc lưu, nên nó không được liên kết với bản đồ này. Hãy mở nó từ Thư viện để tiếp tục làm việc."
     },
     "error": {
       "couldNotOpenOsmPbf": "Không thể mở tệp OSM PBF.",
@@ -8317,6 +8389,13 @@
     "noLayer": "Chọn một lớp vectơ để lưu hoặc áp dụng kiểu."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Tòa nhà",
+      "overview": "Tổng quan",
+      "fullModel": "Toàn bộ mô hình",
+      "disciplinesHint": "Chọn các chuyên ngành và danh mục của mô hình tòa nhà cần vẽ.",
+      "drawnCount_other": "Đã vẽ {{count}} lớp con."
+    },
     "panelLabel": "Kiểu lớp",
     "panelLabelCollapsed": "Thang màu xám",
     "heading": "Phong cách",
@@ -8612,6 +8691,17 @@
       "strokeWidthUnit": "Đơn vị chiều rộng hành trình",
       "strokeWidthUnitPixels": "Điểm ảnh (không đổi trên màn hình)",
       "strokeWidthUnitMeters": "Mét (tỷ lệ với bản đồ)",
+      "strokeOpacity": "Độ mờ đục của nét",
+      "lineStyle": "Kiểu đường",
+      "lineStyleSolid": "Nét liền",
+      "lineStyleDashed": "Nét đứt",
+      "lineStyleDotted": "Chấm",
+      "lineStyleDashDot": "Gạch chấm",
+      "lineStyleLongDash": "Gạch dài",
+      "lineStyleCustom": "Tùy chỉnh",
+      "lineDashPattern": "Mẫu nét đứt",
+      "lineDashPatternHint": "Độ dài nét và khoảng hở tính theo bội số của độ rộng nét, chẳng hạn 4 2 1 2.",
+      "lineBlur": "Độ mờ nhòe đường (px)",
       "textHaloColor": "Màu hào quang của văn bản",
       "textHaloWidth": "Chiều rộng hào quang văn bản",
       "schemeEqualInterval": "Khoảng bằng nhau",
@@ -8694,13 +8784,21 @@
       "heightProperty": "Thuộc tính chiều cao",
       "heightScale": "Thang đo chiều cao",
       "base": "Chiều cao cơ sở",
+      "baseProperty": "Thuộc tính đáy",
+      "baseNone": "Không (đáy phẳng)",
+      "baseScale": "Tỷ lệ đáy",
+      "baseHint": "Mỗi đối tượng bắt đầu tại chiều cao cơ sở + thuộc tính đáy × tỷ lệ đáy, nên các tầng được xếp chồng từ một trường tầng. Đặt chiều cao tầng để mỗi đối tượng có độ dày đó trên đáy của nó; nếu không, chiều cao là độ cao của mái và phải lớn hơn đáy.",
+      "floorHeight": "Chiều cao tầng",
+      "floorHeightHint": "Khi lớn hơn 0, mỗi đối tượng cao bấy nhiêu mét trên đáy của nó và các thiết lập chiều cao bị bỏ qua. Giá trị 0 dùng chiều cao làm độ cao của mái.",
+      "baseExpression": "Biểu thức đáy",
       "apply": "Áp dụng đùn 3D",
       "footer": "Tam giác"
     },
     "expressionLabels": {
       "style": "biểu hiện phong cách",
       "color": "Biểu hiện màu sắc",
-      "height": "biểu hiện chiều cao"
+      "height": "biểu hiện chiều cao",
+      "base": "Biểu thức đáy"
     },
     "expressionErrors": {
       "notArray": "{{label}} phải là biểu thức mảng JSON.",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "Chưa có đối tượng nào được tải. Hãy di chuyển hoặc phóng to bản đồ tới vùng dữ liệu, rồi mở lại phần này.",
     "viewportSampleHint": "Các giá trị lấy từ những ô bản đồ đang được tải, nên danh sách sẽ dài thêm khi bạn di chuyển và phóng to bản đồ.",
     "layerFilteredHint": "Một bộ lọc nhanh đang ẩn bớt các đối tượng của lớp này."
+  },
+  "floorPicker": {
+    "title": "Bộ chọn tầng",
+    "short": "Tầng",
+    "all": "Tất cả",
+    "allTitle": "Hiển thị mọi tầng",
+    "levelTitle_other": "Tầng {{level}} ({{count}} đối tượng)",
+    "below": "+ dưới",
+    "belowTitle": "Hiển thị thêm các tầng bên dưới tầng đã chọn",
+    "resize": "Đổi kích thước danh sách tầng",
+    "resizeTitle": "Kéo để đổi kích thước danh sách tầng. Nhấp đúp để đặt lại.",
+    "heading": "Bộ chọn tầng",
+    "field": "Trường tầng",
+    "off": "Tắt",
+    "hint": "Chọn trường chứa tầng của mỗi đối tượng để liệt kê lớp này trong bộ chọn tầng trên bản đồ.",
+    "linkedHint_other": "{{count}} tầng được liệt kê trong bộ chọn tầng trên bản đồ.",
+    "noLevels": "Không tìm thấy tầng nào trong \"{{field}}\". Hãy chọn trường chứa một số hoặc một tầng như \"0\" hoặc \"-1;0\"."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "Xuất KML không thể ghi tính năng {{position}} vì nó có tọa độ không hợp lệ.",
@@ -10059,11 +10174,23 @@
       "north": "Bắc",
       "useMapExtent": "Dùng phạm vi bản đồ",
       "download": "Tải dữ liệu OSM",
+      "preview": "Xem trước dữ liệu OSM",
+      "addToMap": "Thêm vào bản đồ",
+      "exportGeoParquet": "Lưu GeoParquet",
       "ready": "Chọn khu vực và loại đối tượng.",
       "exportGeoJson": "Lưu GeoJSON",
       "mapUnavailable": "Phạm vi bản đồ chưa khả dụng.",
       "extentApplied": "Đã áp dụng phạm vi bản đồ.",
+      "invalidExtent": "Hãy nhập một khung giới hạn hợp lệ.",
+      "zoomIn": "Hãy phóng to cho đến khi khu vực bản đồ không quá {{limit}} độ vuông.",
       "downloading": "Đang tải từ OpenStreetMap…",
+      "previewing": "Đang tải bản xem trước OSM…",
+      "previewLayerName": "Xem trước — {{name}}",
+      "previewed": "Đang xem trước {{count}} đối tượng: {{points}} điểm, {{lines}} đường, {{polygons}} đa giác.",
+      "preparingExport": "Đang chuẩn bị xuất {{format}}…",
+      "exported": "Đã chuẩn bị {{count}} đối tượng để xuất {{format}}.",
+      "exportCancelled": "Đã hủy xuất.",
+      "exportError": "Không thể xuất {{format}}: {{message}}",
       "noFeatures": "Không tìm thấy đối tượng phù hợp trong khu vực này.",
       "error": "Không thể tải dữ liệu OSM: {{message}}",
       "added": "Đã thêm {{count}} đối tượng vào bản đồ."
@@ -10386,6 +10513,59 @@
       "retry": "Thử lại",
       "catalogFailed": "Không thể tải danh mục Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "Giới thiệu về JAXA Earth API",
+      "aboutText": "JAXA Earth API công bố các tập dữ liệu quan sát Trái Đất của JAXA và các cơ quan đối tác dưới dạng GeoTIFF tối ưu cho đám mây: bản đồ độ cao và rừng ALOS, lượng mưa GSMaP, nhiệt độ bề mặt đất và mặt biển GCOM-C và MODIS, thảm thực vật, sol khí, độ ẩm đất và nhiều hơn nữa. Không cần tài khoản hay khóa API.",
+      "aboutAccess": "GeoLibre vẽ các ô xếp trong trình duyệt bằng JavaScript API của JAXA, chỉ đọc độ phân giải và khu vực mà bản đồ hiển thị.",
+      "home": "JAXA Earth API",
+      "terms": "Điều khoản sử dụng",
+      "attribution": "Dữ liệu do JAXA cung cấp. Một số tập dữ liệu đến từ các cơ quan khác và áp dụng điều khoản riêng; hãy kiểm tra trang của tập dữ liệu trước khi sử dụng lại.",
+      "projectionLabel": "{{title}} (phép chiếu không được hỗ trợ)",
+      "chooseDataset": "Chọn một tập dữ liệu…",
+      "loading": "Đang tải danh mục…",
+      "recommendedGroup": "Đề xuất: {{group}}",
+      "allGroup": "Tất cả tập dữ liệu",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} đến {{end}}",
+      "present": "nay",
+      "climatology": "khí hậu học",
+      "datasetPage": "Chi tiết tập dữ liệu",
+      "dateFailed": "Không thể thay đổi ngày: {{message}}",
+      "noOtherDate": "Không có ngày nào khác theo hướng đó.",
+      "sampling": "Đang đọc mẫu để đặt dải màu…",
+      "noValues": "Mẫu không chứa giá trị nào; hãy đặt Tối thiểu và Tối đa thủ công.",
+      "sampleFailed": "Không thể đọc mẫu của {{name}}: {{message}}",
+      "opening": "Đang mở {{name}}…",
+      "openFailed": "Không thể mở {{name}}: {{message}}",
+      "band": "Kênh",
+      "date": "Ngày (UTC)",
+      "firstDate": "Ngày đầu tiên",
+      "previousDate": "Ngày trước",
+      "nextDate": "Ngày tiếp theo",
+      "latestDate": "Ngày mới nhất",
+      "pickDate": "Đi tới ngày",
+      "colormap": "Bản đồ màu",
+      "rangeInvalid": "Tối thiểu phải nhỏ hơn Tối đa.",
+      "auto": "Tự động",
+      "autoTitle": "Đặt Tối thiểu và Tối đa từ dữ liệu tại ngày này",
+      "min": "Tối thiểu",
+      "max": "Tối đa",
+      "ownColors": "Kênh này có màu riêng, nên không áp dụng bản đồ màu.",
+      "nearest": "Láng giềng gần nhất",
+      "bilinear": "Song tuyến tính",
+      "resampling": "Lấy mẫu lại",
+      "addToMap": "Thêm vào bản đồ",
+      "addUnavailable": "Bản đồ này không thể thêm lớp ô xếp.",
+      "added": "Đã thêm {{name}}. Giờ đây việc thay đổi ngày hoặc màu sẽ cập nhật lớp đó; hãy thêm lại để giữ một bản sao khác.",
+      "searchPlaceholder": "Tìm tiêu đề, vệ tinh, từ khóa…",
+      "search": "Tìm kiếm",
+      "dataset": "Tập dữ liệu",
+      "hint": "Duyệt các tập dữ liệu quan sát Trái Đất của JAXA và thêm chúng vào bản đồ. Chọn tập dữ liệu, kênh và ngày, rồi điều chỉnh màu sắc.",
+      "catalogFailed": "Không thể tải danh mục JAXA Earth: {{message}}",
+      "retry": "Thử lại",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "Không thể mở kho dữ liệu {{name}}.",

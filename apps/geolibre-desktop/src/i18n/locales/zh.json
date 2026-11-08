@@ -388,6 +388,28 @@
     "openWebApp": "打开 GeoLibre 网页应用"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "无法读取此 IMDF 归档：{{reason}}",
+        "invalidJson": "{{file}} 不是有效的 JSON（{{detail}}）",
+        "entryTooLarge": "{{file}} 超过 256 MB",
+        "tooLarge": "其中的 GeoJSON 文件总大小超过 512 MB"
+      },
+      "layer": {
+        "venue": "场馆",
+        "footprint": "建筑轮廓",
+        "level": "楼层",
+        "section": "分区",
+        "unit": "单元",
+        "fixture": "固定设施",
+        "detail": "细节",
+        "opening": "出入口",
+        "kiosk": "服务亭",
+        "geofence": "地理围栏",
+        "amenity": "便利设施",
+        "occupant": "入驻商户"
+      }
+    },
     "title": "添加数据",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "添加 LandXML 图层",
         "description": "导入 LandXML TIN 曲面、平面线形、纵断面元数据和测量点，并按源坐标参考系进行重投影。"
+      },
+      "indoorgml": {
+        "label": "添加 IndoorGML 图层",
+        "description": "导入 OGC IndoorGML 建筑：房间按实际高度拉伸，并包含导航网络，与楼层选择器联动。"
       },
       "georss": {
         "label": "添加 GeoRSS 图层",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "常用坐标系...",
       "crsHelp": "仅当坐标已经是 WGS84 经纬度时才留空。LandXML 坐标按北坐标、东坐标和高程的顺序读取。",
       "detectedCoordinateSystem": "LandXML 坐标系：{{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML 文件",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "缺少 IndoorGML 文件数据。",
+      "readError": "无法读取此 IndoorGML 文件。",
+      "errorChooseFile": "请选择一个 IndoorGML 文件。",
+      "errorUrl": "请输入 IndoorGML URL。",
+      "errorTooLarge": "此 IndoorGML 文件超过 200 MB。",
+      "errorMissingCrs": "此 IndoorGML 文件未指定坐标系，且其坐标不是经纬度。请输入其 CRS，或选择将其放置在地图中心。",
+      "summary": "{{floors}} 个楼层上共 {{cells}} 个单元格，{{transitions}} 条导航边。",
+      "crs": "源坐标参考系",
+      "crsPlaceholder": "例如 EPSG:25832",
+      "crsPresetLabel": "常用坐标系...",
+      "local": "本地坐标：将建筑放置在地图中心",
+      "crsHelp": "许多 IndoorGML 文件没有 CRS。请输入其坐标的 EPSG 代码；如果模型使用建筑本地坐标系（距原点的米数），可将其放置在地图中心进行查看。",
+      "layer": {
+        "cells": "{{name}} 单元格",
+        "transitions": "{{name}} 导航网络",
+        "states": "{{name}} 导航节点"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS 图层",
@@ -2154,6 +2203,12 @@
       "none": "无（无边框）"
     },
     "mapBackground": "地图背景",
+    "pageBackground": "页面背景",
+    "panelTheme": "地图面板",
+    "panelThemeOption": {
+      "light": "浅色",
+      "dark": "深色"
+    },
     "scaleLabel": "比例尺 (1:N)",
     "scalePlaceholder": "例如 25000",
     "scalePresets": "预设…",
@@ -2940,6 +2995,7 @@
       },
       "mapCrs": "地图坐标参考系",
       "mapCrsHint": "以另一种 CRS 平面绘制 MapLibre 地图，例如地球、月球或火星的极地网格或简单圆柱网格，并使用以该网格提供的底图。瓦片不会被重投影：GeoJSON 图层、图像叠加层以及 WMS 或 ArcGIS 导出图层（以该 CRS 请求）会被绘制，而 XYZ、矢量瓦片和大多数插件图层不会被绘制，且地球仪和地形将关闭。",
+      "mapCrsLinkUnknown": "此链接请求的地图 CRS“{{crs}}”未知或不受支持，因此已被忽略。",
       "mapCrsDefault": "Web 墨卡托 / 地球仪（默认）",
       "mapCrsCustom": "自定义 EPSG 代码…",
       "mapCrsEpsg": "EPSG 代码",
@@ -3202,6 +3258,7 @@
       "osEnvField": "从系统环境变量 {{name}} 读取。",
       "osEnvPlaceholder": "在系统环境中设置",
       "refreshModels": "刷新模型列表",
+      "ollamaModelHint": "输入 Ollama 中已安装的任意模型（包含标签，例如 qwen3:8b），或选择一个建议项。刷新列表可查看已安装的模型。",
       "modelsFailedToLoad": "无法加载模型：{{message}}",
       "modelsLoading": "正在加载模型目录…",
       "searchModels": "搜索模型名称或 ID",
@@ -3624,6 +3681,7 @@
       "photos": "带地理标记的照片",
       "gpx": "GPX 图层",
       "landxml": "LandXML 图层",
+      "indoorgml": "IndoorGML 图层",
       "mbtiles": "MBTiles 图层",
       "xyz": "XYZ 图层",
       "wms": "WMS 图层",
@@ -4188,6 +4246,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 浏览器",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light 底图",
       "geolibre-flight-simulator": "飞行模拟器",
       "gods-eye-view": "上帝视角",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "已从 {{name}} 添加 {{count}} 个图层。",
       "osmPbfNoFeatures": "在 {{name}} 中未找到要素。",
       "couldNotParse": "无法解析 {{name}}：{{message}}",
-      "couldNotImport": "无法导入文件。"
+      "couldNotImport": "无法导入文件。",
+      "openedByHandler": "已由 {{name}} 打开。",
+      "handlerFailed": "{{name}} 无法打开拖放的文件：{{message}}"
     },
     "windowClose": {
       "savePromptTitle": "关闭前保存更改？",
       "savePromptDescription": "当前项目有未保存的更改。是否在关闭 GeoLibre 前保存？"
+    },
+    "remoteSave": {
+      "signInTitle": "登录以保存项目",
+      "signInDescriptionOAuth": "登录 {{shareHost}} 以将项目保存到服务器。",
+      "signInDescriptionToken": "将项目保存到 {{shareHost}} 需要个人 API 令牌。请在设置中添加令牌以继续。",
+      "signInButton": "登录",
+      "openSettingsButton": "打开设置",
+      "saveTitle": "将项目保存到服务器",
+      "saveDesc": "请输入项目名称。该项目将作为私有项目保存到 {{shareHost}}。",
+      "noProjectId": "项目服务器未返回项目 ID。",
+      "uploadedNotLinked": "“{{name}}”已保存到 {{shareHost}}，但保存期间会话或项目发生了变化，因此未关联到此地图。请从图库中打开它以继续编辑。"
     },
     "error": {
       "couldNotOpenProject": "无法打开项目。",
@@ -8317,6 +8389,13 @@
     "noLayer": "请选择矢量图层以保存或应用样式。"
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "建筑",
+      "overview": "概览",
+      "fullModel": "完整模型",
+      "disciplinesHint": "选择要绘制的建筑模型专业和类别。",
+      "drawnCount_other": "已绘制 {{count}} 个子图层。"
+    },
     "panelLabel": "图层样式",
     "panelLabelCollapsed": "图层样式（已折叠）",
     "heading": "样式",
@@ -8644,6 +8723,17 @@
       "strokeWidthUnit": "描边宽度单位",
       "strokeWidthUnitPixels": "像素（屏幕上恒定）",
       "strokeWidthUnitMeters": "米（随地图缩放）",
+      "strokeOpacity": "描边不透明度",
+      "lineStyle": "线型",
+      "lineStyleSolid": "实线",
+      "lineStyleDashed": "虚线",
+      "lineStyleDotted": "点线",
+      "lineStyleDashDot": "点划线",
+      "lineStyleLongDash": "长虚线",
+      "lineStyleCustom": "自定义",
+      "lineDashPattern": "虚线模式",
+      "lineDashPatternHint": "虚线和间隔长度，以描边宽度的倍数表示，例如 4 2 1 2。",
+      "lineBlur": "线条模糊（px）",
       "textHaloColor": "文字光晕颜色",
       "textHaloWidth": "文字光晕宽度",
       "schemeEqualInterval": "等间距",
@@ -8694,13 +8784,21 @@
       "heightProperty": "高度属性",
       "heightScale": "高度缩放",
       "base": "基础高度",
+      "baseProperty": "底部属性",
+      "baseNone": "无（平底）",
+      "baseScale": "底部缩放",
+      "baseHint": "每个要素从 基础高度 + 底部属性 × 底部缩放 处开始，因此楼层可以根据楼层字段堆叠。设置楼层高度可使每个要素在其底部之上具有该厚度；否则高度为顶部的海拔，且必须高于底部。",
+      "floorHeight": "楼层高度",
+      "floorHeightHint": "大于 0 时，每个要素在其底部之上的高度为此米数，并忽略高度设置。为 0 时将高度用作顶部的海拔。",
+      "baseExpression": "底部高度表达式",
       "apply": "应用 3D 拉伸",
       "footer": "3D 拉伸设置将在保存时应用。"
     },
     "expressionLabels": {
       "style": "样式表达式",
       "color": "颜色表达式",
-      "height": "高度表达式"
+      "height": "高度表达式",
+      "base": "底部高度表达式"
     },
     "expressionErrors": {
       "notArray": "{{label}}必须是 JSON 数组表达式。",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "尚未加载任何要素。请平移或缩放到数据处，然后重新打开此部分。",
     "viewportSampleHint": "取值来自当前已加载的瓦片，因此列表会随着平移和缩放而增加。",
     "layerFilteredHint": "快速过滤器正在隐藏该图层的部分要素。"
+  },
+  "floorPicker": {
+    "title": "楼层选择器",
+    "short": "楼层",
+    "all": "全部",
+    "allTitle": "显示所有楼层",
+    "levelTitle_other": "楼层 {{level}}（{{count}} 个要素）",
+    "below": "+ 下层",
+    "belowTitle": "同时显示所选楼层以下的楼层",
+    "resize": "调整楼层列表大小",
+    "resizeTitle": "拖动以调整楼层列表大小。双击可重置。",
+    "heading": "楼层选择器",
+    "field": "楼层字段",
+    "off": "关闭",
+    "hint": "选择保存每个要素所在楼层的字段，以便在地图上的楼层选择器中列出此图层。",
+    "linkedHint_other": "地图上的楼层选择器中列出了 {{count}} 个楼层。",
+    "noLevels": "在“{{field}}”中未找到楼层。请选择保存数字或楼层值（例如“0”或“-1;0”）的字段。"
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML 导出无法写入第 {{position}} 个要素，因为它的坐标无效。",
@@ -10059,11 +10174,23 @@
       "north": "北",
       "useMapExtent": "使用地图范围",
       "download": "下载 OSM 数据",
+      "preview": "预览 OSM 数据",
+      "addToMap": "添加到地图",
+      "exportGeoParquet": "保存 GeoParquet",
       "ready": "请选择区域和要素类型。",
       "exportGeoJson": "保存 GeoJSON",
       "mapUnavailable": "地图范围尚不可用。",
       "extentApplied": "已应用地图范围。",
+      "invalidExtent": "请输入有效的边界框。",
+      "zoomIn": "请放大地图，直到地图区域不超过 {{limit}} 平方度。",
       "downloading": "正在从 OpenStreetMap 下载…",
+      "previewing": "正在加载 OSM 预览…",
+      "previewLayerName": "预览 — {{name}}",
+      "previewed": "正在预览 {{count}} 个要素：{{points}} 个点，{{lines}} 条线，{{polygons}} 个面。",
+      "preparingExport": "正在准备 {{format}} 导出…",
+      "exported": "已准备 {{count}} 个要素用于 {{format}} 导出。",
+      "exportCancelled": "导出已取消。",
+      "exportError": "无法导出 {{format}}：{{message}}",
       "noFeatures": "在此区域内未找到匹配的要素。",
       "error": "无法下载 OSM 数据：{{message}}",
       "added": "已将 {{count}} 个要素添加到地图。"
@@ -10386,6 +10513,59 @@
       "retry": "重试",
       "catalogFailed": "无法加载 Ocean Data Platform 目录：{{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "关于 JAXA Earth API",
+      "aboutText": "JAXA Earth API 以云优化 GeoTIFF 的形式发布来自 JAXA 及合作机构的对地观测数据集：ALOS 高程和森林地图、GSMaP 降水、GCOM-C 和 MODIS 地表与海表温度、植被、气溶胶、土壤湿度等。无需账户或 API 密钥。",
+      "aboutAccess": "GeoLibre 使用 JAXA 的 JavaScript API 在浏览器中绘制瓦片，只读取地图当前显示的分辨率和区域。",
+      "home": "JAXA Earth API",
+      "terms": "使用条款",
+      "attribution": "数据由 JAXA 提供。部分数据集来自其他机构，并适用其各自的条款；重复使用前请查看数据集页面。",
+      "projectionLabel": "{{title}}（不支持该投影）",
+      "chooseDataset": "选择数据集…",
+      "loading": "正在加载目录…",
+      "recommendedGroup": "推荐：{{group}}",
+      "allGroup": "所有数据集",
+      "resolutionM": "约 {{value}} m",
+      "resolutionKm": "约 {{value}} km",
+      "timeRange": "{{start}} 至 {{end}}",
+      "present": "至今",
+      "climatology": "气候态",
+      "datasetPage": "数据集详情",
+      "dateFailed": "无法更改日期：{{message}}",
+      "noOtherDate": "该方向上没有其他日期。",
+      "sampling": "正在读取样本以设置颜色范围…",
+      "noValues": "样本中没有值；请手动设置最小值和最大值。",
+      "sampleFailed": "无法读取 {{name}} 的样本：{{message}}",
+      "opening": "正在打开 {{name}}…",
+      "openFailed": "无法打开 {{name}}：{{message}}",
+      "band": "波段",
+      "date": "日期（UTC）",
+      "firstDate": "最早日期",
+      "previousDate": "上一个日期",
+      "nextDate": "下一个日期",
+      "latestDate": "最新日期",
+      "pickDate": "转到日期",
+      "colormap": "色彩映射",
+      "rangeInvalid": "最小值必须小于最大值。",
+      "auto": "自动",
+      "autoTitle": "根据此日期的数据设置最小值和最大值",
+      "min": "最小值",
+      "max": "最大值",
+      "ownColors": "此波段自带颜色，因此不应用色彩映射。",
+      "nearest": "最近邻",
+      "bilinear": "双线性",
+      "resampling": "重采样",
+      "addToMap": "添加到地图",
+      "addUnavailable": "此地图无法添加瓦片图层。",
+      "added": "已添加 {{name}}。现在更改日期或颜色会更新该图层；再次添加可保留另一个副本。",
+      "searchPlaceholder": "搜索标题、卫星、关键词…",
+      "search": "搜索",
+      "dataset": "数据集",
+      "hint": "浏览 JAXA 的对地观测数据集并将其添加到地图。选择数据集、波段和日期，然后调整颜色。",
+      "catalogFailed": "无法加载 JAXA Earth 目录：{{message}}",
+      "retry": "重试",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "无法打开 {{name}} 存储库。",

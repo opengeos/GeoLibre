@@ -388,6 +388,28 @@
     "openWebApp": "GeoLibre Webアプリを開く"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "この IMDF アーカイブを読み込めませんでした: {{reason}}",
+        "invalidJson": "{{file}} は有効な JSON ではありません ({{detail}})",
+        "entryTooLarge": "{{file}} が 256 MB を超えています",
+        "tooLarge": "GeoJSON ファイルの合計サイズが 512 MB を超えています"
+      },
+      "layer": {
+        "venue": "施設",
+        "footprint": "フットプリント",
+        "level": "フロア",
+        "section": "セクション",
+        "unit": "ユニット",
+        "fixture": "什器",
+        "detail": "詳細",
+        "opening": "開口部",
+        "kiosk": "キオスク",
+        "geofence": "ジオフェンス",
+        "amenity": "アメニティ",
+        "occupant": "テナント"
+      }
+    },
     "title": "データを追加",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "LandXMLレイヤーを追加",
         "description": "LandXMLのTINサーフェス、平面線形、縦断メタデータ、測量点を、元のCRSから再投影してインポートします。"
+      },
+      "indoorgml": {
+        "label": "IndoorGMLレイヤーを追加",
+        "description": "OGC IndoorGML の建物をインポートします。部屋は実際の高さに押し出され、ナビゲーションネットワークとともにフロアピッカーに連動します。"
       },
       "georss": {
         "label": "GeoRSSレイヤーを追加",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "一般的な座標系...",
       "crsHelp": "座標がすでにWGS84の経度・緯度である場合のみ空欄にしてください。LandXMLの座標は北距、東距、標高の順に読み取られます。",
       "detectedCoordinateSystem": "LandXMLの座標系: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML ファイル",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML ファイルのデータがありません。",
+      "readError": "この IndoorGML ファイルを読み込めませんでした。",
+      "errorChooseFile": "IndoorGML ファイルを選択してください。",
+      "errorUrl": "IndoorGML の URL を入力してください。",
+      "errorTooLarge": "この IndoorGML ファイルは 200 MB を超えています。",
+      "errorMissingCrs": "この IndoorGML ファイルには座標系が指定されておらず、座標も経度・緯度ではありません。CRS を入力するか、地図の中心に配置することを選択してください。",
+      "summary": "{{floors}} フロアに {{cells}} 個のセル、{{transitions}} 本のナビゲーションエッジ。",
+      "crs": "元のCRS",
+      "crsPlaceholder": "例: EPSG:25832",
+      "crsPresetLabel": "一般的な座標系...",
+      "local": "ローカル座標: 建物を地図の中心に配置",
+      "crsHelp": "多くの IndoorGML ファイルには CRS がありません。座標の EPSG コードを入力してください。建物ローカル座標系 (原点からのメートル) のモデルの場合は、地図の中心に配置して表示できます。",
+      "layer": {
+        "cells": "{{name}} セル",
+        "transitions": "{{name}} ナビゲーションネットワーク",
+        "states": "{{name}} ナビゲーションノード"
+      }
     },
     "georss": {
       "defaultName": "GeoRSSレイヤー",
@@ -2154,6 +2203,12 @@
       "none": "なし(枠なし)"
     },
     "mapBackground": "地図背景",
+    "pageBackground": "ページ背景",
+    "panelTheme": "地図パネル",
+    "panelThemeOption": {
+      "light": "ライト",
+      "dark": "ダーク"
+    },
     "scaleLabel": "縮尺 (1:N)",
     "scalePlaceholder": "例: 25000",
     "scalePresets": "プリセット…",
@@ -2940,6 +2995,7 @@
       },
       "mapCrs": "マップの座標参照系",
       "mapCrsHint": "MapLibre マップを別の CRS で平面描画します。たとえば地球、月、火星の極座標グリッドや単純円筒グリッドで、そのグリッドで配信される背景地図を使用します。タイルは再投影されません。GeoJSON レイヤー、画像オーバーレイ、WMS または ArcGIS のエクスポートレイヤー（その CRS で要求）は描画されますが、XYZ、ベクタータイル、ほとんどのプラグインレイヤーは描画されず、地球儀表示と地形はオフになります。",
+      "mapCrsLinkUnknown": "このリンクは地図の CRS「{{crs}}」を指定していますが、不明またはサポートされていないため無視されました。",
       "mapCrsDefault": "Web メルカトル / 地球儀（既定）",
       "mapCrsCustom": "カスタム EPSG コード…",
       "mapCrsEpsg": "EPSG コード",
@@ -3202,6 +3258,7 @@
       "osEnvField": "システム環境変数 {{name}} から読み取ります。",
       "osEnvPlaceholder": "システム環境変数で設定",
       "refreshModels": "モデル一覧を更新",
+      "ollamaModelHint": "Ollama にインストール済みの任意のモデルをタグ付きで入力するか (例: qwen3:8b)、候補から選択してください。インストール済みのモデルを表示するには一覧を更新してください。",
       "modelsFailedToLoad": "モデルを読み込めませんでした: {{message}}",
       "modelsLoading": "モデルカタログを読み込み中…",
       "searchModels": "モデル名またはIDを検索",
@@ -3624,6 +3681,7 @@
       "photos": "位置情報付き写真",
       "gpx": "GPXレイヤー",
       "landxml": "LandXMLレイヤー",
+      "indoorgml": "IndoorGMLレイヤー",
       "polyline": "エンコードポリライン",
       "mbtiles": "MBTilesレイヤー",
       "xyz": "XYZレイヤー",
@@ -4188,6 +4246,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 エクスプローラー",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light ベースマップ",
       "geolibre-flight-simulator": "フライトシミュレーター",
       "gods-eye-view": "神の視点",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "{{name}} から {{count}} 件のレイヤーを追加しました。",
       "osmPbfNoFeatures": "{{name}} にフィーチャーが見つかりませんでした。",
       "couldNotParse": "{{name}} を解析できませんでした: {{message}}",
-      "couldNotImport": "ファイルをインポートできませんでした。"
+      "couldNotImport": "ファイルをインポートできませんでした。",
+      "openedByHandler": "{{name}} で開きました。",
+      "handlerFailed": "{{name}} はドロップされたファイルを開けませんでした: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "閉じる前に変更を保存しますか?",
       "savePromptDescription": "現在のプロジェクトには未保存の変更があります。GeoLibre を閉じる前に保存しますか?"
+    },
+    "remoteSave": {
+      "signInTitle": "サインインしてプロジェクトを保存",
+      "signInDescriptionOAuth": "プロジェクトをサーバーに保存するには {{shareHost}} にサインインしてください。",
+      "signInDescriptionToken": "{{shareHost}} にプロジェクトを保存するには個人用 API トークンが必要です。続行するには設定でトークンを追加してください。",
+      "signInButton": "サインイン",
+      "openSettingsButton": "設定を開く",
+      "saveTitle": "プロジェクトをサーバーに保存",
+      "saveDesc": "プロジェクト名を入力してください。プロジェクトは {{shareHost}} に非公開プロジェクトとして保存されます。",
+      "noProjectId": "プロジェクトサーバーからプロジェクト ID が返されませんでした。",
+      "uploadedNotLinked": "「{{name}}」は {{shareHost}} に保存されましたが、保存中にセッションまたはプロジェクトが変更されたため、この地図にはリンクされませんでした。作業を続けるにはギャラリーから開いてください。"
     },
     "error": {
       "couldNotOpenProject": "プロジェクトを開けませんでした。",
@@ -8317,6 +8389,13 @@
     "noLayer": "スタイルを保存または適用するベクターレイヤーを選択してください。"
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "建物",
+      "overview": "概要",
+      "fullModel": "完全なモデル",
+      "disciplinesHint": "描画する建物モデルの分野とカテゴリーを選択してください。",
+      "drawnCount_other": "{{count}} 個のサブレイヤーを描画しました。"
+    },
     "panelLabel": "レイヤースタイル",
     "panelLabelCollapsed": "レイヤースタイル (折りたたみ済み)",
     "heading": "スタイル",
@@ -8644,6 +8723,17 @@
       "strokeWidthUnit": "線幅の単位",
       "strokeWidthUnitPixels": "ピクセル (画面上で一定)",
       "strokeWidthUnitMeters": "メートル (地図に合わせて拡縮)",
+      "strokeOpacity": "線の不透明度",
+      "lineStyle": "線のスタイル",
+      "lineStyleSolid": "実線",
+      "lineStyleDashed": "破線",
+      "lineStyleDotted": "点線",
+      "lineStyleDashDot": "一点鎖線",
+      "lineStyleLongDash": "長破線",
+      "lineStyleCustom": "カスタム",
+      "lineDashPattern": "破線パターン",
+      "lineDashPatternHint": "破線と間隔の長さを線幅の倍数で指定します (例: 4 2 1 2)。",
+      "lineBlur": "線のぼかし (px)",
       "textHaloColor": "文字の縁取りの色",
       "textHaloWidth": "文字の縁取りの幅",
       "schemeEqualInterval": "等間隔",
@@ -8694,13 +8784,21 @@
       "heightProperty": "高さプロパティ",
       "heightScale": "高さスケール",
       "base": "基準高さ",
+      "baseProperty": "基部プロパティ",
+      "baseNone": "なし (平らな基部)",
+      "baseScale": "基部スケール",
+      "baseHint": "各フィーチャは 基準高さ + 基部プロパティ × 基部スケール の位置から始まるため、レベルフィールドからフロアを積み重ねられます。フロアの高さを設定すると、各フィーチャは基部の上にその厚さで描画されます。設定しない場合、高さは屋根の標高となり、基部より上である必要があります。",
+      "floorHeight": "フロアの高さ",
+      "floorHeightHint": "0 より大きい場合、各フィーチャは基部の上にこのメートル数の高さで描画され、高さの設定は無視されます。0 の場合は高さを屋根の標高として使用します。",
+      "baseExpression": "基部の式",
       "apply": "3D押し出しを適用",
       "footer": "3D押し出しの設定は保存時に適用されます。"
     },
     "expressionLabels": {
       "style": "スタイルの式",
       "color": "色の式",
-      "height": "高さの式"
+      "height": "高さの式",
+      "base": "基部の式"
     },
     "expressionErrors": {
       "notArray": "{{label}}はJSON配列式である必要があります。",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "フィーチャがまだ読み込まれていません。データの位置まで移動または拡大してから、このセクションを開き直してください。",
     "viewportSampleHint": "値は現在読み込まれているタイルから取得されるため、地図を移動・拡大すると一覧が増えていきます。",
     "layerFilteredHint": "クイックフィルターがこのレイヤーの一部のフィーチャを非表示にしています。"
+  },
+  "floorPicker": {
+    "title": "フロアピッカー",
+    "short": "フロア",
+    "all": "すべて",
+    "allTitle": "すべてのフロアを表示",
+    "levelTitle_other": "フロア {{level}} ({{count}} 個のフィーチャ)",
+    "below": "+ 下階",
+    "belowTitle": "選択したフロアより下のフロアも表示",
+    "resize": "フロアリストのサイズを変更",
+    "resizeTitle": "ドラッグしてフロアリストのサイズを変更します。ダブルクリックでリセットします。",
+    "heading": "フロアピッカー",
+    "field": "フロアフィールド",
+    "off": "オフ",
+    "hint": "各フィーチャのフロアを保持するフィールドを選択すると、このレイヤーが地図上のフロアピッカーに表示されます。",
+    "linkedHint_other": "地図上のフロアピッカーに {{count}} フロアが表示されています。",
+    "noLevels": "「{{field}}」にフロアが見つかりません。数値または「0」や「-1;0」のようなレベルを保持するフィールドを選択してください。"
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "座標が不正なため、KML エクスポートでフィーチャ {{position}} を書き出せませんでした。",
@@ -10059,11 +10174,23 @@
       "north": "北",
       "useMapExtent": "地図の範囲を使用",
       "download": "OSMデータをダウンロード",
+      "preview": "OSMデータをプレビュー",
+      "addToMap": "地図に追加",
+      "exportGeoParquet": "GeoParquetを保存",
       "ready": "エリアと特徴タイプを選択してください。",
       "exportGeoJson": "GeoJSONを保存",
       "mapUnavailable": "地図の範囲はまだ利用できません。",
       "extentApplied": "地図範囲が適用されました。",
+      "invalidExtent": "有効な境界ボックスを入力してください。",
+      "zoomIn": "地図の範囲が {{limit}} 平方度以下になるまでズームインしてください。",
       "downloading": "OpenStreetMapからダウンロード中…",
+      "previewing": "OSMプレビューを読み込み中…",
+      "previewLayerName": "プレビュー — {{name}}",
+      "previewed": "{{count}} 個のフィーチャをプレビュー中: ポイント {{points}}、ライン {{lines}}、ポリゴン {{polygons}}。",
+      "preparingExport": "{{format}} エクスポートを準備中…",
+      "exported": "{{format}} エクスポート用に {{count}} 個のフィーチャを準備しました。",
+      "exportCancelled": "エクスポートをキャンセルしました。",
+      "exportError": "{{format}} をエクスポートできませんでした: {{message}}",
       "noFeatures": "このエリアには一致する特徴が見つかりませんでした。",
       "error": "OSMデータをダウンロードできませんでした: {{message}}",
       "added": "{{count}}個の特徴を地図に追加しました。"
@@ -10386,6 +10513,59 @@
       "retry": "再試行",
       "catalogFailed": "Ocean Data Platform のカタログを読み込めませんでした: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "JAXA Earth API について",
+      "aboutText": "JAXA Earth API は、JAXA および協力機関の地球観測データセットをクラウド最適化 GeoTIFF として公開しています。ALOS の標高・森林マップ、GSMaP の降水量、GCOM-C と MODIS の地表面温度・海面水温、植生、エアロゾル、土壌水分などがあります。アカウントや API キーは不要です。",
+      "aboutAccess": "GeoLibre は JAXA の JavaScript API を使ってブラウザー内でタイルを描画し、地図に表示されている解像度と範囲のみを読み込みます。",
+      "home": "JAXA Earth API",
+      "terms": "利用規約",
+      "attribution": "データ提供: JAXA。一部のデータセットは他機関のもので、それぞれの利用条件が適用されます。再利用の前にデータセットのページを確認してください。",
+      "projectionLabel": "{{title}} (投影法は非対応)",
+      "chooseDataset": "データセットを選択…",
+      "loading": "カタログを読み込み中…",
+      "recommendedGroup": "おすすめ: {{group}}",
+      "allGroup": "すべてのデータセット",
+      "resolutionM": "約 {{value}} m",
+      "resolutionKm": "約 {{value}} km",
+      "timeRange": "{{start}}～{{end}}",
+      "present": "現在",
+      "climatology": "気候値",
+      "datasetPage": "データセットの詳細",
+      "dateFailed": "日付を変更できませんでした: {{message}}",
+      "noOtherDate": "その方向には他の日付がありません。",
+      "sampling": "色の範囲を設定するためにサンプルを読み込み中…",
+      "noValues": "サンプルに値がありません。最小値と最大値を手動で設定してください。",
+      "sampleFailed": "{{name}} のサンプルを読み込めませんでした: {{message}}",
+      "opening": "{{name}} を開いています…",
+      "openFailed": "{{name}} を開けませんでした: {{message}}",
+      "band": "バンド",
+      "date": "日付 (UTC)",
+      "firstDate": "最初の日付",
+      "previousDate": "前の日付",
+      "nextDate": "次の日付",
+      "latestDate": "最新の日付",
+      "pickDate": "日付へ移動",
+      "colormap": "カラーマップ",
+      "rangeInvalid": "最小値は最大値より小さくする必要があります。",
+      "auto": "自動",
+      "autoTitle": "この日付のデータから最小値と最大値を設定",
+      "min": "最小",
+      "max": "最大",
+      "ownColors": "このバンドは独自の色を持つため、カラーマップは適用されません。",
+      "nearest": "最近傍",
+      "bilinear": "バイリニア",
+      "resampling": "リサンプリング",
+      "addToMap": "地図に追加",
+      "addUnavailable": "この地図にはタイルレイヤーを追加できません。",
+      "added": "{{name}} を追加しました。日付や色を変更すると、そのレイヤーが更新されます。別のコピーを残すには再度追加してください。",
+      "searchPlaceholder": "タイトル、衛星、キーワードを検索…",
+      "search": "検索",
+      "dataset": "データセット",
+      "hint": "JAXA の地球観測データセットを閲覧して地図に追加します。データセット、バンド、日付を選んでから、色を調整してください。",
+      "catalogFailed": "JAXA Earth カタログを読み込めませんでした: {{message}}",
+      "retry": "再試行",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "{{name}} リポジトリを開けませんでした。",

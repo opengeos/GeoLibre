@@ -388,6 +388,28 @@
     "openWebApp": "เปิดเว็บแอป GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "ไม่สามารถอ่านไฟล์เก็บถาวร IMDF นี้ได้: {{reason}}",
+        "invalidJson": "{{file}} ไม่ใช่ JSON ที่ถูกต้อง ({{detail}})",
+        "entryTooLarge": "{{file}} มีขนาดใหญ่กว่า 256 MB",
+        "tooLarge": "ไฟล์ GeoJSON ภายในมีขนาดรวมเกิน 512 MB"
+      },
+      "layer": {
+        "venue": "สถานที่",
+        "footprint": "รูปรอยอาคาร",
+        "level": "ชั้น",
+        "section": "ส่วนพื้นที่",
+        "unit": "ยูนิต",
+        "fixture": "อุปกรณ์ติดตั้งถาวร",
+        "detail": "รายละเอียด",
+        "opening": "ช่องทางเข้าออก",
+        "kiosk": "คีออสก์",
+        "geofence": "เขตพื้นที่เสมือน (Geofence)",
+        "amenity": "สิ่งอำนวยความสะดวก",
+        "occupant": "ผู้เช่า"
+      }
+    },
     "title": "เพิ่มข้อมูล",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "เพิ่มเลเยอร์ LandXML",
         "description": "นำเข้าพื้นผิว TIN แนวเส้นทางราบ เมทาดาทาของรูปตัดตามยาว และจุดสำรวจจาก LandXML พร้อมฉายพิกัดใหม่จากระบบพิกัดต้นทาง"
+      },
+      "indoorgml": {
+        "label": "เพิ่มเลเยอร์ IndoorGML",
+        "description": "นำเข้าอาคาร OGC IndoorGML: ห้องต่าง ๆ ถูกยกตัวตามความสูงจริงพร้อมโครงข่ายนำทาง และเชื่อมกับตัวเลือกชั้น"
       },
       "georss": {
         "label": "เพิ่มเลเยอร์ GeoRSS",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "ระบบพิกัดที่ใช้บ่อย...",
       "crsHelp": "เว้นว่างไว้เฉพาะเมื่อพิกัดเป็นลองจิจูดและละติจูด WGS84 อยู่แล้ว พิกัด LandXML จะอ่านในลำดับ northing, easting และระดับความสูง",
       "detectedCoordinateSystem": "ระบบพิกัดของ LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "URL ของ IndoorGML",
+      "file": "ไฟล์ IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "ไม่มีข้อมูลไฟล์ IndoorGML",
+      "readError": "ไม่สามารถอ่านไฟล์ IndoorGML นี้ได้",
+      "errorChooseFile": "เลือกไฟล์ IndoorGML",
+      "errorUrl": "ป้อน URL ของ IndoorGML",
+      "errorTooLarge": "ไฟล์ IndoorGML นี้มีขนาดใหญ่กว่า 200 MB",
+      "errorMissingCrs": "ไฟล์ IndoorGML นี้ไม่ได้ระบุระบบพิกัด และพิกัดไม่ใช่ลองจิจูด/ละติจูด ให้ป้อน CRS ของไฟล์ หรือเลือกวางไว้ที่กึ่งกลางแผนที่",
+      "summary": "{{cells}} เซลล์บน {{floors}} ชั้น เส้นเชื่อมนำทาง {{transitions}} เส้น",
+      "crs": "ระบบพิกัดต้นทาง",
+      "crsPlaceholder": "เช่น EPSG:25832",
+      "crsPresetLabel": "ระบบพิกัดที่ใช้บ่อย...",
+      "local": "พิกัดเฉพาะที่: วางอาคารไว้ที่กึ่งกลางแผนที่",
+      "crsHelp": "ไฟล์ IndoorGML จำนวนมากไม่มี CRS ให้ป้อนรหัส EPSG ของพิกัดในไฟล์ หรือหากเป็นแบบจำลองในกรอบพิกัดเฉพาะของอาคาร (เมตรจากจุดกำเนิด) ให้วางไว้ที่กึ่งกลางแผนที่เพื่อดู",
+      "layer": {
+        "cells": "เซลล์ของ {{name}}",
+        "transitions": "โครงข่ายนำทางของ {{name}}",
+        "states": "โหนดนำทางของ {{name}}"
+      }
     },
     "georss": {
       "defaultName": "เลเยอร์ GeoRSS",
@@ -2154,6 +2203,12 @@
       "none": "ไม่มี (ไร้ขอบ)"
     },
     "mapBackground": "พื้นหลังแผนที่",
+    "pageBackground": "พื้นหลังหน้า",
+    "panelTheme": "แผงบนแผนที่",
+    "panelThemeOption": {
+      "light": "สว่าง",
+      "dark": "มืด"
+    },
     "scaleLabel": "มาตราส่วน (1:N)",
     "scalePlaceholder": "เช่น 25000",
     "scalePresets": "ค่าที่ตั้งไว้…",
@@ -2940,6 +2995,7 @@
       },
       "mapCrs": "ระบบพิกัดอ้างอิงของแผนที่",
       "mapCrsHint": "วาดแผนที่ MapLibre แบบแบนราบใน CRS อื่น เช่น กริดขั้วโลกหรือกริดทรงกระบอกอย่างง่ายของโลก ดวงจันทร์ หรือดาวอังคาร พร้อมแผนที่ฐานที่ให้บริการในกริดนั้น ไทล์จะไม่ถูกแปลงเส้นโครงใหม่: เลเยอร์ GeoJSON ภาพซ้อนทับ และเลเยอร์ส่งออกของ WMS หรือ ArcGIS (ที่ร้องขอใน CRS นั้น) จะถูกวาด แต่ XYZ ไทล์เวกเตอร์ และเลเยอร์ปลั๊กอินส่วนใหญ่จะไม่ถูกวาด และจะปิดลูกโลกกับภูมิประเทศ",
+      "mapCrsLinkUnknown": "ลิงก์นี้ขอ CRS ของแผนที่เป็น \"{{crs}}\" ซึ่งไม่รู้จักหรือไม่รองรับ จึงถูกละเว้น",
       "mapCrsDefault": "Web Mercator / ลูกโลก (ค่าเริ่มต้น)",
       "mapCrsCustom": "รหัส EPSG แบบกำหนดเอง…",
       "mapCrsEpsg": "รหัส EPSG",
@@ -3202,6 +3258,7 @@
       "osEnvField": "อ่านจากตัวแปรสภาพแวดล้อมของระบบ {{name}}",
       "osEnvPlaceholder": "กำหนดไว้ในสภาพแวดล้อมของระบบคุณ",
       "refreshModels": "รีเฟรชรายการโมเดล",
+      "ollamaModelHint": "พิมพ์ชื่อโมเดลใดก็ได้ที่ติดตั้งใน Ollama พร้อมแท็ก (เช่น qwen3:8b) หรือเลือกจากคำแนะนำ รีเฟรชรายการเพื่อดูโมเดลที่ติดตั้งไว้",
       "modelsFailedToLoad": "โหลดโมเดลไม่สำเร็จ: {{message}}",
       "modelsLoading": "กำลังโหลดแค็ตตาล็อกโมเดล…",
       "searchModels": "ค้นหาชื่อหรือ ID โมเดล",
@@ -3624,6 +3681,7 @@
       "photos": "รูปภาพที่มีพิกัดภูมิศาสตร์",
       "gpx": "เลเยอร์ GPX",
       "landxml": "เลเยอร์ LandXML",
+      "indoorgml": "เลเยอร์ IndoorGML",
       "polyline": "โพลีไลน์ที่เข้ารหัส",
       "mbtiles": "เลเยอร์ MBTiles",
       "xyz": "เลเยอร์ XYZ",
@@ -4188,6 +4246,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "แผนที่ฐาน Carto Light",
       "geolibre-flight-simulator": "เครื่องจำลองการบิน",
       "gods-eye-view": "มุมมองรอบรู้",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "เพิ่มเลเยอร์จาก {{name}} แล้ว {{count}} เลเยอร์",
       "osmPbfNoFeatures": "ไม่พบฟีเจอร์ใน {{name}}",
       "couldNotParse": "ไม่สามารถตีความ {{name}} ได้: {{message}}",
-      "couldNotImport": "ไม่สามารถนำเข้าไฟล์ได้"
+      "couldNotImport": "ไม่สามารถนำเข้าไฟล์ได้",
+      "openedByHandler": "เปิดโดย {{name}} แล้ว",
+      "handlerFailed": "{{name}} ไม่สามารถเปิดไฟล์ที่ลากมาวางได้: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "บันทึกการเปลี่ยนแปลงก่อนปิดหรือไม่?",
       "savePromptDescription": "โปรเจกต์ปัจจุบันมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก บันทึกก่อนปิด GeoLibre หรือไม่?"
+    },
+    "remoteSave": {
+      "signInTitle": "ลงชื่อเข้าใช้เพื่อบันทึกโปรเจกต์",
+      "signInDescriptionOAuth": "ลงชื่อเข้าใช้ {{shareHost}} เพื่อบันทึกโปรเจกต์ของคุณบนเซิร์ฟเวอร์",
+      "signInDescriptionToken": "ต้องใช้โทเค็น API ส่วนตัวในการบันทึกโปรเจกต์ไปยัง {{shareHost}} เพิ่มโทเค็นของคุณในหน้าตั้งค่าเพื่อดำเนินการต่อ",
+      "signInButton": "ลงชื่อเข้าใช้",
+      "openSettingsButton": "เปิดการตั้งค่า",
+      "saveTitle": "บันทึกโปรเจกต์ไปยังเซิร์ฟเวอร์",
+      "saveDesc": "ป้อนชื่อโปรเจกต์ โปรเจกต์จะถูกบันทึกเป็นโปรเจกต์ส่วนตัวบน {{shareHost}}",
+      "noProjectId": "เซิร์ฟเวอร์โปรเจกต์ไม่ได้ส่ง ID โปรเจกต์กลับมา",
+      "uploadedNotLinked": "บันทึก \"{{name}}\" ไปยัง {{shareHost}} แล้ว แต่เซสชันหรือโปรเจกต์มีการเปลี่ยนแปลงระหว่างบันทึก จึงไม่ได้เชื่อมโยงกับแผนที่นี้ เปิดจากแกลเลอรีเพื่อทำงานต่อ"
     },
     "error": {
       "couldNotOpenProject": "ไม่สามารถเปิดโปรเจกต์ได้",
@@ -8317,6 +8389,13 @@
     "noLayer": "เลือกเลเยอร์เวกเตอร์เพื่อบันทึกหรือนำสไตล์ไปใช้"
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "อาคาร",
+      "overview": "ภาพรวม",
+      "fullModel": "แบบจำลองทั้งหมด",
+      "disciplinesHint": "เลือกสาขางานและหมวดหมู่ของแบบจำลองอาคารที่จะวาด",
+      "drawnCount_other": "วาดเลเยอร์ย่อย {{count}} รายการแล้ว"
+    },
     "panelLabel": "สไตล์ของเลเยอร์",
     "panelLabelCollapsed": "สไตล์ของเลเยอร์ (ย่อไว้)",
     "heading": "สไตล์",
@@ -8644,6 +8723,17 @@
       "strokeWidthUnit": "หน่วยความหนาเส้น",
       "strokeWidthUnitPixels": "พิกเซล (ขนาดคงที่บนหน้าจอ)",
       "strokeWidthUnitMeters": "เมตร (ปรับขนาดตามแผนที่)",
+      "strokeOpacity": "ความทึบของเส้นขอบ",
+      "lineStyle": "รูปแบบเส้น",
+      "lineStyleSolid": "เส้นทึบ",
+      "lineStyleDashed": "เส้นประ",
+      "lineStyleDotted": "เส้นจุด",
+      "lineStyleDashDot": "ขีดสลับจุด",
+      "lineStyleLongDash": "เส้นประยาว",
+      "lineStyleCustom": "กำหนดเอง",
+      "lineDashPattern": "รูปแบบเส้นประ",
+      "lineDashPatternHint": "ความยาวของขีดและช่องว่างเป็นจำนวนเท่าของความหนาเส้น เช่น 4 2 1 2",
+      "lineBlur": "ความเบลอของเส้น (px)",
       "textHaloColor": "สีขอบเรืองของตัวอักษร",
       "textHaloWidth": "ความหนาขอบเรืองของตัวอักษร",
       "schemeEqualInterval": "ช่วงเท่ากัน",
@@ -8694,13 +8784,21 @@
       "heightProperty": "คุณสมบัติที่ใช้เป็นความสูง",
       "heightScale": "อัตราส่วนความสูง",
       "base": "ความสูงของฐาน",
+      "baseProperty": "คุณสมบัติฐาน",
+      "baseNone": "ไม่มี (ฐานราบ)",
+      "baseScale": "อัตราส่วนฐาน",
+      "baseHint": "แต่ละฟีเจอร์เริ่มต้นที่ ความสูงของฐาน + คุณสมบัติฐาน × อัตราส่วนฐาน ชั้นต่าง ๆ จึงซ้อนกันตามฟิลด์ระดับชั้น ตั้งความสูงชั้นเพื่อให้ทุกฟีเจอร์มีความหนาเท่านั้นบนฐานของตน มิฉะนั้นความสูงจะเป็นระดับความสูงของหลังคาและต้องสูงกว่าฐาน",
+      "floorHeight": "ความสูงชั้น",
+      "floorHeightHint": "เมื่อมากกว่า 0 แต่ละฟีเจอร์จะสูงเท่าจำนวนเมตรนี้เหนือฐานของตน และจะไม่ใช้การตั้งค่าความสูง ค่า 0 จะใช้ความสูงเป็นระดับความสูงของหลังคา",
+      "baseExpression": "นิพจน์ฐาน",
       "apply": "ใช้การยกตัวแบบ 3 มิติ",
       "footer": "การตั้งค่าการยกตัวแบบ 3 มิติจะมีผลเมื่อบันทึกแล้ว"
     },
     "expressionLabels": {
       "style": "นิพจน์สไตล์",
       "color": "นิพจน์สี",
-      "height": "นิพจน์ความสูง"
+      "height": "นิพจน์ความสูง",
+      "base": "นิพจน์ฐาน"
     },
     "expressionErrors": {
       "notArray": "{{label}}ต้องเป็นนิพจน์แบบอาร์เรย์ JSON",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "ยังไม่มีฟีเจอร์ที่โหลดไว้ เลื่อนหรือซูมแผนที่ไปยังข้อมูล แล้วเปิดส่วนนี้อีกครั้ง",
     "viewportSampleHint": "ค่าต่าง ๆ มาจากไทล์ที่โหลดไว้ในขณะนี้ รายการจึงเพิ่มขึ้นเมื่อคุณเลื่อนและซูมแผนที่",
     "layerFilteredHint": "ตัวกรองด่วนกำลังซ่อนฟีเจอร์บางส่วนของเลเยอร์นี้อยู่"
+  },
+  "floorPicker": {
+    "title": "ตัวเลือกชั้น",
+    "short": "ชั้น",
+    "all": "ทั้งหมด",
+    "allTitle": "แสดงทุกชั้น",
+    "levelTitle_other": "ชั้น {{level}} ({{count}} ฟีเจอร์)",
+    "below": "+ ชั้นล่าง",
+    "belowTitle": "แสดงชั้นที่อยู่ต่ำกว่าชั้นที่เลือกด้วย",
+    "resize": "ปรับขนาดรายการชั้น",
+    "resizeTitle": "ลากเพื่อปรับขนาดรายการชั้น ดับเบิลคลิกเพื่อรีเซ็ต",
+    "heading": "ตัวเลือกชั้น",
+    "field": "ฟิลด์ชั้น",
+    "off": "ปิด",
+    "hint": "เลือกฟิลด์ที่เก็บชั้นของแต่ละฟีเจอร์ เพื่อแสดงเลเยอร์นี้ในตัวเลือกชั้นบนแผนที่",
+    "linkedHint_other": "มี {{count}} ชั้นแสดงในตัวเลือกชั้นบนแผนที่",
+    "noLevels": "ไม่พบชั้นใน \"{{field}}\" เลือกฟิลด์ที่เก็บตัวเลขหรือระดับชั้น เช่น \"0\" หรือ \"-1;0\""
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "การส่งออก KML ไม่สามารถเขียนฟีเจอร์ลำดับที่ {{position}} ได้ เนื่องจากมีพิกัดไม่ถูกต้อง",
@@ -10059,11 +10174,23 @@
       "north": "ทิศเหนือ",
       "useMapExtent": "ใช้ขอบเขตแผนที่",
       "download": "ดาวน์โหลดข้อมูล OSM",
+      "preview": "แสดงตัวอย่างข้อมูล OSM",
+      "addToMap": "เพิ่มลงแผนที่",
+      "exportGeoParquet": "บันทึกเป็น GeoParquet",
       "ready": "เลือกพื้นที่และประเภทฟีเจอร์",
       "exportGeoJson": "บันทึกเป็น GeoJSON",
       "mapUnavailable": "ยังไม่มีขอบเขตแผนที่",
       "extentApplied": "ใช้ขอบเขตแผนที่แล้ว",
+      "invalidExtent": "ป้อนกรอบขอบเขตที่ถูกต้อง",
+      "zoomIn": "ซูมเข้าจนกว่าพื้นที่แผนที่จะไม่เกิน {{limit}} ตารางองศา",
       "downloading": "กำลังดาวน์โหลดจาก OpenStreetMap…",
+      "previewing": "กำลังโหลดตัวอย่าง OSM…",
+      "previewLayerName": "ตัวอย่าง — {{name}}",
+      "previewed": "กำลังแสดงตัวอย่างฟีเจอร์ {{count}} รายการ: จุด {{points}} เส้น {{lines}} รูปหลายเหลี่ยม {{polygons}}",
+      "preparingExport": "กำลังเตรียมการส่งออก {{format}}…",
+      "exported": "เตรียมฟีเจอร์ {{count}} รายการสำหรับการส่งออก {{format}} แล้ว",
+      "exportCancelled": "ยกเลิกการส่งออกแล้ว",
+      "exportError": "ไม่สามารถส่งออก {{format}} ได้: {{message}}",
       "noFeatures": "ไม่พบฟีเจอร์ที่ตรงกันในพื้นที่นี้",
       "error": "ไม่สามารถดาวน์โหลดข้อมูล OSM ได้: {{message}}",
       "added": "เพิ่มฟีเจอร์ {{count}} รายการลงบนแผนที่"
@@ -10386,6 +10513,59 @@
       "retry": "ลองใหม่",
       "catalogFailed": "ไม่สามารถโหลดแค็ตตาล็อกของ Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "เกี่ยวกับ JAXA Earth API",
+      "aboutText": "JAXA Earth API เผยแพร่ชุดข้อมูลการสำรวจโลกจาก JAXA และหน่วยงานพันธมิตรในรูปแบบ GeoTIFF ที่ปรับให้เหมาะกับคลาวด์ ได้แก่ แผนที่ระดับความสูงและป่าไม้จาก ALOS ปริมาณน้ำฝนจาก GSMaP อุณหภูมิพื้นผิวดินและผิวน้ำทะเลจาก GCOM-C และ MODIS พืชพรรณ ละอองลอย ความชื้นในดิน และอื่น ๆ ไม่ต้องใช้บัญชีหรือคีย์ API",
+      "aboutAccess": "GeoLibre วาดไทล์ในเบราว์เซอร์ด้วย JavaScript API ของ JAXA โดยอ่านเฉพาะความละเอียดและพื้นที่ที่แผนที่แสดงอยู่",
+      "home": "JAXA Earth API",
+      "terms": "ข้อกำหนดการใช้งาน",
+      "attribution": "ข้อมูลโดย JAXA ชุดข้อมูลบางชุดมาจากหน่วยงานอื่นและใช้ข้อกำหนดของตนเอง โปรดตรวจสอบหน้าของชุดข้อมูลก่อนนำไปใช้ซ้ำ",
+      "projectionLabel": "{{title}} (ไม่รองรับเส้นโครงแผนที่นี้)",
+      "chooseDataset": "เลือกชุดข้อมูล…",
+      "loading": "กำลังโหลดแค็ตตาล็อก…",
+      "recommendedGroup": "แนะนำ: {{group}}",
+      "allGroup": "ชุดข้อมูลทั้งหมด",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} ถึง {{end}}",
+      "present": "ปัจจุบัน",
+      "climatology": "ค่าภูมิอากาศเฉลี่ย",
+      "datasetPage": "รายละเอียดชุดข้อมูล",
+      "dateFailed": "ไม่สามารถเปลี่ยนวันที่ได้: {{message}}",
+      "noOtherDate": "ไม่มีวันที่อื่นในทิศทางนั้น",
+      "sampling": "กำลังอ่านตัวอย่างเพื่อตั้งช่วงสี…",
+      "noValues": "ตัวอย่างไม่มีค่าใด ๆ ให้ตั้งค่าต่ำสุดและสูงสุดด้วยตนเอง",
+      "sampleFailed": "ไม่สามารถอ่านตัวอย่างของ {{name}} ได้: {{message}}",
+      "opening": "กำลังเปิด {{name}}…",
+      "openFailed": "ไม่สามารถเปิด {{name}} ได้: {{message}}",
+      "band": "แบนด์",
+      "date": "วันที่ (UTC)",
+      "firstDate": "วันที่แรก",
+      "previousDate": "วันที่ก่อนหน้า",
+      "nextDate": "วันที่ถัดไป",
+      "latestDate": "วันที่ล่าสุด",
+      "pickDate": "ไปยังวันที่",
+      "colormap": "แผนผังสี",
+      "rangeInvalid": "ค่าต่ำสุดต้องน้อยกว่าค่าสูงสุด",
+      "auto": "อัตโนมัติ",
+      "autoTitle": "ตั้งค่าต่ำสุดและสูงสุดจากข้อมูล ณ วันที่นี้",
+      "min": "ต่ำสุด",
+      "max": "สูงสุด",
+      "ownColors": "แบนด์นี้มีสีของตัวเอง จึงไม่ใช้แผนผังสี",
+      "nearest": "เพื่อนบ้านใกล้ที่สุด",
+      "bilinear": "ไบลิเนียร์",
+      "resampling": "การสุ่มตัวอย่างใหม่",
+      "addToMap": "เพิ่มลงแผนที่",
+      "addUnavailable": "แผนที่นี้ไม่สามารถเพิ่มเลเยอร์ไทล์ได้",
+      "added": "เพิ่ม {{name}} แล้ว การเปลี่ยนวันที่หรือสีตอนนี้จะอัปเดตเลเยอร์นั้น หากต้องการเก็บสำเนาอีกชุด ให้เพิ่มอีกครั้ง",
+      "searchPlaceholder": "ค้นหาชื่อ ดาวเทียม คำสำคัญ…",
+      "search": "ค้นหา",
+      "dataset": "ชุดข้อมูล",
+      "hint": "เรียกดูชุดข้อมูลการสำรวจโลกของ JAXA และเพิ่มลงในแผนที่ เลือกชุดข้อมูล แบนด์ และวันที่ แล้วปรับสี",
+      "catalogFailed": "ไม่สามารถโหลดแค็ตตาล็อก JAXA Earth ได้: {{message}}",
+      "retry": "ลองใหม่",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "ไม่สามารถเปิดคลังข้อมูล {{name}} ได้",

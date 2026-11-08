@@ -395,6 +395,28 @@
     "openWebApp": "GeoLibre veb tətbiqini aç"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Bu IMDF arxivini oxumaq mümkün olmadı: {{reason}}",
+        "invalidJson": "{{file}} etibarlı JSON deyil ({{detail}})",
+        "entryTooLarge": "{{file}} 256 MB-dan böyükdür",
+        "tooLarge": "onun GeoJSON fayllarının ümumi həcmi 512 MB-ı keçir"
+      },
+      "layer": {
+        "venue": "Məkan",
+        "footprint": "Bina konturları",
+        "level": "Mərtəbələr",
+        "section": "Bölmələr",
+        "unit": "Otaqlar",
+        "fixture": "Avadanlıqlar",
+        "detail": "Təfərrüatlar",
+        "opening": "Açırımlar",
+        "kiosk": "Kiosklar",
+        "geofence": "Geozonalar",
+        "amenity": "İctimai xidmət obyektləri",
+        "occupant": "İcarəçilər"
+      }
+    },
     "title": "Verilənlər əlavə et",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "LandXML layı əlavə et",
         "description": "LandXML TIN səthlərini, üfüqi trasları, şaquli profil metaverilənlərini və ölçmə nöqtələrini mənbə CRS-dən yenidən proyeksiyalayaraq idxal edin."
+      },
+      "indoorgml": {
+        "label": "IndoorGML layı əlavə et",
+        "description": "OGC IndoorGML binasını idxal edin: real hündürlüklərinə qədər ekstruziya edilmiş otaqlar və mərtəbə seçicisinə bağlanmış naviqasiya şəbəkəsi."
       },
       "georss": {
         "label": "GeoRSS layı əlavə et",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Geniş yayılmış koordinat sistemləri...",
       "crsHelp": "Yalnız koordinatlar artıq WGS84 uzunluğu və enliyi ilə verildikdə boş saxlayın. LandXML koordinatları şimal istiqamətli koordinat, şərq istiqamətli koordinat və yüksəklik kimi oxunur.",
       "detectedCoordinateSystem": "LandXML koordinat sistemi: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL-i",
+      "file": "IndoorGML faylı",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML faylının verilənləri yoxdur.",
+      "readError": "Bu IndoorGML faylını oxumaq mümkün olmadı.",
+      "errorChooseFile": "IndoorGML faylı seçin.",
+      "errorUrl": "IndoorGML URL-i daxil edin.",
+      "errorTooLarge": "Bu IndoorGML faylı 200 MB-dan böyükdür.",
+      "errorMissingCrs": "Bu IndoorGML faylında koordinat sistemi göstərilməyib və onun koordinatları uzunluq/enlik deyil. Onun CRS-ini daxil edin və ya xəritənin mərkəzinə yerləşdirməyi seçin.",
+      "summary": "{{floors}} mərtəbədə {{cells}} xana, {{transitions}} naviqasiya tili.",
+      "crs": "Mənbə CRS",
+      "crsPlaceholder": "məs. EPSG:25832",
+      "crsPresetLabel": "Geniş yayılmış koordinat sistemləri...",
+      "local": "Yerli koordinatlar: binanı xəritənin mərkəzinə yerləşdir",
+      "crsHelp": "Bir çox IndoorGML faylında CRS olmur. Onların koordinatlarının EPSG kodunu daxil edin, yaxud yerli bina çərçivəsindəki (başlanğıc nöqtəsindən metrlərlə) modeli görmək üçün onu xəritənin mərkəzinə yerləşdirin.",
+      "layer": {
+        "cells": "{{name}}: xanalar",
+        "transitions": "{{name}}: naviqasiya şəbəkəsi",
+        "states": "{{name}}: naviqasiya düyünləri"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS layı",
@@ -2207,6 +2256,12 @@
       "none": "Yoxdur (haşiyəsiz)"
     },
     "mapBackground": "Xəritənin fonu",
+    "pageBackground": "Səhifənin fonu",
+    "panelTheme": "Xəritə panelləri",
+    "panelThemeOption": {
+      "light": "Açıq",
+      "dark": "Tünd"
+    },
     "scaleLabel": "Miqyas (1:N)",
     "scalePlaceholder": "məs., 25000",
     "scalePresets": "Hazır miqyaslar…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "Xəritənin koordinat istinad sistemi",
       "mapCrsHint": "MapLibre xəritəsini başqa CRS-də müstəvi şəklində çəkir, məsələn, Yerin, Ayın və ya Marsın qütb və ya sadə silindrik şəbəkəsində, həmin şəbəkədə təqdim olunan əsas xəritə ilə. Plitələr yenidən proyeksiyalanmır: GeoJSON layları, təsvir örtükləri və WMS və ya ArcGIS ixrac layları (CRS-də sorğulanan) çəkilir, XYZ, vektor plitə və əksər plagin layları isə çəkilmir; qlobus və relyef söndürülür.",
+      "mapCrsLinkUnknown": "Bu keçid \"{{crs}}\" xəritə CRS-ini tələb edir, lakin o naməlumdur və ya dəstəklənmir, buna görə nəzərə alınmadı.",
       "mapCrsDefault": "Web Mercator / qlobus (standart)",
       "mapCrsCustom": "Fərdi EPSG kodu…",
       "mapCrsEpsg": "EPSG kodu",
@@ -3264,6 +3320,7 @@
       "osEnvField": "Sisteminizin {{name}} mühit dəyişənindən oxunur.",
       "osEnvPlaceholder": "Sistem mühitində təyin edin",
       "refreshModels": "Model siyahısını yenilə",
+      "ollamaModelHint": "Ollama-da quraşdırılmış istənilən modeli teqi ilə birlikdə yazın (məsələn, qwen3:8b) və ya təkliflərdən birini seçin. Quraşdırılmış modelləri görmək üçün siyahını yeniləyin.",
       "modelsFailedToLoad": "Modelləri yükləmək mümkün olmadı: {{message}}",
       "modelsLoading": "Model kataloqu yüklənir…",
       "searchModels": "Model adları və ya ID-ləri üzrə axtar",
@@ -3687,6 +3744,7 @@
       "photos": "Coğrafi etiketli fotolar",
       "gpx": "GPX layı",
       "landxml": "LandXML layı",
+      "indoorgml": "IndoorGML layı",
       "polyline": "Kodlaşdırılmış polixətt",
       "mbtiles": "MBTiles layı",
       "xyz": "XYZ layı",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 explorer",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light baza xəritəsi",
       "geolibre-flight-simulator": "Uçuş simulyatoru",
       "gods-eye-view": "Quşbaxışı görünüş",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{name}} faylından {{count}} lay əlavə edildi.",
       "osmPbfNoFeatures": "{{name}} içində obyekt tapılmadı.",
       "couldNotParse": "{{name}} təhlil edilə bilmədi: {{message}}",
-      "couldNotImport": "Faylları idxal etmək mümkün olmadı."
+      "couldNotImport": "Faylları idxal etmək mümkün olmadı.",
+      "openedByHandler": "Açan: {{name}}.",
+      "handlerFailed": "{{name}} buraxılan faylları aça bilmədi: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Bağlamazdan əvvəl dəyişikliklər yadda saxlanılsın?",
       "savePromptDescription": "Cari layihədə yadda saxlanmamış dəyişikliklər var. GeoLibre bağlanmazdan əvvəl onlar yadda saxlanılsın?"
+    },
+    "remoteSave": {
+      "signInTitle": "Layihəni yadda saxlamaq üçün daxil olun",
+      "signInDescriptionOAuth": "Layihənizi serverdə yadda saxlamaq üçün {{shareHost}} hesabınıza daxil olun.",
+      "signInDescriptionToken": "Layihələri {{shareHost}} üzərində yadda saxlamaq üçün şəxsi API tokeni tələb olunur. Davam etmək üçün tokeninizi Parametrlərə əlavə edin.",
+      "signInButton": "Daxil ol",
+      "openSettingsButton": "Parametrləri aç",
+      "saveTitle": "Layihəni serverdə yadda saxla",
+      "saveDesc": "Layihə adını daxil edin. Layihə {{shareHost}} üzərində şəxsi layihə kimi yadda saxlanılacaq.",
+      "noProjectId": "Layihə serveri layihə ID-si qaytarmadı.",
+      "uploadedNotLinked": "\"{{name}}\" {{shareHost}} üzərində yadda saxlanıldı, lakin saxlama zamanı sessiya və ya layihə dəyişdiyi üçün bu xəritəyə bağlanmadı. Üzərində işləməyə davam etmək üçün onu Qalereyadan açın."
     },
     "error": {
       "couldNotOpenProject": "Layihəni açmaq mümkün olmadı.",
@@ -8510,6 +8582,14 @@
     "noLayer": "Üslubları yadda saxlamaq və ya tətbiq etmək üçün vektor layı seçin."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Bina",
+      "overview": "İcmal",
+      "fullModel": "Tam model",
+      "disciplinesHint": "Bina modelinin çəkiləcək fənlərini və kateqoriyalarını seçin.",
+      "drawnCount_one": "{{count}} alt lay çəkildi.",
+      "drawnCount_other": "{{count}} alt lay çəkildi."
+    },
     "panelLabel": "Lay üslubu",
     "panelLabelCollapsed": "Lay üslubu (yığılmış)",
     "heading": "Üslub",
@@ -8840,6 +8920,17 @@
       "strokeWidthUnit": "Xətt qalınlığının vahidi",
       "strokeWidthUnitPixels": "Piksel (ekranda sabit)",
       "strokeWidthUnitMeters": "Metr (xəritə ilə miqyaslanır)",
+      "strokeOpacity": "Xəttin qeyri-şəffaflığı",
+      "lineStyle": "Xətt üslubu",
+      "lineStyleSolid": "Bütöv",
+      "lineStyleDashed": "Kəsik",
+      "lineStyleDotted": "Nöqtəli",
+      "lineStyleDashDot": "Ştrix-nöqtə",
+      "lineStyleLongDash": "Uzun ştrix",
+      "lineStyleCustom": "Fərdi",
+      "lineDashPattern": "Ştrix nümunəsi",
+      "lineDashPatternHint": "Xətt qalınlığının misilləri ilə ştrix və boşluq uzunluqları, məsələn, 4 2 1 2.",
+      "lineBlur": "Xəttin bulanıqlığı (px)",
       "textHaloColor": "Mətn haləsinin rəngi",
       "textHaloWidth": "Mətn haləsinin qalınlığı",
       "schemeEqualInterval": "Bərabər intervallar",
@@ -8890,13 +8981,21 @@
       "heightProperty": "Hündürlük xassəsi",
       "heightScale": "Hündürlük miqyası",
       "base": "Əsas hündürlük",
+      "baseProperty": "Əsas xassəsi",
+      "baseNone": "Yoxdur (düz əsas)",
+      "baseScale": "Əsas miqyası",
+      "baseHint": "Hər obyekt əsas hündürlük + əsas xassəsi × əsas miqyası səviyyəsindən başlayır, beləliklə mərtəbələr səviyyə sahəsinə görə üst-üstə düzülür. Hər obyektə öz əsası üzərində bu qalınlığı vermək üçün mərtəbə hündürlüyü təyin edin; əks halda hündürlük damın yüksəkliyidir və əsasdan yuxarı olmalıdır.",
+      "floorHeight": "Mərtəbə hündürlüyü",
+      "floorHeightHint": "0-dan böyük olduqda hər obyekt öz əsası üzərində bu qədər metr hündürlükdə olur və hündürlük parametrləri nəzərə alınmır. 0 olduqda hündürlük damın yüksəkliyi kimi istifadə olunur.",
+      "baseExpression": "Əsas ifadəsi",
       "apply": "3D ekstruziyanı tətbiq et",
       "footer": "3D ekstruziya parametrləri yadda saxlananda tətbiq olunur."
     },
     "expressionLabels": {
       "style": "Üslub ifadəsi",
       "color": "Rəng ifadəsi",
-      "height": "Hündürlük ifadəsi"
+      "height": "Hündürlük ifadəsi",
+      "base": "Əsas ifadəsi"
     },
     "expressionErrors": {
       "notArray": "{{label}} JSON massivi ifadəsi olmalıdır.",
@@ -9181,6 +9280,25 @@
     "noTileFeatures": "Hələ heç bir obyekt yüklənməyib. Xəritəni verilənlərin olduğu yerə sürüşdürün və ya yaxınlaşdırın, sonra bu bölməni yenidən açın.",
     "viewportSampleHint": "Dəyərlər hazırda yüklənmiş tayllardan götürülür, buna görə sürüşdürüb yaxınlaşdırdıqca siyahı genişlənir.",
     "layerFilteredHint": "Sürətli filtr bu layın bəzi obyektlərini gizlədir."
+  },
+  "floorPicker": {
+    "title": "Mərtəbə seçicisi",
+    "short": "Mərtəbə",
+    "all": "Hamısı",
+    "allTitle": "Bütün mərtəbələri göstər",
+    "levelTitle_one": "Mərtəbə {{level}} ({{count}} obyekt)",
+    "levelTitle_other": "Mərtəbə {{level}} ({{count}} obyekt)",
+    "below": "+ aşağı",
+    "belowTitle": "Seçilmiş mərtəbədən aşağıdakı mərtəbələri də göstər",
+    "resize": "Mərtəbə siyahısının ölçüsünü dəyiş",
+    "resizeTitle": "Mərtəbə siyahısının ölçüsünü dəyişmək üçün sürükləyin. Sıfırlamaq üçün iki dəfə klikləyin.",
+    "heading": "Mərtəbə seçicisi",
+    "field": "Mərtəbə sahəsi",
+    "off": "Söndürülüb",
+    "hint": "Bu layı xəritədəki mərtəbə seçicisində göstərmək üçün hər obyektin mərtəbəsini saxlayan sahəni seçin.",
+    "linkedHint_one": "Xəritədəki mərtəbə seçicisində {{count}} mərtəbə göstərilir.",
+    "linkedHint_other": "Xəritədəki mərtəbə seçicisində {{count}} mərtəbə göstərilir.",
+    "noLevels": "\"{{field}}\" sahəsində mərtəbə tapılmadı. Rəqəm və ya \"0\" yaxud \"-1;0\" kimi səviyyə saxlayan sahəni seçin."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML ixracı {{position}} mövqeyindəki obyekti yaza bilmədi, çünki onun koordinatları yanlışdır.",
@@ -10203,11 +10321,23 @@
       "north": "Şimal",
       "useMapExtent": "Xəritənin əhatə sahəsini istifadə et",
       "download": "OSM verilənlərini endir",
+      "preview": "OSM verilənlərinə önbaxış",
+      "addToMap": "Xəritəyə əlavə et",
+      "exportGeoParquet": "GeoParquet kimi yadda saxla",
       "ready": "Sahə və obyekt növü seçin.",
       "exportGeoJson": "GeoJSON kimi yadda saxla",
       "mapUnavailable": "Xəritənin əhatə sahəsi hələ əlçatan deyil.",
       "extentApplied": "Xəritənin əhatə sahəsi tətbiq edildi.",
+      "invalidExtent": "Düzgün sərhəd düzbucaqlısı daxil edin.",
+      "zoomIn": "Xəritə sahəsi {{limit}} kvadrat dərəcə və ya daha kiçik olana qədər yaxınlaşdırın.",
       "downloading": "OpenStreetMap-dən endirilir…",
+      "previewing": "OSM önbaxışı yüklənir…",
+      "previewLayerName": "Önbaxış — {{name}}",
+      "previewed": "{{count}} obyektə önbaxış: {{points}} nöqtə, {{lines}} xətt, {{polygons}} poliqon.",
+      "preparingExport": "{{format}} ixracı hazırlanır…",
+      "exported": "{{format}} ixracı üçün {{count}} obyekt hazırlandı.",
+      "exportCancelled": "İxrac ləğv edildi.",
+      "exportError": "{{format}} ixrac edilə bilmədi: {{message}}",
       "noFeatures": "Bu sahədə uyğun obyekt tapılmadı.",
       "error": "OSM verilənlərini endirmək mümkün olmadı: {{message}}",
       "added": "Xəritəyə {{count}} obyekt əlavə edildi."
@@ -10530,6 +10660,59 @@
       "retry": "Yenidən cəhd et",
       "catalogFailed": "Ocean Data Platform kataloqunu yükləmək mümkün olmadı: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "JAXA Earth API haqqında",
+      "aboutText": "JAXA Earth API JAXA və tərəfdaş agentliklərin Yer müşahidəsi verilənlər dəstlərini bulud üçün optimallaşdırılmış GeoTIFF-lər kimi dərc edir: ALOS hündürlük və meşə xəritələri, GSMaP yağıntıları, GCOM-C və MODIS quru və dəniz səthi temperaturu, bitki örtüyü, aerozollar, torpaq nəmliyi və s. Hesab və ya API açarı tələb olunmur.",
+      "aboutAccess": "GeoLibre plitələri brauzerdə JAXA-nın JavaScript API-si ilə çəkir və yalnız xəritənin göstərdiyi ayırdetmə qabiliyyətini və sahəni oxuyur.",
+      "home": "JAXA Earth API",
+      "terms": "İstifadə şərtləri",
+      "attribution": "Verilənlər JAXA tərəfindən təqdim olunub. Bəzi verilənlər dəstləri digər agentliklərdən gəlir və öz şərtlərinə tabedir; təkrar istifadədən əvvəl verilənlər dəstinin səhifəsini yoxlayın.",
+      "projectionLabel": "{{title}} (proyeksiya dəstəklənmir)",
+      "chooseDataset": "Verilənlər dəsti seçin…",
+      "loading": "Kataloq yüklənir…",
+      "recommendedGroup": "Tövsiyə olunan: {{group}}",
+      "allGroup": "Bütün verilənlər dəstləri",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} – {{end}}",
+      "present": "indiyədək",
+      "climatology": "klimatologiya",
+      "datasetPage": "Verilənlər dəstinin təfərrüatları",
+      "dateFailed": "Tarixi dəyişmək mümkün olmadı: {{message}}",
+      "noOtherDate": "Bu istiqamətdə başqa tarix yoxdur.",
+      "sampling": "Rəng diapazonunu təyin etmək üçün nümunə oxunur…",
+      "noValues": "Nümunədə heç bir dəyər yoxdur; Min və Maks dəyərlərini əl ilə təyin edin.",
+      "sampleFailed": "{{name}} üçün nümunə oxuna bilmədi: {{message}}",
+      "opening": "{{name}} açılır…",
+      "openFailed": "{{name}} açıla bilmədi: {{message}}",
+      "band": "Kanal",
+      "date": "Tarix (UTC)",
+      "firstDate": "İlk tarix",
+      "previousDate": "Əvvəlki tarix",
+      "nextDate": "Növbəti tarix",
+      "latestDate": "Ən son tarix",
+      "pickDate": "Tarixə keç",
+      "colormap": "Rəng xəritəsi",
+      "rangeInvalid": "Min Maks-dan kiçik olmalıdır.",
+      "auto": "Avtomatik",
+      "autoTitle": "Min və Maks dəyərlərini bu tarixdəki verilənlərə görə təyin et",
+      "min": "Min",
+      "max": "Maks",
+      "ownColors": "Bu kanalın öz rəngləri var, buna görə rəng xəritəsi tətbiq olunmur.",
+      "nearest": "Ən yaxın qonşu",
+      "bilinear": "Bilinear",
+      "resampling": "Yenidən nümunələmə",
+      "addToMap": "Xəritəyə əlavə et",
+      "addUnavailable": "Bu xəritəyə plitə layları əlavə etmək mümkün deyil.",
+      "added": "{{name}} əlavə edildi. Tarixi və ya rəngləri dəyişmək indi həmin layı yeniləyir; başqa bir nüsxə saxlamaq üçün yenidən əlavə edin.",
+      "searchPlaceholder": "Başlıqlar, peyklər, açar sözlər üzrə axtarış…",
+      "search": "Axtar",
+      "dataset": "Verilənlər dəsti",
+      "hint": "JAXA-nın Yer müşahidəsi verilənlər dəstlərinə baxın və onları xəritəyə əlavə edin. Verilənlər dəsti, kanal və tarix seçin, sonra rəngləri tənzimləyin.",
+      "catalogFailed": "JAXA Earth kataloqunu yükləmək mümkün olmadı: {{message}}",
+      "retry": "Yenidən cəhd et",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "{{name}} repozitoriyasını açmaq mümkün olmadı.",

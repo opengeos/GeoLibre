@@ -395,6 +395,28 @@
     "openWebApp": "Abrir o aplicativo web do GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "Não foi possível ler este arquivo IMDF: {{reason}}",
+        "invalidJson": "{{file}} não é um JSON válido ({{detail}})",
+        "entryTooLarge": "{{file}} tem mais de 256 MB",
+        "tooLarge": "seus arquivos GeoJSON somam mais de 512 MB"
+      },
+      "layer": {
+        "venue": "Local",
+        "footprint": "Contornos",
+        "level": "Níveis",
+        "section": "Seções",
+        "unit": "Unidades",
+        "fixture": "Mobiliário",
+        "detail": "Detalhes",
+        "opening": "Aberturas",
+        "kiosk": "Quiosques",
+        "geofence": "Geocercas",
+        "amenity": "Comodidades",
+        "occupant": "Ocupantes"
+      }
+    },
     "title": "Adicionar dados",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "Adicionar camada LandXML",
         "description": "Importe superfícies TIN, alinhamentos horizontais, metadados de perfis verticais e pontos de levantamento LandXML, com reprojeção a partir do CRS de origem."
+      },
+      "indoorgml": {
+        "label": "Adicionar camada IndoorGML",
+        "description": "Importe um edifício OGC IndoorGML: cômodos extrudados até suas alturas reais e a rede de navegação, vinculados ao seletor de andares."
       },
       "georss": {
         "label": "Adicionar camada GeoRSS",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Sistemas de coordenadas comuns...",
       "crsHelp": "Deixe em branco somente se as coordenadas já estiverem em longitude e latitude WGS84. As coordenadas LandXML são lidas como norte, leste e elevação.",
       "detectedCoordinateSystem": "Sistema de coordenadas LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "URL IndoorGML",
+      "file": "Arquivo IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "Os dados do arquivo IndoorGML estão ausentes.",
+      "readError": "Não foi possível ler este arquivo IndoorGML.",
+      "errorChooseFile": "Escolha um arquivo IndoorGML.",
+      "errorUrl": "Digite uma URL IndoorGML.",
+      "errorTooLarge": "Este arquivo IndoorGML tem mais de 200 MB.",
+      "errorMissingCrs": "Este arquivo IndoorGML não informa nenhum sistema de coordenadas e suas coordenadas não são longitude/latitude. Digite o CRS ou escolha posicioná-lo no centro do mapa.",
+      "summary": "{{cells}} células em {{floors}} andares, {{transitions}} arestas de navegação.",
+      "crs": "CRS de origem",
+      "crsPlaceholder": "ex.: EPSG:25832",
+      "crsPresetLabel": "Sistemas de coordenadas comuns...",
+      "local": "Coordenadas locais: posicionar o edifício no centro do mapa",
+      "crsHelp": "Muitos arquivos IndoorGML não têm CRS. Digite o código EPSG das coordenadas ou, para um modelo em um referencial local do edifício (metros a partir de uma origem), posicione-o no centro do mapa para visualizá-lo.",
+      "layer": {
+        "cells": "Células de {{name}}",
+        "transitions": "Rede de navegação de {{name}}",
+        "states": "Nós de navegação de {{name}}"
+      }
     },
     "georss": {
       "defaultName": "Camada GeoRSS",
@@ -2207,6 +2256,12 @@
       "none": "Nenhuma (sem borda)"
     },
     "mapBackground": "Fundo do mapa",
+    "pageBackground": "Fundo da página",
+    "panelTheme": "Painéis do mapa",
+    "panelThemeOption": {
+      "light": "Claro",
+      "dark": "Escuro"
+    },
     "scaleLabel": "Escala (1:N)",
     "scalePlaceholder": "ex.: 25000",
     "scalePresets": "Predefinições…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "Sistema de referência de coordenadas do mapa",
       "mapCrsHint": "Desenha o mapa MapLibre plano em outro SRC, como uma grade polar ou cilíndrica simples da Terra, da Lua ou de Marte, com um mapa base servido nessa grade. Os tiles não são reprojetados: camadas GeoJSON, sobreposições de imagem e camadas de exportação WMS ou ArcGIS (solicitadas no SRC) são desenhadas, enquanto camadas XYZ, de tiles vetoriais e a maioria das camadas de plugins não são, e o globo e o terreno ficam desativados.",
+      "mapCrsLinkUnknown": "Este link solicita o SRC de mapa “{{crs}}”, que é desconhecido ou não suportado, por isso foi ignorado.",
       "mapCrsDefault": "Web Mercator / globo (padrão)",
       "mapCrsCustom": "Código EPSG personalizado…",
       "mapCrsEpsg": "Código EPSG",
@@ -3264,6 +3320,7 @@
       "osEnvField": "Lido da variável de ambiente do sistema {{name}}.",
       "osEnvPlaceholder": "Definido no ambiente do seu sistema",
       "refreshModels": "Atualizar a lista de modelos",
+      "ollamaModelHint": "Digite qualquer modelo instalado no Ollama, com a tag (por exemplo qwen3:8b), ou escolha uma sugestão. Atualize a lista para ver os modelos instalados.",
       "modelsFailedToLoad": "Não foi possível carregar os modelos: {{message}}",
       "modelsLoading": "Carregando o catálogo de modelos…",
       "searchModels": "Pesquisar nomes ou IDs de modelos",
@@ -3687,6 +3744,7 @@
       "photos": "Fotos geomarcadas",
       "gpx": "Camada GPX",
       "landxml": "Camada LandXML",
+      "indoorgml": "Camada IndoorGML",
       "polyline": "Polilinha codificada",
       "mbtiles": "Camada MBTiles",
       "xyz": "Camada XYZ",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Explorador Sentinel-2",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Mapa base Carto Light",
       "geolibre-flight-simulator": "Simulador de voo",
       "gods-eye-view": "Visão divina",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{count}} camadas adicionadas de {{name}}.",
       "osmPbfNoFeatures": "Nenhuma feição encontrada em {{name}}.",
       "couldNotParse": "Não foi possível interpretar {{name}}: {{message}}",
-      "couldNotImport": "Não foi possível importar os arquivos."
+      "couldNotImport": "Não foi possível importar os arquivos.",
+      "openedByHandler": "Aberto por {{name}}.",
+      "handlerFailed": "{{name}} não conseguiu abrir os arquivos soltos: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "Salvar as alterações antes de fechar?",
       "savePromptDescription": "O projeto atual tem alterações não salvas. Salvá-las antes de fechar o GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "Entre para salvar o projeto",
+      "signInDescriptionOAuth": "Entre em {{shareHost}} para salvar seu projeto no servidor.",
+      "signInDescriptionToken": "É necessário um token de API pessoal para salvar projetos em {{shareHost}}. Adicione seu token nas Configurações para continuar.",
+      "signInButton": "Entrar",
+      "openSettingsButton": "Abrir Configurações",
+      "saveTitle": "Salvar projeto no servidor",
+      "saveDesc": "Digite um nome de projeto. O projeto será salvo como projeto privado em {{shareHost}}.",
+      "noProjectId": "O servidor de projetos não retornou um ID de projeto.",
+      "uploadedNotLinked": "“{{name}}” foi salvo em {{shareHost}}, mas a sessão ou o projeto mudou durante o salvamento, por isso não foi vinculado a este mapa. Abra-o pela Galeria para continuar trabalhando nele."
     },
     "error": {
       "couldNotOpenProject": "Não foi possível abrir o projeto.",
@@ -8446,6 +8518,14 @@
     "noLayer": "Selecione uma camada vetorial para salvar ou aplicar estilos."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Edificação",
+      "overview": "Visão geral",
+      "fullModel": "Modelo completo",
+      "disciplinesHint": "Escolha as disciplinas e categorias do modelo da edificação a desenhar.",
+      "drawnCount_one": "{{count}} subcamada desenhada.",
+      "drawnCount_other": "{{count}} subcamadas desenhadas."
+    },
     "panelLabel": "Estilo da camada",
     "panelLabelCollapsed": "Estilo da camada (recolhido)",
     "heading": "Estilo",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "Unidade da espessura do traço",
       "strokeWidthUnitPixels": "Pixels (constante na tela)",
       "strokeWidthUnitMeters": "Metros (dimensiona com o mapa)",
+      "strokeOpacity": "Opacidade do traço",
+      "lineStyle": "Estilo de linha",
+      "lineStyleSolid": "Contínua",
+      "lineStyleDashed": "Tracejada",
+      "lineStyleDotted": "Pontilhada",
+      "lineStyleDashDot": "Traço-ponto",
+      "lineStyleLongDash": "Traço longo",
+      "lineStyleCustom": "Personalizado",
+      "lineDashPattern": "Padrão de traços",
+      "lineDashPatternHint": "Comprimentos de traços e espaços em múltiplos da espessura do traço, por exemplo 4 2 1 2.",
+      "lineBlur": "Desfoque da linha (px)",
       "textHaloColor": "Cor do halo do texto",
       "textHaloWidth": "Espessura do halo do texto",
       "schemeEqualInterval": "Intervalo igual",
@@ -8826,13 +8917,21 @@
       "heightProperty": "Propriedade de altura",
       "heightScale": "Escala de altura",
       "base": "Altura da base",
+      "baseProperty": "Propriedade da base",
+      "baseNone": "Nenhuma (base plana)",
+      "baseScale": "Escala da base",
+      "baseHint": "Cada feição começa em altura da base + propriedade da base × escala da base, de modo que os andares se empilham a partir de um campo de nível. Defina uma altura de andar para dar a cada feição essa espessura sobre sua base; caso contrário, a altura é a altitude do telhado e deve ficar acima da base.",
+      "floorHeight": "Altura do andar",
+      "floorHeightHint": "Quando maior que 0, cada feição tem essa quantidade de metros de altura sobre sua base e as configurações de altura são ignoradas. 0 usa a altura como altitude do telhado.",
+      "baseExpression": "Expressão da base",
       "apply": "Aplicar extrusão 3D",
       "footer": "As configurações de extrusão 3D são aplicadas ao salvar."
     },
     "expressionLabels": {
       "style": "Expressão de estilo",
       "color": "Expressão de cor",
-      "height": "Expressão de altura"
+      "height": "Expressão de altura",
+      "base": "Expressão da base"
     },
     "expressionErrors": {
       "notArray": "{{label}} deve ser uma expressão de array JSON.",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "Nenhuma feição foi carregada ainda. Desloque ou aproxime o mapa até os dados e reabra esta seção.",
     "viewportSampleHint": "Os valores vêm dos tiles carregados no momento, então a lista cresce conforme você desloca e aproxima o mapa.",
     "layerFilteredHint": "Um filtro rápido está ocultando parte das feições desta camada."
+  },
+  "floorPicker": {
+    "title": "Seletor de andares",
+    "short": "Andar",
+    "all": "Todos",
+    "allTitle": "Mostrar todos os andares",
+    "levelTitle_one": "Andar {{level}} ({{count}} feição)",
+    "levelTitle_other": "Andar {{level}} ({{count}} feições)",
+    "below": "+ abaixo",
+    "belowTitle": "Mostrar também os andares abaixo do escolhido",
+    "resize": "Redimensionar a lista de andares",
+    "resizeTitle": "Arraste para redimensionar a lista de andares. Clique duas vezes para redefinir.",
+    "heading": "Seletor de andares",
+    "field": "Campo de andar",
+    "off": "Desativado",
+    "hint": "Escolha o campo que contém o andar de cada feição para listar esta camada no seletor de andares do mapa.",
+    "linkedHint_one": "{{count}} andar listado no seletor de andares do mapa.",
+    "linkedHint_other": "{{count}} andares listados no seletor de andares do mapa.",
+    "noLevels": "Nenhum andar encontrado em “{{field}}”. Escolha o campo que contém um número ou um nível como “0” ou “-1;0”."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "A exportação KML não conseguiu gravar a feição {{position}} porque ela tem coordenadas inválidas.",
@@ -10203,11 +10321,23 @@
       "north": "Norte",
       "useMapExtent": "Usar extensão do mapa",
       "download": "Baixar dados OSM",
+      "preview": "Visualizar dados OSM",
+      "addToMap": "Adicionar ao mapa",
+      "exportGeoParquet": "Salvar GeoParquet",
       "ready": "Escolha uma área e um tipo de recurso.",
       "exportGeoJson": "Salvar GeoJSON",
       "mapUnavailable": "A extensão do mapa ainda não está disponível.",
       "extentApplied": "Extensão do mapa aplicada.",
+      "invalidExtent": "Digite uma caixa delimitadora válida.",
+      "zoomIn": "Aproxime o zoom até que a área do mapa tenha {{limit}} graus quadrados ou menos.",
       "downloading": "Baixando do OpenStreetMap…",
+      "previewing": "Carregando a visualização OSM…",
+      "previewLayerName": "Visualização — {{name}}",
+      "previewed": "Visualizando {{count}} feições: {{points}} pontos, {{lines}} linhas, {{polygons}} polígonos.",
+      "preparingExport": "Preparando exportação em {{format}}…",
+      "exported": "{{count}} feições preparadas para exportação em {{format}}.",
+      "exportCancelled": "Exportação cancelada.",
+      "exportError": "Não foi possível exportar {{format}}: {{message}}",
       "noFeatures": "Nenhum recurso correspondente foi encontrado nesta área.",
       "error": "Não foi possível baixar os dados OSM: {{message}}",
       "added": "Adicionados {{count}} recursos ao mapa."
@@ -10530,6 +10660,59 @@
       "retry": "Tentar novamente",
       "catalogFailed": "Não foi possível carregar o catálogo do Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "Sobre a JAXA Earth API",
+      "aboutText": "A JAXA Earth API publica conjuntos de dados de observação da Terra da JAXA e de agências parceiras como GeoTIFFs Cloud Optimized: mapas de elevação e de florestas do ALOS, precipitação do GSMaP, temperatura da superfície terrestre e do mar do GCOM-C e do MODIS, vegetação, aerossóis, umidade do solo e mais. Não é necessária conta nem chave de API.",
+      "aboutAccess": "O GeoLibre desenha os tiles no navegador com a API JavaScript da JAXA, lendo apenas a resolução e a área que o mapa mostra.",
+      "home": "JAXA Earth API",
+      "terms": "Termos de uso",
+      "attribution": "Dados cortesia da JAXA. Alguns conjuntos de dados vêm de outras agências e mantêm seus próprios termos; consulte a página do conjunto de dados antes de reutilizá-los.",
+      "projectionLabel": "{{title}} (projeção não suportada)",
+      "chooseDataset": "Escolha um conjunto de dados…",
+      "loading": "Carregando o catálogo…",
+      "recommendedGroup": "Recomendado: {{group}}",
+      "allGroup": "Todos os conjuntos de dados",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} até {{end}}",
+      "present": "o presente",
+      "climatology": "climatologia",
+      "datasetPage": "Detalhes do conjunto de dados",
+      "dateFailed": "Não foi possível alterar a data: {{message}}",
+      "noOtherDate": "Não há outra data nessa direção.",
+      "sampling": "Lendo uma amostra para definir o intervalo de cores…",
+      "noValues": "A amostra não contém valores; defina Mín e Máx manualmente.",
+      "sampleFailed": "Não foi possível ler uma amostra de {{name}}: {{message}}",
+      "opening": "Abrindo {{name}}…",
+      "openFailed": "Não foi possível abrir {{name}}: {{message}}",
+      "band": "Banda",
+      "date": "Data (UTC)",
+      "firstDate": "Primeira data",
+      "previousDate": "Data anterior",
+      "nextDate": "Próxima data",
+      "latestDate": "Data mais recente",
+      "pickDate": "Ir para a data",
+      "colormap": "Mapa de cores",
+      "rangeInvalid": "Mín deve ser menor que Máx.",
+      "auto": "Automático",
+      "autoTitle": "Definir Mín e Máx a partir dos dados desta data",
+      "min": "Mín",
+      "max": "Máx",
+      "ownColors": "Esta banda tem cores próprias, então nenhum mapa de cores se aplica.",
+      "nearest": "Vizinho mais próximo",
+      "bilinear": "Bilinear",
+      "resampling": "Reamostragem",
+      "addToMap": "Adicionar ao mapa",
+      "addUnavailable": "Este mapa não pode adicionar camadas de tiles.",
+      "added": "{{name}} adicionado. Alterar a data ou as cores agora atualiza essa camada; adicione novamente para manter outra cópia.",
+      "searchPlaceholder": "Pesquisar títulos, satélites, palavras-chave…",
+      "search": "Pesquisar",
+      "dataset": "Conjunto de dados",
+      "hint": "Explore os conjuntos de dados de observação da Terra da JAXA e adicione-os ao mapa. Escolha um conjunto de dados, uma banda e uma data e depois ajuste as cores.",
+      "catalogFailed": "Não foi possível carregar o catálogo JAXA Earth: {{message}}",
+      "retry": "Tentar novamente",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "Não foi possível abrir o repositório {{name}}.",

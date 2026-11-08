@@ -395,6 +395,28 @@
     "openWebApp": "Abrir la aplicación web de GeoLibre"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "No se pudo leer este archivo IMDF: {{reason}}",
+        "invalidJson": "{{file}} no es un JSON válido ({{detail}})",
+        "entryTooLarge": "{{file}} supera los 256 MB",
+        "tooLarge": "sus archivos GeoJSON suman más de 512 MB"
+      },
+      "layer": {
+        "venue": "Recinto",
+        "footprint": "Huellas",
+        "level": "Niveles",
+        "section": "Secciones",
+        "unit": "Unidades",
+        "fixture": "Mobiliario",
+        "detail": "Detalles",
+        "opening": "Aberturas",
+        "kiosk": "Quioscos",
+        "geofence": "Geocercas",
+        "amenity": "Servicios",
+        "occupant": "Ocupantes"
+      }
+    },
     "title": "Añadir datos",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "Añadir capa LandXML",
         "description": "Importa superficies TIN, ejes en planta, metadatos de perfiles longitudinales y puntos topográficos de LandXML, con reproyección desde el CRS de origen."
+      },
+      "indoorgml": {
+        "label": "Añadir capa IndoorGML",
+        "description": "Importa un edificio OGC IndoorGML: las estancias extruidas a su altura real y la red de navegación, vinculadas al selector de plantas."
       },
       "georss": {
         "label": "Añadir capa GeoRSS",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "Sistemas de coordenadas comunes...",
       "crsHelp": "Déjelo en blanco solo si las coordenadas ya están en longitud y latitud WGS84. Las coordenadas LandXML se leen como norte, este y elevación.",
       "detectedCoordinateSystem": "Sistema de coordenadas LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "URL de IndoorGML",
+      "file": "Archivo IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "Faltan los datos del archivo IndoorGML.",
+      "readError": "No se pudo leer este archivo IndoorGML.",
+      "errorChooseFile": "Elija un archivo IndoorGML.",
+      "errorUrl": "Introduzca una URL de IndoorGML.",
+      "errorTooLarge": "Este archivo IndoorGML supera los 200 MB.",
+      "errorMissingCrs": "Este archivo IndoorGML no indica ningún sistema de coordenadas y sus coordenadas no son longitud/latitud. Introduzca su CRS o elija colocarlo en el centro del mapa.",
+      "summary": "{{cells}} celdas en {{floors}} plantas, {{transitions}} aristas de navegación.",
+      "crs": "CRS de origen",
+      "crsPlaceholder": "p. ej., EPSG:25832",
+      "crsPresetLabel": "Sistemas de coordenadas comunes...",
+      "local": "Coordenadas locales: colocar el edificio en el centro del mapa",
+      "crsHelp": "Muchos archivos IndoorGML no tienen CRS. Introduzca el código EPSG de sus coordenadas o, para un modelo en un sistema local del edificio (metros desde un origen), colóquelo en el centro del mapa para verlo.",
+      "layer": {
+        "cells": "Celdas de {{name}}",
+        "transitions": "Red de navegación de {{name}}",
+        "states": "Nodos de navegación de {{name}}"
+      }
     },
     "georss": {
       "defaultName": "Capa GeoRSS",
@@ -2207,6 +2256,12 @@
       "none": "Ninguno (sin borde)"
     },
     "mapBackground": "Fondo del mapa",
+    "pageBackground": "Fondo de la página",
+    "panelTheme": "Paneles del mapa",
+    "panelThemeOption": {
+      "light": "Claro",
+      "dark": "Oscuro"
+    },
     "scaleLabel": "Escala (1:N)",
     "scalePlaceholder": "p. ej., 25000",
     "scalePresets": "Preajustes…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "Sistema de referencia de coordenadas del mapa",
       "mapCrsHint": "Dibuja el mapa de MapLibre en plano en otro SRC, como una cuadrícula polar o cilíndrica simple de la Tierra, la Luna o Marte, con un mapa base servido en esa cuadrícula. Las teselas no se reproyectan: se dibujan las capas GeoJSON, las superposiciones de imágenes y las capas WMS o de exportación de ArcGIS (solicitadas en el SRC), pero no las capas XYZ, de teselas vectoriales ni la mayoría de las capas de complementos, y el globo y el terreno quedan desactivados.",
+      "mapCrsLinkUnknown": "Este enlace solicita el SRC de mapa «{{crs}}», que es desconocido o no compatible, por lo que se ignoró.",
       "mapCrsDefault": "Web Mercator / globo (predeterminado)",
       "mapCrsCustom": "Código EPSG personalizado…",
       "mapCrsEpsg": "Código EPSG",
@@ -3264,6 +3320,7 @@
       "osEnvField": "Se lee de la variable de entorno de su sistema {{name}}.",
       "osEnvPlaceholder": "Definida en el entorno de su sistema",
       "refreshModels": "Actualizar la lista de modelos",
+      "ollamaModelHint": "Escriba cualquier modelo instalado en Ollama, con su etiqueta (por ejemplo qwen3:8b), o elija una sugerencia. Actualice la lista para ver los modelos instalados.",
       "modelsFailedToLoad": "No se pudieron cargar los modelos: {{message}}",
       "modelsLoading": "Cargando el catálogo de modelos…",
       "searchModels": "Buscar nombres o ID de modelos",
@@ -3687,6 +3744,7 @@
       "photos": "Fotos geoetiquetadas",
       "gpx": "Capa GPX",
       "landxml": "Capa LandXML",
+      "indoorgml": "Capa IndoorGML",
       "polyline": "Polilínea codificada",
       "mbtiles": "Capa MBTiles",
       "xyz": "Capa XYZ",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Explorador de Sentinel-2",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Mapa base Carto Light",
       "geolibre-flight-simulator": "Simulador de vuelo",
       "gods-eye-view": "Vista de Dios",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "Se añadieron {{count}} capas de {{name}}.",
       "osmPbfNoFeatures": "No se encontraron entidades en {{name}}.",
       "couldNotParse": "No se pudo interpretar {{name}}: {{message}}",
-      "couldNotImport": "No se pudieron importar los archivos."
+      "couldNotImport": "No se pudieron importar los archivos.",
+      "openedByHandler": "Abierto con {{name}}.",
+      "handlerFailed": "{{name}} no pudo abrir los archivos soltados: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "¿Guardar los cambios antes de cerrar?",
       "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Guardarlos antes de cerrar GeoLibre?"
+    },
+    "remoteSave": {
+      "signInTitle": "Inicie sesión para guardar el proyecto",
+      "signInDescriptionOAuth": "Inicie sesión en {{shareHost}} para guardar su proyecto en el servidor.",
+      "signInDescriptionToken": "Se necesita un token de API personal para guardar proyectos en {{shareHost}}. Añada su token en Configuración para continuar.",
+      "signInButton": "Iniciar sesión",
+      "openSettingsButton": "Abrir configuración",
+      "saveTitle": "Guardar proyecto en el servidor",
+      "saveDesc": "Introduzca un nombre de proyecto. El proyecto se guardará como proyecto privado en {{shareHost}}.",
+      "noProjectId": "El servidor de proyectos no devolvió un ID de proyecto.",
+      "uploadedNotLinked": "«{{name}}» se guardó en {{shareHost}}, pero la sesión o el proyecto cambiaron durante el guardado, por lo que no se vinculó a este mapa. Ábralo desde la galería para seguir trabajando en él."
     },
     "error": {
       "couldNotOpenProject": "No se pudo abrir el proyecto.",
@@ -8446,6 +8518,14 @@
     "noLayer": "Seleccione una capa vectorial para guardar o aplicar estilos."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "Edificio",
+      "overview": "Vista general",
+      "fullModel": "Modelo completo",
+      "disciplinesHint": "Elija las disciplinas y categorías del modelo del edificio que se dibujarán.",
+      "drawnCount_one": "{{count}} subcapa dibujada.",
+      "drawnCount_other": "{{count}} subcapas dibujadas."
+    },
     "panelLabel": "Estilo de capa",
     "panelLabelCollapsed": "Estilo de capa (contraído)",
     "heading": "Estilo",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "Unidad de ancho de trazo",
       "strokeWidthUnitPixels": "Píxeles (constante en pantalla)",
       "strokeWidthUnitMeters": "Metros (se escala con el mapa)",
+      "strokeOpacity": "Opacidad del trazo",
+      "lineStyle": "Estilo de línea",
+      "lineStyleSolid": "Continua",
+      "lineStyleDashed": "Discontinua",
+      "lineStyleDotted": "Punteada",
+      "lineStyleDashDot": "Raya-punto",
+      "lineStyleLongDash": "Raya larga",
+      "lineStyleCustom": "Personalizado",
+      "lineDashPattern": "Patrón de guiones",
+      "lineDashPatternHint": "Longitudes de guiones y espacios en múltiplos del ancho del trazo, p. ej., 4 2 1 2.",
+      "lineBlur": "Desenfoque de línea (px)",
       "textHaloColor": "Color del halo de texto",
       "textHaloWidth": "Ancho del halo de texto",
       "schemeEqualInterval": "Intervalo igual",
@@ -8826,13 +8917,21 @@
       "heightProperty": "Propiedad de altura",
       "heightScale": "Escala de altura",
       "base": "Altura de base",
+      "baseProperty": "Propiedad de base",
+      "baseNone": "Ninguna (base plana)",
+      "baseScale": "Escala de base",
+      "baseHint": "Cada entidad comienza en altura de base + propiedad de base × escala de base, de modo que las plantas se apilan a partir de un campo de nivel. Establezca una altura de planta para dar a cada entidad ese grosor sobre su base; de lo contrario, la altura es la altitud del tejado y debe estar por encima de la base.",
+      "floorHeight": "Altura de planta",
+      "floorHeightHint": "Si es mayor que 0, cada entidad mide esa cantidad de metros sobre su base y se ignoran los ajustes de altura. Con 0, la altura se usa como altitud del tejado.",
+      "baseExpression": "Expresión de base",
       "apply": "Aplicar extrusión 3D",
       "footer": "La configuración de extrusión 3D se aplica al guardar."
     },
     "expressionLabels": {
       "style": "Expresión de estilo",
       "color": "Expresión de color",
-      "height": "Expresión de altura"
+      "height": "Expresión de altura",
+      "base": "Expresión de base"
     },
     "expressionErrors": {
       "notArray": "{{label}} debe ser una expresión de array JSON.",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "Aún no hay entidades cargadas. Desplace o acerque el mapa a los datos y vuelva a abrir esta sección.",
     "viewportSampleHint": "Los valores provienen de las teselas cargadas en este momento, por lo que la lista crece a medida que desplaza y acerca el mapa.",
     "layerFilteredHint": "Un filtro rápido está ocultando parte de las entidades de esta capa."
+  },
+  "floorPicker": {
+    "title": "Selector de plantas",
+    "short": "Planta",
+    "all": "Todas",
+    "allTitle": "Mostrar todas las plantas",
+    "levelTitle_one": "Planta {{level}} ({{count}} entidad)",
+    "levelTitle_other": "Planta {{level}} ({{count}} entidades)",
+    "below": "+ inferiores",
+    "belowTitle": "Mostrar también las plantas por debajo de la elegida",
+    "resize": "Cambiar el tamaño de la lista de plantas",
+    "resizeTitle": "Arrastre para cambiar el tamaño de la lista de plantas. Haga doble clic para restablecerlo.",
+    "heading": "Selector de plantas",
+    "field": "Campo de planta",
+    "off": "Desactivado",
+    "hint": "Elija el campo que contiene la planta de cada entidad para incluir esta capa en el selector de plantas del mapa.",
+    "linkedHint_one": "{{count}} planta incluida en el selector de plantas del mapa.",
+    "linkedHint_other": "{{count}} plantas incluidas en el selector de plantas del mapa.",
+    "noLevels": "No se encontraron plantas en «{{field}}». Elija el campo que contiene un número o un nivel como «0» o «-1;0»."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "La exportación KML no pudo escribir la entidad {{position}} porque tiene coordenadas no válidas.",
@@ -10203,11 +10321,23 @@
       "north": "Norte",
       "useMapExtent": "Usar extensión del mapa",
       "download": "Descargar datos OSM",
+      "preview": "Previsualizar datos OSM",
+      "addToMap": "Añadir al mapa",
+      "exportGeoParquet": "Guardar GeoParquet",
       "ready": "Elige un área y tipo de característica.",
       "exportGeoJson": "Guardar GeoJSON",
       "mapUnavailable": "La extensión del mapa aún no está disponible.",
       "extentApplied": "Extensión del mapa aplicada.",
+      "invalidExtent": "Introduzca un cuadro delimitador válido.",
+      "zoomIn": "Acerque el mapa hasta que el área sea de {{limit}} grados cuadrados o menos.",
       "downloading": "Descargando desde OpenStreetMap…",
+      "previewing": "Cargando la vista previa de OSM…",
+      "previewLayerName": "Vista previa — {{name}}",
+      "previewed": "Vista previa de {{count}} elementos: {{points}} puntos, {{lines}} líneas, {{polygons}} polígonos.",
+      "preparingExport": "Preparando la exportación a {{format}}…",
+      "exported": "Se prepararon {{count}} elementos para la exportación a {{format}}.",
+      "exportCancelled": "Exportación cancelada.",
+      "exportError": "No se pudo exportar {{format}}: {{message}}",
       "noFeatures": "No se encontraron elementos coincidentes en esta área.",
       "error": "No se pudo descargar los datos de OSM: {{message}}",
       "added": "Añadidos {{count}} elementos al mapa."
@@ -10530,6 +10660,59 @@
       "retry": "Reintentar",
       "catalogFailed": "No se pudo cargar el catálogo de Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "Acerca de la JAXA Earth API",
+      "aboutText": "La JAXA Earth API publica conjuntos de datos de observación de la Tierra de JAXA y agencias asociadas como GeoTIFF Cloud Optimized: mapas de elevación y de bosques de ALOS, precipitación de GSMaP, temperatura de la superficie terrestre y del mar de GCOM-C y MODIS, vegetación, aerosoles, humedad del suelo y más. No se necesita cuenta ni clave de API.",
+      "aboutAccess": "GeoLibre dibuja las teselas en el navegador con la API de JavaScript de JAXA, leyendo solo la resolución y el área que muestra el mapa.",
+      "home": "JAXA Earth API",
+      "terms": "Condiciones de uso",
+      "attribution": "Datos cortesía de JAXA. Algunos conjuntos de datos proceden de otras agencias y mantienen sus propias condiciones; consulte la página del conjunto de datos antes de reutilizarlo.",
+      "projectionLabel": "{{title}} (proyección no compatible)",
+      "chooseDataset": "Elija un conjunto de datos…",
+      "loading": "Cargando el catálogo…",
+      "recommendedGroup": "Recomendado: {{group}}",
+      "allGroup": "Todos los conjuntos de datos",
+      "resolutionM": "~{{value}} m",
+      "resolutionKm": "~{{value}} km",
+      "timeRange": "{{start}} a {{end}}",
+      "present": "la actualidad",
+      "climatology": "climatología",
+      "datasetPage": "Detalles del conjunto de datos",
+      "dateFailed": "No se pudo cambiar la fecha: {{message}}",
+      "noOtherDate": "No hay otra fecha en esa dirección.",
+      "sampling": "Leyendo una muestra para establecer el rango de colores…",
+      "noValues": "La muestra no contiene valores; establezca Mín. y Máx. manualmente.",
+      "sampleFailed": "No se pudo leer una muestra de {{name}}: {{message}}",
+      "opening": "Abriendo {{name}}…",
+      "openFailed": "No se pudo abrir {{name}}: {{message}}",
+      "band": "Banda",
+      "date": "Fecha (UTC)",
+      "firstDate": "Primera fecha",
+      "previousDate": "Fecha anterior",
+      "nextDate": "Fecha siguiente",
+      "latestDate": "Fecha más reciente",
+      "pickDate": "Ir a la fecha",
+      "colormap": "Mapa de colores",
+      "rangeInvalid": "Mín. debe ser menor que Máx.",
+      "auto": "Automático",
+      "autoTitle": "Establecer Mín. y Máx. a partir de los datos de esta fecha",
+      "min": "Mín.",
+      "max": "Máx.",
+      "ownColors": "Esta banda tiene sus propios colores, por lo que no se aplica ningún mapa de colores.",
+      "nearest": "Vecino más cercano",
+      "bilinear": "Bilineal",
+      "resampling": "Remuestreo",
+      "addToMap": "Añadir al mapa",
+      "addUnavailable": "Este mapa no puede añadir capas de teselas.",
+      "added": "Se añadió {{name}}. Cambiar la fecha o los colores ahora actualiza esa capa; vuelva a añadirla para conservar otra copia.",
+      "searchPlaceholder": "Buscar títulos, satélites, palabras clave…",
+      "search": "Buscar",
+      "dataset": "Conjunto de datos",
+      "hint": "Explore los conjuntos de datos de observación de la Tierra de JAXA y añádalos al mapa. Elija un conjunto de datos, una banda y una fecha, y luego ajuste los colores.",
+      "catalogFailed": "No se pudo cargar el catálogo de JAXA Earth: {{message}}",
+      "retry": "Reintentar",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "No se pudo abrir el repositorio {{name}}.",

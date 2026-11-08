@@ -388,6 +388,28 @@
     "openWebApp": "GeoLibre 웹 앱 열기"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "이 IMDF 아카이브를 읽을 수 없습니다: {{reason}}",
+        "invalidJson": "{{file}}은(는) 유효한 JSON이 아닙니다({{detail}})",
+        "entryTooLarge": "{{file}}이(가) 256 MB보다 큽니다",
+        "tooLarge": "GeoJSON 파일의 합계가 512 MB를 초과합니다"
+      },
+      "layer": {
+        "venue": "시설",
+        "footprint": "건물 외곽",
+        "level": "층",
+        "section": "구역",
+        "unit": "공간 단위",
+        "fixture": "고정 설비",
+        "detail": "세부 요소",
+        "opening": "출입구",
+        "kiosk": "키오스크",
+        "geofence": "지오펜스",
+        "amenity": "편의 시설",
+        "occupant": "입점 업체"
+      }
+    },
     "title": "데이터 추가",
     "kind": {
       "xyz": {
@@ -425,6 +447,10 @@
       "landxml": {
         "label": "LandXML 레이어 추가",
         "description": "LandXML TIN 표면, 평면 선형, 종단 메타데이터, 측량점을 원본 CRS에서 재투영하여 가져옵니다."
+      },
+      "indoorgml": {
+        "label": "IndoorGML 레이어 추가",
+        "description": "OGC IndoorGML 건물을 가져옵니다. 방은 실제 높이로 돌출되고 내비게이션 네트워크와 함께 층 선택기에 연결됩니다."
       },
       "georss": {
         "label": "GeoRSS 레이어 추가",
@@ -817,6 +843,29 @@
       "crsPresetLabel": "자주 사용하는 좌표계...",
       "crsHelp": "좌표가 이미 WGS84 경도·위도인 경우에만 비워 두세요. LandXML 좌표는 북거, 동거, 표고 순서로 읽습니다.",
       "detectedCoordinateSystem": "LandXML 좌표계: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML 파일",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML 파일 데이터가 없습니다.",
+      "readError": "이 IndoorGML 파일을 읽을 수 없습니다.",
+      "errorChooseFile": "IndoorGML 파일을 선택하세요.",
+      "errorUrl": "IndoorGML URL을 입력하세요.",
+      "errorTooLarge": "이 IndoorGML 파일은 200 MB보다 큽니다.",
+      "errorMissingCrs": "이 IndoorGML 파일에는 좌표계가 지정되어 있지 않으며 좌표가 경도/위도가 아닙니다. CRS를 입력하거나 지도 중심에 배치하도록 선택하세요.",
+      "summary": "{{floors}}개 층에 셀 {{cells}}개, 내비게이션 에지 {{transitions}}개.",
+      "crs": "원본 CRS",
+      "crsPlaceholder": "예: EPSG:25832",
+      "crsPresetLabel": "자주 사용하는 좌표계...",
+      "local": "로컬 좌표: 건물을 지도 중심에 배치",
+      "crsHelp": "많은 IndoorGML 파일에는 CRS가 없습니다. 좌표의 EPSG 코드를 입력하거나, 로컬 건물 좌표계(원점으로부터의 미터)를 사용하는 모델이라면 지도 중심에 배치하여 확인하세요.",
+      "layer": {
+        "cells": "{{name}} 셀",
+        "transitions": "{{name}} 내비게이션 네트워크",
+        "states": "{{name}} 내비게이션 노드"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS 레이어",
@@ -2154,6 +2203,12 @@
       "none": "없음(테두리 없음)"
     },
     "mapBackground": "지도 배경",
+    "pageBackground": "페이지 배경",
+    "panelTheme": "지도 패널",
+    "panelThemeOption": {
+      "light": "라이트",
+      "dark": "다크"
+    },
     "scaleLabel": "축척(1:N)",
     "scalePlaceholder": "예: 25000",
     "scalePresets": "사전 설정…",
@@ -2940,6 +2995,7 @@
       },
       "mapCrs": "지도 좌표 참조계",
       "mapCrsHint": "MapLibre 지도를 다른 CRS로 평면 표시합니다. 예를 들어 지구, 달, 화성의 극 격자나 단순 원통 격자를 사용하며, 해당 격자로 제공되는 배경지도를 함께 사용합니다. 타일은 재투영되지 않습니다. GeoJSON 레이어, 이미지 오버레이, WMS 또는 ArcGIS 내보내기 레이어(해당 CRS로 요청)는 그려지지만 XYZ, 벡터 타일 및 대부분의 플러그인 레이어는 그려지지 않으며, 지구본과 지형은 꺼집니다.",
+      "mapCrsLinkUnknown": "이 링크는 지도 CRS \"{{crs}}\"을(를) 요청하지만 알 수 없거나 지원되지 않아 무시되었습니다.",
       "mapCrsDefault": "Web Mercator / 지구본(기본값)",
       "mapCrsCustom": "사용자 지정 EPSG 코드…",
       "mapCrsEpsg": "EPSG 코드",
@@ -3202,6 +3258,7 @@
       "osEnvField": "시스템 환경 변수 {{name}}에서 읽습니다.",
       "osEnvPlaceholder": "시스템 환경에서 설정됨",
       "refreshModels": "모델 목록 새로 고침",
+      "ollamaModelHint": "Ollama에 설치된 모델을 태그와 함께 입력하거나(예: qwen3:8b) 추천 항목을 선택하세요. 설치된 모델을 보려면 목록을 새로 고치세요.",
       "modelsFailedToLoad": "모델을 불러오지 못했습니다: {{message}}",
       "modelsLoading": "모델 카탈로그를 불러오는 중…",
       "searchModels": "모델 이름 또는 ID 검색",
@@ -3624,6 +3681,7 @@
       "photos": "위치 태그 사진",
       "gpx": "GPX 레이어",
       "landxml": "LandXML 레이어",
+      "indoorgml": "IndoorGML 레이어",
       "polyline": "인코딩된 폴리라인",
       "mbtiles": "MBTiles 레이어",
       "xyz": "XYZ 레이어",
@@ -4188,6 +4246,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 탐색기",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light 베이스맵",
       "geolibre-flight-simulator": "비행 시뮬레이터",
       "gods-eye-view": "전지적 시점",
@@ -4243,11 +4302,24 @@
       "addedOsmPbfLayers_other": "{{name}}에서 레이어 {{count}}개를 추가했습니다.",
       "osmPbfNoFeatures": "{{name}}에서 피처를 찾을 수 없습니다.",
       "couldNotParse": "{{name}}을(를) 파싱할 수 없습니다: {{message}}",
-      "couldNotImport": "파일을 가져올 수 없습니다."
+      "couldNotImport": "파일을 가져올 수 없습니다.",
+      "openedByHandler": "{{name}}에서 열었습니다.",
+      "handlerFailed": "{{name}}에서 드롭한 파일을 열 수 없습니다: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "닫기 전에 변경 사항을 저장하시겠습니까?",
       "savePromptDescription": "현재 프로젝트에 저장되지 않은 변경 사항이 있습니다. GeoLibre를 닫기 전에 저장하시겠습니까?"
+    },
+    "remoteSave": {
+      "signInTitle": "로그인하여 프로젝트 저장",
+      "signInDescriptionOAuth": "서버에 프로젝트를 저장하려면 {{shareHost}}에 로그인하세요.",
+      "signInDescriptionToken": "{{shareHost}}에 프로젝트를 저장하려면 개인 API 토큰이 필요합니다. 계속하려면 설정에서 토큰을 추가하세요.",
+      "signInButton": "로그인",
+      "openSettingsButton": "설정 열기",
+      "saveTitle": "서버에 프로젝트 저장",
+      "saveDesc": "프로젝트 이름을 입력하세요. 프로젝트는 {{shareHost}}에 비공개 프로젝트로 저장됩니다.",
+      "noProjectId": "프로젝트 서버가 프로젝트 ID를 반환하지 않았습니다.",
+      "uploadedNotLinked": "\"{{name}}\"이(가) {{shareHost}}에 저장되었지만 저장 중에 세션 또는 프로젝트가 변경되어 이 지도에 연결되지 않았습니다. 계속 작업하려면 갤러리에서 여세요."
     },
     "error": {
       "couldNotOpenProject": "프로젝트를 열 수 없습니다.",
@@ -8317,6 +8389,13 @@
     "noLayer": "스타일을 저장하거나 적용하려면 벡터 레이어를 선택하세요."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "건물",
+      "overview": "개요",
+      "fullModel": "전체 모델",
+      "disciplinesHint": "그릴 건물 모델의 분야와 범주를 선택하세요.",
+      "drawnCount_other": "하위 레이어 {{count}}개를 그렸습니다."
+    },
     "panelLabel": "레이어 스타일",
     "panelLabelCollapsed": "레이어 스타일(접힘)",
     "heading": "스타일",
@@ -8644,6 +8723,17 @@
       "strokeWidthUnit": "선 너비 단위",
       "strokeWidthUnitPixels": "픽셀(화면에서 일정)",
       "strokeWidthUnitMeters": "미터(지도에 따라 확대·축소)",
+      "strokeOpacity": "선 불투명도",
+      "lineStyle": "선 스타일",
+      "lineStyleSolid": "실선",
+      "lineStyleDashed": "파선",
+      "lineStyleDotted": "점선",
+      "lineStyleDashDot": "일점쇄선",
+      "lineStyleLongDash": "긴 파선",
+      "lineStyleCustom": "사용자 지정",
+      "lineDashPattern": "대시 패턴",
+      "lineDashPatternHint": "대시와 간격의 길이를 선 너비의 배수로 입력합니다(예: 4 2 1 2).",
+      "lineBlur": "선 흐림(px)",
       "textHaloColor": "텍스트 외곽선 색상",
       "textHaloWidth": "텍스트 외곽선 너비",
       "schemeEqualInterval": "등간격",
@@ -8694,13 +8784,21 @@
       "heightProperty": "높이 속성",
       "heightScale": "높이 배율",
       "base": "기준 높이",
+      "baseProperty": "기준 속성",
+      "baseNone": "없음(평평한 기준)",
+      "baseScale": "기준 배율",
+      "baseHint": "각 피처는 기준 높이 + 기준 속성 × 기준 배율 위치에서 시작하므로 층 필드에서 층을 쌓을 수 있습니다. 층 높이를 설정하면 각 피처가 기준 위에 그 두께로 그려지고, 그렇지 않으면 높이는 지붕의 고도이며 기준보다 높아야 합니다.",
+      "floorHeight": "층 높이",
+      "floorHeightHint": "0보다 크면 각 피처는 기준 위로 이 미터만큼의 높이를 가지며 높이 설정은 무시됩니다. 0이면 높이를 지붕의 고도로 사용합니다.",
+      "baseExpression": "기준 표현식",
       "apply": "3D 돌출 적용",
       "footer": "3D 돌출 설정은 저장할 때 적용됩니다."
     },
     "expressionLabels": {
       "style": "스타일 표현식",
       "color": "색상 표현식",
-      "height": "높이 표현식"
+      "height": "높이 표현식",
+      "base": "기준 표현식"
     },
     "expressionErrors": {
       "notArray": "{{label}}은(는) JSON 배열 표현식이어야 합니다.",
@@ -8984,6 +9082,23 @@
     "noTileFeatures": "아직 불러온 피처가 없습니다. 데이터가 있는 곳으로 이동하거나 확대한 뒤 이 섹션을 다시 여세요.",
     "viewportSampleHint": "값은 현재 불러온 타일에서 가져오므로, 지도를 이동하고 확대할수록 목록이 늘어납니다.",
     "layerFilteredHint": "빠른 필터가 이 레이어의 일부 피처를 숨기고 있습니다."
+  },
+  "floorPicker": {
+    "title": "층 선택기",
+    "short": "층",
+    "all": "전체",
+    "allTitle": "모든 층 표시",
+    "levelTitle_other": "층 {{level}}({{count}}개 피처)",
+    "below": "+ 아래층",
+    "belowTitle": "선택한 층 아래의 층도 표시",
+    "resize": "층 목록 크기 조정",
+    "resizeTitle": "드래그하여 층 목록 크기를 조정합니다. 두 번 클릭하면 초기화됩니다.",
+    "heading": "층 선택기",
+    "field": "층 필드",
+    "off": "끔",
+    "hint": "각 피처의 층 정보를 담은 필드를 선택하면 이 레이어가 지도 위 층 선택기에 표시됩니다.",
+    "linkedHint_other": "지도 위 층 선택기에 {{count}}개 층이 표시됩니다.",
+    "noLevels": "\"{{field}}\"에서 층을 찾을 수 없습니다. 숫자 또는 \"0\"이나 \"-1;0\" 같은 층 값을 담은 필드를 선택하세요."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "좌표가 올바르지 않아 KML 내보내기에서 {{position}}번째 피처를 기록하지 못했습니다.",
@@ -10059,11 +10174,23 @@
       "north": "북쪽",
       "useMapExtent": "지도 범위 사용",
       "download": "OSM 데이터 다운로드",
+      "preview": "OSM 데이터 미리보기",
+      "addToMap": "지도에 추가",
+      "exportGeoParquet": "GeoParquet 저장",
       "ready": "영역과 피처 유형을 선택하세요.",
       "exportGeoJson": "GeoJSON 저장",
       "mapUnavailable": "아직 지도 범위를 사용할 수 없습니다.",
       "extentApplied": "지도 범위가 적용되었습니다.",
+      "invalidExtent": "유효한 경계 상자를 입력하세요.",
+      "zoomIn": "지도 영역이 {{limit}}제곱도 이하가 될 때까지 확대하세요.",
       "downloading": "OpenStreetMap에서 다운로드 중…",
+      "previewing": "OSM 미리보기를 불러오는 중…",
+      "previewLayerName": "미리보기 — {{name}}",
+      "previewed": "{{count}}개 피처 미리보기: 포인트 {{points}}개, 라인 {{lines}}개, 폴리곤 {{polygons}}개.",
+      "preparingExport": "{{format}} 내보내기 준비 중…",
+      "exported": "{{format}} 내보내기용으로 {{count}}개 피처를 준비했습니다.",
+      "exportCancelled": "내보내기가 취소되었습니다.",
+      "exportError": "{{format}}을(를) 내보낼 수 없습니다: {{message}}",
       "noFeatures": "이 영역에서 일치하는 피처를 찾을 수 없습니다.",
       "error": "OSM 데이터를 다운로드할 수 없습니다: {{message}}",
       "added": "{{count}}개 피처를 지도에 추가했습니다."
@@ -10386,6 +10513,59 @@
       "retry": "재시도",
       "catalogFailed": "Ocean Data Platform 카탈로그를 불러올 수 없습니다: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "JAXA Earth API 정보",
+      "aboutText": "JAXA Earth API는 JAXA와 협력 기관의 지구 관측 데이터셋을 클라우드 최적화 GeoTIFF로 제공합니다. ALOS 고도 및 산림 지도, GSMaP 강수량, GCOM-C 및 MODIS 지표·해수면 온도, 식생, 에어로졸, 토양 수분 등이 있습니다. 계정이나 API 키가 필요하지 않습니다.",
+      "aboutAccess": "GeoLibre는 JAXA의 JavaScript API로 브라우저에서 타일을 그리며, 지도에 표시되는 해상도와 영역만 읽습니다.",
+      "home": "JAXA Earth API",
+      "terms": "이용 약관",
+      "attribution": "데이터 제공: JAXA. 일부 데이터셋은 다른 기관에서 제공되며 해당 기관의 약관이 적용됩니다. 재사용하기 전에 데이터셋 페이지를 확인하세요.",
+      "projectionLabel": "{{title}}(지원되지 않는 투영)",
+      "chooseDataset": "데이터셋 선택…",
+      "loading": "카탈로그를 불러오는 중…",
+      "recommendedGroup": "추천: {{group}}",
+      "allGroup": "모든 데이터셋",
+      "resolutionM": "약 {{value}} m",
+      "resolutionKm": "약 {{value}} km",
+      "timeRange": "{{start}} ~ {{end}}",
+      "present": "현재",
+      "climatology": "기후값",
+      "datasetPage": "데이터셋 세부 정보",
+      "dateFailed": "날짜를 변경할 수 없습니다: {{message}}",
+      "noOtherDate": "그 방향으로는 다른 날짜가 없습니다.",
+      "sampling": "색상 범위를 설정하기 위해 샘플을 읽는 중…",
+      "noValues": "샘플에 값이 없습니다. 최소값과 최대값을 직접 설정하세요.",
+      "sampleFailed": "{{name}}의 샘플을 읽을 수 없습니다: {{message}}",
+      "opening": "{{name}} 여는 중…",
+      "openFailed": "{{name}}을(를) 열 수 없습니다: {{message}}",
+      "band": "밴드",
+      "date": "날짜(UTC)",
+      "firstDate": "첫 날짜",
+      "previousDate": "이전 날짜",
+      "nextDate": "다음 날짜",
+      "latestDate": "최신 날짜",
+      "pickDate": "날짜로 이동",
+      "colormap": "컬러맵",
+      "rangeInvalid": "최소값은 최대값보다 작아야 합니다.",
+      "auto": "자동",
+      "autoTitle": "이 날짜의 데이터로 최소값과 최대값 설정",
+      "min": "최소",
+      "max": "최대",
+      "ownColors": "이 밴드에는 자체 색상이 있으므로 컬러맵이 적용되지 않습니다.",
+      "nearest": "최근접 이웃",
+      "bilinear": "쌍선형",
+      "resampling": "리샘플링",
+      "addToMap": "지도에 추가",
+      "addUnavailable": "이 지도에는 타일 레이어를 추가할 수 없습니다.",
+      "added": "{{name}}을(를) 추가했습니다. 이제 날짜나 색상을 변경하면 해당 레이어가 업데이트됩니다. 다른 사본을 유지하려면 다시 추가하세요.",
+      "searchPlaceholder": "제목, 위성, 키워드 검색…",
+      "search": "검색",
+      "dataset": "데이터셋",
+      "hint": "JAXA의 지구 관측 데이터셋을 둘러보고 지도에 추가합니다. 데이터셋, 밴드, 날짜를 선택한 다음 색상을 조정하세요.",
+      "catalogFailed": "JAXA Earth 카탈로그를 불러올 수 없습니다: {{message}}",
+      "retry": "재시도",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "{{name}} 저장소를 열 수 없습니다.",

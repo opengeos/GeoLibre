@@ -423,6 +423,28 @@
     "openWebApp": "فتح تطبيق GeoLibre على الويب"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "تعذّرت قراءة أرشيف IMDF هذا: {{reason}}",
+        "invalidJson": "{{file}} ليس ملف JSON صالحًا ({{detail}})",
+        "entryTooLarge": "حجم {{file}} أكبر من 256 ميغابايت",
+        "tooLarge": "يتجاوز مجموع ملفات GeoJSON فيه 512 ميغابايت"
+      },
+      "layer": {
+        "venue": "الموقع",
+        "footprint": "المساقط الأرضية",
+        "level": "الطوابق",
+        "section": "الأقسام",
+        "unit": "الوحدات",
+        "fixture": "التجهيزات الثابتة",
+        "detail": "التفاصيل",
+        "opening": "الفتحات",
+        "kiosk": "الأكشاك",
+        "geofence": "الأسوار الجغرافية",
+        "amenity": "المرافق",
+        "occupant": "الشاغلون"
+      }
+    },
     "title": "إضافة بيانات",
     "kind": {
       "xyz": {
@@ -460,6 +482,10 @@
       "landxml": {
         "label": "إضافة طبقة LandXML",
         "description": "استيراد أسطح TIN والمحاور الأفقية وبيانات المقاطع الطولية الوصفية ونقاط المسح من LandXML مع إعادة الإسقاط من نظام الإسناد الإحداثي المصدر."
+      },
+      "indoorgml": {
+        "label": "إضافة طبقة IndoorGML",
+        "description": "استيراد مبنى بصيغة OGC IndoorGML: غرف مبثوقة إلى ارتفاعاتها الحقيقية وشبكة التنقل، مرتبطة بمحدد الطوابق."
       },
       "georss": {
         "label": "إضافة طبقة GeoRSS",
@@ -887,6 +913,29 @@
       "crsPresetLabel": "أنظمة إحداثيات شائعة...",
       "crsHelp": "اتركه فارغًا فقط إذا كانت الإحداثيات بالفعل بخط الطول وخط العرض (WGS84). تُقرأ إحداثيات LandXML على أنها الإحداثي الشمالي والإحداثي الشرقي والارتفاع.",
       "detectedCoordinateSystem": "نظام إحداثيات LandXML: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "عنوان URL لملف IndoorGML",
+      "file": "ملف IndoorGML",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "بيانات ملف IndoorGML مفقودة.",
+      "readError": "تعذرت قراءة ملف IndoorGML هذا.",
+      "errorChooseFile": "اختر ملف IndoorGML.",
+      "errorUrl": "أدخل عنوان URL لملف IndoorGML.",
+      "errorTooLarge": "يتجاوز حجم ملف IndoorGML هذا 200 ميغابايت.",
+      "errorMissingCrs": "لا يحدد ملف IndoorGML هذا أي نظام إحداثيات، وإحداثياته ليست خطوط طول/عرض. أدخل نظام الإسناد الإحداثي الخاص به، أو اختر وضعه في مركز الخريطة.",
+      "summary": "{{cells}} خلية على {{floors}} طابق، و{{transitions}} حافة تنقل.",
+      "crs": "نظام الإسناد الإحداثي المصدر",
+      "crsPlaceholder": "مثال: EPSG:25832",
+      "crsPresetLabel": "أنظمة إحداثيات شائعة...",
+      "local": "إحداثيات محلية: ضع المبنى في مركز الخريطة",
+      "crsHelp": "لا تحتوي ملفات IndoorGML كثيرة على نظام إحداثيات. أدخل رمز EPSG لإحداثياتها، أو ضع النموذج في مركز الخريطة لعرضه إن كان بإطار مبنى محلي (بالأمتار من نقطة أصل).",
+      "layer": {
+        "cells": "خلايا {{name}}",
+        "transitions": "شبكة التنقل في {{name}}",
+        "states": "عُقد التنقل في {{name}}"
+      }
     },
     "georss": {
       "defaultName": "طبقة GeoRSS",
@@ -2419,6 +2468,12 @@
       "none": "بدون (بلا حواف)"
     },
     "mapBackground": "خلفية الخريطة",
+    "pageBackground": "خلفية الصفحة",
+    "panelTheme": "لوحات الخريطة",
+    "panelThemeOption": {
+      "light": "فاتح",
+      "dark": "داكن"
+    },
     "scaleLabel": "المقياس (1:N)",
     "scalePlaceholder": "مثال: 25000",
     "scalePresets": "إعدادات مسبقة…",
@@ -3244,6 +3299,7 @@
       },
       "mapCrs": "نظام الإسناد الإحداثي للخريطة",
       "mapCrsHint": "يرسم خريطة MapLibre مسطحة بنظام CRS آخر، مثل شبكة قطبية أو أسطوانية بسيطة للأرض أو القمر أو المريخ، مع خريطة أساس مقدَّمة بتلك الشبكة. لا يُعاد إسقاط البلاطات: تُرسَم طبقات GeoJSON وتراكبات الصور وطبقات التصدير من WMS أو ArcGIS (المطلوبة بنظام CRS هذا)، بينما لا تُرسَم طبقات XYZ والبلاطات المتجهة ومعظم طبقات الإضافات، ويُعطَّل الكرة الأرضية والتضاريس.",
+      "mapCrsLinkUnknown": "يطلب هذا الرابط نظام CRS للخريطة «{{crs}}»، وهو غير معروف أو غير مدعوم، لذا تم تجاهله.",
       "mapCrsDefault": "Web Mercator / الكرة الأرضية (افتراضي)",
       "mapCrsCustom": "رمز EPSG مخصص…",
       "mapCrsEpsg": "رمز EPSG",
@@ -3511,6 +3567,7 @@
       "osEnvField": "يُقرأ من متغير بيئة النظام {{name}}.",
       "osEnvPlaceholder": "معيّن في بيئة النظام لديك",
       "refreshModels": "تحديث قائمة النماذج",
+      "ollamaModelHint": "اكتب اسم أي نموذج مثبّت في Ollama مع الوسم (مثل qwen3:8b)، أو اختر أحد الاقتراحات. حدّث القائمة لرؤية النماذج المثبّتة.",
       "modelsFailedToLoad": "تعذّر تحميل النماذج: {{message}}",
       "modelsLoading": "جارٍ تحميل كتالوج النماذج…",
       "searchModels": "ابحث في أسماء النماذج أو معرّفاتها",
@@ -3938,6 +3995,7 @@
       "photos": "صور موسومة جغرافيًا",
       "gpx": "طبقة GPX",
       "landxml": "طبقة LandXML",
+      "indoorgml": "طبقة IndoorGML",
       "polyline": "خط متعدد مشفر",
       "mbtiles": "طبقة MBTiles",
       "xyz": "طبقة XYZ",
@@ -4537,6 +4595,7 @@
       "geolibre-sentinel2-explorer": "مستكشف Sentinel-2",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "خريطة أساس Carto Light",
       "geolibre-flight-simulator": "محاكي الطيران",
       "gods-eye-view": "منظور عين الإله",
@@ -4617,11 +4676,24 @@
       "addedOsmPbfLayers_other": "تمت إضافة {{count}} طبقة من {{name}}.",
       "osmPbfNoFeatures": "لم يتم العثور على معالم في {{name}}.",
       "couldNotParse": "تعذّر تحليل {{name}}: {{message}}",
-      "couldNotImport": "تعذّر استيراد الملفات."
+      "couldNotImport": "تعذّر استيراد الملفات.",
+      "openedByHandler": "تم الفتح بواسطة {{name}}.",
+      "handlerFailed": "تعذّر على {{name}} فتح الملفات المُفلتة: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "هل تريد حفظ التغييرات قبل الإغلاق؟",
       "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل إغلاق GeoLibre؟"
+    },
+    "remoteSave": {
+      "signInTitle": "سجّل الدخول لحفظ المشروع",
+      "signInDescriptionOAuth": "سجّل الدخول إلى {{shareHost}} لحفظ مشروعك على الخادم.",
+      "signInDescriptionToken": "يلزم رمز API شخصي لحفظ المشاريع على {{shareHost}}. أضف رمزك في الإعدادات للمتابعة.",
+      "signInButton": "تسجيل الدخول",
+      "openSettingsButton": "فتح الإعدادات",
+      "saveTitle": "حفظ المشروع على الخادم",
+      "saveDesc": "أدخل اسم المشروع. سيُحفظ المشروع كمشروع خاص على {{shareHost}}.",
+      "noProjectId": "لم يُرجع خادم المشاريع معرّف المشروع.",
+      "uploadedNotLinked": "تم حفظ «{{name}}» على {{shareHost}}، لكن الجلسة أو المشروع تغيّر أثناء الحفظ، لذا لم يُربط بهذه الخريطة. افتحه من المعرض لمواصلة العمل عليه."
     },
     "error": {
       "couldNotOpenProject": "تعذر فتح المشروع.",
@@ -8961,6 +9033,18 @@
     "noLayer": "حدد طبقة متجهة لحفظ الأنماط أو تطبيقها."
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "المبنى",
+      "overview": "نظرة عامة",
+      "fullModel": "النموذج الكامل",
+      "disciplinesHint": "اختر تخصصات نموذج المبنى وفئاته المراد رسمها.",
+      "drawnCount_zero": "تم رسم {{count}} طبقة فرعية.",
+      "drawnCount_one": "تم رسم {{count}} طبقة فرعية.",
+      "drawnCount_two": "تم رسم {{count}} طبقتين فرعيتين.",
+      "drawnCount_few": "تم رسم {{count}} طبقات فرعية.",
+      "drawnCount_many": "تم رسم {{count}} طبقةً فرعية.",
+      "drawnCount_other": "تم رسم {{count}} طبقة فرعية."
+    },
     "panelLabel": "نمط الطبقة",
     "panelLabelCollapsed": "نمط الطبقة (مطوي)",
     "heading": "النمط",
@@ -9303,6 +9387,17 @@
       "strokeWidthUnit": "وحدة عرض الحد الخارجي",
       "strokeWidthUnitPixels": "بكسل (ثابت على الشاشة)",
       "strokeWidthUnitMeters": "أمتار (يتغير مع مقياس الخريطة)",
+      "strokeOpacity": "عتامة الحد الخارجي",
+      "lineStyle": "نمط الخط",
+      "lineStyleSolid": "متصل",
+      "lineStyleDashed": "متقطع",
+      "lineStyleDotted": "منقّط",
+      "lineStyleDashDot": "شرطة ونقطة",
+      "lineStyleLongDash": "شرطة طويلة",
+      "lineStyleCustom": "مخصص",
+      "lineDashPattern": "نمط التقطيع",
+      "lineDashPatternHint": "أطوال الشرطات والفراغات بمضاعفات عرض الخط، مثل 4 2 1 2.",
+      "lineBlur": "تمويه الخط (px)",
       "textHaloColor": "لون هالة النص",
       "textHaloWidth": "عرض هالة النص",
       "schemeEqualInterval": "فترات متساوية",
@@ -9353,13 +9448,21 @@
       "heightProperty": "خاصية الارتفاع",
       "heightScale": "مقياس الارتفاع",
       "base": "ارتفاع القاعدة",
+      "baseProperty": "خاصية القاعدة",
+      "baseNone": "بلا (قاعدة مسطحة)",
+      "baseScale": "مقياس القاعدة",
+      "baseHint": "يبدأ كل معلم عند ارتفاع القاعدة + خاصية القاعدة × مقياس القاعدة، فتتراكب الطوابق انطلاقًا من حقل المستوى. عيّن ارتفاع الطابق لمنح كل معلم هذا السُّمك فوق قاعدته؛ وإلا فالارتفاع هو منسوب السقف ويجب أن يكون أعلى من القاعدة.",
+      "floorHeight": "ارتفاع الطابق",
+      "floorHeightHint": "عندما تكون القيمة أكبر من 0، يكون ارتفاع كل معلم هذا العدد من الأمتار فوق قاعدته وتُتجاهل إعدادات الارتفاع. القيمة 0 تستخدم الارتفاع كمنسوب للسقف.",
+      "baseExpression": "تعبير القاعدة",
       "apply": "تطبيق البثق ثلاثي الأبعاد",
       "footer": "تُطبَّق إعدادات البثق ثلاثي الأبعاد عند الحفظ."
     },
     "expressionLabels": {
       "style": "تعبير النمط",
       "color": "تعبير اللون",
-      "height": "تعبير الارتفاع"
+      "height": "تعبير الارتفاع",
+      "base": "تعبير القاعدة"
     },
     "expressionErrors": {
       "notArray": "يجب أن يكون {{label}} تعبير مصفوفة JSON.",
@@ -9648,6 +9751,33 @@
     "noTileFeatures": "لم تُحمَّل أي معالم بعد. حرّك الخريطة أو قرّبها إلى البيانات، ثم أعد فتح هذا القسم.",
     "viewportSampleHint": "تأتي القيم من البلاطات المحمّلة حاليًا، لذا تنمو القائمة كلما حرّكت الخريطة وقرّبتها.",
     "layerFilteredHint": "تُخفي تصفية سريعة بعض معالم هذه الطبقة."
+  },
+  "floorPicker": {
+    "title": "محدد الطوابق",
+    "short": "طابق",
+    "all": "الكل",
+    "allTitle": "إظهار كل الطوابق",
+    "levelTitle_zero": "الطابق {{level}} ({{count}} معلم)",
+    "levelTitle_one": "الطابق {{level}} ({{count}} معلم)",
+    "levelTitle_two": "الطابق {{level}} ({{count}} معلمان)",
+    "levelTitle_few": "الطابق {{level}} ({{count}} معالم)",
+    "levelTitle_many": "الطابق {{level}} ({{count}} معلمًا)",
+    "levelTitle_other": "الطابق {{level}} ({{count}} معلم)",
+    "below": "+ الأدنى",
+    "belowTitle": "إظهار الطوابق الواقعة أسفل الطابق المختار أيضًا",
+    "resize": "تغيير حجم قائمة الطوابق",
+    "resizeTitle": "اسحب لتغيير حجم قائمة الطوابق. انقر نقرًا مزدوجًا لإعادة التعيين.",
+    "heading": "محدد الطوابق",
+    "field": "حقل الطابق",
+    "off": "إيقاف",
+    "hint": "اختر الحقل الذي يحمل طابق كل معلم لإدراج هذه الطبقة في محدد الطوابق على الخريطة.",
+    "linkedHint_zero": "{{count}} طابق مُدرج في محدد الطوابق على الخريطة.",
+    "linkedHint_one": "{{count}} طابق مُدرج في محدد الطوابق على الخريطة.",
+    "linkedHint_two": "{{count}} طابقان مُدرجان في محدد الطوابق على الخريطة.",
+    "linkedHint_few": "{{count}} طوابق مُدرجة في محدد الطوابق على الخريطة.",
+    "linkedHint_many": "{{count}} طابقًا مُدرجًا في محدد الطوابق على الخريطة.",
+    "linkedHint_other": "{{count}} طابق مُدرج في محدد الطوابق على الخريطة.",
+    "noLevels": "لم يُعثر على طوابق في «{{field}}». اختر الحقل الذي يحمل رقمًا أو مستوى مثل «0» أو «-1;0»."
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "تعذّر على مُصدّر KML كتابة المعلم {{position}} لأن إحداثياته غير صالحة.",
@@ -10778,11 +10908,23 @@
       "north": "الشمال",
       "useMapExtent": "استخدام مدى الخريطة",
       "download": "تنزيل بيانات OSM",
+      "preview": "معاينة بيانات OSM",
+      "addToMap": "إضافة إلى الخريطة",
+      "exportGeoParquet": "حفظ GeoParquet",
       "ready": "اختر منطقة ونوع ميزة.",
       "exportGeoJson": "حفظ GeoJSON",
       "mapUnavailable": "مدى الخريطة غير متوفر بعد.",
       "extentApplied": "تم تطبيق مدى الخريطة.",
+      "invalidExtent": "أدخل صندوقًا محيطًا صالحًا.",
+      "zoomIn": "قرّب الخريطة حتى تصبح مساحة المنطقة {{limit}} درجة مربعة أو أقل.",
       "downloading": "تنزيل من OpenStreetMap...",
+      "previewing": "جارٍ تحميل معاينة OSM…",
+      "previewLayerName": "معاينة — {{name}}",
+      "previewed": "معاينة {{count}} ميزة: {{points}} نقطة، و{{lines}} خط، و{{polygons}} مضلع.",
+      "preparingExport": "جارٍ تجهيز تصدير {{format}}…",
+      "exported": "تم تجهيز {{count}} ميزة لتصدير {{format}}.",
+      "exportCancelled": "تم إلغاء التصدير.",
+      "exportError": "تعذّر تصدير {{format}}: {{message}}",
       "noFeatures": "لم تُعثر على أي ميزات تطابق في هذه المنطقة.",
       "error": "لم يتم تنزيل بيانات OSM: {{message}}",
       "added": "تم إضافة {{count}} ميزات إلى الخريطة."
@@ -11105,6 +11247,59 @@
       "retry": "إعادة المحاولة",
       "catalogFailed": "تعذّر تحميل كتالوج Ocean Data Platform: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "حول JAXA Earth API",
+      "aboutText": "تنشر JAXA Earth API مجموعات بيانات رصد الأرض من JAXA والوكالات الشريكة بصيغة GeoTIFF المحسّنة للسحابة: خرائط الارتفاع والغابات من ALOS، والهطول من GSMaP، ودرجة حرارة سطح اليابسة والبحر من GCOM-C وMODIS، والغطاء النباتي والهباء الجوي ورطوبة التربة وغيرها. لا حاجة إلى حساب أو مفتاح API.",
+      "aboutAccess": "يرسم GeoLibre البلاطات في المتصفح باستخدام واجهة JavaScript البرمجية من JAXA، فلا يقرأ إلا الدقة والمنطقة اللتين تعرضهما الخريطة.",
+      "home": "JAXA Earth API",
+      "terms": "شروط الاستخدام",
+      "attribution": "البيانات مقدَّمة من JAXA. بعض مجموعات البيانات مصدرها وكالات أخرى وتخضع لشروطها الخاصة؛ راجع صفحة مجموعة البيانات قبل إعادة الاستخدام.",
+      "projectionLabel": "{{title}} (الإسقاط غير مدعوم)",
+      "chooseDataset": "اختر مجموعة بيانات…",
+      "loading": "جارٍ تحميل الكتالوج…",
+      "recommendedGroup": "موصى به: {{group}}",
+      "allGroup": "كل مجموعات البيانات",
+      "resolutionM": "~{{value}} م",
+      "resolutionKm": "~{{value}} كم",
+      "timeRange": "{{start}} إلى {{end}}",
+      "present": "الآن",
+      "climatology": "مناخيات",
+      "datasetPage": "تفاصيل مجموعة البيانات",
+      "dateFailed": "تعذّر تغيير التاريخ: {{message}}",
+      "noOtherDate": "لا يوجد تاريخ آخر في هذا الاتجاه.",
+      "sampling": "جارٍ قراءة عينة لتعيين نطاق الألوان…",
+      "noValues": "لا تحتوي العينة على قيم؛ عيّن الأدنى والأقصى يدويًا.",
+      "sampleFailed": "تعذّرت قراءة عينة من {{name}}: {{message}}",
+      "opening": "جارٍ فتح {{name}}…",
+      "openFailed": "تعذّر فتح {{name}}: {{message}}",
+      "band": "النطاق",
+      "date": "التاريخ (UTC)",
+      "firstDate": "أول تاريخ",
+      "previousDate": "التاريخ السابق",
+      "nextDate": "التاريخ التالي",
+      "latestDate": "أحدث تاريخ",
+      "pickDate": "الانتقال إلى تاريخ",
+      "colormap": "خريطة الألوان",
+      "rangeInvalid": "يجب أن يكون الأدنى أقل من الأقصى.",
+      "auto": "تلقائي",
+      "autoTitle": "تعيين الأدنى والأقصى من البيانات في هذا التاريخ",
+      "min": "الأدنى",
+      "max": "الأقصى",
+      "ownColors": "يحمل هذا النطاق ألوانه الخاصة، لذا لا تنطبق عليه خريطة ألوان.",
+      "nearest": "أقرب جار",
+      "bilinear": "ثنائي الخطية",
+      "resampling": "إعادة أخذ العينات",
+      "addToMap": "إضافة إلى الخريطة",
+      "addUnavailable": "لا يمكن لهذه الخريطة إضافة طبقات بلاطات.",
+      "added": "تمت إضافة {{name}}. تغيير التاريخ أو الألوان الآن يحدّث تلك الطبقة؛ أضفها مرة أخرى للاحتفاظ بنسخة أخرى.",
+      "searchPlaceholder": "ابحث في العناوين والأقمار الصناعية والكلمات المفتاحية…",
+      "search": "بحث",
+      "dataset": "مجموعة البيانات",
+      "hint": "تصفّح مجموعات بيانات رصد الأرض من JAXA وأضفها إلى الخريطة. اختر مجموعة بيانات ونطاقًا وتاريخًا، ثم اضبط الألوان.",
+      "catalogFailed": "تعذّر تحميل كتالوج JAXA Earth: {{message}}",
+      "retry": "إعادة المحاولة",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "تعذّر فتح مستودع {{name}}.",

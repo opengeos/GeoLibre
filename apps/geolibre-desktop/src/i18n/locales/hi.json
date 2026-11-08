@@ -395,6 +395,28 @@
     "openWebApp": "GeoLibre वेब ऐप खोलें"
   },
   "addData": {
+    "imdf": {
+      "error": {
+        "unreadable": "यह IMDF आर्काइव नहीं पढ़ा जा सका: {{reason}}",
+        "invalidJson": "{{file}} मान्य JSON नहीं है ({{detail}})",
+        "entryTooLarge": "{{file}} 256 MB से बड़ी है",
+        "tooLarge": "इसकी GeoJSON फ़ाइलों का कुल आकार 512 MB से अधिक है"
+      },
+      "layer": {
+        "venue": "स्थल",
+        "footprint": "फ़ुटप्रिंट",
+        "level": "मंज़िलें",
+        "section": "खंड",
+        "unit": "इकाइयाँ",
+        "fixture": "फ़िक्स्चर",
+        "detail": "विवरण",
+        "opening": "द्वार",
+        "kiosk": "कियोस्क",
+        "geofence": "जियोफ़ेंस",
+        "amenity": "सुविधाएँ",
+        "occupant": "अधिभोगी"
+      }
+    },
     "title": "डेटा जोड़ें",
     "kind": {
       "xyz": {
@@ -432,6 +454,10 @@
       "landxml": {
         "label": "LandXML लेयर जोड़ें",
         "description": "स्रोत CRS से रीप्रोजेक्शन के साथ LandXML TIN सतहें, क्षैतिज संरेखण, ऊर्ध्वाधर प्रोफ़ाइल मेटाडेटा और सर्वेक्षण बिंदु आयात करें।"
+      },
+      "indoorgml": {
+        "label": "IndoorGML लेयर जोड़ें",
+        "description": "OGC IndoorGML भवन आयात करें: कमरे उनकी वास्तविक ऊँचाई तक एक्सट्रूड होते हैं और नेविगेशन नेटवर्क के साथ फ़्लोर पिकर से जुड़े रहते हैं।"
       },
       "georss": {
         "label": "GeoRSS लेयर जोड़ें",
@@ -831,6 +857,29 @@
       "crsPresetLabel": "सामान्य निर्देशांक प्रणालियाँ...",
       "crsHelp": "केवल तभी खाली छोड़ें जब निर्देशांक पहले से WGS84 देशांतर और अक्षांश में हों। LandXML निर्देशांक नॉर्थिंग, ईस्टिंग और ऊँचाई के रूप में पढ़े जाते हैं।",
       "detectedCoordinateSystem": "LandXML निर्देशांक प्रणाली: {{value}}"
+    },
+    "indoorgml": {
+      "defaultName": "IndoorGML",
+      "url": "IndoorGML URL",
+      "file": "IndoorGML फ़ाइल",
+      "urlPlaceholder": "https://example.com/building.gml",
+      "errorFileMissing": "IndoorGML फ़ाइल डेटा उपलब्ध नहीं है।",
+      "readError": "यह IndoorGML फ़ाइल नहीं पढ़ी जा सकी।",
+      "errorChooseFile": "एक IndoorGML फ़ाइल चुनें।",
+      "errorUrl": "एक IndoorGML URL दर्ज करें।",
+      "errorTooLarge": "यह IndoorGML फ़ाइल 200 MB से बड़ी है।",
+      "errorMissingCrs": "यह IndoorGML फ़ाइल कोई निर्देशांक प्रणाली नहीं बताती और इसके निर्देशांक longitude/latitude नहीं हैं। इसका CRS दर्ज करें, या इसे मानचित्र के केंद्र में रखना चुनें।",
+      "summary": "{{floors}} मंज़िलों पर {{cells}} सेल, {{transitions}} नेविगेशन किनारे।",
+      "crs": "स्रोत CRS",
+      "crsPlaceholder": "उदा. EPSG:25832",
+      "crsPresetLabel": "सामान्य निर्देशांक प्रणालियाँ...",
+      "local": "स्थानीय निर्देशांक: भवन को मानचित्र के केंद्र में रखें",
+      "crsHelp": "कई IndoorGML फ़ाइलों में कोई CRS नहीं होता। उनके निर्देशांकों का EPSG कोड दर्ज करें, या स्थानीय भवन फ़्रेम (किसी मूल बिंदु से मीटर) वाले मॉडल को देखने के लिए उसे मानचित्र के केंद्र में रखें।",
+      "layer": {
+        "cells": "{{name}} सेल",
+        "transitions": "{{name}} नेविगेशन नेटवर्क",
+        "states": "{{name}} नेविगेशन नोड"
+      }
     },
     "georss": {
       "defaultName": "GeoRSS लेयर",
@@ -2207,6 +2256,12 @@
       "none": "कोई नहीं (बिना बॉर्डर)"
     },
     "mapBackground": "मानचित्र पृष्ठभूमि",
+    "pageBackground": "पृष्ठ पृष्ठभूमि",
+    "panelTheme": "मानचित्र पैनल",
+    "panelThemeOption": {
+      "light": "लाइट",
+      "dark": "डार्क"
+    },
     "scaleLabel": "स्केल (1:N)",
     "scalePlaceholder": "जैसे 25000",
     "scalePresets": "प्रीसेट…",
@@ -3001,6 +3056,7 @@
       },
       "mapCrs": "मानचित्र निर्देशांक संदर्भ प्रणाली",
       "mapCrsHint": "MapLibre मानचित्र को किसी अन्य CRS में समतल रूप से बनाता है, जैसे पृथ्वी, चंद्रमा या मंगल का ध्रुवीय या सरल-बेलनाकार ग्रिड, उसी ग्रिड में दिए गए बेसमैप के साथ। टाइलें रीप्रोजेक्ट नहीं की जातीं: GeoJSON लेयर, इमेज ओवरले और WMS या ArcGIS एक्सपोर्ट लेयर (CRS में अनुरोधित) बनाई जाती हैं, जबकि XYZ, वेक्टर टाइल और अधिकांश प्लगइन लेयर नहीं बनाई जातीं, और ग्लोब तथा भू-भाग बंद रहते हैं।",
+      "mapCrsLinkUnknown": "यह लिंक मानचित्र CRS \"{{crs}}\" माँगता है, जो अज्ञात या असमर्थित है, इसलिए इसे अनदेखा किया गया।",
       "mapCrsDefault": "Web Mercator / ग्लोब (डिफ़ॉल्ट)",
       "mapCrsCustom": "कस्टम EPSG कोड…",
       "mapCrsEpsg": "EPSG कोड",
@@ -3264,6 +3320,7 @@
       "osEnvField": "आपके सिस्टम एनवायरनमेंट वेरिएबल {{name}} से पढ़ें।",
       "osEnvPlaceholder": "आपके सिस्टम एनवायरनमेंट में सेट है",
       "refreshModels": "मॉडल सूची ताज़ा करें",
+      "ollamaModelHint": "Ollama में इंस्टॉल किसी भी मॉडल का नाम टैग सहित लिखें (उदाहरण के लिए qwen3:8b), या कोई सुझाव चुनें। इंस्टॉल किए गए मॉडल देखने के लिए सूची रीफ़्रेश करें।",
       "modelsFailedToLoad": "मॉडल लोड नहीं हो सके: {{message}}",
       "modelsLoading": "मॉडल कैटलॉग लोड हो रहा है…",
       "searchModels": "मॉडल के नाम या ID खोजें",
@@ -3687,6 +3744,7 @@
       "photos": "जियोटैग की गई तस्वीरें",
       "gpx": "GPX लेयर",
       "landxml": "LandXML लेयर",
+      "indoorgml": "IndoorGML लेयर",
       "polyline": "एन्कोडेड पॉलीलाइन",
       "mbtiles": "MBTiles लेयर",
       "xyz": "XYZ लेयर",
@@ -4258,6 +4316,7 @@
       "geolibre-sentinel2-explorer": "Sentinel-2 एक्सप्लोरर",
       "geolibre-ocean-data-platform": "Ocean Data Platform",
       "geolibre-dynamical": "Dynamical",
+      "geolibre-jaxa-earth": "JAXA Earth",
       "carto-light": "Carto Light बेसमैप",
       "geolibre-flight-simulator": "फ़्लाइट सिम्युलेटर",
       "gods-eye-view": "ईश्वरीय दृष्टि",
@@ -4318,11 +4377,24 @@
       "addedOsmPbfLayers_other": "{{name}} से {{count}} लेयर जोड़ी गईं।",
       "osmPbfNoFeatures": "{{name}} में कोई फ़ीचर नहीं मिला।",
       "couldNotParse": "{{name}} पार्स नहीं किया जा सका: {{message}}",
-      "couldNotImport": "फ़ाइलें आयात नहीं की जा सकीं।"
+      "couldNotImport": "फ़ाइलें आयात नहीं की जा सकीं।",
+      "openedByHandler": "{{name}} द्वारा खोला गया।",
+      "handlerFailed": "{{name}} छोड़ी गई फ़ाइलें नहीं खोल सका: {{message}}"
     },
     "windowClose": {
       "savePromptTitle": "बंद करने से पहले बदलाव सहेजें?",
       "savePromptDescription": "वर्तमान प्रोजेक्ट में बिना सहेजे गए बदलाव हैं। GeoLibre बंद करने से पहले उन्हें सहेजें?"
+    },
+    "remoteSave": {
+      "signInTitle": "प्रोजेक्ट सहेजने के लिए साइन इन करें",
+      "signInDescriptionOAuth": "अपना प्रोजेक्ट सर्वर पर सहेजने के लिए {{shareHost}} में साइन इन करें।",
+      "signInDescriptionToken": "{{shareHost}} पर प्रोजेक्ट सहेजने के लिए एक व्यक्तिगत API टोकन आवश्यक है। जारी रखने के लिए सेटिंग्स में अपना टोकन जोड़ें।",
+      "signInButton": "साइन इन करें",
+      "openSettingsButton": "सेटिंग्स खोलें",
+      "saveTitle": "प्रोजेक्ट सर्वर पर सहेजें",
+      "saveDesc": "प्रोजेक्ट का नाम दर्ज करें। प्रोजेक्ट {{shareHost}} पर एक निजी प्रोजेक्ट के रूप में सहेजा जाएगा।",
+      "noProjectId": "प्रोजेक्ट सर्वर ने प्रोजेक्ट ID नहीं लौटाई।",
+      "uploadedNotLinked": "\"{{name}}\" को {{shareHost}} पर सहेजा गया, लेकिन सहेजने के दौरान सत्र या प्रोजेक्ट बदल गया, इसलिए इसे इस मानचित्र से नहीं जोड़ा गया। इस पर काम जारी रखने के लिए इसे गैलरी से खोलें।"
     },
     "error": {
       "couldNotOpenProject": "प्रोजेक्ट नहीं खोला जा सका।",
@@ -8446,6 +8518,14 @@
     "noLayer": "स्टाइल सहेजने या लागू करने के लिए एक वेक्टर लेयर चुनें।"
   },
   "style": {
+    "i3sBuilding": {
+      "heading": "भवन",
+      "overview": "अवलोकन",
+      "fullModel": "पूरा मॉडल",
+      "disciplinesHint": "भवन मॉडल के वे विषय और श्रेणियाँ चुनें जिन्हें बनाना है।",
+      "drawnCount_one": "{{count}} सबलेयर बनाई गई।",
+      "drawnCount_other": "{{count}} सबलेयर बनाई गईं।"
+    },
     "panelLabel": "लेयर शैली",
     "panelLabelCollapsed": "लेयर शैली (संक्षिप्त)",
     "heading": "शैली",
@@ -8776,6 +8856,17 @@
       "strokeWidthUnit": "स्ट्रोक चौड़ाई इकाई",
       "strokeWidthUnitPixels": "पिक्सेल (स्क्रीन पर स्थिर)",
       "strokeWidthUnitMeters": "मीटर (मानचित्र के साथ स्केल)",
+      "strokeOpacity": "स्ट्रोक अपारदर्शिता",
+      "lineStyle": "लाइन शैली",
+      "lineStyleSolid": "ठोस",
+      "lineStyleDashed": "डैश्ड",
+      "lineStyleDotted": "बिंदुदार",
+      "lineStyleDashDot": "डैश-डॉट",
+      "lineStyleLongDash": "लंबा डैश",
+      "lineStyleCustom": "कस्टम",
+      "lineDashPattern": "डैश पैटर्न",
+      "lineDashPatternHint": "स्ट्रोक चौड़ाई के गुणकों में डैश और अंतराल की लंबाई, जैसे 4 2 1 2।",
+      "lineBlur": "लाइन धुंधलापन (px)",
       "textHaloColor": "टेक्स्ट हेलो रंग",
       "textHaloWidth": "टेक्स्ट हेलो चौड़ाई",
       "schemeEqualInterval": "समान अंतराल",
@@ -8826,13 +8917,21 @@
       "heightProperty": "ऊंचाई प्रॉपर्टी",
       "heightScale": "ऊंचाई स्केल",
       "base": "आधार ऊंचाई",
+      "baseProperty": "आधार प्रॉपर्टी",
+      "baseNone": "कोई नहीं (समतल आधार)",
+      "baseScale": "आधार स्केल",
+      "baseHint": "प्रत्येक फ़ीचर आधार ऊंचाई + आधार प्रॉपर्टी × आधार स्केल से शुरू होता है, ताकि मंज़िलें किसी स्तर फ़ील्ड के अनुसार एक के ऊपर एक रखी जाएँ। हर फ़ीचर को उसके आधार पर उतनी मोटाई देने के लिए मंज़िल की ऊंचाई सेट करें; अन्यथा ऊंचाई छत की ऊँचाई मानी जाती है और उसे आधार से ऊपर होना चाहिए।",
+      "floorHeight": "मंज़िल की ऊंचाई",
+      "floorHeightHint": "0 से अधिक होने पर, प्रत्येक फ़ीचर अपने आधार के ऊपर इतने मीटर ऊँचा होता है और ऊंचाई सेटिंग्स अनदेखी की जाती हैं। 0 होने पर ऊंचाई को छत की ऊँचाई माना जाता है।",
+      "baseExpression": "आधार एक्सप्रेशन",
       "apply": "3D एक्सट्रूज़न लागू करें",
       "footer": "3D एक्सट्रूज़न सेटिंग्स सहेजने पर लागू होती हैं।"
     },
     "expressionLabels": {
       "style": "शैली एक्सप्रेशन",
       "color": "रंग एक्सप्रेशन",
-      "height": "ऊंचाई एक्सप्रेशन"
+      "height": "ऊंचाई एक्सप्रेशन",
+      "base": "आधार एक्सप्रेशन"
     },
     "expressionErrors": {
       "notArray": "{{label}} एक JSON array एक्सप्रेशन होना चाहिए।",
@@ -9117,6 +9216,25 @@
     "noTileFeatures": "अभी कोई फ़ीचर लोड नहीं हुआ है। मानचित्र को डेटा तक खिसकाएँ या ज़ूम करें, फिर यह अनुभाग दोबारा खोलें।",
     "viewportSampleHint": "मान अभी लोड हुई टाइलों से आते हैं, इसलिए मानचित्र खिसकाने और ज़ूम करने पर सूची बढ़ती जाती है।",
     "layerFilteredHint": "एक त्वरित फ़िल्टर इस लेयर के कुछ फ़ीचर छिपा रहा है।"
+  },
+  "floorPicker": {
+    "title": "फ़्लोर पिकर",
+    "short": "मंज़िल",
+    "all": "सभी",
+    "allTitle": "सभी मंज़िलें दिखाएँ",
+    "levelTitle_one": "मंज़िल {{level}} ({{count}} फ़ीचर)",
+    "levelTitle_other": "मंज़िल {{level}} ({{count}} फ़ीचर)",
+    "below": "+ नीचे",
+    "belowTitle": "चुनी गई मंज़िल के नीचे की मंज़िलें भी दिखाएँ",
+    "resize": "मंज़िल सूची का आकार बदलें",
+    "resizeTitle": "मंज़िल सूची का आकार बदलने के लिए खींचें। रीसेट करने के लिए डबल-क्लिक करें।",
+    "heading": "फ़्लोर पिकर",
+    "field": "मंज़िल फ़ील्ड",
+    "off": "बंद",
+    "hint": "इस लेयर को मानचित्र पर फ़्लोर पिकर में सूचीबद्ध करने के लिए वह फ़ील्ड चुनें जिसमें प्रत्येक फ़ीचर की मंज़िल हो।",
+    "linkedHint_one": "मानचित्र पर फ़्लोर पिकर में {{count}} मंज़िल सूचीबद्ध है।",
+    "linkedHint_other": "मानचित्र पर फ़्लोर पिकर में {{count}} मंज़िलें सूचीबद्ध हैं।",
+    "noLevels": "\"{{field}}\" में कोई मंज़िल नहीं मिली। वह फ़ील्ड चुनें जिसमें कोई संख्या या \"0\" या \"-1;0\" जैसा स्तर हो।"
   },
   "vectorExport": {
     "invalidKmlCoordinatesByPosition": "KML निर्यात फ़ीचर {{position}} नहीं लिख सका क्योंकि उसके निर्देशांक अमान्य हैं।",
@@ -10203,11 +10321,23 @@
       "north": "उत्तर",
       "useMapExtent": "मैप एक्सटेंट का उपयोग करें",
       "download": "ओएसएम डेटा डाउनलोड करें",
+      "preview": "OSM डेटा का पूर्वावलोकन करें",
+      "addToMap": "मैप में जोड़ें",
+      "exportGeoParquet": "GeoParquet सहेजें",
       "ready": "क्षेत्र और फीचर प्रकार का चयन करें।",
       "exportGeoJson": "GeoJSON सहेजें",
       "mapUnavailable": "मैप एक्सटेंट अभी उपलब्ध नहीं है।",
       "extentApplied": "मैप एक्सटेंट लागू किया गया।",
+      "invalidExtent": "एक मान्य बाउंडिंग बॉक्स दर्ज करें।",
+      "zoomIn": "तब तक ज़ूम इन करें जब तक मैप क्षेत्र {{limit}} वर्ग डिग्री या उससे कम न हो जाए।",
       "downloading": "ओपन स्ट्रीट मैप से डाउनलोड कर रहे हैं…",
+      "previewing": "OSM पूर्वावलोकन लोड हो रहा है…",
+      "previewLayerName": "पूर्वावलोकन — {{name}}",
+      "previewed": "{{count}} फीचर का पूर्वावलोकन: {{points}} पॉइंट, {{lines}} लाइन, {{polygons}} पॉलीगॉन।",
+      "preparingExport": "{{format}} निर्यात तैयार किया जा रहा है…",
+      "exported": "{{format}} निर्यात के लिए {{count}} फीचर तैयार किए गए।",
+      "exportCancelled": "निर्यात रद्द किया गया।",
+      "exportError": "{{format}} निर्यात नहीं किया जा सका: {{message}}",
       "noFeatures": "इस क्षेत्र में मेल नहीं खाते फीचर नहीं मिले।",
       "error": "ओएसएम डेटा डाउनलोड नहीं किया जा सकता: {{message}}",
       "added": "{{count}} फीचर मैप में जोड़े गए।"
@@ -10530,6 +10660,59 @@
       "retry": "पुनः प्रयास करें",
       "catalogFailed": "Ocean Data Platform कैटलॉग लोड नहीं हो सका: {{message}}",
       "title": "Ocean Data Platform"
+    },
+    "geolibre-jaxa-earth": {
+      "aboutSummary": "JAXA Earth API के बारे में",
+      "aboutText": "JAXA Earth API, JAXA और साझेदार एजेंसियों के पृथ्वी अवलोकन डेटासेट को क्लाउड-अनुकूलित GeoTIFF के रूप में प्रकाशित करता है: ALOS ऊँचाई और वन मानचित्र, GSMaP वर्षा, GCOM-C और MODIS भूमि व समुद्र सतह तापमान, वनस्पति, एरोसोल, मृदा नमी और बहुत कुछ। किसी खाते या API कुंजी की आवश्यकता नहीं है।",
+      "aboutAccess": "GeoLibre ब्राउज़र में JAXA के JavaScript API से टाइलें बनाता है और केवल वही रिज़ॉल्यूशन और क्षेत्र पढ़ता है जो मानचित्र दिखाता है।",
+      "home": "JAXA Earth API",
+      "terms": "उपयोग की शर्तें",
+      "attribution": "डेटा JAXA के सौजन्य से। कुछ डेटासेट अन्य एजेंसियों से आते हैं और उनकी अपनी शर्तें लागू होती हैं; पुनः उपयोग से पहले डेटासेट का पेज देखें।",
+      "projectionLabel": "{{title}} (प्रक्षेपण समर्थित नहीं)",
+      "chooseDataset": "एक डेटासेट चुनें…",
+      "loading": "कैटलॉग लोड हो रहा है…",
+      "recommendedGroup": "अनुशंसित: {{group}}",
+      "allGroup": "सभी डेटासेट",
+      "resolutionM": "~{{value}} मी",
+      "resolutionKm": "~{{value}} किमी",
+      "timeRange": "{{start}} से {{end}}",
+      "present": "वर्तमान",
+      "climatology": "जलवायु-विज्ञान",
+      "datasetPage": "डेटासेट विवरण",
+      "dateFailed": "तारीख नहीं बदली जा सकी: {{message}}",
+      "noOtherDate": "उस दिशा में कोई अन्य तारीख नहीं है।",
+      "sampling": "रंग सीमा सेट करने के लिए नमूना पढ़ा जा रहा है…",
+      "noValues": "नमूने में कोई मान नहीं है; न्यूनतम और अधिकतम हाथ से सेट करें।",
+      "sampleFailed": "{{name}} का नमूना नहीं पढ़ा जा सका: {{message}}",
+      "opening": "{{name}} खोला जा रहा है…",
+      "openFailed": "{{name}} नहीं खोला जा सका: {{message}}",
+      "band": "बैंड",
+      "date": "तारीख (UTC)",
+      "firstDate": "पहली तारीख",
+      "previousDate": "पिछली तारीख",
+      "nextDate": "अगली तारीख",
+      "latestDate": "नवीनतम तारीख",
+      "pickDate": "तारीख पर जाएँ",
+      "colormap": "कलरमैप",
+      "rangeInvalid": "न्यूनतम, अधिकतम से कम होना चाहिए।",
+      "auto": "स्वतः",
+      "autoTitle": "इस तारीख के डेटा से न्यूनतम और अधिकतम सेट करें",
+      "min": "न्यूनतम",
+      "max": "अधिकतम",
+      "ownColors": "इस बैंड के अपने रंग हैं, इसलिए कोई कलरमैप लागू नहीं होता।",
+      "nearest": "निकटतम पड़ोसी",
+      "bilinear": "द्विरेखीय",
+      "resampling": "पुनः नमूनाकरण",
+      "addToMap": "मानचित्र में जोड़ें",
+      "addUnavailable": "यह मानचित्र टाइल लेयर नहीं जोड़ सकता।",
+      "added": "{{name}} जोड़ा गया। अब तारीख या रंग बदलने से वही लेयर अपडेट होगी; एक और प्रति रखने के लिए फिर से जोड़ें।",
+      "searchPlaceholder": "शीर्षक, उपग्रह, कीवर्ड खोजें…",
+      "search": "खोजें",
+      "dataset": "डेटासेट",
+      "hint": "JAXA के पृथ्वी अवलोकन डेटासेट ब्राउज़ करें और उन्हें मानचित्र में जोड़ें। एक डेटासेट, बैंड और तारीख चुनें, फिर रंग समायोजित करें।",
+      "catalogFailed": "JAXA Earth कैटलॉग लोड नहीं हो सका: {{message}}",
+      "retry": "पुनः प्रयास करें",
+      "title": "JAXA Earth"
     },
     "geolibre-dynamical": {
       "openFailed": "{{name}} रिपॉज़िटरी खोली नहीं जा सकी।",
