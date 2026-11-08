@@ -44,7 +44,6 @@ describe("readBodyBytesWithCap", () => {
     assert.deepEqual(Array.from(bytes), [7, 8, 9]);
   });
 
-
   it("falls back to arrayBuffer when the response has no stream", async () => {
     const response = {
       headers: new Headers(),
