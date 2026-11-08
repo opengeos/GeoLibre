@@ -35,14 +35,21 @@ export async function readBodyBytesWithCap(
   }
   const reader = response.body?.getReader();
   if (!reader) {
-    // No stream available (some environments/test mocks). arrayBuffer() lets us
-    // measure the byte length before returning, so an oversized body is
-    // rejected without building the full result.
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > maxBytes) {
+    // No stream available: some environments and test doubles expose only the
+    // convenience readers. Prefer bytes, then fall back to text so the ceiling
+    // is still enforced either way.
+    if (typeof response.arrayBuffer === "function") {
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > maxBytes) {
+        throw tooLarge();
+      }
+      return new Uint8Array(buffer);
+    }
+    const bytes = new TextEncoder().encode(await response.text());
+    if (bytes.byteLength > maxBytes) {
       throw tooLarge();
     }
-    return new Uint8Array(buffer);
+    return bytes;
   }
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
