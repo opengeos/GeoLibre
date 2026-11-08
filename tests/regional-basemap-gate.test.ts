@@ -223,9 +223,20 @@ describe("regional-basemap deployment switch", () => {
     for (const value of ["1", "true", " TRUE "]) {
       assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), true);
     }
-    for (const value of ["0", "false", "", "  ", "yes", "on"]) {
+    for (const value of ["0", "false", " FALSE ", "", "  "]) {
       assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), false);
     }
+  });
+
+  it("fails closed with a warning on an unrecognised value", (t) => {
+    const warn = t.mock.method(console, "warn", () => {});
+    for (const value of ["yes", "on", "2"]) {
+      assert.equal(regionalBasemapsDisabled({ [DISABLE_REGIONAL_BASEMAPS_ENV]: value }, {}), true);
+    }
+    assert.equal(warn.mock.callCount(), 3);
+  });
+
+  it("prefers the deployment env over the build env", () => {
     assert.equal(regionalBasemapsDisabled({}, { [DISABLE_REGIONAL_BASEMAPS_ENV]: "1" }), true);
     // A deployment "0" beats a build-time "1".
     assert.equal(

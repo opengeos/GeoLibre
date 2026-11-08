@@ -296,9 +296,11 @@ the map shows the default basemap until the user picks **Load** or
 **Use default basemap**. A basemap the user picks in the UI (or that a plugin,
 script or the assistant sets on their behalf, since that is code the user
 installed or ran), a new project, a template, an undo step, a duplicate, and a
-project loaded by an embedding host (the Jupyter widget, the iframe embed API,
-or a live collaboration session) do not ask. Only a regional basemap the user
-picked or accepted is remembered for the next launch.
+project loaded by a trusted host (the Jupyter widget, the iframe embed API from
+an `embedOrigins` origin, or a live collaboration session) do not ask. Other
+framing pages, such as one embedding an `?embed=1` export or a Dash app, get the
+prompt like any opened project. Only a regional basemap the user picked or
+accepted is remembered for the next launch.
 
 `basemaps.regional: false` (or `GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` on Docker,
 or `VITE_GEOLIBRE_DISABLE_REGIONAL_BASEMAPS=1` at build time) removes them
@@ -311,6 +313,11 @@ entirely:
   a short notice saying why;
 - plugins, scripts and the assistant cannot set one either, and a regional
   basemap remembered from an earlier session is not restored.
+
+The prompt and the switch cover the basemap (the project's `basemapStyleUrl`).
+Raster basemaps stacked from the Basemaps control, and any XYZ or WMS layer, are
+ordinary project layers: a project can still point one at any tile server, in
+mainland China or elsewhere, the same way it can name any other data source.
 
 Like the rest of the policy this is client-side: it stops GeoLibre from
 requesting those tiles, not a modified client.

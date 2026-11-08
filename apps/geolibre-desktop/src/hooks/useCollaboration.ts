@@ -80,7 +80,7 @@ export function useCollaboration(
   // the deployment disabled regional basemaps. Outgoing snapshots carry it back
   // unchanged, so an unrelated edit from this client does not switch every
   // unrestricted peer to the default basemap.
-  const sharedBasemapRef = useRef<string | null>(null);
+  const sharedBasemapRef = useRef<{ styleUrl: string; choiceGeneration: number } | null>(null);
   const revRef = useRef(0);
   const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
@@ -150,8 +150,9 @@ export function useCollaboration(
    * Put the session's blocked regional basemap back into an outgoing snapshot.
    *
    * While this client shows the default basemap in its place, the snapshot
-   * carries the shared one instead. Once the local basemap is anything other
-   * than the fallback (the user picked one), the shared one is forgotten and
+   * carries the shared one instead. Once the user picks a basemap locally
+   * (the store's `basemapChoiceGeneration` moved, which also catches a
+   * deliberate pick of the default basemap), the shared one is forgotten and
    * the user's choice goes out.
    *
    * @param project - The snapshot built from the local store.
@@ -160,11 +161,11 @@ export function useCollaboration(
   const withSharedBasemap = (project: GeoLibreProject): GeoLibreProject => {
     const shared = sharedBasemapRef.current;
     if (!shared) return project;
-    if (project.basemapStyleUrl !== DEFAULT_BASEMAP) {
+    if (useAppStore.getState().basemapChoiceGeneration !== shared.choiceGeneration) {
       sharedBasemapRef.current = null;
       return project;
     }
-    return { ...project, basemapStyleUrl: shared };
+    return { ...project, basemapStyleUrl: shared.styleUrl };
   };
 
   const sendSnapshot = async (): Promise<void> => {
@@ -213,7 +214,9 @@ export function useCollaboration(
       DEFAULT_BASEMAP,
       true,
     );
-    sharedBasemapRef.current = gated.held ? merged.basemapStyleUrl : null;
+    sharedBasemapRef.current = gated.held
+      ? { styleUrl: merged.basemapStyleUrl, choiceGeneration: state.basemapChoiceGeneration }
+      : null;
     if (initial) {
       useAppStore.getState().loadProject(merged, null, {
         rememberRecent: false,

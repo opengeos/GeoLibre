@@ -132,17 +132,17 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
           typeof message.project === "string"
             ? parseProject(message.project)
             : parseProject(JSON.stringify(message.project));
-        // The framing host chose this basemap, and a held fallback would echo
-        // back to it (to Python, for the widget) as a basemap change, so skip
-        // the regional-basemap prompt. This trusts whatever frames the app, the
-        // same boundary as the rest of this bridge (see embedHost.ts): the
-        // bridge only runs for a same-origin parent or an explicit `?embed=1`,
-        // which must be served from a trusted context, and
-        // GEOLIBRE_EMBED_ORIGINS narrows it further. A deployment block still
-        // applies.
-        useAppStore
-          .getState()
-          .loadProject(project, null, { rememberRecent: false, trustBasemap: true });
+        // The co-located Jupyter widget (`trustedWidget`) is the notebook's own
+        // code choosing the basemap, and a held fallback would echo back to
+        // Python as a basemap change, so it skips the regional-basemap prompt.
+        // Any other host (a Dash page, a page framing a `?embed=1` export) is
+        // showing the map to someone else, so its viewers are asked. The flag
+        // is self-declared (see above), so this narrows who skips the prompt
+        // rather than enforcing it. A deployment block applies either way.
+        useAppStore.getState().loadProject(project, null, {
+          rememberRecent: false,
+          trustBasemap: trustedWidget,
+        });
         // Suppress the snapshot this load would otherwise echo. loadProject is
         // synchronous, so cache the post-normalisation project (merged styles,
         // computed defaults) rather than the raw input; otherwise the first

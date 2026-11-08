@@ -16,19 +16,31 @@ export const DISABLE_REGIONAL_BASEMAPS_ENV = "VITE_GEOLIBRE_DISABLE_REGIONAL_BAS
 // The same spellings the Docker entrypoint accepts, so a build-time value and a
 // runtime one mean the same thing.
 const TRUE_VALUES = new Set(["1", "true"]);
+const FALSE_VALUES = new Set(["0", "false"]);
 
 /**
  * Whether the deployment disabled the regional basemaps.
  *
+ * An unrecognised non-blank value (a typo such as `yes` in a build-time env,
+ * which the Docker entrypoint would have refused) fails closed with a console
+ * warning: someone set the switch, so they most likely meant to disable them.
+ *
  * @param deploymentEnv - Runtime env (with the policy overlaid); defaults to the
  *   value on `window`.
  * @param buildEnv - Build-time env; defaults to the allowlisted build env.
- * @returns True when the first non-blank value is `1` or `true` (any case).
+ * @returns False when unset or `0`/`false` (any case), otherwise true.
  */
 export function regionalBasemapsDisabled(deploymentEnv?: EnvRecord, buildEnv?: EnvRecord): boolean {
   // Undefined arguments fall through to readDeploymentEnvValue's defaults.
   const value = readDeploymentEnvValue(DISABLE_REGIONAL_BASEMAPS_ENV, deploymentEnv, buildEnv);
-  return value !== undefined && TRUE_VALUES.has(value.trim().toLowerCase());
+  if (value === undefined) return false;
+  const normalized = value.trim().toLowerCase();
+  if (TRUE_VALUES.has(normalized)) return true;
+  if (FALSE_VALUES.has(normalized)) return false;
+  console.warn(
+    `[deployment] ${DISABLE_REGIONAL_BASEMAPS_ENV}=${JSON.stringify(value)} is not 1/true or 0/false; disabling regional basemaps.`,
+  );
+  return true;
 }
 
 /**
