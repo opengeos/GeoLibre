@@ -49,7 +49,6 @@ import {
   OPEN_SKY_STATES_UPSTREAM,
   OVERPASS_API_UPSTREAM,
   OVERPASS_API_FALLBACK_UPSTREAM,
-  OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
   ONTARIO_CCTV_CATALOG_UPSTREAM,
   ONTARIO_CCTV_FRAME_UPSTREAM,
   TRANSIT_UPSTREAMS,
@@ -310,9 +309,11 @@ const CORS_HEADERS: Record<string, string> = {
   "access-control-expose-headers": "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
 };
+const OVERPASS_UPSTREAM_HEADER = "x-overpass-upstream";
 const OVERPASS_CORS_HEADERS: Record<string, string> = {
   ...CORS_HEADERS,
   "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-expose-headers": `${CORS_HEADERS["access-control-expose-headers"]}, ${OVERPASS_UPSTREAM_HEADER}`,
 };
 
 /** `/pmtiles/<name>.pmtiles` range-proxies the Protomaps daily planet builds,
@@ -649,13 +650,10 @@ async function handleOverpass(request: Request): Promise<Response> {
     });
   }
   let originResponse: Response | null = null;
+  let answeringUpstream: string | null = null;
   let upstreamTimeout: ReturnType<typeof setTimeout> | null = null;
   const upstreamDeadline = Date.now() + OVERPASS_UPSTREAM_TIMEOUT_MS;
-  const upstreams = [
-    OVERPASS_API_UPSTREAM,
-    OVERPASS_API_FALLBACK_UPSTREAM,
-    OVERPASS_API_SECOND_FALLBACK_UPSTREAM,
-  ];
+  const upstreams = [OVERPASS_API_UPSTREAM, OVERPASS_API_FALLBACK_UPSTREAM];
   for (const upstream of upstreams) {
     const remainingMs = upstreamDeadline - Date.now();
     if (remainingMs <= 0) break;
@@ -684,6 +682,7 @@ async function handleOverpass(request: Request): Promise<Response> {
       clearTimeout(upstreamTimeout);
       const bodyTimeoutMs = Math.max(1, upstreamDeadline - Date.now());
       upstreamTimeout = setTimeout(() => upstreamController.abort(), bodyTimeoutMs);
+      answeringUpstream = upstream;
       break;
     }
     clearTimeout(upstreamTimeout);
@@ -691,16 +690,22 @@ async function handleOverpass(request: Request): Promise<Response> {
     await originResponse?.body?.cancel().catch(() => undefined);
     originResponse = null;
   }
-  if (!originResponse) {
-    return new Response("Bad Gateway", {
-      status: 502,
-      headers: OVERPASS_CORS_HEADERS,
-    });
+  if (!originResponse || !answeringUpstream) {
+    return new Response(
+      "Overpass is busy: every upstream instance failed or timed out. Try again later.",
+      {
+        status: 502,
+        headers: OVERPASS_CORS_HEADERS,
+      },
+    );
   }
   if (!originResponse.body && upstreamTimeout) clearTimeout(upstreamTimeout);
   const headers = new Headers(OVERPASS_CORS_HEADERS);
   headers.set("content-type", originResponse.headers.get("content-type") ?? "application/json");
   headers.set("cache-control", "no-store");
+  // Name the instance that answered so clients and reviewers can see where the
+  // query (and its area of interest) went.
+  headers.set(OVERPASS_UPSTREAM_HEADER, new URL(answeringUpstream).host);
   const responseBody = originResponse.body
     ? streamWithTimeoutCleanup(originResponse.body, upstreamTimeout!)
     : null;
