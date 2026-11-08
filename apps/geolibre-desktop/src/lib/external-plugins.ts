@@ -837,7 +837,6 @@ let currentAdditionalPluginDirectories: string[] = [];
 /** Deadline for one URL asset read, covering the body as well as the headers. */
 const PLUGIN_ASSET_TIMEOUT_MS = 30_000;
 
-
 /**
  * Read one asset file from a loaded external plugin's own bundle, as raw
  * bytes. Filesystem plugins (an installed zip or a development directory) read

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { encodePluginAssetPath, isSafePluginAssetRelativePath } from "../apps/geolibre-desktop/src/lib/plugin-asset-path";
+import {
+  encodePluginAssetPath,
+  isSafePluginAssetRelativePath,
+} from "../apps/geolibre-desktop/src/lib/plugin-asset-path";
 
 describe("isSafePluginAssetRelativePath", () => {
   it("accepts plain relative paths", () => {
