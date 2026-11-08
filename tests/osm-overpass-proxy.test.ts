@@ -159,6 +159,7 @@ describe("Overpass edge proxy", () => {
       "https://z.overpass-api.de/api/interpreter",
       "https://overpass.private.coffee/api/interpreter",
     ]);
+    assert.equal(response.headers.get("x-overpass-upstream"), "overpass.private.coffee");
     await response.text();
   });
 
