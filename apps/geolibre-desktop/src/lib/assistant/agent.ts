@@ -310,7 +310,7 @@ export class AssistantSession {
       throw new Error(
         pinned
           ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment variables, or pick another provider.`
-          : "No LLM API key is configured. Add GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or AI_GATEWAY_API_KEY in Settings → Environment variables.",
+          : "No LLM API key is configured. Add GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, AI_GATEWAY_API_KEY, or TRUSTEDROUTER_API_KEY in Settings → Environment variables.",
       );
     }
     const model = await createModel(config);

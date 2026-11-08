@@ -68,6 +68,15 @@ export const PROVIDER_FIELDS = {
       required: true,
     },
   ],
+  trustedrouter: [
+    {
+      envKey: "TRUSTEDROUTER_API_KEY",
+      labelKey: "settings.ai.field.apiKey",
+      placeholderKey: "settings.ai.placeholder.trustedrouterKey",
+      secret: true,
+      required: true,
+    },
+  ],
   ollama: [
     {
       envKey: "OLLAMA_BASE_URL",
@@ -151,6 +160,7 @@ export const PROVIDER_DOCS_URL: Partial<Record<AssistantProviderId, string>> = {
   openai: "https://platform.openai.com/api-keys",
   openrouter: "https://openrouter.ai/settings/keys",
   vercel: "https://vercel.com/docs/ai-gateway/authentication-and-byok",
+  trustedrouter: "https://trustedrouter.com",
   ollama: "https://ollama.com/download",
   bedrock: "https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html",
 };

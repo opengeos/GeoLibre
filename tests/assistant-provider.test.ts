@@ -419,6 +419,10 @@ describe("availableProviders", () => {
       "openrouter",
       "vercel",
     ]);
+    assert.deepEqual(
+      availableProviders({ TRUSTEDROUTER_API_KEY: "t", AI_GATEWAY_API_KEY: "v" }),
+      ["vercel", "trustedrouter"],
+    );
   });
 });
 
@@ -659,6 +663,87 @@ describe("configForProvider", () => {
 
     assert.equal(requestUrl, "https://ai-gateway.vercel.sh/v1/chat/completions");
     assert.deepEqual(requestHeaders, ["accept", "authorization", "content-type"]);
+    assert.equal(authorizationHeader, "Bearer profile-key");
+    assert.equal(JSON.parse(requestBody).model, "vendor/selected-model");
+  });
+
+  it("resolves TrustedRouter from a nonblank API key with its default model and override", () => {
+    assert.deepEqual(
+      configForProvider("trustedrouter", undefined, { TRUSTEDROUTER_API_KEY: "key" }),
+      {
+        provider: "trustedrouter",
+        apiKey: "key",
+        baseURL: "https://api.trustedrouter.com/v1",
+        modelId: "trustedrouter/auto",
+      },
+    );
+    assert.equal(
+      configForProvider("trustedrouter", undefined, { TRUSTEDROUTER_API_KEY: "  " }),
+      null,
+    );
+    assert.equal(
+      configForProvider("trustedrouter", undefined, {
+        TRUSTEDROUTER_API_KEY: "key",
+        TRUSTEDROUTER_MODEL: "provider/model",
+      })?.modelId,
+      "provider/model",
+    );
+    assert.equal(
+      defaultModelFor("trustedrouter", { TRUSTEDROUTER_MODEL: "provider/model" }),
+      "provider/model",
+    );
+    assert.equal(defaultModelFor("trustedrouter", {}), "trustedrouter/auto");
+  });
+
+  it("sends a selected model to TrustedRouter's Chat Completions endpoint", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestUrl = "";
+    let requestBody = "";
+    let authorizationHeader: string | null = null;
+    const chunks = [
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "trustedrouter/auto",
+        choices: [
+          { index: 0, delta: { role: "assistant", content: "Hello" }, finish_reason: null },
+        ],
+      },
+      {
+        id: "chatcmpl-test",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "trustedrouter/auto",
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      },
+    ];
+    const body = `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`;
+
+    try {
+      globalThis.fetch = async (input, init) => {
+        const request = new Request(input, init);
+        requestUrl = request.url;
+        authorizationHeader = request.headers.get("authorization");
+        requestBody = await request.clone().text();
+        return new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      };
+      const config = configForProvider("trustedrouter", "vendor/selected-model", {
+        TRUSTEDROUTER_API_KEY: "profile-key",
+      });
+      assert.ok(config);
+      const model = await createModel(config);
+      for await (const _event of new Agent({ model }).stream("hello")) {
+        // Consume the real Strands/OpenAI stream to exercise the request path.
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal(requestUrl, "https://api.trustedrouter.com/v1/chat/completions");
     assert.equal(authorizationHeader, "Bearer profile-key");
     assert.equal(JSON.parse(requestBody).model, "vendor/selected-model");
   });
