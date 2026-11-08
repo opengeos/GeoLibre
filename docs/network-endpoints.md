@@ -262,8 +262,8 @@ should add it here in the same pull request, and say whether it is default or
 opt-in. Useful starting points for an audit:
 
 ```bash
-grep -rhoE "https?://[a-zA-Z0-9.-]+" packages apps/geolibre-desktop/src workers \
-  --include='*.ts' --include='*.tsx' | sort | uniq -c | sort -rn
+grep -rhoE "(https?|wss?)://[a-zA-Z0-9.-]+" packages apps/geolibre-desktop/src workers \
+  --include='*.ts' --include='*.tsx' --include='*.json' | sort | uniq -c | sort -rn
 ```
 
 plus `workers/tiles/src/allowlisted-fetch.ts` for relay upstreams and the
