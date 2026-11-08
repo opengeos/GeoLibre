@@ -28,6 +28,7 @@ import {
   resolvePluginAssetUrl,
   withPluginAssetCacheToken,
 } from "./plugin-asset-url";
+import { readCappedBody } from "./capped-body";
 import { isSafePluginAssetRelativePath } from "./plugin-asset-path";
 import {
   computePluginBundleHash,
@@ -180,7 +181,10 @@ export async function loadExternalPlugins(
   // Remember the directories this scan covered, so readPluginAssetForLoadedPlugin
   // can pass the same root list to the desktop asset-read command (the command
   // re-derives the roots to contain the recorded plugin source before reading).
-  currentAdditionalPluginDirectories = additionalPluginDirectories;
+  // Store exactly the list the scan itself walks: with sideload disabled the
+  // scan passes [], so the read must not keep the suppressed directories.
+  currentAdditionalPluginDirectories =
+    policy?.plugins?.sideload === false ? [] : additionalPluginDirectories;
   if (policy?.plugins?.sideload === false) {
     const decision = evaluatePlugin("", "directory", policy);
     if (!decision.allowed) {
@@ -566,42 +570,13 @@ async function fetchPluginText(url: string, label: string, signal?: AbortSignal)
     throw new Error(`Could not fetch ${label}: HTTP ${response.status}`);
   }
 
-  // Fast-fail when the server declares the size; the streaming reader below
-  // is the real enforcement for responses without a content-length header.
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_PLUGIN_ASSET_BYTES) {
+  // One bounded reader for every URL path: declared length first, then the
+  // stream (a chunked response has no content-length to trust).
+  const bytes = await readCappedBody(response, MAX_PLUGIN_ASSET_BYTES);
+  if (bytes === null) {
     throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
   }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > MAX_PLUGIN_ASSET_BYTES) {
-      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-    }
-    return text;
-  }
-
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_PLUGIN_ASSET_BYTES) {
-      await reader.cancel();
-      throw new Error(`Could not fetch ${label}: exceeds the 50 MB size limit.`);
-    }
-    chunks.push(value);
-  }
-
-  const merged = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
+  return new TextDecoder().decode(bytes);
 }
 
 /**
@@ -881,8 +856,10 @@ export async function readPluginAssetForLoadedPlugin(
   if (isManagedUrlSource(source)) {
     try {
       const response = await fetch(resolvePluginAssetUrl(source, relativePath));
-      if (!response.ok) return null;
-      return new Uint8Array(await response.arrayBuffer());
+      if (!response.ok) {
+        return null;
+      }
+      return await readCappedBody(response, MAX_PLUGIN_ASSET_BYTES);
     } catch {
       return null;
     }

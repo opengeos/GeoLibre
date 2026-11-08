@@ -1150,8 +1150,8 @@ export interface GeoLibreAppAPI {
    * own bundle, or the asset does not exist. `pluginId` should be the calling
    * plugin's own id; since all plugins share one JS context the host cannot
    * verify the caller, so this is a convention rather than an enforced
-   * boundary — and it grants no access a plugin does not already have, since
-   * only the calling plugin's own bundle is ever read. Web-installed plugin
+   * boundary — passing another plugin's id does read that plugin's bundle.
+   * Web-installed plugin
    * archives currently persist only their entry and style sources, so asset
    * reads resolve to null there.
    */

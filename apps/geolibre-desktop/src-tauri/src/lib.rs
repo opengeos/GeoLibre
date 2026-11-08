@@ -2362,13 +2362,20 @@ fn read_external_plugin_asset_blocking(
     let canonical_source = source
         .canonicalize()
         .map_err(|error| format!("Plugin source is unavailable: {error}"))?;
-    if is_zip_path(&canonical_source) {
-        Ok(tauri::ipc::Response::new(read_zip_plugin_asset_bytes(
+    // Dispatch on what is actually on disk, not on the recorded name: a
+    // directory may legitimately be named `*.zip`, and a symlink may resolve to
+    // either shape, so the extension alone would route the read to the wrong
+    // reader.
+    let is_directory = fs::metadata(&canonical_source)
+        .map_err(|error| format!("Plugin source is unavailable: {error}"))?
+        .is_dir();
+    if is_directory {
+        Ok(tauri::ipc::Response::new(read_directory_plugin_asset_bytes(
             &canonical_source,
             relative_path,
         )?))
     } else {
-        Ok(tauri::ipc::Response::new(read_directory_plugin_asset_bytes(
+        Ok(tauri::ipc::Response::new(read_zip_plugin_asset_bytes(
             &canonical_source,
             relative_path,
         )?))
@@ -6618,8 +6625,12 @@ mod tests {
         assert!(read_directory_plugin_asset_bytes(&dir, "missing.json").is_err());
         // A dot-segment escape that resolves to an existing sibling file is
         // refused by the resolved-path containment re-check.
-        fs::write(dir.parent().unwrap().join("escape.json"), b"secret").unwrap();
+        let escape = dir.parent().unwrap().join("escape.json");
+        fs::write(&escape, b"secret").unwrap();
         assert!(read_directory_plugin_asset_bytes(&dir, "../escape.json").is_err());
+        // Remove the sibling too: leaving it behind leaks `secret` into the
+        // shared temp directory and collides with a later interrupted run.
+        fs::remove_file(&escape).unwrap();
         fs::remove_dir_all(&dir).unwrap();
     }
 
