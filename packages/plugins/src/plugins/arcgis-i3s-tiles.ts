@@ -190,6 +190,17 @@ let lastI3sStructureSignature: string | null = null;
 let i3sOffsetRenderTimer: ReturnType<typeof setTimeout> | null = null;
 // The signature the pending offset rebuild is waiting to draw.
 let pendingI3sSignature: string | null = null;
+/**
+ * An abort signal that fires after `ms`. `AbortSignal.timeout` is missing in
+ * some older WebViews, so it is built from an `AbortController` there.
+ */
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
+
 /** How long a layer-document probe may take before the layer draws without it. */
 const I3S_PROBE_TIMEOUT_MS = 15_000;
 /** How long the offsets must stay unchanged before the tileset is reloaded. */
@@ -751,7 +762,7 @@ export async function probeI3sLayerKind(layer: GeoLibreLayer): Promise<void> {
       // Bounded, so a stalled service falls back to drawing the layer (a saved
       // layer waits for this probe) instead of hiding it indefinitely.
       const response = await fetch(i3sDocumentRequestUrl(docUrl), {
-        signal: AbortSignal.timeout(I3S_PROBE_TIMEOUT_MS),
+        signal: timeoutSignal(I3S_PROBE_TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const doc: unknown = await response.json();

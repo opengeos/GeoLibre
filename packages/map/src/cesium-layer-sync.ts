@@ -3834,7 +3834,7 @@ export class CesiumLayerSync {
    */
   private applyTilesetAltitude(entry: LayerEntry): void {
     const raw = Number(entry.layer.source.altitudeOffset);
-    const offset = (Number.isFinite(raw) ? raw : 0) + this.i3sGroundOffset(entry);
+    const offset = (Number.isFinite(raw) ? raw : 0) + this.i3sEntryGroundOffset(entry);
     if ((entry.appliedAltitude ?? 0) === offset) return;
     const { Cesium } = this;
     const tilesets = this.entryTilesets(entry);
@@ -3872,14 +3872,21 @@ export class CesiumLayerSync {
    * @param entry The 3D Tiles entry.
    * @returns The offset in metres, or 0.
    */
-  private i3sGroundOffset(entry: LayerEntry): number {
+  private i3sEntryGroundOffset(entry: LayerEntry): number {
     if (!isI3sLayer(entry.layer) || !entry.handle) return 0;
     const Ellipsoid = this.Cesium.EllipsoidTerrainProvider;
     if (!Ellipsoid || !(this.viewer.terrainProvider instanceof Ellipsoid)) return 0;
     const data = (entry.handle as Partial<I3SDataProvider>).data as
       | { fullExtent?: { zmin?: unknown } }
       | undefined;
-    return i3sGroundOffset(data?.fullExtent?.zmin ?? entry.layer.metadata?.i3sBaseElevation, false);
+    // The provider's own document first; the probed value when it has none.
+    const zmin = data?.fullExtent?.zmin;
+    return i3sGroundOffset(
+      typeof zmin === "number" && Number.isFinite(zmin)
+        ? zmin
+        : entry.layer.metadata?.i3sBaseElevation,
+      false,
+    );
   }
 
   /**
