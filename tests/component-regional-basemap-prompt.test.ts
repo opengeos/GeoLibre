@@ -127,6 +127,9 @@ describe("useLastBasemapPersistence", () => {
     assert.equal(readLastBasemap(), AMAP.styleUrl);
 
     act(() => useAppStore.getState().setBasemapStyleUrl(DEFAULT_BASEMAP));
+    // The pick above also answered the prompt for AMAP; forget it so the load
+    // below asks and the accepted path is the one exercised.
+    useAppStore.setState({ regionalBasemapAnswers: {} });
     openRegionalProject();
     act(() => useAppStore.getState().resolveRegionalBasemapHold(true));
     assert.equal(readLastBasemap(), AMAP.styleUrl);

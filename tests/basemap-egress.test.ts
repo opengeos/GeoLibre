@@ -66,6 +66,17 @@ describe("createBasemapEgressTracker", () => {
     assert.equal(tracker.apply(outbound()).basemapStyleUrl, AMAP.styleUrl);
   });
 
+  it("forgets the withheld basemap when another project is opened, if asked to", () => {
+    const tracker = createBasemapEgressTracker({ forgetOnProjectSwitch: true });
+    useAppStore.getState().loadProject(inbound(AMAP.styleUrl));
+    tracker.noteInbound(AMAP.styleUrl);
+    assert.equal(tracker.apply(outbound()).basemapStyleUrl, AMAP.styleUrl);
+    // A local open, not through the bridge, so the tracker is not told.
+    useAppStore.getState().loadProject(inbound(DEFAULT_BASEMAP));
+    assert.equal(tracker.apply(outbound()).basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(tracker.withheldStyleUrl(), null);
+  });
+
   it("does nothing for an applied or non-regional basemap, or after reset", () => {
     const tracker = createBasemapEgressTracker();
     useAppStore.getState().loadProject(inbound(BLANK_BASEMAP));

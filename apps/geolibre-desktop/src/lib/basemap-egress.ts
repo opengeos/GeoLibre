@@ -15,6 +15,19 @@ import type { GeoLibreProject } from "@geolibre/core";
 interface WithheldBasemap {
   styleUrl: string;
   choiceGeneration: number;
+  projectGeneration: number;
+}
+
+/** Options for {@link createBasemapEgressTracker}. */
+export interface BasemapEgressTrackerOptions {
+  /**
+   * Forget the withheld basemap when a different project is opened locally
+   * (the store's `projectGeneration` moves past the inbound load), so the new
+   * project's own basemap goes out. For the embed bridge, whose inbound loads
+   * bump the generation synchronously. Not for collaboration, which bumps it
+   * after every inbound snapshot without a project switch.
+   */
+  forgetOnProjectSwitch?: boolean;
 }
 
 /** Tracks one bridge's withheld basemap; see {@link createBasemapEgressTracker}. */
@@ -35,6 +48,8 @@ export interface BasemapEgressTracker {
    * @returns The snapshot to send.
    */
   apply(project: GeoLibreProject): GeoLibreProject;
+  /** The regional basemap currently withheld, or null. */
+  withheldStyleUrl(): string | null;
   /** Forget any withheld basemap (a new connection or session). */
   reset(): void;
 }
@@ -42,9 +57,12 @@ export interface BasemapEgressTracker {
 /**
  * Create a tracker for one outbound bridge.
  *
+ * @param options - See {@link BasemapEgressTrackerOptions}.
  * @returns A fresh tracker with nothing withheld.
  */
-export function createBasemapEgressTracker(): BasemapEgressTracker {
+export function createBasemapEgressTracker(
+  options: BasemapEgressTrackerOptions = {},
+): BasemapEgressTracker {
   let withheld: WithheldBasemap | null = null;
   return {
     noteInbound(requestedStyleUrl) {
@@ -52,17 +70,29 @@ export function createBasemapEgressTracker(): BasemapEgressTracker {
       withheld =
         getRegionalBasemapByStyleUrl(requestedStyleUrl) &&
         state.basemapStyleUrl !== requestedStyleUrl
-          ? { styleUrl: requestedStyleUrl, choiceGeneration: state.basemapChoiceGeneration }
+          ? {
+              styleUrl: requestedStyleUrl,
+              choiceGeneration: state.basemapChoiceGeneration,
+              projectGeneration: state.projectGeneration,
+            }
           : null;
     },
     apply(project) {
       if (!withheld) return project;
-      if (useAppStore.getState().basemapChoiceGeneration !== withheld.choiceGeneration) {
+      const state = useAppStore.getState();
+      if (
+        state.basemapChoiceGeneration !== withheld.choiceGeneration ||
+        (options.forgetOnProjectSwitch === true &&
+          state.projectGeneration !== withheld.projectGeneration)
+      ) {
         withheld = null;
         return project;
       }
       if (project.basemapStyleUrl !== DEFAULT_BASEMAP) return project;
       return { ...project, basemapStyleUrl: withheld.styleUrl };
+    },
+    withheldStyleUrl() {
+      return withheld?.styleUrl ?? null;
     },
     reset() {
       withheld = null;

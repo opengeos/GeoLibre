@@ -77,7 +77,7 @@ export function useEmbedBridge(mapControllerRef: RefObject<MapEngine | null>): v
     let lastPostedContent: string | null = null;
     let trustedWidget = false;
 
-    const basemapEgress = createBasemapEgressTracker();
+    const basemapEgress = createBasemapEgressTracker({ forgetOnProjectSwitch: true });
 
     const buildProject = (): GeoLibreProject =>
       basemapEgress.apply(

@@ -6,7 +6,9 @@ import {
   createEmptyProject,
   DEFAULT_BASEMAP,
   gateRegionalBasemap,
+  clearHistory,
   REGIONAL_BASEMAP_SENTINEL_PREFIX,
+  redo,
   undo,
   useAppStore,
 } from "@geolibre/core";
@@ -180,6 +182,25 @@ describe("store regional-basemap gate", () => {
     assert.equal(useAppStore.getState().regionalBasemapHold, null);
   });
 
+  it("a dismissed prompt is not remembered, so the basemap asks again", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().resolveRegionalBasemapHold(false, { remember: false });
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(AMAP.styleUrl in useAppStore.getState().regionalBasemapAnswers, false);
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    assert.equal(useAppStore.getState().regionalBasemapHold?.reason, "prompt");
+  });
+
+  it("picking a regional basemap after turning it down counts as Load", () => {
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    useAppStore.getState().resolveRegionalBasemapHold(false);
+    useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapAnswers[AMAP.styleUrl], true);
+    useAppStore.getState().loadProject(projectWith(AMAP.styleUrl));
+    assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
+    assert.equal(useAppStore.getState().regionalBasemapHold, null);
+  });
+
   it("a trusted load (template, undo step, embed host) skips the prompt", () => {
     useAppStore.getState().loadProject(projectWith(AMAP.styleUrl), null, { trustBasemap: true });
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
@@ -243,10 +264,19 @@ describe("store regional-basemap gate", () => {
     it("undo cannot bring back a regional basemap recorded before the block", () => {
       useAppStore.getState().setRegionalBasemapPolicy("prompt");
       useAppStore.getState().setBasemapStyleUrl(AMAP.styleUrl);
+      // Start the history here so the only undo step restores AMAP rather than
+      // whatever a coalesced burst recorded before it.
+      clearHistory();
       useAppStore.getState().setBasemapStyleUrl(BLANK_BASEMAP);
+      const temporal = useAppStore.temporal.getState();
+      assert.equal(temporal.pastStates.at(-1)?.basemapStyleUrl, AMAP.styleUrl);
       useAppStore.getState().setRegionalBasemapPolicy("block");
       undo();
       assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+      // The correction is not an edit: redo still returns to the later step.
+      assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+      redo();
+      assert.equal(useAppStore.getState().basemapStyleUrl, BLANK_BASEMAP);
     });
   });
 });

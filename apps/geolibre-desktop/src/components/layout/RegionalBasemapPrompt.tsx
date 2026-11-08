@@ -19,7 +19,7 @@ import { notify } from "../../lib/notify";
  * records the requested one in `regionalBasemapHold`. This component only
  * renders that hold, so the map is never blocked on an answer: it keeps showing
  * the default basemap until the user picks Load. Closing the dialog any other
- * way keeps the default basemap.
+ * way keeps the default basemap for now, without remembering an answer.
  */
 export function RegionalBasemapPrompt() {
   const { t } = useTranslation();
@@ -40,7 +40,10 @@ export function RegionalBasemapPrompt() {
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => {
-        if (!next) resolveHold(false);
+        // Escape or a click outside closes the dialog without answering, so
+        // the same basemap asks again next time instead of being refused
+        // quietly for the rest of the session.
+        if (!next) resolveHold(false, { remember: false });
       }}
     >
       <DialogContent className="max-w-md" data-testid="regional-basemap-prompt">

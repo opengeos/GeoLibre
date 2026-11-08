@@ -85,12 +85,22 @@ function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.
 function explicitBasemapChoice(
   state: AppState,
   url: string,
-): Pick<AppState, "basemapStyleUrl" | "regionalBasemapHold" | "basemapChoiceGeneration"> {
+): Pick<
+  AppState,
+  "basemapStyleUrl" | "regionalBasemapHold" | "basemapChoiceGeneration" | "regionalBasemapAnswers"
+> {
   const gated = gateRegionalBasemap(url, state.regionalBasemapPolicy, DEFAULT_BASEMAP, true);
   if (gated.held) {
     console.warn(`Regional basemaps are disabled by this deployment; ignoring "${url}".`);
   }
+  // Picking a regional basemap answers the prompt for it too: a project (or an
+  // embed host re-sending one) that names it later loads it without asking,
+  // even when the user turned it down earlier in the session.
+  const pickedRegional = !gated.held && getRegionalBasemapByStyleUrl(url) !== undefined;
   return {
+    regionalBasemapAnswers: pickedRegional
+      ? { ...state.regionalBasemapAnswers, [url]: true }
+      : state.regionalBasemapAnswers,
     basemapStyleUrl: gated.styleUrl,
     regionalBasemapHold:
       state.regionalBasemapHold?.reason === "prompt" ? null : state.regionalBasemapHold,
@@ -271,9 +281,10 @@ export interface MapViewSlice {
    * belonging to the open project, the regional basemap is applied without
    * marking the project dirty or recording an undo step (it is what the file
    * already says). Otherwise the default basemap stays. Either way the hold is
-   * cleared.
+   * cleared. The answer is remembered for the session unless `remember` is
+   * false (the dialog was dismissed rather than answered).
    */
-  resolveRegionalBasemapHold: (load: boolean) => void;
+  resolveRegionalBasemapHold: (load: boolean, options?: { remember?: boolean }) => void;
 }
 
 export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
@@ -455,7 +466,7 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
     }
     set({ regionalBasemapPolicy: policy, regionalBasemapHold: hold });
   },
-  resolveRegionalBasemapHold: (load) => {
+  resolveRegionalBasemapHold: (load, options = {}) => {
     const state = get();
     const hold = state.regionalBasemapHold;
     if (!hold) return;
@@ -466,9 +477,10 @@ export const createMapViewSlice: SliceCreator<MapViewSlice> = (set, get) => ({
     const answered = hold.reason === "prompt" && state.regionalBasemapPolicy !== "block";
     // Remember a real answer for the session, so the next load of the same
     // basemap does not ask again.
-    const regionalBasemapAnswers = answered
-      ? { ...state.regionalBasemapAnswers, [hold.styleUrl]: load }
-      : state.regionalBasemapAnswers;
+    const regionalBasemapAnswers =
+      answered && options.remember !== false
+        ? { ...state.regionalBasemapAnswers, [hold.styleUrl]: load }
+        : state.regionalBasemapAnswers;
     const applies =
       load &&
       answered &&

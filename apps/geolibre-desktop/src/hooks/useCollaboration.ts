@@ -19,6 +19,7 @@ import {
   buildProjectEgressSnapshot,
 } from "../lib/build-project-snapshot";
 import { createBasemapEgressTracker } from "../lib/basemap-egress";
+import { notify } from "../lib/notify";
 import { projectChanged } from "../lib/project-broadcast-changed";
 import {
   CollabConnection,
@@ -192,12 +193,23 @@ export function useCollaboration(
       });
     } else {
       const applied = applyProjectToStore(merged);
-      applied.basemapStyleUrl = gateRegionalBasemap(
+      const gated = gateRegionalBasemap(
         applied.basemapStyleUrl,
         state.regionalBasemapPolicy,
         DEFAULT_BASEMAP,
         true,
-      ).styleUrl;
+      );
+      applied.basemapStyleUrl = gated.styleUrl;
+      // A peer switched the session to a basemap this deployment blocks: say
+      // why this map differs, once per basemap rather than on every snapshot.
+      if (
+        gated.held === "blocked" &&
+        basemapEgressRef.current.withheldStyleUrl() !== merged.basemapStyleUrl
+      ) {
+        notify.info(i18n.t("regionalBasemap.blockedNotice"), {
+          dedupeKey: "regional-basemap-blocked",
+        });
+      }
       // Keep the layers update and the (deferred) generation bump separate:
       // bindNetcdfProfileSamplesToProject treats a bump that lands together
       // with new layers as a project switch and clears the inspected samples.

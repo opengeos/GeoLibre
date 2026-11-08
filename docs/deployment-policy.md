@@ -304,7 +304,9 @@ widget): the map shows the default basemap until the user picks **Load** or
 **Use default basemap**. The answer holds for the rest of the session, so
 opening the same basemap again (or a host re-sending its project) does not ask
 twice, and a framing host keeps seeing its own basemap in the state the app
-reports back.
+reports back. Closing the dialog without either button keeps the default
+basemap but is not remembered, so the next project naming that basemap asks
+again. Picking the basemap in the UI later counts as **Load**.
 
 These do not ask: a basemap the user picks in the UI, or that a plugin, script
 or the assistant sets on their behalf (code the user installed or ran); a new

@@ -268,7 +268,7 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
       : {};
   // A step recorded before the deployment disabled regional basemaps must not
   // bring one back.
-  const basemapPatch =
+  const basemapPatch: { basemapStyleUrl?: string } =
     s.regionalBasemapPolicy === "block" && getRegionalBasemapByStyleUrl(s.basemapStyleUrl)
       ? { basemapStyleUrl: DEFAULT_BASEMAP }
       : {};
@@ -281,10 +281,12 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           selectedFeatureIds: [],
           ...ellipsoidPatch,
           ...referencePatch,
-          ...basemapPatch,
         }
-      : { isDirty: true, ...ellipsoidPatch, ...referencePatch, ...basemapPatch },
+      : { isDirty: true, ...ellipsoidPatch, ...referencePatch },
   );
+  // The basemap is tracked, so recording this correction as an edit would
+  // clear the redo stack and leave the regional basemap one undo step back.
+  if (basemapPatch.basemapStyleUrl) withoutHistory(() => boundStore().setState(basemapPatch));
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();
 }
