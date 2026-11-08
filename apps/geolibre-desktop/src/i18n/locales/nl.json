@@ -3356,8 +3356,8 @@
         "baseUrl": "Basis-URL",
         "model": "Model",
         "region": "Regio",
-        "accessKeyId": "Access key ID",
-        "secretAccessKey": "Secret access key",
+        "accessKeyId": "Toegangssleutel-ID",
+        "secretAccessKey": "Geheime toegangssleutel",
         "sessionToken": "Sessietoken"
       },
       "placeholder": {
@@ -7939,7 +7939,7 @@
       "noCrs": "Het coördinatenstelsel van dit beeld wordt niet herkend, dus alleen het volledige beeld kan worden gesegmenteerd."
     },
     "method": "Methode",
-    "methodRegionGrowing": "Seeded region growing (Whitebox)",
+    "methodRegionGrowing": "Regiogroei vanuit zaadpunten (Whitebox)",
     "methodFelzenszwalb": "Felzenszwalb-grafenmethode (browser)",
     "methodNote": "Pixels worden aan een regio toegevoegd zolang ze binnen de drempel van het startpunt in de gestandaardiseerde bandruimte blijven; daarna worden objecten onder de minimumgrootte samengevoegd met hun meest gelijkende buur. Dit is geen multiresolutiesegmentatie van eCognition, dus de schaalwaarden zijn niet overdraagbaar.",
     "methodNoteFelzenszwalb": "Naburige pixels worden samengevoegd zolang hun verschil onder de interne variatie van de objecten blijft, geschaald met Schaal; objecten onder de minimumgrootte worden met een buur samengevoegd. Dezelfde methode als de native Felzenszwalb van de desktop-app, uitgevoerd in de browser op maximaal {{max}} pixels.",
