@@ -590,12 +590,15 @@ function numberOption(config: {
   input.style.cssText = `${style.input}width:${width}px;flex:0 0 ${width}px;`;
   const unit = el("span", config.unit);
   unit.style.cssText = style.label;
-  // An empty or out-of-range box reads as the nearest value it could mean, never as NaN.
+  /**
+   * An empty or out-of-range box reads as the nearest value it could mean, never as NaN.
+   */
   const value = (): number => {
     const typed = Number(input.value);
     if (input.value.trim() === "" || !Number.isFinite(typed)) return config.value;
     return Math.min(config.max, Math.max(config.min, typed));
   };
+  /** Greys the number out while its checkbox is off. */
   const sync = (): void => {
     input.disabled = !check.checked;
     input.style.opacity = check.checked ? "1" : "0.5";
@@ -644,6 +647,7 @@ function removeDrawBox(map: StacMap): void {
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
 }
 
+/** Shows a bounding box on the map as the rectangle that will be searched. */
 function showDrawBox(map: StacMap, bbox: [number, number, number, number]): void {
   const [west, south, east, north] = bbox;
   showDrawGeometry(map, {
@@ -731,6 +735,7 @@ function beginShapeDraw(
   map.doubleClickZoom?.disable();
   canvas.style.cursor = "crosshair";
 
+  /** Ends the drawing once: puts the map's controls back and removes the listeners. */
   const cleanup = (): void => {
     if (finished) return;
     finished = true;
@@ -747,16 +752,22 @@ function beginShapeDraw(
       if (openShapeDraws === 0 && doubleClickZoomWasOn) map.doubleClickZoom?.enable();
     }, 0);
   };
+  /** Where a mouse event is on the map, in pixels. */
   const pixel = (event: MouseEvent): { x: number; y: number } => {
     const rect = canvas.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
+  /**
+   * Where a mouse event is on the map as longitude and latitude: the longitude wrapped into
+   * range, the latitude kept on the map.
+   */
   const lngLat = (event: MouseEvent): [number, number] => {
     const { x, y } = pixel(event);
     // A world copy of the map gives longitudes past 180; wrapped, 181 is -179, not a clamped 180.
     const point = map.unproject([x, y]).wrap();
     return [point.lng, Math.max(-90, Math.min(90, point.lat))];
   };
+  /** The shape drawn so far, with the cursor's position as a trial last vertex if given. */
   const build = (extra: [number, number] | null): Geometry | null => {
     const points = extra ? [...vertices, extra] : vertices;
     if (shape === "point") return points.length ? { type: "Point", coordinates: points[0] } : null;
@@ -766,6 +777,7 @@ function beginShapeDraw(
     if (shape === "line" || points.length < 3) return { type: "LineString", coordinates: points };
     return { type: "Polygon", coordinates: [[...points, points[0]]] };
   };
+  /** Ends the drawing with the shape as it stands, if it has enough vertices to be one. */
   const finish = (): void => {
     const geometry = build(null);
     const enough = shape === "line" ? vertices.length >= 2 : vertices.length >= 3;
@@ -776,9 +788,11 @@ function beginShapeDraw(
     showDrawGeometry(map, geometry);
     onComplete(geometry);
   };
+  /** Notes where the mouse went down, to tell a click from the end of a pan. */
   const onDown = (event: MouseEvent): void => {
     downAt = pixel(event);
   };
+  /** Adds a vertex at a click, or finishes a point. */
   const onClick = (event: MouseEvent): void => {
     if (event.button !== 0) return;
     const here = pixel(event);
@@ -795,16 +809,19 @@ function beginShapeDraw(
     const preview = build(null);
     if (preview) showDrawGeometry(map, preview);
   };
+  /** Finishes the drawing on a double-click. */
   const onDouble = (event: MouseEvent): void => {
     event.preventDefault();
     finish();
   };
+  /** Shows the shape with the cursor as a trial vertex. */
   const onMove = (event: MouseEvent): void => {
     if (!vertices.length) return;
     cursor = lngLat(event);
     const preview = build(cursor);
     if (preview) showDrawGeometry(map, preview);
   };
+  /** Enter finishes the drawing and Escape cancels it, unless the user is typing in a field. */
   const onKey = (event: KeyboardEvent): void => {
     // The keys are the drawing's only while the user is not typing: Enter in a field of the panel
     // (a date, the bbox box) is for that field.
@@ -1238,6 +1255,7 @@ function addRendering(
   // engine-audit-allow: getMap-mapbox -- detects MapLibre; renderings are hidden on Mapbox
   if (!app?.addTileLayer || !app.getMap?.()) throw new Error(labels.renderNeedsMapLibre);
   const bands = itemBands(item);
+  /** The item's band by name, or an error naming what it lacks. */
   const need = (name: string): StacBand => {
     const band = findBand(bands, name);
     if (!band) throw new Error(labels.renderMissingBand(name));
@@ -1343,6 +1361,7 @@ function buildPanel(container: HTMLElement): () => void {
   areaCaption.style.cssText = style.label;
   const areaRow = el("div");
   areaRow.style.cssText = `${style.row}flex-wrap:wrap;`;
+  /** A button in the row of ways to choose a search area. */
   const areaButton = (text: string): HTMLButtonElement => {
     const button = el("button", text);
     button.type = "button";
@@ -1382,6 +1401,7 @@ function buildPanel(container: HTMLElement): () => void {
     unit: "m",
     onChange: () => applyArea(),
   });
+  /** The buffer in meters, or 0 when it is off. */
   const bufferMeters = (): number => (buffer.check.checked ? buffer.value() : 0);
   areaWrap.append(areaCaption, areaRow, buffer.wrap);
   const dates = el("div");
@@ -1758,8 +1778,10 @@ function buildPanel(container: HTMLElement): () => void {
       const assets = Object.entries(item.assets ?? {}).filter(([, asset]) => asset?.href);
       if (assets.length) {
         let busy = false;
-        // Each menu shows its own name and acts the moment an entry is chosen, then goes back to
-        // its name: it is a button that drops a list, not a setting that keeps a value.
+        /**
+         * Each menu shows its own name and acts the moment an entry is chosen, then goes back to
+         * its name: it is a button that drops a list, not a setting that keeps a value.
+         */
         const menu = (text: string, hint?: string): HTMLSelectElement => {
           const select = el("select");
           // Sized by the row, not by the longest option: a long asset name must not push a menu
@@ -1774,6 +1796,7 @@ function buildPanel(container: HTMLElement): () => void {
           return select;
         };
         const menus: HTMLSelectElement[] = [];
+        /** Disables every menu while one of them is working. */
         const setBusy = (value: boolean): void => {
           busy = value;
           for (const select of menus) select.disabled = value;
@@ -1833,6 +1856,7 @@ function buildPanel(container: HTMLElement): () => void {
         let renderSelect: HTMLSelectElement | null = null;
         if (combinations.length || indices.length) {
           const select = menu(labels.addRendering, labels.addRenderingHint);
+          /** Adds a titled group of renderings to the Bands menu. */
           const group = (title: string, kind: "combination" | "index", names: string[]): void => {
             if (!names.length) return;
             const optgroup = el("optgroup");
@@ -2211,6 +2235,7 @@ function buildPanel(container: HTMLElement): () => void {
     const grown = geometry !== shape ? ` +${labels.bufferDistance(bufferMeters())}` : "";
     setStatus(`${labels.areaSet(`${shape.type} (${positions})${grown}`)}${note}`);
   }
+  /** Starts drawing a shape for the search area; choosing its tool again ends the drawing. */
   const startShape = (shape: StacDrawShape): void => {
     const sameTool = Boolean(cancelDraw) && activeShape === shape;
     stopDrawing();
@@ -2256,8 +2281,10 @@ function buildPanel(container: HTMLElement): () => void {
     areaFile.value = "";
     if (!file) return;
     const generation = ++areaGeneration;
-    // A read that finishes after another area was chosen or cleared, or after the panel closed,
-    // has been overtaken and is dropped rather than put back over what the user did since.
+    /**
+     * A read that finishes after another area was chosen or cleared, or after the panel closed,
+     * has been overtaken and is dropped rather than put back over what the user did since.
+     */
     const current = (): boolean => generation === areaGeneration && !disposed;
     geometryFromFile(file).then(
       (area) => {
@@ -2284,8 +2311,10 @@ function buildPanel(container: HTMLElement): () => void {
     if (map) removeDrawBox(map);
     setStatus(labels.drawnBboxCleared);
   });
-  // The rectangle and the shape are two ways to say where to search, and the one touched last wins:
-  // typing a bbox or turning on the map extent lets the shape go, rather than being ignored.
+  /**
+   * The rectangle and the shape are two ways to say where to search, and the one touched last wins:
+   * typing a bbox or turning on the map extent lets the shape go, rather than being ignored.
+   */
   const rectangleReplacesShape = (): void => {
     if (!searchArea) return;
     dropShape();

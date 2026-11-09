@@ -100,6 +100,7 @@ export function renderTileUrl(spec: StacRenderSpec): string {
   return `${STAC_RENDER_PROTOCOL}://tile/{z}/{x}/{y}?s=${encodeURIComponent(JSON.stringify(spec))}`;
 }
 
+/** Whether a value is the address of something served over https. */
 function isHttps(href: unknown): href is string {
   if (typeof href !== "string") return false;
   try {
@@ -109,6 +110,10 @@ function isHttps(href: unknown): href is string {
   }
 }
 
+/**
+ * Reads how a band can be signed: undefined when it has no signing details, null when they are
+ * not valid for this file.
+ */
 function parseAccess(value: unknown, href: string): StacAssetAccess | null | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null) return null;
@@ -119,6 +124,7 @@ function parseAccess(value: unknown, href: string): StacAssetAccess | null | und
   return { catalogUrl, collectionId, href };
 }
 
+/** Reads one band of a recipe, or null when it is not valid. */
 function parseBand(value: unknown): RenderBand | null {
   if (typeof value !== "object" || value === null) return null;
   const band = value as Record<string, unknown>;
@@ -142,10 +148,12 @@ function parseBand(value: unknown): RenderBand | null {
   };
 }
 
+/** Whether a value is a finite number within an inclusive range. */
 function finiteIn(value: unknown, low: number, high: number): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= low && value <= high;
 }
 
+/** Reads a recipe's style, or null when any part of it is not valid. */
 function parseStyle(value: unknown): RenderStyle | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const { gain, gamma, ramp, min, max } = value as Record<string, unknown>;
@@ -261,6 +269,7 @@ export function withRenderStyle(spec: StacRenderSpec, style: RenderStyle): StacR
     : (rest as StacRenderSpec);
 }
 
+/** A #rrggbb colour as its red, green and blue. */
 const hexRgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(1, 3), 16),
   parseInt(hex.slice(3, 5), 16),
@@ -320,6 +329,7 @@ export function paintRender(
         out[o + 1] = (g - stretches[1].low) * scales[1];
         out[o + 2] = (b - stretches[2].low) * scales[2];
       } else {
+        /** One colour channel's value stretched, then lifted by the gamma, into 0 to 255. */
         const curve = (value: number, channel: number): number =>
           255 *
           Math.max(0, Math.min(1, ((value - stretches[channel].low) * scales[channel]) / 255)) **
@@ -418,6 +428,7 @@ function isImagery(image: GeoTIFFImage): boolean {
   return (flags & 4) === 0;
 }
 
+/** Opens a band's file once per address and describes it. */
 function openBand(url: string): Promise<BandDataset> {
   let cached = bandCache.get(url);
   if (!cached) {
@@ -592,6 +603,7 @@ function readableBandHref(band: RenderBand, signal?: AbortSignal): Promise<strin
     : Promise.resolve(band.href);
 }
 
+/** Reads the bands' files for a tile and paints it as RGBA, or null when a band has no data. */
 async function renderWith(
   request: RenderTileRequest,
   urls: readonly string[],
@@ -602,6 +614,7 @@ async function renderWith(
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   // Bands of one item usually share a CRS; each distinct one is computed once per tile.
   const byCrs = new Map<string, Coordinates>();
+  /** The tile's pixel coordinates in a file's CRS, worked out once per CRS. */
   const coordinatesFor = (crs: string): Coordinates => {
     let found = byCrs.get(crs);
     if (!found) {
@@ -643,6 +656,7 @@ export async function renderStacTile(
   }
 }
 
+/** Encodes a tile's pixels as a PNG. */
 async function rgbaToPng(rgba: Uint8ClampedArray): Promise<ArrayBuffer> {
   const canvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
   const context = canvas.getContext("2d");

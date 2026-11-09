@@ -52,6 +52,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
   const pending = useRef(false);
 
   const layerId = layer.id;
+  /** Loads the controls from the style the layer's recipe holds. */
   const readStyle = (): void => {
     setStyle(spec?.style ?? {});
     setMinText(String(spec?.style?.min ?? -1));
@@ -70,6 +71,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
 
   if (!spec) return null;
 
+  /** Shows an edit at once and writes it to the layer once edits settle. */
   const apply = (next: RenderStyle): void => {
     setStyle(next);
     clearTimeout(timer.current);
@@ -91,6 +93,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
     }, APPLY_DELAY_MS);
   };
 
+  /** Applies the typed value window, or puts back the one in force when it is not usable. */
   const commitWindow = (): void => {
     const min = Number(minText);
     const max = Number(maxText);
@@ -110,6 +113,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
     apply({ ...style, min, max });
   };
 
+  /** Goes back to the default style. */
   const reset = (): void => {
     setMinText("-1");
     setMaxText("1");

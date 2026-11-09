@@ -48,12 +48,14 @@ function parts(geometry: Geometry): Array<{ type: Base; coordinates: unknown }> 
   }
 }
 
+/** Rounds every position under a coordinates value to the precision a search is sent at. */
 function roundCoordinates(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
   if (typeof value[0] === "number") return round(value as Position);
   return value.map(roundCoordinates);
 }
 
+/** A geometry with every coordinate rounded. */
 function roundGeometry(geometry: Geometry): Geometry {
   if (geometry.type === "GeometryCollection") {
     return { ...geometry, geometries: geometry.geometries.map(roundGeometry) };
@@ -63,6 +65,7 @@ function roundGeometry(geometry: Geometry): Geometry {
 
 /** How many positions a geometry carries, for refusing one too large to send. */
 export function countPositions(geometry: Geometry): number {
+  /** How many positions lie under a coordinates value. */
   const count = (value: unknown): number => {
     if (!Array.isArray(value)) return 0;
     if (typeof value[0] === "number") return 1;
@@ -73,6 +76,7 @@ export function countPositions(geometry: Geometry): number {
 
 /** How many positions a list of coordinate arrays carries. */
 function countAll(coordinates: unknown[]): number {
+  /** How many positions lie under a coordinates value. */
   const count = (value: unknown): number => {
     if (!Array.isArray(value)) return 0;
     if (typeof value[0] === "number") return 1;

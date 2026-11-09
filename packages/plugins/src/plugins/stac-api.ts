@@ -294,6 +294,10 @@ export class StacHttpError extends Error {
 /** Statuses that mean the server refused a parameter, not that it is down or limiting us. */
 const REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 422, 501]);
 
+/**
+ * Whether the server refused the request itself (bad request, unprocessable, not implemented),
+ * as opposed to turning the caller away, limiting it or failing.
+ */
 function refusedRequest(error: unknown): boolean {
   return error instanceof StacHttpError && REFUSED_STATUSES.has(error.status);
 }
@@ -813,6 +817,7 @@ export async function searchStacApi(
   const page = options.next;
   const href = page?.href ?? connection.searchUrl;
   const method = page?.method ?? "POST";
+  /** Asks for one page with the given body, merged with the body a next link carries. */
   const send = async (payload: Record<string, unknown>): Promise<StacSearchResult> => {
     const requestBody = page?.body ? { ...payload, ...page.body } : payload;
     const raw = await fetchJson(
@@ -869,6 +874,7 @@ export async function searchStacApi(
       }
       query.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
+    /** The GET address, with the sort or without it. */
     const getUrl = (sorted: boolean): string => {
       const params = new URLSearchParams(query);
       if (sorted && options.sortby) {
@@ -925,6 +931,7 @@ function splitBox(box: Box): Box[] {
     : [box];
 }
 
+/** Whether a record's bbox, which may cross the antimeridian, overlaps a box. */
 function intersects(a: number[], b: Box): boolean {
   if (a.length < 4) return false;
   const left = splitBox([a[0], a[1], a[2], a[3]]);
@@ -959,6 +966,7 @@ export function geometryBbox(geometry: Geometry): [number, number, number, numbe
   let south = Infinity;
   let east = -Infinity;
   let north = -Infinity;
+  /** Widens the extent by every position under a coordinates value. */
   const visit = (value: unknown): void => {
     if (!Array.isArray(value)) return;
     if (typeof value[0] === "number" && typeof value[1] === "number") {
@@ -970,6 +978,7 @@ export function geometryBbox(geometry: Geometry): [number, number, number, numbe
     }
     for (const child of value) visit(child);
   };
+  /** Visits a geometry, and each member of a collection. */
   const walk = (node: Geometry): void => {
     if (node.type === "GeometryCollection") node.geometries.forEach(walk);
     else visit(node.coordinates);
@@ -1059,6 +1068,7 @@ export async function searchStaticStac(
   const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
   let reads = 0;
 
+  /** Whether an item passes the walk's filters: collection, area, cloud cover and dates. */
   const accepts = (item: StacItem): boolean => {
     // itemBbox flattens 3D (6-element) bboxes; item.bbox[2]/[3] would be minZ/maxX there.
     const bbox = itemBbox(item);

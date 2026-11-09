@@ -74,9 +74,11 @@ const FUNCTIONS: Record<string, (...args: number[]) => number> = {
   max: Math.max,
 };
 
+/** A band name as it is compared: lower case, without hyphens or spaces. */
 const norm = (name: unknown): string =>
   typeof name === "string" ? name.trim().toLowerCase().replace(/-/g, "").replace(/ /g, "") : "";
 
+/** A value as a plain object, or an empty one when it is not one. */
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -207,16 +209,20 @@ export function compileFormula(formula: string): Evaluator {
   const names = formulaNames(text).map((name) => name.toLowerCase());
   if (!names.length) throw new Error("The formula names no band.");
   let at = 0;
+  /** The next token, left in place. */
   const peek = (): string | undefined => tokens[at];
+  /** Takes the next token. */
   const take = (): string => {
     const token = tokens[at++];
     if (token === undefined) throw new Error("The formula ends too soon.");
     return token;
   };
+  /** Takes the next token, which must be the one given. */
   const expect = (token: string): void => {
     if (take() !== token) throw new Error(`Expected "${token}" in the formula.`);
   };
 
+  /** A sum or difference of terms. */
   const expression = (): Evaluator => {
     let left = term();
     while (peek() === "+" || peek() === "-") {
@@ -227,6 +233,7 @@ export function compileFormula(formula: string): Evaluator {
     }
     return left;
   };
+  /** A product or quotient of signed values. */
   const term = (): Evaluator => {
     let left = unary();
     while (peek() === "*" || peek() === "/") {
@@ -237,6 +244,7 @@ export function compileFormula(formula: string): Evaluator {
     }
     return left;
   };
+  /** A value with an optional sign in front. */
   const unary = (): Evaluator => {
     if (peek() === "-") {
       take();
@@ -249,6 +257,7 @@ export function compileFormula(formula: string): Evaluator {
     }
     return power();
   };
+  /** A value raised to a power; the exponent may carry its own sign. */
   const power = (): Evaluator => {
     const base = atom();
     if (peek() !== "^") return base;
@@ -256,6 +265,7 @@ export function compileFormula(formula: string): Evaluator {
     const exponent = unary();
     return (v) => base(v) ** exponent(v);
   };
+  /** A number, a band name, a function call or a bracketed expression. */
   const atom = (): Evaluator => {
     const token = take();
     if (token === "(") {
