@@ -36,6 +36,8 @@ import {
   openCatalogNode,
   searchStacApi,
   searchStaticStac,
+  sortStacItems,
+  type StacSortDirection,
   type StacAsset,
   type StacConnection,
   type StacIndexCatalog,
@@ -53,6 +55,13 @@ import {
   zarrStoreTakesKeys,
   stacDateInterval,
 } from "./stac-api";
+import {
+  AOI_MAX_POSITIONS,
+  countPositions,
+  geometryFromFile,
+  type MergedArea,
+  selectedFeaturesGeometry,
+} from "./stac-aoi";
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
@@ -100,6 +109,7 @@ const FOOTPRINT_SOURCE_KIND = "stac-footprints";
 const DRAW_SOURCE = "geolibre-stac-draw-bbox";
 const DRAW_FILL = "geolibre-stac-draw-bbox-fill";
 const DRAW_LINE = "geolibre-stac-draw-bbox-line";
+const DRAW_POINT = "geolibre-stac-draw-bbox-point";
 // Selection highlight, like the draw rectangle: a transient interaction overlay
 // rather than data, so it stays off the Layers panel.
 const SELECT_SOURCE = "geolibre-stac-selected";
@@ -205,6 +215,26 @@ export interface StacLabels {
   clearDrawnBbox: string;
   drawHint: string;
   drawnBboxCleared: string;
+  areaLabel: string;
+  drawPoint: string;
+  drawLine: string;
+  drawPolygon: string;
+  useSelection: string;
+  loadAreaFile: string;
+  clearArea: string;
+  drawPointHint: string;
+  drawShapeHint: string;
+  areaCleared: string;
+  noSelection: string;
+  areaFileFailed: string;
+  areaTooLarge: (positions: number, max: number) => string;
+  areaSet: (description: string) => string;
+  areaIgnored: (count: number) => string;
+  sortLabel: string;
+  sortDefault: string;
+  sortNewest: string;
+  sortOldest: string;
+  sortHint: string;
   mapNotReady: string;
   startDate: string;
   endDate: string;
@@ -305,6 +335,27 @@ let labels: StacLabels = {
   clearDrawnBbox: "Clear drawn bbox",
   drawHint: "Click and drag on the map to draw a search bounding box.",
   drawnBboxCleared: "Drawn bbox cleared.",
+  areaLabel: "Search area",
+  drawPoint: "Point",
+  drawLine: "Line",
+  drawPolygon: "Polygon",
+  useSelection: "Selected features",
+  loadAreaFile: "From file…",
+  clearArea: "Clear shape",
+  drawPointHint: "Click the map to place a search point. Escape cancels.",
+  drawShapeHint: "Click to add vertices; double-click or press Enter to finish. Escape cancels.",
+  areaCleared: "Search shape cleared.",
+  noSelection: "Select one or more features in a layer first.",
+  areaFileFailed: "Could not read a search shape from that file.",
+  areaTooLarge: (positions, max) =>
+    `That shape has ${positions} vertices; simplify it to ${max} or fewer.`,
+  areaSet: (description) => `Searching within ${description}.`,
+  areaIgnored: (count) => `${count} lower-dimension shape(s) were left out.`,
+  sortLabel: "Sort by date",
+  sortDefault: "Server default",
+  sortNewest: "Newest first",
+  sortOldest: "Oldest first",
+  sortHint: "Order results by capture date. With many matches, Newest first keeps the latest.",
   mapNotReady: "The map is not ready for drawing.",
   startDate: "Start date",
   endDate: "End date",
@@ -485,6 +536,7 @@ function removeFootprints(): void {
 }
 
 function removeDrawBox(map: StacMap): void {
+  if (map.getLayer(DRAW_POINT)) map.removeLayer(DRAW_POINT);
   if (map.getLayer(DRAW_LINE)) map.removeLayer(DRAW_LINE);
   if (map.getLayer(DRAW_FILL)) map.removeLayer(DRAW_FILL);
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
@@ -492,26 +544,25 @@ function removeDrawBox(map: StacMap): void {
 
 function showDrawBox(map: StacMap, bbox: [number, number, number, number]): void {
   const [west, south, east, north] = bbox;
+  showDrawGeometry(map, {
+    type: "Polygon",
+    coordinates: [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ],
+    ],
+  });
+}
+
+/** Draws the search area on the map: a rectangle, point, line, polygon, or any mix of them. */
+function showDrawGeometry(map: StacMap, geometry: Geometry): void {
   const data: FeatureCollection = {
     type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "Polygon",
-          coordinates: [
-            [
-              [west, south],
-              [east, south],
-              [east, north],
-              [west, north],
-              [west, south],
-            ],
-          ],
-        },
-      },
-    ],
+    features: [{ type: "Feature", properties: {}, geometry }],
   };
   const source = map.getSource(DRAW_SOURCE) as GeoJSONSource | undefined;
   if (source) {
@@ -529,12 +580,127 @@ function showDrawBox(map: StacMap, bbox: [number, number, number, number]): void
     id: DRAW_LINE,
     type: "line",
     source: DRAW_SOURCE,
+    paint: { "line-color": "#f59e0b", "line-width": 2, "line-dasharray": [2, 1] },
+  });
+  map.addLayer({
+    id: DRAW_POINT,
+    type: "circle",
+    source: DRAW_SOURCE,
     paint: {
-      "line-color": "#f59e0b",
-      "line-width": 2,
-      "line-dasharray": [2, 1],
+      "circle-radius": 5,
+      "circle-color": "#f59e0b",
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
     },
   });
+}
+
+export type StacDrawShape = "point" | "line" | "polygon";
+
+/**
+ * Lets the user click out a point, line or polygon on the map. A point finishes on the first
+ * click; a line or polygon takes one click per vertex and finishes on a double-click or Enter.
+ * Escape cancels. The shape is previewed as it grows and left on the map when finished.
+ *
+ * @returns A function that abandons the drawing, or null when the map is not ready.
+ */
+function beginShapeDraw(
+  shape: StacDrawShape,
+  onComplete: (geometry: Geometry) => void,
+  onCancel: () => void,
+): (() => void) | null {
+  const map = getStacMap(appRef);
+  if (!map) return null;
+  const canvas = map.getCanvas();
+  const vertices: Array<[number, number]> = [];
+  let cursor: [number, number] | null = null;
+  let downAt: { x: number; y: number } | null = null;
+  let finished = false;
+  map.doubleClickZoom?.disable();
+  canvas.style.cursor = "crosshair";
+
+  const cleanup = (): void => {
+    if (finished) return;
+    finished = true;
+    canvas.removeEventListener("mousedown", onDown);
+    canvas.removeEventListener("click", onClick);
+    canvas.removeEventListener("dblclick", onDouble);
+    canvas.removeEventListener("mousemove", onMove);
+    window.removeEventListener("keydown", onKey);
+    canvas.style.cursor = "";
+    // MapLibre treats a double-click zoom disabled mid-gesture as still pending; defer the restore.
+    setTimeout(() => map.doubleClickZoom?.enable(), 0);
+  };
+  const pixel = (event: MouseEvent): { x: number; y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const lngLat = (event: MouseEvent): [number, number] => {
+    const { x, y } = pixel(event);
+    const point = map.unproject([x, y]);
+    return [Math.max(-180, Math.min(180, point.lng)), Math.max(-90, Math.min(90, point.lat))];
+  };
+  const build = (extra: [number, number] | null): Geometry | null => {
+    const points = extra ? [...vertices, extra] : vertices;
+    if (shape === "point") return points.length ? { type: "Point", coordinates: points[0] } : null;
+    if (points.length < 2) {
+      return points.length ? { type: "Point", coordinates: points[0] } : null;
+    }
+    if (shape === "line" || points.length < 3) return { type: "LineString", coordinates: points };
+    return { type: "Polygon", coordinates: [[...points, points[0]]] };
+  };
+  const finish = (): void => {
+    const geometry = build(null);
+    const enough = shape === "line" ? vertices.length >= 2 : vertices.length >= 3;
+    if (shape !== "point" && !enough) return;
+    cleanup();
+    if (geometry) {
+      showDrawGeometry(map, geometry);
+      onComplete(geometry);
+    }
+  };
+  const onDown = (event: MouseEvent): void => {
+    downAt = pixel(event);
+  };
+  const onClick = (event: MouseEvent): void => {
+    if (event.button !== 0) return;
+    const here = pixel(event);
+    // A click that ends a pan is not a vertex.
+    if (downAt && Math.hypot(here.x - downAt.x, here.y - downAt.y) > 4) return;
+    const next = lngLat(event);
+    if (vertices.length) {
+      const last = map.project(vertices[vertices.length - 1]);
+      // The second click of a double-click lands on the first; it is not another vertex.
+      if (Math.hypot(here.x - last.x, here.y - last.y) < 4) return;
+    }
+    vertices.push(next);
+    if (shape === "point") return finish();
+    const preview = build(null);
+    if (preview) showDrawGeometry(map, preview);
+  };
+  const onDouble = (event: MouseEvent): void => {
+    event.preventDefault();
+    finish();
+  };
+  const onMove = (event: MouseEvent): void => {
+    if (!vertices.length) return;
+    cursor = lngLat(event);
+    const preview = build(cursor);
+    if (preview) showDrawGeometry(map, preview);
+  };
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      const wasOpen = !finished;
+      cleanup();
+      if (wasOpen) onCancel();
+    } else if (event.key === "Enter") finish();
+  };
+  canvas.addEventListener("mousedown", onDown);
+  canvas.addEventListener("click", onClick);
+  canvas.addEventListener("dblclick", onDouble);
+  canvas.addEventListener("mousemove", onMove);
+  window.addEventListener("keydown", onKey);
+  return cleanup;
 }
 
 function beginBboxDraw(
@@ -971,21 +1137,73 @@ function buildPanel(container: HTMLElement): () => void {
   extentRow.append(useExtent, el("span", labels.limitToExtent));
   const bboxField = field(labels.bboxLabel);
   bboxField.input.placeholder = labels.bboxPlaceholder;
-  const drawRow = el("div");
-  drawRow.style.cssText = style.row;
   const drawButton = el("button", labels.drawBbox);
   drawButton.type = "button";
   drawButton.style.cssText = style.button;
   const clearDrawButton = el("button", labels.clearDrawnBbox);
   clearDrawButton.type = "button";
   clearDrawButton.style.cssText = style.button;
-  clearDrawButton.hidden = true;
-  drawRow.append(drawButton, clearDrawButton);
+  setDisabled(clearDrawButton, true);
+
+  // Search by a shape instead of a rectangle: drawn on the map, taken from the features selected
+  // in a layer, or read from a file. The shape replaces the bbox, as STAC Item Search requires.
+  const areaWrap = el("div");
+  areaWrap.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+  const areaCaption = el("span", labels.areaLabel);
+  areaCaption.style.cssText = style.label;
+  const areaRow = el("div");
+  areaRow.style.cssText = `${style.row}flex-wrap:wrap;`;
+  const areaButton = (text: string): HTMLButtonElement => {
+    const button = el("button", text);
+    button.type = "button";
+    button.style.cssText = style.button;
+    return button;
+  };
+  const pointButton = areaButton(labels.drawPoint);
+  const lineButton = areaButton(labels.drawLine);
+  const polygonButton = areaButton(labels.drawPolygon);
+  const selectionButton = areaButton(labels.useSelection);
+  const fileButton = areaButton(labels.loadAreaFile);
+  const clearAreaButton = areaButton(labels.clearArea);
+  setDisabled(clearAreaButton, true);
+  const areaFile = el("input");
+  areaFile.type = "file";
+  areaFile.accept = ".geojson,.json,.zip";
+  areaFile.hidden = true;
+  areaRow.append(
+    pointButton,
+    lineButton,
+    polygonButton,
+    selectionButton,
+    fileButton,
+    drawButton,
+    clearAreaButton,
+    clearDrawButton,
+    areaFile,
+  );
+  areaWrap.append(areaCaption, areaRow);
   const dates = el("div");
   dates.style.cssText = style.row;
   const startField = field(labels.startDate, "date");
   const endField = field(labels.endDate, "date");
   dates.append(startField.wrap, endField.wrap);
+  const sortWrap = el("label");
+  sortWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
+  const sortCaption = el("span", labels.sortLabel);
+  sortCaption.style.cssText = style.label;
+  const sortSelect = el("select");
+  sortSelect.style.cssText = style.input;
+  sortSelect.title = labels.sortHint;
+  for (const [value, title] of [
+    ["", labels.sortDefault],
+    ["desc", labels.sortNewest],
+    ["asc", labels.sortOldest],
+  ] as const) {
+    const option = el("option", title);
+    option.value = value;
+    sortSelect.append(option);
+  }
+  sortWrap.append(sortCaption, sortSelect);
   const additionalWrap = el("label");
   additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
   const additionalCaption = el("span", labels.additionalParams);
@@ -1011,10 +1229,11 @@ function buildPanel(container: HTMLElement): () => void {
     catalogInfo,
     collectionSelect,
     tree.element,
+    areaWrap,
     extentRow,
     bboxField.wrap,
-    drawRow,
     dates,
+    sortWrap,
     additionalWrap,
     searchActions,
   );
@@ -1183,6 +1402,8 @@ function buildPanel(container: HTMLElement): () => void {
   /** The extent read a collection asked for, cancelled when another collection is asked for. */
   let extentRead: AbortController | null = null;
   let cancelDraw: (() => void) | null = null;
+  /** The shape items must intersect, when the search is by shape rather than by rectangle. */
+  let searchArea: Geometry | undefined;
   let selectedItemId: string | null = null;
   const cardsByItemId = new Map<string, HTMLElement>();
 
@@ -1414,6 +1635,8 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const parseBbox = (): [number, number, number, number] | undefined => {
+    // A shape replaces the rectangle, so a stale or half-typed bbox must not fail the search.
+    if (searchArea) return undefined;
     const text = bboxField.input.value.trim();
     if (!text) return useExtent.checked ? currentExtent() : undefined;
     const values = text.split(/[ ,]+/).map(Number);
@@ -1500,11 +1723,15 @@ function buildPanel(container: HTMLElement): () => void {
       const start = startField.input.value;
       const end = endField.input.value;
       const datetime = stacDateInterval(start, end);
+      const sortDirection: StacSortDirection | undefined =
+        sortSelect.value === "asc" || sortSelect.value === "desc" ? sortSelect.value : undefined;
       walking?.abort();
       walking = new AbortController();
       const reading = AbortSignal.any([walking.signal, controller.signal]);
       const options = {
-        bbox: extent ?? parseBbox(),
+        bbox: searchArea ? undefined : (extent ?? parseBbox()),
+        intersects: searchArea,
+        sortby: sortDirection,
         datetime,
         collections: selectedCollections,
         entries: connection.isApi ? [] : tree.selection(),
@@ -1518,7 +1745,10 @@ function buildPanel(container: HTMLElement): () => void {
         ? await searchStacApi(connection, options)
         : await searchStaticStac(connection, options);
       if (search !== searchGeneration) return;
-      allItems = append ? [...allItems, ...response.items] : response.items;
+      const combined = append ? [...allItems, ...response.items] : response.items;
+      // Sorted across every page loaded, so Load more slots new items in rather than appending, and
+      // a server that ignored the sort still gives the order asked for.
+      allItems = sortDirection ? sortStacItems(combined, sortDirection) : combined;
       nextPage = response.next;
       searchCursor = response.cursor;
       // A fresh search invalidates the selection; "Load more" keeps it.
@@ -1615,10 +1845,12 @@ function buildPanel(container: HTMLElement): () => void {
     setStatus(labels.drawHint);
     cancelDraw = beginBboxDraw((bbox) => {
       cancelDraw = null;
+      searchArea = undefined;
+      setDisabled(clearAreaButton, true);
       drawButton.textContent = labels.drawBbox;
       bboxField.input.value = bbox.map((value) => value.toFixed(6)).join(", ");
       useExtent.checked = false;
-      clearDrawButton.hidden = false;
+      setDisabled(clearDrawButton, false);
       setStatus(labels.drawnBbox(bboxField.input.value));
     });
     if (!cancelDraw) {
@@ -1626,9 +1858,86 @@ function buildPanel(container: HTMLElement): () => void {
       setStatus(labels.mapNotReady, true);
     }
   });
+  /** Makes `geometry` the search shape, replacing any rectangle, and shows it on the map. */
+  const setSearchArea = ({ geometry, ignored }: MergedArea): void => {
+    const positions = countPositions(geometry);
+    if (positions > AOI_MAX_POSITIONS) {
+      setStatus(labels.areaTooLarge(positions, AOI_MAX_POSITIONS), true);
+      return;
+    }
+    searchArea = geometry;
+    bboxField.input.value = "";
+    useExtent.checked = false;
+    setDisabled(clearDrawButton, true);
+    setDisabled(clearAreaButton, false);
+    const map = getStacMap(appRef);
+    if (map) showDrawGeometry(map, geometry);
+    const note = ignored ? ` ${labels.areaIgnored(ignored)}` : "";
+    setStatus(`${labels.areaSet(`${geometry.type} (${positions})`)}${note}`);
+  };
+  const resetDrawButtons = (): void => {
+    drawButton.textContent = labels.drawBbox;
+  };
+  const startShape = (shape: StacDrawShape): void => {
+    const wasDrawing = Boolean(cancelDraw);
+    cancelDraw?.();
+    cancelDraw = null;
+    resetDrawButtons();
+    // Choosing a shape tool while another is active switches to it; the same button toggles off.
+    if (wasDrawing && activeShape === shape) {
+      activeShape = null;
+      return;
+    }
+    activeShape = shape;
+    setStatus(shape === "point" ? labels.drawPointHint : labels.drawShapeHint);
+    cancelDraw = beginShapeDraw(
+      shape,
+      (geometry) => {
+        cancelDraw = null;
+        activeShape = null;
+        setSearchArea({ geometry, ignored: 0 });
+      },
+      () => {
+        cancelDraw = null;
+        activeShape = null;
+      },
+    );
+    if (!cancelDraw) {
+      activeShape = null;
+      setStatus(labels.mapNotReady, true);
+    }
+  };
+  let activeShape: StacDrawShape | null = null;
+  pointButton.addEventListener("click", () => startShape("point"));
+  lineButton.addEventListener("click", () => startShape("line"));
+  polygonButton.addEventListener("click", () => startShape("polygon"));
+  selectionButton.addEventListener("click", () => {
+    const area = selectedFeaturesGeometry();
+    if (!area) return setStatus(labels.noSelection, true);
+    setSearchArea(area);
+  });
+  fileButton.addEventListener("click", () => areaFile.click());
+  areaFile.addEventListener("change", () => {
+    const file = areaFile.files?.[0];
+    // Reset so choosing the same file again still fires a change.
+    areaFile.value = "";
+    if (!file) return;
+    geometryFromFile(file).then(setSearchArea, (error) =>
+      setStatus(error instanceof Error ? error.message : labels.areaFileFailed, true),
+    );
+  });
+  clearAreaButton.addEventListener("click", () => {
+    cancelDraw?.();
+    cancelDraw = null;
+    searchArea = undefined;
+    setDisabled(clearAreaButton, true);
+    const map = getStacMap(appRef);
+    if (map) removeDrawBox(map);
+    setStatus(labels.areaCleared);
+  });
   clearDrawButton.addEventListener("click", () => {
     bboxField.input.value = "";
-    clearDrawButton.hidden = true;
+    setDisabled(clearDrawButton, true);
     const map = getStacMap(appRef);
     if (map) removeDrawBox(map);
     setStatus(labels.drawnBboxCleared);

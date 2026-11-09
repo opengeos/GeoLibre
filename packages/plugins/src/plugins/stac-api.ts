@@ -1,3 +1,4 @@
+import booleanIntersects from "@turf/boolean-intersects";
 import type { BBox, Feature, Geometry } from "geojson";
 
 export const STAC_INDEX_CATALOGS_URL = "https://stacindex.org/api/catalogs";
@@ -130,13 +131,27 @@ export interface StacSearchCursor {
   /** Documents given up on; with any of these the catalog was not fully read. */
   dropped: number;
   /** The filters this walk began with, so later pages filter the way page one did. */
-  filters: Pick<StacSearchOptions, "bbox" | "collections" | "datetime">;
+  filters: Pick<StacSearchOptions, "bbox" | "intersects" | "collections" | "datetime">;
 }
+
+export type StacSortDirection = "asc" | "desc";
 
 export interface StacSearchOptions {
   bbox?: [number, number, number, number];
+  /**
+   * A GeoJSON geometry (point, line, polygon, or a multi/collection of them) the items must
+   * intersect. STAC Item Search makes this and `bbox` mutually exclusive, so it wins when both
+   * are given.
+   */
+  intersects?: Geometry;
   datetime?: string;
   collections?: string[];
+  /**
+   * Order results by capture date. Sent to an API as `sortby` on `properties.datetime`; a server
+   * that rejects it is asked again without, and the caller sorts the results itself. A static
+   * catalog has no search endpoint to ask, so only the caller's sort applies there.
+   */
+  sortby?: StacSortDirection;
   /** Documents to search instead of the whole catalog, from the tree's selection. */
   entries?: string[];
   cursor?: StacSearchCursor;
@@ -696,15 +711,20 @@ export async function searchStacApi(
     ...options.additional,
     limit: Math.max(1, Math.min(options.limit ?? 20, 100)),
   };
-  if (options.bbox) body.bbox = options.bbox;
+  if (options.intersects) body.intersects = options.intersects;
+  else if (options.bbox) body.bbox = options.bbox;
   if (options.datetime) body.datetime = options.datetime;
   if (options.collections?.length) body.collections = options.collections;
+  // The dropdown wins over a sortby typed into the additional parameters, which is what it is for.
+  const sortedBody = options.sortby
+    ? { ...body, sortby: [{ field: "properties.datetime", direction: options.sortby }] }
+    : body;
 
   const page = options.next;
   const href = page?.href ?? connection.searchUrl;
   const method = page?.method ?? "POST";
-  const requestBody = page?.body ? { ...body, ...page.body } : body;
-  try {
+  const send = async (payload: Record<string, unknown>): Promise<StacSearchResult> => {
+    const requestBody = page?.body ? { ...payload, ...page.body } : payload;
     const raw = await fetchJson(
       href,
       {
@@ -717,16 +737,30 @@ export async function searchStacApi(
       fetcher,
     );
     return parseItems(raw, href);
+  };
+  try {
+    try {
+      return await send(sortedBody);
+    } catch (error) {
+      // A server without the sort extension answers an error; the search is worth more than the
+      // order, so ask again without it and let the caller sort what comes back.
+      if (options.signal?.aborted || !options.sortby || page || method !== "POST") throw error;
+      return await send(body);
+    }
   } catch (error) {
     if (page || method !== "POST") throw error;
     // Core Item Search requires GET and POST to have equivalent semantics.
     // Some older implementations expose only GET despite advertising search.
     const query = new URLSearchParams({ limit: String(body.limit) });
-    if (options.bbox) query.set("bbox", options.bbox.join(","));
+    if (options.intersects) query.set("intersects", JSON.stringify(options.intersects));
+    else if (options.bbox) query.set("bbox", options.bbox.join(","));
     if (options.datetime) query.set("datetime", options.datetime);
     if (options.collections?.length) query.set("collections", options.collections.join(","));
     for (const [key, value] of Object.entries(options.additional ?? {})) {
-      if (["limit", "bbox", "datetime", "collections"].includes(key) || value === undefined) {
+      if (
+        ["limit", "bbox", "intersects", "datetime", "collections"].includes(key) ||
+        value === undefined
+      ) {
         continue;
       }
       query.set(key, typeof value === "string" ? value : JSON.stringify(value));
@@ -736,8 +770,74 @@ export async function searchStacApi(
   }
 }
 
+/** The instant an item was captured, for ordering; undefined when it carries none. */
+function itemTime(item: StacItem): number | undefined {
+  const value = item.properties.datetime ?? item.properties.start_datetime;
+  const time = typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : undefined;
+}
+
+/**
+ * Orders items by capture date, items with no date last (in their given order). Stable, so equal
+ * dates keep the server's order.
+ */
+export function sortStacItems(items: StacItem[], direction: StacSortDirection): StacItem[] {
+  const sign = direction === "desc" ? -1 : 1;
+  return items
+    .map((item, index) => ({ item, index, time: itemTime(item) }))
+    .sort((a, b) => {
+      if (a.time === undefined || b.time === undefined) {
+        if (a.time === b.time) return a.index - b.index;
+        return a.time === undefined ? 1 : -1;
+      }
+      return sign * (a.time - b.time) || a.index - b.index;
+    })
+    .map((entry) => entry.item);
+}
+
 function intersects(a: number[], b: [number, number, number, number]): boolean {
   return a.length >= 4 && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
+/** The horizontal extent of any GeoJSON geometry, or undefined when it has no positions. */
+export function geometryBbox(geometry: Geometry): [number, number, number, number] | undefined {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  const visit = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      west = Math.min(west, value[0]);
+      east = Math.max(east, value[0]);
+      south = Math.min(south, value[1]);
+      north = Math.max(north, value[1]);
+      return;
+    }
+    for (const child of value) visit(child);
+  };
+  const walk = (node: Geometry): void => {
+    if (node.type === "GeometryCollection") node.geometries.forEach(walk);
+    else visit(node.coordinates);
+  };
+  walk(geometry);
+  return Number.isFinite(west) ? [west, south, east, north] : undefined;
+}
+
+/** Exact intersection of two geometries; a collection intersects when any member does. */
+function geometryIntersects(a: Geometry, b: Geometry): boolean {
+  if (a.type === "GeometryCollection") {
+    return a.geometries.some((part) => geometryIntersects(part, b));
+  }
+  if (b.type === "GeometryCollection") {
+    return b.geometries.some((part) => geometryIntersects(a, part));
+  }
+  try {
+    return booleanIntersects(a, b);
+  } catch {
+    // A malformed footprint should not hide an item the extent test already accepted.
+    return true;
+  }
 }
 
 function inTime(item: StacItem, interval?: string): boolean {
@@ -793,7 +893,12 @@ export async function searchStaticStac(
     visited: new Set<string>(),
     offset: 0,
     dropped: 0,
-    filters: { bbox: options.bbox, collections: options.collections, datetime: options.datetime },
+    filters: {
+      bbox: options.bbox,
+      intersects: options.intersects,
+      collections: options.collections,
+      datetime: options.datetime,
+    },
   };
   const found: StacItem[] = [];
   const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
@@ -808,7 +913,14 @@ export async function searchStaticStac(
     }
     const collectionBboxes = item.properties["geolibre:spatial_bboxes"];
     const bboxes = Array.isArray(collectionBboxes) ? collectionBboxes : bbox ? [bbox] : [];
-    if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
+    // A geometry replaces the bbox filter, as it does on an API. The footprint is tested when the
+    // item has one; the extent stands in otherwise (and for a collection's declared boxes).
+    const area = filters.intersects;
+    if (area) {
+      const window = geometryBbox(area);
+      if (window && !bboxes.some((candidate) => intersects(candidate, window))) return false;
+      if (item.geometry && !geometryIntersects(item.geometry, area)) return false;
+    } else if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
       return false;
     }
     return inTime(item, filters.datetime);

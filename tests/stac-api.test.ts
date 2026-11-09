@@ -11,6 +11,7 @@ import {
   openCatalogNode,
   searchStacApi,
   searchStaticStac,
+  sortStacItems,
   stacDateInterval,
   assetTargets,
   canAddAsset,
@@ -2567,5 +2568,135 @@ test("searchStacApi posts the RFC 3339 date interval, and a static search keeps 
   assert.deepEqual(
     result.items.map((item) => item.id),
     ["end-day-afternoon"],
+  );
+});
+
+test("searchStacApi sends a geometry as `intersects` and drops the bbox", async () => {
+  let body: Record<string, unknown> = {};
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  const point = { type: "Point" as const, coordinates: [10, 20] };
+  await searchStacApi(
+    {
+      url: "https://example.com/",
+      title: "API",
+      isApi: true,
+      searchUrl: "https://example.com/search",
+      collections: [],
+      root: {},
+    },
+    { intersects: point, bbox: [0, 0, 1, 1] },
+    fetcher,
+  );
+  assert.deepEqual(body.intersects, point);
+  assert.equal("bbox" in body, false);
+});
+
+test("searchStaticStac filters by a geometry against item footprints", async () => {
+  const square = (x: number) => ({
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [x, 0],
+        [x + 1, 0],
+        [x + 1, 1],
+        [x, 1],
+        [x, 0],
+      ],
+    ],
+  });
+  const item = (id: string, x: number) => ({
+    type: "Feature",
+    id,
+    bbox: [x, 0, x + 1, 1],
+    geometry: square(x),
+    properties: { datetime: "2024-05-01T00:00:00Z" },
+    assets: {},
+    links: [],
+  });
+  const root = {
+    type: "Catalog",
+    id: "root",
+    links: [
+      { rel: "item", href: "a.json" },
+      { rel: "item", href: "b.json" },
+    ],
+  };
+  const docs: Record<string, unknown> = {
+    "https://example.com/c.json": root,
+    "https://example.com/a.json": item("near", 0),
+    "https://example.com/b.json": item("far", 5),
+  };
+  const fetcher = (async (input: RequestInfo | URL) =>
+    jsonResponse(docs[String(input)])) as typeof fetch;
+  const result = await searchStaticStac(
+    { url: "https://example.com/c.json", title: "S", isApi: false, collections: [], root },
+    { intersects: { type: "Point", coordinates: [0.5, 0.5] }, limit: 20 },
+    fetcher,
+  );
+  assert.deepEqual(
+    result.items.map((found) => found.id),
+    ["near"],
+  );
+});
+
+const sortConnection = {
+  url: "https://example.com/",
+  title: "API",
+  isApi: true,
+  searchUrl: "https://example.com/search",
+  collections: [],
+  root: {},
+};
+
+test("searchStacApi sends the date sort, and asks again without it when the server refuses", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    if (body.sortby) return jsonResponse({ detail: "sort not supported" }, 400);
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(sortConnection, { sortby: "desc" }, fetcher);
+  assert.deepEqual(bodies[0].sortby, [{ field: "properties.datetime", direction: "desc" }]);
+  assert.equal(bodies.length, 2);
+  assert.equal("sortby" in bodies[1], false);
+});
+
+test("searchStacApi sends no sort unless one is chosen, leaving the server's own", async () => {
+  let body: Record<string, unknown> = {};
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(sortConnection, {}, fetcher);
+  assert.equal("sortby" in body, false);
+});
+
+test("sortStacItems orders by capture date and puts undated items last", () => {
+  const item = (id: string, datetime?: string) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: null,
+      properties: datetime ? { datetime } : {},
+      assets: {},
+    }) as StacItem;
+  const items = [
+    item("none-a"),
+    item("mid", "2024-02-01T00:00:00Z"),
+    item("new", "2024-03-01T00:00:00Z"),
+    item("old", "2024-01-01T00:00:00Z"),
+    item("none-b"),
+  ];
+  assert.deepEqual(
+    sortStacItems(items, "desc").map((found) => found.id),
+    ["new", "mid", "old", "none-a", "none-b"],
+  );
+  assert.deepEqual(
+    sortStacItems(items, "asc").map((found) => found.id),
+    ["old", "mid", "new", "none-a", "none-b"],
   );
 });
