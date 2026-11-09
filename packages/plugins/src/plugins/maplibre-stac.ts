@@ -377,7 +377,8 @@ let labels: StacLabels = {
   drawPointHint: "Click the map to place a search point. Escape cancels.",
   drawShapeHint: "Click to add vertices; double-click or press Enter to finish. Escape cancels.",
   areaCleared: "Search shape cleared.",
-  noSelection: "Select one or more features in a layer first.",
+  noSelection:
+    "Select features on the map first: open a layer’s menu, choose Select features, then try again.",
   areaFileFailed: "Could not read a search shape from that file.",
   areaTooLarge: (positions, max) =>
     `That shape has ${positions} vertices; simplify it to ${max} or fewer.`,
