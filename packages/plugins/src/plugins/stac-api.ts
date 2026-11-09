@@ -157,8 +157,8 @@ export interface StacSearchOptions {
   sortby?: StacSortDirection;
   /**
    * Keep items with at most this much `eo:cloud_cover` (percent). Items that report none (radar,
-   * elevation, aerial imagery) are kept. Sent as a CQL2 filter, then as the older `query`
-   * extension if the server refuses, and the caller checks the results either way
+   * elevation, aerial imagery) are kept. Sent as a CQL2 filter, then without a server-side
+   * filter if the server refuses. The caller checks the results either way
    * ({@link withinCloudCover}) because some servers accept the filter and ignore it.
    */
   maxCloudCover?: number;
