@@ -528,10 +528,10 @@ placement recording in `loadSplat` / `loadModel`.
 Better still, upstream an id option and a per-asset placement getter and delete
 the patching.
 
-### `@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode internals
+### `@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode and shape-marker internals
 
 Geoman's change mode removes a vertex on right-click, but only for LineString,
-Polygon and MultiPolygon. `installMultiLineVertexRemoval` in
+Polygon and MultiPolygon. `installGeomanActionPatches` in
 `packages/plugins/src/plugins/maplibre-geo-editor.ts` adds MultiLineString
 (discussion #2750). It hooks `geoman.actionInstances` and wraps the
 `edit__change` action's `cutVertex`, reading the `featureData` / `markerData`
@@ -546,6 +546,22 @@ checks the hook points in both nested copies' `dist/maplibre-geoman.es.js`
 (text only: Geoman cannot be built without a live map). On a bump, still
 right-click a MultiLineString vertex in Edit mode. If upstream adds MultiLineString support, delete the
 wrapper.
+
+The same hook fixes edge-marker placement (#3382). Geoman's shape-markers
+helper (`helper__shape_markers`) puts each edge's "add a vertex" marker at
+`getSegmentMiddlePosition`, which unprojects the midpoint of the two ends'
+screen positions once, at the camera an edit starts with. On a zoomed-out
+globe that strews the markers away from their edges. The hook overrides
+`getSegmentMiddlePosition` on the helper instance with
+`mercatorSegmentMidpoint` (`geo-editor-geometry.ts`) and must return
+`{ coordinate, path }` with the path built as Geoman builds it (the start's
+path ending in `-1`), since `insertVertex` splices at the edge end's path. The
+helper has to be registered before `startAction()` builds the markers, or the
+first set keeps Geoman's placement. `tests/upstream-contracts.test.ts` checks
+these hook points too. On a bump, still open Edit geometry on a world layer
+(the countries Parquet sample) zoomed out on the globe, zoom in, and check the
+small midpoint markers sit on their edges. If upstream computes the midpoint
+from coordinates, delete the override.
 
 ### `@carbonplan/zarr-layer` — private `minZoom`
 

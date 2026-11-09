@@ -12,6 +12,7 @@ import {
   captureEditedFeatureIds,
   captureEditedGeometries,
   captureEditedProperties,
+  mercatorSegmentMidpoint,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   removeMultiLineStringVertex,
@@ -988,5 +989,67 @@ describe("findGeometryEditFeature", () => {
       findGeometryEditFeature({ type: "FeatureCollection", features: [point("0")] }, "0"),
       undefined,
     );
+  });
+});
+
+describe("mercatorSegmentMidpoint", () => {
+  const close = (actual: number, expected: number) =>
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+
+  it("averages longitudes and keeps a parallel's latitude", () => {
+    const [lng, lat] = mercatorSegmentMidpoint([100, 20], [110, 20]);
+    close(lng, 105);
+    close(lat, 20);
+  });
+
+  it("puts the latitude halfway along Mercator y, not halfway in degrees", () => {
+    // A meridian edge from the equator to 60N: Mercator y doubles the spacing
+    // toward the pole, so the drawn midpoint sits well above 30N.
+    const [lng, lat] = mercatorSegmentMidpoint([10, 0], [10, 60]);
+    close(lng, 10);
+    const y60 = Math.log(Math.tan(Math.PI / 4 + Math.PI / 6));
+    close(lat, (Math.atan(Math.sinh(y60 / 2)) * 180) / Math.PI);
+    assert.ok(lat > 35 && lat < 36);
+  });
+
+  it("is symmetric about the equator", () => {
+    const [, lat] = mercatorSegmentMidpoint([0, -40], [0, 40]);
+    close(lat, 0);
+  });
+
+  it("lands on the drawn edge: collinear with its ends in Mercator space", () => {
+    // An edge of the countries layer's Vietnam polygon (#3382).
+    const start = [107.22092858279524, 10.364483954301832];
+    const end = [108.36612999881545, 11.008320624226272];
+    const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    const [lng, lat] = mercatorSegmentMidpoint(start, end);
+    close(lng, (start[0] + end[0]) / 2);
+    close(toY(lat), (toY(start[1]) + toY(end[1])) / 2);
+    // ...which is not the plain latitude average.
+    assert.ok(Math.abs(lat - (start[1] + end[1]) / 2) > 1e-6);
+  });
+
+  it("clamps an end beyond Mercator's limit, as MapLibre draws it", () => {
+    // Drawn from the equator up to the clamped 85.05N, not to the pole.
+    const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    const [lng, lat] = mercatorSegmentMidpoint([0, 0], [20, 90]);
+    close(lng, 10);
+    close(toY(lat), toY(85.051129) / 2);
+  });
+
+  it("averages plain latitudes for an edge with both ends beyond the limit", () => {
+    // Antarctica's ring runs along -90; clamping would pull the marker off it.
+    assert.deepEqual(mercatorSegmentMidpoint([-180, -90], [-170, -90]), [-175, -90]);
+  });
+
+  it("averages elevation when both ends have one", () => {
+    const middle = mercatorSegmentMidpoint([0, 0, 5], [2, 0, 7]);
+    assert.equal(middle.length, 3);
+    close(middle[2], 6);
+  });
+
+  it("leaves elevation out when either end lacks it", () => {
+    assert.equal(mercatorSegmentMidpoint([0, 0, 5], [2, 0]).length, 2);
+    assert.equal(mercatorSegmentMidpoint([0, 0], [2, 0]).length, 2);
   });
 });
