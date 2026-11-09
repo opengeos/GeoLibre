@@ -56,9 +56,29 @@ test("mergeGeometries keeps only the highest dimension and counts what it left o
   assert.equal(mergeGeometries([null, undefined]), undefined);
 });
 
-test("mergeGeometries dissolves overlapping polygons into one valid geometry", () => {
+/** The planar area of a polygon's outer ring, by the shoelace formula, less its holes. */
+function planarArea(polygon: Polygon): number {
+  const ring = (points: Position[]): number =>
+    Math.abs(
+      points.reduce((sum, [x, y], i) => {
+        const [nx, ny] = points[(i + 1) % points.length];
+        return sum + (x * ny - nx * y);
+      }, 0) / 2,
+    );
+  const [outer, ...holes] = polygon.coordinates;
+  return ring(outer) - holes.reduce((sum, hole) => sum + ring(hole), 0);
+}
+
+test("mergeGeometries dissolves overlapping polygons into one geometry covering both", () => {
+  // Two 2 x 2 squares sharing a 1 x 2 strip: the union is 3 x 2. Returning only one of them would
+  // still be a valid polygon, so the area and the extent are what show both were kept.
   const merged = mergeGeometries([square(0, 2), square(1, 2)]);
   assert.equal(merged?.geometry.type, "Polygon");
+  const polygon = merged?.geometry as Polygon;
+  assert.equal(planarArea(polygon), 6);
+  const xs = polygon.coordinates[0].map(([x]) => x);
+  assert.equal(Math.min(...xs), 0);
+  assert.equal(Math.max(...xs), 3);
 });
 
 test("mergeGeometries keeps disjoint polygons as a MultiPolygon", () => {
