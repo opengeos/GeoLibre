@@ -18,6 +18,7 @@ import { fromUrl, type GeoTIFF, type GeoTIFFImage } from "geotiff";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 import proj4 from "proj4";
 import { compileFormula, formulaNames, isValidFormula } from "./stac-bands";
+import { readableStacAssetHref, type StacAssetAccess } from "./stac-signing";
 
 /** The URL scheme of rendering tiles. */
 export const STAC_RENDER_PROTOCOL = "stacrender";
@@ -30,13 +31,23 @@ const MAX_WINDOW = 2048;
 /** Most bands one rendering reads: a formula past this is not an index anyone typed. */
 const MAX_BANDS = 8;
 
-/** One band of one file, with the scale and offset that turn its values into reflectance. */
+/**
+ * One band of one file, with the scale and offset that turn its values into reflectance.
+ *
+ * `href` is the address the catalog gave, never a signed one: a signed address carries a
+ * credential, which would be saved into the project and shared with it, and it expires. Where the
+ * catalog needs one, `access` says how to ask for a fresh signature each time the file is read.
+ */
 export interface RenderBand {
   href: string;
   /** 1-based band number inside the file. */
   index: number;
   scale: number;
   offset: number;
+  /** The value that marks no data in this band, when the catalog declares one. */
+  nodata?: number;
+  /** How to sign `href` when the catalog keeps it private (Planetary Computer). */
+  access?: StacAssetAccess;
 }
 
 /** Three-stop ramps an index can be drawn with: low, middle and high colour. */
@@ -98,17 +109,37 @@ function isHttps(href: unknown): href is string {
   }
 }
 
+function parseAccess(value: unknown, href: string): StacAssetAccess | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null) return null;
+  const { catalogUrl, collectionId, href: accessHref } = value as Record<string, unknown>;
+  if (!isHttps(catalogUrl) || typeof collectionId !== "string" || !collectionId) return null;
+  // The signature is asked for the file this band reads, and no other.
+  if (accessHref !== href) return null;
+  return { catalogUrl, collectionId, href };
+}
+
 function parseBand(value: unknown): RenderBand | null {
   if (typeof value !== "object" || value === null) return null;
   const band = value as Record<string, unknown>;
-  const { href, index, scale, offset } = band;
+  const { href, index, scale, offset, nodata } = band;
   if (!isHttps(href)) return null;
   if (typeof index !== "number" || !Number.isInteger(index) || index < 1 || index > 1000) {
     return null;
   }
   if (typeof scale !== "number" || !Number.isFinite(scale) || scale === 0) return null;
   if (typeof offset !== "number" || !Number.isFinite(offset)) return null;
-  return { href, index, scale, offset };
+  if (nodata !== undefined && (typeof nodata !== "number" || !Number.isFinite(nodata))) return null;
+  const access = parseAccess(band.access, href);
+  if (access === null) return null;
+  return {
+    href,
+    index,
+    scale,
+    offset,
+    ...(nodata !== undefined ? { nodata } : {}),
+    ...(access ? { access } : {}),
+  };
 }
 
 function finiteIn(value: unknown, low: number, high: number): value is number {
@@ -139,8 +170,9 @@ function parseStyle(value: unknown): RenderStyle | null {
     if (!finiteIn(max, -1e6, 1e6)) return null;
     style.max = max;
   }
-  // A window with no width has nothing to draw.
-  if (style.min !== undefined && style.max !== undefined && style.min >= style.max) return null;
+  // The window is judged as it will be drawn, with the default end standing in for one not given:
+  // a minimum of 2 with the default maximum of 1 is no window at all.
+  if (!((style.min ?? -1) < (style.max ?? 1))) return null;
   return style;
 }
 
@@ -310,7 +342,16 @@ export function paintRender(
   const values = new Array<number>(samples.length);
   for (let i = 0; i < count; i++) {
     const o = i * 4;
-    for (let b = 0; b < samples.length; b++) values[b] = samples[b][i];
+    let missing = false;
+    for (let b = 0; b < samples.length; b++) {
+      values[b] = samples[b][i];
+      if (Number.isNaN(values[b])) missing = true;
+    }
+    // A formula such as a ^ 0 turns a missing value into 1, so the check comes before it.
+    if (missing) {
+      out[o + 3] = 0;
+      continue;
+    }
     const raw = evaluate(values);
     if (!Number.isFinite(raw)) {
       out[o + 3] = 0;
@@ -334,12 +375,15 @@ interface BandDataset {
   tiff: GeoTIFF;
   /** Full resolution first, then overviews, coarser and coarser. */
   images: GeoTIFFImage[];
-  /** Ground resolution of each image, in the file's CRS units per pixel. */
-  resolutions: number[];
+  /** Pixel width of each image, in the file's CRS units. */
+  resX: number[];
+  /** Pixel height of each image, in the file's CRS units (the two differ in some files). */
+  resY: number[];
   originX: number;
   originY: number;
   /** proj4 definition of the file's CRS. */
   crs: string;
+  /** The no-data value the file's own tag declares, when it does. */
   nodata: number | null;
   bitsPerSample: number;
 }
@@ -363,34 +407,42 @@ async function projectionOf(geoKeys: Record<string, unknown> | undefined): Promi
   }
 }
 
+/**
+ * Whether an IFD holds imagery. A transparency mask (and an overview of one) is a page of its own
+ * in a COG, flagged in NewSubfileType, with the same width as the image it masks; read as a band
+ * it would paint 0/255 bytes.
+ */
+function isImagery(image: GeoTIFFImage): boolean {
+  // geotiff.js hands tags out through getValue, not as properties of the directory.
+  const flags = Number(image.getFileDirectory().getValue("NewSubfileType") ?? 0);
+  return (flags & 4) === 0;
+}
+
 function openBand(url: string): Promise<BandDataset> {
   let cached = bandCache.get(url);
   if (!cached) {
     cached = (async () => {
       const tiff = await fromUrl(url);
       const count = await tiff.getImageCount();
-      const images: GeoTIFFImage[] = [];
-      for (let i = 0; i < Math.min(count, 16); i++) images.push(await tiff.getImage(i));
+      const pages: GeoTIFFImage[] = [];
+      for (let i = 0; i < Math.min(count, 16); i++) pages.push(await tiff.getImage(i));
+      const images = pages.filter(isImagery);
       const full = images[0];
-      const [resX] = full.getResolution();
+      if (!full) throw new Error("This file has no image to read.");
+      const [resX, resY] = full.getResolution();
       const [originX, originY] = full.getOrigin();
       const crs = await projectionOf(full.getGeoKeys() ?? undefined);
       if (!crs) throw new Error("This file's projection could not be read.");
-      const resolutions = images.map(
-        (image) => (Math.abs(resX) * full.getWidth()) / image.getWidth(),
-      );
-      const bits = full.getBitsPerSample(0);
-      const declared = full.getGDALNoData();
       return {
         tiff,
         images,
-        resolutions,
+        resX: images.map((image) => (Math.abs(resX) * full.getWidth()) / image.getWidth()),
+        resY: images.map((image) => (Math.abs(resY) * full.getHeight()) / image.getHeight()),
         originX,
         originY,
         crs,
-        // 16-bit imagery with no declared nodata uses 0 for the swath edge (Sentinel-2, Landsat).
-        nodata: declared ?? (bits === 16 ? 0 : null),
-        bitsPerSample: bits,
+        nodata: full.getGDALNoData(),
+        bitsPerSample: full.getBitsPerSample(0),
       };
     })();
     bandCache.set(url, cached);
@@ -484,46 +536,69 @@ async function sampleBand(
     if (coords.n[k] < minN) minN = coords.n[k];
     if (coords.n[k] > maxN) maxN = coords.n[k];
   }
-  const level = pickOverview(dataset.resolutions, (maxE - minE) / TILE_SIZE);
+  // Fine enough along both axes: the two pixel sizes can differ.
+  const level = Math.min(
+    pickOverview(dataset.resX, (maxE - minE) / TILE_SIZE),
+    pickOverview(dataset.resY, (maxN - minN) / TILE_SIZE),
+  );
   const image = dataset.images[level];
-  const res = dataset.resolutions[level];
+  const rx = dataset.resX[level];
+  const ry = dataset.resY[level];
   const width = image.getWidth();
   const height = image.getHeight();
-  const x0 = Math.max(0, Math.floor((minE - dataset.originX) / res));
-  const x1 = Math.min(width, Math.ceil((maxE - dataset.originX) / res) + 1);
-  const y0 = Math.max(0, Math.floor((dataset.originY - maxN) / res));
-  const y1 = Math.min(height, Math.ceil((dataset.originY - minN) / res) + 1);
-  if (x1 <= x0 || y1 <= y0 || x1 - x0 > MAX_WINDOW || y1 - y0 > MAX_WINDOW) return null;
+  const x0 = Math.max(0, Math.floor((minE - dataset.originX) / rx));
+  const x1 = Math.min(width, Math.ceil((maxE - dataset.originX) / rx) + 1);
+  const y0 = Math.max(0, Math.floor((dataset.originY - maxN) / ry));
+  const y1 = Math.min(height, Math.ceil((dataset.originY - minN) / ry) + 1);
+  if (x1 <= x0 || y1 <= y0) return null;
+  const w = x1 - x0;
+  const h = y1 - y0;
+  // A file with no overview coarse enough would need a window larger than is sensible to read for
+  // one tile; it is read thinned to fit instead of being left blank.
+  const thin = Math.min(1, MAX_WINDOW / Math.max(w, h));
+  const readW = Math.max(1, Math.round(w * thin));
+  const readH = Math.max(1, Math.round(h * thin));
   // No abort signal: geotiff.js shares a block fetch between concurrent readers, so cancelling one
   // tile's read can truncate a block another tile is decoding ("buffer error"). A cancelled
   // tile's read just completes and is discarded, and its blocks stay cached for the neighbours.
   const rasters = await image.readRasters({
     window: [x0, y0, x1, y1],
     samples: [band.index - 1],
+    ...(thin < 1 ? { width: readW, height: readH, resampleMethod: "nearest" } : {}),
   });
   const data = (rasters as unknown as ArrayLike<number>[])[0];
-  const w = x1 - x0;
-  const h = y1 - y0;
+  // The band's own declaration first; the file's tag when the catalog says nothing.
+  const nodata = band.nodata ?? dataset.nodata;
   const out = new Float32Array(coords.e.length);
   for (let k = 0; k < out.length; k++) {
-    const col = Math.floor((coords.e[k] - dataset.originX) / res) - x0;
-    const row = Math.floor((dataset.originY - coords.n[k]) / res) - y0;
-    if (col < 0 || col >= w || row < 0 || row >= h) {
+    const colAt = (coords.e[k] - dataset.originX) / rx - x0;
+    const rowAt = (dataset.originY - coords.n[k]) / ry - y0;
+    if (colAt < 0 || colAt >= w || rowAt < 0 || rowAt >= h) {
       out[k] = NaN;
       continue;
     }
-    const raw = data[row * w + col];
-    out[k] = raw === dataset.nodata ? NaN : raw * band.scale + band.offset;
+    const col = Math.min(readW - 1, Math.floor((colAt * readW) / w));
+    const row = Math.min(readH - 1, Math.floor((rowAt * readH) / h));
+    const raw = data[row * readW + col];
+    out[k] = raw === nodata ? NaN : raw * band.scale + band.offset;
   }
   return out;
 }
 
+/** The address a band is read from now: signed afresh when the catalog keeps it private. */
+function readableBandHref(band: RenderBand, signal?: AbortSignal): Promise<string> {
+  return band.access
+    ? readableStacAssetHref(band.access, band.href, signal)
+    : Promise.resolve(band.href);
+}
+
 async function renderWith(
   request: RenderTileRequest,
+  urls: readonly string[],
   signal?: AbortSignal,
 ): Promise<Uint8ClampedArray | null> {
   const { spec } = request;
-  const datasets = await Promise.all(spec.bands.map((band) => openBand(band.href)));
+  const datasets = await Promise.all(urls.map(openBand));
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   // Bands of one item usually share a CRS; each distinct one is computed once per tile.
   const byCrs = new Map<string, Coordinates>();
@@ -556,14 +631,15 @@ export async function renderStacTile(
   request: RenderTileRequest,
   signal?: AbortSignal,
 ): Promise<Uint8ClampedArray | null> {
+  const urls = await Promise.all(request.spec.bands.map((band) => readableBandHref(band, signal)));
   try {
-    return await renderWith(request, signal);
+    return await renderWith(request, urls, signal);
   } catch (error) {
     if (signal?.aborted) throw error;
     // A failed read or decode may have left a bad block in the reader's cache; reopen the bands
     // and try once more.
-    for (const band of request.spec.bands) bandCache.delete(band.href);
-    return renderWith(request, signal);
+    for (const url of urls) bandCache.delete(url);
+    return renderWith(request, urls, signal);
   }
 }
 

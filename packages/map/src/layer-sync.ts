@@ -2902,6 +2902,18 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
       ...(addressed.scheme === "tms" ? { scheme: "tms" as const } : {}),
       ...(attribution ? { attribution } : {}),
     });
+  } else if (typeof layer.metadata.stacRendering === "string") {
+    // A STAC rendering's recipe is in its tile URL, and the Style panel (and an undo) change it.
+    // A raster source is otherwise added once and left, so its tiles are handed over here.
+    const source = map.getSource(src) as
+      | { tiles?: string[]; setTiles?: (tiles: string[]) => void }
+      | undefined;
+    const current = source?.tiles;
+    const same =
+      current !== undefined &&
+      current.length === addressed.tiles.length &&
+      current.every((tile, index) => tile === addressed.tiles[index]);
+    if (source?.setTiles && !same) source.setTiles(addressed.tiles);
   }
   ensureLayer(
     map,

@@ -173,6 +173,11 @@ export interface StacNextPage {
   href: string;
   method: "GET" | "POST";
   body?: Record<string, unknown>;
+  /**
+   * The body of the request that got the first page, after any fallback. A POST next link usually
+   * carries only a token, so the later pages are asked for the same way the first one was.
+   */
+  request?: Record<string, unknown>;
 }
 
 export interface StacSearchResult {
@@ -272,12 +277,32 @@ export function isAzureBlobHref(href: string): boolean {
   }
 }
 
+/** A failed STAC request, with the HTTP status it came back with. */
+export class StacHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "StacHttpError";
+  }
+}
+
+/** Statuses that mean the server refused a parameter, not that it is down or limiting us. */
+const REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 422, 501]);
+
+function refusedRequest(error: unknown): boolean {
+  return error instanceof StacHttpError && REFUSED_STATUSES.has(error.status);
+}
+
 async function fetchJson<T>(url: string, init: RequestInit, fetcher: FetchLike): Promise<T> {
   const response = await fetcher(browserCatalogHref(url), {
     ...init,
     headers: { Accept: "application/geo+json, application/json", ...init.headers },
   });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+  if (!response.ok) {
+    throw new StacHttpError(response.status, `${response.status} ${response.statusText}`.trim());
+  }
   return response.json();
 }
 
@@ -719,8 +744,14 @@ function searchBodies(
   const sorts: Array<StacSortDirection | undefined> = options.sortby
     ? [options.sortby, undefined]
     : [undefined];
-  const clouds: Array<"cql2" | "query" | undefined> =
-    options.maxCloudCover === undefined ? [undefined] : ["cql2", "query"];
+  // A CQL2 text filter cannot be combined with the JSON cloud filter, so with one typed the cloud
+  // limit is applied to the results only. The older `query` extension is left out on purpose: its
+  // `lte` drops scenes that report no cloud cover, which the limit promises to keep, and the
+  // panel filters what comes back anyway.
+  const typed = body.filter;
+  const canFilterOnServer = typed === undefined || (typeof typed === "object" && typed !== null);
+  const clouds: Array<"cql2" | undefined> =
+    options.maxCloudCover === undefined || !canFilterOnServer ? [undefined] : ["cql2", undefined];
   return clouds.flatMap((cloud) =>
     sorts.map((sort) => {
       const next: Record<string, unknown> = { ...body };
@@ -732,14 +763,9 @@ function searchBodies(
             { op: "isNull", args: [{ property: "eo:cloud_cover" }] },
           ],
         };
-        // A filter typed into the additional parameters stays; both must hold.
-        const typed = body.filter;
         next["filter-lang"] = "cql2-json";
-        next.filter =
-          typed && typeof typed === "object" ? { op: "and", args: [typed, keep] } : keep;
-      } else if (cloud === "query") {
-        const typed = body.query && typeof body.query === "object" ? body.query : {};
-        next.query = { ...typed, "eo:cloud_cover": { lte: options.maxCloudCover } };
+        // A filter typed into the additional parameters stays; both must hold.
+        next.filter = typed ? { op: "and", args: [typed, keep] } : keep;
       }
       // The dropdown wins over a sortby typed into the additional parameters, which is what it is for.
       if (sort) next.sortby = [{ field: "properties.datetime", direction: sort }];
@@ -770,8 +796,15 @@ export async function searchStacApi(
     ...options.additional,
     limit: Math.max(1, Math.min(options.limit ?? 20, 100)),
   };
-  if (options.intersects) body.intersects = options.intersects;
-  else if (options.bbox) body.bbox = options.bbox;
+  // Item Search takes a bbox or an intersects, never both, and the panel's choice wins over one
+  // typed into the additional parameters.
+  if (options.intersects) {
+    delete body.bbox;
+    body.intersects = options.intersects;
+  } else if (options.bbox) {
+    delete body.intersects;
+    body.bbox = options.bbox;
+  }
   if (options.datetime) body.datetime = options.datetime;
   if (options.collections?.length) body.collections = options.collections;
   const page = options.next;
@@ -790,19 +823,25 @@ export async function searchStacApi(
       },
       fetcher,
     );
-    return parseItems(raw, href);
+    const result = parseItems(raw, href);
+    // The next link is followed the way this page was asked for.
+    if (result.next && method === "POST") result.next.request = payload;
+    return result;
   };
   try {
-    // The request as asked, then simpler forms for a server that rejects it, the way the QGIS
-    // plugin does: the cloud filter goes CQL2 then `query`, and the sort is dropped last (the
-    // caller sorts the results itself). A later page follows the server's own link as is.
-    const variants = page ? [searchBodies(body, options)[0]] : searchBodies(body, options);
+    // The request as asked, then simpler forms for a server that refuses it: the cloud filter is
+    // dropped (the panel filters locally), and the sort last (the caller sorts the results itself).
+    // Only a refusal moves on to the next form; a rate limit, a login or a server error would just
+    // be asked four times. A later page is asked the way the first one finally was.
+    const variants = page
+      ? [page.request ?? searchBodies(body, options)[0]]
+      : searchBodies(body, options);
     let failure: unknown;
     for (const payload of variants) {
       try {
         return await send(payload);
       } catch (error) {
-        if (options.signal?.aborted || method !== "POST") throw error;
+        if (options.signal?.aborted || method !== "POST" || !refusedRequest(error)) throw error;
         failure = error;
       }
     }
@@ -819,14 +858,30 @@ export async function searchStacApi(
     for (const [key, value] of Object.entries(options.additional ?? {})) {
       if (
         ["limit", "bbox", "intersects", "datetime", "collections"].includes(key) ||
+        // The dropdown's sort is encoded below, and wins.
+        (key === "sortby" && options.sortby) ||
         value === undefined
       ) {
         continue;
       }
       query.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-    const getUrl = `${href}${href.includes("?") ? "&" : "?"}${query}`;
-    return parseItems(await fetchJson(getUrl, { signal: options.signal }, fetcher), getUrl);
+    const getUrl = (sorted: boolean): string => {
+      const params = new URLSearchParams(query);
+      if (sorted && options.sortby) {
+        params.set("sortby", `${options.sortby === "asc" ? "+" : "-"}properties.datetime`);
+      }
+      return `${href}${href.includes("?") ? "&" : "?"}${params}`;
+    };
+    try {
+      const url = getUrl(true);
+      return parseItems(await fetchJson(url, { signal: options.signal }, fetcher), url);
+    } catch (getError) {
+      // An endpoint that refuses the sort is asked again without it; the caller sorts the results.
+      if (!options.sortby || options.signal?.aborted || !refusedRequest(getError)) throw getError;
+      const url = getUrl(false);
+      return parseItems(await fetchJson(url, { signal: options.signal }, fetcher), url);
+    }
   }
 }
 
@@ -855,8 +910,44 @@ export function sortStacItems(items: StacItem[], direction: StacSortDirection): 
     .map((entry) => entry.item);
 }
 
-function intersects(a: number[], b: [number, number, number, number]): boolean {
-  return a.length >= 4 && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+type Box = [number, number, number, number];
+
+/** A box that crosses the antimeridian (west greater than east) as the two boxes it is made of. */
+function splitBox(box: Box): Box[] {
+  return box[0] > box[2]
+    ? [
+        [box[0], box[1], 180, box[3]],
+        [-180, box[1], box[2], box[3]],
+      ]
+    : [box];
+}
+
+function intersects(a: number[], b: Box): boolean {
+  if (a.length < 4) return false;
+  const left = splitBox([a[0], a[1], a[2], a[3]]);
+  return left.some((one) =>
+    splitBox(b).some(
+      (other) =>
+        one[0] <= other[2] && one[2] >= other[0] && one[1] <= other[3] && one[3] >= other[1],
+    ),
+  );
+}
+
+/** A box as a polygon, for testing it against a shape the way a footprint is. */
+function boxPolygon(box: Box): Geometry {
+  const [west, south, east, north] = box;
+  return {
+    type: "Polygon",
+    coordinates: [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ],
+    ],
+  };
 }
 
 /** The horizontal extent of any GeoJSON geometry, or undefined when it has no positions. */
@@ -979,7 +1070,21 @@ export async function searchStaticStac(
     if (area) {
       const window = geometryBbox(area);
       if (window && !bboxes.some((candidate) => intersects(candidate, window))) return false;
-      if (item.geometry && !geometryIntersects(item.geometry, area)) return false;
+      // With no footprint, what the record declares is its extent: each box is tested against the
+      // shape itself, not only against the shape's own bounding box.
+      if (item.geometry) {
+        if (!geometryIntersects(item.geometry, area)) return false;
+      } else if (
+        !bboxes.some((candidate) => {
+          const horizontal = horizontalBbox(candidate);
+          return (
+            horizontal !== undefined &&
+            splitBox(horizontal).some((box) => geometryIntersects(boxPolygon(box), area))
+          );
+        })
+      ) {
+        return false;
+      }
     } else if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
       return false;
     }

@@ -1184,6 +1184,8 @@ test("searchStacApi sends spatial, temporal, and collection filters and follows 
     href: "https://example.com/stac/search?token=next",
     method: "POST",
     body: { token: "next" },
+    // The body that got this page, so the next one is asked for the same way.
+    request: body,
   });
 });
 
@@ -2719,22 +2721,125 @@ test("searchStacApi sends the cloud limit as CQL2 that keeps items with no cloud
   });
 });
 
-test("searchStacApi falls back to the query extension, then drops the sort, for a server that refuses", async () => {
+test("searchStacApi drops the cloud filter, then the sort, for a server that refuses them", async () => {
   const bodies: Array<Record<string, unknown>> = [];
   const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
     bodies.push(body);
-    // Accepts only the older query extension, and not with a sort.
+    // Accepts neither a CQL2 filter nor a sort.
     if (body.filter || body.sortby) return jsonResponse({ detail: "unsupported" }, 400);
     return jsonResponse({ type: "FeatureCollection", features: [] });
   }) as typeof fetch;
   await searchStacApi(sortConnection, { maxCloudCover: 20, sortby: "asc" }, fetcher);
   assert.equal(bodies.length, 4);
-  assert.ok(bodies[0].filter && bodies[0].sortby);
-  assert.ok(bodies[1].filter && !bodies[1].sortby);
-  assert.ok(bodies[2].query && bodies[2].sortby);
-  assert.deepEqual(bodies[3].query, { "eo:cloud_cover": { lte: 20 } });
-  assert.equal("sortby" in bodies[3], false);
+  assert.ok(bodies[0].filter && bodies[0].sortby, "as asked");
+  assert.ok(bodies[1].filter && !bodies[1].sortby, "without the sort");
+  assert.ok(!bodies[2].filter && bodies[2].sortby, "without the cloud filter");
+  assert.ok(!bodies[3].filter && !bodies[3].sortby, "plain, and the panel filters locally");
+  // The older query extension drops scenes that report no cloud cover, so it is never sent.
+  assert.equal(
+    bodies.some((body) => "query" in body),
+    false,
+  );
+});
+
+test("searchStacApi asks again only when the server refused, not when it is limiting or down", async () => {
+  for (const status of [401, 403, 429, 500, 503]) {
+    let posts = 0;
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") posts += 1;
+      return jsonResponse({ detail: "no" }, status);
+    }) as typeof fetch;
+    await assert.rejects(
+      searchStacApi(sortConnection, { maxCloudCover: 20, sortby: "desc" }, fetcher),
+    );
+    assert.equal(posts, 1, `one POST for a ${status}, not four`);
+  }
+});
+
+test("the next page is asked for the way the first page finally was", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    if (body.sortby) return jsonResponse({ detail: "no sort here" }, 400);
+    return jsonResponse({
+      type: "FeatureCollection",
+      features: [],
+      links: [{ rel: "next", href: "?t=2", method: "POST", body: { token: "two" } }],
+    });
+  }) as typeof fetch;
+  const first = await searchStacApi(sortConnection, { sortby: "desc" }, fetcher);
+  assert.ok(first.next);
+  bodies.length = 0;
+  await searchStacApi(sortConnection, { sortby: "desc", next: first.next }, fetcher);
+  // The sort the server refused is not sent again with the token.
+  assert.equal(bodies.length, 1);
+  assert.equal("sortby" in bodies[0], false);
+  assert.equal(bodies[0].token, "two");
+});
+
+test("a CQL2 text filter is kept, and the cloud limit is left to the panel", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(
+    sortConnection,
+    {
+      maxCloudCover: 10,
+      additional: { filter: "platform = 'sentinel-2a'", "filter-lang": "cql2-text" },
+    },
+    fetcher,
+  );
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0].filter, "platform = 'sentinel-2a'");
+  assert.equal(bodies[0]["filter-lang"], "cql2-text");
+});
+
+test("a drawn shape wins over a bbox typed into the additional parameters, and the reverse", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  const point = { type: "Point" as const, coordinates: [1, 2] };
+  await searchStacApi(
+    sortConnection,
+    { intersects: point, additional: { bbox: [0, 0, 1, 1] } },
+    fetcher,
+  );
+  assert.deepEqual(bodies[0].intersects, point);
+  assert.equal("bbox" in bodies[0], false);
+  await searchStacApi(
+    sortConnection,
+    { bbox: [0, 0, 1, 1], additional: { intersects: point } },
+    fetcher,
+  );
+  assert.deepEqual(bodies[1].bbox, [0, 0, 1, 1]);
+  assert.equal("intersects" in bodies[1], false);
+});
+
+test("the GET fallback sends the date sort, and asks again without it when refused", async () => {
+  const urls: string[] = [];
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "POST") throw new Error("405 Method Not Allowed");
+    urls.push(String(input));
+    if (String(input).includes("sortby")) return jsonResponse({ detail: "no" }, 400);
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(sortConnection, { sortby: "desc" }, fetcher);
+  assert.equal(urls.length, 2);
+  assert.match(urls[0], /sortby=-properties\.datetime/);
+  assert.doesNotMatch(urls[1], /sortby/);
+  urls.length = 0;
+  await searchStacApi(sortConnection, { sortby: "asc" }, async (input, init) => {
+    if (init?.method === "POST") throw new Error("405");
+    urls.push(String(input));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  });
+  assert.match(decodeURIComponent(urls[0]), /sortby=\+properties\.datetime/);
 });
 
 test("searchStacApi combines a typed filter with the cloud limit", async () => {
@@ -2768,4 +2873,106 @@ test("withinCloudCover drops cloudy items and keeps those that report none", () 
     ["clear", "radar", "edge"],
   );
   assert.equal(withinCloudCover(items, undefined), items);
+});
+
+/** Runs a static search over single items, each given as its own document. */
+async function staticShapeSearch(
+  items: Array<Record<string, unknown>>,
+  intersects:
+    | { type: "Point"; coordinates: number[] }
+    | { type: "Polygon"; coordinates: number[][][] },
+): Promise<string[]> {
+  const docs: Record<string, unknown> = {};
+  const links = items.map((item, index) => {
+    docs[`https://example.com/${index}.json`] = {
+      type: "Feature",
+      assets: {},
+      properties: { datetime: "2024-05-01T00:00:00Z" },
+      ...item,
+    };
+    return { rel: "item", href: `${index}.json` };
+  });
+  const root = { type: "Catalog", id: "root", links };
+  docs["https://example.com/c.json"] = root;
+  const fetcher = (async (input: RequestInfo | URL) =>
+    jsonResponse(docs[String(input)])) as typeof fetch;
+  const result = await searchStaticStac(
+    { url: "https://example.com/c.json", title: "S", isApi: false, collections: [], root },
+    { intersects, limit: 50 },
+    fetcher,
+  );
+  return result.items.map((found) => found.id);
+}
+
+const square = (west: number, south: number, east: number, north: number) => ({
+  type: "Polygon" as const,
+  coordinates: [
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ],
+});
+
+test("a footprint with a hole is not matched by a point inside the hole", async () => {
+  const holed = {
+    id: "holed",
+    bbox: [0, 0, 4, 4],
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [4, 0],
+          [4, 4],
+          [0, 4],
+          [0, 0],
+        ],
+        [
+          [1, 1],
+          [1, 3],
+          [3, 3],
+          [3, 1],
+          [1, 1],
+        ],
+      ],
+    },
+  };
+  // The item's bbox covers both points, so only the footprint can tell them apart.
+  assert.deepEqual(await staticShapeSearch([holed], { type: "Point", coordinates: [2, 2] }), []);
+  assert.deepEqual(await staticShapeSearch([holed], { type: "Point", coordinates: [0.5, 0.5] }), [
+    "holed",
+  ]);
+});
+
+test("an item that crosses the antimeridian is found from either side of it", async () => {
+  const crossing = { id: "crossing", bbox: [170, 0, -170, 10], geometry: null };
+  assert.deepEqual(await staticShapeSearch([crossing], { type: "Point", coordinates: [175, 5] }), [
+    "crossing",
+  ]);
+  assert.deepEqual(await staticShapeSearch([crossing], { type: "Point", coordinates: [-175, 5] }), [
+    "crossing",
+  ]);
+  assert.deepEqual(await staticShapeSearch([crossing], { type: "Point", coordinates: [0, 5] }), []);
+});
+
+test("a record with only an extent is tested against the shape, not its bounding box", async () => {
+  const extentOnly = { id: "extent", bbox: [0, 0, 1, 1], geometry: null };
+  // This triangle's bounding box (0..3) overlaps the extent, but the triangle itself does not.
+  const triangle = {
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [3, 0],
+        [3, 3],
+        [0, 3],
+        [3, 0],
+      ],
+    ],
+  };
+  assert.deepEqual(await staticShapeSearch([extentOnly], triangle), []);
+  assert.deepEqual(await staticShapeSearch([extentOnly], square(0.5, 0.5, 2, 2)), ["extent"]);
 });

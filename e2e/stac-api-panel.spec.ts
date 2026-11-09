@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { waitForMap } from "./helpers";
+import { bindMapLibreMap, waitForMap } from "./helpers";
 
 // `maplibre-stac.ts` builds its panel by hand and exports nothing to call, so the wiring between
 // the catalog tree, the collection list and the search only exists here. An API is the half that
@@ -453,6 +453,26 @@ test("an item's Zoom, Assets, Bands and Download share one row, whatever the ass
   }
 });
 
+/**
+ * The recipes of the STAC rendering sources on the live map, decoded from their tile URLs. This is
+ * what the map is actually drawing from, as against what the store or the controls say.
+ */
+async function liveRenderingRecipes(page: Page): Promise<Array<Record<string, unknown>>> {
+  await bindMapLibreMap(page);
+  const urls = await page.evaluate(() => {
+    const map = (window as unknown as { __geolibreTestMap?: { getStyle(): { sources: object } } })
+      .__geolibreTestMap;
+    const sources = Object.values(map?.getStyle().sources ?? {}) as Array<{ tiles?: string[] }>;
+    return sources
+      .flatMap((source) => source.tiles ?? [])
+      .filter((url) => url.startsWith("stacrender://"));
+  });
+  return urls.map((url) => {
+    const encoded = new URL(url.replace("{z}/{x}/{y}", "0/0/0")).searchParams.get("s");
+    return JSON.parse(encoded ?? "{}") as Record<string, unknown>;
+  });
+}
+
 test("a band rendering has the Edit raster style entry, and its style editor", async ({ page }) => {
   const searches: string[] = [];
   const band = (name: string) => ({
@@ -503,6 +523,21 @@ test("a band rendering has the Edit raster style entry, and its style editor", a
   await expect(page.getByTestId("stac-rendering-style").getByLabel("Color ramp")).toHaveValue(
     "RdYlGn",
   );
+
+  // The map itself is drawing from the edited recipe, not only the store and the controls.
+  await expect
+    .poll(async () => (await liveRenderingRecipes(page)).map((recipe) => recipe.style))
+    .toEqual([{ ramp: "RdYlGn" }]);
+
+  // An undo puts the map and the controls back, which the edit alone never had to do.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Undo/ }).click();
+  await expect
+    .poll(async () => (await liveRenderingRecipes(page)).map((recipe) => recipe.style))
+    .toEqual([undefined]);
+  await expect(page.getByTestId("stac-rendering-style").getByLabel("Color ramp")).toHaveValue(
+    "BrBG",
+  );
 });
 
 test("a colour composite's style editor offers brightness and gamma, not a ramp", async ({
@@ -535,4 +570,106 @@ test("a colour composite's style editor offers brightness and gamma, not a ramp"
   await expect(editor.getByText("Brightness")).toBeVisible();
   await expect(editor.getByText("Gamma")).toBeVisible();
   await expect(editor.getByLabel("Color ramp")).toHaveCount(0);
+});
+
+test("changing the sort order re-orders the results already on screen", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  // Registered after the fixture, so it answers first: three items, out of date order.
+  await page.route("https://api.stac.test/**/search", (route) => {
+    const dated = (id: string, datetime: string) => ({
+      ...item(id, "sentinel-2"),
+      properties: { datetime },
+    });
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        type: "FeatureCollection",
+        features: [
+          dated("item-old", "2024-01-01T00:00:00Z"),
+          dated("item-new", "2024-03-01T00:00:00Z"),
+          dated("item-mid", "2024-02-01T00:00:00Z"),
+        ],
+        numberMatched: 3,
+        links: [],
+      }),
+    });
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  const order = async (): Promise<string[]> =>
+    page.getByText(/^item-(old|mid|new)$/).allTextContents();
+  await expect.poll(order).toEqual(["item-old", "item-new", "item-mid"]);
+
+  const sort = page.getByRole("combobox", { name: /Sort by date/ });
+  // No new search is made: the same results fall into the order asked for.
+  await sort.selectOption({ label: "Newest first" });
+  await expect.poll(order).toEqual(["item-new", "item-mid", "item-old"]);
+  await sort.selectOption({ label: "Oldest first" });
+  await expect.poll(order).toEqual(["item-old", "item-mid", "item-new"]);
+  // And the server's own order comes back when asked for.
+  await sort.selectOption({ label: "Server default" });
+  await expect.poll(order).toEqual(["item-old", "item-new", "item-mid"]);
+});
+
+test("typing a bbox lets go of the search shape, and a cancelled draw resets its tool", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  // A point on the map becomes the search shape.
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await page.locator(".maplibregl-canvas").click({ position: { x: 300, y: 300 } });
+  await expect(page.getByText(/Searching within Point/)).toBeVisible();
+  const clearShape = page.getByRole("button", { name: "Clear shape" });
+  await expect(clearShape).toBeEnabled();
+
+  // A bbox typed afterwards is what the user means now, so the shape does not silently win.
+  await page.getByLabel(/Bounding box/).fill("0, 0, 1, 1");
+  await expect(page.getByText("Search shape cleared.")).toBeVisible();
+  await expect(clearShape).toBeDisabled();
+
+  // A point draw cancelled by the bbox button, and a bbox draw begun after it, must not leave the
+  // Point tool believing it is the one drawing: its next click starts a point, not switches off.
+  const cursor = () =>
+    page.locator(".maplibregl-canvas").evaluate((canvas) => (canvas as HTMLElement).style.cursor);
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await expect.poll(cursor).toBe("crosshair");
+  await page.getByRole("button", { name: "Draw bbox on map" }).click();
+  await expect.poll(cursor).toBe("");
+  await page.getByRole("button", { name: "Draw bbox on map" }).click();
+  await expect(page.getByRole("button", { name: "Cancel drawing" })).toBeVisible();
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await expect.poll(cursor).toBe("crosshair");
+
+  // Enter in a field of the panel is for that field; it does not end the drawing.
+  await page.getByLabel(/Bounding box/).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(cursor).toBe("crosshair");
+  // And Enter with nothing drawn yet leaves it open too.
+  await page.locator(".maplibregl-canvas").hover({ position: { x: 200, y: 200 } });
+  await page.keyboard.press("Enter");
+  await expect.poll(cursor).toBe("crosshair");
+});
+
+test("every menu on a result has a name of its own", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches, {
+    data: { href: "https://data.test/data.tif", type: "image/tiff", title: "Data" },
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  // Named for what they do, not by whichever option happens to be selected.
+  await expect(page.getByRole("combobox", { name: "Download" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: /Add one of this item's assets/ }).first(),
+  ).toBeVisible();
 });

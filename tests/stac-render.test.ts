@@ -180,3 +180,66 @@ test("an index follows its ramp and value window", () => {
   // Past the window is clamped to its end.
   assert.deepEqual(paint(5, { min: 0, max: 1 }).slice(0, 3), [0x01, 0x66, 0x5e]);
 });
+
+const access = (href: string) => ({
+  catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1",
+  collectionId: "sentinel-2-l2a",
+  href,
+});
+
+test("a band keeps its own address and how to sign it, and a recipe never carries a signature", () => {
+  const href = "https://acct.blob.core.windows.net/c/B04.tif";
+  const private4 = { ...band("r"), href, access: access(href), nodata: 0 };
+  const spec: StacRenderSpec = {
+    kind: "rgb",
+    bands: [private4, { ...private4 }, { ...private4 }],
+  };
+  const url = renderTileUrl(spec);
+  assert.doesNotMatch(decodeURIComponent(url), /sig=|sv=|se=/);
+  assert.deepEqual(
+    parseRenderTileUrl(url.replace("{z}", "1").replace("{x}", "0").replace("{y}", "0"))?.spec,
+    spec,
+  );
+});
+
+test("access info for a different file than the band reads is refused", () => {
+  const href = "https://acct.blob.core.windows.net/c/B04.tif";
+  const wrong = {
+    ...band("r"),
+    href,
+    access: access("https://acct.blob.core.windows.net/c/OTHER.tif"),
+  };
+  const url = `stacrender://tile/1/0/0?s=${encodeURIComponent(
+    JSON.stringify({ kind: "rgb", bands: [wrong, wrong, wrong] }),
+  )}`;
+  assert.equal(parseRenderTileUrl(url), null);
+  const plain = { ...band("r"), nodata: "none" };
+  const bad = `stacrender://tile/1/0/0?s=${encodeURIComponent(
+    JSON.stringify({ kind: "rgb", bands: [plain, plain, plain] }),
+  )}`;
+  assert.equal(parseRenderTileUrl(bad), null, "a no-data value must be a number");
+});
+
+test("the index window is judged as it will be drawn, with the default end for one not given", () => {
+  const url = (style: unknown) =>
+    `stacrender://tile/1/0/0?s=${encodeURIComponent(JSON.stringify({ ...ndvi, style }))}`;
+  // A minimum of 1 or 2 leaves the default maximum of 1: no window.
+  assert.equal(parseRenderTileUrl(url({ min: 1 })), null);
+  assert.equal(parseRenderTileUrl(url({ min: 2 })), null);
+  // Likewise a maximum at or below the default minimum of -1.
+  assert.equal(parseRenderTileUrl(url({ max: -1 })), null);
+  assert.notEqual(parseRenderTileUrl(url({ min: 0 })), null);
+  assert.notEqual(parseRenderTileUrl(url({ max: 0.5 })), null);
+});
+
+test("missing data in any band is transparent even when the formula would give a number", () => {
+  const out = new Uint8ClampedArray(4);
+  // a ^ 0 is 1 whatever a is, including a missing value.
+  paintRender(
+    { kind: "index", formula: "a ^ 0 + b", bands: [band("a"), band("b")] },
+    [[NaN], [0.5]],
+    [],
+    out,
+  );
+  assert.equal(out[3], 0);
+});

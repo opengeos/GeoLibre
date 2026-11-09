@@ -1,5 +1,4 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { sourceId, type MapEngine } from "@geolibre/map";
 import {
   DEFAULT_RENDER_RAMP,
   RENDER_RAMPS,
@@ -10,16 +9,17 @@ import {
   type RenderStyle,
 } from "@geolibre/plugins";
 import { Button, Input, Label, Select, Separator } from "@geolibre/ui";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RasterStyleSlider } from "./style-inputs";
 
 /** How long edits settle before the tiles are asked for again. */
 const APPLY_DELAY_MS = 250;
+/** The most a window end may be, as far as a recipe will hold. */
+const MAX_WINDOW_VALUE = 1e6;
 
 interface StacRenderingSectionProps {
   layer: GeoLibreLayer;
-  mapControllerRef: RefObject<MapEngine | null>;
 }
 
 /** The first tile template a rendering layer was added with. */
@@ -32,13 +32,13 @@ function tileTemplate(layer: GeoLibreLayer): string | undefined {
 /**
  * The raster style of a STAC band combination or index: how bright and how contrasty a colour
  * composite is, and which ramp and value window an index is drawn on. The recipe lives in the
- * layer's tile URL, so an edit rewrites that URL, saves with the project, and is pushed to the
- * map's source so the tiles reload at once.
+ * layer's tile URL, so an edit rewrites that URL and saves with the project; layer sync hands the
+ * new URL to the map's source, so the tiles reload at once, and an undo does the same in reverse.
  *
- * @param props - The rendering layer and the map controller.
+ * @param props - The rendering layer.
  * @returns The section, or null when the layer is not one of our renderings.
  */
-export function StacRenderingSection({ layer, mapControllerRef }: StacRenderingSectionProps) {
+export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
   const { t } = useTranslation();
   const updateLayer = useAppStore((s) => s.updateLayer);
   const template = tileTemplate(layer);
@@ -48,43 +48,61 @@ export function StacRenderingSection({ layer, mapControllerRef }: StacRenderingS
   const [minText, setMinText] = useState(String(spec?.style?.min ?? -1));
   const [maxText, setMaxText] = useState(String(spec?.style?.max ?? 1));
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const appliedUrl = useRef(template);
+  /** Whether an edit is waiting to be written, so the controls are not reset from under it. */
+  const pending = useRef(false);
 
-  // A different layer (or one undone elsewhere) starts from its own saved style.
   const layerId = layer.id;
-  useEffect(() => {
+  const readStyle = (): void => {
     setStyle(spec?.style ?? {});
     setMinText(String(spec?.style?.min ?? -1));
     setMaxText(String(spec?.style?.max ?? 1));
-    appliedUrl.current = template;
-    // Re-read only when the layer changes; our own edits update `template` through the store.
+  };
+  // Another layer starts from its own saved style.
+  useEffect(() => {
+    readStyle();
+    // Re-read only when the layer changes.
   }, [layerId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => clearTimeout(timer.current), []);
+  // So does the same layer when its recipe changes outside this panel (an undo, a redo): the
+  // controls follow it, unless an edit of their own is still waiting to be written.
+  useEffect(() => {
+    if (!pending.current) readStyle();
+  }, [template]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!spec) return null;
 
   const apply = (next: RenderStyle): void => {
     setStyle(next);
     clearTimeout(timer.current);
+    pending.current = true;
+    // Written to the layer as it is when the timer fires, found by id: another edit (a rename, an
+    // undo) or another layer being selected in the meantime must not be written over or lose this
+    // one. Closing the panel does not cancel it either.
+    const targetId = layerId;
     timer.current = setTimeout(() => {
-      const url = renderTileUrl(withRenderStyle(spec, next));
-      if (url === appliedUrl.current) return;
-      appliedUrl.current = url;
-      updateLayer(layer.id, { source: { ...layer.source, tiles: [url], url } });
-      // Layer sync adds a raster source once and leaves it, so the new tiles go in directly.
-      const source = mapControllerRef.current?.getMap()?.getSource(sourceId(layer.id)) as
-        | { setTiles?: (tiles: string[]) => void }
-        | undefined;
-      source?.setTiles?.([url]);
+      pending.current = false;
+      const current = useAppStore.getState().layers.find((entry) => entry.id === targetId);
+      const currentTemplate = current ? tileTemplate(current) : undefined;
+      const currentSpec = currentTemplate ? specFromTileUrl(currentTemplate) : null;
+      if (!current || !currentSpec) return;
+      const url = renderTileUrl(withRenderStyle(currentSpec, next));
+      if (url === currentTemplate) return;
+      // Layer sync notices the new template and hands it to the map's source.
+      updateLayer(targetId, { source: { ...current.source, tiles: [url], url } });
     }, APPLY_DELAY_MS);
   };
 
   const commitWindow = (): void => {
     const min = Number(minText);
     const max = Number(maxText);
-    // A window needs two numbers with the low one first; anything else reverts to what applies.
-    if (minText.trim() === "" || maxText.trim() === "" || !(min < max)) {
+    // A window needs two numbers, the low one first, that a recipe is allowed to hold; anything
+    // else reverts to what applies.
+    if (
+      minText.trim() === "" ||
+      maxText.trim() === "" ||
+      !(min < max) ||
+      Math.abs(min) > MAX_WINDOW_VALUE ||
+      Math.abs(max) > MAX_WINDOW_VALUE
+    ) {
       setMinText(String(style.min ?? -1));
       setMaxText(String(style.max ?? 1));
       return;

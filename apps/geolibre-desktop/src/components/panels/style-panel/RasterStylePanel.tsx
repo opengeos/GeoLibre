@@ -161,7 +161,7 @@ export function RasterStylePanel({
           {/* A STAC band combination or index is drawn from its tile URL, not by the raster
               control, so its own style (stretch, or ramp and window) is edited here. */}
           {typeof layer.metadata.stacRendering === "string" && (
-            <StacRenderingSection layer={layer} mapControllerRef={mapControllerRef} />
+            <StacRenderingSection layer={layer} />
           )}
           {/* A Time Slider source is not in the raster plugin's registry, so
               the section above has nothing to attach to; its own spec fields

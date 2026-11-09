@@ -145,3 +145,48 @@ test("bandsForFormula follows the order of the names", () => {
     ["nir", "red"],
   );
 });
+
+test("raster:scale and raster:offset of a unified band are read, and a declared nodata is kept", () => {
+  const item = {
+    type: "Feature",
+    id: "unified",
+    geometry: null,
+    properties: {},
+    assets: {
+      red: asset("https://x.test/red.tif", {
+        bands: [{ common_name: "red", "raster:scale": 0.0001, "raster:offset": -0.1 }],
+      }),
+      nir: asset("https://x.test/nir.tif", {
+        "eo:bands": [{ common_name: "nir" }],
+        "raster:bands": [{ scale: 2e-5, offset: 0, nodata: 0 }],
+      }),
+      swir16: asset("https://x.test/swir.tif", {
+        "eo:bands": [{ common_name: "swir16" }],
+        "raster:bands": [{ nodata: "nan" }],
+      }),
+    },
+  } as unknown as StacItem;
+  const bands = itemBands(item);
+  const red = bands.find((band) => band.common === "red")!;
+  assert.equal(red.scale, 0.0001);
+  assert.equal(red.offset, -0.1);
+  assert.equal(red.nodata, undefined);
+  assert.equal(bands.find((band) => band.common === "nir")?.nodata, 0);
+  // "nan" is not a value to compare pixels against.
+  assert.equal(bands.find((band) => band.common === "swir16")?.nodata, undefined);
+});
+
+test("a number with an exponent is not a band name", () => {
+  assert.deepEqual(formulaNames("1e-4 * nir"), ["nir"]);
+  assert.deepEqual(formulaNames("2.5e3 * (nir - red)"), ["nir", "red"]);
+  assert.equal(compileFormula("1e-4 * nir")([30000]), 3);
+});
+
+test("only the formula's own functions are functions", () => {
+  // Names on the object prototype are not functions, so this is a band name followed by a bracket,
+  // which is not a formula.
+  for (const bad of ["__proto__(nir)", "constructor(nir)", "toString(nir)"]) {
+    assert.equal(isValidFormula(bad), false, bad);
+  }
+  assert.equal(isValidFormula("sqrt(nir)"), true);
+});

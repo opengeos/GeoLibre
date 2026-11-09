@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Geometry, Polygon, Position } from "geojson";
 import {
+  AOI_MAX_POSITIONS,
   bufferGeometry,
   countPositions,
   geometryFromFile,
@@ -133,4 +135,55 @@ test("bufferGeometry widens a point or line into a polygon and leaves polygons a
   assert.equal(bufferGeometry(polygon, 5), polygon);
   const unchanged = { type: "Point" as const, coordinates: [1, 2] };
   assert.equal(bufferGeometry(unchanged, 0), unchanged);
+});
+
+/** The area inside a polygon's outer ring (shoelace), in square degrees. */
+function ringArea(geometry: Geometry): number {
+  assert.equal(geometry.type, "Polygon");
+  const ring = (geometry as Polygon).coordinates[0];
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  }
+  return Math.abs(sum) / 2;
+}
+
+test("dissolved overlapping polygons cover the area of both, not just the first", () => {
+  const merged = mergeGeometries([square(0, 2), square(1, 2)]);
+  assert.ok(merged);
+  // 0..2 and 1..3 across, each 2 high: the union is 3 wide by 2 high.
+  assert.equal(ringArea(merged.geometry), 6);
+});
+
+test("polygons too detailed to send are not dissolved on the way to being refused", () => {
+  // A ring with many positions, twice: past the limit, so the union is not attempted.
+  const detailed = (offset: number): Geometry => {
+    const ring: Position[] = [];
+    for (let i = 0; i < AOI_MAX_POSITIONS; i++) {
+      const angle = (i / AOI_MAX_POSITIONS) * 2 * Math.PI;
+      ring.push([offset + Math.cos(angle), Math.sin(angle)]);
+    }
+    ring.push(ring[0]);
+    return { type: "Polygon", coordinates: [ring] };
+  };
+  const started = Date.now();
+  const merged = mergeGeometries([detailed(0), detailed(0.5)]);
+  assert.ok(merged);
+  assert.equal(merged.geometry.type, "MultiPolygon", "left as it is");
+  assert.ok(countPositions(merged.geometry) > AOI_MAX_POSITIONS, "so the panel refuses it by size");
+  assert.ok(Date.now() - started < 2000, "and no union ran");
+});
+
+test("a file's layers each report what they left out, and so do the layers together", async () => {
+  const collection = (...geometries: unknown[]) => ({
+    type: "FeatureCollection",
+    features: geometries.map((geometry) => ({ type: "Feature", properties: {}, geometry })),
+  });
+  // One layer with a polygon and a point, another with a line and a point.
+  const file = new File(
+    [JSON.stringify(collection(square(0), { type: "Point", coordinates: [5, 5] }, square(10)))],
+    "area.geojson",
+  );
+  const area = await geometryFromFile(file);
+  assert.equal(area.ignored, 1, "the point beside the polygons");
 });

@@ -5185,7 +5185,7 @@
     "bufferDistance": "{{meters}} m",
     "cloudLabel": "Max cloud",
     "cloudHint": "Keep scenes with at most this much cloud cover. Scenes that report none (radar, elevation, aerial imagery) are kept.",
-    "sortHint": "Order results by capture date. With many matches, Newest first keeps the latest.",
+    "sortHint": "Orders the results loaded so far by capture date. Load more can bring scenes that belong earlier or later.",
     "mapNotReady": "The map is not ready for drawing.",
     "startDate": "Start date",
     "endDate": "End date",

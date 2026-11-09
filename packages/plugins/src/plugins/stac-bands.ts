@@ -23,6 +23,8 @@ export interface StacBand {
   /** `raster:bands` scale and offset: value = DN * scale + offset. */
   scale: number;
   offset: number;
+  /** The value the catalog says marks no data, when it says. */
+  nodata?: number;
 }
 
 /** A wanted name, and the common names (or asset keys) that can stand in for it, best first. */
@@ -81,10 +83,24 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function scaleOffset(entry: Record<string, unknown>): [number, number] {
-  const scale = Number(entry.scale ?? 1);
-  const offset = Number(entry.offset ?? 0);
-  return [Number.isFinite(scale) && scale !== 0 ? scale : 1, Number.isFinite(offset) ? offset : 0];
+/**
+ * A band's calibration: its scale and offset (the `raster:` ones of a STAC 1.1 unified band, or the
+ * plain ones of a `raster:bands` entry), and the value that marks no data when it declares one.
+ */
+function calibration(entry: Record<string, unknown>): {
+  scale: number;
+  offset: number;
+  nodata?: number;
+} {
+  const scale = Number(entry["raster:scale"] ?? entry.scale ?? 1);
+  const offset = Number(entry["raster:offset"] ?? entry.offset ?? 0);
+  const nodata = entry.nodata;
+  return {
+    scale: Number.isFinite(scale) && scale !== 0 ? scale : 1,
+    offset: Number.isFinite(offset) ? offset : 0,
+    // "nan" and the like are not a number to compare against, so only a real one is kept.
+    ...(typeof nodata === "number" && Number.isFinite(nodata) ? { nodata } : {}),
+  };
 }
 
 /**
@@ -102,8 +118,17 @@ export function itemBands(item: StacItem): StacBand[] {
     const title = asset.title || key;
     if (!entries.length) {
       const common = norm(raw["eo:common_name"] ?? raw.common_name) || norm(key);
-      const [scale, offset] = scaleOffset(rasters.length ? record(rasters[0]) : raw);
-      bands.push({ asset: key, index: 1, label: title, common, href: asset.href, scale, offset });
+      const { scale, offset, nodata } = calibration(rasters.length ? record(rasters[0]) : raw);
+      bands.push({
+        asset: key,
+        index: 1,
+        label: title,
+        common,
+        href: asset.href,
+        scale,
+        offset,
+        ...(nodata !== undefined ? { nodata } : {}),
+      });
       continue;
     }
     entries.forEach((entry, i) => {
@@ -111,7 +136,9 @@ export function itemBands(item: StacItem): StacBand[] {
         norm(entry.common_name ?? entry["eo:common_name"]) ||
         (entries.length === 1 ? norm(key) : "");
       const name = String(entry.description ?? entry.name ?? `band ${i + 1}`);
-      const [scale, offset] = scaleOffset(i < rasters.length ? record(rasters[i]) : entry);
+      const { scale, offset, nodata } = calibration(
+        i < rasters.length ? record(rasters[i]) : entry,
+      );
       bands.push({
         asset: key,
         index: i + 1,
@@ -120,6 +147,7 @@ export function itemBands(item: StacItem): StacBand[] {
         href: asset.href,
         scale,
         offset,
+        ...(nodata !== undefined ? { nodata } : {}),
       });
     });
   }
@@ -148,13 +176,19 @@ export function availableCombinations(bands: readonly StacBand[]): string[] {
 /** The band names a formula uses (not its function names), in order of first use. */
 export function formulaNames(formula: string): string[] {
   const names: string[] = [];
-  for (const match of formula.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
-    const rest = formula.slice((match.index ?? 0) + match[0].length).trimStart();
-    if (match[0].toLowerCase() in FUNCTIONS && rest.startsWith("(")) continue;
-    if (!names.includes(match[0])) names.push(match[0]);
+  // Numbers are matched first so the `e` of `1e-4` is part of one, not a band called e.
+  for (const match of formula.matchAll(NUMBER_OR_NAME)) {
+    const token = match[0];
+    if (!/^[A-Za-z_]/.test(token)) continue;
+    const rest = formula.slice((match.index ?? 0) + token.length).trimStart();
+    if (Object.hasOwn(FUNCTIONS, token.toLowerCase()) && rest.startsWith("(")) continue;
+    if (!names.includes(token)) names.push(token);
   }
   return names;
 }
+
+/** A number (with an exponent), or a name: what a formula is made of besides its operators. */
+const NUMBER_OR_NAME = /\d+\.?\d*(?:e[+-]?\d+)?|\.\d+|[A-Za-z_][A-Za-z0-9_]*/gi;
 
 type Evaluator = (values: readonly number[]) => number;
 
@@ -236,7 +270,7 @@ export function compileFormula(formula: string): Evaluator {
     }
     if (/^[A-Za-z_]/.test(token)) {
       const lower = token.toLowerCase();
-      if (peek() === "(" && lower in FUNCTIONS) {
+      if (peek() === "(" && Object.hasOwn(FUNCTIONS, lower)) {
         take();
         const args: Evaluator[] = [expression()];
         while (peek() === ",") {

@@ -71,6 +71,16 @@ export function countPositions(geometry: Geometry): number {
   return parts(geometry).reduce((sum, part) => sum + count(part.coordinates), 0);
 }
 
+/** How many positions a list of coordinate arrays carries. */
+function countAll(coordinates: unknown[]): number {
+  const count = (value: unknown): number => {
+    if (!Array.isArray(value)) return 0;
+    if (typeof value[0] === "number") return 1;
+    return value.reduce<number>((sum, child) => sum + count(child), 0);
+  };
+  return coordinates.reduce<number>((sum, one) => sum + count(one), 0);
+}
+
 /** A search geometry, and how many inputs of a lower dimension it left out. */
 export interface MergedArea {
   geometry: Geometry;
@@ -113,7 +123,9 @@ export function mergeGeometries(
     .filter((part) => part.type === kind)
     .map((part) => roundCoordinates(part.coordinates));
   const ignored = all.length - chosen.length;
-  if (kind === "Polygon" && chosen.length > 1) {
+  // A union of many detailed polygons runs on the UI thread, so past what a search could send
+  // anyway the polygons are left as they are: the panel refuses the area by its size straight after.
+  if (kind === "Polygon" && chosen.length > 1 && countAll(chosen) <= AOI_MAX_POSITIONS) {
     const dissolved = dissolve(chosen as Position[][][]);
     if (dissolved) return { geometry: dissolved, ignored };
   }
@@ -205,12 +217,17 @@ export async function geometryFromFile(file: File): Promise<MergedArea> {
   }
   // shpjs returns an array when an archive holds several layers.
   const collections = (Array.isArray(parsed) ? parsed : [parsed]) as FeatureCollection[];
-  const area = mergeGeometries(
-    collections.flatMap((collection) => {
-      const merged = geometryOfGeoJson(collection);
-      return merged ? [merged.geometry] : [];
-    }),
-  );
+  // Each layer is merged on its own first, so what it left out is counted here, and what the
+  // layers leave out between them is counted in the final merge.
+  let ignoredInLayers = 0;
+  const layers: Geometry[] = [];
+  for (const collection of collections) {
+    const merged = geometryOfGeoJson(collection);
+    if (!merged) continue;
+    layers.push(merged.geometry);
+    ignoredInLayers += merged.ignored;
+  }
+  const area = mergeGeometries(layers);
   if (!area) throw new Error("The file holds no geometry to search with.");
-  return area;
+  return { geometry: area.geometry, ignored: area.ignored + ignoredInLayers };
 }
