@@ -7,6 +7,10 @@
     "types": "wrangler types",
     "deploy:dry-run": "wrangler deploy --dry-run"
   },
+  "dependencies": {
+    "@cfworker/json-schema": "^4.1.6",
+    "@modelcontextprotocol/sdk": "^1.32.2"
+  },
   "devDependencies": {
     "wrangler": "^4.156.0"
   }
