@@ -64,7 +64,10 @@ import { abortReason, untilAborted } from "./abortable";
 import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
-import { resolvePluginAssetUrlForLoadedPlugin } from "./external-plugins";
+import {
+  readPluginAssetForLoadedPlugin,
+  resolvePluginAssetUrlForLoadedPlugin,
+} from "./external-plugins";
 import { startGeometryEditSession } from "./geometry-edit-session";
 import { setPluginUrlParameters } from "./live-url";
 import { isDesktopRuntime } from "./is-mobile";
@@ -621,6 +624,7 @@ export function createAppAPI(
       options?: GeoLibrePointCloudLayerOptions,
     ) => addPluginPointCloudLayer(api, host, source, options),
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
+    readPluginAsset: readPluginAssetForLoadedPlugin,
     activatePlugin: async (pluginId: string, state?: unknown) => {
       const activated = await manager.activate(pluginId, api);
       if (!activated || !manager.isActive(pluginId)) return false;

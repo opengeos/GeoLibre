@@ -143,6 +143,42 @@ struct PersistedScopeState {
 #[derive(Default)]
 struct SelectedImagePaths(Mutex<HashSet<PathBuf>>);
 
+/// Canonical paths of the plugin bundles (zip archives or directories) that
+/// the most recent `load_external_plugin_bundles` scan loaded. The asset read
+/// accepts only these sources, so the webview cannot widen the readable set by
+/// naming its own roots: a scan registers only bundles that carry a valid
+/// `plugin.json`, never an arbitrary directory such as `$HOME`.
+#[cfg(not(feature = "mas"))]
+#[derive(Default)]
+struct LoadedPluginBundles(Mutex<HashSet<PathBuf>>);
+
+#[cfg(not(feature = "mas"))]
+impl LoadedPluginBundles {
+    /// Replace the recorded set with the canonical form of `sources`. Sources
+    /// that no longer resolve are dropped.
+    fn replace<I, S>(&self, sources: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<Path>,
+    {
+        let canonical = sources
+            .into_iter()
+            .filter_map(|source| source.as_ref().canonicalize().ok())
+            .collect::<HashSet<_>>();
+        *self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = canonical;
+    }
+
+    /// The canonical path of `source` when it is a recorded bundle, else None.
+    fn canonical_known_source(&self, source: &Path) -> Option<PathBuf> {
+        let canonical = source.canonicalize().ok()?;
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(&canonical)
+            .then_some(canonical)
+    }
+}
+
 fn is_persisted_image_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     PERSISTED_PHOTO_EXTENSIONS
@@ -479,6 +515,11 @@ pub fn run() {
     // Pools for the in-process PostGIS tile renderer, created on first connect.
     let builder = builder.manage(postgis_tiles::PostgisTilesState::default());
 
+    // The plugin bundles the asset read may serve from; external plugins are
+    // compiled out of the MAS build, so the state goes with them.
+    #[cfg(not(feature = "mas"))]
+    let builder = builder.manage(LoadedPluginBundles::default());
+
     // The Martin/sidecar/Jupyter process managers exist only where the commands
     // that spawn those processes do; the MAS build compiles both out together.
     #[cfg(not(feature = "mas"))]
@@ -519,6 +560,7 @@ pub fn run() {
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
+            read_external_plugin_asset,
             pick_image_paths,
             read_selected_image,
             read_admin_profile,
@@ -2273,6 +2315,33 @@ fn load_external_plugin_bundles_blocking(
     fs::create_dir_all(&plugins_dir)
         .map_err(|error| format!("Could not create plugins directory: {error}"))?;
 
+    let plugin_dirs = plugin_roots(additional_plugin_directories, plugins_dir);
+
+    let mut bundles = Vec::new();
+    let mut errors = Vec::new();
+    for plugin_dir in &plugin_dirs {
+        scan_external_plugin_directory(plugin_dir, &mut bundles, &mut errors);
+    }
+    // Remember exactly what loaded, so read_external_plugin_asset can refuse
+    // any source the scan did not itself find.
+    app.state::<LoadedPluginBundles>()
+        .replace(bundles.iter().map(|bundle| PathBuf::from(&bundle.archive_name)));
+
+    Ok(ExternalPluginBundleLoadResult {
+        plugins_directories: plugin_dirs
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect(),
+        bundles,
+        errors,
+    })
+}
+
+/// The deduplicated plugin root directories the startup scan walks: the
+/// user-configured additional directories first, then the app-data plugins
+/// directory.
+#[cfg(not(feature = "mas"))]
+fn plugin_roots(additional_plugin_directories: Vec<String>, plugins_dir: PathBuf) -> Vec<PathBuf> {
     let mut plugin_dirs = Vec::new();
     let mut seen_dirs = HashSet::new();
     for directory in additional_plugin_directories {
@@ -2289,21 +2358,132 @@ fn load_external_plugin_bundles_blocking(
     if seen_dirs.insert(normalize_path_key(&plugins_dir)) {
         plugin_dirs.push(plugins_dir);
     }
+    plugin_dirs
+}
 
-    let mut bundles = Vec::new();
-    let mut errors = Vec::new();
-    for plugin_dir in &plugin_dirs {
-        scan_external_plugin_directory(plugin_dir, &mut bundles, &mut errors);
-    }
-
-    Ok(ExternalPluginBundleLoadResult {
-        plugins_directories: plugin_dirs
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect(),
-        bundles,
-        errors,
+#[cfg(not(feature = "mas"))]
+#[tauri::command]
+async fn read_external_plugin_asset(
+    app: tauri::AppHandle,
+    source_path: String,
+    relative_path: String,
+) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        read_external_plugin_asset_blocking(&app, &source_path, &relative_path)
     })
+    .await
+    .map_err(|error| format!("External plugin asset read task failed: {error}"))?
+}
+
+#[cfg(not(feature = "mas"))]
+fn read_external_plugin_asset_blocking(
+    app: &tauri::AppHandle,
+    source_path: &str,
+    relative_path: &str,
+) -> Result<tauri::ipc::Response, String> {
+    validate_external_plugin_path("relative_path", relative_path)?;
+    // The source must be a bundle the last scan loaded. The roots are not
+    // taken from the caller: a webview that could name its own root could
+    // point this read at any directory on disk.
+    let canonical_source = app
+        .state::<LoadedPluginBundles>()
+        .canonical_known_source(Path::new(source_path))
+        .ok_or_else(|| {
+            "Refusing to read plugin assets: source is not a loaded plugin bundle".to_string()
+        })?;
+    // Dispatch on what is actually on disk, not on the recorded name: a
+    // directory may legitimately be named `*.zip`, and a symlink may resolve to
+    // either shape, so the extension alone would route the read to the wrong
+    // reader.
+    let is_directory = fs::metadata(&canonical_source)
+        .map_err(|error| format!("Plugin source is unavailable: {error}"))?
+        .is_dir();
+    if is_directory {
+        Ok(tauri::ipc::Response::new(read_directory_plugin_asset_bytes(
+            &canonical_source,
+            relative_path,
+        )?))
+    } else {
+        Ok(tauri::ipc::Response::new(read_zip_plugin_asset_bytes(
+            &canonical_source,
+            relative_path,
+        )?))
+    }
+}
+
+#[cfg(not(feature = "mas"))]
+fn read_zip_plugin_asset_bytes(
+    archive_path: &Path,
+    relative_path: &str,
+) -> Result<Vec<u8>, String> {
+    let file = File::open(archive_path)
+        .map_err(|error| format!("Could not open plugin zip: {error}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|error| format!("Could not read plugin zip: {error}"))?;
+    // Assets resolve against the manifest's own directory, mirroring how the
+    // entry/style paths resolve at load time (a wrapping folder is tolerated).
+    let manifest_path = find_zip_manifest_path(&archive)
+        .ok_or_else(|| "Plugin archive is missing a plugin.json".to_string())?;
+    let prefix = manifest_path.strip_suffix("plugin.json").unwrap_or("");
+    let entry_name = format!("{prefix}{relative_path}");
+    let entry = archive.by_name(&entry_name).map_err(|_| {
+        format!("Plugin asset '{relative_path}' does not exist in the plugin archive")
+    })?;
+    if entry.is_dir() {
+        return Err(format!("Plugin asset '{relative_path}' must be a file"));
+    }
+    // Cap the actual bytes read instead of trusting the zip header size,
+    // which a hand-crafted archive can spoof.
+    let mut bytes = Vec::new();
+    entry
+        .take(MAX_PLUGIN_ENTRY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Could not read plugin asset '{relative_path}': {error}"))?;
+    if bytes.len() as u64 > MAX_PLUGIN_ENTRY_BYTES {
+        return Err(format!(
+            "Plugin asset '{relative_path}' exceeds the {}-MB size limit",
+            MAX_PLUGIN_ENTRY_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
+}
+
+#[cfg(not(feature = "mas"))]
+fn read_directory_plugin_asset_bytes(
+    plugin_dir: &Path,
+    relative_path: &str,
+) -> Result<Vec<u8>, String> {
+    let canonical_root = plugin_dir
+        .canonicalize()
+        .unwrap_or_else(|_| plugin_dir.to_path_buf());
+    let entry_path = canonical_root.join(relative_path);
+    // Resolve through path metadata so a symlink inside the plugin directory
+    // cannot redirect the read outside it, then re-check containment on the
+    // resolved path (same resolved-path re-check read_project_file applies).
+    let canonical_entry = entry_path
+        .canonicalize()
+        .map_err(|_| format!("Plugin asset '{relative_path}' does not exist"))?;
+    if !canonical_entry.starts_with(&canonical_root) {
+        return Err(format!(
+            "Refusing to read \"{relative_path}\": it resolves outside the plugin directory"
+        ));
+    }
+    if !canonical_entry.is_file() {
+        return Err(format!("Plugin asset '{relative_path}' must be a file"));
+    }
+    let file = File::open(&canonical_entry)
+        .map_err(|error| format!("Could not read plugin asset '{relative_path}': {error}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_PLUGIN_ENTRY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Could not read plugin asset '{relative_path}': {error}"))?;
+    if bytes.len() as u64 > MAX_PLUGIN_ENTRY_BYTES {
+        return Err(format!(
+            "Plugin asset '{relative_path}' exceeds the {}-MB size limit",
+            MAX_PLUGIN_ENTRY_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
 }
 
 #[cfg(not(feature = "mas"))]
@@ -2809,6 +2989,18 @@ async fn load_external_plugin_bundles(
         bundles: Vec::new(),
         errors: Vec::new(),
     })
+}
+
+// Mirrors the non-MAS command's refusal: the MAS build ships no external
+// plugin support, so there are no bundles to read assets from.
+#[cfg(feature = "mas")]
+#[tauri::command]
+async fn read_external_plugin_asset(
+    _app: tauri::AppHandle,
+    _source_path: String,
+    _relative_path: String,
+) -> Result<tauri::ipc::Response, String> {
+    Err("External plugin assets are not available in the Mac App Store build.".to_string())
 }
 
 #[cfg(not(feature = "mas"))]
@@ -5472,9 +5664,10 @@ mod tests {
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
     use super::{
-        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message,
-        clear_appimage_python_env,
-        find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
+        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message, clear_appimage_python_env,
+        find_zip_manifest_path, plugin_archive_file_name, read_directory_plugin_asset_bytes,
+        LoadedPluginBundles,
+        read_zip_plugin_asset_bytes, resolve_sidecar_in_resource_dir,
         sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
         CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
@@ -6400,6 +6593,108 @@ mod tests {
         // No extension, and a trailing dot (empty extension).
         assert!(!is_allowed_local_vector_path("/home/user/noextension"));
         assert!(!is_allowed_local_vector_path("/home/user/file."));
+    }
+
+    #[cfg(not(feature = "mas"))]
+    fn zip_with_contents(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, contents) in files {
+            writer.start_file(*name, options).unwrap();
+            writer.write_all(contents).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn reads_zip_plugin_asset_relative_to_manifest_directory() {
+        let dir = env::temp_dir().join("geolibre-read-asset-zip-test");
+        fs::create_dir_all(&dir).unwrap();
+        let archive_path = dir.join("wrapped-plugin.zip");
+        fs::write(
+            &archive_path,
+            zip_with_contents(&[
+                ("my-plugin/plugin.json", b"{}"),
+                ("my-plugin/assets/conn.json", b"{\"host\":\"db\"}"),
+            ]),
+        )
+        .unwrap();
+        let bytes = read_zip_plugin_asset_bytes(&archive_path, "assets/conn.json").unwrap();
+        assert_eq!(bytes, b"{\"host\":\"db\"}");
+        assert!(read_zip_plugin_asset_bytes(&archive_path, "missing.json").is_err());
+        fs::remove_file(&archive_path).unwrap();
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn reads_directory_plugin_asset_and_refuses_escapes() {
+        // A per-run directory: concurrent or interrupted runs must not share
+        // fixtures, and cleanup stays inside this test's own root.
+        let dir = env::temp_dir().join(format!(
+            "geolibre-read-asset-dir-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir.join("assets")).unwrap();
+        fs::write(dir.join("assets/conn.json"), b"{\"host\":\"db\"}").unwrap();
+        let bytes = read_directory_plugin_asset_bytes(&dir, "assets/conn.json").unwrap();
+        assert_eq!(bytes, b"{\"host\":\"db\"}");
+        // Missing entries are refused.
+        assert!(read_directory_plugin_asset_bytes(&dir, "missing.json").is_err());
+        // A dot-segment escape that resolves to an existing sibling file is
+        // refused by the resolved-path containment re-check.
+        let escape = dir.parent().unwrap().join("escape.json");
+        fs::write(&escape, b"secret").unwrap();
+        assert!(read_directory_plugin_asset_bytes(&dir, "../escape.json").is_err());
+        // Remove the sibling too: leaving it behind leaks `secret` into the
+        // shared temp directory and collides with a later interrupted run.
+        fs::remove_file(&escape).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn directory_plugin_asset_read_follows_no_symlink_escape() {
+        let dir = env::temp_dir().join("geolibre-read-asset-symlink-test");
+        fs::create_dir_all(&dir).unwrap();
+        let outside = env::temp_dir().join("geolibre-read-asset-symlink-outside.txt");
+        fs::write(&outside, b"secret").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("evil")).unwrap();
+        // canonicalize resolves the symlink, and the containment re-check
+        // refuses the read even though the textual join stayed inside.
+        assert!(read_directory_plugin_asset_bytes(&dir, "evil").is_err());
+        fs::remove_file(&outside).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn loaded_plugin_bundles_accept_only_scanned_sources() {
+        let root = env::temp_dir().join(format!(
+            "geolibre-loaded-bundles-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let plugin = root.join("plugins").join("my-plugin");
+        fs::create_dir_all(&plugin).unwrap();
+        fs::write(plugin.join("plugin.json"), b"{}").unwrap();
+        let bundles = LoadedPluginBundles::default();
+        bundles.replace([&plugin]);
+        // The scanned bundle is accepted, also through a non-canonical spelling.
+        assert!(bundles.canonical_known_source(&plugin).is_some());
+        assert!(bundles
+            .canonical_known_source(&plugin.join("..").join("my-plugin"))
+            .is_some());
+        // A directory the scan never loaded is refused, even one that contains
+        // the bundle (the caller-chosen-root attack: `$HOME` + `.ssh/id_rsa`).
+        assert!(bundles.canonical_known_source(&root).is_none());
+        assert!(bundles.canonical_known_source(&root.join("plugins")).is_none());
+        assert!(bundles.canonical_known_source(&root.join("missing")).is_none());
+        // A rescan replaces the set rather than adding to it.
+        bundles.replace(Vec::<PathBuf>::new());
+        assert!(bundles.canonical_known_source(&plugin).is_none());
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[cfg(not(feature = "mas"))]
