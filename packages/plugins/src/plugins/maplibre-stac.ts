@@ -64,7 +64,24 @@ import {
   type MergedArea,
   selectedFeaturesGeometry,
 } from "./stac-aoi";
+import {
+  availableCombinations,
+  availableIndices,
+  bandsForFormula,
+  COMBINATIONS,
+  findBand,
+  formulaNames,
+  INDICES,
+  itemBands,
+  type StacBand,
+} from "./stac-bands";
 import { buildCatalogTree } from "./stac-catalog-tree";
+import {
+  registerStacRenderProtocol,
+  renderTileUrl,
+  type RenderBand,
+  type StacRenderSpec,
+} from "./stac-render";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
 import { addLidarLayerFromUrl, addZarrRasterLayer } from "./maplibre-components";
@@ -232,6 +249,14 @@ export interface StacLabels {
   areaTooLarge: (positions: number, max: number) => string;
   areaSet: (description: string) => string;
   areaIgnored: (count: number) => string;
+  addAsset: string;
+  addAssetHint: string;
+  addRendering: string;
+  addRenderingHint: string;
+  groupCombinations: string;
+  groupIndices: string;
+  renderNeedsMapLibre: string;
+  renderMissingBand: (name: string) => string;
   sortLabel: string;
   sortDefault: string;
   sortNewest: string;
@@ -358,15 +383,23 @@ let labels: StacLabels = {
     `That shape has ${positions} vertices; simplify it to ${max} or fewer.`,
   areaSet: (description) => `Searching within ${description}.`,
   areaIgnored: (count) => `${count} lower-dimension shape(s) were left out.`,
+  addAsset: "Assets",
+  addAssetHint: "Add one of this item's assets to the map",
+  addRendering: "Bands",
+  addRenderingHint: "Add a band combination or index of this item to the map",
+  groupCombinations: "Band combinations",
+  groupIndices: "Indices",
+  renderNeedsMapLibre: "Renderings need the MapLibre renderer.",
+  renderMissingBand: (name) => `This item has no band called ${name}.`,
   sortLabel: "Sort by date",
   sortDefault: "Server default",
   sortNewest: "Newest first",
   sortOldest: "Oldest first",
-  bufferLabel: "Buffer points and lines (meters)",
+  bufferLabel: "Buffer points and lines by",
   bufferHint:
-    "Widen a point or line into a polygon this many meters either side before searching. Leave empty for no buffer.",
+    "Widen a point or line into a polygon this many meters either side before searching. Polygons are not changed.",
   bufferDistance: (meters) => `${meters} m`,
-  cloudLabel: "Limit cloud cover to",
+  cloudLabel: "Max cloud",
   cloudHint:
     "Keep scenes with at most this much cloud cover. Scenes that report none (radar, elevation, aerial imagery) are kept.",
   sortHint: "Order results by capture date. With many matches, Newest first keeps the latest.",
@@ -533,6 +566,10 @@ function numberOption(config: {
   max: number;
   value: number;
   unit: string;
+  /** Width of the number box in pixels (default 64). */
+  width?: number;
+  /** Called when the checkbox flips or the number is edited. */
+  onChange?: () => void;
 }): { wrap: HTMLElement; check: HTMLInputElement; input: HTMLInputElement; value: () => number } {
   const wrap = el("label");
   wrap.style.cssText = `${style.row}cursor:pointer;`;
@@ -545,7 +582,10 @@ function numberOption(config: {
   input.max = String(config.max);
   input.step = "1";
   input.value = String(config.value);
-  input.style.cssText = `${style.input}width:72px;flex:0 0 72px;`;
+  // A label names only its first control (the checkbox), so the number is named explicitly.
+  input.setAttribute("aria-label", config.label);
+  const width = config.width ?? 64;
+  input.style.cssText = `${style.input}width:${width}px;flex:0 0 ${width}px;`;
   const unit = el("span", config.unit);
   unit.style.cssText = style.label;
   // An empty or out-of-range box reads as the nearest value it could mean, never as NaN.
@@ -558,7 +598,11 @@ function numberOption(config: {
     input.disabled = !check.checked;
     input.style.opacity = check.checked ? "1" : "0.5";
   };
-  check.addEventListener("change", sync);
+  check.addEventListener("change", () => {
+    sync();
+    config.onChange?.();
+  });
+  input.addEventListener("change", () => config.onChange?.());
   sync();
   wrap.append(check, el("span", config.label), input, unit);
   return { wrap, check, input, value };
@@ -1136,6 +1180,78 @@ async function visualizeAsset(
 }
 
 /** An item's descriptive title when available, otherwise its stable identifier. */
+/** A band's file, readable now (signed when the catalog needs it) and with its scale and offset. */
+async function renderBandOf(
+  connection: StacConnection,
+  item: StacItem,
+  band: StacBand,
+  signal?: AbortSignal,
+): Promise<RenderBand> {
+  return {
+    href: await readableHref(connection, item, band.href, signal),
+    index: band.index,
+    scale: band.scale,
+    offset: band.offset,
+  };
+}
+
+/** What the "Add rendering" menu offers: a three-band combination, or an index by name. */
+export type StacRenderingChoice = { kind: "combination" | "index"; name: string };
+
+/**
+ * Adds a band combination or a spectral index of an item to the map as a tile layer.
+ *
+ * @param connection - The catalog the item came from, for signing private assets.
+ * @param item - The item whose bands are drawn.
+ * @param choice - The combination or index.
+ * @param signal - Aborts the signing requests.
+ * @returns The new layer's id.
+ * @throws When the renderer is not MapLibre, or the item lacks a band the choice needs.
+ */
+async function addRendering(
+  connection: StacConnection,
+  item: StacItem,
+  choice: StacRenderingChoice,
+  signal?: AbortSignal,
+): Promise<string> {
+  const app = appRef;
+  // engine-audit-allow: getMap-mapbox -- detects MapLibre; renderings are hidden on Mapbox
+  if (!app?.addTileLayer || !app.getMap?.()) throw new Error(labels.renderNeedsMapLibre);
+  const bands = itemBands(item);
+  const need = (name: string): StacBand => {
+    const band = findBand(bands, name);
+    if (!band) throw new Error(labels.renderMissingBand(name));
+    return band;
+  };
+  let spec: StacRenderSpec;
+  if (choice.kind === "combination") {
+    const channels = COMBINATIONS[choice.name];
+    const picked = channels.map(need);
+    const read = await Promise.all(
+      picked.map((band) => renderBandOf(connection, item, band, signal)),
+    );
+    spec = { kind: "rgb", bands: read as [RenderBand, RenderBand, RenderBand] };
+  } else {
+    const formula = INDICES[choice.name];
+    formulaNames(formula).forEach(need);
+    const read = await Promise.all(
+      bandsForFormula(formula, bands).map((band) => renderBandOf(connection, item, band, signal)),
+    );
+    spec = { kind: "index", formula, bands: read };
+  }
+  registerStacRenderProtocol();
+  const bbox = itemBbox(item);
+  const layerId = app.addTileLayer(`${itemTitle(item)} — ${choice.name}`, renderTileUrl(spec), {
+    tileSize: 256,
+    // Tiles deeper than the data's own detail just upsample, and each reads only a small window.
+    maxzoom: 17,
+    ...(bbox ? { bounds: bbox } : {}),
+    metadata: { stacItemId: item.id, stacRendering: choice.name },
+  });
+  if (bbox) app.fitBounds?.(bbox);
+  return layerId;
+}
+
 function itemTitle(item: StacItem): string {
   const title = item.properties.title;
   return typeof title === "string" && title.trim() ? title : item.id;
@@ -1237,20 +1353,19 @@ function buildPanel(container: HTMLElement): () => void {
     clearDrawButton,
     areaFile,
   );
-  // A number box, as in the ArcGIS Pro add-in: empty (or zero) means no buffer, and it only
-  // affects points and lines.
-  const bufferField = field(labels.bufferLabel, "number");
-  bufferField.wrap.title = labels.bufferHint;
-  bufferField.input.min = "0";
-  bufferField.input.step = "10";
-  bufferField.input.placeholder = "0";
-  // Widening or narrowing the buffer redraws the shape already chosen.
-  bufferField.input.addEventListener("change", () => applyArea());
-  const bufferMeters = (): number => {
-    const meters = Number(bufferField.input.value);
-    return Number.isFinite(meters) && meters > 0 ? meters : 0;
-  };
-  areaWrap.append(areaCaption, areaRow, bufferField.wrap);
+  // A checkbox with an amount in meters. It only affects points and lines, and widening or
+  // narrowing it redraws the shape already chosen.
+  const buffer = numberOption({
+    label: labels.bufferLabel,
+    hint: labels.bufferHint,
+    min: 1,
+    max: 100_000,
+    value: 100,
+    unit: "m",
+    onChange: () => applyArea(),
+  });
+  const bufferMeters = (): number => (buffer.check.checked ? buffer.value() : 0);
+  areaWrap.append(areaCaption, areaRow, buffer.wrap);
   const dates = el("div");
   dates.style.cssText = style.row;
   const startField = field(labels.startDate, "date");
@@ -1280,7 +1395,16 @@ function buildPanel(container: HTMLElement): () => void {
     max: 100,
     value: 10,
     unit: "%",
+    width: 52,
   });
+  // Sort order and the cloud limit are both about which scenes come back, so they share a row.
+  const sortCloudRow = el("div");
+  sortCloudRow.style.cssText = "display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;";
+  sortWrap.style.flex = "1 1 0";
+  sortWrap.style.minWidth = "0";
+  cloud.wrap.style.flex = "0 0 auto";
+  cloud.wrap.style.minHeight = "30px";
+  sortCloudRow.append(cloud.wrap, sortWrap);
   const additionalWrap = el("label");
   additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
   const additionalCaption = el("span", labels.additionalParams);
@@ -1310,8 +1434,7 @@ function buildPanel(container: HTMLElement): () => void {
     areaWrap,
     bboxField.wrap,
     dates,
-    sortWrap,
-    cloud.wrap,
+    sortCloudRow,
     additionalWrap,
     searchActions,
   );
@@ -1607,64 +1730,53 @@ function buildPanel(container: HTMLElement): () => void {
       }
       const assets = Object.entries(item.assets ?? {}).filter(([, asset]) => asset?.href);
       if (assets.length) {
-        const assetSelect = el("select");
-        assetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
-        for (const [key, asset] of assets) {
-          const option = el("option", assetOptionLabel(item, key, asset));
-          option.value = key;
-          assetSelect.append(option);
-        }
-        // Preselect something the user can actually add; assets often lead with metadata.
-        const firstAddable = assets.find(([key, asset]) => canAddAsset(item, key, asset));
-        if (firstAddable) assetSelect.value = firstAddable[0];
-        const selected = (): [string, StacAsset] =>
-          assets.find(([key]) => key === assetSelect.value) ?? assets[0];
-        const add = el("button", labels.add);
-        add.type = "button";
-        add.style.cssText = style.button;
-        const download = el("button", labels.download);
-        download.type = "button";
-        download.style.cssText = style.button;
-        // Which part of the asset to draw, for the formats that hold more than one.
-        const targetSelect = el("select");
-        targetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
-        targetSelect.title = labels.chooseTarget;
-        let adding = false;
-        // Which asset's download is being signed, so switching the dropdown to
-        // another asset does not find its own button disabled.
-        let signingDownloadKey: string | null = null;
-
-        const syncAsset = (): void => {
-          const [key, asset] = selected();
-          const addable = canAddAsset(item, key, asset);
-          const targets = assetTargets(item, key, asset);
-          // Rebuilt on every sync, including the one right after Add, so keep the user's pick.
-          const chosen = targetSelect.value;
-          targetSelect.innerHTML = "";
-          for (const target of targets) {
-            const option = el("option", target.label);
-            option.value = target.id;
-            targetSelect.append(option);
-          }
-          if (targets.some((target) => target.id === chosen)) targetSelect.value = chosen;
-          // One target is the asset itself; hide a choice the user does not have.
-          targetSelect.hidden = targets.length < 2 || !addable;
-          assetSelect.title = asset.href;
-          download.title = asset.href;
-          setDisabled(add, adding || !addable);
-          // A private asset is signed before it opens, so the button says so
-          // by going quiet rather than looking like a dead click.
-          setDisabled(download, signingDownloadKey === key);
-          add.title = addReason(item, key, asset);
+        let busy = false;
+        // Each menu shows its own name and acts the moment an entry is chosen, then goes back to
+        // its name: it is a button that drops a list, not a setting that keeps a value.
+        const menu = (text: string, hint?: string): HTMLSelectElement => {
+          const select = el("select");
+          // Sized by the row, not by the longest option: a long asset name must not push a menu
+          // onto a line of its own. The open list still shows the full names.
+          select.style.cssText = `${style.input}flex:1 1 0;min-width:0;width:auto;`;
+          if (hint) select.title = hint;
+          const placeholder = el("option", text);
+          placeholder.value = "";
+          select.append(placeholder);
+          return select;
+        };
+        const menus: HTMLSelectElement[] = [];
+        const setBusy = (value: boolean): void => {
+          busy = value;
+          for (const select of menus) select.disabled = value;
         };
 
-        assetSelect.addEventListener("change", syncAsset);
-        add.addEventListener("click", async () => {
-          const [key, asset] = selected();
-          // `visualizeAsset` falls back to the first target itself, so do not decide twice.
-          const target = targetSelect.value || undefined;
-          adding = true;
-          syncAsset();
+        // Add asset: one entry per asset, and per variable for a Zarr store holding several.
+        const addEntries = new Map<string, { key: string; asset: StacAsset; target?: string }>();
+        const addSelect = menu(labels.addAsset, labels.addAssetHint);
+        for (const [key, asset] of assets) {
+          const addable = canAddAsset(item, key, asset);
+          const targets = addable ? assetTargets(item, key, asset) : [];
+          const choices =
+            targets.length > 1
+              ? targets.map((target) => ({ target: target.id, suffix: ` — ${target.label}` }))
+              : [{ target: undefined, suffix: "" }];
+          for (const choice of choices) {
+            const id = `a${addEntries.size}`;
+            addEntries.set(id, { key, asset, target: choice.target });
+            const option = el("option", `${assetOptionLabel(item, key, asset)}${choice.suffix}`);
+            option.value = id;
+            option.disabled = !addable;
+            option.title = addReason(item, key, asset);
+            addSelect.append(option);
+          }
+        }
+        menus.push(addSelect);
+        addSelect.addEventListener("change", async () => {
+          const entry = addEntries.get(addSelect.value);
+          addSelect.value = "";
+          if (!entry || busy) return;
+          const { key, asset, target } = entry;
+          setBusy(true);
           setStatus(labels.adding(assetLabel(key, asset)));
           try {
             if (!connection) throw new Error(labels.addFailed);
@@ -1681,18 +1793,70 @@ function buildPanel(container: HTMLElement): () => void {
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
-            adding = false;
-            syncAsset();
+            setBusy(false);
           }
         });
-        download.addEventListener("click", async () => {
-          const [key, asset] = selected();
+
+        // Add rendering: the band combinations and indices this item has the bands for.
+        const bands = itemBands(item);
+        const combinations = availableCombinations(bands);
+        const indices = availableIndices(bands);
+        let renderSelect: HTMLSelectElement | null = null;
+        if (combinations.length || indices.length) {
+          const select = menu(labels.addRendering, labels.addRenderingHint);
+          const group = (title: string, kind: "combination" | "index", names: string[]): void => {
+            if (!names.length) return;
+            const optgroup = el("optgroup");
+            optgroup.label = title;
+            for (const name of names) {
+              const option = el("option", name);
+              option.value = `${kind}:${name}`;
+              optgroup.append(option);
+            }
+            select.append(optgroup);
+          };
+          group(labels.groupCombinations, "combination", combinations);
+          group(labels.groupIndices, "index", indices);
+          select.addEventListener("change", async () => {
+            const [kind, ...rest] = select.value.split(":");
+            const name = rest.join(":");
+            select.value = "";
+            if (!name || busy || (kind !== "combination" && kind !== "index")) return;
+            setBusy(true);
+            setStatus(labels.adding(name));
+            try {
+              if (!connection) throw new Error(labels.addFailed);
+              await addRendering(connection, item, { kind, name }, controller.signal);
+              setStatus(labels.added(name));
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : labels.addFailed, true);
+            } finally {
+              setBusy(false);
+            }
+          });
+          menus.push(select);
+          renderSelect = select;
+        }
+
+        // Download: an asset's own file, signed first when the catalog keeps it private.
+        const downloadSelect = menu(labels.download);
+        for (const [key, asset] of assets) {
+          const option = el("option", assetOptionLabel(item, key, asset));
+          option.value = key;
+          option.title = asset.href;
+          downloadSelect.append(option);
+        }
+        menus.push(downloadSelect);
+        downloadSelect.addEventListener("change", async () => {
+          const chosen = assets.find(([key]) => key === downloadSelect.value);
+          downloadSelect.value = "";
+          if (!chosen || busy) return;
+          const [, asset] = chosen;
           if (!connection) {
             setStatus(labels.addFailed, true);
             return;
           }
-          signingDownloadKey = key;
-          syncAsset();
+          setBusy(true);
           try {
             appRef?.openExternalUrl?.(
               await readableHref(connection, item, asset.href, controller.signal),
@@ -1700,14 +1864,12 @@ function buildPanel(container: HTMLElement): () => void {
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
-            // Only this asset's own sign clears the flag: the user may have
-            // moved on and started another one.
-            if (signingDownloadKey === key) signingDownloadKey = null;
-            syncAsset();
+            setBusy(false);
           }
         });
-        syncAsset();
-        actions.append(assetSelect, targetSelect, add, download);
+        actions.append(addSelect);
+        if (renderSelect) actions.append(renderSelect);
+        actions.append(downloadSelect);
       }
       card.append(title, subtitle, actions);
       results.append(card);

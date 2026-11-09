@@ -132,11 +132,13 @@ test("asset options identify their format and whether they can be added", async 
   await page.getByLabel("Limit search to the current map extent").uncheck();
   await page.getByRole("button", { name: "Search items" }).click();
 
+  // The card's "Assets" menu names itself and drops the asset list.
   const assets = page
-    .locator("select")
-    .filter({ has: page.locator('option[value="red"]') })
+    .getByRole("combobox")
+    .filter({ hasText: /^Assets/ })
     .first();
   await expect(assets.getByRole("option")).toHaveText([
+    "Assets",
     "Red Band — COG",
     "Boundaries — GeoJSON",
     "Vector tiles — PMTiles",
@@ -201,7 +203,12 @@ test("Planetary Computer COG assets are signed before raster reads", async ({ pa
     .selectOption("private-cog");
   await page.getByRole("button", { name: "Search items" }).click();
   await expect(page.getByText(/Showing 1 of 1 items\./)).toBeVisible();
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  // Choosing an asset from the "Assets" menu adds it straight away.
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: /^Assets/ })
+    .first()
+    .selectOption({ label: "data — COG" });
 
   await expect.poll(() => assetRequests.length).toBeGreaterThan(0);
   expect(signingRequests).toBe(1);
@@ -317,4 +324,215 @@ test("connecting to an API after a static catalog clears the tree", async ({ pag
   await expect(page.getByText("E2E STAC API")).toBeVisible();
   await expect(page.getByRole("tree")).toBeHidden();
   await expect(page.getByRole("treeitem")).toHaveCount(0);
+});
+
+test("Add rendering offers the combinations and indices an item has the bands for", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red"),
+    green: band("green"),
+    blue: band("blue"),
+    nir: band("nir"),
+  });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  // Only what red, green, blue and NIR can make: no SWIR combinations or indices.
+  const rendering = page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first();
+  await expect(rendering.getByRole("option")).toHaveText([
+    "Bands",
+    "True color",
+    "Color infrared (vegetation)",
+    "NDVI (vegetation)",
+    "NDWI (water, green/NIR)",
+    "SAVI (soil-adjusted vegetation)",
+    "EVI (enhanced vegetation)",
+  ]);
+
+  // Choosing one adds it straight away, as a layer named for the item and the rendering.
+  await rendering.selectOption({ label: "NDVI (vegetation)" });
+  const layers = page.getByRole("complementary", { name: "Layers" });
+  await expect(layers.getByText(/NDVI \(vegetation\)/)).toBeVisible();
+});
+
+test("the buffer and cloud cover limits are checkboxes that unlock a number", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  for (const [name, fallback] of [
+    [/Buffer points and lines/, "100"],
+    [/Max cloud/, "10"],
+  ] as const) {
+    const check = page.getByRole("checkbox", { name });
+    await expect(check).not.toBeChecked();
+    const box = page.getByRole("spinbutton", { name });
+    await expect(box).toBeDisabled();
+    await expect(box).toHaveValue(fallback);
+    await check.check();
+    await expect(box).toBeEnabled();
+  }
+});
+
+test("the sort order and the cloud cover limit share one row", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  const sort = page.getByRole("combobox").filter({ hasText: "Server default" });
+  const cloud = page.getByRole("checkbox", { name: /Max cloud/ });
+  // The panel can be dragged narrow, and a row that only fits in a wide one is not one row.
+  await sort.evaluate((select) => {
+    select.closest("label")!.parentElement!.parentElement!.style.width = "300px";
+  });
+  const [sortBox, cloudBox] = await Promise.all([sort.boundingBox(), cloud.boundingBox()]);
+  expect(sortBox).not.toBeNull();
+  expect(cloudBox).not.toBeNull();
+  // Side by side, cloud cover on the left: the checkbox sits inside the dropdown's vertical span.
+  expect(cloudBox!.y).toBeGreaterThanOrEqual(sortBox!.y - 4);
+  expect(cloudBox!.y).toBeLessThan(sortBox!.y + sortBox!.height);
+  expect(sortBox!.x).toBeGreaterThan(cloudBox!.x + cloudBox!.width);
+});
+
+test("an item's Zoom, Assets, Bands and Download share one row, whatever the asset names", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string, title: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red", "Aerosol optical thickness with a very long descriptive title (AOT)"),
+    green: band("green", "Green"),
+    blue: band("blue", "Blue"),
+    nir: band("nir", "Near infrared, narrow band, 10 m"),
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  const card = page.getByRole("button", { name: "Zoom", exact: true }).first().locator("..");
+  const boxes = await Promise.all(
+    [
+      card.getByRole("button", { name: "Zoom", exact: true }),
+      card.getByRole("combobox").filter({ hasText: /^Assets/ }),
+      card.getByRole("combobox").filter({ hasText: /^Bands/ }),
+      card.getByRole("combobox").filter({ hasText: /^Download/ }),
+    ].map((control) => control.boundingBox()),
+  );
+  const panel = await card.boundingBox();
+  for (const box of boxes) expect(box).not.toBeNull();
+  const [zoom, ...menus] = boxes as NonNullable<(typeof boxes)[number]>[];
+  for (const menu of menus) {
+    // Same row as Zoom, and inside the card rather than spilling out of it.
+    expect(Math.abs(menu.y - zoom.y)).toBeLessThan(8);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(panel!.x + panel!.width + 1);
+  }
+});
+
+test("a band rendering has the Edit raster style entry, and its style editor", async ({ page }) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red"),
+    green: band("green"),
+    blue: band("blue"),
+    nir: band("nir"),
+  });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  const bands = page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first();
+  await bands.selectOption({ label: "NDVI (vegetation)" });
+  const row = page.locator('[data-testid="layer-row"][data-layer-name$="NDVI (vegetation)"]');
+  await expect(row).toBeVisible();
+
+  // The same entry a COG layer has, opening a style editor made for this kind of layer.
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  const editor = page.getByTestId("stac-rendering-style");
+  await expect(editor).toBeVisible();
+  await expect(editor.getByLabel("Color ramp")).toHaveValue("BrBG");
+
+  // An edit is kept: the ramp survives the editor being closed and opened again.
+  await editor.getByLabel("Color ramp").selectOption("RdYlGn");
+  await page.waitForTimeout(800);
+  await editor
+    .locator("xpath=ancestor::aside[1]")
+    .getByRole("button", { name: /Collapse/ })
+    .click();
+  await expect(editor).toBeHidden();
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  await expect(page.getByTestId("stac-rendering-style").getByLabel("Color ramp")).toHaveValue(
+    "RdYlGn",
+  );
+});
+
+test("a colour composite's style editor offers brightness and gamma, not a ramp", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, { red: band("red"), green: band("green"), blue: band("blue") });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first()
+    .selectOption({ label: "True color" });
+  const row = page.locator('[data-testid="layer-row"][data-layer-name$="True color"]');
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  const editor = page.getByTestId("stac-rendering-style");
+  await expect(editor.getByText("Brightness")).toBeVisible();
+  await expect(editor.getByText("Gamma")).toBeVisible();
+  await expect(editor.getByLabel("Color ramp")).toHaveCount(0);
 });

@@ -285,12 +285,17 @@ test("Ctrl+Enter on a collection searches it and takes the map to it", async ({ 
 
   // The collection's extent, not the item's: the item sits at -113..-112, so a fit to the item
   // would pass a "the view moved" check while missing what was asked for.
-  const [west, south, east, north] = await mapBounds(page);
-  expect(west).toBeLessThanOrEqual(-114);
-  expect(east).toBeGreaterThanOrEqual(-109);
-  expect(south).toBeLessThanOrEqual(37);
-  expect(north).toBeGreaterThanOrEqual(42);
-  expect(east - west).toBeLessThan(30);
+  // The camera flies there, so the view has moved before it has arrived: wait for it to settle on
+  // the collection rather than reading it mid-flight.
+  await expect
+    .poll(
+      async () => {
+        const [west, south, east, north] = await mapBounds(page);
+        return west <= -114 && east >= -109 && south <= 37 && north >= 42 && east - west < 30;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 });
 
 test("Ctrl-click adds a second collection, and Meta+Enter searches like Ctrl does", async ({
