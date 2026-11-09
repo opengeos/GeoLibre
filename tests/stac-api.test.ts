@@ -1306,6 +1306,50 @@ test("searchStaticStac traverses child and item links and applies filters", asyn
   );
 });
 
+test("searchStaticStac applies the cloud limit inside the walk so a page still fills", async () => {
+  const item = (id: string, cloud?: number) => ({
+    type: "Feature",
+    id,
+    collection: "demo",
+    bbox: [0, 0, 1, 1],
+    geometry: null,
+    properties: {
+      datetime: "2024-05-01T00:00:00Z",
+      ...(cloud === undefined ? {} : { "eo:cloud_cover": cloud }),
+    },
+    assets: {},
+  });
+  const docs: Record<string, unknown> = {
+    "https://example.com/collection.json": {
+      type: "Collection",
+      links: ["cloudy1", "cloudy2", "clear", "unreported"].map((id) => ({
+        rel: "item",
+        href: id + ".json",
+      })),
+    },
+    "https://example.com/cloudy1.json": item("cloudy1", 90),
+    "https://example.com/cloudy2.json": item("cloudy2", 80),
+    "https://example.com/clear.json": item("clear", 5),
+    "https://example.com/unreported.json": item("unreported"),
+  };
+  const fetcher = (async (input: RequestInfo | URL) =>
+    jsonResponse(docs[String(input)])) as typeof fetch;
+  const connection = {
+    url: "https://example.com/collection.json",
+    title: "Static",
+    isApi: false,
+    collections: [],
+    root: docs["https://example.com/collection.json"] as Record<string, unknown>,
+  };
+  // A page of two: without the limit in the walk the two cloudy scenes would fill it.
+  const first = await searchStaticStac(connection, { limit: 2, maxCloudCover: 10 }, fetcher);
+  assert.deepEqual(
+    first.items.map((entry) => entry.id),
+    ["clear", "unreported"],
+  );
+  assert.equal(first.cursor, undefined);
+});
+
 test("searchStaticStac exposes assets attached directly to a Collection", async () => {
   const url = "https://example.com/data/collection.json";
   const root = {

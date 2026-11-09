@@ -1937,7 +1937,9 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const searchStatus = (result: StacSearchResult): string => {
-    if (!result.items.length && result.cursor) return labels.noMatchesHere;
+    // Nothing on screen yet, but the search is not finished: a page whose items were all left
+    // out (by the walk or by the cloud limit) is not "no results".
+    if (!allItems.length && (result.cursor || result.next)) return labels.noMatchesHere;
     if (!allItems.length) return labels.noResults;
     if (result.matched) return labels.showingOfMatched(allItems.length, result.matched);
     return labels.showing(allItems.length);

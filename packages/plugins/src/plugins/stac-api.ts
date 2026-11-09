@@ -131,7 +131,10 @@ export interface StacSearchCursor {
   /** Documents given up on; with any of these the catalog was not fully read. */
   dropped: number;
   /** The filters this walk began with, so later pages filter the way page one did. */
-  filters: Pick<StacSearchOptions, "bbox" | "intersects" | "collections" | "datetime">;
+  filters: Pick<
+    StacSearchOptions,
+    "bbox" | "intersects" | "collections" | "datetime" | "maxCloudCover"
+  >;
 }
 
 export type StacSortDirection = "asc" | "desc";
@@ -1049,6 +1052,7 @@ export async function searchStaticStac(
       intersects: options.intersects,
       collections: options.collections,
       datetime: options.datetime,
+      maxCloudCover: options.maxCloudCover,
     },
   };
   const found: StacItem[] = [];
@@ -1088,6 +1092,9 @@ export async function searchStaticStac(
     } else if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
       return false;
     }
+    // The cloud limit is part of the walk, so a page fills with qualifying items and the total
+    // counts only those; an item that reports no cloud cover passes.
+    if (withinCloudCover([item], filters.maxCloudCover).length === 0) return false;
     return inTime(item, filters.datetime);
   };
 
