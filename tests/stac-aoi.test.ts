@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  bufferGeometry,
   countPositions,
   geometryFromFile,
   geometryOfGeoJson,
@@ -105,4 +106,31 @@ test("geometryFromFile reads GeoJSON and refuses other files", async () => {
     ),
     /no geometry/,
   );
+});
+
+test("bufferGeometry widens a point or line into a polygon and leaves polygons alone", () => {
+  const point = bufferGeometry({ type: "Point", coordinates: [-84.5, 38] }, 1);
+  assert.equal(point.type, "Polygon");
+  const [west, , east] = [
+    Math.min(...(point as { coordinates: number[][][] }).coordinates[0].map((p) => p[0])),
+    0,
+    Math.max(...(point as { coordinates: number[][][] }).coordinates[0].map((p) => p[0])),
+  ];
+  // One kilometre is about 0.0114 degrees of longitude at this latitude.
+  assert.ok(east - west > 0.015 && east - west < 0.03);
+  const line = bufferGeometry(
+    {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [0.1, 0.1],
+      ],
+    },
+    2,
+  );
+  assert.equal(line.type, "Polygon");
+  const polygon = square(0);
+  assert.equal(bufferGeometry(polygon, 5), polygon);
+  const unchanged = { type: "Point" as const, coordinates: [1, 2] };
+  assert.equal(bufferGeometry(unchanged, 0), unchanged);
 });

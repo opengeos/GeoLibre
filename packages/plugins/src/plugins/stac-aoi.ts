@@ -1,4 +1,5 @@
 import { featureSelectionId, useAppStore } from "@geolibre/core";
+import buffer from "@turf/buffer";
 import union from "@turf/union";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 
@@ -121,6 +122,36 @@ export function mergeGeometries(
       ? ({ type: kind, coordinates: chosen[0] } as Geometry)
       : ({ type: MULTI[kind], coordinates: chosen } as Geometry);
   return { geometry, ignored };
+}
+
+/** Whether a geometry is a point or a line, which has no area of its own to search. */
+export function isBufferable(geometry: Geometry): boolean {
+  return (
+    geometry.type === "Point" ||
+    geometry.type === "MultiPoint" ||
+    geometry.type === "LineString" ||
+    geometry.type === "MultiLineString"
+  );
+}
+
+/**
+ * Widens a point or line into a polygon `kilometers` either side, so a search finds the scenes
+ * near it and not only those that happen to cover it. A polygon is returned as it is.
+ *
+ * @param geometry - The shape the user gave.
+ * @param kilometers - The distance to widen by; zero or less leaves the shape alone.
+ * @returns The buffered geometry, or the original when it has no area to widen or buffering fails.
+ */
+export function bufferGeometry(geometry: Geometry, kilometers: number): Geometry {
+  if (!isBufferable(geometry) || !(kilometers > 0)) return geometry;
+  try {
+    const widened = buffer({ type: "Feature", properties: {}, geometry }, kilometers, {
+      units: "kilometers",
+    });
+    return widened ? roundGeometry(widened.geometry) : geometry;
+  } catch {
+    return geometry;
+  }
 }
 
 /** The merged area of GeoJSON in any of its three top-level shapes. */

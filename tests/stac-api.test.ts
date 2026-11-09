@@ -12,6 +12,7 @@ import {
   searchStacApi,
   searchStaticStac,
   sortStacItems,
+  withinCloudCover,
   stacDateInterval,
   assetTargets,
   canAddAsset,
@@ -2699,4 +2700,72 @@ test("sortStacItems orders by capture date and puts undated items last", () => {
     sortStacItems(items, "asc").map((found) => found.id),
     ["old", "mid", "new", "none-a", "none-b"],
   );
+});
+
+test("searchStacApi sends the cloud limit as CQL2 that keeps items with no cloud cover", async () => {
+  let body: Record<string, unknown> = {};
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(sortConnection, { maxCloudCover: 10 }, fetcher);
+  assert.equal(body["filter-lang"], "cql2-json");
+  assert.deepEqual(body.filter, {
+    op: "or",
+    args: [
+      { op: "<=", args: [{ property: "eo:cloud_cover" }, 10] },
+      { op: "isNull", args: [{ property: "eo:cloud_cover" }] },
+    ],
+  });
+});
+
+test("searchStacApi falls back to the query extension, then drops the sort, for a server that refuses", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    // Accepts only the older query extension, and not with a sort.
+    if (body.filter || body.sortby) return jsonResponse({ detail: "unsupported" }, 400);
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  await searchStacApi(sortConnection, { maxCloudCover: 20, sortby: "asc" }, fetcher);
+  assert.equal(bodies.length, 4);
+  assert.ok(bodies[0].filter && bodies[0].sortby);
+  assert.ok(bodies[1].filter && !bodies[1].sortby);
+  assert.ok(bodies[2].query && bodies[2].sortby);
+  assert.deepEqual(bodies[3].query, { "eo:cloud_cover": { lte: 20 } });
+  assert.equal("sortby" in bodies[3], false);
+});
+
+test("searchStacApi combines a typed filter with the cloud limit", async () => {
+  let body: Record<string, unknown> = {};
+  const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body));
+    return jsonResponse({ type: "FeatureCollection", features: [] });
+  }) as typeof fetch;
+  const typed = { op: "=", args: [{ property: "platform" }, "sentinel-2a"] };
+  await searchStacApi(
+    sortConnection,
+    { maxCloudCover: 10, additional: { filter: typed } },
+    fetcher,
+  );
+  assert.equal((body.filter as { op: string }).op, "and");
+  assert.deepEqual((body.filter as { args: unknown[] }).args[0], typed);
+});
+
+test("withinCloudCover drops cloudy items and keeps those that report none", () => {
+  const item = (id: string, cover?: number) =>
+    ({
+      type: "Feature",
+      id,
+      geometry: null,
+      properties: cover === undefined ? {} : { "eo:cloud_cover": cover },
+      assets: {},
+    }) as StacItem;
+  const items = [item("clear", 3), item("cloudy", 60), item("radar"), item("edge", 10)];
+  assert.deepEqual(
+    withinCloudCover(items, 10).map((found) => found.id),
+    ["clear", "radar", "edge"],
+  );
+  assert.equal(withinCloudCover(items, undefined), items);
 });

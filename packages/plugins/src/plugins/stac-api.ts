@@ -152,6 +152,13 @@ export interface StacSearchOptions {
    * catalog has no search endpoint to ask, so only the caller's sort applies there.
    */
   sortby?: StacSortDirection;
+  /**
+   * Keep items with at most this much `eo:cloud_cover` (percent). Items that report none (radar,
+   * elevation, aerial imagery) are kept. Sent as a CQL2 filter, then as the older `query`
+   * extension if the server refuses, and the caller checks the results either way
+   * ({@link withinCloudCover}) because some servers accept the filter and ignore it.
+   */
+  maxCloudCover?: number;
   /** Documents to search instead of the whole catalog, from the tree's selection. */
   entries?: string[];
   cursor?: StacSearchCursor;
@@ -701,6 +708,58 @@ export function stacDateInterval(start: string, end: string): string | undefined
   return `${bound(from, "00:00:00")}/${bound(to, "23:59:59.999999")}`;
 }
 
+/**
+ * The request bodies to try, most specific first: each cloud-filter form (CQL2, then the `query`
+ * extension) with the sort, then without it. With neither asked for, just the plain body.
+ */
+function searchBodies(
+  body: Record<string, unknown>,
+  options: StacSearchOptions,
+): Array<Record<string, unknown>> {
+  const sorts: Array<StacSortDirection | undefined> = options.sortby
+    ? [options.sortby, undefined]
+    : [undefined];
+  const clouds: Array<"cql2" | "query" | undefined> =
+    options.maxCloudCover === undefined ? [undefined] : ["cql2", "query"];
+  return clouds.flatMap((cloud) =>
+    sorts.map((sort) => {
+      const next: Record<string, unknown> = { ...body };
+      if (cloud === "cql2") {
+        const keep = {
+          op: "or",
+          args: [
+            { op: "<=", args: [{ property: "eo:cloud_cover" }, options.maxCloudCover] },
+            { op: "isNull", args: [{ property: "eo:cloud_cover" }] },
+          ],
+        };
+        // A filter typed into the additional parameters stays; both must hold.
+        const typed = body.filter;
+        next["filter-lang"] = "cql2-json";
+        next.filter =
+          typed && typeof typed === "object" ? { op: "and", args: [typed, keep] } : keep;
+      } else if (cloud === "query") {
+        const typed = body.query && typeof body.query === "object" ? body.query : {};
+        next.query = { ...typed, "eo:cloud_cover": { lte: options.maxCloudCover } };
+      }
+      // The dropdown wins over a sortby typed into the additional parameters, which is what it is for.
+      if (sort) next.sortby = [{ field: "properties.datetime", direction: sort }];
+      return next;
+    }),
+  );
+}
+
+/**
+ * Drops items that report more cloud cover than allowed. An item that reports none always passes,
+ * and so does everything when no limit is set.
+ */
+export function withinCloudCover(items: StacItem[], max: number | undefined): StacItem[] {
+  if (max === undefined) return items;
+  return items.filter((item) => {
+    const value = item.properties["eo:cloud_cover"];
+    return typeof value !== "number" || value <= max;
+  });
+}
+
 export async function searchStacApi(
   connection: StacConnection,
   options: StacSearchOptions,
@@ -715,11 +774,6 @@ export async function searchStacApi(
   else if (options.bbox) body.bbox = options.bbox;
   if (options.datetime) body.datetime = options.datetime;
   if (options.collections?.length) body.collections = options.collections;
-  // The dropdown wins over a sortby typed into the additional parameters, which is what it is for.
-  const sortedBody = options.sortby
-    ? { ...body, sortby: [{ field: "properties.datetime", direction: options.sortby }] }
-    : body;
-
   const page = options.next;
   const href = page?.href ?? connection.searchUrl;
   const method = page?.method ?? "POST";
@@ -739,14 +793,20 @@ export async function searchStacApi(
     return parseItems(raw, href);
   };
   try {
-    try {
-      return await send(sortedBody);
-    } catch (error) {
-      // A server without the sort extension answers an error; the search is worth more than the
-      // order, so ask again without it and let the caller sort what comes back.
-      if (options.signal?.aborted || !options.sortby || page || method !== "POST") throw error;
-      return await send(body);
+    // The request as asked, then simpler forms for a server that rejects it, the way the QGIS
+    // plugin does: the cloud filter goes CQL2 then `query`, and the sort is dropped last (the
+    // caller sorts the results itself). A later page follows the server's own link as is.
+    const variants = page ? [searchBodies(body, options)[0]] : searchBodies(body, options);
+    let failure: unknown;
+    for (const payload of variants) {
+      try {
+        return await send(payload);
+      } catch (error) {
+        if (options.signal?.aborted || method !== "POST") throw error;
+        failure = error;
+      }
     }
+    throw failure;
   } catch (error) {
     if (page || method !== "POST") throw error;
     // Core Item Search requires GET and POST to have equivalent semantics.

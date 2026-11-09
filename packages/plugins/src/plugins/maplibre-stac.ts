@@ -38,6 +38,7 @@ import {
   searchStaticStac,
   sortStacItems,
   type StacSortDirection,
+  withinCloudCover,
   type StacAsset,
   type StacConnection,
   type StacIndexCatalog,
@@ -57,6 +58,7 @@ import {
 } from "./stac-api";
 import {
   AOI_MAX_POSITIONS,
+  bufferGeometry,
   countPositions,
   geometryFromFile,
   type MergedArea,
@@ -235,6 +237,11 @@ export interface StacLabels {
   sortNewest: string;
   sortOldest: string;
   sortHint: string;
+  bufferLabel: string;
+  bufferHint: string;
+  bufferDistance: (meters: number) => string;
+  cloudLabel: string;
+  cloudHint: string;
   mapNotReady: string;
   startDate: string;
   endDate: string;
@@ -355,6 +362,13 @@ let labels: StacLabels = {
   sortDefault: "Server default",
   sortNewest: "Newest first",
   sortOldest: "Oldest first",
+  bufferLabel: "Buffer points and lines (meters)",
+  bufferHint:
+    "Widen a point or line into a polygon this many meters either side before searching. Leave empty for no buffer.",
+  bufferDistance: (meters) => `${meters} m`,
+  cloudLabel: "Limit cloud cover to",
+  cloudHint:
+    "Keep scenes with at most this much cloud cover. Scenes that report none (radar, elevation, aerial imagery) are kept.",
   sortHint: "Order results by capture date. With many matches, Newest first keeps the latest.",
   mapNotReady: "The map is not ready for drawing.",
   startDate: "Start date",
@@ -506,6 +520,48 @@ function field(label: string, type = "text"): { wrap: HTMLElement; input: HTMLIn
   input.style.cssText = style.input;
   wrap.append(caption, input);
   return { wrap, input };
+}
+
+/**
+ * A checkbox that turns a numeric option on, with a number box for its value and a unit beside it.
+ * The box is dimmed and locked while the checkbox is off.
+ */
+function numberOption(config: {
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  value: number;
+  unit: string;
+}): { wrap: HTMLElement; check: HTMLInputElement; input: HTMLInputElement; value: () => number } {
+  const wrap = el("label");
+  wrap.style.cssText = `${style.row}cursor:pointer;`;
+  wrap.title = config.hint;
+  const check = el("input");
+  check.type = "checkbox";
+  const input = el("input");
+  input.type = "number";
+  input.min = String(config.min);
+  input.max = String(config.max);
+  input.step = "1";
+  input.value = String(config.value);
+  input.style.cssText = `${style.input}width:72px;flex:0 0 72px;`;
+  const unit = el("span", config.unit);
+  unit.style.cssText = style.label;
+  // An empty or out-of-range box reads as the nearest value it could mean, never as NaN.
+  const value = (): number => {
+    const typed = Number(input.value);
+    if (input.value.trim() === "" || !Number.isFinite(typed)) return config.value;
+    return Math.min(config.max, Math.max(config.min, typed));
+  };
+  const sync = (): void => {
+    input.disabled = !check.checked;
+    input.style.opacity = check.checked ? "1" : "0.5";
+  };
+  check.addEventListener("change", sync);
+  sync();
+  wrap.append(check, el("span", config.label), input, unit);
+  return { wrap, check, input, value };
 }
 
 function currentExtent(): [number, number, number, number] | undefined {
@@ -1181,7 +1237,20 @@ function buildPanel(container: HTMLElement): () => void {
     clearDrawButton,
     areaFile,
   );
-  areaWrap.append(areaCaption, areaRow);
+  // A number box, as in the ArcGIS Pro add-in: empty (or zero) means no buffer, and it only
+  // affects points and lines.
+  const bufferField = field(labels.bufferLabel, "number");
+  bufferField.wrap.title = labels.bufferHint;
+  bufferField.input.min = "0";
+  bufferField.input.step = "10";
+  bufferField.input.placeholder = "0";
+  // Widening or narrowing the buffer redraws the shape already chosen.
+  bufferField.input.addEventListener("change", () => applyArea());
+  const bufferMeters = (): number => {
+    const meters = Number(bufferField.input.value);
+    return Number.isFinite(meters) && meters > 0 ? meters : 0;
+  };
+  areaWrap.append(areaCaption, areaRow, bufferField.wrap);
   const dates = el("div");
   dates.style.cssText = style.row;
   const startField = field(labels.startDate, "date");
@@ -1204,6 +1273,14 @@ function buildPanel(container: HTMLElement): () => void {
     sortSelect.append(option);
   }
   sortWrap.append(sortCaption, sortSelect);
+  const cloud = numberOption({
+    label: labels.cloudLabel,
+    hint: labels.cloudHint,
+    min: 0,
+    max: 100,
+    value: 10,
+    unit: "%",
+  });
   const additionalWrap = el("label");
   additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
   const additionalCaption = el("span", labels.additionalParams);
@@ -1229,11 +1306,12 @@ function buildPanel(container: HTMLElement): () => void {
     catalogInfo,
     collectionSelect,
     tree.element,
-    areaWrap,
     extentRow,
+    areaWrap,
     bboxField.wrap,
     dates,
     sortWrap,
+    cloud.wrap,
     additionalWrap,
     searchActions,
   );
@@ -1404,6 +1482,8 @@ function buildPanel(container: HTMLElement): () => void {
   let cancelDraw: (() => void) | null = null;
   /** The shape items must intersect, when the search is by shape rather than by rectangle. */
   let searchArea: Geometry | undefined;
+  /** The shape as chosen, before any buffer; `searchArea` is this, widened when the buffer is on. */
+  let chosenArea: MergedArea | undefined;
   let selectedItemId: string | null = null;
   const cardsByItemId = new Map<string, HTMLElement>();
 
@@ -1723,6 +1803,7 @@ function buildPanel(container: HTMLElement): () => void {
       const start = startField.input.value;
       const end = endField.input.value;
       const datetime = stacDateInterval(start, end);
+      const maxCloudCover = cloud.check.checked ? cloud.value() : undefined;
       const sortDirection: StacSortDirection | undefined =
         sortSelect.value === "asc" || sortSelect.value === "desc" ? sortSelect.value : undefined;
       walking?.abort();
@@ -1732,6 +1813,7 @@ function buildPanel(container: HTMLElement): () => void {
         bbox: searchArea ? undefined : (extent ?? parseBbox()),
         intersects: searchArea,
         sortby: sortDirection,
+        maxCloudCover,
         datetime,
         collections: selectedCollections,
         entries: connection.isApi ? [] : tree.selection(),
@@ -1745,7 +1827,9 @@ function buildPanel(container: HTMLElement): () => void {
         ? await searchStacApi(connection, options)
         : await searchStaticStac(connection, options);
       if (search !== searchGeneration) return;
-      const combined = append ? [...allItems, ...response.items] : response.items;
+      // Checked here as well as asked of the server: some accept a cloud filter and ignore it.
+      const arrived = withinCloudCover(response.items, maxCloudCover);
+      const combined = append ? [...allItems, ...arrived] : arrived;
       // Sorted across every page loaded, so Load more slots new items in rather than appending, and
       // a server that ignored the sort still gives the order asked for.
       allItems = sortDirection ? sortStacItems(combined, sortDirection) : combined;
@@ -1846,6 +1930,7 @@ function buildPanel(container: HTMLElement): () => void {
     cancelDraw = beginBboxDraw((bbox) => {
       cancelDraw = null;
       searchArea = undefined;
+      chosenArea = undefined;
       setDisabled(clearAreaButton, true);
       drawButton.textContent = labels.drawBbox;
       bboxField.input.value = bbox.map((value) => value.toFixed(6)).join(", ");
@@ -1859,7 +1944,15 @@ function buildPanel(container: HTMLElement): () => void {
     }
   });
   /** Makes `geometry` the search shape, replacing any rectangle, and shows it on the map. */
-  const setSearchArea = ({ geometry, ignored }: MergedArea): void => {
+  const setSearchArea = (area: MergedArea): void => {
+    chosenArea = area;
+    applyArea();
+  };
+  /** Turns the chosen shape into the search area: widened by the buffer when that is on. */
+  function applyArea(): void {
+    if (!chosenArea) return;
+    const { geometry: shape, ignored } = chosenArea;
+    const geometry = bufferMeters() ? bufferGeometry(shape, bufferMeters() / 1000) : shape;
     const positions = countPositions(geometry);
     if (positions > AOI_MAX_POSITIONS) {
       setStatus(labels.areaTooLarge(positions, AOI_MAX_POSITIONS), true);
@@ -1873,8 +1966,9 @@ function buildPanel(container: HTMLElement): () => void {
     const map = getStacMap(appRef);
     if (map) showDrawGeometry(map, geometry);
     const note = ignored ? ` ${labels.areaIgnored(ignored)}` : "";
-    setStatus(`${labels.areaSet(`${geometry.type} (${positions})`)}${note}`);
-  };
+    const grown = geometry !== shape ? ` +${labels.bufferDistance(bufferMeters())}` : "";
+    setStatus(`${labels.areaSet(`${shape.type} (${positions})${grown}`)}${note}`);
+  }
   const resetDrawButtons = (): void => {
     drawButton.textContent = labels.drawBbox;
   };
@@ -1930,6 +2024,7 @@ function buildPanel(container: HTMLElement): () => void {
     cancelDraw?.();
     cancelDraw = null;
     searchArea = undefined;
+    chosenArea = undefined;
     setDisabled(clearAreaButton, true);
     const map = getStacMap(appRef);
     if (map) removeDrawBox(map);
