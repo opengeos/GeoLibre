@@ -29,6 +29,7 @@ import {
   captureEditedFeatureIds,
   captureEditedGeometries,
   captureEditedProperties,
+  mercatorSegmentMidpoint,
   removeMultiLineStringVertex,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
@@ -392,7 +393,7 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
         mapbox.adaptGeomanToMapbox(geomanInstance, mapboxGl, mapboxMap);
       }
       geoEditorControl.setGeoman(geomanInstance);
-      installMultiLineVertexRemoval(geomanInstance);
+      installGeomanActionPatches(geomanInstance);
       bindGeomanEditSync(map);
     }
   }
@@ -519,7 +520,11 @@ interface GeomanChangeAction {
 const MULTILINE_CUT_PATCHED = Symbol("geolibre.multiLineCut");
 
 /**
- * Lets right-click remove a vertex from a MultiLineString. Geoman's change mode
+ * Wraps the Geoman action instances GeoLibre fixes up as Geoman creates them:
+ * the change-mode action's vertex removal and the shape-markers helper's
+ * edge-marker placement.
+ *
+ * Right-click vertex removal on a MultiLineString: Geoman's change mode
  * only implements removal for LineString, Polygon and MultiPolygon, so on a
  * MultiLineString it logs "EditChange.cutVertex: feature not updated" and
  * leaves the vertex (discussion #2750). The change-mode action is created each
@@ -528,14 +533,57 @@ const MULTILINE_CUT_PATCHED = Symbol("geolibre.multiLineCut");
  *
  * @param geoman - The Geoman instance the editor drives.
  */
-function installMultiLineVertexRemoval(geoman: Geoman): void {
+function installGeomanActionPatches(geoman: Geoman): void {
   const instances = geoman.actionInstances as Record<string, unknown>;
   geoman.actionInstances = new Proxy(instances, {
     set(target, key, value) {
       if (key === "edit__change") patchChangeAction(value);
+      if (key === "helper__shape_markers") patchShapeMarkersHelper(value);
       return Reflect.set(target, key, value);
     },
   }) as Geoman["actionInstances"];
+}
+
+/** One end of a Geoman shape segment. */
+interface GeomanSegmentPoint {
+  coordinate: Position;
+  path: (string | number)[];
+}
+
+/** Geoman's shape-markers helper, as far as edge-marker placement goes. */
+interface GeomanShapeMarkersHelper {
+  getSegmentMiddlePosition(segment: {
+    start: GeomanSegmentPoint;
+    end: GeomanSegmentPoint;
+  }): GeomanSegmentPoint;
+}
+
+const EDGE_MIDPOINT_PATCHED = Symbol("geolibre.edgeMidpoint");
+
+/**
+ * Places each edge's "add a vertex" marker at the edge's real midpoint
+ * (#3382). Geoman unprojects the midpoint of the two ends' screen positions,
+ * once, at whatever camera an edit starts with; on a zoomed-out globe that
+ * strews the markers far from their edges, and they stay there. The helper is
+ * registered before it builds any marker, so this runs ahead of the first one.
+ * The path is built the way Geoman builds it: the start's, last index `-1`.
+ *
+ * @param value - The `helper__shape_markers` action instance.
+ */
+function patchShapeMarkersHelper(value: unknown): void {
+  const helper = value as (GeomanShapeMarkersHelper & { [EDGE_MIDPOINT_PATCHED]?: true }) | null;
+  if (
+    !helper ||
+    typeof helper.getSegmentMiddlePosition !== "function" ||
+    helper[EDGE_MIDPOINT_PATCHED]
+  ) {
+    return;
+  }
+  helper[EDGE_MIDPOINT_PATCHED] = true;
+  helper.getSegmentMiddlePosition = (segment) => ({
+    coordinate: mercatorSegmentMidpoint(segment.start.coordinate, segment.end.coordinate),
+    path: [...segment.start.path.slice(0, -1), -1],
+  });
 }
 
 function patchChangeAction(value: unknown): void {

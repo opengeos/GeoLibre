@@ -12,6 +12,7 @@ import {
   captureEditedFeatureIds,
   captureEditedGeometries,
   captureEditedProperties,
+  mercatorSegmentMidpoint,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   removeMultiLineStringVertex,
@@ -988,5 +989,50 @@ describe("findGeometryEditFeature", () => {
       findGeometryEditFeature({ type: "FeatureCollection", features: [point("0")] }, "0"),
       undefined,
     );
+  });
+});
+
+describe("mercatorSegmentMidpoint", () => {
+  const close = (actual: number, expected: number) =>
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+
+  it("averages longitudes and keeps a parallel's latitude", () => {
+    const [lng, lat] = mercatorSegmentMidpoint([100, 20], [110, 20]);
+    close(lng, 105);
+    close(lat, 20);
+  });
+
+  it("puts the latitude halfway along Mercator y, not halfway in degrees", () => {
+    // A meridian edge from the equator to 60N: Mercator y doubles the spacing
+    // toward the pole, so the drawn midpoint sits well above 30N.
+    const [lng, lat] = mercatorSegmentMidpoint([10, 0], [10, 60]);
+    close(lng, 10);
+    const y60 = Math.log(Math.tan(Math.PI / 4 + Math.PI / 6));
+    close(lat, (Math.atan(Math.sinh(y60 / 2)) * 180) / Math.PI);
+    assert.ok(lat > 35 && lat < 36);
+  });
+
+  it("is symmetric about the equator", () => {
+    const [, lat] = mercatorSegmentMidpoint([0, -40], [0, 40]);
+    close(lat, 0);
+  });
+
+  it("lands on the Vietnam coast edge the issue showed markers drifting from", () => {
+    // An edge of the countries layer's Vietnam polygon (#3382).
+    const start = [107.22092858279524, 10.364483954301832];
+    const end = [108.36612999881545, 11.008320624226272];
+    const [lng, lat] = mercatorSegmentMidpoint(start, end);
+    close(lng, (start[0] + end[0]) / 2);
+    assert.ok(Math.abs(lat - (start[1] + end[1]) / 2) < 0.001);
+  });
+
+  it("averages plain latitudes for an edge beyond Mercator's limit", () => {
+    // Antarctica's ring runs along -90; clamping would pull the marker off it.
+    assert.deepEqual(mercatorSegmentMidpoint([-180, -90], [-170, -90]), [-175, -90]);
+    assert.deepEqual(mercatorSegmentMidpoint([0, -84], [0, -90]), [0, -87]);
+  });
+
+  it("drops altitude", () => {
+    assert.equal(mercatorSegmentMidpoint([0, 0, 5], [2, 0, 7]).length, 2);
   });
 });

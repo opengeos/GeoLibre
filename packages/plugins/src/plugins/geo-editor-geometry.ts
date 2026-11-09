@@ -780,3 +780,37 @@ export function removeMultiLineStringVertex(
     .filter((part) => part.length >= 2);
   return coordinates.length > 0 ? { ...geometry, coordinates } : null;
 }
+
+/** Web Mercator's latitude limit, past which a latitude has no Mercator y. */
+const MERCATOR_MAX_LATITUDE = 85.051129;
+
+/**
+ * The midpoint of one edge, where Geoman puts the edge's "add a vertex here"
+ * marker. MapLibre draws an edge as a straight line in Web Mercator, so the
+ * midpoint is taken there: the longitudes averaged and the latitude halfway
+ * along the Mercator y axis.
+ *
+ * Geoman itself averages the two ends' screen positions and unprojects that.
+ * It computes every marker once, at the camera of the moment, and never again
+ * on zoom or pan. On a globe, or for an end off screen or behind the globe,
+ * that screen midpoint lands far from the edge, so the markers were strewn
+ * over the map wherever an edit started zoomed out (#3382). This depends on
+ * the coordinates alone.
+ *
+ * An end beyond Mercator's latitude limit (Antarctica's edges along -90) has
+ * no Mercator y, so such an edge takes the plain latitude average instead,
+ * which keeps the marker on the edge rather than at the limit.
+ *
+ * @param start - The edge's first vertex, `[lng, lat, ...]`.
+ * @param end - The edge's second vertex, `[lng, lat, ...]`.
+ * @returns The midpoint as `[lng, lat]`.
+ */
+export function mercatorSegmentMidpoint(start: Position, end: Position): [number, number] {
+  const lng = (start[0] + end[0]) / 2;
+  if (Math.abs(start[1]) > MERCATOR_MAX_LATITUDE || Math.abs(end[1]) > MERCATOR_MAX_LATITUDE) {
+    return [lng, (start[1] + end[1]) / 2];
+  }
+  const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  const y = (toY(start[1]) + toY(end[1])) / 2;
+  return [lng, (Math.atan(Math.sinh(y)) * 180) / Math.PI];
+}
