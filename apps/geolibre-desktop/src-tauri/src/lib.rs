@@ -143,6 +143,42 @@ struct PersistedScopeState {
 #[derive(Default)]
 struct SelectedImagePaths(Mutex<HashSet<PathBuf>>);
 
+/// Canonical paths of the plugin bundles (zip archives or directories) that
+/// the most recent `load_external_plugin_bundles` scan loaded. The asset read
+/// accepts only these sources, so the webview cannot widen the readable set by
+/// naming its own roots: a scan registers only bundles that carry a valid
+/// `plugin.json`, never an arbitrary directory such as `$HOME`.
+#[cfg(not(feature = "mas"))]
+#[derive(Default)]
+struct LoadedPluginBundles(Mutex<HashSet<PathBuf>>);
+
+#[cfg(not(feature = "mas"))]
+impl LoadedPluginBundles {
+    /// Replace the recorded set with the canonical form of `sources`. Sources
+    /// that no longer resolve are dropped.
+    fn replace<I, S>(&self, sources: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<Path>,
+    {
+        let canonical = sources
+            .into_iter()
+            .filter_map(|source| source.as_ref().canonicalize().ok())
+            .collect::<HashSet<_>>();
+        *self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = canonical;
+    }
+
+    /// The canonical path of `source` when it is a recorded bundle, else None.
+    fn canonical_known_source(&self, source: &Path) -> Option<PathBuf> {
+        let canonical = source.canonicalize().ok()?;
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(&canonical)
+            .then_some(canonical)
+    }
+}
+
 fn is_persisted_image_file(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     PERSISTED_PHOTO_EXTENSIONS
@@ -478,6 +514,11 @@ pub fn run() {
 
     // Pools for the in-process PostGIS tile renderer, created on first connect.
     let builder = builder.manage(postgis_tiles::PostgisTilesState::default());
+
+    // The plugin bundles the asset read may serve from; external plugins are
+    // compiled out of the MAS build, so the state goes with them.
+    #[cfg(not(feature = "mas"))]
+    let builder = builder.manage(LoadedPluginBundles::default());
 
     // The Martin/sidecar/Jupyter process managers exist only where the commands
     // that spawn those processes do; the MAS build compiles both out together.
@@ -2281,6 +2322,10 @@ fn load_external_plugin_bundles_blocking(
     for plugin_dir in &plugin_dirs {
         scan_external_plugin_directory(plugin_dir, &mut bundles, &mut errors);
     }
+    // Remember exactly what loaded, so read_external_plugin_asset can refuse
+    // any source the scan did not itself find.
+    app.state::<LoadedPluginBundles>()
+        .replace(bundles.iter().map(|bundle| PathBuf::from(&bundle.archive_name)));
 
     Ok(ExternalPluginBundleLoadResult {
         plugins_directories: plugin_dirs
@@ -2292,10 +2337,9 @@ fn load_external_plugin_bundles_blocking(
     })
 }
 
-/// The deduplicated plugin root directories: the user-configured additional
-/// directories first, then the app-data plugins directory. Shared by the
-/// startup scan and the asset read, which must agree on what counts as a
-/// known plugin bundle.
+/// The deduplicated plugin root directories the startup scan walks: the
+/// user-configured additional directories first, then the app-data plugins
+/// directory.
 #[cfg(not(feature = "mas"))]
 fn plugin_roots(additional_plugin_directories: Vec<String>, plugins_dir: PathBuf) -> Vec<PathBuf> {
     let mut plugin_dirs = Vec::new();
@@ -2321,17 +2365,11 @@ fn plugin_roots(additional_plugin_directories: Vec<String>, plugins_dir: PathBuf
 #[tauri::command]
 async fn read_external_plugin_asset(
     app: tauri::AppHandle,
-    additional_plugin_directories: Vec<String>,
     source_path: String,
     relative_path: String,
 ) -> Result<tauri::ipc::Response, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        read_external_plugin_asset_blocking(
-            &app,
-            additional_plugin_directories,
-            &source_path,
-            &relative_path,
-        )
+        read_external_plugin_asset_blocking(&app, &source_path, &relative_path)
     })
     .await
     .map_err(|error| format!("External plugin asset read task failed: {error}"))?
@@ -2340,28 +2378,19 @@ async fn read_external_plugin_asset(
 #[cfg(not(feature = "mas"))]
 fn read_external_plugin_asset_blocking(
     app: &tauri::AppHandle,
-    additional_plugin_directories: Vec<String>,
     source_path: &str,
     relative_path: &str,
 ) -> Result<tauri::ipc::Response, String> {
     validate_external_plugin_path("relative_path", relative_path)?;
-    let plugins_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not resolve app data directory: {error}"))?
-        .join("plugins");
-    let roots = plugin_roots(additional_plugin_directories, plugins_dir);
-    let source = PathBuf::from(source_path);
-    // The recorded source must resolve under a plugin root, so a tampered
-    // webview can point this read at most at a plugin bundle it already ships.
-    if !canonical_source_under_roots(&source, &roots) {
-        return Err(
-            "Refusing to read plugin assets: source is not a known plugin bundle".to_string(),
-        );
-    }
-    let canonical_source = source
-        .canonicalize()
-        .map_err(|error| format!("Plugin source is unavailable: {error}"))?;
+    // The source must be a bundle the last scan loaded. The roots are not
+    // taken from the caller: a webview that could name its own root could
+    // point this read at any directory on disk.
+    let canonical_source = app
+        .state::<LoadedPluginBundles>()
+        .canonical_known_source(Path::new(source_path))
+        .ok_or_else(|| {
+            "Refusing to read plugin assets: source is not a loaded plugin bundle".to_string()
+        })?;
     // Dispatch on what is actually on disk, not on the recorded name: a
     // directory may legitimately be named `*.zip`, and a symlink may resolve to
     // either shape, so the extension alone would route the read to the wrong
@@ -2382,21 +2411,6 @@ fn read_external_plugin_asset_blocking(
     }
 }
 
-/// Whether `source` resolves inside one of `roots`. Roots that do not exist
-/// (a configured development directory not created yet) contain nothing.
-#[cfg(not(feature = "mas"))]
-fn canonical_source_under_roots(source: &Path, roots: &[PathBuf]) -> bool {
-    let canonical_source = match source.canonicalize() {
-        Ok(canonical) => canonical,
-        Err(_) => return false,
-    };
-    roots.iter().any(|root| {
-        root.canonicalize()
-            .map(|canonical_root| canonical_source.starts_with(canonical_root))
-            .unwrap_or(false)
-    })
-}
-
 #[cfg(not(feature = "mas"))]
 fn read_zip_plugin_asset_bytes(
     archive_path: &Path,
@@ -2412,7 +2426,7 @@ fn read_zip_plugin_asset_bytes(
         .ok_or_else(|| "Plugin archive is missing a plugin.json".to_string())?;
     let prefix = manifest_path.strip_suffix("plugin.json").unwrap_or("");
     let entry_name = format!("{prefix}{relative_path}");
-    let mut entry = archive.by_name(&entry_name).map_err(|_| {
+    let entry = archive.by_name(&entry_name).map_err(|_| {
         format!("Plugin asset '{relative_path}' does not exist in the plugin archive")
     })?;
     if entry.is_dir() {
@@ -2983,7 +2997,6 @@ async fn load_external_plugin_bundles(
 #[tauri::command]
 async fn read_external_plugin_asset(
     _app: tauri::AppHandle,
-    _additional_plugin_directories: Vec<String>,
     _source_path: String,
     _relative_path: String,
 ) -> Result<tauri::ipc::Response, String> {
@@ -5651,9 +5664,9 @@ mod tests {
     // tests that exercise it (and their scaffolding) are gated with it.
     #[cfg(not(feature = "mas"))]
     use super::{
-        add_main_sidecar_extras, add_sidecar_python_pin, canonical_source_under_roots,
-        child_failure_message, clear_appimage_python_env,
+        add_main_sidecar_extras, add_sidecar_python_pin, child_failure_message, clear_appimage_python_env,
         find_zip_manifest_path, plugin_archive_file_name, read_directory_plugin_asset_bytes,
+        LoadedPluginBundles,
         read_zip_plugin_asset_bytes, resolve_sidecar_in_resource_dir,
         sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
         CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
@@ -6657,20 +6670,31 @@ mod tests {
 
     #[cfg(not(feature = "mas"))]
     #[test]
-    fn canonical_source_under_roots_contains_reads() {
-        let root = env::temp_dir().join("geolibre-asset-roots-test");
-        let inside = root.join("plugin.zip");
-        fs::create_dir_all(&root).unwrap();
-        fs::write(&inside, b"x").unwrap();
-        let sibling = env::temp_dir().join("geolibre-asset-roots-sibling");
-        let _ = fs::remove_dir_all(&sibling);
-        fs::create_dir_all(&sibling).unwrap();
-        let outside = sibling.join("other.zip");
-        fs::write(&outside, b"x").unwrap();
-        assert!(canonical_source_under_roots(&inside, &[root.clone()]));
-        assert!(!canonical_source_under_roots(&outside, &[root]));
+    fn loaded_plugin_bundles_accept_only_scanned_sources() {
+        let root = env::temp_dir().join(format!(
+            "geolibre-loaded-bundles-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let plugin = root.join("plugins").join("my-plugin");
+        fs::create_dir_all(&plugin).unwrap();
+        fs::write(plugin.join("plugin.json"), b"{}").unwrap();
+        let bundles = LoadedPluginBundles::default();
+        bundles.replace([&plugin]);
+        // The scanned bundle is accepted, also through a non-canonical spelling.
+        assert!(bundles.canonical_known_source(&plugin).is_some());
+        assert!(bundles
+            .canonical_known_source(&plugin.join("..").join("my-plugin"))
+            .is_some());
+        // A directory the scan never loaded is refused, even one that contains
+        // the bundle (the caller-chosen-root attack: `$HOME` + `.ssh/id_rsa`).
+        assert!(bundles.canonical_known_source(&root).is_none());
+        assert!(bundles.canonical_known_source(&root.join("plugins")).is_none());
+        assert!(bundles.canonical_known_source(&root.join("missing")).is_none());
+        // A rescan replaces the set rather than adding to it.
+        bundles.replace(Vec::<PathBuf>::new());
+        assert!(bundles.canonical_known_source(&plugin).is_none());
         fs::remove_dir_all(&root).unwrap();
-        fs::remove_dir_all(&sibling).unwrap();
     }
 
     #[cfg(not(feature = "mas"))]

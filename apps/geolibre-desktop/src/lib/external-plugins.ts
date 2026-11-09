@@ -29,8 +29,7 @@ import {
   withPluginAssetCacheToken,
 } from "./plugin-asset-url";
 import { readBodyBytesWithCap } from "./capped-body";
-import { encodePluginAssetPath } from "./plugin-asset-path";
-import { isSafePluginAssetRelativePath } from "./plugin-asset-path";
+import { encodePluginAssetPath, isSafePluginAssetRelativePath } from "./plugin-asset-path";
 import {
   computePluginBundleHash,
   pinPluginBundle,
@@ -179,13 +178,6 @@ export async function loadExternalPlugins(
   const issues: ExternalPluginLoadIssue[] = [];
   const bundledUrls = new Set(options.bundledManifestUrls ?? []);
   const policy = options.policy === undefined ? getDeploymentPolicy() : options.policy;
-  // Remember the directories this scan covered, so readPluginAssetForLoadedPlugin
-  // can pass the same root list to the desktop asset-read command (the command
-  // re-derives the roots to contain the recorded plugin source before reading).
-  // Store exactly the list the scan itself walks: with sideload disabled the
-  // scan passes [], so the read must not keep the suppressed directories.
-  currentAdditionalPluginDirectories =
-    policy?.plugins?.sideload === false ? [] : additionalPluginDirectories;
   if (policy?.plugins?.sideload === false) {
     const decision = evaluatePlugin("", "directory", policy);
     if (!decision.allowed) {
@@ -829,18 +821,13 @@ export function resolvePluginAssetUrlForLoadedPlugin(
   return pluginAssetUrlFromSource(externallyLoadedPluginSources.get(pluginId), relativePath);
 }
 
-// The additional plugin directories of the most recent filesystem scan; see
-// loadExternalPlugins. Only consulted on desktop (Tauri), where the asset-read
-// command re-derives the same root list to contain a recorded plugin source.
-let currentAdditionalPluginDirectories: string[] = [];
-
 /** Deadline for one URL asset read, covering the body as well as the headers. */
 const PLUGIN_ASSET_TIMEOUT_MS = 30_000;
 
 /**
  * Read one asset file from a loaded external plugin's own bundle, as raw
  * bytes. Filesystem plugins (an installed zip or a development directory) read
- * through the desktop command, which contains the read to the plugin roots;
+ * through the desktop command, which serves only bundles its last scan loaded;
  * URL-installed plugins fetch the same asset URL
  * {@link resolvePluginAssetUrlForLoadedPlugin} resolves. Resolves null when the
  * plugin is unknown or built-in, the path is unsafe or the asset is missing,
@@ -884,7 +871,6 @@ export async function readPluginAssetForLoadedPlugin(
   }
   try {
     const bytes = await invoke<ArrayBuffer>("read_external_plugin_asset", {
-      additionalPluginDirectories: currentAdditionalPluginDirectories,
       sourcePath: source,
       relativePath,
     });
