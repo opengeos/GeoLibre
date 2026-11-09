@@ -1,3 +1,5 @@
+import { parallelSearch } from "./parallel-search";
+
 // How long to wait for the provider's response headers. Generous enough for a
 // slow non-streaming generation, and below the 600s nginx read timeout that a
 // self-hosted deployment puts in front of this worker.
@@ -762,7 +764,53 @@ async function proxyMessagesSearch(
   }
 }
 
-export default {
+/** Anonymous search, behind the same instance authentication and client budget as chat. */
+async function proxyParallel(request: Request, env: Env, origin: string | null): Promise<Response> {
+  const limited = withOrigin(await rateLimit(request, env), origin);
+  if (limited) return limited;
+  let body: Record<string, unknown>;
+  try {
+    body = await readBoundedJson(
+      request,
+      Math.min(positiveInteger(env.MAX_BODY_BYTES, 1_048_576), 65_536),
+    );
+  } catch (error) {
+    return jsonError(
+      error instanceof Error ? error.message : "Invalid request body",
+      error instanceof RangeError ? 413 : 400,
+      responseHeaders(origin),
+    );
+  }
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query || query.length > 1_000) {
+    return jsonError(
+      "query must be a non-empty string of at most 1,000 characters",
+      400,
+      responseHeaders(origin),
+    );
+  }
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
+  try {
+    const results = await parallelSearch(query, signal);
+    signal.throwIfAborted();
+    const headers = responseHeaders(origin);
+    headers.set("Cache-Control", "no-store");
+    return Response.json({ results }, { headers });
+  } catch (error) {
+    if (signal.aborted) {
+      return jsonError("Search request timed out or cancelled", 504, responseHeaders(origin));
+    }
+    // MCP errors may include the upstream response body, including the search query.
+    const code =
+      error instanceof Error && "code" in error && typeof error.code === "number"
+        ? error.code
+        : undefined;
+    console.error(JSON.stringify({ message: "Parallel search upstream error", code }));
+    return jsonError("Upstream request failed", 502, responseHeaders(origin));
+  }
+}
+
+export const handler = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" && request.method === "GET") {
@@ -783,6 +831,7 @@ export default {
       url.pathname !== "/v1/chat/completions" &&
       url.pathname !== "/search" &&
       url.pathname !== "/tavily" &&
+      url.pathname !== "/parallel" &&
       url.pathname !== "/systemone"
     ) {
       return jsonError("Not found", 404, responseHeaders(origin));
@@ -794,6 +843,9 @@ export default {
     try {
       if (url.pathname === "/search") {
         return await proxyMessagesSearch(request, env, origin);
+      }
+      if (url.pathname === "/parallel") {
+        return await proxyParallel(request, env, origin);
       }
       if (url.pathname === "/tavily") {
         return await proxyTavily(request, env, origin);
@@ -814,3 +866,5 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+export default handler;

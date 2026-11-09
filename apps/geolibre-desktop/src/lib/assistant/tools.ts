@@ -602,24 +602,29 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   const webSearchTool = tool({
     name: "web_search",
     description:
-      "Search the web for current information (news, recent data, documentation). Returns top results with title, url, and snippet, plus a short answer when available. Most reliable when TAVILY_API_KEY is configured; the keyless fallback is best-effort and may be blocked by the browser.",
+      "Search the web for current information (news, recent data, documentation). Returns top results with title, url, and snippet, plus a short answer when available. Supports explicitly selected Parallel via the managed proxy, Tavily with TAVILY_API_KEY, or best-effort DuckDuckGo.",
     inputSchema: z.object({
       query: z.string().describe("The search query."),
     }),
-    callback: async (input) => {
+    callback: async (input, context) => {
+      const signal = context?.cancelSignal;
       try {
-        const response = await webSearch(input.query);
+        const response = await webSearch(input.query, undefined, signal);
+        if (signal?.aborted) {
+          throw signal.reason ?? new DOMException("Search cancelled", "AbortError");
+        }
         return json({
           provider: response.provider,
           answer: response.answer ?? null,
           results: response.results.slice(0, 8),
         });
       } catch (error) {
+        if (signal?.aborted) throw error;
         // Don't surface a raw fetch/CORS error as a tool crash — tell the model
         // search is unavailable so it can fall back gracefully.
         return json({
           error:
-            "Web search is unavailable from the browser. Configure TAVILY_API_KEY in Settings → Environment variables for reliable search.",
+            "Web search is unavailable. Check the selected search provider and proxy, or configure TAVILY_API_KEY in Settings → Environment variables.",
           detail: error instanceof Error ? error.message : String(error),
           results: [],
         });
