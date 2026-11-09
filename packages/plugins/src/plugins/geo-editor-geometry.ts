@@ -786,7 +786,8 @@ const MERCATOR_MAX_LATITUDE = 85.051129;
 
 /**
  * The midpoint of one edge, where Geoman puts the edge's "add a vertex here"
- * marker. MapLibre draws an edge as a straight line in Web Mercator, so the
+ * marker. MapLibre lays an edge out as a straight line in Web Mercator (on the
+ * globe too, where it bends that Mercator line onto the sphere), so the
  * midpoint is taken there: the longitudes averaged and the latitude halfway
  * along the Mercator y axis.
  *
@@ -797,20 +798,32 @@ const MERCATOR_MAX_LATITUDE = 85.051129;
  * over the map wherever an edit started zoomed out (#3382). This depends on
  * the coordinates alone.
  *
- * An end beyond Mercator's latitude limit (Antarctica's edges along -90) has
- * no Mercator y, so such an edge takes the plain latitude average instead,
- * which keeps the marker on the edge rather than at the limit.
+ * MapLibre clamps a latitude beyond Mercator's limit to the limit, so an edge
+ * with one end past it is drawn to the clamped point and its midpoint is taken
+ * between the clamped ends. An edge with both ends past it (Antarctica's ring
+ * along -90) has no drawn length to sit on, so it takes the plain latitude
+ * average, which keeps the marker on the edge's own parallel.
  *
- * @param start - The edge's first vertex, `[lng, lat, ...]`.
- * @param end - The edge's second vertex, `[lng, lat, ...]`.
- * @returns The midpoint as `[lng, lat]`.
+ * When both ends carry an elevation the midpoint gets their average, so a
+ * vertex inserted there keeps the edge's elevation profile.
+ *
+ * @param start - The edge's first vertex, `[lng, lat, elevation?]`.
+ * @param end - The edge's second vertex, `[lng, lat, elevation?]`.
+ * @returns The midpoint as `[lng, lat]`, or `[lng, lat, elevation]` when both
+ *   ends have an elevation.
  */
-export function mercatorSegmentMidpoint(start: Position, end: Position): [number, number] {
+export function mercatorSegmentMidpoint(start: Position, end: Position): Position {
   const lng = (start[0] + end[0]) / 2;
-  if (Math.abs(start[1]) > MERCATOR_MAX_LATITUDE || Math.abs(end[1]) > MERCATOR_MAX_LATITUDE) {
-    return [lng, (start[1] + end[1]) / 2];
+  const elevation =
+    typeof start[2] === "number" && typeof end[2] === "number" ? [(start[2] + end[2]) / 2] : [];
+  const beyond = (lat: number) => Math.abs(lat) > MERCATOR_MAX_LATITUDE;
+  if (beyond(start[1]) && beyond(end[1])) {
+    return [lng, (start[1] + end[1]) / 2, ...elevation];
   }
-  const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  const toY = (lat: number) => {
+    const clamped = Math.max(-MERCATOR_MAX_LATITUDE, Math.min(MERCATOR_MAX_LATITUDE, lat));
+    return Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360));
+  };
   const y = (toY(start[1]) + toY(end[1])) / 2;
-  return [lng, (Math.atan(Math.sinh(y)) * 180) / Math.PI];
+  return [lng, (Math.atan(Math.sinh(y)) * 180) / Math.PI, ...elevation];
 }

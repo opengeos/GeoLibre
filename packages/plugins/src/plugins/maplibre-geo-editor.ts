@@ -533,7 +533,7 @@ const MULTILINE_CUT_PATCHED = Symbol("geolibre.multiLineCut");
  *
  * @param geoman - The Geoman instance the editor drives.
  */
-function installGeomanActionPatches(geoman: Geoman): void {
+export function installGeomanActionPatches(geoman: Pick<Geoman, "actionInstances">): void {
   const instances = geoman.actionInstances as Record<string, unknown>;
   geoman.actionInstances = new Proxy(instances, {
     set(target, key, value) {
@@ -542,6 +542,9 @@ function installGeomanActionPatches(geoman: Geoman): void {
       return Reflect.set(target, key, value);
     },
   }) as Geoman["actionInstances"];
+  // Geoman registers its helpers after construction today; patch one that is
+  // already there in case a release starts doing it inside the constructor.
+  patchShapeMarkersHelper(instances.helper__shape_markers);
 }
 
 /** One end of a Geoman shape segment. */

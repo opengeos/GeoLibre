@@ -1017,22 +1017,39 @@ describe("mercatorSegmentMidpoint", () => {
     close(lat, 0);
   });
 
-  it("lands on the Vietnam coast edge the issue showed markers drifting from", () => {
+  it("lands on the drawn edge: collinear with its ends in Mercator space", () => {
     // An edge of the countries layer's Vietnam polygon (#3382).
     const start = [107.22092858279524, 10.364483954301832];
     const end = [108.36612999881545, 11.008320624226272];
+    const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
     const [lng, lat] = mercatorSegmentMidpoint(start, end);
     close(lng, (start[0] + end[0]) / 2);
-    assert.ok(Math.abs(lat - (start[1] + end[1]) / 2) < 0.001);
+    close(toY(lat), (toY(start[1]) + toY(end[1])) / 2);
+    // ...which is not the plain latitude average.
+    assert.ok(Math.abs(lat - (start[1] + end[1]) / 2) > 1e-6);
   });
 
-  it("averages plain latitudes for an edge beyond Mercator's limit", () => {
+  it("clamps an end beyond Mercator's limit, as MapLibre draws it", () => {
+    // Drawn from the equator up to the clamped 85.05N, not to the pole.
+    const toY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    const [lng, lat] = mercatorSegmentMidpoint([0, 0], [20, 90]);
+    close(lng, 10);
+    close(toY(lat), toY(85.051129) / 2);
+  });
+
+  it("averages plain latitudes for an edge with both ends beyond the limit", () => {
     // Antarctica's ring runs along -90; clamping would pull the marker off it.
     assert.deepEqual(mercatorSegmentMidpoint([-180, -90], [-170, -90]), [-175, -90]);
-    assert.deepEqual(mercatorSegmentMidpoint([0, -84], [0, -90]), [0, -87]);
   });
 
-  it("drops altitude", () => {
-    assert.equal(mercatorSegmentMidpoint([0, 0, 5], [2, 0, 7]).length, 2);
+  it("averages elevation when both ends have one", () => {
+    const middle = mercatorSegmentMidpoint([0, 0, 5], [2, 0, 7]);
+    assert.equal(middle.length, 3);
+    close(middle[2], 6);
+  });
+
+  it("leaves elevation out when either end lacks it", () => {
+    assert.equal(mercatorSegmentMidpoint([0, 0, 5], [2, 0]).length, 2);
+    assert.equal(mercatorSegmentMidpoint([0, 0], [2, 0]).length, 2);
   });
 });

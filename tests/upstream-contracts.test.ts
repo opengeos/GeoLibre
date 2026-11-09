@@ -655,7 +655,7 @@ describe("maplibre-gl-splat", () => {
 
 describe("@geoman-io/maplibre-geoman-free", () => {
   const section =
-    "`@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode internals";
+    "`@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode and shape-marker internals";
 
   // Text check: Geoman needs a live map to construct, and the hook points are
   // inside its action classes. Both workspaces nest their own copy, and the
@@ -717,6 +717,48 @@ describe("@geoman-io/maplibre-geoman-free", () => {
         types,
         /interface PositionData \{\s*coordinate: LngLatTuple;\s*path: Array<string \| number>;/,
         message("vertex marker positions no longer carry { coordinate, path }"),
+      );
+    });
+
+    it(`keeps the shape-markers getSegmentMiddlePosition hook points (${workspace} copy)`, () => {
+      const text = readPublishedText("@geoman-io/maplibre-geoman-free", { workspace });
+      const message = (detail: string) =>
+        contractMessage("@geoman-io/maplibre-geoman-free", section, detail, workspace);
+      assert.match(
+        text,
+        /mode = "shape_markers";/,
+        message(
+          "the shape-markers helper mode is renamed (GeoLibre hooks `helper__shape_markers`)",
+        ),
+      );
+      assert.match(
+        text,
+        /this\.gm\.actionInstances\[e\] = n, await n\.startAction\(\);/,
+        message(
+          "helpers are no longer registered before startAction(), so markers may be built before the patch",
+        ),
+      );
+      assert.ok(
+        text.includes("middle: this.getSegmentMiddlePosition("),
+        message(
+          "edge markers no longer get their position from `this.getSegmentMiddlePosition`, so the instance override is bypassed",
+        ),
+      );
+      assert.match(
+        text,
+        /getSegmentMiddlePosition\(e\) \{\s*let t = this\.gm\.mapAdapter\.project\(e\.start\.coordinate\)/,
+        message(
+          "getSegmentMiddlePosition no longer takes a { start, end } segment, or no longer projects to the screen (check whether #3382 is fixed upstream)",
+        ),
+      );
+      assert.ok(
+        text.includes("e.start.path.slice(0, e.start.path.length - 1).concat([-1])"),
+        message("edge marker paths are no longer the start's path ending in -1"),
+      );
+      assert.match(
+        text,
+        /n = \[\.\.\.e\.markerData\.segment\.end\.path\], r = n\.pop\(\)/,
+        message("insertVertex no longer splices at the edge end's path"),
       );
     });
   }
