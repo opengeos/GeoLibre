@@ -75,7 +75,7 @@ function unitCategoryColor(category: string): string {
  *
  * @param layer - The archive's unit layer.
  * @returns The stops, and a class count equal to their number so the Style
- *   pane selects "All" for them.
+ *   pane selects "All" for them. Both are empty when no unit has a category.
  */
 export function unitCategoryClasses(layer: ImdfLayer): {
   stops: VectorStyleStop[];
@@ -84,14 +84,17 @@ export function unitCategoryClasses(layer: ImdfLayer): {
   const categories = new Set<string>();
   for (const feature of layer.geojson.features) {
     const category = feature.properties?.category;
-    // Trim once: the categorized renderer matches on the trimmed stop value.
+    // Stop values are compared trimmed by the renderer, so trim here to keep
+    // the palette lookup consistent and padded spellings from duplicating a
+    // stop. A padded feature value itself still will not match (IMDF
+    // categories are enumerated, so valid data has none).
     const trimmed = typeof category === "string" ? category.trim() : "";
     if (trimmed) categories.add(trimmed);
   }
   const stops = [...categories]
     .sort()
     .map((category) => ({ value: category, color: unitCategoryColor(category), label: category }));
-  return { stops, classCount: Math.max(1, stops.length) };
+  return { stops, classCount: stops.length };
 }
 
 /** Extrusion settings that stack a feature on its floor. */
@@ -147,10 +150,16 @@ function presentation(
           extrusionColor: UNIT_FALLBACK_COLOR,
           extrusionOpacity: 0.85,
           fillColor: UNIT_FALLBACK_COLOR,
-          vectorStyleMode: "categorized",
-          vectorStyleProperty: "category",
-          vectorStyleStops: classes.stops,
-          vectorStyleClassCount: classes.classCount,
+          // With no categories there is nothing to classify, so the units
+          // stay on single symbology in the fallback color.
+          ...(classes.stops.length > 0
+            ? {
+                vectorStyleMode: "categorized" as const,
+                vectorStyleProperty: "category",
+                vectorStyleStops: classes.stops,
+                vectorStyleClassCount: classes.classCount,
+              }
+            : {}),
         },
         // An open-to-below unit is the void of an atrium; drawing it as a solid
         // would plug the hole it describes. A unit with no resolvable level has

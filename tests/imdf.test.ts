@@ -282,4 +282,25 @@ describe("imdfLoadedLayers", () => {
     ]);
     assert.equal(classCount, 2);
   });
+
+  it("leaves units on single symbology when none has a category", async () => {
+    const { imdfLoadedLayers } = await import("../apps/geolibre-desktop/src/lib/imdf-layers");
+    const [units] = imdfLoadedLayers(
+      {
+        layers: [
+          {
+            featureType: "unit",
+            onLevels: true,
+            geojson: {
+              type: "FeatureCollection",
+              features: [{ type: "Feature", geometry: null, properties: { ordinal: 0 } }],
+            },
+          },
+        ],
+      } as never,
+      "/data/plain.zip",
+    );
+    assert.equal(units.style?.vectorStyleMode, undefined);
+    assert.equal(units.style?.extrusionColor, "#bfdbfe");
+  });
 });
