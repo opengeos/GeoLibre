@@ -443,6 +443,47 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(tool.params?.[0].kind, undefined);
   });
 
+  it("types a flow-direction output whose name contains `dir`", () => {
+    const catalog: WhiteboxTool = {
+      id: "flow_tool",
+      params: [{ name: "flow_dir_output_path", kind: "raster_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "flow_tool",
+      return_type: "Raster",
+      params: [genericOutput("flow_dir_output_path")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, "raster_out");
+  });
+
+  it("types a single-file LiDAR output", () => {
+    const catalog: WhiteboxTool = {
+      id: "lidar_shift",
+      params: [{ name: "output", kind: "lidar_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "lidar_shift",
+      return_type: "Lidar",
+      params: [genericOutput("output")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, "lidar_out");
+  });
+
+  it("falls back to the catalog's return type when the manifest has none", () => {
+    // Manifests built from the binary (manifestToWhiteboxTool) carry no
+    // return_type, so the catalog's list return type must still exclude it.
+    const catalog: WhiteboxTool = {
+      id: "inverse_pca",
+      return_type: "list[Raster]",
+      params: [{ name: "output", kind: "raster_out" }],
+    };
+    const wasm: WhiteboxTool = { id: "inverse_pca", params: [genericOutput("output")] };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, undefined);
+  });
+
   it("leaves a generic output alone when the catalog types it as a file", () => {
     const catalog: WhiteboxTool = {
       id: "vector_summary_statistics",

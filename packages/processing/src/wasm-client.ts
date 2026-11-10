@@ -289,8 +289,19 @@ function shouldPreferCatalogKind(
 
 /** Typed dataset output kinds the catalog may supply for a generic WASM output. */
 const CATALOG_DATASET_OUTPUT_KINDS = new Set(["raster_out", "vector_out", "lidar_out"]);
-/** Name words marking an output that names several files rather than one dataset. */
-const MULTI_FILE_OUTPUT_WORDS = new Set(["prefix", "directory", "dir", "folder"]);
+/**
+ * Name words marking an output that names several files rather than one
+ * dataset. `dir` is deliberately absent: hydrology tools use it for flow
+ * *direction* (`flow_dir_output_path` is one raster), matching
+ * `FOLDER_NAME_WORDS` in the desktop app's `whitebox-param-kind.ts`.
+ */
+const MULTI_FILE_OUTPUT_WORDS = new Set([
+  "prefix",
+  "folder",
+  "folders",
+  "directory",
+  "directories",
+]);
 
 /**
  * Whether the catalog's typed dataset kind should replace a generic WASM
