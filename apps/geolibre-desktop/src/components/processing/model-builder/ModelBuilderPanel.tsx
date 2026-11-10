@@ -123,6 +123,7 @@ import { modelFieldOptions } from "../../../lib/model-field-options";
 import {
   MAX_IMPORT_BYTES,
   parseModelFile,
+  readTextCapped,
   serializeModelFile,
   type ModelFileError,
 } from "../../../lib/model-file";
@@ -368,6 +369,15 @@ export function ModelBuilderPanel({
   const abortRef = useRef<AbortController | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * The canvas and run state as of the latest render, so a sample that is
+   * still fetching can tell whether the user edited the model or started a
+   * run in the meantime.
+   */
+  const latestRef = useRef({ graph, modelName, running });
+  useEffect(() => {
+    latestRef.current = { graph, modelName, running };
+  }, [graph, modelName, running]);
   const importRef = useRef<HTMLInputElement | null>(null);
   const restoredGeometryRef = useRef<{
     position: { x: number; y: number };
@@ -723,20 +733,16 @@ export function ModelBuilderPanel({
   const handleLoadSample = useCallback(
     async (sample: SampleModel) => {
       if (loadingSampleId || !confirmDiscard()) return;
+      const before = latestRef.current;
       setLoadingSampleId(sample.id);
       appendLog(t("processing.modelBuilder.samples.loadingLog", { name: sample.title }));
       try {
         const response = await fetch(sample.modelUrl);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        // Reject on the declared size before buffering the body, then on the
-        // real UTF-8 size (a header can be missing or wrong).
-        if (Number(response.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) {
-          throw new Error(t("processing.modelBuilder.importTooLarge"));
-        }
-        const text = await response.text();
-        if (new TextEncoder().encode(text).byteLength > MAX_IMPORT_BYTES) {
-          throw new Error(t("processing.modelBuilder.importTooLarge"));
-        }
+        // Streamed with a byte cap, so an oversized file is never buffered
+        // in full just to be rejected (the same bound Import puts on file.size).
+        const text = await readTextCapped(response, MAX_IMPORT_BYTES);
+        if (text === null) throw new Error(t("processing.modelBuilder.importTooLarge"));
         const parsed = parseModelFile(text);
         if (!parsed.ok) throw new Error(t(MODEL_FILE_ERROR_KEYS[parsed.error]));
 
@@ -781,6 +787,17 @@ export function ModelBuilderPanel({
               }`,
             );
           }
+        }
+        // The fetches above can take seconds while the canvas stays editable.
+        // The discard prompt covered the model as it was then; ask again if
+        // it changed or a run started since, rather than overwriting it.
+        const now = latestRef.current;
+        if (now.running && !window.confirm(t("processing.modelBuilder.discardRunning"))) return;
+        if (
+          (now.graph !== before.graph || now.modelName !== before.modelName) &&
+          !window.confirm(t("processing.modelBuilder.discardChanges"))
+        ) {
+          return;
         }
         const graph = bindSampleModelInputs(
           parsed.graph,

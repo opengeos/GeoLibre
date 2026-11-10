@@ -71,3 +71,42 @@ export function parseModelFile(text: string): ParsedModelFile {
 export function serializeModelFile(name: string, graph: ProcessingModelGraph): string {
   return JSON.stringify({ $schema: MODEL_SCHEMA, version: MODEL_VERSION, name, graph }, null, 2);
 }
+
+/**
+ * Read a response body as text, giving up once it passes `maxBytes`.
+ *
+ * `response.text()` buffers the whole body before its size can be checked, so
+ * an oversized file (or one served chunked, with no `Content-Length`) would be
+ * held in memory in full just to be rejected. Streaming with a running byte
+ * count stops at the cap instead.
+ *
+ * @param response The fetch response.
+ * @param maxBytes The largest body accepted, in bytes.
+ * @returns The decoded text, or `null` when the body is larger than `maxBytes`.
+ */
+export async function readTextCapped(response: Response, maxBytes: number): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (declared > maxBytes) {
+    await response.body?.cancel();
+    return null;
+  }
+  if (!response.body) {
+    const text = await response.text();
+    return new TextEncoder().encode(text).byteLength > maxBytes ? null : text;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}

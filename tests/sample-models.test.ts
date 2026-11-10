@@ -4,6 +4,7 @@ import type { GeoLibreLayer, ProcessingModelGraph } from "../packages/core/src";
 import {
   MODEL_SCHEMA,
   parseModelFile,
+  readTextCapped,
   serializeModelFile,
 } from "../apps/geolibre-desktop/src/lib/model-file";
 import {
@@ -73,6 +74,42 @@ describe("model file", () => {
       ok: false,
       error: "tooLarge",
     });
+  });
+});
+
+describe("readTextCapped", () => {
+  /** A response streamed in chunks, with no Content-Length header. */
+  const chunked = (parts: string[]) => {
+    const encoder = new TextEncoder();
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled < parts.length) controller.enqueue(encoder.encode(parts[pulled++]));
+        else controller.close();
+      },
+    });
+    return { response: new Response(stream), pulled: () => pulled };
+  };
+
+  it("returns the body when it fits", async () => {
+    assert.equal(await readTextCapped(chunked(["héllo ", "wörld"]).response, 100), "héllo wörld");
+  });
+
+  it("counts UTF-8 bytes, not characters", async () => {
+    // Five characters, ten bytes.
+    assert.equal(await readTextCapped(chunked(["ééééé"]).response, 9), null);
+    assert.equal(await readTextCapped(chunked(["ééééé"]).response, 10), "ééééé");
+  });
+
+  it("stops reading a chunked body once it passes the cap", async () => {
+    const body = chunked(["12345", "67890", "abcde", "fghij"]);
+    assert.equal(await readTextCapped(body.response, 8), null);
+    assert.ok(body.pulled() < 4, `read ${body.pulled()} of 4 chunks`);
+  });
+
+  it("rejects on a declared Content-Length without reading", async () => {
+    const response = new Response("tiny", { headers: { "content-length": "999" } });
+    assert.equal(await readTextCapped(response, 10), null);
   });
 });
 
