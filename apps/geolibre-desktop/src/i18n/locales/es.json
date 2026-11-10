@@ -6078,7 +6078,8 @@
         "dataAddedLog": "Se añadieron los datos de ejemplo \"{{name}}\" al mapa.",
         "dataFailed": "No se pudieron añadir los datos de ejemplo \"{{name}}\"",
         "loadedLog": "Ejemplo \"{{name}}\" cargado.",
-        "loadFailed": "No se pudo cargar el ejemplo"
+        "loadFailed": "No se pudo cargar el ejemplo",
+        "rasterUnsupported": "Los datos de ejemplo \"{{name}}\" son un ráster, que esta compilación no puede añadir al mapa."
       }
     },
     "parameterField": {

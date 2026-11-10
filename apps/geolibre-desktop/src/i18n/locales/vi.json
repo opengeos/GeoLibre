@@ -5987,7 +5987,8 @@
         "dataAddedLog": "Đã thêm dữ liệu mẫu \"{{name}}\" vào bản đồ.",
         "dataFailed": "Không thể thêm dữ liệu mẫu \"{{name}}\"",
         "loadedLog": "Đã tải mẫu \"{{name}}\".",
-        "loadFailed": "Không thể tải mẫu"
+        "loadFailed": "Không thể tải mẫu",
+        "rasterUnsupported": "Dữ liệu mẫu \"{{name}}\" là raster, bản dựng này không thể thêm vào bản đồ."
       }
     },
     "parameterField": {

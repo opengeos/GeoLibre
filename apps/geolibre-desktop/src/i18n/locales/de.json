@@ -6078,7 +6078,8 @@
         "dataAddedLog": "Beispieldaten „{{name}}“ zur Karte hinzugefügt.",
         "dataFailed": "Beispieldaten „{{name}}“ konnten nicht hinzugefügt werden",
         "loadedLog": "Beispiel „{{name}}“ geladen.",
-        "loadFailed": "Das Beispiel konnte nicht geladen werden"
+        "loadFailed": "Das Beispiel konnte nicht geladen werden",
+        "rasterUnsupported": "Die Beispieldaten „{{name}}“ sind ein Raster, das dieser Build nicht zur Karte hinzufügen kann."
       }
     },
     "parameterField": {

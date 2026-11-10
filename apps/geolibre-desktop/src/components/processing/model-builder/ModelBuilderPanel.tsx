@@ -728,8 +728,13 @@ export function ModelBuilderPanel({
       try {
         const response = await fetch(sample.modelUrl);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // Reject on the declared size before buffering the body, then on the
+        // real UTF-8 size (a header can be missing or wrong).
+        if (Number(response.headers.get("content-length") ?? 0) > MAX_IMPORT_BYTES) {
+          throw new Error(t("processing.modelBuilder.importTooLarge"));
+        }
         const text = await response.text();
-        if (text.length > MAX_IMPORT_BYTES) {
+        if (new TextEncoder().encode(text).byteLength > MAX_IMPORT_BYTES) {
           throw new Error(t("processing.modelBuilder.importTooLarge"));
         }
         const parsed = parseModelFile(text);
@@ -737,7 +742,11 @@ export function ModelBuilderPanel({
 
         // Bind the sample datasets. Read the store directly: a dataset added
         // for an earlier entry must be visible to the reuse check of the next.
+        // Log lines are collected and written after resetRunState(), which
+        // clears the log; otherwise a failed dataset would leave the input
+        // unbound with nothing saying why.
         const bindings = new Map<string, string>();
+        const notes: string[] = [];
         for (const data of sample.data) {
           const existing = findSampleDataLayer(useAppStore.getState().layers, data.url);
           if (existing) {
@@ -747,7 +756,13 @@ export function ModelBuilderPanel({
           try {
             let layerId: string | undefined;
             if (data.kind === "raster") {
-              if (onAddRasterUrl) layerId = await onAddRasterUrl(data.url, data.name);
+              if (!onAddRasterUrl) {
+                notes.push(
+                  t("processing.modelBuilder.samples.rasterUnsupported", { name: data.name }),
+                );
+                continue;
+              }
+              layerId = await onAddRasterUrl(data.url, data.name);
             } else {
               const res = await fetch(data.url);
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -756,11 +771,11 @@ export function ModelBuilderPanel({
             }
             if (layerId) {
               bindings.set(data.layerId, layerId);
-              appendLog(t("processing.modelBuilder.samples.dataAddedLog", { name: data.name }));
+              notes.push(t("processing.modelBuilder.samples.dataAddedLog", { name: data.name }));
             }
           } catch (err) {
             // The model still loads; its input is left for the user to pick.
-            appendLog(
+            notes.push(
               `${t("processing.modelBuilder.samples.dataFailed", { name: data.name })}: ${
                 (err as Error).message
               }`,
@@ -778,6 +793,7 @@ export function ModelBuilderPanel({
         setSelectedNodeId(null);
         resetRunState();
         canvasRef.current?.scrollTo({ left: 0, top: 0 });
+        notes.forEach(appendLog);
         appendLog(t("processing.modelBuilder.samples.loadedLog", { name: sample.title }));
       } catch (err) {
         appendLog(`${t("processing.modelBuilder.samples.loadFailed")}: ${(err as Error).message}`);

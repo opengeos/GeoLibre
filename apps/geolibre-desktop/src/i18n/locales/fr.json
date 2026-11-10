@@ -6078,7 +6078,8 @@
         "dataAddedLog": "Données d'exemple « {{name}} » ajoutées à la carte.",
         "dataFailed": "Impossible d'ajouter les données d'exemple « {{name}} »",
         "loadedLog": "Exemple « {{name}} » chargé.",
-        "loadFailed": "Impossible de charger l'exemple"
+        "loadFailed": "Impossible de charger l'exemple",
+        "rasterUnsupported": "Les données d'exemple « {{name}} » sont un raster, que cette version ne peut pas ajouter à la carte."
       }
     },
     "parameterField": {

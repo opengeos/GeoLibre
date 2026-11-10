@@ -6142,7 +6142,8 @@
         "dataAddedLog": "\"{{name}}\" nümunə məlumatı xəritəyə əlavə edildi.",
         "dataFailed": "\"{{name}}\" nümunə məlumatı əlavə edilə bilmədi",
         "loadedLog": "\"{{name}}\" nümunəsi yükləndi.",
-        "loadFailed": "Nümunə yüklənə bilmədi"
+        "loadFailed": "Nümunə yüklənə bilmədi",
+        "rasterUnsupported": "\"{{name}}\" nümunə məlumatı rasterdir və bu versiya onu xəritəyə əlavə edə bilmir."
       }
     },
     "parameterField": {

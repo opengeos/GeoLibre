@@ -6078,7 +6078,8 @@
         "dataAddedLog": "Voorbeeldgegevens \"{{name}}\" aan de kaart toegevoegd.",
         "dataFailed": "Kan voorbeeldgegevens \"{{name}}\" niet toevoegen",
         "loadedLog": "Voorbeeld \"{{name}}\" geladen.",
-        "loadFailed": "Kan het voorbeeld niet laden"
+        "loadFailed": "Kan het voorbeeld niet laden",
+        "rasterUnsupported": "Voorbeeldgegevens \"{{name}}\" zijn een raster, dat deze build niet aan de kaart kan toevoegen."
       }
     },
     "parameterField": {
