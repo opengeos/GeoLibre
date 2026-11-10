@@ -6079,7 +6079,8 @@
         "dataFailed": "नमूना डेटा \"{{name}}\" नहीं जोड़ा जा सका",
         "loadedLog": "नमूना \"{{name}}\" लोड हो गया।",
         "loadFailed": "नमूना लोड नहीं हो सका",
-        "rasterUnsupported": "नमूना डेटा \"{{name}}\" एक रास्टर है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।"
+        "rasterUnsupported": "नमूना डेटा \"{{name}}\" एक रास्टर है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।",
+        "dataUnusable": "अधिकतम {{size}} MB का GeoJSON FeatureCollection नहीं है"
       }
     },
     "parameterField": {

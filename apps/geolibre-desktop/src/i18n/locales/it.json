@@ -6079,7 +6079,8 @@
         "dataFailed": "Impossibile aggiungere i dati di esempio \"{{name}}\"",
         "loadedLog": "Esempio \"{{name}}\" caricato.",
         "loadFailed": "Impossibile caricare l'esempio",
-        "rasterUnsupported": "I dati di esempio \"{{name}}\" sono un raster, che questa build non può aggiungere alla mappa."
+        "rasterUnsupported": "I dati di esempio \"{{name}}\" sono un raster, che questa build non può aggiungere alla mappa.",
+        "dataUnusable": "non è una FeatureCollection GeoJSON di al massimo {{size}} MB"
       }
     },
     "parameterField": {

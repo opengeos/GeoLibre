@@ -6079,7 +6079,8 @@
         "dataFailed": "Impossible d'ajouter les données d'exemple « {{name}} »",
         "loadedLog": "Exemple « {{name}} » chargé.",
         "loadFailed": "Impossible de charger l'exemple",
-        "rasterUnsupported": "Les données d'exemple « {{name}} » sont un raster, que cette version ne peut pas ajouter à la carte."
+        "rasterUnsupported": "Les données d'exemple « {{name}} » sont un raster, que cette version ne peut pas ajouter à la carte.",
+        "dataUnusable": "n'est pas une FeatureCollection GeoJSON d'au plus {{size}} Mo"
       }
     },
     "parameterField": {

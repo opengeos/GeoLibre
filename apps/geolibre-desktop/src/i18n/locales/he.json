@@ -6234,7 +6234,8 @@
         "dataFailed": "לא ניתן להוסיף את נתוני הדוגמה \"{{name}}\"",
         "loadedLog": "הדוגמה \"{{name}}\" נטענה.",
         "loadFailed": "לא ניתן לטעון את הדוגמה",
-        "rasterUnsupported": "נתוני הדוגמה \"{{name}}\" הם רסטר, שגרסה זו אינה יכולה להוסיף למפה."
+        "rasterUnsupported": "נתוני הדוגמה \"{{name}}\" הם רסטר, שגרסה זו אינה יכולה להוסיף למפה.",
+        "dataUnusable": "אינו GeoJSON FeatureCollection בגודל של עד {{size}} MB"
       }
     },
     "parameterField": {

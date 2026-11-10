@@ -290,6 +290,11 @@ interface ModelBuilderPanelProps {
   onAddRasterUrl?: (url: string, name: string) => Promise<string>;
 }
 
+/** How long a sample's model or data fetch may take before it is abandoned. */
+const SAMPLE_FETCH_TIMEOUT_MS = 30_000;
+/** Size cap on a sample's GeoJSON data; the bundled samples are a few KB. */
+const MAX_SAMPLE_DATA_BYTES = 64 * 1024 * 1024;
+
 /** Catalog key for each reason a model file is rejected. */
 const MODEL_FILE_ERROR_KEYS: Record<ModelFileError, ParseKeys> = {
   tooLarge: "processing.modelBuilder.importTooLarge",
@@ -737,7 +742,10 @@ export function ModelBuilderPanel({
       setLoadingSampleId(sample.id);
       appendLog(t("processing.modelBuilder.samples.loadingLog", { name: sample.title }));
       try {
-        const response = await fetch(sample.modelUrl);
+        // A timeout, so a stalled host cannot leave the Samples menu disabled.
+        const response = await fetch(sample.modelUrl, {
+          signal: AbortSignal.timeout(SAMPLE_FETCH_TIMEOUT_MS),
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         // Streamed with a byte cap, so an oversized file is never buffered
         // in full just to be rejected (the same bound Import puts on file.size).
@@ -770,9 +778,19 @@ export function ModelBuilderPanel({
               }
               layerId = await onAddRasterUrl(data.url, data.name);
             } else {
-              const res = await fetch(data.url);
+              const res = await fetch(data.url, {
+                signal: AbortSignal.timeout(SAMPLE_FETCH_TIMEOUT_MS),
+              });
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              const geojson = (await res.json()) as FeatureCollection;
+              const text = await readTextCapped(res, MAX_SAMPLE_DATA_BYTES);
+              const geojson = text === null ? null : (JSON.parse(text) as FeatureCollection);
+              if (geojson?.type !== "FeatureCollection" || !Array.isArray(geojson.features)) {
+                throw new Error(
+                  t("processing.modelBuilder.samples.dataUnusable", {
+                    size: MAX_SAMPLE_DATA_BYTES / (1024 * 1024),
+                  }),
+                );
+              }
               layerId = addGeoJsonLayer(data.name, geojson, data.url);
             }
             if (layerId) {
@@ -791,12 +809,15 @@ export function ModelBuilderPanel({
         // The fetches above can take seconds while the canvas stays editable.
         // The discard prompt covered the model as it was then; ask again if
         // it changed or a run started since, rather than overwriting it.
+        // Declining keeps the current canvas, but the data added above stays
+        // on the map, so the log still says what was added.
         const now = latestRef.current;
-        if (now.running && !window.confirm(t("processing.modelBuilder.discardRunning"))) return;
-        if (
-          (now.graph !== before.graph || now.modelName !== before.modelName) &&
-          !window.confirm(t("processing.modelBuilder.discardChanges"))
-        ) {
+        const declined =
+          (now.running && !window.confirm(t("processing.modelBuilder.discardRunning"))) ||
+          ((now.graph !== before.graph || now.modelName !== before.modelName) &&
+            !window.confirm(t("processing.modelBuilder.discardChanges")));
+        if (declined) {
+          notes.forEach(appendLog);
           return;
         }
         const graph = bindSampleModelInputs(

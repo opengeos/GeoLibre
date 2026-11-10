@@ -6079,7 +6079,8 @@
         "dataFailed": "Kan voorbeeldgegevens \"{{name}}\" niet toevoegen",
         "loadedLog": "Voorbeeld \"{{name}}\" geladen.",
         "loadFailed": "Kan het voorbeeld niet laden",
-        "rasterUnsupported": "Voorbeeldgegevens \"{{name}}\" zijn een raster, dat deze build niet aan de kaart kan toevoegen."
+        "rasterUnsupported": "Voorbeeldgegevens \"{{name}}\" zijn een raster, dat deze build niet aan de kaart kan toevoegen.",
+        "dataUnusable": "geen GeoJSON-FeatureCollection van hoogstens {{size}} MB"
       }
     },
     "parameterField": {

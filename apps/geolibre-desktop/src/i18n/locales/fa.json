@@ -6079,7 +6079,8 @@
         "dataFailed": "افزودن داده نمونه «{{name}}» ممکن نشد",
         "loadedLog": "نمونه «{{name}}» بارگذاری شد.",
         "loadFailed": "بارگذاری نمونه ممکن نشد",
-        "rasterUnsupported": "داده نمونه «{{name}}» رستری است که این نسخه نمی‌تواند آن را به نقشه بیفزاید."
+        "rasterUnsupported": "داده نمونه «{{name}}» رستری است که این نسخه نمی‌تواند آن را به نقشه بیفزاید.",
+        "dataUnusable": "یک GeoJSON FeatureCollection با حداکثر {{size}} مگابایت نیست"
       }
     },
     "parameterField": {

@@ -6177,7 +6177,8 @@
         "dataFailed": "Could not add sample data \"{{name}}\"",
         "loadedLog": "Loaded sample \"{{name}}\".",
         "loadFailed": "Could not load the sample",
-        "rasterUnsupported": "Sample data \"{{name}}\" is a raster, which this build cannot add to the map."
+        "rasterUnsupported": "Sample data \"{{name}}\" is a raster, which this build cannot add to the map.",
+        "dataUnusable": "not a GeoJSON FeatureCollection of at most {{size}} MB"
       }
     },
     "parameterField": {
