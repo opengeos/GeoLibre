@@ -12,6 +12,6 @@
     "@modelcontextprotocol/sdk": "^1.32.2"
   },
   "devDependencies": {
-    "wrangler": "^4.156.0"
+    "wrangler": "^4.158.0"
   }
 }
