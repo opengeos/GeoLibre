@@ -6080,7 +6080,8 @@
         "loadedLog": "नमूना \"{{name}}\" लोड हो गया।",
         "loadFailed": "नमूना लोड नहीं हो सका",
         "rasterUnsupported": "नमूना डेटा \"{{name}}\" एक रास्टर है, जिसे यह बिल्ड मानचित्र में नहीं जोड़ सकता।",
-        "dataUnusable": "अधिकतम {{size}} MB का GeoJSON FeatureCollection नहीं है"
+        "dataUnusable": "GeoJSON FeatureCollection नहीं है",
+        "dataTooLarge": "{{size}} MB से बड़ा है"
       }
     },
     "parameterField": {

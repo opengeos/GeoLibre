@@ -6443,7 +6443,8 @@
         "loadedLog": "تم تحميل المثال \"{{name}}\".",
         "loadFailed": "تعذّر تحميل المثال",
         "rasterUnsupported": "البيانات النموذجية \"{{name}}\" نقطية، ولا يمكن لهذا الإصدار إضافتها إلى الخريطة.",
-        "dataUnusable": "ليست GeoJSON FeatureCollection بحجم {{size}} ميغابايت كحد أقصى"
+        "dataUnusable": "ليست GeoJSON FeatureCollection",
+        "dataTooLarge": "أكبر من {{size}} ميغابايت"
       }
     },
     "parameterField": {

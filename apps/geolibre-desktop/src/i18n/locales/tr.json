@@ -6080,7 +6080,8 @@
         "loadedLog": "\"{{name}}\" örneği yüklendi.",
         "loadFailed": "Örnek yüklenemedi",
         "rasterUnsupported": "\"{{name}}\" örnek verisi bir rasterdir ve bu derleme onu haritaya ekleyemez.",
-        "dataUnusable": "en fazla {{size}} MB boyutunda bir GeoJSON FeatureCollection değil"
+        "dataUnusable": "bir GeoJSON FeatureCollection değil",
+        "dataTooLarge": "{{size}} MB'tan büyük"
       }
     },
     "parameterField": {

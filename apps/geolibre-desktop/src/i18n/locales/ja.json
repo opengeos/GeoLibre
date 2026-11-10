@@ -5989,7 +5989,8 @@
         "loadedLog": "サンプル「{{name}}」を読み込みました。",
         "loadFailed": "サンプルを読み込めませんでした",
         "rasterUnsupported": "サンプルデータ「{{name}}」はラスターのため、このビルドでは地図に追加できません。",
-        "dataUnusable": "{{size}} MB 以下の GeoJSON FeatureCollection ではありません"
+        "dataUnusable": "GeoJSON FeatureCollection ではありません",
+        "dataTooLarge": "{{size}} MB を超えています"
       }
     },
     "parameterField": {

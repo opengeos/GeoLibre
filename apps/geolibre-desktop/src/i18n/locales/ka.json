@@ -6080,7 +6080,8 @@
         "loadedLog": "ნიმუში „{{name}}“ ჩაიტვირთა.",
         "loadFailed": "ნიმუშის ჩატვირთვა ვერ მოხერხდა",
         "rasterUnsupported": "ნიმუში მონაცემები „{{name}}“ რასტრია, რომლის რუკაზე დამატებაც ამ ვერსიას არ შეუძლია.",
-        "dataUnusable": "არ არის არაუმეტეს {{size}} MB ზომის GeoJSON FeatureCollection"
+        "dataUnusable": "არ არის GeoJSON FeatureCollection",
+        "dataTooLarge": "აღემატება {{size}} MB-ს"
       }
     },
     "parameterField": {

@@ -6262,7 +6262,8 @@
         "loadedLog": "Пример «{{name}}» загружен.",
         "loadFailed": "Не удалось загрузить пример",
         "rasterUnsupported": "Пример данных «{{name}}» является растром, который эта сборка не может добавить на карту.",
-        "dataUnusable": "не является GeoJSON FeatureCollection размером не более {{size}} МБ"
+        "dataUnusable": "не является GeoJSON FeatureCollection",
+        "dataTooLarge": "больше {{size}} МБ"
       }
     },
     "parameterField": {

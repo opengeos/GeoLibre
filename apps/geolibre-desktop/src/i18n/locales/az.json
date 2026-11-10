@@ -6144,7 +6144,8 @@
         "loadedLog": "\"{{name}}\" nümunəsi yükləndi.",
         "loadFailed": "Nümunə yüklənə bilmədi",
         "rasterUnsupported": "\"{{name}}\" nümunə məlumatı rasterdir və bu versiya onu xəritəyə əlavə edə bilmir.",
-        "dataUnusable": "ən çox {{size}} MB olan GeoJSON FeatureCollection deyil"
+        "dataUnusable": "GeoJSON FeatureCollection deyil",
+        "dataTooLarge": "{{size}} MB-dan böyükdür"
       }
     },
     "parameterField": {

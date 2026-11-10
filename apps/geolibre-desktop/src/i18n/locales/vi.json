@@ -5989,7 +5989,8 @@
         "loadedLog": "Đã tải mẫu \"{{name}}\".",
         "loadFailed": "Không thể tải mẫu",
         "rasterUnsupported": "Dữ liệu mẫu \"{{name}}\" là raster, bản dựng này không thể thêm vào bản đồ.",
-        "dataUnusable": "không phải GeoJSON FeatureCollection có kích thước tối đa {{size}} MB"
+        "dataUnusable": "không phải GeoJSON FeatureCollection",
+        "dataTooLarge": "lớn hơn {{size}} MB"
       }
     },
     "parameterField": {

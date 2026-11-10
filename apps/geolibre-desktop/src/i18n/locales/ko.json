@@ -5989,7 +5989,8 @@
         "loadedLog": "샘플 \"{{name}}\"을(를) 불러왔습니다.",
         "loadFailed": "샘플을 불러올 수 없습니다",
         "rasterUnsupported": "샘플 데이터 \"{{name}}\"은(는) 래스터이므로 이 빌드에서는 지도에 추가할 수 없습니다.",
-        "dataUnusable": "{{size}}MB 이하의 GeoJSON FeatureCollection이 아닙니다"
+        "dataUnusable": "GeoJSON FeatureCollection이 아닙니다",
+        "dataTooLarge": "{{size}}MB보다 큽니다"
       }
     },
     "parameterField": {

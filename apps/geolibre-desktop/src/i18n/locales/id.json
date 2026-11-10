@@ -5989,7 +5989,8 @@
         "loadedLog": "Contoh \"{{name}}\" dimuat.",
         "loadFailed": "Tidak dapat memuat contoh",
         "rasterUnsupported": "Data contoh \"{{name}}\" adalah raster, yang tidak dapat ditambahkan ke peta oleh build ini.",
-        "dataUnusable": "bukan GeoJSON FeatureCollection berukuran paling banyak {{size}} MB"
+        "dataUnusable": "bukan GeoJSON FeatureCollection",
+        "dataTooLarge": "lebih besar dari {{size}} MB"
       }
     },
     "parameterField": {

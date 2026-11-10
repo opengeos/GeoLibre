@@ -295,6 +295,22 @@ const SAMPLE_FETCH_TIMEOUT_MS = 30_000;
 /** Size cap on a sample's GeoJSON data; the bundled samples are a few KB. */
 const MAX_SAMPLE_DATA_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Settle with `promise`, or reject once `ms` pass. The underlying work is not
+ * cancelled; this only stops a caller waiting on a host that has stalled.
+ *
+ * @param promise The work to wait for.
+ * @param ms How long to wait, in milliseconds.
+ * @returns The promise's value, if it settles in time.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms / 1000} s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /** Catalog key for each reason a model file is rejected. */
 const MODEL_FILE_ERROR_KEYS: Record<ModelFileError, ParseKeys> = {
   tooLarge: "processing.modelBuilder.importTooLarge",
@@ -776,20 +792,34 @@ export function ModelBuilderPanel({
                 );
                 continue;
               }
-              layerId = await onAddRasterUrl(data.url, data.name);
+              // Same bound as the fetches: addRasterToMap takes no signal, so
+              // a stalled COG host is raced rather than cancelled.
+              layerId = await withTimeout(
+                onAddRasterUrl(data.url, data.name),
+                SAMPLE_FETCH_TIMEOUT_MS,
+              );
             } else {
               const res = await fetch(data.url, {
                 signal: AbortSignal.timeout(SAMPLE_FETCH_TIMEOUT_MS),
               });
               if (!res.ok) throw new Error(`HTTP ${res.status}`);
               const text = await readTextCapped(res, MAX_SAMPLE_DATA_BYTES);
-              const geojson = text === null ? null : (JSON.parse(text) as FeatureCollection);
-              if (geojson?.type !== "FeatureCollection" || !Array.isArray(geojson.features)) {
+              if (text === null) {
                 throw new Error(
-                  t("processing.modelBuilder.samples.dataUnusable", {
+                  t("processing.modelBuilder.samples.dataTooLarge", {
                     size: MAX_SAMPLE_DATA_BYTES / (1024 * 1024),
                   }),
                 );
+              }
+              let geojson: FeatureCollection | null = null;
+              try {
+                geojson = JSON.parse(text) as FeatureCollection;
+              } catch {
+                // Malformed JSON gets the same message as a non-collection,
+                // not the parser's raw (and untranslated) error.
+              }
+              if (geojson?.type !== "FeatureCollection" || !Array.isArray(geojson.features)) {
+                throw new Error(t("processing.modelBuilder.samples.dataUnusable"));
               }
               layerId = addGeoJsonLayer(data.name, geojson, data.url);
             }
@@ -813,7 +843,11 @@ export function ModelBuilderPanel({
         // on the map, so the log still says what was added.
         const now = latestRef.current;
         const declined =
-          (now.running && !window.confirm(t("processing.modelBuilder.discardRunning"))) ||
+          // Only a run that started during the load: one already running at
+          // the click was covered by the first prompt.
+          (now.running &&
+            !before.running &&
+            !window.confirm(t("processing.modelBuilder.discardRunning"))) ||
           ((now.graph !== before.graph || now.modelName !== before.modelName) &&
             !window.confirm(t("processing.modelBuilder.discardChanges")));
         if (declined) {
