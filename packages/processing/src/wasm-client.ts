@@ -287,10 +287,53 @@ function shouldPreferCatalogKind(
   return wasmKind.endsWith("_in") && /\b(expression|statement)\b/i.test(param.name);
 }
 
+/** Typed dataset output kinds the catalog may supply for a generic WASM output. */
+const CATALOG_DATASET_OUTPUT_KINDS = new Set(["raster_out", "vector_out", "lidar_out"]);
+/** Name words marking an output that names several files rather than one dataset. */
+const MULTI_FILE_OUTPUT_WORDS = new Set(["prefix", "directory", "dir", "folder"]);
+
+/**
+ * Whether the catalog's typed dataset kind should replace a generic WASM
+ * `file_out` for an output they both declare.
+ *
+ * geolibre-wasm's manifests describe many single-dataset outputs only as
+ * `data_kind: "file"` (`slope`, `wetness_index`, the edge-detection filters, …:
+ * 117 tools), while the catalog snapshot types the same-named param as
+ * `raster_out`/`vector_out`/`lidar_out`. Left generic, the runner writes the
+ * result to an opaque `.dat` file and hands back raw bytes, so the Processing
+ * dialog offers a download instead of adding a layer, and Model Builder drops
+ * the tool from its palette entirely because it has no typed output port.
+ *
+ * Two shapes stay generic because the output is not one dataset:
+ * - a prefix/directory output (`output_prefix`, `output_directory`) that the
+ *   tool expands into several files;
+ * - a tool whose return type is a list (`principal_component_analysis`), whose
+ *   single `output` is a report with the component rasters written beside it.
+ *
+ * @param param - The WASM manifest param.
+ * @param wasmKind - The kind derived from the WASM manifest param.
+ * @param catalogKind - The kind the catalog declares for the same-named param.
+ * @param returnType - The tool's declared return type, if any.
+ * @returns `true` when the catalog kind should replace the WASM kind.
+ */
+function shouldTypeGenericOutput(
+  param: WhiteboxToolParameter,
+  wasmKind: string,
+  catalogKind: string | undefined,
+  returnType: string | undefined,
+): boolean {
+  if (wasmKind !== "file_out" || !catalogKind) return false;
+  if (!CATALOG_DATASET_OUTPUT_KINDS.has(catalogKind)) return false;
+  if (/^\s*list\[/i.test(returnType ?? "")) return false;
+  return !identifierWords(param.name ?? "").some((word) => MULTI_FILE_OUTPUT_WORDS.has(word));
+}
+
 /**
  * Reconcile one tool's WASM manifest params against the catalog's. The WASM
  * params win (names and set), but a same-named catalog param corrects a WASM
- * kind that mislabels a scalar as a dataset/bool (see {@link shouldPreferCatalogKind}).
+ * kind that mislabels a scalar as a dataset/bool (see {@link shouldPreferCatalogKind})
+ * or leaves a single-dataset output as a generic file (see
+ * {@link shouldTypeGenericOutput}).
  *
  * A manifest that declares **no** params is a metadata gap, not a parameterless
  * tool, so the catalog's params are kept instead. geolibre-wasm ships 138 such
@@ -307,6 +350,7 @@ function shouldPreferCatalogKind(
 function reconcileToolParams(
   catalogParams: WhiteboxToolParameter[] | undefined,
   wasmParams: WhiteboxToolParameter[] | undefined,
+  returnType?: string,
 ): WhiteboxToolParameter[] {
   if (!wasmParams?.length) return catalogParams ?? [];
   const catalogByName = new Map((catalogParams ?? []).map((param) => [param.name, param] as const));
@@ -325,7 +369,10 @@ function reconcileToolParams(
       !isDataset && param.default === undefined && catalogParam.default != null
         ? { ...param, default: catalogParam.default }
         : param;
-    if (shouldPreferCatalogKind(param, wasmKind, catalogKind)) {
+    if (
+      shouldPreferCatalogKind(param, wasmKind, catalogKind) ||
+      shouldTypeGenericOutput(param, wasmKind, catalogKind, returnType)
+    ) {
       return { ...merged, kind: catalogKind as WhiteboxToolParameter["kind"] };
     }
     return merged;
@@ -353,7 +400,7 @@ export function mergeWasmToolManifests(
     // (GeoLibre#1073).
     return {
       ...tool,
-      params: reconcileToolParams(tool.params, wasm.params),
+      params: reconcileToolParams(tool.params, wasm.params, wasm.return_type ?? tool.return_type),
       source: wasm.source ?? tool.source,
     };
   });
