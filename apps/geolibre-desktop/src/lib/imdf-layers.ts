@@ -1,4 +1,4 @@
-import type { LayerStyle } from "@geolibre/core";
+import type { LayerStyle, VectorStyleStop } from "@geolibre/core";
 import i18next from "i18next";
 import type { FeatureCollection } from "geojson";
 import type { LoadedVectorLayer } from "./file-io/loaded-layer";
@@ -41,17 +41,60 @@ const UNIT_CATEGORY_COLORS: [string[], string][] = [
     ],
     "#a78bfa",
   ],
-  [["nonpublic", "privatelounge", "storage", "mechanical", "unenclosedarea"], "#9ca3af"],
+  [
+    ["nonpublic", "privatelounge", "storage", "mechanical", "unenclosedarea", "opentobelow"],
+    "#9ca3af",
+  ],
   [["parking", "vehiclelane", "road"], "#6b7280"],
   [["shop", "restaurant", "foodservice", "retail"], "#34d399"],
 ];
 
-/** A MapLibre `match` on `category` over {@link UNIT_CATEGORY_COLORS}. */
-export function unitColorExpression(fallback: string): unknown[] {
-  const match: unknown[] = ["match", ["get", "category"]];
-  for (const [categories, color] of UNIT_CATEGORY_COLORS) match.push(categories, color);
-  match.push(fallback);
-  return match;
+/** The fallback unit color, for categories outside {@link UNIT_CATEGORY_COLORS}. */
+const UNIT_FALLBACK_COLOR = "#bfdbfe";
+
+/** The color a unit category draws in. */
+function unitCategoryColor(category: string): string {
+  for (const [categories, color] of UNIT_CATEGORY_COLORS) {
+    if (categories.includes(category)) return color;
+  }
+  return UNIT_FALLBACK_COLOR;
+}
+
+/**
+ * The categorized renderer for an archive's units (issue #3388): one stop per
+ * distinct `category`, in sorted order. Units are colored through the regular
+ * categorized renderer rather than a raw expression, so the Style pane shows
+ * (and can edit) the classes the map draws.
+ *
+ * `opentobelow` keeps its stop even though the unit filter hides those
+ * features: the Style pane counts every distinct value for "All (N)" and
+ * regenerates the stops from all of them, so leaving it out would make the
+ * class list change shape the first time the user edits it. Its color is
+ * never drawn. Blank categories get no stop, because the categorized renderer
+ * drops blank values.
+ *
+ * @param layer - The archive's unit layer.
+ * @returns The stops, and a class count equal to their number so the Style
+ *   pane selects "All" for them. Both are empty when no unit has a category.
+ */
+export function unitCategoryClasses(layer: ImdfLayer): {
+  stops: VectorStyleStop[];
+  classCount: number;
+} {
+  const categories = new Set<string>();
+  for (const feature of layer.geojson.features) {
+    const category = feature.properties?.category;
+    // Stop values are compared trimmed by the renderer, so trim here to keep
+    // the palette lookup consistent and padded spellings from duplicating a
+    // stop. A padded feature value itself still will not match (IMDF
+    // categories are enumerated, so valid data has none).
+    const trimmed = typeof category === "string" ? category.trim() : "";
+    if (trimmed) categories.add(trimmed);
+  }
+  const stops = [...categories]
+    .sort()
+    .map((category) => ({ value: category, color: unitCategoryColor(category), label: category }));
+  return { stops, classCount: stops.length };
 }
 
 /** Extrusion settings that stack a feature on its floor. */
@@ -97,14 +140,26 @@ function presentation(
           extrusionOpacity: 0.6,
         },
       };
-    case "unit":
+    case "unit": {
+      const classes = unitCategoryClasses(layer);
       return {
         style: {
           ...stacked(lowestOrdinal, UNIT_HEIGHT),
-          extrusionColor: "#bfdbfe",
+          // The categorized renderer colors the extrusion too, and features
+          // whose category has no stop fall back to the extrusion color.
+          extrusionColor: UNIT_FALLBACK_COLOR,
           extrusionOpacity: 0.85,
-          extrusionAdvancedStyleEnabled: true,
-          extrusionColorExpression: JSON.stringify(unitColorExpression("#bfdbfe")),
+          fillColor: UNIT_FALLBACK_COLOR,
+          // With no categories there is nothing to classify, so the units
+          // stay on single symbology in the fallback color.
+          ...(classes.stops.length > 0
+            ? {
+                vectorStyleMode: "categorized" as const,
+                vectorStyleProperty: "category",
+                vectorStyleStops: classes.stops,
+                vectorStyleClassCount: classes.classCount,
+              }
+            : {}),
         },
         // An open-to-below unit is the void of an atrium; drawing it as a solid
         // would plug the hole it describes. A unit with no resolvable level has
@@ -112,6 +167,7 @@ function presentation(
         // on the ground floor.
         filterExpression: ["all", ["!=", ["get", "category"], "opentobelow"], ["has", "ordinal"]],
       };
+    }
     case "opening":
       return { style: { strokeColor: "#dc2626", strokeWidth: 3 } };
     case "amenity":

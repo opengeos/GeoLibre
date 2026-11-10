@@ -357,6 +357,145 @@ describe("mergeWasmToolManifests", () => {
     const [tool] = mergeWasmToolManifests([catalog], [wasm]);
     assert.equal(tool.params?.[0].default, "wasm");
   });
+
+  // geolibre-wasm describes many single-dataset outputs only as a generic file
+  // (`slope`, `wetness_index`, …), which hid them from Model Builder and made
+  // the runner write an opaque `.dat` instead of a GeoTIFF.
+  const genericOutput = (name: string) => ({
+    name,
+    io_role: "output",
+    data_kind: "file",
+    schema: { dataset: { kind: "file" }, kind: "output", mode: "new" },
+  });
+
+  it("types a generic WASM output from the catalog's dataset kind", () => {
+    const catalog: WhiteboxTool = {
+      id: "slope",
+      params: [
+        { name: "input", kind: "raster_in" },
+        { name: "output", kind: "raster_out" },
+      ],
+    };
+    const wasm: WhiteboxTool = {
+      id: "slope",
+      return_type: "Raster",
+      params: [{ name: "input", io_role: "input", data_kind: "raster" }, genericOutput("output")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[1].kind, "raster_out");
+  });
+
+  it("types each generic output of a multi-output tool", () => {
+    const catalog: WhiteboxTool = {
+      id: "ridge_and_valley_vectors",
+      params: [
+        { name: "output_ridges", kind: "vector_out" },
+        { name: "output_valleys", kind: "vector_out" },
+      ],
+    };
+    const wasm: WhiteboxTool = {
+      id: "ridge_and_valley_vectors",
+      return_type: "tuple[Vector, Vector]",
+      params: [genericOutput("output_ridges"), genericOutput("output_valleys")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.deepEqual(
+      tool.params?.map((param) => param.kind),
+      ["vector_out", "vector_out"],
+    );
+  });
+
+  it("keeps a prefix or directory output generic", () => {
+    const catalog: WhiteboxTool = {
+      id: "lidar_tile",
+      params: [{ name: "output_directory", kind: "lidar_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "lidar_tile",
+      return_type: "Lidar",
+      params: [genericOutput("output_directory")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, undefined);
+    const prefixCatalog: WhiteboxTool = {
+      id: "segment_multiresolution_hierarchical",
+      params: [{ name: "output_prefix", kind: "raster_out" }],
+    };
+    const prefixWasm: WhiteboxTool = {
+      id: "segment_multiresolution_hierarchical",
+      params: [genericOutput("output_prefix")],
+    };
+    const [prefixTool] = mergeWasmToolManifests([prefixCatalog], [prefixWasm]);
+    assert.equal(prefixTool.params?.[0].kind, undefined);
+  });
+
+  it("keeps a list-returning tool's output generic", () => {
+    const catalog: WhiteboxTool = {
+      id: "principal_component_analysis",
+      params: [{ name: "output", kind: "raster_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "principal_component_analysis",
+      return_type: "list[Raster]",
+      params: [genericOutput("output")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, undefined);
+  });
+
+  it("types a flow-direction output whose name contains `dir`", () => {
+    const catalog: WhiteboxTool = {
+      id: "flow_tool",
+      params: [{ name: "flow_dir_output_path", kind: "raster_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "flow_tool",
+      return_type: "Raster",
+      params: [genericOutput("flow_dir_output_path")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, "raster_out");
+  });
+
+  it("types a single-file LiDAR output", () => {
+    const catalog: WhiteboxTool = {
+      id: "lidar_shift",
+      params: [{ name: "output", kind: "lidar_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "lidar_shift",
+      return_type: "Lidar",
+      params: [genericOutput("output")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, "lidar_out");
+  });
+
+  it("falls back to the catalog's return type when the manifest has none", () => {
+    // Manifests built from the binary (manifestToWhiteboxTool) carry no
+    // return_type, so the catalog's list return type must still exclude it.
+    const catalog: WhiteboxTool = {
+      id: "inverse_pca",
+      return_type: "list[Raster]",
+      params: [{ name: "output", kind: "raster_out" }],
+    };
+    const wasm: WhiteboxTool = { id: "inverse_pca", params: [genericOutput("output")] };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, undefined);
+  });
+
+  it("leaves a generic output alone when the catalog types it as a file", () => {
+    const catalog: WhiteboxTool = {
+      id: "vector_summary_statistics",
+      params: [{ name: "output", kind: "file_out" }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "vector_summary_statistics",
+      params: [genericOutput("output")],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0].kind, undefined);
+  });
 });
 
 describe("manifestScalarDefaults", () => {
