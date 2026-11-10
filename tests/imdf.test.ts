@@ -231,7 +231,26 @@ describe("imdfLoadedLayers", () => {
       ["has", "ordinal"],
     ]);
     assert.deepEqual(units.levelFilter, { field: "ordinal", mode: "all", level: null });
-    assert.match(units.style?.extrusionColorExpression ?? "", /"match"/);
+    // Units are colored by a categorized renderer the Style pane can show and
+    // edit (issue #3388), not an opaque advanced expression.
+    assert.equal(units.style?.vectorStyleMode, "categorized");
+    assert.equal(units.style?.vectorStyleProperty, "category");
+    assert.equal(units.style?.extrusionAdvancedStyleEnabled, undefined);
+    assert.equal(units.style?.vectorStyleClassCount, 2);
+    assert.deepEqual(units.style?.vectorStyleStops, [
+      { value: "room", color: "#60a5fa", label: "room" },
+      { value: "walkway", color: "#e5e7eb", label: "walkway" },
+    ]);
+    const { DEFAULT_LAYER_STYLE, extrusionColorValue } = await import("@geolibre/core");
+    assert.deepEqual(extrusionColorValue({ ...DEFAULT_LAYER_STYLE, ...units.style }), [
+      "match",
+      ["to-string", ["get", "category"]],
+      "room",
+      "#60a5fa",
+      "walkway",
+      "#e5e7eb",
+      "#bfdbfe",
+    ]);
     // The venue outline is not on a floor, so it stays out of the picker.
     assert.equal(byEntry.get("imdf:venue")!.levelFilter, undefined);
     assert.equal(byEntry.get("imdf:venue")!.style?.extrusionEnabled, undefined);
@@ -239,5 +258,49 @@ describe("imdfLoadedLayers", () => {
       assert.deepEqual(layer.groupPath, ["Musée"]);
       assert.equal(layer.path, "/data/museum.zip");
     }
+  });
+
+  it("gives every unit category a stop, opentobelow included, and skips blanks", async () => {
+    const { unitCategoryClasses } = await import("../apps/geolibre-desktop/src/lib/imdf-layers");
+    const unit = (category: unknown) => ({
+      type: "Feature" as const,
+      geometry: null,
+      properties: { category },
+    });
+    const { stops, classCount } = unitCategoryClasses({
+      featureType: "unit",
+      onLevels: true,
+      geojson: {
+        type: "FeatureCollection",
+        features: [unit("walkway"), unit("opentobelow"), unit(" "), unit(null), unit(" walkway ")],
+      },
+    });
+    // The voids keep a stop so the list matches the Style pane's "All (N)".
+    assert.deepEqual(stops, [
+      { value: "opentobelow", color: "#9ca3af", label: "opentobelow" },
+      { value: "walkway", color: "#e5e7eb", label: "walkway" },
+    ]);
+    assert.equal(classCount, 2);
+  });
+
+  it("leaves units on single symbology when none has a category", async () => {
+    const { imdfLoadedLayers } = await import("../apps/geolibre-desktop/src/lib/imdf-layers");
+    const [units] = imdfLoadedLayers(
+      {
+        layers: [
+          {
+            featureType: "unit",
+            onLevels: true,
+            geojson: {
+              type: "FeatureCollection",
+              features: [{ type: "Feature", geometry: null, properties: { ordinal: 0 } }],
+            },
+          },
+        ],
+      } as never,
+      "/data/plain.zip",
+    );
+    assert.equal(units.style?.vectorStyleMode, undefined);
+    assert.equal(units.style?.extrusionColor, "#bfdbfe");
   });
 });
