@@ -570,6 +570,7 @@ pub fn run() {
             read_env_vars,
             take_pending_project_paths,
             allow_raster_asset,
+            sandbox_hidden_drop_paths,
             read_local_file,
             write_local_geojson_file,
             read_project_file,
@@ -1257,6 +1258,50 @@ fn allow_raster_asset(
     app.asset_protocol_scope()
         .allow_file(&path)
         .map_err(|error| format!("Could not authorize local raster: {error}"))
+}
+
+/// Whether the app runs inside a Flatpak sandbox.
+fn running_in_flatpak() -> bool {
+    env::var_os("FLATPAK_ID").is_some() || Path::new("/.flatpak-info").exists()
+}
+
+/// Pick out the dropped paths a Flatpak sandbox cannot see.
+///
+/// A host file manager that does not route drags through the document portal
+/// hands the sandboxed app the file's host path (issue #3393). Without a
+/// `--filesystem` grant that path does not exist inside the sandbox, so every
+/// later read fails with an opaque error. Only paths already in the fs scope
+/// (which the fs plugin grants for every native drop) are checked, so this is
+/// not a general existence oracle.
+///
+/// # Arguments
+///
+/// * `paths` - The paths reported by the native drop event.
+/// * `in_flatpak` - Whether the app runs inside a Flatpak sandbox.
+/// * `is_allowed` - Whether a path is in the fs scope.
+fn hidden_drop_paths(
+    paths: Vec<String>,
+    in_flatpak: bool,
+    is_allowed: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    if !in_flatpak {
+        return Vec::new();
+    }
+    paths
+        .into_iter()
+        // Only a confirmed miss counts: a permission or other metadata error
+        // is a different problem than the sandbox hiding the path.
+        .filter(|path| is_allowed(path) && matches!(Path::new(path).try_exists(), Ok(false)))
+        .collect()
+}
+
+/// Return the dropped paths the Flatpak sandbox cannot read, so the drop
+/// handler can explain the sandbox instead of failing on each file. Always
+/// empty outside Flatpak.
+#[tauri::command]
+fn sandbox_hidden_drop_paths(app: tauri::AppHandle, paths: Vec<String>) -> Vec<String> {
+    let scope = app.fs_scope();
+    hidden_drop_paths(paths, running_in_flatpak(), |path| scope.is_allowed(path))
 }
 
 /// Shapefile sidecar extensions read alongside a `.shp` (lowercased, no dot).
@@ -5646,12 +5691,13 @@ fn configure_linux_webkit() {}
 mod tests {
     use super::{
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
-        is_allowed_geojson_write_path, is_allowed_local_vector_path, is_allowed_project_path,
-        is_disallowed_ip, is_geolibre_sidecar_command_line, is_image_picker_path,
-        is_persisted_image_file, is_safe_absolute_path, is_ssrf_guard_error, is_unc_resolved_path,
-        path_is_under, project_path_string, project_paths_from_args, read_mbtiles_zoom_range,
-        resolve_fetch_timeout_secs, tcp_table_port, write_local_geojson_file,
-        MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
+        hidden_drop_paths, is_allowed_geojson_write_path, is_allowed_local_vector_path,
+        is_allowed_project_path, is_disallowed_ip, is_geolibre_sidecar_command_line,
+        is_image_picker_path, is_persisted_image_file, is_safe_absolute_path, is_ssrf_guard_error,
+        is_unc_resolved_path, path_is_under, project_path_string, project_paths_from_args,
+        read_mbtiles_zoom_range, resolve_fetch_timeout_secs, tcp_table_port,
+        write_local_geojson_file, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
+        SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
     use super::{
@@ -6773,6 +6819,20 @@ mod tests {
         assert_eq!(plugin_archive_file_name("..hidden"), "hidden.zip");
         // A name that sanitizes away entirely falls back to a fixed stem.
         assert_eq!(plugin_archive_file_name("..."), "plugin.zip");
+    }
+
+    #[test]
+    fn hidden_drop_paths_reports_missing_scoped_paths_only_in_flatpak() {
+        let existing = env::temp_dir().to_string_lossy().into_owned();
+        let missing = "/geolibre-issue-3393-missing/dem.tif".to_string();
+        let unscoped = "/geolibre-issue-3393-unscoped/dem.tif".to_string();
+        let paths = vec![existing.clone(), missing.clone(), unscoped.clone()];
+        let allowed = |path: &str| path != unscoped;
+        assert_eq!(
+            hidden_drop_paths(paths.clone(), true, allowed),
+            vec![missing]
+        );
+        assert!(hidden_drop_paths(paths, false, allowed).is_empty());
     }
 
     #[test]

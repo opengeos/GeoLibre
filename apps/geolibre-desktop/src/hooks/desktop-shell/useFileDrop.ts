@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
+import { readableDropPaths } from "../../lib/sandbox-drop";
 import {
   captureDroppedDirectories,
   offerBrowserDrop,
@@ -160,7 +161,8 @@ export function useFileDrop({
           setDropMessage(t("toolbar.fileDrop.importing"));
 
           try {
-            const paths = event.payload.paths;
+            const paths = await readableDropPaths(event.payload.paths, setDropError, t);
+            if (paths.length === 0) return setDropMessage(null);
             const projectPaths = paths.filter(isGeoLibreProjectFileName);
             if (projectPaths.length > 0) {
               if (!deploymentCapabilities.has("project:edit")) {

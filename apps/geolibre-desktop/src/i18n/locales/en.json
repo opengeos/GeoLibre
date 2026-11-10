@@ -4408,6 +4408,8 @@
       "couldNotOpenProject": "Could not open project.",
       "multipleProjectDrop": "Drop one GeoLibre project at a time, without other files.",
       "projectDropNotAllowed": "This deployment does not allow switching projects.",
+      "sandboxHiddenDrop_one": "The Flatpak sandbox cannot read the dropped file {{names}}. Open it from the Add data menu instead, or give the app read access to its folder and restart it: flatpak override --user --filesystem=/path/to/folder:ro app.geolibre.GeoLibre",
+      "sandboxHiddenDrop_other": "The Flatpak sandbox cannot read {{count}} dropped files ({{names}}). Open them from the Add data menu instead, or give the app read access to their folder and restart it: flatpak override --user --filesystem=/path/to/folder:ro app.geolibre.GeoLibre",
       "couldNotImportQgisProject": "Could not import QGIS project.",
       "couldNotImportArcgisProject": "Could not import ArcGIS Pro project.",
       "invalidProjectUrl": "Enter a valid HTTP or HTTPS project URL.",
