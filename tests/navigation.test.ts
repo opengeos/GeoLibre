@@ -468,6 +468,15 @@ describe("navigation formatting", () => {
     assert.equal(formatNavDistance(1609.344 * 2.34, true, "en"), "2.3 mi");
   });
 
+  it("moves to the next unit when rounding reaches it", () => {
+    assert.equal(formatNavDistance(980, false, "en"), "1 km");
+    assert.equal(formatNavDistance(999, false, "en"), "1 km");
+    assert.equal(formatNavDistance(970, false, "en"), "950 m");
+    // 160.5 m is about 526.6 ft, just under 0.1 mi (528 ft).
+    assert.equal(formatNavDistance(160.5, true, "en"), "0.1 mi");
+    assert.equal(formatNavDistance(152, true, "en"), "500 ft");
+  });
+
   it("formats durations and arrival times", () => {
     assert.equal(formatNavDuration(30, "en"), "1 min");
     assert.equal(formatNavDuration(12 * 60, "en"), "12 min");
