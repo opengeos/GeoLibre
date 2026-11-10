@@ -5,6 +5,7 @@
 
 const METERS_PER_MILE = 1609.344;
 const FEET_PER_METER = 3.28084;
+const FEET_PER_TENTH_MILE = 528;
 
 function unit(locale: string, name: string, value: number, digits: number): string {
   return new Intl.NumberFormat(locale, {
@@ -32,16 +33,20 @@ export function formatNavDistance(meters: number, imperial: boolean, locale: str
     if (miles >= 10) return unit(locale, "mile", Math.round(miles), 0);
     if (miles >= 0.1) return unit(locale, "mile", Math.round(miles * 10) / 10, 1);
     const feet = m * FEET_PER_METER;
-    return unit(
-      locale,
-      "foot",
-      feet < 100 ? Math.round(feet / 10) * 10 : Math.round(feet / 50) * 50,
-      0,
-    );
+    const roundedFeet = feet < 100 ? Math.round(feet / 10) * 10 : Math.round(feet / 50) * 50;
+    // Just under a tenth of a mile (528 ft), feet round up past it; read that
+    // as the next unit rather than a footage longer than "0.1 mi".
+    if (roundedFeet >= FEET_PER_TENTH_MILE) return unit(locale, "mile", 0.1, 1);
+    return unit(locale, "foot", roundedFeet, 0);
   }
   if (m >= 10_000) return unit(locale, "kilometer", Math.round(m / 1000), 0);
   if (m >= 1000) return unit(locale, "kilometer", Math.round(m / 100) / 10, 1);
-  if (m >= 100) return unit(locale, "meter", Math.round(m / 50) * 50, 0);
+  // 975 m and up round to 1000 m; show that as "1 km", like 1000 m itself.
+  if (m >= 100) {
+    const rounded = Math.round(m / 50) * 50;
+    if (rounded >= 1000) return unit(locale, "kilometer", 1, 1);
+    return unit(locale, "meter", rounded, 0);
+  }
   return unit(locale, "meter", Math.round(m / 10) * 10, 0);
 }
 
