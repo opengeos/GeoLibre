@@ -297,8 +297,8 @@ const MULTI_FILE_OUTPUT_WORDS = new Set(["prefix", "directory", "dir", "folder"]
  * `file_out` for an output they both declare.
  *
  * geolibre-wasm's manifests describe many single-dataset outputs only as
- * `data_kind: "file"` (`slope`, `wetness_index`, the edge-detection filters, …:
- * 117 tools), while the catalog snapshot types the same-named param as
+ * `data_kind: "file"` (`slope`, `wetness_index`, the edge-detection filters and
+ * many more), while the catalog snapshot types the same-named param as
  * `raster_out`/`vector_out`/`lidar_out`. Left generic, the runner writes the
  * result to an opaque `.dat` file and hands back raw bytes, so the Processing
  * dialog offers a download instead of adding a layer, and Model Builder drops
