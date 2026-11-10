@@ -1289,7 +1289,9 @@ fn hidden_drop_paths(
     }
     paths
         .into_iter()
-        .filter(|path| is_allowed(path) && !Path::new(path).exists())
+        // Only a confirmed miss counts: a permission or other metadata error
+        // is a different problem than the sandbox hiding the path.
+        .filter(|path| is_allowed(path) && matches!(Path::new(path).try_exists(), Ok(false)))
         .collect()
 }
 

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TFunction } from "i18next";
 
 /**
  * Dropped paths split into the ones the app can read and the ones a Flatpak
@@ -50,4 +51,33 @@ export async function splitSandboxHiddenDropPaths(
  */
 export function droppedFileNames(paths: string[]): string {
   return paths.map((path) => path.split(/[/\\]/).pop() || path).join(", ");
+}
+
+/**
+ * Drop the paths a Flatpak sandbox hides and report them, so a native drop
+ * explains the sandbox instead of failing on each file (issue #3393).
+ *
+ * @param paths - The paths reported by the native drop event.
+ * @param setError - Receives the error naming the hidden files, if any.
+ * @param t - The i18n translate function.
+ * @param findHidden - Resolves the hidden subset; see
+ *   {@link splitSandboxHiddenDropPaths}.
+ * @returns The paths the normal drop pipeline can read.
+ */
+export async function readableDropPaths(
+  paths: string[],
+  setError: (message: string) => void,
+  t: TFunction,
+  findHidden?: (paths: string[]) => Promise<string[]>,
+): Promise<string[]> {
+  const { readable, hidden } = await splitSandboxHiddenDropPaths(paths, findHidden);
+  if (hidden.length > 0) {
+    setError(
+      t("toolbar.error.sandboxHiddenDrop", {
+        count: hidden.length,
+        names: droppedFileNames(hidden),
+      }),
+    );
+  }
+  return readable;
 }

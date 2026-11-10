@@ -125,11 +125,11 @@ The Flatpak package runs in a sandbox without access to your files. The Add data
 menu's file dialogs go through the desktop portal and always work, but a file
 dragged from a file manager that does not use the portal arrives as a path the
 sandbox cannot read. GeoLibre then reports that the sandbox cannot read the
-dropped file. Open the file from the Add data menu instead, or let the app read
-your files so drag and drop works from anywhere:
+dropped file. Open the file from the Add data menu instead, or give the app
+read-only access to the folder that holds your data, then restart GeoLibre:
 
 ```bash
-flatpak override --user --filesystem=host:ro app.geolibre.GeoLibre
+flatpak override --user --filesystem=/path/to/your/data:ro app.geolibre.GeoLibre
 ```
 
 ### "This project is too large to save"

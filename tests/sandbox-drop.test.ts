@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   droppedFileNames,
+  readableDropPaths,
   splitSandboxHiddenDropPaths,
 } from "../apps/geolibre-desktop/src/lib/sandbox-drop.ts";
 
@@ -33,4 +34,33 @@ test("splitSandboxHiddenDropPaths passes every path through when the check fails
 
 test("droppedFileNames lists base names of POSIX and Windows paths", () => {
   assert.equal(droppedFileNames(["/lidar/leon/dem.tif", "C:\\data\\pc.laz"]), "dem.tif, pc.laz");
+});
+
+test("readableDropPaths reports hidden files and returns the readable ones", async () => {
+  const errors: string[] = [];
+  const t = ((key: string, options: { count: number; names: string }) =>
+    `${key}:${options.count}:${options.names}`) as unknown as Parameters<
+    typeof readableDropPaths
+  >[2];
+  const readable = await readableDropPaths(
+    ["/run/user/1000/doc/abc/a.tif", "/lidar/leon/dem.tif"],
+    (message) => errors.push(message),
+    t,
+    async () => ["/lidar/leon/dem.tif"],
+  );
+  assert.deepEqual(readable, ["/run/user/1000/doc/abc/a.tif"]);
+  assert.deepEqual(errors, ["toolbar.error.sandboxHiddenDrop:1:dem.tif"]);
+});
+
+test("readableDropPaths stays quiet when nothing is hidden", async () => {
+  const errors: string[] = [];
+  const t = (() => "unused") as unknown as Parameters<typeof readableDropPaths>[2];
+  const readable = await readableDropPaths(
+    ["/data/a.tif"],
+    (m) => errors.push(m),
+    t,
+    async () => [],
+  );
+  assert.deepEqual(readable, ["/data/a.tif"]);
+  assert.deepEqual(errors, []);
 });

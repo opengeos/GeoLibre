@@ -13,7 +13,7 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
-import { droppedFileNames, splitSandboxHiddenDropPaths } from "../../lib/sandbox-drop";
+import { readableDropPaths } from "../../lib/sandbox-drop";
 import {
   captureDroppedDirectories,
   offerBrowserDrop,
@@ -161,24 +161,8 @@ export function useFileDrop({
           setDropMessage(t("toolbar.fileDrop.importing"));
 
           try {
-            // A Flatpak sandbox without filesystem access cannot read host
-            // paths a file manager drops outside the document portal (issue
-            // #3393). Say so up front instead of failing on each file.
-            const { readable: paths, hidden } = await splitSandboxHiddenDropPaths(
-              event.payload.paths,
-            );
-            if (hidden.length > 0) {
-              setDropError(
-                t("toolbar.error.sandboxHiddenDrop", {
-                  count: hidden.length,
-                  names: droppedFileNames(hidden),
-                }),
-              );
-              if (paths.length === 0) {
-                setDropMessage(null);
-                return;
-              }
-            }
+            const paths = await readableDropPaths(event.payload.paths, setDropError, t);
+            if (paths.length === 0) return setDropMessage(null);
             const projectPaths = paths.filter(isGeoLibreProjectFileName);
             if (projectPaths.length > 0) {
               if (!deploymentCapabilities.has("project:edit")) {
