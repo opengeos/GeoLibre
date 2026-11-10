@@ -130,11 +130,7 @@ describe("binding sample inputs", () => {
   });
 
   it("clears a placeholder that has no binding", () => {
-    const bound = bindSampleModelInputs(
-      graph,
-      new Map(),
-      new Set(["sample-dem", "sample-other"]),
-    );
+    const bound = bindSampleModelInputs(graph, new Map(), new Set(["sample-dem", "sample-other"]));
     assert.equal("layerId" in bound.nodes[0], false);
     assert.equal(bound.nodes[1].parameters?.input, "");
     assert.equal(bound.nodes[1].parameters?.units, "degrees");

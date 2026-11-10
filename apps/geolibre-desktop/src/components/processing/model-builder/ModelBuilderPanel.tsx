@@ -166,7 +166,6 @@ const MAX_LOG_FRACTION = 0.6;
  */
 const MAX_SIDE_FRACTION = 0.4;
 
-
 /**
  * Preferred floors. They are *preferences*, not hard limits: a container
  * narrower than this gets a panel narrower than this, because a panel that
