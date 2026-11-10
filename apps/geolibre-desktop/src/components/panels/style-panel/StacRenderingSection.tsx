@@ -11,6 +11,7 @@ import {
 import { Button, Input, Label, Select, Separator } from "@geolibre/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { createKeyedDebounce } from "../../../lib/keyed-debounce";
 import { RasterStyleSlider } from "./style-inputs";
 
 /** How long edits settle before the tiles are asked for again. */
@@ -47,9 +48,11 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
   // Number boxes hold what is typed until it is a usable number.
   const [minText, setMinText] = useState(String(spec?.style?.min ?? -1));
   const [maxText, setMaxText] = useState(String(spec?.style?.max ?? 1));
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  /** Whether an edit is waiting to be written, so the controls are not reset from under it. */
-  const pending = useRef(false);
+  /**
+   * Edits wait per layer, so one made to another layer while this one's is waiting does not
+   * cancel it. This section serves whichever layer is selected, so the waits outlive a selection.
+   */
+  const debounce = useRef(createKeyedDebounce(APPLY_DELAY_MS));
 
   const layerId = layer.id;
   /** Loads the controls from the style the layer's recipe holds. */
@@ -66,7 +69,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
   // So does the same layer when its recipe changes outside this panel (an undo, a redo): the
   // controls follow it, unless an edit of their own is still waiting to be written.
   useEffect(() => {
-    if (!pending.current) readStyle();
+    if (!debounce.current.pending(layerId)) readStyle();
   }, [template]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!spec) return null;
@@ -74,14 +77,11 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
   /** Shows an edit at once and writes it to the layer once edits settle. */
   const apply = (next: RenderStyle): void => {
     setStyle(next);
-    clearTimeout(timer.current);
-    pending.current = true;
     // Written to the layer as it is when the timer fires, found by id: another edit (a rename, an
     // undo) or another layer being selected in the meantime must not be written over or lose this
     // one. Closing the panel does not cancel it either.
     const targetId = layerId;
-    timer.current = setTimeout(() => {
-      pending.current = false;
+    debounce.current.schedule(targetId, () => {
       const current = useAppStore.getState().layers.find((entry) => entry.id === targetId);
       const currentTemplate = current ? tileTemplate(current) : undefined;
       const currentSpec = currentTemplate ? specFromTileUrl(currentTemplate) : null;
@@ -90,7 +90,7 @@ export function StacRenderingSection({ layer }: StacRenderingSectionProps) {
       if (url === currentTemplate) return;
       // Layer sync notices the new template and hands it to the map's source.
       updateLayer(targetId, { source: { ...current.source, tiles: [url], url } });
-    }, APPLY_DELAY_MS);
+    });
   };
 
   /** Applies the typed value window, or puts back the one in force when it is not usable. */

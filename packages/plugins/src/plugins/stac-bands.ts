@@ -89,13 +89,17 @@ function record(value: unknown): Record<string, unknown> {
  * A band's calibration: its scale and offset (the `raster:` ones of a STAC 1.1 unified band, or the
  * plain ones of a `raster:bands` entry), and the value that marks no data when it declares one.
  */
-function calibration(entry: Record<string, unknown>): {
+function calibration(
+  entry: Record<string, unknown>,
+  asset: Record<string, unknown>,
+): {
   scale: number;
   offset: number;
   nodata?: number;
 } {
-  const scale = Number(entry["raster:scale"] ?? entry.scale ?? 1);
-  const offset = Number(entry["raster:offset"] ?? entry.offset ?? 0);
+  // A band's own value wins; one it leaves out is the asset's, which applies to all its bands.
+  const scale = Number(entry["raster:scale"] ?? entry.scale ?? asset["raster:scale"] ?? 1);
+  const offset = Number(entry["raster:offset"] ?? entry.offset ?? asset["raster:offset"] ?? 0);
   const nodata = entry.nodata;
   return {
     scale: Number.isFinite(scale) && scale !== 0 ? scale : 1,
@@ -120,7 +124,7 @@ export function itemBands(item: StacItem): StacBand[] {
     const title = asset.title || key;
     if (!entries.length) {
       const common = norm(raw["eo:common_name"] ?? raw.common_name) || norm(key);
-      const { scale, offset, nodata } = calibration(rasters.length ? record(rasters[0]) : raw);
+      const { scale, offset, nodata } = calibration(rasters.length ? record(rasters[0]) : raw, raw);
       bands.push({
         asset: key,
         index: 1,
@@ -140,6 +144,7 @@ export function itemBands(item: StacItem): StacBand[] {
       const name = String(entry.description ?? entry.name ?? `band ${i + 1}`);
       const { scale, offset, nodata } = calibration(
         i < rasters.length ? record(rasters[i]) : entry,
+        raw,
       );
       bands.push({
         asset: key,

@@ -190,3 +190,34 @@ test("only the formula's own functions are functions", () => {
   }
   assert.equal(isValidFormula("sqrt(nir)"), true);
 });
+
+test("a band that omits its calibration takes the asset's, and its own value wins", () => {
+  const item = {
+    type: "Feature",
+    id: "asset-level",
+    geometry: null,
+    properties: {},
+    assets: {
+      // The asset carries the calibration; the unified band names the band and says nothing of it.
+      red: asset("https://x.test/red.tif", {
+        "raster:scale": 0.0001,
+        "raster:offset": -0.1,
+        bands: [{ common_name: "red" }],
+      }),
+      // A band's own value beats the asset's, field by field.
+      nir: asset("https://x.test/nir.tif", {
+        "raster:scale": 0.0001,
+        "raster:offset": -0.1,
+        "eo:bands": [{ common_name: "nir" }],
+        "raster:bands": [{ scale: 2e-5 }],
+      }),
+    },
+  } as unknown as StacItem;
+  const bands = itemBands(item);
+  const red = bands.find((band) => band.common === "red")!;
+  assert.equal(red.scale, 0.0001);
+  assert.equal(red.offset, -0.1);
+  const nir = bands.find((band) => band.common === "nir")!;
+  assert.equal(nir.scale, 2e-5);
+  assert.equal(nir.offset, -0.1);
+});
