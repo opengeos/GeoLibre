@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "node:test";
 import {
   LocalizedError,
@@ -70,7 +71,8 @@ describe("LocalizedError catalog keys", () => {
     });
   }
 
-  const root = new URL("../packages/plugins/src/", import.meta.url).pathname;
+  // fileURLToPath, not .pathname: on Windows the latter is "/D:/..." and every scan of it fails.
+  const root = fileURLToPath(new URL("../packages/plugins/src/", import.meta.url));
   const calls: { file: string; key: string; template: string }[] = [];
   for (const file of sourceFiles(root)) {
     if (file.endsWith("localized-error.ts")) continue;

@@ -66,6 +66,7 @@ import {
   maplibreFieldsOfTheWorldPlugin,
   maplibreSentinel2ExplorerPlugin,
   registerSentinel2CompositeProtocol,
+  registerStacRenderProtocol,
   maplibreOceanDataPlatformPlugin,
   maplibreDynamicalPlugin,
   maplibreJaxaEarthPlugin,
@@ -491,6 +492,7 @@ setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, descr
 // Sentinel-2 Explorer composites are tiles of a MapLibre protocol; register it
 // up front so a saved project's composite layers draw before the plugin opens.
 registerSentinel2CompositeProtocol();
+registerStacRenderProtocol();
 
 // JAXA Earth layers are tiles of a MapLibre protocol too; the JAXA module
 // itself loads on the first tile.

@@ -351,7 +351,12 @@ export function LayerActionsMenuItems({
   // Rasters added through the floating Add Raster Layer panel are
   // styled there; offer a shortcut to reopen that panel since it is
   // dismissed (and its on-map icon removed) when closed.
-  const canEditRasterStyle = layer.metadata.sourceKind === RASTER_SOURCE_KIND;
+  // A STAC band combination or index has no raster control behind it, so there is no floating
+  // panel to reopen; its raster style lives in the Style panel, and the same entry opens that.
+  const isStacRendering = typeof layer.metadata.stacRendering === "string";
+  const canEditRasterStyle =
+    layer.metadata.sourceKind === RASTER_SOURCE_KIND ||
+    (isStacRendering && onOpenStylePanel !== undefined);
   const canRefresh = isRefreshableLayer(layer);
   // Iceberg layers refresh only on demand: scanning a table that
   // large on a timer is never what the user meant, so the interval
@@ -1056,7 +1061,8 @@ export function LayerActionsMenuItems({
         <DropdownMenuItem
           onSelect={() => {
             selectLayer(layer.id);
-            onOpenRasterStylePanel();
+            if (isStacRendering) onOpenStylePanel?.();
+            else onOpenRasterStylePanel();
           }}
         >
           <Palette className="me-2 h-3.5 w-3.5" />

@@ -1,3 +1,4 @@
+import booleanIntersects from "@turf/boolean-intersects";
 import type { BBox, Feature, Geometry } from "geojson";
 
 export const STAC_INDEX_CATALOGS_URL = "https://stacindex.org/api/catalogs";
@@ -130,13 +131,37 @@ export interface StacSearchCursor {
   /** Documents given up on; with any of these the catalog was not fully read. */
   dropped: number;
   /** The filters this walk began with, so later pages filter the way page one did. */
-  filters: Pick<StacSearchOptions, "bbox" | "collections" | "datetime">;
+  filters: Pick<
+    StacSearchOptions,
+    "bbox" | "intersects" | "collections" | "datetime" | "maxCloudCover"
+  >;
 }
+
+export type StacSortDirection = "asc" | "desc";
 
 export interface StacSearchOptions {
   bbox?: [number, number, number, number];
+  /**
+   * A GeoJSON geometry (point, line, polygon, or a multi/collection of them) the items must
+   * intersect. STAC Item Search makes this and `bbox` mutually exclusive, so it wins when both
+   * are given.
+   */
+  intersects?: Geometry;
   datetime?: string;
   collections?: string[];
+  /**
+   * Order results by capture date. Sent to an API as `sortby` on `properties.datetime`; a server
+   * that rejects it is asked again without, and the caller sorts the results itself. A static
+   * catalog has no search endpoint to ask, so only the caller's sort applies there.
+   */
+  sortby?: StacSortDirection;
+  /**
+   * Keep items with at most this much `eo:cloud_cover` (percent). Items that report none (radar,
+   * elevation, aerial imagery) are kept. Sent as a CQL2 filter, then without a server-side
+   * filter if the server refuses. The caller checks the results either way
+   * ({@link withinCloudCover}) because some servers accept the filter and ignore it.
+   */
+  maxCloudCover?: number;
   /** Documents to search instead of the whole catalog, from the tree's selection. */
   entries?: string[];
   cursor?: StacSearchCursor;
@@ -151,6 +176,11 @@ export interface StacNextPage {
   href: string;
   method: "GET" | "POST";
   body?: Record<string, unknown>;
+  /**
+   * The body of the request that got the first page, after any fallback. A POST next link usually
+   * carries only a token, so the later pages are asked for the same way the first one was.
+   */
+  request?: Record<string, unknown>;
 }
 
 export interface StacSearchResult {
@@ -250,12 +280,36 @@ export function isAzureBlobHref(href: string): boolean {
   }
 }
 
+/** A failed STAC request, with the HTTP status it came back with. */
+export class StacHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "StacHttpError";
+  }
+}
+
+/** Statuses that mean the server refused a parameter, not that it is down or limiting us. */
+const REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 422, 501]);
+
+/**
+ * Whether the server refused the request itself (bad request, unprocessable, not implemented),
+ * as opposed to turning the caller away, limiting it or failing.
+ */
+function refusedRequest(error: unknown): boolean {
+  return error instanceof StacHttpError && REFUSED_STATUSES.has(error.status);
+}
+
 async function fetchJson<T>(url: string, init: RequestInit, fetcher: FetchLike): Promise<T> {
   const response = await fetcher(browserCatalogHref(url), {
     ...init,
     headers: { Accept: "application/geo+json, application/json", ...init.headers },
   });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+  if (!response.ok) {
+    throw new StacHttpError(response.status, `${response.status} ${response.statusText}`.trim());
+  }
   return response.json();
 }
 
@@ -686,6 +740,59 @@ export function stacDateInterval(start: string, end: string): string | undefined
   return `${bound(from, "00:00:00")}/${bound(to, "23:59:59.999999")}`;
 }
 
+/**
+ * The request bodies to try, most specific first: each cloud-filter form (CQL2, then the `query`
+ * extension) with the sort, then without it. With neither asked for, just the plain body.
+ */
+function searchBodies(
+  body: Record<string, unknown>,
+  options: StacSearchOptions,
+): Array<Record<string, unknown>> {
+  const sorts: Array<StacSortDirection | undefined> = options.sortby
+    ? [options.sortby, undefined]
+    : [undefined];
+  // A CQL2 text filter cannot be combined with the JSON cloud filter, so with one typed the cloud
+  // limit is applied to the results only. The older `query` extension is left out on purpose: its
+  // `lte` drops scenes that report no cloud cover, which the limit promises to keep, and the
+  // panel filters what comes back anyway.
+  const typed = body.filter;
+  const canFilterOnServer = typed === undefined || (typeof typed === "object" && typed !== null);
+  const clouds: Array<"cql2" | undefined> =
+    options.maxCloudCover === undefined || !canFilterOnServer ? [undefined] : ["cql2", undefined];
+  return clouds.flatMap((cloud) =>
+    sorts.map((sort) => {
+      const next: Record<string, unknown> = { ...body };
+      if (cloud === "cql2") {
+        const keep = {
+          op: "or",
+          args: [
+            { op: "<=", args: [{ property: "eo:cloud_cover" }, options.maxCloudCover] },
+            { op: "isNull", args: [{ property: "eo:cloud_cover" }] },
+          ],
+        };
+        next["filter-lang"] = "cql2-json";
+        // A filter typed into the additional parameters stays; both must hold.
+        next.filter = typed ? { op: "and", args: [typed, keep] } : keep;
+      }
+      // The dropdown wins over a sortby typed into the additional parameters, which is what it is for.
+      if (sort) next.sortby = [{ field: "properties.datetime", direction: sort }];
+      return next;
+    }),
+  );
+}
+
+/**
+ * Drops items that report more cloud cover than allowed. An item that reports none always passes,
+ * and so does everything when no limit is set.
+ */
+export function withinCloudCover(items: StacItem[], max: number | undefined): StacItem[] {
+  if (max === undefined) return items;
+  return items.filter((item) => {
+    const value = item.properties["eo:cloud_cover"];
+    return typeof value !== "number" || value <= max;
+  });
+}
+
 export async function searchStacApi(
   connection: StacConnection,
   options: StacSearchOptions,
@@ -696,15 +803,23 @@ export async function searchStacApi(
     ...options.additional,
     limit: Math.max(1, Math.min(options.limit ?? 20, 100)),
   };
-  if (options.bbox) body.bbox = options.bbox;
+  // Item Search takes a bbox or an intersects, never both, and the panel's choice wins over one
+  // typed into the additional parameters.
+  if (options.intersects) {
+    delete body.bbox;
+    body.intersects = options.intersects;
+  } else if (options.bbox) {
+    delete body.intersects;
+    body.bbox = options.bbox;
+  }
   if (options.datetime) body.datetime = options.datetime;
   if (options.collections?.length) body.collections = options.collections;
-
   const page = options.next;
   const href = page?.href ?? connection.searchUrl;
   const method = page?.method ?? "POST";
-  const requestBody = page?.body ? { ...body, ...page.body } : body;
-  try {
+  /** Asks for one page with the given body, merged with the body a next link carries. */
+  const send = async (payload: Record<string, unknown>): Promise<StacSearchResult> => {
+    const requestBody = page?.body ? { ...payload, ...page.body } : payload;
     const raw = await fetchJson(
       href,
       {
@@ -716,28 +831,176 @@ export async function searchStacApi(
       },
       fetcher,
     );
-    return parseItems(raw, href);
+    const result = parseItems(raw, href);
+    // The next link is followed the way this page was asked for.
+    if (result.next && method === "POST") result.next.request = payload;
+    return result;
+  };
+  try {
+    // The request as asked, then simpler forms for a server that refuses it: the cloud filter is
+    // dropped (the panel filters locally), and the sort last (the caller sorts the results itself).
+    // Only a refusal moves on to the next form; a rate limit, a login or a server error would just
+    // be asked four times. A later page is asked the way the first one finally was.
+    const variants = page
+      ? [page.request ?? searchBodies(body, options)[0]]
+      : searchBodies(body, options);
+    let failure: unknown;
+    for (const payload of variants) {
+      try {
+        return await send(payload);
+      } catch (error) {
+        if (options.signal?.aborted || method !== "POST" || !refusedRequest(error)) throw error;
+        failure = error;
+      }
+    }
+    throw failure;
   } catch (error) {
     if (page || method !== "POST") throw error;
     // Core Item Search requires GET and POST to have equivalent semantics.
     // Some older implementations expose only GET despite advertising search.
     const query = new URLSearchParams({ limit: String(body.limit) });
-    if (options.bbox) query.set("bbox", options.bbox.join(","));
+    if (options.intersects) query.set("intersects", JSON.stringify(options.intersects));
+    else if (options.bbox) query.set("bbox", options.bbox.join(","));
     if (options.datetime) query.set("datetime", options.datetime);
     if (options.collections?.length) query.set("collections", options.collections.join(","));
     for (const [key, value] of Object.entries(options.additional ?? {})) {
-      if (["limit", "bbox", "datetime", "collections"].includes(key) || value === undefined) {
+      if (
+        ["limit", "bbox", "intersects", "datetime", "collections"].includes(key) ||
+        // The dropdown's sort is encoded below, and wins.
+        (key === "sortby" && options.sortby) ||
+        value === undefined
+      ) {
         continue;
       }
       query.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-    const getUrl = `${href}${href.includes("?") ? "&" : "?"}${query}`;
-    return parseItems(await fetchJson(getUrl, { signal: options.signal }, fetcher), getUrl);
+    /** The GET address, with the sort or without it. */
+    const getUrl = (sorted: boolean): string => {
+      const params = new URLSearchParams(query);
+      if (sorted && options.sortby) {
+        params.set("sortby", `${options.sortby === "asc" ? "+" : "-"}properties.datetime`);
+      }
+      return `${href}${href.includes("?") ? "&" : "?"}${params}`;
+    };
+    try {
+      const url = getUrl(true);
+      return parseItems(await fetchJson(url, { signal: options.signal }, fetcher), url);
+    } catch (getError) {
+      // An endpoint that refuses the sort is asked again without it; the caller sorts the results.
+      if (!options.sortby || options.signal?.aborted || !refusedRequest(getError)) throw getError;
+      const url = getUrl(false);
+      return parseItems(await fetchJson(url, { signal: options.signal }, fetcher), url);
+    }
   }
 }
 
-function intersects(a: number[], b: [number, number, number, number]): boolean {
-  return a.length >= 4 && a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+/** The instant an item was captured, for ordering; undefined when it carries none. */
+function itemTime(item: StacItem): number | undefined {
+  const value = item.properties.datetime ?? item.properties.start_datetime;
+  const time = typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : undefined;
+}
+
+/**
+ * Orders items by capture date, items with no date last (in their given order). Stable, so equal
+ * dates keep the server's order.
+ */
+export function sortStacItems(items: StacItem[], direction: StacSortDirection): StacItem[] {
+  const sign = direction === "desc" ? -1 : 1;
+  return items
+    .map((item, index) => ({ item, index, time: itemTime(item) }))
+    .sort((a, b) => {
+      if (a.time === undefined || b.time === undefined) {
+        if (a.time === b.time) return a.index - b.index;
+        return a.time === undefined ? 1 : -1;
+      }
+      return sign * (a.time - b.time) || a.index - b.index;
+    })
+    .map((entry) => entry.item);
+}
+
+type Box = [number, number, number, number];
+
+/** A box that crosses the antimeridian (west greater than east) as the two boxes it is made of. */
+function splitBox(box: Box): Box[] {
+  return box[0] > box[2]
+    ? [
+        [box[0], box[1], 180, box[3]],
+        [-180, box[1], box[2], box[3]],
+      ]
+    : [box];
+}
+
+/** Whether a record's bbox, which may cross the antimeridian, overlaps a box. */
+function intersects(a: number[], b: Box): boolean {
+  if (a.length < 4) return false;
+  const left = splitBox([a[0], a[1], a[2], a[3]]);
+  return left.some((one) =>
+    splitBox(b).some(
+      (other) =>
+        one[0] <= other[2] && one[2] >= other[0] && one[1] <= other[3] && one[3] >= other[1],
+    ),
+  );
+}
+
+/** A box as a polygon, for testing it against a shape the way a footprint is. */
+function boxPolygon(box: Box): Geometry {
+  const [west, south, east, north] = box;
+  return {
+    type: "Polygon",
+    coordinates: [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ],
+    ],
+  };
+}
+
+/** The horizontal extent of any GeoJSON geometry, or undefined when it has no positions. */
+export function geometryBbox(geometry: Geometry): [number, number, number, number] | undefined {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  /** Widens the extent by every position under a coordinates value. */
+  const visit = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      west = Math.min(west, value[0]);
+      east = Math.max(east, value[0]);
+      south = Math.min(south, value[1]);
+      north = Math.max(north, value[1]);
+      return;
+    }
+    for (const child of value) visit(child);
+  };
+  /** Visits a geometry, and each member of a collection. */
+  const walk = (node: Geometry): void => {
+    if (node.type === "GeometryCollection") node.geometries.forEach(walk);
+    else visit(node.coordinates);
+  };
+  walk(geometry);
+  return Number.isFinite(west) ? [west, south, east, north] : undefined;
+}
+
+/** Exact intersection of two geometries; a collection intersects when any member does. */
+function geometryIntersects(a: Geometry, b: Geometry): boolean {
+  if (a.type === "GeometryCollection") {
+    return a.geometries.some((part) => geometryIntersects(part, b));
+  }
+  if (b.type === "GeometryCollection") {
+    return b.geometries.some((part) => geometryIntersects(a, part));
+  }
+  try {
+    return booleanIntersects(a, b);
+  } catch {
+    // A malformed footprint should not hide an item the extent test already accepted.
+    return true;
+  }
 }
 
 function inTime(item: StacItem, interval?: string): boolean {
@@ -793,12 +1056,19 @@ export async function searchStaticStac(
     visited: new Set<string>(),
     offset: 0,
     dropped: 0,
-    filters: { bbox: options.bbox, collections: options.collections, datetime: options.datetime },
+    filters: {
+      bbox: options.bbox,
+      intersects: options.intersects,
+      collections: options.collections,
+      datetime: options.datetime,
+      maxCloudCover: options.maxCloudCover,
+    },
   };
   const found: StacItem[] = [];
   const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
   let reads = 0;
 
+  /** Whether an item passes the walk's filters: collection, area, cloud cover and dates. */
   const accepts = (item: StacItem): boolean => {
     // itemBbox flattens 3D (6-element) bboxes; item.bbox[2]/[3] would be minZ/maxX there.
     const bbox = itemBbox(item);
@@ -808,9 +1078,33 @@ export async function searchStaticStac(
     }
     const collectionBboxes = item.properties["geolibre:spatial_bboxes"];
     const bboxes = Array.isArray(collectionBboxes) ? collectionBboxes : bbox ? [bbox] : [];
-    if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
+    // A geometry replaces the bbox filter, as it does on an API. The footprint is tested when the
+    // item has one; the extent stands in otherwise (and for a collection's declared boxes).
+    const area = filters.intersects;
+    if (area) {
+      const window = geometryBbox(area);
+      if (window && !bboxes.some((candidate) => intersects(candidate, window))) return false;
+      // With no footprint, what the record declares is its extent: each box is tested against the
+      // shape itself, not only against the shape's own bounding box.
+      if (item.geometry) {
+        if (!geometryIntersects(item.geometry, area)) return false;
+      } else if (
+        !bboxes.some((candidate) => {
+          const horizontal = horizontalBbox(candidate);
+          return (
+            horizontal !== undefined &&
+            splitBox(horizontal).some((box) => geometryIntersects(boxPolygon(box), area))
+          );
+        })
+      ) {
+        return false;
+      }
+    } else if (filters.bbox && !bboxes.some((candidate) => intersects(candidate, filters.bbox!))) {
       return false;
     }
+    // The cloud limit is part of the walk, so a page fills with qualifying items and the total
+    // counts only those; an item that reports no cloud cover passes.
+    if (withinCloudCover([item], filters.maxCloudCover).length === 0) return false;
     return inTime(item, filters.datetime);
   };
 

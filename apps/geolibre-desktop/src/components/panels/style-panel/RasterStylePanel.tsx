@@ -10,6 +10,7 @@ import { RasterSymbologySection } from "../RasterSymbologySection";
 import { TimeSliderSymbologySection } from "../TimeSliderSymbologySection";
 import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
 import { WmsLegendSection } from "./WmsLegendSection";
+import { StacRenderingSection } from "./StacRenderingSection";
 import { RasterStyleSlider } from "./style-inputs";
 
 interface RasterStylePanelProps {
@@ -156,6 +157,11 @@ export function RasterStylePanel({
           )}
           {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
             <RasterSymbologySection layer={layer} mapControllerRef={mapControllerRef} />
+          )}
+          {/* A STAC band combination or index is drawn from its tile URL, not by the raster
+              control, so its own style (stretch, or ramp and window) is edited here. */}
+          {typeof layer.metadata.stacRendering === "string" && (
+            <StacRenderingSection layer={layer} />
           )}
           {/* A Time Slider source is not in the raster plugin's registry, so
               the section above has nothing to attach to; its own spec fields

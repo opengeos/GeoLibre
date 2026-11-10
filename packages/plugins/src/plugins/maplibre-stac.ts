@@ -36,6 +36,9 @@ import {
   openCatalogNode,
   searchStacApi,
   searchStaticStac,
+  sortStacItems,
+  type StacSortDirection,
+  withinCloudCover,
   type StacAsset,
   type StacConnection,
   type StacIndexCatalog,
@@ -53,7 +56,32 @@ import {
   zarrStoreTakesKeys,
   stacDateInterval,
 } from "./stac-api";
+import {
+  AOI_MAX_POSITIONS,
+  bufferGeometry,
+  countPositions,
+  geometryFromFile,
+  type MergedArea,
+  selectedFeaturesGeometry,
+} from "./stac-aoi";
+import {
+  availableCombinations,
+  availableIndices,
+  bandsForFormula,
+  COMBINATIONS,
+  findBand,
+  formulaNames,
+  INDICES,
+  itemBands,
+  type StacBand,
+} from "./stac-bands";
 import { buildCatalogTree } from "./stac-catalog-tree";
+import {
+  registerStacRenderProtocol,
+  renderTileUrl,
+  type RenderBand,
+  type StacRenderSpec,
+} from "./stac-render";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
 import { addLidarLayerFromUrl, addZarrRasterLayer } from "./maplibre-components";
@@ -100,6 +128,7 @@ const FOOTPRINT_SOURCE_KIND = "stac-footprints";
 const DRAW_SOURCE = "geolibre-stac-draw-bbox";
 const DRAW_FILL = "geolibre-stac-draw-bbox-fill";
 const DRAW_LINE = "geolibre-stac-draw-bbox-line";
+const DRAW_POINT = "geolibre-stac-draw-bbox-point";
 // Selection highlight, like the draw rectangle: a transient interaction overlay
 // rather than data, so it stays off the Layers panel.
 const SELECT_SOURCE = "geolibre-stac-selected";
@@ -205,6 +234,39 @@ export interface StacLabels {
   clearDrawnBbox: string;
   drawHint: string;
   drawnBboxCleared: string;
+  areaLabel: string;
+  drawPoint: string;
+  drawLine: string;
+  drawPolygon: string;
+  useSelection: string;
+  loadAreaFile: string;
+  clearArea: string;
+  drawPointHint: string;
+  drawShapeHint: string;
+  areaCleared: string;
+  noSelection: string;
+  areaFileFailed: string;
+  areaTooLarge: (positions: number, max: number) => string;
+  areaSet: (description: string) => string;
+  areaIgnored: (count: number) => string;
+  addAsset: string;
+  addAssetHint: string;
+  addRendering: string;
+  addRenderingHint: string;
+  groupCombinations: string;
+  groupIndices: string;
+  renderNeedsMapLibre: string;
+  renderMissingBand: (name: string) => string;
+  sortLabel: string;
+  sortDefault: string;
+  sortNewest: string;
+  sortOldest: string;
+  sortHint: string;
+  bufferLabel: string;
+  bufferHint: string;
+  bufferDistance: (meters: number) => string;
+  cloudLabel: string;
+  cloudHint: string;
   mapNotReady: string;
   startDate: string;
   endDate: string;
@@ -305,6 +367,44 @@ let labels: StacLabels = {
   clearDrawnBbox: "Clear drawn bbox",
   drawHint: "Click and drag on the map to draw a search bounding box.",
   drawnBboxCleared: "Drawn bbox cleared.",
+  areaLabel: "Search area",
+  drawPoint: "Point",
+  drawLine: "Line",
+  drawPolygon: "Polygon",
+  useSelection: "Selected features",
+  loadAreaFile: "From file…",
+  clearArea: "Clear shape",
+  drawPointHint: "Click the map to place a search point. Escape cancels.",
+  drawShapeHint: "Click to add vertices; double-click or press Enter to finish. Escape cancels.",
+  areaCleared: "Search shape cleared.",
+  noSelection:
+    "Select features on the map first: open a layer’s menu, choose Select features, then try again.",
+  areaFileFailed: "Could not read a search shape from that file.",
+  areaTooLarge: (positions, max) =>
+    `That shape has ${positions} vertices; simplify it to ${max} or fewer.`,
+  areaSet: (description) => `Searching within ${description}.`,
+  areaIgnored: (count) => `${count} lower-dimension shape(s) were left out.`,
+  addAsset: "Assets",
+  addAssetHint: "Add one of this item's assets to the map",
+  addRendering: "Bands",
+  addRenderingHint: "Add a band combination or index of this item to the map",
+  groupCombinations: "Band combinations",
+  groupIndices: "Indices",
+  renderNeedsMapLibre: "Renderings need the MapLibre renderer.",
+  renderMissingBand: (name) => `This item has no band called ${name}.`,
+  sortLabel: "Sort by date",
+  sortDefault: "Server default",
+  sortNewest: "Newest first",
+  sortOldest: "Oldest first",
+  bufferLabel: "Buffer points and lines by",
+  bufferHint:
+    "Widen a point or line into a polygon this many meters either side before searching. Polygons are not changed.",
+  bufferDistance: (meters) => `${meters} m`,
+  cloudLabel: "Max cloud",
+  cloudHint:
+    "Keep scenes with at most this much cloud cover. Scenes that report none (radar, elevation, aerial imagery) are kept.",
+  sortHint:
+    "Orders the results loaded so far by capture date. Load more can bring scenes that belong earlier or later.",
   mapNotReady: "The map is not ready for drawing.",
   startDate: "Start date",
   endDate: "End date",
@@ -457,6 +557,62 @@ function field(label: string, type = "text"): { wrap: HTMLElement; input: HTMLIn
   return { wrap, input };
 }
 
+/**
+ * A checkbox that turns a numeric option on, with a number box for its value and a unit beside it.
+ * The box is dimmed and locked while the checkbox is off.
+ */
+function numberOption(config: {
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  value: number;
+  unit: string;
+  /** Width of the number box in pixels (default 64). */
+  width?: number;
+  /** Called when the checkbox flips or the number is edited. */
+  onChange?: () => void;
+}): { wrap: HTMLElement; check: HTMLInputElement; input: HTMLInputElement; value: () => number } {
+  const wrap = el("label");
+  wrap.style.cssText = `${style.row}cursor:pointer;`;
+  wrap.title = config.hint;
+  const check = el("input");
+  check.type = "checkbox";
+  const input = el("input");
+  input.type = "number";
+  input.min = String(config.min);
+  input.max = String(config.max);
+  input.step = "1";
+  input.value = String(config.value);
+  // A label names only its first control (the checkbox), so the number is named explicitly.
+  input.setAttribute("aria-label", config.label);
+  const width = config.width ?? 64;
+  input.style.cssText = `${style.input}width:${width}px;flex:0 0 ${width}px;`;
+  const unit = el("span", config.unit);
+  unit.style.cssText = style.label;
+  /**
+   * An empty or out-of-range box reads as the nearest value it could mean, never as NaN.
+   */
+  const value = (): number => {
+    const typed = Number(input.value);
+    if (input.value.trim() === "" || !Number.isFinite(typed)) return config.value;
+    return Math.min(config.max, Math.max(config.min, typed));
+  };
+  /** Greys the number out while its checkbox is off. */
+  const sync = (): void => {
+    input.disabled = !check.checked;
+    input.style.opacity = check.checked ? "1" : "0.5";
+  };
+  check.addEventListener("change", () => {
+    sync();
+    config.onChange?.();
+  });
+  input.addEventListener("change", () => config.onChange?.());
+  sync();
+  wrap.append(check, el("span", config.label), input, unit);
+  return { wrap, check, input, value };
+}
+
 function currentExtent(): [number, number, number, number] | undefined {
   const bounds = getStacMap(appRef)?.getBounds();
   if (!bounds) return undefined;
@@ -485,33 +641,34 @@ function removeFootprints(): void {
 }
 
 function removeDrawBox(map: StacMap): void {
+  if (map.getLayer(DRAW_POINT)) map.removeLayer(DRAW_POINT);
   if (map.getLayer(DRAW_LINE)) map.removeLayer(DRAW_LINE);
   if (map.getLayer(DRAW_FILL)) map.removeLayer(DRAW_FILL);
   if (map.getSource(DRAW_SOURCE)) map.removeSource(DRAW_SOURCE);
 }
 
+/** Shows a bounding box on the map as the rectangle that will be searched. */
 function showDrawBox(map: StacMap, bbox: [number, number, number, number]): void {
   const [west, south, east, north] = bbox;
+  showDrawGeometry(map, {
+    type: "Polygon",
+    coordinates: [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ],
+    ],
+  });
+}
+
+/** Draws the search area on the map: a rectangle, point, line, polygon, or any mix of them. */
+function showDrawGeometry(map: StacMap, geometry: Geometry): void {
   const data: FeatureCollection = {
     type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "Polygon",
-          coordinates: [
-            [
-              [west, south],
-              [east, south],
-              [east, north],
-              [west, north],
-              [west, south],
-            ],
-          ],
-        },
-      },
-    ],
+    features: [{ type: "Feature", properties: {}, geometry }],
   };
   const source = map.getSource(DRAW_SOURCE) as GeoJSONSource | undefined;
   if (source) {
@@ -529,12 +686,159 @@ function showDrawBox(map: StacMap, bbox: [number, number, number, number]): void
     id: DRAW_LINE,
     type: "line",
     source: DRAW_SOURCE,
+    paint: { "line-color": "#f59e0b", "line-width": 2, "line-dasharray": [2, 1] },
+  });
+  map.addLayer({
+    id: DRAW_POINT,
+    type: "circle",
+    source: DRAW_SOURCE,
     paint: {
-      "line-color": "#f59e0b",
-      "line-width": 2,
-      "line-dasharray": [2, 1],
+      "circle-radius": 5,
+      "circle-color": "#f59e0b",
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
     },
   });
+}
+
+export type StacDrawShape = "point" | "line" | "polygon";
+
+/**
+ * Drawings that are open now, and whether double-click zoom was on before the first of them. A
+ * drawing turns the zoom off so a double-click can finish it; it is turned back on only when the
+ * last one closes, and only if it was on to begin with.
+ */
+let openShapeDraws = 0;
+let doubleClickZoomWasOn = true;
+
+/**
+ * Lets the user click out a point, line or polygon on the map. A point finishes on the first
+ * click; a line or polygon takes one click per vertex and finishes on a double-click or Enter.
+ * Escape cancels. The shape is previewed as it grows and left on the map when finished.
+ *
+ * @returns A function that abandons the drawing, or null when the map is not ready.
+ */
+function beginShapeDraw(
+  shape: StacDrawShape,
+  onComplete: (geometry: Geometry) => void,
+  onCancel: () => void,
+): (() => void) | null {
+  const map = getStacMap(appRef);
+  if (!map) return null;
+  const canvas = map.getCanvas();
+  const vertices: Array<[number, number]> = [];
+  let cursor: [number, number] | null = null;
+  let downAt: { x: number; y: number } | null = null;
+  let finished = false;
+  if (openShapeDraws === 0) doubleClickZoomWasOn = map.doubleClickZoom?.isEnabled?.() ?? true;
+  openShapeDraws += 1;
+  map.doubleClickZoom?.disable();
+  canvas.style.cursor = "crosshair";
+
+  /** Ends the drawing once: puts the map's controls back and removes the listeners. */
+  const cleanup = (): void => {
+    if (finished) return;
+    finished = true;
+    openShapeDraws -= 1;
+    canvas.removeEventListener("mousedown", onDown);
+    canvas.removeEventListener("click", onClick);
+    canvas.removeEventListener("dblclick", onDouble);
+    canvas.removeEventListener("mousemove", onMove);
+    window.removeEventListener("keydown", onKey);
+    canvas.style.cursor = "";
+    // MapLibre treats a double-click zoom disabled mid-gesture as still pending; defer the restore.
+    // A drawing begun in the meantime has the zoom switched off again, and keeps it that way.
+    setTimeout(() => {
+      if (openShapeDraws === 0 && doubleClickZoomWasOn) map.doubleClickZoom?.enable();
+    }, 0);
+  };
+  /** Where a mouse event is on the map, in pixels. */
+  const pixel = (event: MouseEvent): { x: number; y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  /**
+   * Where a mouse event is on the map as longitude and latitude: the longitude wrapped into
+   * range, the latitude kept on the map.
+   */
+  const lngLat = (event: MouseEvent): [number, number] => {
+    const { x, y } = pixel(event);
+    // A world copy of the map gives longitudes past 180; wrapped, 181 is -179, not a clamped 180.
+    const point = map.unproject([x, y]).wrap();
+    return [point.lng, Math.max(-90, Math.min(90, point.lat))];
+  };
+  /** The shape drawn so far, with the cursor's position as a trial last vertex if given. */
+  const build = (extra: [number, number] | null): Geometry | null => {
+    const points = extra ? [...vertices, extra] : vertices;
+    if (shape === "point") return points.length ? { type: "Point", coordinates: points[0] } : null;
+    if (points.length < 2) {
+      return points.length ? { type: "Point", coordinates: points[0] } : null;
+    }
+    if (shape === "line" || points.length < 3) return { type: "LineString", coordinates: points };
+    return { type: "Polygon", coordinates: [[...points, points[0]]] };
+  };
+  /** Ends the drawing with the shape as it stands, if it has enough vertices to be one. */
+  const finish = (): void => {
+    const geometry = build(null);
+    const enough = shape === "line" ? vertices.length >= 2 : vertices.length >= 3;
+    // Nothing to finish yet: a point with no click, or too few vertices. The drawing stays open
+    // rather than ending without a shape.
+    if (!geometry || (shape !== "point" && !enough)) return;
+    cleanup();
+    showDrawGeometry(map, geometry);
+    onComplete(geometry);
+  };
+  /** Notes where the mouse went down, to tell a click from the end of a pan. */
+  const onDown = (event: MouseEvent): void => {
+    downAt = pixel(event);
+  };
+  /** Adds a vertex at a click, or finishes a point. */
+  const onClick = (event: MouseEvent): void => {
+    if (event.button !== 0) return;
+    const here = pixel(event);
+    // A click that ends a pan is not a vertex.
+    if (downAt && Math.hypot(here.x - downAt.x, here.y - downAt.y) > 4) return;
+    const next = lngLat(event);
+    if (vertices.length) {
+      const last = map.project(vertices[vertices.length - 1]);
+      // The second click of a double-click lands on the first; it is not another vertex.
+      if (Math.hypot(here.x - last.x, here.y - last.y) < 4) return;
+    }
+    vertices.push(next);
+    if (shape === "point") return finish();
+    const preview = build(null);
+    if (preview) showDrawGeometry(map, preview);
+  };
+  /** Finishes the drawing on a double-click. */
+  const onDouble = (event: MouseEvent): void => {
+    event.preventDefault();
+    finish();
+  };
+  /** Shows the shape with the cursor as a trial vertex. */
+  const onMove = (event: MouseEvent): void => {
+    if (!vertices.length) return;
+    cursor = lngLat(event);
+    const preview = build(cursor);
+    if (preview) showDrawGeometry(map, preview);
+  };
+  /** Enter finishes the drawing and Escape cancels it, unless the user is typing in a field. */
+  const onKey = (event: KeyboardEvent): void => {
+    // The keys are the drawing's only while the user is not typing: Enter in a field of the panel
+    // (a date, the bbox box) is for that field.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, select, [contenteditable]")) return;
+    if (event.key === "Escape") {
+      const wasOpen = !finished;
+      cleanup();
+      if (wasOpen) onCancel();
+    } else if (event.key === "Enter") finish();
+  };
+  canvas.addEventListener("mousedown", onDown);
+  canvas.addEventListener("click", onClick);
+  canvas.addEventListener("dblclick", onDouble);
+  canvas.addEventListener("mousemove", onMove);
+  window.addEventListener("keydown", onKey);
+  return cleanup;
 }
 
 function beginBboxDraw(
@@ -913,6 +1217,76 @@ async function visualizeAsset(
   }
 }
 
+/**
+ * A band as a rendering recipe holds it: the file's own address and how to sign it, not a signed
+ * address. A signature would be saved with the project, would expire within the hour, and is a
+ * credential; the renderer asks for a fresh one whenever it reads the file.
+ */
+function renderBandOf(connection: StacConnection, item: StacItem, band: StacBand): RenderBand {
+  const access = assetAccess(connection, item, band.href);
+  return {
+    href: band.href,
+    index: band.index,
+    scale: band.scale,
+    offset: band.offset,
+    ...(band.nodata !== undefined ? { nodata: band.nodata } : {}),
+    ...(access ? { access } : {}),
+  };
+}
+
+/** What the "Add rendering" menu offers: a three-band combination, or an index by name. */
+export type StacRenderingChoice = { kind: "combination" | "index"; name: string };
+
+/**
+ * Adds a band combination or a spectral index of an item to the map as a tile layer.
+ *
+ * @param connection - The catalog the item came from, for how its private assets are signed.
+ * @param item - The item whose bands are drawn.
+ * @param choice - The combination or index.
+ * @returns The new layer's id.
+ * @throws When the renderer is not MapLibre, or the item lacks a band the choice needs.
+ */
+function addRendering(
+  connection: StacConnection,
+  item: StacItem,
+  choice: StacRenderingChoice,
+): string {
+  const app = appRef;
+  // engine-audit-allow: getMap-mapbox -- detects MapLibre; renderings are hidden on Mapbox
+  if (!app?.addTileLayer || !app.getMap?.()) throw new Error(labels.renderNeedsMapLibre);
+  const bands = itemBands(item);
+  /** The item's band by name, or an error naming what it lacks. */
+  const need = (name: string): StacBand => {
+    const band = findBand(bands, name);
+    if (!band) throw new Error(labels.renderMissingBand(name));
+    return band;
+  };
+  let spec: StacRenderSpec;
+  if (choice.kind === "combination") {
+    const channels = COMBINATIONS[choice.name];
+    const read = channels.map(need).map((band) => renderBandOf(connection, item, band));
+    spec = { kind: "rgb", bands: read as [RenderBand, RenderBand, RenderBand] };
+  } else {
+    const formula = INDICES[choice.name];
+    formulaNames(formula).forEach(need);
+    const read = bandsForFormula(formula, bands).map((band) =>
+      renderBandOf(connection, item, band),
+    );
+    spec = { kind: "index", formula, bands: read };
+  }
+  registerStacRenderProtocol();
+  const bbox = itemBbox(item);
+  const layerId = app.addTileLayer(`${itemTitle(item)} — ${choice.name}`, renderTileUrl(spec), {
+    tileSize: 256,
+    // Tiles deeper than the data's own detail just upsample, and each reads only a small window.
+    maxzoom: 17,
+    ...(bbox ? { bounds: bbox } : {}),
+    metadata: { stacItemId: item.id, stacRendering: choice.name },
+  });
+  if (bbox) app.fitBounds?.(bbox);
+  return layerId;
+}
+
 /** An item's descriptive title when available, otherwise its stable identifier. */
 function itemTitle(item: StacItem): string {
   const title = item.properties.title;
@@ -971,21 +1345,104 @@ function buildPanel(container: HTMLElement): () => void {
   extentRow.append(useExtent, el("span", labels.limitToExtent));
   const bboxField = field(labels.bboxLabel);
   bboxField.input.placeholder = labels.bboxPlaceholder;
-  const drawRow = el("div");
-  drawRow.style.cssText = style.row;
   const drawButton = el("button", labels.drawBbox);
   drawButton.type = "button";
   drawButton.style.cssText = style.button;
   const clearDrawButton = el("button", labels.clearDrawnBbox);
   clearDrawButton.type = "button";
   clearDrawButton.style.cssText = style.button;
-  clearDrawButton.hidden = true;
-  drawRow.append(drawButton, clearDrawButton);
+  setDisabled(clearDrawButton, true);
+
+  // Search by a shape instead of a rectangle: drawn on the map, taken from the features selected
+  // in a layer, or read from a file. The shape replaces the bbox, as STAC Item Search requires.
+  const areaWrap = el("div");
+  areaWrap.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+  const areaCaption = el("span", labels.areaLabel);
+  areaCaption.style.cssText = style.label;
+  const areaRow = el("div");
+  areaRow.style.cssText = `${style.row}flex-wrap:wrap;`;
+  /** A button in the row of ways to choose a search area. */
+  const areaButton = (text: string): HTMLButtonElement => {
+    const button = el("button", text);
+    button.type = "button";
+    button.style.cssText = style.button;
+    return button;
+  };
+  const pointButton = areaButton(labels.drawPoint);
+  const lineButton = areaButton(labels.drawLine);
+  const polygonButton = areaButton(labels.drawPolygon);
+  const selectionButton = areaButton(labels.useSelection);
+  const fileButton = areaButton(labels.loadAreaFile);
+  const clearAreaButton = areaButton(labels.clearArea);
+  setDisabled(clearAreaButton, true);
+  const areaFile = el("input");
+  areaFile.type = "file";
+  areaFile.accept = ".geojson,.json,.zip";
+  areaFile.hidden = true;
+  areaRow.append(
+    pointButton,
+    lineButton,
+    polygonButton,
+    selectionButton,
+    fileButton,
+    drawButton,
+    clearAreaButton,
+    clearDrawButton,
+    areaFile,
+  );
+  // A checkbox with an amount in meters. It only affects points and lines, and widening or
+  // narrowing it redraws the shape already chosen.
+  const buffer = numberOption({
+    label: labels.bufferLabel,
+    hint: labels.bufferHint,
+    min: 1,
+    max: 100_000,
+    value: 100,
+    unit: "m",
+    onChange: () => applyArea(),
+  });
+  /** The buffer in meters, or 0 when it is off. */
+  const bufferMeters = (): number => (buffer.check.checked ? buffer.value() : 0);
+  areaWrap.append(areaCaption, areaRow, buffer.wrap);
   const dates = el("div");
   dates.style.cssText = style.row;
   const startField = field(labels.startDate, "date");
   const endField = field(labels.endDate, "date");
   dates.append(startField.wrap, endField.wrap);
+  const sortWrap = el("label");
+  sortWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
+  const sortCaption = el("span", labels.sortLabel);
+  sortCaption.style.cssText = style.label;
+  const sortSelect = el("select");
+  sortSelect.style.cssText = style.input;
+  sortSelect.title = labels.sortHint;
+  for (const [value, title] of [
+    ["", labels.sortDefault],
+    ["desc", labels.sortNewest],
+    ["asc", labels.sortOldest],
+  ] as const) {
+    const option = el("option", title);
+    option.value = value;
+    sortSelect.append(option);
+  }
+  sortWrap.append(sortCaption, sortSelect);
+  const cloud = numberOption({
+    label: labels.cloudLabel,
+    hint: labels.cloudHint,
+    min: 0,
+    max: 100,
+    value: 10,
+    unit: "%",
+    width: 52,
+  });
+  // Sort order and the cloud limit are both about which scenes come back, so they share a row.
+  const sortCloudRow = el("div");
+  sortCloudRow.style.cssText = "display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;";
+  sortWrap.style.flex = "1 1 0";
+  sortWrap.style.minWidth = "0";
+  cloud.wrap.style.flex = "0 0 auto";
+  cloud.wrap.style.minHeight = "30px";
+  sortCloudRow.append(cloud.wrap, sortWrap);
   const additionalWrap = el("label");
   additionalWrap.style.cssText = "display:flex;min-width:0;flex-direction:column;gap:2px;";
   const additionalCaption = el("span", labels.additionalParams);
@@ -1012,9 +1469,10 @@ function buildPanel(container: HTMLElement): () => void {
     collectionSelect,
     tree.element,
     extentRow,
+    areaWrap,
     bboxField.wrap,
-    drawRow,
     dates,
+    sortCloudRow,
     additionalWrap,
     searchActions,
   );
@@ -1183,6 +1641,18 @@ function buildPanel(container: HTMLElement): () => void {
   /** The extent read a collection asked for, cancelled when another collection is asked for. */
   let extentRead: AbortController | null = null;
   let cancelDraw: (() => void) | null = null;
+  /** The shape items must intersect, when the search is by shape rather than by rectangle. */
+  let searchArea: Geometry | undefined;
+  /** Counts area choices, so a file still being read when another is chosen can be dropped. */
+  let areaGeneration = 0;
+  /** Set when the panel closes, so a read that finishes after it has nothing to update. */
+  let disposed = false;
+  /** Every result loaded, in the order the server gave them; `allItems` is this, sorted. */
+  let fetchedItems: StacItem[] = [];
+  /** What a search was run with, kept for its later pages so the list never mixes criteria. */
+  let pageCriteria: { maxCloudCover?: number; sortDirection?: StacSortDirection } = {};
+  /** The shape as chosen, before any buffer; `searchArea` is this, widened when the buffer is on. */
+  let chosenArea: MergedArea | undefined;
   let selectedItemId: string | null = null;
   const cardsByItemId = new Map<string, HTMLElement>();
 
@@ -1235,6 +1705,7 @@ function buildPanel(container: HTMLElement): () => void {
     // Invalidate a response that may still be in flight before clearing the UI.
     searchGeneration += 1;
     allItems = [];
+    fetchedItems = [];
     nextPage = undefined;
     searchCursor = undefined;
     results.innerHTML = "";
@@ -1306,64 +1777,58 @@ function buildPanel(container: HTMLElement): () => void {
       }
       const assets = Object.entries(item.assets ?? {}).filter(([, asset]) => asset?.href);
       if (assets.length) {
-        const assetSelect = el("select");
-        assetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
-        for (const [key, asset] of assets) {
-          const option = el("option", assetOptionLabel(item, key, asset));
-          option.value = key;
-          assetSelect.append(option);
-        }
-        // Preselect something the user can actually add; assets often lead with metadata.
-        const firstAddable = assets.find(([key, asset]) => canAddAsset(item, key, asset));
-        if (firstAddable) assetSelect.value = firstAddable[0];
-        const selected = (): [string, StacAsset] =>
-          assets.find(([key]) => key === assetSelect.value) ?? assets[0];
-        const add = el("button", labels.add);
-        add.type = "button";
-        add.style.cssText = style.button;
-        const download = el("button", labels.download);
-        download.type = "button";
-        download.style.cssText = style.button;
-        // Which part of the asset to draw, for the formats that hold more than one.
-        const targetSelect = el("select");
-        targetSelect.style.cssText = `${style.input}flex:1 1 140px;width:auto;`;
-        targetSelect.title = labels.chooseTarget;
-        let adding = false;
-        // Which asset's download is being signed, so switching the dropdown to
-        // another asset does not find its own button disabled.
-        let signingDownloadKey: string | null = null;
-
-        const syncAsset = (): void => {
-          const [key, asset] = selected();
-          const addable = canAddAsset(item, key, asset);
-          const targets = assetTargets(item, key, asset);
-          // Rebuilt on every sync, including the one right after Add, so keep the user's pick.
-          const chosen = targetSelect.value;
-          targetSelect.innerHTML = "";
-          for (const target of targets) {
-            const option = el("option", target.label);
-            option.value = target.id;
-            targetSelect.append(option);
-          }
-          if (targets.some((target) => target.id === chosen)) targetSelect.value = chosen;
-          // One target is the asset itself; hide a choice the user does not have.
-          targetSelect.hidden = targets.length < 2 || !addable;
-          assetSelect.title = asset.href;
-          download.title = asset.href;
-          setDisabled(add, adding || !addable);
-          // A private asset is signed before it opens, so the button says so
-          // by going quiet rather than looking like a dead click.
-          setDisabled(download, signingDownloadKey === key);
-          add.title = addReason(item, key, asset);
+        let busy = false;
+        /**
+         * Each menu shows its own name and acts the moment an entry is chosen, then goes back to
+         * its name: it is a button that drops a list, not a setting that keeps a value.
+         */
+        const menu = (text: string, hint?: string): HTMLSelectElement => {
+          const select = el("select");
+          // Sized by the row, not by the longest option: a long asset name must not push a menu
+          // onto a line of its own. The open list still shows the full names.
+          select.style.cssText = `${style.input}flex:1 1 0;min-width:0;width:auto;`;
+          if (hint) select.title = hint;
+          // The selected option is a value, not a name: a screen reader needs one of its own.
+          select.setAttribute("aria-label", hint ?? text);
+          const placeholder = el("option", text);
+          placeholder.value = "";
+          select.append(placeholder);
+          return select;
+        };
+        const menus: HTMLSelectElement[] = [];
+        /** Disables every menu while one of them is working. */
+        const setBusy = (value: boolean): void => {
+          busy = value;
+          for (const select of menus) select.disabled = value;
         };
 
-        assetSelect.addEventListener("change", syncAsset);
-        add.addEventListener("click", async () => {
-          const [key, asset] = selected();
-          // `visualizeAsset` falls back to the first target itself, so do not decide twice.
-          const target = targetSelect.value || undefined;
-          adding = true;
-          syncAsset();
+        // Add asset: one entry per asset, and per variable for a Zarr store holding several.
+        const addEntries = new Map<string, { key: string; asset: StacAsset; target?: string }>();
+        const addSelect = menu(labels.addAsset, labels.addAssetHint);
+        for (const [key, asset] of assets) {
+          const addable = canAddAsset(item, key, asset);
+          const targets = addable ? assetTargets(item, key, asset) : [];
+          const choices =
+            targets.length > 1
+              ? targets.map((target) => ({ target: target.id, suffix: ` — ${target.label}` }))
+              : [{ target: undefined, suffix: "" }];
+          for (const choice of choices) {
+            const id = `a${addEntries.size}`;
+            addEntries.set(id, { key, asset, target: choice.target });
+            const option = el("option", `${assetOptionLabel(item, key, asset)}${choice.suffix}`);
+            option.value = id;
+            option.disabled = !addable;
+            option.title = addReason(item, key, asset);
+            addSelect.append(option);
+          }
+        }
+        menus.push(addSelect);
+        addSelect.addEventListener("change", async () => {
+          const entry = addEntries.get(addSelect.value);
+          addSelect.value = "";
+          if (!entry || busy) return;
+          const { key, asset, target } = entry;
+          setBusy(true);
           setStatus(labels.adding(assetLabel(key, asset)));
           try {
             if (!connection) throw new Error(labels.addFailed);
@@ -1380,18 +1845,71 @@ function buildPanel(container: HTMLElement): () => void {
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
-            adding = false;
-            syncAsset();
+            setBusy(false);
           }
         });
-        download.addEventListener("click", async () => {
-          const [key, asset] = selected();
+
+        // Add rendering: the band combinations and indices this item has the bands for.
+        const bands = itemBands(item);
+        const combinations = availableCombinations(bands);
+        const indices = availableIndices(bands);
+        let renderSelect: HTMLSelectElement | null = null;
+        if (combinations.length || indices.length) {
+          const select = menu(labels.addRendering, labels.addRenderingHint);
+          /** Adds a titled group of renderings to the Bands menu. */
+          const group = (title: string, kind: "combination" | "index", names: string[]): void => {
+            if (!names.length) return;
+            const optgroup = el("optgroup");
+            optgroup.label = title;
+            for (const name of names) {
+              const option = el("option", name);
+              option.value = `${kind}:${name}`;
+              optgroup.append(option);
+            }
+            select.append(optgroup);
+          };
+          group(labels.groupCombinations, "combination", combinations);
+          group(labels.groupIndices, "index", indices);
+          select.addEventListener("change", async () => {
+            const [kind, ...rest] = select.value.split(":");
+            const name = rest.join(":");
+            select.value = "";
+            if (!name || busy || (kind !== "combination" && kind !== "index")) return;
+            setBusy(true);
+            setStatus(labels.adding(name));
+            try {
+              if (!connection) throw new Error(labels.addFailed);
+              addRendering(connection, item, { kind, name });
+              setStatus(labels.added(name));
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : labels.addFailed, true);
+            } finally {
+              setBusy(false);
+            }
+          });
+          menus.push(select);
+          renderSelect = select;
+        }
+
+        // Download: an asset's own file, signed first when the catalog keeps it private.
+        const downloadSelect = menu(labels.download);
+        for (const [key, asset] of assets) {
+          const option = el("option", assetOptionLabel(item, key, asset));
+          option.value = key;
+          option.title = asset.href;
+          downloadSelect.append(option);
+        }
+        menus.push(downloadSelect);
+        downloadSelect.addEventListener("change", async () => {
+          const chosen = assets.find(([key]) => key === downloadSelect.value);
+          downloadSelect.value = "";
+          if (!chosen || busy) return;
+          const [, asset] = chosen;
           if (!connection) {
             setStatus(labels.addFailed, true);
             return;
           }
-          signingDownloadKey = key;
-          syncAsset();
+          setBusy(true);
           try {
             appRef?.openExternalUrl?.(
               await readableHref(connection, item, asset.href, controller.signal),
@@ -1399,21 +1917,25 @@ function buildPanel(container: HTMLElement): () => void {
           } catch (error) {
             setStatus(error instanceof Error ? error.message : labels.addFailed, true);
           } finally {
-            // Only this asset's own sign clears the flag: the user may have
-            // moved on and started another one.
-            if (signingDownloadKey === key) signingDownloadKey = null;
-            syncAsset();
+            setBusy(false);
           }
         });
-        syncAsset();
-        actions.append(assetSelect, targetSelect, add, download);
+        actions.append(addSelect);
+        if (renderSelect) actions.append(renderSelect);
+        actions.append(downloadSelect);
       }
       card.append(title, subtitle, actions);
       results.append(card);
     }
   };
 
+  /** The sort the dropdown asks for, or undefined for the server's own order. */
+  const sortDirectionOf = (): StacSortDirection | undefined =>
+    sortSelect.value === "asc" || sortSelect.value === "desc" ? sortSelect.value : undefined;
+
   const parseBbox = (): [number, number, number, number] | undefined => {
+    // A shape replaces the rectangle, so a stale or half-typed bbox must not fail the search.
+    if (searchArea) return undefined;
     const text = bboxField.input.value.trim();
     if (!text) return useExtent.checked ? currentExtent() : undefined;
     const values = text.split(/[ ,]+/).map(Number);
@@ -1439,7 +1961,9 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const searchStatus = (result: StacSearchResult): string => {
-    if (!result.items.length && result.cursor) return labels.noMatchesHere;
+    // Nothing on screen yet, but the search is not finished: a page whose items were all left
+    // out (by the walk or by the cloud limit) is not "no results".
+    if (!allItems.length && (result.cursor || result.next)) return labels.noMatchesHere;
     if (!allItems.length) return labels.noResults;
     if (result.matched) return labels.showingOfMatched(allItems.length, result.matched);
     return labels.showing(allItems.length);
@@ -1500,11 +2024,22 @@ function buildPanel(container: HTMLElement): () => void {
       const start = startField.input.value;
       const end = endField.input.value;
       const datetime = stacDateInterval(start, end);
+      // Load more carries on the search it continues, whatever the controls say by now.
+      const criteria = append
+        ? pageCriteria
+        : {
+            maxCloudCover: cloud.check.checked ? cloud.value() : undefined,
+            sortDirection: sortDirectionOf(),
+          };
+      const { maxCloudCover, sortDirection } = criteria;
       walking?.abort();
       walking = new AbortController();
       const reading = AbortSignal.any([walking.signal, controller.signal]);
       const options = {
-        bbox: extent ?? parseBbox(),
+        bbox: searchArea ? undefined : (extent ?? parseBbox()),
+        intersects: searchArea,
+        sortby: sortDirection,
+        maxCloudCover,
         datetime,
         collections: selectedCollections,
         entries: connection.isApi ? [] : tree.selection(),
@@ -1518,7 +2053,13 @@ function buildPanel(container: HTMLElement): () => void {
         ? await searchStacApi(connection, options)
         : await searchStaticStac(connection, options);
       if (search !== searchGeneration) return;
-      allItems = append ? [...allItems, ...response.items] : response.items;
+      // Checked here as well as asked of the server: some accept a cloud filter and ignore it.
+      const arrived = withinCloudCover(response.items, maxCloudCover);
+      if (!append) pageCriteria = criteria;
+      fetchedItems = append ? [...fetchedItems, ...arrived] : arrived;
+      // Sorted across every page loaded, so Load more slots new items in rather than appending, and
+      // a server that ignored the sort still gives the order asked for.
+      allItems = sortDirection ? sortStacItems(fetchedItems, sortDirection) : fetchedItems;
       nextPage = response.next;
       searchCursor = response.cursor;
       // A fresh search invalidates the selection; "Load more" keeps it.
@@ -1604,21 +2145,59 @@ function buildPanel(container: HTMLElement): () => void {
   searchButton.addEventListener("click", () => void runSearch(false));
   clearResultsButton.addEventListener("click", () => clearSearchResults());
   loadMore.addEventListener("click", () => void runSearch(true));
-  drawButton.addEventListener("click", () => {
-    if (cancelDraw) {
-      cancelDraw();
-      cancelDraw = null;
-      drawButton.textContent = labels.drawBbox;
+  let activeShape: StacDrawShape | null = null;
+  /** Stops a drawing in progress, whichever tool it is, and puts its button back. */
+  const stopDrawing = (): void => {
+    cancelDraw?.();
+    cancelDraw = null;
+    activeShape = null;
+    drawButton.textContent = labels.drawBbox;
+  };
+  /** Shows the search area again: what a drawing that was cancelled had been drawn over. */
+  const restoreOverlay = (): void => {
+    const map = getStacMap(appRef);
+    if (!map) return;
+    if (searchArea) {
+      showDrawGeometry(map, searchArea);
       return;
     }
+    const values = bboxField.input.value.trim().split(/[ ,]+/).map(Number);
+    if (
+      values.length === 4 &&
+      values.every(Number.isFinite) &&
+      values[0] < values[2] &&
+      values[1] < values[3]
+    ) {
+      showDrawBox(map, values as [number, number, number, number]);
+    } else {
+      removeDrawBox(map);
+    }
+  };
+  /** Lets go of the search shape, so the rectangle controls are the ones that count again. */
+  const dropShape = (): void => {
+    areaGeneration += 1;
+    searchArea = undefined;
+    chosenArea = undefined;
+    setDisabled(clearAreaButton, true);
+  };
+  drawButton.addEventListener("click", () => {
+    const wasDrawing = Boolean(cancelDraw);
+    // Whichever tool was drawing is finished with, so the next click on its button starts again.
+    stopDrawing();
+    if (wasDrawing) {
+      restoreOverlay();
+      return;
+    }
+    areaGeneration += 1;
     drawButton.textContent = labels.cancelDrawing;
     setStatus(labels.drawHint);
     cancelDraw = beginBboxDraw((bbox) => {
       cancelDraw = null;
+      dropShape();
       drawButton.textContent = labels.drawBbox;
       bboxField.input.value = bbox.map((value) => value.toFixed(6)).join(", ");
       useExtent.checked = false;
-      clearDrawButton.hidden = false;
+      setDisabled(clearDrawButton, false);
       setStatus(labels.drawnBbox(bboxField.input.value));
     });
     if (!cancelDraw) {
@@ -1626,12 +2205,140 @@ function buildPanel(container: HTMLElement): () => void {
       setStatus(labels.mapNotReady, true);
     }
   });
+  /** Makes `area` the search shape, replacing any rectangle, and shows it on the map. */
+  const setSearchArea = (area: MergedArea): void => {
+    // A drawing still open would later replace this area with its own.
+    stopDrawing();
+    areaGeneration += 1;
+    applyArea(area);
+  };
+  /** Turns a chosen shape into the search area: widened by the buffer when that is on. */
+  function applyArea(area: MergedArea | undefined = chosenArea): void {
+    if (!area) return;
+    const { geometry: shape, ignored } = area;
+    const geometry = bufferMeters() ? bufferGeometry(shape, bufferMeters() / 1000) : shape;
+    const positions = countPositions(geometry);
+    if (positions > AOI_MAX_POSITIONS) {
+      setStatus(labels.areaTooLarge(positions, AOI_MAX_POSITIONS), true);
+      return;
+    }
+    // Only an area that is accepted replaces the one in use.
+    chosenArea = area;
+    searchArea = geometry;
+    bboxField.input.value = "";
+    useExtent.checked = false;
+    setDisabled(clearDrawButton, true);
+    setDisabled(clearAreaButton, false);
+    const map = getStacMap(appRef);
+    if (map) showDrawGeometry(map, geometry);
+    const note = ignored ? ` ${labels.areaIgnored(ignored)}` : "";
+    const grown = geometry !== shape ? ` +${labels.bufferDistance(bufferMeters())}` : "";
+    setStatus(`${labels.areaSet(`${shape.type} (${positions})${grown}`)}${note}`);
+  }
+  /** Starts drawing a shape for the search area; choosing its tool again ends the drawing. */
+  const startShape = (shape: StacDrawShape): void => {
+    const sameTool = Boolean(cancelDraw) && activeShape === shape;
+    stopDrawing();
+    // The same button toggles off; another tool's switches to it.
+    if (sameTool) {
+      restoreOverlay();
+      return;
+    }
+    areaGeneration += 1;
+    activeShape = shape;
+    setStatus(shape === "point" ? labels.drawPointHint : labels.drawShapeHint);
+    cancelDraw = beginShapeDraw(
+      shape,
+      (geometry) => {
+        cancelDraw = null;
+        activeShape = null;
+        setSearchArea({ geometry, ignored: 0 });
+      },
+      () => {
+        cancelDraw = null;
+        activeShape = null;
+        // Escape ends the preview; what was there before is the search area still.
+        restoreOverlay();
+      },
+    );
+    if (!cancelDraw) {
+      activeShape = null;
+      setStatus(labels.mapNotReady, true);
+    }
+  };
+  pointButton.addEventListener("click", () => startShape("point"));
+  lineButton.addEventListener("click", () => startShape("line"));
+  polygonButton.addEventListener("click", () => startShape("polygon"));
+  selectionButton.addEventListener("click", () => {
+    const area = selectedFeaturesGeometry();
+    if (!area) return setStatus(labels.noSelection, true);
+    setSearchArea(area);
+  });
+  fileButton.addEventListener("click", () => areaFile.click());
+  areaFile.addEventListener("change", () => {
+    const file = areaFile.files?.[0];
+    // Reset so choosing the same file again still fires a change.
+    areaFile.value = "";
+    if (!file) return;
+    const generation = ++areaGeneration;
+    /**
+     * A read that finishes after another area was chosen or cleared, or after the panel closed,
+     * has been overtaken and is dropped rather than put back over what the user did since.
+     */
+    const current = (): boolean => generation === areaGeneration && !disposed;
+    geometryFromFile(file).then(
+      (area) => {
+        if (current()) setSearchArea(area);
+      },
+      (error) => {
+        if (current()) {
+          setStatus(error instanceof Error ? error.message : labels.areaFileFailed, true);
+        }
+      },
+    );
+  });
+  clearAreaButton.addEventListener("click", () => {
+    stopDrawing();
+    dropShape();
+    const map = getStacMap(appRef);
+    if (map) removeDrawBox(map);
+    setStatus(labels.areaCleared);
+  });
   clearDrawButton.addEventListener("click", () => {
     bboxField.input.value = "";
-    clearDrawButton.hidden = true;
+    setDisabled(clearDrawButton, true);
     const map = getStacMap(appRef);
     if (map) removeDrawBox(map);
     setStatus(labels.drawnBboxCleared);
+  });
+  /**
+   * The rectangle and the shape are two ways to say where to search, and the one touched last wins:
+   * typing a bbox or turning on the map extent lets the shape go, rather than being ignored.
+   */
+  const rectangleReplacesShape = (): void => {
+    if (!searchArea) return;
+    dropShape();
+    const map = getStacMap(appRef);
+    if (map) removeDrawBox(map);
+    setStatus(labels.areaCleared);
+  };
+  bboxField.input.addEventListener("input", () => {
+    if (bboxField.input.value.trim()) rectangleReplacesShape();
+  });
+  useExtent.addEventListener("change", () => {
+    if (useExtent.checked) rectangleReplacesShape();
+  });
+  // Changing the sort re-orders what is on screen, in the order the server gave it when it is
+  // the server's own.
+  sortSelect.addEventListener("change", () => {
+    pageCriteria = { ...pageCriteria, sortDirection: sortDirectionOf() };
+    if (!fetchedItems.length) return;
+    allItems = pageCriteria.sortDirection
+      ? sortStacItems(fetchedItems, pageCriteria.sortDirection)
+      : fetchedItems;
+    renderItems();
+    showFootprints(allItems);
+    applySelection(false);
   });
 
   // Clicking a footprint selects the matching result card. The bbox-draw mode
@@ -1687,6 +2394,8 @@ function buildPanel(container: HTMLElement): () => void {
 
   return () => {
     controller.abort();
+    disposed = true;
+    areaGeneration += 1;
     cancelDraw?.();
     searchGeneration += 1;
     // The footprints are the user's layer now, so closing the panel leaves them

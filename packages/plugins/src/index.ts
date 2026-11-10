@@ -695,6 +695,16 @@ export {
 } from "./plugins/maplibre-sentinel2-explorer";
 export { registerSentinel2CompositeProtocol } from "./plugins/sentinel2-composite";
 export {
+  DEFAULT_RENDER_RAMP,
+  RENDER_RAMPS,
+  registerStacRenderProtocol,
+  renderTileUrl,
+  specFromTileUrl,
+  withRenderStyle,
+  type RenderRamp,
+  type RenderStyle,
+} from "./plugins/stac-render";
+export {
   OCEAN_DATA_PLATFORM_PLUGIN_ID,
   maplibreOceanDataPlatformPlugin,
   setOceanDataPlatformFileSaver,

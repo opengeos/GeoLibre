@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { waitForMap } from "./helpers";
+import { bindMapLibreMap, waitForMap } from "./helpers";
 
 // `maplibre-stac.ts` builds its panel by hand and exports nothing to call, so the wiring between
 // the catalog tree, the collection list and the search only exists here. An API is the half that
@@ -132,11 +132,13 @@ test("asset options identify their format and whether they can be added", async 
   await page.getByLabel("Limit search to the current map extent").uncheck();
   await page.getByRole("button", { name: "Search items" }).click();
 
+  // The card's "Assets" menu names itself and drops the asset list.
   const assets = page
-    .locator("select")
-    .filter({ has: page.locator('option[value="red"]') })
+    .getByRole("combobox")
+    .filter({ hasText: /^Assets/ })
     .first();
   await expect(assets.getByRole("option")).toHaveText([
+    "Assets",
     "Red Band — COG",
     "Boundaries — GeoJSON",
     "Vector tiles — PMTiles",
@@ -201,7 +203,12 @@ test("Planetary Computer COG assets are signed before raster reads", async ({ pa
     .selectOption("private-cog");
   await page.getByRole("button", { name: "Search items" }).click();
   await expect(page.getByText(/Showing 1 of 1 items\./)).toBeVisible();
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  // Choosing an asset from the "Assets" menu adds it straight away.
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: /^Assets/ })
+    .first()
+    .selectOption({ label: "data — COG" });
 
   await expect.poll(() => assetRequests.length).toBeGreaterThan(0);
   expect(signingRequests).toBe(1);
@@ -317,4 +324,352 @@ test("connecting to an API after a static catalog clears the tree", async ({ pag
   await expect(page.getByText("E2E STAC API")).toBeVisible();
   await expect(page.getByRole("tree")).toBeHidden();
   await expect(page.getByRole("treeitem")).toHaveCount(0);
+});
+
+test("Add rendering offers the combinations and indices an item has the bands for", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red"),
+    green: band("green"),
+    blue: band("blue"),
+    nir: band("nir"),
+  });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  // Only what red, green, blue and NIR can make: no SWIR combinations or indices.
+  const rendering = page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first();
+  await expect(rendering.getByRole("option")).toHaveText([
+    "Bands",
+    "True color",
+    "Color infrared (vegetation)",
+    "NDVI (vegetation)",
+    "NDWI (water, green/NIR)",
+    "SAVI (soil-adjusted vegetation)",
+    "EVI (enhanced vegetation)",
+  ]);
+
+  // Choosing one adds it straight away, as a layer named for the item and the rendering.
+  await rendering.selectOption({ label: "NDVI (vegetation)" });
+  const layers = page.getByRole("complementary", { name: "Layers" });
+  await expect(layers.getByText(/NDVI \(vegetation\)/)).toBeVisible();
+});
+
+test("the buffer and cloud cover limits are checkboxes that unlock a number", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  for (const [name, fallback] of [
+    [/Buffer points and lines/, "100"],
+    [/Max cloud/, "10"],
+  ] as const) {
+    const check = page.getByRole("checkbox", { name });
+    await expect(check).not.toBeChecked();
+    const box = page.getByRole("spinbutton", { name });
+    await expect(box).toBeDisabled();
+    await expect(box).toHaveValue(fallback);
+    await check.check();
+    await expect(box).toBeEnabled();
+  }
+});
+
+test("the sort order and the cloud cover limit share one row", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  const sort = page.getByRole("combobox").filter({ hasText: "Server default" });
+  const cloud = page.getByRole("checkbox", { name: /Max cloud/ });
+  // The panel can be dragged narrow, and a row that only fits in a wide one is not one row.
+  await sort.evaluate((select) => {
+    select.closest("label")!.parentElement!.parentElement!.style.width = "300px";
+  });
+  const [sortBox, cloudBox] = await Promise.all([sort.boundingBox(), cloud.boundingBox()]);
+  expect(sortBox).not.toBeNull();
+  expect(cloudBox).not.toBeNull();
+  // Side by side, cloud cover on the left: the checkbox sits inside the dropdown's vertical span.
+  expect(cloudBox!.y).toBeGreaterThanOrEqual(sortBox!.y - 4);
+  expect(cloudBox!.y).toBeLessThan(sortBox!.y + sortBox!.height);
+  expect(sortBox!.x).toBeGreaterThan(cloudBox!.x + cloudBox!.width);
+});
+
+test("an item's Zoom, Assets, Bands and Download share one row, whatever the asset names", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string, title: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red", "Aerosol optical thickness with a very long descriptive title (AOT)"),
+    green: band("green", "Green"),
+    blue: band("blue", "Blue"),
+    nir: band("nir", "Near infrared, narrow band, 10 m"),
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  const card = page.getByRole("button", { name: "Zoom", exact: true }).first().locator("..");
+  const boxes = await Promise.all(
+    [
+      card.getByRole("button", { name: "Zoom", exact: true }),
+      card.getByRole("combobox").filter({ hasText: /^Assets/ }),
+      card.getByRole("combobox").filter({ hasText: /^Bands/ }),
+      card.getByRole("combobox").filter({ hasText: /^Download/ }),
+    ].map((control) => control.boundingBox()),
+  );
+  const panel = await card.boundingBox();
+  for (const box of boxes) expect(box).not.toBeNull();
+  const [zoom, ...menus] = boxes as NonNullable<(typeof boxes)[number]>[];
+  for (const menu of menus) {
+    // Same row as Zoom, and inside the card rather than spilling out of it.
+    expect(Math.abs(menu.y - zoom.y)).toBeLessThan(8);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(panel!.x + panel!.width + 1);
+  }
+});
+
+/**
+ * The recipes of the STAC rendering sources on the live map, decoded from their tile URLs. This is
+ * what the map is actually drawing from, as against what the store or the controls say.
+ */
+async function liveRenderingRecipes(page: Page): Promise<Array<Record<string, unknown>>> {
+  await bindMapLibreMap(page);
+  const urls = await page.evaluate(() => {
+    const map = (window as unknown as { __geolibreTestMap?: { getStyle(): { sources: object } } })
+      .__geolibreTestMap;
+    const sources = Object.values(map?.getStyle().sources ?? {}) as Array<{ tiles?: string[] }>;
+    return sources
+      .flatMap((source) => source.tiles ?? [])
+      .filter((url) => url.startsWith("stacrender://"));
+  });
+  return urls.map((url) => {
+    const encoded = new URL(url.replace("{z}/{x}/{y}", "0/0/0")).searchParams.get("s");
+    return JSON.parse(encoded ?? "{}") as Record<string, unknown>;
+  });
+}
+
+test("a band rendering has the Edit raster style entry, and its style editor", async ({ page }) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, {
+    red: band("red"),
+    green: band("green"),
+    blue: band("blue"),
+    nir: band("nir"),
+  });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+
+  const bands = page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first();
+  await bands.selectOption({ label: "NDVI (vegetation)" });
+  const row = page.locator('[data-testid="layer-row"][data-layer-name$="NDVI (vegetation)"]');
+  await expect(row).toBeVisible();
+
+  // The same entry a COG layer has, opening a style editor made for this kind of layer.
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  const editor = page.getByTestId("stac-rendering-style");
+  await expect(editor).toBeVisible();
+  await expect(editor.getByLabel("Color ramp")).toHaveValue("BrBG");
+
+  // An edit is kept: the ramp survives the editor being closed and opened again.
+  await editor.getByLabel("Color ramp").selectOption("RdYlGn");
+  await page.waitForTimeout(800);
+  await editor
+    .locator("xpath=ancestor::aside[1]")
+    .getByRole("button", { name: /Collapse/ })
+    .click();
+  await expect(editor).toBeHidden();
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  await expect(page.getByTestId("stac-rendering-style").getByLabel("Color ramp")).toHaveValue(
+    "RdYlGn",
+  );
+
+  // The map itself is drawing from the edited recipe, not only the store and the controls.
+  await expect
+    .poll(async () => (await liveRenderingRecipes(page)).map((recipe) => recipe.style))
+    .toEqual([{ ramp: "RdYlGn" }]);
+
+  // An undo puts the map and the controls back, which the edit alone never had to do.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^Undo/ }).click();
+  await expect
+    .poll(async () => (await liveRenderingRecipes(page)).map((recipe) => recipe.style))
+    .toEqual([undefined]);
+  await expect(page.getByTestId("stac-rendering-style").getByLabel("Color ramp")).toHaveValue(
+    "BrBG",
+  );
+});
+
+test("a colour composite's style editor offers brightness and gamma, not a ramp", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  const band = (name: string) => ({
+    href: `https://data.test/${name}.tif`,
+    type: "image/tiff",
+    title: name,
+    "eo:bands": [{ common_name: name }],
+  });
+  await serveApi(page, searches, { red: band("red"), green: band("green"), blue: band("blue") });
+  await page.route("https://data.test/**", (route) =>
+    route.fulfill({ status: 404, body: "fixture only" }),
+  );
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: /^Bands/ })
+    .first()
+    .selectOption({ label: "True color" });
+  const row = page.locator('[data-testid="layer-row"][data-layer-name$="True color"]');
+  await row.locator('button[aria-label="Layer actions"]').click();
+  await page.getByRole("menuitem", { name: "Edit raster style…" }).click();
+  const editor = page.getByTestId("stac-rendering-style");
+  await expect(editor.getByText("Brightness")).toBeVisible();
+  await expect(editor.getByText("Gamma")).toBeVisible();
+  await expect(editor.getByLabel("Color ramp")).toHaveCount(0);
+});
+
+test("changing the sort order re-orders the results already on screen", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  // Registered after the fixture, so it answers first: three items, out of date order.
+  await page.route("https://api.stac.test/**/search", (route) => {
+    const dated = (id: string, datetime: string) => ({
+      ...item(id, "sentinel-2"),
+      properties: { datetime },
+    });
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        type: "FeatureCollection",
+        features: [
+          dated("item-old", "2024-01-01T00:00:00Z"),
+          dated("item-new", "2024-03-01T00:00:00Z"),
+          dated("item-mid", "2024-02-01T00:00:00Z"),
+        ],
+        numberMatched: 3,
+        links: [],
+      }),
+    });
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  const order = async (): Promise<string[]> =>
+    page.getByText(/^item-(old|mid|new)$/).allTextContents();
+  await expect.poll(order).toEqual(["item-old", "item-new", "item-mid"]);
+
+  const sort = page.getByRole("combobox", { name: /Sort by date/ });
+  // No new search is made: the same results fall into the order asked for.
+  await sort.selectOption({ label: "Newest first" });
+  await expect.poll(order).toEqual(["item-new", "item-mid", "item-old"]);
+  await sort.selectOption({ label: "Oldest first" });
+  await expect.poll(order).toEqual(["item-old", "item-mid", "item-new"]);
+  // And the server's own order comes back when asked for.
+  await sort.selectOption({ label: "Server default" });
+  await expect.poll(order).toEqual(["item-old", "item-new", "item-mid"]);
+});
+
+test("typing a bbox lets go of the search shape, and a cancelled draw resets its tool", async ({
+  page,
+}) => {
+  const searches: string[] = [];
+  await serveApi(page, searches);
+  await waitForMap(page);
+  await connect(page, API);
+
+  // A point on the map becomes the search shape.
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await page.locator(".maplibregl-canvas").click({ position: { x: 300, y: 300 } });
+  await expect(page.getByText(/Searching within Point/)).toBeVisible();
+  const clearShape = page.getByRole("button", { name: "Clear shape" });
+  await expect(clearShape).toBeEnabled();
+
+  // A bbox typed afterwards is what the user means now, so the shape does not silently win.
+  await page.getByLabel(/Bounding box/).fill("0, 0, 1, 1");
+  await expect(page.getByText("Search shape cleared.")).toBeVisible();
+  await expect(clearShape).toBeDisabled();
+
+  // A point draw cancelled by the bbox button, and a bbox draw begun after it, must not leave the
+  // Point tool believing it is the one drawing: its next click starts a point, not switches off.
+  const cursor = () =>
+    page.locator(".maplibregl-canvas").evaluate((canvas) => (canvas as HTMLElement).style.cursor);
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await expect.poll(cursor).toBe("crosshair");
+  await page.getByRole("button", { name: "Draw bbox on map" }).click();
+  await expect.poll(cursor).toBe("");
+  await page.getByRole("button", { name: "Draw bbox on map" }).click();
+  await expect(page.getByRole("button", { name: "Cancel drawing" })).toBeVisible();
+  await page.getByRole("button", { name: "Point", exact: true }).click();
+  await expect.poll(cursor).toBe("crosshair");
+
+  // Enter in a field of the panel is for that field; it does not end the drawing.
+  await page.getByLabel(/Bounding box/).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(cursor).toBe("crosshair");
+  // And Enter with nothing drawn yet leaves it open too.
+  await page.locator(".maplibregl-canvas").hover({ position: { x: 200, y: 200 } });
+  await page.keyboard.press("Enter");
+  await expect.poll(cursor).toBe("crosshair");
+});
+
+test("every menu on a result has a name of its own", async ({ page }) => {
+  const searches: string[] = [];
+  await serveApi(page, searches, {
+    data: { href: "https://data.test/data.tif", type: "image/tiff", title: "Data" },
+  });
+  await waitForMap(page);
+  await connect(page, API);
+  await page.getByLabel("Limit search to the current map extent").uncheck();
+  await page.getByRole("button", { name: "Search items" }).click();
+  // Named for what they do, not by whichever option happens to be selected.
+  await expect(page.getByRole("combobox", { name: "Download" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: /Add one of this item's assets/ }).first(),
+  ).toBeVisible();
 });
