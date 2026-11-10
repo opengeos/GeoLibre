@@ -272,7 +272,7 @@ describe("imdfLoadedLayers", () => {
       onLevels: true,
       geojson: {
         type: "FeatureCollection",
-        features: [unit("walkway"), unit("opentobelow"), unit(" "), unit(null), unit("walkway")],
+        features: [unit("walkway"), unit("opentobelow"), unit(" "), unit(null), unit(" walkway ")],
       },
     });
     // The voids keep a stop so the list matches the Style pane's "All (N)".

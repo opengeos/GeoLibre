@@ -84,7 +84,9 @@ export function unitCategoryClasses(layer: ImdfLayer): {
   const categories = new Set<string>();
   for (const feature of layer.geojson.features) {
     const category = feature.properties?.category;
-    if (typeof category === "string" && category.trim()) categories.add(category);
+    // Trim once: the categorized renderer matches on the trimmed stop value.
+    const trimmed = typeof category === "string" ? category.trim() : "";
+    if (trimmed) categories.add(trimmed);
   }
   const stops = [...categories]
     .sort()
