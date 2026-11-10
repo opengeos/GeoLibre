@@ -6069,6 +6069,19 @@
           "falseResult": "Yanlış Sonucu",
           "activeOutput": "Etkin Çıktı"
         }
+      },
+      "samples": {
+        "menu": "Örnekler",
+        "menuHint": "Örnek bir iş akışı yükle",
+        "heading": "Örnek iş akışları",
+        "loadingLog": "\"{{name}}\" örneği yükleniyor…",
+        "dataAddedLog": "\"{{name}}\" örnek verisi haritaya eklendi.",
+        "dataFailed": "\"{{name}}\" örnek verisi eklenemedi",
+        "loadedLog": "\"{{name}}\" örneği yüklendi.",
+        "loadFailed": "Örnek yüklenemedi",
+        "rasterUnsupported": "\"{{name}}\" örnek verisi bir rasterdir ve bu derleme onu haritaya ekleyemez.",
+        "dataUnusable": "bir GeoJSON FeatureCollection değil",
+        "dataTooLarge": "{{size}} MB'tan büyük"
       }
     },
     "parameterField": {

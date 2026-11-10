@@ -6432,6 +6432,19 @@
           "falseResult": "النتيجة الخاطئة",
           "activeOutput": "المخرج النشط"
         }
+      },
+      "samples": {
+        "menu": "أمثلة",
+        "menuHint": "تحميل سير عمل نموذجي",
+        "heading": "مسارات عمل نموذجية",
+        "loadingLog": "جارٍ تحميل المثال \"{{name}}\"…",
+        "dataAddedLog": "تمت إضافة البيانات النموذجية \"{{name}}\" إلى الخريطة.",
+        "dataFailed": "تعذّرت إضافة البيانات النموذجية \"{{name}}\"",
+        "loadedLog": "تم تحميل المثال \"{{name}}\".",
+        "loadFailed": "تعذّر تحميل المثال",
+        "rasterUnsupported": "البيانات النموذجية \"{{name}}\" نقطية، ولا يمكن لهذا الإصدار إضافتها إلى الخريطة.",
+        "dataUnusable": "ليست GeoJSON FeatureCollection",
+        "dataTooLarge": "أكبر من {{size}} ميغابايت"
       }
     },
     "parameterField": {

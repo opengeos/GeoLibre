@@ -6069,6 +6069,19 @@
           "falseResult": "„მცდარი“ შედეგი",
           "activeOutput": "აქტიური გამომავალი"
         }
+      },
+      "samples": {
+        "menu": "ნიმუშები",
+        "menuHint": "ნიმუში სამუშაო პროცესის ჩატვირთვა",
+        "heading": "ნიმუში სამუშაო პროცესები",
+        "loadingLog": "იტვირთება ნიმუში „{{name}}“…",
+        "dataAddedLog": "ნიმუში მონაცემები „{{name}}“ დაემატა რუკას.",
+        "dataFailed": "ნიმუში მონაცემების „{{name}}“ დამატება ვერ მოხერხდა",
+        "loadedLog": "ნიმუში „{{name}}“ ჩაიტვირთა.",
+        "loadFailed": "ნიმუშის ჩატვირთვა ვერ მოხერხდა",
+        "rasterUnsupported": "ნიმუში მონაცემები „{{name}}“ რასტრია, რომლის რუკაზე დამატებაც ამ ვერსიას არ შეუძლია.",
+        "dataUnusable": "არ არის GeoJSON FeatureCollection",
+        "dataTooLarge": "აღემატება {{size}} MB-ს"
       }
     },
     "parameterField": {

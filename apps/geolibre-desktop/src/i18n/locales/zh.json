@@ -5978,6 +5978,19 @@
           "falseResult": "假结果",
           "activeOutput": "活动输出"
         }
+      },
+      "samples": {
+        "menu": "示例",
+        "menuHint": "加载示例工作流",
+        "heading": "示例工作流",
+        "loadingLog": "正在加载示例“{{name}}”…",
+        "dataAddedLog": "已将示例数据“{{name}}”添加到地图。",
+        "dataFailed": "无法添加示例数据“{{name}}”",
+        "loadedLog": "已加载示例“{{name}}”。",
+        "loadFailed": "无法加载示例",
+        "rasterUnsupported": "示例数据“{{name}}”是栅格数据，此版本无法将其添加到地图。",
+        "dataUnusable": "不是 GeoJSON FeatureCollection",
+        "dataTooLarge": "大于 {{size}} MB"
       }
     },
     "parameterField": {

@@ -5978,6 +5978,19 @@
           "falseResult": "ผลลัพธ์ False",
           "activeOutput": "เอาต์พุตที่ใช้งานอยู่"
         }
+      },
+      "samples": {
+        "menu": "ตัวอย่าง",
+        "menuHint": "โหลดเวิร์กโฟลว์ตัวอย่าง",
+        "heading": "เวิร์กโฟลว์ตัวอย่าง",
+        "loadingLog": "กำลังโหลดตัวอย่าง \"{{name}}\"…",
+        "dataAddedLog": "เพิ่มข้อมูลตัวอย่าง \"{{name}}\" ลงในแผนที่แล้ว",
+        "dataFailed": "ไม่สามารถเพิ่มข้อมูลตัวอย่าง \"{{name}}\"",
+        "loadedLog": "โหลดตัวอย่าง \"{{name}}\" แล้ว",
+        "loadFailed": "ไม่สามารถโหลดตัวอย่าง",
+        "rasterUnsupported": "ข้อมูลตัวอย่าง \"{{name}}\" เป็นแรสเตอร์ ซึ่งบิลด์นี้ไม่สามารถเพิ่มลงในแผนที่ได้",
+        "dataUnusable": "ไม่ใช่ GeoJSON FeatureCollection",
+        "dataTooLarge": "ใหญ่กว่า {{size}} MB"
       }
     },
     "parameterField": {

@@ -6069,6 +6069,19 @@
           "falseResult": "Resultado Falso",
           "activeOutput": "Saída ativa"
         }
+      },
+      "samples": {
+        "menu": "Exemplos",
+        "menuHint": "Carregar um fluxo de trabalho de exemplo",
+        "heading": "Fluxos de trabalho de exemplo",
+        "loadingLog": "Carregando o exemplo \"{{name}}\"…",
+        "dataAddedLog": "Dados de exemplo \"{{name}}\" adicionados ao mapa.",
+        "dataFailed": "Não foi possível adicionar os dados de exemplo \"{{name}}\"",
+        "loadedLog": "Exemplo \"{{name}}\" carregado.",
+        "loadFailed": "Não foi possível carregar o exemplo",
+        "rasterUnsupported": "Os dados de exemplo \"{{name}}\" são um raster, que esta compilação não pode adicionar ao mapa.",
+        "dataUnusable": "não é uma FeatureCollection GeoJSON",
+        "dataTooLarge": "maior que {{size}} MB"
       }
     },
     "parameterField": {

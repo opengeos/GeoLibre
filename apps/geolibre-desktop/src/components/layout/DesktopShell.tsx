@@ -966,6 +966,9 @@ export function DesktopShell({
                         name,
                       });
                     }}
+                    onAddRasterUrl={(url, name) =>
+                      addRasterToMap(createAppAPI(mapControllerRef), url, { name })
+                    }
                   />
                 </Suspense>
               </MountWhenOpened>

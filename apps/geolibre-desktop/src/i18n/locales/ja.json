@@ -5978,6 +5978,19 @@
           "falseResult": "False の結果",
           "activeOutput": "アクティブな出力"
         }
+      },
+      "samples": {
+        "menu": "サンプル",
+        "menuHint": "サンプルワークフローを読み込む",
+        "heading": "サンプルワークフロー",
+        "loadingLog": "サンプル「{{name}}」を読み込んでいます…",
+        "dataAddedLog": "サンプルデータ「{{name}}」を地図に追加しました。",
+        "dataFailed": "サンプルデータ「{{name}}」を追加できませんでした",
+        "loadedLog": "サンプル「{{name}}」を読み込みました。",
+        "loadFailed": "サンプルを読み込めませんでした",
+        "rasterUnsupported": "サンプルデータ「{{name}}」はラスターのため、このビルドでは地図に追加できません。",
+        "dataUnusable": "GeoJSON FeatureCollection ではありません",
+        "dataTooLarge": "{{size}} MB を超えています"
       }
     },
     "parameterField": {

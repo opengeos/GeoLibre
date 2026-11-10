@@ -6069,6 +6069,19 @@
           "falseResult": "نتیجهٔ False",
           "activeOutput": "خروجی فعال"
         }
+      },
+      "samples": {
+        "menu": "نمونه‌ها",
+        "menuHint": "بارگذاری گردش کار نمونه",
+        "heading": "گردش‌کارهای نمونه",
+        "loadingLog": "در حال بارگذاری نمونه «{{name}}»…",
+        "dataAddedLog": "داده نمونه «{{name}}» به نقشه افزوده شد.",
+        "dataFailed": "افزودن داده نمونه «{{name}}» ممکن نشد",
+        "loadedLog": "نمونه «{{name}}» بارگذاری شد.",
+        "loadFailed": "بارگذاری نمونه ممکن نشد",
+        "rasterUnsupported": "داده نمونه «{{name}}» رستری است که این نسخه نمی‌تواند آن را به نقشه بیفزاید.",
+        "dataUnusable": "یک GeoJSON FeatureCollection نیست",
+        "dataTooLarge": "بزرگ‌تر از {{size}} مگابایت"
       }
     },
     "parameterField": {

@@ -6069,6 +6069,19 @@
           "falseResult": "Onwaar-resultaat",
           "activeOutput": "Actieve uitvoer"
         }
+      },
+      "samples": {
+        "menu": "Voorbeelden",
+        "menuHint": "Een voorbeeldworkflow laden",
+        "heading": "Voorbeeldworkflows",
+        "loadingLog": "Voorbeeld \"{{name}}\" laden…",
+        "dataAddedLog": "Voorbeeldgegevens \"{{name}}\" aan de kaart toegevoegd.",
+        "dataFailed": "Kan voorbeeldgegevens \"{{name}}\" niet toevoegen",
+        "loadedLog": "Voorbeeld \"{{name}}\" geladen.",
+        "loadFailed": "Kan het voorbeeld niet laden",
+        "rasterUnsupported": "Voorbeeldgegevens \"{{name}}\" zijn een raster, dat deze build niet aan de kaart kan toevoegen.",
+        "dataUnusable": "geen GeoJSON-FeatureCollection",
+        "dataTooLarge": "groter dan {{size}} MB"
       }
     },
     "parameterField": {
