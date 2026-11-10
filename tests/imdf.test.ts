@@ -259,4 +259,27 @@ describe("imdfLoadedLayers", () => {
       assert.equal(layer.path, "/data/museum.zip");
     }
   });
+
+  it("gives every unit category a stop, opentobelow included, and skips blanks", async () => {
+    const { unitCategoryClasses } = await import("../apps/geolibre-desktop/src/lib/imdf-layers");
+    const unit = (category: unknown) => ({
+      type: "Feature" as const,
+      geometry: null,
+      properties: { category },
+    });
+    const { stops, classCount } = unitCategoryClasses({
+      featureType: "unit",
+      onLevels: true,
+      geojson: {
+        type: "FeatureCollection",
+        features: [unit("walkway"), unit("opentobelow"), unit(" "), unit(null), unit("walkway")],
+      },
+    });
+    // The voids keep a stop so the list matches the Style pane's "All (N)".
+    assert.deepEqual(stops, [
+      { value: "opentobelow", color: "#9ca3af", label: "opentobelow" },
+      { value: "walkway", color: "#e5e7eb", label: "walkway" },
+    ]);
+    assert.equal(classCount, 2);
+  });
 });

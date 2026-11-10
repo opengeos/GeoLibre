@@ -41,7 +41,10 @@ const UNIT_CATEGORY_COLORS: [string[], string][] = [
     ],
     "#a78bfa",
   ],
-  [["nonpublic", "privatelounge", "storage", "mechanical", "unenclosedarea"], "#9ca3af"],
+  [
+    ["nonpublic", "privatelounge", "storage", "mechanical", "unenclosedarea", "opentobelow"],
+    "#9ca3af",
+  ],
   [["parking", "vehiclelane", "road"], "#6b7280"],
   [["shop", "restaurant", "foodservice", "retail"], "#34d399"],
 ];
@@ -63,10 +66,16 @@ function unitCategoryColor(category: string): string {
  * categorized renderer rather than a raw expression, so the Style pane shows
  * (and can edit) the classes the map draws.
  *
+ * `opentobelow` keeps its stop even though the unit filter hides those
+ * features: the Style pane counts every distinct value for "All (N)" and
+ * regenerates the stops from all of them, so leaving it out would make the
+ * class list change shape the first time the user edits it. Its color is
+ * never drawn. Blank categories get no stop, because the categorized renderer
+ * drops blank values.
+ *
  * @param layer - The archive's unit layer.
- * @returns The stops, leaving out the `opentobelow` voids the unit filter
- *   hides, and a class count equal to every distinct category in the data so
- *   the Style pane selects "All" for it.
+ * @returns The stops, and a class count equal to their number so the Style
+ *   pane selects "All" for them.
  */
 export function unitCategoryClasses(layer: ImdfLayer): {
   stops: VectorStyleStop[];
@@ -78,10 +87,9 @@ export function unitCategoryClasses(layer: ImdfLayer): {
     if (typeof category === "string" && category.trim()) categories.add(category);
   }
   const stops = [...categories]
-    .filter((category) => category !== "opentobelow")
     .sort()
     .map((category) => ({ value: category, color: unitCategoryColor(category), label: category }));
-  return { stops, classCount: Math.max(1, categories.size) };
+  return { stops, classCount: Math.max(1, stops.length) };
 }
 
 /** Extrusion settings that stack a feature on its floor. */
