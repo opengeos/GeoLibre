@@ -231,7 +231,26 @@ describe("imdfLoadedLayers", () => {
       ["has", "ordinal"],
     ]);
     assert.deepEqual(units.levelFilter, { field: "ordinal", mode: "all", level: null });
-    assert.match(units.style?.extrusionColorExpression ?? "", /"match"/);
+    // Units are colored by a categorized renderer the Style pane can show and
+    // edit (issue #3388), not an opaque advanced expression.
+    assert.equal(units.style?.vectorStyleMode, "categorized");
+    assert.equal(units.style?.vectorStyleProperty, "category");
+    assert.equal(units.style?.extrusionAdvancedStyleEnabled, undefined);
+    assert.equal(units.style?.vectorStyleClassCount, 2);
+    assert.deepEqual(units.style?.vectorStyleStops, [
+      { value: "room", color: "#60a5fa", label: "room" },
+      { value: "walkway", color: "#e5e7eb", label: "walkway" },
+    ]);
+    const { DEFAULT_LAYER_STYLE, extrusionColorValue } = await import("@geolibre/core");
+    assert.deepEqual(extrusionColorValue({ ...DEFAULT_LAYER_STYLE, ...units.style }), [
+      "match",
+      ["to-string", ["get", "category"]],
+      "room",
+      "#60a5fa",
+      "walkway",
+      "#e5e7eb",
+      "#bfdbfe",
+    ]);
     // The venue outline is not on a floor, so it stays out of the picker.
     assert.equal(byEntry.get("imdf:venue")!.levelFilter, undefined);
     assert.equal(byEntry.get("imdf:venue")!.style?.extrusionEnabled, undefined);

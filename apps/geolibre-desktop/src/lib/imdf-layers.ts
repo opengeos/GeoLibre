@@ -1,4 +1,4 @@
-import type { LayerStyle } from "@geolibre/core";
+import type { LayerStyle, VectorStyleStop } from "@geolibre/core";
 import i18next from "i18next";
 import type { FeatureCollection } from "geojson";
 import type { LoadedVectorLayer } from "./file-io/loaded-layer";
@@ -46,12 +46,42 @@ const UNIT_CATEGORY_COLORS: [string[], string][] = [
   [["shop", "restaurant", "foodservice", "retail"], "#34d399"],
 ];
 
-/** A MapLibre `match` on `category` over {@link UNIT_CATEGORY_COLORS}. */
-export function unitColorExpression(fallback: string): unknown[] {
-  const match: unknown[] = ["match", ["get", "category"]];
-  for (const [categories, color] of UNIT_CATEGORY_COLORS) match.push(categories, color);
-  match.push(fallback);
-  return match;
+/** The fallback unit color, for categories outside {@link UNIT_CATEGORY_COLORS}. */
+const UNIT_FALLBACK_COLOR = "#bfdbfe";
+
+/** The color a unit category draws in. */
+function unitCategoryColor(category: string): string {
+  for (const [categories, color] of UNIT_CATEGORY_COLORS) {
+    if (categories.includes(category)) return color;
+  }
+  return UNIT_FALLBACK_COLOR;
+}
+
+/**
+ * The categorized renderer for an archive's units (issue #3388): one stop per
+ * distinct `category`, in sorted order. Units are colored through the regular
+ * categorized renderer rather than a raw expression, so the Style pane shows
+ * (and can edit) the classes the map draws.
+ *
+ * @param layer - The archive's unit layer.
+ * @returns The stops, leaving out the `opentobelow` voids the unit filter
+ *   hides, and a class count equal to every distinct category in the data so
+ *   the Style pane selects "All" for it.
+ */
+export function unitCategoryClasses(layer: ImdfLayer): {
+  stops: VectorStyleStop[];
+  classCount: number;
+} {
+  const categories = new Set<string>();
+  for (const feature of layer.geojson.features) {
+    const category = feature.properties?.category;
+    if (typeof category === "string" && category.trim()) categories.add(category);
+  }
+  const stops = [...categories]
+    .filter((category) => category !== "opentobelow")
+    .sort()
+    .map((category) => ({ value: category, color: unitCategoryColor(category), label: category }));
+  return { stops, classCount: Math.max(1, categories.size) };
 }
 
 /** Extrusion settings that stack a feature on its floor. */
@@ -97,14 +127,20 @@ function presentation(
           extrusionOpacity: 0.6,
         },
       };
-    case "unit":
+    case "unit": {
+      const classes = unitCategoryClasses(layer);
       return {
         style: {
           ...stacked(lowestOrdinal, UNIT_HEIGHT),
-          extrusionColor: "#bfdbfe",
+          // The categorized renderer colors the extrusion too, and features
+          // whose category has no stop fall back to the extrusion color.
+          extrusionColor: UNIT_FALLBACK_COLOR,
           extrusionOpacity: 0.85,
-          extrusionAdvancedStyleEnabled: true,
-          extrusionColorExpression: JSON.stringify(unitColorExpression("#bfdbfe")),
+          fillColor: UNIT_FALLBACK_COLOR,
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "category",
+          vectorStyleStops: classes.stops,
+          vectorStyleClassCount: classes.classCount,
         },
         // An open-to-below unit is the void of an atrium; drawing it as a solid
         // would plug the hole it describes. A unit with no resolvable level has
@@ -112,6 +148,7 @@ function presentation(
         // on the ground floor.
         filterExpression: ["all", ["!=", ["get", "category"], "opentobelow"], ["has", "ordinal"]],
       };
+    }
     case "opening":
       return { style: { strokeColor: "#dc2626", strokeWidth: 3 } };
     case "amenity":
