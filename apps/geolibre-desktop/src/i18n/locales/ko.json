@@ -5978,6 +5978,16 @@
           "falseResult": "False 결과",
           "activeOutput": "활성 출력"
         }
+      },
+      "samples": {
+        "menu": "샘플",
+        "menuHint": "샘플 워크플로 불러오기",
+        "heading": "샘플 워크플로",
+        "loadingLog": "샘플 \"{{name}}\" 불러오는 중…",
+        "dataAddedLog": "샘플 데이터 \"{{name}}\"을(를) 지도에 추가했습니다.",
+        "dataFailed": "샘플 데이터 \"{{name}}\"을(를) 추가할 수 없습니다",
+        "loadedLog": "샘플 \"{{name}}\"을(를) 불러왔습니다.",
+        "loadFailed": "샘플을 불러올 수 없습니다"
       }
     },
     "parameterField": {

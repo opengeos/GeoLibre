@@ -6069,6 +6069,16 @@
           "falseResult": "Résultat Faux",
           "activeOutput": "Sortie active"
         }
+      },
+      "samples": {
+        "menu": "Exemples",
+        "menuHint": "Charger un flux de travail d'exemple",
+        "heading": "Flux de travail d'exemple",
+        "loadingLog": "Chargement de l'exemple « {{name}} »…",
+        "dataAddedLog": "Données d'exemple « {{name}} » ajoutées à la carte.",
+        "dataFailed": "Impossible d'ajouter les données d'exemple « {{name}} »",
+        "loadedLog": "Exemple « {{name}} » chargé.",
+        "loadFailed": "Impossible de charger l'exemple"
       }
     },
     "parameterField": {

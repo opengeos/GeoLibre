@@ -6069,6 +6069,16 @@
           "falseResult": "Falsch-Ergebnis",
           "activeOutput": "Aktive Ausgabe"
         }
+      },
+      "samples": {
+        "menu": "Beispiele",
+        "menuHint": "Einen Beispiel-Workflow laden",
+        "heading": "Beispiel-Workflows",
+        "loadingLog": "Beispiel „{{name}}“ wird geladen…",
+        "dataAddedLog": "Beispieldaten „{{name}}“ zur Karte hinzugefügt.",
+        "dataFailed": "Beispieldaten „{{name}}“ konnten nicht hinzugefügt werden",
+        "loadedLog": "Beispiel „{{name}}“ geladen.",
+        "loadFailed": "Das Beispiel konnte nicht geladen werden"
       }
     },
     "parameterField": {

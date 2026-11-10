@@ -5978,6 +5978,16 @@
           "falseResult": "Kết quả False",
           "activeOutput": "Đầu ra đang hoạt động"
         }
+      },
+      "samples": {
+        "menu": "Mẫu",
+        "menuHint": "Tải quy trình mẫu",
+        "heading": "Quy trình mẫu",
+        "loadingLog": "Đang tải mẫu \"{{name}}\"…",
+        "dataAddedLog": "Đã thêm dữ liệu mẫu \"{{name}}\" vào bản đồ.",
+        "dataFailed": "Không thể thêm dữ liệu mẫu \"{{name}}\"",
+        "loadedLog": "Đã tải mẫu \"{{name}}\".",
+        "loadFailed": "Không thể tải mẫu"
       }
     },
     "parameterField": {

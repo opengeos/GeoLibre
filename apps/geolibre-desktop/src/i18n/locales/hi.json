@@ -6069,6 +6069,16 @@
           "falseResult": "False परिणाम",
           "activeOutput": "सक्रिय आउटपुट"
         }
+      },
+      "samples": {
+        "menu": "नमूने",
+        "menuHint": "नमूना वर्कफ़्लो लोड करें",
+        "heading": "नमूना वर्कफ़्लो",
+        "loadingLog": "नमूना \"{{name}}\" लोड हो रहा है…",
+        "dataAddedLog": "नमूना डेटा \"{{name}}\" मानचित्र में जोड़ा गया।",
+        "dataFailed": "नमूना डेटा \"{{name}}\" नहीं जोड़ा जा सका",
+        "loadedLog": "नमूना \"{{name}}\" लोड हो गया।",
+        "loadFailed": "नमूना लोड नहीं हो सका"
       }
     },
     "parameterField": {

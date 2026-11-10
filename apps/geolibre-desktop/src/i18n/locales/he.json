@@ -6224,6 +6224,16 @@
           "falseResult": "תוצאת False",
           "activeOutput": "פלט פעיל"
         }
+      },
+      "samples": {
+        "menu": "דוגמאות",
+        "menuHint": "טעינת תהליך עבודה לדוגמה",
+        "heading": "תהליכי עבודה לדוגמה",
+        "loadingLog": "טוען את הדוגמה \"{{name}}\"…",
+        "dataAddedLog": "נתוני הדוגמה \"{{name}}\" נוספו למפה.",
+        "dataFailed": "לא ניתן להוסיף את נתוני הדוגמה \"{{name}}\"",
+        "loadedLog": "הדוגמה \"{{name}}\" נטענה.",
+        "loadFailed": "לא ניתן לטעון את הדוגמה"
       }
     },
     "parameterField": {

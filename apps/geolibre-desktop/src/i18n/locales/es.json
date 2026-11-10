@@ -6069,6 +6069,16 @@
           "falseResult": "Resultado Falso",
           "activeOutput": "Salida activa"
         }
+      },
+      "samples": {
+        "menu": "Ejemplos",
+        "menuHint": "Cargar un flujo de trabajo de ejemplo",
+        "heading": "Flujos de trabajo de ejemplo",
+        "loadingLog": "Cargando el ejemplo \"{{name}}\"…",
+        "dataAddedLog": "Se añadieron los datos de ejemplo \"{{name}}\" al mapa.",
+        "dataFailed": "No se pudieron añadir los datos de ejemplo \"{{name}}\"",
+        "loadedLog": "Ejemplo \"{{name}}\" cargado.",
+        "loadFailed": "No se pudo cargar el ejemplo"
       }
     },
     "parameterField": {

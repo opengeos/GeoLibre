@@ -1,6 +1,5 @@
 import {
   DEFAULT_LAYER_STYLE,
-  normalizeModelGraph,
   useAppStore,
   type GeoLibreLayer,
   type ModelGraphNode,
@@ -10,6 +9,7 @@ import {
   useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import type { FeatureCollection } from "geojson";
 import {
   VECTOR_TOOLS,
   fetchRemoteWhiteboxCatalogSnapshot,
@@ -30,11 +30,24 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { Button, Input, Label, ScrollArea, Select, cn } from "@geolibre/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+  ScrollArea,
+  Select,
+  cn,
+} from "@geolibre/ui";
 import {
   ChevronDown,
   ChevronUp,
   Copy,
+  BookOpen,
   Download,
   GripVertical,
   LayoutGrid,
@@ -107,14 +120,23 @@ import {
 import { fetchLayerBytes } from "../../../lib/whitebox-layer-inputs";
 import { fieldNamesByLayer } from "../../../lib/layer-field-names";
 import { modelFieldOptions } from "../../../lib/model-field-options";
+import {
+  MAX_IMPORT_BYTES,
+  parseModelFile,
+  serializeModelFile,
+  type ModelFileError,
+} from "../../../lib/model-file";
+import {
+  SAMPLE_MODELS,
+  bindSampleModelInputs,
+  findSampleDataLayer,
+  type SampleModel,
+} from "../../../lib/sample-models";
 import { ParameterField } from "../ParameterField";
 
 /** MIME type carrying a palette tool key through an HTML5 drag. */
 const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
 
-/** Identifies an exported Model Builder file, so a stray JSON is rejected. */
-const MODEL_SCHEMA = "https://geolibre.app/schemas/model-graph-v1.json";
-const MODEL_VERSION = "1.0.0";
 const NULL_CHECK_OPERATORS = new Set(["is_null", "not_null", "is_empty", "not_empty"]);
 // Catalog key for each control-flow node's card title.
 const CONTROL_FLOW_TITLE_KEYS: Partial<Record<ModelGraphNodeKind, ParseKeys>> = {
@@ -144,17 +166,6 @@ const MAX_LOG_FRACTION = 0.6;
  */
 const MAX_SIDE_FRACTION = 0.4;
 
-/** Sanity bounds on an imported file; a hand-built model is nowhere near these. */
-const MAX_IMPORT_NODES = 2000;
-const MAX_IMPORT_EDGES = 4000;
-/**
- * Byte cap checked before the file is read, mirroring how the other importers
- * in this app bound size (`MAX_CIM_BYTES` in `arcgis-project-import.ts`). The
- * node/edge caps above can only fire once the whole file has been decoded and
- * parsed, so a pathological file would be fully loaded before anything could
- * reject it. A model at the node/edge caps serializes well under this.
- */
-const MAX_IMPORT_BYTES = 16 * 1024 * 1024;
 
 /**
  * Preferred floors. They are *preferences*, not hard limits: a container
@@ -272,7 +283,19 @@ interface ModelBuilderPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
   /** Adds a raster result (COG bytes) to the map, when the host supports it. */
   onAddRaster?: (bytes: Uint8Array, name: string, fileName: string) => Promise<void> | void;
+  /**
+   * Adds a remote COG to the map and resolves to its layer id, when the host
+   * supports it. Loading a sample workflow uses it for the sample's DEM.
+   */
+  onAddRasterUrl?: (url: string, name: string) => Promise<string>;
 }
+
+/** Catalog key for each reason a model file is rejected. */
+const MODEL_FILE_ERROR_KEYS: Record<ModelFileError, ParseKeys> = {
+  tooLarge: "processing.modelBuilder.importTooLarge",
+  unsupported: "processing.modelBuilder.importUnsupported",
+  invalid: "processing.modelBuilder.importInvalid",
+};
 
 /**
  * ArcGIS-ModelBuilder-style canvas: drag tools from the palette onto the canvas,
@@ -282,6 +305,7 @@ interface ModelBuilderPanelProps {
 export function ModelBuilderPanel({
   mapControllerRef,
   onAddRaster,
+  onAddRasterUrl,
 }: ModelBuilderPanelProps): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.modelBuilderOpen);
@@ -319,6 +343,8 @@ export function ModelBuilderPanel({
   const [compactPane, setCompactPane] = useState<"palette" | "inspector" | null>(null);
   const [modelId, setModelId] = useState<string>(() => createId());
   const [modelName, setModelName] = useState("");
+  /** The sample workflow being fetched, so the menu can show progress and ignore repeats. */
+  const [loadingSampleId, setLoadingSampleId] = useState<string | null>(null);
   const [graph, setGraph] = useState<ProcessingModelGraph>(emptyModelGraph);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ModelToolDescriptor[]>([]);
@@ -644,11 +670,7 @@ export function ModelBuilderPanel({
   }, [saveModel, modelId, modelName, graph, appendLog, t]);
 
   const handleExport = useCallback(() => {
-    const json = JSON.stringify(
-      { $schema: MODEL_SCHEMA, version: MODEL_VERSION, name: modelName, graph },
-      null,
-      2,
-    );
+    const json = serializeModelFile(modelName, graph);
     const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
     const anchor = document.createElement("a");
     const slug = modelName
@@ -676,29 +698,10 @@ export function ModelBuilderPanel({
         if (file.size > MAX_IMPORT_BYTES) {
           throw new Error(t("processing.modelBuilder.importTooLarge"));
         }
-        const parsed = JSON.parse(await file.text()) as {
-          $schema?: unknown;
-          version?: unknown;
-          name?: unknown;
-          graph?: unknown;
-        };
-        if (parsed.$schema !== undefined && parsed.$schema !== MODEL_SCHEMA) {
-          throw new Error(t("processing.modelBuilder.importUnsupported"));
-        }
-        // normalizeModelGraph is the same coercion the project loader applies:
-        // it drops nodes without a usable id or kind and edges that do not
-        // connect two surviving nodes, so a hand-edited file cannot reach the
-        // canvas with (say) a missing `edges` array that would then throw out
-        // of render, past this try/catch, into the panel's error boundary.
-        const graph = normalizeModelGraph(parsed.graph);
-        if (!graph) throw new Error(t("processing.modelBuilder.importInvalid"));
-        // A canvas is hand-built; anything this large is a corrupt or crafted
-        // file, and laying it out would stall the panel before the user could
-        // even see what went wrong.
-        if (graph.nodes.length > MAX_IMPORT_NODES || graph.edges.length > MAX_IMPORT_EDGES) {
-          throw new Error(t("processing.modelBuilder.importTooLarge"));
-        }
-        setModelName(typeof parsed.name === "string" ? parsed.name : "");
+        const parsed = parseModelFile(await file.text());
+        if (!parsed.ok) throw new Error(t(MODEL_FILE_ERROR_KEYS[parsed.error]));
+        const { graph } = parsed;
+        setModelName(parsed.name);
         setGraph(autoLayout(graph, layoutOptions()));
         setSelectedNodeId(null);
         resetRunState();
@@ -708,6 +711,91 @@ export function ModelBuilderPanel({
       }
     },
     [appendLog, confirmDiscard, layoutOptions, resetRunState, t],
+  );
+
+  /**
+   * Load one of the bundled sample workflows: fetch its `.model.json`, add (or
+   * reuse) the sample datasets its input nodes read, and bind each input to
+   * the matching layer so the model is ready to run as soon as it lands.
+   *
+   * The sample gets a fresh model id, so saving it never overwrites a model
+   * the project already holds.
+   */
+  const handleLoadSample = useCallback(
+    async (sample: SampleModel) => {
+      if (loadingSampleId || !confirmDiscard()) return;
+      setLoadingSampleId(sample.id);
+      appendLog(t("processing.modelBuilder.samples.loadingLog", { name: sample.title }));
+      try {
+        const response = await fetch(sample.modelUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        if (text.length > MAX_IMPORT_BYTES) {
+          throw new Error(t("processing.modelBuilder.importTooLarge"));
+        }
+        const parsed = parseModelFile(text);
+        if (!parsed.ok) throw new Error(t(MODEL_FILE_ERROR_KEYS[parsed.error]));
+
+        // Bind the sample datasets. Read the store directly: a dataset added
+        // for an earlier entry must be visible to the reuse check of the next.
+        const bindings = new Map<string, string>();
+        for (const data of sample.data) {
+          const existing = findSampleDataLayer(useAppStore.getState().layers, data.url);
+          if (existing) {
+            bindings.set(data.layerId, existing);
+            continue;
+          }
+          try {
+            let layerId: string | undefined;
+            if (data.kind === "raster") {
+              if (onAddRasterUrl) layerId = await onAddRasterUrl(data.url, data.name);
+            } else {
+              const res = await fetch(data.url);
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const geojson = (await res.json()) as FeatureCollection;
+              layerId = addGeoJsonLayer(data.name, geojson, data.url);
+            }
+            if (layerId) {
+              bindings.set(data.layerId, layerId);
+              appendLog(t("processing.modelBuilder.samples.dataAddedLog", { name: data.name }));
+            }
+          } catch (err) {
+            // The model still loads; its input is left for the user to pick.
+            appendLog(
+              `${t("processing.modelBuilder.samples.dataFailed", { name: data.name })}: ${
+                (err as Error).message
+              }`,
+            );
+          }
+        }
+        const graph = bindSampleModelInputs(
+          parsed.graph,
+          bindings,
+          new Set(sample.data.map((data) => data.layerId)),
+        );
+        setModelId(createId());
+        setModelName(parsed.name || sample.title);
+        setGraph(autoLayout(graph, layoutOptions()));
+        setSelectedNodeId(null);
+        resetRunState();
+        canvasRef.current?.scrollTo({ left: 0, top: 0 });
+        appendLog(t("processing.modelBuilder.samples.loadedLog", { name: sample.title }));
+      } catch (err) {
+        appendLog(`${t("processing.modelBuilder.samples.loadFailed")}: ${(err as Error).message}`);
+      } finally {
+        setLoadingSampleId(null);
+      }
+    },
+    [
+      addGeoJsonLayer,
+      appendLog,
+      confirmDiscard,
+      layoutOptions,
+      loadingSampleId,
+      onAddRasterUrl,
+      resetRunState,
+      t,
+    ],
   );
 
   // --- Canvas interaction -------------------------------------------------
@@ -1074,8 +1162,13 @@ export function ModelBuilderPanel({
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (maximized) return;
     if ((event.target as HTMLElement).closest("button, input")) return;
-    event.preventDefault();
     const handle = event.currentTarget;
+    // React bubbles events from portaled content (the Samples menu) through
+    // the component tree, so a click on a menu item reaches this handler
+    // although the item is not inside the title bar. Capturing the pointer
+    // here would steal the item's click.
+    if (!handle.contains(event.target as Node)) return;
+    event.preventDefault();
     handle.setPointerCapture(event.pointerId);
     const card = handle.closest("section") as HTMLElement;
     const startX = event.clientX;
@@ -1422,6 +1515,38 @@ export function ModelBuilderPanel({
             <LayoutGrid className="h-3.5 w-3.5" />{" "}
             {!compact && t("processing.modelBuilder.arrange")}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 shrink-0 gap-1 px-2"
+                disabled={loadingSampleId !== null}
+                aria-label={t("processing.modelBuilder.samples.menu")}
+                title={t("processing.modelBuilder.samples.menuHint")}
+              >
+                {loadingSampleId ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <BookOpen className="h-3.5 w-3.5" />
+                )}{" "}
+                {!compact && t("processing.modelBuilder.samples.menu")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuLabel>{t("processing.modelBuilder.samples.heading")}</DropdownMenuLabel>
+              {SAMPLE_MODELS.map((sample) => (
+                <DropdownMenuItem
+                  key={sample.id}
+                  className="flex-col items-start gap-0.5"
+                  onSelect={() => void handleLoadSample(sample)}
+                >
+                  <span className="text-sm font-medium">{sample.title}</span>
+                  <span className="text-xs text-muted-foreground">{sample.description}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size="sm"
             variant="ghost"

@@ -6167,6 +6167,16 @@
           "falseResult": "False result",
           "activeOutput": "Active output"
         }
+      },
+      "samples": {
+        "menu": "Samples",
+        "menuHint": "Load a sample workflow",
+        "heading": "Sample workflows",
+        "loadingLog": "Loading sample \"{{name}}\"…",
+        "dataAddedLog": "Added sample data \"{{name}}\" to the map.",
+        "dataFailed": "Could not add sample data \"{{name}}\"",
+        "loadedLog": "Loaded sample \"{{name}}\".",
+        "loadFailed": "Could not load the sample"
       }
     },
     "parameterField": {

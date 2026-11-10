@@ -6133,6 +6133,16 @@
           "falseResult": "Yanlış nəticəsi",
           "activeOutput": "Aktiv çıxış"
         }
+      },
+      "samples": {
+        "menu": "Nümunələr",
+        "menuHint": "Nümunə iş axını yüklə",
+        "heading": "Nümunə iş axınları",
+        "loadingLog": "\"{{name}}\" nümunəsi yüklənir…",
+        "dataAddedLog": "\"{{name}}\" nümunə məlumatı xəritəyə əlavə edildi.",
+        "dataFailed": "\"{{name}}\" nümunə məlumatı əlavə edilə bilmədi",
+        "loadedLog": "\"{{name}}\" nümunəsi yükləndi.",
+        "loadFailed": "Nümunə yüklənə bilmədi"
       }
     },
     "parameterField": {

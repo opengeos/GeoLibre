@@ -1,0 +1,94 @@
+{
+  "samples": [
+    {
+      "id": "dem-stream-network-extraction",
+      "title": "DEM stream network extraction",
+      "description": "Fill depressions, route D8 flow and vectorize the stream network.",
+      "modelUrl": "https://assets.geolibre.app/models/dem-stream-network-extraction.model.json",
+      "data": [
+        {
+          "layerId": "sample-dem",
+          "name": "Sample DEM",
+          "url": "https://data.source.coop/giswqs/opengeos/dem.tif",
+          "kind": "raster"
+        }
+      ]
+    },
+    {
+      "id": "strahler-stream-order",
+      "title": "Strahler stream order",
+      "description": "Breach depressions, extract streams and rank them by Strahler order.",
+      "modelUrl": "https://assets.geolibre.app/models/strahler-stream-order.model.json",
+      "data": [
+        {
+          "layerId": "sample-dem",
+          "name": "Sample DEM",
+          "url": "https://data.source.coop/giswqs/opengeos/dem.tif",
+          "kind": "raster"
+        }
+      ]
+    },
+    {
+      "id": "height-above-nearest-drainage",
+      "title": "Height above nearest drainage",
+      "description": "Extract streams and measure each cell's height above the stream it drains to.",
+      "modelUrl": "https://assets.geolibre.app/models/height-above-nearest-drainage.model.json",
+      "data": [
+        {
+          "layerId": "sample-dem",
+          "name": "Sample DEM",
+          "url": "https://data.source.coop/giswqs/opengeos/dem.tif",
+          "kind": "raster"
+        }
+      ]
+    },
+    {
+      "id": "dem-terrain-derivatives",
+      "title": "DEM terrain derivatives",
+      "description": "Derive hillshade, aspect and geomorphon landforms from one DEM in a single run.",
+      "modelUrl": "https://assets.geolibre.app/models/dem-terrain-derivatives.model.json",
+      "data": [
+        {
+          "layerId": "sample-dem",
+          "name": "Sample DEM",
+          "url": "https://data.source.coop/giswqs/opengeos/dem.tif",
+          "kind": "raster"
+        }
+      ]
+    },
+    {
+      "id": "dem-contour-lines",
+      "title": "DEM contour lines",
+      "description": "Trace 100 m contour lines from a DEM.",
+      "modelUrl": "https://assets.geolibre.app/models/dem-contour-lines.model.json",
+      "data": [
+        {
+          "layerId": "sample-dem",
+          "name": "Sample DEM",
+          "url": "https://data.source.coop/giswqs/opengeos/dem.tif",
+          "kind": "raster"
+        }
+      ]
+    },
+    {
+      "id": "route-stations-near-cities",
+      "title": "Route stations near cities",
+      "description": "Buffer cities, place stations along a route and keep those inside the city zones.",
+      "modelUrl": "https://assets.geolibre.app/models/route-stations-near-cities.model.json",
+      "data": [
+        {
+          "layerId": "sample-places",
+          "name": "Sample places",
+          "url": "https://assets.geolibre.app/data/places.geojson",
+          "kind": "vector"
+        },
+        {
+          "layerId": "sample-routes",
+          "name": "Sample routes",
+          "url": "https://assets.geolibre.app/data/routes.geojson",
+          "kind": "vector"
+        }
+      ]
+    }
+  ]
+}

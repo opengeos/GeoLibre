@@ -21,6 +21,7 @@ screen the palette and settings become toggle buttons.
 | **New** | Start an empty canvas, asking first if the current one has unsaved changes. |
 | **Save** | Store the model in the project. See [Saving and sharing models](#saving-and-sharing-models). |
 | **Arrange** | Lay the nodes out left to right along the flow. |
+| **Samples** | Load a ready-made sample workflow with its sample data. See [Sample workflows](#sample-workflows). |
 | **Import** / **Export** | Read or write a `.model.json` file. |
 | **Copy Python script** | Copy the equivalent `geolibre` Python code. See [Python export](#python-export). |
 | **Run** / **Cancel** | Run the model, or stop a run in progress. |
@@ -194,6 +195,32 @@ bottom shows each tool's own messages.
   **Run failed: …**. Outputs added before the failure stay on the map.
 - **Cancel** stops the run before the next node starts. A Whitebox tool that
   is already running finishes first.
+
+## Sample workflows
+
+**Samples** lists ready-made workflows you can load, run, and take apart:
+
+| Sample | What it does | Sample data |
+| --- | --- | --- |
+| DEM stream network extraction | Fills depressions, routes D8 flow, and vectorizes the stream network. | DEM |
+| Strahler stream order | Breaches depressions, extracts streams, and ranks them by Strahler order. | DEM |
+| Height above nearest drainage | Extracts streams and measures each cell's height above the stream it drains to. | DEM |
+| DEM terrain derivatives | Derives hillshade, aspect, and geomorphon landforms from one DEM in a single run. | DEM |
+| DEM contour lines | Traces 100 m contour lines from a DEM. | DEM |
+| Route stations near cities | Buffers cities, places stations along a route, and keeps those inside the city zones. | Places and routes (GeoJSON) |
+
+Picking a sample replaces the canvas (asking first if it has unsaved changes),
+adds the sample data to the map, and connects each **Input** node to it, so the
+model is ready to **Run**. Data already on the map from an earlier sample is
+reused rather than added again. A loaded sample is a new, unsaved model: **Save**
+it to keep a copy in the project, and point its inputs at your own layers to run
+it on your data.
+
+The sample files are hosted at `https://assets.geolibre.app/models/` (for
+example
+[dem-stream-network-extraction.model.json](https://assets.geolibre.app/models/dem-stream-network-extraction.model.json)),
+so they can also be downloaded and opened with **Import**. The list itself is
+`apps/geolibre-desktop/src/lib/sample-models.json`.
 
 ## Saving and sharing models
 

@@ -5978,6 +5978,16 @@
           "falseResult": "Hasil False",
           "activeOutput": "Keluaran Aktif"
         }
+      },
+      "samples": {
+        "menu": "Contoh",
+        "menuHint": "Muat contoh alur kerja",
+        "heading": "Contoh alur kerja",
+        "loadingLog": "Memuat contoh \"{{name}}\"…",
+        "dataAddedLog": "Data contoh \"{{name}}\" ditambahkan ke peta.",
+        "dataFailed": "Tidak dapat menambahkan data contoh \"{{name}}\"",
+        "loadedLog": "Contoh \"{{name}}\" dimuat.",
+        "loadFailed": "Tidak dapat memuat contoh"
       }
     },
     "parameterField": {
