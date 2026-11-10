@@ -114,7 +114,7 @@
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts src/epsg-proj4.ts --format esm --dts"
   },
   "dependencies": {
-    "@cesium/core": "^0.1.0",
+    "@cesium/core": "^0.1.1",
     "@cesium/engine": "^26.5.0",
     "@cesium/widgets": "^16.3.1",
     "@geolibre/core": "*",
