@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.6",
@@ -73,7 +73,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "happy-dom": "^21.0.4",
-    "linkedom": "^0.18.14",
+    "linkedom": "^0.18.15",
     "tsx": "^4.23.15",
     "typescript-eslint": "^8.72.1"
   },
