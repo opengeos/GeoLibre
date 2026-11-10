@@ -17,7 +17,7 @@
     {
       "id": "strahler-stream-order",
       "title": "Strahler stream order",
-      "description": "Breach depressions, extract streams and rank them by Strahler order.",
+      "description": "Fill depressions, extract streams and rank them by Strahler order.",
       "modelUrl": "https://assets.geolibre.app/models/strahler-stream-order.model.json",
       "data": [
         {

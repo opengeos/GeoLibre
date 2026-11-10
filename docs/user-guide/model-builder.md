@@ -203,7 +203,7 @@ bottom shows each tool's own messages.
 | Sample | What it does | Sample data |
 | --- | --- | --- |
 | DEM stream network extraction | Fills depressions, routes D8 flow, and vectorizes the stream network. | DEM |
-| Strahler stream order | Breaches depressions, extracts streams, and ranks them by Strahler order. | DEM |
+| Strahler stream order | Fills depressions, extracts streams, and ranks them by Strahler order. | DEM |
 | Height above nearest drainage | Extracts streams and measures each cell's height above the stream it drains to. | DEM |
 | DEM terrain derivatives | Derives hillshade, aspect, and geomorphon landforms from one DEM in a single run. | DEM |
 | DEM contour lines | Traces 100 m contour lines from a DEM. | DEM |
