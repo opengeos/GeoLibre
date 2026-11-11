@@ -1,0 +1,13 @@
+[package]
+name = "tauri-plugin-gnss-bluetooth"
+version = "0.1.0"
+description = "Stream NMEA from a paired Bluetooth (Serial Port Profile) GNSS receiver on Android"
+edition = "2021"
+publish = false
+links = "tauri-plugin-gnss-bluetooth"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2", default-features = false }

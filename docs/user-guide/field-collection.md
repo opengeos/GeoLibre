@@ -44,6 +44,17 @@ estimated from HDOP.
     settings and connect them as a serial port. **Connect Bluetooth** is for
     Bluetooth Low Energy receivers only.
 
+!!! note "Bluetooth receivers in the Android app"
+    The Android app's WebView has neither API, so it reads the receiver
+    natively instead. Pair the receiver in Android's Bluetooth settings, then
+    pick it from **Paired receiver** and press **Connect receiver**. Android
+    asks for the *Nearby devices* permission the first time. The app talks to
+    the receiver over classic Bluetooth (Serial Port Profile), which is what
+    most survey GNSS receivers use; Bluetooth Low Energy-only devices are
+    listed but cannot be connected. GeoLibre does not yet run an NTRIP client,
+    so RTK corrections still have to reach the receiver another way (for
+    example its own modem or radio).
+
 ### Following your position
 
 **Start GPS** begins streaming. The map shows a blue dot, a heading arrow when a

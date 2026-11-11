@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 import { nmeaChecksum } from "../apps/geolibre-desktop/src/lib/nmea";
 import type { GpsFix } from "../apps/geolibre-desktop/src/lib/gps-tracking";
 import {
+  connectAndroidBluetoothNmea,
   connectSerialNmea,
+  listPairedBluetoothDevices,
+  type NativeBluetoothBridge,
   NmeaError,
   serialNmeaSupported,
 } from "../apps/geolibre-desktop/src/lib/nmea-source";
@@ -171,5 +174,120 @@ describe("connectSerialNmea", () => {
     } finally {
       restoreNavigator();
     }
+  });
+});
+
+/**
+ * A stand-in for the native Android plugin: records invokes and lets the test
+ * push channel events, so the transport, parser, and assembler run for real.
+ */
+function fakeBridge(responses: Record<string, (args?: Record<string, unknown>) => unknown> = {}): {
+  bridge: NativeBluetoothBridge;
+  calls: { cmd: string; args?: Record<string, unknown> }[];
+  push: (event: { event: "data"; data: string } | { event: "closed"; error?: string }) => void;
+} {
+  const calls: { cmd: string; args?: Record<string, unknown> }[] = [];
+  let listener: ((event: never) => void) | null = null;
+  const bridge: NativeBluetoothBridge = {
+    invoke: async <T>(cmd: string, args?: Record<string, unknown>) => {
+      calls.push({ cmd, args });
+      const respond = responses[cmd];
+      return (respond ? await respond(args) : undefined) as T;
+    },
+    createChannel: (onMessage) => {
+      listener = onMessage as (event: never) => void;
+      return { id: "fake-channel" };
+    },
+  };
+  return {
+    bridge,
+    calls,
+    push: (event) => {
+      assert.ok(listener, "no channel was created");
+      listener(event as never);
+    },
+  };
+}
+
+const CONNECT = "plugin:gnss-bluetooth|connect";
+const DISCONNECT = "plugin:gnss-bluetooth|disconnect";
+const LIST = "plugin:gnss-bluetooth|list_devices";
+const receiver = { address: "00:11:22:33:44:55", name: "TX2" };
+
+describe("connectAndroidBluetoothNmea", () => {
+  it("streams fixes from channel data split mid-sentence", async () => {
+    const fake = fakeBridge({ [CONNECT]: () => ({ id: 7, name: "TX2 rover" }) });
+    const fixes: GpsFix[] = [];
+    const conn = await connectAndroidBluetoothNmea(
+      receiver,
+      { onFix: (f) => fixes.push(f), onError: () => {} },
+      fake.bridge,
+    );
+    assert.equal(conn.label, "TX2 rover");
+    assert.deepEqual(fake.calls[0].args, {
+      address: receiver.address,
+      channel: { id: "fake-channel" },
+    });
+    const stream = epoch("174512.00") + epoch("174513.00");
+    fake.push({ event: "data", data: stream.slice(0, 50) });
+    fake.push({ event: "data", data: stream.slice(50) });
+    assert.equal(fixes.length, 1, "one completed epoch across the split");
+    assert.ok(Math.abs(fixes[0].lat - 35.9590533) < 1e-6);
+    await conn.close();
+    assert.deepEqual(fake.calls.at(-1), { cmd: DISCONNECT, args: { id: 7 } });
+  });
+
+  it("reports a dropped socket once and delivers nothing after close", async () => {
+    const fake = fakeBridge({ [CONNECT]: () => ({ id: 1, name: "TX2" }) });
+    const errors: NmeaError[] = [];
+    const fixes: GpsFix[] = [];
+    await connectAndroidBluetoothNmea(
+      receiver,
+      { onFix: (f) => fixes.push(f), onError: (e) => errors.push(e) },
+      fake.bridge,
+    );
+    fake.push({ event: "closed", error: "socket closed" });
+    fake.push({ event: "data", data: epoch("174512.00") + epoch("174513.00") });
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].code, "disconnected");
+    assert.equal(fixes.length, 0);
+  });
+
+  it("maps native rejection codes to NmeaError codes", async () => {
+    const cases: [string, string][] = [
+      ["DISABLED", "bluetooth-off"],
+      ["PERMISSION_DENIED", "permission-denied"],
+      ["CONNECT_FAILED", "connect-failed"],
+      ["UNAVAILABLE", "unavailable"],
+      ["BUSY", "busy"],
+      ["NOT_PAIRED", "not-paired"],
+      ["SOMETHING_ELSE", "failed"],
+    ];
+    for (const [nativeCode, code] of cases) {
+      const fake = fakeBridge({
+        [CONNECT]: () => Promise.reject({ message: "nope", code: nativeCode }),
+      });
+      await assert.rejects(
+        connectAndroidBluetoothNmea(receiver, { onFix: () => {}, onError: () => {} }, fake.bridge),
+        (err: unknown) => err instanceof NmeaError && err.code === code && err.message === "nope",
+      );
+    }
+  });
+
+  it("lists paired devices with classic receivers before BLE-only ones", async () => {
+    const fake = fakeBridge({
+      [LIST]: () => ({
+        devices: [
+          { address: "a", name: "Watch", type: "le" },
+          { address: "b", name: "Zed rover", type: "classic" },
+          { address: "c", name: "Alpha rover", type: "dual" },
+        ],
+      }),
+    });
+    const devices = await listPairedBluetoothDevices(fake.bridge);
+    assert.deepEqual(
+      devices.map((d) => d.name),
+      ["Alpha rover", "Zed rover", "Watch"],
+    );
   });
 });

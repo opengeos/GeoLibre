@@ -1832,6 +1832,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-geolocation",
+ "tauri-plugin-gnss-bluetooth",
  "tauri-plugin-http",
  "tauri-plugin-opener",
  "tauri-plugin-persisted-scope",
@@ -5277,6 +5278,14 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "tauri-plugin-gnss-bluetooth"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

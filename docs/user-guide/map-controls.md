@@ -150,6 +150,8 @@ Comments are stored in the `.geolibre.json` file, so they travel with a shared o
 !!! note "NMEA needs a Chromium browser"
     Reading a receiver uses the Web Serial and Web Bluetooth APIs, which Chromium browsers such as Chrome and Edge provide but Firefox and Safari do not. Most Bluetooth GPS receivers speak *classic* Bluetooth rather than Bluetooth Low Energy: pair those in your operating system's settings and they appear here as a serial port. Use **Connect Bluetooth** only for Bluetooth Low Energy receivers.
 
+In the Android app the receiver is read natively instead, with no Chromium requirement: pick a receiver paired in Android's Bluetooth settings from **Paired receiver** and press **Connect receiver**. It connects over classic Bluetooth, so Bluetooth Low Energy-only devices are listed but cannot be connected.
+
 Start GPS to follow your position, record a track log and save it as a layer or export it as GPX or GeoJSON, and capture points where you stand. **Controls → Field Collection...** is the related tool for capturing point, line, and polygon observations against a custom form. See [GPS Tracking & Field Collection](field-collection.md) for both.
 
 ## Map navigation basics

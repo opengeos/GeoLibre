@@ -32,6 +32,10 @@
     "geolocation:allow-watch-position",
     "geolocation:allow-clear-watch",
     {
+      "comment": "External Bluetooth GNSS receivers in the Android app (GeoLibre#3397, lib/nmea-source.ts). The commands exist only on Android; elsewhere the plugin registers no handler and the UI never calls them.",
+      "identifier": "gnss-bluetooth:default"
+    },
+    {
       "comment": "Cleanup of the temporary GeoJSON the sidecar writes when a File Geodatabase layer is added (GdbSource); scoped to exactly that filename pattern so nothing else becomes deletable.",
       "identifier": "fs:allow-remove",
       "allow": [{ "path": "$TEMP/geolibre-gdb-*.geojson" }]
