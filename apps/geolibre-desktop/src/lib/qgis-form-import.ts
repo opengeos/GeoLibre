@@ -248,7 +248,11 @@ export function parseQgisLayerForm(
         // The date picker stores a date only. A field whose format carries a
         // time (a QField timestamp defaulting to now()) stays a text field so
         // the time is kept.
-        if (!/[Hhs]|mm|[Aa][Pp]/.test(optionText(options, "field_format"))) {
+        // `field_iso_format` stores a full ISO timestamp whatever the format says.
+        if (
+          optionText(options, "field_iso_format") !== "true" &&
+          !/[Hhs]|mm|[Aa][Pp]/.test(optionText(options, "field_format"))
+        ) {
           config.widget = "date";
           schemaType = "date";
           meaningful = true;

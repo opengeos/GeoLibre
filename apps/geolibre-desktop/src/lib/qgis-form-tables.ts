@@ -27,6 +27,9 @@ export async function readQgisFormTable(
 ): Promise<Record<string, unknown>[]> {
   if (!isTauri()) throw new Error("Local files are only readable in GeoLibre Desktop.");
   if (
+    // Network shares are refused here as they are for layers: opening one
+    // makes the machine authenticate to whatever host the project names.
+    /^(?:\/\/|\\\\)/.test(sourcePath) ||
     !isAbsoluteLocalPath(sourcePath) ||
     hasPathTraversal(sourcePath) ||
     !/\.gpkg$/i.test(sourcePath)

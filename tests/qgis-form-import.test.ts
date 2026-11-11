@@ -89,6 +89,7 @@ function surveyProject(): string {
           ${field("fenced", "CheckBox", option("CheckedState", "Y") + option("UncheckedState", "N"))}
           ${field("flag", "CheckBox", option("CheckedState", "1") + option("UncheckedState", "0"))}
           ${field("logged_at", "DateTime", option("field_format", "yyyy-MM-dd HH:mm:ss"))}
+          ${field("synced_at", "DateTime", option("field_format", "yyyy-MM-dd") + option("field_iso_format", "true"))}
           ${field("tags", "ValueRelation", option("Layer", "materials") + option("Key", "code") + option("Value", "label") + option("AllowMulti", "true"))}
           ${field("visited", "DateTime")}
           ${field("accuracy", "TextEdit")}
@@ -240,6 +241,7 @@ describe("QGIS form import", () => {
     });
     // A date/time field keeps its time: the date picker would drop it.
     assert.deepEqual(byField.get("logged_at"), { field: "logged_at", widget: "text" });
+    assert.deepEqual(byField.get("synced_at"), { field: "synced_at", widget: "text" });
     // A multi-select holds a list of keys, so it is not made a single choice.
     assert.deepEqual(byField.get("tags"), { field: "tags", widget: "text" });
     assert.equal(

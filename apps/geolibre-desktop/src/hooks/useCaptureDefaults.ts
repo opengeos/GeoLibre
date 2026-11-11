@@ -70,9 +70,23 @@ export function useCaptureDefaults({
   // The clock is read once per capture, so a default that mixes a field with
   // now() keeps its timestamp when the field is edited afterwards.
   const capturedAtRef = useRef(new Date());
+  const capturedLocationRef = useRef<Vertex[] | null>(null);
   const recompute = (mode: "capture" | "input") => {
-    if (!pending || !schema || !hasAttributeFormDefaults(attributeForm)) return;
-    if (mode === "capture") capturedAtRef.current = new Date();
+    if (!pending) {
+      // The capture ended (saved, cancelled, or the target changed). What it
+      // filled in belongs to it: carried into the next capture, an emptied
+      // form would read as fields the user had cleared on purpose.
+      autoFilledRef.current = {};
+      capturedLocationRef.current = null;
+      return;
+    }
+    if (!schema || !hasAttributeFormDefaults(attributeForm)) return;
+    // A new clock reading only for a new location, not for the other things
+    // that rerun this pass (the projections finishing their load).
+    if (mode === "capture" && capturedLocationRef.current !== pending) {
+      capturedLocationRef.current = pending;
+      capturedAtRef.current = new Date();
+    }
     const capturedAt = capturedAtRef.current;
     const current = valuesRef.current;
     const result = applyCaptureDefaults(
