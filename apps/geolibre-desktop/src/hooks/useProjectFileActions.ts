@@ -90,9 +90,12 @@ import { startupSettingsAfterForcedSaveAs } from "../lib/startup-project";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import {
   importQgisProject,
+  materializeQgisFormRelations,
   materializeQgisRemoteLayers,
+  type QgisFormImportNote,
   type QgisProjectImportWarning,
 } from "../lib/qgis-project-import";
+import { readQgisFormTable } from "../lib/qgis-form-tables";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
@@ -347,6 +350,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [qgisImportWarnings, setQgisImportWarnings] = useState<QgisProjectImportWarning[] | null>(
     null,
   );
+  const [qgisImportFormNotes, setQgisImportFormNotes] = useState<QgisFormImportNote[] | null>(null);
   const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
     ArcgisProjectImportWarning[] | null
   >(null);
@@ -627,6 +631,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleImportQgisProject = async () => {
     const result = await openQgisProjectFile();
     if (!result) return;
+    // The reads below can outlast the user opening something else; loading
+    // the import then would replace the project they just opened.
+    const generation = useAppStore.getState().projectGeneration;
+    const superseded = () => useAppStore.getState().projectGeneration !== generation;
     try {
       const imported = await materializeQgisRemoteLayers(
         importQgisProject(result.data, result.path),
@@ -657,7 +665,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
             reason: "browser-local-raster",
           });
         }
+        // Those layers are gone, and so is any way to read a lookup table off
+        // disk; a note about a form nobody can open would only be noise.
+        const keptNames = new Set(imported.project.layers.map((layer) => layer.name));
+        imported.formNotes = imported.formNotes.filter((note) => keptNames.has(note.layerName));
+        imported.formRelations = imported.formRelations.filter((relation) =>
+          imported.project.layers.some((layer) => layer.id === relation.layerId),
+        );
       }
+      // Dropdowns that list another table's rows are filled in before the
+      // project loads, so the form is complete the first time it opens.
+      await materializeQgisFormRelations(imported, readQgisFormTable);
+      if (superseded()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
@@ -704,6 +723,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       useAppStore.setState({ isDirty: true });
       setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
+      setQgisImportFormNotes(imported.formNotes.length > 0 ? imported.formNotes : null);
     } catch (error) {
       console.error("Failed to import QGIS project", error);
       setActionError(
@@ -2213,6 +2233,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     ...windowCloseGuard,
     qgisImportWarnings,
     setQgisImportWarnings,
+    qgisImportFormNotes,
+    setQgisImportFormNotes,
     arcgisImportWarnings,
     setArcgisImportWarnings,
     remoteSaveWarning,

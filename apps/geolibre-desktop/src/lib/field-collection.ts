@@ -99,6 +99,51 @@ export function isCollectionLayer(layer: CollectionLayerLike): boolean {
   return layer.type === "geojson" && layer.metadata?.[FIELD_COLLECTION_FLAG] === true;
 }
 
+/** The parts of a layer the file-backing helpers read. */
+export interface FileBackedLayerLike {
+  sourcePath?: string;
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Whether a collection layer still reads its features from a local file, as a
+ * layer imported from a QGIS/QField project does until something is captured
+ * into it.
+ */
+export function isFileBackedCollectionLayer(layer: FileBackedLayerLike): boolean {
+  return (
+    layer.metadata.localFileReloadable === true ||
+    (typeof layer.sourcePath === "string" &&
+      layer.sourcePath !== "" &&
+      !/^https?:\/\//i.test(layer.sourcePath))
+  );
+}
+
+/**
+ * The layer patch that detaches a file-backed collection layer from its file.
+ *
+ * Such a layer is saved as a path and re-read on reopen, which would silently
+ * drop anything captured into it. From the first capture on the project's own
+ * copy is the authoritative one, so the layer stops pointing at the file and
+ * saves like a layer created here, with its features embedded. The path is
+ * kept under `metadata.capturedFromPath` for reference.
+ *
+ * @param layer - The capture target as it is in the store.
+ * @returns The patch to merge with the new `geojson`; empty when the layer is
+ *   not file-backed.
+ */
+export function detachFromSourceFile(layer: FileBackedLayerLike): {
+  sourcePath?: undefined;
+  metadata?: Record<string, unknown>;
+} {
+  if (!isFileBackedCollectionLayer(layer)) return {};
+  const { localFileReloadable: _reloadable, ...metadata } = layer.metadata;
+  return {
+    sourcePath: undefined,
+    metadata: layer.sourcePath ? { ...metadata, capturedFromPath: layer.sourcePath } : metadata,
+  };
+}
+
 /**
  * Pick the capture target when the Field Collection dialog opens.
  *

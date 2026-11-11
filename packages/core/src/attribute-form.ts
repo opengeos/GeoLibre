@@ -16,6 +16,12 @@
  */
 import type { Feature } from "geojson";
 import { evaluateMapExpression } from "./expressions";
+import {
+  evaluateQgisExpression,
+  formatQgisDate,
+  formatQgisDateTime,
+  type QgisExpressionContext,
+} from "./qgis-expression";
 import type {
   AttributeFormConfig,
   AttributeFormFieldConfig,
@@ -178,6 +184,66 @@ export function isAttributeFormFieldVisible(
     expectedType: "boolean",
   });
   return result.kind === "value" ? result.value === true : true;
+}
+
+/**
+ * Render a computed default as the raw string a form input holds, matching
+ * what {@link coerceAttributeFormValue} parses back for the field's widget.
+ */
+function defaultValueText(config: AttributeFormFieldConfig, value: unknown): string | null {
+  if (value == null) return null;
+  if (config.widget === "checkbox") {
+    if (typeof value === "boolean") return value ? "true" : "false";
+    if (typeof value === "number") return value !== 0 ? "true" : "false";
+    const lower = String(value).trim().toLowerCase();
+    return lower === "true" || lower === "1"
+      ? "true"
+      : lower === "false" || lower === "0"
+        ? "false"
+        : null;
+  }
+  if (value instanceof Date) {
+    return config.widget === "date" ? formatQgisDate(value) : formatQgisDateTime(value);
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
+  if (typeof value === "object") return null;
+  const text = String(value);
+  // A date input only accepts yyyy-mm-dd, so trim a datetime default to it.
+  if (config.widget === "date") return /^\d{4}-\d{2}-\d{2}/.exec(text)?.[0] ?? null;
+  return text;
+}
+
+/**
+ * Compute the default values a form pre-fills for a new feature. Fields are
+ * evaluated in form order and each result is visible to later expressions, so
+ * a default can build on an earlier one (a photo name built from an ID that
+ * is itself defaulted).
+ *
+ * @param form - The layer's form config.
+ * @param context - Variables, geometry and clock for the expressions; its
+ *   `properties` seed the record (values the user already entered).
+ * @param options.skip - Fields to leave alone, e.g. ones the user has edited.
+ * @returns Field name to raw form string, only for fields whose default
+ *   evaluated to a non-null value.
+ */
+export function computeAttributeFormDefaults(
+  form: AttributeFormConfig | undefined,
+  context: QgisExpressionContext = {},
+  options: { skip?: ReadonlySet<string> } = {},
+): Record<string, string> {
+  const defaults: Record<string, string> = {};
+  const properties: Record<string, unknown> = { ...context.properties };
+  for (const config of form?.fields ?? []) {
+    const source = config.defaultValue?.trim();
+    if (!source || options.skip?.has(config.field)) continue;
+    const result = evaluateQgisExpression(source, { ...context, properties });
+    if (!result.ok) continue;
+    const text = defaultValueText(config, result.value);
+    if (text === null) continue;
+    defaults[config.field] = text;
+    properties[config.field] = coerceAttributeFormValue(config, text);
+  }
+  return defaults;
 }
 
 /**

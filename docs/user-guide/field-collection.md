@@ -149,12 +149,47 @@ layer against a custom form.
 4. **Create layer**.
 
 A layer with no fields captures location-only observations. Property names are
-derived from the labels. Fields have no default values.
+derived from the labels.
 
 If the layer has an [attribute form](attribute-table.md#attribute-forms)
 configured, Field Collection uses it instead of the plain field list: its
 aliases, dropdowns and checkboxes, number, range and date widgets, conditional
-visibility, and constraints all apply.
+visibility, constraints, and default values all apply.
+
+A QGIS or QField project brings its forms with it: after
+[importing the project](projects.md#importing-a-qgis-project), every layer
+that has a form is already a collection layer, with nothing to set up here.
+
+### Default values
+
+A field's **Default value** in the attribute form is an expression that fills
+the field as soon as you capture a location. It uses QGIS expression syntax, so
+defaults written for QGIS or QField work unchanged:
+
+| Default value | Fills in |
+| --- | --- |
+| `uuid()` | A unique ID. `uuid('WithoutBraces')` drops the braces. |
+| `now()` | The date and time (the date alone for a Date widget). |
+| `concat("site", '_', format_date(now(), 'yyyyMMdd_HHmmss'), '.jpg')` | A name built from other fields. The `\|\|` operator works too. |
+| `@position_horizontal_accuracy` | The GPS accuracy in meters. |
+| `x(@position_coordinate)`, `y(@position_coordinate)`, `z(@position_coordinate)` | The GPS longitude, latitude and altitude. |
+| `x(transform(@position_coordinate, 'EPSG:4326', 'EPSG:2056'))` | A projected coordinate, for any EPSG code GeoLibre knows. |
+| `@position_number_of_used_satellites` | Satellites used, when the receiver reports it. |
+| `@user_full_name` | Your editor name. |
+
+The `@position_...` variables (and QField's older `@gnss_...` spellings) are set
+only when the location came from **Use GPS**. For a point picked on the map
+they are empty, so `@position_coordinate is not null` records whether a point
+was measured or placed by hand. `$x` and `$y` give the captured point itself
+either way.
+
+A filled-in value is a starting point: type over it and your value is kept.
+Until you do, it follows the capture, so repositioning the point refreshes it,
+and a default built from other fields updates as you fill those in.
+Text functions (`upper`, `lower`, `trim`, `left`, `right`, `substr`, `replace`,
+`lpad`, `rpad`, `concat`, `length`), number functions (`round`, `floor`,
+`ceil`, `abs`, `min`, `max`), `coalesce`, `if`, and `CASE WHEN` are available.
+Aggregates and lookups into other layers (`aggregate`, `get_feature`) are not.
 
 ### Capture an observation
 

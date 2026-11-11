@@ -51,12 +51,14 @@ import {
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
+  detachFromSourceFile,
   emptyFeatureCollection,
   type FieldType,
   getGeometryType,
   getSchema,
   type GeometryType,
   isCollectionLayer,
+  isFileBackedCollectionLayer,
   MAX_PHOTO_BYTES,
   minVertices,
   parseOptions,
@@ -71,6 +73,7 @@ import {
   type FieldCollectionMarker,
   type FieldCollectionPreview,
 } from "../../lib/field-collection-map";
+import { useCaptureDefaults } from "../../hooks/useCaptureDefaults";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
 import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
@@ -232,6 +235,17 @@ export function FieldCollectionDialog({
     const fields = form.fields.filter((field) => keys.has(field.field));
     return fields.length > 0 ? { fields } : undefined;
   }, [activeLayer, schema]);
+
+  useCaptureDefaults({
+    pending,
+    gpsFix: lastGpsFix,
+    schema,
+    attributeForm,
+    geometry: activeGeometry,
+    layerName: activeLayer?.name,
+    values,
+    setValues,
+  });
 
   const getEngine = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
@@ -861,6 +875,13 @@ export function FieldCollectionDialog({
       setNotice(t("fieldCollection.layerGone"));
       return;
     }
+    // A file-backed layer (an imported QGIS/QField layer) whose features have
+    // not been read yet: appending now would save the capture over the rows
+    // still on their way in.
+    if (!current.geojson && isFileBackedCollectionLayer(current)) {
+      setNotice(t("fieldCollection.layerLoading"));
+      return;
+    }
     const fc = current.geojson ?? emptyFeatureCollection();
     // Read the tracking config off `current`, not the render-time layer: the
     // form can sit open across a configuration change.
@@ -870,7 +891,10 @@ export function FieldCollectionDialog({
           userIdentity: currentEditorIdentity(),
         })
       : feature;
-    updateLayer(activeLayer.id, { geojson: appendFeature(fc, tracked) });
+    updateLayer(activeLayer.id, {
+      geojson: appendFeature(fc, tracked),
+      ...detachFromSourceFile(current),
+    });
     invalidateCapture();
 
     savedCountRef.current += 1;

@@ -267,6 +267,17 @@ export function redactUrlCredentials(value: string): string {
   const keptQuery = query === undefined ? undefined : redactParameterString(query);
   const keptFragment =
     fragment === undefined || !fragment.includes("=") ? fragment : redactParameterString(fragment);
+  // Nothing was a credential: hand the value back untouched. Reassembling it
+  // would still drop an empty query or fragment, so plain text that merely
+  // ends in "?" (a form label such as "Position locked?") would come back
+  // changed and be reported, and saved, as a stripped credential.
+  if (
+    base === (queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex)) &&
+    keptQuery === query &&
+    keptFragment === fragment
+  ) {
+    return value;
+  }
   return base + (keptQuery ? `?${keptQuery}` : "") + (keptFragment ? `#${keptFragment}` : "");
 }
 

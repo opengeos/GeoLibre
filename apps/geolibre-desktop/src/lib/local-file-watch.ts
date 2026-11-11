@@ -6,6 +6,7 @@ import {
   isRestorableVectorPath,
   loadDroppedVectorPaths,
 } from "./tauri-io";
+import { localFileSourceLayer } from "./local-file-source";
 
 /**
  * Per-layer "watch this local file for changes" configuration, persisted under
@@ -116,9 +117,14 @@ export async function reloadLocalFileLayer(
     throw new Error("This layer has no local file to reload.");
   }
 
-  const loaded = (await loadDroppedVectorPaths([path], { skipModels: true })).filter(
-    isLoadedVectorLayer,
-  );
+  // A layer imported from a QGIS project names the GeoPackage table it reads.
+  const sourceLayer = localFileSourceLayer(layer);
+  const loaded = (
+    await loadDroppedVectorPaths([path], {
+      skipModels: true,
+      ...(sourceLayer ? { layer: sourceLayer } : {}),
+    })
+  ).filter(isLoadedVectorLayer);
   if (loaded.length === 0) {
     throw new Error("This file no longer contains any readable vector data.");
   }

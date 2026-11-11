@@ -1,6 +1,7 @@
 import {
   attributeFormFieldLabel,
   parseValueMapText,
+  qgisExpressionProblem,
   useAppStore,
   validateMapExpression,
   valueMapToText,
@@ -38,6 +39,7 @@ interface FieldDraft {
   constraintExpression: string;
   constraintDescription: string;
   visibilityExpression: string;
+  defaultValue: string;
 }
 
 function emptyDraft(): FieldDraft {
@@ -53,6 +55,7 @@ function emptyDraft(): FieldDraft {
     constraintExpression: "",
     constraintDescription: "",
     visibilityExpression: "",
+    defaultValue: "",
   };
 }
 
@@ -69,6 +72,7 @@ function draftFromConfig(config: AttributeFormFieldConfig): FieldDraft {
     constraintExpression: config.constraintExpression ?? "",
     constraintDescription: config.constraintDescription ?? "",
     visibilityExpression: config.visibilityExpression ?? "",
+    defaultValue: config.defaultValue ?? "",
   };
 }
 
@@ -168,6 +172,13 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     [draft],
   );
 
+  // Default values use the QGIS expression subset, not MapLibre expressions;
+  // an unsupported one would silently never fill the field, so refuse it here.
+  const defaultValueProblem = useMemo(
+    () => (draft?.defaultValue.trim() ? qgisExpressionProblem(draft.defaultValue.trim()) : null),
+    [draft],
+  );
+
   // A min above max would make validateAttributeFormField reject every value
   // with no hint that the configuration itself is broken, so refuse to save it.
   const draftMin = draft ? numberOrUndefined(draft.min) : undefined;
@@ -185,6 +196,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     !minMaxInvalid &&
     constraintValidation?.ok !== false &&
     visibilityValidation?.ok !== false &&
+    defaultValueProblem === null &&
     (draft.widget !== "valueMap" || parseValueMapText(draft.valueMapText).length > 0);
 
   const closeForm = () => {
@@ -223,9 +235,22 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
       ...(draft.visibilityExpression.trim()
         ? { visibilityExpression: draft.visibilityExpression.trim() }
         : {}),
+      ...(draft.defaultValue.trim() ? { defaultValue: draft.defaultValue.trim() } : {}),
     };
-    const others = configs.filter((entry) => entry.field !== (editingField ?? draft.field));
-    setLayerAttributeForm(layer.id, { fields: [...others, config] });
+    // Replaced in place: form order is evaluation order for default values,
+    // so a default that builds on an earlier field must not jump ahead of it
+    // just because that field was edited.
+    const target = editingField ?? draft.field;
+    // The designer has no control for the storage type (an import or a
+    // service sets it), so an edit that keeps the widget keeps the type too.
+    const previous = configs.find((entry) => entry.field === target);
+    if (previous?.valueType && previous.widget === config.widget) {
+      config.valueType = previous.valueType;
+    }
+    const fields = configs.some((entry) => entry.field === target)
+      ? configs.map((entry) => (entry.field === target ? config : entry))
+      : [...configs.filter((entry) => entry.field !== config.field), config];
+    setLayerAttributeForm(layer.id, { fields });
     closeForm();
   };
 
@@ -326,6 +351,7 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
             {config.required ? ` · ${t("style.attributeForm.requiredTag")}` : ""}
             {config.constraintExpression ? ` · ${t("style.attributeForm.constraintTag")}` : ""}
             {config.visibilityExpression ? ` · ${t("style.attributeForm.visibilityTag")}` : ""}
+            {config.defaultValue ? ` · ${t("style.attributeForm.defaultTag")}` : ""}
           </p>
         </div>
       ))}
@@ -445,6 +471,28 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
             </div>
           )}
           {expressionRow("visibility", draft.visibilityExpression, visibilityValidation)}
+          <div className="space-y-1">
+            <Label htmlFor={`af-default-${layer.id}`}>
+              {t("style.attributeForm.defaultValue")}
+            </Label>
+            <Input
+              id={`af-default-${layer.id}`}
+              className="font-mono text-xs"
+              value={draft.defaultValue}
+              placeholder={t("style.attributeForm.defaultValuePlaceholder")}
+              aria-invalid={defaultValueProblem !== null}
+              aria-describedby={`af-default-help-${layer.id}`}
+              onChange={(event) => update({ defaultValue: event.target.value })}
+            />
+            <p
+              id={`af-default-help-${layer.id}`}
+              className={`text-xs ${defaultValueProblem !== null ? "text-destructive" : "text-muted-foreground"}`}
+            >
+              {defaultValueProblem !== null
+                ? t("style.attributeForm.defaultValueInvalid", { detail: defaultValueProblem })
+                : t("style.attributeForm.defaultValueHelp")}
+            </p>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={closeForm}>
               {t("style.attributeForm.cancel")}

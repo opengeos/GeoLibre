@@ -979,6 +979,14 @@ export interface AttributeFormFieldConfig {
    * Empty/invalid expressions fail open so a typo cannot hide data entry.
    */
   visibilityExpression?: string;
+  /**
+   * Expression that pre-fills the field when a new feature is captured, in
+   * the QGIS expression subset `qgis-expression.ts` evaluates: `now()`,
+   * `uuid()`, `"site" || '-' || format_date(now(), 'yyyyMMdd')`, or a GPS
+   * variable such as `@position_horizontal_accuracy`. An expression that
+   * cannot be evaluated leaves the field empty.
+   */
+  defaultValue?: string;
 }
 
 /** The Attribute Form designer's whole per-layer configuration. */

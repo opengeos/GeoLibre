@@ -11,6 +11,17 @@ import {
 } from "@geolibre/core";
 import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
+import { collectionMetadata } from "./field-collection";
+import {
+  MAX_RELATION_ENTRIES,
+  parseQgisLayerForm,
+  qgisCaptureGeometry,
+  relationValueMap,
+  type QgisFormImportNote,
+  type QgisFormRelation,
+} from "./qgis-form-import";
+
+export type { QgisFormImportNote } from "./qgis-form-import";
 
 export interface QgisProjectImportWarning {
   layerName: string;
@@ -22,14 +33,32 @@ export interface QgisProjectImportWarning {
     | "remote-file"
     | "network-path"
     | "browser-local-file"
-    | "browser-local-raster";
+    | "browser-local-raster"
+    | "no-geometry";
   provider?: string;
+}
+
+/** A relation-backed dropdown still waiting for its referenced table's rows. */
+export interface QgisPendingFormRelation extends QgisFormRelation {
+  /** GeoLibre id of the imported layer whose form shows the dropdown. */
+  layerId: string;
+  layerName: string;
+  /** File holding the referenced table. */
+  sourcePath: string;
+  /** Table (OGR layer) name inside that file; empty for single-layer files. */
+  table: string;
+  /** The referenced layer's QGIS display expression. */
+  displayExpression?: string;
 }
 
 export interface QgisProjectImportResult {
   project: GeoLibreProject;
   rasters: QgisRasterImport[];
   warnings: QgisProjectImportWarning[];
+  /** Form settings that were not carried over (see `qgis-form-import.ts`). */
+  formNotes: QgisFormImportNote[];
+  /** Dropdowns for {@link materializeQgisFormRelations} to fill in. */
+  formRelations: QgisPendingFormRelation[];
 }
 
 export interface QgisRasterImport {
@@ -49,6 +78,13 @@ export interface QgisRasterImport {
     reversed: boolean;
   };
 }
+
+/**
+ * Row cap of the host's table reader (`GEOPACKAGE_TABLE_ROW_LIMIT` in
+ * `gpkg-reader.ts`, which this module cannot import without pulling sql.js
+ * into the parser). A read that returns this many rows was cut off.
+ */
+export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 
 const MAX_QGS_BYTES = 25 * 1024 * 1024;
 const REMOTE_FETCH_CONCURRENCY = 4;
@@ -113,6 +149,74 @@ export async function materializeQgisRemoteLayers(
   return result;
 }
 
+/** Reads every row of one table of a local data file as plain records. */
+export type QgisTableReader = (
+  sourcePath: string,
+  table: string,
+) => Promise<Record<string, unknown>[]>;
+
+/**
+ * Fill in the dropdowns that read their entries from another layer (QGIS
+ * Value Relation and Relation Reference widgets), by snapshotting the
+ * referenced table's rows into a value map on the field. The referenced
+ * table is often one that has no geometry and so is not a map layer here,
+ * which is why this reads the file rather than a loaded layer.
+ *
+ * A dropdown whose table cannot be read stays a plain text field and is
+ * reported in `formNotes`.
+ *
+ * @param result - A parsed import; mutated in place and returned.
+ * @param readTable - Host reader; each table is read at most once.
+ * @returns `result`.
+ */
+export async function materializeQgisFormRelations(
+  result: QgisProjectImportResult,
+  readTable: QgisTableReader,
+): Promise<QgisProjectImportResult> {
+  const tables = new Map<string, Promise<Record<string, unknown>[] | null>>();
+  for (const relation of result.formRelations) {
+    const key = `${relation.sourcePath}\u0000${relation.table}`;
+    let rows = tables.get(key);
+    if (!rows) {
+      rows = readTable(relation.sourcePath, relation.table).catch((error) => {
+        console.warn(
+          `[GeoLibre] Could not read "${relation.table}" for a QGIS form dropdown.`,
+          error,
+        );
+        return null;
+      });
+      tables.set(key, rows);
+    }
+    const layer = result.project.layers.find((candidate) => candidate.id === relation.layerId);
+    const field = layer?.attributeForm?.fields.find((entry) => entry.field === relation.field);
+    if (!field) continue;
+    const loaded = await rows;
+    const { entries, valueType } = relationValueMap(
+      loaded ?? [],
+      relation,
+      relation.displayExpression,
+    );
+    // A list cut short would make its missing values impossible to enter, so
+    // a table too long for a dropdown (or one the reader itself had to cut
+    // off) stays a text box, and says so.
+    const tooLarge =
+      entries.length > MAX_RELATION_ENTRIES || (loaded?.length ?? 0) >= GEOPACKAGE_TABLE_ROW_LIMIT;
+    if (entries.length === 0 || tooLarge) {
+      result.formNotes.push({
+        layerName: relation.layerName,
+        field: relation.field,
+        reason: tooLarge ? "relation-too-large" : loaded ? "relation-empty" : "relation",
+      });
+      continue;
+    }
+    field.widget = "valueMap";
+    field.valueMap = entries;
+    field.valueType = valueType;
+  }
+  result.formRelations = [];
+  return result;
+}
+
 // SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in file-io/paths.ts and
 // RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs.
 const SUPPORTED_VECTOR_EXTENSIONS = new Set([
@@ -164,6 +268,17 @@ export function importQgisProject(
   const warnings: QgisProjectImportWarning[] = [];
   const layers: GeoLibreLayer[] = [];
   const rasters: QgisRasterImport[] = [];
+  const formNotes: QgisFormImportNote[] = [];
+  const formRelations: QgisPendingFormRelation[] = [];
+  const relationsById = new Map<string, { referencedLayerId: string; referencedField: string }>();
+  document.querySelectorAll("qgis > relations > relation").forEach((relation) => {
+    const relationId = relation.getAttribute("id");
+    const referencedLayerId = relation.getAttribute("referencedLayer");
+    const referencedField = relation.querySelector("fieldRef")?.getAttribute("referencedField");
+    if (relationId && referencedLayerId && referencedField) {
+      relationsById.set(relationId, { referencedLayerId, referencedField });
+    }
+  });
 
   for (const id of orderedIds) {
     const element = byId.get(id);
@@ -210,8 +325,50 @@ export function importQgisProject(
       continue;
     }
 
+    // A table without geometry (a lookup list, a child table of photos) has
+    // nothing to draw. It is not a map layer, but dropdowns that read from it
+    // are still filled in by materializeQgisFormRelations.
+    if (element.getAttribute("geometry")?.toLowerCase() === "no geometry") {
+      warnings.push({ layerName: name, reason: "no-geometry" });
+      continue;
+    }
+
+    const layerId = uniqueLayerId(id, layers);
+    const sourceLayer = qgisSourceLayerName(dataSource);
+    const form = parseQgisLayerForm(element, relationsById);
+    const captureGeometry = qgisCaptureGeometry(element);
+    for (const note of form.notes) formNotes.push({ layerName: name, ...note });
+    for (const relation of form.relations) {
+      const referenced = byId.get(relation.referencedLayerId);
+      const referencedSource = referenced
+        ? qgisSourcePath(text(referenced.querySelector(":scope > datasource")), sourcePath)
+        : "";
+      if (!referenced || !referencedSource || isHttpSource(referencedSource)) {
+        formNotes.push({ layerName: name, field: relation.field, reason: "relation" });
+        continue;
+      }
+      const displayExpression = text(referenced.querySelector(":scope > previewExpression"));
+      formRelations.push({
+        ...relation,
+        layerId,
+        layerName: name,
+        sourcePath: referencedSource,
+        table: qgisSourceLayerName(text(referenced.querySelector(":scope > datasource"))),
+        ...(displayExpression ? { displayExpression } : {}),
+      });
+    }
+    const baseMetadata: Record<string, unknown> = {
+      ...(!isHttpSource(source) ? { localFileReloadable: true } : {}),
+      importedFrom: "qgis",
+      qgisLayerId: id,
+      qgisProvider: provider,
+      // Which table of a multi-layer file (a GeoPackage) this layer reads;
+      // without it every layer of the file would load the first table.
+      ...(sourceLayer ? { sourceLayer } : {}),
+    };
+
     layers.push({
-      id: uniqueLayerId(id, layers),
+      id: layerId,
       name,
       type: "geojson",
       source: {
@@ -221,12 +378,13 @@ export function importQgisProject(
       visible: visibilityByLayerId.get(id) ?? true,
       opacity: parseOpacity(element),
       style: parseLayerStyle(element),
-      metadata: {
-        ...(!isHttpSource(source) ? { localFileReloadable: true } : {}),
-        importedFrom: "qgis",
-        qgisLayerId: id,
-        qgisProvider: provider,
-      },
+      // A layer that carries a form is a Field Collection target, so the
+      // project keeps collecting data the way it did in QField.
+      metadata:
+        form.form && captureGeometry
+          ? collectionMetadata(form.schema, captureGeometry, baseMetadata)
+          : baseMetadata,
+      ...(form.form ? { attributeForm: form.form } : {}),
       sourcePath: source,
       ...(groupByLayerId.get(id) ? { groupId: groupByLayerId.get(id) } : {}),
     });
@@ -243,7 +401,16 @@ export function importQgisProject(
     qgisProjectPath: sourcePath,
     qgisVersion: document.documentElement.getAttribute("version") ?? "",
   };
-  return { project, rasters, warnings };
+  return { project, rasters, warnings, formNotes, formRelations };
+}
+
+/** The `layername=` part of an OGR data source (`file.gpkg|layername=roads`). */
+function qgisSourceLayerName(dataSource: string): string {
+  for (const part of dataSource.split("|").slice(1)) {
+    const match = /^\s*layername=(.*)$/i.exec(part);
+    if (match) return match[1].trim();
+  }
+  return "";
 }
 
 function parseRasterState(element: Element): QgisRasterImport["state"] {

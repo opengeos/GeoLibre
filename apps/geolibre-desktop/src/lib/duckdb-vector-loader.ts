@@ -688,7 +688,11 @@ async function loadGeoPackageVector(
         confirmLargeDataset({ name: file.name, featureCount }, options.onLargeDataset)
     : undefined;
 
-  const { featureCollection, epsgCode } = await loadGeoPackageVectorFile(file.data, onBeforeRead);
+  const { featureCollection, epsgCode } = await loadGeoPackageVectorFile(
+    file.data,
+    onBeforeRead,
+    options.layer,
+  );
   if (epsgCode == null) {
     return featureCollection as FeatureCollection;
   }

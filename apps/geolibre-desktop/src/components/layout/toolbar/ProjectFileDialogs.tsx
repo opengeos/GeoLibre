@@ -10,7 +10,7 @@ import {
   Label,
 } from "@geolibre/ui";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,7 +19,10 @@ import {
   type ProjectFileActions,
 } from "../../../hooks/useProjectFileActions";
 import type { ArcgisProjectImportWarning } from "../../../lib/arcgis-project-import";
-import type { QgisProjectImportWarning } from "../../../lib/qgis-project-import";
+import type {
+  QgisFormImportNote,
+  QgisProjectImportWarning,
+} from "../../../lib/qgis-project-import";
 import {
   fetchSharedProjectVersions,
   shareHostLabel,
@@ -69,6 +72,26 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       }),
     [t],
   );
+
+  const describeQgisFormNote = useCallback(
+    (note: QgisFormImportNote & { reason: string }) =>
+      t(`toolbar.item.qgisFormNoteReason.${note.reason as QgisFormImportNote["reason"]}`),
+    [t],
+  );
+  // One entry per field, labelled "Layer: field", grouped by what was skipped.
+  const qgisFormNotes = useMemo(
+    () =>
+      (projectFiles.qgisImportFormNotes ?? []).map((note) => ({
+        ...note,
+        layerName: `${note.layerName} › ${note.field}`,
+      })),
+    [projectFiles.qgisImportFormNotes],
+  );
+  const qgisWarningCount = projectFiles.qgisImportWarnings?.length ?? 0;
+  const closeQgisImportDialog = () => {
+    projectFiles.setQgisImportWarnings(null);
+    projectFiles.setQgisImportFormNotes(null);
+  };
 
   return (
     <>
@@ -236,28 +259,42 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         }
       />
       <Dialog
-        open={projectFiles.qgisImportWarnings !== null}
+        open={projectFiles.qgisImportWarnings !== null || projectFiles.qgisImportFormNotes !== null}
         onOpenChange={(open: boolean) => {
-          if (!open) projectFiles.setQgisImportWarnings(null);
+          if (!open) closeQgisImportDialog();
         }}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t("toolbar.item.qgisImportComplete")}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.qgisImportWarnings", {
-                count: projectFiles.qgisImportWarnings?.length ?? 0,
-              })}
+              {qgisWarningCount > 0
+                ? t("toolbar.item.qgisImportWarnings", { count: qgisWarningCount })
+                : t("toolbar.item.qgisImportFormNotes")}
             </DialogDescription>
           </DialogHeader>
-          <ImportWarningList
-            warnings={projectFiles.qgisImportWarnings ?? []}
-            describe={describeQgisWarning}
-          />
+          {qgisWarningCount > 0 ? (
+            <ImportWarningList
+              warnings={projectFiles.qgisImportWarnings ?? []}
+              describe={describeQgisWarning}
+            />
+          ) : null}
+          {qgisFormNotes.length > 0 ? (
+            <div className="space-y-2">
+              {qgisWarningCount > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t("toolbar.item.qgisImportFormNotes")}
+                </p>
+              ) : null}
+              <ImportWarningList
+                warnings={qgisFormNotes}
+                describe={describeQgisFormNote}
+                countLabel={(count) => t("toolbar.item.qgisFormNoteFieldCount", { count })}
+              />
+            </div>
+          ) : null}
           <div className="flex justify-end">
-            <Button onClick={() => projectFiles.setQgisImportWarnings(null)}>
-              {t("common.ok")}
-            </Button>
+            <Button onClick={closeQgisImportDialog}>{t("common.ok")}</Button>
           </div>
         </DialogContent>
       </Dialog>

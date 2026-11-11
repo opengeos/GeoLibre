@@ -103,7 +103,7 @@ are described in [Web Services](user-guide/web-services.md) and
 | Format | Entry point | Notes |
 | --- | --- | --- |
 | GeoLibre project (`.geolibre.json`) | Project > Open From | Layers, styles, groups, and map state; remote sources and local file references still need to be accessible. |
-| QGIS project (`.qgs`, `.qgz`) | Project > Import | Imports supported layers and settings; reports skipped sources. Local paths require desktop access. |
+| QGIS project (`.qgs`, `.qgz`) | Project > Import | Imports supported layers, settings and attribute forms; reports skipped sources. Local paths require desktop access. |
 | ArcGIS Pro project or map (`.aprx`, `.mapx`) | Project > Import | Imports supported layers and settings; see the [project import guide](user-guide/projects.md#importing-an-arcgis-pro-project) for requirements. |
 
 ## WCS raster subsets

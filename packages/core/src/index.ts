@@ -22,6 +22,7 @@ export * from "./document-locale";
 export * from "./label-number-format";
 export * from "./external-native-paint";
 export * from "./attribute-form";
+export * from "./qgis-expression";
 export * from "./layer-descriptive-metadata";
 export * from "./map-click-claims";
 export * from "./popup";
