@@ -10,6 +10,7 @@
  */
 import {
   computeAttributeFormDefaults,
+  qgisExpressionReferences,
   type AttributeFormConfig,
   type QgisExpressionContext,
 } from "@geolibre/core";
@@ -132,14 +133,21 @@ export function hasAttributeFormDefaults(form: AttributeFormConfig | undefined):
  *
  * A field stays under the defaults' control while it is empty or still holds
  * the value the defaults last put there; once the user types something else
- * it is theirs. Controlled fields are recomputed on every call, so moving the
- * point from a GPS fix to a map click clears the accuracy it no longer has.
+ * it is theirs.
+ *
+ * `mode` says what just changed. `"capture"` (a location was captured or
+ * moved) recomputes every controlled field, so moving the point from a GPS
+ * fix to a map click clears the accuracy it no longer has. `"input"` (the
+ * user edited a field) recomputes only defaults that read other fields, such
+ * as a file name built from a site code typed after the capture, and leaves
+ * `uuid()` and `now()` alone so an ID does not change on every keystroke.
  *
  * @param form - The capture target's form config.
  * @param values - The form's current raw values.
- * @param autoFilled - What the previous call filled in, by field.
+ * @param autoFilled - What earlier calls filled in, by field.
  * @param context - Variables, geometry and `transform` for the expressions;
- *   `properties` are the user-entered values, already coerced.
+ *   `properties` are the form's current values, already coerced.
+ * @param mode - What triggered the recompute.
  * @returns The next values (the same object when nothing changed) and the
  *   record to pass as `autoFilled` next time.
  */
@@ -148,23 +156,42 @@ export function applyCaptureDefaults(
   values: Record<string, string>,
   autoFilled: Record<string, string>,
   context: QgisExpressionContext & { geometry?: Geometry | null },
+  mode: "capture" | "input" = "capture",
 ): { values: Record<string, string>; autoFilled: Record<string, string> } {
-  const controlled = new Set<string>();
+  const refresh = new Set<string>();
   const skip = new Set<string>();
+  const kept: Record<string, string> = {};
   for (const field of form?.fields ?? []) {
-    if (!field.defaultValue?.trim()) continue;
+    const source = field.defaultValue?.trim();
+    if (!source) continue;
     const current = values[field.field] ?? "";
-    if (current === "" || current === autoFilled[field.field]) controlled.add(field.field);
-    else skip.add(field.field);
+    const controlled = current === "" || current === autoFilled[field.field];
+    let recompute = controlled;
+    if (controlled && mode === "input") {
+      const references = qgisExpressionReferences(source);
+      recompute = references !== null && !references.volatile && references.fields.length > 0;
+    }
+    if (recompute) {
+      refresh.add(field.field);
+    } else {
+      skip.add(field.field);
+      if (controlled && autoFilled[field.field] !== undefined) {
+        kept[field.field] = autoFilled[field.field];
+      }
+    }
   }
-  if (controlled.size === 0) return { values, autoFilled: {} };
-  const defaults = computeAttributeFormDefaults(form, context, { skip });
+  if (refresh.size === 0) return { values, autoFilled: kept };
+  // A value the defaults put there earlier must not feed its own recompute,
+  // or a default that became NULL would still be read by the fields after it.
+  const properties = { ...context.properties };
+  for (const field of refresh) delete properties[field];
+  const defaults = computeAttributeFormDefaults(form, { ...context, properties }, { skip });
   let next = values;
-  for (const field of controlled) {
+  for (const field of refresh) {
     const value = defaults[field] ?? "";
     if ((values[field] ?? "") === value) continue;
     if (next === values) next = { ...values };
     next[field] = value;
   }
-  return { values: next, autoFilled: defaults };
+  return { values: next, autoFilled: { ...kept, ...defaults } };
 }

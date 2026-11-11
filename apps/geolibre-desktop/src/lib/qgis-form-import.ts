@@ -11,6 +11,7 @@
  */
 import {
   evaluateQgisExpression,
+  parseQgisExpression,
   qgisExpressionProblem,
   qgisExpressionToMapLibre,
   type AttributeFormConfig,
@@ -28,7 +29,7 @@ import {
 export interface QgisFormImportNote {
   layerName: string;
   field: string;
-  reason: "default" | "constraint" | "relation";
+  reason: "default" | "constraint" | "relation" | "relation-too-large";
   /** What was unsupported (function names, or the parse error). */
   detail?: string;
 }
@@ -220,10 +221,23 @@ export function parseQgisLayerForm(
         }
         break;
       }
-      case "CheckBox":
-        config.widget = "checkbox";
+      case "CheckBox": {
+        // A checkbox on a text or integer column stores the two configured
+        // states ("Y"/"N"), not a boolean. The checkbox widget here only
+        // stores booleans, so such a field becomes a two-entry dropdown that
+        // keeps writing the values the rest of the data uses.
+        const checked = optionText(options, "CheckedState");
+        const unchecked = optionText(options, "UncheckedState");
+        if (checked !== "" && unchecked !== "" && checked !== unchecked) {
+          config.widget = "valueMap";
+          config.valueMap = [{ value: checked }, { value: unchecked }];
+          config.valueType = "string";
+        } else {
+          config.widget = "checkbox";
+        }
         meaningful = true;
         break;
+      }
       case "DateTime":
         config.widget = "date";
         schemaType = "date";
@@ -260,7 +274,7 @@ export function parseQgisLayerForm(
       }
       case "Hidden":
         // Still captured (a hidden field usually holds a default), not shown.
-        config.visibilityExpression = "false";
+        config.visibilityExpression = '["literal", false]';
         meaningful = true;
         break;
       default:
@@ -290,7 +304,14 @@ export function parseQgisLayerForm(
     ) {
       const translated = qgisExpressionToMapLibre(constraintExpression.expression);
       if (translated) {
-        config.constraintExpression = translated;
+        // QGIS does not hold an empty value against a constraint (that is
+        // what Not null is for), while the converted expression would read a
+        // blank field as 0 or "" and reject it.
+        config.constraintExpression = JSON.stringify([
+          "any",
+          ["==", ["get", name], null],
+          JSON.parse(translated),
+        ]);
         if (constraintExpression.description) {
           config.constraintDescription = constraintExpression.description;
         }
@@ -331,8 +352,19 @@ export function parseQgisLayerForm(
   };
 }
 
-/** Most dropdown entries read from a referenced table. */
+/** Most dropdown entries a relation may produce before it is left as text. */
 export const MAX_RELATION_ENTRIES = 1000;
+
+/** A relation dropdown's entries and how its stored values are typed. */
+export interface RelationValueMap {
+  entries: AttributeFormValueMapEntry[];
+  /**
+   * `"string"` when the key column holds text, so a code such as `"01"` or
+   * `"2"` is stored as text like the rows already in the layer; `"number"`
+   * when every key is numeric.
+   */
+  valueType: "string" | "number";
+}
 
 /**
  * Turn a referenced table's rows into dropdown entries.
@@ -341,23 +373,28 @@ export const MAX_RELATION_ENTRIES = 1000;
  * @param relation - Which columns hold the stored value and the label.
  * @param displayExpression - The referenced layer's QGIS display expression,
  *   used for the label when the widget does not name a label column.
- * @returns De-duplicated entries sorted by label, capped at
- *   {@link MAX_RELATION_ENTRIES}.
+ * @returns Every distinct entry, sorted by label. The caller decides what to
+ *   do with a list longer than {@link MAX_RELATION_ENTRIES}.
  */
 export function relationValueMap(
   rows: readonly Record<string, unknown>[],
   relation: QgisFormRelation,
   displayExpression?: string,
-): AttributeFormValueMapEntry[] {
+): RelationValueMap {
   const seen = new Set<string>();
   const entries: AttributeFormValueMapEntry[] = [];
-  const expression = relation.useDisplayExpression ? displayExpression?.trim() : undefined;
+  const source = relation.useDisplayExpression ? displayExpression?.trim() : undefined;
+  // Parsed once: the same expression labels every row.
+  const parsed = source ? parseQgisExpression(source) : null;
+  const expression = parsed?.ok ? parsed.node : null;
+  let numeric = true;
   for (const row of rows) {
     const raw = row[relation.keyField];
     if (raw == null || raw === "") continue;
     const value = String(raw);
     if (seen.has(value)) continue;
     seen.add(value);
+    if (typeof raw !== "number" && typeof raw !== "bigint") numeric = false;
     let label: unknown = relation.labelField ? row[relation.labelField] : undefined;
     if (label == null && expression) {
       const result = evaluateQgisExpression(expression, { properties: row });
@@ -365,9 +402,9 @@ export function relationValueMap(
     }
     const text = label == null ? "" : String(label).trim();
     entries.push(text && text !== value ? { value, label: text } : { value });
-    if (entries.length >= MAX_RELATION_ENTRIES) break;
   }
-  return entries.sort((a, b) =>
+  entries.sort((a, b) =>
     (a.label ?? a.value).localeCompare(b.label ?? b.value, undefined, { numeric: true }),
   );
+  return { entries, valueType: numeric ? "number" : "string" };
 }

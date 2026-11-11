@@ -1,18 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { validateAttributeFormValues } from "@geolibre/core";
+import {
+  getAttributeFormField,
+  isAttributeFormFieldVisible,
+  validateAttributeFormValues,
+} from "@geolibre/core";
 import { DOMParser } from "linkedom";
 import {
+  detachFromSourceFile,
   getGeometryType,
   getSchema,
   isCollectionLayer,
+  isFileBackedCollectionLayer,
 } from "../apps/geolibre-desktop/src/lib/field-collection";
 import {
   applyCaptureDefaults,
   captureExpressionVariables,
   defaultValueEpsgCodes,
 } from "../apps/geolibre-desktop/src/lib/field-collection-defaults";
-import { relationValueMap } from "../apps/geolibre-desktop/src/lib/qgis-form-import";
+import {
+  MAX_RELATION_ENTRIES,
+  relationValueMap,
+} from "../apps/geolibre-desktop/src/lib/qgis-form-import";
 import {
   importQgisProject,
   materializeQgisFormRelations,
@@ -77,6 +86,7 @@ function surveyProject(): string {
           ${field("height", "Range", option("Min", 0) + option("Max", 60) + option("Step", 5) + option("Style", "Slider"))}
           ${field("count", "Range", option("Min", -2147483648) + option("Max", 2147483647) + option("Style", "SpinBox"))}
           ${field("damaged", "CheckBox")}
+          ${field("fenced", "CheckBox", option("CheckedState", "Y") + option("UncheckedState", "N"))}
           ${field("visited", "DateTime")}
           ${field("accuracy", "TextEdit")}
           ${field("easting", "Hidden")}
@@ -193,9 +203,13 @@ describe("QGIS form import", () => {
       max: 60,
       step: 5,
       constraintExpression: JSON.stringify([
-        "all",
-        [">", ["to-number", ["get", "height"]], 0],
-        [">=", 60, ["to-number", ["get", "height"]]],
+        "any",
+        ["==", ["get", "height"], null],
+        [
+          "all",
+          [">", ["to-number", ["get", "height"]], 0],
+          [">=", 60, ["to-number", ["get", "height"]]],
+        ],
       ]),
       constraintDescription: "between 0 and 60 m",
     });
@@ -208,7 +222,13 @@ describe("QGIS form import", () => {
       widget: "date",
       defaultValue: "now()",
     });
-    assert.equal(byField.get("easting")?.visibilityExpression, "false");
+    // A checkbox that stores custom states keeps writing those states.
+    assert.deepEqual(byField.get("fenced"), {
+      field: "fenced",
+      widget: "valueMap",
+      valueMap: [{ value: "Y" }, { value: "N" }],
+      valueType: "string",
+    });
     assert.equal(
       byField.get("photo_name")?.defaultValue,
       "'DCIM/' || species || '_' || format_date(now(), 'yyyyMMdd') || '.jpg'",
@@ -245,8 +265,23 @@ describe("QGIS form import", () => {
     assert.equal(isCollectionLayer(parcels), false);
   });
 
-  it("hides a Hidden-widget field without dropping its validation-free value", () => {
+  it("hides a Hidden-widget field", () => {
     const { points } = imported();
+    const easting = getAttributeFormField(points.attributeForm, "easting");
+    assert.ok(easting);
+    assert.equal(isAttributeFormFieldVisible(easting, {}), false);
+    const height = getAttributeFormField(points.attributeForm, "height");
+    assert.ok(height);
+    assert.equal(isAttributeFormFieldVisible(height, {}), true);
+  });
+
+  it("does not hold an empty optional field against its constraint", () => {
+    const { points } = imported();
+    // height is optional: blank passes, as it does in QGIS.
+    assert.deepEqual(validateAttributeFormValues(points.attributeForm, { species: "QUE" }), {
+      ok: true,
+      errors: {},
+    });
     const result = validateAttributeFormValues(points.attributeForm, {
       species: "QUE",
       height: 20,
@@ -284,14 +319,19 @@ describe("QGIS form import", () => {
     });
     assert.equal(reads.length, 2);
     const fields = points.attributeForm?.fields ?? [];
-    assert.deepEqual(fields.find((entry) => entry.field === "material")?.valueMap, [
+    const material = fields.find((entry) => entry.field === "material");
+    assert.deepEqual(material?.valueMap, [
       { value: "CO", label: "Concrete" },
       { value: "ST", label: "Steel" },
     ]);
-    assert.deepEqual(fields.find((entry) => entry.field === "owner_id")?.valueMap, [
+    // Typed from the key column, so text codes stay text and ids stay numbers.
+    assert.equal(material?.valueType, "string");
+    const owner = fields.find((entry) => entry.field === "owner_id");
+    assert.deepEqual(owner?.valueMap, [
       { value: "1", label: "Abel, Bo" },
       { value: "2", label: "Young, Ada" },
     ]);
+    assert.equal(owner?.valueType, "number");
     assert.deepEqual(result.formRelations, []);
   });
 
@@ -317,7 +357,44 @@ describe("QGIS form import", () => {
         keyField: "id",
         useDisplayExpression: true,
       }),
-      [{ value: "a" }, { value: "b" }],
+      { entries: [{ value: "a" }, { value: "b" }], valueType: "string" },
+    );
+  });
+
+  it("leaves a dropdown as text when its table is too long for a list", async () => {
+    const { result, points } = imported();
+    await materializeQgisFormRelations(result, async (_path, table) =>
+      table === "materials"
+        ? Array.from({ length: MAX_RELATION_ENTRIES + 1 }, (_, index) => ({
+            code: `M${index}`,
+            label: `Material ${index}`,
+          }))
+        : [{ id: 1, first_name: "Bo", last_name: "Abel" }],
+    );
+    const fields = points.attributeForm?.fields ?? [];
+    assert.equal(fields.find((entry) => entry.field === "material")?.widget, "text");
+    assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "valueMap");
+    assert.deepEqual(
+      result.formNotes.filter((note) => note.reason === "relation-too-large"),
+      [{ layerName: "Measured points", field: "material", reason: "relation-too-large" }],
+    );
+  });
+
+  it("detaches a file-backed layer once something is captured into it", () => {
+    const { points } = imported();
+    assert.equal(isFileBackedCollectionLayer(points), true);
+    const patch = detachFromSourceFile(points);
+    assert.equal("sourcePath" in patch && patch.sourcePath, undefined);
+    assert.equal(patch.metadata?.localFileReloadable, undefined);
+    assert.equal(patch.metadata?.capturedFromPath, "/home/me/survey/data/survey.gpkg");
+    assert.equal(patch.metadata?.fieldCollection, true);
+    const detached = { ...points, ...patch };
+    assert.equal(isFileBackedCollectionLayer(detached), false);
+    // A layer created in the app, or one read from a URL, has nothing to detach.
+    assert.deepEqual(detachFromSourceFile({ metadata: { fieldCollection: true } }), {});
+    assert.deepEqual(
+      detachFromSourceFile({ sourcePath: "https://example.com/a.geojson", metadata: {} }),
+      {},
     );
   });
 });
@@ -391,6 +468,69 @@ describe("Field Collection default values", () => {
     assert.equal(second.values.visited, "2026-11-01");
     assert.equal(second.values.accuracy, "");
     assert.equal("visited" in second.autoFilled, false);
+  });
+
+  it("fills a default built from a field the user types after the capture", () => {
+    const form = {
+      fields: [
+        { field: "uuid", widget: "text" as const, defaultValue: "uuid('WithoutBraces')" },
+        { field: "site", widget: "text" as const },
+        { field: "file", widget: "text" as const, defaultValue: "site || '.jpg'" },
+      ],
+    };
+    let id = 0;
+    const context = { uuid: () => `id-${(id += 1)}` };
+    const captured = applyCaptureDefaults(form, {}, {}, context);
+    assert.deepEqual(captured.values, { uuid: "id-1" });
+
+    const typed = { ...captured.values, site: "A1" };
+    const updated = applyCaptureDefaults(
+      form,
+      typed,
+      captured.autoFilled,
+      { ...context, properties: { uuid: "id-1", site: "A1" } },
+      "input",
+    );
+    // The file name follows the site; the ID is not regenerated by typing.
+    assert.deepEqual(updated.values, { uuid: "id-1", site: "A1", file: "A1.jpg" });
+    assert.equal(updated.autoFilled.uuid, "id-1");
+
+    const settled = applyCaptureDefaults(
+      form,
+      updated.values,
+      updated.autoFilled,
+      { ...context, properties: { uuid: "id-1", site: "A1", file: "A1.jpg" } },
+      "input",
+    );
+    assert.equal(settled.values, updated.values);
+  });
+
+  it("does not feed a cleared default back into the fields that read it", () => {
+    const form = {
+      fields: [
+        {
+          field: "accuracy",
+          widget: "text" as const,
+          defaultValue: "@position_horizontal_accuracy",
+        },
+        { field: "note", widget: "text" as const, defaultValue: "'Accuracy: ' || accuracy" },
+      ],
+    };
+    const first = applyCaptureDefaults(
+      form,
+      {},
+      {},
+      {
+        variables: captureExpressionVariables({ fix }),
+      },
+    );
+    assert.deepEqual(first.values, { accuracy: "3.5", note: "Accuracy: 3.5" });
+    // Repositioned on the map: no fix, so both defaults clear together.
+    const second = applyCaptureDefaults(form, first.values, first.autoFilled, {
+      variables: captureExpressionVariables({ fix: null }),
+      properties: { accuracy: "3.5", note: "Accuracy: 3.5" },
+    });
+    assert.deepEqual(second.values, { accuracy: "", note: "" });
   });
 
   it("returns the same object when nothing changes", () => {

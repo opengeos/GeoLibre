@@ -6,6 +6,7 @@ import {
   evaluateQgisExpression,
   parseQgisExpression,
   qgisExpressionProblem,
+  qgisExpressionReferences,
   qgisExpressionToMapLibre,
   type AttributeFormConfig,
   type QgisExpressionContext,
@@ -97,6 +98,69 @@ describe("QGIS expression subset", () => {
     assert.equal(value("if(1 = 2, 'a', 'b')"), "b");
   });
 
+  it("matches LIKE without building a regular expression", () => {
+    assert.equal(value("'a.c' like 'a.c'"), true);
+    assert.equal(value("'abc' like 'a.c'"), false);
+    assert.equal(value("'abc' like 'a_c'"), true);
+    assert.equal(value("'abc' like '%'"), true);
+    assert.equal(value("'' like '%'"), true);
+    assert.equal(value("'abc' like 'a%b%c%'"), true);
+    assert.equal(value("'abc' like '%d'"), false);
+    assert.equal(value("'50%' like '50\\%'"), true);
+    assert.equal(value("'505' like '50\\%'"), false);
+    // The shape that backtracks catastrophically as a regex returns at once.
+    const started = Date.now();
+    const subject = "a".repeat(4000);
+    const result = evaluateQgisExpression(`x like '${"%a".repeat(40)}b'`, {
+      properties: { x: subject },
+    });
+    assert.deepEqual(result, { ok: true, value: false });
+    assert.ok(Date.now() - started < 1000);
+  });
+
+  it("evaluates only the chosen if() branch", () => {
+    assert.equal(value("if(true, 'ok', to_int('invalid'))"), "ok");
+    assert.equal(value("if(a is null, 0, to_int(a))", { properties: { a: null } }), 0);
+    assert.equal(evaluateQgisExpression("if(false, 'ok', to_int('invalid'))").ok, false);
+  });
+
+  it("reads zone-less dates as local calendar dates", () => {
+    assert.equal(value("to_date('2026-11-11')"), "2026-11-11");
+    assert.equal(value("day('2026-11-01')"), 1);
+    assert.equal(value("month('2026-01-31')"), 1);
+    assert.equal(
+      value("format_date('2026-03-05 07:08:09', 'dd.MM.yyyy HH:mm')"),
+      "05.03.2026 07:08",
+    );
+  });
+
+  it("refuses to build oversized text", () => {
+    assert.equal(evaluateQgisExpression("rpad('x', 200000000, 'x')").ok, false);
+    assert.equal(evaluateQgisExpression("lpad('x', 200000000, 'x')").ok, false);
+    assert.equal(value("lpad('7', 3, '0')"), "007");
+  });
+
+  it("lists the fields an expression reads and whether it is volatile", () => {
+    assert.deepEqual(qgisExpressionReferences(`"site" || '_' || left(code, 2)`), {
+      fields: ["site", "code"],
+      volatile: false,
+    });
+    assert.deepEqual(qgisExpressionReferences("uuid()"), { fields: [], volatile: true });
+    assert.deepEqual(qgisExpressionReferences("site || format_date(now(), 'yyyy')"), {
+      fields: ["site"],
+      volatile: true,
+    });
+    assert.deepEqual(qgisExpressionReferences("attribute('site')"), {
+      fields: ["site"],
+      volatile: false,
+    });
+    assert.deepEqual(qgisExpressionReferences("@position_horizontal_accuracy"), {
+      fields: [],
+      volatile: false,
+    });
+    assert.equal(qgisExpressionReferences("1 +"), null);
+  });
+
   it("reports syntax errors and unsupported functions without throwing", () => {
     assert.equal(parseQgisExpression("1 +").ok, false);
     assert.equal(parseQgisExpression("'open").ok, false);
@@ -116,6 +180,8 @@ describe("QGIS expression subset", () => {
       assert.equal(evaluateQgisExpression(source).ok, false, source);
     }
     assert.equal(value("constructor"), null);
+    assert.equal(value("attribute('constructor')", { properties: { a: 1 } }), null);
+    assert.equal(value("attribute('__proto__')", { properties: { a: 1 } }), null);
     assert.equal(value("@__proto__"), null);
     assert.equal(parseQgisExpression("(".repeat(200) + "1" + ")".repeat(200)).ok, false);
   });
@@ -156,6 +222,8 @@ describe("QGIS constraint to MapLibre expression", () => {
     assert.equal(qgisExpressionToMapLibre("@position_coordinate is not null"), null);
     assert.equal(qgisExpressionToMapLibre("now() > review_date"), null);
     assert.equal(qgisExpressionToMapLibre("regexp_match(code, '^A')"), null);
+    // to_int() truncates; MapLibre has no integer conversion to match it.
+    assert.equal(qgisExpressionToMapLibre("to_int(depth) = 1"), null);
     assert.equal(qgisExpressionToMapLibre("42"), null);
   });
 });

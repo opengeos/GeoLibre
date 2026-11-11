@@ -237,8 +237,14 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
         : {}),
       ...(draft.defaultValue.trim() ? { defaultValue: draft.defaultValue.trim() } : {}),
     };
-    const others = configs.filter((entry) => entry.field !== (editingField ?? draft.field));
-    setLayerAttributeForm(layer.id, { fields: [...others, config] });
+    // Replaced in place: form order is evaluation order for default values,
+    // so a default that builds on an earlier field must not jump ahead of it
+    // just because that field was edited.
+    const target = editingField ?? draft.field;
+    const fields = configs.some((entry) => entry.field === target)
+      ? configs.map((entry) => (entry.field === target ? config : entry))
+      : [...configs.filter((entry) => entry.field !== config.field), config];
+    setLayerAttributeForm(layer.id, { fields });
     closeForm();
   };
 

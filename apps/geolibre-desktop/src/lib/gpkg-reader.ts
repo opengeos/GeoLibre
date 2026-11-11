@@ -301,7 +301,11 @@ function missingLayerMessage(name?: string): string {
     : "No vector feature layer found in this GeoPackage.";
 }
 
-/** Most rows {@link readGeoPackageTableRowsSync} returns from one table. */
+/**
+ * Most rows {@link readGeoPackageTableRowsSync} returns from one table.
+ * SYNC: `GEOPACKAGE_TABLE_ROW_LIMIT` in `qgis-project-import.ts`, which treats
+ * a result of this size as cut off.
+ */
 export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 
 /**

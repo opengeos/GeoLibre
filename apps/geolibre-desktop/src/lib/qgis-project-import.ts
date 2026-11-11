@@ -13,6 +13,7 @@ import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
 import { collectionMetadata } from "./field-collection";
 import {
+  MAX_RELATION_ENTRIES,
   parseQgisLayerForm,
   qgisCaptureGeometry,
   relationValueMap,
@@ -77,6 +78,13 @@ export interface QgisRasterImport {
     reversed: boolean;
   };
 }
+
+/**
+ * Row cap of the host's table reader (`GEOPACKAGE_TABLE_ROW_LIMIT` in
+ * `gpkg-reader.ts`, which this module cannot import without pulling sql.js
+ * into the parser). A read that returns this many rows was cut off.
+ */
+export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 
 const MAX_QGS_BYTES = 25 * 1024 * 1024;
 const REMOTE_FETCH_CONCURRENCY = 4;
@@ -183,17 +191,27 @@ export async function materializeQgisFormRelations(
     const field = layer?.attributeForm?.fields.find((entry) => entry.field === relation.field);
     if (!field) continue;
     const loaded = await rows;
-    const entries = loaded ? relationValueMap(loaded, relation, relation.displayExpression) : [];
-    if (entries.length === 0) {
+    const { entries, valueType } = relationValueMap(
+      loaded ?? [],
+      relation,
+      relation.displayExpression,
+    );
+    // A list cut short would make its missing values impossible to enter, so
+    // a table too long for a dropdown (or one the reader itself had to cut
+    // off) stays a text box, and says so.
+    const tooLarge =
+      entries.length > MAX_RELATION_ENTRIES || (loaded?.length ?? 0) >= GEOPACKAGE_TABLE_ROW_LIMIT;
+    if (entries.length === 0 || tooLarge) {
       result.formNotes.push({
         layerName: relation.layerName,
         field: relation.field,
-        reason: "relation",
+        reason: tooLarge ? "relation-too-large" : "relation",
       });
       continue;
     }
     field.widget = "valueMap";
     field.valueMap = entries;
+    field.valueType = valueType;
   }
   result.formRelations = [];
   return result;

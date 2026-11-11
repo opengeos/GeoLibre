@@ -631,6 +631,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleImportQgisProject = async () => {
     const result = await openQgisProjectFile();
     if (!result) return;
+    // The reads below can outlast the user opening something else; loading
+    // the import then would replace the project they just opened.
+    const generation = useAppStore.getState().projectGeneration;
+    const superseded = () => useAppStore.getState().projectGeneration !== generation;
     try {
       const imported = await materializeQgisRemoteLayers(
         importQgisProject(result.data, result.path),
@@ -672,6 +676,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // Dropdowns that list another table's rows are filled in before the
       // project loads, so the form is complete the first time it opens.
       await materializeQgisFormRelations(imported, readQgisFormTable);
+      if (superseded()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,

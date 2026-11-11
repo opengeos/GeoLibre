@@ -100,6 +100,15 @@ const MAX_DEPTH = 64;
 
 class QgisExpressionError extends Error {}
 
+/** Backslash escapes QGIS string literals define. */
+const STRING_ESCAPES = new Map([
+  ["n", "\n"],
+  ["t", "\t"],
+  ["r", "\r"],
+  ["\\", "\\"],
+  ["'", "'"],
+]);
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -119,10 +128,16 @@ function tokenize(source: string): Token[] {
         return value;
       }
       if (char === "\\" && quote === "'" && i + 1 < source.length) {
+        // Only the escapes QGIS defines are consumed; any other backslash is
+        // kept, so a LIKE pattern such as '50\%' still reaches the matcher
+        // with its escape intact.
         const next = source[i + 1];
-        value += next === "n" ? "\n" : next === "t" ? "\t" : next;
-        i += 2;
-        continue;
+        const escaped = STRING_ESCAPES.get(next);
+        if (escaped !== undefined) {
+          value += escaped;
+          i += 2;
+          continue;
+        }
       }
       value += char;
       i += 1;
@@ -523,6 +538,28 @@ function toNumber(value: unknown): number {
 
 function toDate(value: unknown): Date {
   if (value instanceof Date) return value;
+  if (typeof value === "string") {
+    // `new Date("2026-11-11")` is midnight UTC, which is the previous day in
+    // any zone west of Greenwich once read back with local getters. A value
+    // without a zone is a local calendar date/time, as it is in QGIS.
+    const local =
+      /^\s*(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?\s*$/.exec(
+        value,
+      );
+    if (local) {
+      const [, year, month, day, hour = "0", minute = "0", second = "0", ms = "0"] = local;
+      const parsed = new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+        Number(ms.padEnd(3, "0")),
+      );
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
   if (typeof value === "string" || typeof value === "number") {
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) return parsed;
@@ -612,6 +649,15 @@ function defaultUuid(): string {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** Longest text a function may build; a default value is a short string. */
+const MAX_TEXT_LENGTH = 10_000;
+
+function padWidth(value: unknown): number {
+  const width = Math.max(0, Math.trunc(toNumber(value)));
+  if (width > MAX_TEXT_LENGTH) throw new QgisExpressionError("The padded text is too long");
+  return width;
 }
 
 type QgisFunction = (args: unknown[], context: QgisExpressionContext) => unknown;
@@ -713,7 +759,7 @@ const FUNCTIONS: Record<string, FunctionSpec> = {
     min: 3,
     max: 3,
     run: (args) => {
-      const width = Math.max(0, Math.trunc(toNumber(args[1])));
+      const width = padWidth(args[1]);
       return toText(args[0])
         .slice(0, width)
         .padStart(width, toText(args[2]) || " ");
@@ -723,7 +769,7 @@ const FUNCTIONS: Record<string, FunctionSpec> = {
     min: 3,
     max: 3,
     run: (args) => {
-      const width = Math.max(0, Math.trunc(toNumber(args[1])));
+      const width = padWidth(args[1]);
       return toText(args[0])
         .slice(0, width)
         .padEnd(width, toText(args[2]) || " ");
@@ -791,7 +837,12 @@ const FUNCTIONS: Record<string, FunctionSpec> = {
   attribute: {
     min: 1,
     max: 1,
-    run: (args, context) => context.properties?.[toText(args[0])] ?? null,
+    run: (args, context) => {
+      const name = toText(args[0]);
+      return context.properties && Object.prototype.hasOwnProperty.call(context.properties, name)
+        ? (context.properties[name] ?? null)
+        : null;
+    },
   },
 };
 
@@ -836,18 +887,50 @@ function compare(left: unknown, right: unknown): number {
   return x === y ? 0 : x < y ? -1 : 1;
 }
 
-function likePattern(pattern: string, caseInsensitive: boolean): RegExp {
-  let source = "";
+/**
+ * SQL LIKE: `%` matches any run of characters, `_` exactly one, and a
+ * backslash makes the next character literal. Matched with the two-pointer
+ * wildcard walk rather than a generated `RegExp`, so a pattern from an
+ * imported project cannot trigger catastrophic backtracking.
+ */
+function matchesLike(text: string, pattern: string, caseInsensitive: boolean): boolean {
+  const tokens: { kind: "any" | "one" | "char"; char?: string }[] = [];
   for (let i = 0; i < pattern.length; i += 1) {
     const char = pattern[i];
     if (char === "\\" && i + 1 < pattern.length) {
-      source += pattern[i + 1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       i += 1;
-    } else if (char === "%") source += "[\\s\\S]*";
-    else if (char === "_") source += "[\\s\\S]";
-    else source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      tokens.push({ kind: "char", char: pattern[i] });
+    } else if (char === "%") {
+      if (tokens[tokens.length - 1]?.kind !== "any") tokens.push({ kind: "any" });
+    } else if (char === "_") tokens.push({ kind: "one" });
+    else tokens.push({ kind: "char", char });
   }
-  return new RegExp(`^${source}$`, caseInsensitive ? "i" : "");
+  const subject = caseInsensitive ? text.toLowerCase() : text;
+  const same = (token: { char?: string }, char: string) =>
+    (caseInsensitive ? token.char!.toLowerCase() : token.char) === char;
+  let t = 0;
+  let p = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < subject.length) {
+    const token = tokens[p];
+    if (token && (token.kind === "one" || (token.kind === "char" && same(token, subject[t])))) {
+      t += 1;
+      p += 1;
+    } else if (token?.kind === "any") {
+      star = p;
+      mark = t;
+      p += 1;
+    } else if (star >= 0) {
+      p = star + 1;
+      mark += 1;
+      t = mark;
+    } else {
+      return false;
+    }
+  }
+  while (tokens[p]?.kind === "any") p += 1;
+  return p === tokens.length;
 }
 
 function evaluateNode(node: QgisExpressionNode, context: QgisExpressionContext): unknown {
@@ -883,6 +966,12 @@ function evaluateNode(node: QgisExpressionNode, context: QgisExpressionContext):
       if (!spec) throw new QgisExpressionError(`The function ${node.name}() is not supported`);
       if (node.args.length < spec.min || node.args.length > spec.max) {
         throw new QgisExpressionError(`Wrong number of arguments for ${node.name}()`);
+      }
+      // Only the chosen branch runs, as in QGIS, so a guarded branch that
+      // would fail (`if("a" is null, 0, to_int("a"))`) cannot sink the result.
+      if (node.name === "if") {
+        const chosen = toBoolean(evaluateNode(node.args[0], context)) === true ? 1 : 2;
+        return evaluateNode(node.args[chosen], context);
       }
       const args = node.args.map((arg) => evaluateNode(arg, context));
       if (!spec.handlesNull && args.some(isNull)) return null;
@@ -952,7 +1041,7 @@ function evaluateBinary(
       return compare(left, right) >= 0;
     case "like":
     case "ilike":
-      return likePattern(toText(right), node.op === "ilike").test(toText(left));
+      return matchesLike(toText(left), toText(right), node.op === "ilike");
     case "+":
       // QGIS concatenates when either side is text that is not a number.
       if (
@@ -1122,7 +1211,8 @@ function translate(node: QgisExpressionNode): unknown {
         case "to_string":
           arity(1);
           return ["to-string", args[0]];
-        case "to_int":
+        // to_int() truncates, which `to-number` does not, so it is left to the
+        // default case and reported as not convertible.
         case "to_real":
           arity(1);
           return ["to-number", args[0]];
@@ -1226,4 +1316,72 @@ export function qgisExpressionProblem(source: string): string | null {
   const found = new Set<string>();
   collectUnsupported(parsed.node, found);
   return found.size > 0 ? [...found].join(", ") : null;
+}
+
+function collectReferences(node: QgisExpressionNode, fields: Set<string>): boolean {
+  switch (node.type) {
+    case "literal":
+    case "variable":
+      return false;
+    case "special":
+      return node.name === "now";
+    case "field":
+      fields.add(node.name);
+      return false;
+    case "call": {
+      let volatile = node.name === "now" || node.name === "uuid";
+      // attribute('name') reads a field by a name only known when it runs.
+      if (node.name === "attribute") {
+        const [name] = node.args;
+        if (name?.type === "literal" && typeof name.value === "string") fields.add(name.value);
+        else fields.add("*");
+      }
+      for (const arg of node.args) volatile = collectReferences(arg, fields) || volatile;
+      return volatile;
+    }
+    case "unary":
+    case "isNull":
+      return collectReferences(node.arg, fields);
+    case "in": {
+      let volatile = collectReferences(node.arg, fields);
+      for (const entry of node.list) volatile = collectReferences(entry, fields) || volatile;
+      return volatile;
+    }
+    case "case": {
+      let volatile = false;
+      for (const branch of node.branches) {
+        volatile = collectReferences(branch.when, fields) || volatile;
+        volatile = collectReferences(branch.then, fields) || volatile;
+      }
+      if (node.otherwise) volatile = collectReferences(node.otherwise, fields) || volatile;
+      return volatile;
+    }
+    case "binary": {
+      const left = collectReferences(node.left, fields);
+      return collectReferences(node.right, fields) || left;
+    }
+  }
+}
+
+/** What an expression reads, for deciding when its value needs recomputing. */
+export interface QgisExpressionReferences {
+  /** Field names it reads; `"*"` when a name is only known at run time. */
+  fields: string[];
+  /** Whether it calls `now()` or `uuid()`, whose value differs on every run. */
+  volatile: boolean;
+}
+
+/**
+ * List the fields an expression reads and whether its result changes between
+ * runs with the same inputs.
+ *
+ * @param source - QGIS expression text.
+ * @returns The references, or `null` when the expression does not parse.
+ */
+export function qgisExpressionReferences(source: string): QgisExpressionReferences | null {
+  const parsed = parseQgisExpression(source);
+  if (!parsed.ok) return null;
+  const fields = new Set<string>();
+  const volatile = collectReferences(parsed.node, fields);
+  return { fields: [...fields], volatile };
 }

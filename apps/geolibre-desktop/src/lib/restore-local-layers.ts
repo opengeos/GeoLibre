@@ -19,6 +19,14 @@ import {
  * @param layer - A store layer.
  * @returns True when the layer needs its features re-read from `sourcePath`.
  */
+/** Layers that read the same table of the same file, restored by one read. */
+interface RestoreGroup {
+  path: string;
+  /** Table name inside the file, or "" for its first layer. */
+  sourceLayer: string;
+  layers: GeoLibreLayer[];
+}
+
 function needsLocalFileReload(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "geojson" &&
@@ -51,7 +59,7 @@ export async function restoreLocalFileLayers(): Promise<void> {
   // A layer that names the table it reads (`metadata.sourceLayer`, set by the
   // QGIS importer for a GeoPackage) is grouped per table instead, since the
   // reader returns one table per call.
-  const groups = new Map<string, { path: string; sourceLayer: string; layers: GeoLibreLayer[] }>();
+  const groups = new Map<string, RestoreGroup>();
   for (const layer of pending) {
     const path = layer.sourcePath as string;
     const sourceLayer = localFileSourceLayer(layer);
@@ -61,50 +69,68 @@ export async function restoreLocalFileLayers(): Promise<void> {
     else groups.set(key, { path, sourceLayer, layers: [layer] });
   }
 
-  await Promise.all(
-    Array.from(groups.values(), async ({ path, sourceLayer, layers }) => {
-      try {
-        // A KMZ/KML file can yield image overlays alongside its vector layers;
-        // only the vector entries carry the `geojson` these layers reload. Skip
-        // the KML `<Model>` (COLLADA→GLB) conversion — including any remote-mesh
-        // fetch — since the models are discarded by the filter below anyway.
-        const loaded = (
-          await loadDroppedVectorPaths([path], {
-            skipModels: true,
-            ...(sourceLayer ? { layer: sourceLayer } : {}),
-          })
-        ).filter(isLoadedVectorLayer);
-        if (loaded.length === 0) {
-          dropLayers(layers, path);
-          return;
-        }
-        for (const layer of layers) {
-          // One layer per file is the common case; for a multi-layer file match
-          // by the layer's display name, then fall back to the first entry.
-          let match = loaded[0];
-          const entryKey = layer.metadata?.sourceEntry;
-          const byEntry =
-            typeof entryKey === "string"
-              ? loaded.find((entry) => entry.sourceEntry === entryKey)
-              : undefined;
-          if (byEntry) {
-            match = byEntry;
-          } else if (loaded.length > 1) {
-            const named = loaded.find((entry) => entry.name === layer.name);
-            if (named) {
-              match = named;
-            } else {
-              console.warn(
-                `[GeoLibre] Could not match layer "${layer.name}" to a layer in "${path}" by name; using the first. (Renaming a multi-layer file's layers can break this match.)`,
-              );
-            }
-          }
-          useAppStore.getState().updateLayer(layer.id, { geojson: match.data });
-        }
-      } catch (error) {
-        console.warn(`[GeoLibre] Could not reload local layer(s) from "${path}".`, error);
+  // Files load in parallel, but the tables of one file one at a time: when
+  // the native reader is unavailable each read pulls the whole file into
+  // memory, and a GeoPackage with many layers would otherwise hold a copy per
+  // table at once.
+  const byFile = new Map<string, RestoreGroup[]>();
+  for (const group of groups.values()) {
+    const list = byFile.get(group.path);
+    if (list) list.push(group);
+    else byFile.set(group.path, [group]);
+  }
+  const restoreGroup = async ({ path, sourceLayer, layers }: RestoreGroup): Promise<void> => {
+    try {
+      // A KMZ/KML file can yield image overlays alongside its vector layers;
+      // only the vector entries carry the `geojson` these layers reload. Skip
+      // the KML `<Model>` (COLLADA→GLB) conversion — including any remote-mesh
+      // fetch — since the models are discarded by the filter below anyway.
+      const loaded = (
+        await loadDroppedVectorPaths([path], {
+          skipModels: true,
+          ...(sourceLayer ? { layer: sourceLayer } : {}),
+        })
+      ).filter(isLoadedVectorLayer);
+      if (loaded.length === 0) {
         dropLayers(layers, path);
+        return;
       }
+      for (const layer of layers) {
+        // One layer per file is the common case; for a multi-layer file match
+        // by the layer's display name, then fall back to the first entry.
+        let match = loaded[0];
+        const entryKey = layer.metadata?.sourceEntry;
+        const byEntry =
+          typeof entryKey === "string"
+            ? loaded.find((entry) => entry.sourceEntry === entryKey)
+            : undefined;
+        if (byEntry) {
+          match = byEntry;
+        } else if (loaded.length > 1) {
+          const named = loaded.find((entry) => entry.name === layer.name);
+          if (named) {
+            match = named;
+          } else {
+            console.warn(
+              `[GeoLibre] Could not match layer "${layer.name}" to a layer in "${path}" by name; using the first. (Renaming a multi-layer file's layers can break this match.)`,
+            );
+          }
+        }
+        // The layer may have changed while the file was being read: removed,
+        // or detached from the file by a capture that now owns its features.
+        // Committing the read would overwrite that newer state.
+        const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
+        if (!current || !needsLocalFileReload(current) || current.sourcePath !== path) continue;
+        useAppStore.getState().updateLayer(layer.id, { geojson: match.data });
+      }
+    } catch (error) {
+      console.warn(`[GeoLibre] Could not reload local layer(s) from "${path}".`, error);
+      dropLayers(layers, path);
+    }
+  };
+  await Promise.all(
+    Array.from(byFile.values(), async (fileGroups) => {
+      for (const group of fileGroups) await restoreGroup(group);
     }),
   );
 }

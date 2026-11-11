@@ -170,7 +170,7 @@ defaults written for QGIS or QField work unchanged:
 | --- | --- |
 | `uuid()` | A unique ID. `uuid('WithoutBraces')` drops the braces. |
 | `now()` | The date and time (the date alone for a Date widget). |
-| `"site" || '_' || format_date(now(), 'yyyyMMdd_HHmmss') || '.jpg'` | A name built from other fields. |
+| `concat("site", '_', format_date(now(), 'yyyyMMdd_HHmmss'), '.jpg')` | A name built from other fields. The `\|\|` operator works too. |
 | `@position_horizontal_accuracy` | The GPS accuracy in meters. |
 | `x(@position_coordinate)`, `y(@position_coordinate)`, `z(@position_coordinate)` | The GPS longitude, latitude and altitude. |
 | `x(transform(@position_coordinate, 'EPSG:4326', 'EPSG:2056'))` | A projected coordinate, for any EPSG code GeoLibre knows. |
@@ -184,7 +184,8 @@ was measured or placed by hand. `$x` and `$y` give the captured point itself
 either way.
 
 A filled-in value is a starting point: type over it and your value is kept.
-Until you do, it follows the capture, so repositioning the point refreshes it.
+Until you do, it follows the capture, so repositioning the point refreshes it,
+and a default built from other fields updates as you fill those in.
 Text functions (`upper`, `lower`, `trim`, `left`, `right`, `substr`, `replace`,
 `lpad`, `rpad`, `concat`, `length`), number functions (`round`, `floor`,
 `ceil`, `abs`, `min`, `max`), `coalesce`, `if`, and `CASE WHEN` are available.
