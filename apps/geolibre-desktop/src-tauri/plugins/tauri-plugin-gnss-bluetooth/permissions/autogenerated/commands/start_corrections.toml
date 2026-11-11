@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-start-corrections"
+description = "Enables the start_corrections command without any pre-configured scope."
+commands.allow = ["start_corrections"]
+
+[[permission]]
+identifier = "deny-start-corrections"
+description = "Denies the start_corrections command without any pre-configured scope."
+commands.deny = ["start_corrections"]

@@ -35,6 +35,13 @@ import type { GpsFix } from "./gps-tracking";
 import { isAndroid } from "./is-mobile";
 import { isTauri } from "./is-tauri";
 import { NmeaAssembler, type NmeaStreamStats, splitNmeaLines } from "./nmea";
+import {
+  normalizeNtripConfig,
+  ntripErrorCode,
+  type NtripConfig,
+  type NtripState,
+  type NtripStatus,
+} from "./ntrip";
 
 /**
  * Minimal structural types for Web Serial and Web Bluetooth. Neither API is in
@@ -176,6 +183,25 @@ export interface NmeaConnection {
    * guaranteed not to deliver another fix once it has been called.
    */
   close(): Promise<void>;
+  /**
+   * RTK corrections fed to this receiver from an NTRIP caster (issue #3400).
+   * Present only on transports that can write to the receiver natively,
+   * which today is the Android Bluetooth one.
+   */
+  readonly corrections?: NmeaCorrections;
+}
+
+/** Control of the NTRIP session feeding one connected receiver. */
+export interface NmeaCorrections {
+  /**
+   * Start (or restart with new settings) pulling corrections into the
+   * receiver. Resolves once the client is running; connection progress,
+   * byte counts, and errors arrive through `onStatus`. The client retries a
+   * dropped caster by itself and stops on a rejected login or mountpoint.
+   */
+  start(config: NtripConfig, onStatus: (status: NtripStatus) => void): Promise<void>;
+  /** Stop the session. Safe to call when none is running. */
+  stop(): Promise<void>;
 }
 
 interface ConnectHandlers {
@@ -445,7 +471,10 @@ export interface PairedBluetoothDevice {
 }
 
 /** One message the native plugin pushes over the connection's channel. */
-type NativeBluetoothEvent = { event: "data"; data: string } | { event: "closed"; error?: string };
+type NativeBluetoothEvent =
+  | { event: "data"; data: string }
+  | { event: "closed"; error?: string }
+  | { event: "ntrip"; state: NtripState; bytes: number; message?: string; code?: string };
 
 /**
  * The slice of the Tauri IPC the Android transport uses, injectable so tests
@@ -524,9 +553,20 @@ export async function connectAndroidBluetoothNmea(
   // socket opens, then drops at once), so it is held until the id is known.
   let connectionId: number | null = null;
   let droppedBeforeOpen: NmeaError | null = null;
+  /** Listener for the running NTRIP session; null when none is running. */
+  let onNtripStatus: ((status: NtripStatus) => void) | null = null;
 
   const channel = bridge.createChannel((message) => {
     if (closed) return;
+    if (message.event === "ntrip") {
+      onNtripStatus?.({
+        state: message.state,
+        bytes: message.bytes,
+        message: message.message,
+        code: message.state === "error" ? ntripErrorCode(message.code) : undefined,
+      });
+      return;
+    }
     if (message.event === "data") {
       // The plugin decodes bytes as ISO-8859-1, one char per byte, so chunks
       // concatenate exactly and a split sentence reassembles across them.
@@ -560,12 +600,45 @@ export async function connectAndroidBluetoothNmea(
     throw droppedBeforeOpen;
   }
 
+  const corrections: NmeaCorrections = {
+    start: async (config, onStatus) => {
+      if (closed) throw new NmeaError("The receiver is not connected.", "disconnected");
+      const { host, port, mountpoint, username, password, tls } = normalizeNtripConfig(config);
+      onNtripStatus = onStatus;
+      try {
+        await bridge.invoke("plugin:gnss-bluetooth|start_corrections", {
+          id: connectionId,
+          host,
+          port,
+          mountpoint,
+          username,
+          password,
+          tls,
+        });
+      } catch (err) {
+        onNtripStatus = null;
+        throw nativeBluetoothError(err);
+      }
+    },
+    stop: async () => {
+      onNtripStatus = null;
+      if (closed) return;
+      try {
+        await bridge.invoke("plugin:gnss-bluetooth|stop_corrections", { id: connectionId });
+      } catch {
+        // The receiver may already be gone, which stops the session too.
+      }
+    },
+  };
+
   return {
     label: opened.name || device.name,
     stats: () => assembler.getStats(),
+    corrections,
     close: async () => {
       if (closed) return;
       closed = true;
+      onNtripStatus = null;
       try {
         await bridge.invoke("plugin:gnss-bluetooth|disconnect", { id: connectionId });
       } catch {

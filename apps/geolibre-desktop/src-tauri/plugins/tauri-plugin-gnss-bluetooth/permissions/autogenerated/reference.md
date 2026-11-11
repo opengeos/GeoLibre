@@ -1,12 +1,14 @@
 ## Default Permission
 
-List paired Bluetooth GNSS receivers and stream NMEA from one.
+List paired Bluetooth GNSS receivers, stream NMEA from one, and feed it NTRIP corrections.
 
 #### This default permission set includes the following:
 
 - `allow-list-devices`
 - `allow-connect`
 - `allow-disconnect`
+- `allow-start-corrections`
+- `allow-stop-corrections`
 
 ## Permission Table
 
@@ -91,6 +93,58 @@ Enables the list_devices command without any pre-configured scope.
 <td>
 
 Denies the list_devices command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`gnss-bluetooth:allow-start-corrections`
+
+</td>
+<td>
+
+Enables the start_corrections command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`gnss-bluetooth:deny-start-corrections`
+
+</td>
+<td>
+
+Denies the start_corrections command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`gnss-bluetooth:allow-stop-corrections`
+
+</td>
+<td>
+
+Enables the stop_corrections command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`gnss-bluetooth:deny-stop-corrections`
+
+</td>
+<td>
+
+Denies the stop_corrections command without any pre-configured scope.
 
 </td>
 </tr>

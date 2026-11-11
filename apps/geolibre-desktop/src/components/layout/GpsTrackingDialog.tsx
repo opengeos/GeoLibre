@@ -22,6 +22,7 @@ import {
   Bluetooth,
   Cable,
   Circle,
+  CircleStop,
   Crosshair,
   Download,
   LocateFixed,
@@ -30,6 +31,7 @@ import {
   Pause,
   Play,
   RefreshCw,
+  Satellite,
   Save,
   Square,
   Trash2,
@@ -75,6 +77,16 @@ import {
   type NmeaConnection,
   type PairedBluetoothDevice,
 } from "../../lib/nmea-source";
+import {
+  formatNtripBytes,
+  loadNtripSettings,
+  normalizeNtripConfig,
+  ntripConfigProblem,
+  saveNtripSettings,
+  type NtripConfig,
+  type NtripStatus,
+  type StoredNtripSettings,
+} from "../../lib/ntrip";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
@@ -330,6 +342,17 @@ export function GpsTrackingDialog({
   const [nmeaStats, setNmeaStats] = useState<NmeaStreamStats | null>(null);
   const [connecting, setConnecting] = useState<NmeaTransport | null>(null);
   const nmeaConnRef = useRef<NmeaConnection | null>(null);
+  /**
+   * NTRIP corrections (issue #3400). Held here rather than in the dialog body
+   * because the dialog content unmounts when it closes while the receiver and
+   * its correction stream keep running. `ntripStatus` is null when no session
+   * has been started for the current receiver.
+   */
+  const [ntripSettings, setNtripSettingsState] = useState<StoredNtripSettings>(loadNtripSettings);
+  const ntripSettingsRef = useRef(ntripSettings);
+  const [ntripStatus, setNtripStatus] = useState<NtripStatus | null>(null);
+  /** Whether the connected receiver's transport can take corrections. */
+  const [nmeaHasCorrections, setNmeaHasCorrections] = useState(false);
   /**
    * Bumped whenever an in-flight connect is superseded — by another connect, a
    * source change, stopping, or unmount. A Bluetooth `gatt.connect()` can stay
@@ -726,6 +749,9 @@ export function GpsTrackingDialog({
     nmeaConnRef.current = null;
     setNmeaLabel(null);
     setNmeaStats(null);
+    // Closing the receiver ends its correction session natively.
+    setNtripStatus(null);
+    setNmeaHasCorrections(false);
     try {
       await conn?.close();
     } catch (error) {
@@ -748,6 +774,56 @@ export function GpsTrackingDialog({
     setConnecting(null);
     await closeNmea();
   }, [closeNmea]);
+
+  const updateNtripSettings = useCallback((next: StoredNtripSettings) => {
+    ntripSettingsRef.current = next;
+    setNtripSettingsState(next);
+    saveNtripSettings(next);
+  }, []);
+
+  /**
+   * Start the NTRIP session for `conn`. Status updates from a receiver that
+   * has since been replaced are dropped, and a `stopped` that follows a fatal
+   * error keeps the error on screen so the user can see why it stopped.
+   */
+  const startCorrectionsFor = useCallback(async (conn: NmeaConnection, config: NtripConfig) => {
+    if (!conn.corrections) return;
+    setNtripStatus({ state: "connecting", bytes: 0 });
+    try {
+      await conn.corrections.start(config, (status) => {
+        if (nmeaConnRef.current !== conn) return;
+        setNtripStatus((prev) =>
+          status.state === "stopped" && prev?.state === "error" ? prev : status,
+        );
+      });
+    } catch (err) {
+      if (nmeaConnRef.current !== conn) return;
+      setNtripStatus({
+        state: "error",
+        bytes: 0,
+        code: "failed",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      logGpsFailure("GPS: could not start NTRIP corrections", err, "warning");
+    }
+  }, []);
+
+  const startCorrections = useCallback(() => {
+    const conn = nmeaConnRef.current;
+    const settings = ntripSettingsRef.current;
+    if (!conn?.corrections || ntripConfigProblem(settings.config)) return;
+    // Show what is actually sent: a pasted "http://host:2102/" becomes host
+    // and port, and a leading slash leaves the mountpoint.
+    const config = normalizeNtripConfig(settings.config);
+    updateNtripSettings({ config, autoStart: true });
+    void startCorrectionsFor(conn, config);
+  }, [startCorrectionsFor, updateNtripSettings]);
+
+  const stopCorrections = useCallback(() => {
+    updateNtripSettings({ ...ntripSettingsRef.current, autoStart: false });
+    setNtripStatus(null);
+    void nmeaConnRef.current?.corrections?.stop();
+  }, [updateNtripSettings]);
 
   /**
    * Open an NMEA receiver and start tracking from it. Both transports show a
@@ -807,7 +883,13 @@ export function GpsTrackingDialog({
         nmeaConnRef.current = conn;
         setNmeaLabel(conn.label);
         setNmeaStats(conn.stats());
+        setNmeaHasCorrections(conn.corrections != null);
         setTracking(true);
+        // Corrections that were running when this receiver was last used
+        // come back on their own, as they do in a dedicated field app.
+        const stored = ntripSettingsRef.current;
+        if (conn.corrections && stored.autoStart && !ntripConfigProblem(stored.config))
+          void startCorrectionsFor(conn, stored.config);
       } catch (err) {
         if (isStale()) return;
         if (err instanceof NmeaError) {
@@ -822,7 +904,7 @@ export function GpsTrackingDialog({
         if (!isStale()) setConnecting(null);
       }
     },
-    [baudRate, closeNmea, disconnectNmea, handleFix, t],
+    [baudRate, closeNmea, disconnectNmea, handleFix, startCorrectionsFor, t],
   );
 
   // Poll the assembler's counters while connected so the readout shows the
@@ -1055,6 +1137,15 @@ export function GpsTrackingDialog({
                     onConnect={(transport, device) => void connectNmea(transport, device)}
                   />
                 )}
+                {source === "nmea" && nmeaLabel && nmeaHasCorrections && (
+                  <NtripControls
+                    config={ntripSettings.config}
+                    onConfigChange={(config) => updateNtripSettings({ ...ntripSettings, config })}
+                    status={ntripStatus}
+                    onStart={startCorrections}
+                    onStop={stopCorrections}
+                  />
+                )}
               </div>
 
               <Separator />
@@ -1262,6 +1353,160 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
         <span>{t("gps.headingValue", { value: Math.round(fix.heading) })}</span>
       )}
       <span className="text-muted-foreground">{new Date(fix.timestamp).toLocaleTimeString()}</span>
+    </div>
+  );
+}
+
+interface NtripControlsProps {
+  config: NtripConfig;
+  onConfigChange: (config: NtripConfig) => void;
+  /** Null when no session is running. */
+  status: NtripStatus | null;
+  onStart: () => void;
+  onStop: () => void;
+}
+
+/**
+ * Caster settings and status for RTK corrections (issue #3400). The settings
+ * are locked while a session runs; Stop, edit, and Start again to change them.
+ */
+function NtripControls({ config, onConfigChange, status, onStart, onStop }: NtripControlsProps) {
+  const { t } = useTranslation();
+  // A fatal error (bad login, unknown mountpoint) has stopped the client, so
+  // the form unlocks and offers Start again; a retrying error has not.
+  const running =
+    status != null &&
+    status.state !== "stopped" &&
+    !(status.state === "error" && status.code !== "failed");
+  const problem = ntripConfigProblem(config);
+  const set = (patch: Partial<NtripConfig>) => onConfigChange({ ...config, ...patch });
+
+  let statusText: string | null = null;
+  if (status) {
+    if (status.state === "connecting") statusText = t("gps.ntripConnecting");
+    else if (status.state === "connected")
+      statusText =
+        status.bytes > 0
+          ? t("gps.ntripReceiving", { size: formatNtripBytes(status.bytes) })
+          : t("gps.ntripWaiting");
+    else if (status.state === "error")
+      statusText =
+        status.code === "auth-failed"
+          ? t("gps.ntripAuthFailed")
+          : status.code === "mountpoint"
+            ? t("gps.ntripMountpointMissing", { mountpoint: config.mountpoint.trim() })
+            : t("gps.ntripRetrying", { message: status.message ?? "" });
+  }
+  const statusIsError = status?.state === "error";
+
+  return (
+    <div className="space-y-2 rounded-md border p-2">
+      <div className="text-sm font-medium">{t("gps.ntripTitle")}</div>
+      <div className="flex gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label htmlFor="gps-ntrip-host" className="text-xs font-normal text-muted-foreground">
+            {t("gps.ntripHost")}
+          </Label>
+          <Input
+            id="gps-ntrip-host"
+            value={config.host}
+            disabled={running}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="caster.example.com"
+            onChange={(e) => set({ host: e.target.value })}
+          />
+        </div>
+        <div className="w-24 space-y-1">
+          <Label htmlFor="gps-ntrip-port" className="text-xs font-normal text-muted-foreground">
+            {t("gps.ntripPort")}
+          </Label>
+          <Input
+            id="gps-ntrip-port"
+            inputMode="numeric"
+            value={config.port || ""}
+            disabled={running}
+            onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) })}
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="gps-ntrip-mount" className="text-xs font-normal text-muted-foreground">
+          {t("gps.ntripMountpoint")}
+        </Label>
+        <Input
+          id="gps-ntrip-mount"
+          value={config.mountpoint}
+          disabled={running}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => set({ mountpoint: e.target.value })}
+        />
+      </div>
+      <div className="flex gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label htmlFor="gps-ntrip-user" className="text-xs font-normal text-muted-foreground">
+            {t("gps.ntripUsername")}
+          </Label>
+          <Input
+            id="gps-ntrip-user"
+            value={config.username}
+            disabled={running}
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => set({ username: e.target.value })}
+          />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label htmlFor="gps-ntrip-pass" className="text-xs font-normal text-muted-foreground">
+            {t("gps.ntripPassword")}
+          </Label>
+          <Input
+            id="gps-ntrip-pass"
+            type="password"
+            value={config.password}
+            disabled={running}
+            autoComplete="off"
+            onChange={(e) => set({ password: e.target.value })}
+          />
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={config.tls}
+          disabled={running}
+          onChange={(e) => set({ tls: e.target.checked })}
+        />
+        {t("gps.ntripTls")}
+      </label>
+      {running ? (
+        <Button size="sm" variant="outline" onClick={onStop}>
+          <CircleStop className="me-1 h-3.5 w-3.5" />
+          {t("gps.ntripStop")}
+        </Button>
+      ) : (
+        <Button size="sm" disabled={problem != null} onClick={onStart}>
+          <Satellite className="me-1 h-3.5 w-3.5" />
+          {t("gps.ntripStart")}
+        </Button>
+      )}
+      {statusText && (
+        <p
+          className={`text-xs ${statusIsError ? "text-destructive" : "text-muted-foreground"} tabular-nums`}
+          role="status"
+        >
+          {statusText}
+        </p>
+      )}
+      {!running && problem && config.host.trim() !== "" && (
+        <p className="text-xs text-muted-foreground">{t(`gps.${problem}`)}</p>
+      )}
+      <p className="text-xs text-muted-foreground">{t("gps.ntripHint")}</p>
     </div>
   );
 }
