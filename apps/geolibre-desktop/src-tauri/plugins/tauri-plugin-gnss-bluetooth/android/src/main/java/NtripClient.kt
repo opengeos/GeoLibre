@@ -6,11 +6,13 @@
 
 package org.geolibre.gnssbluetooth
 
+import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocket
@@ -261,10 +263,13 @@ class NtripClient(
     val raw = Socket().also { socket = it }
     try {
       if (stopped) throw IOException("stopped")
-      raw.connect(InetSocketAddress(config.host, config.port), CONNECT_TIMEOUT_MS)
+      // An IPv6 literal keeps its brackets for the Host header only; the
+      // resolver, SNI and the certificate check all want the bare address.
+      val address = config.host.removeSurrounding("[", "]")
+      raw.connect(InetSocketAddress(address, config.port), CONNECT_TIMEOUT_MS)
       raw.soTimeout = READ_TIMEOUT_MS
       if (!config.tls) return raw
-      val tls = sslSocketFactory.createSocket(raw, config.host, config.port, true) as SSLSocket
+      val tls = sslSocketFactory.createSocket(raw, address, config.port, true) as SSLSocket
       // A bare SSLSocket checks the certificate chain but not the name in it.
       // HTTPS endpoint identification makes the handshake itself check the
       // certificate against the host, so no separate verifier is relied on.
@@ -272,8 +277,11 @@ class NtripClient(
       try {
         tls.startHandshake()
       } catch (e: SSLException) {
-        // Covers a bad or mismatched certificate and TLS against a plain
-        // port ("Unrecognized SSL message"), none of which a retry fixes.
+        // A dropped connection mid-handshake (Conscrypt reports a reset as a
+        // handshake failure) is transient and retries like any other drop.
+        if (causedByTransportFailure(e)) throw e
+        // What is left is a bad or mismatched certificate or TLS against a
+        // plain port ("Unrecognized SSL message"), none of which a retry fixes.
         throw tlsError(e)
       }
       return tls
@@ -284,6 +292,15 @@ class NtripClient(
       }
       throw e
     }
+  }
+
+  private fun causedByTransportFailure(e: Throwable): Boolean {
+    var cause = e.cause
+    while (cause != null) {
+      if (cause is SocketException || cause is EOFException) return true
+      cause = cause.cause
+    }
+    return false
   }
 
   /**

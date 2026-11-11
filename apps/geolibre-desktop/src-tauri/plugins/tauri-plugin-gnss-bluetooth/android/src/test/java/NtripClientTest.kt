@@ -300,6 +300,18 @@ class NtripClientTest {
   }
 
   @Test
+  fun tlsHandshakeCutOffByTheCasterIsRetried() {
+    val run = start(config(host = "localhost", tls = true))
+    // The caster drops the connection mid-handshake: transient, so the
+    // client reports a retrying error rather than stopping.
+    server.accept().close()
+    val deadline = System.currentTimeMillis() + 5_000
+    while (run.statuses.none { it.state == "error" } && System.currentTimeMillis() < deadline) Thread.sleep(20)
+    assertEquals("FAILED", run.statuses.first { it.state == "error" }.code)
+    assertEquals(1L, run.stopped.count)
+  }
+
+  @Test
   fun tlsCertificateForAnotherHostIsFatal() {
     val ssl = tlsCaster("caster.example.com")
     val run = start(config(host = "localhost", tls = true), ssl = ssl)

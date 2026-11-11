@@ -73,6 +73,9 @@ describe("ntripConfigProblem", () => {
     assert.equal(ntripConfigProblem({ ...base, port: 70000 }), "ntripBadPort");
     assert.equal(ntripConfigProblem({ ...base, mountpoint: "/" }), "ntripNeedsMountpoint");
     assert.equal(ntripConfigProblem({ ...base, mountpoint: "MY MOUNT" }), "ntripBadCharacters");
+    assert.equal(ntripConfigProblem({ ...base, host: "2001:db8::1" }), "ntripBadHost");
+    assert.equal(ntripConfigProblem({ ...base, host: "caster.example.com:abc" }), "ntripBadHost");
+    assert.equal(ntripConfigProblem({ ...base, host: "[2001:db8::1]:2101" }), null);
     assert.equal(
       ntripConfigProblem({ ...base, host: "caster.example.com\r\nX-Evil: 1" }),
       "ntripBadCharacters",

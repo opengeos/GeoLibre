@@ -37,7 +37,8 @@ export type NtripConfigProblem =
   | "ntripNeedsHost"
   | "ntripNeedsMountpoint"
   | "ntripBadPort"
-  | "ntripBadCharacters";
+  | "ntripBadCharacters"
+  | "ntripBadHost";
 
 /**
  * Trim the typed values into what the client sends: whitespace off the host
@@ -79,6 +80,10 @@ export function ntripConfigProblem(config: NtripConfig): NtripConfigProblem | nu
   // breaks the request, and a CR or LF would inject a header.
   if (/[\s\p{Cc}]/u.test(normalized.host) || /[\s\p{Cc}]/u.test(normalized.mountpoint))
     return "ntripBadCharacters";
+  // What is left after normalization must be a name or a bracketed IPv6
+  // literal: a colon here is a bare IPv6 address or a port that is not a
+  // number, either of which yields a Host header the caster rejects.
+  if (!normalized.host.startsWith("[") && normalized.host.includes(":")) return "ntripBadHost";
   return null;
 }
 

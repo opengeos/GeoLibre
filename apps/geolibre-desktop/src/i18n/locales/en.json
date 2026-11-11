@@ -1839,6 +1839,7 @@
     "ntripNeedsHost": "Enter the caster host.",
     "ntripNeedsMountpoint": "Enter a mountpoint.",
     "ntripBadPort": "Enter a port between 1 and 65535.",
+    "ntripBadHost": "Check the caster host: write an IPv6 address in brackets, such as [2001:db8::1], and a port as a number.",
     "ntripBadCharacters": "The caster host and mountpoint cannot contain spaces or control characters.",
     "ntripTlsFailed": "Could not set up a secure (TLS) connection with the caster. Check the host and port, and whether the caster supports TLS on that port.",
     "ntripStartFailed": "Could not start corrections: {{message}}",

@@ -21,7 +21,6 @@ import {
   Bluetooth,
   Cable,
   Circle,
-  CircleStop,
   Crosshair,
   Download,
   LocateFixed,
