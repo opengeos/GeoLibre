@@ -1839,6 +1839,10 @@
     "ntripNeedsHost": "Enter the caster host.",
     "ntripNeedsMountpoint": "Enter a mountpoint.",
     "ntripBadPort": "Enter a port between 1 and 65535.",
+    "ntripBadCharacters": "The caster host and mountpoint cannot contain spaces or control characters.",
+    "ntripTlsFailed": "Could not set up a secure (TLS) connection with the caster. Check the host and port, and whether the caster supports TLS on that port.",
+    "ntripStartFailed": "Could not start corrections: {{message}}",
+    "ntripCleartextHint": "Without TLS the caster receives the password unencrypted, as most NTRIP casters require. Use TLS if your caster offers it.",
     "ntripHint": "GeoLibre pulls RTCM corrections from your caster and sends them to the receiver over the same Bluetooth link, along with the receiver's position for network (VRS) casters. The settings, including the password, are saved on this device, and corrections restart on their own when the receiver reconnects.",
     "fixQuality": {
       "invalid": "No fix",

@@ -7,6 +7,7 @@ import {
   normalizeNtripConfig,
   ntripConfigProblem,
   ntripErrorCode,
+  ntripSessionRunning,
   saveNtripSettings,
 } from "../apps/geolibre-desktop/src/lib/ntrip";
 
@@ -51,6 +52,11 @@ describe("ntripConfigProblem", () => {
     assert.equal(ntripConfigProblem({ ...base, port: 0 }), "ntripBadPort");
     assert.equal(ntripConfigProblem({ ...base, port: 70000 }), "ntripBadPort");
     assert.equal(ntripConfigProblem({ ...base, mountpoint: "/" }), "ntripNeedsMountpoint");
+    assert.equal(ntripConfigProblem({ ...base, mountpoint: "MY MOUNT" }), "ntripBadCharacters");
+    assert.equal(
+      ntripConfigProblem({ ...base, host: "caster.example.com\r\nX-Evil: 1" }),
+      "ntripBadCharacters",
+    );
   });
 });
 
@@ -84,6 +90,7 @@ describe("NTRIP helpers", () => {
   it("maps native error codes", () => {
     assert.equal(ntripErrorCode("AUTH_FAILED"), "auth-failed");
     assert.equal(ntripErrorCode("MOUNTPOINT"), "mountpoint");
+    assert.equal(ntripErrorCode("TLS_FAILED"), "tls");
     assert.equal(ntripErrorCode("FAILED"), "failed");
     assert.equal(ntripErrorCode(undefined), "failed");
   });
@@ -92,5 +99,17 @@ describe("NTRIP helpers", () => {
     assert.equal(formatNtripBytes(512), "512 B");
     assert.equal(formatNtripBytes(12_345), "12.3 kB");
     assert.equal(formatNtripBytes(2_500_000), "2.50 MB");
+  });
+});
+
+describe("ntripSessionRunning", () => {
+  it("treats only retrying errors as a live session", () => {
+    assert.equal(ntripSessionRunning(null), false);
+    assert.equal(ntripSessionRunning({ state: "connecting", bytes: 0 }), true);
+    assert.equal(ntripSessionRunning({ state: "connected", bytes: 9 }), true);
+    assert.equal(ntripSessionRunning({ state: "error", bytes: 0, code: "failed" }), true);
+    for (const code of ["auth-failed", "mountpoint", "tls", "not-started"] as const)
+      assert.equal(ntripSessionRunning({ state: "error", bytes: 0, code }), false, code);
+    assert.equal(ntripSessionRunning({ state: "stopped", bytes: 0 }), false);
   });
 });

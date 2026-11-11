@@ -12,7 +12,8 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
-import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -36,8 +37,8 @@ data class NtripStatus(
   val bytes: Long,
   val message: String? = null,
   /**
-   * For `error`: `AUTH_FAILED` and `MOUNTPOINT` stop the client (retrying
-   * cannot help); `FAILED` is retried after [RETRY_DELAY_MS].
+   * For `error`: `AUTH_FAILED`, `MOUNTPOINT` and `TLS_FAILED` stop the client
+   * (retrying cannot help); `FAILED` is retried after [RETRY_DELAY_MS].
    */
   val code: String? = null,
 )
@@ -184,6 +185,8 @@ private class ChunkedInputStream(private val input: InputStream) : InputStream()
  */
 class NtripClient(
   private val config: NtripConfig,
+  /** TLS sockets come from here; tests pass one that trusts their own CA. */
+  private val sslSocketFactory: SSLSocketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory,
   /** Writes correction bytes to the receiver. */
   private val sink: (ByteArray, Int) -> Unit,
   private val gga: GgaTracker,
@@ -236,21 +239,43 @@ class NtripClient(
     onStatus(NtripStatus("stopped", bytes))
   }
 
+  /** Opens the caster connection, closing whatever it opened if any step fails. */
   private fun open(): Socket {
     val raw = Socket()
-    raw.connect(InetSocketAddress(config.host, config.port), CONNECT_TIMEOUT_MS)
-    raw.soTimeout = READ_TIMEOUT_MS
-    if (!config.tls) return raw
-    val tls = (SSLSocketFactory.getDefault() as SSLSocketFactory)
-      .createSocket(raw, config.host, config.port, true) as SSLSocket
-    tls.startHandshake()
-    // A bare SSLSocket checks the chain but not the name; verify it like HTTPS.
-    if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(config.host, tls.session)) {
-      tls.close()
-      throw FatalNtripError("The caster's TLS certificate does not match ${config.host}.", "FAILED")
+    try {
+      raw.connect(InetSocketAddress(config.host, config.port), CONNECT_TIMEOUT_MS)
+      raw.soTimeout = READ_TIMEOUT_MS
+      if (!config.tls) return raw
+      val tls = sslSocketFactory.createSocket(raw, config.host, config.port, true) as SSLSocket
+      // A bare SSLSocket checks the certificate chain but not the name in it.
+      // HTTPS endpoint identification makes the handshake itself check the
+      // certificate against the host, so no separate verifier is relied on.
+      tls.sslParameters = tls.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
+      try {
+        tls.startHandshake()
+      } catch (e: SSLHandshakeException) {
+        throw tlsError(e)
+      } catch (e: SSLPeerUnverifiedException) {
+        throw tlsError(e)
+      }
+      return tls
+    } catch (e: Exception) {
+      try {
+        raw.close()
+      } catch (_: IOException) {
+      }
+      throw e
     }
-    return tls
   }
+
+  /**
+   * An untrusted or mismatched certificate, or TLS against a plain port:
+   * retrying cannot fix any of these, so the client stops.
+   */
+  private fun tlsError(e: Exception) = FatalNtripError(
+    "Could not set up TLS with ${config.host}: ${e.message}",
+    "TLS_FAILED",
+  )
 
   private fun session() {
     val s = open()
@@ -277,6 +302,16 @@ class NtripClient(
     // NTRIP 1.0: "ICY 200 OK" and the stream follows at once, with no headers.
     if (status.startsWith("ICY 200")) return input
     if (status.startsWith("SOURCETABLE")) throw mountpointError()
+    // NTRIP 1.0 refusals are a bare line, e.g. "ERROR - Bad Password" or
+    // "ERROR - Bad Mountpoint", not an HTTP status.
+    if (status.startsWith("ERROR")) {
+      val reason = status.lowercase()
+      if ("password" in reason || "auth" in reason) {
+        throw FatalNtripError("The caster rejected the username or password.", "AUTH_FAILED")
+      }
+      if ("mount" in reason) throw mountpointError()
+      throw IOException("The caster answered: $status")
+    }
     val code = status.split(' ').getOrNull(1)?.toIntOrNull()
       ?: throw IOException("Unexpected caster response: $status")
     val headers = mutableMapOf<String, String>()

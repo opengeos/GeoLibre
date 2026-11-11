@@ -14,6 +14,7 @@ import {
   loadNtripSettings,
   normalizeNtripConfig,
   ntripConfigProblem,
+  ntripSessionRunning,
   saveNtripSettings,
   type NtripConfig,
   type NtripStatus,
@@ -56,7 +57,9 @@ export function useNtripCorrections(connRef: RefObject<NmeaConnection | null>) {
         setStatus({
           state: "error",
           bytes: 0,
-          code: "failed",
+          // Not "failed": that means the native client is retrying, and here
+          // it never started, so the form must unlock rather than show Stop.
+          code: "not-started",
           message: err instanceof Error ? err.message : String(err),
         });
         appendDiagnostic({
@@ -135,10 +138,7 @@ export function NtripControls({
   const { t } = useTranslation();
   // A fatal error (bad login, unknown mountpoint) has stopped the client, so
   // the form unlocks and offers Start again; a retrying error has not.
-  const running =
-    status != null &&
-    status.state !== "stopped" &&
-    !(status.state === "error" && status.code !== "failed");
+  const running = ntripSessionRunning(status);
   const problem = ntripConfigProblem(config);
   const set = (patch: Partial<NtripConfig>) => onConfigChange({ ...config, ...patch });
 
@@ -150,13 +150,15 @@ export function NtripControls({
         status.bytes > 0
           ? t("gps.ntripReceiving", { size: formatNtripBytes(status.bytes) })
           : t("gps.ntripWaiting");
-    else if (status.state === "error")
-      statusText =
-        status.code === "auth-failed"
-          ? t("gps.ntripAuthFailed")
-          : status.code === "mountpoint"
-            ? t("gps.ntripMountpointMissing", { mountpoint: config.mountpoint.trim() })
-            : t("gps.ntripRetrying", { message: status.message ?? "" });
+    else if (status.state === "error") {
+      if (status.code === "auth-failed") statusText = t("gps.ntripAuthFailed");
+      else if (status.code === "mountpoint")
+        statusText = t("gps.ntripMountpointMissing", { mountpoint: config.mountpoint.trim() });
+      else if (status.code === "tls") statusText = t("gps.ntripTlsFailed");
+      else if (status.code === "not-started")
+        statusText = t("gps.ntripStartFailed", { message: status.message ?? "" });
+      else statusText = t("gps.ntripRetrying", { message: status.message ?? "" });
+    }
   }
   const statusIsError = status?.state === "error";
 
@@ -266,6 +268,9 @@ export function NtripControls({
       )}
       {!running && problem && config.host.trim() !== "" && (
         <p className="text-xs text-muted-foreground">{t(`gps.${problem}`)}</p>
+      )}
+      {!config.tls && config.password !== "" && (
+        <p className="text-xs text-muted-foreground">{t("gps.ntripCleartextHint")}</p>
       )}
       <p className="text-xs text-muted-foreground">{t("gps.ntripHint")}</p>
     </div>

@@ -1,12 +1,19 @@
 package org.geolibre.gnssbluetooth
 
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.KeyStore
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLServerSocket
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManagerFactory
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -20,7 +27,7 @@ import org.junit.Test
  * answers, and GGA forwarding.
  */
 class NtripClientTest {
-  private val server = ServerSocket(0)
+  private var server: ServerSocket = ServerSocket(0)
   private var client: NtripClient? = null
 
   @After
@@ -31,8 +38,12 @@ class NtripClientTest {
 
   private val rtcm = byteArrayOf(0xD3.toByte(), 0x00, 0x13, 0x3E, 0xD0.toByte(), 0x00, 0x03)
 
-  private fun config(username: String = "rover", mountpoint: String = "MOUNT") =
-    NtripConfig("127.0.0.1", server.localPort, mountpoint, username, "secret", tls = false, ggaIntervalSec = 1)
+  private fun config(
+    username: String = "rover",
+    mountpoint: String = "MOUNT",
+    host: String = "127.0.0.1",
+    tls: Boolean = false,
+  ) = NtripConfig(host, server.localPort, mountpoint, username, "secret", tls = tls, ggaIntervalSec = 1)
 
   private class Run {
     val received = ByteArrayOutputStream()
@@ -41,10 +52,16 @@ class NtripClientTest {
     val stopped = CountDownLatch(1)
   }
 
-  private fun start(config: NtripConfig, gga: GgaTracker = GgaTracker(), expectBytes: Int = 1): Run {
+  private fun start(
+    config: NtripConfig,
+    gga: GgaTracker = GgaTracker(),
+    expectBytes: Int = 1,
+    ssl: SSLSocketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory,
+  ): Run {
     val run = Run()
     client = NtripClient(
       config,
+      sslSocketFactory = ssl,
       sink = { b, n ->
         synchronized(run.received) { run.received.write(b, 0, n) }
         if (run.received.size() >= expectBytes) run.gotBytes.countDown()
@@ -174,5 +191,85 @@ class NtripClientTest {
   fun base64MatchesRfc4648Vectors() {
     val cases = mapOf("" to "", "f" to "Zg==", "fo" to "Zm8=", "foo" to "Zm9v", "foobar" to "Zm9vYmFy")
     for ((input, expected) in cases) assertEquals(expected, base64(input.toByteArray()))
+  }
+
+  @Test
+  fun ntrip1BadPasswordLineIsFatal() {
+    val run = start(config())
+    server.accept().use { sock ->
+      readRequest(sock.getInputStream())
+      sock.getOutputStream().write("ERROR - Bad Password\r\n".toByteArray())
+    }
+    assertTrue(run.stopped.await(5, TimeUnit.SECONDS))
+    assertEquals("AUTH_FAILED", run.statuses.first { it.state == "error" }.code)
+  }
+
+  @Test
+  fun ntrip1BadMountpointLineIsFatal() {
+    val run = start(config())
+    server.accept().use { sock ->
+      readRequest(sock.getInputStream())
+      sock.getOutputStream().write("ERROR - Bad Mountpoint\r\n".toByteArray())
+    }
+    assertTrue(run.stopped.await(5, TimeUnit.SECONDS))
+    assertEquals("MOUNTPOINT", run.statuses.first { it.state == "error" }.code)
+  }
+
+  /**
+   * A TLS caster whose certificate names `certHost`, plus a client socket
+   * factory that trusts it, so only the name check can fail the handshake.
+   */
+  private fun tlsCaster(certHost: String): SSLSocketFactory {
+    val dir = createTempDirectory()
+    val store = File(dir, "caster.p12")
+    val keytool = File(System.getProperty("java.home"), "bin/keytool").path
+    val proc = ProcessBuilder(
+      keytool, "-genkeypair", "-alias", "caster", "-keyalg", "RSA", "-keysize", "2048",
+      "-validity", "2", "-dname", "CN=$certHost", "-ext", "SAN=dns:$certHost",
+      "-storetype", "PKCS12", "-keystore", store.path, "-storepass", "changeit", "-keypass", "changeit",
+    ).redirectErrorStream(true).start()
+    proc.inputStream.readBytes()
+    assertEquals(0, proc.waitFor())
+    val ks = KeyStore.getInstance("PKCS12").apply { store.inputStream().use { load(it, "changeit".toCharArray()) } }
+    val kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(ks, "changeit".toCharArray()) }
+    val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(ks) }
+    val ctx = SSLContext.getInstance("TLS").apply { init(kmf.keyManagers, tmf.trustManagers, null) }
+    server.close()
+    server = ctx.serverSocketFactory.createServerSocket(0) as SSLServerSocket
+    return ctx.socketFactory
+  }
+
+  private fun createTempDirectory(): File =
+    kotlin.io.path.createTempDirectory("ntrip-tls").toFile().also { it.deleteOnExit() }
+
+  @Test
+  fun tlsCasterWithMatchingCertificateStreams() {
+    val ssl = tlsCaster("localhost")
+    val run = start(config(host = "localhost", tls = true), expectBytes = rtcm.size, ssl = ssl)
+    server.accept().use { sock ->
+      readRequest(sock.getInputStream())
+      sock.getOutputStream().apply {
+        write("ICY 200 OK\r\n".toByteArray())
+        write(rtcm)
+        flush()
+      }
+      assertTrue(run.gotBytes.await(5, TimeUnit.SECONDS))
+    }
+    assertArrayEquals(rtcm, run.received.toByteArray())
+  }
+
+  @Test
+  fun tlsCertificateForAnotherHostIsFatal() {
+    val ssl = tlsCaster("caster.example.com")
+    val run = start(config(host = "localhost", tls = true), ssl = ssl)
+    Thread {
+      try {
+        server.accept().use { (it as javax.net.ssl.SSLSocket).startHandshake() }
+      } catch (_: Exception) {
+        // The client aborts the handshake; that is the point.
+      }
+    }.start()
+    assertTrue(run.stopped.await(10, TimeUnit.SECONDS))
+    assertEquals("TLS_FAILED", run.statuses.first { it.state == "error" }.code)
   }
 }

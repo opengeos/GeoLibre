@@ -382,11 +382,20 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
       invoke.reject("Enter a caster host and a port between 1 and 65535.", "FAILED")
       return
     }
+    // Both go into the request line and Host header verbatim, so whitespace
+    // or a CR/LF would break the request or inject headers.
+    val mountpoint = args.mountpoint.trim().trimStart('/')
+    if (host.any { it.isWhitespace() || it.isISOControl() } ||
+      mountpoint.any { it.isWhitespace() || it.isISOControl() }
+    ) {
+      invoke.reject("The caster host and mountpoint cannot contain spaces or control characters.", "FAILED")
+      return
+    }
     connection.stopCorrections()
     val config = NtripConfig(
       host = host,
       port = args.port,
-      mountpoint = args.mountpoint.trim().trimStart('/'),
+      mountpoint = mountpoint,
       username = args.username,
       password = args.password,
       tls = args.tls,

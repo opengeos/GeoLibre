@@ -33,7 +33,11 @@ export const DEFAULT_NTRIP_CONFIG: NtripConfig = {
 };
 
 /** Why a config cannot be started, as an i18n key under `gps.`. */
-export type NtripConfigProblem = "ntripNeedsHost" | "ntripNeedsMountpoint" | "ntripBadPort";
+export type NtripConfigProblem =
+  | "ntripNeedsHost"
+  | "ntripNeedsMountpoint"
+  | "ntripBadPort"
+  | "ntripBadCharacters";
 
 /**
  * Trim the typed values into what the client sends: whitespace off the host
@@ -66,6 +70,10 @@ export function ntripConfigProblem(config: NtripConfig): NtripConfigProblem | nu
   if (!Number.isInteger(normalized.port) || normalized.port < 1 || normalized.port > 65535)
     return "ntripBadPort";
   if (!normalized.mountpoint) return "ntripNeedsMountpoint";
+  // Both go into the request line and Host header verbatim: an inner space
+  // breaks the request, and a CR or LF would inject a header.
+  if (/[\s\p{Cc}]/u.test(normalized.host) || /[\s\p{Cc}]/u.test(normalized.mountpoint))
+    return "ntripBadCharacters";
   return null;
 }
 
@@ -132,10 +140,17 @@ function safeStorage(): Storage | null {
 export type NtripState = "connecting" | "connected" | "error" | "stopped";
 
 /**
- * `auth-failed` and `mountpoint` stop the client (retrying cannot help);
- * `failed` is retried by the client every few seconds.
+ * `auth-failed`, `mountpoint` and `tls` stop the client (retrying cannot
+ * help); `failed` is retried by the client every few seconds. `not-started`
+ * means the native client never started, so nothing is running either.
  */
-export type NtripErrorCode = "auth-failed" | "mountpoint" | "failed";
+export type NtripErrorCode = "auth-failed" | "mountpoint" | "tls" | "failed" | "not-started";
+
+/** Whether a session in `status` is still live (connecting, streaming, or retrying). */
+export function ntripSessionRunning(status: NtripStatus | null): boolean {
+  if (!status || status.state === "stopped") return false;
+  return status.state !== "error" || status.code === "failed";
+}
 
 export interface NtripStatus {
   state: NtripState;
@@ -149,6 +164,7 @@ export interface NtripStatus {
 export function ntripErrorCode(native: string | undefined): NtripErrorCode {
   if (native === "AUTH_FAILED") return "auth-failed";
   if (native === "MOUNTPOINT") return "mountpoint";
+  if (native === "TLS_FAILED") return "tls";
   return "failed";
 }
 
