@@ -29,6 +29,12 @@ function memoryStorage(): Storage {
 const base = { ...DEFAULT_NTRIP_CONFIG, host: "caster.example.com", mountpoint: "MOUNT" };
 
 describe("normalizeNtripConfig", () => {
+  it("splits a port off a bracketed IPv6 host", () => {
+    const n = normalizeNtripConfig({ ...base, host: "[2001:db8::1]:2102" });
+    assert.equal(n.host, "[2001:db8::1]");
+    assert.equal(n.port, 2102);
+  });
+
   it("strips a pasted scheme, path and port out of the host", () => {
     const n = normalizeNtripConfig({ ...base, host: " http://caster.example.com:2102/ " });
     assert.equal(n.host, "caster.example.com");

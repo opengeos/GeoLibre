@@ -17,6 +17,7 @@ import javax.net.ssl.TrustManagerFactory
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -184,6 +185,17 @@ class NtripClientTest {
     val gga = GgaTracker()
     val bytes = "\$GPGGA,174511.00,,,,,0,00,,,M,,M,,*66\r\n\$GPRMC,1,A\r\n".toByteArray()
     gga.feed(bytes, bytes.size)
+    assertNull(gga.latest)
+  }
+
+  @Test
+  fun ggaTrackerForgetsThePositionWhenTheFixIsLost() {
+    val gga = GgaTracker()
+    val fixed = "\$GPGGA,174511.00,4807.038,N,01131.000,E,4,12,0.9,545.4,M,46.9,M,,*47\r\n".toByteArray()
+    gga.feed(fixed, fixed.size)
+    assertNotNull(gga.latest)
+    val lost = "\$GPGGA,174512.00,,,,,0,00,,,M,,M,,*65\r\n".toByteArray()
+    gga.feed(lost, lost.size)
     assertNull(gga.latest)
   }
 

@@ -51,6 +51,10 @@ export function useNtripCorrections(connRef: RefObject<NmeaConnection | null>) {
         await conn.corrections.start(config, (next) => {
           if (connRef.current !== conn) return;
           setStatus((prev) => (next.state === "stopped" && prev?.state === "error" ? prev : next));
+          // A fatal stop (bad login, unknown mountpoint, TLS) must not start
+          // again on its own at the next connect.
+          if (next.state === "error" && !ntripSessionRunning(next))
+            update({ ...settingsRef.current, autoStart: false });
         });
       } catch (err) {
         if (connRef.current !== conn) return;
@@ -71,7 +75,7 @@ export function useNtripCorrections(connRef: RefObject<NmeaConnection | null>) {
         });
       }
     },
-    [connRef],
+    [connRef, update],
   );
 
   const start = useCallback(() => {

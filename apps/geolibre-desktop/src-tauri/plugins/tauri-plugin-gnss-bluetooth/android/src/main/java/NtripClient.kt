@@ -84,8 +84,9 @@ class GgaTracker {
     // Field 6 is the fix quality; 0 (or empty) means no fix, and some casters
     // drop a client that sends a position without one.
     val quality = sentence.split(',').getOrNull(6) ?: return
-    if (quality.isEmpty() || quality == "0") return
-    latest = sentence + "\r\n"
+    // A lost fix clears the position, so a VRS caster is not kept building
+    // corrections for where the rover used to be.
+    latest = if (quality.isEmpty() || quality == "0") null else sentence + "\r\n"
   }
 }
 
@@ -241,8 +242,10 @@ class NtripClient(
 
   /** Opens the caster connection, closing whatever it opened if any step fails. */
   private fun open(): Socket {
-    val raw = Socket()
+    // Published at once so stop() can abort a connect or handshake in progress.
+    val raw = Socket().also { socket = it }
     try {
+      if (stopped) throw IOException("stopped")
       raw.connect(InetSocketAddress(config.host, config.port), CONNECT_TIMEOUT_MS)
       raw.soTimeout = READ_TIMEOUT_MS
       if (!config.tls) return raw

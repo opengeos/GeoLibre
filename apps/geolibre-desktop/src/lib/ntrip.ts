@@ -50,7 +50,7 @@ export function normalizeNtripConfig(config: NtripConfig): NtripConfig {
   let host = config.host.trim().replace(/^[a-z]+:\/\//i, "");
   host = host.split("/")[0];
   let port = config.port;
-  const withPort = /^([^:\s]+):(\d+)$/.exec(host);
+  const withPort = /^(\[[^\]\s]+\]|[^:\s]+):(\d+)$/.exec(host);
   if (withPort) {
     host = withPort[1];
     port = Number(withPort[2]);
