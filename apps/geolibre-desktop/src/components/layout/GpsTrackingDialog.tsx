@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import type { Feature, FeatureCollection, Position } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { MapEngine } from "@geolibre/map";
@@ -30,8 +29,6 @@ import {
   Maximize2,
   Pause,
   Play,
-  RefreshCw,
-  Satellite,
   Save,
   Square,
   Trash2,
@@ -70,24 +67,15 @@ import {
   connectBluetoothNmea,
   connectSerialNmea,
   DEFAULT_NMEA_BAUD_RATE,
-  listPairedBluetoothDevices,
   NMEA_BAUD_RATES,
   NmeaError,
   serialNmeaSupported,
   type NmeaConnection,
   type PairedBluetoothDevice,
 } from "../../lib/nmea-source";
-import {
-  formatNtripBytes,
-  loadNtripSettings,
-  normalizeNtripConfig,
-  ntripConfigProblem,
-  saveNtripSettings,
-  type NtripConfig,
-  type NtripStatus,
-  type StoredNtripSettings,
-} from "../../lib/ntrip";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import { AndroidBluetoothControls, nmeaErrorText } from "./GpsBluetoothReceiverControls";
+import { NtripControls, useNtripCorrections } from "./GpsNtripControls";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
@@ -131,8 +119,6 @@ const TRACK_COLOR = "#ef4444";
 const GPS_SETTINGS_STORAGE_KEY = "geolibre.gpsTracking.settings";
 /** Remembered baud rate, so reconnecting a receiver doesn't mean re-picking it. */
 const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
-/** Remembered paired receiver in the Android app, preselected on the next visit. */
-const NMEA_BLUETOOTH_DEVICE_STORAGE_KEY = "geolibre.gpsTracking.bluetoothDevice";
 
 /**
  * Where fixes come from: the device's own Geolocation API, or an external NMEA
@@ -275,31 +261,6 @@ function removeGpsSources(map: maplibregl.Map): void {
 type RecordingState = "off" | "recording" | "paused";
 
 /**
- * Localized text for an {@link NmeaError}. Only the cases the UI can describe
- * better than the browser are translated; a `failed` error carries a message
- * relayed from the platform (a `DOMException` string, or a driver error), and
- * showing that is more useful than a generic localized sentence.
- */
-function nmeaErrorText(err: NmeaError, t: TFunction): string {
-  switch (err.code) {
-    case "unavailable":
-      return t("gps.nmeaUnsupported");
-    case "unsupported-device":
-      return t("gps.nmeaUnsupportedDevice");
-    case "disconnected":
-      return t("gps.nmeaDisconnected");
-    case "bluetooth-off":
-      return t("gps.nmeaBluetoothOff");
-    case "permission-denied":
-      return t("gps.nmeaBluetoothPermissionDenied");
-    case "connect-failed":
-      return t("gps.nmeaBluetoothConnectFailed");
-    default:
-      return err.message;
-  }
-}
-
-/**
  * GPS Tracking (issue #1316): stream a live position onto the map with an
  * accuracy circle and heading marker, optionally keep the map centered, record
  * a timestamped track log with distance/duration stats and min-distance /
@@ -345,12 +306,10 @@ export function GpsTrackingDialog({
   /**
    * NTRIP corrections (issue #3400). Held here rather than in the dialog body
    * because the dialog content unmounts when it closes while the receiver and
-   * its correction stream keep running. `ntripStatus` is null when no session
-   * has been started for the current receiver.
+   * its correction stream keep running.
    */
-  const [ntripSettings, setNtripSettingsState] = useState<StoredNtripSettings>(loadNtripSettings);
-  const ntripSettingsRef = useRef(ntripSettings);
-  const [ntripStatus, setNtripStatus] = useState<NtripStatus | null>(null);
+  const ntrip = useNtripCorrections(nmeaConnRef);
+  const { reset: resetNtrip, resumeFor: resumeNtripFor } = ntrip;
   /** Whether the connected receiver's transport can take corrections. */
   const [nmeaHasCorrections, setNmeaHasCorrections] = useState(false);
   /**
@@ -750,7 +709,7 @@ export function GpsTrackingDialog({
     setNmeaLabel(null);
     setNmeaStats(null);
     // Closing the receiver ends its correction session natively.
-    setNtripStatus(null);
+    resetNtrip();
     setNmeaHasCorrections(false);
     try {
       await conn?.close();
@@ -761,7 +720,7 @@ export function GpsTrackingDialog({
       // keep a warning so a receiver that never releases can be diagnosed.
       logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
     }
-  }, []);
+  }, [resetNtrip]);
 
   /** Abandon any in-flight connect as well as closing the live connection. */
   const disconnectNmea = useCallback(async () => {
@@ -774,56 +733,6 @@ export function GpsTrackingDialog({
     setConnecting(null);
     await closeNmea();
   }, [closeNmea]);
-
-  const updateNtripSettings = useCallback((next: StoredNtripSettings) => {
-    ntripSettingsRef.current = next;
-    setNtripSettingsState(next);
-    saveNtripSettings(next);
-  }, []);
-
-  /**
-   * Start the NTRIP session for `conn`. Status updates from a receiver that
-   * has since been replaced are dropped, and a `stopped` that follows a fatal
-   * error keeps the error on screen so the user can see why it stopped.
-   */
-  const startCorrectionsFor = useCallback(async (conn: NmeaConnection, config: NtripConfig) => {
-    if (!conn.corrections) return;
-    setNtripStatus({ state: "connecting", bytes: 0 });
-    try {
-      await conn.corrections.start(config, (status) => {
-        if (nmeaConnRef.current !== conn) return;
-        setNtripStatus((prev) =>
-          status.state === "stopped" && prev?.state === "error" ? prev : status,
-        );
-      });
-    } catch (err) {
-      if (nmeaConnRef.current !== conn) return;
-      setNtripStatus({
-        state: "error",
-        bytes: 0,
-        code: "failed",
-        message: err instanceof Error ? err.message : String(err),
-      });
-      logGpsFailure("GPS: could not start NTRIP corrections", err, "warning");
-    }
-  }, []);
-
-  const startCorrections = useCallback(() => {
-    const conn = nmeaConnRef.current;
-    const settings = ntripSettingsRef.current;
-    if (!conn?.corrections || ntripConfigProblem(settings.config)) return;
-    // Show what is actually sent: a pasted "http://host:2102/" becomes host
-    // and port, and a leading slash leaves the mountpoint.
-    const config = normalizeNtripConfig(settings.config);
-    updateNtripSettings({ config, autoStart: true });
-    void startCorrectionsFor(conn, config);
-  }, [startCorrectionsFor, updateNtripSettings]);
-
-  const stopCorrections = useCallback(() => {
-    updateNtripSettings({ ...ntripSettingsRef.current, autoStart: false });
-    setNtripStatus(null);
-    void nmeaConnRef.current?.corrections?.stop();
-  }, [updateNtripSettings]);
 
   /**
    * Open an NMEA receiver and start tracking from it. Both transports show a
@@ -887,9 +796,7 @@ export function GpsTrackingDialog({
         setTracking(true);
         // Corrections that were running when this receiver was last used
         // come back on their own, as they do in a dedicated field app.
-        const stored = ntripSettingsRef.current;
-        if (conn.corrections && stored.autoStart && !ntripConfigProblem(stored.config))
-          void startCorrectionsFor(conn, stored.config);
+        resumeNtripFor(conn);
       } catch (err) {
         if (isStale()) return;
         if (err instanceof NmeaError) {
@@ -904,7 +811,7 @@ export function GpsTrackingDialog({
         if (!isStale()) setConnecting(null);
       }
     },
-    [baudRate, closeNmea, disconnectNmea, handleFix, startCorrectionsFor, t],
+    [baudRate, closeNmea, disconnectNmea, handleFix, resumeNtripFor, t],
   );
 
   // Poll the assembler's counters while connected so the readout shows the
@@ -1139,11 +1046,11 @@ export function GpsTrackingDialog({
                 )}
                 {source === "nmea" && nmeaLabel && nmeaHasCorrections && (
                   <NtripControls
-                    config={ntripSettings.config}
-                    onConfigChange={(config) => updateNtripSettings({ ...ntripSettings, config })}
-                    status={ntripStatus}
-                    onStart={startCorrections}
-                    onStop={stopCorrections}
+                    config={ntrip.settings.config}
+                    onConfigChange={ntrip.setConfig}
+                    status={ntrip.status}
+                    onStart={ntrip.start}
+                    onStop={ntrip.stop}
                   />
                 )}
               </div>
@@ -1357,160 +1264,6 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
   );
 }
 
-interface NtripControlsProps {
-  config: NtripConfig;
-  onConfigChange: (config: NtripConfig) => void;
-  /** Null when no session is running. */
-  status: NtripStatus | null;
-  onStart: () => void;
-  onStop: () => void;
-}
-
-/**
- * Caster settings and status for RTK corrections (issue #3400). The settings
- * are locked while a session runs; Stop, edit, and Start again to change them.
- */
-function NtripControls({ config, onConfigChange, status, onStart, onStop }: NtripControlsProps) {
-  const { t } = useTranslation();
-  // A fatal error (bad login, unknown mountpoint) has stopped the client, so
-  // the form unlocks and offers Start again; a retrying error has not.
-  const running =
-    status != null &&
-    status.state !== "stopped" &&
-    !(status.state === "error" && status.code !== "failed");
-  const problem = ntripConfigProblem(config);
-  const set = (patch: Partial<NtripConfig>) => onConfigChange({ ...config, ...patch });
-
-  let statusText: string | null = null;
-  if (status) {
-    if (status.state === "connecting") statusText = t("gps.ntripConnecting");
-    else if (status.state === "connected")
-      statusText =
-        status.bytes > 0
-          ? t("gps.ntripReceiving", { size: formatNtripBytes(status.bytes) })
-          : t("gps.ntripWaiting");
-    else if (status.state === "error")
-      statusText =
-        status.code === "auth-failed"
-          ? t("gps.ntripAuthFailed")
-          : status.code === "mountpoint"
-            ? t("gps.ntripMountpointMissing", { mountpoint: config.mountpoint.trim() })
-            : t("gps.ntripRetrying", { message: status.message ?? "" });
-  }
-  const statusIsError = status?.state === "error";
-
-  return (
-    <div className="space-y-2 rounded-md border p-2">
-      <div className="text-sm font-medium">{t("gps.ntripTitle")}</div>
-      <div className="flex gap-2">
-        <div className="min-w-0 flex-1 space-y-1">
-          <Label htmlFor="gps-ntrip-host" className="text-xs font-normal text-muted-foreground">
-            {t("gps.ntripHost")}
-          </Label>
-          <Input
-            id="gps-ntrip-host"
-            value={config.host}
-            disabled={running}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="caster.example.com"
-            onChange={(e) => set({ host: e.target.value })}
-          />
-        </div>
-        <div className="w-24 space-y-1">
-          <Label htmlFor="gps-ntrip-port" className="text-xs font-normal text-muted-foreground">
-            {t("gps.ntripPort")}
-          </Label>
-          <Input
-            id="gps-ntrip-port"
-            inputMode="numeric"
-            value={config.port || ""}
-            disabled={running}
-            onChange={(e) => set({ port: Number(e.target.value.replace(/\D/g, "")) })}
-          />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="gps-ntrip-mount" className="text-xs font-normal text-muted-foreground">
-          {t("gps.ntripMountpoint")}
-        </Label>
-        <Input
-          id="gps-ntrip-mount"
-          value={config.mountpoint}
-          disabled={running}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          onChange={(e) => set({ mountpoint: e.target.value })}
-        />
-      </div>
-      <div className="flex gap-2">
-        <div className="min-w-0 flex-1 space-y-1">
-          <Label htmlFor="gps-ntrip-user" className="text-xs font-normal text-muted-foreground">
-            {t("gps.ntripUsername")}
-          </Label>
-          <Input
-            id="gps-ntrip-user"
-            value={config.username}
-            disabled={running}
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => set({ username: e.target.value })}
-          />
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <Label htmlFor="gps-ntrip-pass" className="text-xs font-normal text-muted-foreground">
-            {t("gps.ntripPassword")}
-          </Label>
-          <Input
-            id="gps-ntrip-pass"
-            type="password"
-            value={config.password}
-            disabled={running}
-            autoComplete="off"
-            onChange={(e) => set({ password: e.target.value })}
-          />
-        </div>
-      </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={config.tls}
-          disabled={running}
-          onChange={(e) => set({ tls: e.target.checked })}
-        />
-        {t("gps.ntripTls")}
-      </label>
-      {running ? (
-        <Button size="sm" variant="outline" onClick={onStop}>
-          <CircleStop className="me-1 h-3.5 w-3.5" />
-          {t("gps.ntripStop")}
-        </Button>
-      ) : (
-        <Button size="sm" disabled={problem != null} onClick={onStart}>
-          <Satellite className="me-1 h-3.5 w-3.5" />
-          {t("gps.ntripStart")}
-        </Button>
-      )}
-      {statusText && (
-        <p
-          className={`text-xs ${statusIsError ? "text-destructive" : "text-muted-foreground"} tabular-nums`}
-          role="status"
-        >
-          {statusText}
-        </p>
-      )}
-      {!running && problem && config.host.trim() !== "" && (
-        <p className="text-xs text-muted-foreground">{t(`gps.${problem}`)}</p>
-      )}
-      <p className="text-xs text-muted-foreground">{t("gps.ntripHint")}</p>
-    </div>
-  );
-}
-
 interface NmeaControlsProps {
   baudRate: number;
   onBaudRateChange: (value: number) => void;
@@ -1620,127 +1373,6 @@ function NmeaControls({
       {!bluetoothOk && (
         <p className="text-xs text-muted-foreground">{t("gps.nmeaBluetoothUnsupported")}</p>
       )}
-    </div>
-  );
-}
-
-function loadStoredBluetoothAddress(): string | null {
-  try {
-    return window.localStorage.getItem(NMEA_BLUETOOTH_DEVICE_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-interface AndroidBluetoothControlsProps {
-  connecting: boolean;
-  disabled: boolean;
-  onConnect: (device: PairedBluetoothDevice) => void;
-}
-
-/**
- * Receiver picker for the Android app (issue #3397): lists the devices paired
- * in Android's Bluetooth settings and connects to the chosen one over its
- * Serial Port Profile through the native plugin. The list loads on mount,
- * which is when Android asks for the Bluetooth permission the first time; the
- * last receiver used is preselected so reconnecting is one tap.
- */
-function AndroidBluetoothControls({
-  connecting,
-  disabled,
-  onConnect,
-}: AndroidBluetoothControlsProps) {
-  const { t } = useTranslation();
-  const [devices, setDevices] = useState<PairedBluetoothDevice[] | null>(null);
-  const [address, setAddress] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setListError(null);
-    try {
-      const paired = await listPairedBluetoothDevices();
-      if (!mountedRef.current) return;
-      setDevices(paired);
-      const stored = loadStoredBluetoothAddress();
-      setAddress((current) => {
-        const keep = [current, stored].find((a) => a && paired.some((d) => d.address === a));
-        return keep ?? paired[0]?.address ?? "";
-      });
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setDevices(null);
-      setListError(err instanceof NmeaError ? nmeaErrorText(err, t) : t("gps.nmeaConnectFailed"));
-      logGpsFailure("GPS: could not list paired Bluetooth devices", err, "warning");
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    void refresh();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [refresh]);
-
-  const selected = devices?.find((d) => d.address === address) ?? null;
-
-  const connect = () => {
-    if (!selected) return;
-    try {
-      window.localStorage.setItem(NMEA_BLUETOOTH_DEVICE_STORAGE_KEY, selected.address);
-    } catch {
-      // Best-effort; the user just picks the receiver again next time.
-    }
-    onConnect(selected);
-  };
-
-  return (
-    <div className="space-y-2">
-      <Label htmlFor="gps-nmea-bt-device" className="text-xs font-normal text-muted-foreground">
-        {t("gps.nmeaPairedDevice")}
-      </Label>
-      <div className="flex gap-2">
-        <Select
-          id="gps-nmea-bt-device"
-          className="min-w-0 flex-1"
-          value={address}
-          disabled={loading || !devices?.length}
-          onChange={(e) => setAddress(e.target.value)}
-        >
-          {devices?.length ? (
-            devices.map((d) => (
-              <option key={d.address} value={d.address}>
-                {d.type === "le" ? t("gps.nmeaDeviceBleOnly", { name: d.name }) : d.name}
-              </option>
-            ))
-          ) : (
-            <option value="">
-              {loading ? t("gps.nmeaLoadingDevices") : t("gps.nmeaNoPairedDevices")}
-            </option>
-          )}
-        </Select>
-        <Button
-          size="icon"
-          variant="outline"
-          disabled={loading}
-          onClick={() => void refresh()}
-          aria-label={t("gps.nmeaRefreshDevices")}
-          title={t("gps.nmeaRefreshDevices")}
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
-      <Button size="sm" disabled={!selected || disabled} onClick={connect}>
-        <Bluetooth className="me-1 h-3.5 w-3.5" />
-        {connecting ? t("gps.nmeaConnecting") : t("gps.nmeaConnectReceiver")}
-      </Button>
-      {listError && <p className="text-xs text-destructive">{listError}</p>}
-      <p className="text-xs text-muted-foreground">{t("gps.nmeaAndroidBluetoothHint")}</p>
     </div>
   );
 }
