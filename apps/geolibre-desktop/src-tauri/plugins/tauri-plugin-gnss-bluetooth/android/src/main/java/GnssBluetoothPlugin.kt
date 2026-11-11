@@ -201,7 +201,7 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         it.address.equals(args.address, ignoreCase = true)
       }
       if (device == null) {
-        invoke.reject("${args.address} is not paired. Pair it in Android's Bluetooth settings first.", "FAILED")
+        invoke.reject("${args.address} is not paired. Pair it in Android's Bluetooth settings first.", "NOT_PAIRED")
         return
       }
       val socket = openSocket(device)
@@ -223,6 +223,14 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
       id = nextId.getAndIncrement()
       connection = Connection(socket, args.channel)
       connections[id] = connection
+      // onDestroy may have run between the check above and the put, in which
+      // case its sweep missed this connection; close it here instead.
+      if (destroyed) {
+        connections.remove(id)
+        connection.close()
+        invoke.reject("The app is closing.", "FAILED")
+        return
+      }
       val result = JSObject()
       result.put("id", id)
       result.put("name", device.name ?: args.address)
@@ -277,7 +285,9 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         if (!timeout.cancel(false)) throw IOException("Connect timed out after $CONNECT_TIMEOUT_MS ms.")
         return candidate
       } catch (e: Exception) {
-        Logger.debug("GnssBluetooth", "SPP connect attempt failed: ${e.message}")
+        // Warn, not debug: the channel-1 fallback goes through a hidden API by
+        // reflection, and if a future Android blocks it this is the only trace.
+        Logger.warn("GnssBluetooth", "SPP connect attempt failed: ${e.javaClass.simpleName}: ${e.message}")
         try {
           socket?.close()
         } catch (_: IOException) {

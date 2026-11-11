@@ -37,6 +37,10 @@ export function nmeaErrorText(err: NmeaError, t: TFunction): string {
       return t("gps.nmeaBluetoothPermissionDenied");
     case "connect-failed":
       return t("gps.nmeaBluetoothConnectFailed");
+    case "busy":
+      return t("gps.nmeaBluetoothBusy");
+    case "not-paired":
+      return t("gps.nmeaBluetoothNotPaired");
     default:
       return err.message;
   }
@@ -72,15 +76,20 @@ export function AndroidBluetoothControls({
   const [devices, setDevices] = useState<PairedBluetoothDevice[] | null>(null);
   const [address, setAddress] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listError, setListError] = useState<NmeaError | null>(null);
   const mountedRef = useRef(true);
 
+  // Each listing gets an id; only the newest may touch state, so a slow,
+  // superseded request (a double tap on Refresh) cannot overwrite a newer list.
+  const requestRef = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++requestRef.current;
+    const current = () => mountedRef.current && request === requestRef.current;
     setLoading(true);
     setListError(null);
     try {
       const paired = await listPairedBluetoothDevices();
-      if (!mountedRef.current) return;
+      if (!current()) return;
       setDevices(paired);
       const stored = loadStoredBluetoothAddress();
       setAddress((current) => {
@@ -88,9 +97,15 @@ export function AndroidBluetoothControls({
         return keep ?? paired[0]?.address ?? "";
       });
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!current()) return;
       setDevices(null);
-      setListError(err instanceof NmeaError ? nmeaErrorText(err, t) : t("gps.nmeaConnectFailed"));
+      // Kept as the error, not its text, so a language change re-renders it
+      // without listing the devices again.
+      setListError(
+        err instanceof NmeaError
+          ? err
+          : new NmeaError(err instanceof Error ? err.message : String(err)),
+      );
       appendDiagnostic({
         category: "runtime",
         level: "warning",
@@ -99,9 +114,9 @@ export function AndroidBluetoothControls({
         source: "gps-tracking",
       });
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -167,7 +182,7 @@ export function AndroidBluetoothControls({
         <Bluetooth className="me-1 h-3.5 w-3.5" />
         {connecting ? t("gps.nmeaConnecting") : t("gps.nmeaConnectReceiver")}
       </Button>
-      {listError && <p className="text-xs text-destructive">{listError}</p>}
+      {listError && <p className="text-xs text-destructive">{nmeaErrorText(listError, t)}</p>}
       <p className="text-xs text-muted-foreground">{t("gps.nmeaAndroidBluetoothHint")}</p>
     </div>
   );

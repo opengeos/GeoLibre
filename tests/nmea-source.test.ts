@@ -259,6 +259,8 @@ describe("connectAndroidBluetoothNmea", () => {
       ["PERMISSION_DENIED", "permission-denied"],
       ["CONNECT_FAILED", "connect-failed"],
       ["UNAVAILABLE", "unavailable"],
+      ["BUSY", "busy"],
+      ["NOT_PAIRED", "not-paired"],
       ["SOMETHING_ELSE", "failed"],
     ];
     for (const [nativeCode, code] of cases) {
