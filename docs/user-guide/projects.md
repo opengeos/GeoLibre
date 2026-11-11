@@ -68,8 +68,8 @@ A project prepared in QGIS for field work with QField keeps its form setup, so t
 
 | QGIS form setting | In GeoLibre |
 | --- | --- |
-| Edit widgets | **Value Map** becomes a dropdown, **Range** a slider or number box with its bounds, **Checkbox** a checkbox (or a two-entry dropdown when it stores custom values such as `Y`/`N`), **Date/Time** a date picker. **Hidden** fields stay hidden but are still saved. |
-| **Value Relation** and **Relation Reference** | A dropdown filled from the linked table's rows, read from the GeoPackage even when that table has no geometry. The entries are a snapshot taken at import. A table with more than 1,000 distinct values is left as a text box. |
+| Edit widgets | **Value Map** becomes a dropdown, **Range** a slider or number box with its bounds, **Checkbox** a checkbox (or a two-entry dropdown when it stores custom values such as `Y`/`N`), **Date/Time** a date picker (a field that also stores a time stays a text box so the time is kept). **Hidden** fields stay hidden but are still saved. |
+| **Value Relation** and **Relation Reference** | A dropdown filled from the linked table's rows, read from the GeoPackage even when that table has no geometry. The entries are a snapshot taken at import. A table with more than 1,000 distinct values, or a widget that allows several selections, is left as a text box. |
 | Field aliases | The field's label. |
 | **Not null** constraints | A required field. Constraints QGIS only warns about are not enforced. |
 | Constraint expressions | Converted when they use comparisons, `AND`/`OR`/`NOT`, arithmetic, `IS NULL`, `IN`, and text length or case functions. As in QGIS, an empty value passes. |

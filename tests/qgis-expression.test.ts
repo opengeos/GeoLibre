@@ -140,25 +140,30 @@ describe("QGIS expression subset", () => {
     assert.equal(value("lpad('7', 3, '0')"), "007");
   });
 
-  it("lists the fields an expression reads and whether it is volatile", () => {
+  it("lists the fields an expression reads and what makes it change", () => {
     assert.deepEqual(qgisExpressionReferences(`"site" || '_' || left(code, 2)`), {
       fields: ["site", "code"],
-      volatile: false,
+      usesNow: false,
+      usesUuid: false,
     });
-    assert.deepEqual(qgisExpressionReferences("uuid()"), { fields: [], volatile: true });
+    assert.deepEqual(qgisExpressionReferences("uuid()"), {
+      fields: [],
+      usesNow: false,
+      usesUuid: true,
+    });
     assert.deepEqual(qgisExpressionReferences("site || format_date(now(), 'yyyy')"), {
       fields: ["site"],
-      volatile: true,
+      usesNow: true,
+      usesUuid: false,
     });
-    assert.deepEqual(qgisExpressionReferences("attribute('site')"), {
-      fields: ["site"],
-      volatile: false,
-    });
-    assert.deepEqual(qgisExpressionReferences("@position_horizontal_accuracy"), {
-      fields: [],
-      volatile: false,
-    });
+    assert.deepEqual(qgisExpressionReferences("attribute('site')")?.fields, ["site"]);
+    assert.deepEqual(qgisExpressionReferences("@position_horizontal_accuracy")?.fields, []);
     assert.equal(qgisExpressionReferences("1 +"), null);
+  });
+
+  it("leaves text alone when asked to replace an empty string", () => {
+    assert.equal(value("replace('abc', '', 'x')"), "abc");
+    assert.equal(value("replace('a-b-c', '-', '')"), "abc");
   });
 
   it("reports syntax errors and unsupported functions without throwing", () => {

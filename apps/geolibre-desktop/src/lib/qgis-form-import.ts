@@ -74,7 +74,9 @@ function readOption(option: Element): OptionValue {
   const type = option.getAttribute("type");
   const children = Array.from(option.children).filter((child) => child.tagName === "Option");
   if (type === "Map") {
-    const map: { [key: string]: OptionValue } = {};
+    // Null prototype: names come from the project file, and "__proto__" must
+    // be an ordinary key.
+    const map: { [key: string]: OptionValue } = Object.create(null);
     for (const child of children) map[child.getAttribute("name") ?? ""] = readOption(child);
     return map;
   }
@@ -231,7 +233,11 @@ export function parseQgisLayerForm(
         if (checked !== "" && unchecked !== "" && checked !== unchecked) {
           config.widget = "valueMap";
           config.valueMap = [{ value: checked }, { value: unchecked }];
-          config.valueType = "string";
+          // Numeric states (1/0 on an integer column) keep storing numbers,
+          // which the value map does on its own for all-numeric codes.
+          if (![checked, unchecked].every((state) => String(Number(state)) === state)) {
+            config.valueType = "string";
+          }
         } else {
           config.widget = "checkbox";
         }
@@ -239,13 +245,21 @@ export function parseQgisLayerForm(
         break;
       }
       case "DateTime":
-        config.widget = "date";
-        schemaType = "date";
-        meaningful = true;
+        // The date picker stores a date only. A field whose format carries a
+        // time (a QField timestamp defaulting to now()) stays a text field so
+        // the time is kept.
+        if (!/[Hhs]|mm|[Aa][Pp]/.test(optionText(options, "field_format"))) {
+          config.widget = "date";
+          schemaType = "date";
+          meaningful = true;
+        }
         break;
       case "ValueRelation": {
         const referencedLayerId = optionText(options, "Layer");
         const keyField = optionText(options, "Key");
+        // A multi-select stores a list of keys in one value, which a
+        // single-choice dropdown would overwrite with one key: leave it text.
+        if (optionText(options, "AllowMulti") === "true") break;
         if (referencedLayerId && keyField) {
           relations.push({
             field: name,

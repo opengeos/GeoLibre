@@ -53,23 +53,34 @@ export function useCaptureDefaults({
   useEffect(() => {
     let cancelled = false;
     setTransform(null);
-    void loadDefaultValueTransform(attributeForm).then((loaded) => {
-      // Wrapped: a bare function passed to a state setter is called as an updater.
-      if (!cancelled && loaded) setTransform(() => loaded);
-    });
+    loadDefaultValueTransform(attributeForm)
+      .then((loaded) => {
+        // Wrapped: a bare function passed to a state setter is called as an updater.
+        if (!cancelled && loaded) setTransform(() => loaded);
+      })
+      .catch((error) => {
+        // Projected defaults then stay empty rather than wrong.
+        console.warn("[GeoLibre] Could not load projections for default values.", error);
+      });
     return () => {
       cancelled = true;
     };
   }, [attributeForm]);
 
+  // The clock is read once per capture, so a default that mixes a field with
+  // now() keeps its timestamp when the field is edited afterwards.
+  const capturedAtRef = useRef(new Date());
   const recompute = (mode: "capture" | "input") => {
     if (!pending || !schema || !hasAttributeFormDefaults(attributeForm)) return;
+    if (mode === "capture") capturedAtRef.current = new Date();
+    const capturedAt = capturedAtRef.current;
     const current = valuesRef.current;
     const result = applyCaptureDefaults(
       attributeForm,
       current,
       autoFilledRef.current,
       {
+        now: () => capturedAt,
         properties: buildPropertiesWithForm(schema, current, attributeForm),
         variables: captureExpressionVariables({
           fix: gpsFix,
@@ -95,7 +106,7 @@ export function useCaptureDefaults({
   }, [pending, gpsFix, schema, attributeForm, geometry, layerName, transform]);
 
   // Settles in one extra pass: the values it writes are a fixed point of the
-  // same computation, because volatile defaults are excluded in this mode.
+  // same computation, because uuid() is excluded and the clock is held still.
   useEffect(() => {
     recomputeRef.current("input");
   }, [values]);

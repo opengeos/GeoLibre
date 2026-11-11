@@ -87,6 +87,9 @@ function surveyProject(): string {
           ${field("count", "Range", option("Min", -2147483648) + option("Max", 2147483647) + option("Style", "SpinBox"))}
           ${field("damaged", "CheckBox")}
           ${field("fenced", "CheckBox", option("CheckedState", "Y") + option("UncheckedState", "N"))}
+          ${field("flag", "CheckBox", option("CheckedState", "1") + option("UncheckedState", "0"))}
+          ${field("logged_at", "DateTime", option("field_format", "yyyy-MM-dd HH:mm:ss"))}
+          ${field("tags", "ValueRelation", option("Layer", "materials") + option("Key", "code") + option("Value", "label") + option("AllowMulti", "true"))}
           ${field("visited", "DateTime")}
           ${field("accuracy", "TextEdit")}
           ${field("easting", "Hidden")}
@@ -229,6 +232,16 @@ describe("QGIS form import", () => {
       valueMap: [{ value: "Y" }, { value: "N" }],
       valueType: "string",
     });
+    // Numeric states on an integer column keep storing numbers.
+    assert.deepEqual(byField.get("flag"), {
+      field: "flag",
+      widget: "valueMap",
+      valueMap: [{ value: "1" }, { value: "0" }],
+    });
+    // A date/time field keeps its time: the date picker would drop it.
+    assert.deepEqual(byField.get("logged_at"), { field: "logged_at", widget: "text" });
+    // A multi-select holds a list of keys, so it is not made a single choice.
+    assert.deepEqual(byField.get("tags"), { field: "tags", widget: "text" });
     assert.equal(
       byField.get("photo_name")?.defaultValue,
       "'DCIM/' || species || '_' || format_date(now(), 'yyyyMMdd') || '.jpg'",
@@ -503,6 +516,68 @@ describe("Field Collection default values", () => {
       "input",
     );
     assert.equal(settled.values, updated.values);
+  });
+
+  it("keeps the capture time when a field in a timestamped name changes", () => {
+    const form = {
+      fields: [
+        { field: "site", widget: "text" as const },
+        {
+          field: "file",
+          widget: "text" as const,
+          defaultValue: "site || '_' || format_date(now(), 'HHmmss') || '.jpg'",
+        },
+      ],
+    };
+    const capturedAt = new Date(2026, 10, 11, 9, 30, 15);
+    const context = { now: () => capturedAt };
+    const captured = applyCaptureDefaults(
+      form,
+      { site: "A1" },
+      {},
+      {
+        ...context,
+        properties: { site: "A1" },
+      },
+    );
+    assert.equal(captured.values.file, "A1_093015.jpg");
+    const renamed = applyCaptureDefaults(
+      form,
+      { ...captured.values, site: "B2" },
+      captured.autoFilled,
+      { ...context, properties: { site: "B2", file: "A1_093015.jpg" } },
+      "input",
+    );
+    assert.equal(renamed.values.file, "B2_093015.jpg");
+  });
+
+  it("leaves a default the user emptied empty", () => {
+    const form = {
+      fields: [
+        { field: "site", widget: "text" as const },
+        { field: "file", widget: "text" as const, defaultValue: "site || '.jpg'" },
+      ],
+    };
+    const captured = applyCaptureDefaults(form, { site: "A1" }, {}, { properties: { site: "A1" } });
+    assert.equal(captured.values.file, "A1.jpg");
+    // The user clears the optional field, then edits something else.
+    const cleared = { ...captured.values, file: "" };
+    const first = applyCaptureDefaults(
+      form,
+      cleared,
+      captured.autoFilled,
+      { properties: { site: "A1" } },
+      "input",
+    );
+    assert.equal(first.values, cleared);
+    const second = applyCaptureDefaults(
+      form,
+      { ...cleared, site: "B2" },
+      first.autoFilled,
+      { properties: { site: "B2" } },
+      "input",
+    );
+    assert.equal(second.values.file, "");
   });
 
   it("does not feed a cleared default back into the fields that read it", () => {

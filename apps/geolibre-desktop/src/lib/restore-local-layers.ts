@@ -1,5 +1,6 @@
 import { hasPathTraversal, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import i18next from "i18next";
+import { localFileSourceLayer } from "./local-file-source";
 import { notify } from "./notify";
 import {
   isAbsoluteLocalPath,
@@ -8,6 +9,14 @@ import {
   isTauri,
   loadDroppedVectorPaths,
 } from "./tauri-io";
+
+/** Layers that read the same table of the same file, restored by one read. */
+interface RestoreGroup {
+  path: string;
+  /** Table name inside the file, or "" for its first layer. */
+  sourceLayer: string;
+  layers: GeoLibreLayer[];
+}
 
 /**
  * Detects a plain GeoJSON layer saved as a re-readable local-file reference
@@ -19,14 +28,6 @@ import {
  * @param layer - A store layer.
  * @returns True when the layer needs its features re-read from `sourcePath`.
  */
-/** Layers that read the same table of the same file, restored by one read. */
-interface RestoreGroup {
-  path: string;
-  /** Table name inside the file, or "" for its first layer. */
-  sourceLayer: string;
-  layers: GeoLibreLayer[];
-}
-
 function needsLocalFileReload(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "geojson" &&
@@ -92,7 +93,7 @@ export async function restoreLocalFileLayers(): Promise<void> {
         })
       ).filter(isLoadedVectorLayer);
       if (loaded.length === 0) {
-        dropLayers(layers, path);
+        dropLayers(stillWaiting(layers, path, sourceLayer), path);
         return;
       }
       for (const layer of layers) {
@@ -119,13 +120,12 @@ export async function restoreLocalFileLayers(): Promise<void> {
         // The layer may have changed while the file was being read: removed,
         // or detached from the file by a capture that now owns its features.
         // Committing the read would overwrite that newer state.
-        const current = useAppStore.getState().layers.find((entry) => entry.id === layer.id);
-        if (!current || !needsLocalFileReload(current) || current.sourcePath !== path) continue;
+        if (!isStillWaiting(layer.id, path, sourceLayer)) continue;
         useAppStore.getState().updateLayer(layer.id, { geojson: match.data });
       }
     } catch (error) {
       console.warn(`[GeoLibre] Could not reload local layer(s) from "${path}".`, error);
-      dropLayers(layers, path);
+      dropLayers(stillWaiting(layers, path, sourceLayer), path);
     }
   };
   await Promise.all(
@@ -136,17 +136,28 @@ export async function restoreLocalFileLayers(): Promise<void> {
 }
 
 /**
- * The table of a multi-layer file a layer reads, or "" for the file's first.
- *
- * @param layer - A store layer.
- * @returns The `metadata.sourceLayer` name, trimmed.
+ * Whether a layer is still the one a read was started for: present, still
+ * without features, and still pointing at that table of that file. A layer
+ * can be removed, replaced by another project's, or detached from its file by
+ * a capture while the read is in flight, and none of those may be overwritten
+ * or dropped by its result.
  */
-export function localFileSourceLayer(layer: GeoLibreLayer): string {
-  const value = layer.metadata.sourceLayer;
-  return typeof value === "string" ? value.trim() : "";
+function isStillWaiting(layerId: string, path: string, sourceLayer: string): boolean {
+  const current = useAppStore.getState().layers.find((entry) => entry.id === layerId);
+  return (
+    current !== undefined &&
+    needsLocalFileReload(current) &&
+    current.sourcePath === path &&
+    localFileSourceLayer(current) === sourceLayer
+  );
+}
+
+function stillWaiting(layers: GeoLibreLayer[], path: string, sourceLayer: string): GeoLibreLayer[] {
+  return layers.filter((layer) => isStillWaiting(layer.id, path, sourceLayer));
 }
 
 function dropLayers(layers: GeoLibreLayer[], path: string): void {
+  if (layers.length === 0) return;
   for (const layer of layers) {
     console.info(
       `[GeoLibre] Layer "${layer.name}" could not be re-read from "${path}"; removing it.`,

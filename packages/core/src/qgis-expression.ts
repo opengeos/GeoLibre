@@ -753,7 +753,12 @@ const FUNCTIONS: Record<string, FunctionSpec> = {
   replace: {
     min: 3,
     max: 3,
-    run: (args) => toText(args[0]).split(toText(args[1])).join(toText(args[2])),
+    run: (args) => {
+      // Splitting on "" would insert the replacement between every character;
+      // QGIS leaves the text as it is.
+      const search = toText(args[1]);
+      return search ? toText(args[0]).split(search).join(toText(args[2])) : toText(args[0]);
+    },
   },
   lpad: {
     min: 3,
@@ -1318,25 +1323,29 @@ export function qgisExpressionProblem(source: string): string | null {
   return found.size > 0 ? [...found].join(", ") : null;
 }
 
-function collectReferences(node: QgisExpressionNode, fields: Set<string>): boolean {
+/** Bit flags {@link collectReferences} returns. */
+const USES_NOW = 1;
+const USES_UUID = 2;
+
+function collectReferences(node: QgisExpressionNode, fields: Set<string>): number {
   switch (node.type) {
     case "literal":
     case "variable":
-      return false;
+      return 0;
     case "special":
-      return node.name === "now";
+      return node.name === "now" ? USES_NOW : 0;
     case "field":
       fields.add(node.name);
-      return false;
+      return 0;
     case "call": {
-      let volatile = node.name === "now" || node.name === "uuid";
+      let volatile = node.name === "now" ? USES_NOW : node.name === "uuid" ? USES_UUID : 0;
       // attribute('name') reads a field by a name only known when it runs.
       if (node.name === "attribute") {
         const [name] = node.args;
         if (name?.type === "literal" && typeof name.value === "string") fields.add(name.value);
         else fields.add("*");
       }
-      for (const arg of node.args) volatile = collectReferences(arg, fields) || volatile;
+      for (const arg of node.args) volatile |= collectReferences(arg, fields);
       return volatile;
     }
     case "unary":
@@ -1344,22 +1353,20 @@ function collectReferences(node: QgisExpressionNode, fields: Set<string>): boole
       return collectReferences(node.arg, fields);
     case "in": {
       let volatile = collectReferences(node.arg, fields);
-      for (const entry of node.list) volatile = collectReferences(entry, fields) || volatile;
+      for (const entry of node.list) volatile |= collectReferences(entry, fields);
       return volatile;
     }
     case "case": {
-      let volatile = false;
+      let volatile = 0;
       for (const branch of node.branches) {
-        volatile = collectReferences(branch.when, fields) || volatile;
-        volatile = collectReferences(branch.then, fields) || volatile;
+        volatile |= collectReferences(branch.when, fields);
+        volatile |= collectReferences(branch.then, fields);
       }
-      if (node.otherwise) volatile = collectReferences(node.otherwise, fields) || volatile;
+      if (node.otherwise) volatile |= collectReferences(node.otherwise, fields);
       return volatile;
     }
-    case "binary": {
-      const left = collectReferences(node.left, fields);
-      return collectReferences(node.right, fields) || left;
-    }
+    case "binary":
+      return collectReferences(node.left, fields) | collectReferences(node.right, fields);
   }
 }
 
@@ -1367,8 +1374,10 @@ function collectReferences(node: QgisExpressionNode, fields: Set<string>): boole
 export interface QgisExpressionReferences {
   /** Field names it reads; `"*"` when a name is only known at run time. */
   fields: string[];
-  /** Whether it calls `now()` or `uuid()`, whose value differs on every run. */
-  volatile: boolean;
+  /** Whether it reads the clock (`now()`), which a caller can hold still. */
+  usesNow: boolean;
+  /** Whether it calls `uuid()`, whose value differs on every run. */
+  usesUuid: boolean;
 }
 
 /**
@@ -1382,6 +1391,10 @@ export function qgisExpressionReferences(source: string): QgisExpressionReferenc
   const parsed = parseQgisExpression(source);
   if (!parsed.ok) return null;
   const fields = new Set<string>();
-  const volatile = collectReferences(parsed.node, fields);
-  return { fields: [...fields], volatile };
+  const flags = collectReferences(parsed.node, fields);
+  return {
+    fields: [...fields],
+    usesNow: (flags & USES_NOW) !== 0,
+    usesUuid: (flags & USES_UUID) !== 0,
+  };
 }

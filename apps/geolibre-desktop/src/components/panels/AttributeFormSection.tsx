@@ -241,6 +241,12 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     // so a default that builds on an earlier field must not jump ahead of it
     // just because that field was edited.
     const target = editingField ?? draft.field;
+    // The designer has no control for the storage type (an import or a
+    // service sets it), so an edit that keeps the widget keeps the type too.
+    const previous = configs.find((entry) => entry.field === target);
+    if (previous?.valueType && previous.widget === config.widget) {
+      config.valueType = previous.valueType;
+    }
     const fields = configs.some((entry) => entry.field === target)
       ? configs.map((entry) => (entry.field === target ? config : entry))
       : [...configs.filter((entry) => entry.field !== config.field), config];

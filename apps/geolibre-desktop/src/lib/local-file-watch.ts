@@ -6,6 +6,7 @@ import {
   isRestorableVectorPath,
   loadDroppedVectorPaths,
 } from "./tauri-io";
+import { localFileSourceLayer } from "./local-file-source";
 
 /**
  * Per-layer "watch this local file for changes" configuration, persisted under
@@ -117,8 +118,7 @@ export async function reloadLocalFileLayer(
   }
 
   // A layer imported from a QGIS project names the GeoPackage table it reads.
-  const sourceLayer =
-    typeof layer.metadata.sourceLayer === "string" ? layer.metadata.sourceLayer.trim() : "";
+  const sourceLayer = localFileSourceLayer(layer);
   const loaded = (
     await loadDroppedVectorPaths([path], {
       skipModels: true,

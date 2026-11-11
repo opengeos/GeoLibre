@@ -140,7 +140,12 @@ export function hasAttributeFormDefaults(form: AttributeFormConfig | undefined):
  * fix to a map click clears the accuracy it no longer has. `"input"` (the
  * user edited a field) recomputes only defaults that read other fields, such
  * as a file name built from a site code typed after the capture, and leaves
- * `uuid()` and `now()` alone so an ID does not change on every keystroke.
+ * `uuid()` alone so an ID does not change on every keystroke. The caller
+ * holds `context.now` at the capture time for that pass, so a name that also
+ * carries a timestamp keeps the one it was captured with.
+ *
+ * A field the user emptied after the defaults had filled it stays empty: an
+ * optional field must be clearable.
  *
  * @param form - The capture target's form config.
  * @param values - The form's current raw values.
@@ -165,19 +170,21 @@ export function applyCaptureDefaults(
     const source = field.defaultValue?.trim();
     if (!source) continue;
     const current = values[field.field] ?? "";
-    const controlled = current === "" || current === autoFilled[field.field];
+    const filled = autoFilled[field.field];
+    // Empty with nothing filled in yet, or still exactly what was filled in.
+    const controlled = current === (filled ?? "");
     let recompute = controlled;
     if (controlled && mode === "input") {
       const references = qgisExpressionReferences(source);
-      recompute = references !== null && !references.volatile && references.fields.length > 0;
+      recompute = references !== null && !references.usesUuid && references.fields.length > 0;
     }
     if (recompute) {
       refresh.add(field.field);
     } else {
       skip.add(field.field);
-      if (controlled && autoFilled[field.field] !== undefined) {
-        kept[field.field] = autoFilled[field.field];
-      }
+      // Carried forward for a field waiting on the next capture, and for one
+      // the user emptied, so that it is not mistaken for never filled.
+      if (filled !== undefined && (controlled || current === "")) kept[field.field] = filled;
     }
   }
   if (refresh.size === 0) return { values, autoFilled: kept };
