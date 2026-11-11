@@ -240,7 +240,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - Provider-pluggable with your own API key, also read from OS environment variables
     - A dedicated AI Providers settings section with per-feature provider dropdowns and multiple named profiles (provider, model, and credentials) you can switch between from the assistant panel
     - An in-panel model picker over the active profile's models, credentials that survive a provider change, and arrow-key recall of previous prompts
-    - OpenRouter, Vercel AI Gateway, and TrustedRouter providers, and live model discovery for Google, Anthropic, OpenAI, and Bedrock rather than a hard-coded model list
+    - OpenRouter, Vercel AI Gateway, TrustedRouter, and UberLLM providers, and live model discovery for Google, Anthropic, OpenAI, and Bedrock rather than a hard-coded model list
     - A sub-second fast path that resolves simple map commands (hide a layer, switch the basemap, zoom to a layer) through TypeSafe when a credential is configured, falling through to the full agent whenever it is unsure, and plugin tools loaded on demand once more than twelve are registered
     - Voice commands: click the microphone for an open mic, or hold Space for push-to-talk, and have answers read back — the spoken request runs the same tools, so it stays auditable and undoable (needs a browser with the Web Speech API)
 - In-app Python Console plus a Python automation API for scripting the app
