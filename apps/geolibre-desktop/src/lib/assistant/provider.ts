@@ -6,8 +6,8 @@ import { getDeploymentPolicy, readDeploymentEnv } from "../deployment-env";
  * kept deliberately small and provider-pluggable: each provider maps to a
  * Strands model class that is dynamically imported so only the selected
  * provider's SDK is pulled into the bundle. `openrouter`, `vercel`,
- * `trustedrouter`, `ollama`, and `custom` reuse the OpenAI-compatible client
- * against a base URL.
+ * `trustedrouter`, `uberllm`, `ollama`, and `custom` reuse the
+ * OpenAI-compatible client against a base URL.
  */
 export type AssistantProviderId =
   | "google"
@@ -16,6 +16,7 @@ export type AssistantProviderId =
   | "openrouter"
   | "vercel"
   | "trustedrouter"
+  | "uberllm"
   | "ollama"
   | "bedrock"
   | "custom";
@@ -28,6 +29,7 @@ export const ASSISTANT_PROVIDER_IDS: readonly AssistantProviderId[] = [
   "openrouter",
   "vercel",
   "trustedrouter",
+  "uberllm",
   "ollama",
   "bedrock",
   "custom",
@@ -92,6 +94,7 @@ const PROVIDER_KEY_NAMES: Partial<Record<AssistantProviderId, readonly string[]>
   openrouter: ["OPENROUTER_API_KEY"],
   vercel: ["AI_GATEWAY_API_KEY"],
   trustedrouter: ["TRUSTEDROUTER_API_KEY"],
+  uberllm: ["UBERLLM_API_KEY"],
 };
 
 /**
@@ -135,6 +138,9 @@ export const OS_ENV_VAR_NAMES: readonly string[] = [
   // TrustedRouter.
   "TRUSTEDROUTER_API_KEY",
   "TRUSTEDROUTER_MODEL",
+  // UberLLM.
+  "UBERLLM_API_KEY",
+  "UBERLLM_MODEL",
   // Ollama (local). `OLLAMA_HOST` is intentionally omitted — it is the ambient
   // Ollama variable; `OLLAMA_BASE_URL` is GeoLibre's own documented setting.
   "OLLAMA_BASE_URL",
@@ -241,7 +247,7 @@ export function mergeRuntimeEnv({
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
  * (or the per-provider env var) or the model picker. For Google, Anthropic,
- * OpenAI, OpenRouter, Vercel AI Gateway, TrustedRouter, and Bedrock the picker replaces these with the provider's
+ * OpenAI, OpenRouter, Vercel AI Gateway, TrustedRouter, UberLLM, and Bedrock the picker replaces these with the provider's
  * live catalog once it loads (see `model-discovery.ts`), so the lists here are
  * only the default and the offline fallback. The hosted-model ids were
  * verified against the providers' docs as of 2026-07; the `ollama` list is
@@ -260,6 +266,7 @@ export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
   openrouter: ["openai/gpt-5.6-luna"],
   vercel: ["openai/gpt-5.6-luna"],
   trustedrouter: ["trustedrouter/auto"],
+  uberllm: ["openai/gpt-5.6-luna"],
   ollama: ["gemma4", "qwen3.6", "qwen3.5", "llama4", "gpt-oss"],
   bedrock: [
     "global.anthropic.claude-opus-5",
@@ -280,6 +287,7 @@ const DEFAULT_MODEL: Record<AssistantProviderId, string> = {
   openrouter: PROVIDER_MODELS.openrouter[0],
   vercel: PROVIDER_MODELS.vercel[0],
   trustedrouter: PROVIDER_MODELS.trustedrouter[0],
+  uberllm: PROVIDER_MODELS.uberllm[0],
   ollama: PROVIDER_MODELS.ollama[0],
   bedrock: PROVIDER_MODELS.bedrock[0],
   custom: "",
@@ -293,6 +301,7 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
   openrouter: "OpenRouter",
   vercel: "Vercel AI Gateway",
   trustedrouter: "TrustedRouter",
+  uberllm: "UberLLM",
   ollama: "Ollama (local)",
   bedrock: "Amazon Bedrock",
   custom: "Custom (OpenAI-compatible)",
@@ -436,8 +445,8 @@ export function getApiKey(
 /**
  * The default model id for a provider.
  *
- * OpenRouter, Vercel AI Gateway, TrustedRouter and Ollama honor their optional
- * model overrides here so a new profile picks that id up. Other providers apply their
+ * OpenRouter, Vercel AI Gateway, TrustedRouter, UberLLM and Ollama honor their
+ * optional model overrides here so a new profile picks that id up. Other providers apply their
  * overrides only when a request is resolved, not when the settings form
  * proposes a default.
  */
@@ -452,9 +461,11 @@ export function defaultModelFor(
         ? env.AI_GATEWAY_MODEL
         : provider === "trustedrouter"
           ? env.TRUSTEDROUTER_MODEL
-          : provider === "ollama"
-            ? env.OLLAMA_MODEL
-            : undefined;
+          : provider === "uberllm"
+            ? env.UBERLLM_MODEL
+            : provider === "ollama"
+              ? env.OLLAMA_MODEL
+              : undefined;
   return override?.trim() || DEFAULT_MODEL[provider];
 }
 
@@ -473,6 +484,8 @@ function perProviderModel(provider: AssistantProviderId, env: RuntimeEnv): strin
       return env.AI_GATEWAY_MODEL;
     case "trustedrouter":
       return env.TRUSTEDROUTER_MODEL;
+    case "uberllm":
+      return env.UBERLLM_MODEL;
     default:
       return undefined;
   }
@@ -498,7 +511,7 @@ function resolveModelId(
  * or null when that provider is not configured. Each provider type reads its own
  * Settings → Environment variables:
  *
- * - google / anthropic / openai / openrouter / vercel / trustedrouter — an API key (see {@link PROVIDER_KEY_NAMES}).
+ * - google / anthropic / openai / openrouter / vercel / trustedrouter / uberllm — an API key (see {@link PROVIDER_KEY_NAMES}).
  * - ollama — `OLLAMA_BASE_URL` (or `OLLAMA_HOST`); keyless, local.
  * - bedrock — `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`,
  *   `AWS_SESSION_TOKEN`).
@@ -522,7 +535,8 @@ export function configForProvider(
     }
     case "openrouter":
     case "vercel":
-    case "trustedrouter": {
+    case "trustedrouter":
+    case "uberllm": {
       const apiKey = getApiKey(provider, env);
       if (!apiKey) return null;
       return {
@@ -533,7 +547,9 @@ export function configForProvider(
             ? "https://ai-gateway.vercel.sh/v1"
             : provider === "trustedrouter"
               ? "https://api.trustedrouter.com/v1"
-              : "https://openrouter.ai/api/v1",
+              : provider === "uberllm"
+                ? "https://api.uberllm.dev/v1"
+                : "https://openrouter.ai/api/v1",
         modelId,
       };
     }
@@ -714,10 +730,11 @@ export async function createModel(config: AssistantProviderConfig): Promise<Mode
     case "openrouter":
     case "vercel":
     case "trustedrouter":
+    case "uberllm":
     case "ollama":
     case "custom": {
-      // Ollama, OpenRouter, Vercel AI Gateway, TrustedRouter, and custom
-      // endpoints speak OpenAI Chat Completions;
+      // Ollama, OpenRouter, Vercel AI Gateway, TrustedRouter, UberLLM, and
+      // custom endpoints speak OpenAI Chat Completions;
       // the Responses API (OpenAI's default) is not generally supported there.
       const { OpenAIModel } = await import("@strands-agents/sdk/models/openai");
       return new OpenAIModel({
