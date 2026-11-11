@@ -630,3 +630,118 @@ describe("Field Collection default values", () => {
     assert.equal(result.values, values);
   });
 });
+
+describe("QGIS project symbology", () => {
+  // The color format QGIS 3.40+ writes: 8-bit channels, then the color in its own space.
+  const color = (r: number, g: number, b: number) => `${r},${g},${b},255,rgb:0.5,0.5,0.5,1`;
+  const fill = (name: string, rgb: string) =>
+    `<symbol name="${name}" type="fill" alpha="1"><layer class="SimpleFill">
+       <Option type="Map"><Option name="color" type="QString" value="${rgb}"/>
+       <Option name="outline_color" type="QString" value="${color(0, 0, 0)}"/></Option>
+     </layer></symbol>`;
+  const layer = (id: string, renderer: string, labeling = "") => `
+    <maplayer type="vector" geometry="Polygon">
+      <id>${id}</id><layername>${id}</layername>
+      <datasource>./data/${id}.geojson</datasource><provider>ogr</provider>
+      ${renderer}${labeling}
+    </maplayer>`;
+  const categorized = `<renderer-v2 type="categorizedSymbol" attr="crop">
+      <categories>
+        <category value="colza" label="Colza" symbol="0" render="true"/>
+        <category value="grass" label="Grass" symbol="1" render="true"/>
+      </categories>
+      <symbols>${fill("0", color(255, 200, 0))}${fill("1", color(0, 160, 60))}</symbols>
+    </renderer-v2>`;
+  const styled = () =>
+    importQgisProject(
+      `<qgis version="3.44.0"><projectlayers>
+        ${layer("fields", categorized)}
+        ${layer("clustered", `<renderer-v2 type="pointCluster">${categorized}</renderer-v2>`)}
+        ${layer(
+          "zones",
+          `<renderer-v2 type="graduatedSymbol" attr="area" graduatedMethod="GraduatedColor">
+             <ranges>
+               <range lower="0" upper="10" label="small" symbol="0" render="true"/>
+               <range lower="10" upper="50" label="large" symbol="1" render="true"/>
+             </ranges>
+             <symbols>${fill("0", color(240, 240, 240))}${fill("1", color(20, 20, 120))}</symbols>
+           </renderer-v2>`,
+        )}
+        ${layer(
+          "rules",
+          `<renderer-v2 type="RuleRenderer"><rules key="r">
+             <rule key="a" symbol="0" label="Residential" filter="&quot;landuse&quot; = 'residential'"/>
+             <rule key="b" symbol="1" label="Odd" filter="geom_to_wkt($geometry) = 'x'"/>
+             <rule key="c" symbol="1" label="Odd too" filter="geom_to_wkt($geometry) = 'y'"/>
+           </rules>
+           <symbols>${fill("0", color(200, 50, 50))}${fill("1", color(50, 50, 200))}</symbols>
+           </renderer-v2>`,
+          `<labeling type="simple"><settings><text-style fieldName="upper(name)" isExpression="1"/></settings></labeling>`,
+        )}
+        ${layer(
+          "plain",
+          `<renderer-v2 type="singleSymbol"><symbols><symbol><layer class="SimpleFill">
+             <Option name="color" value="${color(10, 20, 30)}"/>
+           </layer></symbol></symbols></renderer-v2>`,
+          `<labeling type="simple"><settings><text-style fieldName="name" isExpression="0"/></settings></labeling>`,
+        )}
+      </projectlayers></qgis>`,
+      "/work/styled.qgs",
+    );
+  const byId = (result: ReturnType<typeof styled>, id: string) => {
+    const found = result.project.layers.find((candidate) => candidate.id === id);
+    assert.ok(found, `layer ${id} was not imported`);
+    return found;
+  };
+
+  it("imports a categorized renderer with its classes, colors and labels", () => {
+    const { style } = byId(styled(), "fields");
+    assert.equal(style.vectorStyleMode, "categorized");
+    assert.equal(style.vectorStyleProperty, "crop");
+    assert.deepEqual(style.vectorStyleStops, [
+      { value: "colza", color: "#ffc800", label: "Colza" },
+      { value: "grass", color: "#00a03c", label: "Grass" },
+    ]);
+  });
+
+  it("reads through a point cluster renderer to the symbols it wraps", () => {
+    const { style } = byId(styled(), "clustered");
+    assert.equal(style.vectorStyleMode, "categorized");
+    assert.equal(style.vectorStyleStops.length, 2);
+  });
+
+  it("imports a graduated renderer", () => {
+    const { style } = byId(styled(), "zones");
+    assert.equal(style.vectorStyleMode, "graduated");
+    assert.equal(style.vectorStyleProperty, "area");
+    assert.equal(style.vectorStyleStops.length, 2);
+  });
+
+  it("imports the rules it can convert and reports the rest once", () => {
+    const result = styled();
+    const { style } = byId(result, "rules");
+    assert.equal(style.vectorStyleMode, "rule-based");
+    const labels = style.vectorRules.map((rule) => rule.label);
+    assert.equal(labels[0], "Residential");
+    assert.equal(labels.includes("Odd"), false);
+    const notes = result.styleNotes.filter((note) => note.layerName === "rules");
+    // Two unreadable rules share one message; the expression label has its own.
+    assert.equal(notes.length, 2);
+    assert.ok(notes.some((note) => /expression/i.test(note.message) && /rule/i.test(note.message)));
+    assert.ok(notes.some((note) => /Labels built from a QGIS expression/.test(note.message)));
+    assert.equal(style.labels.enabled, false);
+  });
+
+  it("keeps the direct read for a single symbol, including a field label", () => {
+    const result = styled();
+    const { style } = byId(result, "plain");
+    assert.equal(style.vectorStyleMode, "single");
+    assert.equal(style.fillColor, "#0a141e");
+    assert.equal(style.labels.enabled, true);
+    assert.equal(style.labels.field, "name");
+    assert.deepEqual(
+      result.styleNotes.filter((note) => note.layerName === "plain"),
+      [],
+    );
+  });
+});

@@ -800,8 +800,10 @@ const FUNCTIONS: Record<string, FunctionSpec> = {
     min: 1,
     max: 2,
     run: (args) => {
+      // Half away from zero, as QGIS rounds; Math.round sends -2.5 to -2.
       const factor = 10 ** (args.length > 1 ? Math.trunc(toNumber(args[1])) : 0);
-      return Math.round(toNumber(args[0]) * factor) / factor;
+      const scaled = toNumber(args[0]) * factor;
+      return (Math.sign(scaled) * Math.round(Math.abs(scaled))) / factor;
     },
   },
   min: { min: 1, max: Infinity, run: (args) => Math.min(...args.map(toNumber)) },

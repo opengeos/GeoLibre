@@ -87,10 +87,21 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       })),
     [projectFiles.qgisImportFormNotes],
   );
+  // The style reader's messages are already sentences; group by message.
+  const qgisStyleNotes = useMemo(
+    () =>
+      (projectFiles.qgisImportStyleNotes ?? []).map((note) => ({
+        layerName: note.layerName,
+        reason: note.message,
+      })),
+    [projectFiles.qgisImportStyleNotes],
+  );
+  const describeQgisStyleNote = useCallback((note: { reason: string }) => note.reason, []);
   const qgisWarningCount = projectFiles.qgisImportWarnings?.length ?? 0;
   const closeQgisImportDialog = () => {
     projectFiles.setQgisImportWarnings(null);
     projectFiles.setQgisImportFormNotes(null);
+    projectFiles.setQgisImportStyleNotes(null);
   };
 
   return (
@@ -259,7 +270,11 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         }
       />
       <Dialog
-        open={projectFiles.qgisImportWarnings !== null || projectFiles.qgisImportFormNotes !== null}
+        open={
+          projectFiles.qgisImportWarnings !== null ||
+          projectFiles.qgisImportFormNotes !== null ||
+          projectFiles.qgisImportStyleNotes !== null
+        }
         onOpenChange={(open: boolean) => {
           if (!open) closeQgisImportDialog();
         }}
@@ -270,7 +285,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <DialogDescription>
               {qgisWarningCount > 0
                 ? t("toolbar.item.qgisImportWarnings", { count: qgisWarningCount })
-                : t("toolbar.item.qgisImportFormNotes")}
+                : t("toolbar.item.qgisImportNotes")}
             </DialogDescription>
           </DialogHeader>
           {qgisWarningCount > 0 ? (
@@ -281,16 +296,22 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           ) : null}
           {qgisFormNotes.length > 0 ? (
             <div className="space-y-2">
-              {qgisWarningCount > 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("toolbar.item.qgisImportFormNotes")}
-                </p>
-              ) : null}
+              <p className="text-sm text-muted-foreground">
+                {t("toolbar.item.qgisImportFormNotes")}
+              </p>
               <ImportWarningList
                 warnings={qgisFormNotes}
                 describe={describeQgisFormNote}
                 countLabel={(count) => t("toolbar.item.qgisFormNoteFieldCount", { count })}
               />
+            </div>
+          ) : null}
+          {qgisStyleNotes.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {t("toolbar.item.qgisImportStyleNotes")}
+              </p>
+              <ImportWarningList warnings={qgisStyleNotes} describe={describeQgisStyleNote} />
             </div>
           ) : null}
           <div className="flex justify-end">

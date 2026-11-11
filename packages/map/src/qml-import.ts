@@ -108,7 +108,13 @@ function toNum(value: string | null): number | null {
  */
 function rgbaToHex(value: string | null): { hex: string; alpha: number } | null {
   if (value === null) return null;
-  const parts = value.split(",").map((part) => Number.parseInt(part.trim(), 10));
+  // QGIS 3.40+ appends the color in its own color space after the 8-bit
+  // channels ("229,182,54,255,rgb:0.898,0.714,0.212,1"). Only the leading
+  // r,g,b[,a] are read; the tail must not make the whole color unreadable.
+  const parts = value
+    .split(",")
+    .slice(0, 4)
+    .map((part) => (/^\s*-?\d+\s*$/.test(part) ? Number.parseInt(part.trim(), 10) : Number.NaN));
   if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) {
     return null;
   }

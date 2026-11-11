@@ -94,6 +94,7 @@ import {
   materializeQgisRemoteLayers,
   type QgisFormImportNote,
   type QgisProjectImportWarning,
+  type QgisStyleImportNote,
 } from "../lib/qgis-project-import";
 import { readQgisFormTable } from "../lib/qgis-form-tables";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
@@ -351,6 +352,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     null,
   );
   const [qgisImportFormNotes, setQgisImportFormNotes] = useState<QgisFormImportNote[] | null>(null);
+  const [qgisImportStyleNotes, setQgisImportStyleNotes] = useState<QgisStyleImportNote[] | null>(
+    null,
+  );
   const [arcgisImportWarnings, setArcgisImportWarnings] = useState<
     ArcgisProjectImportWarning[] | null
   >(null);
@@ -669,6 +673,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         // disk; a note about a form nobody can open would only be noise.
         const keptNames = new Set(imported.project.layers.map((layer) => layer.name));
         imported.formNotes = imported.formNotes.filter((note) => keptNames.has(note.layerName));
+        imported.styleNotes = imported.styleNotes.filter((note) => keptNames.has(note.layerName));
         imported.formRelations = imported.formRelations.filter((relation) =>
           imported.project.layers.some((layer) => layer.id === relation.layerId),
         );
@@ -724,6 +729,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       useAppStore.setState({ isDirty: true });
       setQgisImportWarnings(imported.warnings.length > 0 ? imported.warnings : null);
       setQgisImportFormNotes(imported.formNotes.length > 0 ? imported.formNotes : null);
+      setQgisImportStyleNotes(imported.styleNotes.length > 0 ? imported.styleNotes : null);
     } catch (error) {
       console.error("Failed to import QGIS project", error);
       setActionError(
@@ -2235,6 +2241,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     setQgisImportWarnings,
     qgisImportFormNotes,
     setQgisImportFormNotes,
+    qgisImportStyleNotes,
+    setQgisImportStyleNotes,
     arcgisImportWarnings,
     setArcgisImportWarnings,
     remoteSaveWarning,

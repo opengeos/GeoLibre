@@ -9,6 +9,7 @@ import {
   type LayerStyle,
   type MapViewState,
 } from "@geolibre/core";
+import { importStyleText } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
 import { collectionMetadata } from "./field-collection";
@@ -59,6 +60,15 @@ export interface QgisProjectImportResult {
   formNotes: QgisFormImportNote[];
   /** Dropdowns for {@link materializeQgisFormRelations} to fill in. */
   formRelations: QgisPendingFormRelation[];
+  /** Symbology the style reader could not represent, in its own words. */
+  styleNotes: QgisStyleImportNote[];
+}
+
+/** Something about a layer's symbology that was not carried over. */
+export interface QgisStyleImportNote {
+  layerName: string;
+  /** The style reader's message, shown as it is. */
+  message: string;
 }
 
 export interface QgisRasterImport {
@@ -269,6 +279,7 @@ export function importQgisProject(
   const layers: GeoLibreLayer[] = [];
   const rasters: QgisRasterImport[] = [];
   const formNotes: QgisFormImportNote[] = [];
+  const styleNotes: QgisStyleImportNote[] = [];
   const formRelations: QgisPendingFormRelation[] = [];
   const relationsById = new Map<string, { referencedLayerId: string; referencedField: string }>();
   document.querySelectorAll("qgis > relations > relation").forEach((relation) => {
@@ -334,6 +345,12 @@ export function importQgisProject(
     }
 
     const layerId = uniqueLayerId(id, layers);
+    const symbology = parseLayerSymbology(element);
+    // One line per distinct message: a renderer with forty unreadable rules
+    // says so once.
+    for (const message of new Set(symbology.warnings)) {
+      styleNotes.push({ layerName: name, message });
+    }
     const sourceLayer = qgisSourceLayerName(dataSource);
     const form = parseQgisLayerForm(element, relationsById);
     const captureGeometry = qgisCaptureGeometry(element);
@@ -377,7 +394,7 @@ export function importQgisProject(
       },
       visible: visibilityByLayerId.get(id) ?? true,
       opacity: parseOpacity(element),
-      style: parseLayerStyle(element),
+      style: symbology.style,
       // A layer that carries a form is a Field Collection target, so the
       // project keeps collecting data the way it did in QField.
       metadata:
@@ -401,7 +418,7 @@ export function importQgisProject(
     qgisProjectPath: sourcePath,
     qgisVersion: document.documentElement.getAttribute("version") ?? "",
   };
-  return { project, rasters, warnings, formNotes, formRelations };
+  return { project, rasters, warnings, formNotes, formRelations, styleNotes };
 }
 
 /** The `layername=` part of an OGR data source (`file.gpkg|layername=roads`). */
@@ -749,10 +766,63 @@ function unsupportedReason(
   return "format";
 }
 
-function parseLayerStyle(element: Element): LayerStyle {
+/** Renderers that only wrap another one (clustering, displacement, inverted fill). */
+const WRAPPER_RENDERERS = new Set([
+  "pointCluster",
+  "pointDisplacement",
+  "invertedPolygonRenderer",
+  "mergedFeatureRenderer",
+]);
+/** Renderer types the QML style reader classifies into GeoLibre's renderer modes. */
+const CLASSIFIED_RENDERERS = new Set(["categorizedSymbol", "graduatedSymbol", "RuleRenderer"]);
+
+/**
+ * Read a layer's symbology. A single symbol keeps the long-standing direct
+ * read; categorized, graduated and rule-based renderers go through the same
+ * QML reader as Import layer styles, since a project stores each layer's
+ * renderer exactly as a `.qml` file does. A wrapper renderer (point cluster,
+ * displacement) is read through to the renderer it wraps: the clustering
+ * itself is not carried over, the symbols are.
+ *
+ * @param element - The layer's `<maplayer>` element.
+ * @returns The style, and what the reader said it could not represent.
+ */
+function parseLayerSymbology(element: Element): { style: LayerStyle; warnings: string[] } {
+  const warnings: string[] = [];
+  const base = parseLayerStyle(element, warnings);
+  let renderer = element.querySelector(":scope > renderer-v2");
+  for (let depth = 0; renderer && depth < 4; depth += 1) {
+    if (!WRAPPER_RENDERERS.has(renderer.getAttribute("type") ?? "")) break;
+    renderer = renderer.querySelector(":scope > renderer-v2");
+  }
+  if (!renderer || !CLASSIFIED_RENDERERS.has(renderer.getAttribute("type") ?? "")) {
+    return { style: base, warnings };
+  }
+  const xml = elementXml(renderer);
+  // Far beyond any real renderer; a crafted project must not make the style
+  // reader chew through megabytes of XML per layer.
+  if (!xml || xml.length > MAX_RENDERER_XML_LENGTH) return { style: base, warnings };
+  const imported = importStyleText(`<qgis>${xml}</qgis>`);
+  warnings.push(...imported.warnings);
+  // Labels come from the direct read above (the fragment carries none).
+  return { style: imported.ok ? imported.apply(base) : base, warnings };
+}
+
+const MAX_RENDERER_XML_LENGTH = 2 * 1024 * 1024;
+
+/** Serialize an element back to XML text. */
+function elementXml(element: Element): string {
+  if (typeof XMLSerializer !== "undefined") return new XMLSerializer().serializeToString(element);
+  return element.outerHTML ?? "";
+}
+
+function parseLayerStyle(element: Element, warnings: string[] = []): LayerStyle {
   const style: LayerStyle = structuredClone(DEFAULT_LAYER_STYLE);
   const renderer = element.querySelector(":scope > renderer-v2");
-  if (renderer?.getAttribute("type") !== "singleSymbol") return style;
+  // Labels are independent of the renderer type.
+  if (renderer?.getAttribute("type") !== "singleSymbol") {
+    return applySimpleLabels(element, style, warnings);
+  }
   const symbolLayer = renderer.querySelector("symbols symbol layer");
   const options = new Map<string, string>();
   symbolLayer?.querySelectorAll("Option[name]").forEach((option) => {
@@ -782,8 +852,19 @@ function parseLayerStyle(element: Element): LayerStyle {
   ) {
     style.circleRadius = Math.max(1, (size * (sizeUnit === "MM" ? 3.78 : 1)) / 2);
   }
+  return applySimpleLabels(element, style, warnings);
+}
+
+/** Read a simple (single-rule) labeling block onto the style. */
+function applySimpleLabels(element: Element, style: LayerStyle, warnings: string[]): LayerStyle {
   const textStyle = element.querySelector("labeling[type='simple'] settings text-style");
   const field = textStyle?.getAttribute("fieldName")?.trim();
+  // `fieldName` holds a QGIS expression when isExpression is set. Used as a
+  // field name it would label every feature with nothing.
+  if (field && textStyle?.getAttribute("isExpression") === "1") {
+    warnings.push("Labels built from a QGIS expression were not imported.");
+    return style;
+  }
   if (field) {
     style.labels.enabled = true;
     style.labels.field = field;
