@@ -138,6 +138,11 @@ describe("QGIS expression subset", () => {
     assert.equal(evaluateQgisExpression("rpad('x', 200000000, 'x')").ok, false);
     assert.equal(evaluateQgisExpression("lpad('x', 200000000, 'x')").ok, false);
     assert.equal(value("lpad('7', 3, '0')"), "007");
+    // Growth through nesting is bounded too, not only a single wide pad.
+    const big = "rpad('a', 5000, 'a')";
+    assert.equal(evaluateQgisExpression(`replace(${big}, 'a', 'aaaa')`).ok, false);
+    assert.equal(evaluateQgisExpression(`${big} || ${big} || ${big}`).ok, false);
+    assert.equal(evaluateQgisExpression(`concat(${big}, ${big}, ${big})`).ok, false);
   });
 
   it("lists the fields an expression reads and what makes it change", () => {

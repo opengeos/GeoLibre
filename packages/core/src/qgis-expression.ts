@@ -654,6 +654,18 @@ function defaultUuid(): string {
 /** Longest text a function may build; a default value is a short string. */
 const MAX_TEXT_LENGTH = 10_000;
 
+/**
+ * Every text a function or `||` produces passes through here, so nested
+ * calls (`replace(replace(...))`, repeated concatenation) cannot multiply a
+ * short expression into an enormous string.
+ */
+function boundedText<T>(value: T): T {
+  if (typeof value === "string" && value.length > MAX_TEXT_LENGTH) {
+    throw new QgisExpressionError("The text is too long");
+  }
+  return value;
+}
+
 function padWidth(value: unknown): number {
   const width = Math.max(0, Math.trunc(toNumber(value)));
   if (width > MAX_TEXT_LENGTH) throw new QgisExpressionError("The padded text is too long");
@@ -980,7 +992,7 @@ function evaluateNode(node: QgisExpressionNode, context: QgisExpressionContext):
       }
       const args = node.args.map((arg) => evaluateNode(arg, context));
       if (!spec.handlesNull && args.some(isNull)) return null;
-      return spec.run(args, context);
+      return boundedText(spec.run(args, context));
     }
     case "unary": {
       const value = evaluateNode(node.arg, context);
@@ -1031,7 +1043,7 @@ function evaluateBinary(
   if (isNull(left) || isNull(right)) return null;
   switch (node.op) {
     case "||":
-      return toText(left) + toText(right);
+      return boundedText(toText(left) + toText(right));
     case "=":
       return compare(left, right) === 0;
     case "<>":
