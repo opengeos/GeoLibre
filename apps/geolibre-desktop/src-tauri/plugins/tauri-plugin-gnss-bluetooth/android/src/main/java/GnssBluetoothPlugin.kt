@@ -33,6 +33,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /** The well-known Serial Port Profile service UUID every SPP GNSS receiver exposes. */
@@ -89,6 +90,11 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
   private val nextId = AtomicInteger(1)
   /** Closes a socket whose connect() outlives CONNECT_TIMEOUT_MS, which makes it throw. */
   private val connectWatchdog = Executors.newSingleThreadScheduledExecutor()
+  /** One connect at a time: each holds a thread and a socket for seconds. */
+  private val connecting = AtomicBoolean(false)
+  /** Sockets mid-connect, which onDestroy must close as well as open ones. */
+  private val pendingSockets = ConcurrentHashMap.newKeySet<BluetoothSocket>()
+  @Volatile private var destroyed = false
 
   private fun adapter(): BluetoothAdapter? {
     val manager = activity.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
@@ -170,6 +176,10 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
   fun connect(invoke: Invoke) {
     withBluetooth(invoke, "connectPermissionCallback") { adapter ->
       val args = invoke.parseArgs(ConnectArgs::class.java)
+      if (!connecting.compareAndSet(false, true)) {
+        invoke.reject("Another receiver is already connecting.", "BUSY")
+        return@withBluetooth
+      }
       Thread({ openAndPump(invoke, adapter, args) }, "gnss-bluetooth-connect").start()
     }
   }
@@ -181,28 +191,45 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
 
   @SuppressLint("MissingPermission") // Checked by withBluetooth.
   private fun openAndPump(invoke: Invoke, adapter: BluetoothAdapter, args: ConnectArgs) {
-    val device = try {
-      adapter.getRemoteDevice(args.address)
-    } catch (e: IllegalArgumentException) {
-      invoke.reject("Invalid Bluetooth address: ${args.address}", "FAILED")
-      return
+    val connection: Connection
+    val id: Int
+    try {
+      // Only devices the user paired in Android settings: the command is
+      // reachable from any webview code, and an arbitrary address would let it
+      // probe nearby devices or raise a pairing prompt the user never asked for.
+      val device = adapter.bondedDevices.orEmpty().firstOrNull {
+        it.address.equals(args.address, ignoreCase = true)
+      }
+      if (device == null) {
+        invoke.reject("${args.address} is not paired. Pair it in Android's Bluetooth settings first.", "FAILED")
+        return
+      }
+      val socket = openSocket(device)
+      if (socket == null) {
+        invoke.reject(
+          "Could not connect to ${device.name ?: args.address}. Make sure the receiver is on, in range, and not connected to another app.",
+          "CONNECT_FAILED",
+        )
+        return
+      }
+      if (destroyed) {
+        try {
+          socket.close()
+        } catch (_: IOException) {
+        }
+        invoke.reject("The app is closing.", "FAILED")
+        return
+      }
+      id = nextId.getAndIncrement()
+      connection = Connection(socket, args.channel)
+      connections[id] = connection
+      val result = JSObject()
+      result.put("id", id)
+      result.put("name", device.name ?: args.address)
+      invoke.resolve(result)
+    } finally {
+      connecting.set(false)
     }
-    val socket = openSocket(device)
-    if (socket == null) {
-      invoke.reject(
-        "Could not connect to ${device.name ?: args.address}. Make sure the receiver is on, in range, and not connected to another app.",
-        "CONNECT_FAILED",
-      )
-      return
-    }
-
-    val id = nextId.getAndIncrement()
-    val connection = Connection(socket, args.channel)
-    connections[id] = connection
-    val result = JSObject()
-    result.put("id", id)
-    result.put("name", device.name ?: args.address)
-    invoke.resolve(result)
     pump(id, connection)
   }
 
@@ -226,8 +253,10 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
     for (attempt in attempts) {
       var socket: BluetoothSocket? = null
       try {
+        if (destroyed) return null
         val candidate = attempt()
         socket = candidate
+        pendingSockets.add(candidate)
         val timeout = connectWatchdog.schedule(
           {
             try {
@@ -241,8 +270,11 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         try {
           candidate.connect()
         } finally {
-          timeout.cancel(false)
+          pendingSockets.remove(candidate)
         }
+        // cancel() is false when the watchdog already ran: it closed this
+        // socket just as connect() returned, so the attempt did not succeed.
+        if (!timeout.cancel(false)) throw IOException("Connect timed out after $CONNECT_TIMEOUT_MS ms.")
         return candidate
       } catch (e: Exception) {
         Logger.debug("GnssBluetooth", "SPP connect attempt failed: ${e.message}")
@@ -299,6 +331,15 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
 
   override fun onDestroy(activity: AppCompatActivity) {
     super.onDestroy(activity)
+    destroyed = true
+    // shutdownNow drops queued watchdog tasks, so close in-flight sockets here;
+    // their connect() then throws and openAndPump publishes nothing.
+    for (socket in pendingSockets) {
+      try {
+        socket.close()
+      } catch (_: IOException) {
+      }
+    }
     connectWatchdog.shutdownNow()
     for (connection in connections.values) connection.close()
     connections.clear()
