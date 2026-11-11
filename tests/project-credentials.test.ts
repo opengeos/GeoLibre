@@ -6,6 +6,7 @@ import {
   createEmptyProject,
   redactCredentials,
   redactProjectCredentials,
+  redactUrlCredentials,
   serializeProject,
   setRegistryPublishableSettings,
   type GeoLibreProject,
@@ -93,6 +94,48 @@ describe("project credential redaction", () => {
     );
     assert.equal(redactProjectCredentials(original).redactedCount, 10);
     assert.equal(pluginSetting(original, "external")?.arbitraryName, "plugin-secret");
+  });
+
+  it("leaves plain text that only looks URL-shaped alone", () => {
+    // A form label ending in "?" has an empty query; rebuilding it used to
+    // drop the "?" and report the label as a stripped credential.
+    for (const text of ["Position locked?", "Damaged? (yes/no)", "Section #", "a#b", "why?#"]) {
+      assert.equal(redactUrlCredentials(text), text);
+    }
+    assert.equal(
+      redactUrlCredentials("https://example.com/tiles?token=secret&layer=a"),
+      "https://example.com/tiles?layer=a",
+    );
+    assert.equal(
+      redactUrlCredentials("https://example.com/tiles?token=secret"),
+      "https://example.com/tiles",
+    );
+    const result = redactProjectCredentials({
+      ...createEmptyProject("Survey"),
+      layers: [
+        {
+          id: "points",
+          name: "Points",
+          type: "geojson",
+          source: { type: "geojson" },
+          visible: true,
+          opacity: 1,
+          style: DEFAULT_LAYER_STYLE,
+          metadata: {
+            fieldCollection: true,
+            collectionSchema: {
+              fields: [{ key: "locked", label: "Position locked?", type: "text" }],
+            },
+          },
+        },
+      ],
+    });
+    // Scoped to the layer: an earlier fixture in this file leaves credentials
+    // on the shared default preferences.
+    assert.deepEqual(
+      result.redactedPaths.filter((path) => path.startsWith("layers")),
+      [],
+    );
   });
 
   it("keeps the first-party map controls so an export still renders them", () => {

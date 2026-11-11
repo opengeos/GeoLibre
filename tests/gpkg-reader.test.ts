@@ -8,6 +8,7 @@ import { encodeWkb } from "../apps/geolibre-desktop/src/lib/geometry-wkb";
 import {
   isLikelyGeoPackage,
   readGeoPackageSync,
+  readGeoPackageTableRowsSync,
   stripGeoPackageHeader,
 } from "../apps/geolibre-desktop/src/lib/gpkg-reader";
 
@@ -289,5 +290,86 @@ describe("isLikelyGeoPackage", () => {
   it("recognises a SQLite/GeoPackage buffer", () => {
     assert.equal(isLikelyGeoPackage(buildGpkg([])), true);
     assert.equal(isLikelyGeoPackage(new Uint8Array([1, 2, 3, 4])), false);
+  });
+});
+
+describe("named GeoPackage layers and attribute tables", () => {
+  /** Two feature tables, a geometry-less lookup table, and a bookkeeping table. */
+  function buildMultiLayerGpkg(): Uint8Array {
+    const db: Database = new SQL.Database();
+    db.run(`
+      CREATE TABLE gpkg_contents (table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, srs_id INTEGER);
+      CREATE TABLE gpkg_geometry_columns (
+        table_name TEXT NOT NULL, column_name TEXT NOT NULL,
+        geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, z TINYINT, m TINYINT
+      );
+      CREATE TABLE "roads" (fid INTEGER PRIMARY KEY, geom BLOB, name TEXT);
+      CREATE TABLE "Trees" (fid INTEGER PRIMARY KEY, geom BLOB, species TEXT);
+      CREATE TABLE "species" (fid INTEGER PRIMARY KEY, code TEXT, label TEXT, icon BLOB);
+      CREATE TABLE "secrets" (token TEXT);
+      INSERT INTO gpkg_contents VALUES ('roads','features',4326), ('Trees','features',4326), ('species','attributes',NULL);
+      INSERT INTO gpkg_geometry_columns VALUES ('roads','geom','GEOMETRY',4326,0,0), ('Trees','geom','POINT',4326,0,0);
+      INSERT INTO species (code, label, icon) VALUES ('QUE','Oak',x'00'), ('FAG','Beech',NULL);
+      INSERT INTO secrets VALUES ('hunter2');
+    `);
+    db.run("INSERT INTO roads (geom, name) VALUES (:g, 'Main St')", {
+      ":g": geoPackageBlob({
+        type: "LineString",
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      }),
+    });
+    db.run("INSERT INTO Trees (geom, species) VALUES (:g, 'QUE')", {
+      ":g": geoPackageBlob({ type: "Point", coordinates: [5, 6] }),
+    });
+    const bytes = db.export();
+    db.close();
+    return bytes;
+  }
+
+  it("reads the first layer by default and a named one on request", () => {
+    const bytes = buildMultiLayerGpkg();
+    const first = readGeoPackageSync(SQL, bytes).featureCollection.features;
+    assert.deepEqual(first[0].properties, { name: "Main St" });
+    // Matched case-insensitively, as SQLite resolves table names.
+    const trees = readGeoPackageSync(SQL, bytes, "trees").featureCollection.features;
+    assert.deepEqual(trees[0].properties, { species: "QUE" });
+    assert.deepEqual(trees[0].geometry, { type: "Point", coordinates: [5, 6] });
+  });
+
+  it("names the missing layer instead of falling back to another one", () => {
+    assert.throws(
+      () => readGeoPackageSync(SQL, buildMultiLayerGpkg(), "rivers"),
+      /No vector feature layer named "rivers"/,
+    );
+    // A table without geometry is not a feature layer.
+    assert.throws(() => readGeoPackageSync(SQL, buildMultiLayerGpkg(), "species"), /species/);
+  });
+
+  it("reads a geometry-less table's rows, dropping binary columns", () => {
+    assert.deepEqual(readGeoPackageTableRowsSync(SQL, buildMultiLayerGpkg(), "species"), [
+      { fid: 1, code: "QUE", label: "Oak" },
+      { fid: 2, code: "FAG", label: "Beech", icon: null },
+    ]);
+    assert.deepEqual(readGeoPackageTableRowsSync(SQL, buildMultiLayerGpkg(), "Trees"), [
+      { fid: 1, species: "QUE" },
+    ]);
+  });
+
+  it("only reads tables registered as data, never bookkeeping or stray tables", () => {
+    for (const table of [
+      "secrets",
+      "gpkg_contents",
+      "sqlite_master",
+      'species"; DROP TABLE x; --',
+    ]) {
+      assert.throws(
+        () => readGeoPackageTableRowsSync(SQL, buildMultiLayerGpkg(), table),
+        /No table named/,
+        table,
+      );
+    }
   });
 });

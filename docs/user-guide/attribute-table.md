@@ -197,6 +197,7 @@ form. Set it up in the layer's **Style** panel under **Attributes Form**, with
 | **Min**, **Max**, **Step** | Bounds for Number and Range widgets (Step for Range). |
 | **Constraint expression** / **Constraint description** | A MapLibre expression the value must satisfy, and the message shown when it does not. |
 | **Visibility expression** | Show the field only when the expression is true. |
+| **Default value** | Fills the field when a new feature is captured in Field Collection. See [Default values](field-collection.md#default-values). |
 
 When you edit the table, value-map fields become dropdowns, checkbox fields
 become checkboxes, and number, range, and date fields get typed inputs. A cell

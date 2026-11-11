@@ -78,7 +78,7 @@ export function stripGeoPackageHeader(blob: Uint8Array): Uint8Array {
  * registered geometry column. Mirrors GDAL's "first layer" default (no `layer=`
  * argument), which is what the previous `ST_Read` path used.
  */
-function selectLayer(db: Database): GeoPackageLayer | null {
+function selectLayer(db: Database, name?: string): GeoPackageLayer | null {
   // Both tables are referenced by the JOIN below. gpkg_contents is mandatory in
   // the spec, but guard it too so a malformed file returns null (no layer) here
   // rather than throwing an opaque sql.js error from the JOIN.
@@ -93,8 +93,12 @@ function selectLayer(db: Database): GeoPackageLayer | null {
      FROM gpkg_geometry_columns g
      JOIN gpkg_contents c ON c.table_name = g.table_name COLLATE NOCASE
      WHERE lower(c.data_type) = 'features'
+       AND (:name IS NULL OR g.table_name = :name COLLATE NOCASE)
      ORDER BY c.rowid
      LIMIT 1`,
+    // A named layer (a QGIS project's `layername=`) reads that table instead
+    // of the first one.
+    { ":name": name?.trim() || null },
   );
   const row = result[0]?.values[0];
   if (!row) return null;
@@ -205,11 +209,9 @@ function readLayerFeatures(
 }
 
 /** Read the first feature layer of an open GeoPackage database. */
-function readGeoPackage(db: Database): GeoPackageReadResult {
-  const layer = selectLayer(db);
-  if (!layer) {
-    throw new Error("No vector feature layer found in this GeoPackage.");
-  }
+function readGeoPackage(db: Database, name?: string): GeoPackageReadResult {
+  const layer = selectLayer(db, name);
+  if (!layer) throw new Error(missingLayerMessage(name));
   return {
     featureCollection: readLayerFeatures(db, layer),
     epsgCode: resolveEpsgCode(db, layer.srsId),
@@ -221,10 +223,14 @@ function readGeoPackage(db: Database): GeoPackageReadResult {
  * the first layer into a GeoJSON FeatureCollection. Separated so it can be
  * unit-tested with an already-initialised sql.js factory.
  */
-export function readGeoPackageSync(SQL: SqlJsStatic, bytes: Uint8Array): GeoPackageReadResult {
+export function readGeoPackageSync(
+  SQL: SqlJsStatic,
+  bytes: Uint8Array,
+  layerName?: string,
+): GeoPackageReadResult {
   const db = new SQL.Database(bytes);
   try {
-    return readGeoPackage(db);
+    return readGeoPackage(db, layerName);
   } finally {
     db.close();
   }
@@ -267,14 +273,13 @@ export type LargeGeoPackageGuard = (count: GeoPackageLayerCount) => void | Promi
 export async function loadGeoPackageVectorFile(
   bytes: Uint8Array,
   onBeforeRead?: LargeGeoPackageGuard,
+  layerName?: string,
 ): Promise<GeoPackageReadResult> {
   const SQL = await loadSqlJs();
   const db = new SQL.Database(bytes);
   try {
-    const layer = selectLayer(db);
-    if (!layer) {
-      throw new Error("No vector feature layer found in this GeoPackage.");
-    }
+    const layer = selectLayer(db, layerName);
+    if (!layer) throw new Error(missingLayerMessage(layerName));
     if (onBeforeRead) {
       await onBeforeRead({
         name: layer.table,
@@ -288,4 +293,71 @@ export async function loadGeoPackageVectorFile(
   } finally {
     db.close();
   }
+}
+
+function missingLayerMessage(name?: string): string {
+  return name?.trim()
+    ? `No vector feature layer named "${name.trim()}" found in this GeoPackage.`
+    : "No vector feature layer found in this GeoPackage.";
+}
+
+/** Most rows {@link readGeoPackageTableRowsSync} returns from one table. */
+export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
+
+/**
+ * Read a GeoPackage table's attribute rows as plain records, geometry and
+ * other BLOB columns left out. Unlike the feature readers this also reads
+ * tables that have no geometry at all (lookup lists), which is what a QGIS
+ * project's relation-backed dropdowns point at.
+ *
+ * @param SQL - An initialised sql.js factory.
+ * @param bytes - The GeoPackage file.
+ * @param table - Table name; must be a user data table registered in
+ *   `gpkg_contents` (or the only one, when blank).
+ * @returns Up to {@link GEOPACKAGE_TABLE_ROW_LIMIT} rows.
+ */
+export function readGeoPackageTableRowsSync(
+  SQL: SqlJsStatic,
+  bytes: Uint8Array,
+  table: string,
+): Record<string, unknown>[] {
+  const db = new SQL.Database(bytes);
+  try {
+    if (!tableExists(db, "gpkg_contents")) throw new Error("This file is not a GeoPackage.");
+    // Resolve the name through gpkg_contents rather than trusting it: only
+    // registered data tables are readable, never SQLite or GeoPackage
+    // bookkeeping tables.
+    const match = db.exec(
+      `SELECT table_name FROM gpkg_contents
+       WHERE lower(data_type) IN ('features', 'attributes', 'aspatial')
+         AND (:name IS NULL OR table_name = :name COLLATE NOCASE)
+       ORDER BY rowid LIMIT 1`,
+      { ":name": table.trim() || null },
+    );
+    const resolved = match[0]?.values[0]?.[0];
+    if (resolved == null) throw new Error(`No table named "${table}" found in this GeoPackage.`);
+    const result = db.exec(
+      `SELECT * FROM ${quoteIdentifier(String(resolved))} LIMIT ${GEOPACKAGE_TABLE_ROW_LIMIT}`,
+    );
+    if (result.length === 0) return [];
+    const { columns, values } = result[0];
+    return values.map((row) => {
+      const record: Record<string, unknown> = {};
+      for (let i = 0; i < columns.length; i += 1) {
+        if (row[i] instanceof Uint8Array) continue;
+        record[columns[i]] = row[i];
+      }
+      return record;
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** Async wrapper over {@link readGeoPackageTableRowsSync} that loads sql.js. */
+export async function loadGeoPackageTableRows(
+  bytes: Uint8Array,
+  table: string,
+): Promise<Record<string, unknown>[]> {
+  return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table);
 }

@@ -6,6 +6,11 @@ interface ImportWarningListProps<T extends ImportWarningLike> {
   warnings: T[];
   /** Renders a warning's localized message. */
   describe: (warning: T) => string;
+  /**
+   * Label for a group of more than one entry; defaults to "N layers". Lets a
+   * list whose entries are not layers (form fields) count the right thing.
+   */
+  countLabel?: (count: number) => string;
 }
 
 /**
@@ -19,6 +24,7 @@ interface ImportWarningListProps<T extends ImportWarningLike> {
 export function ImportWarningList<T extends ImportWarningLike>({
   warnings,
   describe,
+  countLabel,
 }: ImportWarningListProps<T>) {
   const { t } = useTranslation();
   const listId = useId();
@@ -36,9 +42,12 @@ export function ImportWarningList<T extends ImportWarningLike>({
             <strong>
               {group.layerNames.length === 1
                 ? `${group.layerNames[0]}:`
-                : `${t("toolbar.item.importWarningLayerCount", {
-                    count: group.layerNames.length,
-                  })}:`}
+                : `${
+                    countLabel?.(group.layerNames.length) ??
+                    t("toolbar.item.importWarningLayerCount", {
+                      count: group.layerNames.length,
+                    })
+                  }:`}
             </strong>{" "}
             {group.message}
             {group.layerNames.length > 1 ? (

@@ -48,24 +48,32 @@ export async function restoreLocalFileLayers(): Promise<void> {
   if (pending.length === 0) return;
 
   // Group by path so a multi-layer file (or repeated path) is read only once.
-  const byPath = new Map<string, GeoLibreLayer[]>();
+  // A layer that names the table it reads (`metadata.sourceLayer`, set by the
+  // QGIS importer for a GeoPackage) is grouped per table instead, since the
+  // reader returns one table per call.
+  const groups = new Map<string, { path: string; sourceLayer: string; layers: GeoLibreLayer[] }>();
   for (const layer of pending) {
     const path = layer.sourcePath as string;
-    const group = byPath.get(path);
-    if (group) group.push(layer);
-    else byPath.set(path, [layer]);
+    const sourceLayer = localFileSourceLayer(layer);
+    const key = `${path}\u0000${sourceLayer}`;
+    const group = groups.get(key);
+    if (group) group.layers.push(layer);
+    else groups.set(key, { path, sourceLayer, layers: [layer] });
   }
 
   await Promise.all(
-    Array.from(byPath, async ([path, layers]) => {
+    Array.from(groups.values(), async ({ path, sourceLayer, layers }) => {
       try {
         // A KMZ/KML file can yield image overlays alongside its vector layers;
         // only the vector entries carry the `geojson` these layers reload. Skip
         // the KML `<Model>` (COLLADA→GLB) conversion — including any remote-mesh
         // fetch — since the models are discarded by the filter below anyway.
-        const loaded = (await loadDroppedVectorPaths([path], { skipModels: true })).filter(
-          isLoadedVectorLayer,
-        );
+        const loaded = (
+          await loadDroppedVectorPaths([path], {
+            skipModels: true,
+            ...(sourceLayer ? { layer: sourceLayer } : {}),
+          })
+        ).filter(isLoadedVectorLayer);
         if (loaded.length === 0) {
           dropLayers(layers, path);
           return;
@@ -99,6 +107,17 @@ export async function restoreLocalFileLayers(): Promise<void> {
       }
     }),
   );
+}
+
+/**
+ * The table of a multi-layer file a layer reads, or "" for the file's first.
+ *
+ * @param layer - A store layer.
+ * @returns The `metadata.sourceLayer` name, trimmed.
+ */
+export function localFileSourceLayer(layer: GeoLibreLayer): string {
+  const value = layer.metadata.sourceLayer;
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function dropLayers(layers: GeoLibreLayer[], path: string): void {

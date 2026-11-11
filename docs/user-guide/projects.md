@@ -58,7 +58,27 @@ Snapshots are stored per project — keyed by file path, or by name for a projec
 
 ## Importing a QGIS project
 
-**Project → Import → Import QGIS Project…** reads a QGIS `.qgs` or `.qgz` project and rebuilds it as a GeoLibre project: its layers, layer groups (including nested ones), group visibility, layer order, styling, and the saved map view.
+**Project → Import → Import QGIS Project…** reads a QGIS `.qgs` or `.qgz` project and rebuilds it as a GeoLibre project: its layers, layer groups (including nested ones), group visibility, layer order, styling, the saved map view, and each layer's attribute form.
+
+Every layer of a multi-layer GeoPackage is read from its own table. A table without geometry (a lookup list, a table of linked photos) has nothing to draw, so it is listed as skipped rather than added as a map layer.
+
+### Forms from QGIS and QField
+
+A project prepared in QGIS for field work with QField keeps its form setup, so the same project collects data in GeoLibre without rebuilding the forms. For each layer the importer reads:
+
+| QGIS form setting | In GeoLibre |
+| --- | --- |
+| Edit widgets | **Value Map** becomes a dropdown, **Range** a slider or number box with its bounds, **Checkbox** a checkbox, **Date/Time** a date picker. **Hidden** fields stay hidden but are still saved. |
+| **Value Relation** and **Relation Reference** | A dropdown filled from the linked table's rows, read from the GeoPackage even when that table has no geometry. The entries are a snapshot taken at import. |
+| Field aliases | The field's label. |
+| **Not null** constraints | A required field. Constraints QGIS only warns about are not enforced. |
+| Constraint expressions | Converted when they use comparisons, `AND`/`OR`/`NOT`, arithmetic, `IS NULL`, `IN`, and text length or case functions. |
+| Default values | Kept as written, including QField's GPS variables. See [Default values](field-collection.md#default-values). |
+| **UUID Generator** | A text field that defaults to `uuid()`. |
+
+A layer that has a form becomes a [Field Collection](field-collection.md) layer, ready to capture into, and its form can be reviewed and changed in the **Style** panel under **Attributes Form**. Anything that could not be carried over (a default that looks up another layer, a constraint using an unsupported function, a linked table that could not be read) is listed per field when the import finishes.
+
+The layer's existing features are still read from the QGIS data file. Once you capture a new feature into it, GeoLibre keeps that layer's features in the `.geolibre.json` project instead, so the capture is saved with the project and the original file is left untouched. Photos are attached with Field Collection's own photo control; QGIS attachment fields, drag-and-drop form layouts (tabs and groups), and relations that edit child records are not imported.
 
 The importer targets file-based vector layers plus rasters the app can open, and it reports what it could not bring across rather than failing the whole import — you get the project plus a list of skipped layers and the reason (an unsupported data provider, an unsupported file format, a missing source, a network share path, or a remote source). Layers skipped for the same reason are grouped into one line with a count, so a project where hundreds of layers share one root cause reads at a glance; expand a group to see the layer names. In the browser build, layers that reference a local path on disk are listed as skipped because a browser cannot reopen those paths; open the same project in GeoLibre Desktop to load them.
 

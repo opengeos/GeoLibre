@@ -71,10 +71,30 @@ import {
   type FieldCollectionMarker,
   type FieldCollectionPreview,
 } from "../../lib/field-collection-map";
+import {
+  applyCaptureDefaults,
+  captureExpressionVariables,
+  hasAttributeFormDefaults,
+  loadDefaultValueTransform,
+  type DefaultValueTransform,
+} from "../../lib/field-collection-defaults";
+import { isAbsoluteLocalPath } from "../../lib/tauri-io";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
 import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
+
+/**
+ * Whether a collection layer still reads its features from a local file, as a
+ * layer imported from a QGIS/QField project does until something is captured
+ * into it.
+ */
+function isFileBackedCollectionLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.localFileReloadable === true ||
+    (typeof layer.sourcePath === "string" && isAbsoluteLocalPath(layer.sourcePath))
+  );
+}
 
 interface FieldCollectionDialogProps {
   open: boolean;
@@ -232,6 +252,53 @@ export function FieldCollectionDialog({
     const fields = form.fields.filter((field) => keys.has(field.field));
     return fields.length > 0 ? { fields } : undefined;
   }, [activeLayer, schema]);
+
+  // Default values (#3398): fields whose Attribute Form config carries a
+  // default expression are pre-filled when a location is captured, and
+  // refreshed when it moves, until the user types over them.
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const autoFilledRef = useRef<Record<string, string>>({});
+  const [defaultTransform, setDefaultTransform] = useState<DefaultValueTransform | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setDefaultTransform(null);
+    void loadDefaultValueTransform(attributeForm).then((transform) => {
+      // Wrapped: a bare function passed to a state setter is called as an updater.
+      if (!cancelled && transform) setDefaultTransform(() => transform);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attributeForm]);
+  const activeLayerName = activeLayer?.name;
+  useEffect(() => {
+    if (!pending || !schema || !hasAttributeFormDefaults(attributeForm)) return;
+    const current = valuesRef.current;
+    const result = applyCaptureDefaults(attributeForm, current, autoFilledRef.current, {
+      properties: buildPropertiesWithForm(schema, current, attributeForm),
+      variables: captureExpressionVariables({
+        fix: lastGpsFix,
+        layerName: activeLayerName,
+        user: currentEditorIdentity(),
+      }),
+      geometry:
+        activeGeometry === "point" && pending[0]
+          ? { type: "Point", coordinates: [...pending[0]] }
+          : null,
+      ...(defaultTransform ? { transform: defaultTransform } : {}),
+    });
+    autoFilledRef.current = result.autoFilled;
+    if (result.values !== current) setValues(result.values);
+  }, [
+    pending,
+    lastGpsFix,
+    schema,
+    attributeForm,
+    activeGeometry,
+    activeLayerName,
+    defaultTransform,
+  ]);
 
   const getEngine = useCallback(() => mapControllerRef.current, [mapControllerRef]);
 
@@ -861,6 +928,13 @@ export function FieldCollectionDialog({
       setNotice(t("fieldCollection.layerGone"));
       return;
     }
+    // A file-backed layer (an imported QGIS/QField layer) whose features have
+    // not been read yet: appending now would save the capture over the rows
+    // still on their way in.
+    if (!current.geojson && isFileBackedCollectionLayer(current)) {
+      setNotice(t("fieldCollection.layerLoading"));
+      return;
+    }
     const fc = current.geojson ?? emptyFeatureCollection();
     // Read the tracking config off `current`, not the render-time layer: the
     // form can sit open across a configuration change.
@@ -870,7 +944,22 @@ export function FieldCollectionDialog({
           userIdentity: currentEditorIdentity(),
         })
       : feature;
-    updateLayer(activeLayer.id, { geojson: appendFeature(fc, tracked) });
+    // A layer read from a local file (an imported QGIS/QField layer) is saved
+    // as a path and re-read on reopen, which would silently drop this capture.
+    // From the first capture on the project's own copy is the authoritative
+    // one, so detach the layer from the file: it then saves like any layer
+    // created here, with its features embedded. The path is kept for reference.
+    const fileBacked = isFileBackedCollectionLayer(current);
+    const { localFileReloadable: _reloadable, ...detachedMetadata } = current.metadata;
+    updateLayer(activeLayer.id, {
+      geojson: appendFeature(fc, tracked),
+      ...(fileBacked
+        ? {
+            sourcePath: undefined,
+            metadata: { ...detachedMetadata, capturedFromPath: current.sourcePath },
+          }
+        : {}),
+    });
     invalidateCapture();
 
     savedCountRef.current += 1;
