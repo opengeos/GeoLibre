@@ -31,12 +31,21 @@ import app.tauri.plugin.Plugin
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** The well-known Serial Port Profile service UUID every SPP GNSS receiver exposes. */
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
 private const val ALIAS_BLUETOOTH = "bluetooth"
+
+/**
+ * Bound on one socket connect attempt. BluetoothSocket.connect() has no
+ * timeout of its own, so an out-of-range receiver would otherwise hold each of
+ * the three fallback attempts for the OS's own (much longer) timeout.
+ */
+private const val CONNECT_TIMEOUT_MS = 10_000L
 
 /** Bytes per socket read; NMEA at 10 Hz is well under this per read. */
 private const val READ_BUFFER_BYTES = 4096
@@ -78,6 +87,8 @@ private class Connection(val socket: BluetoothSocket, val channel: Channel) {
 class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
   private val connections = ConcurrentHashMap<Int, Connection>()
   private val nextId = AtomicInteger(1)
+  /** Closes a socket whose connect() outlives CONNECT_TIMEOUT_MS, which makes it throw. */
+  private val connectWatchdog = Executors.newSingleThreadScheduledExecutor()
 
   private fun adapter(): BluetoothAdapter? {
     val manager = activity.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
@@ -215,9 +226,24 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
     for (attempt in attempts) {
       var socket: BluetoothSocket? = null
       try {
-        socket = attempt()
-        socket.connect()
-        return socket
+        val candidate = attempt()
+        socket = candidate
+        val timeout = connectWatchdog.schedule(
+          {
+            try {
+              candidate.close()
+            } catch (_: IOException) {
+            }
+          },
+          CONNECT_TIMEOUT_MS,
+          TimeUnit.MILLISECONDS,
+        )
+        try {
+          candidate.connect()
+        } finally {
+          timeout.cancel(false)
+        }
+        return candidate
       } catch (e: Exception) {
         Logger.debug("GnssBluetooth", "SPP connect attempt failed: ${e.message}")
         try {
@@ -247,7 +273,9 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         event.put("data", String(buffer, 0, n, Charsets.ISO_8859_1))
         connection.channel.send(event)
       }
-    } catch (e: IOException) {
+    } catch (e: Exception) {
+      // Not just IOException: anything escaping this background thread would
+      // crash the app, and one failed socket should only end its own session.
       failure = e.message
     } finally {
       connections.remove(id)
@@ -271,6 +299,7 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
 
   override fun onDestroy(activity: AppCompatActivity) {
     super.onDestroy(activity)
+    connectWatchdog.shutdownNow()
     for (connection in connections.values) connection.close()
     connections.clear()
   }

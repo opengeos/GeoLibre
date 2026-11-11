@@ -792,9 +792,12 @@ export function GpsTrackingDialog({
         };
         let conn: NmeaConnection;
         if (transport === "serial") conn = await connectSerialNmea({ baudRate }, handlers);
-        else if (transport === "android-bluetooth" && device)
+        else if (transport === "android-bluetooth") {
+          // Never fall through to Web Bluetooth here: it does not exist in the
+          // Android WebView, so its error would misdescribe the failure.
+          if (!device) throw new NmeaError(t("gps.nmeaConnectFailed"));
           conn = await connectAndroidBluetoothNmea(device, handlers);
-        else conn = await connectBluetoothNmea(handlers);
+        } else conn = await connectBluetoothNmea(handlers);
         if (isStale()) {
           // The user moved on while the device was still opening: release it
           // rather than resurrecting a session they already abandoned.
