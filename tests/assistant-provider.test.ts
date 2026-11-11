@@ -753,19 +753,13 @@ describe("configForProvider", () => {
   });
 
   it("resolves UberLLM from a nonblank API key with its default model and override", () => {
-    assert.deepEqual(
-      configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "key" }),
-      {
-        provider: "uberllm",
-        apiKey: "key",
-        baseURL: "https://api.uberllm.dev/v1",
-        modelId: "openai/gpt-5.6-luna",
-      },
-    );
-    assert.equal(
-      configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "  " }),
-      null,
-    );
+    assert.deepEqual(configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "key" }), {
+      provider: "uberllm",
+      apiKey: "key",
+      baseURL: "https://api.uberllm.dev/v1",
+      modelId: "openai/gpt-5.6-luna",
+    });
+    assert.equal(configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "  " }), null);
     assert.equal(
       configForProvider("uberllm", undefined, {
         UBERLLM_API_KEY: "key",
@@ -773,10 +767,7 @@ describe("configForProvider", () => {
       })?.modelId,
       "provider/model",
     );
-    assert.equal(
-      defaultModelFor("uberllm", { UBERLLM_MODEL: "provider/model" }),
-      "provider/model",
-    );
+    assert.equal(defaultModelFor("uberllm", { UBERLLM_MODEL: "provider/model" }), "provider/model");
     assert.equal(defaultModelFor("uberllm", {}), "openai/gpt-5.6-luna");
   });
 
