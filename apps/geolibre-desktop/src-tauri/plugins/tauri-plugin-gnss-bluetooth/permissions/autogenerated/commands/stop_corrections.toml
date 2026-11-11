@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-corrections"
+description = "Enables the stop_corrections command without any pre-configured scope."
+commands.allow = ["stop_corrections"]
+
+[[permission]]
+identifier = "deny-stop-corrections"
+description = "Denies the stop_corrections command without any pre-configured scope."
+commands.deny = ["stop_corrections"]

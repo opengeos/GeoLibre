@@ -292,10 +292,34 @@
           "markdownDescription": "Denies the list_devices command without any pre-configured scope."
         },
         {
-          "description": "List paired Bluetooth GNSS receivers and stream NMEA from one.\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-connect`\n- `allow-disconnect`",
+          "description": "Enables the start_corrections command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-corrections",
+          "markdownDescription": "Enables the start_corrections command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_corrections command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-corrections",
+          "markdownDescription": "Denies the start_corrections command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_corrections command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-corrections",
+          "markdownDescription": "Enables the stop_corrections command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_corrections command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-corrections",
+          "markdownDescription": "Denies the stop_corrections command without any pre-configured scope."
+        },
+        {
+          "description": "List paired Bluetooth GNSS receivers, stream NMEA from one, and feed it NTRIP corrections.\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-connect`\n- `allow-disconnect`\n- `allow-start-corrections`\n- `allow-stop-corrections`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "List paired Bluetooth GNSS receivers and stream NMEA from one.\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-connect`\n- `allow-disconnect`"
+          "markdownDescription": "List paired Bluetooth GNSS receivers, stream NMEA from one, and feed it NTRIP corrections.\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-connect`\n- `allow-disconnect`\n- `allow-start-corrections`\n- `allow-stop-corrections`"
         }
       ]
     }

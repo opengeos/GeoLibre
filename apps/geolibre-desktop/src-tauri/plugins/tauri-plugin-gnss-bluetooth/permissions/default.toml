@@ -1,5 +1,11 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "List paired Bluetooth GNSS receivers and stream NMEA from one."
-permissions = ["allow-list-devices", "allow-connect", "allow-disconnect"]
+description = "List paired Bluetooth GNSS receivers, stream NMEA from one, and feed it NTRIP corrections."
+permissions = [
+  "allow-list-devices",
+  "allow-connect",
+  "allow-disconnect",
+  "allow-start-corrections",
+  "allow-stop-corrections",
+]

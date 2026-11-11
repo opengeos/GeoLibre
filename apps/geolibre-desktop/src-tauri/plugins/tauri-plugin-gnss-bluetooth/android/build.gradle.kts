@@ -23,5 +23,6 @@ android {
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.6.0")
+    testImplementation("junit:junit:4.13.2")
     implementation(project(":tauri-android"))
 }

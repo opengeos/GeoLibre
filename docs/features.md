@@ -223,7 +223,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - Runs as a session: **Controls → Field Collection...** starts or resumes one, a floating quick-open pill on the map names the layer the next observation lands in, and **Done** ends the session and retires the pill without touching any collection layer or captured feature. Closing the dialog with its X, `Esc`, or a click outside keeps the session running, and the target layer can be switched at the top of the dialog without losing your place
     - Select multiple photos, append more, or remove individual attachments before saving. The existing per-photo size limit still applies. Photos and filenames are saved in `geolibre_photos` and `geolibre_photo_names`; `photo` retains the first image for existing single-photo popups and exports
 - Live GPS tracking with a moving position marker, a recorded track log, and digitizing new features directly from the GPS feed. See [GPS tracking](user-guide/map-controls.md#gps-tracking)
-    - Reads either the device's own geolocation or an external **NMEA** GPS/GNSS receiver over Web Serial or Web Bluetooth, with a baud-rate picker and a live sentence and fix counter; the Android app connects to a paired classic Bluetooth receiver natively
+    - Reads either the device's own geolocation or an external **NMEA** GPS/GNSS receiver over Web Serial or Web Bluetooth, with a baud-rate picker and a live sentence and fix counter; the Android app connects to a paired classic Bluetooth receiver natively and can feed it RTK corrections from an NTRIP caster
 
 ## Storytelling and collaboration
 

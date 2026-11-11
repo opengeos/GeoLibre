@@ -184,7 +184,12 @@ describe("connectSerialNmea", () => {
 function fakeBridge(responses: Record<string, (args?: Record<string, unknown>) => unknown> = {}): {
   bridge: NativeBluetoothBridge;
   calls: { cmd: string; args?: Record<string, unknown> }[];
-  push: (event: { event: "data"; data: string } | { event: "closed"; error?: string }) => void;
+  push: (
+    event:
+      | { event: "data"; data: string }
+      | { event: "closed"; error?: string }
+      | { event: "ntrip"; state: string; bytes: number; message?: string; code?: string },
+  ) => void;
 } {
   const calls: { cmd: string; args?: Record<string, unknown> }[] = [];
   let listener: ((event: never) => void) | null = null;
@@ -251,6 +256,53 @@ describe("connectAndroidBluetoothNmea", () => {
     assert.equal(errors.length, 1);
     assert.equal(errors[0].code, "disconnected");
     assert.equal(fixes.length, 0);
+  });
+
+  it("starts corrections with a normalized config and relays status events", async () => {
+    const fake = fakeBridge({ [CONNECT]: () => ({ id: 3, name: "TX2" }) });
+    const conn = await connectAndroidBluetoothNmea(
+      receiver,
+      { onFix: () => {}, onError: () => {} },
+      fake.bridge,
+    );
+    assert.ok(conn.corrections, "the Android transport can take corrections");
+    const statuses: unknown[] = [];
+    await conn.corrections.start(
+      {
+        host: "http://caster.example.com:2102/",
+        port: 2101,
+        mountpoint: "/MOUNT",
+        username: "u",
+        password: "p",
+        tls: true,
+      },
+      (s) => statuses.push(s),
+    );
+    assert.deepEqual(fake.calls.at(-1), {
+      cmd: "plugin:gnss-bluetooth|start_corrections",
+      args: {
+        id: 3,
+        host: "caster.example.com",
+        port: 2102,
+        mountpoint: "MOUNT",
+        username: "u",
+        password: "p",
+        tls: true,
+      },
+    });
+    fake.push({ event: "ntrip", state: "connected", bytes: 512 });
+    fake.push({ event: "ntrip", state: "error", bytes: 512, message: "bad", code: "AUTH_FAILED" });
+    assert.deepEqual(statuses, [
+      { state: "connected", bytes: 512, message: undefined, code: undefined },
+      { state: "error", bytes: 512, message: "bad", code: "auth-failed" },
+    ]);
+    await conn.corrections.stop();
+    assert.deepEqual(fake.calls.at(-1), {
+      cmd: "plugin:gnss-bluetooth|stop_corrections",
+      args: { id: 3 },
+    });
+    fake.push({ event: "ntrip", state: "connected", bytes: 1024 });
+    assert.equal(statuses.length, 2, "no status after stop");
   });
 
   it("maps native rejection codes to NmeaError codes", async () => {

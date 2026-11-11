@@ -62,12 +62,65 @@ class DisconnectArgs {
   var id: Int = 0
 }
 
+@InvokeArg
+class StartCorrectionsArgs {
+  var id: Int = 0
+  lateinit var host: String
+  var port: Int = 2101
+  var mountpoint: String = ""
+  var username: String = ""
+  var password: String = ""
+  var tls: Boolean = false
+  var ggaIntervalSec: Int = 10
+}
+
 /** One open receiver: its socket and the thread pumping it into a channel. */
 private class Connection(val socket: BluetoothSocket, val channel: Channel) {
   @Volatile var closed = false
+  /** The receiver's latest fixed GGA, which an NTRIP caster may ask for. */
+  val gga = GgaTracker()
+  /** The NTRIP session feeding this receiver corrections, if one is running. */
+  @Volatile var ntrip: NtripClient? = null
+
+  /** Write correction bytes to the receiver. */
+  fun write(bytes: ByteArray, count: Int) {
+    val out = socket.outputStream
+    synchronized(this) {
+      out.write(bytes, 0, count)
+      out.flush()
+    }
+  }
+
+  /** Serializes starting, stopping and closing, apart from the write lock. */
+  private val lifecycle = Any()
+
+  /**
+   * Replace the running session with [client] and start it, unless the
+   * receiver has closed meanwhile; false then, and the client never runs.
+   */
+  fun startCorrections(client: NtripClient): Boolean {
+    synchronized(lifecycle) {
+      if (closed) return false
+      ntrip?.stop()
+      ntrip = client
+      client.start()
+      return true
+    }
+  }
+
+  fun stopCorrections() {
+    synchronized(lifecycle) {
+      ntrip?.stop()
+      ntrip = null
+    }
+  }
 
   fun close() {
-    closed = true
+    synchronized(lifecycle) {
+      closed = true
+      ntrip?.stop()
+      ntrip = null
+    }
     try {
       socket.close()
     } catch (_: IOException) {
@@ -307,6 +360,7 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         val n = input.read(buffer)
         if (n < 0) break
         if (n == 0) continue
+        connection.gga.feed(buffer, n)
         val event = JSObject()
         event.put("event", "data")
         // ISO-8859-1 maps every byte to one char, so a binary RTCM/UBX frame
@@ -330,6 +384,75 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         connection.channel.send(event)
       }
     }
+  }
+
+  /**
+   * Start an NTRIP session that writes RTCM corrections to an open receiver
+   * (GeoLibre#3400). Status goes to the receiver's own channel as `ntrip`
+   * events; a running session for the same receiver is replaced.
+   */
+  @Command
+  fun startCorrections(invoke: Invoke) {
+    val args = invoke.parseArgs(StartCorrectionsArgs::class.java)
+    val connection = connections[args.id]
+    if (connection == null) {
+      invoke.reject("The receiver is not connected.", "NOT_CONNECTED")
+      return
+    }
+    val host = args.host.trim()
+    if (host.isEmpty() || args.port !in 1..65535) {
+      invoke.reject("Enter a caster host and a port between 1 and 65535.", "FAILED")
+      return
+    }
+    // Both go into the request line and Host header verbatim, so whitespace
+    // or a CR/LF would break the request or inject headers.
+    val mountpoint = args.mountpoint.trim().trimStart('/')
+    if (host.any { it.isWhitespace() || it.isISOControl() } ||
+      mountpoint.any { it.isWhitespace() || it.isISOControl() }
+    ) {
+      invoke.reject("The caster host and mountpoint cannot contain spaces or control characters.", "FAILED")
+      return
+    }
+    val config = NtripConfig(
+      host = host,
+      port = args.port,
+      mountpoint = mountpoint,
+      username = args.username,
+      password = args.password,
+      tls = args.tls,
+      ggaIntervalSec = args.ggaIntervalSec,
+    )
+    lateinit var client: NtripClient
+    client = NtripClient(
+      config,
+      sink = { bytes, count -> connection.write(bytes, count) },
+      gga = connection.gga,
+      onStatus = { status ->
+        // A replaced or stopped session must not report over its successor;
+        // the webview already knows about a stop it asked for.
+        if (connection.ntrip === client) {
+          val event = JSObject()
+          event.put("event", "ntrip")
+          event.put("state", status.state)
+          event.put("bytes", status.bytes)
+          if (status.message != null) event.put("message", status.message)
+          if (status.code != null) event.put("code", status.code)
+          connection.channel.send(event)
+        }
+      },
+    )
+    if (!connection.startCorrections(client)) {
+      invoke.reject("The receiver is not connected.", "NOT_CONNECTED")
+      return
+    }
+    invoke.resolve()
+  }
+
+  @Command
+  fun stopCorrections(invoke: Invoke) {
+    val args = invoke.parseArgs(DisconnectArgs::class.java)
+    connections[args.id]?.stopCorrections()
+    invoke.resolve()
   }
 
   @Command

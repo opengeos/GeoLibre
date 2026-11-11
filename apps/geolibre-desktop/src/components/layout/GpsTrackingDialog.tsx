@@ -74,6 +74,7 @@ import {
 } from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { AndroidBluetoothControls, nmeaErrorText } from "./GpsBluetoothReceiverControls";
+import { NtripControls, useNtripCorrections } from "./GpsNtripControls";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
@@ -301,6 +302,15 @@ export function GpsTrackingDialog({
   const [nmeaStats, setNmeaStats] = useState<NmeaStreamStats | null>(null);
   const [connecting, setConnecting] = useState<NmeaTransport | null>(null);
   const nmeaConnRef = useRef<NmeaConnection | null>(null);
+  /**
+   * NTRIP corrections (issue #3400). Held here rather than in the dialog body
+   * because the dialog content unmounts when it closes while the receiver and
+   * its correction stream keep running.
+   */
+  const ntrip = useNtripCorrections(nmeaConnRef);
+  const { reset: resetNtrip, resumeFor: resumeNtripFor } = ntrip;
+  /** Whether the connected receiver's transport can take corrections. */
+  const [nmeaHasCorrections, setNmeaHasCorrections] = useState(false);
   /**
    * Bumped whenever an in-flight connect is superseded — by another connect, a
    * source change, stopping, or unmount. A Bluetooth `gatt.connect()` can stay
@@ -697,6 +707,9 @@ export function GpsTrackingDialog({
     nmeaConnRef.current = null;
     setNmeaLabel(null);
     setNmeaStats(null);
+    // Closing the receiver ends its correction session natively.
+    resetNtrip();
+    setNmeaHasCorrections(false);
     try {
       await conn?.close();
     } catch (error) {
@@ -706,7 +719,7 @@ export function GpsTrackingDialog({
       // keep a warning so a receiver that never releases can be diagnosed.
       logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
     }
-  }, []);
+  }, [resetNtrip]);
 
   /** Abandon any in-flight connect as well as closing the live connection. */
   const disconnectNmea = useCallback(async () => {
@@ -778,7 +791,11 @@ export function GpsTrackingDialog({
         nmeaConnRef.current = conn;
         setNmeaLabel(conn.label);
         setNmeaStats(conn.stats());
+        setNmeaHasCorrections(conn.corrections != null);
         setTracking(true);
+        // Corrections that were running when this receiver was last used
+        // come back on their own, as they do in a dedicated field app.
+        resumeNtripFor(conn);
       } catch (err) {
         if (isStale()) return;
         if (err instanceof NmeaError) {
@@ -793,7 +810,7 @@ export function GpsTrackingDialog({
         if (!isStale()) setConnecting(null);
       }
     },
-    [baudRate, closeNmea, disconnectNmea, handleFix, t],
+    [baudRate, closeNmea, disconnectNmea, handleFix, resumeNtripFor, t],
   );
 
   // Poll the assembler's counters while connected so the readout shows the
@@ -1024,6 +1041,15 @@ export function GpsTrackingDialog({
                     connectedLabel={nmeaLabel}
                     stats={nmeaStats}
                     onConnect={(transport, device) => void connectNmea(transport, device)}
+                  />
+                )}
+                {source === "nmea" && nmeaLabel && nmeaHasCorrections && (
+                  <NtripControls
+                    config={ntrip.settings.config}
+                    onConfigChange={ntrip.setConfig}
+                    status={ntrip.status}
+                    onStart={ntrip.start}
+                    onStop={ntrip.stop}
                   />
                 )}
               </div>

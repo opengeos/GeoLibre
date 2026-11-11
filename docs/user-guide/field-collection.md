@@ -51,9 +51,30 @@ estimated from HDOP.
     asks for the *Nearby devices* permission the first time. The app talks to
     the receiver over classic Bluetooth (Serial Port Profile), which is what
     most survey GNSS receivers use; Bluetooth Low Energy-only devices are
-    listed but cannot be connected. GeoLibre does not yet run an NTRIP client,
-    so RTK corrections still have to reach the receiver another way (for
-    example its own modem or radio).
+    listed but cannot be connected.
+
+### RTK corrections (NTRIP)
+
+In the Android app, once a Bluetooth receiver is connected, the dialog shows
+**RTK corrections (NTRIP)**. Enter the **Caster host**, **Port** (2101 by
+default), **Mountpoint**, and your **Username** and **Password** from the
+correction provider, tick **Use TLS** if the caster requires it, and press
+**Start corrections**. GeoLibre connects to the caster, sends the receiver its
+RTCM corrections over the same Bluetooth link, and sends the caster the
+receiver's own position (GGA) every 10 seconds, which network (VRS) casters need
+before they start streaming. The status line counts the corrections received,
+and the receiver readout above it shows the fix moving to **RTK float** and
+**RTK fixed**.
+
+A pasted caster URL such as `http://caster.example.com:2102/` is split into
+host and port, and a leading `/` is dropped from the mountpoint. If the caster
+drops the stream, GeoLibre reconnects every few seconds; a rejected login or an
+unknown mountpoint stops it with a message instead. The settings, including the
+password, are saved on the device, and corrections restart on their own the
+next time the receiver connects, until you press **Stop corrections**.
+
+The web version cannot run an NTRIP client: a browser page cannot open the
+plain TCP connection a caster speaks.
 
 ### Following your position
 
