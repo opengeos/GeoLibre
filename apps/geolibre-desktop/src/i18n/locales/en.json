@@ -4239,7 +4239,9 @@
         "default": "The default value uses an expression that is not supported, so the field starts empty.",
         "constraint": "The constraint expression is not supported and was left out.",
         "relation": "The dropdown's linked table could not be read, so the field is a plain text box.",
-        "relation-too-large": "The dropdown's linked table has too many rows for a list, so the field is a plain text box."
+        "relation-empty": "The dropdown's linked table has no values to list, so the field is a plain text box.",
+        "relation-too-large": "The dropdown's linked table has too many rows for a list, so the field is a plain text box.",
+        "relation-multi": "The dropdown allows several selections, which is not supported, so the field is a plain text box."
       },
       "openProjectFromUrlDesc": "Load a `.geolibre.json` project and add it to recent projects.",
       "projectUrl": "Project URL",

@@ -29,7 +29,13 @@ import {
 export interface QgisFormImportNote {
   layerName: string;
   field: string;
-  reason: "default" | "constraint" | "relation" | "relation-too-large";
+  reason:
+    | "default"
+    | "constraint"
+    | "relation"
+    | "relation-empty"
+    | "relation-too-large"
+    | "relation-multi";
   /** What was unsupported (function names, or the parse error). */
   detail?: string;
 }
@@ -263,7 +269,10 @@ export function parseQgisLayerForm(
         const keyField = optionText(options, "Key");
         // A multi-select stores a list of keys in one value, which a
         // single-choice dropdown would overwrite with one key: leave it text.
-        if (optionText(options, "AllowMulti") === "true") break;
+        if (optionText(options, "AllowMulti") === "true") {
+          notes.push({ field: name, reason: "relation-multi" });
+          break;
+        }
         if (referencedLayerId && keyField) {
           relations.push({
             field: name,

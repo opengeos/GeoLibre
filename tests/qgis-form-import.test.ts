@@ -260,6 +260,7 @@ describe("QGIS form import", () => {
         detail: "maximum(count) > count",
       },
       { layerName: "Measured points", field: "count", reason: "default", detail: "aggregate()" },
+      { layerName: "Measured points", field: "tags", reason: "relation-multi" },
       { layerName: "Measured points", field: "parent", reason: "relation" },
     ]);
   });
@@ -359,8 +360,16 @@ describe("QGIS form import", () => {
     const fields = points.attributeForm?.fields ?? [];
     assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "text");
     assert.deepEqual(
-      result.formNotes.filter((note) => note.reason === "relation").map((note) => note.field),
-      ["parent", "material", "owner_id"],
+      result.formNotes
+        .filter((note) => note.reason.startsWith("relation"))
+        .map((note) => [note.field, note.reason]),
+      [
+        ["tags", "relation-multi"],
+        ["parent", "relation"],
+        // Read fine but empty, as opposed to the one that could not be read.
+        ["material", "relation-empty"],
+        ["owner_id", "relation"],
+      ],
     );
   });
 

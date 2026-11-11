@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   applyCaptureDefaults,
   captureExpressionVariables,
+  defaultValueEpsgCodes,
   hasAttributeFormDefaults,
   loadDefaultValueTransform,
   type DefaultValueTransform,
@@ -50,10 +51,16 @@ export function useCaptureDefaults({
   const autoFilledRef = useRef<Record<string, string>>({});
   const [transform, setTransform] = useState<DefaultValueTransform | null>(null);
 
+  // Keyed on the EPSG codes the form names, not on the form object: that is
+  // rebuilt whenever the layer changes (after every save), and reloading then
+  // would briefly empty the projected defaults of the next capture.
+  const epsgKey = defaultValueEpsgCodes(attributeForm).join(",");
+  const formRef = useRef(attributeForm);
+  formRef.current = attributeForm;
   useEffect(() => {
     let cancelled = false;
     setTransform(null);
-    loadDefaultValueTransform(attributeForm)
+    loadDefaultValueTransform(formRef.current)
       .then((loaded) => {
         // Wrapped: a bare function passed to a state setter is called as an updater.
         if (!cancelled && loaded) setTransform(() => loaded);
@@ -65,7 +72,7 @@ export function useCaptureDefaults({
     return () => {
       cancelled = true;
     };
-  }, [attributeForm]);
+  }, [epsgKey]);
 
   // The clock is read once per capture, so a default that mixes a field with
   // now() keeps its timestamp when the field is edited afterwards.

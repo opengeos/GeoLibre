@@ -205,7 +205,7 @@ export async function materializeQgisFormRelations(
       result.formNotes.push({
         layerName: relation.layerName,
         field: relation.field,
-        reason: tooLarge ? "relation-too-large" : "relation",
+        reason: tooLarge ? "relation-too-large" : loaded ? "relation-empty" : "relation",
       });
       continue;
     }
