@@ -12,8 +12,7 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
-import javax.net.ssl.SSLHandshakeException
-import javax.net.ssl.SSLPeerUnverifiedException
+import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -50,6 +49,10 @@ private const val RETRY_DELAY_MS = 5_000L
 /** Throttle for `connected` byte-count updates. */
 private const val STATUS_INTERVAL_MS = 1_000L
 private const val MAX_HEADER_LINE = 8192
+/** More response headers than any real caster sends. */
+private const val MAX_HEADERS = 100
+/** A fix older than this is not sent; receivers report at 1 Hz or faster. */
+private const val GGA_MAX_AGE_MS = 15_000L
 
 /** A caster answer that retrying cannot fix. */
 private class FatalNtripError(message: String, val code: String) : IOException(message)
@@ -59,10 +62,17 @@ private class FatalNtripError(message: String, val code: String) : IOException(m
  * NMEA stream. Network casters (VRS and nearest-base) need the rover position
  * to choose or synthesize a base, and the receiver's GGA is exactly that.
  */
-class GgaTracker {
+class GgaTracker(private val clock: () -> Long = System::currentTimeMillis) {
   private val line = StringBuilder()
-  @Volatile var latest: String? = null
-    private set
+  @Volatile private var fixed: String? = null
+  @Volatile private var fixedAt = 0L
+
+  /**
+   * The last fixed GGA, or null once the fix is lost or the receiver has
+   * gone quiet, so a caster is never sent a position the rover has left.
+   */
+  val latest: String?
+    get() = fixed?.takeIf { clock() - fixedAt <= GGA_MAX_AGE_MS }
 
   /** Feed raw receiver bytes (one char per byte, as the plugin reads them). */
   fun feed(bytes: ByteArray, count: Int) {
@@ -86,7 +96,12 @@ class GgaTracker {
     val quality = sentence.split(',').getOrNull(6) ?: return
     // A lost fix clears the position, so a VRS caster is not kept building
     // corrections for where the rover used to be.
-    latest = if (quality.isEmpty() || quality == "0") null else sentence + "\r\n"
+    if (quality.isEmpty() || quality == "0") {
+      fixed = null
+    } else {
+      fixedAt = clock()
+      fixed = sentence + "\r\n"
+    }
   }
 }
 
@@ -144,7 +159,7 @@ private class ChunkedInputStream(private val input: InputStream) : InputStream()
   private fun nextChunk(): Boolean {
     if (done) return false
     val sizeLine = readLine(input) ?: return false.also { done = true }
-    val size = sizeLine.substringBefore(';').trim().toIntOrNull(16)
+    val size = sizeLine.substringBefore(';').trim().toIntOrNull(16)?.takeIf { it >= 0 }
       ?: throw IOException("Malformed chunk size from caster: $sizeLine")
     if (size == 0) {
       done = true
@@ -256,9 +271,9 @@ class NtripClient(
       tls.sslParameters = tls.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
       try {
         tls.startHandshake()
-      } catch (e: SSLHandshakeException) {
-        throw tlsError(e)
-      } catch (e: SSLPeerUnverifiedException) {
+      } catch (e: SSLException) {
+        // Covers a bad or mismatched certificate and TLS against a plain
+        // port ("Unrecognized SSL message"), none of which a retry fixes.
         throw tlsError(e)
       }
       return tls
@@ -321,8 +336,10 @@ class NtripClient(
     while (true) {
       val line = readLine(input) ?: break
       if (line.isEmpty()) break
+      if (headers.size >= MAX_HEADERS) throw IOException("The caster sent too many response headers.")
       val colon = line.indexOf(':')
-      if (colon > 0) headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
+      // Header names, transfer codings and media types are all case-insensitive.
+      if (colon > 0) headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim().lowercase()
     }
     when (code) {
       200 -> {}

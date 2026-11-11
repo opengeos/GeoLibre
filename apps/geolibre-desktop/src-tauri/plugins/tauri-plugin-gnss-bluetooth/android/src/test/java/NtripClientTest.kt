@@ -117,11 +117,12 @@ class NtripClientTest {
 
   @Test
   fun ntrip2ChunkedStreamIsDecoded() {
+    // "Chunked" in any case: transfer codings are case-insensitive.
     val run = start(config(), expectBytes = rtcm.size)
     server.accept().use { sock ->
       readRequest(sock.getInputStream())
       sock.getOutputStream().apply {
-        write("HTTP/1.1 200 OK\r\nContent-Type: gnss/data\r\nTransfer-Encoding: chunked\r\n\r\n".toByteArray())
+        write("HTTP/1.1 200 OK\r\nContent-Type: gnss/data\r\nTransfer-Encoding: Chunked\r\n\r\n".toByteArray())
         write("3\r\n".toByteArray()); write(rtcm, 0, 3); write("\r\n".toByteArray())
         write("4\r\n".toByteArray()); write(rtcm, 3, 4); write("\r\n".toByteArray())
         flush()
@@ -200,6 +201,18 @@ class NtripClientTest {
   }
 
   @Test
+  fun ggaTrackerExpiresAFixWhenTheReceiverGoesQuiet() {
+    var now = 1_000_000L
+    val gga = GgaTracker { now }
+    val fixed = "\$GPGGA,174511.00,4807.038,N,01131.000,E,4,12,0.9,545.4,M,46.9,M,,*47\r\n".toByteArray()
+    gga.feed(fixed, fixed.size)
+    now += 10_000
+    assertNotNull(gga.latest)
+    now += 10_000
+    assertNull(gga.latest)
+  }
+
+  @Test
   fun base64MatchesRfc4648Vectors() {
     val cases = mapOf("" to "", "f" to "Zg==", "fo" to "Zm8=", "foo" to "Zm9v", "foobar" to "Zm9vYmFy")
     for ((input, expected) in cases) assertEquals(expected, base64(input.toByteArray()))
@@ -268,6 +281,22 @@ class NtripClientTest {
       assertTrue(run.gotBytes.await(5, TimeUnit.SECONDS))
     }
     assertArrayEquals(rtcm, run.received.toByteArray())
+  }
+
+  @Test
+  fun tlsAgainstAPlainTextCasterIsFatal() {
+    val run = start(config(host = "localhost", tls = true))
+    Thread {
+      try {
+        server.accept().use { sock ->
+          sock.getOutputStream().write("ICY 200 OK\r\n\r\n".toByteArray())
+          sock.getInputStream().read(ByteArray(4096))
+        }
+      } catch (_: Exception) {
+      }
+    }.start()
+    assertTrue(run.stopped.await(10, TimeUnit.SECONDS))
+    assertEquals("TLS_FAILED", run.statuses.first { it.state == "error" }.code)
   }
 
   @Test

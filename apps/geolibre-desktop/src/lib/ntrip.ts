@@ -43,11 +43,15 @@ export type NtripConfigProblem =
  * Trim the typed values into what the client sends: whitespace off the host
  * and mountpoint, a leading `/` off the mountpoint (casters list them both
  * ways), and a scheme or path off a pasted host (`http://caster.example:2101/`).
- * A port in the pasted host wins over the port field. Credentials are left
- * exactly as typed.
+ * A port in the pasted host wins over the port field, and an https:// scheme
+ * turns TLS on. Credentials are left exactly as typed.
  */
 export function normalizeNtripConfig(config: NtripConfig): NtripConfig {
-  let host = config.host.trim().replace(/^[a-z]+:\/\//i, "");
+  let host = config.host.trim();
+  // A pasted https:// URL asks for TLS; dropping the scheme must not drop
+  // that and send the login in clear text.
+  const tls = config.tls || /^https:\/\//i.test(host);
+  host = host.replace(/^[a-z]+:\/\//i, "");
   host = host.split("/")[0];
   let port = config.port;
   const withPort = /^(\[[^\]\s]+\]|[^:\s]+):(\d+)$/.exec(host);
@@ -59,6 +63,7 @@ export function normalizeNtripConfig(config: NtripConfig): NtripConfig {
     ...config,
     host,
     port,
+    tls,
     mountpoint: config.mountpoint.trim().replace(/^\/+/, ""),
   };
 }

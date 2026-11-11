@@ -29,6 +29,20 @@ function memoryStorage(): Storage {
 const base = { ...DEFAULT_NTRIP_CONFIG, host: "caster.example.com", mountpoint: "MOUNT" };
 
 describe("normalizeNtripConfig", () => {
+  it("turns TLS on for a pasted https:// URL", () => {
+    const n = normalizeNtripConfig({
+      ...base,
+      tls: false,
+      host: "https://caster.example.com:2102/",
+    });
+    assert.equal(n.host, "caster.example.com");
+    assert.equal(n.tls, true);
+    assert.equal(
+      normalizeNtripConfig({ ...base, tls: false, host: "http://caster.example.com" }).tls,
+      false,
+    );
+  });
+
   it("splits a port off a bracketed IPv6 host", () => {
     const n = normalizeNtripConfig({ ...base, host: "[2001:db8::1]:2102" });
     assert.equal(n.host, "[2001:db8::1]");

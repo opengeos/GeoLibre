@@ -91,14 +91,36 @@ private class Connection(val socket: BluetoothSocket, val channel: Channel) {
     }
   }
 
+  /** Serializes starting, stopping and closing, apart from the write lock. */
+  private val lifecycle = Any()
+
+  /**
+   * Replace the running session with [client] and start it, unless the
+   * receiver has closed meanwhile; false then, and the client never runs.
+   */
+  fun startCorrections(client: NtripClient): Boolean {
+    synchronized(lifecycle) {
+      if (closed) return false
+      ntrip?.stop()
+      ntrip = client
+      client.start()
+      return true
+    }
+  }
+
   fun stopCorrections() {
-    ntrip?.stop()
-    ntrip = null
+    synchronized(lifecycle) {
+      ntrip?.stop()
+      ntrip = null
+    }
   }
 
   fun close() {
-    closed = true
-    stopCorrections()
+    synchronized(lifecycle) {
+      closed = true
+      ntrip?.stop()
+      ntrip = null
+    }
     try {
       socket.close()
     } catch (_: IOException) {
@@ -391,7 +413,6 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
       invoke.reject("The caster host and mountpoint cannot contain spaces or control characters.", "FAILED")
       return
     }
-    connection.stopCorrections()
     val config = NtripConfig(
       host = host,
       port = args.port,
@@ -420,8 +441,10 @@ class GnssBluetoothPlugin(private val activity: Activity) : Plugin(activity) {
         }
       },
     )
-    connection.ntrip = client
-    client.start()
+    if (!connection.startCorrections(client)) {
+      invoke.reject("The receiver is not connected.", "NOT_CONNECTED")
+      return
+    }
     invoke.resolve()
   }
 
