@@ -1819,6 +1819,8 @@
     "nmeaBluetoothOff": "Bluetooth is turned off. Turn it on in Android's settings and try again.",
     "nmeaBluetoothPermissionDenied": "GeoLibre needs the Nearby devices permission to connect to a Bluetooth receiver. Allow it in Android's app settings and try again.",
     "nmeaBluetoothConnectFailed": "Could not connect to the receiver. Make sure it is switched on, in range, and not connected to another app.",
+    "nmeaBluetoothBusy": "The previous connection attempt is still running. Wait a few seconds and try again.",
+    "nmeaBluetoothNotPaired": "That receiver is no longer paired. Pair it again in Android's Bluetooth settings, then refresh the list.",
     "ntripTitle": "RTK corrections (NTRIP)",
     "ntripHost": "Caster host",
     "ntripPort": "Port",

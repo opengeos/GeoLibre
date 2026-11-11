@@ -154,6 +154,8 @@ export type NmeaErrorCode =
   | "bluetooth-off"
   | "permission-denied"
   | "connect-failed"
+  | "busy"
+  | "not-paired"
   | "failed";
 
 /** Why an NMEA connection could not be established or was lost. */
@@ -512,6 +514,8 @@ function nativeBluetoothError(err: unknown): NmeaError {
     DISABLED: "bluetooth-off",
     PERMISSION_DENIED: "permission-denied",
     CONNECT_FAILED: "connect-failed",
+    BUSY: "busy",
+    NOT_PAIRED: "not-paired",
   };
   return new NmeaError(message, codes[nativeCode] ?? "failed");
 }
