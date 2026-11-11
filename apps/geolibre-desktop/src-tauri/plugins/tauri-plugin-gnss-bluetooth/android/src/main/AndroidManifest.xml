@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 12+: connect to an already-paired device. No BLUETOOTH_SCAN:
+         the plugin only lists bonded devices and never starts discovery. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 and older: install-time permission for classic sockets. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <!-- Optional, so Play does not hide the app from devices without Bluetooth. -->
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+</manifest>

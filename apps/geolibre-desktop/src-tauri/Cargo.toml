@@ -46,6 +46,10 @@ tauri-plugin-fs = { version = "2", features = ["watch"] }
 # (the frontend only invokes it on mobile). This is a patched 2.3.2 release;
 # see vendor/tauri-plugin-geolocation/GEOLIBRE_PATCH.md before upgrading.
 tauri-plugin-geolocation = { path = "vendor/tauri-plugin-geolocation" }
+# Bluetooth GNSS receivers on Android (GeoLibre#3397): the WebView has no Web
+# Serial or Web Bluetooth, so a small in-repo plugin opens the receiver's Serial
+# Port Profile socket natively. Its commands live in Kotlin; desktop is inert.
+tauri-plugin-gnss-bluetooth = { path = "plugins/tauri-plugin-gnss-bluetooth" }
 tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
 # Persists the fs scope the folder picker grants, so Browser-panel pinned

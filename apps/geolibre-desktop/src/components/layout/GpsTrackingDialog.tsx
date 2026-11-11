@@ -29,6 +29,7 @@ import {
   Maximize2,
   Pause,
   Play,
+  RefreshCw,
   Save,
   Square,
   Trash2,
@@ -61,14 +62,18 @@ import {
 import { watchPosition } from "../../lib/geolocation";
 import type { NmeaStreamStats } from "../../lib/nmea";
 import {
+  androidBluetoothNmeaSupported,
   bluetoothNmeaSupported,
+  connectAndroidBluetoothNmea,
   connectBluetoothNmea,
   connectSerialNmea,
   DEFAULT_NMEA_BAUD_RATE,
+  listPairedBluetoothDevices,
   NMEA_BAUD_RATES,
   NmeaError,
   serialNmeaSupported,
   type NmeaConnection,
+  type PairedBluetoothDevice,
 } from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
@@ -114,6 +119,8 @@ const TRACK_COLOR = "#ef4444";
 const GPS_SETTINGS_STORAGE_KEY = "geolibre.gpsTracking.settings";
 /** Remembered baud rate, so reconnecting a receiver doesn't mean re-picking it. */
 const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
+/** Remembered paired receiver in the Android app, preselected on the next visit. */
+const NMEA_BLUETOOTH_DEVICE_STORAGE_KEY = "geolibre.gpsTracking.bluetoothDevice";
 
 /**
  * Where fixes come from: the device's own Geolocation API, or an external NMEA
@@ -122,8 +129,11 @@ const NMEA_BAUD_STORAGE_KEY = "geolibre.gpsTracking.nmeaBaudRate";
  */
 type PositionSource = "device" | "nmea";
 
-/** How an NMEA receiver is reached. See lib/nmea-source.ts for why both exist. */
-type NmeaTransport = "serial" | "bluetooth";
+/**
+ * How an NMEA receiver is reached. See lib/nmea-source.ts for why each exists;
+ * `android-bluetooth` is the native plugin the Android app uses (issue #3397).
+ */
+type NmeaTransport = "serial" | "bluetooth" | "android-bluetooth";
 
 function loadStoredBaudRate(): number {
   try {
@@ -266,6 +276,12 @@ function nmeaErrorText(err: NmeaError, t: TFunction): string {
       return t("gps.nmeaUnsupportedDevice");
     case "disconnected":
       return t("gps.nmeaDisconnected");
+    case "bluetooth-off":
+      return t("gps.nmeaBluetoothOff");
+    case "permission-denied":
+      return t("gps.nmeaBluetoothPermissionDenied");
+    case "connect-failed":
+      return t("gps.nmeaBluetoothConnectFailed");
     default:
       return err.message;
   }
@@ -739,7 +755,7 @@ export function GpsTrackingDialog({
    * chooser is a deliberate "never mind" and is not surfaced as an error.
    */
   const connectNmea = useCallback(
-    async (transport: NmeaTransport) => {
+    async (transport: NmeaTransport, device?: PairedBluetoothDevice) => {
       setError(null);
       setNotice(null);
       // Claim a generation synchronously, before the first await: closing the
@@ -774,10 +790,11 @@ export function GpsTrackingDialog({
             void disconnectNmea();
           },
         };
-        const conn =
-          transport === "serial"
-            ? await connectSerialNmea({ baudRate }, handlers)
-            : await connectBluetoothNmea(handlers);
+        let conn: NmeaConnection;
+        if (transport === "serial") conn = await connectSerialNmea({ baudRate }, handlers);
+        else if (transport === "android-bluetooth" && device)
+          conn = await connectAndroidBluetoothNmea(device, handlers);
+        else conn = await connectBluetoothNmea(handlers);
         if (isStale()) {
           // The user moved on while the device was still opening: release it
           // rather than resurrecting a session they already abandoned.
@@ -1032,7 +1049,7 @@ export function GpsTrackingDialog({
                     connecting={connecting}
                     connectedLabel={nmeaLabel}
                     stats={nmeaStats}
-                    onConnect={(transport) => void connectNmea(transport)}
+                    onConnect={(transport, device) => void connectNmea(transport, device)}
                   />
                 )}
               </div>
@@ -1253,7 +1270,7 @@ interface NmeaControlsProps {
   /** Device label while connected, null when not. */
   connectedLabel: string | null;
   stats: NmeaStreamStats | null;
-  onConnect: (transport: NmeaTransport) => void;
+  onConnect: (transport: NmeaTransport, device?: PairedBluetoothDevice) => void;
 }
 
 /**
@@ -1290,6 +1307,18 @@ function NmeaControls({
           </p>
         )}
       </div>
+    );
+  }
+
+  // The Android WebView has neither Web API, so the app reads receivers
+  // through the native plugin instead of showing two dead buttons.
+  if (androidBluetoothNmeaSupported()) {
+    return (
+      <AndroidBluetoothControls
+        connecting={connecting === "android-bluetooth"}
+        disabled={connecting !== null}
+        onConnect={(device) => onConnect("android-bluetooth", device)}
+      />
     );
   }
 
@@ -1343,6 +1372,127 @@ function NmeaControls({
       {!bluetoothOk && (
         <p className="text-xs text-muted-foreground">{t("gps.nmeaBluetoothUnsupported")}</p>
       )}
+    </div>
+  );
+}
+
+function loadStoredBluetoothAddress(): string | null {
+  try {
+    return window.localStorage.getItem(NMEA_BLUETOOTH_DEVICE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+interface AndroidBluetoothControlsProps {
+  connecting: boolean;
+  disabled: boolean;
+  onConnect: (device: PairedBluetoothDevice) => void;
+}
+
+/**
+ * Receiver picker for the Android app (issue #3397): lists the devices paired
+ * in Android's Bluetooth settings and connects to the chosen one over its
+ * Serial Port Profile through the native plugin. The list loads on mount,
+ * which is when Android asks for the Bluetooth permission the first time; the
+ * last receiver used is preselected so reconnecting is one tap.
+ */
+function AndroidBluetoothControls({
+  connecting,
+  disabled,
+  onConnect,
+}: AndroidBluetoothControlsProps) {
+  const { t } = useTranslation();
+  const [devices, setDevices] = useState<PairedBluetoothDevice[] | null>(null);
+  const [address, setAddress] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setListError(null);
+    try {
+      const paired = await listPairedBluetoothDevices();
+      if (!mountedRef.current) return;
+      setDevices(paired);
+      const stored = loadStoredBluetoothAddress();
+      setAddress((current) => {
+        const keep = [current, stored].find((a) => a && paired.some((d) => d.address === a));
+        return keep ?? paired[0]?.address ?? "";
+      });
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setDevices(null);
+      setListError(err instanceof NmeaError ? nmeaErrorText(err, t) : t("gps.nmeaConnectFailed"));
+      logGpsFailure("GPS: could not list paired Bluetooth devices", err, "warning");
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void refresh();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [refresh]);
+
+  const selected = devices?.find((d) => d.address === address) ?? null;
+
+  const connect = () => {
+    if (!selected) return;
+    try {
+      window.localStorage.setItem(NMEA_BLUETOOTH_DEVICE_STORAGE_KEY, selected.address);
+    } catch {
+      // Best-effort; the user just picks the receiver again next time.
+    }
+    onConnect(selected);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="gps-nmea-bt-device" className="text-xs font-normal text-muted-foreground">
+        {t("gps.nmeaPairedDevice")}
+      </Label>
+      <div className="flex gap-2">
+        <Select
+          id="gps-nmea-bt-device"
+          className="min-w-0 flex-1"
+          value={address}
+          disabled={loading || !devices?.length}
+          onChange={(e) => setAddress(e.target.value)}
+        >
+          {devices?.length ? (
+            devices.map((d) => (
+              <option key={d.address} value={d.address}>
+                {d.type === "le" ? t("gps.nmeaDeviceBleOnly", { name: d.name }) : d.name}
+              </option>
+            ))
+          ) : (
+            <option value="">
+              {loading ? t("gps.nmeaLoadingDevices") : t("gps.nmeaNoPairedDevices")}
+            </option>
+          )}
+        </Select>
+        <Button
+          size="icon"
+          variant="outline"
+          disabled={loading}
+          onClick={() => void refresh()}
+          aria-label={t("gps.nmeaRefreshDevices")}
+          title={t("gps.nmeaRefreshDevices")}
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+      <Button size="sm" disabled={!selected || disabled} onClick={connect}>
+        <Bluetooth className="me-1 h-3.5 w-3.5" />
+        {connecting ? t("gps.nmeaConnecting") : t("gps.nmeaConnectReceiver")}
+      </Button>
+      {listError && <p className="text-xs text-destructive">{listError}</p>}
+      <p className="text-xs text-muted-foreground">{t("gps.nmeaAndroidBluetoothHint")}</p>
     </div>
   );
 }

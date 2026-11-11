@@ -498,6 +498,7 @@ pub fn run() {
         // revisit if a narrower per-source scope or a revoke path is wanted.
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_geolocation::init())
+        .plugin(tauri_plugin_gnss_bluetooth::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init());
