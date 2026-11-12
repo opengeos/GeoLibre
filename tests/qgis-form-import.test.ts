@@ -679,6 +679,15 @@ describe("QGIS project symbology", () => {
           `<labeling type="simple"><settings><text-style fieldName="upper(name)" isExpression="1"/></settings></labeling>`,
         )}
         ${layer(
+          "clusteredSingle",
+          `<renderer-v2 type="pointCluster"><renderer-v2 type="singleSymbol"><symbols><symbol>
+             <layer class="SimpleMarker"><Option name="color" value="${color(200, 10, 10)}"/>
+             <Option name="size" value="4"/></layer>
+           </symbol></symbols></renderer-v2></renderer-v2>`,
+          `<labeling type="simple"><settings><text-style fieldName="&quot;name&quot;" isExpression="1"/></settings></labeling>`,
+        )}
+        ${layer("unreadable", `<renderer-v2 type="categorizedSymbol" attr="crop"/>`)}
+        ${layer(
           "plain",
           `<renderer-v2 type="singleSymbol"><symbols><symbol><layer class="SimpleFill">
              <Option name="color" value="${color(10, 20, 30)}"/>
@@ -730,6 +739,29 @@ describe("QGIS project symbology", () => {
     assert.ok(notes.some((note) => /expression/i.test(note.message) && /rule/i.test(note.message)));
     assert.ok(notes.some((note) => /Labels built from a QGIS expression/.test(note.message)));
     assert.equal(style.labels.enabled, false);
+  });
+
+  it("reads a clustered single symbol, and a label that is only a field reference", () => {
+    const result = styled();
+    const { style } = byId(result, "clusteredSingle");
+    assert.equal(style.vectorStyleMode, "single");
+    assert.equal(style.markerColor, "#c80a0a");
+    // `"name"` typed in expression mode is still the field `name`.
+    assert.equal(style.labels.enabled, true);
+    assert.equal(style.labels.field, "name");
+    assert.deepEqual(
+      result.styleNotes.filter((note) => note.layerName === "clusteredSingle"),
+      [],
+    );
+  });
+
+  it("never falls back to the default style without saying so", () => {
+    const result = styled();
+    assert.equal(byId(result, "unreadable").style.vectorStyleMode, "single");
+    assert.equal(
+      result.styleNotes.filter((note) => note.layerName === "unreadable").length > 0,
+      true,
+    );
   });
 
   it("keeps the direct read for a single symbol, including a field label", () => {

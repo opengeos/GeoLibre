@@ -789,21 +789,30 @@ const CLASSIFIED_RENDERERS = new Set(["categorizedSymbol", "graduatedSymbol", "R
  */
 function parseLayerSymbology(element: Element): { style: LayerStyle; warnings: string[] } {
   const warnings: string[] = [];
-  const base = parseLayerStyle(element, warnings);
   let renderer = element.querySelector(":scope > renderer-v2");
   for (let depth = 0; renderer && depth < 4; depth += 1) {
     if (!WRAPPER_RENDERERS.has(renderer.getAttribute("type") ?? "")) break;
     renderer = renderer.querySelector(":scope > renderer-v2");
   }
+  // The unwrapped renderer is what the direct read sees too, so a clustered
+  // single symbol keeps its color and size.
+  const base = parseLayerStyle(element, renderer, warnings);
   if (!renderer || !CLASSIFIED_RENDERERS.has(renderer.getAttribute("type") ?? "")) {
     return { style: base, warnings };
   }
   const xml = elementXml(renderer);
   // Far beyond any real renderer; a crafted project must not make the style
   // reader chew through megabytes of XML per layer.
-  if (!xml || xml.length > MAX_RENDERER_XML_LENGTH) return { style: base, warnings };
+  if (!xml || xml.length > MAX_RENDERER_XML_LENGTH) {
+    warnings.push("The layer's renderer could not be read; the default style was used.");
+    return { style: base, warnings };
+  }
   const imported = importStyleText(`<qgis>${xml}</qgis>`);
   warnings.push(...imported.warnings);
+  // Never a silent default: a renderer that yielded nothing says so.
+  if (!imported.ok && imported.warnings.length === 0) {
+    warnings.push("The layer's renderer could not be read; the default style was used.");
+  }
   // Labels come from the direct read above (the fragment carries none).
   return { style: imported.ok ? imported.apply(base) : base, warnings };
 }
@@ -816,9 +825,12 @@ function elementXml(element: Element): string {
   return element.outerHTML ?? "";
 }
 
-function parseLayerStyle(element: Element, warnings: string[] = []): LayerStyle {
+function parseLayerStyle(
+  element: Element,
+  renderer: Element | null,
+  warnings: string[],
+): LayerStyle {
   const style: LayerStyle = structuredClone(DEFAULT_LAYER_STYLE);
-  const renderer = element.querySelector(":scope > renderer-v2");
   // Labels are independent of the renderer type.
   if (renderer?.getAttribute("type") !== "singleSymbol") {
     return applySimpleLabels(element, style, warnings);
@@ -861,13 +873,19 @@ function applySimpleLabels(element: Element, style: LayerStyle, warnings: string
   const field = textStyle?.getAttribute("fieldName")?.trim();
   // `fieldName` holds a QGIS expression when isExpression is set. Used as a
   // field name it would label every feature with nothing.
-  if (field && textStyle?.getAttribute("isExpression") === "1") {
+  const isExpression = textStyle?.getAttribute("isExpression") === "1";
+  // An expression that is only a field reference (`name` or `"name"`), which
+  // QGIS also writes in expression mode, is still a plain field label.
+  const reference = isExpression ? /^(?:"((?:[^"]|"")+)"|([A-Za-z_]\w*))$/.exec(field ?? "") : null;
+  if (field && isExpression && !reference) {
     warnings.push("Labels built from a QGIS expression were not imported.");
     return style;
   }
   if (field) {
     style.labels.enabled = true;
-    style.labels.field = field;
+    style.labels.field = reference
+      ? (reference[1]?.replaceAll('""', '"') ?? reference[2] ?? field)
+      : field;
     const color = qgisColor(textStyle?.getAttribute("textColor") ?? undefined);
     if (color) style.labels.color = color.color;
     const sizeValue = optionalNumber(textStyle?.getAttribute("fontSize") ?? undefined);
