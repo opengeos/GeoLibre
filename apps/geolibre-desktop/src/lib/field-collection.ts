@@ -17,6 +17,7 @@ import {
   PHOTO_FULL_PROPERTY,
   PHOTO_PROPERTY,
   type AttributeFormConfig,
+  type AttributeFormSection,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from "geojson";
 
@@ -28,7 +29,11 @@ export { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY };
 export type FieldType = "text" | "number" | "date" | "choice";
 
 /** Geometry a collection layer captures. A layer holds one geometry type. */
-export type GeometryType = "point" | "line" | "polygon";
+/**
+ * `"none"` is a table: its records have no location (a list of reviews or
+ * photos linked to a point), so capture goes straight to the form.
+ */
+export type GeometryType = "point" | "line" | "polygon" | "none";
 
 /** A captured coordinate as [lng, lat]. */
 export type Vertex = [number, number];
@@ -175,13 +180,14 @@ export function getSchema(layer: CollectionLayerLike): CollectionSchema {
 /** Read a layer's captured geometry type, defaulting to `point`. */
 export function getGeometryType(layer: CollectionLayerLike): GeometryType {
   const g = layer.metadata?.[COLLECTION_GEOMETRY_KEY];
-  return g === "line" || g === "polygon" ? g : "point";
+  return g === "line" || g === "polygon" || g === "none" ? g : "point";
 }
 
 /** Minimum vertices a geometry needs before it can be finished/saved. */
 export function minVertices(geometry: GeometryType): number {
   if (geometry === "polygon") return 3;
   if (geometry === "line") return 2;
+  if (geometry === "none") return 0;
   return 1;
 }
 
@@ -400,6 +406,10 @@ export function buildGeometryFeature(
   coords: Vertex[],
   properties: Record<string, unknown>,
 ): Feature {
+  if (geometry === "none") {
+    // GeoJSON allows a feature without geometry; the typings do not say so.
+    return { type: "Feature", geometry: null, properties } as unknown as Feature;
+  }
   if (geometry === "line") return makeLineFeature(coords, properties);
   if (geometry === "polygon") return makePolygonFeature(coords, properties);
   const pt = coords[0];
@@ -410,4 +420,103 @@ export function buildGeometryFeature(
 /** Return a new FeatureCollection with `feature` appended (immutably). */
 export function appendFeature(fc: FeatureCollection, feature: Feature): FeatureCollection {
   return { type: "FeatureCollection", features: [...fc.features, feature] };
+}
+
+/** A run of form fields shown together, under `title` when it has one. */
+export interface FormFieldGroup {
+  title: string;
+  fields: CollectionField[];
+}
+
+/**
+ * Arrange a capture form's fields under the form's sections (the tabs and
+ * groups of a QGIS drag-and-drop layout).
+ *
+ * @param fields - The schema's fields, in schema order.
+ * @param sections - The form's sections, if it has any.
+ * @returns Groups in display order: the sections, then one untitled group of
+ *   the fields no section lists. Without sections, one untitled group.
+ */
+export function orderFormFields(
+  fields: readonly CollectionField[],
+  sections: readonly AttributeFormSection[] | undefined,
+): FormFieldGroup[] {
+  if (!sections?.length) return [{ title: "", fields: [...fields] }];
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  const placed = new Set<string>();
+  const groups: FormFieldGroup[] = [];
+  for (const section of sections) {
+    const members = section.fields.flatMap((key) => {
+      const field = byKey.get(key);
+      if (!field || placed.has(key)) return [];
+      placed.add(key);
+      return [field];
+    });
+    if (members.length === 0) continue;
+    // A group interrupted by a nested group whose fields are all elsewhere
+    // would otherwise repeat its own heading back to back.
+    const previous = groups[groups.length - 1];
+    if (previous && previous.title === section.title && section.title !== "") {
+      previous.fields.push(...members);
+    } else groups.push({ title: section.title, fields: members });
+  }
+  const rest = fields.filter((field) => !placed.has(field.key));
+  return rest.length > 0 ? [...groups, { title: "", fields: rest }] : groups;
+}
+
+/** A record just saved, kept so its child records can be added next. */
+export interface SavedParent {
+  layerId: string;
+  properties: Record<string, unknown>;
+}
+
+/** A child layer a record can be added to, with the value that links it. */
+export interface RelatedRecordTarget {
+  layerId: string;
+  layerName: string;
+  /** The child's field that holds the link. */
+  field: string;
+  /** That field's label, to tell two links into the same layer apart. */
+  fieldLabel: string;
+  /** The parent's key, as the raw form string to pre-fill. */
+  value: string;
+}
+
+/** The parts of a layer {@link relatedRecordTargets} reads. */
+export interface RelatedLayerLike extends CollectionLayerLike {
+  id: string;
+  name: string;
+  attributeForm?: AttributeFormConfig;
+}
+
+/**
+ * Find the collection layers whose form links to a saved record's layer.
+ *
+ * @param parent - The record just saved.
+ * @param layers - The project's layers.
+ * @returns One target per child field that references the parent's layer and
+ *   whose key the saved record actually carries.
+ */
+export function relatedRecordTargets(
+  parent: SavedParent,
+  layers: readonly RelatedLayerLike[],
+): RelatedRecordTarget[] {
+  const targets: RelatedRecordTarget[] = [];
+  for (const layer of layers) {
+    if (layer.id === parent.layerId || !isCollectionLayer(layer)) continue;
+    for (const field of layer.attributeForm?.fields ?? []) {
+      const relation = field.valueRelation;
+      if (relation?.layerId !== parent.layerId) continue;
+      const key = parent.properties[relation.keyField];
+      if (key == null || key === "") continue;
+      targets.push({
+        layerId: layer.id,
+        layerName: layer.name,
+        field: field.field,
+        fieldLabel: field.alias?.trim() || field.field,
+        value: String(key),
+      });
+    }
+  }
+  return targets;
 }

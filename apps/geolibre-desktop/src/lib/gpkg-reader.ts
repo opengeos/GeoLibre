@@ -318,12 +318,15 @@ export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
  * @param bytes - The GeoPackage file.
  * @param table - Table name; must be a user data table registered in
  *   `gpkg_contents`. Blank reads the first registered one.
- * @returns Up to {@link GEOPACKAGE_TABLE_ROW_LIMIT} rows.
+ * @param limit - Most rows to return; defaults to
+ *   {@link GEOPACKAGE_TABLE_ROW_LIMIT}.
+ * @returns Up to `limit` rows.
  */
 export function readGeoPackageTableRowsSync(
   SQL: SqlJsStatic,
   bytes: Uint8Array,
   table: string,
+  limit: number = GEOPACKAGE_TABLE_ROW_LIMIT,
 ): Record<string, unknown>[] {
   const db = new SQL.Database(bytes);
   try {
@@ -341,7 +344,9 @@ export function readGeoPackageTableRowsSync(
     const resolved = match[0]?.values[0]?.[0];
     if (resolved == null) throw new Error(`No table named "${table}" found in this GeoPackage.`);
     const result = db.exec(
-      `SELECT * FROM ${quoteIdentifier(String(resolved))} LIMIT ${GEOPACKAGE_TABLE_ROW_LIMIT}`,
+      `SELECT * FROM ${quoteIdentifier(String(resolved))} LIMIT ${
+        Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : GEOPACKAGE_TABLE_ROW_LIMIT
+      }`,
     );
     if (result.length === 0) return [];
     const { columns, values } = result[0];
@@ -362,6 +367,7 @@ export function readGeoPackageTableRowsSync(
 export async function loadGeoPackageTableRows(
   bytes: Uint8Array,
   table: string,
+  limit?: number,
 ): Promise<Record<string, unknown>[]> {
-  return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table);
+  return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table, limit);
 }

@@ -24,7 +24,15 @@ interface AttributeFormSectionProps {
   layer: GeoLibreLayer;
 }
 
-const WIDGETS: AttributeFormWidget[] = ["text", "number", "range", "checkbox", "date", "valueMap"];
+const WIDGETS: AttributeFormWidget[] = [
+  "text",
+  "number",
+  "range",
+  "checkbox",
+  "date",
+  "valueMap",
+  "attachment",
+];
 
 /** Blank designer draft; `field` empty means "no field picked yet". */
 interface FieldDraft {
@@ -247,16 +255,31 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     if (previous?.valueType && previous.widget === config.widget) {
       config.valueType = previous.valueType;
     }
+    // Likewise the link to the layer a dropdown reads its entries from. The
+    // entries shown in the designer are that layer's snapshot, not a list the
+    // author typed, so it survives an edit that keeps the widget; choosing
+    // another widget is how the author turns the dropdown off.
+    if (previous?.valueRelation && previous.widget === config.widget) {
+      config.valueRelation = previous.valueRelation;
+    }
     const fields = configs.some((entry) => entry.field === target)
       ? configs.map((entry) => (entry.field === target ? config : entry))
       : [...configs.filter((entry) => entry.field !== config.field), config];
-    setLayerAttributeForm(layer.id, { fields });
+    // Spread: the form also carries its sections, which have no editor here.
+    setLayerAttributeForm(layer.id, { ...layer.attributeForm, fields });
     closeForm();
   };
 
   const removeConfig = (field: string) => {
     const remaining = configs.filter((entry) => entry.field !== field);
-    setLayerAttributeForm(layer.id, remaining.length ? { fields: remaining } : undefined);
+    // The sections outlive the last configured field: other fields still
+    // sit in them.
+    setLayerAttributeForm(
+      layer.id,
+      remaining.length || layer.attributeForm?.sections?.length
+        ? { ...layer.attributeForm, fields: remaining }
+        : undefined,
+    );
   };
 
   const update = (patch: Partial<FieldDraft>) => {

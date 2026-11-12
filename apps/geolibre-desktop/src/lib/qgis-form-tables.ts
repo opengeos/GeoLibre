@@ -5,6 +5,7 @@
  * imports and runs under `node --test`.
  */
 import { hasPathTraversal } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import { loadGeoPackageTableRows } from "./gpkg-reader";
 import { localFileSizeBytes, readLocalFileBytes } from "./file-io/local-fs";
 import { isAbsoluteLocalPath, isTauri } from "./tauri-io";
@@ -24,6 +25,8 @@ const MAX_LOOKUP_FILE_BYTES = 256 * 1024 * 1024;
 export async function readQgisFormTable(
   sourcePath: string,
   table: string,
+  limit?: number,
+  maxFileBytes: number = MAX_LOOKUP_FILE_BYTES,
 ): Promise<Record<string, unknown>[]> {
   if (!isTauri()) throw new Error("Local files are only readable in GeoLibre Desktop.");
   if (
@@ -34,11 +37,69 @@ export async function readQgisFormTable(
     hasPathTraversal(sourcePath) ||
     !/\.gpkg$/i.test(sourcePath)
   ) {
-    throw new Error("Only tables in a local GeoPackage can fill a dropdown list.");
+    throw new Error("Only tables in a local GeoPackage can be read.");
   }
   const size = await localFileSizeBytes(sourcePath);
-  if (size !== undefined && size > MAX_LOOKUP_FILE_BYTES) {
-    throw new Error("The GeoPackage is too large to read a dropdown list from.");
+  if (size !== undefined && size > maxFileBytes) {
+    throw new Error("The GeoPackage is too large to read a table from.");
   }
-  return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table);
+  return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table, limit);
+}
+
+/** Most rows read into a table layer; a table is a list, not a dataset. */
+export const TABLE_LAYER_ROW_LIMIT = 100_000;
+
+/**
+ * Read a geometry-less GeoPackage table as the features of a table layer:
+ * one feature per row, with the row as its properties and no geometry.
+ *
+ * @param sourcePath - Absolute path of the GeoPackage.
+ * @param table - Table name inside it.
+ * @returns The geometry-less features, and whether the table had more rows
+ *   than {@link TABLE_LAYER_ROW_LIMIT}.
+ */
+export async function readTableLayerFeatures(
+  sourcePath: string,
+  table: string,
+): Promise<{ geojson: FeatureCollection; truncated: boolean }> {
+  // One row past the limit tells a full table from one that was cut short.
+  const rows = await readQgisFormTable(sourcePath, table, TABLE_LAYER_ROW_LIMIT + 1);
+  const truncated = rows.length > TABLE_LAYER_ROW_LIMIT;
+  return {
+    truncated,
+    geojson: {
+      type: "FeatureCollection",
+      // GeoJSON allows a null geometry; the typings want a Geometry.
+      features: rows
+        .slice(0, TABLE_LAYER_ROW_LIMIT)
+        .map((properties) => ({ type: "Feature", geometry: null, properties })),
+    } as unknown as FeatureCollection,
+  };
+}
+
+/** Largest GeoPackage read just to keep a fallback list behind a live dropdown. */
+const MAX_FALLBACK_FILE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The table reader the QGIS importer uses for dropdown snapshots. An optional
+ * read (a fallback behind a dropdown that reads its layer live) is only taken
+ * from a small file, so a large GeoPackage is not loaded for a list that is
+ * normally never shown.
+ *
+ * @param sourcePath - Absolute path of the GeoPackage.
+ * @param table - Table name inside it.
+ * @param options.optional - Whether the result is only a fallback.
+ * @returns The table's rows.
+ */
+export function readQgisSnapshotTable(
+  sourcePath: string,
+  table: string,
+  options: { optional?: boolean } = {},
+): Promise<Record<string, unknown>[]> {
+  return readQgisFormTable(
+    sourcePath,
+    table,
+    undefined,
+    options.optional ? MAX_FALLBACK_FILE_BYTES : undefined,
+  );
 }

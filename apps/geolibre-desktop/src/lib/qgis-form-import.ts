@@ -10,13 +10,15 @@
  * needs the referenced table's rows.
  */
 import {
-  evaluateQgisExpression,
-  parseQgisExpression,
+  buildRelationValueMap,
+  MAX_RELATION_ENTRIES,
   qgisExpressionProblem,
   qgisExpressionToMapLibre,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
+  type AttributeFormSection,
   type AttributeFormValueMapEntry,
+  type RelationValueMap,
 } from "@geolibre/core";
 import {
   RESERVED_PROPERTY_KEYS,
@@ -145,6 +147,7 @@ function attributeMap(parent: Element | null, selector: string, key: string, val
 /** Map a QGIS layer's `geometry` attribute to a capture geometry. */
 export function qgisCaptureGeometry(element: Element): GeometryType | null {
   const geometry = element.getAttribute("geometry")?.toLowerCase();
+  if (geometry === "no geometry") return "none";
   if (geometry === "point") return "point";
   if (geometry === "line") return "line";
   if (geometry === "polygon") return "polygon";
@@ -299,9 +302,17 @@ export function parseQgisLayerForm(
         }
         break;
       }
+      case "ExternalResource":
+        // A photo field. The picture is kept with the feature instead of as a
+        // file beside the project, so the form offers a picker, not a path.
+        if (isImageResource(options, name, aliases.get(name))) {
+          config.widget = "attachment";
+          meaningful = true;
+        }
+        break;
       case "Hidden":
         // Still captured (a hidden field usually holds a default), not shown.
-        config.visibilityExpression = '["literal", false]';
+        config.visibilityExpression = HIDDEN_EXPRESSION;
         meaningful = true;
         break;
       default:
@@ -371,27 +382,119 @@ export function parseQgisLayerForm(
     configured ||= meaningful || relations.some((relation) => relation.field === name);
   }
 
+  // A drag-and-drop layout decides which fields the form shows, in what
+  // order, and under which tab or group. A field it leaves out is not shown,
+  // though it is still saved (it usually carries a default, such as an ID).
+  const layout = parseFormLayout(element);
+  if (layout) {
+    const order = new Map(layout.order.map((field, index) => [field, index]));
+    const rank = (field: string) => order.get(field) ?? Number.MAX_SAFE_INTEGER;
+    for (const config of fields) {
+      if (!order.has(config.field) && !config.visibilityExpression) {
+        config.visibilityExpression = HIDDEN_EXPRESSION;
+        configured = true;
+      }
+    }
+    // Stable: fields outside the layout keep their own order after it. The
+    // form's field order is also the order defaults are evaluated in, so it
+    // is left alone; only the capture schema, which drives display, moves.
+    schemaFields.sort((a, b) => rank(a.key) - rank(b.key));
+    // A layout is form setup in its own right, even one with no tabs and
+    // only plain text fields: it makes the layer something to capture into.
+    configured = true;
+  }
+
   return {
-    ...(configured ? { form: { fields } } : {}),
+    ...(configured
+      ? {
+          form: {
+            fields,
+            // Untitled runs alone say nothing the field order does not.
+            ...(layout?.sections.some((section) => section.title !== "")
+              ? { sections: layout.sections }
+              : {}),
+          },
+        }
+      : {}),
     schema: { fields: schemaFields },
     relations,
     notes,
   };
 }
 
-/** Most dropdown entries a relation may produce before it is left as text. */
-export const MAX_RELATION_ENTRIES = 1000;
+/** A MapLibre expression that is always false: the field is never shown. */
+const HIDDEN_EXPRESSION = '["literal", false]';
 
-/** A relation dropdown's entries and how its stored values are typed. */
-export interface RelationValueMap {
-  entries: AttributeFormValueMapEntry[];
-  /**
-   * `"string"` when the key column holds text, so a code such as `"01"` or
-   * `"2"` is stored as text like the rows already in the layer; `"number"`
-   * when every key is numeric.
-   */
-  valueType: "string" | "number";
+/** Deepest tab/group nesting read from a form layout. */
+const MAX_LAYOUT_DEPTH = 8;
+
+/**
+ * Read a drag-and-drop form layout (`<editorlayout>tablayout</editorlayout>`).
+ *
+ * @param element - The layer's `<maplayer>` element.
+ * @returns The fields in display order and the titled tabs/groups they sit
+ *   in, or `null` when the layer uses the auto-generated layout.
+ */
+function parseFormLayout(
+  element: Element,
+): { order: string[]; sections: AttributeFormSection[] } | null {
+  const layoutType = element.querySelector(":scope > editorlayout")?.textContent?.trim();
+  const root = element.querySelector(":scope > attributeEditorForm");
+  if (layoutType !== "tablayout" || !root) return null;
+  const order: string[] = [];
+  const sections: AttributeFormSection[] = [];
+  const seen = new Set<string>();
+  const walk = (container: Element, path: string[], depth: number): void => {
+    let section: AttributeFormSection | null = null;
+    for (const child of Array.from(container.children)) {
+      if (child.tagName === "attributeEditorField") {
+        const name = child.getAttribute("name") ?? "";
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        order.push(name);
+        // One section per run of fields, so a group's fields that follow a
+        // nested group are not folded back above it. Fields outside any
+        // group form an untitled run, which keeps them where the layout put
+        // them (between two tabs, say) instead of after every group.
+        if (!section) {
+          section = { title: path.join(" \u203a "), fields: [] };
+          sections.push(section);
+        }
+        section.fields.push(name);
+      } else if (child.tagName === "attributeEditorContainer" && depth < MAX_LAYOUT_DEPTH) {
+        section = null;
+        const title = child.getAttribute("name")?.trim() ?? "";
+        walk(child, title ? [...path, title] : path, depth + 1);
+      }
+    }
+  };
+  walk(root, [], 0);
+  return order.length > 0 ? { order, sections } : null;
 }
+
+/**
+ * A whole name, not a fragment: `picture` and `Photos` are photo fields,
+ * `photo_path`, `image_url` and `photographer` are not.
+ */
+const IMAGE_FIELD_NAME = /^\s*(?:photos?|pictures?|images?|fotos?|bild(?:er)?|img)\s*$/i;
+const IMAGE_FILTER = /\.(?:jpe?g|png|gif|webp|heic|bmp|tiff?)\b/i;
+
+/** Whether an Attachment (External Resource) widget holds a picture. */
+function isImageResource(
+  options: { [key: string]: OptionValue },
+  name: string,
+  alias: string | undefined,
+): boolean {
+  // DocumentViewer 1 is QGIS's image viewer.
+  return (
+    optionText(options, "DocumentViewer") === "1" ||
+    IMAGE_FILTER.test(optionText(options, "FileWidgetFilter")) ||
+    IMAGE_FIELD_NAME.test(name) ||
+    IMAGE_FIELD_NAME.test(alias ?? "")
+  );
+}
+
+export { MAX_RELATION_ENTRIES };
 
 /**
  * Turn a referenced table's rows into dropdown entries.
@@ -408,30 +511,11 @@ export function relationValueMap(
   relation: QgisFormRelation,
   displayExpression?: string,
 ): RelationValueMap {
-  const seen = new Set<string>();
-  const entries: AttributeFormValueMapEntry[] = [];
-  const source = relation.useDisplayExpression ? displayExpression?.trim() : undefined;
-  // Parsed once: the same expression labels every row.
-  const parsed = source ? parseQgisExpression(source) : null;
-  const expression = parsed?.ok ? parsed.node : null;
-  let numeric = true;
-  for (const row of rows) {
-    const raw = row[relation.keyField];
-    if (raw == null || raw === "") continue;
-    const value = String(raw);
-    if (seen.has(value)) continue;
-    seen.add(value);
-    if (typeof raw !== "number" && typeof raw !== "bigint") numeric = false;
-    let label: unknown = relation.labelField ? row[relation.labelField] : undefined;
-    if (label == null && expression) {
-      const result = evaluateQgisExpression(expression, { properties: row });
-      if (result.ok) label = result.value;
-    }
-    const text = label == null ? "" : String(label).trim();
-    entries.push(text && text !== value ? { value, label: text } : { value });
-  }
-  entries.sort((a, b) =>
-    (a.label ?? a.value).localeCompare(b.label ?? b.value, undefined, { numeric: true }),
-  );
-  return { entries, valueType: numeric ? "number" : "string" };
+  return buildRelationValueMap(rows, {
+    keyField: relation.keyField,
+    ...(relation.labelField ? { labelField: relation.labelField } : {}),
+    ...(relation.useDisplayExpression && displayExpression
+      ? { labelExpression: displayExpression }
+      : {}),
+  });
 }

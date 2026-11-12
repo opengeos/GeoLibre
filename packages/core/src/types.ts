@@ -918,7 +918,43 @@ export interface LayerJoin {
 }
 
 /** Edit-widget kinds the Attribute Form designer can assign to a field. */
-export type AttributeFormWidget = "text" | "number" | "range" | "checkbox" | "date" | "valueMap";
+export type AttributeFormWidget =
+  | "text"
+  | "number"
+  | "range"
+  | "checkbox"
+  | "date"
+  | "valueMap"
+  | "attachment";
+
+/**
+ * Where a dropdown reads its entries from when they are another layer's rows
+ * (a QGIS Value Relation or Relation Reference). Resolved against that
+ * layer's current features each time a form is shown, so a record added to
+ * the referenced layer is selectable at once.
+ */
+export interface AttributeFormValueRelation {
+  /** Id of the referenced layer in the same project. */
+  layerId: string;
+  /** Property of the referenced features that is stored on this field. */
+  keyField: string;
+  /** Property shown as the entry's label. */
+  labelField?: string;
+  /**
+   * QGIS expression evaluated per referenced feature for the label, used when
+   * there is no {@link labelField} (a Relation Reference shows the referenced
+   * layer's display expression).
+   */
+  labelExpression?: string;
+}
+
+/** A run of fields in a form: a tab or group box in QGIS, or the fields between two. */
+export interface AttributeFormSection {
+  /** Heading shown above the run; empty for none. */
+  title: string;
+  /** Field names, in the order they are shown. */
+  fields: string[];
+}
 
 /** One selectable entry of a `valueMap` widget (stored value + display label). */
 export interface AttributeFormValueMapEntry {
@@ -947,8 +983,14 @@ export interface AttributeFormFieldConfig {
    * exempt: unchecked is a valid state, not a missing value.
    */
   required?: boolean;
-  /** Dropdown entries for the `valueMap` widget. */
+  /**
+   * Dropdown entries for the `valueMap` widget. With a {@link valueRelation}
+   * these are only the fallback used while the referenced layer is missing or
+   * has not loaded.
+   */
   valueMap?: AttributeFormValueMapEntry[];
+  /** Read the dropdown's entries from another layer's features. */
+  valueRelation?: AttributeFormValueRelation;
   /**
    * Declared storage type of the field. When set, coercion follows it instead
    * of guessing from the value map (a text field whose codes are "1" and "2"
@@ -992,6 +1034,13 @@ export interface AttributeFormFieldConfig {
 /** The Attribute Form designer's whole per-layer configuration. */
 export interface AttributeFormConfig {
   fields: AttributeFormFieldConfig[];
+  /**
+   * Runs of fields the capture form shows in order, each under its title. A
+   * run with an empty title has no heading (fields that sit between two
+   * groups). A field no section lists is shown after them. Absent means one
+   * flat list.
+   */
+  sections?: AttributeFormSection[];
 }
 
 /** Point of contact recorded in a layer's {@link LayerDescriptiveMetadata}. */

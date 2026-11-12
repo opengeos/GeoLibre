@@ -136,6 +136,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { useResolvedAttributeForm } from "../../hooks/useResolvedAttributeForm";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
@@ -807,7 +808,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Attribute Form designer config: per-column edit widgets plus constraint
   // validation of drafted rows. DuckDB layers keep the plain text editor —
   // the designer is only offered for store-backed geojson layers.
-  const attributeForm = isDuckDBLayer ? undefined : layer?.attributeForm;
+  // Relation dropdowns are filled live from the layers they reference.
+  const attributeForm = useResolvedAttributeForm(isDuckDBLayer ? undefined : layer?.attributeForm);
   // Constraints the layer's data service publishes (ArcGIS coded-value and
   // range domains, per type/subtype), merged per record with the designer
   // config. Derived from metadata the layer already holds.

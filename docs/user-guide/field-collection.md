@@ -160,6 +160,19 @@ A QGIS or QField project brings its forms with it: after
 [importing the project](projects.md#importing-a-qgis-project), every layer
 that has a form is already a collection layer, with nothing to set up here.
 
+### Linked records and photos
+
+A project imported from QGIS or QField can link layers together: several reviews, samples or photos that belong to one point. In GeoLibre the linked layer is usually a table layer (records with no location of their own).
+
+1. Capture and save the point as usual.
+2. Under the confirmation, **Add to _layer_** appears for each layer that links to the one you just saved into. Choose it.
+3. The form of the linked layer opens with the link to your point already filled in. There is no location to pick. Fill it in and **Save record**.
+4. The form stays on the linked layer with the same link, so you can add the next record (a second photo) straight away. Switch the **Collection layer** back to carry on with points.
+
+You can also pick a table layer as the **Collection layer** yourself and choose the record it belongs to from the dropdown, which lists the parent layer's current features.
+
+A field set up as a **Photo** in the attribute form (a QGIS Attachment widget, or the **Photo** edit widget chosen in the Style panel) shows **Choose photo…** instead of a text box. The picture is stored in that field, travels with the project, and shows as a thumbnail in popups and the attribute table. Each picture can be up to 2 MB.
+
 ### Default values
 
 A field's **Default value** in the attribute form is an expression that fills

@@ -62,6 +62,7 @@ import {
   MAX_PHOTO_BYTES,
   minVertices,
   parseOptions,
+  type SavedParent,
   resolveTargetLayer,
   validateForm,
   type Vertex,
@@ -74,6 +75,9 @@ import {
   type FieldCollectionPreview,
 } from "../../lib/field-collection-map";
 import { useCaptureDefaults } from "../../hooks/useCaptureDefaults";
+import { useResolvedAttributeForm } from "../../hooks/useResolvedAttributeForm";
+import { FieldCollectionFormFields } from "./FieldCollectionFormFields";
+import { FieldCollectionRelated } from "./FieldCollectionRelated";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { getCurrentPosition } from "../../lib/geolocation";
 import { fixFromPosition, formatAccuracy, type GpsFix } from "../../lib/gps-tracking";
@@ -91,6 +95,8 @@ const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
 const GEOMETRY_TYPES: GeometryType[] = ["point", "line", "polygon"];
 
 const DRAW_COLOR = "#ef4444";
+/** A second save of a table record this soon after the last is a double-click. */
+const DOUBLE_SAVE_MS = 600;
 
 interface DraftField {
   id: number;
@@ -228,16 +234,41 @@ export function FieldCollectionDialog({
   // not block a save (its required/constraint rules have nothing to bind to).
   // Memoized so handleSave's useCallback and CaptureStep's prop keep a stable
   // identity across unrelated re-renders.
+  // Relation dropdowns list the referenced layer's current rows, so a point
+  // captured a moment ago can be picked as a review's or photo's parent.
+  const resolvedForm = useResolvedAttributeForm(activeLayer?.attributeForm);
   const attributeForm: AttributeFormConfig | undefined = useMemo(() => {
-    const form = activeLayer?.attributeForm;
+    const form = resolvedForm;
     if (!form || !schema) return undefined;
     const keys = new Set(schema.fields.map((field) => field.key));
     const fields = form.fields.filter((field) => keys.has(field.field));
-    return fields.length > 0 ? { fields } : undefined;
-  }, [activeLayer, schema]);
+    return fields.length > 0 ? { ...form, fields } : undefined;
+  }, [resolvedForm, schema]);
+  // A table's records have no location: the form is the whole capture. A new
+  // array per record marks where one capture ends and the next begins.
+  const [recordSeq, setRecordSeq] = useState(0);
+  const noLocationRef = useRef<{ key: string; vertices: Vertex[] }>({ key: "", vertices: [] });
+  const recordKey = `${layerId}:${recordSeq}`;
+  if (noLocationRef.current.key !== recordKey) {
+    noLocationRef.current = { key: recordKey, vertices: [] };
+  }
+  const capturePending = activeGeometry === "none" ? noLocationRef.current.vertices : pending;
+  const recordKeyRef = useRef(recordKey);
+  recordKeyRef.current = recordKey;
+  // Values a child record starts with (its link to the parent just saved),
+  // and the record whose children can be added next.
+  const prefillRef = useRef<Record<string, string>>({});
+  const [savedParent, setSavedParent] = useState<SavedParent | null>(null);
+  // Whether the user has typed into the current record, and when the last one
+  // was saved: a table's form is ready again the instant a record is saved,
+  // so nothing else stands between a double-click and a duplicate record.
+  const [recordEdited, setRecordEdited] = useState(false);
+  const lastSavedAtRef = useRef(0);
 
   useCaptureDefaults({
-    pending,
+    pending: capturePending,
+    // Layer and record: switching between two tables is a new capture too.
+    captureKey: recordKey,
     gpsFix: lastGpsFix,
     schema,
     attributeForm,
@@ -345,6 +376,12 @@ export function FieldCollectionDialog({
   const handleTargetChange = useCallback(
     (nextId: string) => {
       clearCapture();
+      prefillRef.current = {};
+      setSavedParent(null);
+      setRecordEdited(false);
+      // The double-click guard is about one layer's form; a save into the
+      // layer just switched to is a different record, however soon it comes.
+      lastSavedAtRef.current = 0;
       targetChosenRef.current = true;
       setLayerId(nextId);
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
@@ -385,6 +422,11 @@ export function FieldCollectionDialog({
     // its suppress flag consumed by the open-reset effect below, leaving the
     // old project's pending geometry in the new project's session.
     suppressResetRef.current = false;
+    // The saved parent and its pre-filled link name layers of the project
+    // being left; another project can reuse the same layer ids.
+    prefillRef.current = {};
+    setSavedParent(null);
+    setRecordEdited(false);
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
@@ -839,7 +881,9 @@ export function FieldCollectionDialog({
   }, [drafts, layerName, geometry, addGeoJsonLayer, updateLayer, t]);
 
   const handleSave = useCallback(() => {
+    const pending = capturePending;
     if (!activeLayer || !schema || !pending || photoReads > 0) return;
+    if (activeGeometry === "none" && Date.now() - lastSavedAtRef.current < DOUBLE_SAVE_MS) return;
     // Fields hidden by a visibility expression never block a save, so the
     // schema's own required/type checks run against the visible subset only.
     const candidate = buildPropertiesWithForm(schema, values, attributeForm);
@@ -907,17 +951,21 @@ export function FieldCollectionDialog({
     setPending(null);
     setLocating(false);
     setLastGpsFix(null);
-    setValues({});
+    setValues(prefillRef.current);
+    setRecordSeq((seq) => seq + 1);
+    setRecordEdited(false);
+    lastSavedAtRef.current = Date.now();
+    setSavedParent({ layerId: activeLayer.id, properties: props });
     setPhotos([]);
     setVertices([]);
     verticesRef.current = [];
     setErrors({});
     clearPreview();
   }, [
+    capturePending,
     activeLayer,
     schema,
     attributeForm,
-    pending,
     values,
     photos,
     photoReads,
@@ -929,6 +977,7 @@ export function FieldCollectionDialog({
   ]);
 
   const setValue = useCallback((key: string, value: string) => {
+    setRecordEdited(true);
     setValues((v) => ({ ...v, [key]: value }));
   }, []);
 
@@ -1015,9 +1064,11 @@ export function FieldCollectionDialog({
               {t(
                 inSetup
                   ? "fieldCollection.description"
-                  : pending
-                    ? "fieldCollection.captureReviewDescription"
-                    : "fieldCollection.captureDescription",
+                  : activeGeometry === "none"
+                    ? "fieldCollection.captureRecordDescription"
+                    : pending
+                      ? "fieldCollection.captureReviewDescription"
+                      : "fieldCollection.captureDescription",
               )}
             </DialogDescription>
           </DialogHeader>
@@ -1061,7 +1112,18 @@ export function FieldCollectionDialog({
                   geometry={activeGeometry}
                   schema={schema!}
                   attributeForm={attributeForm}
-                  pending={pending}
+                  pending={capturePending}
+                  captureKey={recordKey}
+                  // A read reports under the record it began in. One that ends
+                  // after its capture did (its count was reset with it) must
+                  // not release the record that came next.
+                  onAttachmentReading={(delta, key) => {
+                    // Read through the ref: the picture's own callback was
+                    // created with the record it was picked in.
+                    if (key === recordKeyRef.current) {
+                      setPhotoReads((count) => Math.max(0, count + delta));
+                    }
+                  }}
                   values={values}
                   setValue={setValue}
                   errors={errors}
@@ -1078,6 +1140,20 @@ export function FieldCollectionDialog({
                   onPickOnMap={handlePickOnMap}
                   onStartDrawing={handleStartDrawing}
                   onSave={handleSave}
+                />
+              )}
+
+              {/* Hidden once the next record is being typed: following it
+                  would discard that record. */}
+              {savedParent && (activeGeometry === "none" ? !recordEdited : !pending) && (
+                <FieldCollectionRelated
+                  parent={savedParent}
+                  layers={layers}
+                  onAdd={(childId, prefill) => {
+                    handleTargetChange(childId);
+                    prefillRef.current = prefill;
+                    setValues(prefill);
+                  }}
                 />
               )}
 
@@ -1337,6 +1413,10 @@ interface CaptureStepProps {
   /** Attribute Form designer config narrowed to this schema's fields. */
   attributeForm?: AttributeFormConfig;
   pending: Vertex[] | null;
+  /** Identifies the record being filled in; changes on save and on a new target. */
+  captureKey: string;
+  /** A photo field started (+1) or finished (-1) reading a picture; Save waits for it. */
+  onAttachmentReading: (delta: 1 | -1, captureKey: string) => void;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
@@ -1358,6 +1438,8 @@ function CaptureStep({
   schema,
   attributeForm,
   pending,
+  captureKey,
+  onAttachmentReading,
   values,
   setValue,
   errors,
@@ -1387,7 +1469,7 @@ function CaptureStep({
 
   return (
     <div className="space-y-3">
-      {isPoint ? (
+      {geometry === "none" ? null : isPoint ? (
         pending ? (
           // A point is already captured, so GPS would silently discard the
           // current selection; offer only an explicit reposition (#711).
@@ -1426,98 +1508,28 @@ function CaptureStep({
         </p>
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-sm">
-            <MapPin className="h-4 w-4 shrink-0 text-primary" />
-            <span className="tabular-nums">
-              {isPoint
-                ? formatLatLng(pending[0][0], pending[0][1])
-                : t("fieldCollection.vertices", { count: pending.length })}
-            </span>
-          </div>
+          {geometry !== "none" && (
+            <div className="flex items-center gap-2 rounded-md bg-muted p-2 text-sm">
+              <MapPin className="h-4 w-4 shrink-0 text-primary" />
+              <span className="tabular-nums">
+                {isPoint
+                  ? formatLatLng(pending[0][0], pending[0][1])
+                  : t("fieldCollection.vertices", { count: pending.length })}
+              </span>
+            </div>
+          )}
 
-          {schema.fields.map((field) => {
-            const config = getAttributeFormField(attributeForm, field.key);
-            // Conditional visibility: a hidden field disappears from the form
-            // (and its validation is skipped by handleSave). Evaluated against
-            // the current candidate values so it updates as the user types.
-            if (config && candidateProps && !isAttributeFormFieldVisible(config, candidateProps)) {
-              return null;
-            }
-            const err = errorText(errors[field.key]);
-            return (
-              <div key={field.key} className="space-y-1.5">
-                <Label htmlFor={`fc-${field.key}`}>
-                  {config?.alias?.trim() || field.label}
-                  {(field.required || config?.required) && (
-                    <span className="ms-0.5 text-destructive">*</span>
-                  )}
-                </Label>
-                {config?.widget === "valueMap" && config.valueMap?.length ? (
-                  <Select
-                    id={`fc-${field.key}`}
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => setValue(field.key, e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {config.valueMap.map((entry) => (
-                      <option key={entry.value} value={entry.value}>
-                        {entry.label ?? entry.value}
-                      </option>
-                    ))}
-                  </Select>
-                ) : config?.widget === "checkbox" ? (
-                  <div className="flex h-9 items-center">
-                    <input
-                      id={`fc-${field.key}`}
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={values[field.key] === "true"}
-                      onChange={(e) => setValue(field.key, e.target.checked ? "true" : "false")}
-                    />
-                  </div>
-                ) : config ? (
-                  <Input
-                    id={`fc-${field.key}`}
-                    type={
-                      config.widget === "number" || config.widget === "range"
-                        ? "number"
-                        : config.widget === "date"
-                          ? "date"
-                          : "text"
-                    }
-                    min={config.min}
-                    max={config.max}
-                    step={config.step}
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => setValue(field.key, e.target.value)}
-                  />
-                ) : field.type === "choice" && field.options?.length ? (
-                  <Select
-                    id={`fc-${field.key}`}
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => setValue(field.key, e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {field.options.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Input
-                    id={`fc-${field.key}`}
-                    type={
-                      field.type === "number" ? "number" : field.type === "date" ? "date" : "text"
-                    }
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => setValue(field.key, e.target.value)}
-                  />
-                )}
-                {err && <p className="text-xs text-destructive">{err}</p>}
-              </div>
-            );
-          })}
+          <FieldCollectionFormFields
+            schema={schema}
+            attributeForm={attributeForm}
+            candidateProps={candidateProps}
+            values={values}
+            setValue={setValue}
+            errors={errors}
+            errorText={errorText}
+            captureKey={captureKey}
+            onReadingChange={onAttachmentReading}
+          />
 
           {/* Save sits above the optional photo so the primary action is
               reachable without scrolling past the upload, and the photo reads

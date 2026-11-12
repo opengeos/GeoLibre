@@ -96,7 +96,7 @@ import {
   type QgisProjectImportWarning,
   type QgisStyleImportNote,
 } from "../lib/qgis-project-import";
-import { readQgisFormTable } from "../lib/qgis-form-tables";
+import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
@@ -685,7 +685,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const loadedNames = new Set(imported.project.layers.map((layer) => layer.name));
       imported.formNotes = imported.formNotes.filter((note) => loadedNames.has(note.layerName));
       imported.styleNotes = imported.styleNotes.filter((note) => loadedNames.has(note.layerName));
-      await materializeQgisFormRelations(imported, readQgisFormTable);
+      await materializeQgisFormRelations(imported, readQgisSnapshotTable);
       if (superseded()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,

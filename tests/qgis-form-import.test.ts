@@ -3,15 +3,21 @@ import { describe, it } from "node:test";
 import {
   getAttributeFormField,
   isAttributeFormFieldVisible,
+  isAttributeTableLayer,
+  resolveAttributeFormRelations,
   validateAttributeFormValues,
 } from "@geolibre/core";
 import { DOMParser } from "linkedom";
 import {
+  buildGeometryFeature,
   detachFromSourceFile,
   getGeometryType,
   getSchema,
   isCollectionLayer,
   isFileBackedCollectionLayer,
+  minVertices,
+  orderFormFields,
+  relatedRecordTargets,
 } from "../apps/geolibre-desktop/src/lib/field-collection";
 import {
   applyCaptureDefaults,
@@ -65,6 +71,9 @@ function surveyProject(): string {
       <relation id="point_owner" referencingLayer="points" referencedLayer="owners">
         <fieldRef referencingField="owner_id" referencedField="id"/>
       </relation>
+      <relation id="photo_point" referencingLayer="photos" referencedLayer="points">
+        <fieldRef referencingField="point_uuid" referencedField="uuid"/>
+      </relation>
     </relations>
     <projectlayers>
       <maplayer type="vector" geometry="Point">
@@ -97,6 +106,7 @@ function surveyProject(): string {
           ${field("photo_name", "ExternalResource")}
           ${field("material", "ValueRelation", option("Layer", "materials") + option("Key", "code") + option("Value", "label"))}
           ${field("owner_id", "RelationReference", option("Relation", "point_owner"))}
+          ${field("note_code", "ValueRelation", option("Layer", "notes") + option("Key", "code") + option("Value", "text"))}
           ${field("parent", "RelationReference", option("Relation", "gone"))}
           ${field("note", "TextEdit")}
         </fieldConfiguration>
@@ -131,6 +141,48 @@ function surveyProject(): string {
         <fieldConfiguration>${field("fid", "TextEdit")}${field("name", "TextEdit")}</fieldConfiguration>
       </maplayer>
       <maplayer type="vector" geometry="No geometry">
+        <id>photos</id><layername>Photos</layername>
+        <datasource>./data/survey.gpkg|layername=photos</datasource><provider>ogr</provider>
+        <fieldConfiguration>
+          ${field("fid", "TextEdit")}
+          ${field("uuid", "UuidGenerator")}
+          ${field("point_uuid", "RelationReference", option("Relation", "photo_point"))}
+          ${field("path", "ExternalResource", option("DocumentViewer", 1))}
+          ${field("manual", "ExternalResource", option("DocumentViewer", 0))}
+          ${field("photo_path", "ExternalResource", option("DocumentViewer", 0))}
+          ${field("picture", "ExternalResource", option("DocumentViewer", 0))}
+          ${field("caption", "TextEdit")}
+          ${field("taken", "DateTime")}
+        </fieldConfiguration>
+        <editorlayout>tablayout</editorlayout>
+        <attributeEditorForm>
+          <attributeEditorField name="point_uuid"/>
+          <attributeEditorContainer name="Picture">
+            <attributeEditorField name="path"/>
+            <attributeEditorContainer name="Details">
+              <attributeEditorField name="caption"/>
+            </attributeEditorContainer>
+            <attributeEditorField name="taken"/>
+          </attributeEditorContainer>
+          <attributeEditorRelation name="ignored"/>
+        </attributeEditorForm>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
+        <id>visits</id><layername>Visits</layername>
+        <datasource>./data/survey.gpkg|layername=visits</datasource><provider>ogr</provider>
+        <fieldConfiguration>${field("fid", "TextEdit")}${field("who", "TextEdit")}</fieldConfiguration>
+        <editorlayout>tablayout</editorlayout>
+        <attributeEditorForm><attributeEditorField name="who"/></attributeEditorForm>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
+        <id>remote</id><layername>Remote list</layername>
+        <datasource>/vsicurl/https://example.com/lists.gpkg|layername=codes</datasource><provider>ogr</provider>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
+        <id>notes</id><layername>Notes</layername>
+        <datasource>./data/notes.csv</datasource><provider>ogr</provider>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
         <id>materials</id><layername>Materials</layername>
         <datasource>./data/lookups.gpkg|layername=materials</datasource><provider>ogr</provider>
       </maplayer>
@@ -151,7 +203,7 @@ function imported() {
     assert.ok(found, `layer ${id} was not imported`);
     return found;
   };
-  return { ...result, result, points: layer("points"), parcels: layer("parcels") };
+  return { ...result, result, layer, points: layer("points"), parcels: layer("parcels") };
 }
 
 describe("QGIS form import", () => {
@@ -166,15 +218,190 @@ describe("QGIS form import", () => {
     );
   });
 
-  it("reports tables without geometry instead of adding empty layers", () => {
-    const { warnings } = imported();
+  it("imports GeoPackage tables without geometry as table layers", () => {
+    const { layer, warnings } = imported();
+    const materials = layer("materials");
+    assert.equal(materials.metadata.attributeTable, true);
+    assert.equal(materials.metadata.sourceLayer, "materials");
+    assert.equal(materials.sourcePath, "/home/me/survey/data/lookups.gpkg");
+    assert.equal(isAttributeTableLayer(materials), true);
+    assert.equal(isAttributeTableLayer(layer("points")), false);
+    // A lookup list has no form of its own, so it is not a capture target.
+    assert.equal(isCollectionLayer(materials), false);
+    // A table that has a form is one, capturing records without a location.
+    const photos = layer("photos");
+    assert.equal(isCollectionLayer(photos), true);
+    assert.equal(getGeometryType(photos), "none");
+    // Only a GeoPackage table can be read row by row.
+    // Nor one behind a URL: a table's rows are read from the file itself.
     assert.deepEqual(
       warnings.sort((a, b) => a.layerName.localeCompare(b.layerName)),
       [
-        { layerName: "Materials", reason: "no-geometry" },
-        { layerName: "Owners", reason: "no-geometry" },
+        { layerName: "Notes", reason: "no-geometry" },
+        { layerName: "Remote list", reason: "no-geometry" },
       ],
     );
+  });
+
+  it("links relation dropdowns to the layer they read from", () => {
+    const { points, layer } = imported();
+    const byField = new Map(points.attributeForm?.fields.map((entry) => [entry.field, entry]));
+    assert.deepEqual(byField.get("material")?.valueRelation, {
+      layerId: "materials",
+      keyField: "code",
+      labelField: "label",
+    });
+    assert.deepEqual(byField.get("owner_id")?.valueRelation, {
+      layerId: "owners",
+      keyField: "id",
+      labelExpression: `"last_name" || ', ' || "first_name"`,
+    });
+    const link = layer("photos").attributeForm?.fields.find(
+      (entry) => entry.field === "point_uuid",
+    );
+    assert.deepEqual(link?.valueRelation, { layerId: "points", keyField: "uuid" });
+  });
+
+  it("reads live entries from the referenced layer, falling back when it is not loaded", () => {
+    const { points } = imported();
+    const rows = new Map<string, Record<string, unknown>[]>([
+      [
+        "materials",
+        [
+          { code: "ST", label: "Steel" },
+          { code: "WD", label: "Wood" },
+        ],
+      ],
+    ]);
+    const resolved = resolveAttributeFormRelations(points.attributeForm, (id) => rows.get(id));
+    const material = resolved?.fields.find((entry) => entry.field === "material");
+    assert.equal(material?.widget, "valueMap");
+    assert.deepEqual(material?.valueMap, [
+      { value: "ST", label: "Steel" },
+      { value: "WD", label: "Wood" },
+    ]);
+    assert.equal(material?.valueType, "string");
+    // Owners is not loaded: the field is left exactly as it was.
+    const owner = resolved?.fields.find((entry) => entry.field === "owner_id");
+    assert.equal(owner?.widget, "text");
+    // A layer that is loaded but empty offers nothing, not a stale snapshot.
+    const stale = {
+      fields: [
+        {
+          field: "material",
+          widget: "valueMap" as const,
+          valueMap: [{ value: "OLD" }],
+          valueRelation: { layerId: "materials", keyField: "code" },
+        },
+      ],
+    };
+    assert.deepEqual(resolveAttributeFormRelations(stale, () => [])?.fields[0].valueMap, []);
+    assert.deepEqual(resolveAttributeFormRelations(stale, () => undefined)?.fields[0].valueMap, [
+      { value: "OLD" },
+    ]);
+    // A table too long for a list is left alone, without sorting all of it.
+    const long = Array.from({ length: 1500 }, (_, index) => ({ code: `C${index}` }));
+    assert.equal(resolveAttributeFormRelations(stale, () => long)?.fields[0].valueMap?.length, 1);
+    // Nothing to resolve returns the same object, so memoized callers stay put.
+    assert.equal(
+      resolveAttributeFormRelations(points.attributeForm, () => undefined),
+      points.attributeForm,
+    );
+  });
+
+  it("offers the child records of a record that was just saved", () => {
+    const { result } = imported();
+    const parent = { layerId: "points", properties: { uuid: "{abc}", species: "QUE" } };
+    assert.deepEqual(relatedRecordTargets(parent, result.project.layers), [
+      {
+        layerId: "photos",
+        layerName: "Photos",
+        field: "point_uuid",
+        fieldLabel: "point_uuid",
+        value: "{abc}",
+      },
+    ]);
+    // Without the key there is nothing to link to.
+    assert.deepEqual(
+      relatedRecordTargets({ layerId: "points", properties: {} }, result.project.layers),
+      [],
+    );
+    assert.deepEqual(
+      relatedRecordTargets({ layerId: "photos", properties: { uuid: "x" } }, result.project.layers),
+      [],
+    );
+  });
+
+  it("imports a picture attachment as a photo field", () => {
+    const { layer } = imported();
+    const byField = new Map(
+      layer("photos").attributeForm?.fields.map((entry) => [entry.field, entry]),
+    );
+    assert.equal(byField.get("path")?.widget, "attachment");
+    // Not an image viewer and not named like a picture: left as a path.
+    assert.equal(byField.get("manual")?.widget, "text");
+    // The name decides only when it is a whole word for a picture.
+    assert.equal(byField.get("photo_path")?.widget, "text");
+    assert.equal(byField.get("picture")?.widget, "attachment");
+  });
+
+  it("follows a drag-and-drop layout: order, sections and hidden fields", () => {
+    const { layer } = imported();
+    const photos = layer("photos");
+    assert.deepEqual(photos.attributeForm?.sections, [
+      // An untitled run: the field sits above the first tab, and stays there.
+      { title: "", fields: ["point_uuid"] },
+      { title: "Picture", fields: ["path"] },
+      { title: "Picture \u203a Details", fields: ["caption"] },
+      { title: "Picture", fields: ["taken"] },
+    ]);
+    const schema = getSchema(photos);
+    assert.deepEqual(
+      schema.fields.map((entry) => entry.key),
+      ["point_uuid", "path", "caption", "taken", "uuid", "manual", "photo_path", "picture"],
+    );
+    // Left out of the layout: not shown, but still saved (uuid has a default).
+    for (const hidden of ["uuid", "manual", "photo_path", "picture"]) {
+      const config = getAttributeFormField(photos.attributeForm, hidden);
+      assert.ok(config);
+      assert.equal(isAttributeFormFieldVisible(config, {}), false, hidden);
+    }
+    assert.equal(getAttributeFormField(photos.attributeForm, "uuid")?.defaultValue, "uuid()");
+    assert.deepEqual(
+      orderFormFields(schema.fields, photos.attributeForm?.sections).map((group) => [
+        group.title,
+        group.fields.map((entry) => entry.key),
+      ]),
+      [
+        ["", ["point_uuid"]],
+        ["Picture", ["path"]],
+        ["Picture \u203a Details", ["caption"]],
+        ["Picture", ["taken"]],
+        ["", ["uuid", "manual", "photo_path", "picture"]],
+      ],
+    );
+    assert.deepEqual(orderFormFields(schema.fields, undefined).length, 1);
+    // A table whose layout has no tabs is still a form to capture into, and
+    // carries no sections since the field order already says it all.
+    const visits = layer("visits");
+    assert.equal(isCollectionLayer(visits), true);
+    assert.equal(visits.attributeForm?.sections, undefined);
+    // A group split only by fields that are not in the schema reads as one.
+    assert.deepEqual(
+      orderFormFields(schema.fields.slice(1, 4), [
+        { title: "A", fields: ["path"] },
+        { title: "A \u203a gone", fields: ["missing"] },
+        { title: "A", fields: ["caption", "taken"] },
+      ]).map((group) => [group.title, group.fields.length]),
+      [["A", 3]],
+    );
+  });
+
+  it("builds a record without geometry for a table layer", () => {
+    const feature = buildGeometryFeature("none", [], { caption: "north side" });
+    assert.equal(feature.geometry, null);
+    assert.deepEqual(feature.properties, { caption: "north side" });
+    assert.equal(minVertices("none"), 0);
   });
 
   it("carries widgets, aliases, required fields, constraints and defaults over", () => {
@@ -308,67 +535,111 @@ describe("QGIS form import", () => {
     assert.equal(failing.errors.height?.code, "range");
   });
 
-  it("fills relation dropdowns from the referenced tables", async () => {
+  it("snapshots every dropdown, marking the ones that read their layer live as optional", async () => {
     const { result, points } = imported();
-    assert.deepEqual(
-      result.formRelations.map((relation) => [relation.field, relation.sourcePath, relation.table]),
-      [
-        ["material", "/home/me/survey/data/lookups.gpkg", "materials"],
-        ["owner_id", "/home/me/survey/data/survey.gpkg", "owners"],
-      ],
-    );
+    // Materials, Owners and Points are layers, so those dropdowns are read
+    // live and their snapshot is only a fallback; Notes is a CSV table that
+    // was skipped, so its dropdown depends on the snapshot.
     const reads: string[] = [];
-    await materializeQgisFormRelations(result, async (path, table) => {
-      reads.push(`${path}|${table}`);
-      if (table === "materials") {
-        return [
-          { code: "ST", label: "Steel" },
-          { code: "CO", label: "Concrete" },
-          { code: "ST", label: "Steel (duplicate)" },
-          { code: null, label: "No code" },
-        ];
-      }
+    await materializeQgisFormRelations(result, async (path, table, options) => {
+      reads.push(`${table || "notes.csv"}:${options?.optional ? "optional" : "needed"}`);
+      // The host declines the optional read of the owners table.
+      if (table === "owners") throw new Error("too large for a fallback");
+      if (table === "materials") return [{ code: "ST", label: "Steel" }];
       return [
-        { id: 2, first_name: "Ada", last_name: "Young" },
-        { id: 1, first_name: "Bo", last_name: "Abel" },
+        { code: "B", text: "Beta" },
+        { code: "A", text: "Alpha" },
+        { code: "B", text: "Beta again" },
+        { code: null, text: "No code" },
       ];
     });
-    assert.equal(reads.length, 2);
+    assert.deepEqual(reads.sort(), [
+      "materials:optional",
+      "notes.csv:needed",
+      "owners:optional",
+      "points:optional",
+    ]);
     const fields = points.attributeForm?.fields ?? [];
+    const note = fields.find((entry) => entry.field === "note_code");
+    assert.equal(note?.widget, "valueMap");
+    assert.deepEqual(note?.valueMap, [
+      { value: "A", label: "Alpha" },
+      { value: "B", label: "Beta" },
+    ]);
+    assert.equal(note?.valueType, "string");
+    assert.equal(note?.valueRelation, undefined);
+    // A live dropdown keeps its link and gains the fallback list.
     const material = fields.find((entry) => entry.field === "material");
-    assert.deepEqual(material?.valueMap, [
-      { value: "CO", label: "Concrete" },
-      { value: "ST", label: "Steel" },
-    ]);
-    // Typed from the key column, so text codes stay text and ids stay numbers.
-    assert.equal(material?.valueType, "string");
+    assert.deepEqual(material?.valueMap, [{ value: "ST", label: "Steel" }]);
+    assert.equal(material?.valueRelation?.layerId, "materials");
+    // A declined fallback leaves the live dropdown as it was, with no note.
     const owner = fields.find((entry) => entry.field === "owner_id");
-    assert.deepEqual(owner?.valueMap, [
-      { value: "1", label: "Abel, Bo" },
-      { value: "2", label: "Young, Ada" },
-    ]);
-    assert.equal(owner?.valueType, "number");
+    assert.equal(owner?.valueMap, undefined);
+    assert.equal(owner?.valueRelation?.layerId, "owners");
+    assert.deepEqual(
+      result.formNotes.filter((entry) => entry.field === "owner_id"),
+      [],
+    );
     assert.deepEqual(result.formRelations, []);
   });
 
-  it("keeps a text box and notes it when a referenced table cannot be read", async () => {
-    const { result, points } = imported();
-    await materializeQgisFormRelations(result, async (_path, table) => {
-      if (table === "owners") throw new Error("locked");
-      return [];
+  it("keeps a text box and says why when a snapshot cannot be taken", async () => {
+    const unreadable = imported();
+    await materializeQgisFormRelations(unreadable.result, async () => {
+      throw new Error("locked");
     });
-    const fields = points.attributeForm?.fields ?? [];
-    assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "text");
+    const empty = imported();
+    await materializeQgisFormRelations(empty.result, async () => []);
+    const tooLong = imported();
+    await materializeQgisFormRelations(tooLong.result, async () =>
+      Array.from({ length: MAX_RELATION_ENTRIES + 1 }, (_, index) => ({
+        code: `N${index}`,
+        text: `Note ${index}`,
+      })),
+    );
+    for (const [run, reason] of [
+      [unreadable, "relation"],
+      [empty, "relation-empty"],
+      [tooLong, "relation-too-large"],
+    ] as const) {
+      const note = run.points.attributeForm?.fields.find((entry) => entry.field === "note_code");
+      assert.equal(note?.widget, "text", reason);
+      assert.deepEqual(
+        run.result.formNotes.filter((entry) => entry.field === "note_code"),
+        [{ layerName: "Measured points", field: "note_code", reason }],
+      );
+    }
+    // Reported at import regardless of the snapshot.
     assert.deepEqual(
-      result.formNotes
-        .filter((note) => note.reason.startsWith("relation"))
-        .map((note) => [note.field, note.reason]),
+      unreadable.result.formNotes
+        .filter((entry) => entry.reason.startsWith("relation") && entry.field !== "note_code")
+        .map((entry) => [entry.field, entry.reason]),
       [
         ["tags", "relation-multi"],
         ["parent", "relation"],
-        // Read fine but empty, as opposed to the one that could not be read.
-        ["material", "relation-empty"],
-        ["owner_id", "relation"],
+      ],
+    );
+  });
+
+  it("falls back to the display expression for a row with no label", () => {
+    assert.deepEqual(
+      relationValueMap(
+        [
+          { id: 1, label: "One", code: "x" },
+          { id: 2, label: null, code: "y" },
+        ],
+        {
+          field: "f",
+          referencedLayerId: "t",
+          keyField: "id",
+          labelField: "label",
+          useDisplayExpression: true,
+        },
+        "'code ' || code",
+      ).entries,
+      [
+        { value: "2", label: "code y" },
+        { value: "1", label: "One" },
       ],
     );
   });
@@ -382,25 +653,6 @@ describe("QGIS form import", () => {
         useDisplayExpression: true,
       }),
       { entries: [{ value: "a" }, { value: "b" }], valueType: "string" },
-    );
-  });
-
-  it("leaves a dropdown as text when its table is too long for a list", async () => {
-    const { result, points } = imported();
-    await materializeQgisFormRelations(result, async (_path, table) =>
-      table === "materials"
-        ? Array.from({ length: MAX_RELATION_ENTRIES + 1 }, (_, index) => ({
-            code: `M${index}`,
-            label: `Material ${index}`,
-          }))
-        : [{ id: 1, first_name: "Bo", last_name: "Abel" }],
-    );
-    const fields = points.attributeForm?.fields ?? [];
-    assert.equal(fields.find((entry) => entry.field === "material")?.widget, "text");
-    assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "valueMap");
-    assert.deepEqual(
-      result.formNotes.filter((note) => note.reason === "relation-too-large"),
-      [{ layerName: "Measured points", field: "material", reason: "relation-too-large" }],
     );
   });
 
