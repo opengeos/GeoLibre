@@ -7,6 +7,7 @@ import {
 } from "@geolibre/map/tile-request-headers";
 
 const LAYER_KEY_PREFIX = "plugin-layer:";
+const URL_KEY_PREFIX = "plugin-url:";
 // RFC 9110 token characters.
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const HEADER_VALUE_BREAK = /[\r\n\0]/;
@@ -201,4 +202,39 @@ export function setPluginLayerRequestHeaders(
     headers === null ? null : validateRequestHeaders("setLayerRequestHeaders", headers);
   const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
   return layer ? registerLayerRequestHeaders("setLayerRequestHeaders", layer, validated) : false;
+}
+
+/**
+ * The plugin API's `setUrlRequestHeaders`: send `headers` with every tile and
+ * TileJSON request whose URL starts with `urlPrefix`, replacing any set for
+ * that prefix before; null or `{}` stops sending them.
+ *
+ * For sources a plugin adds to the map itself (`getMap().addSource`) and
+ * doesn't mirror into the layer store: there is no layer to hang the headers
+ * on, so they belong to the URL, and stay until the plugin clears them. A
+ * layer's own headers win over these where both match: the longer prefix
+ * wins, and on the same prefix the layer's do.
+ *
+ * @param urlPrefix - The start of the URLs to match: a fixed host and the
+ *   start of a path. A tile template is cut at its first `{`.
+ * @param headers - The headers to send, or null to stop.
+ */
+export function setPluginUrlRequestHeaders(
+  urlPrefix: string,
+  headers: Record<string, string> | null,
+): void {
+  const prefix = tileUrlPrefix(urlPrefix);
+  // setTileRequestHeaders drops an empty prefix (from "" or a template that
+  // starts with "{") without an error, so refuse unscoped ones here.
+  if (headers !== null && !isScopedTileUrlPrefix(prefix)) {
+    throw new Error(
+      `setUrlRequestHeaders: "${urlPrefix}" needs a fixed host and path before its first placeholder; it could match other servers.`,
+    );
+  }
+  setTileRequestHeaders(
+    `${URL_KEY_PREFIX}${prefix}`,
+    [prefix],
+    headers === null ? {} : validateRequestHeaders("setUrlRequestHeaders", headers),
+    { fallback: true },
+  );
 }

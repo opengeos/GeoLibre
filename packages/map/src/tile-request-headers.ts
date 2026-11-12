@@ -13,6 +13,7 @@ import type { RequestParameters, ResourceType } from "maplibre-gl";
 interface TileRequestHeaderEntry {
   urlPrefixes: readonly string[];
   headers: Readonly<Record<string, string>>;
+  fallback: boolean;
 }
 
 const entries = new Map<string, TileRequestHeaderEntry>();
@@ -63,11 +64,14 @@ export function isScopedTileUrlPrefix(prefix: string): boolean {
  *   must pass {@link isScopedTileUrlPrefix}, or this throws and registers
  *   nothing, so credentials can't reach other servers.
  * @param headers - The headers to send, such as `Authorization`.
+ * @param options - `fallback: true` makes these lose to any other
+ *   registration with an equally long matching prefix.
  */
 export function setTileRequestHeaders(
   key: string,
   urlPrefixes: readonly string[],
   headers: Readonly<Record<string, string>>,
+  options: { fallback?: boolean } = {},
 ): void {
   const prefixes = urlPrefixes.filter((prefix) => prefix.length > 0);
   if (prefixes.length === 0 || Object.keys(headers).length === 0) {
@@ -80,7 +84,11 @@ export function setTileRequestHeaders(
       `Tile request headers need a URL with a fixed host and path before its first placeholder; "${unscoped}" could match other servers.`,
     );
   }
-  entries.set(key, { urlPrefixes: [...prefixes], headers: { ...headers } });
+  entries.set(key, {
+    urlPrefixes: [...prefixes],
+    headers: { ...headers },
+    fallback: options.fallback === true,
+  });
 }
 
 /**
@@ -106,18 +114,24 @@ export function clearTileRequestHeadersWhere(shouldClear: (key: string) => boole
 
 /**
  * The headers registered for `url`. When several registrations match, the
- * longest prefix wins, so a specific endpoint's credentials beat a broader one.
+ * longest prefix wins, so a specific endpoint's credentials beat a broader one;
+ * on equally long prefixes, a non-fallback registration beats a fallback one.
  *
  * @param url - The request URL.
  * @returns The headers to send, or undefined when none apply.
  */
 export function tileRequestHeadersFor(url: string): Record<string, string> | undefined {
   let bestLength = -1;
+  let bestIsFallback = true;
   let best: Readonly<Record<string, string>> | undefined;
-  for (const { urlPrefixes, headers } of entries.values()) {
+  for (const { urlPrefixes, headers, fallback } of entries.values()) {
     for (const prefix of urlPrefixes) {
-      if (prefix.length > bestLength && url.startsWith(prefix)) {
+      if (!url.startsWith(prefix)) continue;
+      const beatsBest =
+        prefix.length > bestLength || (prefix.length === bestLength && bestIsFallback && !fallback);
+      if (beatsBest) {
         bestLength = prefix.length;
+        bestIsFallback = fallback;
         best = headers;
       }
     }

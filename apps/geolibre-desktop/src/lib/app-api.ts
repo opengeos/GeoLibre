@@ -90,6 +90,7 @@ import { addPluginPointCloudLayer } from "./plugin-point-cloud-layer";
 import {
   clearLayerRequestHeaders,
   setPluginLayerRequestHeaders,
+  setPluginUrlRequestHeaders,
 } from "./plugin-tile-request-headers";
 import { addPluginVectorTileLayer } from "./plugin-vector-tile-layer";
 import {
@@ -403,6 +404,8 @@ export function createAppAPI(
       addPluginVectorTileLayer(name, url, options),
     setLayerRequestHeaders: (layerId: string, headers: Record<string, string> | null) =>
       setPluginLayerRequestHeaders(layerId, headers),
+    setUrlRequestHeaders: (urlPrefix: string, headers: Record<string, string> | null) =>
+      setPluginUrlRequestHeaders(urlPrefix, headers),
     addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
       const {
         beforeLayerId,

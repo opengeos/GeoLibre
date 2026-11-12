@@ -197,6 +197,10 @@ export interface GeoLibreAppAPI {
     layerId: string,
     headers: Record<string, string> | null
   ) => boolean;
+  setUrlRequestHeaders?: (
+    urlPrefix: string,
+    headers: Record<string, string> | null
+  ) => void;
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   addWfsLayer?: (name: string, options: GeoLibreWfsLayerOptions) => Promise<string>;
   // Native client-side COG (reads the GeoTIFF directly; band/rescale/colormap/
@@ -1149,6 +1153,28 @@ app.setLayerRequestHeaders?.(layerId, { Authorization: `Bearer ${newAccessToken}
 - **MapLibre only.** The Mapbox, ArcGIS and Cesium renderers request tiles without them, and so does the desktop app's native WMS route, which fetches WMS tiles outside MapLibre.
 - **CORS.** A header turns a tile request into one the browser preflights, so the service must allow the app's origin and the header (for example `Access-Control-Allow-Headers: Authorization`).
 - `setLayerRequestHeaders` returns false when there is no such layer or it has no tile URL. It throws on a header name that isn't a valid token or that the browser sets itself (`Cookie`, `Host`, `Origin`, `Sec-*`, `Proxy-*` and the rest of the Fetch standard's forbidden names), a name given twice in different cases, a value with a line break or a character above U+00FF, or an unscoped tile URL.
+
+#### A source the plugin draws itself
+
+A plugin that adds its own source with `getMap().addSource` and doesn't mirror it into the layer store (a transient preview, say, that shouldn't be saved with the project) has no layer for `setLayerRequestHeaders` to name. `setUrlRequestHeaders` attaches the headers to the URL instead:
+
+```typescript
+const map = app.getMap?.();
+app.setUrlRequestHeaders?.("https://tiles.example.org/preview/", {
+  Authorization: `Bearer ${accessToken}`,
+});
+map?.addSource("preview", {
+  type: "raster",
+  tiles: ["https://tiles.example.org/preview/{z}/{x}/{y}.png"],
+});
+
+// In deactivate(): stop sending them.
+app.setUrlRequestHeaders?.("https://tiles.example.org/preview/", null);
+```
+
+- Every tile and TileJSON request whose URL starts with the prefix carries the headers, whichever source asks, so set them before adding the source. The prefix follows a layer's rule (a fixed host and the start of a path; a template is cut at its first `{`), and an unscoped one throws.
+- They belong to the plugin, not to a layer or the project: held in memory, never saved, and sent until the plugin clears them with `null`, so clear them in `deactivate`. Calling it again for the same prefix replaces them, which is how a refreshed token is put in.
+- Where a layer's own headers also match, the longer prefix wins, and on the same prefix the layer's do. The `MapLibre only` and `CORS` notes above apply here too.
 
 ## Zarr layers
 
@@ -2328,7 +2354,7 @@ only for the shared surface; a mapbox-gl map has none of MapLibre's extensions:
   MapLibre-only (Overture Maps instead asks `maplibre-gl-overture-maps` for
   plain `.pmtiles` URLs, which mapbox-gl 3.30+ reads through its own tile
   provider). `setTransformRequest` — Mapbox takes `transformRequest`
-  only at construction, so tile request headers (`setLayerRequestHeaders`,
+  only at construction, so tile request headers (`setLayerRequestHeaders`, `setUrlRequestHeaders`,
   GeoLens private rasters) are MapLibre-only. Custom `CustomLayerInterface` layers
   (`capabilities.customLayers` is false on Mapbox). The terrain camera helpers
   (`calculateCameraOptionsFromCameraLngLatAltRotation`,
