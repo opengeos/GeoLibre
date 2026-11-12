@@ -253,6 +253,8 @@ export function FieldCollectionDialog({
     noLocationRef.current = { key: recordKey, vertices: [] };
   }
   const capturePending = activeGeometry === "none" ? noLocationRef.current.vertices : pending;
+  const recordKeyRef = useRef(recordKey);
+  recordKeyRef.current = recordKey;
   // Values a child record starts with (its link to the parent just saved),
   // and the record whose children can be added next.
   const prefillRef = useRef<Record<string, string>>({});
@@ -1116,7 +1118,11 @@ export function FieldCollectionDialog({
                   // after its capture did (its count was reset with it) must
                   // not release the record that came next.
                   onAttachmentReading={(delta, key) => {
-                    if (key === recordKey) setPhotoReads((count) => Math.max(0, count + delta));
+                    // Read through the ref: the picture's own callback was
+                    // created with the record it was picked in.
+                    if (key === recordKeyRef.current) {
+                      setPhotoReads((count) => Math.max(0, count + delta));
+                    }
                   }}
                   values={values}
                   setValue={setValue}
