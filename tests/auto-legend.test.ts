@@ -70,6 +70,12 @@ describe("formatLegendNumber", () => {
     assert.equal(formatLegendNumber(1995, "en"), "1,995");
     assert.equal(formatLegendNumber(3.14159, "en"), "3.14");
   });
+
+  it("moves to M when the K value rounds up to 1,000.0", () => {
+    assert.equal(formatLegendNumber(999950, "en"), "1.0M");
+    assert.equal(formatLegendNumber(-999950, "en"), "-1.0M");
+    assert.equal(formatLegendNumber(999949, "en"), "999.9K");
+  });
 });
 
 describe("buildAutoLegend — vector layers", () => {

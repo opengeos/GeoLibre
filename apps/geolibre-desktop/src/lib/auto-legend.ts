@@ -154,8 +154,9 @@ export function legendRowKey(entryId: string, index: number): string {
  */
 export function formatLegendNumber(value: number, locale?: string): string {
   const abs = Math.abs(value);
+  const roundedThousands = Math.round(abs / 100) / 10;
   const one = { minimumFractionDigits: 1, maximumFractionDigits: 1 } as const;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toLocaleString(locale, one)}M`;
+  if (roundedThousands >= 1_000) return `${(value / 1_000_000).toLocaleString(locale, one)}M`;
   if (abs >= 10_000) return `${(value / 1_000).toLocaleString(locale, one)}K`;
   if (Number.isInteger(value)) return value.toLocaleString(locale);
   return value.toLocaleString(locale, { maximumFractionDigits: 2 });
