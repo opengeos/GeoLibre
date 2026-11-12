@@ -329,10 +329,7 @@ export function parseQgisLayerForm(
     const flags = Number(constraint?.getAttribute("constraints") ?? 0);
     if (
       flags & CONSTRAINT_NOT_NULL &&
-      constraint?.getAttribute("notnull_strength") !== STRENGTH_SOFT &&
-      // An existing row holds a file path here, which the picker cannot show
-      // as chosen; requiring the field would block every edit of such a row.
-      config.widget !== "attachment"
+      constraint?.getAttribute("notnull_strength") !== STRENGTH_SOFT
     ) {
       config.required = true;
       meaningful = true;
@@ -402,7 +399,9 @@ export function parseQgisLayerForm(
     // form's field order is also the order defaults are evaluated in, so it
     // is left alone; only the capture schema, which drives display, moves.
     schemaFields.sort((a, b) => rank(a.key) - rank(b.key));
-    if (layout.sections.length > 0) configured = true;
+    // A layout is form setup in its own right, even one with no tabs and
+    // only plain text fields: it makes the layer something to capture into.
+    configured = true;
   }
 
   return {
@@ -410,7 +409,10 @@ export function parseQgisLayerForm(
       ? {
           form: {
             fields,
-            ...(layout && layout.sections.length > 0 ? { sections: layout.sections } : {}),
+            // Untitled runs alone say nothing the field order does not.
+            ...(layout?.sections.some((section) => section.title !== "")
+              ? { sections: layout.sections }
+              : {}),
           },
         }
       : {}),
@@ -450,15 +452,15 @@ function parseFormLayout(
         if (!name || seen.has(name)) continue;
         seen.add(name);
         order.push(name);
-        if (path.length > 0) {
-          // One section per run of fields, so a group's fields that follow a
-          // nested group are not folded back above it.
-          if (!section) {
-            section = { title: path.join(" \u203a "), fields: [] };
-            sections.push(section);
-          }
-          section.fields.push(name);
+        // One section per run of fields, so a group's fields that follow a
+        // nested group are not folded back above it. Fields outside any
+        // group form an untitled run, which keeps them where the layout put
+        // them (between two tabs, say) instead of after every group.
+        if (!section) {
+          section = { title: path.join(" \u203a "), fields: [] };
+          sections.push(section);
         }
+        section.fields.push(name);
       } else if (child.tagName === "attributeEditorContainer" && depth < MAX_LAYOUT_DEPTH) {
         section = null;
         const title = child.getAttribute("name")?.trim() ?? "";

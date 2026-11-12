@@ -498,8 +498,9 @@ export const MAX_RELATION_ENTRIES = 1000;
  * @param rowsOf - The current feature properties of a layer by id, or
  *   `undefined` when the layer is absent or its features have not loaded.
  * @returns A form whose relation fields carry entries read from the
- *   referenced layer. A field whose layer is unavailable, empty, or too long
- *   for a list keeps the entries it already had. Returns `form` itself when
+ *   referenced layer. A field whose layer is unavailable, or too long for a
+ *   list, keeps the entries it already had; one whose layer is loaded but
+ *   empty has none. Returns `form` itself when
  *   nothing was resolved.
  */
 export function resolveAttributeFormRelations(
@@ -513,8 +514,11 @@ export function resolveAttributeFormRelations(
     const rows = relation ? rowsOf(relation.layerId) : undefined;
     if (!relation || !rows) return field;
     const { entries, valueType } = buildRelationValueMap(rows, relation);
-    if (entries.length === 0 || entries.length > MAX_RELATION_ENTRIES) return field;
+    if (entries.length > MAX_RELATION_ENTRIES) return field;
     changed = true;
+    // The layer is loaded and has nothing to offer: the import-time snapshot
+    // would list keys that no longer exist, so it is dropped rather than kept.
+    if (entries.length === 0) return { ...field, valueMap: [] };
     return {
       ...field,
       widget: "valueMap" as const,

@@ -196,6 +196,12 @@ export async function materializeQgisFormRelations(
 ): Promise<QgisProjectImportResult> {
   const tables = new Map<string, Promise<Record<string, unknown>[] | null>>();
   for (const relation of result.formRelations) {
+    // A dropdown that reads its layer live needs no snapshot, and taking one
+    // would mean loading the whole GeoPackage for a list nobody uses.
+    const live = result.project.layers
+      .find((candidate) => candidate.id === relation.layerId)
+      ?.attributeForm?.fields.find((entry) => entry.field === relation.field)?.valueRelation;
+    if (live) continue;
     const key = `${relation.sourcePath}\u0000${relation.table}`;
     let rows = tables.get(key);
     if (!rows) {
@@ -223,9 +229,6 @@ export async function materializeQgisFormRelations(
     const tooLarge =
       entries.length > MAX_RELATION_ENTRIES || (loaded?.length ?? 0) >= GEOPACKAGE_TABLE_ROW_LIMIT;
     if (entries.length === 0 || tooLarge) {
-      // With the referenced table imported as a layer the dropdown is read
-      // from it live, so an empty or unreadable snapshot costs nothing.
-      if (field.valueRelation && !tooLarge) continue;
       result.formNotes.push({
         layerName: relation.layerName,
         field: relation.field,

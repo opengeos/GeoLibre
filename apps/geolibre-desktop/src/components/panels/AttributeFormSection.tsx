@@ -257,8 +257,9 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     }
     // Likewise the link to the layer a dropdown reads its entries from. The
     // entries shown in the designer are that layer's snapshot, not a list the
-    // author typed, so it survives unless the widget is changed away.
-    if (previous?.valueRelation && (config.widget === "valueMap" || config.widget === "text")) {
+    // author typed, so it survives an edit that keeps the widget; choosing
+    // another widget is how the author turns the dropdown off.
+    if (previous?.valueRelation && previous.widget === config.widget) {
       config.valueRelation = previous.valueRelation;
     }
     const fields = configs.some((entry) => entry.field === target)
@@ -271,9 +272,13 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
 
   const removeConfig = (field: string) => {
     const remaining = configs.filter((entry) => entry.field !== field);
+    // The sections outlive the last configured field: other fields still
+    // sit in them.
     setLayerAttributeForm(
       layer.id,
-      remaining.length ? { ...layer.attributeForm, fields: remaining } : undefined,
+      remaining.length || layer.attributeForm?.sections?.length
+        ? { ...layer.attributeForm, fields: remaining }
+        : undefined,
     );
   };
 

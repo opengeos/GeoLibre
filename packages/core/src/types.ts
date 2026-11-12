@@ -948,8 +948,9 @@ export interface AttributeFormValueRelation {
   labelExpression?: string;
 }
 
-/** A titled run of fields in a form (a tab or group box in QGIS). */
+/** A run of fields in a form: a tab or group box in QGIS, or the fields between two. */
 export interface AttributeFormSection {
+  /** Heading shown above the run; empty for none. */
   title: string;
   /** Field names, in the order they are shown. */
   fields: string[];
@@ -1034,8 +1035,10 @@ export interface AttributeFormFieldConfig {
 export interface AttributeFormConfig {
   fields: AttributeFormFieldConfig[];
   /**
-   * Titled groups the capture form shows its fields under, in order. A field
-   * no section lists is shown after them. Absent means one flat list.
+   * Runs of fields the capture form shows in order, each under its title. A
+   * run with an empty title has no heading (fields that sit between two
+   * groups). A field no section lists is shown after them. Absent means one
+   * flat list.
    */
   sections?: AttributeFormSection[];
 }

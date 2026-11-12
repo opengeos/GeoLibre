@@ -6,7 +6,7 @@ import {
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ImagePlus, X } from "lucide-react";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MAX_PHOTO_BYTES,
@@ -14,6 +14,14 @@ import {
   type CollectionField,
   type CollectionSchema,
 } from "../../lib/field-collection";
+
+/**
+ * Raster pictures only. An SVG is inert inside `<img>`, but the stored value
+ * is drawn elsewhere too, and a vector document has no place in a photo field.
+ */
+const RASTER_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,/i;
+/** Longest data URL of a picture within {@link MAX_PHOTO_BYTES}. */
+const MAX_ATTACHMENT_DATA_URL_LENGTH = Math.ceil((MAX_PHOTO_BYTES * 4) / 3) + 64;
 
 interface FieldCollectionFormFieldsProps {
   schema: CollectionSchema;
@@ -25,6 +33,8 @@ interface FieldCollectionFormFieldsProps {
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
   errorText: (code: string | undefined) => string | null;
+  /** Changes with each record, so a picture still loading stays with its own. */
+  captureKey: string;
 }
 
 /**
@@ -40,6 +50,7 @@ export function FieldCollectionFormFields({
   setValue,
   errors,
   errorText,
+  captureKey,
 }: FieldCollectionFormFieldsProps) {
   // A heading is drawn once per run: sections whose fields are all hidden
   // leave nothing between two parts of the same group.
@@ -63,6 +74,7 @@ export function FieldCollectionFormFields({
               value={values[field.key] ?? ""}
               onChange={(value) => setValue(field.key, value)}
               error={errorText(errors[field.key])}
+              captureKey={captureKey}
             />,
           ];
         });
@@ -90,9 +102,10 @@ interface FormFieldProps {
   value: string;
   onChange: (value: string) => void;
   error: string | null;
+  captureKey: string;
 }
 
-function FormField({ field, config, value, onChange, error }: FormFieldProps) {
+function FormField({ field, config, value, onChange, error, captureKey }: FormFieldProps) {
   const id = `fc-${field.key}`;
   return (
     <div className="space-y-1.5">
@@ -120,7 +133,7 @@ function FormField({ field, config, value, onChange, error }: FormFieldProps) {
           />
         </div>
       ) : config?.widget === "attachment" ? (
-        <AttachmentInput id={id} value={value} onChange={onChange} />
+        <AttachmentInput id={id} value={value} onChange={onChange} captureKey={captureKey} />
       ) : config ? (
         <Input
           id={id}
@@ -168,17 +181,25 @@ function AttachmentInput({
   id,
   value,
   onChange,
+  captureKey,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
+  captureKey: string;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // A read that finishes after a newer pick (or a removal) must not win.
   const readSeq = useRef(0);
-  const isImage = value.startsWith("data:image/");
+  // Nor one that finishes after its record was saved: it would land in the
+  // next record's form.
+  useEffect(() => {
+    readSeq.current += 1;
+    setProblem(null);
+  }, [captureKey]);
+  const isImage = RASTER_DATA_URL.test(value);
 
   const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -202,9 +223,9 @@ function AttachmentInput({
     reader.onload = () => {
       if (readSeq.current !== seq) return;
       const src = typeof reader.result === "string" ? reader.result : "";
-      if (!src.startsWith("data:image/")) setProblem(t("fieldCollection.photoReadError"));
-      // The stored value is base64 (~4/3 the file size), so check it too.
-      else if (src.length > MAX_PHOTO_BYTES) tooLarge();
+      if (!RASTER_DATA_URL.test(src)) setProblem(t("fieldCollection.photoReadError"));
+      // The stored value is base64, about 4/3 the size of the file it holds.
+      else if (src.length > MAX_ATTACHMENT_DATA_URL_LENGTH) tooLarge();
       else {
         setProblem(null);
         onChange(src);
@@ -240,7 +261,7 @@ function AttachmentInput({
         ref={inputRef}
         id={id}
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
         className="sr-only"
         onChange={handleFile}
       />

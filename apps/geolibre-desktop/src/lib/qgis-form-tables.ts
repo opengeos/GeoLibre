@@ -54,16 +54,24 @@ export const TABLE_LAYER_ROW_LIMIT = 100_000;
  *
  * @param sourcePath - Absolute path of the GeoPackage.
  * @param table - Table name inside it.
- * @returns A FeatureCollection of geometry-less features.
+ * @returns The geometry-less features, and whether the table had more rows
+ *   than {@link TABLE_LAYER_ROW_LIMIT}.
  */
 export async function readTableLayerFeatures(
   sourcePath: string,
   table: string,
-): Promise<FeatureCollection> {
-  const rows = await readQgisFormTable(sourcePath, table, TABLE_LAYER_ROW_LIMIT);
+): Promise<{ geojson: FeatureCollection; truncated: boolean }> {
+  // One row past the limit tells a full table from one that was cut short.
+  const rows = await readQgisFormTable(sourcePath, table, TABLE_LAYER_ROW_LIMIT + 1);
+  const truncated = rows.length > TABLE_LAYER_ROW_LIMIT;
   return {
-    type: "FeatureCollection",
-    // GeoJSON allows a null geometry; the typings want a Geometry.
-    features: rows.map((properties) => ({ type: "Feature", geometry: null, properties })),
-  } as unknown as FeatureCollection;
+    truncated,
+    geojson: {
+      type: "FeatureCollection",
+      // GeoJSON allows a null geometry; the typings want a Geometry.
+      features: rows
+        .slice(0, TABLE_LAYER_ROW_LIMIT)
+        .map((properties) => ({ type: "Feature", geometry: null, properties })),
+    } as unknown as FeatureCollection,
+  };
 }

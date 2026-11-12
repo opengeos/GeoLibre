@@ -95,6 +95,8 @@ const FIELD_TYPES: FieldType[] = ["text", "number", "date", "choice"];
 const GEOMETRY_TYPES: GeometryType[] = ["point", "line", "polygon"];
 
 const DRAW_COLOR = "#ef4444";
+/** A second save of a table record this soon after the last is a double-click. */
+const DOUBLE_SAVE_MS = 600;
 
 interface DraftField {
   id: number;
@@ -256,6 +258,11 @@ export function FieldCollectionDialog({
   // and the record whose children can be added next.
   const prefillRef = useRef<Record<string, string>>({});
   const [savedParent, setSavedParent] = useState<SavedParent | null>(null);
+  // Whether the user has typed into the current record, and when the last one
+  // was saved: a table's form is ready again the instant a record is saved,
+  // so nothing else stands between a double-click and a duplicate record.
+  const [recordEdited, setRecordEdited] = useState(false);
+  const lastSavedAtRef = useRef(0);
 
   useCaptureDefaults({
     pending: capturePending,
@@ -369,6 +376,7 @@ export function FieldCollectionDialog({
       clearCapture();
       prefillRef.current = {};
       setSavedParent(null);
+      setRecordEdited(false);
       targetChosenRef.current = true;
       setLayerId(nextId);
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
@@ -409,6 +417,11 @@ export function FieldCollectionDialog({
     // its suppress flag consumed by the open-reset effect below, leaving the
     // old project's pending geometry in the new project's session.
     suppressResetRef.current = false;
+    // The saved parent and its pre-filled link name layers of the project
+    // being left; another project can reuse the same layer ids.
+    prefillRef.current = {};
+    setSavedParent(null);
+    setRecordEdited(false);
     resetCapture(
       resolveTargetLayer(
         collectionLayers.map((l) => l.id),
@@ -865,6 +878,7 @@ export function FieldCollectionDialog({
   const handleSave = useCallback(() => {
     const pending = capturePending;
     if (!activeLayer || !schema || !pending || photoReads > 0) return;
+    if (activeGeometry === "none" && Date.now() - lastSavedAtRef.current < DOUBLE_SAVE_MS) return;
     // Fields hidden by a visibility expression never block a save, so the
     // schema's own required/type checks run against the visible subset only.
     const candidate = buildPropertiesWithForm(schema, values, attributeForm);
@@ -934,6 +948,8 @@ export function FieldCollectionDialog({
     setLastGpsFix(null);
     setValues(prefillRef.current);
     setRecordSeq((seq) => seq + 1);
+    setRecordEdited(false);
+    lastSavedAtRef.current = Date.now();
     setSavedParent({ layerId: activeLayer.id, properties: props });
     setPhotos([]);
     setVertices([]);
@@ -956,6 +972,7 @@ export function FieldCollectionDialog({
   ]);
 
   const setValue = useCallback((key: string, value: string) => {
+    setRecordEdited(true);
     setValues((v) => ({ ...v, [key]: value }));
   }, []);
 
@@ -1091,6 +1108,7 @@ export function FieldCollectionDialog({
                   schema={schema!}
                   attributeForm={attributeForm}
                   pending={capturePending}
+                  captureKey={recordKey}
                   values={values}
                   setValue={setValue}
                   errors={errors}
@@ -1110,7 +1128,9 @@ export function FieldCollectionDialog({
                 />
               )}
 
-              {savedParent && (activeGeometry === "none" || !pending) && (
+              {/* Hidden once the next record is being typed: following it
+                  would discard that record. */}
+              {savedParent && (activeGeometry === "none" ? !recordEdited : !pending) && (
                 <FieldCollectionRelated
                   parent={savedParent}
                   layers={layers}
@@ -1378,6 +1398,8 @@ interface CaptureStepProps {
   /** Attribute Form designer config narrowed to this schema's fields. */
   attributeForm?: AttributeFormConfig;
   pending: Vertex[] | null;
+  /** Identifies the record being filled in; changes on save and on a new target. */
+  captureKey: string;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
@@ -1399,6 +1421,7 @@ function CaptureStep({
   schema,
   attributeForm,
   pending,
+  captureKey,
   values,
   setValue,
   errors,
@@ -1486,6 +1509,7 @@ function CaptureStep({
             setValue={setValue}
             errors={errors}
             errorText={errorText}
+            captureKey={captureKey}
           />
 
           {/* Save sits above the optional photo so the primary action is

@@ -33,7 +33,13 @@ export function FieldCollectionRelated({ parent, layers, onAdd }: FieldCollectio
           onClick={() => onAdd(target.layerId, { [target.field]: target.value })}
         >
           <Plus className="me-2 h-4 w-4" />
-          {t("fieldCollection.addRelated", { layer: target.layerName })}
+          {/* Two links into one layer are told apart by the field they fill. */}
+          {targets.filter((other) => other.layerId === target.layerId).length > 1
+            ? t("fieldCollection.addRelatedVia", {
+                layer: target.layerName,
+                field: target.fieldLabel,
+              })
+            : t("fieldCollection.addRelated", { layer: target.layerName })}
         </Button>
       ))}
     </div>

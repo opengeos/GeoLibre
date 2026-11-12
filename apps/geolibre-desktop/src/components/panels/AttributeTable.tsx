@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import {
   canEditAttributeValues,
   isReadOnlyAttributeLayer,
@@ -808,20 +809,34 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Attribute Form designer config: per-column edit widgets plus constraint
   // validation of drafted rows. DuckDB layers keep the plain text editor —
   // the designer is only offered for store-backed geojson layers.
-  // Relation dropdowns are filled from the layer they reference, read off the
-  // store when the form is built rather than subscribed to: the table would
-  // otherwise re-render on every edit of an unrelated layer.
+  // Relation dropdowns are filled from the layers they reference. Only those
+  // layers' features are subscribed to, so a record added to one shows up in
+  // the dropdown at once while edits to unrelated layers re-render nothing.
+  const relationLayerIds = useMemo(
+    () => [
+      ...new Set(
+        (isDuckDBLayer ? [] : (layer?.attributeForm?.fields ?? [])).flatMap((field) =>
+          field.valueRelation ? [field.valueRelation.layerId] : [],
+        ),
+      ),
+    ],
+    [isDuckDBLayer, layer?.attributeForm],
+  );
+  const relationSources = useAppStore(
+    useShallow((s) =>
+      relationLayerIds.map((id) => s.layers.find((candidate) => candidate.id === id)?.geojson),
+    ),
+  );
   const attributeForm = useMemo(
     () =>
       isDuckDBLayer
         ? undefined
         : resolveAttributeFormRelations(layer?.attributeForm, (id) =>
-            useAppStore
-              .getState()
-              .layers.find((candidate) => candidate.id === id)
-              ?.geojson?.features.map((feature) => feature.properties),
+            relationSources[relationLayerIds.indexOf(id)]?.features.map(
+              (feature) => feature.properties,
+            ),
           ),
-    [isDuckDBLayer, layer],
+    [isDuckDBLayer, layer?.attributeForm, relationLayerIds, relationSources],
   );
   // Constraints the layer's data service publishes (ArcGIS coded-value and
   // range domains, per type/subtype), merged per record with the designer

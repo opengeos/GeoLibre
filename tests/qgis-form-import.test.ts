@@ -106,6 +106,7 @@ function surveyProject(): string {
           ${field("photo_name", "ExternalResource")}
           ${field("material", "ValueRelation", option("Layer", "materials") + option("Key", "code") + option("Value", "label"))}
           ${field("owner_id", "RelationReference", option("Relation", "point_owner"))}
+          ${field("note_code", "ValueRelation", option("Layer", "notes") + option("Key", "code") + option("Value", "text"))}
           ${field("parent", "RelationReference", option("Relation", "gone"))}
           ${field("note", "TextEdit")}
         </fieldConfiguration>
@@ -163,6 +164,13 @@ function surveyProject(): string {
           </attributeEditorContainer>
           <attributeEditorRelation name="ignored"/>
         </attributeEditorForm>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
+        <id>visits</id><layername>Visits</layername>
+        <datasource>./data/survey.gpkg|layername=visits</datasource><provider>ogr</provider>
+        <fieldConfiguration>${field("fid", "TextEdit")}${field("who", "TextEdit")}</fieldConfiguration>
+        <editorlayout>tablayout</editorlayout>
+        <attributeEditorForm><attributeEditorField name="who"/></attributeEditorForm>
       </maplayer>
       <maplayer type="vector" geometry="No geometry">
         <id>notes</id><layername>Notes</layername>
@@ -263,6 +271,21 @@ describe("QGIS form import", () => {
     // Owners is not loaded: the field is left exactly as it was.
     const owner = resolved?.fields.find((entry) => entry.field === "owner_id");
     assert.equal(owner?.widget, "text");
+    // A layer that is loaded but empty offers nothing, not a stale snapshot.
+    const stale = {
+      fields: [
+        {
+          field: "material",
+          widget: "valueMap" as const,
+          valueMap: [{ value: "OLD" }],
+          valueRelation: { layerId: "materials", keyField: "code" },
+        },
+      ],
+    };
+    assert.deepEqual(resolveAttributeFormRelations(stale, () => [])?.fields[0].valueMap, []);
+    assert.deepEqual(resolveAttributeFormRelations(stale, () => undefined)?.fields[0].valueMap, [
+      { value: "OLD" },
+    ]);
     // Nothing to resolve returns the same object, so memoized callers stay put.
     assert.equal(
       resolveAttributeFormRelations(points.attributeForm, () => undefined),
@@ -274,7 +297,13 @@ describe("QGIS form import", () => {
     const { result } = imported();
     const parent = { layerId: "points", properties: { uuid: "{abc}", species: "QUE" } };
     assert.deepEqual(relatedRecordTargets(parent, result.project.layers), [
-      { layerId: "photos", layerName: "Photos", field: "point_uuid", value: "{abc}" },
+      {
+        layerId: "photos",
+        layerName: "Photos",
+        field: "point_uuid",
+        fieldLabel: "point_uuid",
+        value: "{abc}",
+      },
     ]);
     // Without the key there is nothing to link to.
     assert.deepEqual(
@@ -301,6 +330,8 @@ describe("QGIS form import", () => {
     const { layer } = imported();
     const photos = layer("photos");
     assert.deepEqual(photos.attributeForm?.sections, [
+      // An untitled run: the field sits above the first tab, and stays there.
+      { title: "", fields: ["point_uuid"] },
       { title: "Picture", fields: ["path"] },
       { title: "Picture \u203a Details", fields: ["caption"] },
       { title: "Picture", fields: ["taken"] },
@@ -331,6 +362,11 @@ describe("QGIS form import", () => {
       ],
     );
     assert.deepEqual(orderFormFields(schema.fields, undefined).length, 1);
+    // A table whose layout has no tabs is still a form to capture into, and
+    // carries no sections since the field order already says it all.
+    const visits = layer("visits");
+    assert.equal(isCollectionLayer(visits), true);
+    assert.equal(visits.attributeForm?.sections, undefined);
     // A group split only by fields that are not in the schema reads as one.
     assert.deepEqual(
       orderFormFields(schema.fields.slice(1, 4), [
@@ -480,66 +516,66 @@ describe("QGIS form import", () => {
     assert.equal(failing.errors.height?.code, "range");
   });
 
-  it("fills relation dropdowns from the referenced tables", async () => {
+  it("snapshots a dropdown only when its table is not a layer of the project", async () => {
     const { result, points } = imported();
-    assert.deepEqual(
-      result.formRelations
-        .filter((relation) => relation.layerId === "points")
-        .map((relation) => [relation.field, relation.sourcePath, relation.table]),
-      [
-        ["material", "/home/me/survey/data/lookups.gpkg", "materials"],
-        ["owner_id", "/home/me/survey/data/survey.gpkg", "owners"],
-      ],
-    );
+    // Materials, Owners and Points are layers, so those dropdowns are read
+    // live; Notes is a CSV table that was skipped, so its dropdown is the one
+    // that needs a snapshot.
     const reads: string[] = [];
     await materializeQgisFormRelations(result, async (path, table) => {
       reads.push(`${path}|${table}`);
-      if (table === "materials") {
-        return [
-          { code: "ST", label: "Steel" },
-          { code: "CO", label: "Concrete" },
-          { code: "ST", label: "Steel (duplicate)" },
-          { code: null, label: "No code" },
-        ];
-      }
       return [
-        { id: 2, first_name: "Ada", last_name: "Young" },
-        { id: 1, first_name: "Bo", last_name: "Abel" },
+        { code: "B", text: "Beta" },
+        { code: "A", text: "Alpha" },
+        { code: "B", text: "Beta again" },
+        { code: null, text: "No code" },
       ];
     });
-    // The two lookup tables, and the points table the photos link to.
-    assert.equal(reads.length, 3);
+    assert.deepEqual(reads, ["/home/me/survey/data/notes.csv|"]);
     const fields = points.attributeForm?.fields ?? [];
-    const material = fields.find((entry) => entry.field === "material");
-    assert.deepEqual(material?.valueMap, [
-      { value: "CO", label: "Concrete" },
-      { value: "ST", label: "Steel" },
+    const note = fields.find((entry) => entry.field === "note_code");
+    assert.equal(note?.widget, "valueMap");
+    assert.deepEqual(note?.valueMap, [
+      { value: "A", label: "Alpha" },
+      { value: "B", label: "Beta" },
     ]);
-    // Typed from the key column, so text codes stay text and ids stay numbers.
-    assert.equal(material?.valueType, "string");
-    const owner = fields.find((entry) => entry.field === "owner_id");
-    assert.deepEqual(owner?.valueMap, [
-      { value: "1", label: "Abel, Bo" },
-      { value: "2", label: "Young, Ada" },
-    ]);
-    assert.equal(owner?.valueType, "number");
+    assert.equal(note?.valueType, "string");
+    assert.equal(note?.valueRelation, undefined);
+    assert.equal(fields.find((entry) => entry.field === "material")?.valueMap, undefined);
     assert.deepEqual(result.formRelations, []);
   });
 
-  it("keeps a text box and notes it when a referenced table cannot be read", async () => {
-    const { result, points } = imported();
-    await materializeQgisFormRelations(result, async (_path, table) => {
-      if (table === "owners") throw new Error("locked");
-      return [];
+  it("keeps a text box and says why when a snapshot cannot be taken", async () => {
+    const unreadable = imported();
+    await materializeQgisFormRelations(unreadable.result, async () => {
+      throw new Error("locked");
     });
-    const fields = points.attributeForm?.fields ?? [];
-    assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "text");
+    const empty = imported();
+    await materializeQgisFormRelations(empty.result, async () => []);
+    const tooLong = imported();
+    await materializeQgisFormRelations(tooLong.result, async () =>
+      Array.from({ length: MAX_RELATION_ENTRIES + 1 }, (_, index) => ({
+        code: `N${index}`,
+        text: `Note ${index}`,
+      })),
+    );
+    for (const [run, reason] of [
+      [unreadable, "relation"],
+      [empty, "relation-empty"],
+      [tooLong, "relation-too-large"],
+    ] as const) {
+      const note = run.points.attributeForm?.fields.find((entry) => entry.field === "note_code");
+      assert.equal(note?.widget, "text", reason);
+      assert.deepEqual(
+        run.result.formNotes.filter((entry) => entry.field === "note_code"),
+        [{ layerName: "Measured points", field: "note_code", reason }],
+      );
+    }
+    // Reported at import regardless of the snapshot.
     assert.deepEqual(
-      result.formNotes
-        .filter((note) => note.reason.startsWith("relation"))
-        .map((note) => [note.field, note.reason]),
-      // The referenced tables are layers of the project, so their dropdowns
-      // are read live and a failed or empty snapshot is nothing to report.
+      unreadable.result.formNotes
+        .filter((entry) => entry.reason.startsWith("relation") && entry.field !== "note_code")
+        .map((entry) => [entry.field, entry.reason]),
       [
         ["tags", "relation-multi"],
         ["parent", "relation"],
@@ -556,25 +592,6 @@ describe("QGIS form import", () => {
         useDisplayExpression: true,
       }),
       { entries: [{ value: "a" }, { value: "b" }], valueType: "string" },
-    );
-  });
-
-  it("leaves a dropdown as text when its table is too long for a list", async () => {
-    const { result, points } = imported();
-    await materializeQgisFormRelations(result, async (_path, table) =>
-      table === "materials"
-        ? Array.from({ length: MAX_RELATION_ENTRIES + 1 }, (_, index) => ({
-            code: `M${index}`,
-            label: `Material ${index}`,
-          }))
-        : [{ id: 1, first_name: "Bo", last_name: "Abel" }],
-    );
-    const fields = points.attributeForm?.fields ?? [];
-    assert.equal(fields.find((entry) => entry.field === "material")?.widget, "text");
-    assert.equal(fields.find((entry) => entry.field === "owner_id")?.widget, "valueMap");
-    assert.deepEqual(
-      result.formNotes.filter((note) => note.reason === "relation-too-large"),
-      [{ layerName: "Measured points", field: "material", reason: "relation-too-large" }],
     );
   });
 

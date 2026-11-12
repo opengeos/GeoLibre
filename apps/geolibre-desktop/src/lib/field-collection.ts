@@ -434,9 +434,8 @@ export interface FormFieldGroup {
  *
  * @param fields - The schema's fields, in schema order.
  * @param sections - The form's sections, if it has any.
- * @returns Groups in display order. Fields no section lists keep their place
- *   relative to each other: those before the first sectioned field lead, the
- *   rest follow the sections. Without sections, one untitled group.
+ * @returns Groups in display order: the sections, then one untitled group of
+ *   the fields no section lists. Without sections, one untitled group.
  */
 export function orderFormFields(
   fields: readonly CollectionField[],
@@ -457,17 +456,12 @@ export function orderFormFields(
     // A group interrupted by a nested group whose fields are all elsewhere
     // would otherwise repeat its own heading back to back.
     const previous = groups[groups.length - 1];
-    if (previous && previous.title === section.title) previous.fields.push(...members);
-    else groups.push({ title: section.title, fields: members });
+    if (previous && previous.title === section.title && section.title !== "") {
+      previous.fields.push(...members);
+    } else groups.push({ title: section.title, fields: members });
   }
-  const firstPlaced = fields.findIndex((field) => placed.has(field.key));
-  const leading = fields.filter((field, index) => !placed.has(field.key) && index < firstPlaced);
-  const trailing = fields.filter((field, index) => !placed.has(field.key) && index > firstPlaced);
-  return [
-    ...(leading.length > 0 ? [{ title: "", fields: leading }] : []),
-    ...groups,
-    ...(trailing.length > 0 ? [{ title: "", fields: trailing }] : []),
-  ];
+  const rest = fields.filter((field) => !placed.has(field.key));
+  return rest.length > 0 ? [...groups, { title: "", fields: rest }] : groups;
 }
 
 /** A record just saved, kept so its child records can be added next. */
@@ -482,6 +476,8 @@ export interface RelatedRecordTarget {
   layerName: string;
   /** The child's field that holds the link. */
   field: string;
+  /** That field's label, to tell two links into the same layer apart. */
+  fieldLabel: string;
   /** The parent's key, as the raw form string to pre-fill. */
   value: string;
 }
@@ -517,6 +513,7 @@ export function relatedRecordTargets(
         layerId: layer.id,
         layerName: layer.name,
         field: field.field,
+        fieldLabel: field.alias?.trim() || field.field,
         value: String(key),
       });
     }

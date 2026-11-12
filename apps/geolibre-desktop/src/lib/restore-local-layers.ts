@@ -92,10 +92,21 @@ export async function restoreLocalFileLayers(): Promise<void> {
       // are read straight from the GeoPackage.
       const tables = layers.filter(isAttributeTableLayer);
       if (tables.length > 0) {
-        const geojson = await readTableLayerFeatures(path, sourceLayer);
+        const { geojson, truncated } = await readTableLayerFeatures(path, sourceLayer);
         for (const layer of tables) {
           if (!isStillWaiting(layer.id, path, sourceLayer)) continue;
           useAppStore.getState().updateLayer(layer.id, { geojson });
+          // A list cut short looks complete in the attribute table and in the
+          // dropdowns that read it, so say that it is not.
+          if (truncated) {
+            notify.warning(
+              i18next.t("notifications.tableLayerTruncated", {
+                layer: layer.name,
+                count: geojson.features.length,
+              }),
+              { durationMs: null, dedupeKey: `table-layer-truncated:${layer.id}` },
+            );
+          }
         }
         layers = layers.filter((layer) => !isAttributeTableLayer(layer));
         if (layers.length === 0) return;
