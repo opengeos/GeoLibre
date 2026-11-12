@@ -1260,6 +1260,60 @@ describe("plugin app API layers", () => {
     assert.equal(tileRequestHeadersFor(tile), undefined);
   });
 
+  it("sends a URL prefix's request headers until the plugin clears them", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const prefix = "https://tiles.example.org/preview/";
+    const tile = "https://tiles.example.org/preview/3/2/1.png";
+
+    api.setUrlRequestHeaders(prefix, { Authorization: "Bearer first" });
+    assert.deepEqual(tileRequestHeadersFor(tile), { Authorization: "Bearer first" });
+    assert.equal(
+      tileRequestHeadersFor("https://tiles.example.org/other/3/2/1.png"),
+      undefined,
+      "only URLs under the prefix carry them",
+    );
+    assert.deepEqual(useAppStore.getState().layers, [], "no layer is needed, and none is made");
+
+    // A refreshed token replaces the one before.
+    api.setUrlRequestHeaders(prefix, { Authorization: "Bearer second" });
+    assert.deepEqual(tileRequestHeadersFor(tile), { Authorization: "Bearer second" });
+
+    // They are the plugin's, not the project's: another project keeps them.
+    useAppStore.getState().newProject({ name: "Next" });
+    assert.deepEqual(tileRequestHeadersFor(tile), { Authorization: "Bearer second" });
+
+    // A template is cut at its first placeholder, so it names the same prefix.
+    api.setUrlRequestHeaders(`${prefix}{z}/{x}/{y}.png`, null);
+    assert.equal(tileRequestHeadersFor(tile), undefined);
+  });
+
+  it("lets a layer's own headers win over a URL prefix's", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    api.setUrlRequestHeaders("https://tiles.example.org/", { Authorization: "Bearer broad" });
+    const layer = api.addTileLayer("Raster", "https://tiles.example.org/mosaic/{z}/{x}/{y}.png");
+    api.setLayerRequestHeaders(layer, { Authorization: "Bearer layer" });
+
+    assert.deepEqual(tileRequestHeadersFor("https://tiles.example.org/mosaic/1/1/1.png"), {
+      Authorization: "Bearer layer",
+    });
+    assert.deepEqual(tileRequestHeadersFor("https://tiles.example.org/preview/1/1/1.png"), {
+      Authorization: "Bearer broad",
+    });
+
+    api.setUrlRequestHeaders("https://tiles.example.org/", null);
+  });
+
+  it("refuses a URL prefix whose headers could reach other servers", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    for (const unscoped of ["https://", "https://tiles.example.org", "https://{s}.example.org/"]) {
+      assert.throws(
+        () => api.setUrlRequestHeaders(unscoped, { Authorization: "Bearer token" }),
+        /could match other servers/,
+      );
+    }
+    assert.equal(tileRequestHeadersFor("https://tiles.example.org/1/1/1.png"), undefined);
+  });
+
   it("keeps a layer's headers through a token refresh, but not a move to another URL", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     const vector = api.addVectorTileLayer(
