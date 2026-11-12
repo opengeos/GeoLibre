@@ -466,7 +466,8 @@ export function buildRelationValueMap(
   const seen = new Set<string>();
   const entries: AttributeFormValueMapEntry[] = [];
   // Parsed once: the same expression labels every row.
-  const source = relation.labelField ? undefined : relation.labelExpression?.trim();
+  // Also the fallback for a row whose label column is empty.
+  const source = relation.labelExpression?.trim();
   const parsed = source ? parseQgisExpression(source) : null;
   const expression = parsed?.ok ? parsed.node : null;
   let numeric = true;

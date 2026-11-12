@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -234,17 +235,32 @@ export function FieldCollectionDialog({
   // not block a save (its required/constraint rules have nothing to bind to).
   // Memoized so handleSave's useCallback and CaptureStep's prop keep a stable
   // identity across unrelated re-renders.
+  // Only the layers this form's dropdowns read are watched, so the lists are
+  // rebuilt when one of them changes and not on every edit anywhere.
+  const relationLayerIds = useMemo(
+    () => [
+      ...new Set(
+        (activeLayer?.attributeForm?.fields ?? []).flatMap((field) =>
+          field.valueRelation ? [field.valueRelation.layerId] : [],
+        ),
+      ),
+    ],
+    [activeLayer?.attributeForm],
+  );
+  const relationSources = useAppStore(
+    useShallow((s) => relationLayerIds.map((id) => s.layers.find((l) => l.id === id)?.geojson)),
+  );
   const attributeForm: AttributeFormConfig | undefined = useMemo(() => {
     // Relation dropdowns list the referenced layer's current rows, so a point
     // captured a moment ago can be picked as a review's or photo's parent.
     const form = resolveAttributeFormRelations(activeLayer?.attributeForm, (id) =>
-      layers.find((layer) => layer.id === id)?.geojson?.features.map((f) => f.properties),
+      relationSources[relationLayerIds.indexOf(id)]?.features.map((f) => f.properties),
     );
     if (!form || !schema) return undefined;
     const keys = new Set(schema.fields.map((field) => field.key));
     const fields = form.fields.filter((field) => keys.has(field.field));
     return fields.length > 0 ? { ...form, fields } : undefined;
-  }, [activeLayer, schema, layers]);
+  }, [activeLayer, schema, relationLayerIds, relationSources]);
   // A table's records have no location: the form is the whole capture. A new
   // array per record marks where one capture ends and the next begins.
   const [recordSeq, setRecordSeq] = useState(0);
@@ -378,6 +394,9 @@ export function FieldCollectionDialog({
       prefillRef.current = {};
       setSavedParent(null);
       setRecordEdited(false);
+      // The double-click guard is about one layer's form; a save into the
+      // layer just switched to is a different record, however soon it comes.
+      lastSavedAtRef.current = 0;
       targetChosenRef.current = true;
       setLayerId(nextId);
       if (!nextId && drafts.length === 0) setDrafts([makeDraft()]);
@@ -1110,10 +1129,12 @@ export function FieldCollectionDialog({
                   attributeForm={attributeForm}
                   pending={capturePending}
                   captureKey={recordKey}
-                  // Clamped: a capture that ended mid-read reset the count to 0.
-                  onAttachmentReading={(delta) =>
-                    setPhotoReads((count) => Math.max(0, count + delta))
-                  }
+                  // A read reports under the record it began in. One that ends
+                  // after its capture did (its count was reset with it) must
+                  // not release the record that came next.
+                  onAttachmentReading={(delta, key) => {
+                    if (key === recordKey) setPhotoReads((count) => Math.max(0, count + delta));
+                  }}
                   values={values}
                   setValue={setValue}
                   errors={errors}
@@ -1406,7 +1427,7 @@ interface CaptureStepProps {
   /** Identifies the record being filled in; changes on save and on a new target. */
   captureKey: string;
   /** A photo field started (+1) or finished (-1) reading a picture; Save waits for it. */
-  onAttachmentReading: (delta: 1 | -1) => void;
+  onAttachmentReading: (delta: 1 | -1, captureKey: string) => void;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;

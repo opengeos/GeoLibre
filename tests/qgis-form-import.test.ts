@@ -149,6 +149,8 @@ function surveyProject(): string {
           ${field("point_uuid", "RelationReference", option("Relation", "photo_point"))}
           ${field("path", "ExternalResource", option("DocumentViewer", 1))}
           ${field("manual", "ExternalResource", option("DocumentViewer", 0))}
+          ${field("photo_path", "ExternalResource", option("DocumentViewer", 0))}
+          ${field("picture", "ExternalResource", option("DocumentViewer", 0))}
           ${field("caption", "TextEdit")}
           ${field("taken", "DateTime")}
         </fieldConfiguration>
@@ -327,6 +329,9 @@ describe("QGIS form import", () => {
     assert.equal(byField.get("path")?.widget, "attachment");
     // Not an image viewer and not named like a picture: left as a path.
     assert.equal(byField.get("manual")?.widget, "text");
+    // The name decides only when it is a whole word for a picture.
+    assert.equal(byField.get("photo_path")?.widget, "text");
+    assert.equal(byField.get("picture")?.widget, "attachment");
   });
 
   it("follows a drag-and-drop layout: order, sections and hidden fields", () => {
@@ -342,10 +347,10 @@ describe("QGIS form import", () => {
     const schema = getSchema(photos);
     assert.deepEqual(
       schema.fields.map((entry) => entry.key),
-      ["point_uuid", "path", "caption", "taken", "uuid", "manual"],
+      ["point_uuid", "path", "caption", "taken", "uuid", "manual", "photo_path", "picture"],
     );
     // Left out of the layout: not shown, but still saved (uuid has a default).
-    for (const hidden of ["uuid", "manual"]) {
+    for (const hidden of ["uuid", "manual", "photo_path", "picture"]) {
       const config = getAttributeFormField(photos.attributeForm, hidden);
       assert.ok(config);
       assert.equal(isAttributeFormFieldVisible(config, {}), false, hidden);
@@ -361,7 +366,7 @@ describe("QGIS form import", () => {
         ["Picture", ["path"]],
         ["Picture \u203a Details", ["caption"]],
         ["Picture", ["taken"]],
-        ["", ["uuid", "manual"]],
+        ["", ["uuid", "manual", "photo_path", "picture"]],
       ],
     );
     assert.deepEqual(orderFormFields(schema.fields, undefined).length, 1);
@@ -582,6 +587,29 @@ describe("QGIS form import", () => {
       [
         ["tags", "relation-multi"],
         ["parent", "relation"],
+      ],
+    );
+  });
+
+  it("falls back to the display expression for a row with no label", () => {
+    assert.deepEqual(
+      relationValueMap(
+        [
+          { id: 1, label: "One", code: "x" },
+          { id: 2, label: null, code: "y" },
+        ],
+        {
+          field: "f",
+          referencedLayerId: "t",
+          keyField: "id",
+          labelField: "label",
+          useDisplayExpression: true,
+        },
+        "'code ' || code",
+      ).entries,
+      [
+        { value: "2", label: "code y" },
+        { value: "1", label: "One" },
       ],
     );
   });

@@ -36,7 +36,7 @@ interface FieldCollectionFormFieldsProps {
   /** Changes with each record, so a picture still loading stays with its own. */
   captureKey: string;
   /** Told when a picture starts (+1) and finishes (-1) loading, so Save can wait. */
-  onReadingChange: (delta: 1 | -1) => void;
+  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
 }
 
 /**
@@ -107,7 +107,7 @@ interface FormFieldProps {
   onChange: (value: string) => void;
   error: string | null;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1) => void;
+  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
 }
 
 function FormField({
@@ -207,7 +207,7 @@ function AttachmentInput({
   value: string;
   onChange: (value: string) => void;
   captureKey: string;
-  onReadingChange: (delta: 1 | -1) => void;
+  onReadingChange: (delta: 1 | -1, captureKey: string) => void;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -240,8 +240,8 @@ function AttachmentInput({
     const reader = new FileReader();
     // Save is held while the picture loads, so a quick save cannot store the
     // record without it. Released exactly once, however the read ends.
-    onReadingChange(1);
-    reader.onloadend = () => onReadingChange(-1);
+    onReadingChange(1, captureKey);
+    reader.onloadend = () => onReadingChange(-1, captureKey);
     reader.onerror = () => {
       if (readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
     };

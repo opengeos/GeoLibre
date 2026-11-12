@@ -472,7 +472,11 @@ function parseFormLayout(
   return order.length > 0 ? { order, sections } : null;
 }
 
-const IMAGE_FIELD_NAME = /photo|picture|image|foto|bild|img/i;
+/**
+ * A whole name, not a fragment: `picture` and `Photos` are photo fields,
+ * `photo_path`, `image_url` and `photographer` are not.
+ */
+const IMAGE_FIELD_NAME = /^\s*(?:photos?|pictures?|images?|fotos?|bild(?:er)?|img)\s*$/i;
 const IMAGE_FILTER = /\.(?:jpe?g|png|gif|webp|heic|bmp|tiff?)\b/i;
 
 /** Whether an Attachment (External Resource) widget holds a picture. */
