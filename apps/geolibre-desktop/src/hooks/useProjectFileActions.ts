@@ -680,6 +680,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }
       // Dropdowns that list another table's rows are filled in before the
       // project loads, so the form is complete the first time it opens.
+      // A remote layer that failed to load is gone from the project by now;
+      // notes about it would describe a layer the user cannot see.
+      const loadedNames = new Set(imported.project.layers.map((layer) => layer.name));
+      imported.formNotes = imported.formNotes.filter((note) => loadedNames.has(note.layerName));
+      imported.styleNotes = imported.styleNotes.filter((note) => loadedNames.has(note.layerName));
       await materializeQgisFormRelations(imported, readQgisFormTable);
       if (superseded()) return;
       const mapReady = importedProjectMapReady(

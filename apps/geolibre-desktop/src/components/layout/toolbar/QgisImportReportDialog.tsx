@@ -9,9 +9,10 @@ import {
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
-import type {
-  QgisFormImportNote,
-  QgisProjectImportWarning,
+import {
+  QGIS_STYLE_NOTE_CODES,
+  type QgisFormImportNote,
+  type QgisProjectImportWarning,
 } from "../../../lib/qgis-project-import";
 import { ImportWarningList } from "./ImportWarningList";
 
@@ -53,7 +54,13 @@ export function QgisImportReportDialog({ projectFiles }: { projectFiles: Project
       })),
     [projectFiles.qgisImportStyleNotes],
   );
-  const describeQgisStyleNote = useCallback((note: { reason: string }) => note.reason, []);
+  const describeQgisStyleNote = useCallback(
+    (note: { reason: string }) => {
+      const code = QGIS_STYLE_NOTE_CODES.find((candidate) => candidate === note.reason);
+      return code ? t(`toolbar.item.qgisStyleNoteReason.${code}`) : note.reason;
+    },
+    [t],
+  );
   const qgisWarningCount = projectFiles.qgisImportWarnings?.length ?? 0;
   const closeQgisImportDialog = () => {
     projectFiles.setQgisImportWarnings(null);

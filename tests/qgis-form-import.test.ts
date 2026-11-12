@@ -737,7 +737,7 @@ describe("QGIS project symbology", () => {
     // Two unreadable rules share one message; the expression label has its own.
     assert.equal(notes.length, 2);
     assert.ok(notes.some((note) => /expression/i.test(note.message) && /rule/i.test(note.message)));
-    assert.ok(notes.some((note) => /Labels built from a QGIS expression/.test(note.message)));
+    assert.ok(notes.some((note) => note.message === "expression-label"));
     assert.equal(style.labels.enabled, false);
   });
 

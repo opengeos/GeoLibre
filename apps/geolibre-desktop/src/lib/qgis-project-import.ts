@@ -67,9 +67,18 @@ export interface QgisProjectImportResult {
 /** Something about a layer's symbology that was not carried over. */
 export interface QgisStyleImportNote {
   layerName: string;
-  /** The style reader's message, shown as it is. */
+  /**
+   * One of this importer's own {@link QGIS_STYLE_NOTE_CODES}, which the
+   * report translates, or a sentence from the style reader, shown as it is.
+   */
   message: string;
 }
+
+/** Notes this importer raises itself; the report dialog has a string for each. */
+export const QGIS_STYLE_NOTE_CODES = ["renderer-unreadable", "expression-label"] as const;
+export type QgisStyleNoteCode = (typeof QGIS_STYLE_NOTE_CODES)[number];
+const RENDERER_UNREADABLE: QgisStyleNoteCode = "renderer-unreadable";
+const EXPRESSION_LABEL: QgisStyleNoteCode = "expression-label";
 
 export interface QgisRasterImport {
   id: string;
@@ -804,14 +813,14 @@ function parseLayerSymbology(element: Element): { style: LayerStyle; warnings: s
   // Far beyond any real renderer; a crafted project must not make the style
   // reader chew through megabytes of XML per layer.
   if (!xml || xml.length > MAX_RENDERER_XML_LENGTH) {
-    warnings.push("The layer's renderer could not be read; the default style was used.");
+    warnings.push(RENDERER_UNREADABLE);
     return { style: base, warnings };
   }
   const imported = importStyleText(`<qgis>${xml}</qgis>`);
   warnings.push(...imported.warnings);
   // Never a silent default: a renderer that yielded nothing says so.
   if (!imported.ok && imported.warnings.length === 0) {
-    warnings.push("The layer's renderer could not be read; the default style was used.");
+    warnings.push(RENDERER_UNREADABLE);
   }
   // Labels come from the direct read above (the fragment carries none).
   return { style: imported.ok ? imported.apply(base) : base, warnings };
@@ -878,7 +887,7 @@ function applySimpleLabels(element: Element, style: LayerStyle, warnings: string
   // QGIS also writes in expression mode, is still a plain field label.
   const reference = isExpression ? /^(?:"((?:[^"]|"")+)"|([A-Za-z_]\w*))$/.exec(field ?? "") : null;
   if (field && isExpression && !reference) {
-    warnings.push("Labels built from a QGIS expression were not imported.");
+    warnings.push(EXPRESSION_LABEL);
     return style;
   }
   if (field) {
