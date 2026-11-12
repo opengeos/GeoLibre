@@ -35,6 +35,8 @@ interface FieldCollectionFormFieldsProps {
   errorText: (code: string | undefined) => string | null;
   /** Changes with each record, so a picture still loading stays with its own. */
   captureKey: string;
+  /** Told when a picture starts (+1) and finishes (-1) loading, so Save can wait. */
+  onReadingChange: (delta: 1 | -1) => void;
 }
 
 /**
@@ -51,6 +53,7 @@ export function FieldCollectionFormFields({
   errors,
   errorText,
   captureKey,
+  onReadingChange,
 }: FieldCollectionFormFieldsProps) {
   // A heading is drawn once per run: sections whose fields are all hidden
   // leave nothing between two parts of the same group.
@@ -75,6 +78,7 @@ export function FieldCollectionFormFields({
               onChange={(value) => setValue(field.key, value)}
               error={errorText(errors[field.key])}
               captureKey={captureKey}
+              onReadingChange={onReadingChange}
             />,
           ];
         });
@@ -103,9 +107,18 @@ interface FormFieldProps {
   onChange: (value: string) => void;
   error: string | null;
   captureKey: string;
+  onReadingChange: (delta: 1 | -1) => void;
 }
 
-function FormField({ field, config, value, onChange, error, captureKey }: FormFieldProps) {
+function FormField({
+  field,
+  config,
+  value,
+  onChange,
+  error,
+  captureKey,
+  onReadingChange,
+}: FormFieldProps) {
   const id = `fc-${field.key}`;
   return (
     <div className="space-y-1.5">
@@ -133,7 +146,13 @@ function FormField({ field, config, value, onChange, error, captureKey }: FormFi
           />
         </div>
       ) : config?.widget === "attachment" ? (
-        <AttachmentInput id={id} value={value} onChange={onChange} captureKey={captureKey} />
+        <AttachmentInput
+          id={id}
+          value={value}
+          onChange={onChange}
+          captureKey={captureKey}
+          onReadingChange={onReadingChange}
+        />
       ) : config ? (
         <Input
           id={id}
@@ -182,11 +201,13 @@ function AttachmentInput({
   value,
   onChange,
   captureKey,
+  onReadingChange,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   captureKey: string;
+  onReadingChange: (delta: 1 | -1) => void;
 }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,6 +238,10 @@ function AttachmentInput({
     }
     const seq = (readSeq.current += 1);
     const reader = new FileReader();
+    // Save is held while the picture loads, so a quick save cannot store the
+    // record without it. Released exactly once, however the read ends.
+    onReadingChange(1);
+    reader.onloadend = () => onReadingChange(-1);
     reader.onerror = () => {
       if (readSeq.current === seq) setProblem(t("fieldCollection.photoReadError"));
     };

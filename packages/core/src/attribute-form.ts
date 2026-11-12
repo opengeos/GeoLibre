@@ -453,12 +453,15 @@ export interface RelationValueMap {
  *
  * @param rows - The referenced rows, as plain property records.
  * @param relation - Which properties hold the stored value and the label.
+ * @param options.maxEntries - Stop once more than this many distinct entries
+ *   are found; the result is then longer than the limit and unsorted.
  * @returns Every distinct entry, sorted by label. The caller decides what to
  *   do with a very long list.
  */
 export function buildRelationValueMap(
   rows: Iterable<Record<string, unknown> | null | undefined>,
   relation: Omit<AttributeFormValueRelation, "layerId">,
+  options: { maxEntries?: number } = {},
 ): RelationValueMap {
   const seen = new Set<string>();
   const entries: AttributeFormValueMapEntry[] = [];
@@ -481,6 +484,11 @@ export function buildRelationValueMap(
     }
     const text = label == null ? "" : String(label).trim();
     entries.push(text && text !== value ? { value, label: text } : { value });
+    // Past the caller's limit the list is not going to be used: stop before
+    // labelling and sorting the rest of a very long table.
+    if (options.maxEntries !== undefined && entries.length > options.maxEntries) {
+      return { entries, valueType: numeric ? "number" : "string" };
+    }
   }
   entries.sort((a, b) =>
     (a.label ?? a.value).localeCompare(b.label ?? b.value, undefined, { numeric: true }),
@@ -513,7 +521,9 @@ export function resolveAttributeFormRelations(
     const relation = field.valueRelation;
     const rows = relation ? rowsOf(relation.layerId) : undefined;
     if (!relation || !rows) return field;
-    const { entries, valueType } = buildRelationValueMap(rows, relation);
+    const { entries, valueType } = buildRelationValueMap(rows, relation, {
+      maxEntries: MAX_RELATION_ENTRIES,
+    });
     if (entries.length > MAX_RELATION_ENTRIES) return field;
     changed = true;
     // The layer is loaded and has nothing to offer: the import-time snapshot

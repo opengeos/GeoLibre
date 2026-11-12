@@ -286,6 +286,9 @@ describe("QGIS form import", () => {
     assert.deepEqual(resolveAttributeFormRelations(stale, () => undefined)?.fields[0].valueMap, [
       { value: "OLD" },
     ]);
+    // A table too long for a list is left alone, without sorting all of it.
+    const long = Array.from({ length: 1500 }, (_, index) => ({ code: `C${index}` }));
+    assert.equal(resolveAttributeFormRelations(stale, () => long)?.fields[0].valueMap?.length, 1);
     // Nothing to resolve returns the same object, so memoized callers stay put.
     assert.equal(
       resolveAttributeFormRelations(points.attributeForm, () => undefined),

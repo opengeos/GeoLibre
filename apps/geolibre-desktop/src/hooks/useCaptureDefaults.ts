@@ -24,7 +24,7 @@ interface CaptureDefaultsOptions {
    * have no location to go null between captures, so this is what tells them
    * apart.
    */
-  captureKey?: number;
+  captureKey?: string;
   /** The GPS fix the location came from; null for a map pick. */
   gpsFix: GpsFix | null;
   schema: CollectionSchema | null;
@@ -44,7 +44,7 @@ interface CaptureDefaultsOptions {
  */
 export function useCaptureDefaults({
   pending,
-  captureKey = 0,
+  captureKey = "",
   gpsFix,
   schema,
   attributeForm,

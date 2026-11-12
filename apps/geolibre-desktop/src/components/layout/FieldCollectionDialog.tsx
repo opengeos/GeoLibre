@@ -266,7 +266,8 @@ export function FieldCollectionDialog({
 
   useCaptureDefaults({
     pending: capturePending,
-    captureKey: recordSeq,
+    // Layer and record: switching between two tables is a new capture too.
+    captureKey: recordKey,
     gpsFix: lastGpsFix,
     schema,
     attributeForm,
@@ -1109,6 +1110,10 @@ export function FieldCollectionDialog({
                   attributeForm={attributeForm}
                   pending={capturePending}
                   captureKey={recordKey}
+                  // Clamped: a capture that ended mid-read reset the count to 0.
+                  onAttachmentReading={(delta) =>
+                    setPhotoReads((count) => Math.max(0, count + delta))
+                  }
                   values={values}
                   setValue={setValue}
                   errors={errors}
@@ -1400,6 +1405,8 @@ interface CaptureStepProps {
   pending: Vertex[] | null;
   /** Identifies the record being filled in; changes on save and on a new target. */
   captureKey: string;
+  /** A photo field started (+1) or finished (-1) reading a picture; Save waits for it. */
+  onAttachmentReading: (delta: 1 | -1) => void;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
   errors: Record<string, string>;
@@ -1422,6 +1429,7 @@ function CaptureStep({
   attributeForm,
   pending,
   captureKey,
+  onAttachmentReading,
   values,
   setValue,
   errors,
@@ -1510,6 +1518,7 @@ function CaptureStep({
             errors={errors}
             errorText={errorText}
             captureKey={captureKey}
+            onReadingChange={onAttachmentReading}
           />
 
           {/* Save sits above the optional photo so the primary action is
