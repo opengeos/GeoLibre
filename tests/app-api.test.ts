@@ -1319,7 +1319,13 @@ describe("plugin app API layers", () => {
 
   it("refuses a URL prefix whose headers could reach other servers", () => {
     const api = createAppAPI(undefined, fakeHost().host);
-    for (const unscoped of ["https://", "https://tiles.example.org", "https://{s}.example.org/"]) {
+    for (const unscoped of [
+      "",
+      "{z}/{x}/{y}.png",
+      "https://",
+      "https://tiles.example.org",
+      "https://{s}.example.org/",
+    ]) {
       assert.throws(
         () => api.setUrlRequestHeaders(unscoped, { Authorization: "Bearer token" }),
         /could match other servers/,

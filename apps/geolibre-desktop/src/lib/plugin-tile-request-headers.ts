@@ -224,6 +224,13 @@ export function setPluginUrlRequestHeaders(
   headers: Record<string, string> | null,
 ): void {
   const prefix = tileUrlPrefix(urlPrefix);
+  // setTileRequestHeaders drops an empty prefix (from "" or a template that
+  // starts with "{") without an error, so refuse unscoped ones here.
+  if (headers !== null && !isScopedTileUrlPrefix(prefix)) {
+    throw new Error(
+      `setUrlRequestHeaders: "${urlPrefix}" needs a fixed host and path before its first placeholder; it could match other servers.`,
+    );
+  }
   setTileRequestHeaders(
     `${URL_KEY_PREFIX}${prefix}`,
     [prefix],
