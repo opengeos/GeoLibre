@@ -30,6 +30,10 @@ describe("QGIS expression subset", () => {
     assert.equal(value("(1 + 2) * 3"), 9);
     assert.equal(value("2 ^ 3 ^ 2"), 512);
     assert.equal(value("-4 + 10 % 3"), -3);
+    // Half away from zero, as QGIS rounds.
+    assert.equal(value("round(-2.5)"), -3);
+    assert.equal(value("round(2.5)"), 3);
+    assert.equal(value("round(-1.25, 1)"), -1.3);
     assert.equal(value("'it''s'"), "it's");
     assert.equal(value("7 / 0"), null);
   });

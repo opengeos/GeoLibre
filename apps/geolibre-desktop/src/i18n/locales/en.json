@@ -4232,7 +4232,13 @@
         "browser-local-raster": "The raster is referenced by a local path. Use GeoLibre Desktop to load it.",
         "no-geometry": "Tables without geometry are not added as map layers. Dropdown lists that read from them are still filled in."
       },
+      "qgisImportNotes": "The project was imported. Some settings could not be carried over.",
       "qgisImportFormNotes": "Some form settings could not be carried over.",
+      "qgisImportStyleNotes": "Some symbology could not be carried over.",
+      "qgisStyleNoteReason": {
+        "renderer-unreadable": "The layer's renderer could not be read; the default style was used.",
+        "expression-label": "Labels built from a QGIS expression were not imported."
+      },
       "qgisFormNoteFieldCount_one": "{{count}} field",
       "qgisFormNoteFieldCount_other": "{{count}} fields",
       "qgisFormNoteReason": {

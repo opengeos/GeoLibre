@@ -317,7 +317,7 @@ export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
  * @param SQL - An initialised sql.js factory.
  * @param bytes - The GeoPackage file.
  * @param table - Table name; must be a user data table registered in
- *   `gpkg_contents` (or the only one, when blank).
+ *   `gpkg_contents`. Blank reads the first registered one.
  * @returns Up to {@link GEOPACKAGE_TABLE_ROW_LIMIT} rows.
  */
 export function readGeoPackageTableRowsSync(
