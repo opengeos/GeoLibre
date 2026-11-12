@@ -1174,7 +1174,7 @@ app.setUrlRequestHeaders?.("https://tiles.example.org/preview/", null);
 
 - Every tile and TileJSON request whose URL starts with the prefix carries the headers, whichever source asks, so set them before adding the source. The prefix follows a layer's rule (a fixed host and the start of a path; a template is cut at its first `{`), and an unscoped one throws.
 - They belong to the plugin, not to a layer or the project: held in memory, never saved, and sent until the plugin clears them with `null`, so clear them in `deactivate`. Calling it again for the same prefix replaces them, which is how a refreshed token is put in.
-- Where a layer's own headers also match, the longer prefix wins. The `MapLibre only` and `CORS` notes above apply here too.
+- Where a layer's own headers also match, the longer prefix wins, and on the same prefix the layer's do. The `MapLibre only` and `CORS` notes above apply here too.
 
 ## Zarr layers
 

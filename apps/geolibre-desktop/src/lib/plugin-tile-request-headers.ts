@@ -212,8 +212,8 @@ export function setPluginLayerRequestHeaders(
  * For sources a plugin adds to the map itself (`getMap().addSource`) and
  * doesn't mirror into the layer store: there is no layer to hang the headers
  * on, so they belong to the URL, and stay until the plugin clears them. A
- * layer's own headers win over these where both match, since the longest
- * prefix does.
+ * layer's own headers win over these where both match: the longer prefix
+ * wins, and on the same prefix the layer's do.
  *
  * @param urlPrefix - The start of the URLs to match: a fixed host and the
  *   start of a path. A tile template is cut at its first `{`.
@@ -228,5 +228,6 @@ export function setPluginUrlRequestHeaders(
     `${URL_KEY_PREFIX}${prefix}`,
     [prefix],
     headers === null ? {} : validateRequestHeaders("setUrlRequestHeaders", headers),
+    { fallback: true },
   );
 }

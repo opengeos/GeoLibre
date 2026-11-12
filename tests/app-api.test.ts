@@ -1303,6 +1303,20 @@ describe("plugin app API layers", () => {
     api.setUrlRequestHeaders("https://tiles.example.org/", null);
   });
 
+  it("lets a layer's own headers win over the same URL prefix set before them", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const prefix = "https://tiles.example.org/mosaic/";
+    api.setUrlRequestHeaders(prefix, { Authorization: "Bearer url" });
+    const layer = api.addTileLayer("Raster", `${prefix}{z}/{x}/{y}.png`);
+    api.setLayerRequestHeaders(layer, { Authorization: "Bearer layer" });
+
+    assert.deepEqual(tileRequestHeadersFor(`${prefix}1/1/1.png`), {
+      Authorization: "Bearer layer",
+    });
+
+    api.setUrlRequestHeaders(prefix, null);
+  });
+
   it("refuses a URL prefix whose headers could reach other servers", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     for (const unscoped of ["https://", "https://tiles.example.org", "https://{s}.example.org/"]) {
