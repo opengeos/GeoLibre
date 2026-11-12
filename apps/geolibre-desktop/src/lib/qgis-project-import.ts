@@ -170,10 +170,17 @@ export async function materializeQgisRemoteLayers(
   return result;
 }
 
-/** Reads every row of one table of a local data file as plain records. */
+/**
+ * Reads every row of one table of a local data file as plain records.
+ *
+ * `options.optional` marks a read whose result is only a fallback (the
+ * snapshot behind a dropdown that normally reads its layer live). A host
+ * should decline it, by rejecting, when the read would be expensive.
+ */
 export type QgisTableReader = (
   sourcePath: string,
   table: string,
+  options?: { optional?: boolean },
 ) => Promise<Record<string, unknown>[]>;
 
 /**
@@ -196,16 +203,20 @@ export async function materializeQgisFormRelations(
 ): Promise<QgisProjectImportResult> {
   const tables = new Map<string, Promise<Record<string, unknown>[] | null>>();
   for (const relation of result.formRelations) {
-    // A dropdown that reads its layer live needs no snapshot, and taking one
-    // would mean loading the whole GeoPackage for a list nobody uses.
-    const live = result.project.layers
-      .find((candidate) => candidate.id === relation.layerId)
-      ?.attributeForm?.fields.find((entry) => entry.field === relation.field)?.valueRelation;
-    if (live) continue;
-    const key = `${relation.sourcePath}\u0000${relation.table}`;
+    // A dropdown that reads its layer live only needs the snapshot as a
+    // fallback, for when that layer cannot be loaded later (its file moved).
+    // The read is marked optional so the host can skip it for a large file.
+    const live = Boolean(
+      result.project.layers
+        .find((candidate) => candidate.id === relation.layerId)
+        ?.attributeForm?.fields.find((entry) => entry.field === relation.field)?.valueRelation,
+    );
+    const key = `${relation.sourcePath}\u0000${relation.table}\u0000${live}`;
     let rows = tables.get(key);
     if (!rows) {
-      rows = readTable(relation.sourcePath, relation.table).catch((error) => {
+      rows = readTable(relation.sourcePath, relation.table, { optional: live }).catch((error) => {
+        // A declined fallback is expected, not a problem to log.
+        if (live) return null;
         console.warn(
           `[GeoLibre] Could not read "${relation.table}" for a QGIS form dropdown.`,
           error,
@@ -229,6 +240,8 @@ export async function materializeQgisFormRelations(
     const tooLarge =
       entries.length > MAX_RELATION_ENTRIES || (loaded?.length ?? 0) >= GEOPACKAGE_TABLE_ROW_LIMIT;
     if (entries.length === 0 || tooLarge) {
+      // The live list is what the user sees; a missing fallback is no news.
+      if (live) continue;
       result.formNotes.push({
         layerName: relation.layerName,
         field: relation.field,

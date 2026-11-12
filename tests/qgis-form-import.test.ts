@@ -535,14 +535,17 @@ describe("QGIS form import", () => {
     assert.equal(failing.errors.height?.code, "range");
   });
 
-  it("snapshots a dropdown only when its table is not a layer of the project", async () => {
+  it("snapshots every dropdown, marking the ones that read their layer live as optional", async () => {
     const { result, points } = imported();
     // Materials, Owners and Points are layers, so those dropdowns are read
-    // live; Notes is a CSV table that was skipped, so its dropdown is the one
-    // that needs a snapshot.
+    // live and their snapshot is only a fallback; Notes is a CSV table that
+    // was skipped, so its dropdown depends on the snapshot.
     const reads: string[] = [];
-    await materializeQgisFormRelations(result, async (path, table) => {
-      reads.push(`${path}|${table}`);
+    await materializeQgisFormRelations(result, async (path, table, options) => {
+      reads.push(`${table || "notes.csv"}:${options?.optional ? "optional" : "needed"}`);
+      // The host declines the optional read of the owners table.
+      if (table === "owners") throw new Error("too large for a fallback");
+      if (table === "materials") return [{ code: "ST", label: "Steel" }];
       return [
         { code: "B", text: "Beta" },
         { code: "A", text: "Alpha" },
@@ -550,7 +553,12 @@ describe("QGIS form import", () => {
         { code: null, text: "No code" },
       ];
     });
-    assert.deepEqual(reads, ["/home/me/survey/data/notes.csv|"]);
+    assert.deepEqual(reads.sort(), [
+      "materials:optional",
+      "notes.csv:needed",
+      "owners:optional",
+      "points:optional",
+    ]);
     const fields = points.attributeForm?.fields ?? [];
     const note = fields.find((entry) => entry.field === "note_code");
     assert.equal(note?.widget, "valueMap");
@@ -560,7 +568,18 @@ describe("QGIS form import", () => {
     ]);
     assert.equal(note?.valueType, "string");
     assert.equal(note?.valueRelation, undefined);
-    assert.equal(fields.find((entry) => entry.field === "material")?.valueMap, undefined);
+    // A live dropdown keeps its link and gains the fallback list.
+    const material = fields.find((entry) => entry.field === "material");
+    assert.deepEqual(material?.valueMap, [{ value: "ST", label: "Steel" }]);
+    assert.equal(material?.valueRelation?.layerId, "materials");
+    // A declined fallback leaves the live dropdown as it was, with no note.
+    const owner = fields.find((entry) => entry.field === "owner_id");
+    assert.equal(owner?.valueMap, undefined);
+    assert.equal(owner?.valueRelation?.layerId, "owners");
+    assert.deepEqual(
+      result.formNotes.filter((entry) => entry.field === "owner_id"),
+      [],
+    );
     assert.deepEqual(result.formRelations, []);
   });
 

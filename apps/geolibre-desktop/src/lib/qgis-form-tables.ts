@@ -26,6 +26,7 @@ export async function readQgisFormTable(
   sourcePath: string,
   table: string,
   limit?: number,
+  maxFileBytes: number = MAX_LOOKUP_FILE_BYTES,
 ): Promise<Record<string, unknown>[]> {
   if (!isTauri()) throw new Error("Local files are only readable in GeoLibre Desktop.");
   if (
@@ -39,7 +40,7 @@ export async function readQgisFormTable(
     throw new Error("Only tables in a local GeoPackage can be read.");
   }
   const size = await localFileSizeBytes(sourcePath);
-  if (size !== undefined && size > MAX_LOOKUP_FILE_BYTES) {
+  if (size !== undefined && size > maxFileBytes) {
     throw new Error("The GeoPackage is too large to read a table from.");
   }
   return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table, limit);
@@ -74,4 +75,31 @@ export async function readTableLayerFeatures(
         .map((properties) => ({ type: "Feature", geometry: null, properties })),
     } as unknown as FeatureCollection,
   };
+}
+
+/** Largest GeoPackage read just to keep a fallback list behind a live dropdown. */
+const MAX_FALLBACK_FILE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The table reader the QGIS importer uses for dropdown snapshots. An optional
+ * read (a fallback behind a dropdown that reads its layer live) is only taken
+ * from a small file, so a large GeoPackage is not loaded for a list that is
+ * normally never shown.
+ *
+ * @param sourcePath - Absolute path of the GeoPackage.
+ * @param table - Table name inside it.
+ * @param options.optional - Whether the result is only a fallback.
+ * @returns The table's rows.
+ */
+export function readQgisSnapshotTable(
+  sourcePath: string,
+  table: string,
+  options: { optional?: boolean } = {},
+): Promise<Record<string, unknown>[]> {
+  return readQgisFormTable(
+    sourcePath,
+    table,
+    undefined,
+    options.optional ? MAX_FALLBACK_FILE_BYTES : undefined,
+  );
 }
