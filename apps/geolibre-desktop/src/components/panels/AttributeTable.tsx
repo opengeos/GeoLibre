@@ -13,6 +13,7 @@ import {
   ensureEditorTrackingFields,
   isDuckDBQueryLayer,
   mergeAttributeFormConfigs,
+  resolveAttributeFormRelations,
   stampFeaturePropertiesEditorTracking,
   useAppStore,
   validateAttributeFormValues,
@@ -807,7 +808,21 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Attribute Form designer config: per-column edit widgets plus constraint
   // validation of drafted rows. DuckDB layers keep the plain text editor —
   // the designer is only offered for store-backed geojson layers.
-  const attributeForm = isDuckDBLayer ? undefined : layer?.attributeForm;
+  // Relation dropdowns are filled from the layer they reference, read off the
+  // store when the form is built rather than subscribed to: the table would
+  // otherwise re-render on every edit of an unrelated layer.
+  const attributeForm = useMemo(
+    () =>
+      isDuckDBLayer
+        ? undefined
+        : resolveAttributeFormRelations(layer?.attributeForm, (id) =>
+            useAppStore
+              .getState()
+              .layers.find((candidate) => candidate.id === id)
+              ?.geojson?.features.map((feature) => feature.properties),
+          ),
+    [isDuckDBLayer, layer],
+  );
   // Constraints the layer's data service publishes (ArcGIS coded-value and
   // range domains, per type/subtype), merged per record with the designer
   // config. Derived from metadata the layer already holds.

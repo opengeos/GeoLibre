@@ -1,5 +1,7 @@
 import {
+  ATTRIBUTE_TABLE_FLAG,
   DEFAULT_BASEMAP,
+  qgisExpressionProblem,
   DEFAULT_LAYER_STYLE,
   VECTOR_COLOR_RAMPS,
   createEmptyProject,
@@ -221,6 +223,9 @@ export async function materializeQgisFormRelations(
     const tooLarge =
       entries.length > MAX_RELATION_ENTRIES || (loaded?.length ?? 0) >= GEOPACKAGE_TABLE_ROW_LIMIT;
     if (entries.length === 0 || tooLarge) {
+      // With the referenced table imported as a layer the dropdown is read
+      // from it live, so an empty or unreadable snapshot costs nothing.
+      if (field.valueRelation && !tooLarge) continue;
       result.formNotes.push({
         layerName: relation.layerName,
         field: relation.field,
@@ -290,6 +295,7 @@ export function importQgisProject(
   const formNotes: QgisFormImportNote[] = [];
   const styleNotes: QgisStyleImportNote[] = [];
   const formRelations: QgisPendingFormRelation[] = [];
+  const layerIdByQgisId = new Map<string, string>();
   const relationsById = new Map<string, { referencedLayerId: string; referencedField: string }>();
   document.querySelectorAll("qgis > relations > relation").forEach((relation) => {
     const relationId = relation.getAttribute("id");
@@ -345,10 +351,12 @@ export function importQgisProject(
       continue;
     }
 
-    // A table without geometry (a lookup list, a child table of photos) has
-    // nothing to draw. It is not a map layer, but dropdowns that read from it
-    // are still filled in by materializeQgisFormRelations.
-    if (element.getAttribute("geometry")?.toLowerCase() === "no geometry") {
+    // A table without geometry (a lookup list, a child table of reviews or
+    // photos) draws nothing, but it is a layer all the same: its rows show in
+    // the attribute table, dropdowns read from it, and records are added to
+    // it. Only a GeoPackage table can be read that way.
+    const isTable = element.getAttribute("geometry")?.toLowerCase() === "no geometry";
+    if (isTable && sourceExtension(source) !== "gpkg") {
       warnings.push({ layerName: name, reason: "no-geometry" });
       continue;
     }
@@ -391,7 +399,9 @@ export function importQgisProject(
       // Which table of a multi-layer file (a GeoPackage) this layer reads;
       // without it every layer of the file would load the first table.
       ...(sourceLayer ? { sourceLayer } : {}),
+      ...(isTable ? { [ATTRIBUTE_TABLE_FLAG]: true } : {}),
     };
+    layerIdByQgisId.set(id, layerId);
 
     layers.push({
       id: layerId,
@@ -414,6 +424,30 @@ export function importQgisProject(
       sourcePath: source,
       ...(groupByLayerId.get(id) ? { groupId: groupByLayerId.get(id) } : {}),
     });
+  }
+
+  // A relation dropdown reads the referenced layer live whenever that layer
+  // is part of the project, so a record added to it is selectable at once.
+  // The snapshot taken by materializeQgisFormRelations stays as the fallback
+  // for a referenced table that was not imported or has not loaded.
+  for (const relation of formRelations) {
+    const referencedId = layerIdByQgisId.get(relation.referencedLayerId);
+    const field = layers
+      .find((layer) => layer.id === relation.layerId)
+      ?.attributeForm?.fields.find((entry) => entry.field === relation.field);
+    if (!referencedId || !field) continue;
+    const labelExpression =
+      relation.useDisplayExpression &&
+      relation.displayExpression &&
+      qgisExpressionProblem(relation.displayExpression) === null
+        ? relation.displayExpression
+        : undefined;
+    field.valueRelation = {
+      layerId: referencedId,
+      keyField: relation.keyField,
+      ...(relation.labelField ? { labelField: relation.labelField } : {}),
+      ...(labelExpression ? { labelExpression } : {}),
+    };
   }
 
   project.layers = layers;

@@ -190,7 +190,7 @@ form. Set it up in the layer's **Style** panel under **Attributes Form**, with
 
 | Setting | Effect |
 | --- | --- |
-| **Edit widget** | **Text**, **Number**, **Range**, **Checkbox**, **Date**, or **Value map** (a dropdown). |
+| **Edit widget** | **Text**, **Number**, **Range**, **Checkbox**, **Date**, **Value map** (a dropdown), or **Photo** (a picture stored in the field, in Field Collection). |
 | **Alias** | A friendlier label for the field in forms. |
 | **Required** | The field must have a value. |
 | **Value map entries** | One per line, as `value` or `value=Label`. |

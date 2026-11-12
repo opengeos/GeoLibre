@@ -1687,7 +1687,8 @@
     "geom": {
       "point": "Point",
       "line": "Line",
-      "polygon": "Polygon"
+      "polygon": "Polygon",
+      "none": "Table"
     },
     "fields": "Form fields",
     "addField": "Add field",
@@ -1726,7 +1727,8 @@
     "save": {
       "point": "Save point",
       "line": "Save line",
-      "polygon": "Save polygon"
+      "polygon": "Save polygon",
+      "none": "Save record"
     },
     "saved": {
       "point_one": "Saved {{count}} point to {{layer}}.",
@@ -1734,8 +1736,13 @@
       "line_one": "Saved {{count}} line to {{layer}}.",
       "line_other": "Saved {{count}} lines to {{layer}}.",
       "polygon_one": "Saved {{count}} polygon to {{layer}}.",
-      "polygon_other": "Saved {{count}} polygons to {{layer}}."
+      "polygon_other": "Saved {{count}} polygons to {{layer}}.",
+      "none_one": "Saved {{count}} record to {{layer}}.",
+      "none_other": "Saved {{count}} records to {{layer}}."
     },
+    "captureRecordDescription": "Fill in the form and save the record. Records in this layer have no location.",
+    "relatedPrompt": "Add a record linked to the one you just saved:",
+    "addRelated": "Add to {{layer}}",
     "layerGone": "The collection layer is no longer available.",
     "layerLoading": "This layer is still loading its features. Try again in a moment.",
     "noGeolocation": "Geolocation isn't available on this device.",
@@ -4230,7 +4237,7 @@
         "network-path": "Network share paths are not loaded for security reasons.",
         "browser-local-file": "The local file is referenced, but browsers cannot reopen QGIS data paths. Use GeoLibre Desktop to load it.",
         "browser-local-raster": "The raster is referenced by a local path. Use GeoLibre Desktop to load it.",
-        "no-geometry": "Tables without geometry are not added as map layers. Dropdown lists that read from them are still filled in."
+        "no-geometry": "A table without geometry can only be read from a GeoPackage."
       },
       "qgisImportNotes": "The project was imported. Some settings could not be carried over.",
       "qgisImportFormNotes": "Some form settings could not be carried over.",
@@ -9254,7 +9261,8 @@
         "range": "Range",
         "checkbox": "Checkbox",
         "date": "Date",
-        "valueMap": "Value map"
+        "valueMap": "Value map",
+        "attachment": "Photo"
       },
       "alias": "Alias",
       "required": "Required",

@@ -5,6 +5,7 @@
  * imports and runs under `node --test`.
  */
 import { hasPathTraversal } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import { loadGeoPackageTableRows } from "./gpkg-reader";
 import { localFileSizeBytes, readLocalFileBytes } from "./file-io/local-fs";
 import { isAbsoluteLocalPath, isTauri } from "./tauri-io";
@@ -24,6 +25,7 @@ const MAX_LOOKUP_FILE_BYTES = 256 * 1024 * 1024;
 export async function readQgisFormTable(
   sourcePath: string,
   table: string,
+  limit?: number,
 ): Promise<Record<string, unknown>[]> {
   if (!isTauri()) throw new Error("Local files are only readable in GeoLibre Desktop.");
   if (
@@ -40,5 +42,28 @@ export async function readQgisFormTable(
   if (size !== undefined && size > MAX_LOOKUP_FILE_BYTES) {
     throw new Error("The GeoPackage is too large to read a dropdown list from.");
   }
-  return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table);
+  return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table, limit);
+}
+
+/** Most rows read into a table layer; a table is a list, not a dataset. */
+export const TABLE_LAYER_ROW_LIMIT = 100_000;
+
+/**
+ * Read a geometry-less GeoPackage table as the features of a table layer:
+ * one feature per row, with the row as its properties and no geometry.
+ *
+ * @param sourcePath - Absolute path of the GeoPackage.
+ * @param table - Table name inside it.
+ * @returns A FeatureCollection of geometry-less features.
+ */
+export async function readTableLayerFeatures(
+  sourcePath: string,
+  table: string,
+): Promise<FeatureCollection> {
+  const rows = await readQgisFormTable(sourcePath, table, TABLE_LAYER_ROW_LIMIT);
+  return {
+    type: "FeatureCollection",
+    // GeoJSON allows a null geometry; the typings want a Geometry.
+    features: rows.map((properties) => ({ type: "Feature", geometry: null, properties })),
+  } as unknown as FeatureCollection;
 }

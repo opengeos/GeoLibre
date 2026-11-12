@@ -19,6 +19,12 @@ import type { GpsFix } from "../lib/gps-tracking";
 interface CaptureDefaultsOptions {
   /** The captured location, or null before one exists. */
   pending: Vertex[] | null;
+  /**
+   * Changes when one capture ends and the next begins. A table's records
+   * have no location to go null between captures, so this is what tells them
+   * apart.
+   */
+  captureKey?: number;
   /** The GPS fix the location came from; null for a map pick. */
   gpsFix: GpsFix | null;
   schema: CollectionSchema | null;
@@ -38,6 +44,7 @@ interface CaptureDefaultsOptions {
  */
 export function useCaptureDefaults({
   pending,
+  captureKey = 0,
   gpsFix,
   schema,
   attributeForm,
@@ -78,14 +85,16 @@ export function useCaptureDefaults({
   // now() keeps its timestamp when the field is edited afterwards.
   const capturedAtRef = useRef(new Date());
   const capturedLocationRef = useRef<Vertex[] | null>(null);
+  const captureKeyRef = useRef(captureKey);
   const recompute = (mode: "capture" | "input") => {
-    if (!pending) {
+    if (!pending || captureKeyRef.current !== captureKey) {
+      captureKeyRef.current = captureKey;
       // The capture ended (saved, cancelled, or the target changed). What it
       // filled in belongs to it: carried into the next capture, an emptied
       // form would read as fields the user had cleared on purpose.
       autoFilledRef.current = {};
       capturedLocationRef.current = null;
-      return;
+      if (!pending) return;
     }
     if (!schema || !hasAttributeFormDefaults(attributeForm)) return;
     // A new clock reading only for a new location, not for the other things
@@ -122,9 +131,15 @@ export function useCaptureDefaults({
   const recomputeRef = useRef(recompute);
   recomputeRef.current = recompute;
 
+  // Keyed on what the defaults are, not on the form object: that is rebuilt
+  // whenever a referenced layer changes, and rerunning the capture pass then
+  // would hand out a new ID mid-form.
+  const defaultsKey = (attributeForm?.fields ?? [])
+    .map((field) => `${field.field}=${field.defaultValue ?? ""}`)
+    .join("\u0000");
   useEffect(() => {
     recomputeRef.current("capture");
-  }, [pending, gpsFix, schema, attributeForm, geometry, layerName, transform]);
+  }, [pending, captureKey, gpsFix, schema, defaultsKey, geometry, layerName, transform]);
 
   // Settles in one extra pass: the values it writes are a fixed point of the
   // same computation, because uuid() is excluded and the clock is held still.

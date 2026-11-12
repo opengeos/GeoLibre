@@ -18,6 +18,7 @@ import type { Feature } from "geojson";
 import { evaluateMapExpression } from "./expressions";
 import {
   evaluateQgisExpression,
+  parseQgisExpression,
   formatQgisDate,
   formatQgisDateTime,
   type QgisExpressionContext,
@@ -26,6 +27,7 @@ import type {
   AttributeFormConfig,
   AttributeFormFieldConfig,
   AttributeFormValueMapEntry,
+  AttributeFormValueRelation,
 } from "./types";
 
 /** Options threaded to expression evaluation (constraints, visibility). */
@@ -433,4 +435,106 @@ function featureForEvaluation(
     ...(feature?.id !== undefined ? { id: feature.id } : {}),
     properties: properties as Feature["properties"],
   };
+}
+
+/** Entries read from a referenced layer, and how their stored values are typed. */
+export interface RelationValueMap {
+  entries: AttributeFormValueMapEntry[];
+  /**
+   * `"string"` when the key column holds text, so a code such as `"01"` is
+   * stored as text like the rows already in the layer; `"number"` when every
+   * key is numeric.
+   */
+  valueType: "string" | "number";
+}
+
+/**
+ * Turn a referenced layer's rows into dropdown entries.
+ *
+ * @param rows - The referenced rows, as plain property records.
+ * @param relation - Which properties hold the stored value and the label.
+ * @returns Every distinct entry, sorted by label. The caller decides what to
+ *   do with a very long list.
+ */
+export function buildRelationValueMap(
+  rows: Iterable<Record<string, unknown> | null | undefined>,
+  relation: Omit<AttributeFormValueRelation, "layerId">,
+): RelationValueMap {
+  const seen = new Set<string>();
+  const entries: AttributeFormValueMapEntry[] = [];
+  // Parsed once: the same expression labels every row.
+  const source = relation.labelField ? undefined : relation.labelExpression?.trim();
+  const parsed = source ? parseQgisExpression(source) : null;
+  const expression = parsed?.ok ? parsed.node : null;
+  let numeric = true;
+  for (const row of rows) {
+    const raw = row?.[relation.keyField];
+    if (!row || raw == null || raw === "") continue;
+    const value = String(raw);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (typeof raw !== "number" && typeof raw !== "bigint") numeric = false;
+    let label: unknown = relation.labelField ? row[relation.labelField] : undefined;
+    if (label == null && expression) {
+      const result = evaluateQgisExpression(expression, { properties: row });
+      if (result.ok) label = result.value;
+    }
+    const text = label == null ? "" : String(label).trim();
+    entries.push(text && text !== value ? { value, label: text } : { value });
+  }
+  entries.sort((a, b) =>
+    (a.label ?? a.value).localeCompare(b.label ?? b.value, undefined, { numeric: true }),
+  );
+  return { entries, valueType: numeric ? "number" : "string" };
+}
+
+/** Most entries a live relation dropdown shows; a longer list stays as it was. */
+export const MAX_RELATION_ENTRIES = 1000;
+
+/**
+ * Fill relation dropdowns from the layers they reference.
+ *
+ * @param form - The layer's form config.
+ * @param rowsOf - The current feature properties of a layer by id, or
+ *   `undefined` when the layer is absent or its features have not loaded.
+ * @returns A form whose relation fields carry entries read from the
+ *   referenced layer. A field whose layer is unavailable, empty, or too long
+ *   for a list keeps the entries it already had. Returns `form` itself when
+ *   nothing was resolved.
+ */
+export function resolveAttributeFormRelations(
+  form: AttributeFormConfig | undefined,
+  rowsOf: (layerId: string) => Iterable<Record<string, unknown> | null> | undefined,
+): AttributeFormConfig | undefined {
+  if (!form?.fields.some((field) => field.valueRelation)) return form;
+  let changed = false;
+  const fields = form.fields.map((field) => {
+    const relation = field.valueRelation;
+    const rows = relation ? rowsOf(relation.layerId) : undefined;
+    if (!relation || !rows) return field;
+    const { entries, valueType } = buildRelationValueMap(rows, relation);
+    if (entries.length === 0 || entries.length > MAX_RELATION_ENTRIES) return field;
+    changed = true;
+    return {
+      ...field,
+      widget: "valueMap" as const,
+      valueMap: entries,
+      valueType: field.valueType ?? valueType,
+    };
+  });
+  return changed ? { ...form, fields } : form;
+}
+
+/**
+ * `metadata` flag on a layer that is a table: its features have attributes
+ * but no geometry (a lookup list, or child records linked to another layer's
+ * features). It draws nothing; its rows show in the attribute table.
+ */
+export const ATTRIBUTE_TABLE_FLAG = "attributeTable";
+
+/** Whether a layer is a geometry-less table (see {@link ATTRIBUTE_TABLE_FLAG}). */
+export function isAttributeTableLayer(layer: {
+  metadata?: Record<string, unknown> | null;
+}): boolean {
+  return layer.metadata?.[ATTRIBUTE_TABLE_FLAG] === true;
 }
