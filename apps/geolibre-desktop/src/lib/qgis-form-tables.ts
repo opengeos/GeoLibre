@@ -36,11 +36,11 @@ export async function readQgisFormTable(
     hasPathTraversal(sourcePath) ||
     !/\.gpkg$/i.test(sourcePath)
   ) {
-    throw new Error("Only tables in a local GeoPackage can fill a dropdown list.");
+    throw new Error("Only tables in a local GeoPackage can be read.");
   }
   const size = await localFileSizeBytes(sourcePath);
   if (size !== undefined && size > MAX_LOOKUP_FILE_BYTES) {
-    throw new Error("The GeoPackage is too large to read a dropdown list from.");
+    throw new Error("The GeoPackage is too large to read a table from.");
   }
   return loadGeoPackageTableRows(await readLocalFileBytes(sourcePath), table, limit);
 }

@@ -344,7 +344,9 @@ export function readGeoPackageTableRowsSync(
     const resolved = match[0]?.values[0]?.[0];
     if (resolved == null) throw new Error(`No table named "${table}" found in this GeoPackage.`);
     const result = db.exec(
-      `SELECT * FROM ${quoteIdentifier(String(resolved))} LIMIT ${Math.max(0, Math.trunc(limit))}`,
+      `SELECT * FROM ${quoteIdentifier(String(resolved))} LIMIT ${
+        Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : GEOPACKAGE_TABLE_ROW_LIMIT
+      }`,
     );
     if (result.length === 0) return [];
     const { columns, values } = result[0];

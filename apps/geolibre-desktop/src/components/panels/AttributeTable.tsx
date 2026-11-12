@@ -1,4 +1,3 @@
-import { useShallow } from "zustand/react/shallow";
 import {
   canEditAttributeValues,
   isReadOnlyAttributeLayer,
@@ -14,7 +13,6 @@ import {
   ensureEditorTrackingFields,
   isDuckDBQueryLayer,
   mergeAttributeFormConfigs,
-  resolveAttributeFormRelations,
   stampFeaturePropertiesEditorTracking,
   useAppStore,
   validateAttributeFormValues,
@@ -138,6 +136,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { useResolvedAttributeForm } from "../../hooks/useResolvedAttributeForm";
 import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { coerceNumericStringRows, pickAnalysisRows } from "../../lib/attribute-charts";
 import { computeRowSelection } from "../../lib/attribute-selection";
@@ -809,35 +808,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Attribute Form designer config: per-column edit widgets plus constraint
   // validation of drafted rows. DuckDB layers keep the plain text editor —
   // the designer is only offered for store-backed geojson layers.
-  // Relation dropdowns are filled from the layers they reference. Only those
-  // layers' features are subscribed to, so a record added to one shows up in
-  // the dropdown at once while edits to unrelated layers re-render nothing.
-  const relationLayerIds = useMemo(
-    () => [
-      ...new Set(
-        (isDuckDBLayer ? [] : (layer?.attributeForm?.fields ?? [])).flatMap((field) =>
-          field.valueRelation ? [field.valueRelation.layerId] : [],
-        ),
-      ),
-    ],
-    [isDuckDBLayer, layer?.attributeForm],
-  );
-  const relationSources = useAppStore(
-    useShallow((s) =>
-      relationLayerIds.map((id) => s.layers.find((candidate) => candidate.id === id)?.geojson),
-    ),
-  );
-  const attributeForm = useMemo(
-    () =>
-      isDuckDBLayer
-        ? undefined
-        : resolveAttributeFormRelations(layer?.attributeForm, (id) =>
-            relationSources[relationLayerIds.indexOf(id)]?.features.map(
-              (feature) => feature.properties,
-            ),
-          ),
-    [isDuckDBLayer, layer?.attributeForm, relationLayerIds, relationSources],
-  );
+  // Relation dropdowns are filled live from the layers they reference.
+  const attributeForm = useResolvedAttributeForm(isDuckDBLayer ? undefined : layer?.attributeForm);
   // Constraints the layer's data service publishes (ArcGIS coded-value and
   // range domains, per type/subtype), merged per record with the designer
   // config. Derived from metadata the layer already holds.

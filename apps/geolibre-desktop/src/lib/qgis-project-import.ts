@@ -359,7 +359,8 @@ export function importQgisProject(
     // the attribute table, dropdowns read from it, and records are added to
     // it. Only a GeoPackage table can be read that way.
     const isTable = element.getAttribute("geometry")?.toLowerCase() === "no geometry";
-    if (isTable && sourceExtension(source) !== "gpkg") {
+    // And only a local one: a table's rows are read from the file itself.
+    if (isTable && (sourceExtension(source) !== "gpkg" || isHttpSource(source))) {
       warnings.push({ layerName: name, reason: "no-geometry" });
       continue;
     }

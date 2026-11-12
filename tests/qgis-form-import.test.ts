@@ -175,6 +175,10 @@ function surveyProject(): string {
         <attributeEditorForm><attributeEditorField name="who"/></attributeEditorForm>
       </maplayer>
       <maplayer type="vector" geometry="No geometry">
+        <id>remote</id><layername>Remote list</layername>
+        <datasource>/vsicurl/https://example.com/lists.gpkg|layername=codes</datasource><provider>ogr</provider>
+      </maplayer>
+      <maplayer type="vector" geometry="No geometry">
         <id>notes</id><layername>Notes</layername>
         <datasource>./data/notes.csv</datasource><provider>ogr</provider>
       </maplayer>
@@ -229,7 +233,14 @@ describe("QGIS form import", () => {
     assert.equal(isCollectionLayer(photos), true);
     assert.equal(getGeometryType(photos), "none");
     // Only a GeoPackage table can be read row by row.
-    assert.deepEqual(warnings, [{ layerName: "Notes", reason: "no-geometry" }]);
+    // Nor one behind a URL: a table's rows are read from the file itself.
+    assert.deepEqual(
+      warnings.sort((a, b) => a.layerName.localeCompare(b.layerName)),
+      [
+        { layerName: "Notes", reason: "no-geometry" },
+        { layerName: "Remote list", reason: "no-geometry" },
+      ],
+    );
   });
 
   it("links relation dropdowns to the layer they read from", () => {
