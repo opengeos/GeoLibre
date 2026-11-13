@@ -684,6 +684,64 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     });
   });
 
+  it("identifies an ImageServer added from an /exportImage template alone", async () => {
+    // How the Earthdata GIS browser adds one: a `wms`-typed layer, no sourceKind.
+    const template = `${SERVICE}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&renderingRule=${encodeURIComponent('{"rasterFunction":"NDVI Raw"}')}&token=t0k&f=image`;
+    const layer = geojsonLayer({
+      id: "earthdata",
+      type: "wms",
+      geojson: undefined,
+      source: { type: "raster", tiles: [template], url: SERVICE },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), true);
+    const urls = stubFetch(JSON.stringify({ value: "0.42" }), "application/json");
+    assert.deepEqual(
+      await fetchServiceIdentifyProperties(layer, [-84, 35.9], 12, new AbortController().signal),
+      { properties: { Value: "0.42" } },
+    );
+    const url = new URL(urls[0]);
+    assert.equal(url.pathname, "/arcgis/rest/services/Landsat/MS/ImageServer/identify");
+    assert.equal(url.searchParams.get("renderingRule"), '{"rasterFunction":"NDVI Raw"}');
+    assert.equal(url.searchParams.get("token"), "t0k");
+  });
+
+  it("labels a template-added layer's bands from the service description, once", async () => {
+    const service = "https://img.example/arcgis/rest/services/HLS/ImageServer";
+    const layer = geojsonLayer({
+      type: "wms",
+      geojson: undefined,
+      source: { type: "raster", tiles: [`${service}/exportImage?bbox={bbox-epsg-3857}&f=image`] },
+    });
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      const body = url.includes("/identify?")
+        ? { value: "185, 204" }
+        : { bandNames: ["Coastal Aerosol", "Blue"] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as typeof fetch;
+    const identifyAt = () =>
+      fetchServiceIdentifyProperties(layer, [-90.3, 35], 12, new AbortController().signal);
+    assert.deepEqual(await identifyAt(), {
+      properties: { "Coastal Aerosol": "185", Blue: "204" },
+    });
+    await identifyAt();
+    assert.equal(urls.filter((url) => url === `${service}?f=json`).length, 1);
+  });
+
+  it("does not take a MapServer export template for an ImageServer", () => {
+    const layer = geojsonLayer({
+      type: "wms",
+      geojson: undefined,
+      source: {
+        type: "raster",
+        tiles: [`${SERVICE.replace("ImageServer", "MapServer")}/export?bbox={bbox-epsg-3857}`],
+      },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), false);
+  });
+
   it("treats NoData as a miss", async () => {
     stubFetch(JSON.stringify({ value: "NoData" }), "application/json");
     assert.deepEqual(await identify(imageLayer()), { properties: {} });
