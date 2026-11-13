@@ -2550,7 +2550,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                                 href={linkUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title={linkUrl}
+                                title={withColumnHint(linkUrl)}
                                 className="inline-block max-w-full truncate align-bottom text-primary underline underline-offset-2"
                                 onClick={(event) => {
                                   event.preventDefault();
