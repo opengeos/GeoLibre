@@ -2559,7 +2559,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                             ) : codeLabel ? (
                               <span
                                 className="block max-w-full truncate"
-                                title={formattedValue || undefined}
+                                title={
+                                  formattedValue && formattedValue !== codeLabel
+                                    ? `${codeLabel} (${formattedValue})`
+                                    : codeLabel
+                                }
                               >
                                 {codeLabel}
                               </span>

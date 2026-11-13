@@ -34,12 +34,15 @@ const cities: FeatureCollection = {
 };
 
 /** Open the table on a GeoJSON layer and render it with no map behind it. */
-function renderTable(collection: FeatureCollection = cities) {
+function renderTable(
+  collection: FeatureCollection = cities,
+  layerPatch: Parameters<typeof geojsonLayer>[0] = {},
+) {
   // The rows are virtualized, and happy-dom does no layout: without a box
   // size the virtualizer thinks the viewport is 0px tall and renders nothing.
   stubLayout(1024, 600);
   useAppStore.setState({
-    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: collection })],
+    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: collection, ...layerPatch })],
     selectedLayerId: "cities",
   });
   useAppStore.getState().setAttributeTableOpen(true);
@@ -118,6 +121,44 @@ describe("AttributeTable", () => {
     assert.equal(ndviValue?.getAttribute("title"), JSON.stringify(values));
     assert.ok(metadataValue?.classList.contains("truncate"));
     assert.equal(metadataValue?.getAttribute("title"), '{"source":"sentinel"}');
+  });
+
+  it("keeps a coded-value label and its stored code in the truncated tooltip", () => {
+    renderTable(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 1,
+            properties: { status: 7 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+      {
+        metadata: {
+          sourceKind: "arcgis-feature-query",
+          arcgisEditInfo: {
+            fields: [
+              {
+                name: "status",
+                type: "esriFieldTypeInteger",
+                domain: {
+                  type: "codedValue",
+                  codedValues: [{ name: "Available for field inspection", code: 7 }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    const statusValue = table().querySelector("tbody td:nth-child(2) span");
+    assert.equal(statusValue?.textContent, "Available for field inspection");
+    assert.ok(statusValue?.classList.contains("truncate"));
+    assert.equal(statusValue?.getAttribute("title"), "Available for field inspection (7)");
   });
 
   it("titles the table with the selected layer", () => {
