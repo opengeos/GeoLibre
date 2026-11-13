@@ -777,6 +777,9 @@ export function isServiceIdentifyLayer(layer: GeoLibreLayer): boolean {
   return isWmsLayer(layer) || isArcGISImageServiceLayer(layer);
 }
 
+/** How long a service description may take before identify labels bands `Band N`. */
+const ARCGIS_BAND_NAMES_TIMEOUT_MS = 5_000;
+
 /** Each ImageServer's band names, fetched once per service URL. */
 const arcgisBandNamesCache = new Map<string, Promise<string[]>>();
 
@@ -795,10 +798,14 @@ function fetchArcGISBandNames(serviceUrl: string, token: string | undefined): Pr
   const query = token ? `f=json&token=${encodeURIComponent(token)}` : "f=json";
   const url = `${serviceUrl}?${query}`;
   const request = (async () => {
+    // Bounded, so a stalled description is dropped (and retried next click)
+    // rather than holding every later identify of this service.
+    const signal = AbortSignal.timeout(ARCGIS_BAND_NAMES_TIMEOUT_MS);
     const response = wmsIdentifyFetcher
-      ? await wmsIdentifyFetcher(url, new AbortController().signal)
-      : await fetch(url);
-    if (!response.ok) return [];
+      ? await wmsIdentifyFetcher(url, signal)
+      : await fetch(url, { signal });
+    // Thrown so the catch below drops it from the cache and a later click retries.
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const info = JSON.parse(await response.text()) as { bandNames?: unknown };
     return Array.isArray(info.bandNames)
       ? info.bandNames.filter((name): name is string => typeof name === "string")
@@ -910,7 +917,13 @@ export async function fetchArcGISImageIdentifyProperties(
   const bandNames =
     storedBandNames.length > 0 || renderingRule || values.length < 2
       ? storedBandNames
-      : await fetchArcGISBandNames(serviceUrl, token);
+      : // A superseded click stops waiting for the names at once.
+        await Promise.race([
+          fetchArcGISBandNames(serviceUrl, token),
+          new Promise<string[]>((resolve) =>
+            signal.addEventListener("abort", () => resolve([]), { once: true }),
+          ),
+        ]);
   if (signal.aborted) return null;
   // A rendering rule usually changes the band count and meaning, so the
   // service's own band names only label the values when nothing remapped them.

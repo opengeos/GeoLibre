@@ -560,6 +560,27 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.equal(layer?.metadata.arcgisRawTiles, false);
   });
 
+  it("keeps a TilesOnly LERC cache in another CRS flagged for the ArcGIS renderer", async () => {
+    // The cache fails the Web Mercator check, and there is no /exportImage.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,TilesOnly",
+      singleFusedMapCache: true,
+      tileInfo: {
+        ...mercatorCache([0, 1, 2]),
+        format: "LERC2D",
+        spatialReference: { wkid: 32617 },
+      },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisRawTiles, true);
+  });
+
   it("records an image service's band names for Identify", async () => {
     respondWith({ ...IMAGE_SERVICE, bandNames: ["Red", "Green", "Blue"] });
     const id = await addArcGISLayer(app, {

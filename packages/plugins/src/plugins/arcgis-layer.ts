@@ -1437,7 +1437,10 @@ async function addArcGISImageServiceLayer(
       // renderer must not read the cache either: an explicit `false` also
       // overrides its hosted-tiled-imagery host detection.
       ...(options.layerType === "image-service" && !renderingRule && isArcGISRawTileCache(info)
-        ? { arcgisRawTiles: tileScheme !== null }
+        ? // Only a cache passed over for `/exportImage` turns the flag off; one
+          // rejected for its scheme (a TilesOnly service in another CRS, say)
+          // is still the SDK's to draw.
+          { arcgisRawTiles: tileScheme !== null || arcgisTileScheme(info) === null }
         : {}),
       ...(bounds ? { bounds } : {}),
       // The token has to travel in the tile URL for the tiles to render at all,
@@ -1915,7 +1918,11 @@ function arcgisNativeWebMercatorResolution(
   // A Web Mercator pixel size is already in the cache's units.
   if (wkid === 3857 || wkid === 102100 || wkid === 102113) return pixelSize;
   const groundMeters = pixelSize * arcgisMetersPerUnit(info.spatialReference);
-  // A Web Mercator metre shrinks on the ground by cos(latitude).
+  // A Web Mercator metre shrinks on the ground by cos(latitude), on both axes
+  // for a projected pixel. For a geographic one (a square of degrees) only the
+  // y axis is stretched by 1/cos: x is a degree of longitude, 111 320 Web
+  // Mercator metres at any latitude. Dividing by cos gives the larger, y-axis
+  // value, the coarser of the two, which is the side the cache must match.
   const latitude = bounds ? (bounds[1] + bounds[3]) / 2 : 0;
   const cosine = Math.cos((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180);
   return groundMeters / cosine;
