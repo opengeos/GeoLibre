@@ -249,6 +249,29 @@ describe("earthdata gis api", () => {
       );
     });
 
+    it("carries an ImageServer raster function as an encoded renderingRule", () => {
+      const rule = '{"rasterFunction":"NDVI Raw"}';
+      const url = buildExportTileUrl(item({}), rule);
+      assert.ok(url?.includes(`renderingRule=${encodeURIComponent(rule)}&f=image`), url ?? "");
+      // The bbox token still reaches MapLibre unencoded.
+      assert.ok(url?.includes("bbox={bbox-epsg-3857}"));
+      assert.equal(
+        buildExportTileUrl(item({})),
+        url?.replace(`renderingRule=${encodeURIComponent(rule)}&`, ""),
+      );
+    });
+
+    it("ignores a rendering rule for a MapServer", () => {
+      const mapItem = item({
+        kind: "map",
+        url: "https://gis.earthdata.nasa.gov/gis05/rest/services/A/B/MapServer",
+      });
+      assert.equal(
+        buildExportTileUrl(mapItem, '{"rasterFunction":"X"}'),
+        buildExportTileUrl(mapItem),
+      );
+    });
+
     it("leaves the {bbox-epsg-3857} token unencoded for MapLibre to substitute", () => {
       // URLSearchParams would percent-encode the braces, which MapLibre never
       // substitutes — the layer would then request one broken tile forever.

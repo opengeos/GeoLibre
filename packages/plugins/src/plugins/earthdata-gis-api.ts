@@ -320,9 +320,11 @@ export function buildItemPageUrl(itemId: string): string {
  * and `URLSearchParams` would percent-encode them.
  *
  * @param item - A normalized catalog item
+ * @param renderingRule - An ImageServer raster function as `renderingRule`
+ *   JSON (`{"rasterFunction":"NDVI Raw"}`); ignored for a MapServer
  * @returns A raster tile template, or null for a non-raster item
  */
-export function buildExportTileUrl(item: EarthdataGisItem): string | null {
+export function buildExportTileUrl(item: EarthdataGisItem, renderingRule?: string): string | null {
   if (item.kind === "feature" || item.kind === "webmap") return null;
   if (!HTTP_URL_RE.test(item.url)) return null;
   const operation = item.kind === "image" ? "exportImage" : "export";
@@ -341,6 +343,9 @@ export function buildExportTileUrl(item: EarthdataGisItem): string | null {
     "transparent=true",
     "dpi=96",
     ...(sublayer ? [`layers=show:${sublayer[2]}`] : []),
+    ...(item.kind === "image" && renderingRule
+      ? [`renderingRule=${encodeURIComponent(renderingRule)}`]
+      : []),
     "f=image",
   ].join("&");
   return `${base}/${operation}?${query}`;

@@ -13,7 +13,11 @@
  */
 
 import { useAppStore } from "@geolibre/core";
-import { addArcGISLayer } from "./arcgis-layer";
+import {
+  addArcGISLayer,
+  fetchArcGISImageServiceRasterFunctions,
+  type ArcGISImageServiceRasterFunction,
+} from "./arcgis-layer";
 import {
   buildExportTileUrl,
   EARTHDATA_GIS_ATTRIBUTION,
@@ -130,6 +134,12 @@ export interface EarthdataGisLabels {
   portalTitle: string;
   cog: string;
   cogTitle: string;
+  rasterFunction: string;
+  rasterFunctionTitle: string;
+  rasterFunctionDefault: string;
+  rasterFunctionLoading: string;
+  rasterFunctionNone: string;
+  rasterFunctionError: (message: string) => string;
   cogHeading: string;
   cogAreaView: string;
   cogAreaExtent: string;
@@ -206,6 +216,13 @@ export const DEFAULT_EARTHDATA_GIS_LABELS: EarthdataGisLabels = {
   portalTitle: "Open this item on the Earthdata GIS portal",
   cog: "COG",
   cogTitle: "Download this service as a Cloud Optimized GeoTIFF",
+  rasterFunction: "Function",
+  rasterFunctionTitle:
+    "Raster function (processing template) the service applies; pixel values follow it",
+  rasterFunctionDefault: "Service default",
+  rasterFunctionLoading: "Loading functions…",
+  rasterFunctionNone: "No published functions",
+  rasterFunctionError: (message) => `Could not load the raster functions: ${message}`,
   cogHeading: "Download as COG",
   cogAreaView: "Current view",
   cogAreaExtent: "Full extent",
@@ -284,6 +301,10 @@ const CSS = {
     "color:hsl(var(--muted-foreground));cursor:pointer;",
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
   sentinel: "flex:0 0 auto;height:1px;",
+  functionSelect:
+    "width:100%;min-width:0;font-size:11px;padding:3px 4px;border-radius:4px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
+    "color:hsl(var(--foreground));",
   results: "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;overflow-y:auto;",
   card:
     "display:flex;gap:8px;padding:6px;border-radius:6px;" +
@@ -349,10 +370,189 @@ function findAddedLayerId(item: EarthdataGisItem): string | undefined {
   }
   const tileUrl = buildExportTileUrl(item);
   if (!tileUrl) return undefined;
+  // An image service's template varies only by the raster function picked, so
+  // it is compared with that parameter dropped. Anything else on the same
+  // service (an Add Data ArcGIS layer, with its own query and maybe a token)
+  // is not this card's layer.
+  const matches = (tile: unknown) =>
+    typeof tile === "string" &&
+    (item.kind === "image" ? tile.replace(/&renderingRule=[^&]*/, "") : tile) === tileUrl;
   return layers.find((candidate) => {
     const tiles = (candidate.source as { tiles?: unknown }).tiles;
-    return Array.isArray(tiles) && tiles.includes(tileUrl);
+    return Array.isArray(tiles) && tiles.some(matches);
   })?.id;
+}
+
+/** How long the pointer rests on a Function picker before its list is fetched. */
+const RASTER_FUNCTION_HOVER_MS = 300;
+
+/** The raster function picked on each image card before it is added, by item id. */
+const pickedRasterFunctions = new Map<string, string>();
+/** Each image service's published raster functions, once fetched, by service URL. */
+const rasterFunctionCatalogs = new Map<string, ArcGISImageServiceRasterFunction[]>();
+/** Catalog requests in flight, so two cards for one service share a fetch. */
+const rasterFunctionRequests = new Map<string, Promise<ArcGISImageServiceRasterFunction[]>>();
+
+/** The `renderingRule` JSON for a raster function name ("" is the service default). */
+function renderingRuleFor(functionName: string): string | undefined {
+  return functionName ? JSON.stringify({ rasterFunction: functionName }) : undefined;
+}
+
+/**
+ * The raster function an image item draws with: the one in its layer's tile
+ * template once it is on the map (so a reopened panel or a reloaded project
+ * shows it), else the one picked on its card.
+ *
+ * @param item - An image-service catalog item
+ * @returns The function name, or "" for the service default
+ */
+function currentRasterFunction(item: EarthdataGisItem): string {
+  const layerId = findAddedLayerId(item);
+  const layer = layerId
+    ? useAppStore.getState().layers.find((candidate) => candidate.id === layerId)
+    : undefined;
+  const tiles = (layer?.source as { tiles?: unknown } | undefined)?.tiles;
+  if (Array.isArray(tiles) && typeof tiles[0] === "string") {
+    const rule = /[?&]renderingRule=([^&]*)/.exec(tiles[0])?.[1];
+    if (!rule) return "";
+    try {
+      const parsed = JSON.parse(decodeURIComponent(rule)) as { rasterFunction?: unknown };
+      return typeof parsed.rasterFunction === "string" ? parsed.rasterFunction : "";
+    } catch {
+      return "";
+    }
+  }
+  return pickedRasterFunctions.get(item.id) ?? "";
+}
+
+/** A layer name that says which raster function it draws with. */
+function rasterFunctionLayerName(item: EarthdataGisItem, functionName: string): string {
+  return functionName ? `${item.title} (${functionName})` : item.title;
+}
+
+/**
+ * Point an added image layer at another raster function: its tiles (and so its
+ * Identify values, which read the rule from the template) and, when the user
+ * has not renamed it, its name.
+ *
+ * @param item - The image-service catalog item
+ * @param previous - The function it drew with
+ * @param next - The function to draw with ("" for the service default)
+ */
+function applyRasterFunction(item: EarthdataGisItem, previous: string, next: string): void {
+  const layerId = findAddedLayerId(item);
+  const store = useAppStore.getState();
+  const layer = store.layers.find((candidate) => candidate.id === layerId);
+  const tileUrl = buildExportTileUrl(item, renderingRuleFor(next));
+  if (!layer || !tileUrl) return;
+  store.updateLayer(layer.id, {
+    source: { ...layer.source, tiles: [tileUrl] },
+    metadata: { ...layer.metadata, arcgisRenderingRule: renderingRuleFor(next) ?? "" },
+    ...(layer.name === rasterFunctionLayerName(item, previous)
+      ? { name: rasterFunctionLayerName(item, next) }
+      : {}),
+  });
+}
+
+/**
+ * An image service's raster functions, fetched once per service.
+ *
+ * @param item - An image-service catalog item
+ * @returns The published functions, in the service's order
+ */
+function loadRasterFunctions(item: EarthdataGisItem): Promise<ArcGISImageServiceRasterFunction[]> {
+  const cached = rasterFunctionCatalogs.get(item.url);
+  if (cached) return Promise.resolve(cached);
+  let request = rasterFunctionRequests.get(item.url);
+  if (!request) {
+    request = fetchArcGISImageServiceRasterFunctions({ url: item.url })
+      .then((functions) => {
+        rasterFunctionCatalogs.set(item.url, functions);
+        return functions;
+      })
+      .finally(() => rasterFunctionRequests.delete(item.url));
+    rasterFunctionRequests.set(item.url, request);
+  }
+  return request;
+}
+
+/**
+ * The Function picker on an image card. Its list is fetched the first time the
+ * user opens it, not for every card a search renders. Picking a function sets
+ * the one Add will use, or redraws the layer when it is already on the map.
+ *
+ * @param item - An image-service catalog item
+ * @param onError - Reports a catalog that could not be fetched
+ * @returns The picker
+ */
+function buildRasterFunctionSelect(
+  item: EarthdataGisItem,
+  onError: (message: string) => void,
+): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.style.cssText = CSS.functionSelect;
+  select.title = labels.rasterFunctionTitle;
+  select.setAttribute("aria-label", labels.rasterFunction);
+
+  const fill = (functions: readonly ArcGISImageServiceRasterFunction[] | null, note?: string) => {
+    const current = currentRasterFunction(item);
+    select.replaceChildren();
+    select.add(new Option(labels.rasterFunctionDefault, ""));
+    const names = functions ? functions.map((fn) => fn.name) : [];
+    // Keep a function the layer already uses selectable before the list loads.
+    if (current && !names.includes(current)) names.unshift(current);
+    for (const name of names) {
+      const option = new Option(name, name);
+      const description = functions?.find((fn) => fn.name === name)?.description;
+      if (description) option.title = description;
+      select.add(option);
+    }
+    if (note) {
+      const option = new Option(note, "__note__");
+      option.disabled = true;
+      select.add(option);
+    }
+    select.value = current;
+  };
+  fill(rasterFunctionCatalogs.get(item.url) ?? null);
+
+  let requested = rasterFunctionCatalogs.has(item.url);
+  const request = () => {
+    if (requested) return;
+    requested = true;
+    fill(null, labels.rasterFunctionLoading);
+    loadRasterFunctions(item).then(
+      (functions) =>
+        fill(functions, functions.length === 0 ? labels.rasterFunctionNone : undefined),
+      (error: unknown) => {
+        requested = false;
+        fill(null);
+        onError(labels.rasterFunctionError(error instanceof Error ? error.message : String(error)));
+      },
+    );
+  };
+  // Hovering starts the fetch, so the list is usually in before the dropdown
+  // opens; focus covers the keyboard, pointerdown a touch tap.
+  // A pointer resting on the picker starts the fetch, so the list is usually in
+  // before the dropdown opens; one sweeping across the list does not fetch for
+  // every card it crosses. Focus covers the keyboard, pointerdown a touch tap.
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  select.addEventListener("pointerenter", () => {
+    hoverTimer = setTimeout(request, RASTER_FUNCTION_HOVER_MS);
+  });
+  select.addEventListener("pointerleave", () => clearTimeout(hoverTimer));
+  select.addEventListener("focus", request);
+  select.addEventListener("pointerdown", request);
+  // A card rebuilt while its service's list is loading attaches to that load.
+  if (rasterFunctionRequests.has(item.url)) request();
+  select.dataset.itemId = item.id;
+  select.addEventListener("change", () => {
+    const previous = currentRasterFunction(item);
+    const next = select.value;
+    pickedRasterFunctions.set(item.id, next);
+    if (isAdded(item)) applyRasterFunction(item, previous, next);
+  });
+  return select;
 }
 
 /** Whether an item is currently on the map. */
@@ -494,8 +694,7 @@ async function addServiceToMap(
     return layerId;
   }
 
-  const tileUrl = buildExportTileUrl(item);
-  if (!tileUrl) return null;
+  if (!buildExportTileUrl(item)) return null;
 
   // Best-effort: a service that never answers must not block the add, so the
   // lookup is bounded and any failure simply leaves the layer unconstrained.
@@ -506,7 +705,13 @@ async function addServiceToMap(
       ? presetMinVisibleZoom
       : await withVisibilityTimeout(fetchMinVisibleZoom(item));
 
-  const layerId = useAppStore.getState().addTileLayer(item.title, {
+  // Read after the lookup: the picker stays usable while it runs, and the
+  // function to draw is the one picked when the layer is actually added.
+  const functionName = item.kind === "image" ? (pickedRasterFunctions.get(item.id) ?? "") : "";
+  const tileUrl = buildExportTileUrl(item, renderingRuleFor(functionName));
+  if (!tileUrl) return null;
+
+  const layerId = useAppStore.getState().addTileLayer(rasterFunctionLayerName(item, functionName), {
     type: layerTypeForTiles([tileUrl]),
     tiles: [tileUrl],
     url: item.url,
@@ -514,7 +719,14 @@ async function addServiceToMap(
     attribution: EARTHDATA_GIS_ATTRIBUTION,
     ...(minVisibleZoom !== null ? { minzoom: minVisibleZoom } : {}),
     ...(item.bbox ? { bounds: item.bbox } : {}),
-    ...(ownerMetadata ? { metadata: ownerMetadata } : {}),
+    metadata: {
+      ...ownerMetadata,
+      // Marks the layer's tiles as following its raster function, so layer
+      // sync hands a changed template to the map source (and Identify reads it).
+      ...(item.kind === "image"
+        ? { arcgisRenderingRule: renderingRuleFor(functionName) ?? "" }
+        : {}),
+    },
   });
 
   if (fit && item.bbox && revealRasterLayer(item.bbox, minVisibleZoom)) {
@@ -1268,7 +1480,13 @@ function buildPanel(container: HTMLElement): () => void {
 
   const computeAddedSignature = (): string =>
     items
-      .map((item) => `${item.id}:${isAdded(item) ? 1 : 0}:${pendingAdds.has(item.id) ? 1 : 0}`)
+      .map(
+        (item) =>
+          `${item.id}:${isAdded(item) ? 1 : 0}:${pendingAdds.has(item.id) ? 1 : 0}` +
+          // The function an added image layer draws, so an undo of a pick
+          // re-renders its card's picker.
+          (item.kind === "image" && isAdded(item) ? `:${currentRasterFunction(item)}` : ""),
+      )
       .join(",");
 
   const clearResults = (): void => {
@@ -1309,12 +1527,20 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const renderResults = (): void => {
+    // The rebuild replaces every card, so a Function picker that had focus
+    // (a pick redraws its layer, which re-renders the list) gets it back.
+    const active = document.activeElement;
+    const focusedPicker =
+      active instanceof HTMLSelectElement && results.contains(active)
+        ? active.dataset.itemId
+        : undefined;
     results.innerHTML = "";
     for (const item of items) {
       results.appendChild(
         buildCard(item, {
           openDetails: () => openDetailsModal(item),
           onAddError: (message) => setStatus(labels.addError(message), true),
+          onError: (message) => setStatus(message, true),
           onHint: (hint) => setStatus(hint),
           onChanged: () => renderResults(),
         }),
@@ -1323,6 +1549,11 @@ function buildPanel(container: HTMLElement): () => void {
     results.appendChild(sentinel);
     moreButton.hidden = nextStart === null;
     addedSignature = computeAddedSignature();
+    if (focusedPicker !== undefined) {
+      for (const picker of results.querySelectorAll("select")) {
+        if (picker.dataset.itemId === focusedPicker) picker.focus();
+      }
+    }
   };
 
   // Keep Add/Remove in sync when layers change elsewhere (e.g. the user deletes
@@ -1493,6 +1724,8 @@ function buildCard(
   handlers: {
     openDetails: () => void;
     onAddError: (message: string) => void;
+    /** Shows an error that is not about adding, as is. */
+    onError: (message: string) => void;
     onHint: (hint: string) => void;
     onChanged: () => void;
   },
@@ -1598,7 +1831,10 @@ function buildCard(
 
   const body = document.createElement("div");
   body.style.cssText = CSS.body;
-  body.append(title, sub, actions);
+  body.append(title, sub);
+  // An image service's processing templates, applied by its `/exportImage`.
+  if (item.kind === "image") body.appendChild(buildRasterFunctionSelect(item, handlers.onError));
+  body.appendChild(actions);
 
   card.append(thumb, body);
   return card;
