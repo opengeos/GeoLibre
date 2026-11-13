@@ -50,7 +50,7 @@ Pan, zoom, rotate, and tilt a MapLibre map over OpenFreeMap basemaps or a blank 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, then inspect and edit attributes in a table with a field calculator, charts, and statistics. Style layers with categorized, graduated, heatmap, and clustering renderers, reorder the stack with undo/redo, export to GeoParquet, GeoPackage, and more, and share `.geolibre.json` projects.
+Load local and remote vector and raster data, then inspect and edit attributes in a table with a field calculator, charts, and statistics. Style layers with categorized, graduated, expression, heatmap, and clustering renderers, reorder the stack with undo/redo, export to GeoParquet, GeoPackage, and more, and share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
@@ -104,7 +104,7 @@ Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geol
 <div class="feature-card" markdown>
 ### AI Assistant
 
-Chat with your data: the [assistant](user-guide/ai-assistant.md) turns plain-English requests into Spatial SQL, symbology, data, and map operations, applied through the app so they stay auditable and undoable. Bring your own credentials for Gemini, Anthropic, OpenAI, OpenRouter, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint.
+Chat with your data: the [assistant](user-guide/ai-assistant.md) turns plain-English requests into Spatial SQL, symbology, data, and map operations, applied through the app so they stay auditable and undoable. Bring your own credentials for Gemini, Anthropic, OpenAI, OpenRouter, Amazon Bedrock, a local Ollama, any OpenAI-compatible endpoint, and more.
 </div>
 
 <div class="feature-card" markdown>
