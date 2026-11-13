@@ -43,6 +43,12 @@ export interface ArcgisIdentifyHost {
   /** The camera's zoom, for popup templates and GetFeatureInfo scale. */
   zoom(): number;
   /**
+   * The view's displayed resolution in Web Mercator metres per pixel. The SDK's
+   * zoom follows the basemap's tiling scheme rather than MapLibre's 512 px
+   * ladder, so an ImageServer's `/identify` pixel size is taken from this.
+   */
+  resolution?(): number | undefined;
+  /**
    * Show `content` anchored at `lngLat`, replacing any open popup. `onClose`
    * runs when the user closes it (not when it is replaced).
    */
@@ -195,7 +201,13 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
         asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
           try {
             if (isServiceIdentifyLayer(candidate)) {
-              const result = await fetchServiceIdentifyProperties(candidate, lngLat, zoom, signal);
+              const result = await fetchServiceIdentifyProperties(
+                candidate,
+                lngLat,
+                zoom,
+                signal,
+                host.resolution?.(),
+              );
               if (
                 !result ||
                 (result.featureId == null && Object.keys(result.properties).length === 0)
@@ -316,7 +328,13 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
       const zoom = host.zoom();
       identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
         try {
-          const result = await fetchServiceIdentifyProperties(layer, lngLat, zoom, signal);
+          const result = await fetchServiceIdentifyProperties(
+            layer,
+            lngLat,
+            zoom,
+            signal,
+            host.resolution?.(),
+          );
           const content = createIdentifyPopupElement(
             layer.name,
             result?.properties ?? {},

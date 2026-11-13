@@ -651,6 +651,39 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     });
   });
 
+  it("keeps every band when the service repeats a band name", async () => {
+    stubFetch(JSON.stringify({ value: "12, 34" }), "application/json");
+    assert.deepEqual(await identify(imageLayer({ arcgisBandNames: ["Band", "Band"] })), {
+      properties: { Band: "12", "Band (2)": "34" },
+    });
+  });
+
+  it("asks at the view's own resolution when the engine gives one", async () => {
+    // The ArcGIS SDK's zoom follows the basemap's scheme, not MapLibre's.
+    const urls = stubFetch(JSON.stringify({ value: "5" }), "application/json");
+    await fetchArcGISImageIdentifyProperties(
+      imageLayer(),
+      [-84, 35.9],
+      10,
+      new AbortController().signal,
+      152.87,
+    );
+    assert.equal(JSON.parse(new URL(urls[0]).searchParams.get("pixelSize")!).x, 152.87);
+  });
+
+  it("reports the server's own error text, with no English prefix", async () => {
+    stubFetch(
+      JSON.stringify({
+        error: { code: 400, message: "Unable to complete operation.", details: [] },
+      }),
+      "application/json",
+    );
+    await assert.rejects(identify(imageLayer()), (error: Error) => {
+      assert.equal(error.message, "Unable to complete operation.");
+      return true;
+    });
+  });
+
   it("treats NoData as a miss", async () => {
     stubFetch(JSON.stringify({ value: "NoData" }), "application/json");
     assert.deepEqual(await identify(imageLayer()), { properties: {} });

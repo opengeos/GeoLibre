@@ -1,4 +1,8 @@
-import { formatPixelValue, type GeoLibreLayer } from "@geolibre/core";
+import {
+  ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
+  formatPixelValue,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 
 // Identify sources other than rendered vector features: WMS GetFeatureInfo,
 // the DuckDB and Time Slider plugin bridges, and pixel readings. Engine-neutral
@@ -404,7 +408,7 @@ function cellText(cell: Element): string {
  * taken. Own keys only, and defined rather than assigned, so a field named
  * `constructor` or `__proto__` keeps its name and its value.
  */
-function addProperty(target: Record<string, string>, name: string, value: string): void {
+function addProperty<T>(target: Record<string, T>, name: string, value: T): void {
   let key = name;
   for (let copy = 2; Object.hasOwn(target, key); copy += 1) key = `${name} (${copy})`;
   Object.defineProperty(target, key, {
@@ -716,10 +720,6 @@ export async function fetchWmsIdentifyProperties(
   return null;
 }
 
-// Mirrors ARCGIS_IMAGE_SERVICE_SOURCE_KIND in @geolibre/plugins, which this
-// package does not depend on.
-const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
-
 /**
  * Whether a layer is an ArcGIS ImageServer, whose pixel values Identify reads
  * through the service's `/identify` operation.
@@ -769,28 +769,34 @@ function arcgisPixelValue(value: string): string | number {
  *
  * @param layer The ImageServer layer to query.
  * @param lngLat The clicked position.
- * @param zoom The map zoom, which sets the pixel size asked about.
+ * @param zoom The map zoom, which sets the pixel size asked about when
+ *   `resolution` is not given.
  * @param signal Aborts the request when a newer click supersedes it.
+ * @param resolution The view's displayed resolution in Web Mercator metres per
+ *   pixel, for an engine whose zoom does not follow MapLibre's 512 px ladder.
  * @returns One row per band (named after the service's bands when the count
  *   matches), or null for a layer that is not an ImageServer.
- * @throws Error when the service answers with an error or an HTTP failure.
+ * @throws Error carrying the service's own error message, or the HTTP status,
+ *   when the request fails. The canvases show it as is, so it holds no
+ *   GeoLibre-authored English.
  */
 export async function fetchArcGISImageIdentifyProperties(
   layer: GeoLibreLayer,
   lngLat: [number, number],
   zoom: number,
   signal: AbortSignal,
+  resolution?: number,
 ): Promise<{ properties: Record<string, unknown> } | null> {
   if (!isArcGISImageServiceLayer(layer) || !layer.sourcePath) return null;
   const serviceUrl = layer.sourcePath.trim().replace(/\/+$/, "");
-  const resolution = wmsIdentifyResolution(zoom);
+  const pixelSize =
+    resolution !== undefined && Number.isFinite(resolution) && resolution > 0
+      ? resolution
+      : wmsIdentifyResolution(zoom);
   const params: Array<[string, string]> = [
     ["geometry", JSON.stringify({ x: lngLat[0], y: lngLat[1], spatialReference: { wkid: 4326 } })],
     ["geometryType", "esriGeometryPoint"],
-    [
-      "pixelSize",
-      JSON.stringify({ x: resolution, y: resolution, spatialReference: { wkid: 3857 } }),
-    ],
+    ["pixelSize", JSON.stringify({ x: pixelSize, y: pixelSize, spatialReference: { wkid: 3857 } })],
     ["returnGeometry", "false"],
     ["returnCatalogItems", "false"],
   ];
@@ -813,22 +819,23 @@ export async function fetchArcGISImageIdentifyProperties(
     : await fetch(url, { signal });
   const text = await response.text();
   if (signal.aborted) return null;
-  if (!response.ok) {
-    throw new Error(`ArcGIS identify failed: ${wmsHttpErrorMessage(response, text)}`);
-  }
-  let body: { error?: { message?: unknown; details?: unknown }; value?: unknown };
+  if (!response.ok) throw new Error(wmsHttpErrorMessage(response, text));
+  let body: {
+    error?: { code?: unknown; message?: unknown; details?: unknown };
+    value?: unknown;
+  };
   try {
     body = JSON.parse(text) as typeof body;
   } catch {
-    throw new Error(`ArcGIS identify failed: ${wmsHttpErrorMessage(response, text)}`);
+    throw new Error(wmsHttpErrorMessage(response, text));
   }
-  // ArcGIS reports errors in a 200 JSON body.
+  // ArcGIS reports errors in a 200 JSON body; its message is the server's own.
   if (body.error) {
     const details = Array.isArray(body.error.details) ? body.error.details.join(" ") : "";
     const message = normalizeText(
       `${typeof body.error.message === "string" ? body.error.message : ""} ${details}`,
     );
-    throw new Error(`ArcGIS identify returned an error: ${message || "unknown error"}`);
+    throw new Error(message || `ArcGIS ${String(body.error.code ?? "")}`.trim());
   }
 
   const raw = typeof body.value === "string" ? body.value.trim() : "";
@@ -848,13 +855,9 @@ export async function fetchArcGISImageIdentifyProperties(
         ? ["Value"]
         : values.map((_, index) => `Band ${index + 1}`);
   const properties: Record<string, unknown> = {};
+  // A service may repeat a band name; each value still gets its own row.
   values.forEach((value, index) => {
-    Object.defineProperty(properties, names[index] ?? `Band ${index + 1}`, {
-      value: arcgisPixelValue(value),
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
+    addProperty(properties, names[index] ?? `Band ${index + 1}`, arcgisPixelValue(value));
   });
   return { properties };
 }
@@ -867,6 +870,8 @@ export async function fetchArcGISImageIdentifyProperties(
  * @param lngLat The clicked position.
  * @param zoom The map zoom.
  * @param signal Aborts the request when a newer click supersedes it.
+ * @param resolution The view's displayed Web Mercator metres per pixel, when
+ *   the engine's zoom does not follow MapLibre's ladder (ImageServer only).
  * @returns The identify popup's properties, or null.
  */
 export function fetchServiceIdentifyProperties(
@@ -874,9 +879,10 @@ export function fetchServiceIdentifyProperties(
   lngLat: [number, number],
   zoom: number,
   signal: AbortSignal,
+  resolution?: number,
 ): Promise<{ featureId?: string | number; properties: Record<string, unknown> } | null> {
   return isArcGISImageServiceLayer(layer)
-    ? fetchArcGISImageIdentifyProperties(layer, lngLat, zoom, signal)
+    ? fetchArcGISImageIdentifyProperties(layer, lngLat, zoom, signal, resolution)
     : fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
 }
 

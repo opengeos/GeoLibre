@@ -472,6 +472,9 @@ describe("addArcGISLayer (map and image services)", () => {
       sourceType: "url",
       url: IMAGE_SERVICE_URL,
     });
+    // Exportable, yet the cache is kept: it reaches the source resolution, and
+    // its speed is worth more than drawing the service below level 9, where
+    // the cache never answered either.
     assert.equal(tileTemplate(id), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
     const layer = useAppStore.getState().layers.find((l) => l.id === id);
     assert.equal(layer?.source.minzoom, 9);
@@ -494,6 +497,67 @@ describe("addArcGISLayer (map and image services)", () => {
       url: IMAGE_SERVICE_URL,
     });
     assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
+  it("reads a geographic WKID outside the EPSG 4000 block in degrees", async () => {
+    // JGD2011 (6668): 0.01 degrees is about 1.1 km, coarser than the level-10
+    // cache, so the cache reaches the sources. Read as metres it would not.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 0.01,
+      spatialReference: { wkid: 6668 },
+      tileInfo: mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.equal(tileTemplate(id), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
+  });
+
+  it("converts a foot-based WKT's pixel size to metres", async () => {
+    // A 1 ft (0.3 m) source under a level-17 cache (~1.2 m, ~0.9 m on the
+    // ground at 40 degrees) is more than twice as fine as the cache.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: {
+        wkt: 'PROJCS["NAD_1983_StatePlane_Ohio_North_FIPS_3401_Feet",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic"],UNIT["Foot_US",0.3048006096012192]]',
+      },
+      tileInfo: mercatorCache([12, 13, 14, 15, 16, 17]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
+  it("does not send the ArcGIS renderer to a LERC cache that was passed over", async () => {
+    // Exportable, and the LERC cache stops short of the 1 m sources.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,Metadata",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: { wkid: 3857 },
+      tileInfo: { ...mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8]), format: "LERC2D" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    // An explicit false, so hosted-tiled-imagery host detection cannot flip it back.
+    assert.equal(layer?.metadata.arcgisRawTiles, false);
   });
 
   it("records an image service's band names for Identify", async () => {

@@ -7,6 +7,7 @@ import {
   shouldZoomToNewLayers,
   useAppStore,
 } from "@geolibre/core";
+import { ARCGIS_IMAGE_SERVICE_SOURCE_KIND } from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
 import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
@@ -94,7 +95,8 @@ export function parseArcGISLayerType(
  * marks where it came from.
  */
 export const ARCGIS_MAP_SERVICE_SOURCE_KIND = "arcgis-map-service";
-export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+// Shared with `@geolibre/map`'s Identify, so it lives in core.
+export { ARCGIS_IMAGE_SERVICE_SOURCE_KIND };
 export const ARCGIS_MAP_SERVICE_URL_ERROR = "Enter an ArcGIS MapServer URL.";
 export const ARCGIS_IMAGE_SERVICE_URL_ERROR = "Enter an ArcGIS ImageServer URL.";
 // Catalog namespace for the errors this module raises for the UI.
@@ -287,7 +289,7 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
   /** An ImageServer's native pixel size, in its `spatialReference` units. */
   pixelSizeX?: number;
   singleFusedMapCache?: boolean;
-  spatialReference?: { latestWkid?: number; wkid?: number };
+  spatialReference?: { latestWkid?: number; wkid?: number; wkt?: string };
   tileInfo?: ArcGISTileInfo;
 }
 
@@ -1430,8 +1432,12 @@ async function addArcGISImageServiceLayer(
       // neither MapLibre template above can draw it. The ArcGIS renderer's
       // ImageryTileLayer decodes and symbolizes those tiles client-side.
       // A rendering rule needs `/exportImage`, which that layer does not apply.
+      // When the cache was passed over for `/exportImage` (the service can
+      // export and the cache stops short of the source rasters), the ArcGIS
+      // renderer must not read the cache either: an explicit `false` also
+      // overrides its hosted-tiled-imagery host detection.
       ...(options.layerType === "image-service" && !renderingRule && isArcGISRawTileCache(info)
-        ? { arcgisRawTiles: true }
+        ? { arcgisRawTiles: tileScheme !== null }
         : {}),
       ...(bounds ? { bounds } : {}),
       // The token has to travel in the tile URL for the tiles to render at all,
@@ -1869,6 +1875,29 @@ function arcgisImageServiceTileScheme(
 }
 
 /**
+ * Metres per unit of a service's spatial reference, for its native pixel size.
+ *
+ * A geographic CRS (by WKID, or a `GEOGCS` WKT) measures in degrees; a
+ * projected WKT in the linear `UNIT` it closes with (`Foot_US`, 0.3048...). A
+ * bare projected WKID carries no unit, so it is read as metres: for a foot-based
+ * one that overstates the pixel size and errs toward keeping the cache.
+ *
+ * @param spatialReference - The service's `spatialReference`.
+ * @returns The ground length of one unit, in metres.
+ */
+function arcgisMetersPerUnit(
+  spatialReference: ArcGISImageProducingServiceInfo["spatialReference"],
+): number {
+  const wkid = spatialReference?.latestWkid ?? spatialReference?.wkid;
+  if (typeof wkid === "number" && isGeographicWkid(wkid)) return METERS_PER_DEGREE;
+  const wkt = spatialReference?.wkt?.trim() ?? "";
+  if (/^GEOGCS\b/i.test(wkt)) return METERS_PER_DEGREE;
+  const unit = /UNIT\[\s*"[^"]*"\s*,\s*([0-9.eE+-]+)\s*\]\s*\]$/.exec(wkt);
+  const metersPerUnit = unit ? Number(unit[1]) : Number.NaN;
+  return Number.isFinite(metersPerUnit) && metersPerUnit > 0 ? metersPerUnit : 1;
+}
+
+/**
  * An ImageServer's native pixel size as a Web Mercator resolution at the
  * service's latitude, comparable with a cache level's resolution.
  *
@@ -1885,11 +1914,7 @@ function arcgisNativeWebMercatorResolution(
   const wkid = info.spatialReference?.latestWkid ?? info.spatialReference?.wkid;
   // A Web Mercator pixel size is already in the cache's units.
   if (wkid === 3857 || wkid === 102100 || wkid === 102113) return pixelSize;
-  // EPSG's 4000-4999 block holds the geographic CRSs, whose units are degrees.
-  const groundMeters =
-    typeof wkid === "number" && wkid >= 4000 && wkid < 5000
-      ? pixelSize * METERS_PER_DEGREE
-      : pixelSize;
+  const groundMeters = pixelSize * arcgisMetersPerUnit(info.spatialReference);
   // A Web Mercator metre shrinks on the ground by cos(latitude).
   const latitude = bounds ? (bounds[1] + bounds[3]) / 2 : 0;
   const cosine = Math.cos((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180);

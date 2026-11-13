@@ -326,6 +326,10 @@ export function ArcgisCanvas({
           identifyFeaturesAt: (point, layerId) => current.identifyFeaturesAt(point, layerId),
           toLngLat: (point) => current.lngLatOf(mapView.toMap(point)),
           zoom: () => current.readView().zoom,
+          // A 2D view knows its resolution; a scene's comes from its scale
+          // (ArcGIS assumes 96 DPI).
+          resolution: () =>
+            mapView.type === "2d" ? mapView.resolution : mapView.scale / (96 / 0.0254),
           showPopup: (lngLat, content, maxWidth, onClose) => {
             removePopup();
             if (cancelled || !mapView.container) return;
