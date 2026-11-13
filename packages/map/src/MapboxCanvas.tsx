@@ -791,6 +791,7 @@ export function MapboxCanvas({
                         lngLat,
                         zoom,
                         signal,
+                        { labels },
                       );
                       if (
                         !result ||
@@ -906,7 +907,9 @@ export function MapboxCanvas({
             const zoom = map.getZoom();
             identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
               try {
-                const result = await fetchServiceIdentifyProperties(layer, lngLat, zoom, signal);
+                const result = await fetchServiceIdentifyProperties(layer, lngLat, zoom, signal, {
+                  labels,
+                });
                 const content = createIdentifyPopupElement(
                   layer.name,
                   result?.properties ?? {},

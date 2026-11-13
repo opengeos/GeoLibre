@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import { DOMParser } from "linkedom";
 import {
   fetchArcGISImageIdentifyProperties,
@@ -581,6 +581,16 @@ describe("pixel identify helpers", () => {
   });
 });
 
+/**
+ * The `/identify` request among those a stubbed fetch saw: a cold band-name
+ * cache sends the service description alongside it, in either order.
+ */
+function identifyUrl(urls: string[]): string {
+  const url = urls.find((candidate) => candidate.includes("/identify?"));
+  assert.ok(url, `no /identify request among ${urls.join(", ")}`);
+  return url;
+}
+
 describe("fetchArcGISImageIdentifyProperties", () => {
   const SERVICE = "https://img.example/arcgis/rest/services/Landsat/MS/ImageServer";
   const imageLayer = (metadata: Record<string, unknown> = {}, tiles?: string[]) =>
@@ -613,7 +623,7 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     const result = await identify(imageLayer({ arcgisBandNames: ["Red", "Green", "Blue"] }));
     assert.deepEqual(result, { properties: { Red: "1128", Green: "864", Blue: "612" } });
 
-    const url = new URL(urls[0]);
+    const url = new URL(identifyUrl(urls));
     assert.equal(url.pathname, "/arcgis/rest/services/Landsat/MS/ImageServer/identify");
     assert.deepEqual(JSON.parse(url.searchParams.get("geometry")!), {
       x: -84,
@@ -639,7 +649,7 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     );
     // The band names describe the source bands, not the NDVI output.
     assert.deepEqual(result, { properties: { Value: "0.663175" } });
-    const url = new URL(urls[0]);
+    const url = new URL(identifyUrl(urls));
     assert.equal(url.searchParams.get("renderingRule"), rule);
     assert.equal(url.searchParams.get("token"), "abc123");
   });
@@ -666,9 +676,9 @@ describe("fetchArcGISImageIdentifyProperties", () => {
       [-84, 35.9],
       10,
       new AbortController().signal,
-      152.87,
+      { resolution: 152.87 },
     );
-    assert.equal(JSON.parse(new URL(urls[0]).searchParams.get("pixelSize")!).x, 152.87);
+    assert.equal(JSON.parse(new URL(identifyUrl(urls)).searchParams.get("pixelSize")!).x, 152.87);
   });
 
   it("reports the server's own error text, with no English prefix", async () => {
@@ -699,7 +709,7 @@ describe("fetchArcGISImageIdentifyProperties", () => {
       await fetchServiceIdentifyProperties(layer, [-84, 35.9], 12, new AbortController().signal),
       { properties: { Value: "0.42" } },
     );
-    const url = new URL(urls[0]);
+    const url = new URL(identifyUrl(urls));
     assert.equal(url.pathname, "/arcgis/rest/services/Landsat/MS/ImageServer/identify");
     assert.equal(url.searchParams.get("renderingRule"), '{"rasterFunction":"NDVI Raw"}');
     assert.equal(url.searchParams.get("token"), "t0k");
@@ -748,8 +758,17 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     }) as typeof fetch;
     const identifyAt = () =>
       fetchServiceIdentifyProperties(layer, [0, 0], 12, new AbortController().signal);
-    assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
-    assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    // A failure is remembered for a minute, so a stalled service does not hold
+    // every click, then retried.
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      mock.timers.tick(60_000);
+      assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it("does not cache an ArcGIS error body as the band names", async () => {
@@ -774,8 +793,17 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     }) as typeof fetch;
     const identifyAt = () =>
       fetchServiceIdentifyProperties(layer, [0, 0], 12, new AbortController().signal);
-    assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
-    assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    // A failure is remembered for a minute, so a stalled service does not hold
+    // every click, then retried.
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      mock.timers.tick(60_000);
+      assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it("does not take a MapServer export template for an ImageServer", () => {
@@ -803,6 +831,18 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     assert.equal(isArcGISImageServiceLayer(layer), false);
   });
 
+  it("labels unnamed bands with the host's translated labels", async () => {
+    stubFetch(JSON.stringify({ value: "7, 8" }), "application/json");
+    const result = await fetchArcGISImageIdentifyProperties(
+      imageLayer({ arcgisRenderingRule: '{"rasterFunction":"X"}' }),
+      [0, 0],
+      10,
+      new AbortController().signal,
+      { labels: { pixelValue: "Valeur", pixelBand: (index) => `Bande ${index}` } },
+    );
+    assert.deepEqual(result, { properties: { "Bande 1": "7", "Bande 2": "8" } });
+  });
+
   it("treats NoData as a miss", async () => {
     stubFetch(JSON.stringify({ value: "NoData" }), "application/json");
     assert.deepEqual(await identify(imageLayer()), { properties: {} });
@@ -819,6 +859,6 @@ describe("fetchArcGISImageIdentifyProperties", () => {
   it("routes an ImageServer through /identify and a WMS through GetFeatureInfo", async () => {
     const urls = stubFetch(JSON.stringify({ value: "5" }), "application/json");
     await fetchServiceIdentifyProperties(imageLayer(), [0, 0], 3, new AbortController().signal);
-    assert.match(urls[0], /\/ImageServer\/identify\?/);
+    assert.match(identifyUrl(urls), /\/ImageServer\/identify\?/);
   });
 });

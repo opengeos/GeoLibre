@@ -6,8 +6,8 @@ import {
   type GeoLibreLayer,
   shouldZoomToNewLayers,
   useAppStore,
+  ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
 } from "@geolibre/core";
-import { ARCGIS_IMAGE_SERVICE_SOURCE_KIND } from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
 import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
@@ -1912,11 +1912,13 @@ function arcgisMetersPerUnit(
   const wkid = spatialReference?.latestWkid ?? spatialReference?.wkid;
   if (typeof wkid === "number" && isGeographicWkid(wkid)) return METERS_PER_DEGREE;
   const wkt = spatialReference?.wkt?.trim() ?? "";
-  if (/^GEOGCS\b/i.test(wkt)) return METERS_PER_DEGREE;
+  // WKT2 (PROJCRS/GEOGCRS, LENGTHUNIT) is not parsed: read as metres.
+  if (/^GEOGC(S|RS)\b/i.test(wkt)) return METERS_PER_DEGREE;
+  if (/^PROJCRS\b/i.test(wkt)) return 1;
   // The linear unit is PROJCS's own UNIT: the first one left once the nested
   // GEOGCS (whose UNIT is angular) is cut out. Trailing AXIS or AUTHORITY
   // clauses after it do not matter.
-  const unit = /UNIT\[\s*"[^"]*"\s*,\s*([0-9.eE+-]+)/i.exec(withoutWktNode(wkt, "GEOGCS"));
+  const unit = /\bUNIT\[\s*"[^"]*"\s*,\s*([0-9.eE+-]+)/i.exec(withoutWktNode(wkt, "GEOGCS"));
   const metersPerUnit = unit ? Number(unit[1]) : Number.NaN;
   return Number.isFinite(metersPerUnit) && metersPerUnit > 0 ? metersPerUnit : 1;
 }

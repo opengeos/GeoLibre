@@ -3,6 +3,7 @@ import {
   formatPixelValue,
   type GeoLibreLayer,
 } from "@geolibre/core";
+import { DEFAULT_IDENTIFY_ALL_LABELS, type MapCanvasIdentifyAllLabels } from "./identify-all-popup";
 
 // Identify sources other than rendered vector features: WMS GetFeatureInfo,
 // the DuckDB and Time Slider plugin bridges, and pixel readings. Engine-neutral
@@ -782,6 +783,8 @@ export function isServiceIdentifyLayer(layer: GeoLibreLayer): boolean {
 
 /** How long a service description may take before identify labels bands `Band N`. */
 const ARCGIS_BAND_NAMES_TIMEOUT_MS = 5_000;
+/** How long a failed band-name lookup is remembered before a click retries it. */
+const ARCGIS_BAND_NAMES_RETRY_MS = 60_000;
 
 /** Each ImageServer's band names, fetched once per service URL. */
 const arcgisBandNamesCache = new Map<string, Promise<string[]>>();
@@ -816,12 +819,26 @@ function fetchArcGISBandNames(serviceUrl: string, token: string | undefined): Pr
       ? info.bandNames.filter((name): name is string => typeof name === "string")
       : [];
   })().catch(() => {
-    // Let a later click try again rather than caching the failure.
-    arcgisBandNamesCache.delete(serviceUrl);
+    // Remember the failure briefly, so a stalled or refusing service does not
+    // hold every click for the timeout, then let a later click try again.
+    setTimeout(() => {
+      if (arcgisBandNamesCache.get(serviceUrl) === request) arcgisBandNamesCache.delete(serviceUrl);
+    }, ARCGIS_BAND_NAMES_RETRY_MS);
     return [];
   });
   arcgisBandNamesCache.set(serviceUrl, request);
   return request;
+}
+
+/** What a service identify needs beyond the clicked point and zoom. */
+export interface ServiceIdentifyOptions {
+  /**
+   * The view's displayed resolution in Web Mercator metres per pixel, for an
+   * engine whose zoom does not follow MapLibre's 512 px ladder.
+   */
+  resolution?: number;
+  /** Translated row labels for an ImageServer's unnamed bands. */
+  labels?: Pick<MapCanvasIdentifyAllLabels, "pixelValue" | "pixelBand">;
 }
 
 /** One band value from an ImageServer `/identify` answer, as a number when it is one. */
@@ -842,22 +859,24 @@ function arcgisPixelValue(value: string): string | number {
  * @param zoom The map zoom, which sets the pixel size asked about when
  *   `resolution` is not given.
  * @param signal Aborts the request when a newer click supersedes it.
- * @param resolution The view's displayed resolution in Web Mercator metres per
- *   pixel, for an engine whose zoom does not follow MapLibre's 512 px ladder.
+ * @param options `resolution`: the view's displayed Web Mercator metres per
+ *   pixel, for an engine whose zoom does not follow MapLibre's 512 px ladder;
+ *   `labels`: the translated row labels for unnamed bands.
  * @returns One row per band (named after the service's bands when the count
  *   matches), or null for a layer that is not an ImageServer.
  * @throws Error carrying the service's own error message, or the HTTP status,
  *   when the request fails. The canvases show it as is, so the message adds
- *   no GeoLibre-authored English. (The `Value` and `Band N` row labels are
- *   still English, as `pixelIdentifyProperties`' `Band N` already is.)
+ *   no GeoLibre-authored English; the row labels come from `options.labels`.
  */
 export async function fetchArcGISImageIdentifyProperties(
   layer: GeoLibreLayer,
   lngLat: [number, number],
   zoom: number,
   signal: AbortSignal,
-  resolution?: number,
+  options: ServiceIdentifyOptions = {},
 ): Promise<{ properties: Record<string, unknown> } | null> {
+  const { resolution } = options;
+  const rowLabels = options.labels ?? DEFAULT_IDENTIFY_ALL_LABELS;
   const serviceUrl = arcgisImageServiceUrl(layer);
   if (!serviceUrl) return null;
   const pixelSize =
@@ -941,12 +960,16 @@ export async function fetchArcGISImageIdentifyProperties(
     !renderingRule && bandNames.length === values.length
       ? bandNames
       : values.length === 1
-        ? ["Value"]
-        : values.map((_, index) => `Band ${index + 1}`);
+        ? [rowLabels.pixelValue]
+        : values.map((_, index) => rowLabels.pixelBand(index + 1));
   const properties: Record<string, unknown> = {};
   // A service may repeat a band name; each value still gets its own row.
   values.forEach((value, index) => {
-    addProperty(properties, names[index] ?? `Band ${index + 1}`, arcgisPixelValue(value));
+    addProperty(
+      properties,
+      names[index] ?? rowLabels.pixelBand(index + 1),
+      arcgisPixelValue(value),
+    );
   });
   return { properties };
 }
@@ -959,8 +982,8 @@ export async function fetchArcGISImageIdentifyProperties(
  * @param lngLat The clicked position.
  * @param zoom The map zoom.
  * @param signal Aborts the request when a newer click supersedes it.
- * @param resolution The view's displayed Web Mercator metres per pixel, when
- *   the engine's zoom does not follow MapLibre's ladder (ImageServer only).
+ * @param options The view resolution and row labels an ImageServer identify
+ *   uses; see {@link fetchArcGISImageIdentifyProperties}.
  * @returns The identify popup's properties, or null.
  */
 export function fetchServiceIdentifyProperties(
@@ -968,10 +991,10 @@ export function fetchServiceIdentifyProperties(
   lngLat: [number, number],
   zoom: number,
   signal: AbortSignal,
-  resolution?: number,
+  options: ServiceIdentifyOptions = {},
 ): Promise<{ featureId?: string | number; properties: Record<string, unknown> } | null> {
   return isArcGISImageServiceLayer(layer)
-    ? fetchArcGISImageIdentifyProperties(layer, lngLat, zoom, signal, resolution)
+    ? fetchArcGISImageIdentifyProperties(layer, lngLat, zoom, signal, options)
     : fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
 }
 

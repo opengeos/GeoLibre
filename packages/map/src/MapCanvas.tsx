@@ -746,6 +746,7 @@ export const MapCanvas = memo(function MapCanvas({
                   [event.lngLat.lng, event.lngLat.lat],
                   map.getZoom(),
                   abortController.signal,
+                  { labels: identifyAllLabels },
                 );
                 if (
                   !result ||
@@ -1017,6 +1018,7 @@ export const MapCanvas = memo(function MapCanvas({
           [event.lngLat.lng, event.lngLat.lat],
           map.getZoom(),
           abortController.signal,
+          { labels: identifyAllLabels },
         )
           .then((result) => {
             if (userDismissed || abortController.signal.aborted) return;

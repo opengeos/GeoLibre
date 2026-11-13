@@ -201,13 +201,10 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
         asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
           try {
             if (isServiceIdentifyLayer(candidate)) {
-              const result = await fetchServiceIdentifyProperties(
-                candidate,
-                lngLat,
-                zoom,
-                signal,
-                host.resolution?.(),
-              );
+              const result = await fetchServiceIdentifyProperties(candidate, lngLat, zoom, signal, {
+                resolution: host.resolution?.(),
+                labels,
+              });
               if (
                 !result ||
                 (result.featureId == null && Object.keys(result.properties).length === 0)
@@ -328,13 +325,10 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
       const zoom = host.zoom();
       identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
         try {
-          const result = await fetchServiceIdentifyProperties(
-            layer,
-            lngLat,
-            zoom,
-            signal,
-            host.resolution?.(),
-          );
+          const result = await fetchServiceIdentifyProperties(layer, lngLat, zoom, signal, {
+            resolution: host.resolution?.(),
+            labels,
+          });
           const content = createIdentifyPopupElement(
             layer.name,
             result?.properties ?? {},
