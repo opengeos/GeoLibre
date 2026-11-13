@@ -383,6 +383,9 @@ function findAddedLayerId(item: EarthdataGisItem): string | undefined {
   })?.id;
 }
 
+/** How long the pointer rests on a Function picker before its list is fetched. */
+const RASTER_FUNCTION_HOVER_MS = 300;
+
 /** The raster function picked on each image card before it is added, by item id. */
 const pickedRasterFunctions = new Map<string, string>();
 /** Each image service's published raster functions, once fetched, by service URL. */
@@ -530,9 +533,19 @@ function buildRasterFunctionSelect(
   };
   // Hovering starts the fetch, so the list is usually in before the dropdown
   // opens; focus covers the keyboard, pointerdown a touch tap.
-  select.addEventListener("pointerenter", request);
+  // A pointer resting on the picker starts the fetch, so the list is usually in
+  // before the dropdown opens; one sweeping across the list does not fetch for
+  // every card it crosses. Focus covers the keyboard, pointerdown a touch tap.
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  select.addEventListener("pointerenter", () => {
+    hoverTimer = setTimeout(request, RASTER_FUNCTION_HOVER_MS);
+  });
+  select.addEventListener("pointerleave", () => clearTimeout(hoverTimer));
   select.addEventListener("focus", request);
   select.addEventListener("pointerdown", request);
+  // A card rebuilt while its service's list is loading attaches to that load.
+  if (rasterFunctionRequests.has(item.url)) request();
+  select.dataset.itemId = item.id;
   select.addEventListener("change", () => {
     const previous = currentRasterFunction(item);
     const next = select.value;
@@ -1514,6 +1527,13 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const renderResults = (): void => {
+    // The rebuild replaces every card, so a Function picker that had focus
+    // (a pick redraws its layer, which re-renders the list) gets it back.
+    const active = document.activeElement;
+    const focusedPicker =
+      active instanceof HTMLSelectElement && results.contains(active)
+        ? active.dataset.itemId
+        : undefined;
     results.innerHTML = "";
     for (const item of items) {
       results.appendChild(
@@ -1529,6 +1549,11 @@ function buildPanel(container: HTMLElement): () => void {
     results.appendChild(sentinel);
     moreButton.hidden = nextStart === null;
     addedSignature = computeAddedSignature();
+    if (focusedPicker !== undefined) {
+      for (const picker of results.querySelectorAll("select")) {
+        if (picker.dataset.itemId === focusedPicker) picker.focus();
+      }
+    }
   };
 
   // Keep Add/Remove in sync when layers change elsewhere (e.g. the user deletes
