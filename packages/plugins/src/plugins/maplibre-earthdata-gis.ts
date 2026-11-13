@@ -21,6 +21,7 @@ import {
   EARTHDATA_GIS_TILE_SIZE,
   EARTHDATA_SERVICE_KINDS,
   type EarthdataGisItem,
+  type EarthdataGisSearchOptions,
   type EarthdataGisSearchResult,
   type EarthdataServiceKind,
   bboxToMercator,
@@ -282,6 +283,7 @@ const CSS = {
     "display:flex;align-items:center;gap:6px;font-size:11px;" +
     "color:hsl(var(--muted-foreground));cursor:pointer;",
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
+  sentinel: "flex:0 0 auto;height:1px;",
   results: "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;overflow-y:auto;",
   card:
     "display:flex;gap:8px;padding:6px;border-radius:6px;" +
@@ -1220,11 +1222,20 @@ function buildPanel(container: HTMLElement): () => void {
   const results = document.createElement("div");
   results.style.cssText = CSS.results;
 
+  // Reaching the end of the list loads the next page by itself (see
+  // `autoLoad` below); the button stays as the fallback for a page that
+  // failed, or a browser without IntersectionObserver.
   const moreButton = document.createElement("button");
   moreButton.type = "button";
   moreButton.textContent = labels.loadMore;
   moreButton.style.cssText = CSS.wideButton;
   moreButton.hidden = true;
+
+  // An empty marker kept after the last card; its scrolling into view is
+  // what loads the next page.
+  const sentinel = document.createElement("div");
+  sentinel.setAttribute("aria-hidden", "true");
+  sentinel.style.cssText = CSS.sentinel;
 
   container.append(searchRow, filterBar, viewRow, status, results, moreButton);
 
@@ -1237,6 +1248,15 @@ function buildPanel(container: HTMLElement): () => void {
   let generation = 0;
   // Aborts the in-flight request when a newer search supersedes it.
   let inflight: AbortController | null = null;
+  // Set when a page fails, so the end of the list does not retry it in a loop;
+  // the button (or a new search) clears it.
+  let autoLoadPaused = false;
+  // The search the loaded pages belong to, captured when it starts.
+  let query: Pick<EarthdataGisSearchOptions, "terms" | "kinds" | "bbox"> = {
+    terms: "",
+    kinds: EARTHDATA_SERVICE_KINDS,
+    bbox: null,
+  };
   // Signature of which listed items are on the map, so the store subscription
   // can skip re-rendering when an unrelated part of the store changes.
   let addedSignature = "";
@@ -1256,6 +1276,38 @@ function buildPanel(container: HTMLElement): () => void {
     moreButton.hidden = true;
   };
 
+  // Loads the next page whenever the end of the list is within a screenful of
+  // view. Rooted on the list, which is the element that scrolls.
+  const autoLoad =
+    typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(
+          (entries) => {
+            const intersecting = entries.some((entry) => entry.isIntersecting);
+            if (
+              !shouldAutoLoad({
+                intersecting,
+                nextStart,
+                loading: inflight !== null,
+                paused: autoLoadPaused,
+              })
+            )
+              return;
+            void runSearch(false);
+          },
+          { root: results, rootMargin: "0px 0px 200px 0px" },
+        )
+      : null;
+
+  /**
+   * Re-arm the observer: observing anew reports the sentinel's current state,
+   * so a page too short to fill the list keeps loading until it scrolls.
+   */
+  const watchListEnd = (): void => {
+    if (!autoLoad) return;
+    autoLoad.unobserve(sentinel);
+    if (nextStart !== null) autoLoad.observe(sentinel);
+  };
+
   const renderResults = (): void => {
     results.innerHTML = "";
     for (const item of items) {
@@ -1268,6 +1320,7 @@ function buildPanel(container: HTMLElement): () => void {
         }),
       );
     }
+    results.appendChild(sentinel);
     moreButton.hidden = nextStart === null;
     addedSignature = computeAddedSignature();
   };
@@ -1287,7 +1340,15 @@ function buildPanel(container: HTMLElement): () => void {
       items = [];
       total = 0;
       nextStart = 1;
+      // Later pages repeat this search, not whatever the box, filter or map
+      // view hold by the time the list is scrolled.
+      query = {
+        terms: searchInput.value,
+        kinds: kindsForFilter(),
+        bbox: viewCheckbox.checked ? currentBbox() : null,
+      };
     }
+    autoLoadPaused = false;
     const start = nextStart;
     if (start === null) return;
 
@@ -1303,21 +1364,26 @@ function buildPanel(container: HTMLElement): () => void {
 
     try {
       const result: EarthdataGisSearchResult = await searchEarthdataGis({
-        terms: searchInput.value,
-        kinds: kindsForFilter(),
-        bbox: viewCheckbox.checked ? currentBbox() : null,
+        ...query,
         num: EARTHDATA_GIS_PAGE_SIZE,
         start,
         signal: controller.signal,
       });
       if (current !== generation) return; // superseded
+      // A new search starts at the top, rather than at the old list's end,
+      // which would also load its second page at once.
+      if (reset) results.scrollTop = 0;
       items = [...items, ...result.items];
       total = result.total;
-      nextStart = result.nextStart;
-      if (items.length === 0) {
+      // A cursor that does not move past this page would request it again
+      // forever now that the end of the list loads by itself.
+      nextStart = result.nextStart !== null && result.nextStart > start ? result.nextStart : null;
+      if (items.length === 0 && nextStart === null) {
         setStatus(labels.noResults);
         clearResults();
       } else {
+        // A page whose every record was unusable can still have more after it,
+        // so the list (and its end marker) stays up while there is a next page.
         setStatus(labels.showing(items.length, total));
         renderResults();
       }
@@ -1327,6 +1393,7 @@ function buildPanel(container: HTMLElement): () => void {
       if (error instanceof DOMException && error.name === "AbortError") return;
       const message = error instanceof Error ? error.message : "Search failed";
       setStatus(labels.searchError(message), true);
+      autoLoadPaused = true;
       // Keep already-loaded results on screen: a failed "Load more" should not
       // wipe a successful initial search or hide the retry button.
       if (items.length === 0) clearResults();
@@ -1334,6 +1401,9 @@ function buildPanel(container: HTMLElement): () => void {
       if (current === generation) {
         setControlsDisabled(false);
         inflight = null;
+        // Now that nothing is loading, a list that still ends on screen asks
+        // for its next page.
+        watchListEnd();
       }
     }
   };
@@ -1379,9 +1449,26 @@ function buildPanel(container: HTMLElement): () => void {
     generation += 1;
     inflight?.abort();
     inflight = null;
+    autoLoad?.disconnect();
     closeDetailsDialog?.();
     unsubscribe();
   };
+}
+
+/**
+ * Whether reaching the end of the results list should load the next page.
+ *
+ * @param state - The end marker's visibility and the paging state
+ * @returns True when there is a next page, none is loading, and auto-loading
+ *   has not been paused by a failed page
+ */
+export function shouldAutoLoad(state: {
+  intersecting: boolean;
+  nextStart: number | null;
+  loading: boolean;
+  paused: boolean;
+}): boolean {
+  return state.intersecting && state.nextStart !== null && !state.loading && !state.paused;
 }
 
 /** Creates a segmented-control button for the type filter. */
