@@ -19,6 +19,7 @@ import {
 } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import {
+  isArcGISImageServiceLayer,
   isArcgisSupportedLayer,
   isCesiumSupportedLayerType,
   isMapboxSupportedLayer,
@@ -183,6 +184,8 @@ export function LayerRow({
       // COG layers identify pixel values via the raster control's pixel
       // inspector (see useRasterIdentify), not the vector feature query.
       layer.type === "cog" ||
+      // An ArcGIS ImageServer reports its pixel values through `/identify`.
+      isArcGISImageServiceLayer(layer) ||
       hasNativeIdentifyLayers(layer));
   const identifyActive = identifyLayerId === layer.id;
   // A gesture that takes over map clicks has to turn Identify off, or
@@ -197,7 +200,10 @@ export function LayerRow({
   // the icon's tooltip reflects that distinct action. Time Slider COG
   // and mosaic sources read the same way, at the current timeline
   // date, and mark themselves with `pixelIdentify`.
-  const isPixelIdentify = layer.type === "cog" || layer.metadata.pixelIdentify === true;
+  const isPixelIdentify =
+    layer.type === "cog" ||
+    layer.metadata.pixelIdentify === true ||
+    isArcGISImageServiceLayer(layer);
   // Shared by the button's title and aria-label so they can't diverge.
   const identifyLabel = canIdentify
     ? identifyActive

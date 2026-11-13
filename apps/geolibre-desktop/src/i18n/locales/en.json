@@ -2430,6 +2430,8 @@
       "error": "Could not identify this layer.",
       "noData": "No data at this location.",
       "pixelReadFailed": "The pixel value could not be read.",
+      "pixelValue": "Value",
+      "pixelBand": "Band {{index}}",
       "wmsFailed": "The WMS GetFeatureInfo request failed.",
       "wmsNotQueryable": "This WMS layer does not provide feature information.",
       "editGeometry": "Edit geometry",

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import { DOMParser } from "linkedom";
 import {
+  fetchArcGISImageIdentifyProperties,
+  fetchServiceIdentifyProperties,
   fetchWmsIdentifyProperties,
+  isArcGISImageServiceLayer,
   isPixelIdentifyLayer,
   isWmsQueryable,
   pixelIdentifyProperties,
@@ -575,5 +578,287 @@ describe("pixel identify helpers", () => {
     assert.equal(rows.Date, "2026-01-01");
     assert.equal(rows.red, "12");
     assert.match(String(rows["Band 2"]), /nodata/);
+  });
+});
+
+/**
+ * The `/identify` request among those a stubbed fetch saw: a cold band-name
+ * cache sends the service description alongside it, in either order.
+ */
+function identifyUrl(urls: string[]): string {
+  const url = urls.find((candidate) => candidate.includes("/identify?"));
+  assert.ok(url, `no /identify request among ${urls.join(", ")}`);
+  return url;
+}
+
+describe("fetchArcGISImageIdentifyProperties", () => {
+  const SERVICE = "https://img.example/arcgis/rest/services/Landsat/MS/ImageServer";
+  const imageLayer = (metadata: Record<string, unknown> = {}, tiles?: string[]) =>
+    geojsonLayer({
+      id: "landsat",
+      type: "raster",
+      geojson: undefined,
+      sourcePath: SERVICE,
+      source: { type: "raster", tiles: tiles ?? [`${SERVICE}/exportImage?bbox={bbox-epsg-3857}`] },
+      metadata: { sourceKind: "arcgis-image-service", ...metadata },
+    });
+  const identify = (layer: ReturnType<typeof imageLayer>) =>
+    fetchArcGISImageIdentifyProperties(layer, [-84, 35.9], 10, new AbortController().signal);
+
+  it("recognizes an ImageServer layer, and not a MapServer one", () => {
+    assert.equal(isArcGISImageServiceLayer(imageLayer()), true);
+    assert.equal(
+      isArcGISImageServiceLayer(
+        geojsonLayer({ sourcePath: SERVICE.replace("ImageServer", "MapServer") }),
+      ),
+      false,
+    );
+  });
+
+  it("asks /identify at the clicked point and pixel size, labelled with the band names", async () => {
+    const urls = stubFetch(
+      JSON.stringify({ name: "Pixel", value: "1128, 864, 612" }),
+      "application/json",
+    );
+    const result = await identify(imageLayer({ arcgisBandNames: ["Red", "Green", "Blue"] }));
+    assert.deepEqual(result, { properties: { Red: "1128", Green: "864", Blue: "612" } });
+
+    const url = new URL(identifyUrl(urls));
+    assert.equal(url.pathname, "/arcgis/rest/services/Landsat/MS/ImageServer/identify");
+    assert.deepEqual(JSON.parse(url.searchParams.get("geometry")!), {
+      x: -84,
+      y: 35.9,
+      spatialReference: { wkid: 4326 },
+    });
+    // The map's own pixel size at zoom 10, so a mosaic answers from the
+    // overview or source raster it is drawing there.
+    const pixelSize = JSON.parse(url.searchParams.get("pixelSize")!);
+    const expected = (2 * Math.PI * 6378137) / (512 * 2 ** 10);
+    assert.ok(Math.abs(pixelSize.x - expected) < 1e-6);
+    assert.equal(url.searchParams.get("f"), "json");
+    assert.equal(url.searchParams.get("renderingRule"), null);
+  });
+
+  it("reports a rendering rule's output values and passes the token", async () => {
+    const urls = stubFetch(JSON.stringify({ value: "0.663175" }), "application/json");
+    const rule = '{"rasterFunction":"NDVI Raw"}';
+    const result = await identify(
+      imageLayer({ arcgisRenderingRule: rule, arcgisBandNames: ["Red", "Green", "Blue"] }, [
+        `${SERVICE}/exportImage?bbox={bbox-epsg-3857}&token=abc123&f=image`,
+      ]),
+    );
+    // The band names describe the source bands, not the NDVI output.
+    assert.deepEqual(result, { properties: { Value: "0.663175" } });
+    const url = new URL(identifyUrl(urls));
+    assert.equal(url.searchParams.get("renderingRule"), rule);
+    assert.equal(url.searchParams.get("token"), "abc123");
+  });
+
+  it("numbers bands it has no names for, and reads space-separated values", async () => {
+    stubFetch(JSON.stringify({ value: "12 34" }), "application/json");
+    assert.deepEqual(await identify(imageLayer()), {
+      properties: { "Band 1": "12", "Band 2": "34" },
+    });
+  });
+
+  it("keeps every band when the service repeats a band name", async () => {
+    stubFetch(JSON.stringify({ value: "12, 34" }), "application/json");
+    assert.deepEqual(await identify(imageLayer({ arcgisBandNames: ["Band", "Band"] })), {
+      properties: { Band: "12", "Band (2)": "34" },
+    });
+  });
+
+  it("asks at the view's own resolution when the engine gives one", async () => {
+    // The ArcGIS SDK's zoom follows the basemap's scheme, not MapLibre's.
+    const urls = stubFetch(JSON.stringify({ value: "5" }), "application/json");
+    await fetchArcGISImageIdentifyProperties(
+      imageLayer(),
+      [-84, 35.9],
+      10,
+      new AbortController().signal,
+      { resolution: 152.87 },
+    );
+    assert.equal(JSON.parse(new URL(identifyUrl(urls)).searchParams.get("pixelSize")!).x, 152.87);
+  });
+
+  it("reports the server's own error text, with no English prefix", async () => {
+    stubFetch(
+      JSON.stringify({
+        error: { code: 400, message: "Unable to complete operation.", details: [] },
+      }),
+      "application/json",
+    );
+    await assert.rejects(identify(imageLayer()), (error: Error) => {
+      assert.equal(error.message, "Unable to complete operation.");
+      return true;
+    });
+  });
+
+  it("identifies an ImageServer added from an /exportImage template alone", async () => {
+    // How the Earthdata GIS browser adds one: a `wms`-typed layer, no sourceKind.
+    const template = `${SERVICE}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&renderingRule=${encodeURIComponent('{"rasterFunction":"NDVI Raw"}')}&token=t0k&f=image`;
+    const layer = geojsonLayer({
+      id: "earthdata",
+      type: "wms",
+      geojson: undefined,
+      source: { type: "raster", tiles: [template], url: SERVICE },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), true);
+    const urls = stubFetch(JSON.stringify({ value: "0.42" }), "application/json");
+    assert.deepEqual(
+      await fetchServiceIdentifyProperties(layer, [-84, 35.9], 12, new AbortController().signal),
+      { properties: { Value: "0.42" } },
+    );
+    const url = new URL(identifyUrl(urls));
+    assert.equal(url.pathname, "/arcgis/rest/services/Landsat/MS/ImageServer/identify");
+    assert.equal(url.searchParams.get("renderingRule"), '{"rasterFunction":"NDVI Raw"}');
+    assert.equal(url.searchParams.get("token"), "t0k");
+  });
+
+  it("labels a template-added layer's bands from the service description, once", async () => {
+    const service = "https://img.example/arcgis/rest/services/HLS/ImageServer";
+    const layer = geojsonLayer({
+      type: "wms",
+      geojson: undefined,
+      source: { type: "raster", tiles: [`${service}/exportImage?bbox={bbox-epsg-3857}&f=image`] },
+    });
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      const body = url.includes("/identify?")
+        ? { value: "185, 204" }
+        : { bandNames: ["Coastal Aerosol", "Blue"] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as typeof fetch;
+    const identifyAt = () =>
+      fetchServiceIdentifyProperties(layer, [-90.3, 35], 12, new AbortController().signal);
+    assert.deepEqual(await identifyAt(), {
+      properties: { "Coastal Aerosol": "185", Blue: "204" },
+    });
+    await identifyAt();
+    assert.equal(urls.filter((url) => url === `${service}?f=json`).length, 1);
+  });
+
+  it("retries the band names after the description fails", async () => {
+    const service = "https://img.example/arcgis/rest/services/Flaky/ImageServer";
+    const layer = geojsonLayer({
+      type: "raster",
+      geojson: undefined,
+      source: { type: "raster", tiles: [`${service}/exportImage?bbox={bbox-epsg-3857}`] },
+    });
+    let describeCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/identify?")) return new Response(JSON.stringify({ value: "1, 2" }));
+      describeCalls += 1;
+      return describeCalls === 1
+        ? new Response("busy", { status: 503 })
+        : new Response(JSON.stringify({ bandNames: ["Red", "NIR"] }));
+    }) as typeof fetch;
+    const identifyAt = () =>
+      fetchServiceIdentifyProperties(layer, [0, 0], 12, new AbortController().signal);
+    // A failure is remembered for a minute, so a stalled service does not hold
+    // every click, then retried.
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      mock.timers.tick(60_000);
+      assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it("does not cache an ArcGIS error body as the band names", async () => {
+    const service = "https://img.example/arcgis/rest/services/Expired/ImageServer";
+    const layer = geojsonLayer({
+      type: "raster",
+      geojson: undefined,
+      source: { type: "raster", tiles: [`${service}/exportImage?bbox={bbox-epsg-3857}`] },
+    });
+    let describeCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/identify?"))
+        return new Response(JSON.stringify({ value: "1, 2" }));
+      describeCalls += 1;
+      return new Response(
+        JSON.stringify(
+          describeCalls === 1
+            ? { error: { code: 498, message: "Invalid token." } }
+            : { bandNames: ["Red", "NIR"] },
+        ),
+      );
+    }) as typeof fetch;
+    const identifyAt = () =>
+      fetchServiceIdentifyProperties(layer, [0, 0], 12, new AbortController().signal);
+    // A failure is remembered for a minute, so a stalled service does not hold
+    // every click, then retried.
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+      mock.timers.tick(60_000);
+      assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it("does not take a MapServer export template for an ImageServer", () => {
+    const layer = geojsonLayer({
+      type: "wms",
+      geojson: undefined,
+      source: {
+        type: "raster",
+        tiles: [`${SERVICE.replace("ImageServer", "MapServer")}/export?bbox={bbox-epsg-3857}`],
+      },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), false);
+  });
+
+  it("treats a null body as a miss rather than a crash", async () => {
+    stubFetch("null", "application/json");
+    assert.deepEqual(await identify(imageLayer()), { properties: {} });
+  });
+
+  it("refuses a non-HTTP ImageServer path from a project file", () => {
+    const layer = geojsonLayer({
+      sourcePath: "file:///etc/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service" },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), false);
+  });
+
+  it("labels unnamed bands with the host's translated labels", async () => {
+    stubFetch(JSON.stringify({ value: "7, 8" }), "application/json");
+    const result = await fetchArcGISImageIdentifyProperties(
+      imageLayer({ arcgisRenderingRule: '{"rasterFunction":"X"}' }),
+      [0, 0],
+      10,
+      new AbortController().signal,
+      { labels: { pixelValue: "Valeur", pixelBand: (index) => `Bande ${index}` } },
+    );
+    assert.deepEqual(result, { properties: { "Bande 1": "7", "Bande 2": "8" } });
+  });
+
+  it("treats NoData as a miss", async () => {
+    stubFetch(JSON.stringify({ value: "NoData" }), "application/json");
+    assert.deepEqual(await identify(imageLayer()), { properties: {} });
+  });
+
+  it("surfaces an ArcGIS error body as an error", async () => {
+    stubFetch(
+      JSON.stringify({ error: { code: 499, message: "Token Required", details: [] } }),
+      "application/json",
+    );
+    await assert.rejects(identify(imageLayer()), /Token Required/);
+  });
+
+  it("routes an ImageServer through /identify and a WMS through GetFeatureInfo", async () => {
+    const urls = stubFetch(JSON.stringify({ value: "5" }), "application/json");
+    await fetchServiceIdentifyProperties(imageLayer(), [0, 0], 3, new AbortController().signal);
+    assert.match(identifyUrl(urls), /\/ImageServer\/identify\?/);
   });
 });

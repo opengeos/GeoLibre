@@ -220,6 +220,7 @@ export {
 export { applyQmlImport, parseQml, type QmlImportResult } from "./qml-import";
 export { loadMarkerSvgImage, markerIconSizeValue, renderMarkerCanvas } from "./markers";
 export {
+  isArcGISImageServiceLayer,
   setWmsIdentifyFetcher,
   setWmsIdentifyProjectionResolver,
   type WmsIdentifyFetcher,

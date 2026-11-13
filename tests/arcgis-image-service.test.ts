@@ -399,6 +399,221 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  /** A Web Mercator cache tileInfo holding `levels`, with each LOD's scale. */
+  function mercatorCache(levels: number[]) {
+    return {
+      ...CACHED_MAP_SERVICE.tileInfo,
+      format: "JPEG",
+      lods: levels.map((level) => {
+        const resolution = 156543.03392800014 / 2 ** level;
+        return { level, resolution, scale: resolution * (96 / 0.0254) };
+      }),
+    };
+  }
+
+  it("draws an image service through /exportImage when its cache stops short of the sources", async () => {
+    // A mosaic cached only for small scales (overviews, down to ~150 m), with
+    // 1 m source rasters the service draws dynamically below that.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,Metadata,Catalog",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: { wkid: 102100, latestWkid: 3857 },
+      tileInfo: mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+
+    // Overzooming the level-10 cache would show the overviews at every zoom.
+    assert.match(tileTemplate(id), /\/ImageServer\/exportImage\?/);
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisTiled, false);
+    assert.equal(layer?.source.maxzoom, undefined);
+  });
+
+  it("keeps a short image service cache when the service cannot export", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,TilesOnly",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: { wkid: 102100 },
+      tileInfo: mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.equal(tileTemplate(id), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
+  });
+
+  it("clips an image service cache to the scale range it was built for", async () => {
+    // Like sampleserver6's Toronto service: LODs 0-19 listed, but the cache
+    // holds only the scales between minScale and maxScale (levels 9-18).
+    const levels = Array.from({ length: 20 }, (_, level) => level);
+    const tileInfo = mercatorCache(levels);
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Catalog,Mensuration,Image,Metadata",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: { wkid: 102100 },
+      minScale: tileInfo.lods[9].scale,
+      maxScale: tileInfo.lods[18].scale,
+      tileInfo,
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    // Exportable, yet the cache is kept: it reaches the source resolution, and
+    // its speed is worth more than drawing the service below level 9, where
+    // the cache never answered either.
+    assert.equal(tileTemplate(id), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.source.minzoom, 9);
+    assert.equal(layer?.source.maxzoom, 18);
+  });
+
+  it("judges a geographic image service's pixel size in degrees", async () => {
+    // 0.0001 degrees is about 11 m, finer than the level-10 cache (~150 m).
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 0.0001,
+      spatialReference: { wkid: 4326 },
+      tileInfo: mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
+  it("reads a geographic WKID outside the EPSG 4000 block in degrees", async () => {
+    // JGD2011 (6668): 0.01 degrees is about 1.1 km, coarser than the level-10
+    // cache, so the cache reaches the sources. Read as metres it would not.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 0.01,
+      spatialReference: { wkid: 6668 },
+      tileInfo: mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.equal(tileTemplate(id), `${IMAGE_SERVICE_URL}/tile/{z}/{y}/{x}`);
+  });
+
+  it("converts a foot-based WKT's pixel size to metres", async () => {
+    // A 1 ft (0.3 m) source under a level-17 cache (~1.2 m, ~0.9 m on the
+    // ground at 40 degrees) is more than twice as fine as the cache.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: {
+        wkt: 'PROJCS["NAD_1983_StatePlane_Ohio_North_FIPS_3401_Feet",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic"],UNIT["Foot_US",0.3048006096012192]]',
+      },
+      tileInfo: mercatorCache([12, 13, 14, 15, 16, 17]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
+  it("reads a foot-based WKT's unit past a trailing AUTHORITY clause", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: {
+        wkt: 'PROJCS["NAD83 / Ohio North (ftUS)",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic_2SP"],UNIT["US survey foot",0.304800609601219],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","3734"]]',
+      },
+      tileInfo: mercatorCache([12, 13, 14, 15, 16, 17]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
+  it("does not send the ArcGIS renderer to a LERC cache that was passed over", async () => {
+    // Exportable, and the LERC cache stops short of the 1 m sources.
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,Metadata",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: { wkid: 3857 },
+      tileInfo: { ...mercatorCache([0, 1, 2, 3, 4, 5, 6, 7, 8]), format: "LERC2D" },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    // An explicit false, so hosted-tiled-imagery host detection cannot flip it back.
+    assert.equal(layer?.metadata.arcgisRawTiles, false);
+  });
+
+  it("keeps a TilesOnly LERC cache in another CRS flagged for the ArcGIS renderer", async () => {
+    // The cache fails the Web Mercator check and the service is TilesOnly, so
+    // the flag keeps the ArcGIS renderer on its ImageryTileLayer. (MapLibre,
+    // which cannot read such a cache, still gets the /exportImage template, as
+    // before this change; that template fails on a TilesOnly service.)
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image,TilesOnly",
+      singleFusedMapCache: true,
+      tileInfo: {
+        ...mercatorCache([0, 1, 2]),
+        format: "LERC2D",
+        spatialReference: { wkid: 32617 },
+      },
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.equal(layer?.metadata.arcgisRawTiles, true);
+  });
+
+  it("records an image service's band names for Identify", async () => {
+    respondWith({ ...IMAGE_SERVICE, bandNames: ["Red", "Green", "Blue"] });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.deepEqual(layer?.metadata.arcgisBandNames, ["Red", "Green", "Blue"]);
+  });
+
   it("applies an image service rendering rule and skips the cache for it", async () => {
     respondWith({ ...IMAGE_SERVICE, ...CACHED_MAP_SERVICE, name: "Elevation" });
     const id = await addArcGISLayer(app, {

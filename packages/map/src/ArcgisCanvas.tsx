@@ -326,6 +326,19 @@ export function ArcgisCanvas({
           identifyFeaturesAt: (point, layerId) => current.identifyFeaturesAt(point, layerId),
           toLngLat: (point) => current.lngLatOf(mapView.toMap(point)),
           zoom: () => current.readView().zoom,
+          // Web Mercator metres per pixel. A Web Mercator 2D view reports that
+          // as its resolution; any other view (a scene, or a 2D view in another
+          // WKID, whose resolution is in that CRS's units) goes through its
+          // scale: ground metres at ArcGIS's 96 DPI, stretched by 1/cos(lat)
+          // as Web Mercator stretches the ground at the view's latitude.
+          resolution: () => {
+            if (mapView.type === "2d" && (wkid === undefined || wkid === 3857 || wkid === 102100))
+              return mapView.resolution;
+            // readView projects the centre to WGS84, which a projected 2D
+            // view's own center.latitude (null there) does not.
+            const latitude = Math.max(-85, Math.min(85, current.readView().center[1]));
+            return mapView.scale / (96 / 0.0254) / Math.cos((latitude * Math.PI) / 180);
+          },
           showPopup: (lngLat, content, maxWidth, onClose) => {
             removePopup();
             if (cancelled || !mapView.container) return;

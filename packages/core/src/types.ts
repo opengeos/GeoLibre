@@ -1640,6 +1640,15 @@ export const SQL_QUERY_SOURCE_KIND = "sql-query";
 export const NETCDF_IMAGE_SOURCE_KIND = "netcdf-image";
 
 /**
+ * Metadata `sourceKind` marking an ArcGIS ImageServer drawn as a `raster` layer.
+ *
+ * Defined here so the plugin that adds these layers and `@geolibre/map` (whose
+ * Identify reads their pixel values through the service's `/identify`) share
+ * one value.
+ */
+export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+
+/**
  * Detect a DuckDB query layer rendered through the plugin's external deck.gl
  * overlay. Shared by `@geolibre/map`, `@geolibre/plugins`, and the desktop
  * app so the detection criteria cannot drift.
