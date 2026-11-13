@@ -370,13 +370,13 @@ function findAddedLayerId(item: EarthdataGisItem): string | undefined {
   }
   const tileUrl = buildExportTileUrl(item);
   if (!tileUrl) return undefined;
-  // An image service's template varies with the raster function picked, so it
-  // is matched up to its query string; a map service's is fixed.
-  const matches =
-    item.kind === "image"
-      ? (tile: unknown) =>
-          typeof tile === "string" && tile.startsWith(tileUrl.slice(0, tileUrl.indexOf("?") + 1))
-      : (tile: unknown) => tile === tileUrl;
+  // An image service's template varies only by the raster function picked, so
+  // it is compared with that parameter dropped. Anything else on the same
+  // service (an Add Data ArcGIS layer, with its own query and maybe a token)
+  // is not this card's layer.
+  const matches = (tile: unknown) =>
+    typeof tile === "string" &&
+    (item.kind === "image" ? tile.replace(/&renderingRule=[^&]*/, "") : tile) === tileUrl;
   return layers.find((candidate) => {
     const tiles = (candidate.source as { tiles?: unknown }).tiles;
     return Array.isArray(tiles) && tiles.some(matches);
@@ -528,11 +528,14 @@ function buildRasterFunctionSelect(
       },
     );
   };
-  select.addEventListener("pointerdown", request);
+  // Hovering starts the fetch, so the list is usually in before the dropdown
+  // opens; focus covers the keyboard, pointerdown a touch tap.
+  select.addEventListener("pointerenter", request);
   select.addEventListener("focus", request);
+  select.addEventListener("pointerdown", request);
   select.addEventListener("change", () => {
     const previous = currentRasterFunction(item);
-    const next = select.value === "__note__" ? previous : select.value;
+    const next = select.value;
     pickedRasterFunctions.set(item.id, next);
     if (isAdded(item)) applyRasterFunction(item, previous, next);
   });
@@ -678,9 +681,7 @@ async function addServiceToMap(
     return layerId;
   }
 
-  const functionName = item.kind === "image" ? (pickedRasterFunctions.get(item.id) ?? "") : "";
-  const tileUrl = buildExportTileUrl(item, renderingRuleFor(functionName));
-  if (!tileUrl) return null;
+  if (!buildExportTileUrl(item)) return null;
 
   // Best-effort: a service that never answers must not block the add, so the
   // lookup is bounded and any failure simply leaves the layer unconstrained.
@@ -690,6 +691,12 @@ async function addServiceToMap(
     presetMinVisibleZoom !== undefined
       ? presetMinVisibleZoom
       : await withVisibilityTimeout(fetchMinVisibleZoom(item));
+
+  // Read after the lookup: the picker stays usable while it runs, and the
+  // function to draw is the one picked when the layer is actually added.
+  const functionName = item.kind === "image" ? (pickedRasterFunctions.get(item.id) ?? "") : "";
+  const tileUrl = buildExportTileUrl(item, renderingRuleFor(functionName));
+  if (!tileUrl) return null;
 
   const layerId = useAppStore.getState().addTileLayer(rasterFunctionLayerName(item, functionName), {
     type: layerTypeForTiles([tileUrl]),
@@ -1460,7 +1467,13 @@ function buildPanel(container: HTMLElement): () => void {
 
   const computeAddedSignature = (): string =>
     items
-      .map((item) => `${item.id}:${isAdded(item) ? 1 : 0}:${pendingAdds.has(item.id) ? 1 : 0}`)
+      .map(
+        (item) =>
+          `${item.id}:${isAdded(item) ? 1 : 0}:${pendingAdds.has(item.id) ? 1 : 0}` +
+          // The function an added image layer draws, so an undo of a pick
+          // re-renders its card's picker.
+          (item.kind === "image" && isAdded(item) ? `:${currentRasterFunction(item)}` : ""),
+      )
       .join(",");
 
   const clearResults = (): void => {
