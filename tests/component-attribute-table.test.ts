@@ -34,12 +34,12 @@ const cities: FeatureCollection = {
 };
 
 /** Open the table on a GeoJSON layer and render it with no map behind it. */
-function renderTable() {
+function renderTable(collection: FeatureCollection = cities) {
   // The rows are virtualized, and happy-dom does no layout: without a box
   // size the virtualizer thinks the viewport is 0px tall and renders nothing.
   stubLayout(1024, 600);
   useAppStore.setState({
-    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: cities })],
+    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: collection })],
     selectedLayerId: "cities",
   });
   useAppStore.getState().setAttributeTableOpen(true);
@@ -94,6 +94,30 @@ describe("AttributeTable", () => {
     const names = rows().map((cells) => cells[1]);
     assert.deepEqual(names, ["Oslo", "Bergen", "Trondheim"]);
     assert.match(status(), /3 features/);
+  });
+
+  it("clips long structured values to their column and exposes the full value", () => {
+    const values = [0.7364, 0.7268, 0.7149, 0.702];
+    renderTable({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 1902789,
+          properties: { ndvi: values, metadata: { source: "sentinel" } },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    });
+
+    const cells = table().querySelectorAll("tbody td");
+    const ndviValue = cells[1]?.querySelector("span");
+    const metadataValue = cells[2]?.querySelector("span");
+
+    assert.ok(ndviValue?.classList.contains("truncate"));
+    assert.equal(ndviValue?.getAttribute("title"), JSON.stringify(values));
+    assert.ok(metadataValue?.classList.contains("truncate"));
+    assert.equal(metadataValue?.getAttribute("title"), '{"source":"sentinel"}');
   });
 
   it("titles the table with the selected layer", () => {

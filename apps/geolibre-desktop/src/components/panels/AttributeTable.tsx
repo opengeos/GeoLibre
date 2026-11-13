@@ -2425,7 +2425,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                         handleRowClick(featureId, event);
                       }}
                     >
-                      <TableCell>{featureId}</TableCell>
+                      <TableCell>
+                        <span className="block max-w-full truncate" title={featureId}>
+                          {featureId}
+                        </span>
+                      </TableCell>
                       {columns.map((col) => {
                         const value = properties[col];
                         const draft = drafts[featureId]?.[col];
@@ -2448,7 +2452,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                           value != null
                             ? config.valueMap?.find((entry) => entry.value === String(value))?.label
                             : undefined;
-                        const current = draft ?? formatAttributeValue(value);
+                        const formattedValue = formatAttributeValue(value);
+                        const current = draft ?? formattedValue;
                         const isEditableCell = isEditing && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
                         const invalidTitle = invalid
@@ -2552,9 +2557,19 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                                 {linkUrl}
                               </a>
                             ) : codeLabel ? (
-                              <span title={formatAttributeValue(value)}>{codeLabel}</span>
+                              <span
+                                className="block max-w-full truncate"
+                                title={formattedValue || undefined}
+                              >
+                                {codeLabel}
+                              </span>
                             ) : (
-                              formatAttributeValue(value)
+                              <span
+                                className="block max-w-full truncate"
+                                title={formattedValue || undefined}
+                              >
+                                {formattedValue}
+                              </span>
                             )}
                           </TableCell>
                         );
