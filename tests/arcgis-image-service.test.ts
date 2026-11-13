@@ -561,7 +561,10 @@ describe("addArcGISLayer (map and image services)", () => {
   });
 
   it("keeps a TilesOnly LERC cache in another CRS flagged for the ArcGIS renderer", async () => {
-    // The cache fails the Web Mercator check, and there is no /exportImage.
+    // The cache fails the Web Mercator check and the service is TilesOnly, so
+    // the flag keeps the ArcGIS renderer on its ImageryTileLayer. (MapLibre,
+    // which cannot read such a cache, still gets the /exportImage template, as
+    // before this change; that template fails on a TilesOnly service.)
     respondWith({
       ...IMAGE_SERVICE,
       capabilities: "Image,TilesOnly",

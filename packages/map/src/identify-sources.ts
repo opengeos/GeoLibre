@@ -806,7 +806,9 @@ function fetchArcGISBandNames(serviceUrl: string, token: string | undefined): Pr
       : await fetch(url, { signal });
     // Thrown so the catch below drops it from the cache and a later click retries.
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const info = JSON.parse(await response.text()) as { bandNames?: unknown };
+    const info = JSON.parse(await response.text()) as { bandNames?: unknown; error?: unknown };
+    // ArcGIS reports a refused request (an expired token, say) in a 200 body.
+    if (info.error) throw new Error("ArcGIS error");
     return Array.isArray(info.bandNames)
       ? info.bandNames.filter((name): name is string => typeof name === "string")
       : [];
@@ -881,6 +883,14 @@ export async function fetchArcGISImageIdentifyProperties(
   // fetcher (for its webview origin) is used, never the dev server's WMS proxy,
   // whose 30 s cap a busy image server can exceed.
   const url = `${serviceUrl}/identify?${query}`;
+  const storedBandNames = Array.isArray(layer.metadata.arcgisBandNames)
+    ? layer.metadata.arcgisBandNames.filter((name): name is string => typeof name === "string")
+    : [];
+  // Labels for the service's own bands, asked for alongside the pixel values so
+  // the popup does not wait on them in turn; cached per service, so only a
+  // first click pays for it. Skipped under a rule, which remaps the bands.
+  const bandNamesRequest =
+    storedBandNames.length > 0 || renderingRule ? null : fetchArcGISBandNames(serviceUrl, token);
   const response = wmsIdentifyFetcher
     ? await wmsIdentifyFetcher(url, signal)
     : await fetch(url, { signal });
@@ -910,16 +920,12 @@ export async function fetchArcGISImageIdentifyProperties(
   if (!raw || /^nodata$/i.test(raw)) return { properties: {} };
   // Current servers separate bands with ", ", older ones with spaces.
   const values = raw.split(/\s*,\s*|\s+/).filter((value) => value !== "");
-  const storedBandNames = Array.isArray(layer.metadata.arcgisBandNames)
-    ? layer.metadata.arcgisBandNames.filter((name): name is string => typeof name === "string")
-    : [];
-  // Only needed to label the service's own bands, so skipped under a rule.
   const bandNames =
-    storedBandNames.length > 0 || renderingRule || values.length < 2
+    !bandNamesRequest || values.length < 2
       ? storedBandNames
       : // A superseded click stops waiting for the names at once.
         await Promise.race([
-          fetchArcGISBandNames(serviceUrl, token),
+          bandNamesRequest,
           new Promise<string[]>((resolve) =>
             signal.addEventListener("abort", () => resolve([]), { once: true }),
           ),

@@ -334,7 +334,9 @@ export function ArcgisCanvas({
           resolution: () => {
             if (mapView.type === "2d" && (wkid === undefined || wkid === 3857 || wkid === 102100))
               return mapView.resolution;
-            const latitude = Math.max(-85, Math.min(85, mapView.center?.latitude ?? 0));
+            // readView projects the centre to WGS84, which a projected 2D
+            // view's own center.latitude (null there) does not.
+            const latitude = Math.max(-85, Math.min(85, current.readView().center[1]));
             return mapView.scale / (96 / 0.0254) / Math.cos((latitude * Math.PI) / 180);
           },
           showPopup: (lngLat, content, maxWidth, onClose) => {

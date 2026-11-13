@@ -752,6 +752,32 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
   });
 
+  it("does not cache an ArcGIS error body as the band names", async () => {
+    const service = "https://img.example/arcgis/rest/services/Expired/ImageServer";
+    const layer = geojsonLayer({
+      type: "raster",
+      geojson: undefined,
+      source: { type: "raster", tiles: [`${service}/exportImage?bbox={bbox-epsg-3857}`] },
+    });
+    let describeCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/identify?"))
+        return new Response(JSON.stringify({ value: "1, 2" }));
+      describeCalls += 1;
+      return new Response(
+        JSON.stringify(
+          describeCalls === 1
+            ? { error: { code: 498, message: "Invalid token." } }
+            : { bandNames: ["Red", "NIR"] },
+        ),
+      );
+    }) as typeof fetch;
+    const identifyAt = () =>
+      fetchServiceIdentifyProperties(layer, [0, 0], 12, new AbortController().signal);
+    assert.deepEqual(await identifyAt(), { properties: { "Band 1": "1", "Band 2": "2" } });
+    assert.deepEqual(await identifyAt(), { properties: { Red: "1", NIR: "2" } });
+  });
+
   it("does not take a MapServer export template for an ImageServer", () => {
     const layer = geojsonLayer({
       type: "wms",
