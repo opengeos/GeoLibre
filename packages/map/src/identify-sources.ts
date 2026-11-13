@@ -919,7 +919,7 @@ export async function fetchArcGISImageIdentifyProperties(
     throw new Error(message || `ArcGIS ${String(body.error.code ?? "")}`.trim());
   }
 
-  const raw = typeof body.value === "string" ? body.value.trim() : "";
+  const raw = typeof body?.value === "string" ? body.value.trim() : "";
   // Off the image, or a masked pixel.
   if (!raw || /^nodata$/i.test(raw)) return { properties: {} };
   // Current servers separate bands with ", ", older ones with spaces.
