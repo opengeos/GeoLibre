@@ -2902,9 +2902,14 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
       ...(addressed.scheme === "tms" ? { scheme: "tms" as const } : {}),
       ...(attribution ? { attribution } : {}),
     });
-  } else if (typeof layer.metadata.stacRendering === "string") {
-    // A STAC rendering's recipe is in its tile URL, and the Style panel (and an undo) change it.
-    // A raster source is otherwise added once and left, so its tiles are handed over here.
+  } else if (
+    typeof layer.metadata.stacRendering === "string" ||
+    typeof layer.metadata.arcgisRenderingRule === "string"
+  ) {
+    // A STAC rendering's recipe, or an ArcGIS ImageServer's raster function, is
+    // in its tile URL, and the Style panel, the Earthdata GIS browser (and an
+    // undo) change it. A raster source is otherwise added once and left, so its
+    // tiles are handed over here.
     const source = map.getSource(src) as
       | { tiles?: string[]; setTiles?: (tiles: string[]) => void }
       | undefined;
