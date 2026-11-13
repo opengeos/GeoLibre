@@ -44,73 +44,73 @@ hide:
 <div class="feature-card" markdown>
 ### MapLibre map workspace
 
-Pan, zoom, rotate, and tilt a MapLibre map with OpenFreeMap basemaps or a blank background. Toggle controls for navigation, globe, terrain, geolocation, scale, attribution, and logo, plus on-map tools like Measure, Bookmark, Minimap, View State, and Field Collection for capturing point, line, and polygon observations with a custom form by GPS or map tap.
+Pan, zoom, rotate, and tilt a MapLibre map over OpenFreeMap basemaps or a blank background. Toggle navigation, globe, terrain, geolocation, and scale controls, and use on-map tools like Measure, Bookmark, Minimap, and Field Collection to capture points, lines, and polygons with a custom form by GPS or map tap.
 </div>
 
 <div class="feature-card" markdown>
 ### Local and remote data
 
-Load local and remote vector and raster data, then inspect and edit attributes in a table with a field calculator, charts, statistics, and export to GeoJSON, GeoParquet, Shapefile, GeoPackage, or CSV. Style layers with categorized, graduated, expression, heatmap, and clustering renderers, group and reorder the layer stack with undo/redo, and save or share `.geolibre.json` projects.
+Load local and remote vector and raster data, then inspect and edit attributes in a table with a field calculator, charts, and statistics. Style layers with categorized, graduated, heatmap, and clustering renderers, reorder the stack with undo/redo, export to GeoParquet, GeoPackage, and more, and share `.geolibre.json` projects.
 </div>
 
 <div class="feature-card" markdown>
 ### Plugins and marketplace
 
-Activate built-in plugins for layer control, basemaps, MapLibre components, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, GeoEditor, and atmosphere effects, and install, update, or remove external plugins from the built-in marketplace.
+Activate built-in plugins for layer control, basemaps, swipe, street view, time slider, Overture Maps, LiDAR, GeoAgent, GeoEditor, and atmosphere effects. Install, update, or remove external plugins from the built-in marketplace, or write your own against the [plugin API](plugin-api.md) and load it from a zip or manifest.
 </div>
 
 <div class="feature-card" markdown>
 ### Advanced layer formats
 
-Add Data covers XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG, GeoTIFF, Cloud-Optimized NetCDF/HDF, and MBTiles rasters; LiDAR, Gaussian splats, 3D Tiles (including authenticated tilesets), georeferenced video, and deck.gl layers; and DuckDB and PostgreSQL databases.
+Add XYZ, WMS, WFS, WMTS, ArcGIS, and STAC services; GeoParquet, FlatGeobuf, PMTiles, Zarr, and OpenStreetMap PBF; COG, GeoTIFF, NetCDF/HDF, and MBTiles rasters; LiDAR, Gaussian splats, 3D Tiles (including authenticated tilesets), georeferenced video, and deck.gl layers; and DuckDB and PostgreSQL databases.
 </div>
 
 <div class="feature-card" markdown>
 ### 1,000+ geoprocessing tools
 
-Run **1,000+ geoprocessing tools** — vector, raster, remote sensing, hydrology, terrain, LiDAR, conversion, network, and projection — from the Whitebox toolbox, browsable by category in the Processing menu. They execute in the browser on a WebAssembly runtime with raster and vector I/O, so there is no Python sidecar to install and the full set works on the web, desktop, and Android.
+Run **1,000+ geoprocessing tools** from the Whitebox toolbox (vector, raster, remote sensing, hydrology, terrain, LiDAR, and more), browsable by category in the Processing menu. They run in the browser on a WebAssembly runtime, so there is nothing to install and the full set works on the web, desktop, and Android.
 </div>
 
 <div class="feature-card" markdown>
 ### SQL Workspace
 
-Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or query with the in-browser PostGIS (PGlite) and Apache Sedona engines. Bare URLs auto-wrap into the matching reader and stream over HTTP range requests. Includes sample queries, query history, and adding results to the map or exporting them as CSV or GeoParquet.
+Run DuckDB Spatial SQL in the browser against loaded layers, local files, and remote URLs, or switch to in-browser PostGIS (PGlite) or Apache Sedona. Bare URLs stream over HTTP range requests. Sample queries and history are built in, and results go to the map or export as CSV or GeoParquet.
 </div>
 
 <div class="feature-card" markdown>
 ### Vector tools
 
-Geometry tools under Processing → GeoLibre Toolbox → Vector — buffer, centroids, convex hull, dissolve, bounding box, simplify, smooth, regular grid, clip, overlay (intersect/difference/union), spatial and attribute joins, selection, Voronoi/Delaunay, and H3 grids and binning — run in the browser with Turf.js, with an optional GeoPandas sidecar engine. A Spatial Statistics toolbox and a batch runner with model/pipeline chaining round out Processing.
+Buffer, dissolve, simplify, clip, overlay, spatial and attribute joins, Voronoi/Delaunay, H3 binning, and more under Processing → GeoLibre Toolbox → Vector, run in the browser with Turf.js or an optional GeoPandas sidecar. A Spatial Statistics toolbox and a batch runner with pipeline chaining round out Processing.
 </div>
 
 <div class="feature-card" markdown>
 ### Raster tools
 
-Raster tools under Processing → GeoLibre Toolbox → Raster — hillshade, slope, aspect, reproject, resample, clip, polygonize, contour, zonal and focal statistics, raster calculator, reclassify, mosaic, and a Spectral Index toolbox (NDVI, NDWI, EVI with band presets) — run on a rasterio sidecar with a client-side fallback. Includes a Georeferencer and single-band or RGB raster styling.
+Hillshade, slope, aspect, reproject, clip, polygonize, contours, zonal statistics, raster calculator, reclassify, mosaic, and spectral indices (NDVI, NDWI, EVI) under Processing → GeoLibre Toolbox → Raster, run on a rasterio sidecar with a client-side fallback. Also includes a Georeferencer and single-band or RGB styling.
 </div>
 
 <div class="feature-card" markdown>
 ### Python and Jupyter
 
-Embed the full GeoLibre app in a Jupyter notebook with the [`geolibre`](python.md) Python package, driving the map through an expanded leafmap-style API that syncs both ways so UI edits read back from Python. An in-app Python Console scripts the app, and a docked [Notebook panel](notebook.md) runs Jupyter beside the map — JupyterLite on the web, a JupyterLab server on desktop.
+Embed the full app in a Jupyter notebook with the [`geolibre`](python.md) Python package and drive the map through a leafmap-style API that syncs both ways. An in-app Python Console scripts the app, and a docked [Notebook panel](notebook.md) runs JupyterLite on the web or JupyterLab on desktop.
 </div>
 
 <div class="feature-card" markdown>
 ### R, Quarto, and Shiny
 
-Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geolibre`](r.md) R package. Add GeoJSON, `sf` objects, and remote rasters, control the camera, and exchange portable `.geolibre.json` projects with the web and desktop applications.
+Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geolibre`](r.md) R package. Add GeoJSON, `sf` objects, and remote rasters with their own styles, control the camera from R, and exchange portable `.geolibre.json` projects with the web and desktop apps to keep editing there.
 </div>
 
 <div class="feature-card" markdown>
 ### AI Assistant
 
-Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI, OpenRouter, Vercel AI Gateway, TrustedRouter, UberLLM, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint) with your own credentials, disabled until configured.
+Chat with your data: the [assistant](user-guide/ai-assistant.md) turns plain-English requests into Spatial SQL, symbology, data, and map operations, applied through the app so they stay auditable and undoable. Bring your own credentials for Gemini, Anthropic, OpenAI, OpenRouter, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint.
 </div>
 
 <div class="feature-card" markdown>
 ### Collaboration and story maps
 
-Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and a standalone HTML export you can publish anywhere.
+Edit the same project with others in real time ([collaboration](collaboration.md) MVP; requires `VITE_GEOLIBRE_COLLAB_URL`), [share or embed](tutorials/sharing-embedding.md) a map with a link, and build scroll-driven [story maps](user-guide/storymaps.md) with a presenter view and a standalone HTML export you can publish anywhere.
 </div>
 
 </div>
