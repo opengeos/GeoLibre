@@ -161,6 +161,33 @@ describe("AttributeTable", () => {
     assert.equal(statusValue?.getAttribute("title"), "Available for field inspection (7)");
   });
 
+  it("keeps a derived column's hint in the value tooltip", () => {
+    renderTable(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 1,
+            properties: { density: 42.5 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+      {
+        virtualFields: [
+          { id: "vf", name: "density", expression: '["get", "pop"]', addedField: "density" },
+        ],
+      },
+    );
+
+    const cell = table().querySelector("tbody td:nth-child(2)");
+    const value = cell?.querySelector("span");
+    const hint = cell?.getAttribute("title");
+    assert.ok(hint, "the cell keeps its column hint");
+    assert.equal(value?.getAttribute("title"), `42.5\n${hint}`);
+  });
+
   it("titles the table with the selected layer", () => {
     renderTable();
 

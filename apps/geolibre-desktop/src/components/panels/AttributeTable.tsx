@@ -2467,20 +2467,24 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                         });
                         const commitDraft = (next: string) =>
                           updateCellDraft(featureId, col, next, value);
+                        // Explains where a derived column comes from. The value
+                        // span sets its own tooltip, so the hint is appended
+                        // there too, or hovering the text would hide it.
+                        const columnHint = virtualFieldColumns.has(col)
+                          ? t("attributeTable.virtualColumnTitle")
+                          : joinDerivedColumns.has(col)
+                            ? t("attributeTable.joinedColumnTitle")
+                            : trackingColumns.has(col)
+                              ? t("attributeTable.trackingColumnTitle")
+                              : undefined;
+                        const withColumnHint = (text: string) =>
+                          [text, columnHint].filter(Boolean).join("\n") || undefined;
                         return (
                           <TableCell
                             key={col}
                             data-state={changed ? "edited" : undefined}
                             className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
-                            title={
-                              virtualFieldColumns.has(col)
-                                ? t("attributeTable.virtualColumnTitle")
-                                : joinDerivedColumns.has(col)
-                                  ? t("attributeTable.joinedColumnTitle")
-                                  : trackingColumns.has(col)
-                                    ? t("attributeTable.trackingColumnTitle")
-                                    : undefined
-                            }
+                            title={columnHint}
                           >
                             {isEditableCell ? (
                               config?.widget === "valueMap" && config.valueMap?.length ? (
@@ -2559,18 +2563,18 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                             ) : codeLabel ? (
                               <span
                                 className="block max-w-full truncate"
-                                title={
+                                title={withColumnHint(
                                   formattedValue && formattedValue !== codeLabel
                                     ? `${codeLabel} (${formattedValue})`
-                                    : codeLabel
-                                }
+                                    : codeLabel,
+                                )}
                               >
                                 {codeLabel}
                               </span>
                             ) : (
                               <span
                                 className="block max-w-full truncate"
-                                title={formattedValue || undefined}
+                                title={withColumnHint(formattedValue)}
                               >
                                 {formattedValue}
                               </span>
