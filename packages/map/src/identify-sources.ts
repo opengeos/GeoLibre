@@ -803,7 +803,14 @@ export async function fetchArcGISImageIdentifyProperties(
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join("&");
 
-  const response = await fetchWmsIdentifyResponse(`${serviceUrl}/identify?${query}`, signal);
+  // ArcGIS REST answers cross-origin requests, and the layer's own `/exportImage`
+  // tiles already reach the server directly, so only the desktop's native
+  // fetcher (for its webview origin) is used, never the dev server's WMS proxy,
+  // whose 30 s cap a busy image server can exceed.
+  const url = `${serviceUrl}/identify?${query}`;
+  const response = wmsIdentifyFetcher
+    ? await wmsIdentifyFetcher(url, signal)
+    : await fetch(url, { signal });
   const text = await response.text();
   if (signal.aborted) return null;
   if (!response.ok) {
