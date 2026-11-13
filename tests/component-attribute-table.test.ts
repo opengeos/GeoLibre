@@ -34,12 +34,15 @@ const cities: FeatureCollection = {
 };
 
 /** Open the table on a GeoJSON layer and render it with no map behind it. */
-function renderTable() {
+function renderTable(
+  collection: FeatureCollection = cities,
+  layerPatch: Parameters<typeof geojsonLayer>[0] = {},
+) {
   // The rows are virtualized, and happy-dom does no layout: without a box
   // size the virtualizer thinks the viewport is 0px tall and renders nothing.
   stubLayout(1024, 600);
   useAppStore.setState({
-    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: cities })],
+    layers: [geojsonLayer({ id: "cities", name: "Cities", geojson: collection, ...layerPatch })],
     selectedLayerId: "cities",
   });
   useAppStore.getState().setAttributeTableOpen(true);
@@ -94,6 +97,95 @@ describe("AttributeTable", () => {
     const names = rows().map((cells) => cells[1]);
     assert.deepEqual(names, ["Oslo", "Bergen", "Trondheim"]);
     assert.match(status(), /3 features/);
+  });
+
+  it("clips long structured values to their column and exposes the full value", () => {
+    const values = [0.7364, 0.7268, 0.7149, 0.702];
+    renderTable({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 1902789,
+          properties: { ndvi: values, metadata: { source: "sentinel" } },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+      ],
+    });
+
+    const cells = table().querySelectorAll("tbody td");
+    const ndviValue = cells[1]?.querySelector("span");
+    const metadataValue = cells[2]?.querySelector("span");
+
+    assert.ok(ndviValue?.classList.contains("truncate"));
+    assert.equal(ndviValue?.getAttribute("title"), JSON.stringify(values));
+    assert.ok(metadataValue?.classList.contains("truncate"));
+    assert.equal(metadataValue?.getAttribute("title"), '{"source":"sentinel"}');
+  });
+
+  it("keeps a coded-value label and its stored code in the truncated tooltip", () => {
+    renderTable(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 1,
+            properties: { status: 7 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+      {
+        metadata: {
+          sourceKind: "arcgis-feature-query",
+          arcgisEditInfo: {
+            fields: [
+              {
+                name: "status",
+                type: "esriFieldTypeInteger",
+                domain: {
+                  type: "codedValue",
+                  codedValues: [{ name: "Available for field inspection", code: 7 }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    const statusValue = table().querySelector("tbody td:nth-child(2) span");
+    assert.equal(statusValue?.textContent, "Available for field inspection");
+    assert.ok(statusValue?.classList.contains("truncate"));
+    assert.equal(statusValue?.getAttribute("title"), "Available for field inspection (7)");
+  });
+
+  it("keeps a derived column's hint in the value tooltip", () => {
+    renderTable(
+      {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: 1,
+            properties: { density: 42.5 },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+        ],
+      },
+      {
+        virtualFields: [
+          { id: "vf", name: "density", expression: '["get", "pop"]', addedField: "density" },
+        ],
+      },
+    );
+
+    const cell = table().querySelector("tbody td:nth-child(2)");
+    const value = cell?.querySelector("span");
+    const hint = cell?.getAttribute("title");
+    assert.ok(hint, "the cell keeps its column hint");
+    assert.equal(value?.getAttribute("title"), `42.5\n${hint}`);
   });
 
   it("titles the table with the selected layer", () => {
