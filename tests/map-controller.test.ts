@@ -2449,7 +2449,8 @@ describe("MapController terrain auto-enable", () => {
 
     assert.equal(controller.setTerrainEnabled(true), true);
     assert.equal(terrain?.source, "geolibre-terrain-dem");
-    assert.equal(centerClamped, false);
+    // The center stays clamped to the terrain (#3409).
+    assert.equal(centerClamped, true);
 
     assert.equal(controller.setTerrainEnabled(false), true);
     assert.equal(terrain, null);

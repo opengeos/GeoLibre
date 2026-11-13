@@ -2799,7 +2799,6 @@ export class MapController implements MapEngine {
       if (this.terrainControl) {
         this.terrainControl.setEnabled(true);
       } else if (!this.isTerrainEnabled()) {
-        this.map.setCenterClampedToGround(false);
         this.map.setTerrain({
           source: TERRAIN_SOURCE_ID,
           exaggeration: this.terrainExaggeration,
@@ -2812,7 +2811,6 @@ export class MapController implements MapEngine {
         this.terrainControl.setEnabled(false);
       } else {
         this.map.setTerrain(null);
-        this.map.setCenterClampedToGround(true);
       }
     }
     return !this.isTerrainEnabled();
@@ -2824,10 +2822,6 @@ export class MapController implements MapEngine {
     this.terrainEnablePending = false;
     if (this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID) {
       this.map.setTerrain(null);
-      // Mirror TerrainControl.setEnabled(false): restore MapLibre's default
-      // center-clamping, which the control turned off to stop terrain from
-      // recomputing (and snapping) the zoom while zooming over steep relief.
-      this.map.setCenterClampedToGround(true);
     }
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);

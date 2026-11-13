@@ -79,8 +79,7 @@ function makeFakeMap(): FakeMap {
       setTerrainCalls.push(spec);
       for (const handler of handlers.terrain ?? []) handler();
     },
-    // The control unclamps the center from the terrain surface while terrain is
-    // on to stop MapLibre from snapping the zoom over steep relief.
+    // Recorded so a test can assert the control never unclamps the center.
     setCenterClampedToGround: (value: boolean) => {
       clampCalls.push(value);
     },
@@ -242,23 +241,16 @@ describe("TerrainControl", () => {
     assert.equal(mount({ exaggeration: Number.NaN }).control.getExaggeration(), 1);
   });
 
-  it("unclamps the center while terrain is on and re-clamps when off", () => {
+  it("leaves the center clamped to the terrain while toggling it (#3409)", () => {
     const { control, fake } = mount();
 
-    // Enabling terrain unclamps the center (false) BEFORE applying terrain, so
-    // the first frame is already free of the constant-altitude zoom recompute.
+    // Unclamping anchored the center at sea level, so over high terrain the
+    // camera hit the ground before maxZoom and zoom (and tile loading) stalled.
     control.setEnabled(true);
-    assert.deepEqual(fake.clampCalls, [false]);
     assert.equal(fake.setTerrainCalls.at(-1)?.source, TERRAIN_SOURCE);
-
-    // Disabling terrain restores MapLibre's default center clamping (true).
     control.setEnabled(false);
-    assert.deepEqual(fake.clampCalls, [false, true]);
     assert.equal(fake.setTerrainCalls.at(-1), null);
-
-    // Redundant calls (already in the requested state) don't touch clamping.
-    control.setEnabled(false);
-    assert.deepEqual(fake.clampCalls, [false, true]);
+    assert.deepEqual(fake.clampCalls, []);
   });
 
   it("reflects the enabled state on the button class and aria-pressed", () => {
