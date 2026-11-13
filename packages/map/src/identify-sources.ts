@@ -740,6 +740,9 @@ function arcgisImageServiceUrl(layer: GeoLibreLayer): string | null {
   const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (
     layer.metadata.sourceKind === ARCGIS_IMAGE_SERVICE_SOURCE_KIND &&
+    // http(s) only, as the template branch below requires: a project file's
+    // path must not reach the desktop's native fetcher with another scheme.
+    /^https?:\/\//i.test(sourcePath) &&
     /\/ImageServer\/?$/i.test(sourcePath)
   ) {
     return sourcePath.replace(/\/+$/, "");
@@ -844,8 +847,9 @@ function arcgisPixelValue(value: string): string | number {
  * @returns One row per band (named after the service's bands when the count
  *   matches), or null for a layer that is not an ImageServer.
  * @throws Error carrying the service's own error message, or the HTTP status,
- *   when the request fails. The canvases show it as is, so it holds no
- *   GeoLibre-authored English.
+ *   when the request fails. The canvases show it as is, so the message adds
+ *   no GeoLibre-authored English. (The `Value` and `Band N` row labels are
+ *   still English, as `pixelIdentifyProperties`' `Band N` already is.)
  */
 export async function fetchArcGISImageIdentifyProperties(
   layer: GeoLibreLayer,
@@ -907,7 +911,7 @@ export async function fetchArcGISImageIdentifyProperties(
     throw new Error(wmsHttpErrorMessage(response, text));
   }
   // ArcGIS reports errors in a 200 JSON body; its message is the server's own.
-  if (body.error) {
+  if (body?.error) {
     const details = Array.isArray(body.error.details) ? body.error.details.join(" ") : "";
     const message = normalizeText(
       `${typeof body.error.message === "string" ? body.error.message : ""} ${details}`,

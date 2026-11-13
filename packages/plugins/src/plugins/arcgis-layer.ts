@@ -1878,6 +1878,24 @@ function arcgisImageServiceTileScheme(
 }
 
 /**
+ * A WKT string with its first `name[...]` node removed, brackets balanced.
+ *
+ * @param wkt - The WKT text.
+ * @param name - The node keyword, such as `GEOGCS`.
+ * @returns The WKT without that node, or unchanged when it has none.
+ */
+function withoutWktNode(wkt: string, name: string): string {
+  const start = wkt.search(new RegExp(`\\b${name}\\s*\\[`, "i"));
+  if (start < 0) return wkt;
+  let depth = 0;
+  for (let index = wkt.indexOf("[", start); index < wkt.length; index += 1) {
+    if (wkt[index] === "[") depth += 1;
+    else if (wkt[index] === "]" && --depth === 0) return wkt.slice(0, start) + wkt.slice(index + 1);
+  }
+  return wkt;
+}
+
+/**
  * Metres per unit of a service's spatial reference, for its native pixel size.
  *
  * A geographic CRS (by WKID, or a `GEOGCS` WKT) measures in degrees; a
@@ -1895,7 +1913,10 @@ function arcgisMetersPerUnit(
   if (typeof wkid === "number" && isGeographicWkid(wkid)) return METERS_PER_DEGREE;
   const wkt = spatialReference?.wkt?.trim() ?? "";
   if (/^GEOGCS\b/i.test(wkt)) return METERS_PER_DEGREE;
-  const unit = /UNIT\[\s*"[^"]*"\s*,\s*([0-9.eE+-]+)\s*\]\s*\]$/.exec(wkt);
+  // The linear unit is PROJCS's own UNIT: the first one left once the nested
+  // GEOGCS (whose UNIT is angular) is cut out. Trailing AXIS or AUTHORITY
+  // clauses after it do not matter.
+  const unit = /UNIT\[\s*"[^"]*"\s*,\s*([0-9.eE+-]+)/i.exec(withoutWktNode(wkt, "GEOGCS"));
   const metersPerUnit = unit ? Number(unit[1]) : Number.NaN;
   return Number.isFinite(metersPerUnit) && metersPerUnit > 0 ? metersPerUnit : 1;
 }

@@ -790,6 +790,19 @@ describe("fetchArcGISImageIdentifyProperties", () => {
     assert.equal(isArcGISImageServiceLayer(layer), false);
   });
 
+  it("treats a null body as a miss rather than a crash", async () => {
+    stubFetch("null", "application/json");
+    assert.deepEqual(await identify(imageLayer()), { properties: {} });
+  });
+
+  it("refuses a non-HTTP ImageServer path from a project file", () => {
+    const layer = geojsonLayer({
+      sourcePath: "file:///etc/ImageServer",
+      metadata: { sourceKind: "arcgis-image-service" },
+    });
+    assert.equal(isArcGISImageServiceLayer(layer), false);
+  });
+
   it("treats NoData as a miss", async () => {
     stubFetch(JSON.stringify({ value: "NoData" }), "application/json");
     assert.deepEqual(await identify(imageLayer()), { properties: {} });

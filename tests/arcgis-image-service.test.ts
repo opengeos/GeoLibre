@@ -539,6 +539,25 @@ describe("addArcGISLayer (map and image services)", () => {
     assert.match(tileTemplate(id), /\/exportImage\?/);
   });
 
+  it("reads a foot-based WKT's unit past a trailing AUTHORITY clause", async () => {
+    respondWith({
+      ...IMAGE_SERVICE,
+      capabilities: "Image",
+      singleFusedMapCache: true,
+      pixelSizeX: 1,
+      spatialReference: {
+        wkt: 'PROJCS["NAD83 / Ohio North (ftUS)",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic_2SP"],UNIT["US survey foot",0.304800609601219],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","3734"]]',
+      },
+      tileInfo: mercatorCache([12, 13, 14, 15, 16, 17]),
+    });
+    const id = await addArcGISLayer(app, {
+      layerType: "image-service",
+      sourceType: "url",
+      url: IMAGE_SERVICE_URL,
+    });
+    assert.match(tileTemplate(id), /\/exportImage\?/);
+  });
+
   it("does not send the ArcGIS renderer to a LERC cache that was passed over", async () => {
     // Exportable, and the LERC cache stops short of the 1 m sources.
     respondWith({
