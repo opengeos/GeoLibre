@@ -63,9 +63,11 @@ import {
 } from "./identify-edit-actions";
 import {
   duckDBBridge,
-  fetchWmsIdentifyProperties,
+  fetchServiceIdentifyProperties,
   isAbortError,
   isPixelIdentifyLayer,
+  isArcGISImageServiceLayer,
+  isServiceIdentifyLayer,
   isWmsLayer,
   isWmsQueryable,
   pixelIdentifyProperties,
@@ -763,6 +765,7 @@ export function MapboxCanvas({
           const asyncLayers = eligibleLayers.filter(
             (candidate) =>
               (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
+              isArcGISImageServiceLayer(candidate) ||
               isPixelIdentifyLayer(candidate) ||
               candidate.type === "cog" ||
               candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
@@ -782,8 +785,8 @@ export function MapboxCanvas({
               const asyncHits = await Promise.all(
                 asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
                   try {
-                    if (isWmsLayer(candidate)) {
-                      const result = await fetchWmsIdentifyProperties(
+                    if (isServiceIdentifyLayer(candidate)) {
+                      const result = await fetchServiceIdentifyProperties(
                         candidate,
                         lngLat,
                         zoom,
@@ -798,6 +801,7 @@ export function MapboxCanvas({
                         layer: candidate,
                         properties: result.properties,
                         featureId: result.featureId == null ? null : String(result.featureId),
+                        ...(isArcGISImageServiceLayer(candidate) ? { title: labels.pixel } : {}),
                       };
                     }
                     // Before the pixel branch on purpose: the NetCDF dialog
@@ -897,12 +901,12 @@ export function MapboxCanvas({
             showPopupAt(lngLat, message(labels.wmsNotQueryable), maxWidth);
             return true;
           }
-          if (isWmsLayer(layer)) {
+          if (isServiceIdentifyLayer(layer)) {
             store.selectFeature(null);
             const zoom = map.getZoom();
             identifyAsync(lngLat, message(labels.loading), maxWidth, async (signal) => {
               try {
-                const result = await fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
+                const result = await fetchServiceIdentifyProperties(layer, lngLat, zoom, signal);
                 const content = createIdentifyPopupElement(
                   layer.name,
                   result?.properties ?? {},

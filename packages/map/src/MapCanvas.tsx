@@ -35,9 +35,11 @@ import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import { createGlobalIdentifyHitDeduper } from "./identify-all";
 import {
   duckDBBridge,
-  fetchWmsIdentifyProperties,
+  fetchServiceIdentifyProperties,
   isAbortError,
   isPixelIdentifyLayer,
+  isArcGISImageServiceLayer,
+  isServiceIdentifyLayer,
   isWmsLayer,
   isWmsQueryable,
   pixelIdentifyProperties,
@@ -714,6 +716,7 @@ export const MapCanvas = memo(function MapCanvas({
         const asyncLayers = eligibleLayers.filter(
           (candidate) =>
             (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
+            isArcGISImageServiceLayer(candidate) ||
             isPixelIdentifyLayer(candidate) ||
             candidate.type === "cog" ||
             candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
@@ -737,8 +740,8 @@ export const MapCanvas = memo(function MapCanvas({
         void Promise.all(
           asyncLayers.map(async (candidate): Promise<GlobalIdentifyHit | null> => {
             try {
-              if (isWmsLayer(candidate)) {
-                const result = await fetchWmsIdentifyProperties(
+              if (isServiceIdentifyLayer(candidate)) {
+                const result = await fetchServiceIdentifyProperties(
                   candidate,
                   [event.lngLat.lng, event.lngLat.lat],
                   map.getZoom(),
@@ -754,6 +757,9 @@ export const MapCanvas = memo(function MapCanvas({
                   layer: candidate,
                   properties: result.properties,
                   featureId: result.featureId == null ? null : String(result.featureId),
+                  ...(isArcGISImageServiceLayer(candidate)
+                    ? { title: identifyAllLabels.pixel }
+                    : {}),
                 };
               }
 
@@ -982,7 +988,7 @@ export const MapCanvas = memo(function MapCanvas({
         return;
       }
 
-      if (isWmsLayer(layer)) {
+      if (isServiceIdentifyLayer(layer)) {
         wmsIdentifyAbortController?.abort();
         const abortController = new AbortController();
         wmsIdentifyAbortController = abortController;
@@ -1006,7 +1012,7 @@ export const MapCanvas = memo(function MapCanvas({
         // showIdentifyPopup just assigned identifyPopup.current, so it is set.
         loadingPopup!.once("close", onLoadingClose);
 
-        void fetchWmsIdentifyProperties(
+        void fetchServiceIdentifyProperties(
           layer,
           [event.lngLat.lng, event.lngLat.lat],
           map.getZoom(),

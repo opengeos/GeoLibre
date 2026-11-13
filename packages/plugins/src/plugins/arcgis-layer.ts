@@ -264,6 +264,10 @@ interface ArcGISServiceInfo {
  * has a Web Mercator tile cache that can be consumed as XYZ tiles.
  */
 interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
+  /** An ImageServer's band names, in band order (`Red`, `NearInfrared`...). */
+  bandNames?: string[];
+  /** Comma-separated operations; an ImageServer without `Image` has no `/exportImage`. */
+  capabilities?: string;
   copyrightText?: string;
   layers?: Array<{
     defaultVisibility?: boolean;
@@ -272,8 +276,18 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
     subLayerIds?: number[] | null;
   }>;
   mapName?: string;
+  /**
+   * The scale range an ImageServer's tile cache was built for. The cache's
+   * `tileInfo.lods` can list levels outside it, which answer 404. Zero means
+   * unbounded.
+   */
+  maxScale?: number;
+  minScale?: number;
   name?: string;
+  /** An ImageServer's native pixel size, in its `spatialReference` units. */
+  pixelSizeX?: number;
   singleFusedMapCache?: boolean;
+  spatialReference?: { latestWkid?: number; wkid?: number };
   tileInfo?: ArcGISTileInfo;
 }
 
@@ -297,7 +311,7 @@ interface ArcGISTileInfo {
   cols?: number;
   /** The cache's tile encoding: `PNG`, `JPEG`, `MIXED`, or `LERC`/`LERC2D` raw data. */
   format?: string;
-  lods?: Array<{ level?: number; resolution?: number }>;
+  lods?: Array<{ level?: number; resolution?: number; scale?: number }>;
   origin?: { x?: number; y?: number };
   rows?: number;
   spatialReference?: {
@@ -1364,9 +1378,20 @@ async function addArcGISImageServiceLayer(
       : undefined;
   const token = options.token?.trim() || undefined;
 
+  const bounds =
+    arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent) ??
+    (options.layerType === "map-service"
+      ? await resolveArcGISMapServiceBounds(serviceUrl, info, options, sublayers)
+      : undefined);
+
   // Sublayers and rendering rules are dynamic-only, so the cache is only an
   // option when neither was asked for.
-  const tileScheme = sublayers || renderingRule ? null : arcgisTileScheme(info);
+  const tileScheme =
+    sublayers || renderingRule
+      ? null
+      : options.layerType === "image-service"
+        ? arcgisImageServiceTileScheme(info, bounds)
+        : arcgisTileScheme(info);
   const tiles = tileScheme
     ? arcgisCachedTileUrl(serviceUrl, token)
     : arcgisExportTileUrl(serviceUrl, {
@@ -1375,12 +1400,10 @@ async function addArcGISImageServiceLayer(
         sublayers,
         token,
       });
-
-  const bounds =
-    arcgisExtentToBounds(info.fullExtent ?? info.initialExtent ?? info.extent) ??
-    (options.layerType === "map-service"
-      ? await resolveArcGISMapServiceBounds(serviceUrl, info, options, sublayers)
-      : undefined);
+  const bandNames =
+    options.layerType === "image-service" && Array.isArray(info.bandNames)
+      ? info.bandNames.filter((name): name is string => typeof name === "string")
+      : [];
   const attribution = info.copyrightText?.trim() || undefined;
   const id = createArcGISLayerId();
   const layer: GeoLibreLayer = {
@@ -1420,6 +1443,8 @@ async function addArcGISImageServiceLayer(
       ...(options.sourceType === "portal-item" ? { itemId: input } : {}),
       ...(options.portalUrl?.trim() ? { portalUrl: options.portalUrl.trim() } : {}),
       ...(renderingRule ? { arcgisRenderingRule: renderingRule } : {}),
+      // Labels for the Identify popup's pixel values, one per band.
+      ...(bandNames.length > 0 ? { arcgisBandNames: bandNames } : {}),
       ...(sublayers ? { arcgisSublayers: sublayers } : {}),
       sourceKind:
         options.layerType === "image-service"
@@ -1765,6 +1790,110 @@ function arcgisTileScheme(info: ArcGISImageProducingServiceInfo): ArcGISTileSche
     minzoom: Math.min(...levels.map((lod) => lod.level)),
     tileSize,
   };
+}
+
+/** Map scale per metre of ground resolution at the 96 DPI ArcGIS assumes. */
+const ARCGIS_SCALE_PER_RESOLUTION = 96 / 0.0254;
+/** Metres per degree of latitude, for a pixel size in a geographic CRS. */
+const METERS_PER_DEGREE = 111_320;
+/**
+ * How much coarser than the source pixels the cache's finest level may be and
+ * still count as drawing them: one zoom level of slack, since a cache is built
+ * to the nearest level rather than to the exact native resolution.
+ */
+const ARCGIS_CACHE_NATIVE_SLACK = 2;
+
+/**
+ * Read an ImageServer's tile cache as an XYZ scheme, when MapLibre should use
+ * it rather than `/exportImage`.
+ *
+ * On top of {@link arcgisTileScheme}'s checks, an image service's cache is:
+ *
+ * - **Clipped to `minScale`/`maxScale`**, the scales it was actually built for.
+ *   Its `tileInfo.lods` often list the whole Web Mercator ladder, and a level
+ *   outside the range answers 404.
+ * - **Passed over for `/exportImage`** when the service can export (it has the
+ *   `Image` capability and is not `TilesOnly`) and the cache stops short of the
+ *   source rasters' resolution, or holds raw LERC values MapLibre cannot draw.
+ *   A cache built only for small scales holds the mosaic's overviews, so
+ *   overzooming its finest level would show those overviews where the service
+ *   would draw the source rasters, as ArcGIS clients do by going dynamic.
+ *
+ * @param info - The service's `?f=json` description.
+ * @param bounds - The service's WGS84 bounds, to judge ground resolution at its latitude.
+ * @returns The tile size and zoom range, or null to draw through `/exportImage`.
+ */
+function arcgisImageServiceTileScheme(
+  info: ArcGISImageProducingServiceInfo,
+  bounds: [number, number, number, number] | undefined,
+): ArcGISTileScheme | null {
+  const scheme = arcgisTileScheme(info);
+  if (!scheme) return null;
+
+  const capabilities = (info.capabilities ?? "")
+    .split(",")
+    .map((capability) => capability.trim().toLowerCase());
+  // Without the capability list, assume the export is there: it is for every
+  // ImageServer but a hosted tiled imagery layer, which advertises `TilesOnly`.
+  const canExport =
+    !capabilities.includes("tilesonly") &&
+    (info.capabilities === undefined || capabilities.includes("image"));
+
+  // The cache's levels within its built scale range; one percent of slack, as
+  // services round the scales they advertise.
+  const minScale = typeof info.minScale === "number" && info.minScale > 0 ? info.minScale : null;
+  const maxScale = typeof info.maxScale === "number" && info.maxScale > 0 ? info.maxScale : null;
+  const level0Resolution = WEB_MERCATOR_LEVEL0_RESOLUTION * (256 / scheme.tileSize);
+  const levels: number[] = [];
+  for (let level = scheme.minzoom; level <= scheme.maxzoom; level += 1) {
+    const lod = info.tileInfo?.lods?.find((candidate) => candidate.level === level);
+    if (!lod) continue;
+    const scale =
+      typeof lod.scale === "number" && lod.scale > 0
+        ? lod.scale
+        : (level0Resolution / 2 ** level) * ARCGIS_SCALE_PER_RESOLUTION;
+    if (minScale !== null && scale > minScale * 1.01) continue;
+    if (maxScale !== null && scale < maxScale * 0.99) continue;
+    levels.push(level);
+  }
+  // A scale range that excludes every level is one the cache cannot serve.
+  if (levels.length === 0) return canExport ? null : scheme;
+  const clipped = { ...scheme, minzoom: Math.min(...levels), maxzoom: Math.max(...levels) };
+  if (!canExport) return clipped;
+  if (isArcGISRawTileCache(info)) return null;
+
+  const nativeResolution = arcgisNativeWebMercatorResolution(info, bounds);
+  if (nativeResolution === null) return clipped;
+  const finestCacheResolution = level0Resolution / 2 ** clipped.maxzoom;
+  return finestCacheResolution <= nativeResolution * ARCGIS_CACHE_NATIVE_SLACK ? clipped : null;
+}
+
+/**
+ * An ImageServer's native pixel size as a Web Mercator resolution at the
+ * service's latitude, comparable with a cache level's resolution.
+ *
+ * @param info - The service's `?f=json` description.
+ * @param bounds - The service's WGS84 bounds, for the latitude.
+ * @returns The resolution in Web Mercator metres, or null when the service does not say.
+ */
+function arcgisNativeWebMercatorResolution(
+  info: ArcGISImageProducingServiceInfo,
+  bounds: [number, number, number, number] | undefined,
+): number | null {
+  const pixelSize = info.pixelSizeX;
+  if (typeof pixelSize !== "number" || !Number.isFinite(pixelSize) || pixelSize <= 0) return null;
+  const wkid = info.spatialReference?.latestWkid ?? info.spatialReference?.wkid;
+  // A Web Mercator pixel size is already in the cache's units.
+  if (wkid === 3857 || wkid === 102100 || wkid === 102113) return pixelSize;
+  // EPSG's 4000-4999 block holds the geographic CRSs, whose units are degrees.
+  const groundMeters =
+    typeof wkid === "number" && wkid >= 4000 && wkid < 5000
+      ? pixelSize * METERS_PER_DEGREE
+      : pixelSize;
+  // A Web Mercator metre shrinks on the ground by cos(latitude).
+  const latitude = bounds ? (bounds[1] + bounds[3]) / 2 : 0;
+  const cosine = Math.cos((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180);
+  return groundMeters / cosine;
 }
 
 /**

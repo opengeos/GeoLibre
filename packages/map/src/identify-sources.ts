@@ -716,6 +716,163 @@ export async function fetchWmsIdentifyProperties(
   return null;
 }
 
+// Mirrors ARCGIS_IMAGE_SERVICE_SOURCE_KIND in @geolibre/plugins, which this
+// package does not depend on.
+const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
+
+/**
+ * Whether a layer is an ArcGIS ImageServer, whose pixel values Identify reads
+ * through the service's `/identify` operation.
+ */
+export function isArcGISImageServiceLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata.sourceKind === ARCGIS_IMAGE_SERVICE_SOURCE_KIND &&
+    typeof layer.sourcePath === "string" &&
+    /\/ImageServer\/?$/i.test(layer.sourcePath.trim())
+  );
+}
+
+/**
+ * Whether Identify reads a layer by asking its server about the clicked point:
+ * a WMS GetFeatureInfo or an ArcGIS ImageServer `/identify`.
+ */
+export function isServiceIdentifyLayer(layer: GeoLibreLayer): boolean {
+  return isWmsLayer(layer) || isArcGISImageServiceLayer(layer);
+}
+
+/** The `token` parameter of a layer's tile template, if it carries one. */
+function tileTemplateToken(layer: GeoLibreLayer): string | undefined {
+  const tiles = layer.source.tiles;
+  const template = Array.isArray(tiles) ? stringSource(tiles[0]) : undefined;
+  if (!template) return undefined;
+  try {
+    // The bbox placeholder is not valid in a URL query as written, but the
+    // parser only needs the other parameters.
+    return stringSource(new URL(template).searchParams.get("token"));
+  } catch {
+    return undefined;
+  }
+}
+
+/** One band value from an ImageServer `/identify` answer, as a number when it is one. */
+function arcgisPixelValue(value: string): string | number {
+  const number = Number(value);
+  return value !== "" && Number.isFinite(number) ? formatPixelValue(number) : value;
+}
+
+/**
+ * The pixel values an ArcGIS ImageServer reports at a point, as the identify
+ * popup's properties. The request carries the layer's rendering rule, so a
+ * processing template (NDVI, a hillshade...) reports its own output values, and
+ * the map's pixel size, so a mosaic answers from the same overview or source
+ * raster it draws at that zoom.
+ *
+ * @param layer The ImageServer layer to query.
+ * @param lngLat The clicked position.
+ * @param zoom The map zoom, which sets the pixel size asked about.
+ * @param signal Aborts the request when a newer click supersedes it.
+ * @returns One row per band (named after the service's bands when the count
+ *   matches), or null for a layer that is not an ImageServer.
+ * @throws Error when the service answers with an error or an HTTP failure.
+ */
+export async function fetchArcGISImageIdentifyProperties(
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  zoom: number,
+  signal: AbortSignal,
+): Promise<{ properties: Record<string, unknown> } | null> {
+  if (!isArcGISImageServiceLayer(layer) || !layer.sourcePath) return null;
+  const serviceUrl = layer.sourcePath.trim().replace(/\/+$/, "");
+  const resolution = wmsIdentifyResolution(zoom);
+  const params: Array<[string, string]> = [
+    ["geometry", JSON.stringify({ x: lngLat[0], y: lngLat[1], spatialReference: { wkid: 4326 } })],
+    ["geometryType", "esriGeometryPoint"],
+    [
+      "pixelSize",
+      JSON.stringify({ x: resolution, y: resolution, spatialReference: { wkid: 3857 } }),
+    ],
+    ["returnGeometry", "false"],
+    ["returnCatalogItems", "false"],
+  ];
+  const renderingRule = stringSource(layer.metadata.arcgisRenderingRule);
+  if (renderingRule) params.push(["renderingRule", renderingRule]);
+  const token = tileTemplateToken(layer);
+  if (token) params.push(["token", token]);
+  params.push(["f", "json"]);
+  const query = params
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+
+  const response = await fetchWmsIdentifyResponse(`${serviceUrl}/identify?${query}`, signal);
+  const text = await response.text();
+  if (signal.aborted) return null;
+  if (!response.ok) {
+    throw new Error(`ArcGIS identify failed: ${wmsHttpErrorMessage(response, text)}`);
+  }
+  let body: { error?: { message?: unknown; details?: unknown }; value?: unknown };
+  try {
+    body = JSON.parse(text) as typeof body;
+  } catch {
+    throw new Error(`ArcGIS identify failed: ${wmsHttpErrorMessage(response, text)}`);
+  }
+  // ArcGIS reports errors in a 200 JSON body.
+  if (body.error) {
+    const details = Array.isArray(body.error.details) ? body.error.details.join(" ") : "";
+    const message = normalizeText(
+      `${typeof body.error.message === "string" ? body.error.message : ""} ${details}`,
+    );
+    throw new Error(`ArcGIS identify returned an error: ${message || "unknown error"}`);
+  }
+
+  const raw = typeof body.value === "string" ? body.value.trim() : "";
+  // Off the image, or a masked pixel.
+  if (!raw || /^nodata$/i.test(raw)) return { properties: {} };
+  // Current servers separate bands with ", ", older ones with spaces.
+  const values = raw.split(/\s*,\s*|\s+/).filter((value) => value !== "");
+  const bandNames = Array.isArray(layer.metadata.arcgisBandNames)
+    ? layer.metadata.arcgisBandNames.filter((name): name is string => typeof name === "string")
+    : [];
+  // A rendering rule usually changes the band count and meaning, so the
+  // service's own band names only label the values when nothing remapped them.
+  const names =
+    !renderingRule && bandNames.length === values.length
+      ? bandNames
+      : values.length === 1
+        ? ["Value"]
+        : values.map((_, index) => `Band ${index + 1}`);
+  const properties: Record<string, unknown> = {};
+  values.forEach((value, index) => {
+    Object.defineProperty(properties, names[index] ?? `Band ${index + 1}`, {
+      value: arcgisPixelValue(value),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  });
+  return { properties };
+}
+
+/**
+ * Identify through the layer's server: ImageServer `/identify` for an ArcGIS
+ * image service, WMS GetFeatureInfo otherwise.
+ *
+ * @param layer The WMS or ImageServer layer to query.
+ * @param lngLat The clicked position.
+ * @param zoom The map zoom.
+ * @param signal Aborts the request when a newer click supersedes it.
+ * @returns The identify popup's properties, or null.
+ */
+export function fetchServiceIdentifyProperties(
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  zoom: number,
+  signal: AbortSignal,
+): Promise<{ featureId?: string | number; properties: Record<string, unknown> } | null> {
+  return isArcGISImageServiceLayer(layer)
+    ? fetchArcGISImageIdentifyProperties(layer, lngLat, zoom, signal)
+    : fetchWmsIdentifyProperties(layer, lngLat, zoom, signal);
+}
+
 export function isAbortError(error: unknown): boolean {
   return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
 }
