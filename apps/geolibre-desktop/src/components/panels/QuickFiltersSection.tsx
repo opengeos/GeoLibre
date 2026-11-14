@@ -66,9 +66,9 @@ export function QuickFiltersSection({
   mapControllerRef,
   mapReadyGeneration,
 }: QuickFiltersSectionProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
-  const { profiles, byField, sampledFromViewport, empty } = useQuickFilterProfiles(
+  const { profiles, byField, sampledFromViewport, partialSample, empty } = useQuickFilterProfiles(
     layer,
     mapControllerRef,
     mapReadyGeneration,
@@ -171,6 +171,16 @@ export function QuickFiltersSection({
         <p className="flex items-start gap-1 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {t("quickFilters.viewportSampleHint")}
+        </p>
+      )}
+
+      {partialSample && !empty && (
+        <p className="flex items-start gap-1 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {t("quickFilters.partialSampleHint", {
+            inspected: partialSample.inspected.toLocaleString(i18n.language),
+            total: partialSample.total.toLocaleString(i18n.language),
+          })}
         </p>
       )}
     </div>

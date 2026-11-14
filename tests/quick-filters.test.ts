@@ -13,6 +13,7 @@ import {
 import {
   profileQuickFilterFields,
   type QuickFilterFieldProfile,
+  QUICK_FILTER_PROFILE_LIMIT,
 } from "../apps/geolibre-desktop/src/lib/quick-filter-profile";
 
 /**
@@ -516,6 +517,37 @@ describe("profileQuickFilterFields", () => {
     const a = byField(profileQuickFilterFields(rows)).get("a");
     assert.equal(a?.sampled, 4);
     assert.equal(a?.present, 2);
+  });
+
+  it("counts every feature by default, not a leading sample", () => {
+    // 8,031 features (more than the 5,000 the profile used to stop at), with
+    // the rarer values and the extreme magnitude only past row 5,000: the
+    // counts and extents must describe the whole layer.
+    const rows = Array.from({ length: 8031 }, (_, index) => ({
+      magType: index < 5000 ? "ml" : index % 3 === 0 ? "md" : "ml",
+      mag: index === 8030 ? 7.1 : 1 + (index % 30) / 10,
+    }));
+    const expectedMd = rows.filter((row) => row.magType === "md").length;
+    const profiles = byField(profileQuickFilterFields(rows));
+    const magType = profiles.get("magType");
+    assert.equal(magType?.sampled, 8031);
+    assert.equal(magType?.present, 8031);
+    assert.deepEqual(magType?.values, [
+      { value: "ml", count: 8031 - expectedMd },
+      { value: "md", count: expectedMd },
+    ]);
+    const total = (magType?.values ?? []).reduce((sum, entry) => sum + entry.count, 0);
+    assert.equal(total, 8031);
+    assert.equal(profiles.get("mag")?.max, 7.1);
+  });
+
+  it("stops at the profile limit on a very large layer", () => {
+    const rows = Array.from({ length: QUICK_FILTER_PROFILE_LIMIT + 10 }, (_, index) => ({
+      a: index % 2,
+    }));
+    const a = byField(profileQuickFilterFields(rows)).get("a");
+    assert.equal(a?.sampled, QUICK_FILTER_PROFILE_LIMIT);
+    assert.equal(a?.present, QUICK_FILTER_PROFILE_LIMIT);
   });
 
   it("honors the sample limit and the exclusion list", () => {

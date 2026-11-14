@@ -9441,6 +9441,7 @@
     "noFields": "This layer has no attributes to filter on.",
     "noTileFeatures": "No features are loaded yet. Pan or zoom to the data, then reopen this section.",
     "viewportSampleHint": "Values come from the tiles currently loaded, so the list grows as you pan and zoom.",
+    "partialSampleHint": "Counts and ranges come from the first {{inspected}} of {{total}} features.",
     "layerFilteredHint": "A quick filter is hiding some of this layer's features."
   },
   "floorPicker": {

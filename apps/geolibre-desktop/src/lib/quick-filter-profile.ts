@@ -16,7 +16,7 @@ import type { QuickFilterDateKind, QuickFilterKind } from "@geolibre/core";
  * checkboxes if that is what the question calls for.
  */
 
-/** A distinct value of a field, with how many sampled features carry it. */
+/** A distinct value of a field, with how many inspected features carry it. */
 export interface QuickFilterValueCount {
   value: string | number | boolean;
   count: number;
@@ -49,18 +49,22 @@ export interface QuickFilterFieldProfile {
 }
 
 export interface ProfileQuickFilterOptions {
-  /** Features to inspect. Defaults to {@link SAMPLE_LIMIT}. */
+  /** Features to inspect. Defaults to {@link PROFILE_LIMIT}. */
   sampleLimit?: number;
   /** Field names to skip (geometry helpers, tracking columns, …). */
   exclude?: readonly string[];
 }
 
 /**
- * Features inspected per layer. A profile is a picture of the data, not a
- * census: a few thousand features settle the value list and the extents for
- * every real dataset, and reading more would stall the panel on a large layer.
+ * Features inspected per layer by default. The value counts are shown next to
+ * each checkbox and the numeric/date extents bound the range sliders, so the
+ * profile reads every feature of an ordinary layer (as the attribute table's
+ * column explorer does) rather than presenting a sample as totals. At this
+ * many features a pass already takes about half a second on the main thread, so a
+ * larger layer is profiled from its first {@link PROFILE_LIMIT} features and
+ * the panel says so (see `useQuickFilterProfiles`).
  */
-const SAMPLE_LIMIT = 5000;
+const PROFILE_LIMIT = 50_000;
 
 /**
  * Distinct values past which a field is not offered as checkboxes. A list this
@@ -303,7 +307,7 @@ function profileFromTally(
 }
 
 /**
- * Profile every field across a sample of feature property bags.
+ * Profile every field across feature property bags.
  *
  * @param records - Feature property bags, in sample order. Tile-backed layers
  *   pass whatever is currently loaded; GeoJSON layers pass their features.
@@ -314,7 +318,7 @@ export function profileQuickFilterFields(
   records: readonly (Record<string, unknown> | null | undefined)[],
   options: ProfileQuickFilterOptions = {},
 ): QuickFilterFieldProfile[] {
-  const limit = Math.max(0, options.sampleLimit ?? SAMPLE_LIMIT);
+  const limit = Math.max(0, options.sampleLimit ?? PROFILE_LIMIT);
   const excluded = new Set(options.exclude ?? []);
   const tallies = new Map<string, FieldTally>();
   const inspected = Math.min(records.length, limit);
@@ -334,4 +338,4 @@ export function profileQuickFilterFields(
   return [...tallies.entries()].map(([field, tally]) => profileFromTally(field, tally, inspected));
 }
 
-export const QUICK_FILTER_SAMPLE_LIMIT = SAMPLE_LIMIT;
+export const QUICK_FILTER_PROFILE_LIMIT = PROFILE_LIMIT;
