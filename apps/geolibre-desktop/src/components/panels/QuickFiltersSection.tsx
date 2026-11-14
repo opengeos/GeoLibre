@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { ChevronDown, Filter, Info } from "lucide-react";
-import { useMemo, type RefObject } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuickFilterProfiles } from "../../hooks/useQuickFilterProfiles";
 import type { QuickFilterFieldProfile } from "../../lib/quick-filter-profile";
@@ -68,18 +68,23 @@ export function QuickFiltersSection({
 }: QuickFiltersSectionProps) {
   const { t, i18n } = useTranslation();
   const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
-  const { profiles, byField, sampledFromViewport, partialSample, empty } = useQuickFilterProfiles(
-    layer,
-    mapControllerRef,
-    mapReadyGeneration,
-  );
+  const {
+    fields,
+    fieldsLoading,
+    byField,
+    loadingFields,
+    profileField,
+    sampledFromViewport,
+    partialSample,
+    empty,
+  } = useQuickFilterProfiles(layer, mapControllerRef, mapReadyGeneration, { listFields: true });
+  // The field being profiled between its pick from the menu and its filter
+  // being added. Only a large layer holds it long enough to notice.
+  const [addingField, setAddingField] = useState<string | null>(null);
 
   const filters = useMemo(() => layer.quickFilters ?? [], [layer.quickFilters]);
   const used = useMemo(() => new Set(filters.map((filter) => filter.field)), [filters]);
-  const addable = useMemo(
-    () => profiles.filter((profile) => !used.has(profile.field)),
-    [profiles, used],
-  );
+  const addable = useMemo(() => fields.filter((field) => !used.has(field)), [fields, used]);
   const activeCount = useMemo(
     () => filters.filter((filter) => compileQuickFilters([filter]) !== null).length,
     [filters],
@@ -87,10 +92,24 @@ export function QuickFiltersSection({
 
   const update = (next: LayerQuickFilter[]): void => setLayerQuickFilters(layer.id, next);
 
-  const addField = (field: string): void => {
-    const profile = byField.get(field);
+  // A field's profile decides which control it gets, and is computed only now
+  // that the field has been picked (issue #3426), so adding a filter waits for
+  // it. The layer is re-read afterwards: it may have changed in the meantime.
+  const layerId = layer.id;
+  const addField = async (field: string): Promise<void> => {
+    setAddingField(field);
+    let profile: QuickFilterFieldProfile | undefined;
+    try {
+      profile = await profileField(field);
+    } finally {
+      setAddingField(null);
+    }
     if (!profile) return;
-    update([...filters, filterForProfile(profile)]);
+    const current =
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId)?.quickFilters ??
+      [];
+    if (current.some((filter) => filter.field === field)) return;
+    setLayerQuickFilters(layerId, [...current, filterForProfile(profile)]);
   };
 
   return (
@@ -119,6 +138,7 @@ export function QuickFiltersSection({
           key={filter.id}
           filter={filter}
           profile={byField.get(filter.field)}
+          loading={loadingFields.has(filter.field)}
           idPrefix={`style-${layer.id}`}
           onChange={(next) =>
             update(filters.map((current) => (current.id === filter.id ? next : current)))
@@ -148,18 +168,19 @@ export function QuickFiltersSection({
                 variant="outline"
                 size="sm"
                 className="h-9 flex-1 justify-between font-normal"
-                disabled={addable.length === 0}
+                disabled={addable.length === 0 || addingField !== null}
+                aria-busy={fieldsLoading || addingField !== null}
               >
-                {addable.length === 0
+                {addable.length === 0 && !fieldsLoading
                   ? t("quickFilters.allFieldsUsed")
                   : t("quickFilters.addFilter")}
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-              {addable.map((profile) => (
-                <DropdownMenuItem key={profile.field} onSelect={() => addField(profile.field)}>
-                  {profile.field}
+              {addable.map((field) => (
+                <DropdownMenuItem key={field} onSelect={() => void addField(field)}>
+                  {field}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

@@ -27,6 +27,11 @@ export interface QuickFilterControlProps {
   filter: LayerQuickFilter;
   /** The field's profile, absent when the data has not been read yet. */
   profile?: QuickFilterFieldProfile;
+  /**
+   * The profile is still being computed. Lets the value list say so instead of
+   * claiming the field has no values.
+   */
+  loading?: boolean;
   /** Prefix for input ids, so two panels showing the same filter stay distinct. */
   idPrefix: string;
   onChange: (next: LayerQuickFilter) => void;
@@ -71,9 +76,10 @@ function parseBound(text: string): number | null {
 function CategoricalControl({
   filter,
   profile,
+  loading,
   idPrefix,
   onChange,
-}: Pick<QuickFilterControlProps, "filter" | "profile" | "idPrefix" | "onChange">) {
+}: Pick<QuickFilterControlProps, "filter" | "profile" | "loading" | "idPrefix" | "onChange">) {
   const { t } = useTranslation();
   const countFormatter = useCountFormatter();
   const [query, setQuery] = useState("");
@@ -105,7 +111,11 @@ function CategoricalControl({
   };
 
   if (options.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t("quickFilters.noValues")}</p>;
+    return (
+      <p className="text-xs text-muted-foreground" aria-busy={loading || undefined}>
+        {loading ? t("quickFilters.loadingValues") : t("quickFilters.noValues")}
+      </p>
+    );
   }
 
   return (
@@ -364,6 +374,7 @@ const KIND_ORDER: QuickFilterKind[] = ["categorical", "range", "date", "text"];
 export function QuickFilterControl({
   filter,
   profile,
+  loading,
   idPrefix,
   onChange,
   onRemove,
@@ -489,6 +500,7 @@ export function QuickFilterControl({
           <CategoricalControl
             filter={filter}
             profile={profile}
+            loading={loading}
             idPrefix={idPrefix}
             onChange={onChange}
           />
