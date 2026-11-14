@@ -1191,8 +1191,8 @@ if (bytes) {
 
 - For a plugin installed from the desktop filesystem (a zip archive or a
   development directory), the host reads the file out of that bundle. For a
-  URL-installed plugin it fetches the asset URL `resolvePluginAssetUrl` would
-  resolve.
+  URL-installed plugin it fetches the file relative to the plugin's own
+  base URL.
 - It resolves `null` when the plugin is unknown or built-in, `relativePath` is
   absolute or escapes the plugin's bundle, or the file does not exist. Plugins
   installed from a zip in the web build keep only their entry and style
