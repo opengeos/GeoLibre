@@ -1,24 +1,45 @@
-import { initialLayerStyle, useAppStore } from "@geolibre/core";
+import { initialLayerStyle, useAppStore, type DominantGeometry } from "@geolibre/core";
 import type { VectorControl, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
 
 type ContainerControl = Pick<VectorControl, "addData" | "getLayers">;
 
-/** Group the tables produced by one container import, including overlapping imports. */
+/**
+ * Group the tables produced by one container import, including overlapping
+ * imports, and report every layer each `addData` call created.
+ *
+ * @param control - The vector control whose `addData` is wrapped.
+ * @param addGroup - Called with the new layer ids when one import produced
+ *   more than one table (a multi-table container).
+ * @param onImported - Called with the ids of every layer an import added to
+ *   the project, single layer or container, before `addGroup`, along with the
+ *   caller's style. Layers the store already held (a replay) are left out.
+ */
 export function groupVectorContainerImports(
   control: ContainerControl,
   addGroup: (name: string, ids: string[], style?: Partial<VectorLayerStyle>) => void,
+  onImported?: (ids: string[], style?: Partial<VectorLayerStyle>) => void,
 ): void {
   const addData = control.addData.bind(control);
   control.addData = async (source, options: VectorLayerOptions = {}) => {
     const id = options.id ?? crypto.randomUUID();
     const previous = new Set(control.getLayers().map((layer) => layer.id));
+    // A replay (project restore, refresh) re-adds layers the store already
+    // holds; those are not new to the project and keep their saved style.
+    const known = new Set(useAppStore.getState().layers.map((layer) => layer.id));
     const result = await addData(source, { ...options, id });
     // The vector control derives each selected table's id from the container id.
     // A prefix scoped to this call avoids grouping layers from concurrent loads.
-    const ids = control
+    const created = control
       .getLayers()
-      .filter((layer) => !previous.has(layer.id) && layer.id.startsWith(`${id}-`))
+      .filter(
+        (layer) => !previous.has(layer.id) && (layer.id === id || layer.id.startsWith(`${id}-`)),
+      )
       .map((layer) => layer.id);
+    onImported?.(
+      created.filter((layerId) => !known.has(layerId)),
+      options.style,
+    );
+    const ids = created.filter((layerId) => layerId !== id);
     if (ids.length > 1) {
       // An explicit display name is user-authored, not a filename. Preserve it,
       // including dots; strip the extension only from a derived source name.
@@ -41,8 +62,29 @@ export function groupVectorContainerImports(
   };
 }
 
-/** Give newly imported tables distinct default colors without replacing authored colors. */
-export function applyVectorContainerColors(ids: string[], style?: Partial<VectorLayerStyle>): void {
+/** Geometry families {@link initialLayerStyle} sizes for, by control category. */
+const CONTROL_GEOMETRY: Record<string, DominantGeometry> = {
+  point: "point",
+  line: "line",
+  polygon: "polygon",
+};
+
+/**
+ * Give layers newly added through the vector control the as-added look a
+ * drag-and-drop layer gets: the next unused palette color, an outline derived
+ * from it, and sizing for the layer's geometry (see {@link initialLayerStyle}).
+ * Without this every such layer kept the control's own `#3388ff` default, and
+ * because that is not a palette color the Style panel never offered its style
+ * suggestions for it either.
+ *
+ * A caller that supplied any color (a project restore replaying its saved
+ * style, an API add with an explicit style) keeps it. The restyle is left out
+ * of the undo history, so one undo still removes the added layer.
+ *
+ * @param ids - The store ids of the layers one `addData` call created.
+ * @param style - The style the caller passed to `addData`, if any.
+ */
+export function applyInitialVectorStyles(ids: string[], style?: Partial<VectorLayerStyle>): void {
   if (
     style &&
     [
@@ -55,11 +97,30 @@ export function applyVectorContainerColors(ids: string[], style?: Partial<Vector
     ].some((color) => color !== undefined)
   )
     return;
-  for (const id of ids) {
-    const state = useAppStore.getState();
-    const layer = state.layers.find((candidate) => candidate.id === id);
-    if (!layer) continue;
-    const { fillColor, strokeColor } = initialLayerStyle({ layers: state.layers });
-    state.updateLayer(id, { style: { ...layer.style, fillColor, strokeColor } });
+  const history = useAppStore.temporal.getState();
+  history.pause();
+  try {
+    for (const id of ids) {
+      const state = useAppStore.getState();
+      const layer = state.layers.find((candidate) => candidate.id === id);
+      if (!layer) continue;
+      const geometryType = layer.metadata.geometryType;
+      const initial = initialLayerStyle({
+        layers: state.layers,
+        geometry: (typeof geometryType === "string" && CONTROL_GEOMETRY[geometryType]) || "mixed",
+      });
+      state.updateLayer(id, {
+        style: {
+          ...layer.style,
+          fillColor: initial.fillColor,
+          strokeColor: initial.strokeColor,
+          fillOpacity: initial.fillOpacity,
+          strokeWidth: initial.strokeWidth,
+          circleRadius: initial.circleRadius,
+        },
+      });
+    }
+  } finally {
+    history.resume();
   }
 }

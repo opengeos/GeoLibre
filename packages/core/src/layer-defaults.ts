@@ -169,6 +169,11 @@ export interface InitialLayerStyleOptions {
   geojson?: FeatureCollection;
   /** Current project layers, so the new layer gets an unused palette color. */
   layers?: readonly GeoLibreLayer[];
+  /**
+   * The layer's geometry family when it is known without `geojson`, as for a
+   * layer whose features live in an external renderer. Wins over `geojson`.
+   */
+  geometry?: DominantGeometry;
   /** Style values that win over the computed defaults (e.g. a restored style). */
   overrides?: Partial<LayerStyle>;
 }
@@ -187,7 +192,7 @@ export function initialLayerStyle(options: InitialLayerStyleOptions = {}): Layer
     ...DEFAULT_LAYER_STYLE,
     fillColor,
     strokeColor: darkenHex(fillColor, STROKE_DARKEN),
-    ...GEOMETRY_DEFAULTS[dominantGeometry(geojson)],
+    ...GEOMETRY_DEFAULTS[options.geometry ?? dominantGeometry(geojson)],
     ...overrides,
   };
 }
