@@ -18,6 +18,14 @@ export function isMapOnly(params: URLSearchParams): boolean {
 }
 
 /**
+ * Whether the query hides the top toolbar (`?maponly`, `?toolbar=hidden`), and
+ * with it the menus and the keyboard shortcuts it owns.
+ */
+export function isToolbarHidden(params: URLSearchParams): boolean {
+  return isMapOnly(params) || HIDDEN_PANEL_VALUES.has(normalizedParam(params.get("toolbar")));
+}
+
+/**
  * Whether the query hides every side panel (`?maponly`, `?panels=hidden`,
  * `?hidePanels=true`).
  */

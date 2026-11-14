@@ -1,7 +1,13 @@
 import { useAppStore, type DeploymentCapability } from "@geolibre/core";
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { arePanelsHidden, isDrawRequested, isMapOnly, normalizedParam } from "../lib/layout-params";
+import {
+  arePanelsHidden,
+  isDrawRequested,
+  isMapOnly,
+  isToolbarHidden,
+  normalizedParam,
+} from "../lib/layout-params";
 import { useDesktopSettingsStore, type DesktopLayoutSettings } from "./useDesktopSettings";
 
 export interface LayoutOptions {
@@ -41,7 +47,6 @@ export interface LayoutOptions {
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
-const HIDDEN_TOOLBAR_VALUES = new Set(["hidden", "hide", "none", "off"]);
 
 export function useLayoutOptions(): LayoutOptions {
   // Shallow equality keeps unrelated desktop-settings updates (which always
@@ -121,7 +126,7 @@ export function layoutOptionsFromLocation(
     statusBarVisible: !mapOnly,
     stylePanelVisible,
     toolbarLabels,
-    toolbarVisible: !mapOnly && !HIDDEN_TOOLBAR_VALUES.has(toolbar),
+    toolbarVisible: !isToolbarHidden(params),
     viewer,
     viewerDrawing: viewer && isDrawRequested(params) && capabilities.has("project:edit"),
   };
