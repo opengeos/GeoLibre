@@ -203,7 +203,8 @@ export function filterRowsBySelections(
 /**
  * Order rows by one property for the dashboard list widget. Two finite-number
  * values (numeric strings included) compare numerically, anything else as
- * locale-aware text. Rows with no value for the field (null, undefined or a
+ * locale-aware text, and in a column mixing the two every number sorts before
+ * every text value. Rows with no value for the field (null, undefined or a
  * blank string) always sort last, whichever the direction, so a descending
  * "top N" never leads with empty cells.
  *
@@ -230,6 +231,9 @@ export function sortRowsByField(
     const an = toFiniteNumber(av);
     const bn = toFiniteNumber(bv);
     if (an !== null && bn !== null) return sign * (an - bn);
+    // In a mixed column numbers come before text either way; comparing a
+    // number against text as strings would make the order non-transitive.
+    if (an !== null || bn !== null) return an !== null ? -1 : 1;
     return sign * String(av).localeCompare(String(bv));
   });
 }

@@ -793,6 +793,13 @@ describe("list widget rows", () => {
     ]);
   });
 
+  it("orders a mixed column consistently, numbers before text", () => {
+    const mixed: ChartRow[] = ["1a", "10", "2", "b"].map((code) => ({ properties: { code } }));
+    const codes = (rows: ChartRow[]) => rows.map((row) => row.properties.code);
+    assert.deepEqual(codes(sortRowsByField(mixed, "code", "asc")), ["2", "10", "1a", "b"]);
+    assert.deepEqual(codes(sortRowsByField(mixed, "code", "desc")), ["10", "2", "b", "1a"]);
+  });
+
   it("leaves the order and the input array untouched", () => {
     assert.equal(sortRowsByField(quakes, undefined, "desc"), quakes);
     sortRowsByField(quakes, "mag", "asc");
