@@ -456,6 +456,18 @@ function WidgetCard({
     () => (widget.type === "selector" ? data.rows : filterRowsBySelections(data.rows, selections)),
     [data.rows, selections, widget.type],
   );
+  // The list widget's rows in display order. Memoized so an unrelated re-render
+  // does not re-sort the whole layer just to show the first few rows.
+  const listRows = useMemo(
+    () =>
+      widget.type === "list"
+        ? sortRowsByField(rows, widget.sortBy, widget.sortDir ?? "desc").slice(
+            0,
+            widget.limit ?? 20,
+          )
+        : [],
+    [rows, widget.type, widget.sortBy, widget.sortDir, widget.limit],
+  );
   const result = useMemo(
     () =>
       widget.type === "indicator" || widget.type === "selector" || widget.type === "list"
@@ -648,9 +660,7 @@ function WidgetCard({
             }
             // `rows` is the outer memo: already narrowed by the selectors on
             // this layer, so a list cross-filters like every other widget.
-            const limit = widget.limit ?? 20;
-            const sorted = sortRowsByField(rows, widget.sortBy, widget.sortDir ?? "desc");
-            return <ListTable fields={widget.listFields} rows={sorted.slice(0, limit)} />;
+            return <ListTable fields={widget.listFields} rows={listRows} />;
           })()}
         </div>
       ) : (

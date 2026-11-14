@@ -213,6 +213,10 @@ export function filterRowsBySelections(
  * @param direction "asc" for smallest first, "desc" for largest first.
  * @returns A sorted copy, or the original array when no field is given.
  */
+// One collator for every text comparison: a bare localeCompare re-resolves the
+// locale on each call, and a sort makes O(n log n) of them.
+const textCollator = new Intl.Collator();
+
 export function sortRowsByField(
   rows: ChartRow[],
   field: string | undefined,
@@ -234,7 +238,7 @@ export function sortRowsByField(
     // In a mixed column numbers come before text either way; comparing a
     // number against text as strings would make the order non-transitive.
     if (an !== null || bn !== null) return an !== null ? -1 : 1;
-    return sign * String(av).localeCompare(String(bv));
+    return sign * textCollator.compare(String(av), String(bv));
   });
 }
 
