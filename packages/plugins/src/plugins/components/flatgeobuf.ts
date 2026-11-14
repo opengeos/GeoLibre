@@ -109,7 +109,8 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
     if (!layerInfo) return;
 
     const store = useAppStore.getState();
-    const layer = createFlatGeobufStoreLayer(event.layerId, layerInfo, control);
+    const name = flatGeobufLayerName(layerInfo, event.state.layerName);
+    const layer = createFlatGeobufStoreLayer(event.layerId, layerInfo, control, name);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -123,10 +124,29 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
   };
 }
 
+/**
+ * Picks the store name for a layer the FlatGeobuf panel just added.
+ *
+ * The panel's Layer Name field is not carried on the layer info: upstream uses
+ * the typed name as the layer id instead (falling back to the URL's file name,
+ * then a generated id). So the typed name wins when it is the id the layer got;
+ * otherwise the name comes from the URL as before.
+ *
+ * @param layerInfo - The upstream layer info for the added layer.
+ * @param typedName - The panel's Layer Name field at the time of the add.
+ * @returns The display name for the GeoLibre layer.
+ */
+export function flatGeobufLayerName(layerInfo: AddVectorLayerInfo, typedName?: string): string {
+  const customName = typedName?.trim();
+  if (customName && customName === layerInfo.id) return customName;
+  return layerNameFromUrl(layerInfo.url, layerInfo.id);
+}
+
 function createFlatGeobufStoreLayer(
   id: string,
   layerInfo: AddVectorLayerInfo,
   control: AddVectorControl,
+  name: string,
 ): GeoLibreLayer {
   const nativeLayerIds = control
     .getLayerIds()
@@ -135,7 +155,7 @@ function createFlatGeobufStoreLayer(
 
   return {
     id,
-    name: layerNameFromUrl(url, id),
+    name,
     type: "flatgeobuf",
     source: {
       type: "geojson",
