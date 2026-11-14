@@ -5,6 +5,50 @@ import { GripHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+/** Gap kept between the card and the map area's edges, in pixels. */
+const EDGE_MARGIN = 12;
+/** Card height a dragged panel keeps in view when the map area shrinks. */
+const MIN_VISIBLE_HEIGHT = 160;
+/** Deepest top offset of a `defaultPositionClass` (`top-9`), in pixels. */
+const DEFAULT_MAX_TOP = 36;
+
+/**
+ * Clamp a dragged panel's position after the map area resized. Vertically it
+ * keeps `MIN_VISIBLE_HEIGHT` (plus the edge margin) of room below the top;
+ * in a map area shorter than that the card is pinned to the top and its
+ * height cap shrinks it further. Horizontally it keeps the whole card inside,
+ * like the drag clamp, falling back to the left edge when the card is wider.
+ *
+ * @param pos - The panel's current offset within the map area, in pixels.
+ * @param area - The map area's size, in pixels.
+ * @param cardWidth - The card's rendered width, in pixels.
+ * @returns The clamped offset, never negative.
+ */
+export function clampSelectionPanelPosition(
+  pos: { x: number; y: number },
+  area: { width: number; height: number },
+  cardWidth: number,
+): { x: number; y: number } {
+  return {
+    x: Math.max(0, Math.min(pos.x, area.width - cardWidth)),
+    y: Math.max(0, Math.min(pos.y, area.height - MIN_VISIBLE_HEIGHT - EDGE_MARGIN)),
+  };
+}
+
+/**
+ * CSS `max-height` for the card, so it never extends past the bottom of the
+ * map area whether it sits at its default corner or was dragged.
+ *
+ * @param top - The dragged top offset in pixels, or null at the default corner.
+ * @returns A `calc()` relative to the map-area overlay's height.
+ */
+export function selectionPanelMaxHeight(top: number | null): string {
+  // Before a drag the card sits at its default corner class, `top-3` or
+  // `top-9` (36px); reserve room for the deeper one.
+  const offset = (top ?? DEFAULT_MAX_TOP) + EDGE_MARGIN;
+  return `calc(100% - ${offset}px)`;
+}
+
 /**
  * Floating, non-modal window shell shared by the two selection panels
  * (#1314): a draggable card instead of a Radix modal, so the map and
@@ -23,39 +67,6 @@ import { useTranslation } from "react-i18next";
  * The body scrolls instead, and a dragged card moves up when the map area
  * shrinks under it.
  */
-/** Gap kept between the card and the map area's edges, in pixels. */
-const EDGE_MARGIN = 12;
-/** Card height a dragged panel keeps in view when the map area shrinks. */
-const MIN_VISIBLE_HEIGHT = 160;
-/** Deepest top offset of a `defaultPositionClass` (`top-9`), in pixels. */
-const DEFAULT_MAX_TOP = 36;
-
-/**
- * Clamp a dragged panel's top offset so at least `MIN_VISIBLE_HEIGHT` of it
- * (or the whole map area, when smaller) stays inside the map area.
- *
- * @param y - The panel's current top offset within the map area, in pixels.
- * @param areaHeight - The map area's height, in pixels.
- * @returns The clamped top offset, never negative.
- */
-export function clampSelectionPanelTop(y: number, areaHeight: number): number {
-  return Math.max(0, Math.min(y, areaHeight - MIN_VISIBLE_HEIGHT - EDGE_MARGIN));
-}
-
-/**
- * CSS `max-height` for the card, so it never extends past the bottom of the
- * map area whether it sits at its default corner or was dragged.
- *
- * @param top - The dragged top offset in pixels, or null at the default corner.
- * @returns A `calc()` relative to the map-area overlay's height.
- */
-export function selectionPanelMaxHeight(top: number | null): string {
-  // Before a drag the card sits at its default corner class, `top-3` or
-  // `top-9` (36px); reserve room for the deeper one.
-  const offset = (top ?? DEFAULT_MAX_TOP) + EDGE_MARGIN;
-  return `calc(100% - ${offset}px)`;
-}
-
 export function SelectionFloatingPanel({
   open,
   title,
@@ -76,17 +87,19 @@ export function SelectionFloatingPanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  // Docking or resizing the attribute table shrinks the map area; pull a
-  // dragged card up so its title bar and buttons do not end up clipped.
+  // Docking or resizing the attribute table (or opening a side panel)
+  // shrinks the map area; pull a dragged card back inside so its title bar
+  // and buttons do not end up clipped.
   useEffect(() => {
     const overlay = overlayRef.current;
     if (!open || !overlay || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(() => {
-      const height = overlay.getBoundingClientRect().height;
+      const area = overlay.getBoundingClientRect();
+      const cardWidth = panelRef.current?.offsetWidth ?? 0;
       setPos((current) => {
         if (!current) return current;
-        const y = clampSelectionPanelTop(current.y, height);
-        return y === current.y ? current : { ...current, y };
+        const next = clampSelectionPanelPosition(current, area, cardWidth);
+        return next.x === current.x && next.y === current.y ? current : next;
       });
     });
     observer.observe(overlay);

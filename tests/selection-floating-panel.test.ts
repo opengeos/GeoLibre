@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  clampSelectionPanelTop,
+  clampSelectionPanelPosition,
   selectionPanelMaxHeight,
 } from "../apps/geolibre-desktop/src/components/selection/selection-dialog-shared";
 
@@ -19,12 +19,25 @@ describe("selection floating panel sizing", () => {
   });
 
   it("pulls a dragged card up when the map area shrinks under it", () => {
+    const clampY = (y: number, height: number) =>
+      clampSelectionPanelPosition({ x: 0, y }, { width: 1000, height }, 384).y;
     // Map area shrank to 300px with the card dragged to y=250: keep 160px of
-    // card plus the 12px margin visible.
-    assert.equal(clampSelectionPanelTop(250, 300), 128);
+    // card plus the 12px margin of room below its top.
+    assert.equal(clampY(250, 300), 128);
     // Enough room: the position is left alone.
-    assert.equal(clampSelectionPanelTop(100, 600), 100);
+    assert.equal(clampY(100, 600), 100);
     // A map area shorter than the minimum pins the card to the top.
-    assert.equal(clampSelectionPanelTop(50, 120), 0);
+    assert.equal(clampY(50, 120), 0);
+  });
+
+  it("pulls a dragged card back in when the map area narrows", () => {
+    const area = { width: 600, height: 800 };
+    assert.deepEqual(clampSelectionPanelPosition({ x: 500, y: 40 }, area, 384), { x: 216, y: 40 });
+    assert.deepEqual(clampSelectionPanelPosition({ x: 100, y: 40 }, area, 384), { x: 100, y: 40 });
+    // A card wider than the area sticks to the left edge.
+    assert.equal(
+      clampSelectionPanelPosition({ x: 50, y: 0 }, { width: 300, height: 800 }, 384).x,
+      0,
+    );
   });
 });
