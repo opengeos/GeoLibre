@@ -200,6 +200,62 @@ export function filterRowsBySelections(
   );
 }
 
+// One collator for every text comparison: a bare localeCompare re-resolves the
+// locale on each call, and a sort makes O(n log n) of them.
+const textCollator = new Intl.Collator();
+
+/**
+ * Order rows by one property for the dashboard list widget. Two finite-number
+ * values (numeric strings included) compare numerically, anything else as
+ * locale-aware text, and in a column mixing the two every number sorts before
+ * every text value. Rows with no value for the field (null, undefined or a
+ * blank string) always sort last, whichever the direction, so a descending
+ * "top N" never leads with empty cells.
+ *
+ * @param rows The rows to order; the array itself is not mutated.
+ * @param field The property to sort by; empty leaves the order unchanged.
+ * @param direction "asc" for smallest first, "desc" for largest first.
+ * @returns A sorted copy, or the original array when no field is given.
+ */
+export function sortRowsByField(
+  rows: ChartRow[],
+  field: string | undefined,
+  direction: "asc" | "desc",
+): ChartRow[] {
+  if (!field) return rows;
+  const sign = direction === "asc" ? 1 : -1;
+  const isMissing = (value: unknown) =>
+    value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+  return [...rows].sort((a, b) => {
+    const av = a.properties[field];
+    const bv = b.properties[field];
+    const aMissing = isMissing(av);
+    const bMissing = isMissing(bv);
+    if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+    const an = toFiniteNumber(av);
+    const bn = toFiniteNumber(bv);
+    if (an !== null && bn !== null) return sign * (an - bn);
+    // In a mixed column numbers come before text either way; comparing a
+    // number against text as strings would make the order non-transitive.
+    if (an !== null || bn !== null) return an !== null ? -1 : 1;
+    return sign * textCollator.compare(String(av), String(bv));
+  });
+}
+
+/**
+ * The columns a dashboard list widget offers, numeric fields first and then the
+ * rest, each listed once. `categoryColumnOptions` falls back to every column
+ * (numeric ones included), so concatenating the two lists naively shows the
+ * numeric fields twice.
+ *
+ * @param numeric The layer's numeric columns.
+ * @param category The layer's category column options.
+ * @returns The de-duplicated column list, order preserved.
+ */
+export function listColumnOptions(numeric: string[], category: string[]): string[] {
+  return [...new Set([...numeric, ...category])];
+}
+
 /**
  * Columns suitable for charting: a key counts as numeric when it has at least
  * two finite-number values and those make up at least half of its non-null
