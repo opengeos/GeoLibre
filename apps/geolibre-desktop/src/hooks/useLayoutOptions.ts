@@ -6,6 +6,7 @@ import {
   isDrawRequested,
   isMapOnly,
   isToolbarHidden,
+  isViewerLayoutParams,
   normalizedParam,
 } from "../lib/layout-params";
 import { useDesktopSettingsStore, type DesktopLayoutSettings } from "./useDesktopSettings";
@@ -69,7 +70,7 @@ export function useLayoutOptions(): LayoutOptions {
  *   True for a viewer launch.
  */
 export function isViewerLayout(search: string): boolean {
-  return normalizedParam(new URLSearchParams(search).get("layout")) === "viewer";
+  return isViewerLayoutParams(new URLSearchParams(search));
 }
 
 export function layoutOptionsFromLocation(

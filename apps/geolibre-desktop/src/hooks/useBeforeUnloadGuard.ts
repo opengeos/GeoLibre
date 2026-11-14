@@ -1,9 +1,8 @@
 import { type AppPrivilege, type DeploymentCapability, useAppStore } from "@geolibre/core";
 import { useEffect } from "react";
 import { isEmbedded } from "./embedHost";
-import { isViewerLayout } from "./useLayoutOptions";
 import { isTauri } from "../lib/is-tauri";
-import { isToolbarHidden } from "../lib/layout-params";
+import { isToolbarHidden, isViewerLayoutParams } from "../lib/layout-params";
 
 /** The store and URL state {@link shouldWarnBeforeUnload} decides from. */
 export interface BeforeUnloadGuardState {
@@ -28,6 +27,12 @@ export interface BeforeUnloadGuardState {
  * a visitor about changes they have no way to keep, typically just the layers a
  * `?data=` link loaded, which the same link loads again.
  *
+ * The rule keys on whether saving is reachable, not on how the changes were
+ * made, on purpose: geometry drawn in a `layout=viewer&draw` embed or a file
+ * dropped on a map-only page is not kept by the link either, but with no way to
+ * save it the prompt can only announce the loss, and for an embed the host page
+ * owns that work (it reads drawings through the embed API).
+ *
  * Args:
  *   state: The dirty flag, the save gates and the page's query string.
  *
@@ -36,9 +41,8 @@ export interface BeforeUnloadGuardState {
  */
 export function shouldWarnBeforeUnload(state: BeforeUnloadGuardState): boolean {
   if (!state.isDirty) return false;
-  if (isViewerLayout(state.search) || isToolbarHidden(new URLSearchParams(state.search))) {
-    return false;
-  }
+  const params = new URLSearchParams(state.search);
+  if (isViewerLayoutParams(params) || isToolbarHidden(params)) return false;
   // The same two gates the command registry applies to `project.save`
   // (`deployment-gates.ts`): the deployment's `project:edit` and the role's
   // `project:save`.
