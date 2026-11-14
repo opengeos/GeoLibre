@@ -672,7 +672,17 @@ function createLidarControl(
         lidarLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
       }
     }
-    if (projectOpened && lidarControl) resetLidarControlDisplay(lidarControl, displayDefaults);
+    if (projectOpened && lidarControl) {
+      resetLidarControlDisplay(lidarControl, displayDefaults);
+      // The panel-wide opacity reset clears every cloud's own opacity, and a
+      // cloud the new project keeps (same layer id, e.g. reopening the same
+      // file) is not re-streamed, so re-apply its saved opacity.
+      for (const layer of state.layers) {
+        if (isLidarControlLayer(layer) && hasLidarPointCloud(layer.id) && layer.opacity !== 1) {
+          lidarLayerAdapter?.setOpacity(layer.id, layer.opacity);
+        }
+      }
+    }
   });
   return control;
 }

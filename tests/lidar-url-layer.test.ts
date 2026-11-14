@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { useAppStore } from "@geolibre/core";
+import { createEmptyProject, useAppStore } from "@geolibre/core";
 import {
   __setComponentsModuleLoaderForTests,
   addLidarLayerFromBytes,
@@ -77,8 +77,23 @@ class LidarControlStub {
     return this.pointClouds;
   }
 
+  // The panel's Elevation Filter checkbox, the only panel element the reset
+  // touches. Its change handler is the upstream one in miniature: unticking
+  // clears the filter.
+  elevationFilterCheckbox = Object.assign(new EventTarget(), { checked: false });
+
   getPanelElement() {
-    return null;
+    const checkbox = this.elevationFilterCheckbox;
+    if (!(checkbox as { wired?: boolean }).wired) {
+      checkbox.addEventListener("change", () => {
+        if (!checkbox.checked) this.clearElevationRange();
+      });
+      (checkbox as { wired?: boolean }).wired = true;
+    }
+    return {
+      querySelector: (selector: string) =>
+        selector === "#lidar-elevation-filter-checkbox" ? checkbox : null,
+    };
   }
 
   getContainer() {
@@ -110,6 +125,8 @@ class LidarControlStub {
 
   setOpacity(opacity: number) {
     this.state.opacity = opacity;
+    // Panel-wide: upstream this clears every cloud's own opacity.
+    opacityCalls.push(["*", opacity]);
   }
 
   setPointSize(size: number) {
@@ -165,8 +182,12 @@ class LidarLayerAdapterStub {
   destroy() {}
   removeLayer() {}
   setVisibility() {}
-  setOpacity() {}
+  setOpacity(id: string, opacity: number) {
+    opacityCalls.push([id, opacity]);
+  }
 }
+
+const opacityCalls: [string, number][] = [];
 
 const fakeComponentsModule = {
   LidarControl: LidarControlStub,
@@ -279,6 +300,33 @@ describe("restoreLidarLayers", () => {
     assert.equal(control.state.elevationRange, null);
     assert.equal(control.state.hiddenClassifications.size, 0);
     assert.equal(control.state.pickable, false);
+  });
+
+  it("unticks the panel's Elevation Filter on project open", async () => {
+    installStubModule();
+    await addLidarLayerFromUrl(app, "https://example.com/a.copc.laz");
+    const control = lastControl!;
+    control.elevationFilterCheckbox.checked = true;
+
+    useAppStore.getState().newProject();
+
+    assert.equal(control.elevationFilterCheckbox.checked, false);
+  });
+
+  it("re-applies the saved opacity of a cloud kept across the open", async () => {
+    // Reopening the same project keeps the loaded cloud (same layer id), so it
+    // is not re-streamed; the panel-wide opacity reset must not leave it opaque.
+    installStubModule();
+    const id = await addLidarLayerFromUrl(app, "https://example.com/a.copc.laz");
+    const layer = useAppStore.getState().layers.find((item) => item.id === id)!;
+    opacityCalls.length = 0;
+
+    useAppStore.getState().loadProject({
+      ...createEmptyProject("Reopened"),
+      layers: [{ ...layer, opacity: 0.4 }],
+    });
+
+    assert.deepEqual(opacityCalls.at(-1), [id, 0.4]);
   });
 
   it("does not mount the control for a project without LiDAR", async () => {
