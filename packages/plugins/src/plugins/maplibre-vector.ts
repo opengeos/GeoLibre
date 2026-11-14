@@ -997,6 +997,8 @@ function createVectorControl(
     control,
     (name, ids) => useAppStore.getState().addLayerGroup(name, ids),
     // Every add, not only containers: a single layer gets its palette color too.
+    // Relies on the store already holding the new layers when addData
+    // resolves: the `layeradded` handler above syncs them synchronously.
     applyInitialVectorStyles,
   );
   // After the container grouping above, so its addData wrapper runs inside this

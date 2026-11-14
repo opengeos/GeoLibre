@@ -106,15 +106,19 @@ export function applyInitialVectorStyles(ids: string[], style?: Partial<VectorLa
     return;
   // The store seeds these fields from the control, which applied the caller's
   // values; keep them rather than replacing them with geometry defaults.
-  const keepOpacity = style?.fillOpacity !== undefined || style?.circleOpacity !== undefined;
   const keepWidth = style?.lineWidth !== undefined;
   const keepRadius = style?.circleRadius !== undefined;
+  if (ids.length === 0) return;
   withoutHistory(() => {
     for (const id of ids) {
       const state = useAppStore.getState();
       const layer = state.layers.find((candidate) => candidate.id === id);
       if (!layer) continue;
       const geometryType = layer.metadata.geometryType;
+      // The store's fillOpacity mirrors circleOpacity on a point layer and
+      // fillOpacity otherwise (see vectorStyleToLayerStyle).
+      const keepOpacity =
+        (geometryType === "point" ? style?.circleOpacity : style?.fillOpacity) !== undefined;
       const initial = initialLayerStyle({
         layers: state.layers,
         geometry: (typeof geometryType === "string" && CONTROL_GEOMETRY[geometryType]) || "mixed",
