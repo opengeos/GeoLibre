@@ -191,7 +191,13 @@ export function normalizeGeocodeBbox(
   east: unknown,
   north: unknown,
 ): GeocodeBbox | null {
-  if ([west, south, east, north].some((v) => v === null || v === undefined || v === "")) {
+  // Only numbers and numeric strings (Nominatim's form) count: `Number()` would
+  // also turn `true` or a one-element array into a coordinate.
+  if (
+    [west, south, east, north].some(
+      (v) => !(typeof v === "number" || (typeof v === "string" && v.trim() !== "")),
+    )
+  ) {
     return null;
   }
   const box = [Number(west), Number(south), Number(east), Number(north)] as GeocodeBbox;

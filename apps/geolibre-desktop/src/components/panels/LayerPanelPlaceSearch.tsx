@@ -456,19 +456,24 @@ export function LayerPanelPlaceSearch({
           // level; only a result without one flies to a fixed zoom.
           const camera = geocodeResultCamera(row.match, engine.readView().zoom);
           if (camera.kind === "bounds") {
+            // Every engine frames the extent, the globe included, the same way
+            // the H3 row above does: the store's view holds only a center and a
+            // zoom, so it cannot frame a box.
             engine.fitBounds(camera.bounds);
-            // Preserve the globe's existing instant placement. Its animated
-            // camera path differs in flat scene modes; search previously used
-            // the store's applyView path rather than a flight there.
-            // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
-          } else if (engine.kind === "cesium") {
-            const store = useAppStore.getState();
-            store.setMapView({
-              center: camera.center,
-              zoom: Math.max(store.mapView.zoom, POINT_RESULT_ZOOM),
-            });
           } else {
-            engine.flyTo({ center: camera.center, zoom: camera.zoom });
+            // Preserve the globe's existing instant placement for a point. Its
+            // animated camera path differs in flat scene modes; search
+            // previously used the store's applyView path rather than a flight.
+            // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
+            if (engine.kind === "cesium") {
+              const store = useAppStore.getState();
+              store.setMapView({
+                center: camera.center,
+                zoom: Math.max(store.mapView.zoom, POINT_RESULT_ZOOM),
+              });
+            } else {
+              engine.flyTo({ center: camera.center, zoom: camera.zoom });
+            }
           }
         }
       }
