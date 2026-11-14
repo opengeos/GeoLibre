@@ -260,8 +260,18 @@ function syncPlanetaryComputerLayersToStore(
   }
 }
 
-/** Metadata keys that describe how a layer is rendered and so follow a restyle. */
-const PLANETARY_COMPUTER_RENDER_METADATA_KEYS = ["assets", "presetName", "renderParams"] as const;
+/**
+ * Metadata keys the control's state is authoritative for on a layer already in
+ * the store. The render keys follow a restyle. `identifiable` is here so a
+ * layer saved by a version that wrote `false` (before Identify could read
+ * these layers) is switched on when the project is reopened.
+ */
+const PLANETARY_COMPUTER_RENDER_METADATA_KEYS = [
+  "assets",
+  "identifiable",
+  "presetName",
+  "renderParams",
+] as const;
 
 /**
  * The render metadata of `next` that differs from `existing`.
@@ -925,7 +935,9 @@ function isPlanetaryComputerNoDataError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   // Only the Data API's own "nothing at this point" answers. A broader match
   // (a bare "not found", say) would turn a missing item into a silent miss.
-  return /outside (the )?(dataset |raster |item )?bounds|out of bounds|no ?data/i.test(message);
+  return /outside (the )?(dataset |raster |item )?bounds|out of bounds|\bno[ _-]?data\b/i.test(
+    message,
+  );
 }
 
 /**
