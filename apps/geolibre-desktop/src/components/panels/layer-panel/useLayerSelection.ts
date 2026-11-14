@@ -28,6 +28,11 @@ export function useLayerSelection({
     () => new Set(selectedLayerId ? [selectedLayerId] : []),
   );
   const selectionAnchorRef = useRef<string | null>(selectedLayerId);
+  // `selectLayer` clears the feature selection, so re-clicking the active
+  // layer's row must not call it: that would wipe a selection made on it.
+  const activateLayer = (layerId: string) => {
+    if (layerId !== selectedLayerId) selectLayer(layerId);
+  };
   useEffect(() => {
     const existingIds = new Set(layers.map((layer) => layer.id));
     setSelectedLayerIds((current) => {
@@ -69,20 +74,20 @@ export function useLayerSelection({
       else next.add(layerId);
       setSelectedLayerIds(next);
       selectionAnchorRef.current = layerId;
-      selectLayer(next.has(layerId) ? layerId : [...next][0]);
+      activateLayer(next.has(layerId) ? layerId : [...next][0]);
       return;
     } else {
       setSelectedLayerIds(new Set([layerId]));
       selectionAnchorRef.current = layerId;
     }
-    selectLayer(layerId);
+    activateLayer(layerId);
   };
 
   // Make one layer the whole selection and the range anchor.
   const selectOnlyLayer = (layerId: string) => {
     setSelectedLayerIds(new Set([layerId]));
     selectionAnchorRef.current = layerId;
-    selectLayer(layerId);
+    activateLayer(layerId);
   };
 
   return {

@@ -82,6 +82,7 @@ import { openAlongTrackProfile } from "../../../lib/along-track-profile-store";
 import { canOpenLayerAttributeTable } from "../../../lib/attribute-table-source";
 import type { CollaborationApi } from "../../../hooks/useCollaboration";
 import {
+  activateLayerPreservingSelection,
   clearFeatureSelection,
   exportSelectionAsLayer,
   invertLayerSelection,
@@ -235,7 +236,6 @@ export function LayerActionsMenuItems({
   } = actions;
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
-  const selectLayer = useAppStore((s) => s.selectLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const setSelectByExpressionOpen = useAppStore((s) => s.setSelectByExpressionOpen);
@@ -427,7 +427,7 @@ export function LayerActionsMenuItems({
       {onOpenStylePanel && (
         <DropdownMenuItem
           onSelect={() => {
-            selectLayer(layer.id);
+            activateLayerPreservingSelection(layer.id);
             onOpenStylePanel();
           }}
         >
@@ -550,7 +550,7 @@ export function LayerActionsMenuItems({
           disabled={geometryEditElsewhere || !layerEditable}
           onSelect={() => {
             if (!layerEditable) return;
-            selectLayer(layer.id);
+            activateLayerPreservingSelection(layer.id);
             if (identifyOwnsClicks) setIdentifyLayer(null);
             onToggleGeometryEdit(layer.id);
           }}
@@ -564,7 +564,7 @@ export function LayerActionsMenuItems({
           disabled={!layerEditable}
           onSelect={() => {
             if (!layerEditable) return;
-            selectLayer(layer.id);
+            activateLayerPreservingSelection(layer.id);
             setLoadEditorFeaturesOpen(true, layer.id);
           }}
         >
@@ -660,7 +660,7 @@ export function LayerActionsMenuItems({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
-                selectLayer(layer.id);
+                activateLayerPreservingSelection(layer.id);
                 setVectorToolOpen("buffer");
               }}
             >
@@ -960,7 +960,7 @@ export function LayerActionsMenuItems({
                 so select this one before opening it. */}
                 <DropdownMenuItem
                   onSelect={() => {
-                    selectLayer(layer.id);
+                    activateLayerPreservingSelection(layer.id);
                     setStyleManagerOpen(true);
                   }}
                 >
@@ -1055,7 +1055,7 @@ export function LayerActionsMenuItems({
       {canEditRasterStyle && (
         <DropdownMenuItem
           onSelect={() => {
-            selectLayer(layer.id);
+            activateLayerPreservingSelection(layer.id);
             if (isStacRendering) onOpenStylePanel?.();
             else onOpenRasterStylePanel();
           }}
@@ -1067,7 +1067,7 @@ export function LayerActionsMenuItems({
       {canExportRaster && (
         <DropdownMenuItem
           onSelect={() => {
-            selectLayer(layer.id);
+            activateLayerPreservingSelection(layer.id);
             setRasterAttributeTableOpen(true);
           }}
         >
@@ -1094,7 +1094,7 @@ export function LayerActionsMenuItems({
             {canExtractSubset && (
               <DropdownMenuItem
                 onSelect={() => {
-                  selectLayer(layer.id);
+                  activateLayerPreservingSelection(layer.id);
                   onOpenRasterSubset(layer);
                 }}
               >
