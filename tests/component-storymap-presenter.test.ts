@@ -314,4 +314,39 @@ describe("StoryMapPresenter lifecycle and input", () => {
     fireEvent.pointerDown(button, { button: 0, pointerId: 1 });
     assert.match(status(), /Chapter 2 \/ 3.*Paused for discussion/);
   });
+
+  it("shows the story title block on the start view but not on the closing slide", () => {
+    const story = startStory();
+    useAppStore.setState({
+      storymap: {
+        ...story,
+        title: "Nevada Counties",
+        subtitle: "A tour",
+        byline: "By the workshop",
+        startSlide: "global",
+        endSlide: "black",
+      },
+    });
+    const fake = fakeEngine();
+    render(
+      createElement(StoryMapPresenter, {
+        mapControllerRef: { current: fake.engine },
+        mapReadyGeneration: 1,
+      }),
+    );
+    const titleBlock = () => screen.getByTestId("story-title-block");
+    // The opening "Global view" carries the title block (#998 start view).
+    assert.match(titleBlock().textContent ?? "", /Nevada Counties.*A tour.*By the workshop/);
+    assert.notEqual(titleBlock().style.visibility, "hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next chapter" }));
+    assert.match(status(), /Chapter 1 \/ 3/);
+    assert.notEqual(titleBlock().style.visibility, "hidden");
+
+    for (let step = 0; step < 3; step++) {
+      fireEvent.click(screen.getByRole("button", { name: "Next chapter" }));
+    }
+    // The closing slide stays free of the story text.
+    assert.equal(titleBlock().style.visibility, "hidden");
+  });
 });

@@ -278,6 +278,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     endStepId: STORY_END_STEP_ID,
     navToggleLabel,
     labelLayerSuffix: STORY_LABEL_LAYER_SUFFIX,
+    // Each exported style layer's opacity paint at a layer opacity of 1. A
+    // chapter's opacity takes the place of the layer opacity, so the page
+    // scales these rather than overwriting the style's own translucency.
+    fadeBase: storyFadeBase(inlineLayers),
     labelGlyphs: STORY_LABEL_GLYPHS_URL,
     markerImages: usedMarkerImages,
     popups,
@@ -485,14 +489,12 @@ const STORY_LABEL_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/
 /**
  * Seed the opacity paint properties an exported layer fades.
  *
- * When chapter 0 assigns the layer an opacity, start there (matching the in-app
- * first frame, #950); otherwise use the style's per-property opacity scaled by
- * the layer opacity so the export matches what GeoLibre renders. A chapter 0
- * opacity wins outright, including over a hidden layer's 0, exactly as the
- * in-app presenter's setLayerOpacity overwrites the live value. Circles carry
- * both fill and stroke opacity so a faded point hides fully (#934). A
- * data-driven opacity (a graduated or rule-based renderer) is scaled inside any
- * zoom step, as the live map's paint builders do.
+ * The style's per-property opacity is scaled by the layer opacity so the
+ * export matches what GeoLibre renders, or by chapter 0's opacity when it
+ * assigns one (matching the in-app first frame, #950). A chapter 0 opacity
+ * takes the place of the layer opacity, including a hidden layer's 0, exactly
+ * as the in-app presenter does. Circles carry both fill and stroke opacity so
+ * a faded point hides fully (#934).
  *
  * @param paint The layer spec's paint, left unmodified.
  * @param props The opacity paint properties to seed.
@@ -505,24 +507,56 @@ function seedOpacity(
   entry: Pick<InlineLayerExport, "layerOpacity" | "chapterZeroOpacity">,
 ): Record<string, unknown> {
   const seeded = { ...paint };
-  for (const prop of props) {
-    if (entry.chapterZeroOpacity !== undefined) {
-      seeded[prop] = entry.chapterZeroOpacity;
-      continue;
-    }
-    const value = seeded[prop] ?? 1;
-    seeded[prop] =
-      typeof value === "number"
-        ? value * entry.layerOpacity
-        : entry.layerOpacity === 1
-          ? value
-          : mapZoomStepOutputs(value, (output) =>
-              typeof output === "number"
-                ? output * entry.layerOpacity
-                : ["*", output, entry.layerOpacity],
-            );
-  }
+  const opacity = entry.chapterZeroOpacity ?? entry.layerOpacity;
+  for (const prop of props) seeded[prop] = scaleStoryOpacity(seeded[prop], opacity);
   return seeded;
+}
+
+/**
+ * Scale a style's opacity paint value (at a layer opacity of 1) by a layer or
+ * chapter opacity. An unset value counts as 1. A data-driven opacity (a
+ * graduated or rule-based renderer) is scaled inside any zoom step, as the live
+ * map's paint builders do. The exported page's `scaleOpacity` mirrors this.
+ *
+ * @param value The style's opacity paint value.
+ * @param opacity The layer or chapter opacity.
+ * @returns The scaled paint value.
+ */
+export function scaleStoryOpacity(value: unknown, opacity: number): unknown {
+  if (value === undefined || value === null) return opacity;
+  if (typeof value === "number") return value * opacity;
+  if (opacity === 1) return value;
+  return mapZoomStepOutputs(value, (output) =>
+    typeof output === "number" ? output * opacity : ["*", output, opacity],
+  );
+}
+
+/**
+ * The opacity paint each exported style layer carries at a layer opacity of 1,
+ * keyed by style layer id, so the page's chapter fades can scale it (see
+ * `fadeLayer` in the page template). Unset properties are left out and count
+ * as 1.
+ *
+ * @param inlineLayers The layers inlined into the export.
+ * @returns Paint values by style layer id, then property.
+ */
+function storyFadeBase(inlineLayers: InlineLayerExport[]): Record<string, Record<string, unknown>> {
+  const base: Record<string, Record<string, unknown>> = {};
+  const record = (id: string, paint: unknown, props: string[]) => {
+    const values: Record<string, unknown> = {};
+    for (const prop of props) {
+      const value = (paint as Record<string, unknown> | undefined)?.[prop];
+      if (value !== undefined) values[prop] = value;
+    }
+    if (Object.keys(values).length > 0) base[id] = values;
+  };
+  for (const entry of inlineLayers) {
+    record(entry.id, entry.layerSpec.paint, opacityProperties(entry.layerSpec.type as string));
+    if (entry.labelSpec) {
+      record(`${entry.id}${STORY_LABEL_LAYER_SUFFIX}`, entry.labelSpec.paint, ["text-opacity"]);
+    }
+  }
+  return base;
 }
 
 /**
@@ -934,6 +968,8 @@ function renderTemplate(
         /* Solid cover painted over the map for a blank/black slide; below the
            nav, and pointer-events:none so the page still scrolls. */
         #slide-cover { position: fixed; inset: 0; z-index: 15; display: none; pointer-events: none; }
+        /* The start slide keeps the story's title block, above its cover. */
+        #header.sm-over-cover { z-index: 16; }
         .sm-card { position: relative; display: flex; flex-direction: column; max-height: 70vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
         .sm-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; user-select: none; touch-action: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
         .sm-grip { opacity: 0.5; flex-shrink: 0; }
@@ -1005,15 +1041,31 @@ function renderTemplate(
         var alignments = { 'left': 'lefty', 'center': 'centered', 'right': 'righty', 'full': 'fully' };
 
         function getLayerPaintType(layer) { var sl = map.getLayer(layer); return sl ? layerTypes[sl.type] : null; }
+        // Mirrors scaleStoryOpacity in storymap-export.ts; keep the two in step.
+        function scaleOpacity(base, opacity) {
+            if (base === undefined || base === null) return opacity;
+            if (typeof base === 'number') return base * opacity;
+            if (opacity === 1) return base;
+            var scale = function (output) { return typeof output === 'number' ? output * opacity : ['*', output, opacity]; };
+            if (Array.isArray(base) && base[0] === 'step' && Array.isArray(base[1]) && base[1][0] === 'zoom') {
+                var out = ['step', base[1], scale(base[2])];
+                for (var i = 3; i < base.length; i += 2) out.push(base[i], scale(base[i + 1]));
+                return out;
+            }
+            return scale(base);
+        }
         function fadeLayer(id, opacity, duration) {
             if (!map.getLayer(id)) return;
             var paintProps = getLayerPaintType(id);
             if (!paintProps) return;
+            var base = (config.fadeBase && config.fadeBase[id]) || {};
             paintProps.forEach(function (prop) {
                 if (duration) {
                     map.setPaintProperty(id, prop + '-transition', { duration: duration });
                 }
-                map.setPaintProperty(id, prop, opacity);
+                // Hillshade exaggeration is not an opacity the style scales.
+                var value = /-opacity$/.test(prop) ? scaleOpacity(base[prop], opacity) : opacity;
+                map.setPaintProperty(id, prop, value);
             });
         }
         // A layer's text labels live in a companion symbol layer that fades with it.
@@ -1188,11 +1240,12 @@ function renderTemplate(
         if (footer.children.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
 
         // Apply the start slide's initial state during DOM construction (before
-        // map load) so a slow style/tile load can't flash the story header/footer
-        // or an uncovered map on a supposedly text-free start slide (#998 review).
+        // map load) so a slow style/tile load can't flash the story footer or an
+        // uncovered map on the start slide (#998 review). The start slide is the
+        // story's opening screen, so its title block stays, above the cover.
         if (config.startSlide && config.startSlide !== 'none') {
             var startHeaderEl = document.getElementById('header');
-            if (startHeaderEl) startHeaderEl.classList.add('hidden');
+            if (startHeaderEl) startHeaderEl.classList.add('sm-over-cover');
             var startFooterEl = document.getElementById('footer');
             if (startFooterEl) startFooterEl.classList.add('hidden');
             var startBg = slideBg(config.startSlide);
@@ -1363,14 +1416,17 @@ ${inlineLayerScript}
                 if (insetMarker) insetMarker.getElement().style.visibility = value;
             }
 
-            // Hide/show the story title/byline/footer chrome. Slides are
-            // documented as text-free, so the persistent header and footer hide
-            // while one is active, matching the in-app presenter (the blank/black
-            // cover already hides them; this also clears them for global/adjacent).
-            function setChromeHidden(hidden) {
+            // Hide/show the story title/byline/footer chrome, matching the
+            // in-app presenter. Slides carry no chapter text: the closing slide
+            // hides the header and footer, while the start slide keeps the
+            // title block (raised above a blank/black cover) and hides the footer.
+            function setChromeHidden(hidden, keepTitle) {
                 var headerEl = document.getElementById('header');
                 var footerEl = document.getElementById('footer');
-                if (headerEl) headerEl.classList.toggle('hidden', hidden);
+                if (headerEl) {
+                    headerEl.classList.toggle('hidden', hidden && !keepTitle);
+                    headerEl.classList.toggle('sm-over-cover', hidden && !!keepTitle);
+                }
                 if (footerEl) footerEl.classList.toggle('hidden', hidden);
             }
 
@@ -1378,7 +1434,7 @@ ${inlineLayerScript}
                 navItems.forEach(function (it) { it.classList.remove('active'); });
                 map.stop();
                 ++cameraToken;
-                setChromeHidden(true);
+                setChromeHidden(true, isStart);
                 var bg = slideBg(mode);
                 if (bg) { cover.style.background = bg; cover.style.display = 'block'; return; }
                 cover.style.display = 'none';

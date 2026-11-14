@@ -14,6 +14,7 @@ import {
   defaultBlankBackgroundColor,
   geolocateControlFactory,
   MapController,
+  storyScaledPaintValue,
 } from "../packages/map/src/map-controller";
 
 // Internal shape of MapController we reach into to inject a fake map. The
@@ -1660,10 +1661,10 @@ describe("MapController camera and query helpers", () => {
     assert.equal(controller.identifyFeatures([0, 0], "b").length, 1);
   });
 
-  it("writes story opacity directly to the native paint property", () => {
+  it("writes story opacity to the native paint property in place of the layer opacity", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
-    controller.syncLayers([pointLayer("a")]);
+    controller.syncLayers([pointLayer("a", {}, { fillOpacity: 0.5 })]);
 
     controller.setStoryLayerOpacity("a", 0.3);
 
@@ -1674,13 +1675,14 @@ describe("MapController camera and query helpers", () => {
         c.args[1] === "circle-opacity",
     );
     assert.ok(op);
-    assert.equal(op.args[2], 0.3);
+    // The style's own 0.5 fill opacity times the chapter's 0.3.
+    assert.equal(op.args[2], 0.15);
   });
 
   it("clamps story opacity into the 0-1 range", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
-    controller.syncLayers([pointLayer("a")]);
+    controller.syncLayers([pointLayer("a", {}, { fillOpacity: 1 })]);
 
     controller.setStoryLayerOpacity("a", 5);
 
@@ -2276,7 +2278,7 @@ describe("MapController story-map layer helpers", () => {
   it("keeps chapter fades when a saved annotation causes a layer sync, then restores project opacity", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
-    const projectLayer = pointLayer("a", { opacity: 0.8 });
+    const projectLayer = pointLayer("a", { opacity: 0.8 }, { fillOpacity: 1 });
     controller.syncLayers([projectLayer]);
     const circlePaint = () => fake.layers.get("layer-a-circle")?.paint as Record<string, unknown>;
     const initialOpacity = circlePaint()["circle-opacity"];
@@ -2295,6 +2297,82 @@ describe("MapController story-map layer helpers", () => {
       initialOpacity,
       "cleared overrides must not return on sync",
     );
+  });
+
+  // A polygon styled with a translucent fill, as the Style panel leaves a new
+  // polygon layer (fill opacity 0.45).
+  function translucentPolygonLayer(id: string, opacity = 1): GeoLibreLayer {
+    return pointLayer(
+      id,
+      {
+        opacity,
+        geojson: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "Polygon",
+                coordinates: [
+                  [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 1],
+                    [0, 0],
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+      },
+      { fillOpacity: 0.45, strokeOpacity: 1 },
+    );
+  }
+
+  it("keeps a polygon's styled fill opacity when a chapter sets the layer opacity", () => {
+    const { map, fake } = makeFakeMap();
+    (map as unknown as { stop: () => void }).stop = () => {};
+    const controller = controllerWith(map);
+    controller.syncLayers([translucentPolygonLayer("a")]);
+    const fill = () => fake.layers.get("layer-a-fill")?.paint as Record<string, unknown>;
+    const line = () => fake.layers.get("layer-a-line")?.paint as Record<string, unknown>;
+    assert.equal(fill()["fill-opacity"], 0.45);
+
+    // A chapter at 1 is the layer at full opacity: still the 0.45 fill, not solid.
+    controller.setStoryLayerOpacity("a", 1, 0);
+    assert.equal(fill()["fill-opacity"], 0.45);
+    assert.equal(line()["line-opacity"], 1);
+
+    // A chapter at 0.2 scales the styled fill, as the Layers panel slider does.
+    controller.setStoryLayerOpacity("a", 0.2, 0);
+    assert.ok(Math.abs((fill()["fill-opacity"] as number) - 0.09) < 1e-9);
+    assert.equal(line()["line-opacity"], 0.2);
+
+    // Back to 1 does not compound the previous fade.
+    controller.setStoryLayerOpacity("a", 1, 0);
+    assert.equal(fill()["fill-opacity"], 0.45);
+
+    controller.restoreLayerStyles();
+    assert.equal(fill()["fill-opacity"], 0.45);
+    assert.equal(line()["line-opacity"], 1);
+  });
+
+  it("replaces a layer opacity below 1 rather than multiplying it", () => {
+    const { map, fake } = makeFakeMap();
+    (map as unknown as { stop: () => void }).stop = () => {};
+    const controller = controllerWith(map);
+    controller.syncLayers([translucentPolygonLayer("a", 0.5)]);
+    const fill = () => fake.layers.get("layer-a-fill")?.paint as Record<string, unknown>;
+    assert.equal(fill()["fill-opacity"], 0.225);
+
+    controller.setStoryLayerOpacity("a", 1, 0);
+    assert.equal(fill()["fill-opacity"], 0.45);
+
+    controller.restoreLayerStyles();
+    assert.equal(fill()["fill-opacity"], 0.225);
   });
 
   it("does not apply a removed layer's old story fade when its id is reused", () => {
@@ -2926,5 +3004,30 @@ describe("MapController search result lifecycle", () => {
     })();
     assert.equal(fake.sources.size, 0);
     assert.equal(fake.layers.size, 1);
+  });
+});
+
+describe("storyScaledPaintValue", () => {
+  it("rescales a numeric paint value from the layer opacity to the chapter's", () => {
+    assert.equal(storyScaledPaintValue(0.45, 1, 1), 0.45);
+    assert.equal(storyScaledPaintValue(0.25, 0.5, 1), 0.5);
+    assert.equal(storyScaledPaintValue(0.4, 0.5, 0), 0);
+    assert.equal(storyScaledPaintValue(0.9, 0.5, 1), 1, "clamped to 1");
+  });
+
+  it("wraps a data expression and leaves it untouched at a ratio of 1", () => {
+    const expr = ["coalesce", ["get", "fill-opacity"], 0.45];
+    assert.equal(storyScaledPaintValue(expr, 1, 1), expr);
+    assert.deepEqual(storyScaledPaintValue(expr, 1, 0.5), ["min", 1, ["*", expr, 0.5]]);
+  });
+
+  it("gives up on values it cannot rescale", () => {
+    assert.equal(storyScaledPaintValue(undefined, 1, 0.5), undefined);
+    assert.equal(storyScaledPaintValue(0, 0, 0.5), undefined, "layer opacity 0 erased the style");
+    assert.equal(
+      storyScaledPaintValue(["interpolate", ["linear"], ["zoom"], 5, 0, 10, 1], 1, 0.5),
+      undefined,
+      "zoom expressions must stay top-level",
+    );
   });
 });

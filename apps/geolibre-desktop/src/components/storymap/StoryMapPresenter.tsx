@@ -619,12 +619,16 @@ export function StoryMapPresenter({
   // Chapters sit after the optional start slide, so a chapter's nav entry maps
   // to its step index by this offset.
   const startOffset = storymap && storymap.startSlide !== "none" ? 1 : 0;
-  // A start/closing slide is showing (no chapter highlighted). Slides are
-  // documented as text-free, so the persistent story header/footer hide while
-  // one is active (a blank/black cover already hides them; this also clears the
-  // title/byline/footer for global/adjacent slides). visibility (not display)
-  // keeps the title area stable as the presenter switches between steps.
+  // A start/closing slide is showing (no chapter highlighted). Slides carry no
+  // chapter text, and the closing slide hides the story header/footer too. The
+  // start view is the story's opening screen, so it keeps the title block
+  // (title/subtitle/byline), raised above a blank/black cover; only the footer
+  // hides there. visibility (not display) keeps the title area stable as the
+  // presenter switches between steps.
   const slideActive = activeChapter === -1;
+  const currentStep = steps[playback.index];
+  const startSlideActive =
+    slideActive && currentStep?.kind === "slide" && currentStep.position === "start";
   const automatic = playback.phase === "playing" || playback.phase === "moving";
   const playLabel = automatic
     ? t("storymap.playback.pause")
@@ -836,7 +840,15 @@ export function StoryMapPresenter({
         {storymap && (storymap.title || storymap.subtitle || storymap.byline) ? (
           <div
             className={`glsm-header ${themeClass}`}
-            style={slideActive || !cardOpen ? { visibility: "hidden" } : undefined}
+            data-testid="story-title-block"
+            style={
+              !cardOpen || (slideActive && !startSlideActive)
+                ? { visibility: "hidden" }
+                : startSlideActive
+                  ? // Above the start slide's blank/black cover (z-71).
+                    { zIndex: 71 }
+                  : undefined
+            }
           >
             {storymap.title ? <h1>{storymap.title}</h1> : null}
             {storymap.subtitle ? <h2>{storymap.subtitle}</h2> : null}
