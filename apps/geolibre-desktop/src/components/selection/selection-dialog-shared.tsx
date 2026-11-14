@@ -2,7 +2,7 @@ import { type GeoLibreLayer, type SelectionMode, SELECTION_MODES } from "@geolib
 import { Label, Select, cn } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
 import { GripHorizontal, X } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -16,7 +16,46 @@ import { useTranslation } from "react-i18next";
  * Whitebox toolbox in #1226): `pos` is null until first dragged, when the
  * default corner placement (CSS class) applies; afterwards it pins to
  * explicit coords, clamped to the map area.
+ *
+ * The card's height is capped by the map area, not the viewport: a tall
+ * docked attribute table shrinks the map area, and a viewport-sized card
+ * would run past it and be clipped, hiding the action buttons at the bottom.
+ * The body scrolls instead, and a dragged card moves up when the map area
+ * shrinks under it.
  */
+/** Gap kept between the card and the map area's edges, in pixels. */
+const EDGE_MARGIN = 12;
+/** Card height a dragged panel keeps in view when the map area shrinks. */
+const MIN_VISIBLE_HEIGHT = 160;
+/** Deepest top offset of a `defaultPositionClass` (`top-9`), in pixels. */
+const DEFAULT_MAX_TOP = 36;
+
+/**
+ * Clamp a dragged panel's top offset so at least `MIN_VISIBLE_HEIGHT` of it
+ * (or the whole map area, when smaller) stays inside the map area.
+ *
+ * @param y - The panel's current top offset within the map area, in pixels.
+ * @param areaHeight - The map area's height, in pixels.
+ * @returns The clamped top offset, never negative.
+ */
+export function clampSelectionPanelTop(y: number, areaHeight: number): number {
+  return Math.max(0, Math.min(y, areaHeight - MIN_VISIBLE_HEIGHT - EDGE_MARGIN));
+}
+
+/**
+ * CSS `max-height` for the card, so it never extends past the bottom of the
+ * map area whether it sits at its default corner or was dragged.
+ *
+ * @param top - The dragged top offset in pixels, or null at the default corner.
+ * @returns A `calc()` relative to the map-area overlay's height.
+ */
+export function selectionPanelMaxHeight(top: number | null): string {
+  // Before a drag the card sits at its default corner class, `top-3` or
+  // `top-9` (36px); reserve room for the deeper one.
+  const offset = (top ?? DEFAULT_MAX_TOP) + EDGE_MARGIN;
+  return `calc(100% - ${offset}px)`;
+}
+
 export function SelectionFloatingPanel({
   open,
   title,
@@ -35,6 +74,24 @@ export function SelectionFloatingPanel({
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  // Docking or resizing the attribute table shrinks the map area; pull a
+  // dragged card up so its title bar and buttons do not end up clipped.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!open || !overlay || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      const height = overlay.getBoundingClientRect().height;
+      setPos((current) => {
+        if (!current) return current;
+        const y = clampSelectionPanelTop(current.y, height);
+        return y === current.y ? current : { ...current, y };
+      });
+    });
+    observer.observe(overlay);
+    return () => observer.disconnect();
+  }, [open]);
 
   if (!open) return null;
 
@@ -80,12 +137,15 @@ export function SelectionFloatingPanel({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+    <div ref={overlayRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
       <div
         ref={panelRef}
         role="dialog"
         aria-label={title}
-        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        style={{
+          ...(pos ? { left: pos.x, top: pos.y } : {}),
+          maxHeight: selectionPanelMaxHeight(pos?.y ?? null),
+        }}
         className={cn(
           "pointer-events-auto absolute flex w-96 max-w-[95%] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
           pos ? "" : defaultPositionClass,
@@ -110,7 +170,7 @@ export function SelectionFloatingPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
       </div>
     </div>
   );
