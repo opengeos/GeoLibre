@@ -85,11 +85,12 @@ const ZARR_SAMPLE_URL =
  *
  * NOAA OI SST V2 monthly means, 1981-2023 on a 1-degree global grid, chunked
  * one time step per chunk (~165 KiB) so stepping the timeline is a single small
- * read. Public domain (U.S. Government work); see the store's own attributes
- * for the citation.
+ * read. Land cells are NaN (masked with NOAA PSL's land-sea mask), so the
+ * field draws over the oceans only. Public domain (U.S. Government work); see
+ * the store's own attributes for the citation.
  */
 const ZARR_TIME_SERIES_SAMPLE_URL =
-  "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr";
+  "https://data.source.coop/opengeos/data/zarr/noaa-oisst-v2-monthly.zarr";
 
 // Matches the stop count of the control's own default colormap, so a named ramp
 // renders with the same smoothness as the built-in Zarr panel default. Declared
