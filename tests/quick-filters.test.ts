@@ -570,6 +570,12 @@ describe("profileQuickFilterFields", () => {
       ["a"],
     );
     assert.equal(profiles[0]?.sampled, 3);
+    // The exclusion list also applies to an explicit field list.
+    const named = profileQuickFilterFields(rows, { fields: ["a", "secret"], exclude: ["secret"] });
+    assert.deepEqual(
+      named.map((profile) => profile.field),
+      ["a"],
+    );
   });
 });
 
