@@ -4,49 +4,19 @@ import type { ParseKeys } from "i18next";
 import { GripHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-
-/** Gap kept between the card and the map area's edges, in pixels. */
-const EDGE_MARGIN = 12;
-/** Card height a dragged panel keeps in view when the map area shrinks. */
-const MIN_VISIBLE_HEIGHT = 160;
-/** Deepest top offset of a `defaultPositionClass` (`top-9`), in pixels. */
-const DEFAULT_MAX_TOP = 36;
+import { clampSelectionPanelPosition, selectionPanelMaxHeight } from "./selection-panel-geometry";
 
 /**
- * Clamp a dragged panel's position after the map area resized. Vertically it
- * keeps `MIN_VISIBLE_HEIGHT` (plus the edge margin) of room below the top;
- * in a map area shorter than that the card is pinned to the top and its
- * height cap shrinks it further. Horizontally it keeps the whole card inside,
- * like the drag clamp, falling back to the left edge when the card is wider.
+ * A selection card's width and natural height: its rendered height with the
+ * body's full content height in place of the capped, scrolling part.
  *
- * @param pos - The panel's current offset within the map area, in pixels.
- * @param area - The map area's size, in pixels.
- * @param cardWidth - The card's rendered width, in pixels.
- * @returns The clamped offset, never negative.
+ * @param card - The rendered card element.
+ * @param body - The card's scrolling body, when mounted.
+ * @returns The size to clamp the card's position against.
  */
-export function clampSelectionPanelPosition(
-  pos: { x: number; y: number },
-  area: { width: number; height: number },
-  cardWidth: number,
-): { x: number; y: number } {
-  return {
-    x: Math.max(0, Math.min(pos.x, area.width - cardWidth)),
-    y: Math.max(0, Math.min(pos.y, area.height - MIN_VISIBLE_HEIGHT - EDGE_MARGIN)),
-  };
-}
-
-/**
- * CSS `max-height` for the card, so it never extends past the bottom of the
- * map area whether it sits at its default corner or was dragged.
- *
- * @param top - The dragged top offset in pixels, or null at the default corner.
- * @returns A `calc()` relative to the map-area overlay's height.
- */
-export function selectionPanelMaxHeight(top: number | null): string {
-  // Before a drag the card sits at its default corner class, `top-3` or
-  // `top-9` (36px); reserve room for the deeper one.
-  const offset = (top ?? DEFAULT_MAX_TOP) + EDGE_MARGIN;
-  return `calc(100% - ${offset}px)`;
+function naturalCardSize(card: HTMLElement, body: HTMLElement | null) {
+  const hidden = body ? body.scrollHeight - body.clientHeight : 0;
+  return { width: card.offsetWidth, height: card.offsetHeight + hidden };
 }
 
 /**
@@ -86,6 +56,7 @@ export function SelectionFloatingPanel({
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
   // Docking or resizing the attribute table (or opening a side panel)
   // shrinks the map area; pull a dragged card back inside so its title bar
@@ -95,10 +66,12 @@ export function SelectionFloatingPanel({
     if (!open || !overlay || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(() => {
       const area = overlay.getBoundingClientRect();
-      const cardWidth = panelRef.current?.offsetWidth ?? 0;
+      const card = panelRef.current;
+      if (!card) return;
+      const size = naturalCardSize(card, bodyRef.current);
       setPos((current) => {
         if (!current) return current;
-        const next = clampSelectionPanelPosition(current, area, cardWidth);
+        const next = clampSelectionPanelPosition(current, area, size);
         return next.x === current.x && next.y === current.y ? current : next;
       });
     });
@@ -130,18 +103,16 @@ export function SelectionFloatingPanel({
     const bounds = card?.parentElement?.getBoundingClientRect();
     if (!card || !bounds) return;
     // Keep the panel within the map area so it can't be dragged off-canvas.
-    const x = Math.max(
-      0,
-      Math.min(event.clientX - dragOffset.current.x - bounds.left, bounds.width - card.offsetWidth),
-    );
-    const y = Math.max(
-      0,
-      Math.min(
-        event.clientY - dragOffset.current.y - bounds.top,
-        bounds.height - card.offsetHeight,
+    setPos(
+      clampSelectionPanelPosition(
+        {
+          x: event.clientX - dragOffset.current.x - bounds.left,
+          y: event.clientY - dragOffset.current.y - bounds.top,
+        },
+        bounds,
+        naturalCardSize(card, bodyRef.current),
       ),
     );
-    setPos({ x, y });
   };
 
   const onDragEnd = (event: React.PointerEvent) => {
@@ -183,7 +154,9 @@ export function SelectionFloatingPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+          {children}
+        </div>
       </div>
     </div>
   );
