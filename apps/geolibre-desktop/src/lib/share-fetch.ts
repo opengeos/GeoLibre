@@ -5,6 +5,7 @@
 // http://tauri.localhost on Windows); requests are never retried via native HTTP.
 
 import type { fetch as nativeHttpFetch } from "@tauri-apps/plugin-http";
+import { DIAGNOSTIC_REQUEST_HEADERS } from "./diagnostics";
 import { DEFAULT_SHARE_BASE_URL, resolveShareBaseUrl } from "./share-geolibre";
 
 /**
@@ -76,9 +77,25 @@ export function createNativeShareFetch(
     const protectedRequest =
       headers.has("Authorization") ||
       (init?.redirect ?? (input instanceof Request ? input.redirect : undefined)) === "error";
-    if (!protectedRequest) return tauriFetch(input, init);
+    // Native HTTP bypasses the Diagnostics fetch wrapper that strips its
+    // client-only markers, so drop them here: the server never sees them.
+    // Filter the header set fetch would actually send: `init.headers` replaces
+    // a Request's headers rather than merging with them.
+    const sent = new Headers(
+      init?.headers !== undefined
+        ? init.headers
+        : input instanceof Request
+          ? input.headers
+          : undefined,
+    );
+    let nativeInit = init;
+    if (DIAGNOSTIC_REQUEST_HEADERS.some((name) => sent.has(name))) {
+      for (const name of DIAGNOSTIC_REQUEST_HEADERS) sent.delete(name);
+      nativeInit = { ...init, headers: sent };
+    }
+    if (!protectedRequest) return tauriFetch(input, nativeInit);
 
-    return tauriFetch(input, { ...init, maxRedirections: 0 }).then((response) => {
+    return tauriFetch(input, { ...nativeInit, maxRedirections: 0 }).then((response) => {
       if (response.status >= 300 && response.status < 400) {
         throw new TypeError("Redirect refused for authenticated share request");
       }

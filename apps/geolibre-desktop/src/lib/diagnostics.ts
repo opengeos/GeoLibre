@@ -105,7 +105,19 @@ function isBenignConsoleWarning(args: unknown[]): boolean {
 export const OPTIONAL_RESOURCE_HEADER = "x-geolibre-optional-resource";
 export const EXPECTED_STATUS_HEADER = "x-geolibre-expected-status";
 
-const DIAGNOSTIC_REQUEST_HEADERS = [OPTIONAL_RESOURCE_HEADER, EXPECTED_STATUS_HEADER] as const;
+/**
+ * Every client-only marker header. A transport that bypasses the Diagnostics
+ * fetch wrapper (native HTTP) drops these itself so they never reach a server.
+ */
+export const DIAGNOSTIC_REQUEST_HEADERS = [
+  OPTIONAL_RESOURCE_HEADER,
+  EXPECTED_STATUS_HEADER,
+] as const;
+
+/** Whether a header name is one of the client-only Diagnostics markers. */
+export function isDiagnosticRequestHeader(name: string): boolean {
+  return (DIAGNOSTIC_REQUEST_HEADERS as readonly string[]).includes(name.toLowerCase());
+}
 
 /** The statuses listed in an {@link EXPECTED_STATUS_HEADER} value, e.g. "400, 404". */
 export function parseExpectedStatuses(headerValue: string | null): Set<number> {

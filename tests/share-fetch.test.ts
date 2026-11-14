@@ -198,6 +198,43 @@ describe("native share transport", () => {
     assert.equal(browserUrls.length, 4);
   });
 
+  it("strips the client-only Diagnostics markers before native HTTP sends the request", async () => {
+    const sent: Headers[] = [];
+    const native = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(new Headers(init?.headers));
+      return new Response("{}");
+    }) as Parameters<typeof createNativeShareFetch>[0];
+    const shareFetch = createNativeShareFetch(native);
+
+    await shareFetch("https://share.geolibre.app/api/groups/mine", {
+      headers: { Authorization: "Bearer private", "x-geolibre-expected-status": "404" },
+    });
+    await shareFetch(
+      new Request("https://share.geolibre.app/api/projects", {
+        headers: { "x-geolibre-optional-resource": "1", Accept: "application/json" },
+      }),
+    );
+    assert.equal(sent.length, 2);
+    for (const headers of sent) {
+      assert.equal(headers.get("x-geolibre-expected-status"), null);
+      assert.equal(headers.get("x-geolibre-optional-resource"), null);
+    }
+    assert.equal(sent[0].get("Authorization"), "Bearer private");
+    assert.equal(sent[1].get("Accept"), "application/json");
+
+    // init.headers replaces a Request's headers; stripping must not bring a
+    // header the caller dropped back in.
+    await shareFetch(
+      new Request("https://share.geolibre.app/api/projects", {
+        headers: { Authorization: "Bearer stale" },
+      }),
+      { headers: { Accept: "application/json", "x-geolibre-expected-status": "404" } },
+    );
+    assert.equal(sent[2].get("Authorization"), null);
+    assert.equal(sent[2].get("x-geolibre-expected-status"), null);
+    assert.equal(sent[2].get("Accept"), "application/json");
+  });
+
   it("disables native redirects for credentials and rejects 3xx instead of exposing a redirect target", async () => {
     const redirected: string[] = [];
     const options: Array<(RequestInit & { maxRedirections?: number }) | undefined> = [];

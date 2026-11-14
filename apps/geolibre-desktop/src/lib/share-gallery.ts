@@ -7,6 +7,7 @@
 // with an OAuth access token or personal API token to also return the signed-in
 // user's `unlisted` and `private` projects.
 
+import { EXPECTED_STATUS_HEADER } from "./diagnostics";
 import { getShareFetch } from "./share-fetch";
 import { resolveShareBaseUrl } from "./share-geolibre";
 
@@ -320,12 +321,20 @@ async function shareAuthorizedJsonRequest(
     fetchImpl?: typeof fetch;
     method?: "GET" | "POST" | "PATCH" | "DELETE";
     body?: unknown;
+    /**
+     * The route is an optional server feature: a 404 means this server does
+     * not offer it, so the request resolves to null and Diagnostics records the
+     * 404 as info rather than an error.
+     */
+    optionalRoute?: boolean;
   } = {},
 ): Promise<unknown> {
   const authFetch = shareAuthorizedFetch(token, base, options.fetchImpl ?? getShareFetch());
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const headers: Record<string, string> = { Accept: "application/json" };
+  // A client-only marker; the Diagnostics fetch wrapper strips it.
+  if (options.optionalRoute) headers[EXPECTED_STATUS_HEADER] = "404";
   let payload: string | undefined;
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -349,6 +358,7 @@ async function shareAuthorizedJsonRequest(
   if (response.status === 401 || response.status === 403) {
     throw new GalleryError("unauthorized");
   }
+  if (response.status === 404 && options.optionalRoute) return null;
   if (!response.ok) {
     // The server's refusals carry a stable `{"error": "..."}` phrase (see
     // docs/server-api.md); map the ones the UI explains to a typed code and
@@ -673,6 +683,10 @@ export async function fetchMyShareUsername(options: FetchMyProjectsOptions): Pro
 
 /**
  * Fetch the organizations the signed-in user belongs to.
+ *
+ * Organizations are a self-hosted GeoLibre server feature: the hosted
+ * share.geolibre.app has no `/api/organizations/mine`, so its 404 resolves to
+ * an empty list rather than an error.
  */
 export async function fetchMyOrganizations(
   options: FetchOrganizationsOptions,
@@ -682,7 +696,7 @@ export async function fetchMyOrganizations(
     "/api/organizations/mine",
     options.token,
     base,
-    { signal: options.signal, fetchImpl: options.fetchImpl },
+    { signal: options.signal, fetchImpl: options.fetchImpl, optionalRoute: true },
   )) as {
     organizations?: unknown[];
   } | null;
@@ -726,12 +740,16 @@ export async function fetchMyOrganizations(
 
 /**
  * Fetch the groups the signed-in user belongs to.
+ *
+ * Groups, like organizations, exist only on a self-hosted GeoLibre server, so
+ * the hosted share.geolibre.app's 404 resolves to an empty list.
  */
 export async function fetchMyGroups(options: FetchGroupsOptions): Promise<ShareGroup[]> {
   const base = requireShareBase(options.baseUrl);
   const payload = (await shareAuthorizedJsonRequest("/api/groups/mine", options.token, base, {
     signal: options.signal,
     fetchImpl: options.fetchImpl,
+    optionalRoute: true,
   })) as { groups?: unknown[] } | null;
   const raw = Array.isArray(payload?.groups) ? payload.groups : [];
   return raw
