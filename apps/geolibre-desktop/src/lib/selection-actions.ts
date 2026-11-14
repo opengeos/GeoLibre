@@ -50,6 +50,20 @@ export function invertLayerSelection(): void {
   store.selectFeatures(invertSelection(allIds, store.selectedFeatureIds));
 }
 
+/**
+ * Make a layer active and open its attribute table. `selectLayer` clears the
+ * feature selection, so it only runs when the layer is not active yet: a
+ * selection made on this layer (Select by expression, a map lasso) carries
+ * into the table instead of being wiped as it mounts.
+ *
+ * @param layerId - The layer whose attribute table to open.
+ */
+export function openLayerAttributeTable(layerId: string): void {
+  const store = useAppStore.getState();
+  if (store.selectedLayerId !== layerId) store.selectLayer(layerId);
+  store.setAttributeTableOpen(true);
+}
+
 /** Clear the selection (keeps the layer active). */
 export function clearFeatureSelection(): void {
   useAppStore.getState().selectFeature(null);
