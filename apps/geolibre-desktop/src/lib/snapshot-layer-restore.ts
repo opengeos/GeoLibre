@@ -1,4 +1,5 @@
 import {
+  cascadeLayerJoinRefresh,
   hydrateProjectLayer,
   normalizeGroupContiguity,
   normalizeLegendConfig,
@@ -17,6 +18,7 @@ import {
   type SecondaryMapView,
   type StoryLayerOpacityChange,
   type StoryMap,
+  useAppStore,
 } from "@geolibre/core";
 
 /**
@@ -269,4 +271,53 @@ function restorePrintLayoutReferences(
       ? { atlasLayerId: layerId, atlasEnabled: current.atlasEnabled || snapshot.atlasEnabled }
       : {}),
   };
+}
+
+/**
+ * Restore one layer from a parsed snapshot into the live store as a single
+ * undoable step, then hand the restored record to `redraw` so the plugin that
+ * paints it can draw it again.
+ *
+ * The store write alone is enough for a layer GeoLibre renders itself, but not
+ * for a control-painted one (Add Vector Layer, rasters, LiDAR, 3D Tiles,
+ * Planetary Computer) or for an Add Vector Layer layer GeoLibre adopted, which
+ * a snapshot saves by URL without its features: their map output only comes
+ * back when the owning plugin's restore pass runs, which a project load does
+ * and a single store write does not. Without `redraw` the restored layer is
+ * listed in the Layers panel and draws nothing.
+ *
+ * @param project - The parsed snapshot project.
+ * @param layerId - The id of the layer to restore.
+ * @param redraw - Called with the restored record after the store write, so the
+ *   owning restore pass reads the store with the layer already in it.
+ * @returns The restored layer record.
+ * @throws When the snapshot has no layer with `layerId`.
+ */
+export function applySnapshotLayerRestore(
+  project: GeoLibreProject,
+  layerId: string,
+  redraw: (layer: GeoLibreLayer) => void,
+): GeoLibreLayer {
+  const state = useAppStore.getState();
+  const restoredLayers = restoreLayerFromSnapshot(
+    { layers: state.layers, layerGroups: state.layerGroups },
+    project,
+    layerId,
+  );
+  if (!restoredLayers) throw new Error(`Snapshot has no layer ${layerId}.`);
+  // Layers that join on the restored one re-derive their columns from it,
+  // as they do after any change to a join source.
+  const layers = cascadeLayerJoinRefresh(restoredLayers, layerId);
+  // Deleting a layer scrubbed every reference to it, so a re-inserted
+  // layer also gets back its widgets, comments, legend entries,
+  // story-map rows, pane visibility and Print Layout blocks. A layer
+  // that still exists kept its references; leave those as they are.
+  const wasDeleted = !state.layers.some((layer) => layer.id === layerId);
+  const references = wasDeleted ? restoreLayerReferencesFromSnapshot(state, project, layerId) : {};
+  // One store write, so one Undo step reverts the whole restore.
+  useAppStore.setState({ layers, ...references, isDirty: true });
+  const restored = layers.find((layer) => layer.id === layerId);
+  if (!restored) throw new Error(`Snapshot has no layer ${layerId}.`);
+  redraw(restored);
+  return restored;
 }

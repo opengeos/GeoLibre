@@ -1,5 +1,4 @@
 import {
-  cascadeLayerJoinRefresh,
   createProjectLayerSerializationCache,
   parseProject,
   registerProjectRestoreHistory,
@@ -36,10 +35,9 @@ import {
   SESSION_HEARTBEAT_MS,
   shouldOfferProjectRecovery,
 } from "../lib/project-history-session";
-import {
-  restoreLayerFromSnapshot,
-  restoreLayerReferencesFromSnapshot,
-} from "../lib/snapshot-layer-restore";
+import { applySnapshotLayerRestore } from "../lib/snapshot-layer-restore";
+import { restoreLibraryLayer } from "../lib/restore-library-layer";
+import { createAppAPI } from "./usePlugins";
 import { notify } from "../lib/notify";
 const AUTOSAVE_DELAY_MS = 3_000;
 
@@ -273,27 +271,17 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
     (snapshot: ProjectHistorySnapshot, layerId: string) => {
       setRestoreError(null);
       try {
-        const state = useAppStore.getState();
         const project = parseProject(snapshot.content);
-        const restoredLayers = restoreLayerFromSnapshot(
-          { layers: state.layers, layerGroups: state.layerGroups },
-          project,
-          layerId,
-        );
-        if (!restoredLayers) throw new Error(`Snapshot has no layer ${layerId}.`);
-        // Layers that join on the restored one re-derive their columns from it,
-        // as they do after any change to a join source.
-        const layers = cascadeLayerJoinRefresh(restoredLayers, layerId);
-        // Deleting a layer scrubbed every reference to it, so a re-inserted
-        // layer also gets back its widgets, comments, legend entries,
-        // story-map rows, pane visibility and Print Layout blocks. A layer
-        // that still exists kept its references; leave those as they are.
-        const wasDeleted = !state.layers.some((layer) => layer.id === layerId);
-        const references = wasDeleted
-          ? restoreLayerReferencesFromSnapshot(state, project, layerId)
-          : {};
-        // One store write, so one Undo step reverts the whole restore.
-        useAppStore.setState({ layers, ...references, isDirty: true });
+        // A control-painted layer (or an adopted Add Vector Layer layer, which
+        // the snapshot saved by URL without its features) only draws once its
+        // plugin's restore pass runs, as a project load or a My Data re-add
+        // does; the store write alone would list it and draw nothing.
+        applySnapshotLayerRestore(project, layerId, (layer) => {
+          void restoreLibraryLayer(layer, createAppAPI(mapControllerRef), {
+            failureNotice: (name) =>
+              i18next.t("projectHistory.diff.restoreLayerRedrawError", { name }),
+          });
+        });
         return true;
       } catch (error) {
         console.error("Could not restore the layer from the snapshot.", error);
@@ -301,7 +289,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         return false;
       }
     },
-    [t],
+    [mapControllerRef, t],
   );
 
   const discardRecovery = useCallback(() => {
