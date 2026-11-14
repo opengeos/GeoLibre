@@ -109,7 +109,7 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
     if (!layerInfo) return;
 
     const store = useAppStore.getState();
-    const name = flatGeobufLayerName(layerInfo, event.state.layerName);
+    const name = flatGeobufLayerName(layerInfo);
     const layer = createFlatGeobufStoreLayer(event.layerId, layerInfo, control, name);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
@@ -128,18 +128,35 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
  * Picks the store name for a layer the FlatGeobuf panel just added.
  *
  * The panel's Layer Name field is not carried on the layer info: upstream uses
- * the typed name as the layer id instead (falling back to the URL's file name,
- * then a generated id). So the typed name wins when it is the id the layer got;
- * otherwise the name comes from the URL as before.
+ * the trimmed typed name as the layer id instead, falling back to the URL's
+ * file name (extension dropped, not decoded) and, when there is none (inline
+ * GeoJSON), a generated id. So an id that is not the URL-derived file name is
+ * the name the user typed; a generated id is shown as is, as before.
+ *
+ * Reading the id rather than the field keeps the typed name even if the field
+ * is edited while the file is still loading.
  *
  * @param layerInfo - The upstream layer info for the added layer.
- * @param typedName - The panel's Layer Name field at the time of the add.
  * @returns The display name for the GeoLibre layer.
  */
-export function flatGeobufLayerName(layerInfo: AddVectorLayerInfo, typedName?: string): string {
-  const customName = typedName?.trim();
-  if (customName && customName === layerInfo.id) return customName;
+export function flatGeobufLayerName(layerInfo: Pick<AddVectorLayerInfo, "id" | "url">): string {
+  if (layerInfo.id !== upstreamUrlLayerId(layerInfo.url)) return layerInfo.id;
   return layerNameFromUrl(layerInfo.url, layerInfo.id);
+}
+
+/**
+ * Mirrors the id AddVectorControl derives from a URL when no name is typed.
+ *
+ * @param url - The vector data URL.
+ * @returns The URL's last path segment without its extension, or "" when the
+ *   URL does not parse.
+ */
+function upstreamUrlLayerId(url: string): string {
+  try {
+    return (new URL(url).pathname.split("/").pop() || "").replace(/\.[^.]+$/, "");
+  } catch {
+    return "";
+  }
 }
 
 function createFlatGeobufStoreLayer(

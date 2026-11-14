@@ -139,17 +139,26 @@ describe("FlatGeobuf panel layer name", () => {
 });
 
 describe("flatGeobufLayerName", () => {
-  const info = { id: "us_counties", url: COUNTIES_URL } as Parameters<
-    typeof flatGeobufLayerName
-  >[0];
+  it("keeps the typed name even if the field changed while loading", () => {
+    // The id is the name typed at Add time; the field's later value is not read.
+    assert.equal(
+      flatGeobufLayerName({ id: "US counties (FlatGeobuf)", url: COUNTIES_URL }),
+      "US counties (FlatGeobuf)",
+    );
+  });
 
-  it("ignores a typed name the layer id did not come from", () => {
-    // e.g. the field was edited while the file was still loading.
-    assert.equal(flatGeobufLayerName(info, "Something else"), "us_counties");
+  it("uses the URL's file name when the id came from it", () => {
+    assert.equal(flatGeobufLayerName({ id: "us_counties", url: COUNTIES_URL }), "us_counties");
   });
 
   it("decodes a percent-encoded file name when no name was typed", () => {
-    const encoded = { id: "air%20temp", url: "https://example.com/air%20temp.fgb" } as typeof info;
-    assert.equal(flatGeobufLayerName(encoded, ""), "air temp");
+    assert.equal(
+      flatGeobufLayerName({ id: "air%20temp", url: "https://example.com/air%20temp.fgb" }),
+      "air temp",
+    );
+  });
+
+  it("shows a generated id for inline GeoJSON as before", () => {
+    assert.equal(flatGeobufLayerName({ id: "addvec-abc1234", url: "" }), "addvec-abc1234");
   });
 });
