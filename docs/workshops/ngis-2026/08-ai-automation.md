@@ -149,7 +149,7 @@ California. Loading the earthquakes from **GeoParquet** rather than CSV keeps
     on your own: the Python console needs no key. Google AI Studio offers a free
     Gemini API key if you want one for later.
 
-### Exercise 8.1: Set up the AI Assistant (4 min)
+### Exercise 8.1: Set up the AI Assistant (6 min)
 
 1. Choose **Processing → AI assistant**. The panel docks below the map and
    shows **Set up the AI assistant**, with a list of supported providers and
@@ -402,7 +402,7 @@ basemap, add the DEM at
 https://data.source.coop/opengeos/data/workshops/ngis-2026/reno_tahoe_dem.tif
 with a terrain colormap, and export it as HTML."* The agent calls tools such
 as `create_project`, `add_raster_layer`, `add_vector_layer`, `set_view`,
-`describe_project`, and `export_html`, about 60 in all.
+`describe_project`, and `export_html`, about 80 in all.
 
 Two safety rules are worth seeing for yourself:
 
