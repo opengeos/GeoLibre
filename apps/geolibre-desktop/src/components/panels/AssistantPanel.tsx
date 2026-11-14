@@ -87,7 +87,6 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   { id: "openrouter", envs: ["OPENROUTER_API_KEY"] },
   { id: "vercel", envs: ["AI_GATEWAY_API_KEY"] },
   { id: "trustedrouter", envs: ["TRUSTEDROUTER_API_KEY"] },
-  { id: "uberllm", envs: ["UBERLLM_API_KEY"] },
   { id: "ollama", envs: ["OLLAMA_BASE_URL"] },
   { id: "bedrock", envs: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] },
   { id: "custom", envs: ["OPENAI_COMPATIBLE_BASE_URL", "OPENAI_COMPATIBLE_MODEL"] },
