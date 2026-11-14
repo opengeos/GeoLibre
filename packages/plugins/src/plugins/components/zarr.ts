@@ -1223,6 +1223,7 @@ async function restoreZarrLayerExclusively(
   // it would draw with no Layers entry.
   if (entry.restoredId !== addedLayerId) {
     control.removeLayer(addedLayerId);
+    clearExternalNativePaintBridge(addedLayerId);
     return;
   }
 
@@ -1245,7 +1246,10 @@ async function restoreZarrLayerExclusively(
  * record is renamed aside in the same update rather
  * than removed and re-added in a second one: between two updates the Zarr
  * control's store listener would see the id vanish and remove the live layer
- * that now carries it.
+ * that now carries it. The trade-off: a skipped record renamed this way loses
+ * anything keyed by its old id (selection, a Time Slider binding). It draws
+ * nothing on this engine either way, and the control offers no way to choose
+ * the live layer's id instead.
  *
  * @param entry - The restore in progress.
  * @param live - The record built from the control's `layeradd` state.
