@@ -168,8 +168,33 @@ describe("geocodeResultCamera", () => {
     });
   });
 
-  it("falls back to the point for an antimeridian-crossing box", () => {
-    const camera = geocodeResultCamera({ ...base, bbox: [170, -20, -170, -10] }, 2);
-    assert.equal(camera.kind, "center");
+  it("frames the side of an antimeridian-crossing box that holds the point", () => {
+    // Russia in Nominatim's form: west 19.6, east -169, point at lon 97.
+    const russia = {
+      ...base,
+      lon: 97,
+      lat: 64,
+      bbox: [19.6, 41.2, -169, 81.9] as GeocodeMatch["bbox"],
+    };
+    assert.deepEqual(geocodeResultCamera(russia, 2), {
+      kind: "bounds",
+      bounds: [19.6, 41.2, 180, 81.9],
+    });
+    // A point on the east side keeps the [-180, east] half.
+    const eastPoint = {
+      ...base,
+      lon: -175,
+      lat: -15,
+      bbox: [170, -20, -170, -10] as GeocodeMatch["bbox"],
+    };
+    assert.deepEqual(geocodeResultCamera(eastPoint, 2), {
+      kind: "bounds",
+      bounds: [-180, -20, -170, -10],
+    });
+  });
+
+  it("frames the wider side when the point is outside an antimeridian box", () => {
+    const camera = geocodeResultCamera({ ...base, lon: 0, bbox: [175, -20, -150, -10] }, 2);
+    assert.deepEqual(camera, { kind: "bounds", bounds: [-180, -20, -150, -10] });
   });
 });

@@ -458,12 +458,15 @@ export function LayerPanelPlaceSearch({
           if (camera.kind === "bounds") {
             // Every engine frames the extent, the globe included, the same way
             // the H3 row above does: the store's view holds only a center and a
-            // zoom, so it cannot frame a box.
+            // zoom, so it cannot frame a box. On the globe this means a boxed
+            // result flies there (Cesium's fitBounds animates the camera) while
+            // a point-only result below still jumps.
             engine.fitBounds(camera.bounds);
           } else {
-            // Preserve the globe's existing instant placement for a point. Its
-            // animated camera path differs in flat scene modes; search
-            // previously used the store's applyView path rather than a flight.
+            // A point-only result keeps the globe's instant placement through
+            // the store's applyView path: the Cesium camera's flight path
+            // differs in flat scene modes, and with no box there is nothing a
+            // flight would frame.
             // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
             if (engine.kind === "cesium") {
               const store = useAppStore.getState();

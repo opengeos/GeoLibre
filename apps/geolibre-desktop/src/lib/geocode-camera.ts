@@ -37,9 +37,11 @@ export type GeocodeCamera =
  * Decide how to frame a picked geocoder result. A result with a bounding box
  * (a country, a state, a lake) is fit to that box so the whole place is in
  * view; a tiny box (an address) is first widened to {@link MIN_RESULT_SPAN_DEG}
- * so the fit stops at street level. A result without a box, or with one that
- * crosses the antimeridian (which the 2D engines cannot fit as given), flies to
- * its point at {@link POINT_RESULT_ZOOM}, never zooming the map out.
+ * so the fit stops at street level. A box that crosses the antimeridian (west
+ * greater than east, which no engine can fit as given) is cut at ±180° and the
+ * side holding the result's point is framed, or the wider side when the point
+ * lies in neither. A result without a box flies to its point at
+ * {@link POINT_RESULT_ZOOM}, never zooming the map out.
  *
  * @param match - The picked geocoder match.
  * @param currentZoom - The map's current zoom, for the point fallback.
@@ -47,7 +49,7 @@ export type GeocodeCamera =
  */
 export function geocodeResultCamera(match: GeocodeMatch, currentZoom: number): GeocodeCamera {
   const bbox = match.bbox;
-  if (!bbox || bbox[0] > bbox[2]) {
+  if (!bbox) {
     return {
       kind: "center",
       center: [match.lon, match.lat],
@@ -55,6 +57,14 @@ export function geocodeResultCamera(match: GeocodeMatch, currentZoom: number): G
     };
   }
   let [west, south, east, north] = bbox;
+  if (west > east) {
+    // Split at the antimeridian into [west, 180] and [-180, east].
+    const onWestSide = match.lon >= west;
+    const onEastSide = match.lon <= east;
+    const keepWestSide = onWestSide === onEastSide ? 180 - west >= east + 180 : onWestSide;
+    if (keepWestSide) east = 180;
+    else west = -180;
+  }
   south = Math.max(south, -MAX_MERCATOR_LAT);
   north = Math.min(north, MAX_MERCATOR_LAT);
   if (south > north) {
