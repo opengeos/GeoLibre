@@ -59,12 +59,12 @@ export interface ProfileQuickFilterOptions {
  * Features inspected per layer by default. The value counts are shown next to
  * each checkbox and the numeric/date extents bound the range sliders, so the
  * profile reads every feature of an ordinary layer (as the attribute table's
- * column explorer does) rather than presenting a sample as totals. Past this
- * many features a full pass takes over a second on the main thread, so a
+ * column explorer does) rather than presenting a sample as totals. At this
+ * many features a pass already takes about half a second on the main thread, so a
  * larger layer is profiled from its first {@link PROFILE_LIMIT} features and
  * the panel says so (see `useQuickFilterProfiles`).
  */
-const PROFILE_LIMIT = 100_000;
+const PROFILE_LIMIT = 50_000;
 
 /**
  * Distinct values past which a field is not offered as checkboxes. A list this

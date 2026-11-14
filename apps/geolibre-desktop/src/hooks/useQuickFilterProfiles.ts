@@ -120,7 +120,7 @@ export function useQuickFilterProfiles(
   // uninteresting; do not offer a filter control for it either. Read outside
   // the memo and reduced to a string key for the same reason as `layerRef`
   // above: the settings object is rebuilt on every layer patch, so depending on
-  // it directly would re-profile up to 100,000 records per paint tick.
+  // it directly would re-profile up to 50,000 records per paint tick.
   const hiddenKey = (getColumnSettings(layer).hidden ?? []).join("\u0000");
 
   return useMemo(() => {
