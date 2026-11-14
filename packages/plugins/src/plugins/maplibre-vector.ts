@@ -43,7 +43,7 @@ import {
   wireVectorStoreSync,
 } from "./vector-layer-sync";
 import { bridgeVectorControlToStore, exceedsCesiumVectorLimit } from "./vector-cesium-bridge";
-import { applyVectorContainerColors, groupVectorContainerImports } from "./vector-container-group";
+import { applyInitialVectorStyles, groupVectorContainerImports } from "./vector-container-group";
 import { readableStacLayerHref } from "./stac-signing";
 import { focusPanel, restorePanelFocus } from "./panel-focus";
 import type { FeatureCollection } from "geojson";
@@ -993,10 +993,14 @@ function createVectorControl(
   const panelStateSyncHandler: VectorControlEventHandler = () => syncVectorLayersToStore(control);
   control.on("expand", panelStateSyncHandler);
   control.on("collapse", panelStateSyncHandler);
-  groupVectorContainerImports(control, (name, ids, style) => {
-    applyVectorContainerColors(ids, style);
-    useAppStore.getState().addLayerGroup(name, ids);
-  });
+  groupVectorContainerImports(
+    control,
+    (name, ids) => useAppStore.getState().addLayerGroup(name, ids),
+    // Every add, not only containers: a single layer gets its palette color too.
+    // Relies on the store already holding the new layers when addData
+    // resolves: the `layeradded` handler above syncs them synchronously.
+    applyInitialVectorStyles,
+  );
   // After the container grouping above, so its addData wrapper runs inside this
   // one and a container's tables are grouped before they are adopted.
   wireVectorAdoption(control);
