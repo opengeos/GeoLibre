@@ -268,6 +268,7 @@ export {
   type CloudNetcdfLayerOptions,
   addZarrRasterLayer,
   restoreArcgisZarrLayers,
+  restoreZarrLayers,
   queryZarrLayer,
   setZarrLayerSelector,
   setZarrLocalStoreProvider,
