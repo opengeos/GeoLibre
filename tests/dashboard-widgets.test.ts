@@ -23,8 +23,12 @@ import {
   shadeRamp,
 } from "../apps/geolibre-desktop/src/components/panels/charts/chart-colors";
 import {
+  categoryColumnOptions,
   distinctCategoryValues,
   filterRowsBySelections,
+  listColumnOptions,
+  numericColumns,
+  sortRowsByField,
   type ChartRow,
 } from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
@@ -748,5 +752,62 @@ describe("saving an edited widget", () => {
     const saved = useAppStore.getState().widgets.find((w) => w.id === "s");
     assert.equal(saved?.multiple, true);
     assert.equal(saved?.category, "REGION_UN");
+  });
+});
+
+// The list widget read `row[field]` while rows are `{ properties }` bags, so
+// every cell rendered empty and sorting compared undefined to undefined.
+describe("list widget rows", () => {
+  const quakes: ChartRow[] = [
+    { properties: { place: "Reno", mag: 2.1, depth: "7.5" } },
+    { properties: { place: "Tonopah", mag: 4.3, depth: "12" } },
+    { properties: { place: "Ely", mag: null, depth: "3" } },
+    { properties: { place: "Elko", mag: 3.0, depth: "" } },
+  ];
+  const places = (rows: ChartRow[]) => rows.map((row) => row.properties.place);
+
+  it("sorts by a numeric property, largest first", () => {
+    assert.deepEqual(places(sortRowsByField(quakes, "mag", "desc")), [
+      "Tonopah",
+      "Elko",
+      "Reno",
+      "Ely",
+    ]);
+  });
+
+  it("sorts numeric strings numerically and keeps missing values last", () => {
+    assert.deepEqual(places(sortRowsByField(quakes, "depth", "asc")), [
+      "Ely",
+      "Reno",
+      "Tonopah",
+      "Elko",
+    ]);
+  });
+
+  it("sorts text with locale comparison", () => {
+    assert.deepEqual(places(sortRowsByField(quakes, "place", "asc")), [
+      "Elko",
+      "Ely",
+      "Reno",
+      "Tonopah",
+    ]);
+  });
+
+  it("leaves the order and the input array untouched", () => {
+    assert.equal(sortRowsByField(quakes, undefined, "desc"), quakes);
+    sortRowsByField(quakes, "mag", "asc");
+    assert.deepEqual(places(quakes), ["Reno", "Tonopah", "Ely", "Elko"]);
+  });
+
+  it("offers each column once even when category options include numerics", () => {
+    const rows: ChartRow[] = Array.from({ length: 10 }, (_, i) => ({
+      properties: { id: `q${i}`, mag: i / 2, depth: i * 3 },
+    }));
+    const columns = ["id", "mag", "depth"];
+    const numeric = numericColumns(rows, columns);
+    const category = categoryColumnOptions(rows, columns);
+    // The fallback that made the editor list numeric fields twice.
+    assert.ok(numeric.every((column) => category.includes(column)));
+    assert.deepEqual(listColumnOptions(numeric, category), ["mag", "depth", "id"]);
   });
 });

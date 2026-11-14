@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   categoryColumnOptions,
+  listColumnOptions,
   DEFAULT_HISTOGRAM_BINS,
   MAX_HISTOGRAM_BINS,
   MIN_HISTOGRAM_BINS,
@@ -106,6 +107,12 @@ export function WidgetEditorDialog({
   const data = useLayerChartData(layerId);
   const numericCols = useMemo(() => numericColumns(data.rows, data.columns), [data]);
   const categoryCols = useMemo(() => categoryColumnOptions(data.rows, data.columns), [data]);
+  // The list widget can show any column; numeric ones also appear in the
+  // category options, so merge the two without repeating them.
+  const listCols = useMemo(
+    () => listColumnOptions(numericCols, categoryCols),
+    [numericCols, categoryCols],
+  );
   const hasNumeric = numericCols.length > 0;
   const hasCategory = categoryCols.length > 0;
   const hasChartable = hasNumeric || hasCategory;
@@ -175,9 +182,8 @@ export function WidgetEditorDialog({
     }
     if (type === "list") {
       // Ensure at least one column is selected; default to all available.
-      const allCols = [...numericCols, ...categoryCols];
-      const cols = listFields.filter((f) => allCols.includes(f));
-      next.listFields = cols.length > 0 ? cols : allCols.slice(0, 3);
+      const cols = listFields.filter((f) => listCols.includes(f));
+      next.listFields = cols.length > 0 ? cols : listCols.slice(0, 3);
       if (sortBy) next.sortBy = sortBy;
       if (sortDir !== "desc") next.sortDir = sortDir;
       if (limit !== 20) next.limit = limit;
@@ -397,7 +403,7 @@ export function WidgetEditorDialog({
                   <div className="grid gap-1.5">
                     <Label>{t("dashboard.editor.listColumns")}</Label>
                     <div className="flex flex-wrap gap-1.5">
-                      {[...numericCols, ...categoryCols].map((col) => {
+                      {listCols.map((col) => {
                         const checked = listFields.includes(col);
                         return (
                           <label
@@ -426,7 +432,7 @@ export function WidgetEditorDialog({
                       id="widget-list-sort"
                       label={t("dashboard.editor.sortBy")}
                       value={sortBy}
-                      options={["", ...numericCols, ...categoryCols]}
+                      options={["", ...listCols]}
                       onChange={setSortBy}
                     />
                     <div className="grid gap-1.5">
