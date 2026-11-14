@@ -7,6 +7,7 @@ import {
   addLidarLayerFromUrl,
   closeMaplibreComponentControls,
   LIDAR_SOURCE_KIND,
+  restoreLidarLayers,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/maplibre-components.ts";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -23,6 +24,8 @@ interface LoadCall {
 }
 
 const loadCalls: LoadCall[] = [];
+// Options each control was constructed with, newest last.
+const constructorOptions: Record<string, unknown>[] = [];
 // When false the stub resolves without emitting `load`, as an upstream change
 // to the event timing would.
 let emitLoad = true;
@@ -34,6 +37,7 @@ class LidarControlStub {
   private pointClouds: { id: string }[] = [];
 
   constructor(options: { autoZoom?: boolean }) {
+    constructorOptions.push({ ...options });
     this._options = { ...options, autoZoom: options.autoZoom ?? true };
   }
 
@@ -116,7 +120,58 @@ afterEach(() => {
   __setComponentsModuleLoaderForTests(null);
   useAppStore.setState({ layers: [] });
   loadCalls.length = 0;
+  constructorOptions.length = 0;
   emitLoad = true;
+});
+
+describe("LiDAR control options", () => {
+  it("never restores its own share state from the web address", async () => {
+    // GeoLibre keeps `lat`/`lon`/`zoom` in the address. maplibre-gl-lidar's
+    // default `restoreFromUrl` reads those as a flat share link with pitch 0,
+    // bearing 0 and terrain off, which flattened a reopened 3D project.
+    installStubModule();
+    await addLidarLayerFromUrl(app, "https://example.com/a.copc.laz");
+
+    assert.equal(constructorOptions.length, 1);
+    assert.equal(constructorOptions[0]!.restoreFromUrl, false);
+    assert.equal(constructorOptions[0]!.shareUrl, false);
+  });
+});
+
+describe("restoreLidarLayers", () => {
+  function addSavedLidarLayer(id: string, url: string): void {
+    useAppStore.getState().addLayer({
+      id,
+      name: "saved.copc.laz",
+      type: "lidar",
+      source: { type: "lidar", sourceId: id, url },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { externalNativeLayer: true, sourceKind: LIDAR_SOURCE_KIND, identifiable: false },
+      sourcePath: url,
+    } as never);
+  }
+
+  it("keeps the saved camera when reopening a project", async () => {
+    // Flying to the cloud on reopen threw away the project's saved view
+    // (fitBounds resets the bearing and moves the zoom).
+    installStubModule();
+    const url = "https://example.com/saved.copc.laz";
+    addSavedLidarLayer("saved-lidar", url);
+    await restoreLidarLayers(app, { keepCamera: true });
+
+    assert.deepEqual(loadCalls, [{ url, autoZoom: false }]);
+    // Auto-zoom comes back on for layers the user adds afterwards.
+    await addLidarLayerFromUrl(app, "https://example.com/new.copc.laz");
+    assert.equal(loadCalls[1]!.autoZoom, true);
+  });
+
+  it("does not mount the control for a project without LiDAR", async () => {
+    installStubModule();
+    await restoreLidarLayers(app, { keepCamera: true });
+    assert.equal(constructorOptions.length, 0);
+  });
 });
 
 describe("addLidarLayerFromUrl", () => {

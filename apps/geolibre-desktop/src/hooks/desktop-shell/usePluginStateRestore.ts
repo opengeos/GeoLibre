@@ -205,7 +205,7 @@ export function usePluginStateRestore({
     // here; MapLibre restores them on the native path below.
     if (engine.capabilities.deckOverlay && !engine.capabilities.nativeMapInstance) {
       restoreThreeDTilesLayers(appAPI);
-      void restoreLidarLayers(appAPI).catch(notifyLidarRestoreFailed);
+      void restoreLidarLayers(appAPI, { keepCamera: true }).catch(notifyLidarRestoreFailed);
     }
     // Same contract for the shared deck.gl overlay: re-attach it to the current
     // map and re-render any deckgl-viz layers a restored project carries. It
@@ -253,8 +253,9 @@ export function usePluginStateRestore({
     // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
     // into the store as inert metadata; the point cloud is loaded by the LiDAR
     // control, not the store, so without this the layer shows in the panel but
-    // renders nothing.
-    void restoreLidarLayers(appAPI).catch(notifyLidarRestoreFailed);
+    // renders nothing. `keepCamera` holds the project's saved view instead of
+    // flying to each cloud.
+    void restoreLidarLayers(appAPI, { keepCamera: true }).catch(notifyLidarRestoreFailed);
     // Same for saved Gaussian splats and 3D models (`splatting-url`): the
     // splatting control draws them, so reload them through it.
     void restoreSplattingLayers(appAPI).catch((error: unknown) => {

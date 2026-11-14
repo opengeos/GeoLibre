@@ -63,6 +63,16 @@ const LIDAR_OPTIONS = {
   // The panel doubles as the Add LiDAR Layer dialog, so it stays open until
   // the user closes it; clicking the map must not collapse it.
   closeOnOutsideClick: false,
+  // GeoLibre owns the address bar and the camera: it keeps `lat`/`lon`/`zoom`
+  // in the web address and restores point clouds from the project
+  // (restoreLidarLayers). Left on, the control's onAdd read those host
+  // parameters as one of its own flat share links, which parse with pitch 0,
+  // bearing 0 and terrain off, so opening a 3D project with a LiDAR layer
+  // jumped the camera flat and turned its terrain off. Its share links would
+  // not open in GeoLibre either (`?url=` is the project URL here), so the
+  // panel's Share button goes too.
+  restoreFromUrl: false,
+  shareUrl: false,
 } satisfies ConstructorParameters<LidarControlConstructor>[0];
 
 let lidarControl: LidarControl | null = null;
@@ -385,6 +395,18 @@ function lidarLayerUrl(layer: GeoLibreLayer): string | null {
   return typeof url === "string" && url ? url : null;
 }
 
+/** The store's LiDAR layers that are neither loaded nor queued to load. */
+function pendingLidarRestoreLayers(): GeoLibreLayer[] {
+  return useAppStore
+    .getState()
+    .layers.filter(
+      (layer) =>
+        isLidarControlLayer(layer) &&
+        !hasLidarPointCloud(layer.id) &&
+        !isLidarRestorePending(layer),
+    );
+}
+
 /** Whether a restore is already queued or in flight for this specific layer. */
 function isLidarRestorePending(layer: GeoLibreLayer): boolean {
   for (const queue of pendingLidarRestores.values()) {
@@ -407,21 +429,32 @@ function isLidarRestorePending(layer: GeoLibreLayer): boolean {
  * store after the first run's `pending` snapshot was taken still gets picked
  * up on the retry instead of `addTileToMap` reporting it as added while it
  * never actually streams.
+ *
+ * Args:
+ *   app: The GeoLibre app API.
+ *   options: `keepCamera` streams the clouds without the control flying the
+ *     camera to each one. Reopening a project (or re-initializing the map)
+ *     passes it so the saved view, pitch and bearing included, survives the
+ *     restore; adding a new layer leaves it off and flies to the data.
+ *
+ * Returns:
+ *   Resolves once every load is issued, or with `keepCamera` once they finish.
  */
-export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
+export async function restoreLidarLayers(
+  app: GeoLibreAppAPI,
+  options: { keepCamera?: boolean } = {},
+): Promise<void> {
+  if (options.keepCamera) {
+    // Check first so a project without LiDAR never mounts the control.
+    if (pendingLidarRestoreLayers().length === 0) return;
+    return withLidarAutoZoomSuppressed(app, () => restoreLidarLayers(app));
+  }
   if (lidarRestoreInFlightPromise) {
     await lidarRestoreInFlightPromise.catch(() => {});
     return restoreLidarLayers(app);
   }
 
-  const pending = useAppStore
-    .getState()
-    .layers.filter(
-      (layer) =>
-        isLidarControlLayer(layer) &&
-        !hasLidarPointCloud(layer.id) &&
-        !isLidarRestorePending(layer),
-    );
+  const pending = pendingLidarRestoreLayers();
   if (pending.length === 0) return;
 
   const run = (async () => {
