@@ -188,6 +188,8 @@ def test_planetary_computer_datetime_is_normalized(value, expected):
         ({"collection": "naip", "bbox": [5, 0, 1, 1]}, "bbox"),
         ({"collection": "naip", "max_cloud_cover": 120}, "between 0 and 100"),
         ({"collection": "naip", "datetime": "a/b/c"}, "datetime"),
+        ({"collection": "naip", "datetime": "2024-06/2024-08"}, "YYYY-MM-DD"),
+        ({"collection": "naip", "datetime": "2024"}, "YYYY-MM-DD"),
     ],
 )
 def test_planetary_computer_rejects_inconsistent_options(kwargs, message):

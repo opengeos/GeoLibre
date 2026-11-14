@@ -706,6 +706,9 @@ from it when the project opens (MapLibre renderer only):
 | `renderParams` | Data API render parameters: `assets`, `expression`, `asset_as_band`, `rescale` (`"min,max"`), `colormap_name`, and so on. Parameters that select bands (`assets` or `expression` here, or a nonempty top-level `assets`) are a complete render and are used as saved: a `presetName` beside them is only a label, and its own expression or colormap is not applied. Without a band selection, the parameters are applied over the named preset's, or over the collection's default preset when none is named, so a lone `rescale` overrides just the stretch. With no parameters at all, the named or default preset is used. |
 | `assets` | The asset names rendered (empty for an expression). |
 | `bounds` | `[west, south, east, north]`, used by zoom-to-layer and to bound a mosaic's tile requests. |
+| `stacDatetime` | Item layers written by the app: the item's acquisition datetime. Informational. |
+| `identifiable` | `true`: Identify reads the layer's pixel values through the Data API. |
+| `tileType` | `"raster"`. |
 | `sourceId`, `sourceIds`, `nativeLayerIds` | The MapLibre source and layer ids the panel creates: `nativeLayerIds` is `[<layer id>]` and `sourceId` is `<layer id>-source`. |
 
 The Python API (`Map.add_planetary_computer`) and the MCP server

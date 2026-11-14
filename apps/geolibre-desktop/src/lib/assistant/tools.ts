@@ -1023,7 +1023,7 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   const searchStac = tool({
     name: "search_stac",
     description:
-      "Search the Microsoft Planetary Computer STAC catalog for earth-observation items in a collection (e.g. 'sentinel-2-l2a', 'landsat-c2-l2', 'naip', 'cop-dem-glo-30'). Defaults the bounding box to the current map view and sorts newest-first. Returns matching items (id, datetime, cloud cover, bbox).",
+      "Search the Microsoft Planetary Computer STAC catalog for earth-observation items in a collection (e.g. 'sentinel-2-l2a', 'landsat-c2-l2', 'naip', 'cop-dem-glo-30'). Defaults the bounding box to the current map view and sorts newest-first unless sortBy says otherwise (oldest, least-cloudy). Returns matching items (id, datetime, cloud cover, bbox).",
     inputSchema: z.object({
       ...stacSearchFields,
       limit: z.number().optional().describe("Max items (default 10)."),

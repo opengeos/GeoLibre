@@ -48,6 +48,10 @@ export interface PlanetaryComputerLabels {
   timeSliderUnavailable: string;
 }
 
+// English fallbacks, shown until the host calls setPlanetaryComputerLabels (and
+// wherever the plugin runs without one). The app's own copy is the
+// `planetaryComputer.*` block of en.json, passed in by usePluginLabelSync, the
+// same arrangement as the other built-in panels' label setters.
 const DEFAULT_LABELS: PlanetaryComputerLabels = {
   stacBrowser: "Browse in STAC catalogs",
   stacBrowserTitle:
@@ -182,6 +186,8 @@ export function parsePlanetaryComputerStack(value: unknown): PlanetaryComputerSt
       /^\d{4}-\d{2}-\d{2}$/.test(item.date),
   );
   if (items.length === 0) return null;
+  // The stack is walked in date order; a hand-edited project may not keep it.
+  items.sort((a, b) => a.date.localeCompare(b.date));
   const renderParams =
     candidate.renderParams && typeof candidate.renderParams === "object"
       ? (candidate.renderParams as TileParams)

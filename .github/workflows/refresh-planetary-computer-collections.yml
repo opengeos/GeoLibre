@@ -45,7 +45,17 @@ jobs:
 
       # The script only uses Node built-ins (fetch, fs), so no npm install.
       - name: Regenerate the snapshot
-        run: node scripts/gen-planetary-computer-collections.mjs
+        run: |
+          count() { node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$1"; }
+          before="$(count "$SNAPSHOT")"
+          node scripts/gen-planetary-computer-collections.mjs
+          after="$(count "$SNAPSHOT")"
+          echo "Collections: $before -> $after"
+          # A partial API response must not shrink the bundled list.
+          if [ $((after * 5)) -lt $((before * 4)) ]; then
+            echo "::error::The API returned $after collections, down from $before. Refusing to refresh."
+            exit 1
+          fi
 
       # The committed snapshot is the script's output run through the repo
       # formatter. Format it the same way (with the version the pre-commit hook

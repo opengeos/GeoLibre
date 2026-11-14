@@ -617,7 +617,10 @@ relied on without a type to enforce them:
   `planetary-computer-collections.json` is used when the live `/collections`
   request cannot be read. `.github/workflows/refresh-planetary-computer-collections.yml`
   regenerates it monthly and opens a pull request; run
-  `npm run gen:planetary-computer-collections` to refresh it by hand.
+  `npm run gen:planetary-computer-collections` to refresh it by hand, then format
+  the file (`npx oxfmt --write packages/plugins/src/plugins/planetary-computer-collections.json`,
+  or let the pre-commit hook do it): the script writes it minified, and the
+  committed copy is the formatted output.
 - **`updateLayer` stores `visible` and `opacity` verbatim** before emitting
   `layer:update`. The store-to-control and control-to-store sync both compare
   with `===`; a library that rounded or coerced the values would make toggling

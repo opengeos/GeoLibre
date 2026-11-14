@@ -1474,6 +1474,7 @@ PLANETARY_COMPUTER_SOURCE_KIND = "planetary-computer-raster"
 # expression without one refers to whole assets (`(B08-B04)/(B08+B04)`), which
 # the Planetary Computer Data API only evaluates with `asset_as_band` set.
 _ASSET_BAND_REFERENCE = re.compile(r"_b\d+\b")
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _planetary_computer_datetime(value: str | tuple[str, str] | list[str]) -> str:
@@ -1502,6 +1503,12 @@ def _planetary_computer_datetime(value: str | tuple[str, str] | list[str]) -> st
     def bound(text: str, end: bool) -> str:
         if text == ".." or "T" in text.upper():
             return text
+        # A partial date ("2024-06") would be widened into a timestamp the STAC
+        # search rejects, and only when the app opens the project.
+        if not _DATE_ONLY.fullmatch(text):
+            raise ValueError(
+                f"datetime bound {text!r} must be a YYYY-MM-DD date, an RFC 3339 datetime, or '..'"
+            )
         return f"{text}T23:59:59Z" if end else f"{text}T00:00:00Z"
 
     if len(parts) == 1:
