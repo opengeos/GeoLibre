@@ -221,6 +221,18 @@ describe("native share transport", () => {
     }
     assert.equal(sent[0].get("Authorization"), "Bearer private");
     assert.equal(sent[1].get("Accept"), "application/json");
+
+    // init.headers replaces a Request's headers; stripping must not bring a
+    // header the caller dropped back in.
+    await shareFetch(
+      new Request("https://share.geolibre.app/api/projects", {
+        headers: { Authorization: "Bearer stale" },
+      }),
+      { headers: { Accept: "application/json", "x-geolibre-expected-status": "404" } },
+    );
+    assert.equal(sent[2].get("Authorization"), null);
+    assert.equal(sent[2].get("x-geolibre-expected-status"), null);
+    assert.equal(sent[2].get("Accept"), "application/json");
   });
 
   it("disables native redirects for credentials and rejects 3xx instead of exposing a redirect target", async () => {
