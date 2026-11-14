@@ -22,15 +22,15 @@ that anyone can reopen from a single link.
 
 | Time | Section | Topics |
 | --- | --- | --- |
-| 8:00 - 9:00 | [1. Introduction to GeoLibre and cloud-native GIS](01-introduction.md) | The cloud-native ecosystem, the GeoLibre interface, your first map, projects |
-| 9:00 - 10:00 | [2. Accessing cloud-hosted vector data](02-vector-data.md) | Loading data by URL, CSV points, styling, labels, legends, the attribute table |
-| 10:00 - 11:00 | [3. Cloud-native formats: COG, GeoParquet, PMTiles, and Zarr](03-cloud-native-formats.md) | How each format reads only the bytes it needs, and when to use which |
-| 11:00 - 12:00 | [4. STAC catalogs and OGC web services](04-stac-and-ogc-services.md) | Searching Sentinel-2 with STAC, WMS, OGC API - Features |
+| 8:00 - 9:00 | [1. Getting started with GeoLibre and cloud-native GIS](01-getting-started.md) | The cloud-native model, the interface, your first map, saving and reopening projects |
+| 9:00 - 10:00 | [2. Bringing in cloud-hosted data](02-bringing-in-data.md) | Vector files by URL, COG, PMTiles, Zarr, OGC and ArcGIS services, STAC catalogs, managing layers |
+| 10:00 - 11:00 | [3. Visualization and styling](03-visualization-styling.md) | Graduated and categorized symbology, labels, popups, raster styling, legends, print layouts |
+| 11:00 - 12:00 | [4. Attributes, editing, and spatial SQL](04-attributes-editing-sql.md) | The attribute table, expressions and selections, DuckDB spatial SQL, feature editing |
 | **12:00 - 1:00** | **Lunch** | |
-| 1:00 - 2:00 | [5. Spatial analysis with SQL and processing tools](05-spatial-analysis.md) | DuckDB spatial SQL, spatial joins, buffers, terrain analysis |
-| 2:00 - 3:00 | [6. LiDAR, terrain, and 3D](06-lidar-3d.md) | Streaming USGS 3DEP point clouds, 3D terrain, camera control |
-| 3:00 - 4:00 | [7. Extending GeoLibre with plugins and AI](07-plugins-ai.md) | Time slider, historical imagery, web-service catalogs, the AI Assistant |
-| 4:00 - 5:00 | [8. Sharing maps and reproducible projects](08-sharing-reproducibility.md) | Story maps, share links, embedding, HTML export, the Python package, wrap-up |
+| 1:00 - 2:00 | [5. Analysis and processing](05-analysis-processing.md) | Vector and terrain tools, the geoprocessing toolbox, imagery, routing, discrete global grids |
+| 2:00 - 3:00 | [6. Rendering engines, 3D, and time](06-3d-and-time.md) | The Cesium globe, terrain and 3D buildings, USGS 3DEP LiDAR, the Time Slider |
+| 3:00 - 4:00 | [7. Communicating and collaborating](07-communicating-collaborating.md) | Story maps, dashboards, share links, embedding, HTML export, live collaboration |
+| 4:00 - 5:00 | [8. AI and automation](08-ai-automation.md) | The AI Assistant, MCP agents, GeoLibre in Python and R, wrap-up |
 
 Each section page lists its learning goals, a lecture outline, step-by-step
 exercises, and a link to the finished project so you can check your work or
@@ -47,10 +47,10 @@ catch up after a break.
 2. Optional: install the [desktop app](../../downloads.md). It adds local file
    access and a Python sidecar for extra processing tools, but no exercise
    requires it.
-3. Optional, for Section 8: a free account at
+3. Optional, for Section 7: a free account at
    [share.geolibre.app](https://share.geolibre.app) if you want to publish a
    public link to your map.
-4. Optional, for Section 7: an API key for an AI provider (Google Gemini,
+4. Optional, for Section 8: an API key for an AI provider (Google Gemini,
    Anthropic, OpenAI, or OpenRouter), or a local [Ollama](https://ollama.com)
    install, if you want to try the AI Assistant yourself.
 
@@ -62,30 +62,35 @@ catch up after a break.
 ## Workshop data
 
 The core workshop data is real, public-domain data for the Reno, Lake Tahoe,
-and Nevada area, with national county and state layers for comparison, hosted
-as plain files on `https://assets.geolibre.app/data/workshops/ngis-2026/`. You
-never need to download it: every exercise reads it by URL. Some exercises
-also read public services on other hosts (listed below the table), so make
-sure the venue network does not block them.
+and Nevada area, with national county and state layers for comparison. It is
+hosted as plain files on [Source Cooperative](https://source.coop/opengeos/data),
+a public object store, under
+`https://data.source.coop/opengeos/data/workshops/ngis-2026/`. You never need to
+download it: every exercise reads it by URL. Some exercises also read public
+services on other hosts (listed below the table), so make sure the venue
+network does not block them.
 
 | Dataset | File | Format | Source |
 | --- | --- | --- | --- |
-| Nevada counties (17) | [`nv_counties.geojson`](https://assets.geolibre.app/data/workshops/ngis-2026/nv_counties.geojson) | GeoJSON | US Census Bureau, 2023 cartographic boundaries |
-| US states (56) | [`us_states.geojson`](https://assets.geolibre.app/data/workshops/ngis-2026/us_states.geojson) | GeoJSON | US Census Bureau |
-| US counties (3,235) | [`us_counties.fgb`](https://assets.geolibre.app/data/workshops/ngis-2026/us_counties.fgb), [`.parquet`](https://assets.geolibre.app/data/workshops/ngis-2026/us_counties.parquet), [`.pmtiles`](https://assets.geolibre.app/data/workshops/ngis-2026/us_counties.pmtiles) | FlatGeobuf, GeoParquet, PMTiles | US Census Bureau |
-| Earthquakes, M2.5+, 2016-2025 (8,031) | [`nv_earthquakes.csv`](https://assets.geolibre.app/data/workshops/ngis-2026/nv_earthquakes.csv), [`.parquet`](https://assets.geolibre.app/data/workshops/ngis-2026/nv_earthquakes.parquet) | CSV, GeoParquet | USGS ANSS Comprehensive Catalog |
-| Reno-Tahoe elevation | [`reno_tahoe_dem.tif`](https://assets.geolibre.app/data/workshops/ngis-2026/reno_tahoe_dem.tif) | Cloud-Optimized GeoTIFF, about 30 m | USGS 3DEP 1/3 arc-second DEM, resampled |
-| Reno-Tahoe hillshade | [`reno_tahoe_hillshade.tif`](https://assets.geolibre.app/data/workshops/ngis-2026/reno_tahoe_hillshade.tif) | Cloud-Optimized GeoTIFF | Derived from the DEM |
-| Reno-Tahoe landmarks (8) | [`reno_sites.geojson`](https://assets.geolibre.app/data/workshops/ngis-2026/reno_sites.geojson) | GeoJSON | Hand-digitized, approximate locations |
+| Nevada counties (17) | [`nv_counties.geojson`](https://data.source.coop/opengeos/data/workshops/ngis-2026/nv_counties.geojson) | GeoJSON | US Census Bureau, 2023 cartographic boundaries |
+| US states (56) | [`us_states.geojson`](https://data.source.coop/opengeos/data/workshops/ngis-2026/us_states.geojson) | GeoJSON | US Census Bureau |
+| US counties (3,235) | [`us_counties.fgb`](https://data.source.coop/opengeos/data/workshops/ngis-2026/us_counties.fgb), [`.parquet`](https://data.source.coop/opengeos/data/workshops/ngis-2026/us_counties.parquet), [`.pmtiles`](https://data.source.coop/opengeos/data/workshops/ngis-2026/us_counties.pmtiles) | FlatGeobuf, GeoParquet, PMTiles | US Census Bureau |
+| Earthquakes, M2.5+, 2016-2025 (8,031) | [`nv_earthquakes.csv`](https://data.source.coop/opengeos/data/workshops/ngis-2026/nv_earthquakes.csv), [`.parquet`](https://data.source.coop/opengeos/data/workshops/ngis-2026/nv_earthquakes.parquet) | CSV, GeoParquet | USGS ANSS Comprehensive Catalog |
+| Reno-Tahoe elevation | [`reno_tahoe_dem.tif`](https://data.source.coop/opengeos/data/workshops/ngis-2026/reno_tahoe_dem.tif) | Cloud-Optimized GeoTIFF, about 30 m | USGS 3DEP 1/3 arc-second DEM, resampled |
+| Reno-Tahoe hillshade | [`reno_tahoe_hillshade.tif`](https://data.source.coop/opengeos/data/workshops/ngis-2026/reno_tahoe_hillshade.tif) | Cloud-Optimized GeoTIFF | Derived from the DEM |
+| Reno-Tahoe landmarks (8) | [`reno_sites.geojson`](https://data.source.coop/opengeos/data/workshops/ngis-2026/reno_sites.geojson) | GeoJSON | Hand-digitized, approximate locations |
 
 The earthquake extract covers latitude 35 to 42.1 and longitude -120.1 to -114,
 so it includes events just outside Nevada, mostly in eastern California.
-Section 5 clips it to Nevada with a spatial join.
+Section 4 counts the events inside each Nevada county with a spatial join
+(Exercise 4.7); the earthquake layer itself keeps all 8,031 events.
 
 Other sections also read large public datasets in place: Sentinel-2 imagery
 from [Earth Search](https://earth-search.aws.element84.com/v1), the USGS
-National Map and Water Data services, NOAA sea surface temperature as Zarr, and
-the USGS 3DEP Reno-Carson LiDAR point cloud.
+National Map and the USGS Water Data API (`api.waterdata.usgs.gov`), NOAA sea
+surface temperature as Zarr, and the USGS 3DEP Reno-Carson LiDAR point cloud.
+Optional steps also read the USGS earthquake feed (`earthquake.usgs.gov`) and
+the Autzen LiDAR sample (`s3.amazonaws.com/hobu-lidar`).
 
 ## Finished projects
 
@@ -93,14 +98,14 @@ Each link opens the project a section builds, straight in the browser.
 
 | Section | Project file |
 | --- | --- |
-| 1. Introduction | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/01-first-map.geolibre.json) · [`01-first-map.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/01-first-map.geolibre.json) |
-| 2. Vector data | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/02-vector-styling.geolibre.json) · [`02-vector-styling.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/02-vector-styling.geolibre.json) |
-| 3. Cloud-native formats | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/03-cloud-formats.geolibre.json) · [`03-cloud-formats.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/03-cloud-formats.geolibre.json) |
-| 4. STAC and OGC services | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/04-stac-services.geolibre.json) · [`04-stac-services.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/04-stac-services.geolibre.json) |
-| 5. Spatial analysis | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/05-spatial-analysis.geolibre.json) · [`05-spatial-analysis.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/05-spatial-analysis.geolibre.json) |
-| 6. LiDAR and 3D | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/06-lidar-3d.geolibre.json) · [`06-lidar-3d.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/06-lidar-3d.geolibre.json) |
-| 7. Plugins and AI | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/07-plugins-ai.geolibre.json) · [`07-plugins-ai.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/07-plugins-ai.geolibre.json) |
-| 8. Sharing | [Open in GeoLibre](https://web.geolibre.app/?url=https://assets.geolibre.app/projects/workshops/ngis-2026/08-story-map.geolibre.json) · [`08-story-map.geolibre.json`](https://assets.geolibre.app/projects/workshops/ngis-2026/08-story-map.geolibre.json) |
+| 1. Getting started | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/01-getting-started.geolibre.json) · [`01-getting-started.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/01-getting-started.geolibre.json) |
+| 2. Bringing in data | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/02-bringing-in-data.geolibre.json) · [`02-bringing-in-data.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/02-bringing-in-data.geolibre.json) |
+| 3. Visualization and styling | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/03-visualization-styling.geolibre.json) · [`03-visualization-styling.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/03-visualization-styling.geolibre.json) |
+| 4. Attributes, editing, and SQL | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/04-attributes-editing-sql.geolibre.json) · [`04-attributes-editing-sql.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/04-attributes-editing-sql.geolibre.json) |
+| 5. Analysis and processing | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/05-analysis-processing.geolibre.json) · [`05-analysis-processing.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/05-analysis-processing.geolibre.json) |
+| 6. Engines, 3D, and time | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/06-3d-and-time.geolibre.json) · [`06-3d-and-time.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/06-3d-and-time.geolibre.json) |
+| 7. Communicating and collaborating | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/07-communicating-collaborating.geolibre.json) · [`07-communicating-collaborating.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/07-communicating-collaborating.geolibre.json) |
+| 8. AI and automation | [Open in GeoLibre](https://web.geolibre.app/?url=https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/08-ai-automation.geolibre.json) · [`08-ai-automation.geolibre.json`](https://data.source.coop/opengeos/data/workshops/ngis-2026/projects/08-ai-automation.geolibre.json) |
 
 ## Conventions in these pages
 

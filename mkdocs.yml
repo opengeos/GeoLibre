@@ -97,14 +97,14 @@ nav:
   - Workshops:
       - NGIS 2026:
           - Overview: workshops/ngis-2026/index.md
-          - "1. Introduction": workshops/ngis-2026/01-introduction.md
-          - "2. Vector Data": workshops/ngis-2026/02-vector-data.md
-          - "3. Cloud-Native Formats": workshops/ngis-2026/03-cloud-native-formats.md
-          - "4. STAC & OGC Services": workshops/ngis-2026/04-stac-and-ogc-services.md
-          - "5. Spatial Analysis": workshops/ngis-2026/05-spatial-analysis.md
-          - "6. LiDAR & 3D": workshops/ngis-2026/06-lidar-3d.md
-          - "7. Plugins & AI": workshops/ngis-2026/07-plugins-ai.md
-          - "8. Sharing & Reproducibility": workshops/ngis-2026/08-sharing-reproducibility.md
+          - "1. Getting Started": workshops/ngis-2026/01-getting-started.md
+          - "2. Bringing In Data": workshops/ngis-2026/02-bringing-in-data.md
+          - "3. Visualization & Styling": workshops/ngis-2026/03-visualization-styling.md
+          - "4. Attributes, Editing & SQL": workshops/ngis-2026/04-attributes-editing-sql.md
+          - "5. Analysis & Processing": workshops/ngis-2026/05-analysis-processing.md
+          - "6. Engines, 3D & Time": workshops/ngis-2026/06-3d-and-time.md
+          - "7. Communicating & Collaborating": workshops/ngis-2026/07-communicating-collaborating.md
+          - "8. AI & Automation": workshops/ngis-2026/08-ai-automation.md
   - Reference:
       - Architecture: architecture.md
       - MapLibre Renderer: maplibre-renderer.md

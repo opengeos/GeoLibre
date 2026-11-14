@@ -38,4 +38,4 @@ All of them, with chapters and summaries, are on [Video Tutorials](videos.md).
 
 ## Workshops
 
-For a full day of lectures and hands-on exercises with real Nevada data, follow the [NGIS 2026 workshop](../workshops/ngis-2026/index.md): eight one-hour sections from a first map to cloud-native formats, STAC, spatial SQL, LiDAR, plugins, AI, and sharing.
+For a full day of lectures and hands-on exercises with real Nevada data, follow the [NGIS 2026 workshop](../workshops/ngis-2026/index.md): eight one-hour sections from a first map through cloud-hosted data, styling, spatial SQL and editing, analysis, 3D and time, sharing, and AI and automation.
