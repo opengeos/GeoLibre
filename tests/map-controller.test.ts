@@ -3021,6 +3021,18 @@ describe("storyScaledPaintValue", () => {
     assert.deepEqual(storyScaledPaintValue(expr, 1, 0.5), ["min", 1, ["*", expr, 0.5]]);
   });
 
+  it("scales the outputs of a top-level zoom step in place", () => {
+    assert.deepEqual(storyScaledPaintValue(["step", ["zoom"], 0, 5, 0.45, 12, 0], 1, 0.2), [
+      "step",
+      ["zoom"],
+      0,
+      5,
+      0.45 * 0.2,
+      12,
+      0,
+    ]);
+  });
+
   it("gives up on values it cannot rescale", () => {
     assert.equal(storyScaledPaintValue(undefined, 1, 0.5), undefined);
     assert.equal(storyScaledPaintValue(0, 0, 0.5), undefined, "layer opacity 0 erased the style");

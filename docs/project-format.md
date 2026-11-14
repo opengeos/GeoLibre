@@ -196,8 +196,9 @@ enter/exit. The section is omitted entirely when the project has no chapters.
 `alignment` is one of `left`, `center`, `right`, `full`; `mapAnimation` is
 `flyTo`, `easeTo`, or `jumpTo`. Layer opacity changes reference project layer
 ids, and their `opacity` replaces the layer's own `opacity` while the chapter
-is active; the layer's style (such as `fillOpacity`) still applies. Build and present story maps from **Project → Story Map**, or export a
-self-contained HTML page for static hosting.
+is active; the layer's style (such as `fillOpacity`) still applies. Build and
+present story maps from **Project → Story Map**, or export a self-contained
+HTML page for static hosting.
 
 `durationSeconds` is an optional chapter dwell time for in-app autoplay. The
 countdown starts after the camera reaches the chapter view. Omitted or invalid

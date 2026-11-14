@@ -4,6 +4,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   horizontalBbox,
+  mapZoomStepOutputs,
   normalizeMapCrs,
   scaleAltitudeToActiveBody,
   styleValue,
@@ -173,7 +174,8 @@ function expressionReadsZoom(value: unknown): boolean {
  * @param storyOpacity The chapter's opacity, already clamped to 0-1.
  * @returns The value to write, or `undefined` when the base cannot be rescaled
  *   (unset, a layer opacity of 0 that erased the style's value, or a zoom
- *   expression, which MapLibre only accepts at the top level).
+ *   expression other than a top-level zoom `step`, since MapLibre only
+ *   accepts zoom as the input of a top-level step or interpolate).
  */
 export function storyScaledPaintValue(
   base: unknown,
@@ -182,13 +184,26 @@ export function storyScaledPaintValue(
 ): unknown {
   if (!Number.isFinite(layerOpacity) || layerOpacity <= 0) return undefined;
   const ratio = storyOpacity / layerOpacity;
-  if (typeof base === "number" && Number.isFinite(base)) {
-    return Math.min(1, Math.max(0, base * ratio));
-  }
-  if (Array.isArray(base) && !expressionReadsZoom(base)) {
-    return ratio === 1 ? base : ["min", 1, ["*", base, ratio]];
-  }
-  return undefined;
+  const scale = (value: unknown): unknown => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.min(1, Math.max(0, value * ratio));
+    }
+    if (Array.isArray(value) && !expressionReadsZoom(value)) {
+      return ratio === 1 ? value : ["min", 1, ["*", value, ratio]];
+    }
+    return undefined;
+  };
+  if (!Array.isArray(base) || !expressionReadsZoom(base)) return scale(base);
+  // A rule's scale range compiles to a top-level `["step", ["zoom"], ...]`
+  // (see `scaleByOpacity` in style-mapper.ts); scale its outputs in place.
+  if (base[0] !== "step" || !Array.isArray(base[1]) || base[1][0] !== "zoom") return undefined;
+  let scalable = true;
+  const stepped = mapZoomStepOutputs(base, (output) => {
+    const value = scale(output);
+    if (value === undefined) scalable = false;
+    return value;
+  });
+  return scalable ? stepped : undefined;
 }
 
 /**
