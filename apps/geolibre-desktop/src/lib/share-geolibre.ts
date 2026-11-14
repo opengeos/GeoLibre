@@ -13,6 +13,7 @@ import {
   serializeProject,
 } from "@geolibre/core";
 import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
+import { EXPECTED_STATUS_HEADER } from "./diagnostics";
 import { isSerializationTooLargeError } from "./project-serialization-limits";
 import { getShareFetch } from "./share-fetch";
 
@@ -497,6 +498,10 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
+        // A 404 means "not supported" (ShareLinksUnsupportedError above), so
+        // Diagnostics records it as info. The Diagnostics fetch wrapper strips
+        // this client-only marker before the request leaves.
+        [EXPECTED_STATUS_HEADER]: "404",
       },
       signal,
     });

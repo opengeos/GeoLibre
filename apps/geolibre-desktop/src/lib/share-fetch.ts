@@ -5,7 +5,10 @@
 // http://tauri.localhost on Windows); requests are never retried via native HTTP.
 
 import type { fetch as nativeHttpFetch } from "@tauri-apps/plugin-http";
+import { EXPECTED_STATUS_HEADER, OPTIONAL_RESOURCE_HEADER } from "./diagnostics";
 import { DEFAULT_SHARE_BASE_URL, resolveShareBaseUrl } from "./share-geolibre";
+
+const DIAGNOSTIC_MARKER_HEADERS = [OPTIONAL_RESOURCE_HEADER, EXPECTED_STATUS_HEADER] as const;
 
 /**
  * The active share fetch. Browser `fetch` by default; the desktop build
@@ -76,9 +79,16 @@ export function createNativeShareFetch(
     const protectedRequest =
       headers.has("Authorization") ||
       (init?.redirect ?? (input instanceof Request ? input.redirect : undefined)) === "error";
-    if (!protectedRequest) return tauriFetch(input, init);
+    // Native HTTP bypasses the Diagnostics fetch wrapper that strips its
+    // client-only markers, so drop them here: the server never sees them.
+    let nativeInit = init;
+    if (DIAGNOSTIC_MARKER_HEADERS.some((name) => headers.has(name))) {
+      for (const name of DIAGNOSTIC_MARKER_HEADERS) headers.delete(name);
+      nativeInit = { ...init, headers };
+    }
+    if (!protectedRequest) return tauriFetch(input, nativeInit);
 
-    return tauriFetch(input, { ...init, maxRedirections: 0 }).then((response) => {
+    return tauriFetch(input, { ...nativeInit, maxRedirections: 0 }).then((response) => {
       if (response.status >= 300 && response.status < 400) {
         throw new TypeError("Redirect refused for authenticated share request");
       }
