@@ -212,6 +212,26 @@ function applyDash(info: SymbolInfo, dash: ReturnType<typeof readDash>): void {
   else if (dash !== undefined) info.strokeDash = dash;
 }
 
+/** Screen pixels per millimetre, the factor the single-symbol QGIS project import uses too. */
+const PIXELS_PER_MM = 3.78;
+
+/**
+ * Read a length option (`size`, `line_width`, `outline_width`) in pixels. QGIS
+ * writes each length beside a `<key>_unit` option and defaults it to
+ * millimetres. Units that cannot be turned into a fixed pixel length (map
+ * units, meters at scale, points, inches) return `null`, so the layer keeps its
+ * own value, like the single-symbol project import does.
+ */
+function readPixelLength(opts: Map<string, string>, key: string): number | null {
+  const value = toNum(opts.get(key) ?? null);
+  if (value === null) return null;
+  const unit = opts.get(`${key}_unit`) ?? "MM";
+  if (unit === "Pixel") return value;
+  // Rounded to hundredths so 18 mm reads as 68.04 px, not 68.03999999999999.
+  if (unit === "MM") return Math.round(value * PIXELS_PER_MM * 100) / 100;
+  return null;
+}
+
 /** Parse one `<symbol>` element into a {@link SymbolInfo}. */
 function readSymbol(symbol: unknown): SymbolInfo {
   const type = attr(symbol, "type");
@@ -242,7 +262,7 @@ function readSymbol(symbol: unknown): SymbolInfo {
       info.opacity = line.alpha * symbolAlpha;
       info.strokeOpacity = info.opacity;
     }
-    const width = toNum(opts.get("line_width") ?? null);
+    const width = readPixelLength(opts, "line_width");
     if (width !== null) info.strokeWidth = width;
     applyDash(info, readDash(opts, "line_style", "line_width"));
     // QGIS's "no" pen draws no line at all.
@@ -261,14 +281,14 @@ function readSymbol(symbol: unknown): SymbolInfo {
     info.strokeColor = outline.hex;
     info.strokeOpacity = outline.alpha * symbolAlpha;
   }
-  const outlineWidth = toNum(opts.get("outline_width") ?? null);
+  const outlineWidth = readPixelLength(opts, "outline_width");
   if (outlineWidth !== null) info.strokeWidth = outlineWidth;
   // A point outline cannot be dashed in GeoLibre, so only a fill's is read.
   if (geometry === "fill") applyDash(info, readDash(opts, "outline_style", "outline_width"));
   // QGIS's "no" pen draws no outline at all.
   if (opts.get("outline_style") === "no") info.strokeOpacity = 0;
   if (geometry === "marker") {
-    const size = toNum(opts.get("size") ?? null);
+    const size = readPixelLength(opts, "size");
     if (size !== null) info.markerSize = size;
     const name = opts.get("name");
     if (name) info.markerName = name;

@@ -389,6 +389,32 @@ describe("QGIS project import", () => {
     assert.equal(pixel.project.layers[0].style.circleRadius, 2);
   });
 
+  it("sizes a categorized marker like the same single-symbol marker (#3450)", () => {
+    // Real QGIS files wrap a symbol layer's options in <Option type="Map">, which the classified
+    // path's QML reader requires.
+    const singleXml = projectXml()
+      .replaceAll('<layer class="SimpleMarker">', '<layer class="SimpleMarker"><Option type="Map">')
+      .replaceAll("</layer></symbol>", "</Option></layer></symbol>");
+    const categorizedXml = singleXml
+      .replaceAll(
+        '<renderer-v2 type="singleSymbol">',
+        `<renderer-v2 type="categorizedSymbol" attr="kind"><categories>
+          <category value="a" symbol="0" label="A" render="true"/>
+        </categories>`,
+      )
+      .replaceAll("<symbols><symbol>", '<symbols><symbol type="marker" name="0">');
+    const single = importQgisProject(singleXml, "/work/example.qgs").project.layers[0].style;
+    const categorized = importQgisProject(categorizedXml, "/work/example.qgs").project.layers[0]
+      .style;
+    assert.equal(categorized.vectorStyleMode, "categorized");
+    // A 4 mm marker: 4 × 3.78 px across, half that as a radius.
+    assert.ok(Math.abs((single.circleRadius ?? 0) - 7.56) < 0.01, `single ${single.circleRadius}`);
+    assert.ok(
+      Math.abs((categorized.circleRadius ?? 0) - 7.56) < 0.01,
+      `categorized ${categorized.circleRadius}`,
+    );
+  });
+
   it("rejects oversized QGS members before decompressing them", () => {
     const oversized = zipSync({
       "project.qgs": new Uint8Array(25 * 1024 * 1024 + 1),

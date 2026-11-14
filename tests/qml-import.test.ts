@@ -14,6 +14,7 @@ function fillSymbol(name: string, color: string, outline = "30,64,175,255", widt
     <Option name="color" type="QString" value="${color}"/>
     <Option name="outline_color" type="QString" value="${outline}"/>
     <Option name="outline_width" type="QString" value="${width}"/>
+    <Option name="outline_width_unit" type="QString" value="Pixel"/>
   </Option></layer></symbol>`;
 }
 
@@ -108,6 +109,7 @@ describe("parseQml", () => {
           <Option name="name" type="QString" value="circle"/>
           <Option name="color" type="QString" value="18,52,86,255"/>
           <Option name="size" type="QString" value="20"/>
+          <Option name="size_unit" type="QString" value="Pixel"/>
         </Option></layer></symbol>
       </symbols></renderer-v2>`),
     );
@@ -123,6 +125,7 @@ describe("parseQml", () => {
           <Option name="name" type="QString" value="diamond"/>
           <Option name="color" type="QString" value="255,136,0,255"/>
           <Option name="size" type="QString" value="18"/>
+          <Option name="size_unit" type="QString" value="Pixel"/>
         </Option></layer></symbol>
       </symbols></renderer-v2>`),
     );
@@ -150,6 +153,43 @@ describe("parseQml", () => {
       { value: "lake", color: "#0000ff" },
     ]);
     assert.equal(result.style.fillColor, "#cccccc");
+  });
+
+  // QGIS defaults marker sizes and outline widths to millimetres; the classified path once copied
+  // them as pixels, drawing a 4.2 mm categorized marker at a 2.1 px radius (#3450).
+  it("converts categorized marker sizes and widths by their unit", () => {
+    const marker = (name: string, size: string, sizeUnit: string | null, width = "0.4") =>
+      `<symbol type="marker" name="${name}"><layer class="SimpleMarker"><Option type="Map">
+        <Option name="name" type="QString" value="circle"/>
+        <Option name="color" type="QString" value="255,0,0,255"/>
+        <Option name="size" type="QString" value="${size}"/>
+        ${sizeUnit === null ? "" : `<Option name="size_unit" type="QString" value="${sizeUnit}"/>`}
+        <Option name="outline_width" type="QString" value="${width}"/>
+        <Option name="outline_width_unit" type="QString" value="MM"/>
+      </Option></layer></symbol>`;
+    const parse = (symbols: string) =>
+      parseQml(
+        qgis(`<renderer-v2 type="categorizedSymbol" attr="kind">
+          <categories>
+            <category value="a" symbol="0" label="A" render="true"/>
+            <category value="b" symbol="1" label="B" render="true"/>
+          </categories>
+          <symbols>${symbols}</symbols>
+        </renderer-v2>`),
+      );
+
+    // An explicit MM size and one with no unit (QGIS's default) both read as millimetres.
+    const mm = parse(`${marker("0", "4.2", "MM")}${marker("1", "4.2", null)}`);
+    assert.equal(mm.style.vectorStyleMode, "categorized");
+    assert.equal(mm.style.circleRadius, 7.94);
+    assert.equal(mm.style.strokeWidth, 1.51);
+
+    const px = parse(`${marker("0", "8", "Pixel")}${marker("1", "8", "Pixel")}`);
+    assert.equal(px.style.circleRadius, 4);
+
+    // Map units have no fixed pixel size, so the layer keeps its own.
+    const mapUnits = parse(`${marker("0", "50", "MapUnit")}${marker("1", "50", "MapUnit")}`);
+    assert.equal(mapUnits.style.circleRadius, undefined);
   });
 
   it("classifies a graduatedSymbol renderer", () => {
@@ -232,6 +272,7 @@ describe("parseQml", () => {
         <symbol type="line" name="0"><layer class="SimpleLine"><Option type="Map">
           <Option name="line_color" type="QString" value="230,57,70,255"/>
           <Option name="line_width" type="QString" value="3"/>
+          <Option name="line_width_unit" type="QString" value="Pixel"/>
         </Option></layer></symbol>
       </symbols></renderer-v2>`),
     );
