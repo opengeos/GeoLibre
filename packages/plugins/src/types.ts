@@ -1146,7 +1146,9 @@ export interface GeoLibreAppAPI {
    * host resolves `relativePath` against the plugin's own directory.
    * `relativePath` is a raw file path, not a URL: each segment is
    * percent-encoded, so `#`, `?`, `%` and spaces stay part of the file name
-   * and the URL names the same file {@link readPluginAsset} reads. Returns
+   * and the URL names the same file {@link readPluginAsset} reads. Do not
+   * pre-encode: pass `"data/my file.json"`, not `"data/my%20file.json"`
+   * (that names a file literally called `my%20file.json`). Returns
    * null for built-in plugins, for plugins installed from the desktop
    * filesystem (which have no URL base), or when `relativePath` escapes the
    * plugin directory. `pluginId` should be the calling plugin's own id; since

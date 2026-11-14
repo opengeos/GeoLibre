@@ -35,9 +35,19 @@ for (const name of ASSET_NAMES) {
   served.set(`${BASE}${encoded}`, JSON.stringify({ name }));
 }
 
-/** Install the minimal browser globals the plugin loader touches in Node. */
-function installBrowserShims(): void {
+const SHIMMED_GLOBALS = ["self", "localStorage", "document", "fetch", "Blob"] as const;
+
+/**
+ * Install the minimal browser globals the plugin loader touches in Node.
+ *
+ * Returns a function that puts back every global and `URL` static it replaced.
+ */
+function installBrowserShims(): () => void {
   const globals = globalThis as Record<string, unknown>;
+  const saved = SHIMMED_GLOBALS.map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globals, key)] as const,
+  );
+  const { createObjectURL, revokeObjectURL } = URL;
   globals.self = globalThis;
   const storage = new Map<string, string>();
   globals.localStorage = {
@@ -73,15 +83,24 @@ function installBrowserShims(): void {
   URL.createObjectURL = (blob: unknown) =>
     `data:text/javascript;base64,${Buffer.from((blob as SourceBlob).source).toString("base64")}`;
   URL.revokeObjectURL = () => undefined;
+  return () => {
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globals, key, descriptor);
+      else delete globals[key];
+    }
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+  };
 }
 
 describe("plugin asset URL and read APIs agree", () => {
   let externalPlugins: ExternalPlugins;
   let manager: PluginManager;
+  let restoreGlobals: () => void = () => undefined;
   const app = {} as GeoLibreAppAPI;
 
   before(async () => {
-    installBrowserShims();
+    restoreGlobals = installBrowserShims();
     externalPlugins = await import("../apps/geolibre-desktop/src/lib/external-plugins");
     const { PluginManager: PluginManagerCtor } =
       await import("../packages/plugins/src/plugin-manager");
@@ -93,6 +112,7 @@ describe("plugin asset URL and read APIs agree", () => {
 
   after(() => {
     externalPlugins.unloadRemovedUrlPlugins(manager, [], app);
+    restoreGlobals();
   });
 
   for (const name of ASSET_NAMES) {

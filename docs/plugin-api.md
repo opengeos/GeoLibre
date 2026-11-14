@@ -1204,7 +1204,9 @@ if (bytes) {
   returns the URL `readPluginAsset` fetches, for code that needs a URL rather
   than bytes (a worker, a WebAssembly module). `relativePath` is a file path,
   not a URL: pass the raw file name and the host percent-encodes each segment,
-  so `#`, `?`, `%` and spaces name the same file in both APIs. It returns
+  so `#`, `?`, `%` and spaces name the same file in both APIs. Do not
+  pre-encode: `"data/my%20file.json"` names a file literally called
+  `my%20file.json`, not `my file.json`. It returns
   `null` for a plugin installed from the desktop filesystem.
 
 ## Zarr layers
