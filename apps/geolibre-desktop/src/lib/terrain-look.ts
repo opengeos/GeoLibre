@@ -1,5 +1,6 @@
 import type { MapPreferences } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import { clampExaggeration } from "./terrain-exaggeration";
 
 /** The engine calls {@link applyTerrainLook} makes (stubbed in tests). */
 export type TerrainLookEngine = Pick<
@@ -29,7 +30,11 @@ export function applyTerrainLook(
   options: { reset: boolean; defaultExaggeration: number },
 ): void {
   if (map.terrainExaggeration !== undefined || options.reset) {
-    engine.setTerrainExaggeration(map.terrainExaggeration ?? options.defaultExaggeration);
+    // Clamped to the Terrain dialog's range, so a hand-edited project cannot
+    // open at a value the dialog would show (and save) differently.
+    engine.setTerrainExaggeration(
+      clampExaggeration(map.terrainExaggeration ?? options.defaultExaggeration),
+    );
   }
   if (!engine.capabilities.terrainSource) return;
   const source = map.terrainSource ?? null;

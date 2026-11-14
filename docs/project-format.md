@@ -63,7 +63,10 @@ hold the camera tilt and rotation, and `preferences.map` holds the terrain:
 `terrainEnabled` (3D terrain on or off), `terrainExaggeration` (vertical
 exaggeration; omitted for the default of 1) and `terrainSource` (the HTTP(S) URL
 of a Cloud Optimized GeoTIFF DEM; omitted for the built-in global terrain). A DEM
-opened from a local file has no URL, so it is not saved. `terrainIonAssetId`
+opened from a local file has no URL, so it is not saved. Like other URLs in a project,
+`terrainSource` passes through [credential redaction](#credential-redaction), so
+a presigned or keyed DEM URL loses its signature and needs re-signing to load
+again. `terrainIonAssetId`
 picks a Cesium Ion terrain asset for the globe.
 
 ## Plugin state

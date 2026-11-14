@@ -7,6 +7,7 @@ import {
   applyTerrainLook,
   type TerrainLookEngine,
 } from "../apps/geolibre-desktop/src/lib/terrain-look.ts";
+import { MAX_EXAGGERATION } from "../apps/geolibre-desktop/src/lib/terrain-exaggeration.ts";
 
 const DEFAULT_TERRAIN_EXAGGERATION = 1;
 
@@ -99,6 +100,16 @@ describe("applyTerrainLook", () => {
       { reset: true, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
     );
     assert.deepEqual(calls, { exaggeration: [2], sources: [DEM] });
+  });
+
+  it("clamps a hand-edited exaggeration to the dialog's range", () => {
+    const { engine, calls } = fakeEngine();
+    applyTerrainLook(
+      engine,
+      { terrainExaggeration: 50 },
+      { reset: true, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
+    );
+    assert.deepEqual(calls.exaggeration, [MAX_EXAGGERATION]);
   });
 
   it("does not reload a source the engine already draws", () => {
