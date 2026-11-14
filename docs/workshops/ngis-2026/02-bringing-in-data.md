@@ -410,6 +410,8 @@ Eleven layers is already a long list. Groups are folders in the layer stack.
   `sst`, and a display range of -2 to 32 °C. Tick **Pickable (click to show
   pixel value)**, name the layer, and click **Add Layer** (**Zarr layer added
   successfully.**). Set **View → Set view…** zoom to 2 to see the globe.
+  The temperatures cover the oceans only: land cells are stored as no data,
+  so the continents show the basemap through them.
   Change **Selector (JSON)** to `{"time": 12}` and add a second time step.
   The **Diagnostics** counter in the status bar goes to 1: the reader first
   checks for a Zarr v3 `zarr.json`, gets a harmless 404 from this v2 store,
