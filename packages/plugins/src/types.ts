@@ -1143,7 +1143,10 @@ export interface GeoLibreAppAPI {
   /**
    * Resolve a fetchable URL for an asset shipped alongside an external
    * plugin's manifest (e.g. sample data bundled in the plugin folder). The
-   * host resolves `relativePath` against the plugin's own directory. Returns
+   * host resolves `relativePath` against the plugin's own directory.
+   * `relativePath` is a raw file path, not a URL: each segment is
+   * percent-encoded, so `#`, `?`, `%` and spaces stay part of the file name
+   * and the URL names the same file {@link readPluginAsset} reads. Returns
    * null for built-in plugins, for plugins installed from the desktop
    * filesystem (which have no URL base), or when `relativePath` escapes the
    * plugin directory. `pluginId` should be the calling plugin's own id; since
