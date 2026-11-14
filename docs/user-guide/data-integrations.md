@@ -8,13 +8,51 @@ Beyond the [Add Data](adding-data.md) menu, GeoLibre connects to several hosted 
 
 | Integration | Where | What it does |
 | --- | --- | --- |
-| **Planetary Computer** | Processing menu | Browse and load STAC data from Microsoft Planetary Computer (Sentinel, Landsat, and more). |
+| **Planetary Computer** | Processing menu | Search Microsoft Planetary Computer (Sentinel, Landsat, NAIP, DEMs, and more) and add scenes or date-range mosaics. See [Planetary Computer](#planetary-computer). |
 | **Earth Engine** | Processing menu | Browse and load Google Earth Engine datasets after authenticating. |
 | **Overture Maps** | Plugins menu | Load Overture Maps data themes (such as buildings, places, and transportation). |
 | **STAC** | Add Data menu | Search any STAC catalog and add matching raster items. See [Adding Data](adding-data.md#web-services). |
 
 !!! note "Credentials"
     Earth Engine requires authentication, and some providers expect an API key or token. Set these in **Settings → Environment Variables**. See [Settings & Preferences](settings.md).
+
+## Planetary Computer
+
+**Processing → Planetary Computer** opens a panel on the map for the
+[Microsoft Planetary Computer](https://planetarycomputer.microsoft.com) catalog.
+No account or key is needed. The panel draws through the MapLibre renderer, so
+the menu item is disabled on the Mapbox, ArcGIS, and Cesium engines.
+
+1. Pick a collection (the search box filters by title, id, and keyword).
+2. Set the search area (draw a box, or use the map view), a date range, and for
+   optical collections a maximum cloud cover.
+3. Choose **Search Items** to list individual scenes, or **Add Mosaic** to
+   composite every matching scene into one seamless layer, for example a
+   low-cloud Sentinel-2 summer composite.
+
+Each layer is drawn with a **visualization preset**. Sentinel-2 and Landsat ship
+true color, false color, and spectral indices (NDVI, NDWI, NBR, and for
+Sentinel-2 NDBI); NAIP has RGB, color infrared, and NDVI; the Copernicus DEMs
+have elevation and hillshade. On the panel's **Layers** tab, the sliders button
+on a layer opens its style: switch preset, or set a colormap, a rescale range,
+and a band-math expression such as `(B08-B04)/(B08+B04)`, then **Apply Style**.
+
+What else you can do with a result:
+
+| Action | Where | What it does |
+| --- | --- | --- |
+| **Identify** | The Identify tool, or the crosshair on a panel layer | Reads the layer's band values (or the value of its expression) at the click, and names the scene they came from. Works on mosaics. |
+| **Show colorbar** | Panel → Layers → a layer's style | Adds a colorbar for the layer's colormap and rescale range through [Controls → Colorbar](interface.md). |
+| **Animate in Time slider** | Search results | Turns the results into a dated stack in the Time slider, one scene per date, drawn with the preset chosen in the search form. With the stack loaded, **Pixel time series** charts a clicked pixel through every date. |
+| **Clip GeoTIFF** / **Add clip to map** | A scene's detail view | Clips the scene to the drawn box (or the map view) as a GeoTIFF of raw band values. **Clip GeoTIFF** downloads the file; **Add clip to map** loads it as a raster layer, ready for Identify, restyling, and the [raster tools](processing.md). |
+| **Browse in STAC catalogs** | Search form | Opens the collection in the [STAC catalogs](adding-data.md#web-services) panel, which adds the assets a raster tiler cannot draw: COPC point clouds (3DEP LiDAR), GeoParquet (building footprints), and Zarr (ERA5, Daymet). |
+
+Layers are saved with the project and rebuilt when it is reopened, including
+mosaics and the Time slider stack. The [AI Assistant](ai-assistant.md) adds the
+same kind of layer, so a scene it loads appears in the panel and can be restyled
+there. From Python, `Map.add_planetary_computer` writes one into a project
+([Python API](../python.md)); so does the MCP server's
+`add_planetary_computer_layer` tool ([MCP server](../mcp.md)).
 
 ## Self-hosted catalogs
 

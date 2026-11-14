@@ -17,6 +17,7 @@ import {
   setOlcLabels,
   setOpenAerialMapLabels,
   setOpenDataCatalogLabels,
+  setPlanetaryComputerLabels,
   setReverseGeocodeLabels,
   setS2Labels,
   setS3BrowserLabels,
@@ -957,6 +958,24 @@ export function usePluginLabelSync(): void {
       loadingTiles: t("timelapse.loadingTiles"),
     });
     setStacLabels(buildStacLabels(t, i18n));
+    setPlanetaryComputerLabels({
+      stacBrowser: t("planetaryComputer.stacBrowser"),
+      stacBrowserTitle: t("planetaryComputer.stacBrowserTitle"),
+      timeSlider: t("planetaryComputer.timeSlider"),
+      timeSliderTitle: t("planetaryComputer.timeSliderTitle"),
+      colorbar: t("planetaryComputer.colorbar"),
+      colorbarTitle: t("planetaryComputer.colorbarTitle"),
+      clipToMap: t("planetaryComputer.clipToMap"),
+      clipToMapTitle: t("planetaryComputer.clipToMapTitle"),
+      clipLayerName: t("planetaryComputer.clipLayerName", { item: "{{item}}" }),
+      clipOutsideItem: t("planetaryComputer.clipOutsideItem"),
+      // The plugin substitutes {{collection}} itself, so pass the placeholder through.
+      timeSeriesLayerName: t("planetaryComputer.timeSeriesLayerName", {
+        collection: "{{collection}}",
+      }),
+      timeSliderNeedsDates: t("planetaryComputer.timeSliderNeedsDates"),
+      timeSliderUnavailable: t("planetaryComputer.timeSliderUnavailable"),
+    });
     setSamGeoLabels({
       panelTitle: t("samgeoPlugin.panelTitle"),
       intro: t("samgeoPlugin.intro"),

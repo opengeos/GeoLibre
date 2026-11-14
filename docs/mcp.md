@@ -239,6 +239,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_vector_layer` | A large remote FlatGeobuf / GeoParquet / GeoJSON read in place. |
 | `add_raster_layer` | A Cloud Optimized GeoTIFF, with band, colormap, and rescale options. |
 | `add_tile_layer` | A raster XYZ tile template. |
+| `add_planetary_computer_layer` | Microsoft Planetary Computer imagery (Sentinel-2, Landsat, NAIP, DEMs) by collection id: one STAC item, or a date-range mosaic. Takes a render preset such as `ndvi`, or assets / band math with a rescale and colormap. Needs no tile URL or credentials. |
 | `add_tiles_layer` | PMTiles archives and vector tile services. |
 | `add_ogc_layer` | WMS and WMTS endpoints. |
 | `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |

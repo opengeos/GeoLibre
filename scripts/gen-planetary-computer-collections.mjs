@@ -2,12 +2,19 @@
 // Regenerate packages/plugins/src/plugins/planetary-computer-collections.json,
 // the bundled Planetary Computer collection list.
 //
-// Usage: node scripts/gen-planetary-computer-collections.mjs
+// Usage: npm run gen:planetary-computer-collections
 //
-// The Planetary Computer STAC API stopped sending CORS headers on its
-// `/collections` listing, so a browser (or the Tauri webview) cannot load the
+// The Planetary Computer STAC API has at times sent its `/collections` listing
+// without CORS headers, so a browser (or the Tauri webview) could not load the
 // list the Planetary Computer panel opens with. The panel tries the live list
-// first and falls back to this snapshot. Only the fields the panel reads are
+// first and falls back to this snapshot.
+// .github/workflows/refresh-planetary-computer-collections.yml reruns this
+// monthly and opens a pull request when the list changed.
+//
+// The file is written minified and the committed copy is that output run
+// through the repo formatter (oxfmt, which the pre-commit hook applies). Format
+// it before comparing or committing, or every line reads as changed:
+//   npx oxfmt --write packages/plugins/src/plugins/planetary-computer-collections.json Only the fields the panel reads are
 // kept (list/search text, extent, cloud-cover flag, item asset types), which
 // keeps the lazily loaded chunk small. Selecting a collection still reads its
 // items live, so a stale snapshot only hides collections added since.

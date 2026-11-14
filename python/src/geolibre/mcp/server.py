@@ -85,6 +85,9 @@ Pick the layer tool by what the data *is*, not by file extension alone:
   GeoJSON) read in place rather than inlined.
 - `add_raster_layer`   - a Cloud Optimized GeoTIFF (COG).
 - `add_tile_layer`     - a raster XYZ tile template with {z}/{x}/{y}.
+- `add_planetary_computer_layer` - Microsoft Planetary Computer imagery
+  (Sentinel-2, Landsat, NAIP, DEMs) by collection: one STAC item, or a
+  date-range mosaic. Needs no tile URL or credentials.
 - `add_tiles_layer`    - PMTiles or a vector tile service.
 - `add_ogc_layer`      - a WMS or WMTS endpoint.
 - `add_lidar_layer`    - a LAS/LAZ/COPC/EPT point cloud by URL.
@@ -575,6 +578,73 @@ def build_server(workspace: Workspace) -> MCPServer:
             The new layer's id and the project's updated layer count.
         """
         layer = _project.tile_layer(name, url, tile_size=tile_size, attribution=attribution)
+        return add(path, layer, index)
+
+    @tool()
+    def add_planetary_computer_layer(
+        path: str,
+        collection: str,
+        item: str | None = None,
+        name: str | None = None,
+        datetime: str | None = None,
+        bbox: list[float] | None = None,
+        preset: str | None = None,
+        assets: list[str] | None = None,
+        expression: str | None = None,
+        rescale: list[float] | None = None,
+        colormap: str | None = None,
+        max_cloud_cover: float | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add Microsoft Planetary Computer imagery (Sentinel-2, Landsat, NAIP, DEMs, ...).
+
+        With `item` the layer draws that one STAC item. Without it the layer is
+        a mosaic: every item of the collection matching `datetime` and
+        `max_cloud_cover`, composited into one seamless layer (for example a
+        low-cloud Sentinel-2 summer composite). No credentials are needed and
+        nothing is fetched while authoring: GeoLibre's Planetary Computer panel
+        builds the layer when it opens the project.
+
+        Render it with a named `preset`, or with `assets` / `expression` plus
+        `rescale` and `colormap`. With none of them the collection's default
+        preset applies. Presets: sentinel-2-l2a has true-color, false-color,
+        ndvi, ndwi, nbr, ndbi, swir; landsat-c2-l2 has true-color, false-color,
+        ndvi, ndwi, nbr, thermal; naip has rgb, cir, ndvi; cop-dem-glo-30 and
+        cop-dem-glo-90 have elevation, hillshade.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            collection: STAC collection id, e.g. `sentinel-2-l2a`.
+            item: STAC item id to draw; omit for a mosaic of the collection.
+            name: The layer's display name; defaults to the item id or collection.
+            datetime: Mosaic only. Date range as `start/end`, e.g.
+                `2024-06-01/2024-08-31`.
+            bbox: `[west, south, east, north]` extent of the layer.
+            preset: A render preset name for the collection, e.g. `ndvi`.
+            assets: Asset names to render, e.g. `["B08", "B04", "B03"]`.
+            expression: Band math over assets, e.g. `(B08-B04)/(B08+B04)`.
+            rescale: `[min, max]` value range stretched to the output colors.
+            colormap: Named colormap for a single-band or expression render.
+            max_cloud_cover: Mosaic only. Keep items at or below this cloud
+                cover percentage.
+            index: Draw-order position; appended on top when omitted.
+
+        Returns:
+            The new layer's id and the project's updated layer count.
+        """
+        layer = _project.planetary_computer_layer(
+            collection,
+            item,
+            name=name,
+            datetime=datetime,
+            bbox=bbox,
+            preset=preset,
+            assets=assets,
+            expression=expression,
+            rescale=rescale,
+            colormap=colormap,
+            max_cloud_cover=max_cloud_cover,
+        )
         return add(path, layer, index)
 
     @tool()

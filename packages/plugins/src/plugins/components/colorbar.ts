@@ -6,6 +6,7 @@ import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
 import { type ColorbarGuiControlConstructor, getComponentsConstructors } from "./constructors";
 import {
   type ComponentColorbarGuiState,
+  normalizeColorbarState,
   type RestorableColorbarGuiControl,
   restoreGuiControlState,
 } from "./gui-state";
@@ -47,6 +48,58 @@ export async function restoreColorbarPanel(
     else control.hide();
     setColorbarPanelVisible(state.visible);
   }, 0);
+}
+
+/** A colorbar another plugin asks the Colorbar control to show. */
+export interface ColorbarRequest {
+  /** A named colormap of the control, or the colors of a custom ramp (low to high). */
+  colormap: string | string[];
+  /** Value at the low end of the ramp. */
+  vmin: number;
+  /** Value at the high end of the ramp. */
+  vmax: number;
+  /** Caption, typically the layer or index name. */
+  label: string;
+  /** Units shown after the tick values. */
+  units?: string;
+}
+
+/**
+ * Adds a colorbar to the map through the Controls → Colorbar panel, opening
+ * the panel when it is closed and keeping the colorbars already on it.
+ *
+ * A colorbar with the same label replaces the earlier one, so restyling a layer
+ * and asking again updates its colorbar instead of stacking duplicates.
+ *
+ * @param app - The GeoLibre app API.
+ * @param request - The ramp, its value range, and its caption.
+ */
+export async function showColorbar(app: GeoLibreAppAPI, request: ColorbarRequest): Promise<void> {
+  const current = normalizeColorbarState(
+    colorbarControl && colorbarPanelVisible ? colorbarControl.getState() : undefined,
+  );
+  const custom = Array.isArray(request.colormap);
+  const entry = {
+    mode: custom ? ("custom" as const) : ("named" as const),
+    ...(custom
+      ? { customColors: (request.colormap as string[]).join(", ") }
+      : { colormap: request.colormap as string }),
+    vmin: request.vmin,
+    vmax: request.vmax,
+    label: request.label,
+    units: request.units ?? "",
+    orientation: "horizontal" as const,
+  };
+  const kept = (current?.colorbars ?? []).filter((colorbar) => colorbar.label !== request.label);
+  const state = normalizeColorbarState({
+    ...current,
+    ...entry,
+    colorbars: [...kept, entry],
+    selectedColorbarIndex: kept.length,
+    visible: true,
+    collapsed: true,
+  });
+  if (state) await restoreColorbarPanel(app, state);
 }
 
 export function openColorbarPanel(app: GeoLibreAppAPI): void {

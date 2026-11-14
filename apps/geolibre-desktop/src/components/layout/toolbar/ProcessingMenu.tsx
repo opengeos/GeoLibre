@@ -842,7 +842,8 @@ export function ProcessingMenu({
         {!trimmedQuery && show("processing.planetaryComputer") && (
           <DropdownMenuItem
             onSelect={onOpenPlanetaryComputer}
-            disabled={!addRemoteCap.granted}
+            disabled={!addRemoteCap.granted || !capabilities.nativeMapInstance}
+            title={capabilities.nativeMapInstance ? undefined : t("renderer.pluginUnsupported")}
             aria-describedby={addRemoteDeniedBy}
           >
             {t("toolbar.command.planetaryComputer")}

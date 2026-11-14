@@ -52,6 +52,10 @@ m.add_raster(source, name="Raster", bands=None, colormap=None, rescale=None,
 m.add_tile_layer(url, name, tile_size=256, attribution=None)
 m.add_ee_layer(ee_object, vis_params=None, name="Earth Engine", shown=True,
                opacity=1.0)
+m.add_planetary_computer(collection, item=None, name=None, datetime=None,
+                         bbox=None, preset=None, assets=None, expression=None,
+                         rescale=None, colormap=None, max_cloud_cover=None,
+                         visible=True, opacity=1.0)   # Sentinel-2, Landsat, NAIP, DEMs
 m.add_pmtiles(url, name, tile_type="vector", source_layers=None)
 m.add_vector_tiles(url, name, source_layers=None)
 m.add_wms(endpoint, layers, name, version="1.1.1", crs=None, bounds=None)
@@ -76,6 +80,16 @@ m.add_video(...)
 Every `add_*` returns the new layer's **id** and accepts style keyword
 arguments inline (`m.add_geojson(url, name="Roads", strokeColor="#ef4444",
 strokeWidth=3)`).
+
+`add_planetary_computer` adds Microsoft Planetary Computer imagery by
+collection id, with no credentials and no network access while authoring. With
+`item` it draws one STAC item; without it, a mosaic of every item matching
+`datetime` (`"2024-06-01/2024-08-31"` or a `(start, end)` pair) and
+`max_cloud_cover`. Pick a `preset` (`"true-color"`, `"false-color"`, `"ndvi"`,
+...; see `add_planetary_computer_layer` in [mcp-tools.md](mcp-tools.md)) or
+give `assets` / `expression` with `rescale=(min, max)` and `colormap`. The app's
+Planetary Computer panel builds the layer when the project opens (MapLibre
+renderer only) and can restyle it.
 
 `add_ee_layer` accepts an authenticated Earth Engine Image, ImageCollection,
 FeatureCollection, Feature, or Geometry. Initialize the Earth Engine Python API

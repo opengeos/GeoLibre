@@ -37,6 +37,7 @@ import {
   duckDBBridge,
   fetchServiceIdentifyProperties,
   isAbortError,
+  isBridgedRasterIdentifyLayer,
   isPixelIdentifyLayer,
   isArcGISImageServiceLayer,
   isServiceIdentifyLayer,
@@ -75,6 +76,12 @@ import { type MapDiagnosticEvent, summarizeDiagnosticTile } from "./map-diagnost
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
+
+/** Reads a pixel layer's identify rows at a clicked `[lng, lat]`; null is a miss. */
+type IdentifyPixelReader = (
+  lngLat: [number, number],
+  options: { signal: AbortSignal },
+) => Promise<Record<string, unknown> | null>;
 
 export interface MapCanvasProps {
   controllerRef?: React.MutableRefObject<MapEngine | null>;
@@ -718,6 +725,7 @@ export const MapCanvas = memo(function MapCanvas({
             (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
             isArcGISImageServiceLayer(candidate) ||
             isPixelIdentifyLayer(candidate) ||
+            isBridgedRasterIdentifyLayer(candidate) ||
             candidate.type === "cog" ||
             candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
         );
@@ -927,9 +935,22 @@ export const MapCanvas = memo(function MapCanvas({
         popup.once("close", onClose);
       };
 
-      if (isPixelIdentifyLayer(layer)) {
-        const identifyPixelAt = timeSliderBridge()?.identifyPixelAt;
-        if (!identifyPixelAt) {
+      const bridgedRaster = isBridgedRasterIdentifyLayer(layer);
+      if (isPixelIdentifyLayer(layer) || bridgedRaster) {
+        // Two readers share this flow. The Time Slider bridge reads its own
+        // COG/mosaic sources; any other pixel layer (a Planetary Computer
+        // layer) is read by the application's raster bridge.
+        const timeSliderRead = bridgedRaster ? undefined : timeSliderBridge()?.identifyPixelAt;
+        const readProperties: IdentifyPixelReader | undefined = bridgedRaster
+          ? identifyRasterLayerAt &&
+            (async (lngLat, options) =>
+              (await identifyRasterLayerAt(layer, lngLat, options))?.properties ?? null)
+          : timeSliderRead &&
+            (async (lngLat, options) => {
+              const result = await timeSliderRead(layer.id, lngLat, options);
+              return result ? pixelIdentifyProperties(result) : null;
+            });
+        if (!readProperties) {
           clearIdentifyResult();
           return;
         }
@@ -953,18 +974,18 @@ export const MapCanvas = memo(function MapCanvas({
         };
         loadingPopup!.once("close", onLoadingClose);
 
-        void identifyPixelAt(layer.id, [event.lngLat.lng, event.lngLat.lat], {
+        void readProperties([event.lngLat.lng, event.lngLat.lat], {
           signal: abortController.signal,
         })
-          .then((result) => {
+          .then((properties) => {
             if (userDismissed || abortController.signal.aborted) return;
             pixelIdentifyAbortController = null;
             loadingPopup?.off("close", onLoadingClose);
             // A null result means the click landed off the image grid, which is
             // an ordinary miss rather than a failure.
             showIdentifyPopup(
-              result
-                ? createIdentifyPopupElement(layer.name, pixelIdentifyProperties(result))
+              properties
+                ? createIdentifyPopupElement(layer.name, properties)
                 : createIdentifyMessagePopupElement(layer.name, identifyAllLabels.noData),
             );
           })

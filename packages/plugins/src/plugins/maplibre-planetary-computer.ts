@@ -1,29 +1,38 @@
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  isPlanetaryComputerLayer,
+  PLANETARY_COMPUTER_SOURCE_KIND,
+  useAppStore,
+} from "@geolibre/core";
 import type {
   ActiveLayer,
   PlanetaryComputerControl,
+  PlanetaryComputerCustomActions,
   PlanetaryComputerEventData,
   PlanetaryComputerOptions,
+  PlanetaryComputerState,
   STACClient,
   STACCollection,
   STACItem,
+  STACSearchParams,
   TiTilerClient,
   TileParams,
 } from "maplibre-gl-planetary-computer";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
-import { createCorsSafeStacClientClass } from "./planetary-computer-stac";
+import {
+  PLANETARY_COMPUTER_STAC_URL,
+  planetaryComputerStacClientOptions,
+} from "./planetary-computer-stac";
 
 /**
- * `metadata.sourceKind` marking the Planetary Computer raster layers this plugin adds. Exported so the
+ * `metadata.sourceKind` marking the Planetary Computer raster layers this plugin adds. Re-exported so the
  * Layer Library's restore dispatch keys off the same value this plugin writes
  * rather than a hand-typed copy (issue #1520).
  */
-export const PLANETARY_COMPUTER_SOURCE_KIND = "planetary-computer-raster";
+export { isPlanetaryComputerLayer, PLANETARY_COMPUTER_SOURCE_KIND };
 
-type PlanetaryComputerControlConstructor =
-  (typeof import("maplibre-gl-planetary-computer"))["PlanetaryComputerControl"];
-type STACClientConstructor = (typeof import("maplibre-gl-planetary-computer"))["STACClient"];
-type TiTilerClientConstructor = (typeof import("maplibre-gl-planetary-computer"))["TiTilerClient"];
+type PlanetaryComputerModule = typeof import("maplibre-gl-planetary-computer");
 
 const planetaryComputerControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -36,22 +45,31 @@ const PLANETARY_COMPUTER_OPTIONS = {
 
 let planetaryComputerControl: PlanetaryComputerControl | null = null;
 let planetaryComputerControlMounted = false;
-let planetaryComputerConstructorsPromise: Promise<{
-  PlanetaryComputerControl: PlanetaryComputerControlConstructor;
-  STACClient: STACClientConstructor;
-  TiTilerClient: TiTilerClientConstructor;
-}> | null = null;
-let planetaryComputerConstructors: {
-  PlanetaryComputerControl: PlanetaryComputerControlConstructor;
-  STACClient: STACClientConstructor;
-  TiTilerClient: TiTilerClientConstructor;
-} | null = null;
+let planetaryComputerModulePromise: Promise<PlanetaryComputerModule> | null = null;
+let planetaryComputerModule: PlanetaryComputerModule | null = null;
 let planetaryComputerStacClient: STACClient | null = null;
+let planetaryComputerSearchClient: STACClient | null = null;
 let planetaryComputerTilerClient: TiTilerClient | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
 let planetaryComputerRestoreToken = 0;
 let planetaryComputerRestorePreservedLayerIds = new Set<string>();
 let planetaryComputerStoreSyncSuspended = 0;
+let planetaryComputerCustomActions:
+  | ((app: GeoLibreAppAPI) => PlanetaryComputerCustomActions)
+  | null = null;
+
+/**
+ * Supplies the extra buttons GeoLibre adds to the panel (Time Slider, STAC
+ * browser, colorbar, ...). Kept as a late-bound factory so this module does not
+ * import the plugins those buttons hand off to.
+ *
+ * @param factory - Builds the custom actions for a host app, or null for none.
+ */
+export function setPlanetaryComputerCustomActions(
+  factory: ((app: GeoLibreAppAPI) => PlanetaryComputerCustomActions) | null,
+): void {
+  planetaryComputerCustomActions = factory;
+}
 
 export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePlanetaryComputerControl(app);
@@ -63,6 +81,20 @@ export function closePlanetaryComputerPanel(app: GeoLibreAppAPI): void {
     return;
   }
   resetPlanetaryComputerControl(planetaryComputerControl);
+}
+
+/**
+ * Whether the panel can run on the active renderer.
+ *
+ * The control draws its layers through the MapLibre style API (raster sources
+ * added to the map it is mounted on), so it needs a native MapLibre map. The
+ * Mapbox, ArcGIS, and Cesium engines have none.
+ *
+ * @param app - The GeoLibre app API.
+ * @returns True when the active renderer can host the panel.
+ */
+export function isPlanetaryComputerPanelSupported(app: GeoLibreAppAPI): boolean {
+  return Boolean(app.getMap?.());
 }
 
 async function openStandalonePlanetaryComputerControl(app: GeoLibreAppAPI): Promise<boolean> {
@@ -93,41 +125,27 @@ function wirePlanetaryComputerCloseButton(control: PlanetaryComputerControl | nu
   closeButton.addEventListener("click", () => hidePlanetaryComputerControl(control));
 }
 
-function getPlanetaryComputerConstructors(): Promise<{
-  PlanetaryComputerControl: PlanetaryComputerControlConstructor;
-  STACClient: STACClientConstructor;
-  TiTilerClient: TiTilerClientConstructor;
-}> {
-  planetaryComputerConstructorsPromise ??= import("maplibre-gl-planetary-computer").then(
-    (module) => {
-      const {
-        PlanetaryComputerControl: PlanetaryComputerControlClass,
-        STACClient: STACClientClass,
-        TiTilerClient: TiTilerClientClass,
-      } = module;
-      planetaryComputerConstructors = {
-        PlanetaryComputerControl: PlanetaryComputerControlClass,
-        STACClient: createCorsSafeStacClientClass(STACClientClass),
-        TiTilerClient: TiTilerClientClass,
-      };
-      return planetaryComputerConstructors;
-    },
-  );
-  return planetaryComputerConstructorsPromise;
+function loadPlanetaryComputerModule(): Promise<PlanetaryComputerModule> {
+  planetaryComputerModulePromise ??= import("maplibre-gl-planetary-computer").then((module) => {
+    planetaryComputerModule = module;
+    return module;
+  });
+  return planetaryComputerModulePromise;
 }
 
 async function ensurePlanetaryComputerControl(
   app: GeoLibreAppAPI,
   options: { hiddenOnMount?: boolean } = {},
 ): Promise<PlanetaryComputerControl | null> {
-  // Unlike the deck.gl-based plugins (GeoParquet, DuckDB), no
-  // ensureMercatorProjection call is needed: the control adds native
-  // MapLibre raster layers, which render correctly on the globe projection.
-  const { PlanetaryComputerControl: PlanetaryComputerControlClass } =
-    await getPlanetaryComputerConstructors();
+  // The control adds native MapLibre raster layers to the map it is mounted on,
+  // so there is nothing to mount it on without a MapLibre map (the Mapbox,
+  // ArcGIS, and Cesium engines). Unlike the deck.gl-based plugins (GeoParquet,
+  // DuckDB), no ensureMercatorProjection call is needed: raster layers render
+  // correctly on the globe projection.
+  if (!isPlanetaryComputerPanelSupported(app)) return null;
 
-  planetaryComputerControl ??= createPlanetaryComputerControl(PlanetaryComputerControlClass);
-  installPlanetaryComputerCorsSafeStacClient(planetaryComputerControl);
+  const module = await loadPlanetaryComputerModule();
+  planetaryComputerControl ??= createPlanetaryComputerControl(module, app);
 
   if (!planetaryComputerControlMounted) {
     const added = app.addMapControl(planetaryComputerControl, planetaryComputerControlPosition);
@@ -145,36 +163,29 @@ async function ensurePlanetaryComputerControl(
   return planetaryComputerControl;
 }
 
-// The control builds its own `STACClient` in its constructor and offers no
-// option to supply one, so swap in the CORS-safe subclass through the private
-// `_stacClient` field (a plain field at runtime in
-// maplibre-gl-planetary-computer 0.4.0). Without it the panel's collection list
-// and search fail with "Failed to fetch" in the browser and the Tauri webview.
-function installPlanetaryComputerCorsSafeStacClient(control: PlanetaryComputerControl): void {
-  const internals = control as unknown as { _stacClient?: STACClient };
-  const { STACClient: STACClientClass } = getResolvedPlanetaryComputerConstructors();
-  const current = internals._stacClient;
-  if (current instanceof STACClientClass) return;
-  internals._stacClient = new STACClientClass((current as STACClient | undefined)?.getBaseUrl());
-}
-
 function createPlanetaryComputerControl(
-  PlanetaryComputerControlClass: PlanetaryComputerControlConstructor,
+  module: PlanetaryComputerModule,
+  app: GeoLibreAppAPI,
 ): PlanetaryComputerControl {
-  const control = new PlanetaryComputerControlClass(PLANETARY_COMPUTER_OPTIONS);
+  const control = new module.PlanetaryComputerControl({
+    ...PLANETARY_COMPUTER_OPTIONS,
+    // The control and the restore/identify paths share one pair of clients, so
+    // every request gets the same CORS-safe search and collection fallback.
+    stacClient: getPlanetaryComputerStacClient(module),
+    tilerClient: getPlanetaryComputerTilerClient(module),
+    customActions: planetaryComputerCustomActions?.(app),
+  });
   patchPlanetaryComputerControlOnRemove(control);
   control.on("layer:add", syncPlanetaryComputerLayersToStore);
   control.on("layer:remove", syncPlanetaryComputerLayersToStore);
   control.on("layer:update", syncPlanetaryComputerLayersToStore);
 
   // updateLayer stores the passed visible/opacity values verbatim before
-  // re-emitting "layer:update" (verified against
-  // maplibre-gl-planetary-computer 0.4.0), so the equality checks here and
-  // in syncPlanetaryComputerLayersToStore break the store <-> control
-  // feedback cycle. When upgrading the library, re-verify that updateLayer
-  // does not coerce or round these values; if it ever does, toggling
-  // visibility/opacity in the layer list would loop updateLayer <->
-  // layer:update indefinitely.
+  // re-emitting "layer:update" (covered by tests/upstream-contracts.test.ts),
+  // so the equality checks here and in syncPlanetaryComputerLayersToStore break
+  // the store <-> control feedback cycle. If the library ever coerced or
+  // rounded these values, toggling visibility/opacity in the layer list would
+  // loop updateLayer <-> layer:update indefinitely.
   planetaryComputerStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
@@ -204,7 +215,9 @@ function createPlanetaryComputerControl(
   return control;
 }
 
-function syncPlanetaryComputerLayersToStore(event: PlanetaryComputerEventData): void {
+function syncPlanetaryComputerLayersToStore(
+  event: Pick<PlanetaryComputerEventData, "state">,
+): void {
   if (planetaryComputerStoreSyncSuspended > 0) return;
 
   const store = useAppStore.getState();
@@ -228,14 +241,18 @@ function syncPlanetaryComputerLayersToStore(event: PlanetaryComputerEventData): 
     const existing = useAppStore.getState().layers.find((current) => current.id === layer.id);
 
     if (existing) {
-      // Only sync visible/opacity (the same fields the store -> control path
-      // syncs). The name is derived from STAC metadata, so re-syncing it here
-      // would clobber a user rename on every panel event.
-      if (existing.visible !== layer.visible || existing.opacity !== layer.opacity) {
-        useAppStore.getState().updateLayer(layer.id, {
-          opacity: layer.opacity,
-          visible: layer.visible,
-        });
+      // Sync visible/opacity (the same fields the store -> control path syncs)
+      // and the render state a restyle in the panel changed, so a saved project
+      // reopens with the layer's current look. The name is derived from STAC
+      // metadata, so re-syncing it here would clobber a user rename on every
+      // panel event.
+      const patch: Partial<GeoLibreLayer> = {};
+      if (existing.visible !== layer.visible) patch.visible = layer.visible;
+      if (existing.opacity !== layer.opacity) patch.opacity = layer.opacity;
+      const metadata = planetaryComputerRenderMetadataPatch(existing, layer);
+      if (metadata) patch.metadata = { ...existing.metadata, ...metadata };
+      if (Object.keys(patch).length > 0) {
+        useAppStore.getState().updateLayer(layer.id, patch);
       }
       continue;
     }
@@ -244,9 +261,48 @@ function syncPlanetaryComputerLayersToStore(event: PlanetaryComputerEventData): 
   }
 }
 
-function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLayer {
-  const bbox = activeLayer.item?.bbox ?? activeLayer.collection?.extent?.spatial?.bbox?.[0];
+/** Metadata keys that describe how a layer is rendered and so follow a restyle. */
+const PLANETARY_COMPUTER_RENDER_METADATA_KEYS = ["assets", "presetName", "renderParams"] as const;
+
+/**
+ * The render metadata of `next` that differs from `existing`.
+ *
+ * @param existing - The layer currently in the store.
+ * @param next - The layer rebuilt from the control's state.
+ * @returns The changed metadata fields, or null when nothing changed.
+ */
+function planetaryComputerRenderMetadataPatch(
+  existing: GeoLibreLayer,
+  next: GeoLibreLayer,
+): Record<string, unknown> | null {
+  const patch: Record<string, unknown> = {};
+  for (const key of PLANETARY_COMPUTER_RENDER_METADATA_KEYS) {
+    if (JSON.stringify(existing.metadata[key]) !== JSON.stringify(next.metadata[key])) {
+      patch[key] = next.metadata[key];
+    }
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * Builds the GeoLibre store layer that mirrors a control layer.
+ *
+ * The metadata is everything {@link restorePlanetaryComputerLayers} needs to
+ * rebuild the layer from a saved project: the collection, the item id (or, for
+ * a mosaic, the search that selects its items), and the render state. The same
+ * shape is authored by the Python API's `Map.add_planetary_computer` and the
+ * MCP server's `add_planetary_computer_layer` (see `docs/project-format.md`).
+ *
+ * @param activeLayer - The control's layer.
+ * @returns The mirroring store layer.
+ */
+export function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLayer {
+  const bbox =
+    activeLayer.bounds ??
+    boundsTuple(activeLayer.item?.bbox) ??
+    boundsTuple(activeLayer.collection?.extent?.spatial?.bbox?.[0]);
   const collectionId = activeLayer.item?.collection ?? activeLayer.collection?.id ?? "";
+  const datetime = activeLayer.item ? planetaryComputerItemDate(activeLayer.item) : undefined;
 
   return {
     id: activeLayer.id,
@@ -263,7 +319,9 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
     metadata: {
       assets: activeLayer.assets,
       externalNativeLayer: true,
-      identifiable: false,
+      // Identify reads pixel values through the Data API (see
+      // identifyPlanetaryComputerLayer), not through a vector feature query.
+      identifiable: true,
       nativeLayerIds: [activeLayer.id],
       planetaryComputerLayerType: activeLayer.type,
       presetName: activeLayer.presetName,
@@ -273,6 +331,8 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
       sourceKind: PLANETARY_COMPUTER_SOURCE_KIND,
       stacCollectionId: collectionId,
       stacItemId: activeLayer.item?.id,
+      ...(datetime ? { stacDatetime: datetime } : {}),
+      ...(activeLayer.searchParams ? { stacSearchParams: activeLayer.searchParams } : {}),
       tileType: "raster",
       ...(bbox ? { bounds: bbox } : {}),
     },
@@ -282,9 +342,8 @@ function createPlanetaryComputerStoreLayer(activeLayer: ActiveLayer): GeoLibreLa
 
 /**
  * Replays saved Planetary Computer raster layers into the upstream control.
- * The upstream addItemLayer/addCollectionLayer methods generate fresh IDs, so
- * project restore has to recreate the native MapLibre layers with the saved
- * GeoLibre IDs and register them with the control's runtime layer manager.
+ * Each layer is re-created under its saved GeoLibre id through the control's
+ * public add methods, so the panel lists it and can restyle it again.
  *
  * @param app - The GeoLibre app API.
  */
@@ -381,7 +440,9 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
     }
 
     if (restoredLayerIds.size > 0) {
-      emitPlanetaryComputerRestore(control);
+      // The adds above ran with the store sync suspended (each one would
+      // otherwise drop the saved layers not yet restored). Reconcile once now.
+      syncPlanetaryComputerLayersToStore({ state: control.getState() });
     }
   })().catch((error) => {
     console.error("[GeoLibre] Failed to restore Planetary Computer layers", error);
@@ -393,6 +454,7 @@ async function restorePlanetaryComputerLayer(
   layer: GeoLibreLayer,
   restoreToken: number,
 ): Promise<string | null> {
+  const module = await loadPlanetaryComputerModule();
   const collectionId = stringMetadata(layer, "stacCollectionId");
   const layerType = stringMetadata(layer, "planetaryComputerLayerType");
   if (!collectionId) {
@@ -401,13 +463,38 @@ async function restorePlanetaryComputerLayer(
     );
   }
 
+  const style = planetaryComputerSavedStyle(module, layer, collectionId);
+
+  // "collection" is how releases before the mosaic rewrite spelled a mosaic of
+  // a whole collection; it restores the same way, with an empty search.
   if (layerType === "collection" || layerType === "mosaic") {
-    const collection = await getPlanetaryComputerStacClient().getCollection(collectionId);
+    const searchParams: Partial<STACSearchParams> = {
+      ...searchParamsMetadata(layer, "stacSearchParams"),
+      collections: [collectionId],
+    };
+    // A search id is not permanent, so register the search again instead of
+    // saving the id. Registration is idempotent.
+    const [collection, { searchId }] = await Promise.all([
+      getPlanetaryComputerStacClient(module).getCollection(collectionId),
+      getPlanetaryComputerTilerClient(module).registerMosaic(searchParams),
+    ]);
     const currentLayer = currentRestorablePlanetaryComputerLayer(control, layer, restoreToken);
     if (!currentLayer) return null;
-    registerRestoredPlanetaryComputerLayer(control, currentLayer, {
-      collection,
-      type: layerType,
+    const map = control.getMap();
+    runWithPlanetaryComputerStoreSyncSuspended(() => {
+      // With `mosaicId` given the control skips registration, so the layer is
+      // added (and its events fire) synchronously inside this call.
+      void control.addMosaicLayer(collection, {
+        ...style,
+        id: currentLayer.id,
+        sourceId: stringMetadata(currentLayer, "sourceId"),
+        visible: currentLayer.visible,
+        opacity: currentLayer.opacity,
+        beforeId: map ? nextRenderedStoreLayerId(map, currentLayer.id) : undefined,
+        mosaicId: searchId,
+        searchParams,
+        bbox: numberArrayMetadata(currentLayer, "bounds"),
+      });
     });
     return currentLayer.id;
   }
@@ -419,95 +506,66 @@ async function restorePlanetaryComputerLayer(
     );
   }
 
-  const item = await getPlanetaryComputerStacClient().getItem(collectionId, itemId);
+  const item = await getPlanetaryComputerStacClient(module).getItem(collectionId, itemId);
   const currentLayer = currentRestorablePlanetaryComputerLayer(control, layer, restoreToken);
   if (!currentLayer) return null;
-  registerRestoredPlanetaryComputerLayer(control, currentLayer, {
-    collectionId,
-    item,
-    type: "item",
+  const map = control.getMap();
+  runWithPlanetaryComputerStoreSyncSuspended(() => {
+    control.addItemLayer(
+      { ...item, collection: item.collection || collectionId },
+      {
+        ...style,
+        id: currentLayer.id,
+        sourceId: stringMetadata(currentLayer, "sourceId"),
+        visible: currentLayer.visible,
+        opacity: currentLayer.opacity,
+        beforeId: map ? nextRenderedStoreLayerId(map, currentLayer.id) : undefined,
+      },
+    );
   });
   return currentLayer.id;
 }
 
-function registerRestoredPlanetaryComputerLayer(
-  control: PlanetaryComputerControl,
+/**
+ * The render options saved on a layer, in the shape the control's add methods take.
+ *
+ * A layer saved by the app carries its full `renderParams`. One authored by the
+ * Python API or the MCP server may carry only a `presetName` (or nothing), in
+ * which case the preset's parameters are looked up here, and with neither the
+ * control falls back to the collection's default preset.
+ *
+ * @param module - The loaded Planetary Computer library.
+ * @param layer - The saved store layer.
+ * @param collectionId - The layer's collection id.
+ * @returns The `renderParams`/`assets`/`presetName` options to pass on.
+ */
+function planetaryComputerSavedStyle(
+  module: PlanetaryComputerModule,
   layer: GeoLibreLayer,
-  source:
-    | { collectionId: string; item: STACItem; type: "item" }
-    | { collection: STACCollection; type: "collection" | "mosaic" },
-): void {
-  const map = control.getMap();
-  if (!map) throw new Error("Planetary Computer control is not attached.");
+  collectionId: string,
+): { assets?: string[]; presetName?: string; renderParams?: TileParams } {
+  const presetName = stringMetadata(layer, "presetName");
+  const savedParams = tileParamsMetadata(layer, "renderParams");
+  const savedAssets = stringArrayMetadata(layer, "assets");
+  const preset = presetName ? module.getPreset(collectionId, presetName) : undefined;
+  const hasSavedParams = Object.keys(savedParams).length > 0;
 
-  const sourceId = stringMetadata(layer, "sourceId") || `${layer.id}-source`;
-  const renderParams = tileParamsMetadata(layer, "renderParams");
-  const assets = stringArrayMetadata(layer, "assets") || renderParams.assets || [];
-  const savedBounds = numberArrayMetadata(layer, "bounds");
-  const tileParams = assets.length ? { ...renderParams, assets } : renderParams;
-  const internals = requiredPlanetaryComputerRestoreInternals(control);
-
-  if (map.getLayer(layer.id)) map.removeLayer(layer.id);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-  if (source.type === "item") {
-    map.addSource(sourceId, {
-      type: "raster",
-      url: getPlanetaryComputerTilerClient().getItemTileJSONUrl(
-        source.item.collection || source.collectionId,
-        source.item.id,
-        tileParams,
-      ),
-      tileSize: tileParams.tile_size || 256,
-      bounds: boundsTuple(source.item.bbox),
-      attribution: "Microsoft Planetary Computer",
-    });
-  } else {
-    map.addSource(sourceId, {
-      type: "raster",
-      tiles: [
-        getPlanetaryComputerTilerClient().getCollectionTileUrl(source.collection.id, tileParams),
-      ],
-      tileSize: tileParams.tile_size || 256,
-      bounds: savedBounds ?? boundsTuple(source.collection.extent?.spatial?.bbox?.[0]),
-      attribution: "Microsoft Planetary Computer",
-    });
+  if (!hasSavedParams && !savedAssets?.length) {
+    return preset ? { presetName: preset.name, renderParams: { ...preset.params } } : {};
   }
 
-  map.addLayer(
-    {
-      id: layer.id,
-      type: "raster",
-      source: sourceId,
-      layout: {
-        visibility: layer.visible ? "visible" : "none",
-      },
-      paint: {
-        "raster-opacity": layer.opacity,
-      },
-    },
-    nextRenderedStoreLayerId(map, layer.id),
-  );
-
-  const activeLayer: ActiveLayer = {
-    id: layer.id,
-    type: source.type,
-    sourceId,
-    ...(source.type === "item"
-      ? { item: source.item, collection: undefined }
-      : { collection: source.collection }),
-    visible: layer.visible,
-    opacity: layer.opacity,
-    assets,
-    renderParams: tileParams,
-    presetName: stringMetadata(layer, "presetName"),
-    showControls: false,
+  // Saved parameters win over the preset's, so an authored layer can name a
+  // preset and still override, say, its rescale. For a layer the app saved the
+  // two are the same set, and the merge changes nothing.
+  const renderParams: TileParams = { ...preset?.params, ...savedParams };
+  // An expression names its own assets, so a preset's asset list must not ride along.
+  if (savedParams.expression && !savedParams.assets) delete renderParams.assets;
+  const assets = savedAssets?.length ? savedAssets : renderParams.assets;
+  return {
+    ...(presetName ? { presetName } : {}),
+    renderParams,
+    ...(assets?.length ? { assets } : {}),
   };
-
-  internals.layerManagerLayers.set(layer.id, activeLayer);
-  if (!internals.activeLayers.some((current) => current.id === layer.id)) {
-    internals.activeLayers.push(activeLayer);
-  }
 }
 
 function removeInvalidPlanetaryComputerStoreLayers(
@@ -545,11 +603,11 @@ function rollbackSupersededPlanetaryComputerRestore(
 
       control.removeLayer(restoredLayerId);
     }
-
-    if (keptRestoredLayer) {
-      emitPlanetaryComputerRestore(control);
-    }
   });
+
+  if (keptRestoredLayer) {
+    syncPlanetaryComputerLayersToStore({ state: control.getState() });
+  }
 }
 
 function currentRestorablePlanetaryComputerLayer(
@@ -590,7 +648,9 @@ function hasSamePlanetaryComputerRestoreSource(
       stringMetadata(restoredLayer, "stacCollectionId") &&
     stringMetadata(currentLayer, "stacItemId") === stringMetadata(restoredLayer, "stacItemId") &&
     stringMetadata(currentLayer, "planetaryComputerLayerType") ===
-      stringMetadata(restoredLayer, "planetaryComputerLayerType")
+      stringMetadata(restoredLayer, "planetaryComputerLayerType") &&
+    JSON.stringify(currentLayer.metadata.stacSearchParams) ===
+      JSON.stringify(restoredLayer.metadata.stacSearchParams)
   );
 }
 
@@ -630,58 +690,371 @@ function renderedLayerIds(layer: GeoLibreLayer): string[] {
   return [...nativeLayerIds, layer.id];
 }
 
-function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
-  // Private API verified against maplibre-gl-planetary-computer 0.4.0. These
-  // calls are needed so the upstream panel and GeoLibre store see restored
-  // layers that were re-registered with saved IDs. In 0.4.0, _emit constructs
-  // PlanetaryComputerEventData from _state.activeLayers synchronously, which is
-  // why one "layer:add" emit is enough to reconcile all restored layers.
-  const internals = control as unknown as PlanetaryComputerControlInternals;
-  if (!internals._emit) {
-    console.warn(
-      "[GeoLibre] Planetary Computer _emit not found; " +
-        "the restored panel state may not refresh. " +
-        "Re-verify against maplibre-gl-planetary-computer internals.",
-    );
-    return;
-  }
-  internals._emit("layer:add");
-  internals._emit("statechange");
-  internals._renderContent?.();
+// ----- Programmatic entry points ---------------------------------------------
+// Used by the AI Assistant's STAC tools and by the panel's own hand-offs, so a
+// layer added from anywhere is the same control-owned layer the panel lists and
+// can restyle, instead of a disconnected XYZ tile layer.
+
+/** Search filters shared by the programmatic Planetary Computer entry points. */
+export interface PlanetaryComputerSearchInput {
+  /** STAC collection id, e.g. `sentinel-2-l2a`. */
+  collection: string;
+  /** `[west, south, east, north]` in WGS84 degrees. */
+  bbox?: [number, number, number, number];
+  /** RFC 3339 datetime or `start/end` range. */
+  datetime?: string;
+  /** Keep only items at or below this `eo:cloud_cover` percentage. */
+  maxCloudCover?: number;
+  /** Maximum number of items to return. */
+  limit?: number;
+  /** Sort order; defaults to newest first. */
+  sortBy?: "newest" | "oldest" | "least-cloudy";
 }
 
-function getPlanetaryComputerStacClient(): STACClient {
-  if (!planetaryComputerStacClient) {
-    const { STACClient: STACClientClass } = getResolvedPlanetaryComputerConstructors();
-    planetaryComputerStacClient = new STACClientClass();
+/**
+ * Builds STAC search parameters from the simple filters the entry points take.
+ *
+ * @param input - The search filters.
+ * @returns The STAC search parameters.
+ */
+export function planetaryComputerSearchParams(
+  input: PlanetaryComputerSearchInput,
+): STACSearchParams {
+  const params: STACSearchParams = { collections: [input.collection] };
+  if (input.bbox) params.bbox = input.bbox;
+  if (input.datetime) params.datetime = input.datetime;
+  if (input.limit !== undefined) params.limit = input.limit;
+  if (input.maxCloudCover !== undefined && input.maxCloudCover < 100) {
+    params.query = { "eo:cloud_cover": { lte: input.maxCloudCover } };
   }
+  params.sortby =
+    input.sortBy === "least-cloudy"
+      ? [{ field: "properties.eo:cloud_cover", direction: "asc" }]
+      : [{ field: "properties.datetime", direction: input.sortBy === "oldest" ? "asc" : "desc" }];
+  return params;
+}
+
+/**
+ * Searches the Planetary Computer STAC API.
+ *
+ * Uses a client of its own, so a search here never cancels one the panel has
+ * in flight (the library's client aborts its previous search on a new one).
+ *
+ * @param input - The search filters.
+ * @returns The matching STAC items.
+ */
+export async function searchPlanetaryComputerItems(
+  input: PlanetaryComputerSearchInput,
+): Promise<STACItem[]> {
+  const module = await loadPlanetaryComputerModule();
+  planetaryComputerSearchClient ??= new module.STACClient(
+    PLANETARY_COMPUTER_STAC_URL,
+    planetaryComputerStacClientOptions(),
+  );
+  return planetaryComputerSearchClient.search(planetaryComputerSearchParams(input));
+}
+
+/** Render options accepted by the programmatic add entry points. */
+export interface PlanetaryComputerStyleInput {
+  /** Name of a built-in render preset for the collection, e.g. `ndvi`. */
+  presetName?: string;
+  /** Explicit Data API render parameters; wins over `presetName`. */
+  renderParams?: TileParams;
+  /** Layer name shown in the Layers panel; defaults to the item id or collection title. */
+  name?: string;
+}
+
+/** What a programmatic add produced. */
+export interface PlanetaryComputerAddResult {
+  /** Id of the layer in the GeoLibre store. */
+  layerId: string;
+  /** `[west, south, east, north]` extent of the layer, when known. */
+  bounds?: [number, number, number, number];
+  /** The item drawn (item layers only). */
+  item?: STACItem;
+  /** True when the layer is a plain XYZ tile layer because the active renderer cannot host the panel. */
+  tileLayerFallback?: boolean;
+}
+
+/**
+ * Resolves the render options for a programmatic add.
+ *
+ * @param module - The loaded Planetary Computer library.
+ * @param collectionId - The collection id.
+ * @param style - The requested preset and/or render parameters.
+ * @returns Options for the control's add methods; empty to use the default preset.
+ * @throws When a named preset does not exist for the collection.
+ */
+function resolvePlanetaryComputerStyle(
+  module: PlanetaryComputerModule,
+  collectionId: string,
+  style: PlanetaryComputerStyleInput,
+): { presetName?: string; renderParams?: TileParams } {
+  if (style.renderParams && Object.keys(style.renderParams).length > 0) {
+    return { renderParams: style.renderParams, presetName: style.presetName };
+  }
+  if (!style.presetName) return {};
+  const preset = module.getPreset(collectionId, style.presetName);
+  if (!preset) {
+    const available = module
+      .getPresetsForCollection(collectionId)
+      .map((candidate) => candidate.name);
+    throw new Error(
+      available.length
+        ? `Unknown preset "${style.presetName}" for ${collectionId}. Available: ${available.join(", ")}.`
+        : `${collectionId} has no render presets; pass render parameters instead.`,
+    );
+  }
+  return { presetName: preset.name, renderParams: { ...preset.params } };
+}
+
+/**
+ * Adds one Planetary Computer STAC item to the map as a panel-owned layer.
+ *
+ * The layer is created through the panel's control (mounted hidden when the
+ * panel is closed), so it appears in the panel's Layers tab, can be restyled
+ * there, and is restored when the project is reopened. On a renderer that
+ * cannot host the panel the item is added as a plain XYZ tile layer instead.
+ *
+ * @param app - The GeoLibre app API.
+ * @param input - The collection and item (an id to fetch, or the item itself) plus render options.
+ * @returns The added layer.
+ */
+export async function addPlanetaryComputerItemLayer(
+  app: GeoLibreAppAPI,
+  input: PlanetaryComputerStyleInput & {
+    collection: string;
+    itemId?: string;
+    item?: STACItem;
+  },
+): Promise<PlanetaryComputerAddResult> {
+  const module = await loadPlanetaryComputerModule();
+  let item = input.item;
+  if (!item) {
+    if (!input.itemId) throw new Error("An item or item id is required.");
+    item = await getPlanetaryComputerStacClient(module).getItem(input.collection, input.itemId);
+  }
+  item = { ...item, collection: item.collection || input.collection };
+  const style = resolvePlanetaryComputerStyle(module, input.collection, input);
+  const bounds = boundsTuple(item.bbox);
+  const name = input.name?.trim();
+
+  const control = await ensurePlanetaryComputerControl(app);
+  if (!control) {
+    const params = style.renderParams ?? module.getDefaultPreset(input.collection)?.params ?? {};
+    const tileUrl = getPlanetaryComputerTilerClient(module).getItemTileUrl(
+      input.collection,
+      item.id,
+      params,
+    );
+    const layerId = app.addTileLayer?.(name || item.id, tileUrl, {
+      attribution: "Microsoft Planetary Computer",
+      ...(bounds ? { bounds } : {}),
+      metadata: { stacCollectionId: input.collection, stacItemId: item.id },
+    });
+    if (!layerId) throw new Error("The active map cannot add tile layers.");
+    return { layerId, item, tileLayerFallback: true, ...(bounds ? { bounds } : {}) };
+  }
+
+  const layer = control.addItemLayer(item, style);
+  if (name) useAppStore.getState().updateLayer(layer.id, { name });
+  return { layerId: layer.id, item, ...(bounds ? { bounds } : {}) };
+}
+
+/**
+ * Adds a Planetary Computer mosaic to the map as a panel-owned layer: every
+ * item of a collection that matches the search, composited into one layer.
+ *
+ * @param app - The GeoLibre app API.
+ * @param input - The collection, the search selecting its items, and render options.
+ * @returns The added layer.
+ * @throws When the active renderer cannot host the panel (a mosaic has no XYZ fallback
+ *   worth offering: its search id expires, so it could not be restored).
+ */
+export async function addPlanetaryComputerMosaicLayer(
+  app: GeoLibreAppAPI,
+  input: PlanetaryComputerStyleInput & PlanetaryComputerSearchInput,
+): Promise<PlanetaryComputerAddResult> {
+  const module = await loadPlanetaryComputerModule();
+  const style = resolvePlanetaryComputerStyle(module, input.collection, input);
+  const control = await ensurePlanetaryComputerControl(app);
+  if (!control) {
+    throw new Error("Planetary Computer mosaics need the MapLibre renderer.");
+  }
+
+  const collection = await getPlanetaryComputerStacClient(module).getCollection(input.collection);
+  const { bbox, limit: _limit, ...searchParams } = planetaryComputerSearchParams(input);
+  const layer = await control.addMosaicLayer(collection, { ...style, searchParams, bbox });
+  const name = input.name?.trim();
+  if (name) useAppStore.getState().updateLayer(layer.id, { name });
+  return { layerId: layer.id, ...(layer.bounds ? { bounds: layer.bounds } : {}) };
+}
+
+/** One band value read at a point. */
+export interface PlanetaryComputerPixelValue {
+  /** Band or expression name reported by the Data API. */
+  name: string;
+  /** The value, or null where the pixel is nodata. */
+  value: number | null;
+}
+
+/** Pixel values of a Planetary Computer layer at a point. */
+export interface PlanetaryComputerPixelReading {
+  /** Id of the STAC item the values came from (the topmost item for a mosaic). */
+  itemId?: string;
+  /** One entry per band of the layer's render (its assets or expression). */
+  values: PlanetaryComputerPixelValue[];
+}
+
+/**
+ * Whether a Data API failure only means "no data here" rather than a real error.
+ *
+ * @param error - The rejection from a point query.
+ * @returns True for an out-of-footprint or nodata response.
+ */
+function isPlanetaryComputerNoDataError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /outside|out of bounds|no data|nodata|not found|no assets|empty/i.test(message);
+}
+
+/**
+ * Reads the pixel values of a Planetary Computer layer at a coordinate.
+ *
+ * Values are the layer's own bands: the assets it renders, or the result of
+ * its band-math expression. A mosaic is read from its topmost item at the point.
+ *
+ * @param layer - A Planetary Computer store layer.
+ * @param lngLat - `[lng, lat]` in WGS84 degrees.
+ * @param options - Abort signal.
+ * @returns The reading, or null when the point is outside the data.
+ */
+export async function identifyPlanetaryComputerLayer(
+  layer: GeoLibreLayer,
+  lngLat: [number, number],
+  options: { signal?: AbortSignal } = {},
+): Promise<PlanetaryComputerPixelReading | null> {
+  if (!isPlanetaryComputerLayer(layer)) return null;
+  const module = await loadPlanetaryComputerModule();
+  const tiler = getPlanetaryComputerTilerClient(module);
+  const collectionId = stringMetadata(layer, "stacCollectionId");
+  if (!collectionId) return null;
+
+  const bounds = numberArrayMetadata(layer, "bounds");
+  if (
+    bounds &&
+    (lngLat[0] < bounds[0] ||
+      lngLat[0] > bounds[2] ||
+      lngLat[1] < bounds[1] ||
+      lngLat[1] > bounds[3])
+  ) {
+    return null;
+  }
+
+  const renderParams = tileParamsMetadata(layer, "renderParams");
+  const assets = stringArrayMetadata(layer, "assets");
+  const params = assets?.length ? { ...renderParams, assets } : renderParams;
+
+  try {
+    let itemId = stringMetadata(layer, "stacItemId");
+    let itemCollection = collectionId;
+    if (!itemId) {
+      // A mosaic: find the topmost item under the point through the control's
+      // registered search, then read that item.
+      const active = planetaryComputerControl
+        ?.getState()
+        .activeLayers.find((candidate) => candidate.id === layer.id);
+      if (!active?.mosaicId) return null;
+      const items = await tiler.getMosaicItemsAtPoint(
+        active.mosaicId,
+        lngLat[0],
+        lngLat[1],
+        collectionId,
+      );
+      if (options.signal?.aborted || !items[0]) return null;
+      itemId = items[0].id;
+      itemCollection = items[0].collection || collectionId;
+    }
+
+    const data = await tiler.getItemPoint(itemCollection, itemId, lngLat[0], lngLat[1], params);
+    if (options.signal?.aborted) return null;
+    const values = Array.isArray(data.values) ? data.values : [];
+    if (values.length === 0) return null;
+    return {
+      itemId,
+      values: values.map((value, index) => ({
+        name: data.band_names?.[index] || `b${index + 1}`,
+        value: typeof value === "number" && Number.isFinite(value) ? value : null,
+      })),
+    };
+  } catch (error) {
+    if (isPlanetaryComputerNoDataError(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * The live state of the panel's control, or null when it has not been created.
+ *
+ * @returns The control state.
+ */
+export function getPlanetaryComputerState(): PlanetaryComputerState | null {
+  return planetaryComputerControl?.getState() ?? null;
+}
+
+/**
+ * The loaded Planetary Computer library and the shared API clients, for the
+ * panel's hand-off actions.
+ *
+ * @returns The module and clients.
+ */
+export async function getPlanetaryComputerClients(): Promise<{
+  module: PlanetaryComputerModule;
+  stac: STACClient;
+  tiler: TiTilerClient;
+}> {
+  const module = await loadPlanetaryComputerModule();
+  return {
+    module,
+    stac: getPlanetaryComputerStacClient(module),
+    tiler: getPlanetaryComputerTilerClient(module),
+  };
+}
+
+function getPlanetaryComputerStacClient(module: PlanetaryComputerModule): STACClient {
+  planetaryComputerStacClient ??= new module.STACClient(
+    PLANETARY_COMPUTER_STAC_URL,
+    planetaryComputerStacClientOptions(),
+  );
   return planetaryComputerStacClient;
 }
 
-function getPlanetaryComputerTilerClient(): TiTilerClient {
-  if (!planetaryComputerTilerClient) {
-    const { TiTilerClient: TiTilerClientClass } = getResolvedPlanetaryComputerConstructors();
-    planetaryComputerTilerClient = new TiTilerClientClass();
-  }
+function getPlanetaryComputerTilerClient(module: PlanetaryComputerModule): TiTilerClient {
+  planetaryComputerTilerClient ??= new module.TiTilerClient();
   return planetaryComputerTilerClient;
 }
 
-function getResolvedPlanetaryComputerConstructors(): {
-  STACClient: STACClientConstructor;
-  TiTilerClient: TiTilerClientConstructor;
-} {
-  if (!planetaryComputerConstructors) {
-    throw new Error("Planetary Computer constructors are not loaded.");
-  }
-  return planetaryComputerConstructors;
+/**
+ * The acquisition date of a STAC item.
+ *
+ * @param item - The STAC item.
+ * @returns Its `datetime`, else the start or end of its range, else undefined.
+ */
+export function planetaryComputerItemDate(item: STACItem): string | undefined {
+  const { datetime, start_datetime: start, end_datetime: end } = item.properties ?? {};
+  return datetime || start || end || undefined;
 }
 
 function planetaryComputerLayerName(activeLayer: ActiveLayer): string {
   if (activeLayer.item) return activeLayer.item.id;
-  if (activeLayer.collection) {
-    return activeLayer.collection.title || activeLayer.collection.id;
-  }
-  return activeLayer.id;
+  const title = activeLayer.collection?.title || activeLayer.collection?.id || activeLayer.id;
+  const datetime = activeLayer.searchParams?.datetime;
+  if (!datetime) return title;
+  const range = datetime
+    .split("/")
+    .map((part) => (part === ".." ? "" : part.slice(0, 10)))
+    .filter(Boolean)
+    .join(" to ");
+  return range ? `${title} (${range})` : title;
 }
 
 function patchPlanetaryComputerControlOnRemove(control: PlanetaryComputerControl): void {
@@ -718,34 +1091,6 @@ function showPlanetaryComputerControl(control: PlanetaryComputerControl | null):
   if (panel) panel.style.display = "";
 }
 
-function isPlanetaryComputerLayer(layer: GeoLibreLayer): boolean {
-  return (
-    layer.type === "raster" &&
-    layer.metadata.sourceKind === PLANETARY_COMPUTER_SOURCE_KIND &&
-    layer.metadata.externalNativeLayer === true
-  );
-}
-
-type PlanetaryComputerLayerManagerInternals = {
-  layers?: Map<string, ActiveLayer>;
-};
-
-// Mirrors private maplibre-gl-planetary-computer 0.4.0 internals used only by
-// the restore path. Missing required internals make the affected layer restore
-// fail before any map mutation, so dependency drift does not corrupt control
-// state.
-type PlanetaryComputerControlInternals = {
-  _layerManager?: PlanetaryComputerLayerManagerInternals;
-  _state?: { activeLayers: ActiveLayer[] };
-  _emit?: (event: "layer:add" | "statechange") => void;
-  _renderContent?: () => void;
-};
-
-type PlanetaryComputerRestoreInternals = {
-  activeLayers: ActiveLayer[];
-  layerManagerLayers: Map<string, ActiveLayer>;
-};
-
 type PlanetaryComputerRestoreFailure = {
   id: string;
   name: string;
@@ -760,21 +1105,6 @@ class InvalidPlanetaryComputerLayerMetadataError extends Error {
 
 function isInvalidPlanetaryComputerLayerMetadataError(error: unknown): boolean {
   return error instanceof InvalidPlanetaryComputerLayerMetadataError;
-}
-
-function requiredPlanetaryComputerRestoreInternals(
-  control: PlanetaryComputerControl,
-): PlanetaryComputerRestoreInternals {
-  const internals = control as unknown as PlanetaryComputerControlInternals;
-  const layerManagerLayers = internals._layerManager?.layers;
-  const activeLayers = internals._state?.activeLayers;
-  if (!layerManagerLayers || !activeLayers) {
-    throw new Error(
-      "Planetary Computer restore internals are unavailable; " +
-        "re-verify against maplibre-gl-planetary-computer internals.",
-    );
-  }
-  return { activeLayers, layerManagerLayers };
 }
 
 function stringMetadata(layer: GeoLibreLayer, key: string): string | undefined {
@@ -802,10 +1132,24 @@ function tileParamsMetadata(layer: GeoLibreLayer, key: string): TileParams {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as TileParams) : {};
 }
 
+function searchParamsMetadata(layer: GeoLibreLayer, key: string): Partial<STACSearchParams> {
+  const value = layer.metadata[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  // Only the fields a mosaic search uses; a hand-edited project cannot smuggle
+  // anything else into the registration request.
+  const candidate = value as Partial<STACSearchParams>;
+  const params: Partial<STACSearchParams> = {};
+  if (typeof candidate.datetime === "string") params.datetime = candidate.datetime;
+  if (candidate.query && typeof candidate.query === "object") params.query = candidate.query;
+  if (Array.isArray(candidate.sortby)) params.sortby = candidate.sortby;
+  if (candidate.filter && typeof candidate.filter === "object") params.filter = candidate.filter;
+  return params;
+}
+
 function boundsTuple(value: unknown): [number, number, number, number] | undefined {
-  return Array.isArray(value) &&
-    value.length === 4 &&
-    value.every((entry) => typeof entry === "number")
-    ? (value as [number, number, number, number])
-    : undefined;
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "number")) return undefined;
+  if (value.length === 4) return value as [number, number, number, number];
+  // A 3D STAC bbox is [west, south, minz, east, north, maxz].
+  if (value.length === 6) return [value[0], value[1], value[3], value[4]];
+  return undefined;
 }

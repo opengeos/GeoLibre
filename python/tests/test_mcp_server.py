@@ -419,6 +419,37 @@ def test_add_raster_layer_records_its_source(server, project_path):
     assert described["layers"][0]["name"] == "DEM"
 
 
+def test_add_planetary_computer_layer_writes_a_restorable_layer(server, project_path, tmp_path):
+    result = call(
+        server,
+        "add_planetary_computer_layer",
+        path=project_path,
+        collection="sentinel-2-l2a",
+        datetime="2024-06-01/2024-08-31",
+        max_cloud_cover=10,
+        preset="false-color",
+        bbox=[-123.5, 46.8, -121.0, 48.5],
+    )
+    assert result["layerCount"] == 1
+    saved = json.loads((tmp_path / project_path).read_text(encoding="utf-8"))
+    metadata = saved["layers"][0]["metadata"]
+    assert metadata["sourceKind"] == "planetary-computer-raster"
+    assert metadata["planetaryComputerLayerType"] == "mosaic"
+    assert metadata["presetName"] == "false-color"
+    assert metadata["stacSearchParams"]["datetime"] == "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z"
+    assert metadata["bounds"] == [-123.5, 46.8, -121.0, 48.5]
+
+    error = call_error(
+        server,
+        "add_planetary_computer_layer",
+        path=project_path,
+        collection="sentinel-2-l2a",
+        item="S2_ITEM",
+        datetime="2024-06-01/2024-08-31",
+    )
+    assert "mosaic" in error
+
+
 @pytest.mark.parametrize(
     ("tool", "arguments", "expected_type"),
     [
@@ -435,6 +466,12 @@ def test_add_raster_layer_records_its_source(server, project_path):
             "vector-tiles",
         ),
         ("add_tile_layer", {"url": "https://example.com/{z}/{x}/{y}.png"}, "xyz"),
+        ("add_planetary_computer_layer", {"collection": "sentinel-2-l2a"}, "raster"),
+        (
+            "add_planetary_computer_layer",
+            {"collection": "sentinel-2-l2a", "item": "S2_ITEM", "preset": "ndvi"},
+            "raster",
+        ),
         ("add_lidar_layer", {"url": "https://example.com/autzen.copc.laz"}, "lidar"),
         ("add_3d_tiles_layer", {"url": "https://example.com/tileset.json"}, "3d-tiles"),
         ("add_3d_tiles_layer", {"ion_asset_id": 96188}, "3d-tiles"),

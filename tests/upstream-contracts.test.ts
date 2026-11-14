@@ -766,79 +766,158 @@ describe("@geoman-io/maplibre-geoman-free", () => {
 
 describe("maplibre-gl-planetary-computer", () => {
   const section =
-    "`maplibre-gl-planetary-computer` (`packages/plugins/package.json`) — private STAC client";
+    "`maplibre-gl-planetary-computer` (`packages/plugins/package.json`): client, restore, and sync contract";
+  const message = (detail: string) =>
+    contractMessage("maplibre-gl-planetary-computer", section, detail, "packages/plugins");
 
-  it("keeps the private STAC client fields the CORS-safe subclass reuses", async () => {
-    const { PlanetaryComputerControl, STACClient } = await import("maplibre-gl-planetary-computer");
-    const message = (detail: string) =>
-      contractMessage("maplibre-gl-planetary-computer", section, detail, "packages/plugins");
-    const client = new STACClient() as unknown as Record<string, unknown>;
-    assert.ok("abortController" in client, message("STACClient has no `abortController` field"));
-    const proto = STACClient.prototype as unknown as Record<string, unknown>;
-    for (const method of ["fetch", "getBaseUrl", "getCollections", "search", "searchWithContext"]) {
-      assert.equal(
-        typeof proto[method],
-        "function",
-        message(`STACClient has no \`${method}\` method`),
-      );
-    }
-    assert.match(
-      sourceOf(proto.fetch),
-      /^async fetch\(\w+, \w+\)/,
-      message("STACClient.fetch is no longer fetch(path, init)"),
-    );
-
-    const original = STACClient.prototype.getCollections;
-    let loads = 0;
-    STACClient.prototype.getCollections = async function () {
-      loads++;
-      return [];
+  /** The parts of a MapLibre map the control's layer manager touches. */
+  function fakeMap() {
+    const sources = new Map<string, unknown>();
+    let layers: Array<{
+      id: string;
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    }> = [];
+    return {
+      sources,
+      order: () => layers.map((layer) => layer.id),
+      getContainer: () => ({ appendChild() {}, classList: { add() {}, remove() {} } }),
+      addSource: (id: string, source: unknown) => void sources.set(id, source),
+      removeSource: (id: string) => void sources.delete(id),
+      getSource: (id: string) => sources.get(id),
+      addLayer: (layer: (typeof layers)[number], beforeId?: string) => {
+        const index = beforeId ? layers.findIndex((candidate) => candidate.id === beforeId) : -1;
+        if (index >= 0) layers.splice(index, 0, layer);
+        else layers.push(layer);
+      },
+      removeLayer: (id: string) => {
+        layers = layers.filter((layer) => layer.id !== id);
+      },
+      getLayer: (id: string) => layers.find((layer) => layer.id === id),
+      getStyle: () => ({ layers }),
+      setLayoutProperty: (id: string, name: string, value: unknown) => {
+        const layer = layers.find((candidate) => candidate.id === id);
+        if (layer) layer.layout[name] = value;
+      },
+      setPaintProperty: (id: string, name: string, value: unknown) => {
+        const layer = layers.find((candidate) => candidate.id === id);
+        if (layer) layer.paint[name] = value;
+      },
     };
-    try {
-      const control = new PlanetaryComputerControl({}) as unknown as Record<string, unknown>;
-      assert.ok(
-        control._stacClient instanceof STACClient,
-        message("the control no longer keeps its client on `_stacClient`"),
-      );
-      assert.equal(
-        loads,
-        0,
-        message("the control now loads collections in its constructor, before the swap"),
-      );
-    } finally {
-      STACClient.prototype.getCollections = original;
-    }
+  }
+
+  const item = {
+    id: "ITEM",
+    type: "Feature",
+    stac_version: "1.0.0",
+    geometry: { type: "Point", coordinates: [0, 0] },
+    bbox: [-1, -1, 1, 1],
+    properties: { datetime: "2024-01-01T00:00:00Z" },
+    links: [],
+    assets: { visual: { href: "https://example.test/visual.tif" } },
+    collection: "sentinel-2-l2a",
+  };
+
+  it("uses the client it is given and loads nothing in its constructor", async () => {
+    const { PlanetaryComputerControl, STACClient } = await import("maplibre-gl-planetary-computer");
+    let loads = 0;
+    const client = new STACClient(undefined, {
+      fetch: (async () => {
+        loads++;
+        return new Response(JSON.stringify({ collections: [] }), { status: 200 });
+      }) as typeof fetch,
+    });
+    const control = new PlanetaryComputerControl({ stacClient: client });
+    assert.equal(
+      control.getStacClient(),
+      client,
+      message("the control no longer uses the `stacClient` option"),
+    );
+    assert.equal(loads, 0, message("the control now loads collections in its constructor"));
   });
 
-  it("issues only GET requests outside search", async () => {
+  it("searches with a GET and issues only GET requests for the other reads", async () => {
     const { STACClient } = await import("maplibre-gl-planetary-computer");
-    const methods: string[] = [];
-    const realFetch = globalThis.fetch;
-    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
-      methods.push(init?.method ?? "GET");
-      return new Response(JSON.stringify({ collections: [], features: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
-    try {
-      const client = new STACClient();
-      await client.getCollections();
-      await client.getCollection("x");
-      await client.getCollectionItems("x");
-      await client.getItem("x", "y");
-    } finally {
-      globalThis.fetch = realFetch;
-    }
+    const requests: string[] = [];
+    const client = new STACClient("https://stac.test", {
+      fetch: (async (url: unknown, init?: RequestInit) => {
+        requests.push(`${init?.method ?? "GET"} ${String(url)}`);
+        return new Response(JSON.stringify({ collections: [], features: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+    await client.getCollections();
+    await client.getCollection("x");
+    await client.getCollectionItems("x");
+    await client.getItem("x", "y");
+    await client.search({ collections: ["x"], limit: 1 });
     assert.deepEqual(
-      methods,
-      ["GET", "GET", "GET", "GET"],
-      contractMessage(
-        "maplibre-gl-planetary-computer",
-        section,
-        "a STACClient read now sends a non-GET request, which the Planetary Computer API rejects cross-origin",
-        "packages/plugins",
+      requests.map((request) => request.split(" ")[0]),
+      ["GET", "GET", "GET", "GET", "GET"],
+      message(
+        "a STACClient read now sends a non-GET request, which the Planetary Computer API has rejected cross-origin",
       ),
+    );
+    assert.equal(
+      requests[4],
+      "GET https://stac.test/search?collections=x&limit=1",
+      message("search is no longer a GET /search with the parameters in the query string"),
+    );
+  });
+
+  it("re-creates a saved layer under its id and stores updates verbatim", async () => {
+    const { PlanetaryComputerControl } = await import("maplibre-gl-planetary-computer");
+    const control = new PlanetaryComputerControl({ autoLoadCollections: false });
+    const map = fakeMap();
+    // Attach the layer manager without building the panel DOM (no document here).
+    const internals = control as unknown as { _map: unknown; _layerManager: unknown };
+    const { LayerManager } = await import("maplibre-gl-planetary-computer");
+    internals._map = map;
+    internals._layerManager = new LayerManager(map as never, control.getTilerClient());
+    (control as unknown as { _renderContent: () => void })._renderContent = () => {};
+
+    const events: string[] = [];
+    control.on("layer:add", () => events.push("add"));
+    control.on("layer:update", () => events.push("update"));
+
+    map.addLayer({ id: "above", layout: {}, paint: {} });
+    const layer = control.addItemLayer(item as never, {
+      id: "saved-id",
+      sourceId: "saved-source",
+      visible: false,
+      opacity: 0.37,
+      beforeId: "above",
+    });
+    assert.equal(layer.id, "saved-id", message("addItemLayer ignores the `id` option"));
+    assert.equal(layer.sourceId, "saved-source", message("addItemLayer ignores `sourceId`"));
+    assert.deepEqual(map.order(), ["saved-id", "above"], message("`beforeId` is not honored"));
+    assert.deepEqual(events, ["add"], message("addItemLayer no longer emits one layer:add"));
+
+    // The store <-> control sync compares these with ===, so they must not be
+    // coerced or rounded on the way through updateLayer.
+    control.updateLayer("saved-id", { visible: true, opacity: 0.123456789 });
+    const updated = control.getState().activeLayers.find((active) => active.id === "saved-id");
+    assert.equal(updated?.opacity, 0.123456789, message("updateLayer rounds or coerces opacity"));
+    assert.equal(updated?.visible, true, message("updateLayer coerces visible"));
+    assert.deepEqual(events, ["add", "update"]);
+
+    // With `mosaicId` the mosaic is added synchronously, which the restore path
+    // relies on to add it while the store sync is suspended.
+    const collection = { id: "sentinel-2-l2a", title: "Sentinel-2" };
+    void control.addMosaicLayer(collection as never, {
+      id: "mosaic-id",
+      mosaicId: "pc1.search",
+      searchParams: { datetime: "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z" },
+    });
+    const mosaic = control.getState().activeLayers.find((active) => active.id === "mosaic-id");
+    assert.ok(mosaic, message("addMosaicLayer with `mosaicId` no longer adds synchronously"));
+    assert.equal(mosaic?.type, "mosaic");
+    assert.match(
+      String((map.sources.get(mosaic.sourceId) as { tiles: string[] }).tiles[0]),
+      /\/mosaic\/pc1\.search\/tiles\/WebMercatorQuad\//,
+      message("mosaic tiles are no longer served under the registered search id"),
     );
   });
 });

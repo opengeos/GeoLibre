@@ -557,3 +557,94 @@ describe("isTimeSliderIdle", () => {
     });
   });
 });
+
+describe("source rehydration", () => {
+  it("lets a plugin restore or drop a saved source", async () => {
+    const { registerTimeSliderSourceRehydrator } =
+      await import("../packages/plugins/src/plugins/maplibre-time-slider");
+    const seen: string[] = [];
+    const unregister = registerTimeSliderSourceRehydrator((spec) => {
+      seen.push(String(spec.id));
+      if (spec.id === "drop-me") return null;
+      if (spec.id === "restore-me") return { ...spec, name: "Restored" } as SourceSpec;
+      return undefined;
+    });
+    try {
+      assert.equal(
+        apply(
+          baseConfig({
+            sources: [
+              { id: "keep-me", type: "xyz", tiles: "https://example.com/{z}/{x}/{y}.png" },
+              { id: "drop-me", type: "xyz" },
+              { id: "restore-me", type: "xyz", tiles: "https://example.com/{z}/{x}/{y}.png" },
+            ],
+          }),
+        ),
+        true,
+      );
+      assert.deepEqual(seen, ["keep-me", "drop-me", "restore-me"]);
+      const sources = saved()?.sources as Array<{ id: string; name?: string }>;
+      assert.deepEqual(
+        sources.map((source) => [source.id, source.name]),
+        [
+          ["keep-me", undefined],
+          ["restore-me", "Restored"],
+        ],
+      );
+    } finally {
+      unregister();
+    }
+  });
+
+  it("rebuilds a Planetary Computer stack's tile resolver from its saved description", async () => {
+    // Importing the module registers its rehydrator, as the plugins barrel does.
+    const { PLANETARY_COMPUTER_STACK_KEY } =
+      await import("../packages/plugins/src/plugins/planetary-computer-actions");
+    const stack = {
+      collection: "sentinel-2-l2a",
+      items: [
+        { id: "first", date: "2024-06-20" },
+        { id: "second", date: "2024-09-06" },
+      ],
+      renderParams: { assets: ["visual"] },
+    };
+    // What a saved project holds: the description survives, the function does not.
+    const savedSource = {
+      id: "pc-stack",
+      name: "Stack",
+      type: "xyz",
+      [PLANETARY_COMPUTER_STACK_KEY]: stack,
+    };
+    const unregister = (
+      await import("../packages/plugins/src/plugins/maplibre-time-slider")
+    ).registerTimeSliderSourceRehydrator((spec) => {
+      // Runs after the Planetary Computer rehydrator: the resolver is back.
+      const tiles = (spec as unknown as { tiles?: unknown }).tiles;
+      if (spec.id === "pc-stack") assert.equal(typeof tiles, "function");
+      return undefined;
+    });
+    try {
+      assert.equal(
+        apply(
+          baseConfig({
+            dates: ["2024-06-20", "2024-09-06"],
+            sources: [
+              savedSource,
+              { id: "broken", type: "xyz", [PLANETARY_COMPUTER_STACK_KEY]: {} },
+            ],
+          }),
+        ),
+        true,
+      );
+    } finally {
+      unregister();
+    }
+    const sources = saved()?.sources as Array<Record<string, unknown>>;
+    // A stack whose description is unusable has no tiles to draw and is dropped.
+    assert.deepEqual(
+      sources.map((source) => source.id),
+      ["pc-stack"],
+    );
+    assert.deepEqual(sources[0][PLANETARY_COMPUTER_STACK_KEY], stack);
+  });
+});

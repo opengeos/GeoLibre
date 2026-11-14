@@ -2,6 +2,7 @@ import {
   ARCGIS_IMAGE_SERVICE_SOURCE_KIND,
   formatPixelValue,
   type GeoLibreLayer,
+  isPlanetaryComputerLayer,
 } from "@geolibre/core";
 import { DEFAULT_IDENTIFY_ALL_LABELS, type MapCanvasIdentifyAllLabels } from "./identify-all-popup";
 
@@ -105,6 +106,16 @@ export function timeSliderBridge(): GeoLibreTimeSliderBridge | undefined {
  */
 export function isPixelIdentifyLayer(layer: GeoLibreLayer): boolean {
   return layer.metadata.pixelIdentify === true;
+}
+
+/**
+ * Whether Identify reads this layer's pixel values through the application's
+ * raster bridge (`identifyRasterLayerAt`) although it is neither a COG nor a
+ * NetCDF grid. A Planetary Computer layer is drawn from rendered tiles, so its
+ * source values are read from the Data API by the plugin that owns it.
+ */
+export function isBridgedRasterIdentifyLayer(layer: GeoLibreLayer): boolean {
+  return isPlanetaryComputerLayer(layer) && layer.metadata.identifiable !== false;
 }
 
 /** Turn a pixel reading into the flat key/value rows the identify popup shows. */
