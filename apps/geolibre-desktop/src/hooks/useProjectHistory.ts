@@ -278,8 +278,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         // does; the store write alone would list it and draw nothing.
         applySnapshotLayerRestore(project, layerId, (layer) => {
           void restoreLibraryLayer(layer, createAppAPI(mapControllerRef), {
-            failureNotice: (name) =>
-              i18next.t("projectHistory.diff.restoreLayerRedrawError", { name }),
+            failureNotice: (name) => t("projectHistory.diff.restoreLayerRedrawError", { name }),
           });
         });
         return true;
