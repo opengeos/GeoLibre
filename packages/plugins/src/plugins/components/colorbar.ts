@@ -75,9 +75,9 @@ export interface ColorbarRequest {
  * @param request - The ramp, its value range, and its caption.
  */
 export async function showColorbar(app: GeoLibreAppAPI, request: ColorbarRequest): Promise<void> {
-  const current = normalizeColorbarState(
-    colorbarControl && colorbarPanelVisible ? colorbarControl.getState() : undefined,
-  );
+  // The control keeps its colorbars while its panel is hidden, so read them
+  // whenever it exists; a torn-down control has none to keep.
+  const current = normalizeColorbarState(colorbarControl?.getState());
   const custom = Array.isArray(request.colormap);
   const entry = {
     mode: custom ? ("custom" as const) : ("named" as const),

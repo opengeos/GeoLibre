@@ -161,6 +161,14 @@ describe("planetaryComputerSavedStyle", () => {
     assert.equal(style.renderParams?.colormap_name, "rdylgn");
   });
 
+  it("puts a lone rescale or colormap over the collection's default preset", async () => {
+    // Without bands to draw the Data API has nothing to render.
+    const style = await saved({ renderParams: { rescale: "0,4000" }, assets: [] });
+    assert.deepEqual(style.renderParams, { assets: ["visual"], rescale: "0,4000" });
+    assert.deepEqual(style.assets, ["visual"]);
+    assert.equal(style.presetName, "true-color");
+  });
+
   it("keeps a complete saved render as saved, whatever preset name rides along", async () => {
     // Explicit render parameters win over a preset when the layer is added, so
     // a restore must not graft the preset's expression and colormap back on.

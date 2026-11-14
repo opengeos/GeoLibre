@@ -123,6 +123,17 @@ def test_planetary_computer_mosaic_layer_shape():
     assert "presetName" not in metadata
 
 
+def test_planetary_computer_stretch_without_bands_is_a_partial_override():
+    # No assets, expression, or preset: the app draws the collection's default
+    # preset and applies these over it, so no band selection is written here.
+    layer = project.planetary_computer_layer("cop-dem-glo-30", rescale=(0, 3000))
+    assert layer["metadata"]["renderParams"] == {"rescale": "0,3000"}
+    assert layer["metadata"]["assets"] == []
+    assert "presetName" not in layer["metadata"]
+    colored = project.planetary_computer_layer("cop-dem-glo-30", colormap="viridis")
+    assert colored["metadata"]["renderParams"] == {"colormap_name": "viridis"}
+
+
 def test_planetary_computer_render_options():
     layer = project.planetary_computer_layer(
         "sentinel-2-l2a",

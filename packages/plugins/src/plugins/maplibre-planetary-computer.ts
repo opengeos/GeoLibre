@@ -542,7 +542,7 @@ async function restorePlanetaryComputerLayer(
  * @returns The `renderParams`/`assets`/`presetName` options to pass on.
  */
 export function planetaryComputerSavedStyle(
-  module: Pick<PlanetaryComputerModule, "getPreset">,
+  module: Pick<PlanetaryComputerModule, "getPreset" | "getDefaultPreset">,
   layer: GeoLibreLayer,
   collectionId: string,
 ): { assets?: string[]; presetName?: string; renderParams?: TileParams } {
@@ -564,12 +564,13 @@ export function planetaryComputerSavedStyle(
   const selectsBands = Boolean(
     savedParams.expression || savedParams.assets?.length || savedAssets?.length,
   );
-  const renderParams: TileParams = selectsBands
-    ? savedParams
-    : { ...preset?.params, ...savedParams };
+  // A partial override with no preset named (a lone rescale or colormap) still
+  // needs bands to draw, so it goes over the collection's default preset.
+  const base = preset ?? module.getDefaultPreset(collectionId);
+  const renderParams: TileParams = selectsBands ? savedParams : { ...base?.params, ...savedParams };
   const assets = savedAssets?.length ? savedAssets : renderParams.assets;
   return {
-    ...(presetName ? { presetName } : {}),
+    ...(presetName ? { presetName } : !selectsBands && base ? { presetName: base.name } : {}),
     renderParams,
     ...(assets?.length ? { assets } : {}),
   };
@@ -922,7 +923,9 @@ export interface PlanetaryComputerPixelReading {
  */
 function isPlanetaryComputerNoDataError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /outside|out of bounds|no data|nodata|not found|no assets|empty/i.test(message);
+  // Only the Data API's own "nothing at this point" answers. A broader match
+  // (a bare "not found", say) would turn a missing item into a silent miss.
+  return /outside (the )?(dataset |raster |item )?bounds|out of bounds|no ?data/i.test(message);
 }
 
 /**
