@@ -15,6 +15,7 @@ import {
   PLANETARY_COMPUTER_STACK_KEY,
   planetaryComputerColorbar,
   planetaryComputerStackItemAt,
+  planetaryComputerStackBounds,
   planetaryComputerStackItems,
   planetaryComputerStackReader,
   planetaryComputerStackSource,
@@ -263,10 +264,11 @@ describe("Planetary Computer time-series stack", () => {
   ];
 
   it("keeps one item per day, oldest first, preferring the search order", () => {
+    const bbox = [-123, 46.8, -121.5, 47.8];
     assert.deepEqual(planetaryComputerStackItems(items), [
-      { id: "oldest", date: "2024-06-20" },
-      { id: "middle", date: "2024-08-07" },
-      { id: "newest", date: "2024-09-06" },
+      { id: "oldest", date: "2024-06-20", bbox },
+      { id: "middle", date: "2024-08-07", bbox },
+      { id: "newest", date: "2024-09-06", bbox },
     ]);
   });
 
@@ -288,10 +290,13 @@ describe("Planetary Computer time-series stack", () => {
       ],
       focus,
     );
-    assert.deepEqual(stackItems, [
-      { id: "earlier", date: "2024-08-07" },
-      { id: "covering-tile", date: "2024-09-06" },
-    ]);
+    assert.deepEqual(
+      stackItems.map(({ id, date }) => ({ id, date })),
+      [
+        { id: "earlier", date: "2024-08-07" },
+        { id: "covering-tile", date: "2024-09-06" },
+      ],
+    );
   });
 
   const stack: PlanetaryComputerStack = {
@@ -333,6 +338,41 @@ describe("Planetary Computer time-series stack", () => {
     const saved = JSON.parse(JSON.stringify(source));
     assert.equal(saved.tiles, undefined);
     assert.deepEqual(parsePlanetaryComputerStack(saved[PLANETARY_COMPUTER_STACK_KEY]), stack);
+  });
+
+  it("limits the source to the stack's footprints so off-scene tiles are not requested", () => {
+    const footprints: PlanetaryComputerStack = {
+      collection: "sentinel-2-l2a",
+      items: [
+        { id: "a", date: "2024-06-07", bbox: [-84.37, 36.01, -83.11, 37.03] },
+        { id: "b", date: "2024-08-31", bbox: [-83.25, 35.1, -82.6, 36.04] },
+      ],
+      renderParams: {},
+    };
+    assert.deepEqual(planetaryComputerStackBounds(footprints.items), [-84.37, 35.1, -82.6, 37.03]);
+    const source = planetaryComputerStackSource("s", "S", footprints) as unknown as {
+      bounds?: number[];
+    };
+    assert.deepEqual(source.bounds, [-84.37, 35.1, -82.6, 37.03]);
+    // The footprints survive a project round trip, so a reopened stack keeps its bounds.
+    const reopened = parsePlanetaryComputerStack(JSON.parse(JSON.stringify(footprints)));
+    assert.deepEqual(reopened, footprints);
+
+    // A stack saved before footprints were recorded draws unbounded, as before.
+    const legacy = { ...footprints, items: [{ id: "a", date: "2024-06-07" }] };
+    assert.equal(planetaryComputerStackBounds(legacy.items), undefined);
+    assert.equal(
+      (planetaryComputerStackSource("s", "S", legacy) as unknown as { bounds?: number[] }).bounds,
+      undefined,
+    );
+    // A malformed footprint is dropped rather than poisoning the bounds.
+    assert.deepEqual(
+      parsePlanetaryComputerStack({
+        collection: "x",
+        items: [{ id: "a", date: "2024-06-07", bbox: [0, "1", 2, 3] }],
+      })?.items,
+      [{ id: "a", date: "2024-06-07" }],
+    );
   });
 
   it("rejects a malformed saved stack", () => {
