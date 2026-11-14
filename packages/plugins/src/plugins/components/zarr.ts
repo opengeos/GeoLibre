@@ -1027,6 +1027,41 @@ interface PendingZarrRestore {
   /** The record as saved, whose name, visibility, opacity and style are kept. */
   layer: GeoLibreLayer;
   url: string;
+  /** The live layer's id, once the swap has taken over the record. */
+  restoredId?: string;
+}
+
+/**
+ * The store record a restore is for, if it is still there and still the same
+ * layer. Ids are `zarr-layer-<n>` in every project, so a project opened while
+ * an earlier one's restore was loading can hold a different layer under the
+ * same id; matching the store URL and variable keeps the stale restore off it.
+ */
+function zarrRestoreTarget(entry: PendingZarrRestore): GeoLibreLayer | undefined {
+  const record = useAppStore.getState().layers.find((layer) => layer.id === entry.placeholderId);
+  if (!record || record.type !== "zarr") return undefined;
+  const url = typeof record.source.url === "string" ? record.source.url.trim() : "";
+  if (url !== entry.url || record.source.variable !== entry.layer.source.variable) return undefined;
+  return record;
+}
+
+/** A copy of `record` without its undefined values, so a spread keeps the saved ones. */
+function definedEntries(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
+}
+
+/**
+ * Whether a saved record's URL names a kerchunk reference manifest rather than
+ * a Zarr store. New Cloud NetCDF adds record `source.kerchunk`; projects saved
+ * before that only have the manifest URL, which is JSON where a store is not.
+ */
+function isKerchunkReferenceRecord(source: Record<string, unknown>, url: string): boolean {
+  if (source.kerchunk === true) return true;
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith(".json");
+  } catch {
+    return false;
+  }
 }
 
 /** The restore whose `layeradd` the shared handler should swap in, if any. */
@@ -1108,8 +1143,8 @@ async function restoreZarrLayerExclusively(
   app: GeoLibreAppAPI,
   entry: PendingZarrRestore,
 ): Promise<void> {
-  // Removed, or already restored by an overlapping call, while queued.
-  if (!useAppStore.getState().layers.some((layer) => layer.id === entry.placeholderId)) return;
+  // Removed, replaced by another project, or already restored, while queued.
+  if (!zarrRestoreTarget(entry)) return;
   if (zarrControl?.getLayersMap().has(entry.placeholderId)) return;
 
   const { ZarrLayerControl: ZarrLayerControlClass } = await getComponentsConstructors();
@@ -1132,7 +1167,7 @@ async function restoreZarrLayerExclusively(
   // `?url=` link can open one), so never send credentials over plain HTTP.
   assertSecureRequestHeaders(url, headers);
   let refs = source.kerchunkRefs as KerchunkRefs | undefined;
-  if (!refs && source.kerchunk === true) {
+  if (!refs && isKerchunkReferenceRecord(source, url)) {
     refs = await loadKerchunkReference(url, { headers });
   }
   const control = zarrControl;
@@ -1183,16 +1218,21 @@ async function restoreZarrLayerExclusively(
     endAdd();
   }
   if (!addedLayerId) throw new Error(failure ?? "Failed to restore the Zarr layer.");
-  // The record was removed while the store loaded, so the swap had nothing to
-  // replace: drop the live layer too, or it would draw with no Layers entry.
-  if (!useAppStore.getState().layers.some((item) => item.id === addedLayerId)) {
+  // The record was removed (or another project opened) while the store
+  // loaded, so the swap had nothing to take over: drop the live layer too, or
+  // it would draw with no Layers entry.
+  if (entry.restoredId !== addedLayerId) {
     control.removeLayer(addedLayerId);
     return;
   }
 
   registerZarrHeaders(addedLayerId, headers);
   void registerZarrTemporalAdapter(addedLayerId, url, { headers, refs });
-  if (!layer.visible) control.setLayerVisibility(addedLayerId, false, layer.opacity);
+  // Read back, so a visibility change made while the store loaded is kept.
+  const restored = useAppStore.getState().layers.find((item) => item.id === addedLayerId);
+  if (restored && !restored.visible) {
+    control.setLayerVisibility(addedLayerId, false, restored.opacity);
+  }
 }
 
 /**
@@ -1211,17 +1251,20 @@ async function restoreZarrLayerExclusively(
  * @param live - The record built from the control's `layeradd` state.
  */
 function swapRestoredZarrLayer(entry: PendingZarrRestore, live: GeoLibreLayer): void {
-  const saved = entry.layer;
+  // The record as it is now, so edits made while the store loaded are kept.
+  const saved = zarrRestoreTarget(entry);
+  if (!saved) return;
   const restored: GeoLibreLayer = {
     ...saved,
     id: live.id,
-    source: { ...saved.source, ...live.source },
-    metadata: { ...saved.metadata, ...live.metadata },
+    // The control can report a field as undefined (a selector it was not
+    // given); that must not erase the saved value.
+    source: { ...saved.source, ...definedEntries(live.source) },
+    metadata: { ...saved.metadata, ...definedEntries(live.metadata) },
     sourcePath: live.sourcePath,
   };
   const placeholderId = entry.placeholderId;
   const layers = useAppStore.getState().layers;
-  if (!layers.some((layer) => layer.id === placeholderId)) return;
   // Any record can hold the id, not only a pending restore: a local folder or
   // Icechunk record the restore skips keeps its saved id too.
   const clashes = live.id !== placeholderId && layers.some((layer) => layer.id === live.id);
@@ -1238,6 +1281,7 @@ function swapRestoredZarrLayer(entry: PendingZarrRestore, live: GeoLibreLayer): 
   }));
   if (clash && asideId) clash.placeholderId = asideId;
   entry.placeholderId = live.id;
+  entry.restoredId = live.id;
 }
 
 // The control takes an explicit list of hex colors; the public option also

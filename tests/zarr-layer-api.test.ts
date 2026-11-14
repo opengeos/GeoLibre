@@ -759,6 +759,24 @@ describe("restoreZarrLayers", () => {
     assert.equal(stubControl()?.getLayersMap().size, liveBefore, "the live layer is dropped");
   });
 
+  it("leaves another project's record alone when it opens mid-restore", async () => {
+    installStubModule();
+    await addZarrRasterLayer(app, { url: "https://example.org/d.zarr", variable: "x" });
+    useAppStore.setState({ layers: [savedZarrLayer("zarr-layer-1", "Project A")] });
+    const liveBefore = stubControl()?.getLayersMap().size;
+    // Project B opens while A's store loads, with its own layer under the same id.
+    const projectB = savedZarrLayer("zarr-layer-1", "Project B", "https://example.org/b.zarr");
+    beforeNextAdd = () => useAppStore.setState({ layers: [projectB] });
+
+    await restoreZarrLayers(app);
+
+    const layers = useAppStore.getState().layers;
+    assert.equal(layers.length, 1);
+    assert.equal(layers[0].name, "Project B");
+    assert.equal(layers[0].source.url, "https://example.org/b.zarr");
+    assert.equal(stubControl()?.getLayersMap().size, liveBefore, "A's live layer is dropped");
+  });
+
   it("does not send saved headers over plain HTTP", async () => {
     installStubModule();
     const layer = savedZarrLayer("insecure", "Insecure", "http://example.org/private.zarr");
