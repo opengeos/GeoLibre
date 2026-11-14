@@ -355,11 +355,17 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("toolbar.item.embedVectorTitle")}</DialogTitle>
+            <DialogTitle>
+              {t(
+                projectFiles.embedVectorDataPrompt?.hasGeometryEdits
+                  ? "toolbar.item.embedEditedVectorTitle"
+                  : "toolbar.item.embedVectorTitle",
+              )}
+            </DialogTitle>
             <DialogDescription>
               {t(
                 projectFiles.embedVectorDataPrompt?.hasGeometryEdits
-                  ? "toolbar.item.embedEditedGeometryDesc"
+                  ? "toolbar.item.embedEditedFeaturesDesc"
                   : projectFiles.embedVectorDataPrompt?.allowFileReferences
                     ? "toolbar.item.embedVectorDescDesktop"
                     : projectFiles.embedVectorDataPrompt?.desktop

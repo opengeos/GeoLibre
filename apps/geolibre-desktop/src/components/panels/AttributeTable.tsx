@@ -129,6 +129,7 @@ import {
   type NewColumnType,
   inferColumnTypes,
 } from "../../lib/attribute-columns";
+import { markAttributeEdit } from "../../lib/edited-geometry-save";
 import {
   coerceComputedValue,
   compileExpression,
@@ -1352,7 +1353,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       ),
     };
 
-    updateLayer(layer.id, { geojson });
+    updateLayer(layer.id, markAttributeEdit(layer, { geojson }));
     setIsEditing(false);
     setDrafts({});
     return true;
@@ -1443,7 +1444,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     const newKey = editingColumnName.trim();
     const patch = renameColumn(layer, discoveredColumns, oldKey, newKey);
     if (patch) {
-      updateLayer(layer.id, patch);
+      updateLayer(layer.id, markAttributeEdit(layer, patch));
       // Keep view state pointing at the renamed column.
       setColumnWidths((current) => {
         if (!(oldKey in current)) return current;
@@ -1492,7 +1493,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const confirmDeleteColumn = () => {
     if (!layer || !canManageColumns || !layerCaps.delete || !columnPendingDelete) return;
     const patch = deleteColumn(layer, columnPendingDelete);
-    if (patch) updateLayer(layer.id, patch);
+    if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     // Drop a sort that pointed at the deleted column, which would otherwise
     // leave sort.key referencing an absent field (every row compares equal).
     setSort((current) =>
@@ -1540,7 +1541,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       newColumnType,
       newColumnDefault,
     );
-    if (patch) updateLayer(layer.id, patch);
+    if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     setAddingColumn(false);
   };
 
@@ -1728,7 +1729,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       setCalcError(result.error);
       return;
     }
-    updateLayer(layer.id, result.patch);
+    updateLayer(layer.id, markAttributeEdit(layer, result.patch));
     if (result.errors > 0) {
       // The calculation was applied, but some rows threw and were written as
       // null. Keep the dialog open and report it rather than showing a silent
