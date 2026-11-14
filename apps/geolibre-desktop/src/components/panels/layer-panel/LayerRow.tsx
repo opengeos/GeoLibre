@@ -45,6 +45,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { layerFilteredHintKey } from "../../../lib/layer-filter-hint";
+import { activateLayerPreservingSelection } from "../../../lib/selection-actions";
 import { getLayerRefreshConfig } from "../../../lib/layer-refresh";
 import { notify } from "../../../lib/notify";
 import { LayerSwatchIcon } from "../LayerSwatchIcon";
@@ -144,7 +145,6 @@ export function LayerRow({
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
-  const selectLayer = useAppStore((s) => s.selectLayer);
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const { collaboration, mapControllerRef, beginRename, onOpenStylePanel } = menu;
   // When an ancestor group is hidden, a layer whose own visibility
@@ -609,7 +609,7 @@ export function LayerRow({
             onClick={(e) => {
               e.stopPropagation();
               if (!canIdentify) return;
-              selectLayer(layer.id);
+              activateLayerPreservingSelection(layer.id);
               setIdentifyLayer(identifyActive ? null : layer.id);
             }}
           >
@@ -624,7 +624,7 @@ export function LayerRow({
               aria-label={t("layers.openStylePanel")}
               onClick={(e) => {
                 e.stopPropagation();
-                selectLayer(layer.id);
+                activateLayerPreservingSelection(layer.id);
                 onOpenStylePanel();
               }}
             >

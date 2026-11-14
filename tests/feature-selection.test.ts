@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, Polygon } from "geojson";
@@ -10,6 +11,7 @@ import {
 } from "@geolibre/core";
 import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools";
 import {
+  activateLayerPreservingSelection,
   applyMatchedSelection,
   openLayerAttributeTable,
 } from "../apps/geolibre-desktop/src/lib/selection-actions";
@@ -295,6 +297,52 @@ describe("openLayerAttributeTable", () => {
     assert.equal(state.selectedLayerId, "L2");
     assert.deepEqual(state.selectedFeatureIds, []);
     assert.equal(state.selectedFeatureId, null);
+  });
+});
+
+describe("activateLayerPreservingSelection", () => {
+  const seed = (selectedLayerId: string | null, ids: string[]) => {
+    useAppStore.setState({
+      selectedLayerId,
+      selectedFeatureIds: ids,
+      selectedFeatureId: ids.at(-1) ?? null,
+    });
+  };
+
+  it("keeps the selection when the layer is already active", () => {
+    // Select by expression on L1, then Layer actions -> Open Style panel /
+    // Open in Processing / Style Manager: the selection must survive.
+    seed("L1", ["a", "b"]);
+    activateLayerPreservingSelection("L1");
+    const state = useAppStore.getState();
+    assert.equal(state.selectedLayerId, "L1");
+    assert.deepEqual(state.selectedFeatureIds, ["a", "b"]);
+    assert.equal(state.selectedFeatureId, "b");
+  });
+
+  it("activates another layer and drops the old layer's per-layer ids", () => {
+    seed("L1", ["a"]);
+    activateLayerPreservingSelection("L2");
+    const state = useAppStore.getState();
+    assert.equal(state.selectedLayerId, "L2");
+    assert.deepEqual(state.selectedFeatureIds, []);
+    assert.equal(state.selectedFeatureId, null);
+  });
+
+  it("is what the layer row and its actions menu use to activate a layer", () => {
+    // A bare selectLayer(layer.id) in these menus wipes the selection on the
+    // active layer; they must go through the preserving helper instead.
+    for (const file of ["LayerActionsMenu.tsx", "LayerRow.tsx"]) {
+      const source = readFileSync(
+        new URL(
+          `../apps/geolibre-desktop/src/components/panels/layer-panel/${file}`,
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      assert.doesNotMatch(source, /\bselectLayer\(layer\.id\)/, file);
+      assert.match(source, /activateLayerPreservingSelection\(layer\.id\)/, file);
+    }
   });
 });
 
