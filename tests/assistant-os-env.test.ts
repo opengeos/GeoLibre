@@ -42,7 +42,6 @@ describe("OS_ENV_VAR_NAMES", () => {
       "OPENROUTER_MODEL",
       "AI_GATEWAY_MODEL",
       "TRUSTEDROUTER_MODEL",
-      "UBERLLM_MODEL",
       // Seeds a new Ollama profile's model; the profile has no field for it.
       "OLLAMA_MODEL",
       "TAVILY_API_KEY",
@@ -70,8 +69,6 @@ describe("OS_ENV_VAR_NAMES", () => {
       "AI_GATEWAY_MODEL",
       "TRUSTEDROUTER_API_KEY",
       "TRUSTEDROUTER_MODEL",
-      "UBERLLM_API_KEY",
-      "UBERLLM_MODEL",
       "OLLAMA_BASE_URL",
       "OLLAMA_MODEL",
       "OPENAI_COMPATIBLE_BASE_URL",
@@ -166,19 +163,6 @@ describe("OS env feeds provider resolution", () => {
       provider: "trustedrouter",
       apiKey: "os-key",
       baseURL: "https://api.trustedrouter.com/v1",
-      modelId: "vendor/os-model",
-    });
-  });
-  it("configures UberLLM from an OS key and its OS model override", () => {
-    const merged = {
-      UBERLLM_API_KEY: "os-key",
-      UBERLLM_MODEL: "vendor/os-model",
-    };
-    assert.deepEqual(availableProviders(merged), ["uberllm"]);
-    assert.deepEqual(configForProvider("uberllm", undefined, merged), {
-      provider: "uberllm",
-      apiKey: "os-key",
-      baseURL: "https://api.uberllm.dev/v1",
       modelId: "vendor/os-model",
     });
   });

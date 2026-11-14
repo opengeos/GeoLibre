@@ -32,7 +32,6 @@ providers in **Settings → AI Providers**:
 | **OpenRouter** | `OPENROUTER_API_KEY` (+ optional `OPENROUTER_MODEL`) | `openai/gpt-5.6-luna` |
 | **Vercel AI Gateway** | `AI_GATEWAY_API_KEY` (+ optional `AI_GATEWAY_MODEL`) | `openai/gpt-5.6-luna` |
 | **TrustedRouter** | `TRUSTEDROUTER_API_KEY` (+ optional `TRUSTEDROUTER_MODEL`) | `trustedrouter/auto` |
-| **UberLLM** | `UBERLLM_API_KEY` (+ optional `UBERLLM_MODEL`) | `openai/gpt-5.6-luna` |
 | **Ollama** (local) | `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) | `gemma4` |
 | **Amazon Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`, optional `AWS_SESSION_TOKEN`) | `global.anthropic.claude-opus-5` |
 | **Custom** (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL` (+ optional `OPENAI_COMPATIBLE_API_KEY`) and `OPENAI_COMPATIBLE_MODEL` | — |
@@ -63,12 +62,6 @@ providers in **Settings → AI Providers**:
   `anthropic/claude-sonnet-4.5`. The model picker fetches the public catalog
   without sending your key and keeps models that accept tools and return text.
   Set `TRUSTEDROUTER_MODEL` to choose a different default.
-- **UberLLM** calls `https://api.uberllm.dev/v1` with Chat Completions from
-  your browser, using one `UBERLLM_API_KEY` for every model it serves. Model
-  ids are prefixed, such as `openai/gpt-5.6-luna` or
-  `anthropic/claude-sonnet-4.6`. The model picker fetches the public catalog
-  without sending your key and keeps models that accept tools and return text.
-  Set `UBERLLM_MODEL` to choose a different default.
 - **Custom** covers any OpenAI-compatible endpoint — LiteLLM, vLLM, Groq, Together, a local server, etc. — via its chat-completions API.
 
 Hosted keys (and AWS credentials) are used **directly from your browser** to call
@@ -187,7 +180,7 @@ Optional variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `GEOLIBRE_ASSISTANT_PROVIDER` | Force a provider (`google` / `anthropic` / `openai` / `openrouter` / `vercel` / `trustedrouter` / `uberllm`) when several keys are set. |
+| `GEOLIBRE_ASSISTANT_PROVIDER` | Force a provider (`google` / `anthropic` / `openai` / `openrouter` / `vercel` / `trustedrouter`) when several keys are set. |
 | `GEOLIBRE_ASSISTANT_MODEL` | Pin a specific model id, overriding the default and the picker. |
 
 When more than one provider key is configured, a **provider** dropdown appears in
@@ -219,7 +212,6 @@ the UI:
 | OpenRouter | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` |
 | Vercel AI Gateway | `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` |
 | TrustedRouter | `TRUSTEDROUTER_API_KEY`, `TRUSTEDROUTER_MODEL` |
-| UberLLM | `UBERLLM_API_KEY`, `UBERLLM_MODEL` |
 | Ollama | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` |
 | Custom (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_MODEL` |
 | Web search | `TAVILY_API_KEY` |

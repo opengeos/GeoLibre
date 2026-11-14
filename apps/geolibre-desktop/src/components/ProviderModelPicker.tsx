@@ -12,7 +12,6 @@ import {
 } from "../lib/assistant/model-discovery";
 import { discoverOpenRouterModels } from "../lib/assistant/openrouter";
 import { discoverTrustedRouterModels } from "../lib/assistant/trustedrouter";
-import { discoverUberLLMModels } from "../lib/assistant/uberllm";
 import { discoverVercelGatewayModels } from "../lib/assistant/vercel-gateway";
 import { PROVIDER_LABELS, PROVIDER_MODELS } from "../lib/assistant/provider";
 
@@ -21,12 +20,7 @@ const KEY_SETTLE_MS = 500;
 
 /** Catalogs that are public, so the picker must not wait on or send the API key. */
 function usesPublicCatalog(provider: PickerProvider): boolean {
-  return (
-    provider === "openrouter" ||
-    provider === "vercel" ||
-    provider === "trustedrouter" ||
-    provider === "uberllm"
-  );
+  return provider === "openrouter" || provider === "vercel" || provider === "trustedrouter";
 }
 
 export interface ProviderModelPickerProps {
@@ -123,11 +117,9 @@ export function ProviderModelPicker({
               ? await discoverVercelGatewayModels(controller.signal)
               : provider === "trustedrouter"
                 ? await discoverTrustedRouterModels(controller.signal)
-                : provider === "uberllm"
-                  ? await discoverUberLLMModels(controller.signal)
-                  : provider === "bedrock"
-                    ? await discoverBedrockModels(bedrockAuthRef.current!, options)
-                    : await discoverProviderModels(provider, key, options);
+                : provider === "bedrock"
+                  ? await discoverBedrockModels(bedrockAuthRef.current!, options)
+                  : await discoverProviderModels(provider, key, options);
         if (generation !== requestGeneration.current) return;
         setDiscovered({ provider, key, models });
       } catch (cause) {

@@ -423,10 +423,6 @@ describe("availableProviders", () => {
       "vercel",
       "trustedrouter",
     ]);
-    assert.deepEqual(availableProviders({ UBERLLM_API_KEY: "u", TRUSTEDROUTER_API_KEY: "t" }), [
-      "trustedrouter",
-      "uberllm",
-    ]);
   });
 });
 
@@ -748,78 +744,6 @@ describe("configForProvider", () => {
     }
 
     assert.equal(requestUrl, "https://api.trustedrouter.com/v1/chat/completions");
-    assert.equal(authorizationHeader, "Bearer profile-key");
-    assert.equal(JSON.parse(requestBody).model, "vendor/selected-model");
-  });
-
-  it("resolves UberLLM from a nonblank API key with its default model and override", () => {
-    assert.deepEqual(configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "key" }), {
-      provider: "uberllm",
-      apiKey: "key",
-      baseURL: "https://api.uberllm.dev/v1",
-      modelId: "openai/gpt-5.6-luna",
-    });
-    assert.equal(configForProvider("uberllm", undefined, { UBERLLM_API_KEY: "  " }), null);
-    assert.equal(
-      configForProvider("uberllm", undefined, {
-        UBERLLM_API_KEY: "key",
-        UBERLLM_MODEL: "provider/model",
-      })?.modelId,
-      "provider/model",
-    );
-    assert.equal(defaultModelFor("uberllm", { UBERLLM_MODEL: "provider/model" }), "provider/model");
-    assert.equal(defaultModelFor("uberllm", {}), "openai/gpt-5.6-luna");
-  });
-
-  it("sends a selected model to UberLLM's Chat Completions endpoint", async () => {
-    const originalFetch = globalThis.fetch;
-    let requestUrl = "";
-    let requestBody = "";
-    let authorizationHeader: string | null = null;
-    const chunks = [
-      {
-        id: "chatcmpl-test",
-        object: "chat.completion.chunk",
-        created: 0,
-        model: "openai/gpt-5.6-luna",
-        choices: [
-          { index: 0, delta: { role: "assistant", content: "Hello" }, finish_reason: null },
-        ],
-      },
-      {
-        id: "chatcmpl-test",
-        object: "chat.completion.chunk",
-        created: 0,
-        model: "openai/gpt-5.6-luna",
-        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-      },
-    ];
-    const body = `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`;
-
-    try {
-      globalThis.fetch = async (input, init) => {
-        const request = new Request(input, init);
-        requestUrl = request.url;
-        authorizationHeader = request.headers.get("authorization");
-        requestBody = await request.clone().text();
-        return new Response(body, {
-          status: 200,
-          headers: { "content-type": "text/event-stream" },
-        });
-      };
-      const config = configForProvider("uberllm", "vendor/selected-model", {
-        UBERLLM_API_KEY: "profile-key",
-      });
-      assert.ok(config);
-      const model = await createModel(config);
-      for await (const _event of new Agent({ model }).stream("hello")) {
-        // Consume the real Strands/OpenAI stream to exercise the request path.
-      }
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-
-    assert.equal(requestUrl, "https://api.uberllm.dev/v1/chat/completions");
     assert.equal(authorizationHeader, "Bearer profile-key");
     assert.equal(JSON.parse(requestBody).model, "vendor/selected-model");
   });
