@@ -10,6 +10,7 @@ import {
 } from "../lib/netcdf-image-symbology";
 import {
   planetaryComputerIdentifyProperties,
+  wrapLongitude,
   rasterIdentifyProperties,
   rasterPixelIdentifyProperties,
 } from "../lib/global-raster-identify";
@@ -43,7 +44,10 @@ export function useGlobalRasterIdentify(): MapCanvasRasterIdentify {
       }
 
       if (isPlanetaryComputerLayer(layer)) {
-        const reading = await identifyPlanetaryComputerLayer(layer, lngLat, { signal });
+        // A click on a repeated world copy reports a longitude beyond ±180;
+        // the layer's bounds and the Data API both use the wrapped value.
+        const wrapped: [number, number] = [wrapLongitude(lngLat[0]), lngLat[1]];
+        const reading = await identifyPlanetaryComputerLayer(layer, wrapped, { signal });
         if (!reading || signal.aborted) return null;
         return {
           title: t("map.identifyAll.pixel"),
@@ -51,7 +55,7 @@ export function useGlobalRasterIdentify(): MapCanvasRasterIdentify {
             item: t("map.identifyAll.stacItem"),
             nodata: t("map.identifyAll.nodata"),
             coordinates: t("map.identifyAll.coordinates"),
-            lngLat,
+            lngLat: wrapped,
           }),
         };
       }

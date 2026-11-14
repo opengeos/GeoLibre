@@ -48,7 +48,6 @@ let planetaryComputerControlMounted = false;
 let planetaryComputerModulePromise: Promise<PlanetaryComputerModule> | null = null;
 let planetaryComputerModule: PlanetaryComputerModule | null = null;
 let planetaryComputerStacClient: STACClient | null = null;
-let planetaryComputerSearchClient: STACClient | null = null;
 let planetaryComputerTilerClient: TiTilerClient | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
 let planetaryComputerRestoreToken = 0;
@@ -481,10 +480,12 @@ async function restorePlanetaryComputerLayer(
     const currentLayer = currentRestorablePlanetaryComputerLayer(control, layer, restoreToken);
     if (!currentLayer) return null;
     const map = control.getMap();
-    runWithPlanetaryComputerStoreSyncSuspended(() => {
-      // With `mosaicId` given the control skips registration, so the layer is
-      // added (and its events fire) synchronously inside this call.
-      void control.addMosaicLayer(collection, {
+    // With `mosaicId` given the control skips registration, so the layer is
+    // added (and its events fire) synchronously inside this call, while the
+    // store sync is suspended. The promise is still awaited below: a failure
+    // to build the source rejects it, and must fail this layer's restore.
+    const added = runWithPlanetaryComputerStoreSyncSuspended(() =>
+      control.addMosaicLayer(collection, {
         ...style,
         id: currentLayer.id,
         sourceId: stringMetadata(currentLayer, "sourceId"),
@@ -494,8 +495,9 @@ async function restorePlanetaryComputerLayer(
         mosaicId: searchId,
         searchParams,
         bbox: numberArrayMetadata(currentLayer, "bounds"),
-      });
-    });
+      }),
+    );
+    await added;
     return currentLayer.id;
   }
 
@@ -539,8 +541,8 @@ async function restorePlanetaryComputerLayer(
  * @param collectionId - The layer's collection id.
  * @returns The `renderParams`/`assets`/`presetName` options to pass on.
  */
-function planetaryComputerSavedStyle(
-  module: PlanetaryComputerModule,
+export function planetaryComputerSavedStyle(
+  module: Pick<PlanetaryComputerModule, "getPreset">,
   layer: GeoLibreLayer,
   collectionId: string,
 ): { assets?: string[]; presetName?: string; renderParams?: TileParams } {
@@ -554,12 +556,17 @@ function planetaryComputerSavedStyle(
     return preset ? { presetName: preset.name, renderParams: { ...preset.params } } : {};
   }
 
-  // Saved parameters win over the preset's, so an authored layer can name a
-  // preset and still override, say, its rescale. For a layer the app saved the
-  // two are the same set, and the merge changes nothing.
-  const renderParams: TileParams = { ...preset?.params, ...savedParams };
-  // An expression names its own assets, so a preset's asset list must not ride along.
-  if (savedParams.expression && !savedParams.assets) delete renderParams.assets;
+  // Parameters that say what to draw (assets or band math) are a complete
+  // render: every layer the app saves has them, and they are used as saved,
+  // whatever preset name rides along. Without them the saved parameters are a
+  // partial override from the Python API or the MCP server (a preset plus, say,
+  // its own rescale), and are applied over the preset's.
+  const selectsBands = Boolean(
+    savedParams.expression || savedParams.assets?.length || savedAssets?.length,
+  );
+  const renderParams: TileParams = selectsBands
+    ? savedParams
+    : { ...preset?.params, ...savedParams };
   const assets = savedAssets?.length ? savedAssets : renderParams.assets;
   return {
     ...(presetName ? { presetName } : {}),
@@ -737,8 +744,9 @@ export function planetaryComputerSearchParams(
 /**
  * Searches the Planetary Computer STAC API.
  *
- * Uses a client of its own, so a search here never cancels one the panel has
- * in flight (the library's client aborts its previous search on a new one).
+ * Each call uses a client of its own: the library's client aborts its previous
+ * search when a new one starts, so a shared one would let the panel, or two
+ * assistant tool calls running at once, cancel each other.
  *
  * @param input - The search filters.
  * @returns The matching STAC items.
@@ -747,11 +755,11 @@ export async function searchPlanetaryComputerItems(
   input: PlanetaryComputerSearchInput,
 ): Promise<STACItem[]> {
   const module = await loadPlanetaryComputerModule();
-  planetaryComputerSearchClient ??= new module.STACClient(
+  const client = new module.STACClient(
     PLANETARY_COMPUTER_STAC_URL,
     planetaryComputerStacClientOptions(),
   );
-  return planetaryComputerSearchClient.search(planetaryComputerSearchParams(input));
+  return client.search(planetaryComputerSearchParams(input));
 }
 
 /** Render options accepted by the programmatic add entry points. */

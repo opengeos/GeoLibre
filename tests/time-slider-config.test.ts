@@ -558,6 +558,18 @@ describe("isTimeSliderIdle", () => {
   });
 });
 
+describe("a source whose URL is a resolver function", () => {
+  it("mirrors its referenceUrl so the layer is still recognized as hosted", () => {
+    const layer = createStoreLayer({
+      id: "stack",
+      type: "xyz",
+      tiles: async () => "https://example.com/{z}/{x}/{y}.png",
+      referenceUrl: "https://example.com/collections/demo",
+    } as unknown as SourceSpec);
+    assert.equal(layer.metadata.originalUrl, "https://example.com/collections/demo");
+  });
+});
+
 describe("source rehydration", () => {
   it("lets a plugin restore or drop a saved source", async () => {
     const { registerTimeSliderSourceRehydrator } =

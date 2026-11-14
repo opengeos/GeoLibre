@@ -1348,7 +1348,10 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
 export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
-  const authoredUrl = ["url", "tiles", "baseUrl", "data"]
+  // `referenceUrl` is for a source whose URL is a resolver function (one URL
+  // per date): its owner names a stable remote reference instead, so the mirror
+  // is still recognized as a hosted layer.
+  const authoredUrl = ["url", "tiles", "baseUrl", "data", "referenceUrl"]
     .map((key) => {
       const value = key in spec ? spec[key as keyof SourceSpec] : undefined;
       return typeof value === "string" ? value.trim() : "";

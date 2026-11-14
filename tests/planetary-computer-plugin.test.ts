@@ -5,6 +5,7 @@ import type { ActiveLayer, STACItem } from "maplibre-gl-planetary-computer";
 import {
   createPlanetaryComputerStoreLayer,
   planetaryComputerItemDate,
+  planetaryComputerSavedStyle,
   planetaryComputerSearchParams,
 } from "../packages/plugins/src/plugins/maplibre-planetary-computer";
 import {
@@ -19,7 +20,10 @@ import {
   type PlanetaryComputerStack,
 } from "../packages/plugins/src/plugins/planetary-computer-actions";
 import { isBridgedRasterIdentifyLayer } from "../packages/map/src/identify-sources";
-import { planetaryComputerIdentifyProperties } from "../apps/geolibre-desktop/src/lib/global-raster-identify";
+import {
+  planetaryComputerIdentifyProperties,
+  wrapLongitude,
+} from "../apps/geolibre-desktop/src/lib/global-raster-identify";
 
 function stacItem(id: string, properties: Record<string, unknown>): STACItem {
   return {
@@ -115,6 +119,66 @@ describe("createPlanetaryComputerStoreLayer", () => {
       renderParams: {},
     });
     assert.deepEqual(layer.metadata.bounds, [-123, 46, -122, 47]);
+  });
+});
+
+describe("planetaryComputerSavedStyle", () => {
+  const saved = async (metadata: Record<string, unknown>) => {
+    const module = await import("maplibre-gl-planetary-computer");
+    const layer = createPlanetaryComputerStoreLayer({
+      id: "l",
+      type: "item",
+      sourceId: "l-source",
+      item: stacItem("S2_ITEM", {}),
+      visible: true,
+      opacity: 1,
+      assets: [],
+      renderParams: {},
+    });
+    layer.metadata = { ...layer.metadata, ...metadata };
+    return planetaryComputerSavedStyle(module, layer, "sentinel-2-l2a");
+  };
+
+  it("uses the collection default when nothing was saved", async () => {
+    assert.deepEqual(await saved({ renderParams: {}, assets: [] }), {});
+  });
+
+  it("looks up a preset authored by name alone", async () => {
+    const style = await saved({ presetName: "ndvi", renderParams: {}, assets: [] });
+    assert.equal(style.presetName, "ndvi");
+    assert.equal(style.renderParams?.expression, "(B08-B04)/(B08+B04)");
+    assert.equal(style.renderParams?.asset_as_band, true);
+  });
+
+  it("applies a partial override over the preset", async () => {
+    const style = await saved({
+      presetName: "ndvi",
+      renderParams: { rescale: "0,0.8" },
+      assets: [],
+    });
+    assert.equal(style.renderParams?.rescale, "0,0.8");
+    assert.equal(style.renderParams?.expression, "(B08-B04)/(B08+B04)");
+    assert.equal(style.renderParams?.colormap_name, "rdylgn");
+  });
+
+  it("keeps a complete saved render as saved, whatever preset name rides along", async () => {
+    // Explicit render parameters win over a preset when the layer is added, so
+    // a restore must not graft the preset's expression and colormap back on.
+    const style = await saved({
+      presetName: "ndvi",
+      renderParams: { assets: ["B04"], rescale: "0,3000" },
+      assets: ["B04"],
+    });
+    assert.deepEqual(style.renderParams, { assets: ["B04"], rescale: "0,3000" });
+    assert.deepEqual(style.assets, ["B04"]);
+
+    const expression = await saved({
+      presetName: "true-color",
+      renderParams: { expression: "B08/B04", asset_as_band: true },
+      assets: [],
+    });
+    assert.deepEqual(expression.renderParams, { expression: "B08/B04", asset_as_band: true });
+    assert.equal(expression.assets, undefined);
   });
 });
 
@@ -233,6 +297,12 @@ describe("Planetary Computer time-series stack", () => {
     assert.equal(
       url,
       "https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?collection=sentinel-2-l2a&item=middle&assets=visual",
+    );
+    // A stable remote reference stands in for the function-valued tile URL, so
+    // the mirrored layer is recognized as hosted (shareable, reloadable).
+    assert.equal(
+      (source as unknown as { referenceUrl: string }).referenceUrl,
+      "https://planetarycomputer.microsoft.com/api/stac/v1/collections/sentinel-2-l2a",
     );
     // The description is plain JSON, so it survives the project file although
     // the resolver function does not.
@@ -366,6 +436,15 @@ describe("clampClipBounds", () => {
 
   it("reports a box that misses the item", () => {
     assert.equal(clampClipBounds([10, 10, 11, 11], [-123, 46.8, -121.5, 47.8]), null);
+  });
+});
+
+describe("wrapLongitude", () => {
+  it("maps a repeated world copy back into the geographic range", () => {
+    assert.equal(wrapLongitude(181), -179);
+    assert.equal(wrapLongitude(-181), 179);
+    assert.equal(wrapLongitude(-122.33), -122.33);
+    assert.equal(wrapLongitude(540), -180);
   });
 });
 

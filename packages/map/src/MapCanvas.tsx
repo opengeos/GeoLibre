@@ -985,7 +985,11 @@ export const MapCanvas = memo(function MapCanvas({
             // an ordinary miss rather than a failure.
             showIdentifyPopup(
               properties
-                ? createIdentifyPopupElement(layer.name, properties)
+                ? createIdentifyPopupElement(layer.name, properties, undefined, {
+                    popup: layer.popup,
+                    fieldVisibility: layer.fieldVisibility,
+                    zoom: map.getZoom(),
+                  })
                 : createIdentifyMessagePopupElement(layer.name, identifyAllLabels.noData),
             );
           })

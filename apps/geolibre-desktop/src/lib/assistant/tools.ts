@@ -1082,10 +1082,17 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
         (input.bbox as [number, number, number, number] | undefined) ?? viewBbox() ?? undefined;
       const style = { presetName: input.preset, name: input.name };
 
-      if (input.mosaic && !input.itemId) {
+      if (input.mosaic && input.itemId) {
+        throw new Error("Pass either itemId or mosaic=true, not both.");
+      }
+      if (input.mosaic) {
         const result = await addPlanetaryComputerMosaicLayer(appApi, {
           ...style,
           collection: input.collection,
+          // An explicit bbox bounds the layer. The view is not used here: a
+          // mosaic is meant to be panned, so it is not clipped to where the
+          // map happened to be.
+          bbox: input.bbox as [number, number, number, number] | undefined,
           datetime: input.datetime,
           maxCloudCover: input.maxCloudCover,
           sortBy: input.maxCloudCover !== undefined ? "least-cloudy" : "newest",

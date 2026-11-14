@@ -239,6 +239,10 @@ export function planetaryComputerStackSource(
       return tiler.getItemTileUrl(stack.collection, item.id, stack.renderParams);
     },
     [PLANETARY_COMPUTER_STACK_KEY]: stack,
+    // The tile URL is a function, so name the collection as the layer's stable
+    // remote reference: the Time Slider mirrors it onto the store layer, and
+    // sharing then treats the stack as the hosted, reloadable layer it is.
+    referenceUrl: `${PLANETARY_COMPUTER_STAC_URL}/collections/${encodeURIComponent(stack.collection)}`,
   } as SourceSpec;
 }
 
@@ -318,15 +322,25 @@ async function sendResultsToTimeSlider(
     "{{collection}}",
     context.collection?.title || collectionId,
   );
-  // One stack per collection: sending new results replaces the previous stack
-  // rather than piling up layers that all animate over the same dates.
+  // The timeline's dates become this stack's dates, so it holds one Planetary
+  // Computer stack at a time: a stack from an earlier search, of this or any
+  // other collection, is replaced rather than left animating over dates it has
+  // no scenes for.
   const id = `planetary-computer-stack-${collectionId}`;
   const dates = items.map((item) => item.date);
 
   const applied = await applyTimeSliderConfig(app, (current): TimeSliderConfig => {
-    const otherSources = (current?.sources ?? []).filter(
-      (source) => !(PLANETARY_COMPUTER_STACK_KEY in (source as unknown as Record<string, unknown>)),
-    );
+    const isStack = (source: SourceSpec) =>
+      PLANETARY_COMPUTER_STACK_KEY in (source as unknown as Record<string, unknown>);
+    const otherSources = (current?.sources ?? []).filter((source) => !isStack(source));
+    // Replacing this collection's stack keeps what the user set on it in the
+    // Layers panel; a fresh source would come back visible at full opacity
+    // while the panel still showed the old state.
+    const previous = (current?.sources ?? []).find((source) => source.id === id);
+    const display = {
+      ...(previous?.visible !== undefined ? { visible: previous.visible } : {}),
+      ...(previous?.opacity !== undefined ? { opacity: previous.opacity } : {}),
+    };
     return {
       speed: 1000,
       loop: true,
@@ -339,7 +353,10 @@ async function sendResultsToTimeSlider(
       granularity: "day",
       currentDate: dates[dates.length - 1],
       collapsed: false,
-      sources: [...otherSources, planetaryComputerStackSource(id, name, stack)],
+      sources: [
+        ...otherSources,
+        { ...planetaryComputerStackSource(id, name, stack), ...display } as SourceSpec,
+      ],
     };
   });
   if (!applied) throw new Error(labels.timeSliderUnavailable);

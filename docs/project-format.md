@@ -703,7 +703,7 @@ from it when the project opens (MapLibre renderer only):
 | `stacItemId` | The STAC item id. Required for an `item` layer. |
 | `stacSearchParams` | Mosaic only. The STAC search selecting its items: `datetime` (RFC 3339 range), `query` (e.g. `{"eo:cloud_cover": {"lte": 10}}`), `sortby`, `filter`. The search is registered again on every open, because a registered search id expires and is never saved. |
 | `presetName` | A render preset of the collection (`true-color`, `ndvi`, ...). |
-| `renderParams` | Data API render parameters: `assets`, `expression`, `asset_as_band`, `rescale` (`"min,max"`), `colormap_name`, and so on. They are applied over the preset's own, so `presetName` with a lone `rescale` overrides just the stretch. With neither, the collection's default preset is used. |
+| `renderParams` | Data API render parameters: `assets`, `expression`, `asset_as_band`, `rescale` (`"min,max"`), `colormap_name`, and so on. Parameters that select bands (`assets` or `expression`) are a complete render and are used as saved. Without them, the parameters are applied over the preset's own, so `presetName` with a lone `rescale` overrides just the stretch. With neither, the collection's default preset is used. |
 | `assets` | The asset names rendered (empty for an expression). |
 | `bounds` | `[west, south, east, north]`, used by zoom-to-layer and to bound a mosaic's tile requests. |
 | `sourceId`, `sourceIds`, `nativeLayerIds` | The MapLibre source and layer ids the panel creates: `nativeLayerIds` is `[<layer id>]` and `sourceId` is `<layer id>-source`. |

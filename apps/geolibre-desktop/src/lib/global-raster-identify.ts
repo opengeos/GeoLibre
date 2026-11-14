@@ -92,3 +92,16 @@ export function planetaryComputerIdentifyProperties(
   rows.push([labels.coordinates, `${labels.lngLat[0].toFixed(5)}, ${labels.lngLat[1].toFixed(5)}`]);
   return rasterIdentifyProperties(rows);
 }
+
+/**
+ * Wrap a longitude into the geographic range.
+ *
+ * @param lng - A longitude, possibly from a repeated world copy (e.g. 181).
+ * @returns The equivalent longitude in [-180, 180).
+ */
+export function wrapLongitude(lng: number): number {
+  // Leave an in-range value untouched: the arithmetic below would nudge it by
+  // a floating-point ulp, and the popup echoes the coordinate back.
+  if (lng >= -180 && lng < 180) return lng;
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}

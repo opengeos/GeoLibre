@@ -28,6 +28,7 @@ import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
+import { PlanetaryComputerMenuItem } from "./PlanetaryComputerMenuItem";
 import { PluginMenuContributions } from "./PluginMenuContributions";
 import type { Command } from "../../../lib/commands";
 import { ProcessingMenuSearch } from "./ProcessingMenuSearch";
@@ -840,14 +841,12 @@ export function ProcessingMenu({
           </DropdownMenuItem>
         )}
         {!trimmedQuery && show("processing.planetaryComputer") && (
-          <DropdownMenuItem
+          <PlanetaryComputerMenuItem
             onSelect={onOpenPlanetaryComputer}
-            disabled={!addRemoteCap.granted || !capabilities.nativeMapInstance}
-            title={capabilities.nativeMapInstance ? undefined : t("renderer.pluginUnsupported")}
-            aria-describedby={addRemoteDeniedBy}
-          >
-            {t("toolbar.command.planetaryComputer")}
-          </DropdownMenuItem>
+            allowed={addRemoteCap.granted}
+            deniedBy={addRemoteDeniedBy}
+            nativeMap={capabilities.nativeMapInstance}
+          />
         )}
         {!trimmedQuery && showEarthEngine && (
           <DropdownMenuItem
