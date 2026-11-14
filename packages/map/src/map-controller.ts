@@ -4,6 +4,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   horizontalBbox,
+  mapZoomStepOutputs,
   normalizeMapCrs,
   scaleAltitudeToActiveBody,
   styleValue,
@@ -151,8 +152,63 @@ const NON_BASEMAP_STYLE_LAYER_IDS = [
 ];
 const OPACITY_PAINT_PROPERTIES = STORY_OPACITY_PAINT_PROPERTIES;
 
+/** Whether a paint expression reads `["zoom"]` anywhere inside it. */
+function expressionReadsZoom(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  if (value[0] === "zoom" && value.length === 1) return true;
+  return value.some(expressionReadsZoom);
+}
+
 /**
- * The paint value a story fade writes for one property of one style layer.
+ * Rescale the opacity paint value the layer sync wrote for a layer's own
+ * opacity so it shows a story chapter's opacity in its place.
+ *
+ * A chapter's opacity stands in for the layer opacity (the Layers panel
+ * slider), not for the paint property: the sync writes each opacity paint as
+ * the style's own value times the layer opacity (`fillOpacity` x opacity for a
+ * fill), so a chapter at 1 must draw a fill styled at 0.45 at 0.45, not solid.
+ * The base is therefore scaled by `storyOpacity / layerOpacity`.
+ *
+ * @param base The paint value the layer sync last wrote.
+ * @param layerOpacity The store layer's own opacity.
+ * @param storyOpacity The chapter's opacity, already clamped to 0-1.
+ * @returns The value to write, or `undefined` when the base cannot be rescaled
+ *   (unset, a layer opacity of 0 that erased the style's value, or a zoom
+ *   expression other than a top-level zoom `step`, since MapLibre only
+ *   accepts zoom as the input of a top-level step or interpolate).
+ */
+export function storyScaledPaintValue(
+  base: unknown,
+  layerOpacity: number,
+  storyOpacity: number,
+): unknown {
+  if (!Number.isFinite(layerOpacity) || layerOpacity <= 0) return undefined;
+  const ratio = storyOpacity / layerOpacity;
+  const scale = (value: unknown): unknown => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.min(1, Math.max(0, value * ratio));
+    }
+    if (Array.isArray(value) && !expressionReadsZoom(value)) {
+      return ratio === 1 ? value : ["min", 1, ["*", value, ratio]];
+    }
+    return undefined;
+  };
+  if (!Array.isArray(base) || !expressionReadsZoom(base)) return scale(base);
+  // A rule's scale range compiles to a top-level `["step", ["zoom"], ...]`
+  // (see `scaleByOpacity` in style-mapper.ts); scale its outputs in place.
+  if (base[0] !== "step" || !Array.isArray(base[1]) || base[1][0] !== "zoom") return undefined;
+  let scalable = true;
+  const stepped = mapZoomStepOutputs(base, (output) => {
+    const value = scale(output);
+    if (value === undefined) scalable = false;
+    return value;
+  });
+  return scalable ? stepped : undefined;
+}
+
+/**
+ * The paint value a story fade writes for one property of one style layer
+ * when the synced value cannot be rescaled (see {@link storyScaledPaintValue}).
  *
  * Fades write absolute opacities, but the geometry generator's fill/circle
  * opacity is the product of the layer opacity and the style's own
@@ -238,6 +294,13 @@ export class MapController implements MapEngine {
   private map: maplibregl.Map | null = null;
   /** Presentation overrides survive ordinary layer syncs without changing project data. */
   private readonly storyOpacities = new Map<string, number>();
+  /**
+   * Per style layer and paint property: the value the layer sync wrote (the
+   * base a story fade rescales) and the value the fade wrote over it. A
+   * current value that no longer matches `written` means a sync has rewritten
+   * the base since, so it is captured afresh.
+   */
+  private readonly storyPaintBases = new Map<string, { base: unknown; written: unknown }>();
   /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
   private pendingViewClamp = false;
   /**
@@ -585,10 +648,13 @@ export class MapController implements MapEngine {
   /**
    * Fade a project layer in or out for story-map playback.
    *
-   * Story chapters change layer opacity as the reader scrolls. This writes the
-   * MapLibre paint properties directly instead of going through the store, so
-   * playback never marks the project dirty or pushes undo history. Call
-   * {@link restoreLayerStyles} when playback ends to reset opacities.
+   * Story chapters change layer opacity as the reader scrolls. The chapter's
+   * opacity takes the place of the layer opacity (the Layers panel slider), so
+   * a polygon styled with a 0.45 fill draws at 0.45 for a chapter at 1 and at
+   * 0.09 for one at 0.2. This writes the MapLibre paint properties directly
+   * instead of going through the store, so playback never marks the project
+   * dirty or pushes undo history. Call {@link restoreLayerStyles} when
+   * playback ends to reset opacities.
    *
    * @param layerId GeoLibre store layer id to fade.
    * @param opacity Target opacity, clamped to the 0-1 range.
@@ -616,10 +682,41 @@ export class MapController implements MapEngine {
           this.map,
           nativeId,
           prop,
-          storyPaintOpacity(layer, nativeId, prop, clamped),
+          this.storyPaintValue(layer, nativeId, prop, clamped),
         );
       }
     }
+  }
+
+  /**
+   * The value a story fade writes for one opacity paint property: the synced
+   * value rescaled from the layer's own opacity to the chapter's, so the
+   * style's own translucency survives the fade (see
+   * {@link storyScaledPaintValue}).
+   *
+   * @param layer The synced store layer.
+   * @param nativeId MapLibre style layer id.
+   * @param prop Paint property name.
+   * @param opacity The chapter's opacity, clamped to 0-1.
+   * @returns The paint value to write.
+   */
+  private storyPaintValue(
+    layer: GeoLibreLayer,
+    nativeId: string,
+    prop: string,
+    opacity: number,
+  ): unknown {
+    const key = `${nativeId}\u0000${prop}`;
+    const current = this.map ? getDynamicPaintProperty(this.map, nativeId, prop) : undefined;
+    const entry = this.storyPaintBases.get(key);
+    const base = entry && styleValuesEqual(current, entry.written) ? entry.base : current;
+    // Only opacities scale with the layer opacity; hillshade exaggeration does not.
+    const scaled = prop.endsWith("-opacity")
+      ? storyScaledPaintValue(base, layer.opacity, opacity)
+      : undefined;
+    const value = scaled ?? storyPaintOpacity(layer, nativeId, prop, opacity);
+    this.storyPaintBases.set(key, { base, written: value });
+    return value;
   }
 
   /**
@@ -654,6 +751,7 @@ export class MapController implements MapEngine {
   restoreLayerStyles(): void {
     this.stopStoryCamera();
     this.storyOpacities.clear();
+    this.storyPaintBases.clear();
     // Clear any opacity transitions left over from playback first, otherwise the
     // restored values animate back in (potentially over a multi-second fade).
     if (this.map) {

@@ -8,6 +8,7 @@ import {
 } from "@geolibre/core";
 import {
   buildStoryMapHtml,
+  scaleStoryOpacity,
   storyExportCandidates,
 } from "../apps/geolibre-desktop/src/lib/storymap-export";
 import { resolveTextFontFromStyleLayers } from "../packages/map/src/text-font";
@@ -568,6 +569,51 @@ describe("buildStoryMapHtml symbology and labels (#3033)", () => {
     });
     const label = exportedLayerSpec(html, "addLabelLayer", "zones::label");
     assert.equal((label.paint as Record<string, unknown>)["text-opacity"], 0);
+  });
+});
+
+describe("buildStoryMapHtml chapter fades keep the layer style", () => {
+  it("seeds chapter 0's opacity in place of the layer opacity, keeping the fill style", () => {
+    const html = buildStoryMapHtml({
+      storymap: story({
+        chapters: story().chapters.map((chapter, index) =>
+          index === 0
+            ? { ...chapter, onChapterEnter: [{ layerId: "zones", opacity: 1 }] }
+            : chapter,
+        ),
+      }),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [categorizedPolygons({ fillOpacity: 0.45 })],
+    });
+    const spec = exportedLayerSpec(html, "map.addLayer", "zones");
+    // Opacity 1 is the layer at full opacity, not a solid fill.
+    assert.equal((spec.paint as Record<string, unknown>)["fill-opacity"], 0.45);
+  });
+
+  it("hands the page each layer's opacity paint to scale on a fade", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [categorizedPolygons({ fillOpacity: 0.45 })],
+    });
+    const fadeBase = exportedConfig(html).fadeBase as Record<string, Record<string, unknown>>;
+    assert.equal(fadeBase.zones["fill-opacity"], 0.45);
+    assert.match(html, /scaleOpacity\(base\[prop\], opacity\)/);
+  });
+
+  it("scales numbers, unset values, and zoom-stepped expressions", () => {
+    assert.equal(scaleStoryOpacity(0.45, 0.2), 0.45 * 0.2);
+    assert.equal(scaleStoryOpacity(undefined, 0.3), 0.3);
+    const expr = ["get", "o"];
+    assert.equal(scaleStoryOpacity(expr, 1), expr);
+    assert.deepEqual(scaleStoryOpacity(expr, 0.5), ["*", expr, 0.5]);
+    assert.deepEqual(scaleStoryOpacity(["step", ["zoom"], 0.2, 10, 0.8], 0.5), [
+      "step",
+      ["zoom"],
+      0.1,
+      10,
+      0.4,
+    ]);
   });
 });
 

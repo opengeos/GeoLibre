@@ -84,7 +84,10 @@ sets the autoplay dwell time in seconds. A missing or blank cell keeps the
 Under **On enter** and **On exit**, add layer fades that run as a chapter
 becomes active or is left behind. Pick a project layer and a target opacity (and
 optional transition duration). This is how you reveal or hide data as the story
-progresses.
+progresses. The target opacity stands in for the layer's opacity, as the Layers
+panel slider does, so the layer's style still applies: a polygon styled with a
+45% fill shows that fill at an opacity of 1 and a fainter one at 0.2. Leaving the
+presentation puts every layer back as it was.
 
 ## Present
 

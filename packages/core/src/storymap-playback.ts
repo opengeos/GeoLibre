@@ -40,10 +40,11 @@ export function storyLayerOpacityFactor(
  * A layer whose opacity reflects the story presentation's fade.
  *
  * A chapter's opacity *replaces* the layer's own opacity rather than scaling
- * it, matching `MapController.setStoryLayerOpacity`, which writes the chapter
- * value as the absolute paint opacity; otherwise a layer set to 0.7 in the
- * Layers panel and faded to 0.4 by a chapter would draw its diagrams at 0.28
- * while its MapLibre layers draw at 0.4.
+ * it, matching `MapController.setStoryLayerOpacity`, which redraws the paint
+ * with the chapter value in place of the layer opacity (the style's own fill
+ * opacity still applies); otherwise a layer set to 0.7 in the Layers panel and
+ * faded to 0.4 by a chapter would draw its diagrams at 0.28 while its MapLibre
+ * layers draw at 0.4.
  *
  * Returns the same object when the presentation has not touched the layer (or
  * recorded the opacity it already has), so identity-keyed caches downstream
