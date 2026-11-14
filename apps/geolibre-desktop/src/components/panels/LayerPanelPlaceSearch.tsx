@@ -25,6 +25,7 @@ import type { MapEngine } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
 import { Hexagon, Loader2, LocateFixed, MapPin, Search, Table2, X } from "lucide-react";
 import { formatLatLon, parseLatLon } from "../../lib/coordinates";
+import { geocodeResultCamera, POINT_RESULT_ZOOM } from "../../lib/geocode-camera";
 import { parseGridReference } from "../../lib/grid-reference";
 import { type H3CellMatch, parseH3Cell } from "../../lib/h3-search";
 import {
@@ -450,15 +451,32 @@ export function LayerPanelPlaceSearch({
             type: "Point",
             coordinates: center,
           });
-          // Preserve the globe's existing instant placement. Its animated
-          // camera path differs in flat scene modes; search previously used
-          // the store's applyView path rather than a flight there.
-          // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
-          if (engine.kind === "cesium") {
-            const store = useAppStore.getState();
-            store.setMapView({ center, zoom: Math.max(store.mapView.zoom, 12) });
+          // Frame the place's own extent when the geocoder reports one, so a
+          // state or a country is seen whole and an address lands at street
+          // level; only a result without one flies to a fixed zoom.
+          const camera = geocodeResultCamera(row.match, engine.readView().zoom);
+          if (camera.kind === "bounds") {
+            // Every engine frames the extent, the globe included, the same way
+            // the H3 row above does: the store's view holds only a center and a
+            // zoom, so it cannot frame a box. On the globe this means a boxed
+            // result flies there (Cesium's fitBounds animates the camera) while
+            // a point-only result below still jumps.
+            engine.fitBounds(camera.bounds);
           } else {
-            engine.flyTo({ center, zoom: Math.max(engine.readView().zoom, 12) });
+            // A point-only result keeps the globe's instant placement through
+            // the store's applyView path: the Cesium camera's flight path
+            // differs in flat scene modes, and with no box there is nothing a
+            // flight would frame.
+            // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
+            if (engine.kind === "cesium") {
+              const store = useAppStore.getState();
+              store.setMapView({
+                center: camera.center,
+                zoom: Math.max(store.mapView.zoom, POINT_RESULT_ZOOM),
+              });
+            } else {
+              engine.flyTo({ center: camera.center, zoom: camera.zoom });
+            }
           }
         }
       }

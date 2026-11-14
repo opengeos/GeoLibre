@@ -160,6 +160,60 @@ export interface GeocodeMatch {
    * Empty values are left out.
    */
   attributes?: Record<string, string | number | boolean>;
+  /**
+   * The extent of the matched place as `[west, south, east, north]` in degrees,
+   * when the service reports one (Nominatim `boundingbox`, a GeoJSON feature's
+   * `bbox`, an ArcGIS candidate's `extent`, Google's `viewport`). A country or
+   * state carries a large box and a street address a tiny one, so a caller can
+   * frame the place instead of guessing a zoom. `west` greater than `east`
+   * means the box crosses the antimeridian.
+   */
+  bbox?: GeocodeBbox;
+}
+
+/** A `[west, south, east, north]` extent in degrees. */
+export type GeocodeBbox = [number, number, number, number];
+
+/**
+ * Whether a raw coordinate is a number or a numeric-looking string
+ * (Nominatim's form). `Number()` would also turn `null`, `true`, a blank string
+ * or a one-element array into a coordinate, so those are rejected first.
+ */
+function isCoordinateValue(value: unknown): value is number | string {
+  return typeof value === "number" || (typeof value === "string" && value.trim() !== "");
+}
+
+/**
+ * Validate a west/south/east/north extent: every edge finite and on Earth,
+ * south not above north. Returns null otherwise, so a malformed box falls back
+ * to the match's point instead of sending the camera somewhere odd.
+ *
+ * @param west - Western longitude.
+ * @param south - Southern latitude.
+ * @param east - Eastern longitude.
+ * @param north - Northern latitude.
+ * @returns The extent, or null when it is not a usable one.
+ */
+export function normalizeGeocodeBbox(
+  west: unknown,
+  south: unknown,
+  east: unknown,
+  north: unknown,
+): GeocodeBbox | null {
+  if (![west, south, east, north].every(isCoordinateValue)) return null;
+  const box = [Number(west), Number(south), Number(east), Number(north)] as GeocodeBbox;
+  if (!box.every(Number.isFinite)) return null;
+  const [w, s, e, n] = box;
+  if (w < -180 || w > 180 || e < -180 || e > 180) return null;
+  if (s < -90 || n > 90 || s > n) return null;
+  return box;
+}
+
+/** A GeoJSON feature's own `bbox` member (`[west, south, east, north]`), or null. */
+function geojsonFeatureBbox(feature: Record<string, unknown>): GeocodeBbox | null {
+  const bbox = feature.bbox;
+  if (!Array.isArray(bbox) || bbox.length !== 4) return null;
+  return normalizeGeocodeBbox(bbox[0], bbox[1], bbox[2], bbox[3]);
 }
 
 /** A partial-text suggestion from a locator's `suggest` operation. */
@@ -222,6 +276,8 @@ export interface NominatimForwardResult {
   lon: string;
   display_name?: string;
   importance?: number | string;
+  /** `[south, north, west, east]` as strings. */
+  boundingbox?: unknown;
   [key: string]: unknown;
 }
 
@@ -330,11 +386,15 @@ function nominatimForwardResultToMatch(result: NominatimForwardResult): GeocodeM
   const lat = Number(result.lat);
   const lon = Number(result.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const box = Array.isArray(result.boundingbox) ? result.boundingbox : null;
+  // Nominatim orders its box south, north, west, east.
+  const bbox = box?.length === 4 ? normalizeGeocodeBbox(box[2], box[0], box[3], box[1]) : null;
   return {
     lat,
     lon,
     displayName: result.display_name ?? "",
     score: coerceScore(result.importance),
+    ...(bbox ? { bbox } : {}),
   };
 }
 
@@ -519,11 +579,13 @@ const peliasProvider: GeocodingProvider = {
         const coords = pointCoords(feature);
         if (!coords) return null;
         const props = (feature.properties as Record<string, unknown>) ?? {};
+        const bbox = geojsonFeatureBbox(feature);
         return {
           lon: coords[0],
           lat: coords[1],
           displayName: readString(props, "label") ?? "",
           score: coerceScore(props.confidence as number | undefined),
+          ...(bbox ? { bbox } : {}),
         } satisfies GeocodeMatch;
       })
       .filter((m): m is GeocodeMatch => m !== null),
@@ -634,6 +696,31 @@ function arcgisCandidatePosition(
 }
 
 /**
+ * A candidate's `extent` (`xmin`/`ymin`/`xmax`/`ymax`, in the response's
+ * spatial reference) as a west/south/east/north box in degrees, or null when it
+ * is missing, malformed, or in a spatial reference that cannot be unprojected.
+ *
+ * @param extent - The candidate's `extent` member.
+ * @param wkid - The response's spatial reference, or null when it reports none.
+ * @returns The extent in degrees, or null.
+ */
+function arcgisCandidateExtent(extent: unknown, wkid: number | null): GeocodeBbox | null {
+  if (!extent || typeof extent !== "object") return null;
+  const e = extent as { xmin?: unknown; ymin?: unknown; xmax?: unknown; ymax?: unknown };
+  // Checked before `Number()`, which reads a null extent as a box at 0, 0.
+  if (![e.xmin, e.ymin, e.xmax, e.ymax].every(isCoordinateValue)) return null;
+  try {
+    const sw = arcgisCandidatePosition(Number(e.xmin), Number(e.ymin), wkid);
+    const ne = arcgisCandidatePosition(Number(e.xmax), Number(e.ymax), wkid);
+    if (!sw || !ne) return null;
+    return normalizeGeocodeBbox(sw.lon, sw.lat, ne.lon, ne.lat);
+  } catch {
+    // The candidate's own position already reports an unsupported reference.
+    return null;
+  }
+}
+
+/**
  * A candidate's attributes worth keeping: plain values that are not empty.
  * The shape and the location fields the match already carries are dropped.
  */
@@ -676,11 +763,13 @@ function parseArcGISCandidates(data: unknown): GeocodeMatch[] {
       const position = arcgisCandidatePosition(Number(location?.x), Number(location?.y), wkid);
       if (!position) return null;
       const attributes = candidateAttributes(candidate.attributes);
+      const bbox = arcgisCandidateExtent(candidate.extent, wkid);
       return {
         ...position,
         displayName: readString(candidate, "address") ?? "",
         score: coerceScore(candidate.score as number | undefined),
         ...(attributes ? { attributes } : {}),
+        ...(bbox ? { bbox } : {}),
       } satisfies GeocodeMatch;
     })
     .filter((m): m is GeocodeMatch => m !== null);
@@ -932,11 +1021,13 @@ const mapboxProvider: GeocodingProvider = {
         }
         coords ??= pointCoords(feature);
         if (!coords) return null;
+        const bbox = geojsonFeatureBbox(feature);
         return {
           lon: coords[0],
           lat: coords[1],
           displayName: readString(feature, "place_name") ?? "",
           score: coerceScore(feature.relevance as number | undefined),
+          ...(bbox ? { bbox } : {}),
         } satisfies GeocodeMatch;
       })
       .filter((m): m is GeocodeMatch => m !== null),
@@ -1024,16 +1115,28 @@ function parseGoogleResults(data: unknown): GeocodeMatch[] {
       : [];
   return results
     .map((result): GeocodeMatch | null => {
-      const geometry = result.geometry as { location?: unknown } | undefined;
+      const geometry = result.geometry as { location?: unknown; viewport?: unknown } | undefined;
       const location = geometry?.location as { lat?: unknown; lng?: unknown } | undefined;
       const lat = Number(location?.lat);
       const lon = Number(location?.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      // The recommended viewport for the result, which Google always returns.
+      type Corner = { lat?: unknown; lng?: unknown } | undefined;
+      const viewport = geometry?.viewport as { northeast?: Corner; southwest?: Corner } | undefined;
+      const bbox = viewport
+        ? normalizeGeocodeBbox(
+            viewport.southwest?.lng,
+            viewport.southwest?.lat,
+            viewport.northeast?.lng,
+            viewport.northeast?.lat,
+          )
+        : null;
       return {
         lat,
         lon,
         displayName: readString(result, "formatted_address") ?? "",
         score: null,
+        ...(bbox ? { bbox } : {}),
       };
     })
     .filter((m): m is GeocodeMatch => m !== null);
