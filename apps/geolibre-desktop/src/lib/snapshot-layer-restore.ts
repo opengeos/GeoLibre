@@ -286,6 +286,11 @@ function restorePrintLayoutReferences(
  * and a single store write does not. Without `redraw` the restored layer is
  * listed in the Layers panel and draws nothing.
  *
+ * The owning passes are store-driven, like on project load: they skip a layer
+ * their control already holds (a control-drawn layer restored in place keeps
+ * its map output) and replay any other store layer of their kind the control
+ * is missing, not only this one.
+ *
  * @param project - The parsed snapshot project.
  * @param layerId - The id of the layer to restore.
  * @param redraw - Called with the restored record after the store write, so the
@@ -308,6 +313,8 @@ export function applySnapshotLayerRestore(
   // Layers that join on the restored one re-derive their columns from it,
   // as they do after any change to a join source.
   const layers = cascadeLayerJoinRefresh(restoredLayers, layerId);
+  const restored = layers.find((layer) => layer.id === layerId);
+  if (!restored) throw new Error(`Snapshot has no layer ${layerId}.`);
   // Deleting a layer scrubbed every reference to it, so a re-inserted
   // layer also gets back its widgets, comments, legend entries,
   // story-map rows, pane visibility and Print Layout blocks. A layer
@@ -316,8 +323,6 @@ export function applySnapshotLayerRestore(
   const references = wasDeleted ? restoreLayerReferencesFromSnapshot(state, project, layerId) : {};
   // One store write, so one Undo step reverts the whole restore.
   useAppStore.setState({ layers, ...references, isDirty: true });
-  const restored = layers.find((layer) => layer.id === layerId);
-  if (!restored) throw new Error(`Snapshot has no layer ${layerId}.`);
   redraw(restored);
   return restored;
 }
