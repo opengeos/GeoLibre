@@ -203,8 +203,9 @@ The search box at the bottom of the Layers panel decides what you typed and
 handles it accordingly.
 
 1. **By name.** Type `Reno` and pick **Reno, Washoe County, Nevada, United
-   States** from the results (it may not be the first entry). The map flies
-   to Reno at about zoom 12.
+   States** from the results (it may not be the first entry). The map frames
+   the whole city, Sparks included, at about zoom 10. A state or a country is
+   framed whole the same way, and a street address lands at street level.
 2. **By coordinates.** Clear the box and type `39.5442, -119.8160` (latitude
    first). The only result is **Go to 39.5442, -119.816**. Pick it to fly to
    the University of Nevada, Reno campus, near this workshop's venue.

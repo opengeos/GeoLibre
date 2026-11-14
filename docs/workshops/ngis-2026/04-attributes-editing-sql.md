@@ -203,12 +203,15 @@ Close the chart.
 7. Sort `water_pct` descending. **Carson City** leads at **8** percent, then
    Douglas (3.8) and Washoe (3.4). All three border Lake Tahoe.
 
-!!! warning "Calculated fields on a URL layer live in this session only"
-    `nv_counties` was loaded from a URL, so the project stores the URL, not a
-    copy of the data. Fields you calculate on it are not saved with the
-    project and are gone when you reopen it. To keep derived values, calculate
-    them in SQL (Exercise 4.7), use a **virtual field** (Style panel →
-    **Virtual fields**), or export the layer to a file.
+!!! note "Calculated fields on a URL layer are kept only if you embed them"
+    `nv_counties` was loaded from a URL, so the project normally stores the
+    URL, not a copy of the data. Once you edit its attributes, **Project →
+    Save** asks **Embed edited vector data?** Click **Embed data** and the 17
+    counties, with `area_km2` and `water_pct`, are written into the project
+    file (about 86 KB). **Save without data** keeps only the URL, and the
+    fields are gone when you reopen it. A **virtual field** (Style panel →
+    **Virtual fields**) or a SQL query (Exercise 4.7) keeps derived values
+    without copying the data.
 
 ### Exercise 4.3: Select by expression and summarize the selection (4 min)
 
@@ -281,7 +284,9 @@ were in Nevada?
     rule-based symbology all combine instead of replacing each other. Filters
     hide features on the map only. They do not narrow the attribute table or
     change the selection. A quick filter on a text field such as `magType`
-    offers a **Values** list of checkboxes instead of a range.
+    offers a **Values** list of checkboxes instead of a range, each with its
+    count across the whole layer: `ml` 6,497, `md` 894, `mw` 369, and `mlr`
+    246 of the 8,031 events.
 
 ### Exercise 4.6: Spatial SQL, and a degrees-versus-meters trap (6 min)
 
@@ -394,8 +399,8 @@ were in Nevada?
 
 1. Zoom in to Reno and Sparks: type `Reno` in the search box and pick **Reno,
    Washoe County, Nevada, United States** under **Places** (matches from your
-   own layers are listed first), then zoom out one step. Show `nv_earthquakes`
-   again.
+   own layers are listed first). The map frames Reno and Sparks. Show
+   `nv_earthquakes` again.
 2. Click the **GeoEditor** button in the Layers panel toolbar (the pen icon).
    The editing toolbar opens on the left edge of the map.
 3. Click the **Polygon** tool (the first button). Click four or five points on
@@ -430,7 +435,9 @@ were in Nevada?
     A drawn layer has no source URL, so GeoLibre embeds its features, and its
     `name` and `area_km2` values, in the `.geolibre` project file.
 
-Save the project with **Project → Save** (`Ctrl+S`, `Cmd+S` on macOS).
+Save the project with **Project → Save** (`Ctrl+S`, `Cmd+S` on macOS). When
+GeoLibre asks **Embed edited vector data?**, click **Embed data** to keep the
+county fields from Exercise 4.2.
 
 ### Bonus 4.9: Join the counts back to the counties (if you finish early)
 
@@ -509,7 +516,8 @@ restores the `Earthquakes per county` query layer with its Reds choropleth (use
 **Layer actions → Refresh** to re-run its SQL), the `Study area` polygon with
 its attributes, and the join from Bonus 4.9. As the warning in Exercise 4.2
 explains, the `area_km2` and `water_pct` fields calculated on `nv_counties` are
-not in it.
+kept only when you embed the edited data; the finished project was saved
+without them, so it stays small and reads the counties from their URL.
 
 ## Going further
 

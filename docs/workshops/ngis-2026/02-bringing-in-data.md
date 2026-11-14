@@ -294,9 +294,9 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
 ### Exercise 2.6: Search Sentinel-2 with STAC (7 min)
 
 1. Type `Lake Tahoe` in the search box at the bottom left and pick **Lake
-   Tahoe, Placer County, California, United States**. Search results fly to
-   zoom 12, so choose **View → Set view…**, set **Zoom** to `9`, and click
-   **Go**. The whole lake and Reno are now in view.
+   Tahoe, Placer County, California, United States**. The map frames the
+   whole lake. To bring Reno into view as well, choose **View → Set view…**,
+   set **Zoom** to `9`, and click **Go**.
 2. Choose **Plugins → Web services → STAC catalogs**. The panel docks on the
    right.
 3. In **STAC catalog or API URL**, enter Element 84's Earth Search and click
