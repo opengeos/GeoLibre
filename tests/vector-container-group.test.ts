@@ -9,6 +9,7 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
+import { getHistoryCoalesceMs, setHistoryCoalesceMs } from "../packages/core/src/history";
 import {
   applyInitialVectorStyles,
   groupVectorContainerImports,
@@ -178,11 +179,36 @@ describe("initial styles for vector control layers", () => {
     assert.equal(styledUnknown.style.fillOpacity, DEFAULT_LAYER_STYLE.fillOpacity);
     assert.equal(styledUnknown.style.fillColor, LAYER_PALETTE[1]);
   });
-  it("keeps the restyle out of the undo history", () => {
-    useAppStore.setState({ layers: layers() });
-    useAppStore.temporal.getState().clear();
-    applyInitialVectorStyles(["original"]);
-    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+  it("keeps the restyle out of the undo history, and redo of the add keeps it", () => {
+    // No coalescing, so an unpaused write would record its own undo step.
+    const coalesceMs = getHistoryCoalesceMs();
+    setHistoryCoalesceMs(0);
+    try {
+      useAppStore.setState({ layers: [] });
+      useAppStore.temporal.getState().clear();
+      const [layer] = layers("point");
+      useAppStore.getState().addLayer(layer);
+      const past = useAppStore.temporal.getState().pastStates.length;
+      applyInitialVectorStyles([layer.id]);
+      assert.equal(useAppStore.temporal.getState().pastStates.length, past);
+      useAppStore.temporal.getState().undo();
+      assert.equal(useAppStore.getState().layers.length, 0, "one undo removes the add");
+      useAppStore.temporal.getState().redo();
+      assert.equal(useAppStore.getState().layers[0]?.style.fillColor, LAYER_PALETTE[0]);
+    } finally {
+      setHistoryCoalesceMs(coalesceMs);
+    }
+  });
+  it("keeps caller-supplied sizing while still assigning a palette color", () => {
+    const [layer] = layers("point");
+    const seeded = { ...layer, style: { ...layer.style, circleRadius: 9, strokeWidth: 4 } };
+    useAppStore.setState({ layers: [seeded] });
+    applyInitialVectorStyles([layer.id], { circleRadius: 9, lineWidth: 4 });
+    const styled = useAppStore.getState().layers[0].style;
+    assert.equal(styled.fillColor, LAYER_PALETTE[0]);
+    assert.equal(styled.circleRadius, 9);
+    assert.equal(styled.strokeWidth, 4);
+    assert.equal(styled.fillOpacity, 0.9);
   });
   it("preserves explicitly supplied colors and color expressions", () => {
     const styles: Partial<VectorLayerStyle>[] = [

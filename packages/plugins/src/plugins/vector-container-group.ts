@@ -1,4 +1,9 @@
-import { initialLayerStyle, useAppStore, type DominantGeometry } from "@geolibre/core";
+import {
+  initialLayerStyle,
+  useAppStore,
+  withoutHistory,
+  type DominantGeometry,
+} from "@geolibre/core";
 import type { VectorControl, VectorLayerOptions, VectorLayerStyle } from "maplibre-gl-vector";
 
 type ContainerControl = Pick<VectorControl, "addData" | "getLayers">;
@@ -78,8 +83,10 @@ const CONTROL_GEOMETRY: Record<string, DominantGeometry> = {
  * suggestions for it either.
  *
  * A caller that supplied any color (a project restore replaying its saved
- * style, an API add with an explicit style) keeps it. The restyle is left out
- * of the undo history, so one undo still removes the added layer.
+ * style, an API add with an explicit style) keeps its whole style; one that
+ * supplied only sizing or opacity keeps those fields and gets the palette
+ * color. The restyle is left out of the undo history, so one undo still
+ * removes the added layer.
  *
  * @param ids - The store ids of the layers one `addData` call created.
  * @param style - The style the caller passed to `addData`, if any.
@@ -97,9 +104,12 @@ export function applyInitialVectorStyles(ids: string[], style?: Partial<VectorLa
     ].some((color) => color !== undefined)
   )
     return;
-  const history = useAppStore.temporal.getState();
-  history.pause();
-  try {
+  // The store seeds these fields from the control, which applied the caller's
+  // values; keep them rather than replacing them with geometry defaults.
+  const keepOpacity = style?.fillOpacity !== undefined || style?.circleOpacity !== undefined;
+  const keepWidth = style?.lineWidth !== undefined;
+  const keepRadius = style?.circleRadius !== undefined;
+  withoutHistory(() => {
     for (const id of ids) {
       const state = useAppStore.getState();
       const layer = state.layers.find((candidate) => candidate.id === id);
@@ -114,13 +124,11 @@ export function applyInitialVectorStyles(ids: string[], style?: Partial<VectorLa
           ...layer.style,
           fillColor: initial.fillColor,
           strokeColor: initial.strokeColor,
-          fillOpacity: initial.fillOpacity,
-          strokeWidth: initial.strokeWidth,
-          circleRadius: initial.circleRadius,
+          fillOpacity: keepOpacity ? layer.style.fillOpacity : initial.fillOpacity,
+          strokeWidth: keepWidth ? layer.style.strokeWidth : initial.strokeWidth,
+          circleRadius: keepRadius ? layer.style.circleRadius : initial.circleRadius,
         },
       });
     }
-  } finally {
-    history.resume();
-  }
+  });
 }
