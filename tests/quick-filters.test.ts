@@ -741,4 +741,31 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     assert.equal(yields.length, 0);
     assert.equal(readQuickFilterProfileCache(rows), undefined);
   });
+
+  it("settles the caller without caching when a later slice throws", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const rows = makeRows();
+    let done = 0;
+    let clock = 0;
+    let reads = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"] },
+      {
+        onDone: () => done++,
+        sliceBudgetMs: 1,
+        now: () => (clock += 1),
+        yieldControl: () => Promise.resolve(),
+        properties: (row) => {
+          reads += 1;
+          if (reads > 1000) throw new Error("unreadable record");
+          return row;
+        },
+      },
+    );
+    assert.equal(done, 0);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(done, 1, "a failed scan must still call back");
+    assert.equal(readQuickFilterProfileCache(rows), undefined);
+  });
 });

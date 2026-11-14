@@ -35,13 +35,21 @@ function newFilterId(): string {
 /**
  * Build the control a field's profile calls for, pre-filled with nothing so a
  * newly added filter shows every feature until it is answered.
+ *
+ * A field with no profile (its values could not be read, say because a
+ * tile-backed layer's loaded tiles changed between listing the field and
+ * picking it) still gets a text match, the one control that needs no profile,
+ * rather than the pick being dropped.
  */
-function filterForProfile(profile: QuickFilterFieldProfile): LayerQuickFilter {
+function filterForField(
+  field: string,
+  profile: QuickFilterFieldProfile | undefined,
+): LayerQuickFilter {
   return {
     id: newFilterId(),
-    field: profile.field,
-    kind: profile.kind,
-    ...(profile.dateKind ? { dateKind: profile.dateKind } : {}),
+    field,
+    kind: profile?.kind ?? "text",
+    ...(profile?.dateKind ? { dateKind: profile.dateKind } : {}),
   };
 }
 
@@ -104,12 +112,11 @@ export function QuickFiltersSection({
     } finally {
       setAddingField(null);
     }
-    if (!profile) return;
     const current =
       useAppStore.getState().layers.find((candidate) => candidate.id === layerId)?.quickFilters ??
       [];
     if (current.some((filter) => filter.field === field)) return;
-    setLayerQuickFilters(layerId, [...current, filterForProfile(profile)]);
+    setLayerQuickFilters(layerId, [...current, filterForField(field, profile)]);
   };
 
   return (
@@ -171,9 +178,11 @@ export function QuickFiltersSection({
                 disabled={addable.length === 0 || addingField !== null}
                 aria-busy={fieldsLoading || addingField !== null}
               >
-                {addable.length === 0 && !fieldsLoading
-                  ? t("quickFilters.allFieldsUsed")
-                  : t("quickFilters.addFilter")}
+                {addingField !== null
+                  ? t("quickFilters.loadingValues")
+                  : addable.length === 0 && !fieldsLoading
+                    ? t("quickFilters.allFieldsUsed")
+                    : t("quickFilters.addFilter")}
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </DropdownMenuTrigger>

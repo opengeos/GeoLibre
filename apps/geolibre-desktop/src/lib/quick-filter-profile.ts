@@ -340,8 +340,12 @@ function profileFromTally(
   return profile;
 }
 
-/** Records read between two `shouldYield` polls of a {@link QuickFilterScan}. */
-const SCAN_YIELD_INTERVAL = 512;
+/**
+ * Records read between two `shouldYield` polls of a {@link QuickFilterScan}.
+ * Small enough that a wide attribute table cannot run far past a caller's time
+ * budget between polls; a poll is one clock read, so it costs next to nothing.
+ */
+const SCAN_YIELD_INTERVAL = 128;
 
 const hasOwn = Object.prototype.hasOwnProperty;
 

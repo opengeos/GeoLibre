@@ -194,49 +194,47 @@ export function useQuickFilterProfiles(
         : null;
   // Sampled tile records are already property bags; local features are not.
   const properties = hasLocalFeatures ? featureProperties : undefined;
+  // What the committed render scans, for the callbacks below. Written in a
+  // layout effect rather than during render so a discarded render cannot leave
+  // them pointing at a source that was never committed.
   const sourceRef = useRef({ source, properties });
-  sourceRef.current = { source, properties };
+  // Whether the committed render is still waiting on the cache.
+  const pendingRef = useRef(false);
 
   // Bumped when a scan lands in the cache, to re-read it.
   const [cacheVersion, bumpCacheVersion] = useReducer((version: number) => version + 1, 0);
 
-  // A layout effect so the scan's first slice — which is the whole scan for an
-  // ordinary layer — lands before the browser paints, and the controls never
-  // flash a loading state they do not need.
-  useLayoutEffect(() => {
-    if (!source) return;
-    const request = { fields: splitKey(wantedKey), names: listFields };
-    // Already answerable (a reselected layer, a reopened panel): this render
-    // read the cache, so there is nothing to scan and nothing to re-read.
-    if (hasQuickFilterProfiles(source, request)) return;
-    return ensureQuickFilterProfiles(source, request, {
-      properties,
-      onDone: bumpCacheVersion,
-    });
-  }, [listFields, properties, source, wantedKey]);
-
   const profileField = useCallback(
     (field: string): Promise<QuickFilterFieldProfile | undefined> =>
       new Promise((resolve) => {
-        const { source: current, properties: propertiesOf } = sourceRef.current;
-        if (!current) {
-          resolve(undefined);
-          return;
-        }
-        ensureQuickFilterProfiles(
-          current,
-          { fields: [field] },
-          {
-            properties: propertiesOf,
-            onDone: () =>
-              resolve(readQuickFilterProfileCache(current)?.profiles.get(field) ?? undefined),
-          },
-        );
+        const attempt = (): void => {
+          const { source: current, properties: propertiesOf } = sourceRef.current;
+          if (!current) {
+            resolve(undefined);
+            return;
+          }
+          ensureQuickFilterProfiles(
+            current,
+            { fields: [field] },
+            {
+              properties: propertiesOf,
+              onDone: () => {
+                // The features were replaced while a sliced scan was running:
+                // the profile describes data the layer no longer has, so read
+                // the field again from what it has now.
+                if (sourceRef.current.source !== current) attempt();
+                else
+                  resolve(readQuickFilterProfileCache(current)?.profiles.get(field) ?? undefined);
+              },
+            },
+          );
+        };
+        attempt();
       }),
     [],
   );
 
-  return useMemo(() => {
+  const result = useMemo(() => {
     // Not read, but the cache it stands for is: a scan landing bumps it.
     void cacheVersion;
     const cached = source ? readQuickFilterProfileCache(source) : undefined;
@@ -281,4 +279,34 @@ export function useQuickFilterProfiles(
     tileBacked,
     wantedKey,
   ]);
+
+  // Layout effects run in declaration order, so this one keeps the refs in
+  // step with the committed render before the scanning effect below reads them.
+  const pending = result.fieldsLoading || result.loadingFields.size > 0;
+  useLayoutEffect(() => {
+    sourceRef.current = { source, properties };
+    pendingRef.current = pending;
+  });
+
+  // A layout effect so the scan's first slice — which is the whole scan for an
+  // ordinary layer — lands before the browser paints, and the controls never
+  // flash a loading state they do not need.
+  useLayoutEffect(() => {
+    if (!source) return;
+    const request = { fields: splitKey(wantedKey), names: listFields };
+    // Already answerable (a reselected layer, a reopened panel): there is
+    // nothing to scan. This render normally read the answer too; it has not
+    // only when another instance of this hook filled the cache from its own
+    // layout effect in this same commit, after this one rendered.
+    if (hasQuickFilterProfiles(source, request)) {
+      if (pendingRef.current) bumpCacheVersion();
+      return;
+    }
+    return ensureQuickFilterProfiles(source, request, {
+      properties,
+      onDone: bumpCacheVersion,
+    });
+  }, [listFields, properties, source, wantedKey]);
+
+  return result;
 }

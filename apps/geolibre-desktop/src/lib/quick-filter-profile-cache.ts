@@ -64,9 +64,10 @@ export interface QuickFilterProfilingOptions<T> {
   /** Features to inspect; see {@link ProfileQuickFilterOptions.sampleLimit}. */
   sampleLimit?: number;
   /**
-   * Called once the request is answerable from the cache. Called synchronously,
-   * before `ensureQuickFilterProfiles` returns, when it already was or when the
-   * scan fits in its first slice.
+   * Called once the scan has settled: the request is answerable from the cache,
+   * or a later slice threw and nothing was cached (the cache says which). Called
+   * synchronously, before `ensureQuickFilterProfiles` returns, when the request
+   * already was answerable or the scan fits in its first slice.
    */
   onDone?: () => void;
   /** How long one slice may hold the main thread, in milliseconds. */
@@ -167,14 +168,20 @@ export function ensureQuickFilterProfiles<T>(
 
   let cancelled = false;
   void (async () => {
-    for (;;) {
-      await yieldControl();
-      if (cancelled) return;
-      if (runSlice()) {
-        commit();
-        return;
+    try {
+      for (;;) {
+        await yieldControl();
+        if (cancelled) return;
+        if (runSlice()) break;
       }
+    } catch (error) {
+      // A throwing accessor must not leave a caller waiting forever. Nothing is
+      // cached, so the caller's read of the cache comes back empty.
+      console.error("Quick filter profiling failed", error);
+      options.onDone?.();
+      return;
     }
+    commit();
   })();
   return () => {
     cancelled = true;
