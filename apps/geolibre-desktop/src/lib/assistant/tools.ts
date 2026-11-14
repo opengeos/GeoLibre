@@ -1005,7 +1005,9 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       .array(z.number())
       .length(4)
       .optional()
-      .describe("[west, south, east, north]; defaults to the current view."),
+      .describe(
+        "[west, south, east, north]. A search defaults to the current view; a mosaic is not limited to the view and uses a bbox only as the layer's extent.",
+      ),
     datetime: z
       .string()
       .optional()

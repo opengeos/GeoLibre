@@ -436,6 +436,11 @@ describe("planetaryComputerColorbar", () => {
 
   it("has nothing to show without a colormap or a numeric range", () => {
     assert.equal(planetaryComputerColorbar({ renderParams: { assets: ["visual"] } }), null);
+    // An inherited key is not a colormap.
+    assert.equal(
+      planetaryComputerColorbar({ renderParams: { colormap_name: "constructor", rescale: "0,1" } }),
+      null,
+    );
     assert.equal(planetaryComputerColorbar({ renderParams: { colormap_name: "viridis" } }), null);
     assert.equal(
       planetaryComputerColorbar({ renderParams: { colormap_name: "viridis", rescale: "5,5" } }),

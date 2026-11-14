@@ -422,7 +422,13 @@ export function planetaryComputerColorbar(
   if (!name || !rescale) return null;
   const [vmin, vmax] = rescale.split(",").map(Number);
   if (!Number.isFinite(vmin) || !Number.isFinite(vmax) || vmin === vmax) return null;
-  const colormap = COLORBAR_NAMED[name] ?? COLORBAR_CUSTOM[name];
+  // Own-property lookups: the name comes from a form or a saved project, and a
+  // plain index would resolve "constructor" to an inherited function.
+  const colormap = Object.hasOwn(COLORBAR_NAMED, name)
+    ? COLORBAR_NAMED[name]
+    : Object.hasOwn(COLORBAR_CUSTOM, name)
+      ? COLORBAR_CUSTOM[name]
+      : undefined;
   if (!colormap) return null;
   const label =
     layer.presetName?.toUpperCase() ||
