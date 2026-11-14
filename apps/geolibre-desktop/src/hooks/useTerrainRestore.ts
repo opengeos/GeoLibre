@@ -1,9 +1,11 @@
 import { useAppStore } from "@geolibre/core";
-import type { MapEngine } from "@geolibre/map";
-import { useEffect } from "react";
+import { DEFAULT_TERRAIN_EXAGGERATION, type MapEngine } from "@geolibre/map";
+import { useEffect, useRef } from "react";
+import { applyTerrainLook } from "../lib/terrain-look";
 
 /**
- * Apply the project's `terrainEnabled` preference to the live map.
+ * Apply the project's 3D terrain (`terrainEnabled`, exaggeration and DEM
+ * source) to the live map.
  *
  * Terrain is project state rather than optional map chrome, so restoring it
  * cannot live in the toolbar: embeds that hide the toolbar (`?maponly`, used by
@@ -22,8 +24,25 @@ export function useTerrainRestore(
   projectGeneration: number,
 ): void {
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
+  // The engine and project the saved look was last applied to. A style reload
+  // keeps the engine's own exaggeration and source, so only a new engine or a
+  // new project applies it again; the Terrain settings dialog drives the
+  // engine directly in between.
+  const applied = useRef<{ engine: MapEngine; projectGeneration: number } | null>(null);
 
   useEffect(() => {
     mapControllerRef.current?.setBuiltInControlVisible("terrain", terrainEnabled);
   }, [mapControllerRef, mapReadyGeneration, projectGeneration, terrainEnabled]);
+
+  useEffect(() => {
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    const last = applied.current;
+    if (last?.engine === engine && last.projectGeneration === projectGeneration) return;
+    applied.current = { engine, projectGeneration };
+    applyTerrainLook(engine, useAppStore.getState().preferences.map, {
+      reset: last !== null && last.projectGeneration !== projectGeneration,
+      defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION,
+    });
+  }, [mapControllerRef, mapReadyGeneration, projectGeneration]);
 }

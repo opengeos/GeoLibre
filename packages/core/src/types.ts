@@ -1914,6 +1914,17 @@ export interface MapPreferences {
    * Ignored by 2D renderers; absent means the renderer's normal global source.
    */
   terrainIonAssetId?: number;
+  /**
+   * Vertical exaggeration of the 3D terrain, as set in Terrain settings.
+   * Absent means the renderer default (1).
+   */
+  terrainExaggeration?: number;
+  /**
+   * HTTP(S) URL of the Cloud Optimized GeoTIFF DEM the 3D terrain is drawn
+   * from. Absent means the renderer's built-in global terrain. A DEM opened
+   * from a local file has no URL to save, so it is not kept.
+   */
+  terrainSource?: string;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
   /**

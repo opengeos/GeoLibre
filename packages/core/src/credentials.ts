@@ -461,6 +461,13 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
   if (redactedMapboxStyleUrl !== mapboxStyleUrl) {
     recordRedaction(accumulator, "preferences.map.mapboxStyleUrl", mapboxStyleUrl);
   }
+  // The terrain DEM is a URL too, and a signed or keyed one would leak with it.
+  const terrainSource = project.preferences?.map?.terrainSource;
+  const redactedTerrainSource =
+    typeof terrainSource === "string" ? redactUrlCredentials(terrainSource) : terrainSource;
+  if (redactedTerrainSource !== terrainSource) {
+    recordRedaction(accumulator, "preferences.map.terrainSource", terrainSource);
+  }
   const preferences = project.preferences
     ? {
         ...project.preferences,
@@ -470,8 +477,14 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
           (variable) => variable.secret === false,
         ),
         geocoding,
-        ...(redactedMapboxStyleUrl !== mapboxStyleUrl
-          ? { map: { ...project.preferences.map, mapboxStyleUrl: redactedMapboxStyleUrl } }
+        ...(redactedMapboxStyleUrl !== mapboxStyleUrl || redactedTerrainSource !== terrainSource
+          ? {
+              map: {
+                ...project.preferences.map,
+                mapboxStyleUrl: redactedMapboxStyleUrl,
+                terrainSource: redactedTerrainSource,
+              },
+            }
           : {}),
       }
     : project.preferences;
