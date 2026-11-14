@@ -139,11 +139,21 @@ describe("FlatGeobuf panel layer name", () => {
 });
 
 describe("flatGeobufLayerName", () => {
-  it("keeps the typed name even if the field changed while loading", () => {
-    // The id is the name typed at Add time; the field's later value is not read.
+  it("keeps the typed name when the field changed while loading", () => {
+    // The id is the name typed at Add time; the field now holds something else.
     assert.equal(
-      flatGeobufLayerName({ id: "US counties (FlatGeobuf)", url: COUNTIES_URL }),
+      flatGeobufLayerName({ id: "US counties (FlatGeobuf)", url: COUNTIES_URL }, "edited"),
       "US counties (FlatGeobuf)",
+    );
+  });
+
+  it("keeps a typed name that equals the URL-derived id verbatim", () => {
+    assert.equal(
+      flatGeobufLayerName(
+        { id: "air%20temp", url: "https://example.com/air%20temp.fgb" },
+        "air%20temp",
+      ),
+      "air%20temp",
     );
   });
 
