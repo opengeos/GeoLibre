@@ -19,6 +19,7 @@ Pick by what the data **is**:
 | A big remote FlatGeobuf / GeoParquet / GeoJSON | `add_vector_layer` | Read in place, not copied. No attribute table in the file. |
 | A Cloud Optimized GeoTIFF / COG | `add_raster_layer` | `bands`, `colormap`, `rescale`. |
 | An XYZ raster tile template (`{z}/{x}/{y}.png`) | `add_tile_layer` | Basemaps like OSM go here, not `set_basemap`. |
+| Satellite or aerial imagery with no URL in hand (Sentinel-2, Landsat, NAIP, a DEM) | `add_planetary_computer_layer` | Microsoft Planetary Computer by collection id: one STAC `item`, or a `datetime` mosaic. No credentials. MapLibre renderer. |
 | A PMTiles archive, or a vector tile service | `add_tiles_layer` | `kind="pmtiles"` (with `tile_type`) or `kind="vector-tiles"`. |
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
 | A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
@@ -81,6 +82,10 @@ add_vector_layer(path, name, url, render_mode="geojson", data_format=None,
 add_raster_layer(path, name, url, bands=None, colormap=None, rescale=None,
                  style=None, index=None)
 add_tile_layer(path, name, url, tile_size=256, attribution=None, index=None)
+add_planetary_computer_layer(path, collection, item=None, name=None, datetime=None,
+                             bbox=None, preset=None, assets=None, expression=None,
+                             rescale=None, colormap=None, max_cloud_cover=None,
+                             index=None)
 add_ogc_layer(path, name, service, endpoint, layers=None, styles="",
               image_format="image/png", transparent=True, tile_size=256,
               version="1.1.1", crs=None, bounds=None, index=None)
@@ -105,6 +110,19 @@ add_cesium_kml_layer(path, name, url=None, data=None, index=None)
   RGB), and `rescale` is a list of `[min, max]` pairs, one per band
   (`[[0, 3000]]`). The COG URL must be publicly readable **and CORS-enabled** —
   the browser fetches the tiles directly.
+- `add_planetary_computer_layer`: with `item` it draws that one STAC item;
+  without it, a mosaic of every item matching `datetime` (`"start/end"`) and
+  `max_cloud_cover`, e.g. a low-cloud Sentinel-2 summer composite
+  (`collection="sentinel-2-l2a", datetime="2024-06-01/2024-08-31",
+  max_cloud_cover=10`). Style it with a `preset` (sentinel-2-l2a: `true-color`,
+  `false-color`, `ndvi`, `ndwi`, `nbr`, `ndbi`, `swir`; landsat-c2-l2:
+  `true-color`, `false-color`, `ndvi`, `ndwi`, `nbr`, `thermal`; naip: `rgb`,
+  `cir`, `ndvi`; cop-dem-glo-30 / cop-dem-glo-90: `elevation`, `hillshade`), or
+  with `assets` / `expression` plus `rescale=[min, max]` and `colormap`. With
+  none of them the collection's default preset applies. The layer stores no
+  tile URL: GeoLibre's Planetary Computer panel builds it when the project
+  opens (MapLibre renderer only), lists it in its Layers tab, and can restyle
+  it. Give a mosaic a `bbox` so zoom-to-layer has an extent.
 - `add_ogc_layer`: `layers` is required when `service="wms"`. `version` defaults
   to `1.1.1`; pass what the server advertises when it differs. For
   `service="wmts"`, `endpoint` is a full tile URL template. `bounds` is the

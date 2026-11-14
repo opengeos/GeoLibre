@@ -1,4 +1,4 @@
-import { generateSteps, resolveUrl } from "maplibre-gl-time-slider";
+import { generateSteps, resolveUrl, type SourceSpec } from "maplibre-gl-time-slider";
 import type { BandReading, PixelReading } from "maplibre-gl-raster";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { getActiveTimeSliderControl } from "./maplibre-time-slider";
@@ -115,6 +115,87 @@ const DEFAULT_MAX_STEPS = 120;
 /** Concurrent COG reads. Keeps the stack query responsive without flooding. */
 const READ_CONCURRENCY = 6;
 
+/** One timestep's values from a {@link PixelSeriesStepReader}. */
+export interface PixelSeriesStepReading {
+  /** What the values were read from, for attribution in the export. */
+  url: string;
+  /** Every band's value at the clicked location. */
+  bands: BandReading[];
+}
+
+/**
+ * Reads one timestep of a source the built-in GeoTIFF reader cannot handle.
+ *
+ * @param date - The timeline step.
+ * @param lngLat - The clicked location, `[lng, lat]` in WGS84.
+ * @param signal - Aborts the read.
+ * @returns The reading, or null when the source has no data for this step.
+ */
+export type PixelSeriesStepReader = (
+  date: Date,
+  lngLat: [number, number],
+  signal?: AbortSignal,
+) => Promise<PixelSeriesStepReading | null>;
+
+/** Returns a reader for a source it recognizes, or null to leave it alone. */
+export type PixelSeriesReaderFactory = (spec: SourceSpec) => PixelSeriesStepReader | null;
+
+const pixelSeriesReaderFactories = new Set<PixelSeriesReaderFactory>();
+
+/**
+ * Lets another plugin make one of its Time Slider sources chartable.
+ *
+ * The built-in reader range-reads a COG (or a mosaic's COG) per date. A source
+ * drawn from rendered tiles has no file to read, but its owner may be able to
+ * fetch the source values another way: a Planetary Computer stack is an XYZ
+ * source whose pixel values come from the Data API's point endpoint.
+ *
+ * @param factory - Recognizes the plugin's sources and returns their reader.
+ * @returns A function that unregisters the factory.
+ */
+export function registerPixelSeriesReader(factory: PixelSeriesReaderFactory): () => void {
+  pixelSeriesReaderFactories.add(factory);
+  return () => pixelSeriesReaderFactories.delete(factory);
+}
+
+/**
+ * The plugin-supplied reader for a source, if any plugin claims it.
+ *
+ * @param spec - A Time Slider source.
+ * @returns The reader, or null when no registered factory recognizes the source.
+ */
+function pluginPixelSeriesReader(spec: SourceSpec): PixelSeriesStepReader | null {
+  for (const factory of pixelSeriesReaderFactories) {
+    const reader = factory(spec);
+    if (reader) return reader;
+  }
+  return null;
+}
+
+/** A source to chart, with the plugin reader that replaces the GeoTIFF read (if any). */
+interface PixelSeriesSource {
+  spec: SourceSpec;
+  reader: PixelSeriesStepReader | null;
+}
+
+/**
+ * Every chartable source on the active Time Slider, in dock order: the
+ * COG/mosaic sources the built-in reader handles plus any source a plugin
+ * registered a reader for.
+ *
+ * @returns The sources, or an empty array when the dock is closed or has none.
+ */
+function getTimeSliderSeriesSources(): PixelSeriesSource[] {
+  const control = getActiveTimeSliderControl();
+  if (!control) return [];
+  const sources: PixelSeriesSource[] = [];
+  for (const spec of control.getSources()) {
+    const reader = pluginPixelSeriesReader(spec);
+    if (reader || isPixelIdentifiableSourceType(spec.type)) sources.push({ spec, reader });
+  }
+  return sources;
+}
+
 /**
  * The pixel-readable sources currently configured on the active Time Slider, in
  * dock order.
@@ -147,10 +228,12 @@ export function getTimeSliderPixelSources(): PixelIdentifiableSpec[] {
 /**
  * Whether the Time Slider currently exposes a pixel-readable raster stack.
  *
- * @returns True when at least one COG or mosaic source is configured.
+ * @returns True when at least one COG or mosaic source is configured, or a
+ *   source another plugin registered a reader for
+ *   ({@link registerPixelSeriesReader}).
  */
 export function hasTimeSliderRasterStack(): boolean {
-  return getTimeSliderPixelSources().length > 0;
+  return getTimeSliderSeriesSources().length > 0;
 }
 
 /**
@@ -327,12 +410,12 @@ async function runWithConcurrency<T>(
  *   band that renders the first series as all gaps).
  */
 function pickDefaultBandIndex(
-  sources: PixelIdentifiableSpec[],
+  sources: SourceSpec[],
   bands: BandOption[],
   firstSourcePoints: PixelSeriesPoint[],
 ): number | null {
   if (bands.length === 0) return null;
-  const configured = sources[0]?.bidx?.[0];
+  const configured = (sources[0] as { bidx?: number[] } | undefined)?.bidx?.[0];
   const firstSourceBands = new Set(
     firstSourcePoints.flatMap((point) => point.bands.map((band) => band.index)),
   );
@@ -364,7 +447,8 @@ export async function queryPixelTimeSeries(
   options: PixelTimeSeriesOptions = {},
 ): Promise<PixelTimeSeriesResult> {
   const { signal, onProgress, maxSteps = DEFAULT_MAX_STEPS } = options;
-  const sources = getTimeSliderPixelSources();
+  const seriesSources = getTimeSliderSeriesSources();
+  const sources = seriesSources.map((entry) => entry.spec);
   if (sources.length === 0) {
     throw new Error("The Time Slider has no COG or mosaic sources to query.");
   }
@@ -450,14 +534,26 @@ export async function queryPixelTimeSeries(
         };
         try {
           if (signal?.aborted) throw new Error("aborted");
-          const resolved = await resolveUrl(source.url, date);
+          // A plugin-owned source (e.g. a Planetary Computer stack) is read by
+          // its owner; there is no per-date file for the GeoTIFF reader.
+          const pluginReader = seriesSources[si].reader;
+          if (pluginReader) {
+            const reading = await pluginReader(date, lngLat, signal);
+            if (reading) {
+              point.url = reading.url;
+              point.bands = reading.bands;
+            }
+            return;
+          }
+          const pixelSource = source as PixelIdentifiableSpec;
+          const resolved = await resolveUrl(pixelSource.url, date);
           point.url = resolved;
           // A COG source resolves straight to the file; a mosaic resolves to a
           // manifest listing many COGs, so the covering asset has to be found
           // first. A point outside every asset's bbox has no reading for this
           // step — leave it as a gap, keeping the manifest URL so the export
           // still shows what was consulted.
-          const url = await readUrlFor(source, resolved);
+          const url = await readUrlFor(pixelSource, resolved);
           if (!url) return;
           point.url = url;
           const reading = await readAt(url);

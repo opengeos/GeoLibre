@@ -2221,7 +2221,7 @@
     "license": "proprietary",
     "extent": {
       "spatial": { "bbox": [[-124.784, 24.744, -66.951, 49.346]] },
-      "temporal": { "interval": [["2010-01-01T00:00:00Z", "2023-12-31T00:00:00Z"]] }
+      "temporal": { "interval": [["2010-01-01T00:00:00Z", "2025-12-31T23:59:59Z"]] }
     },
     "item_assets": {
       "image": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
@@ -2493,6 +2493,23 @@
       "temporal": { "interval": [["1981-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
     },
     "item_assets": { "geoparquet": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "noaa-hrrr",
+    "type": "Collection",
+    "title": "NOAA High Resolution Rapid Refresh (HRRR)",
+    "description": "The [High-Resolution Rapid Refresh (HRRR)](https://rapidrefresh.noaa.gov/hrrr/) is a NOAA real-time 3-km resolution, hourly updated, cloud-resolving, convection-allowing atmospheric model. HRRR runs are initialized by 3-km grids with 3-km radar assimilation. Radar data is assimilated in the HRRR eve…",
+    "keywords": ["NOAA", "HRRR", "forecast", "atmospheric", "weather"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-174.8849, 21.1222, -60.8912, 76.3464]] },
+      "temporal": { "interval": [["2021-03-21T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "grib": { "type": "application/wmo-GRIB2" },
+      "index": { "type": "application/x-ndjson" }
+    },
     "links": []
   },
   {

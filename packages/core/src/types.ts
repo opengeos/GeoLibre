@@ -1649,6 +1649,30 @@ export const NETCDF_IMAGE_SOURCE_KIND = "netcdf-image";
 export const ARCGIS_IMAGE_SERVICE_SOURCE_KIND = "arcgis-image-service";
 
 /**
+ * Metadata `sourceKind` marking a Microsoft Planetary Computer raster layer
+ * (one STAC item, or a mosaic of many) drawn by the Planetary Computer panel.
+ *
+ * Defined here so the plugin that adds these layers, the Layer Library's
+ * restore dispatch, and `@geolibre/map` (whose Identify reads their pixel
+ * values through the application's raster bridge) share one value.
+ */
+export const PLANETARY_COMPUTER_SOURCE_KIND = "planetary-computer-raster";
+
+/**
+ * Whether a layer is a Planetary Computer raster the panel's control draws.
+ *
+ * @param layer - The layer to test.
+ * @returns True for a control-drawn Planetary Computer item or mosaic layer.
+ */
+export function isPlanetaryComputerLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "raster" &&
+    layer.metadata.sourceKind === PLANETARY_COMPUTER_SOURCE_KIND &&
+    layer.metadata.externalNativeLayer === true
+  );
+}
+
+/**
  * Detect a DuckDB query layer rendered through the plugin's external deck.gl
  * overlay. Shared by `@geolibre/map`, `@geolibre/plugins`, and the desktop
  * app so the detection criteria cannot drift.

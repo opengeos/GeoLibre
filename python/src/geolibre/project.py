@@ -1468,6 +1468,238 @@ def tile_layer(
     return layer
 
 
+PLANETARY_COMPUTER_SOURCE_KIND = "planetary-computer-raster"
+
+# A band of one asset is spelled `<asset>_b<N>` in a band-math expression. An
+# expression without one refers to whole assets (`(B08-B04)/(B08+B04)`), which
+# the Planetary Computer Data API only evaluates with `asset_as_band` set.
+_ASSET_BAND_REFERENCE = re.compile(r"_b\d+\b")
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _planetary_computer_datetime(value: str | tuple[str, str] | list[str]) -> str:
+    """Normalize a date or date range to the RFC 3339 form a STAC search takes.
+
+    Args:
+        value: A single date/datetime, a ``"start/end"`` range, or a
+            ``(start, end)`` pair. A date-only bound is widened to the whole
+            day (start of day for the first bound, end of day for the last).
+            ``".."`` leaves a bound open.
+
+    Returns:
+        The datetime, or ``start/end`` range, with full timestamps.
+
+    Raises:
+        ValueError: If the value is empty or has more than two bounds.
+    """
+    if isinstance(value, (tuple, list)):
+        parts = [str(part) for part in value]
+    else:
+        parts = str(value).split("/")
+    parts = [part.strip() for part in parts]
+    if not 1 <= len(parts) <= 2 or not all(parts):
+        raise ValueError("datetime must be a date, a 'start/end' range, or a (start, end) pair")
+
+    def bound(text: str, end: bool) -> str:
+        if text == ".." or "T" in text.upper():
+            return text
+        # A partial date ("2024-06") would be widened into a timestamp the STAC
+        # search rejects, and only when the app opens the project.
+        if not _DATE_ONLY.fullmatch(text):
+            raise ValueError(
+                f"datetime bound {text!r} must be a YYYY-MM-DD date, an RFC 3339 datetime, or '..'"
+            )
+        return f"{text}T23:59:59Z" if end else f"{text}T00:00:00Z"
+
+    if len(parts) == 1:
+        if parts[0] == "..":
+            raise ValueError("datetime cannot be an open bound on its own")
+        # A date-only value means that whole day.
+        if "T" not in parts[0].upper():
+            return f"{bound(parts[0], False)}/{bound(parts[0], True)}"
+        return parts[0]
+    return f"{bound(parts[0], False)}/{bound(parts[1], True)}"
+
+
+def planetary_computer_layer(
+    collection: str,
+    item: str | None = None,
+    *,
+    name: str | None = None,
+    datetime: str | tuple[str, str] | list[str] | None = None,
+    bbox: list[float] | tuple[float, ...] | None = None,
+    preset: str | None = None,
+    assets: list[str] | None = None,
+    expression: str | None = None,
+    rescale: tuple[float, float] | list[float] | None = None,
+    colormap: str | None = None,
+    max_cloud_cover: float | None = None,
+) -> dict[str, Any]:
+    """Build a Microsoft Planetary Computer raster layer.
+
+    With ``item`` the layer draws that one STAC item. Without it the layer is a
+    mosaic: every item of the collection matching ``datetime`` and
+    ``max_cloud_cover``, composited into one seamless layer.
+
+    The layer holds no tile URL. It carries the collection, the item id or the
+    mosaic's search, and the render options, in the shape the app's Planetary
+    Computer panel saves (see
+    packages/plugins/src/plugins/maplibre-planetary-computer.ts), so opening
+    the project makes the panel rebuild it: the layer is listed in the panel's
+    Layers tab and can be restyled there. Building it needs no network access.
+
+    Args:
+        collection: STAC collection id, e.g. ``"sentinel-2-l2a"``.
+        item: STAC item id to draw. Omit for a mosaic of the collection.
+        name: Layer display name. Defaults to the item id, or to the collection
+            id with the date range for a mosaic.
+        datetime: Mosaic only. The date range to composite: a ``"start/end"``
+            string or a ``(start, end)`` pair. Date-only bounds cover whole days.
+        bbox: ``[west, south, east, north]`` extent of the layer, used by
+            zoom-to-layer and to bound a mosaic's tile requests.
+        preset: Name of one of the panel's render presets for the collection,
+            e.g. ``"true-color"``, ``"false-color"``, ``"ndvi"``. With none of
+            the render options the collection's default preset is used.
+        assets: Asset names to render, e.g. ``["B08", "B04", "B03"]``.
+        expression: Band-math expression over assets, e.g.
+            ``"(B08-B04)/(B08+B04)"``. Mutually exclusive with ``assets``.
+        rescale: ``(min, max)`` value range stretched to the output colors.
+        colormap: Named colormap for a single-band or expression render, e.g.
+            ``"viridis"``.
+        max_cloud_cover: Mosaic only. Keep items at or below this
+            ``eo:cloud_cover`` percentage; the least cloudy are drawn on top.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If the collection is empty, ``assets`` and ``expression``
+            are combined, a mosaic-only option is given with ``item``, or
+            ``bbox``/``rescale``/``max_cloud_cover`` is malformed.
+    """
+    collection = str(collection or "").strip()
+    if not collection:
+        raise ValueError("collection is required")
+    if item is not None:
+        item = str(item).strip()
+        if not item:
+            raise ValueError("item must be a non-empty STAC item id")
+        if datetime is not None or max_cloud_cover is not None:
+            raise ValueError(
+                "datetime and max_cloud_cover select the items of a mosaic; "
+                "omit them when item names a single STAC item"
+            )
+    if assets and expression:
+        raise ValueError("pass either assets or expression, not both")
+
+    render_params: dict[str, Any] = {}
+    if assets:
+        render_params["assets"] = [str(asset) for asset in assets]
+    if expression:
+        render_params["expression"] = expression
+        if not _ASSET_BAND_REFERENCE.search(expression):
+            render_params["asset_as_band"] = True
+    if rescale is not None:
+        if isinstance(rescale, str) or len(rescale) != 2:
+            raise ValueError("rescale must be a (min, max) pair")
+        low, high = (_finite_number(value, "rescale") for value in rescale)
+        render_params["rescale"] = f"{_format_number(low)},{_format_number(high)}"
+    if colormap:
+        render_params["colormap_name"] = colormap
+
+    bounds: list[float] | None = None
+    if bbox is not None:
+        if len(bbox) != 4:
+            raise ValueError("bbox must be [west, south, east, north]")
+        bounds = [_finite_number(value, "bbox") for value in bbox]
+        if bounds[0] >= bounds[2] or bounds[1] >= bounds[3]:
+            raise ValueError("bbox must be [west, south, east, north]")
+
+    search: dict[str, Any] | None = None
+    range_label = ""
+    if item is None:
+        search = {"collections": [collection]}
+        if datetime is not None:
+            search["datetime"] = _planetary_computer_datetime(datetime)
+            range_label = " to ".join(
+                part[:10] for part in search["datetime"].split("/") if part != ".."
+            )
+        if max_cloud_cover is not None:
+            cloud = _finite_number(max_cloud_cover, "max_cloud_cover")
+            if not 0 <= cloud <= 100:
+                raise ValueError("max_cloud_cover must be between 0 and 100")
+            search["query"] = {"eo:cloud_cover": {"lte": cloud}}
+            search["sortby"] = [{"field": "properties.eo:cloud_cover", "direction": "asc"}]
+        else:
+            search["sortby"] = [{"field": "properties.datetime", "direction": "desc"}]
+
+    default_name = item or (f"{collection} ({range_label})" if range_label else collection)
+    layer = _layer_base(name or default_name, "raster")
+    source_id = f"{layer['id']}-source"
+    layer["source"] = {
+        "collectionId": collection,
+        "sourceId": source_id,
+        "type": "raster",
+    }
+    metadata: dict[str, Any] = {
+        "assets": render_params.get("assets", []),
+        "externalNativeLayer": True,
+        "identifiable": True,
+        "nativeLayerIds": [layer["id"]],
+        "planetaryComputerLayerType": "item" if item else "mosaic",
+        "renderParams": render_params,
+        "sourceId": source_id,
+        "sourceIds": [source_id],
+        "sourceKind": PLANETARY_COMPUTER_SOURCE_KIND,
+        "stacCollectionId": collection,
+        "tileType": "raster",
+    }
+    if preset:
+        metadata["presetName"] = preset
+    if item:
+        metadata["stacItemId"] = item
+    if search is not None:
+        metadata["stacSearchParams"] = search
+    if bounds is not None:
+        metadata["bounds"] = bounds
+    layer["metadata"] = metadata
+    layer["sourcePath"] = collection
+    return layer
+
+
+def _finite_number(value: Any, label: str) -> float:
+    """Coerce a value to a finite float.
+
+    Args:
+        value: The value to coerce.
+        label: The argument name, for the error message.
+
+    Returns:
+        The value as a float.
+
+    Raises:
+        ValueError: If the value is not a finite number.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{label} values must be numbers")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{label} values must be finite")
+    return number
+
+
+def _format_number(value: float) -> str:
+    """Format a number without a trailing ``.0`` for whole values.
+
+    Args:
+        value: The number to format.
+
+    Returns:
+        ``"3000"`` for ``3000.0`` and ``"0.8"`` for ``0.8``.
+    """
+    return str(int(value)) if value == int(value) else repr(value)
+
+
 def cog_layer(
     name: str,
     url: str,

@@ -599,26 +599,43 @@ imports the `cesium` wrapper, which `apps/geolibre-desktop/vite.config.ts`
 aliases to `@cesium/engine`: keep that alias if a bump adds more `cesium`
 imports, or the globe loads a second engine.
 
-### `maplibre-gl-planetary-computer` (`packages/plugins/package.json`) — private STAC client
+### `maplibre-gl-planetary-computer` (`packages/plugins/package.json`): client, restore, and sync contract
 
-The Planetary Computer STAC API sends no CORS headers on `GET /collections` and
-rejects the preflight a JSON `POST /search` needs, so the library's own
-`STACClient` fails with "Failed to fetch" in the browser and the Tauri webview.
-`packages/plugins/src/plugins/planetary-computer-stac.ts` subclasses it: search
-goes out as a `GET /search`, and the collection list falls back to the bundled
-`planetary-computer-collections.json` when the live one cannot be read. The
-subclass reuses the private `fetch` / `abortController` fields, and
-`maplibre-planetary-computer.ts` swaps it into the control's private
-`_stacClient` field before the control is added (collections load in `onAdd`).
+GeoLibre drives this library through its public API only (0.5.0 and later):
+`maplibre-planetary-computer.ts` hands the control a `STACClient` built from
+`planetaryComputerStacClientOptions()` (`planetary-computer-stac.ts`), restores
+saved layers with `addItemLayer` / `addMosaicLayer` and their `id` option, and
+adds its own buttons through `customActions` (`planetary-computer-actions.ts`).
+Nothing reaches into a private field anymore, but four behaviors are still
+relied on without a type to enforce them:
 
-If upstream renames those fields, loads collections in its constructor, or adds
-new POST requests, the panel breaks again without a compiler error.
-`tests/upstream-contracts.test.ts` checks the real client and control for the
-private fields, that the constructor loads nothing, and that every non-search
-read is a GET. Run it and `tests/planetary-computer-stac.test.ts` on a bump. Regenerate the bundled list with
-`node scripts/gen-planetary-computer-collections.mjs` to pick up new
-collections. Better still, upstream a GET search and a client/fetch option and
-delete the swap.
+- **Search is a `GET /search`.** The Planetary Computer API has rejected the
+  CORS preflight a JSON `POST /search` needs, so a POST fails with "Failed to
+  fetch" in the browser and the Tauri webview. GET is the library default; if
+  that default changes, every search in the panel and the AI Assistant breaks.
+- **The collection list falls back to the bundled snapshot.**
+  `planetary-computer-collections.json` is used when the live `/collections`
+  request cannot be read. `.github/workflows/refresh-planetary-computer-collections.yml`
+  regenerates it monthly and opens a pull request; run
+  `npm run gen:planetary-computer-collections` to refresh it by hand, then format
+  the file (`npx oxfmt --write packages/plugins/src/plugins/planetary-computer-collections.json`,
+  or let the pre-commit hook do it): the script writes it minified, and the
+  committed copy is the formatted output.
+- **`updateLayer` stores `visible` and `opacity` verbatim** before emitting
+  `layer:update`. The store-to-control and control-to-store sync both compare
+  with `===`; a library that rounded or coerced the values would make toggling
+  visibility or opacity in the Layers panel loop forever.
+- **`addMosaicLayer` with `mosaicId` adds the layer synchronously.** The restore
+  path registers the mosaic's search itself, then adds the layer while the store
+  sync is suspended. If the add became asynchronous, its `layer:add` event would
+  fire unsuspended and drop the saved layers not yet restored.
+
+`tests/upstream-contracts.test.ts` checks all four against the installed
+package, and `tests/planetary-computer-stac.test.ts` runs the real client with
+GeoLibre's options. Run both on a bump. The render presets live upstream too:
+the Python API and the MCP server name them in docstrings
+(`python/src/geolibre/mcp/server.py`, `skills/geolibre/references/mcp-tools.md`),
+so update those lists when a preset is added or renamed.
 
 ### `maplibre-gl-raster` — stretch and gamma curves
 

@@ -4211,6 +4211,15 @@ html
   border-color: hsl(var(--border));
 }
 
+/* These cards ship with light backgrounds; without a dark surface their
+   (already lightened) text is unreadable. */
+.dark .pc-stats-card,
+.dark .pc-legend-card,
+.dark .pc-tilejson-card,
+.dark .pc-inspector-panel {
+  background: hsl(var(--muted));
+}
+
 .dark .pc-collection-item:hover,
 .dark .pc-result-item:hover {
   background: hsl(var(--accent));

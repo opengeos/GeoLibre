@@ -1,50 +1,7 @@
-import type {
-  STACCollection,
-  STACItem,
-  STACItemCollection,
-  STACSearchParams,
-} from "maplibre-gl-planetary-computer";
+import type { STACClientOptions, STACCollection } from "maplibre-gl-planetary-computer";
 
-type STACClientConstructor = (typeof import("maplibre-gl-planetary-computer"))["STACClient"];
-
-/**
- * Builds the query string for a Planetary Computer `GET /search` request.
- *
- * The Planetary Computer STAC API answers the CORS preflight a JSON `POST
- * /search` needs with a 405 and no `Access-Control-Allow-Origin`, so the
- * browser blocks the library's POST search ("Failed to fetch"). A plain GET
- * needs no preflight and the API sends CORS headers on it. This follows the
- * STAC API item-search GET encoding: comma-joined `collections`/`ids`/`bbox`,
- * JSON-encoded `intersects`/`query`/`filter`, and `sortby` as `+field`/`-field`.
- *
- * @param params - The search parameters the control would have POSTed.
- * @returns The URL-encoded query string, without a leading `?`.
- */
-export function buildStacSearchQuery(params: STACSearchParams): string {
-  const query = new URLSearchParams();
-  if (params.collections?.length) query.set("collections", params.collections.join(","));
-  if (params.ids?.length) query.set("ids", params.ids.join(","));
-  if (params.bbox?.length) query.set("bbox", params.bbox.join(","));
-  if (params.intersects) query.set("intersects", JSON.stringify(params.intersects));
-  if (params.datetime) query.set("datetime", params.datetime);
-  if (params.limit !== undefined) query.set("limit", String(params.limit));
-  if (params.query && Object.keys(params.query).length > 0) {
-    query.set("query", JSON.stringify(params.query));
-  }
-  if (params.sortby?.length) {
-    query.set(
-      "sortby",
-      params.sortby
-        .map(({ field, direction }) => `${direction === "desc" ? "-" : "+"}${field}`)
-        .join(","),
-    );
-  }
-  if (params.filter) {
-    query.set("filter", JSON.stringify(params.filter));
-    query.set("filter-lang", params["filter-lang"] ?? "cql2-json");
-  }
-  return query.toString();
-}
+/** Base URL of the Planetary Computer STAC API. */
+export const PLANETARY_COMPUTER_STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1";
 
 /**
  * Loads the bundled Planetary Computer collection snapshot.
@@ -60,74 +17,32 @@ export async function loadBundledPlanetaryComputerCollections(): Promise<STACCol
   return module.default as unknown as STACCollection[];
 }
 
-/** Hooks for {@link createCorsSafeStacClientClass}, overridable in tests. */
-export interface CorsSafeStacClientOptions {
-  /** Supplies the collection list when the live `/collections` request fails. */
-  loadFallbackCollections?: () => Promise<STACCollection[]>;
-  /** Reports the live `/collections` failure that triggered the fallback. */
-  onCollectionsFallback?: (error: unknown) => void;
-}
-
 /**
- * Subclasses the library's `STACClient` so it works from a browser origin.
+ * Options every Planetary Computer `STACClient` in GeoLibre is built with.
  *
- * Two of its requests are blocked by CORS on the Planetary Computer STAC API:
- * `POST /search` (its preflight is rejected) and `GET /collections` (sent
- * without CORS headers). Search is re-sent as a `GET /search`, and the
- * collection list falls back to a bundled snapshot when the live one cannot be
- * read. Every other request (a single collection, its items, one item) still
- * carries CORS headers and is left unchanged.
+ * Search goes out as a `GET /search`, the library default: a plain GET needs no
+ * CORS preflight, so it works from the browser and the Tauri webview even when
+ * the API rejects the `OPTIONS` request a JSON `POST /search` requires. The
+ * collection list falls back to the bundled snapshot when the live one cannot
+ * be read (the API has at times sent `GET /collections` without CORS headers).
  *
- * @param STACClientClass - The library's `STACClient` constructor.
- * @param options - Fallback hooks.
- * @returns A `STACClient` subclass constructor.
+ * @param overrides - Fallback hooks, overridable in tests.
+ * @returns The client options.
  */
-export function createCorsSafeStacClientClass(
-  STACClientClass: STACClientConstructor,
-  options: CorsSafeStacClientOptions = {},
-): STACClientConstructor {
-  const loadFallbackCollections =
-    options.loadFallbackCollections ?? loadBundledPlanetaryComputerCollections;
-  const onCollectionsFallback =
-    options.onCollectionsFallback ??
-    ((error: unknown) =>
+export function planetaryComputerStacClientOptions(
+  overrides: Pick<
+    STACClientOptions,
+    "fallbackCollections" | "onCollectionsFallback" | "fetch"
+  > = {},
+): STACClientOptions {
+  return {
+    searchMethod: "GET",
+    fallbackCollections: loadBundledPlanetaryComputerCollections,
+    onCollectionsFallback: (error: unknown) =>
       console.warn(
         "Planetary Computer collection list is unavailable from this origin; using the bundled list.",
         error,
-      ));
-
-  // The library's `fetch(path, init)` wrapper and `abortController` are
-  // private in its typings but plain fields at runtime (verified against
-  // maplibre-gl-planetary-computer 0.4.0). Reusing them keeps its error
-  // messages and its cancel-the-previous-search behavior.
-  type ClientInternals = {
-    abortController: AbortController | null;
-    fetch<T>(path: string, init?: RequestInit): Promise<T>;
+      ),
+    ...overrides,
   };
-
-  class CorsSafeStacClient extends STACClientClass {
-    override async getCollections(): Promise<STACCollection[]> {
-      try {
-        return await super.getCollections();
-      } catch (error) {
-        onCollectionsFallback(error);
-        return loadFallbackCollections();
-      }
-    }
-
-    override async search(params: STACSearchParams): Promise<STACItem[]> {
-      return (await this.searchWithContext(params)).features;
-    }
-
-    override async searchWithContext(params: STACSearchParams): Promise<STACItemCollection> {
-      const internals = this as unknown as ClientInternals;
-      internals.abortController?.abort();
-      internals.abortController = new AbortController();
-      return internals.fetch<STACItemCollection>(`/search?${buildStacSearchQuery(params)}`, {
-        signal: internals.abortController.signal,
-      });
-    }
-  }
-
-  return CorsSafeStacClient;
 }

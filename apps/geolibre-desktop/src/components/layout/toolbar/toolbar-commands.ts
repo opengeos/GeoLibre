@@ -597,6 +597,8 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       id: "proc.planetary-computer",
       title: t("toolbar.command.planetaryComputer"),
       group: t("toolbar.commandGroup.processing"),
+      // The panel's control draws its layers through the MapLibre style API.
+      disabledReason: capabilities.nativeMapInstance ? undefined : t("renderer.pluginUnsupported"),
       run: handleOpenPlanetaryComputer,
     },
     // Earth Engine sign-in needs the Rust loopback OAuth listener, which the

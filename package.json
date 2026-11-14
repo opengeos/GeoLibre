@@ -37,6 +37,7 @@
     "check:untested-modules": "node scripts/check-untested-modules.mjs",
     "check:gis-portals": "node --import tsx scripts/check-gis-portals.mjs",
     "audit:ci": "node scripts/audit-check.mjs",
+    "gen:planetary-computer-collections": "node scripts/gen-planetary-computer-collections.mjs",
     "i18n:tools": "node --import tsx scripts/gen-processing-i18n-catalog.mjs",
     "i18n:tools:check": "node --import tsx scripts/gen-processing-i18n-catalog.mjs --check",
     "gallery": "node scripts/gen-demo-gallery.mjs",

@@ -5,6 +5,7 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import type { GeoLibreAppAPI } from "@geolibre/plugins";
 import type { ModelToolDescriptor } from "@geolibre/processing";
 import type { Tool, JSONValue } from "@strands-agents/sdk";
 import * as maplibregl from "maplibre-gl";
@@ -37,6 +38,13 @@ import { webSearch } from "./web-search";
 export interface AssistantToolDeps {
   /** Returns the live map controller, or null before the map mounts. */
   getMapController: () => MapEngine | null;
+  /**
+   * Returns the plugin app API bound to the live map. The Planetary Computer
+   * tools add their layers through the panel's control with it, so those layers
+   * are listed (and can be restyled) in the panel. When omitted (e.g. in tests)
+   * those tools report that the map is not ready.
+   */
+  getAppApi?: () => GeoLibreAppAPI | null;
   /**
    * Ask the user to approve executing model-generated code before it runs.
    * Resolves true to proceed, false to decline. The assistant can be steered by
@@ -330,14 +338,6 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   /** The current map viewport as [west, south, east, north], or null. */
   const viewBbox = (): [number, number, number, number] | null =>
     deps.getMapController()?.getViewBounds() ?? null;
-
-  /** Reduce a STAC bbox (2D or 3D) to a 2D [w, s, e, n]. */
-  const bbox2d = (bbox: number[]): [number, number, number, number] | null =>
-    bbox.length >= 6
-      ? [bbox[0], bbox[1], bbox[3], bbox[4]]
-      : bbox.length >= 4
-        ? [bbox[0], bbox[1], bbox[2], bbox[3]]
-        : null;
 
   // Lazily load the shared processing executor (Phase 2). It pulls in the
   // algorithm registries (Turf, DuckDB), so it is imported only when used.
@@ -998,33 +998,53 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
     },
   });
 
+  /** Planetary Computer search filters shared by the STAC tools. */
+  const stacSearchFields = {
+    collection: z.string().describe("STAC collection id, e.g. 'sentinel-2-l2a'."),
+    bbox: z
+      .array(z.number())
+      .length(4)
+      .optional()
+      .describe(
+        "[west, south, east, north]. A search defaults to the current view; a mosaic is not limited to the view and uses a bbox only as the layer's extent.",
+      ),
+    datetime: z
+      .string()
+      .optional()
+      .describe("RFC3339 datetime or range, e.g. '2024-06-01/2024-09-30'."),
+    maxCloudCover: z
+      .number()
+      .min(0)
+      .max(100)
+      .optional()
+      .describe("Keep only scenes at or below this cloud cover percentage (optical collections)."),
+  };
+
   const searchStac = tool({
     name: "search_stac",
     description:
-      "Search the Microsoft Planetary Computer STAC catalog for earth-observation items in a collection (e.g. 'sentinel-2-l2a', 'landsat-c2-l2', 'naip', 'cop-dem-glo-30'). Defaults the bounding box to the current map view and sorts newest-first. Returns matching items (id, datetime, cloud cover, bbox).",
+      "Search the Microsoft Planetary Computer STAC catalog for earth-observation items in a collection (e.g. 'sentinel-2-l2a', 'landsat-c2-l2', 'naip', 'cop-dem-glo-30'). Defaults the bounding box to the current map view and sorts newest-first unless sortBy says otherwise (oldest, least-cloudy). Returns matching items (id, datetime, cloud cover, bbox).",
     inputSchema: z.object({
-      collection: z.string().describe("STAC collection id, e.g. 'sentinel-2-l2a'."),
-      bbox: z
-        .array(z.number())
-        .length(4)
-        .optional()
-        .describe("[west, south, east, north]; defaults to the current view."),
-      datetime: z
-        .string()
-        .optional()
-        .describe("RFC3339 datetime or range, e.g. '2024-06-01/2024-09-30'."),
+      ...stacSearchFields,
       limit: z.number().optional().describe("Max items (default 10)."),
+      sortBy: z
+        .enum(["newest", "oldest", "least-cloudy"])
+        .optional()
+        .describe("Result order (default newest)."),
     }),
     callback: async (input) => {
-      const { STACClient } = await import("maplibre-gl-planetary-computer");
-      const bbox =
-        (input.bbox as [number, number, number, number] | undefined) ?? viewBbox() ?? undefined;
-      const items = await new STACClient().search({
-        collections: [input.collection],
-        bbox,
+      // The plugin's search client sends a GET /search: the Planetary Computer
+      // API has rejected the CORS preflight a JSON POST needs, which made this
+      // tool fail with "Failed to fetch" in the browser and the desktop webview.
+      const { searchPlanetaryComputerItems } = await import("@geolibre/plugins");
+      const items = await searchPlanetaryComputerItems({
+        collection: input.collection,
+        bbox:
+          (input.bbox as [number, number, number, number] | undefined) ?? viewBbox() ?? undefined,
         datetime: input.datetime,
+        maxCloudCover: input.maxCloudCover,
         limit: input.limit ?? 10,
-        sortby: [{ field: "datetime", direction: "desc" }],
+        sortBy: input.sortBy,
       });
       return json({
         count: items.length,
@@ -1041,68 +1061,73 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
   const addStacLayer = tool({
     name: "add_stac_layer",
     description:
-      "Add a Planetary Computer STAC item as a raster tile layer (tiles are signed server-side — no credentials needed). Give a collection and optionally a specific itemId from search_stac; otherwise the newest item over the current view is used. Renders with the collection's default band/colormap preset.",
+      "Add Planetary Computer imagery as a raster layer (tiles are signed server-side, so no credentials are needed). Give a collection and optionally a specific itemId from search_stac; otherwise the newest item over the current view is used. Set mosaic=true to composite every item matching datetime/maxCloudCover into one seamless layer instead of a single scene. Renders with the collection's default preset unless `preset` names another (sentinel-2-l2a: true-color, false-color, ndvi, ndwi, nbr, ndbi, swir; landsat-c2-l2: true-color, false-color, ndvi, ndwi, nbr, thermal; naip: rgb, cir, ndvi; cop-dem-glo-30/90: elevation, hillshade). The layer is listed in the Planetary Computer panel, where it can be restyled.",
     inputSchema: z.object({
-      collection: z.string().describe("STAC collection id, e.g. 'sentinel-2-l2a'."),
+      ...stacSearchFields,
       itemId: z
         .string()
         .optional()
         .describe("A specific item id; otherwise the latest over the view is used."),
-      bbox: z.array(z.number()).length(4).optional(),
-      datetime: z.string().optional(),
+      mosaic: z
+        .boolean()
+        .optional()
+        .describe("Composite all matching items into one layer instead of adding one item."),
+      preset: z.string().optional().describe("Render preset name, e.g. 'ndvi'."),
       name: z.string().optional(),
     }),
     callback: async (input) => {
-      const { STACClient, TiTilerClient, getDefaultPreset } =
-        await import("maplibre-gl-planetary-computer");
-      const stac = new STACClient();
+      const { addPlanetaryComputerItemLayer, addPlanetaryComputerMosaicLayer } =
+        await import("@geolibre/plugins");
+      const appApi = deps.getAppApi?.();
+      if (!appApi) throw new Error("The map is not ready yet.");
+      const bbox =
+        (input.bbox as [number, number, number, number] | undefined) ?? viewBbox() ?? undefined;
+      const style = { presetName: input.preset, name: input.name };
+
+      if (input.mosaic && input.itemId) {
+        throw new Error("Pass either itemId or mosaic=true, not both.");
+      }
+      if (input.mosaic) {
+        const result = await addPlanetaryComputerMosaicLayer(appApi, {
+          ...style,
+          collection: input.collection,
+          // An explicit bbox bounds the layer. The view is not used here: a
+          // mosaic is meant to be panned, so it is not clipped to where the
+          // map happened to be.
+          bbox: input.bbox as [number, number, number, number] | undefined,
+          datetime: input.datetime,
+          maxCloudCover: input.maxCloudCover,
+          sortBy: input.maxCloudCover !== undefined ? "least-cloudy" : "newest",
+        });
+        return json({ addedLayerId: result.layerId, mosaic: true });
+      }
+
       let item;
-      if (input.itemId) {
-        item = await stac.getItem(input.collection, input.itemId);
-      } else {
-        const bbox =
-          (input.bbox as [number, number, number, number] | undefined) ?? viewBbox() ?? undefined;
-        const items = await stac.search({
-          collections: [input.collection],
+      if (!input.itemId) {
+        const { searchPlanetaryComputerItems } = await import("@geolibre/plugins");
+        const items = await searchPlanetaryComputerItems({
+          collection: input.collection,
           bbox,
           datetime: input.datetime,
+          maxCloudCover: input.maxCloudCover,
           limit: 1,
-          sortby: [{ field: "datetime", direction: "desc" }],
         });
         if (!items.length) {
           throw new Error(`No ${input.collection} items found for the given area/time.`);
         }
         item = items[0];
       }
-      const preset = getDefaultPreset(input.collection);
-      const tileUrl = new TiTilerClient().getItemTileUrl(input.collection, item.id, preset?.params);
-      const bounds = bbox2d(item.bbox);
-      const layer: GeoLibreLayer = {
-        id: crypto.randomUUID(),
-        name: input.name?.trim() || `${input.collection} ${item.properties.datetime ?? item.id}`,
-        type: "xyz",
-        source: {
-          type: "raster",
-          tiles: [tileUrl],
-          tileSize: 256,
-          attribution: "Microsoft Planetary Computer",
-        },
-        visible: true,
-        opacity: 1,
-        style: { ...DEFAULT_LAYER_STYLE },
-        metadata: {
-          sourceKind: "stac-planetary-computer",
-          stacCollectionId: input.collection,
-          stacItemId: item.id,
-        },
-      };
-      const bottomBeforeId = store().layers[0]?.id ?? null;
-      store().addLayer(layer, bottomBeforeId);
-      if (bounds) deps.getMapController()?.fitBounds(bounds);
+      const result = await addPlanetaryComputerItemLayer(appApi, {
+        ...style,
+        collection: input.collection,
+        itemId: input.itemId,
+        item,
+      });
+      if (result.bounds) deps.getMapController()?.fitBounds(result.bounds);
       return json({
-        addedLayerId: layer.id,
-        itemId: item.id,
-        datetime: item.properties.datetime ?? null,
+        addedLayerId: result.layerId,
+        itemId: result.item?.id ?? null,
+        datetime: result.item?.properties.datetime ?? null,
       });
     },
   });

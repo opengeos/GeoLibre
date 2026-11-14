@@ -1,4 +1,5 @@
 import { formatPixelValue } from "@geolibre/core";
+import type { PlanetaryComputerPixelReading } from "@geolibre/plugins";
 import type { PixelReading } from "maplibre-gl-raster";
 
 export interface RasterIdentifyLabels {
@@ -58,4 +59,49 @@ export function rasterPixelIdentifyProperties(
   rows.push([labels.row, reading.row]);
   rows.push([labels.column, reading.col]);
   return rasterIdentifyProperties(rows);
+}
+
+/** Localized labels for a Planetary Computer pixel reading. */
+export interface PlanetaryComputerIdentifyLabels {
+  item: string;
+  nodata: string;
+  coordinates: string;
+  /** The clicked `[lng, lat]`, echoed as the last row. */
+  lngLat: [number, number];
+}
+
+/**
+ * Convert a Planetary Computer pixel reading into rows for an Identify popup.
+ *
+ * The band names are the Data API's own: `<asset>_b<N>` for an asset band, or
+ * the band-math expression for a computed index such as NDVI.
+ *
+ * @param reading - Band values and the STAC item they were read from.
+ * @param labels - Localized labels for the popup rows.
+ * @returns Ordered property rows for the identified pixel.
+ */
+export function planetaryComputerIdentifyProperties(
+  reading: PlanetaryComputerPixelReading,
+  labels: PlanetaryComputerIdentifyLabels,
+): Record<string, unknown> {
+  const rows: Array<[string, unknown]> = reading.values.map((band) => [
+    band.name,
+    band.value === null ? labels.nodata : formatPixelValue(band.value),
+  ]);
+  if (reading.itemId) rows.push([labels.item, reading.itemId]);
+  rows.push([labels.coordinates, `${labels.lngLat[0].toFixed(5)}, ${labels.lngLat[1].toFixed(5)}`]);
+  return rasterIdentifyProperties(rows);
+}
+
+/**
+ * Wrap a longitude into the geographic range.
+ *
+ * @param lng - A longitude, possibly from a repeated world copy (e.g. 181).
+ * @returns The equivalent longitude in [-180, 180).
+ */
+export function wrapLongitude(lng: number): number {
+  // Leave an in-range value untouched: the arithmetic below would nudge it by
+  // a floating-point ulp, and the popup echoes the coordinate back.
+  if (lng >= -180 && lng < 180) return lng;
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
 }

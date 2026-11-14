@@ -79,6 +79,41 @@ def test_add_wms_and_add_wmts_forward_bounds(m):
     assert _last_layer(m)["source"]["bounds"] == [-10.0, 35.0, 5.0, 45.0]
 
 
+def test_add_planetary_computer_item_and_mosaic(m):
+    item_id = m.add_planetary_computer(
+        "sentinel-2-l2a",
+        "S2A_MSIL2A_20240906T190921_R056_T10TET_20240907T023150",
+        "Seattle NDVI",
+        preset="ndvi",
+        opacity=0.8,
+    )
+    layer = _last_layer(m)
+    assert layer["id"] == item_id
+    assert layer["name"] == "Seattle NDVI"
+    assert layer["type"] == "raster"
+    assert layer["opacity"] == 0.8
+    assert layer["metadata"]["sourceKind"] == "planetary-computer-raster"
+    assert layer["metadata"]["planetaryComputerLayerType"] == "item"
+    assert layer["metadata"]["presetName"] == "ndvi"
+
+    m.add_planetary_computer(
+        "sentinel-2-l2a",
+        datetime=("2024-06-01", "2024-08-31"),
+        max_cloud_cover=10,
+        visible=False,
+    )
+    mosaic = _last_layer(m)
+    assert mosaic["visible"] is False
+    assert mosaic["metadata"]["planetaryComputerLayerType"] == "mosaic"
+    assert (
+        mosaic["metadata"]["stacSearchParams"]["datetime"]
+        == "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z"
+    )
+
+    with pytest.raises(ValueError, match="opacity"):
+        m.add_planetary_computer("naip", opacity=2)
+
+
 def test_add_ee_layer_from_map_id(m):
     class TileFetcher:
         url_format = "https://earthengine.googleapis.com/maps/test/tiles/{z}/{x}/{y}"

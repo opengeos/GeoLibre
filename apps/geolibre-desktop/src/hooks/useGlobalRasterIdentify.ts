@@ -1,5 +1,6 @@
 import type { MapCanvasRasterIdentify } from "@geolibre/map";
-import { readRasterPixel } from "@geolibre/plugins";
+import { isPlanetaryComputerLayer } from "@geolibre/core";
+import { identifyPlanetaryComputerLayer, readRasterPixel } from "@geolibre/plugins";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -8,6 +9,8 @@ import {
   NETCDF_IMAGE_SOURCE_KIND,
 } from "../lib/netcdf-image-symbology";
 import {
+  planetaryComputerIdentifyProperties,
+  wrapLongitude,
   rasterIdentifyProperties,
   rasterPixelIdentifyProperties,
 } from "../lib/global-raster-identify";
@@ -19,6 +22,8 @@ import { netcdfIdentifyRows } from "./useNetcdfIdentify";
  * COGs read through the raster control's public pixel API. NetCDF image layers
  * read their retained in-memory grids, matching the dedicated per-layer
  * inspector without adding a profile marker for a broad all-layer query.
+ * Planetary Computer layers are drawn from rendered tiles, so their source
+ * values are read from the Planetary Computer Data API.
  *
  * @returns Stable raster identify callback for `MapCanvas`.
  */
@@ -35,6 +40,23 @@ export function useGlobalRasterIdentify(): MapCanvasRasterIdentify {
         return {
           title: t("map.identifyAll.pixel"),
           properties: rasterIdentifyProperties(netcdfIdentifyRows(state, pixel, t)),
+        };
+      }
+
+      if (isPlanetaryComputerLayer(layer)) {
+        // A click on a repeated world copy reports a longitude beyond ±180;
+        // the layer's bounds and the Data API both use the wrapped value.
+        const wrapped: [number, number] = [wrapLongitude(lngLat[0]), lngLat[1]];
+        const reading = await identifyPlanetaryComputerLayer(layer, wrapped, { signal });
+        if (!reading || signal.aborted) return null;
+        return {
+          title: t("map.identifyAll.pixel"),
+          properties: planetaryComputerIdentifyProperties(reading, {
+            item: t("map.identifyAll.stacItem"),
+            nodata: t("map.identifyAll.nodata"),
+            coordinates: t("map.identifyAll.coordinates"),
+            lngLat: wrapped,
+          }),
         };
       }
 

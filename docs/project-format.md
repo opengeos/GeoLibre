@@ -689,6 +689,32 @@ export time, since STAC requires a `datetime`. Exporting a vector layer to
 GeoParquet writes the block as JSON into the file's Parquet key-value metadata
 under `geolibre:metadata`, beside the `geo` key.
 
+### Planetary Computer layers
+
+A layer drawn by the Planetary Computer panel is a `raster` layer with no tile
+URL. Its `metadata` describes what to draw, and the panel rebuilds the layer
+from it when the project opens (MapLibre renderer only):
+
+| Key | Meaning |
+| --- | --- |
+| `sourceKind` | `"planetary-computer-raster"`. With `externalNativeLayer: true`, marks the layer as the panel's. |
+| `planetaryComputerLayerType` | `"item"` for one STAC item, `"mosaic"` for many composited. (`"collection"`, written by older versions, is read as a mosaic with no search filter.) |
+| `stacCollectionId` | The STAC collection id, e.g. `sentinel-2-l2a`. Required. |
+| `stacItemId` | The STAC item id. Required for an `item` layer. |
+| `stacSearchParams` | Mosaic only. The STAC search selecting its items: `datetime` (RFC 3339 range), `query` (e.g. `{"eo:cloud_cover": {"lte": 10}}`), `sortby`, `filter`. The search is registered again on every open, because a registered search id expires and is never saved. |
+| `presetName` | A render preset of the collection (`true-color`, `ndvi`, ...). |
+| `renderParams` | Data API render parameters: `assets`, `expression`, `asset_as_band`, `rescale` (`"min,max"`), `colormap_name`, and so on. Parameters that select bands (`assets` or `expression` here, or a nonempty top-level `assets`) are a complete render and are used as saved: a `presetName` beside them is only a label, and its own expression or colormap is not applied. Without a band selection, the parameters are applied over the named preset's, or over the collection's default preset when none is named, so a lone `rescale` overrides just the stretch. With no parameters at all, the named or default preset is used. |
+| `assets` | The asset names rendered (empty for an expression). |
+| `bounds` | `[west, south, east, north]`, used by zoom-to-layer and to bound a mosaic's tile requests. |
+| `stacDatetime` | Item layers written by the app: the item's acquisition datetime. Informational. |
+| `identifiable` | `true`: Identify reads the layer's pixel values through the Data API. |
+| `tileType` | `"raster"`. |
+| `sourceId`, `sourceIds`, `nativeLayerIds` | The MapLibre source and layer ids the panel creates: `nativeLayerIds` is `[<layer id>]` and `sourceId` is `<layer id>-source`. |
+
+The Python API (`Map.add_planetary_computer`) and the MCP server
+(`add_planetary_computer_layer`) write this shape without contacting the
+service.
+
 ## Layer types
 
 | Type             | Status                                                                                             |

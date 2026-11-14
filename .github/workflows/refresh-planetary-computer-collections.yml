@@ -1,0 +1,97 @@
+name: Refresh Planetary Computer collections
+
+# The Planetary Computer panel opens with the live collection list and falls
+# back to a bundled snapshot when the list cannot be read from the browser
+# (packages/plugins/src/plugins/planetary-computer-collections.json). A stale
+# snapshot hides collections added since it was generated, so regenerate it on
+# a schedule and open a pull request when it changed.
+
+on:
+  schedule:
+    # 06:23 UTC on the first day of each month.
+    - cron: "23 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-planetary-computer-collections
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Regenerate the bundled collection list
+    # Scheduled runs are for the canonical repository only; forks would open
+    # the pull request against themselves.
+    if: github.repository == 'opengeos/GeoLibre'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BRANCH: chore/refresh-planetary-computer-collections
+      SNAPSHOT: packages/plugins/src/plugins/planetary-computer-collections.json
+    steps:
+      - name: Check out GeoLibre
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The script only uses Node built-ins (fetch, fs), so no npm install.
+      - name: Regenerate the snapshot
+        run: |
+          count() { node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$1"; }
+          before="$(count "$SNAPSHOT")"
+          node scripts/gen-planetary-computer-collections.mjs
+          after="$(count "$SNAPSHOT")"
+          echo "Collections: $before -> $after"
+          # A partial API response must not shrink the bundled list.
+          if [ $((after * 5)) -lt $((before * 4)) ]; then
+            echo "::error::The API returned $after collections, down from $before. Refusing to refresh."
+            exit 1
+          fi
+
+      # The committed snapshot is the script's output run through the repo
+      # formatter. Format it the same way (with the version the pre-commit hook
+      # pins) so an unchanged list produces no diff.
+      - name: Format the snapshot
+        run: |
+          oxfmt="$(grep -oE 'oxfmt@[0-9]+\.[0-9]+\.[0-9]+' .pre-commit-config.yaml | head -n 1)"
+          test -n "$oxfmt"
+          npx --yes "$oxfmt" --write "$SNAPSHOT"
+
+      - name: Open a pull request when the snapshot changed
+        run: |
+          if git diff --quiet -- "$SNAPSHOT"; then
+            echo "The collection list is unchanged."
+            exit 0
+          fi
+
+          count="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$SNAPSHOT")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add -- "$SNAPSHOT"
+          git commit -m "chore: refresh the bundled Planetary Computer collection list"
+          # The branch is owned by this job, so replacing it is the intended way
+          # to update a pull request left open from an earlier run.
+          git push --force origin "$BRANCH"
+
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "Updated the open pull request."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: refresh the bundled Planetary Computer collection list" \
+            --body "Regenerated \`$SNAPSHOT\` with \`npm run gen:planetary-computer-collections\`. It now lists $count collections.
+
+          The Planetary Computer panel falls back to this list when the live \`/collections\` request cannot be read from the browser. A pull request opened by the workflow token does not start CI on its own: close and reopen it (or push an empty commit) to run the checks before merging."

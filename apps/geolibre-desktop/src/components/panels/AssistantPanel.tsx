@@ -52,6 +52,7 @@ import {
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
   activatePluginForAssistant,
+  createAppAPI,
   listAssistantActivatablePlugins,
 } from "../../hooks/usePlugins";
 import { shouldIgnoreVoiceButtonClick, useVoiceCommands } from "../../hooks/useVoiceCommands";
@@ -304,6 +305,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     () =>
       new AssistantSession({
         getMapController: () => mapControllerRef.current,
+        getAppApi: () => createAppAPI(mapControllerRef),
         plugins: {
           listActivatable: listAssistantActivatablePlugins,
           activate: (pluginId) => activatePluginForAssistant(pluginId, mapControllerRef),

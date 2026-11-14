@@ -396,7 +396,86 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
   return {
     ...candidate,
     endDate: candidate.endDate ?? undefined,
+    sources: rehydrateSources(candidate.sources as SourceSpec[]),
   } as TimeSliderConfig;
+}
+
+/**
+ * Rebuilds the parts of a saved source that JSON cannot carry.
+ *
+ * @param spec - A source read back from a saved project.
+ * @returns The source with its runtime parts restored, the source unchanged
+ *   when it is not the rehydrator's, or null to drop a source that cannot be
+ *   rebuilt.
+ */
+export type TimeSliderSourceRehydrator = (spec: SourceSpec) => SourceSpec | null | undefined;
+
+const sourceRehydrators = new Set<TimeSliderSourceRehydrator>();
+
+/**
+ * Lets another plugin restore a source whose URL is a resolver function.
+ *
+ * The library accepts a function for a source's `url`/`tiles` (one URL per
+ * date), and a function does not survive the project file. A plugin that adds
+ * such a source also stores a serializable description on the spec and
+ * registers a rehydrator here to turn that description back into the resolver
+ * when the project is reopened (the Planetary Computer panel's dated stacks).
+ *
+ * @param rehydrator - Recognizes the plugin's sources and restores them.
+ * @returns A function that unregisters the rehydrator.
+ */
+export function registerTimeSliderSourceRehydrator(
+  rehydrator: TimeSliderSourceRehydrator,
+): () => void {
+  sourceRehydrators.add(rehydrator);
+  return () => sourceRehydrators.delete(rehydrator);
+}
+
+function rehydrateSources(sources: SourceSpec[]): SourceSpec[] {
+  const restored: SourceSpec[] = [];
+  for (const source of sources) {
+    let next: SourceSpec | null = source;
+    for (const rehydrator of sourceRehydrators) {
+      const result: SourceSpec | null | undefined = rehydrator(next);
+      if (result === null) {
+        next = null;
+        break;
+      }
+      if (result) next = result;
+    }
+    if (next) restored.push(next);
+  }
+  return restored;
+}
+
+/**
+ * Opens the Time Slider (activating its plugin when needed) and replaces its
+ * timeline, for a plugin that hands it a dated stack.
+ *
+ * Unlike a project restore this takes a live config, so a source may carry a
+ * resolver function; pair it with {@link registerTimeSliderSourceRehydrator} if
+ * it should survive a saved project.
+ *
+ * @param app - The GeoLibre app API.
+ * @param build - Derives the new config from the dock's current one (null when it has none).
+ * @returns True when the timeline was applied.
+ */
+export async function applyTimeSliderConfig(
+  app: GeoLibreAppAPI,
+  build: (current: TimeSliderConfig | null) => TimeSliderConfig,
+): Promise<boolean> {
+  if (!timeSliderControl) {
+    const activated = await app.activatePlugin?.(TIME_SLIDER_PLUGIN_ID);
+    if (!activated || !timeSliderControl) return false;
+  }
+  const control = timeSliderControl;
+  const next = build(control.getConfig());
+  savedConfig = next;
+  if (configBeforeRemoval.has(control)) configBeforeRemoval.set(control, next);
+  control.setConfig(next);
+  if (next.collapsed === false) control.expand?.();
+  setTimeout(() => syncStoreLayers(control), 0);
+  return true;
 }
 
 // Only sourceadd/sourceremove change the store's layer set. statechange also
@@ -1269,7 +1348,10 @@ function shouldUpdateStoreLayer(existingLayer: GeoLibreLayer, nextLayer: GeoLibr
 export function createStoreLayer(spec: SourceSpec): GeoLibreLayer {
   const sourceId = spec.id as string;
   const layerType = spec.type === "geojson" ? "geojson" : "raster";
-  const authoredUrl = ["url", "tiles", "baseUrl", "data"]
+  // `referenceUrl` is for a source whose URL is a resolver function (one URL
+  // per date): its owner names a stable remote reference instead, so the mirror
+  // is still recognized as a hosted layer.
+  const authoredUrl = ["url", "tiles", "baseUrl", "data", "referenceUrl"]
     .map((key) => {
       const value = key in spec ? spec[key as keyof SourceSpec] : undefined;
       return typeof value === "string" ? value.trim() : "";

@@ -69,6 +69,136 @@ def test_geojson_layer_with_source_url():
     assert layer["sourcePath"] == "https://e/x.geojson"
 
 
+def test_planetary_computer_item_layer_shape():
+    layer = project.planetary_computer_layer(
+        "sentinel-2-l2a",
+        "S2A_MSIL2A_20240906T190921_R056_T10TET_20240907T023150",
+        preset="ndvi",
+        rescale=(0, 0.8),
+    )
+    assert layer["type"] == "raster"
+    assert layer["name"] == "S2A_MSIL2A_20240906T190921_R056_T10TET_20240907T023150"
+    source_id = f"{layer['id']}-source"
+    assert layer["source"] == {
+        "collectionId": "sentinel-2-l2a",
+        "sourceId": source_id,
+        "type": "raster",
+    }
+    metadata = layer["metadata"]
+    # The exact keys the app's Planetary Computer panel restores a layer from
+    # (packages/plugins/src/plugins/maplibre-planetary-computer.ts).
+    assert metadata["sourceKind"] == "planetary-computer-raster"
+    assert metadata["externalNativeLayer"] is True
+    assert metadata["planetaryComputerLayerType"] == "item"
+    assert metadata["stacCollectionId"] == "sentinel-2-l2a"
+    assert metadata["stacItemId"] == layer["name"]
+    assert metadata["nativeLayerIds"] == [layer["id"]]
+    assert metadata["sourceIds"] == [source_id]
+    assert metadata["presetName"] == "ndvi"
+    # Only the override is written; the app merges it over the preset.
+    assert metadata["renderParams"] == {"rescale": "0,0.8"}
+    assert "stacSearchParams" not in metadata
+
+
+def test_planetary_computer_mosaic_layer_shape():
+    layer = project.planetary_computer_layer(
+        "sentinel-2-l2a",
+        datetime="2024-06-01/2024-08-31",
+        max_cloud_cover=10,
+        bbox=[-123.5, 46.8, -121.0, 48.5],
+    )
+    metadata = layer["metadata"]
+    assert layer["name"] == "sentinel-2-l2a (2024-06-01 to 2024-08-31)"
+    assert metadata["planetaryComputerLayerType"] == "mosaic"
+    assert "stacItemId" not in metadata
+    assert metadata["bounds"] == [-123.5, 46.8, -121.0, 48.5]
+    assert metadata["stacSearchParams"] == {
+        "collections": ["sentinel-2-l2a"],
+        "datetime": "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z",
+        "query": {"eo:cloud_cover": {"lte": 10.0}},
+        "sortby": [{"field": "properties.eo:cloud_cover", "direction": "asc"}],
+    }
+    # No render option: the app applies the collection's default preset.
+    assert metadata["renderParams"] == {}
+    assert "presetName" not in metadata
+
+
+def test_planetary_computer_stretch_without_bands_is_a_partial_override():
+    # No assets, expression, or preset: the app draws the collection's default
+    # preset and applies these over it, so no band selection is written here.
+    layer = project.planetary_computer_layer("cop-dem-glo-30", rescale=(0, 3000))
+    assert layer["metadata"]["renderParams"] == {"rescale": "0,3000"}
+    assert layer["metadata"]["assets"] == []
+    assert "presetName" not in layer["metadata"]
+    colored = project.planetary_computer_layer("cop-dem-glo-30", colormap="viridis")
+    assert colored["metadata"]["renderParams"] == {"colormap_name": "viridis"}
+
+
+def test_planetary_computer_render_options():
+    layer = project.planetary_computer_layer(
+        "sentinel-2-l2a",
+        "item-1",
+        expression="(B08-B04)/(B08+B04)",
+        rescale=[-1, 1],
+        colormap="rdylgn",
+    )
+    assert layer["metadata"]["renderParams"] == {
+        "expression": "(B08-B04)/(B08+B04)",
+        # Asset-level band math needs this flag, or the Data API answers 500.
+        "asset_as_band": True,
+        "rescale": "-1,1",
+        "colormap_name": "rdylgn",
+    }
+    naip = project.planetary_computer_layer(
+        "naip", "item-2", expression="(image_b4-image_b1)/(image_b4+image_b1)"
+    )
+    # Bands of one asset are addressed directly, without the flag.
+    assert "asset_as_band" not in naip["metadata"]["renderParams"]
+    bands = project.planetary_computer_layer(
+        "sentinel-2-l2a", "item-3", assets=["B08", "B04", "B03"]
+    )
+    assert bands["metadata"]["assets"] == ["B08", "B04", "B03"]
+    assert bands["metadata"]["renderParams"] == {"assets": ["B08", "B04", "B03"]}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2024-06-01/2024-08-31", "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z"),
+        (("2024-06-01", "2024-08-31"), "2024-06-01T00:00:00Z/2024-08-31T23:59:59Z"),
+        ("2024-06-01", "2024-06-01T00:00:00Z/2024-06-01T23:59:59Z"),
+        ("../2020-12-31", "../2020-12-31T23:59:59Z"),
+        ("2024-06-01T10:00:00Z/2024-06-02T10:00:00Z", "2024-06-01T10:00:00Z/2024-06-02T10:00:00Z"),
+    ],
+)
+def test_planetary_computer_datetime_is_normalized(value, expected):
+    layer = project.planetary_computer_layer("naip", datetime=value)
+    assert layer["metadata"]["stacSearchParams"]["datetime"] == expected
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"collection": " "}, "collection is required"),
+        ({"collection": "naip", "item": "x", "datetime": "2024-01-01/2024-02-01"}, "mosaic"),
+        ({"collection": "naip", "item": "x", "max_cloud_cover": 10}, "mosaic"),
+        ({"collection": "naip", "assets": ["image"], "expression": "image_b1"}, "not both"),
+        ({"collection": "naip", "rescale": [1]}, "rescale"),
+        ({"collection": "naip", "bbox": [0, 0, 1]}, "bbox"),
+        ({"collection": "naip", "bbox": [5, 0, 1, 1]}, "bbox"),
+        ({"collection": "naip", "max_cloud_cover": 120}, "between 0 and 100"),
+        ({"collection": "naip", "datetime": "a/b/c"}, "datetime"),
+        ({"collection": "naip", "datetime": "2024-06/2024-08"}, "YYYY-MM-DD"),
+        ({"collection": "naip", "datetime": "2024"}, "YYYY-MM-DD"),
+    ],
+)
+def test_planetary_computer_rejects_inconsistent_options(kwargs, message):
+    collection = kwargs.pop("collection")
+    item = kwargs.pop("item", None)
+    with pytest.raises(ValueError, match=message):
+        project.planetary_computer_layer(collection, item, **kwargs)
+
+
 def test_tile_layer_shape():
     layer = project.tile_layer("OSM", "https://t/{z}/{x}/{y}.png")
     assert layer["type"] == "xyz"

@@ -2743,6 +2743,96 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    def add_planetary_computer(
+        self,
+        collection: str,
+        item: str | None = None,
+        name: str | None = None,
+        *,
+        datetime: str | tuple[str, str] | list[str] | None = None,
+        bbox: list[float] | tuple[float, ...] | None = None,
+        preset: str | None = None,
+        assets: list[str] | None = None,
+        expression: str | None = None,
+        rescale: tuple[float, float] | list[float] | None = None,
+        colormap: str | None = None,
+        max_cloud_cover: float | None = None,
+        visible: bool = True,
+        opacity: float = 1.0,
+    ) -> str:
+        """Add Microsoft Planetary Computer imagery as a raster layer.
+
+        With ``item`` the layer draws that one STAC item. Without it the layer
+        is a mosaic: every item of the collection matching ``datetime`` and
+        ``max_cloud_cover``, composited into one seamless layer. No credentials
+        are needed, and nothing is fetched here: the app's Planetary Computer
+        panel builds the layer when it opens the project, lists it in its
+        Layers tab, and can restyle it. It needs the MapLibre renderer.
+
+        Examples:
+            A cloud-free summer composite and an NDVI of one scene::
+
+                m.add_planetary_computer(
+                    "sentinel-2-l2a",
+                    datetime="2024-06-01/2024-08-31",
+                    max_cloud_cover=10,
+                )
+                m.add_planetary_computer(
+                    "sentinel-2-l2a",
+                    "S2A_MSIL2A_20240906T190921_R056_T10TET_20240907T023150",
+                    preset="ndvi",
+                )
+
+        Args:
+            collection: STAC collection id, e.g. ``"sentinel-2-l2a"``.
+            item: STAC item id to draw. Omit for a mosaic of the collection.
+            name: Layer display name. Defaults to the item id, or to the
+                collection id with the date range for a mosaic.
+            datetime: Mosaic only. The date range to composite: a
+                ``"start/end"`` string or a ``(start, end)`` pair.
+            bbox: ``[west, south, east, north]`` extent of the layer.
+            preset: Name of a render preset for the collection, e.g.
+                ``"true-color"``, ``"false-color"``, ``"ndvi"``. The
+                collection's default preset is used when no render option is
+                given.
+            assets: Asset names to render, e.g. ``["B08", "B04", "B03"]``.
+            expression: Band-math expression over assets, e.g.
+                ``"(B08-B04)/(B08+B04)"``.
+            rescale: ``(min, max)`` value range stretched to the output colors.
+            colormap: Named colormap, e.g. ``"viridis"``.
+            max_cloud_cover: Mosaic only. Keep items at or below this cloud
+                cover percentage.
+            visible: Whether the layer starts visible.
+            opacity: Layer opacity from 0 to 1.
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ValueError: If the options are inconsistent (see
+                :func:`geolibre.project.planetary_computer_layer`) or
+                ``opacity`` is outside 0 to 1.
+        """
+        opacity_value = float(opacity)
+        if not 0 <= opacity_value <= 1:
+            raise ValueError("opacity must be between 0 and 1")
+        layer = _project.planetary_computer_layer(
+            collection,
+            item,
+            name=name,
+            datetime=datetime,
+            bbox=bbox,
+            preset=preset,
+            assets=assets,
+            expression=expression,
+            rescale=rescale,
+            colormap=colormap,
+            max_cloud_cover=max_cloud_cover,
+        )
+        layer["visible"] = bool(visible)
+        layer["opacity"] = opacity_value
+        return self._add_layer(layer)
+
     def add_ee_layer(
         self,
         ee_object: Any,

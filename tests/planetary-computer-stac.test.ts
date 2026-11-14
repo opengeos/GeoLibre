@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { STACClient, type STACCollection } from "maplibre-gl-planetary-computer";
 import {
   buildStacSearchQuery,
-  createCorsSafeStacClientClass,
+  STACClient,
+  type STACCollection,
+} from "maplibre-gl-planetary-computer";
+import {
   loadBundledPlanetaryComputerCollections,
+  PLANETARY_COMPUTER_STAC_URL,
+  planetaryComputerStacClientOptions,
 } from "../packages/plugins/src/plugins/planetary-computer-stac";
 
-const BASE = "https://planetarycomputer.microsoft.com/api/stac/v1";
+// GeoLibre builds every Planetary Computer STAC client from
+// planetaryComputerStacClientOptions(). These tests run the real library
+// client with those options, so they fail if the library stops honoring them.
+
+const BASE = PLANETARY_COMPUTER_STAC_URL;
 
 type FetchCall = { url: string; init?: RequestInit };
 
@@ -27,6 +35,13 @@ async function withFetch<T>(
   } finally {
     globalThis.fetch = original;
   }
+}
+
+/** A client configured the way the plugin configures its own. */
+function createClient(
+  overrides: Parameters<typeof planetaryComputerStacClientOptions>[0] = {},
+): STACClient {
+  return new STACClient(BASE, planetaryComputerStacClientOptions(overrides));
 }
 
 function json(body: unknown): Response {
@@ -73,8 +88,7 @@ test("ascending sort, ids, intersects and a CQL2 filter keep their GET forms", (
 });
 
 test("search is sent as a preflight-free GET", async () => {
-  const Client = createCorsSafeStacClientClass(STACClient);
-  const client = new Client(BASE);
+  const client = createClient();
   const features = await withFetch(
     () => json({ type: "FeatureCollection", features: [{ id: "item-1" }] }),
     async (calls) => {
@@ -95,8 +109,7 @@ test("search is sent as a preflight-free GET", async () => {
 });
 
 test("a new search cancels the one still in flight", async () => {
-  const Client = createCorsSafeStacClientClass(STACClient);
-  const client = new Client(BASE);
+  const client = createClient();
   await withFetch(
     (_url, init) =>
       new Promise<Response>((resolve, reject) => {
@@ -118,15 +131,15 @@ test("a new search cancels the one still in flight", async () => {
 
 test("a live collection list is used when the API allows it", async () => {
   let fellBack = false;
-  const Client = createCorsSafeStacClientClass(STACClient, {
-    loadFallbackCollections: async () => {
+  const client = createClient({
+    fallbackCollections: async () => {
       fellBack = true;
       return [];
     },
   });
   const collections = await withFetch(
     () => json({ collections: [{ id: "live" }] }),
-    () => new Client(BASE).getCollections(),
+    () => client.getCollections(),
   );
   assert.deepEqual(
     collections.map((collection) => collection.id),
@@ -138,17 +151,31 @@ test("a live collection list is used when the API allows it", async () => {
 test("a CORS-blocked collection list falls back to the bundled one", async () => {
   const errors: unknown[] = [];
   const bundled = [{ id: "bundled" }] as STACCollection[];
-  const Client = createCorsSafeStacClientClass(STACClient, {
-    loadFallbackCollections: async () => bundled,
+  const client = createClient({
+    fallbackCollections: async () => bundled,
     onCollectionsFallback: (error) => errors.push(error),
   });
   const collections = await withFetch(
     () => Promise.reject(new TypeError("Failed to fetch")),
-    () => new Client(BASE).getCollections(),
+    () => client.getCollections(),
   );
   assert.equal(collections, bundled);
   assert.equal(errors.length, 1);
   assert.match(String(errors[0]), /Failed to fetch/);
+});
+
+test("the default fallback is the bundled collection list", async () => {
+  const original = console.warn;
+  console.warn = () => {};
+  try {
+    const collections = await withFetch(
+      () => Promise.reject(new TypeError("Failed to fetch")),
+      () => createClient().getCollections(),
+    );
+    assert.ok(collections.some((collection) => collection.id === "sentinel-2-l2a"));
+  } finally {
+    console.warn = original;
+  }
 });
 
 test("the bundled collection list carries what the panel reads", async () => {

@@ -2445,7 +2445,8 @@
       "nodata": "no data",
       "coordinates": "lon, lat",
       "row": "row",
-      "column": "column"
+      "column": "column",
+      "stacItem": "Item"
     },
     "directionsMode": {
       "title": "Directions mode active",
@@ -4951,6 +4952,22 @@
     "exportCsv": "Export CSV",
     "includeNeighbors": "Include selected tile neighbors",
     "includeParent": "Include selected tile parent"
+  },
+  "planetaryComputer": {
+    "stacBrowser": "Browse in STAC catalogs",
+    "stacBrowserTitle": "Open this collection in the STAC catalogs panel to add point clouds, GeoParquet, Zarr, and other assets the raster tiler cannot draw",
+    "timeSlider": "Animate in Time slider",
+    "timeSliderTitle": "Step through these results by date in the Time slider and chart a pixel through time",
+    "colorbar": "Show colorbar",
+    "colorbarTitle": "Add a colorbar for this layer's colormap and value range to the map",
+    "clipToMap": "Add clip to map",
+    "clipToMapTitle": "Clip this scene to the drawn box (or the map view) and add its raw band values as a raster layer for analysis",
+    "clipLayerName": "{{item}} clip",
+    "clipOutsideItem": "The clip area does not overlap this scene. Draw a box inside its footprint or move the map over it.",
+    "clipUnavailable": "This scene cannot be added as a clip on this map.",
+    "timeSeriesLayerName": "{{collection}} time series",
+    "timeSliderNeedsDates": "At least two results with different dates are needed for a time series.",
+    "timeSliderUnavailable": "The Time slider is not available on this map."
   },
   "timelapse": {
     "title": "Timelapse",
