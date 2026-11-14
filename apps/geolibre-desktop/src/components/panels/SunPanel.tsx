@@ -16,6 +16,11 @@ import { Clock3, Pause, Play, Repeat, SkipBack, SkipForward, Sun, X } from "luci
 import { type PointerEvent as ReactPointerEvent, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import {
+  fromLocalDateTimeParts,
+  isCompleteDateInput,
+  localDateParts,
+} from "../../lib/sun-date-input";
 
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 1440;
@@ -42,21 +47,6 @@ function minutesOfLocalDay(dateMs: number): number {
 
 function withMinutesOfLocalDay(dateMs: number, minutes: number): number {
   return localDayStart(dateMs) + clamp(minutes, 0, MINUTES_PER_DAY - 1) * MS_PER_MINUTE;
-}
-
-/** Format epoch ms as date/time input values in device local time. */
-function localDateParts(dateMs: number): { date: string; time: string } {
-  const d = new Date(dateMs);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  };
-}
-
-function fromLocalDateTimeParts(date: string, time: string): number | null {
-  const ms = new Date(`${date}T${time}`).getTime();
-  return Number.isFinite(ms) ? ms : null;
 }
 
 function formatClock(dateMs: number): string {
@@ -89,6 +79,11 @@ function SunPanelCard() {
     x: EDGE_MARGIN,
     y: EDGE_MARGIN,
   }));
+
+  // Raw text of the date field while the user is mid-edit. Native date inputs
+  // report every keystroke of a year (0002, 0020, 0202, 2024) as a valid date,
+  // so partial years stay local until the entry is complete.
+  const [dateDraft, setDateDraft] = useState<string | null>(null);
 
   const { dateMs, playing, speed, loop, shadeOpacity } = settings;
   const minutes = minutesOfLocalDay(dateMs);
@@ -147,8 +142,16 @@ function SunPanelCard() {
   };
 
   const setDatePart = (nextDate: string) => {
-    const next = fromLocalDateTimeParts(nextDate, time);
-    if (next !== null) setSunSettings({ dateMs: next, playing: false });
+    const next = isCompleteDateInput(nextDate) ? fromLocalDateTimeParts(nextDate, time) : null;
+    if (next === null) {
+      setDateDraft(nextDate);
+      // Editing the date pauses playback, as a commit does, so the header and
+      // clock do not run on while the field holds the typed draft.
+      if (playing) setSunSettings({ playing: false });
+      return;
+    }
+    setDateDraft(null);
+    setSunSettings({ dateMs: next, playing: false });
   };
 
   const setTimePart = (nextTime: string) => {
@@ -195,8 +198,9 @@ function SunPanelCard() {
             <input
               type="date"
               className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-              value={date}
+              value={dateDraft ?? date}
               onChange={(e) => setDatePart(e.target.value)}
+              onBlur={() => setDateDraft(null)}
             />
           </label>
           <label className="w-[7.5rem] space-y-1">
