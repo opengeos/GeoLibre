@@ -35,6 +35,6 @@ export function fromLocalDateTimeParts(date: string, time: string): number | nul
  * four-digit year (1000 or later) counts as a finished entry.
  */
 export function isCompleteDateInput(value: string): boolean {
-  const match = /^(\d{4,})-\d{2}-\d{2}$/.exec(value);
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
   return match !== null && Number(match[1]) >= 1000;
 }

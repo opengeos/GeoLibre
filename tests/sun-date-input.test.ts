@@ -19,7 +19,14 @@ describe("Sun panel date input helpers", () => {
   });
 
   it("treats partial years typed digit by digit as incomplete", () => {
-    for (const partial of ["0002-12-21", "0020-12-21", "0202-12-21", "", "2024-12"]) {
+    for (const partial of [
+      "0002-12-21",
+      "0020-12-21",
+      "0202-12-21",
+      "",
+      "2024-12",
+      "20245-12-21",
+    ]) {
       assert.equal(isCompleteDateInput(partial), false, partial);
     }
     assert.equal(isCompleteDateInput("2024-12-21"), true);
