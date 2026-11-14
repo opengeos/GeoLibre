@@ -365,6 +365,31 @@ describe("Planetary Computer time-series stack", () => {
       (planetaryComputerStackSource("s", "S", legacy) as unknown as { bounds?: number[] }).bounds,
       undefined,
     );
+    // A scene crossing the antimeridian (west > east) keeps the stack unbounded
+    // instead of being clipped out of a min/max union.
+    assert.equal(
+      planetaryComputerStackBounds([
+        { id: "a", date: "2024-06-07", bbox: [177, -20, -178, -16] },
+        { id: "b", date: "2024-06-08", bbox: [170, -20, 175, -16] },
+      ]),
+      undefined,
+    );
+    // ...and its footprint is still kept when the stack is reopened.
+    assert.deepEqual(
+      parsePlanetaryComputerStack({
+        collection: "x",
+        items: [{ id: "a", date: "2024-06-07", bbox: [177, -20, -178, -16] }],
+      })?.items,
+      [{ id: "a", date: "2024-06-07", bbox: [177, -20, -178, -16] }],
+    );
+    // A footprint with south above north is not a box and is dropped.
+    assert.deepEqual(
+      parsePlanetaryComputerStack({
+        collection: "x",
+        items: [{ id: "a", date: "2024-06-07", bbox: [0, 2, 1, 1] }],
+      })?.items,
+      [{ id: "a", date: "2024-06-07" }],
+    );
     // A malformed footprint is dropped rather than poisoning the bounds.
     assert.deepEqual(
       parsePlanetaryComputerStack({

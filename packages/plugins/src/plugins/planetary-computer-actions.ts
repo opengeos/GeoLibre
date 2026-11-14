@@ -146,7 +146,11 @@ function bbox2d(bbox: unknown): [number, number, number, number] | null {
   if (!Array.isArray(bbox)) return null;
   const box =
     bbox.length === 6 ? [bbox[0], bbox[1], bbox[3], bbox[4]] : bbox.length === 4 ? bbox : null;
-  return box && box.every((value) => typeof value === "number" && Number.isFinite(value))
+  // West may exceed east (a footprint crossing the antimeridian), but south
+  // above north is not a box.
+  return box &&
+    box.every((value) => typeof value === "number" && Number.isFinite(value)) &&
+    box[1] <= box[3]
     ? (box as [number, number, number, number])
     : null;
 }
@@ -158,14 +162,18 @@ function bbox2d(bbox: unknown): [number, number, number, number] | null {
  * without CORS headers: a console error per tile (hundreds per pan).
  *
  * @param items - The stack items.
- * @returns The union box, or undefined when any item lacks a footprint.
+ * @returns The union box, or undefined when any item lacks a footprint or one
+ *   crosses the antimeridian.
  */
 export function planetaryComputerStackBounds(
   items: PlanetaryComputerStackItem[],
 ): [number, number, number, number] | undefined {
   let union: [number, number, number, number] | undefined;
   for (const { bbox } of items) {
-    if (!bbox) return undefined;
+    // A footprint crossing the antimeridian (west > east) has no plain
+    // min/max union with the others; leave such a stack unbounded rather than
+    // clip that scene's tiles away.
+    if (!bbox || bbox[0] > bbox[2]) return undefined;
     union = union
       ? [
           Math.min(union[0], bbox[0]),
