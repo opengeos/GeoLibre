@@ -1,4 +1,5 @@
 import { normalizeMapCrs, type MapViewState } from "@geolibre/core";
+import { coordinateTargetFromSearch } from "./coordinate-url";
 import { isTauri } from "./is-tauri";
 
 // Host routing, startup, authentication and layout parameters are never owned
@@ -89,12 +90,15 @@ export function setPluginUrlParameters(
  *   params: The address's current query parameters.
  *
  * Returns:
- *   The keys spelling a compact coordinate token.
+ *   The bare keys that parse as a valid compact coordinate token. Other
+ *   slash-shaped keys, such as `a/b/c` from an embedding page, are kept.
  */
 export function compactCoordinateKeys(params: URLSearchParams): string[] {
   const keys: string[] = [];
   for (const [key, value] of params) {
-    if (value === "" && key.split("/").length === 3 && !keys.includes(key)) keys.push(key);
+    if (value === "" && key.split("/").length === 3 && coordinateTargetFromSearch(`?${key}`)) {
+      keys.push(key);
+    }
   }
   return keys;
 }

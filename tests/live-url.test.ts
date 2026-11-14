@@ -462,7 +462,13 @@ test("compact token detection ignores keyed values and other bare keys", () => {
   assert.deepEqual(compactCoordinateKeys(new URLSearchParams("?12/40.7/-74&embed")), [
     "12/40.7/-74",
   ]);
-  assert.deepEqual(compactCoordinateKeys(new URLSearchParams("?url=a/b/c&maponly&a/b=")), []);
+  assert.deepEqual(
+    compactCoordinateKeys(new URLSearchParams("?url=a/b/c&maponly&a/b=&a/b/c&12/95/0")),
+    [],
+  );
+  const url = address("?a/b/c");
+  setMapViewUrl({ center: [0, 0], zoom: 1, bearing: 0, pitch: 0 });
+  assert.equal(url.params().has("a/b/c"), true, "non-coordinate bare keys survive");
 });
 
 test("a plugin cannot claim the crs parameter", () => {
