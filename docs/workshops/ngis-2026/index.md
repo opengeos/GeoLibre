@@ -87,8 +87,10 @@ Section 4 counts the events inside each Nevada county with a spatial join
 
 Other sections also read large public datasets in place: Sentinel-2 imagery
 from [Earth Search](https://earth-search.aws.element84.com/v1), the USGS
-National Map and Water Data services, NOAA sea surface temperature as Zarr, and
-the USGS 3DEP Reno-Carson LiDAR point cloud.
+National Map and the USGS Water Data API (`api.waterdata.usgs.gov`), NOAA sea
+surface temperature as Zarr, and the USGS 3DEP Reno-Carson LiDAR point cloud.
+Optional steps also read the USGS earthquake feed (`earthquake.usgs.gov`) and
+the Autzen LiDAR sample (`s3.amazonaws.com/hobu-lidar`).
 
 ## Finished projects
 
