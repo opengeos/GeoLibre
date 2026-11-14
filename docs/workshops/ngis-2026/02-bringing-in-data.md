@@ -148,7 +148,8 @@ built from a CSV are embedded in the project (so the file grows), and a
 feature service result (OGC API, WFS) is saved as the features you fetched.
 A Zarr layer is saved as its store URL plus the variable, time selector, and
 color settings, and reopens from the store. Credentials (API keys, S3 keys,
-ArcGIS sign-ins) are never written to a project.
+ArcGIS sign-ins) are stripped from shared links and exports; a local save
+asks before keeping any.
 
 ## Hands-on (35 min)
 

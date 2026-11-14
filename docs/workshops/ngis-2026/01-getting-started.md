@@ -146,8 +146,11 @@ plugin state. Three things about it matter today:
   URL to point at: points built from a CSV, features fetched from a feature
   service, layers you draw, and analysis results are embedded in the file.
   Check what a project embeds before you share one built from private data.
-- **It never contains credentials.** API keys and tokens stay on the device,
-  so a project file is safe to commit to Git or email.
+- **Sharing strips credentials.** Share links, HTML exports, embeds, and
+  live sessions remove API keys and tokens. A local **Save** can keep them:
+  the desktop app moves keys to the system keychain, and otherwise GeoLibre
+  asks whether to keep or strip them. Choose strip before you commit a
+  project to Git or email it.
 - **It is plain JSON.** Projects save as `.geolibre` files. Earlier releases
   used `.geolibre.json`, and GeoLibre still opens those everywhere (the
   workshop's finished projects use that name).
