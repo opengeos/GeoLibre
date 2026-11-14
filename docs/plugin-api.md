@@ -1176,6 +1176,30 @@ app.setUrlRequestHeaders?.("https://tiles.example.org/preview/", null);
 - They belong to the plugin, not to a layer or the project: held in memory, never saved, and sent until the plugin clears them with `null`, so clear them in `deactivate`. Calling it again for the same prefix replaces them, which is how a refreshed token is put in.
 - Where a layer's own headers also match, the longer prefix wins, and on the same prefix the layer's do. The `MapLibre only` and `CORS` notes above apply here too.
 
+## Plugin assets
+
+A plugin can ship data files (a lookup table, a model, a sample dataset) inside
+its own bundle and read them back as raw bytes:
+
+```ts
+// readPluginAsset?: (pluginId: string, relativePath: string) => Promise<Uint8Array | null>
+const bytes = await app.readPluginAsset?.("my-plugin", "data/classes.json");
+if (bytes) {
+  const classes = JSON.parse(new TextDecoder().decode(bytes));
+}
+```
+
+- For a plugin installed from the desktop filesystem (a zip archive or a
+  development directory), the host reads the file out of that bundle. For a
+  URL-installed plugin it fetches the asset URL `resolvePluginAssetUrl` would
+  resolve.
+- It resolves `null` when the plugin is unknown or built-in, `relativePath` is
+  absolute or escapes the plugin's bundle, or the file does not exist. Plugins
+  installed from a zip in the web build keep only their entry and style
+  sources, so reads resolve `null` there.
+- Pass your own plugin's id. All plugins share one JS context, so the host
+  cannot verify the caller; this is a convention, not a security boundary.
+
 ## Zarr layers
 
 `addZarrLayer` renders a Zarr store (Zarr v2/v3 over HTTP) through **GeoLibre's own** `@carbonplan/zarr-layer` instance and mirrors the result into the Layers panel. It is the Zarr counterpart of `addCogLayer`. Stores that are not read from a URL — a kerchunk-backed cloud NetCDF, an Icechunk repository, a folder on disk — reach the same renderer through an internal `store` option that this API does not expose, so they are added by GeoLibre's own panels rather than by a plugin.
