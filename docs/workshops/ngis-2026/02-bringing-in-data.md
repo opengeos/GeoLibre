@@ -228,11 +228,11 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
    layer** (magnifier) on the `nv_counties` row to come back to Nevada.
 
 !!! tip "Streaming or not?"
-    Streaming queries the file where it sits instead of copying it into
-    memory. It suits large, **spatially sorted** files: this one was written
-    with `SORT_BY_BBOX` and 256-row groups (14 in all), so nearby counties
-    share row groups and a reader can skip the rest. For small files, leave
-    streaming off: the layer is handed to GeoLibre and gets the full Style
+    Streaming queries the file where it sits instead of copying it into memory.
+    It suits large, **spatially sorted** files: this one was written with
+    `SORT_BY_BBOX` in row groups of up to 256 rows (14 in all), so nearby
+    counties share row groups and a reader can skip the rest. For small files,
+    leave streaming off: the layer is handed to GeoLibre and gets the full Style
     panel and attribute table.
 
 ### Exercise 2.4: The same counties as PMTiles (4 min)

@@ -295,10 +295,11 @@ view; its buildings rise in 3D when you zoom in to a city.
    of the decade (Ridgecrest, M7.1 on July 6).
 
 !!! question "Discussion"
-    2019 has ten times the events of 2018, yet most of them are not in
-    Nevada. What would you change, with what you learned in Section 4, so the
-    animation shows only Nevada? And which **Show features** option would
-    turn this into a map of where earthquakes have accumulated?
+    2019 has nearly twenty times the events of 2018 (3,070 against 158), yet
+    most of them are not in Nevada. What would you change, with what you learned
+    in Section 4, so the animation shows only Nevada? And which **Show
+    features** option would turn this into a map of where earthquakes have
+    accumulated?
 
 ### Exercise 6.6: Bookmark a view and measure it (5 min)
 

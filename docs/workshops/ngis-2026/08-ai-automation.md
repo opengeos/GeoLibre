@@ -1,7 +1,8 @@
 # 8. AI and Automation
 
 !!! info "4:00 - 5:00 p.m."
-    Lecture 15 min · Hands-on 25 min · Wrap-up and questions 10 min
+    Lecture 15 min · Hands-on 25 min · Wrap-up 10 min · Open questions 4:50 -
+    5:00
 
 ## Learning goals
 
