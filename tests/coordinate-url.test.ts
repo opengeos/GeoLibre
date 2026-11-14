@@ -37,6 +37,15 @@ test("invalid web coordinates do not claim startup", () => {
   }
 });
 
+test("explicit lat/lon/zoom take precedence over a compact token", () => {
+  for (const query of [
+    "?14%2F39.5442%2F-119.8160=&lat=40&lon=-100&zoom=5",
+    "?14/39.5442/-119.8160&lat=40&lon=-100&zoom=5",
+  ]) {
+    assert.deepEqual(coordinateTargetFromSearch(query), { center: [-100, 40], zoom: 5 }, query);
+  }
+});
+
 test("geo URIs support direct coordinates, zoom, and labeled coordinate queries", () => {
   assert.deepEqual(coordinateTargetFromGeoUri("geo:40.7128,-74.006"), {
     center: [-74.006, 40.7128],

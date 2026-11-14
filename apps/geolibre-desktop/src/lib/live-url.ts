@@ -1,4 +1,5 @@
 import { normalizeMapCrs, type MapViewState } from "@geolibre/core";
+import { coordinateTargetFromSearch } from "./coordinate-url";
 import { isTauri } from "./is-tauri";
 
 // Host routing, startup, authentication and layout parameters are never owned
@@ -81,17 +82,42 @@ export function setPluginUrlParameters(
   );
 }
 
+/**
+ * Find the compact `?z/lat/lon` launch token, which `URLSearchParams` reads as
+ * a bare key with an empty value.
+ *
+ * Args:
+ *   params: The address's current query parameters.
+ *
+ * Returns:
+ *   The bare keys that parse as a valid compact coordinate token. Other
+ *   slash-shaped keys, such as `a/b/c` from an embedding page, are kept.
+ */
+export function compactCoordinateKeys(params: URLSearchParams): string[] {
+  const keys: string[] = [];
+  for (const [key, value] of params) {
+    if (value === "" && key.split("/").length === 3 && coordinateTargetFromSearch(`?${key}`)) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
 export function setMapViewUrl(view: MapViewState): void {
   const [lon, lat] = view.center;
   if (![lon, lat, view.zoom].every(Number.isFinite)) return;
+  if (typeof window === "undefined") return;
   const rounded = (value: number, digits: number) => String(Number(value.toFixed(digits)));
+  // The live lat/lon/zoom replace a compact launch token, so a copied link
+  // carries one view instead of a stale `14%2F39.5%2F-119.8=` key beside it.
+  const compact = compactCoordinateKeys(new URL(window.location.href).searchParams);
   replaceUrlParameters(
     new URLSearchParams({
       lat: rounded(lat, 6),
       lon: rounded(((((lon + 180) % 360) + 360) % 360) - 180, 6),
       zoom: rounded(view.zoom, 2),
     }),
-    ["lat", "lon", "zoom"],
+    ["lat", "lon", "zoom", ...compact],
   );
 }
 

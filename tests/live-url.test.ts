@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
+  compactCoordinateKeys,
   setMapCrsUrl,
   setMapViewUrl,
   setPluginUrlParameters,
@@ -443,6 +444,31 @@ test("the address follows the map's CRS and keeps a link's spelling of it", () =
   assert.equal(preset.writes(), 0);
   setMapCrsUrl("mars-north-polar");
   assert.equal(preset.params().get("crs"), "mars-north-polar");
+});
+
+test("the live view replaces a compact z/lat/lon launch token", () => {
+  const url = address("?14/39.5442/-119.8160&url=project.json");
+  setMapViewUrl({ center: [-119.82115, 39.545524], zoom: 14, bearing: 0, pitch: 0 });
+  assert.deepEqual([...url.params().keys()], ["url", "lat", "lon", "zoom"]);
+  assert.equal(new URL(url.href()).search.includes("%2F"), false);
+
+  // An address an earlier build already rewrote is cleaned on the next move.
+  const stale = address("?14%2F39.5442%2F-119.8160=&lat=40&lon=-100&zoom=5");
+  setMapViewUrl({ center: [-100, 40], zoom: 5, bearing: 0, pitch: 0 });
+  assert.equal(new URL(stale.href()).search, "?lat=40&lon=-100&zoom=5");
+});
+
+test("compact token detection ignores keyed values and other bare keys", () => {
+  assert.deepEqual(compactCoordinateKeys(new URLSearchParams("?12/40.7/-74&embed")), [
+    "12/40.7/-74",
+  ]);
+  assert.deepEqual(
+    compactCoordinateKeys(new URLSearchParams("?url=a/b/c&maponly&a/b=&a/b/c&12/95/0")),
+    [],
+  );
+  const url = address("?a/b/c");
+  setMapViewUrl({ center: [0, 0], zoom: 1, bearing: 0, pitch: 0 });
+  assert.equal(url.params().has("a/b/c"), true, "non-coordinate bare keys survive");
 });
 
 test("a plugin cannot claim the crs parameter", () => {
