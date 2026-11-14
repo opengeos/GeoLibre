@@ -295,7 +295,7 @@ export function AboutDialog({
             {LINKS.map((link) => (
               <a
                 key={link.href}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 href={link.href}
                 onClick={(event) => {
                   event.preventDefault();
@@ -304,10 +304,13 @@ export function AboutDialog({
                 rel="noreferrer"
                 target="_blank"
               >
-                <span>{t(link.labelKey)}</span>
-                <span className="inline-flex items-center gap-2 text-muted-foreground">
-                  {link.href.replace(/^https?:\/\//, "")}
-                  <ExternalLink className="h-3.5 w-3.5" />
+                <span className="shrink-0">{t(link.labelKey)}</span>
+                {/* Long URLs wrap anywhere so the dialog never scrolls sideways. */}
+                <span className="inline-flex min-w-0 items-center gap-2 text-end text-muted-foreground">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {link.href.replace(/^https?:\/\//, "")}
+                  </span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                 </span>
               </a>
             ))}
