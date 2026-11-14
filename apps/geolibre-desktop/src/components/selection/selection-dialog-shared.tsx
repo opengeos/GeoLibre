@@ -2,8 +2,22 @@ import { type GeoLibreLayer, type SelectionMode, SELECTION_MODES } from "@geolib
 import { Label, Select, cn } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
 import { GripHorizontal, X } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { clampSelectionPanelPosition, selectionPanelMaxHeight } from "./selection-panel-geometry";
+
+/**
+ * A selection card's width and natural height: its rendered height with the
+ * body's full content height in place of the capped, scrolling part.
+ *
+ * @param card - The rendered card element.
+ * @param body - The card's scrolling body, when mounted.
+ * @returns The size to clamp the card's position against.
+ */
+function naturalCardSize(card: HTMLElement, body: HTMLElement | null) {
+  const hidden = body ? body.scrollHeight - body.clientHeight : 0;
+  return { width: card.offsetWidth, height: card.offsetHeight + hidden };
+}
 
 /**
  * Floating, non-modal window shell shared by the two selection panels
@@ -16,6 +30,12 @@ import { useTranslation } from "react-i18next";
  * Whitebox toolbox in #1226): `pos` is null until first dragged, when the
  * default corner placement (CSS class) applies; afterwards it pins to
  * explicit coords, clamped to the map area.
+ *
+ * The card's height is capped by the map area, not the viewport: a tall
+ * docked attribute table shrinks the map area, and a viewport-sized card
+ * would run past it and be clipped, hiding the action buttons at the bottom.
+ * The body scrolls instead, and a dragged card moves up when the map area
+ * shrinks under it.
  */
 export function SelectionFloatingPanel({
   open,
@@ -35,6 +55,29 @@ export function SelectionFloatingPanel({
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  // Docking or resizing the attribute table (or opening a side panel)
+  // shrinks the map area; pull a dragged card back inside so its title bar
+  // and buttons do not end up clipped.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!open || !overlay || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      const area = overlay.getBoundingClientRect();
+      const card = panelRef.current;
+      if (!card) return;
+      const size = naturalCardSize(card, bodyRef.current);
+      setPos((current) => {
+        if (!current) return current;
+        const next = clampSelectionPanelPosition(current, area, size);
+        return next.x === current.x && next.y === current.y ? current : next;
+      });
+    });
+    observer.observe(overlay);
+    return () => observer.disconnect();
+  }, [open]);
 
   if (!open) return null;
 
@@ -60,18 +103,16 @@ export function SelectionFloatingPanel({
     const bounds = card?.parentElement?.getBoundingClientRect();
     if (!card || !bounds) return;
     // Keep the panel within the map area so it can't be dragged off-canvas.
-    const x = Math.max(
-      0,
-      Math.min(event.clientX - dragOffset.current.x - bounds.left, bounds.width - card.offsetWidth),
-    );
-    const y = Math.max(
-      0,
-      Math.min(
-        event.clientY - dragOffset.current.y - bounds.top,
-        bounds.height - card.offsetHeight,
+    setPos(
+      clampSelectionPanelPosition(
+        {
+          x: event.clientX - dragOffset.current.x - bounds.left,
+          y: event.clientY - dragOffset.current.y - bounds.top,
+        },
+        bounds,
+        naturalCardSize(card, bodyRef.current),
       ),
     );
-    setPos({ x, y });
   };
 
   const onDragEnd = (event: React.PointerEvent) => {
@@ -80,12 +121,15 @@ export function SelectionFloatingPanel({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+    <div ref={overlayRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
       <div
         ref={panelRef}
         role="dialog"
         aria-label={title}
-        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        style={{
+          ...(pos ? { left: pos.x, top: pos.y } : {}),
+          maxHeight: selectionPanelMaxHeight(pos?.y ?? null),
+        }}
         className={cn(
           "pointer-events-auto absolute flex w-96 max-w-[95%] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
           pos ? "" : defaultPositionClass,
@@ -110,7 +154,9 @@ export function SelectionFloatingPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3">{children}</div>
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+          {children}
+        </div>
       </div>
     </div>
   );
