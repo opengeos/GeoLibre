@@ -96,7 +96,13 @@ export function setPluginUrlParameters(
 export function compactCoordinateKeys(params: URLSearchParams): string[] {
   const keys: string[] = [];
   for (const [key, value] of params) {
-    if (value === "" && key.split("/").length === 3 && coordinateTargetFromSearch(`?${key}`)) {
+    // A decoded `&` or `=` would let the reparse read embedded lat/lon instead.
+    if (
+      value === "" &&
+      key.split("/").length === 3 &&
+      !/[&=#?]/.test(key) &&
+      coordinateTargetFromSearch(`?${key}`)
+    ) {
       keys.push(key);
     }
   }
