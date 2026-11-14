@@ -9,7 +9,10 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools";
-import { applyMatchedSelection } from "../apps/geolibre-desktop/src/lib/selection-actions";
+import {
+  applyMatchedSelection,
+  openLayerAttributeTable,
+} from "../apps/geolibre-desktop/src/lib/selection-actions";
 import {
   featuresIntersectingPolygon,
   CAMERA_HANDLERS,
@@ -255,6 +258,40 @@ describe("applyMatchedSelection", () => {
     const size = applyMatchedSelection("L2", ["a"], "remove");
     assert.equal(size, 0);
     const state = useAppStore.getState();
+    assert.equal(state.selectedLayerId, "L2");
+    assert.deepEqual(state.selectedFeatureIds, []);
+    assert.equal(state.selectedFeatureId, null);
+  });
+});
+
+describe("openLayerAttributeTable", () => {
+  const seed = (selectedLayerId: string | null, ids: string[]) => {
+    useAppStore.setState((s) => ({
+      selectedLayerId,
+      selectedFeatureIds: ids,
+      selectedFeatureId: ids.at(-1) ?? null,
+      ui: { ...s.ui, attributeTableOpen: false },
+    }));
+  };
+
+  it("keeps the selection when the layer already holds it", () => {
+    // Select by expression on L1, then Layer actions -> Open attribute table:
+    // the table must open on the existing selection, not clear it.
+    seed("L1", ["a", "b"]);
+    applyMatchedSelection("L1", ["c"], "add");
+    openLayerAttributeTable("L1");
+    const state = useAppStore.getState();
+    assert.equal(state.ui.attributeTableOpen, true);
+    assert.equal(state.selectedLayerId, "L1");
+    assert.deepEqual(state.selectedFeatureIds, ["a", "b", "c"]);
+    assert.equal(state.selectedFeatureId, "c");
+  });
+
+  it("activates another layer and drops the old layer's per-layer ids", () => {
+    seed("L1", ["a"]);
+    openLayerAttributeTable("L2");
+    const state = useAppStore.getState();
+    assert.equal(state.ui.attributeTableOpen, true);
     assert.equal(state.selectedLayerId, "L2");
     assert.deepEqual(state.selectedFeatureIds, []);
     assert.equal(state.selectedFeatureId, null);

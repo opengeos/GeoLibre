@@ -85,6 +85,7 @@ import {
   clearFeatureSelection,
   exportSelectionAsLayer,
   invertLayerSelection,
+  openLayerAttributeTable,
   zoomToSelection,
 } from "../../../lib/selection-actions";
 import {
@@ -240,7 +241,6 @@ export function LayerActionsMenuItems({
   const setSelectByExpressionOpen = useAppStore((s) => s.setSelectByExpressionOpen);
   const setSelectByLocationOpen = useAppStore((s) => s.setSelectByLocationOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
-  const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setRasterAttributeTableOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
   const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
@@ -573,12 +573,7 @@ export function LayerActionsMenuItems({
         </DropdownMenuItem>
       )}
       {canOpenAttributeTable && (
-        <DropdownMenuItem
-          onSelect={() => {
-            selectLayer(layer.id);
-            setAttributeTableOpen(true);
-          }}
-        >
+        <DropdownMenuItem onSelect={() => openLayerAttributeTable(layer.id)}>
           <TableProperties className="me-2 h-3.5 w-3.5" />
           {t("layers.openAttributeTable")}
         </DropdownMenuItem>
