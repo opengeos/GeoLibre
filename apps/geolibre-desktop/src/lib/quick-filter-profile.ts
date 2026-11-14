@@ -49,22 +49,22 @@ export interface QuickFilterFieldProfile {
 }
 
 export interface ProfileQuickFilterOptions {
-  /** Features to inspect. Defaults to every record passed in. */
+  /** Features to inspect. Defaults to {@link PROFILE_LIMIT}. */
   sampleLimit?: number;
   /** Field names to skip (geometry helpers, tracking columns, …). */
   exclude?: readonly string[];
 }
 
 /**
- * Features inspected per layer by default: all of them. The value counts are
- * shown next to each checkbox and the numeric/date extents bound the range
- * sliders, so a partial read would present a sample as the layer's totals
- * (and could clip a range to values that happen to sit in the first rows).
- * One pass over the property bags is cheap next to holding the features in
- * memory at all, and matches the attribute table's column explorer, which
- * also summarizes every row.
+ * Features inspected per layer by default. The value counts are shown next to
+ * each checkbox and the numeric/date extents bound the range sliders, so the
+ * profile reads every feature of an ordinary layer (as the attribute table's
+ * column explorer does) rather than presenting a sample as totals. Past this
+ * many features a full pass takes over a second on the main thread, so a
+ * larger layer is profiled from its first {@link PROFILE_LIMIT} features and
+ * the panel says so (see `useQuickFilterProfiles`).
  */
-const SAMPLE_LIMIT = Number.POSITIVE_INFINITY;
+const PROFILE_LIMIT = 100_000;
 
 /**
  * Distinct values past which a field is not offered as checkboxes. A list this
@@ -318,7 +318,7 @@ export function profileQuickFilterFields(
   records: readonly (Record<string, unknown> | null | undefined)[],
   options: ProfileQuickFilterOptions = {},
 ): QuickFilterFieldProfile[] {
-  const limit = Math.max(0, options.sampleLimit ?? SAMPLE_LIMIT);
+  const limit = Math.max(0, options.sampleLimit ?? PROFILE_LIMIT);
   const excluded = new Set(options.exclude ?? []);
   const tallies = new Map<string, FieldTally>();
   const inspected = Math.min(records.length, limit);
@@ -338,4 +338,4 @@ export function profileQuickFilterFields(
   return [...tallies.entries()].map(([field, tally]) => profileFromTally(field, tally, inspected));
 }
 
-export const QUICK_FILTER_SAMPLE_LIMIT = SAMPLE_LIMIT;
+export const QUICK_FILTER_PROFILE_LIMIT = PROFILE_LIMIT;

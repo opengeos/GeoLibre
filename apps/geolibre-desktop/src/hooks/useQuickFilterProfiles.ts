@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { getColumnSettings } from "../lib/attribute-columns";
 import {
   profileQuickFilterFields,
+  QUICK_FILTER_PROFILE_LIMIT,
   type QuickFilterFieldProfile,
 } from "../lib/quick-filter-profile";
 import {
@@ -29,6 +30,11 @@ export interface QuickFilterProfiles {
   byField: Map<string, QuickFilterFieldProfile>;
   /** The profiles describe the loaded tiles, not the whole dataset. */
   sampledFromViewport: boolean;
+  /**
+   * Set when a layer has more local features than the profile reads, so the
+   * value counts and extents describe only the first `inspected` of `total`.
+   */
+  partialSample?: { inspected: number; total: number };
   /** Nothing to profile yet: no local features and no tiles decoded. */
   empty: boolean;
 }
@@ -114,7 +120,7 @@ export function useQuickFilterProfiles(
   // uninteresting; do not offer a filter control for it either. Read outside
   // the memo and reduced to a string key for the same reason as `layerRef`
   // above: the settings object is rebuilt on every layer patch, so depending on
-  // it directly would re-profile every record per paint tick.
+  // it directly would re-profile up to 100,000 records per paint tick.
   const hiddenKey = (getColumnSettings(layer).hidden ?? []).join("\u0000");
 
   return useMemo(() => {
@@ -137,6 +143,10 @@ export function useQuickFilterProfiles(
       profiles,
       byField: new Map(profiles.map((profile) => [profile.field, profile])),
       sampledFromViewport: tileBacked,
+      partialSample:
+        hasLocalFeatures && records.length > QUICK_FILTER_PROFILE_LIMIT
+          ? { inspected: QUICK_FILTER_PROFILE_LIMIT, total: records.length }
+          : undefined,
       empty: profiles.length === 0,
     };
   }, [features, hasLocalFeatures, hiddenKey, layerId, tileBacked, tileRecords]);

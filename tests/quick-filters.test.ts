@@ -13,6 +13,7 @@ import {
 import {
   profileQuickFilterFields,
   type QuickFilterFieldProfile,
+  QUICK_FILTER_PROFILE_LIMIT,
 } from "../apps/geolibre-desktop/src/lib/quick-filter-profile";
 
 /**
@@ -538,6 +539,15 @@ describe("profileQuickFilterFields", () => {
     const total = (magType?.values ?? []).reduce((sum, entry) => sum + entry.count, 0);
     assert.equal(total, 8031);
     assert.equal(profiles.get("mag")?.max, 7.1);
+  });
+
+  it("stops at the profile limit on a very large layer", () => {
+    const rows = Array.from({ length: QUICK_FILTER_PROFILE_LIMIT + 10 }, (_, index) => ({
+      a: index % 2,
+    }));
+    const a = byField(profileQuickFilterFields(rows)).get("a");
+    assert.equal(a?.sampled, QUICK_FILTER_PROFILE_LIMIT);
+    assert.equal(a?.present, QUICK_FILTER_PROFILE_LIMIT);
   });
 
   it("honors the sample limit and the exclusion list", () => {
