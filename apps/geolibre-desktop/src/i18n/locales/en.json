@@ -4964,6 +4964,7 @@
     "clipToMapTitle": "Clip this scene to the drawn box (or the map view) and add its raw band values as a raster layer for analysis",
     "clipLayerName": "{{item}} clip",
     "clipOutsideItem": "The clip area does not overlap this scene. Draw a box inside its footprint or move the map over it.",
+    "clipUnavailable": "This scene cannot be added as a clip on this map.",
     "timeSeriesLayerName": "{{collection}} time series",
     "timeSliderNeedsDates": "At least two results with different dates are needed for a time series.",
     "timeSliderUnavailable": "The Time slider is not available on this map."

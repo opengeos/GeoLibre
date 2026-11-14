@@ -951,15 +951,7 @@ export async function identifyPlanetaryComputerLayer(
   if (!collectionId) return null;
 
   const bounds = numberArrayMetadata(layer, "bounds");
-  if (
-    bounds &&
-    (lngLat[0] < bounds[0] ||
-      lngLat[0] > bounds[2] ||
-      lngLat[1] < bounds[1] ||
-      lngLat[1] > bounds[3])
-  ) {
-    return null;
-  }
+  if (bounds && !planetaryComputerBoundsContain(bounds, lngLat)) return null;
 
   const renderParams = tileParamsMetadata(layer, "renderParams");
   const assets = stringArrayMetadata(layer, "assets");
@@ -1001,6 +993,26 @@ export async function identifyPlanetaryComputerLayer(
     if (isPlanetaryComputerNoDataError(error)) return null;
     throw error;
   }
+}
+
+/**
+ * Whether a point lies inside a STAC bbox.
+ *
+ * A bbox that crosses the antimeridian is written with west greater than east
+ * (`[170, ..., -170, ...]`), and covers the longitudes on either side of 180.
+ *
+ * @param bounds - `[west, south, east, north]`.
+ * @param lngLat - `[lng, lat]`.
+ * @returns True when the point is inside the box.
+ */
+export function planetaryComputerBoundsContain(
+  bounds: [number, number, number, number],
+  lngLat: [number, number],
+): boolean {
+  const [west, south, east, north] = bounds;
+  const [lng, lat] = lngLat;
+  if (lat < south || lat > north) return false;
+  return west <= east ? lng >= west && lng <= east : lng >= west || lng <= east;
 }
 
 /**

@@ -4,6 +4,7 @@ import { isPlanetaryComputerLayer, PLANETARY_COMPUTER_SOURCE_KIND } from "@geoli
 import type { ActiveLayer, STACItem } from "maplibre-gl-planetary-computer";
 import {
   createPlanetaryComputerStoreLayer,
+  planetaryComputerBoundsContain,
   planetaryComputerItemDate,
   planetaryComputerSavedStyle,
   planetaryComputerSearchParams,
@@ -187,6 +188,21 @@ describe("planetaryComputerSavedStyle", () => {
     });
     assert.deepEqual(expression.renderParams, { expression: "B08/B04", asset_as_band: true });
     assert.equal(expression.assets, undefined);
+  });
+});
+
+describe("planetaryComputerBoundsContain", () => {
+  it("tests an ordinary box", () => {
+    assert.equal(planetaryComputerBoundsContain([-123, 46, -121, 48], [-122, 47]), true);
+    assert.equal(planetaryComputerBoundsContain([-123, 46, -121, 48], [-120, 47]), false);
+    assert.equal(planetaryComputerBoundsContain([-123, 46, -121, 48], [-122, 49]), false);
+  });
+
+  it("accepts either side of a box that crosses the antimeridian", () => {
+    const fiji: [number, number, number, number] = [178, -18, -179, -16];
+    assert.equal(planetaryComputerBoundsContain(fiji, [179.5, -17]), true);
+    assert.equal(planetaryComputerBoundsContain(fiji, [-179.5, -17]), true);
+    assert.equal(planetaryComputerBoundsContain(fiji, [0, -17]), false);
   });
 });
 

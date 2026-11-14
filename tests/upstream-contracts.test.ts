@@ -871,7 +871,11 @@ describe("maplibre-gl-planetary-computer", () => {
     const { PlanetaryComputerControl } = await import("maplibre-gl-planetary-computer");
     const control = new PlanetaryComputerControl({ autoLoadCollections: false });
     const map = fakeMap();
-    // Attach the layer manager without building the panel DOM (no document here).
+    // Test scaffolding only: `onAdd` builds the panel DOM, and there is no
+    // document under `node --test`, so the control is attached by hand through
+    // `_map`, `_layerManager`, and a no-op `_renderContent`. GeoLibre's own
+    // code touches none of these. If an upstream rename breaks this setup, fix
+    // the setup; the assertions below are the public behavior under contract.
     const internals = control as unknown as { _map: unknown; _layerManager: unknown };
     const { LayerManager } = await import("maplibre-gl-planetary-computer");
     internals._map = map;

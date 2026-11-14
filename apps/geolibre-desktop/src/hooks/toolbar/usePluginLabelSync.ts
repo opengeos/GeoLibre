@@ -969,6 +969,7 @@ export function usePluginLabelSync(): void {
       clipToMapTitle: t("planetaryComputer.clipToMapTitle"),
       clipLayerName: t("planetaryComputer.clipLayerName", { item: "{{item}}" }),
       clipOutsideItem: t("planetaryComputer.clipOutsideItem"),
+      clipUnavailable: t("planetaryComputer.clipUnavailable"),
       // The plugin substitutes {{collection}} itself, so pass the placeholder through.
       timeSeriesLayerName: t("planetaryComputer.timeSeriesLayerName", {
         collection: "{{collection}}",

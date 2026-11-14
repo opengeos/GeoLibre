@@ -38,6 +38,8 @@ export interface PlanetaryComputerLabels {
   clipLayerName: string;
   /** Error shown when the clip area does not overlap the item. */
   clipOutsideItem: string;
+  /** Error shown when the scene or the active map cannot take a clip layer. */
+  clipUnavailable: string;
   /** Name of the Time Slider layer; `{{collection}}` is replaced by the collection title. */
   timeSeriesLayerName: string;
   /** Error shown when fewer than two results carry a date. */
@@ -61,6 +63,7 @@ const DEFAULT_LABELS: PlanetaryComputerLabels = {
   clipLayerName: "{{item}} clip",
   clipOutsideItem:
     "The clip area does not overlap this scene. Draw a box inside its footprint or move the map over it.",
+  clipUnavailable: "This scene cannot be added as a clip on this map.",
   timeSeriesLayerName: "{{collection}} time series",
   timeSliderNeedsDates: "At least two results with different dates are needed for a time series.",
   timeSliderUnavailable: "The Time slider is not available on this map.",
@@ -483,7 +486,8 @@ async function addItemClipToMap(
   const { item } = context;
   const requested = context.bbox ?? app.getViewBounds?.() ?? null;
   const bounds = requested ? clampClipBounds(requested, item.bbox) : null;
-  if (!item.collection || !bounds || !app.addCogLayer) throw new Error(labels.clipOutsideItem);
+  if (!item.collection || !app.addCogLayer) throw new Error(labels.clipUnavailable);
+  if (!bounds) throw new Error(labels.clipOutsideItem);
 
   // The clip is for analysis, so it carries the band values rather than a
   // rendered picture: drop the stretch and colormap, keep the band selection.
