@@ -466,6 +466,8 @@ test("compact token detection ignores keyed values and other bare keys", () => {
     compactCoordinateKeys(new URLSearchParams("?url=a/b/c&maponly&a/b=&a/b/c&12/95/0")),
     [],
   );
+  // An encoded delimiter decodes into the key and must not smuggle in lat/lon.
+  assert.deepEqual(compactCoordinateKeys(new URLSearchParams("?a/b/c%26lat%3D40%26lon%3D-74")), []);
   const url = address("?a/b/c");
   setMapViewUrl({ center: [0, 0], zoom: 1, bearing: 0, pitch: 0 });
   assert.equal(url.params().has("a/b/c"), true, "non-coordinate bare keys survive");
