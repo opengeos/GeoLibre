@@ -145,6 +145,9 @@ function SunPanelCard() {
     const next = isCompleteDateInput(nextDate) ? fromLocalDateTimeParts(nextDate, time) : null;
     if (next === null) {
       setDateDraft(nextDate);
+      // Editing the date pauses playback, as a commit does, so the header and
+      // clock do not run on while the field holds the typed draft.
+      if (playing) setSunSettings({ playing: false });
       return;
     }
     setDateDraft(null);
