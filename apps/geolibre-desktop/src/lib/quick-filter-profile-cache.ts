@@ -64,8 +64,9 @@ export interface QuickFilterProfilingOptions<T> {
   /** Features to inspect; see {@link ProfileQuickFilterOptions.sampleLimit}. */
   sampleLimit?: number;
   /**
-   * Called once the scan has settled: the request is answerable from the cache,
-   * or a later slice threw and nothing was cached (the cache says which). Called
+   * Called once the scan has settled and the request is answerable from the
+   * cache. A scan that throws records its fields as having no values (and an
+   * empty field list) so a caller never waits on it forever. Called
    * synchronously, before `ensureQuickFilterProfiles` returns, when the request
    * already was answerable or the scan fits in its first slice.
    */
@@ -150,18 +151,34 @@ export function ensureQuickFilterProfiles<T>(
     return scan.step(() => now() >= deadline);
   };
 
-  const commit = (): void => {
+  const commit = (failed = false): void => {
     // Re-read rather than reuse `entry`: another scan over the same array may
     // have finished while this one was yielding.
     const target: MutableEntry = cache.get(source) ?? { profiles: new Map() };
-    const found = new Map(scan.profiles().map((profile) => [profile.field, profile]));
+    const found = failed
+      ? new Map<string, QuickFilterFieldProfile>()
+      : new Map(scan.profiles().map((profile) => [profile.field, profile]));
     for (const field of missing) target.profiles.set(field, found.get(field) ?? null);
-    if (needNames) target.names = scan.fieldNames();
+    if (needNames) target.names = failed ? [] : scan.fieldNames();
     cache.set(source, target);
     options.onDone?.();
   };
+  // A throwing accessor must not leave a caller showing a loading state
+  // forever. The same array would throw again, so the failure is cached as
+  // "no values" rather than retried.
+  const fail = (error: unknown): void => {
+    console.error("Quick filter profiling failed", error);
+    commit(true);
+  };
 
-  if (runSlice()) {
+  let done: boolean;
+  try {
+    done = runSlice();
+  } catch (error) {
+    fail(error);
+    return () => {};
+  }
+  if (done) {
     commit();
     return () => {};
   }
@@ -175,10 +192,7 @@ export function ensureQuickFilterProfiles<T>(
         if (runSlice()) break;
       }
     } catch (error) {
-      // A throwing accessor must not leave a caller waiting forever. Nothing is
-      // cached, so the caller's read of the cache comes back empty.
-      console.error("Quick filter profiling failed", error);
-      options.onDone?.();
+      fail(error);
       return;
     }
     commit();

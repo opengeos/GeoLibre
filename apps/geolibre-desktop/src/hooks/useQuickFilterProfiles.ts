@@ -96,7 +96,7 @@ type PropertiesOf = (record: unknown) => Record<string, unknown> | null | undefi
 
 /** Local features are scanned in place rather than mapped to property bags first. */
 const featureProperties: PropertiesOf = (feature) =>
-  (feature as Feature).properties as Record<string, unknown> | null;
+  (feature as Feature | null)?.properties as Record<string, unknown> | null | undefined;
 
 /**
  * Profile a layer's fields for the quick-filter controls.
@@ -197,7 +197,7 @@ export function useQuickFilterProfiles(
   // What the committed render scans, for the callbacks below. Written in a
   // layout effect rather than during render so a discarded render cannot leave
   // them pointing at a source that was never committed.
-  const sourceRef = useRef({ source, properties });
+  const sourceRef = useRef({ layerId, source, properties });
   // Whether the committed render is still waiting on the cache.
   const pendingRef = useRef(false);
 
@@ -207,9 +207,12 @@ export function useQuickFilterProfiles(
   const profileField = useCallback(
     (field: string): Promise<QuickFilterFieldProfile | undefined> =>
       new Promise((resolve) => {
+        // The layer the field was picked on. A profile from any other layer
+        // would describe the wrong data, so a selection change ends the wait.
+        const pickedLayerId = sourceRef.current.layerId;
         const attempt = (): void => {
           const { source: current, properties: propertiesOf } = sourceRef.current;
-          if (!current) {
+          if (!current || sourceRef.current.layerId !== pickedLayerId) {
             resolve(undefined);
             return;
           }
@@ -284,7 +287,7 @@ export function useQuickFilterProfiles(
   // step with the committed render before the scanning effect below reads them.
   const pending = result.fieldsLoading || result.loadingFields.size > 0;
   useLayoutEffect(() => {
-    sourceRef.current = { source, properties };
+    sourceRef.current = { layerId, source, properties };
     pendingRef.current = pending;
   });
 

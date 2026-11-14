@@ -742,7 +742,7 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     assert.equal(readQuickFilterProfileCache(rows), undefined);
   });
 
-  it("settles the caller without caching when a later slice throws", async (t) => {
+  it("settles the caller and records no values when a later slice throws", async (t) => {
     t.mock.method(console, "error", () => {});
     const rows = makeRows();
     let done = 0;
@@ -766,6 +766,28 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     assert.equal(done, 0);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(done, 1, "a failed scan must still call back");
-    assert.equal(readQuickFilterProfileCache(rows), undefined);
+    // Cached as "no values", so a caller stops reporting the field as loading.
+    assert.equal(readQuickFilterProfileCache(rows)?.profiles.get("state"), null);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["state"] }), true);
+  });
+
+  it("settles the caller when the first, synchronous slice throws", (t) => {
+    t.mock.method(console, "error", () => {});
+    const rows = makeRows(10);
+    let done = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"], names: true },
+      {
+        onDone: () => done++,
+        properties: () => {
+          throw new Error("unreadable record");
+        },
+      },
+    );
+    assert.equal(done, 1);
+    const cached = readQuickFilterProfileCache(rows);
+    assert.equal(cached?.profiles.get("state"), null);
+    assert.deepEqual(cached?.names, []);
   });
 });
