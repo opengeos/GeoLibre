@@ -57,6 +57,9 @@ const visibilityCalls: { layerId: string; visible: boolean; opacity?: number }[]
 const selectorCalls: Record<string, number | string>[] = [];
 const queryCalls: { geometry: unknown; selector?: unknown; options?: unknown }[] = [];
 let failNextAdd: string | null = null;
+// Runs as the stub's addLayer starts, i.e. after the caller's awaits and while
+// the control is loading the store.
+let beforeNextAdd: (() => void) | null = null;
 
 // What the stub renderer answers a query with: values plus the store's own
 // spatial axis names, whose coordinates are in the source CRS (see the
@@ -67,7 +70,14 @@ const QUERY_RESULT = {
   coordinates: { y: [1234567.5], x: [-987654.5] },
 };
 
+let lastStubControl: ZarrLayerControlStub | null = null;
+const stubControl = () => lastStubControl;
+
 class ZarrLayerControlStub {
+  constructor() {
+    lastStubControl = this;
+  }
+
   private handlers = new Map<string, Set<(event: unknown) => void>>();
   private layers: {
     id: string;
@@ -107,6 +117,9 @@ class ZarrLayerControlStub {
 
   async addLayer(url?: string, variable?: string, options?: StubAddOptions) {
     addCalls.push({ url, variable, options });
+    const hook = beforeNextAdd;
+    beforeNextAdd = null;
+    hook?.();
     if (failNextAdd) {
       const error = failNextAdd;
       failNextAdd = null;
@@ -703,6 +716,65 @@ describe("restoreZarrLayers", () => {
     );
     assert.equal(layers[0].metadata.description, "kept");
     assert.deepEqual(layers[0].metadata.nativeLayerIds, [`zarr-layer-${next}`]);
+  });
+
+  it("moves aside a skipped local record that holds the id the control hands out", async () => {
+    installStubModule();
+    const probe = await addZarrRasterLayer(app, {
+      url: "https://example.org/b.zarr",
+      variable: "x",
+    });
+    const next = Number(probe.split("-").at(-1)) + 1;
+    useAppStore.setState({
+      layers: [
+        savedZarrLayer(`zarr-layer-${next}`, "Folder", "local-zarr:cube?1"),
+        savedZarrLayer(`zarr-layer-${next + 5}`, "SST"),
+      ],
+    });
+
+    await restoreZarrLayers(app);
+
+    const layers = useAppStore.getState().layers;
+    assert.equal(new Set(layers.map((layer) => layer.id)).size, 2, "ids stay unique");
+    assert.deepEqual(
+      layers.map((layer) => layer.name),
+      ["Folder", "SST"],
+    );
+    assert.equal(layers[1].id, `zarr-layer-${next}`);
+  });
+
+  it("drops the live layer when its record is removed while the store loads", async () => {
+    installStubModule();
+    // A probe add first, so the control exists and its live count is known.
+    await addZarrRasterLayer(app, { url: "https://example.org/c.zarr", variable: "x" });
+    useAppStore.setState({ layers: [savedZarrLayer("gone", "Gone")] });
+    addCalls.length = 0;
+    const liveBefore = stubControl()?.getLayersMap().size;
+    beforeNextAdd = () => useAppStore.setState({ layers: [] });
+
+    await restoreZarrLayers(app);
+
+    assert.equal(addCalls.length, 1, "the restore reached the control");
+    assert.deepEqual(useAppStore.getState().layers, []);
+    assert.equal(stubControl()?.getLayersMap().size, liveBefore, "the live layer is dropped");
+  });
+
+  it("does not send saved headers over plain HTTP", async () => {
+    installStubModule();
+    const layer = savedZarrLayer("insecure", "Insecure", "http://example.org/private.zarr");
+    useAppStore.setState({
+      layers: [{ ...layer, source: { ...layer.source, headers: { authorization: TOKEN } } }],
+    });
+    addCalls.length = 0;
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await restoreZarrLayers(app);
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(addCalls.length, 0);
+    assert.equal(useAppStore.getState().layers.length, 1);
   });
 
   it("restores each record once and skips stores the URL alone cannot open", async () => {

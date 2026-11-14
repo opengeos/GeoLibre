@@ -32,6 +32,7 @@ import type {
 } from "maplibre-gl-components";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
 import {
+  assertSecureRequestHeaders,
   KerchunkReferenceStore,
   type KerchunkRefs,
   loadKerchunkReference,
@@ -1046,10 +1047,11 @@ const pendingZarrRestores = new Set<PendingZarrRestore>();
  */
 function isRestorableZarrLayer(layer: GeoLibreLayer): boolean {
   if (layer.type !== "zarr") return false;
-  const url = layer.source.url;
+  const rawUrl = layer.source.url;
   const variable = layer.source.variable;
-  if (typeof url !== "string" || !url.trim()) return false;
-  if (typeof variable !== "string" || !variable.trim()) return false;
+  if (typeof rawUrl !== "string" || typeof variable !== "string") return false;
+  const url = rawUrl.trim();
+  if (!url || !variable.trim()) return false;
   if (/^local(-zarr)?:/.test(url) || url.includes("#icechunk=")) return false;
   return true;
 }
@@ -1126,6 +1128,9 @@ async function restoreZarrLayerExclusively(
   const { layer, url } = entry;
   const source = layer.source;
   const headers = zarrRequestHeaders(layer);
+  // The project file names the URL and this runs on open, without a click (a
+  // `?url=` link can open one), so never send credentials over plain HTTP.
+  assertSecureRequestHeaders(url, headers);
   let refs = source.kerchunkRefs as KerchunkRefs | undefined;
   if (!refs && source.kerchunk === true) {
     refs = await loadKerchunkReference(url, { headers });
@@ -1178,6 +1183,12 @@ async function restoreZarrLayerExclusively(
     endAdd();
   }
   if (!addedLayerId) throw new Error(failure ?? "Failed to restore the Zarr layer.");
+  // The record was removed while the store loaded, so the swap had nothing to
+  // replace: drop the live layer too, or it would draw with no Layers entry.
+  if (!useAppStore.getState().layers.some((item) => item.id === addedLayerId)) {
+    control.removeLayer(addedLayerId);
+    return;
+  }
 
   registerZarrHeaders(addedLayerId, headers);
   void registerZarrTemporalAdapter(addedLayerId, url, { headers, refs });
@@ -1189,8 +1200,9 @@ async function restoreZarrLayerExclusively(
  * added, in a single store update.
  *
  * The control names layers `zarr-layer-<n>` from its own counter, so the new id
- * can differ from the saved one, and can even be the id another not-yet-restored
- * record still holds. That record is renamed aside in the same update rather
+ * can differ from the saved one, and can even be the id another record still
+ * holds (one waiting to be restored, or a local store the restore skips). That
+ * record is renamed aside in the same update rather
  * than removed and re-added in a second one: between two updates the Zarr
  * control's store listener would see the id vanish and remove the live layer
  * that now carries it.
@@ -1208,11 +1220,15 @@ function swapRestoredZarrLayer(entry: PendingZarrRestore, live: GeoLibreLayer): 
     sourcePath: live.sourcePath,
   };
   const placeholderId = entry.placeholderId;
-  let clash: PendingZarrRestore | undefined;
-  if (live.id !== placeholderId) {
-    clash = [...pendingZarrRestores].find((pending) => pending.placeholderId === live.id);
-  }
-  const asideId = clash ? `${live.id}:restoring:${crypto.randomUUID()}` : null;
+  const layers = useAppStore.getState().layers;
+  if (!layers.some((layer) => layer.id === placeholderId)) return;
+  // Any record can hold the id, not only a pending restore: a local folder or
+  // Icechunk record the restore skips keeps its saved id too.
+  const clashes = live.id !== placeholderId && layers.some((layer) => layer.id === live.id);
+  const clash = clashes
+    ? [...pendingZarrRestores].find((pending) => pending.placeholderId === live.id)
+    : undefined;
+  const asideId = clashes ? `${live.id}:restoring:${crypto.randomUUID()}` : null;
   useAppStore.setState((state) => ({
     layers: state.layers.map((layer) => {
       if (layer.id === placeholderId) return restored;
