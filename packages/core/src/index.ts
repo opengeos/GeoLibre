@@ -174,6 +174,8 @@ export {
   type GeocodingProvider,
   type GeocodingProviderId,
   type GeocodingPreferenceInput,
+  normalizeGeocodeBbox,
+  type GeocodeBbox,
   type GeocodeMatch,
   type GeocodeSuggestion,
   type GeocodeStatus,
