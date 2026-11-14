@@ -175,6 +175,15 @@ export interface GeocodeMatch {
 export type GeocodeBbox = [number, number, number, number];
 
 /**
+ * Whether a raw coordinate is a number or a numeric-looking string
+ * (Nominatim's form). `Number()` would also turn `null`, `true`, a blank string
+ * or a one-element array into a coordinate, so those are rejected first.
+ */
+function isCoordinateValue(value: unknown): value is number | string {
+  return typeof value === "number" || (typeof value === "string" && value.trim() !== "");
+}
+
+/**
  * Validate a west/south/east/north extent: every edge finite and on Earth,
  * south not above north. Returns null otherwise, so a malformed box falls back
  * to the match's point instead of sending the camera somewhere odd.
@@ -191,15 +200,7 @@ export function normalizeGeocodeBbox(
   east: unknown,
   north: unknown,
 ): GeocodeBbox | null {
-  // Only numbers and numeric strings (Nominatim's form) count: `Number()` would
-  // also turn `true` or a one-element array into a coordinate.
-  if (
-    [west, south, east, north].some(
-      (v) => !(typeof v === "number" || (typeof v === "string" && v.trim() !== "")),
-    )
-  ) {
-    return null;
-  }
+  if (![west, south, east, north].every(isCoordinateValue)) return null;
   const box = [Number(west), Number(south), Number(east), Number(north)] as GeocodeBbox;
   if (!box.every(Number.isFinite)) return null;
   const [w, s, e, n] = box;
@@ -706,6 +707,8 @@ function arcgisCandidatePosition(
 function arcgisCandidateExtent(extent: unknown, wkid: number | null): GeocodeBbox | null {
   if (!extent || typeof extent !== "object") return null;
   const e = extent as { xmin?: unknown; ymin?: unknown; xmax?: unknown; ymax?: unknown };
+  // Checked before `Number()`, which reads a null extent as a box at 0, 0.
+  if (![e.xmin, e.ymin, e.xmax, e.ymax].every(isCoordinateValue)) return null;
   try {
     const sw = arcgisCandidatePosition(Number(e.xmin), Number(e.ymin), wkid);
     const ne = arcgisCandidatePosition(Number(e.xmax), Number(e.ymax), wkid);

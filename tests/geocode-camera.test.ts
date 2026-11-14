@@ -107,6 +107,19 @@ describe("geocoder bounding boxes", () => {
     assert.equal(normalizeGeocodeBbox(true, 0, 1, 1), null);
     assert.equal(normalizeGeocodeBbox([1], 0, 1, 1), null);
     assert.equal(normalizeGeocodeBbox(" ", 0, 1, 1), null);
+    // An ArcGIS extent of nulls must not become a box at 0, 0.
+    const [nulls] = getGeocodingProvider("arcgis").parseForward({
+      spatialReference: { wkid: 4326 },
+      candidates: [
+        {
+          address: "Nevada",
+          location: { x: -116.8, y: 39.5 },
+          score: 100,
+          extent: { xmin: null, ymin: null, xmax: null, ymax: null },
+        },
+      ],
+    });
+    assert.equal(nulls.bbox, undefined);
     assert.equal(normalizeGeocodeBbox(0, 10, 1, 5), null); // south above north
     assert.equal(normalizeGeocodeBbox(-200, 0, 1, 1), null);
     assert.equal(normalizeGeocodeBbox(0, -91, 1, 1), null);
