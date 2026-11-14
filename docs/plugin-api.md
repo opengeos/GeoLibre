@@ -1194,9 +1194,10 @@ if (bytes) {
   URL-installed plugin it fetches the file relative to the plugin's own
   base URL.
 - It resolves `null` when the plugin is unknown or built-in, `relativePath` is
-  absolute or escapes the plugin's bundle, or the file does not exist. Plugins
-  installed from a zip in the web build keep only their entry and style
-  sources, so reads resolve `null` there.
+  absolute or escapes the plugin's bundle, the file does not exist or is larger
+  than 50 MB, a URL read takes longer than 30 seconds, or the build cannot read
+  bundles: the Mac App Store build always, and the web build for plugins
+  installed from a zip (those keep only their entry and style sources).
 - Pass your own plugin's id. All plugins share one JS context, so the host
   cannot verify the caller; this is a convention, not a security boundary.
 
