@@ -109,7 +109,8 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
     if (!layerInfo) return;
 
     const store = useAppStore.getState();
-    const layer = createFlatGeobufStoreLayer(event.layerId, layerInfo, control);
+    const name = flatGeobufLayerName(layerInfo, event.state.layerName);
+    const layer = createFlatGeobufStoreLayer(event.layerId, layerInfo, control, name);
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
         metadata: layer.metadata,
@@ -123,10 +124,56 @@ function createFlatGeobufLayerAddHandler(control: AddVectorControl): AddVectorEv
   };
 }
 
+/**
+ * Picks the store name for a layer the FlatGeobuf panel just added.
+ *
+ * The panel's Layer Name field is not carried on the layer info: upstream uses
+ * the trimmed typed name as the layer id instead, falling back to the URL's
+ * file name (extension dropped, not decoded) and, when there is none (inline
+ * GeoJSON), a generated id. So an id that is not the URL-derived file name is
+ * the name the user typed; a generated id is shown as is, as before.
+ *
+ * Reading the id rather than the field keeps the typed name even if the field
+ * is edited while the file is still loading. The field is still checked first,
+ * so a typed name that happens to equal the URL-derived id (`air%20temp` for
+ * `air%20temp.fgb`) is kept verbatim instead of being decoded.
+ *
+ * @param layerInfo - The upstream layer info for the added layer.
+ * @param typedName - The panel's Layer Name field when `layeradd` fired.
+ * @returns The display name for the GeoLibre layer.
+ */
+export function flatGeobufLayerName(
+  layerInfo: Pick<AddVectorLayerInfo, "id" | "url">,
+  typedName?: string,
+): string {
+  if (typedName?.trim() === layerInfo.id) return layerInfo.id;
+  if (layerInfo.id !== upstreamUrlLayerId(layerInfo.url)) return layerInfo.id;
+  return layerNameFromUrl(layerInfo.url, layerInfo.id);
+}
+
+/**
+ * Mirrors the id AddVectorControl derives from a URL when no name is typed
+ * (maplibre-gl-components 0.31.x, `AddVectorControl._addLayer`). If upstream
+ * changes that rule, a URL-named layer shows its raw id rather than the
+ * decoded file name; a typed name is unaffected.
+ *
+ * @param url - The vector data URL.
+ * @returns The URL's last path segment without its extension, or "" when the
+ *   URL does not parse.
+ */
+function upstreamUrlLayerId(url: string): string {
+  try {
+    return (new URL(url).pathname.split("/").pop() || "").replace(/\.[^.]+$/, "");
+  } catch {
+    return "";
+  }
+}
+
 function createFlatGeobufStoreLayer(
   id: string,
   layerInfo: AddVectorLayerInfo,
   control: AddVectorControl,
+  name: string,
 ): GeoLibreLayer {
   const nativeLayerIds = control
     .getLayerIds()
@@ -135,7 +182,7 @@ function createFlatGeobufStoreLayer(
 
   return {
     id,
-    name: layerNameFromUrl(url, id),
+    name,
     type: "flatgeobuf",
     source: {
       type: "geojson",

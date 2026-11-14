@@ -308,6 +308,17 @@ black — it declines the stack.
   real archive, through the real `layeradd` handler into the store, and fails if
   the id scheme moves or the selection stops reaching the handler.
 
+- **The AddVectorControl's layer id rule** (`upstreamUrlLayerId` /
+  `flatGeobufLayerName`, `packages/plugins/src/plugins/components/flatgeobuf.ts`)
+  mirrors how the FlatGeobuf panel's `AddVectorControl` names a layer: the
+  trimmed Layer Name field, else the URL's last path segment without its
+  extension, else a generated `addvec-*` id. The typed name is not on
+  `AddVectorLayerInfo`, so GeoLibre reads it from the field and, failing that,
+  from an id that is not the URL-derived one. If the rule drifts, a typed name
+  still wins while the field holds it, but a URL-named layer shows its raw id
+  (undecoded) instead of the file name. `tests/flatgeobuf-layer-name.test.ts`
+  uses a fake control, so after a bump add a FlatGeobuf URL with and without a
+  Layer Name and check the Layers panel.
 - **The MeasureControl's `_panel` and `_sourceId`**
   (`packages/plugins/src/plugins/terrain-measure.ts`, via `measurePanelElement`
   and `measureSourceId`) are private members that only the control knows: the
