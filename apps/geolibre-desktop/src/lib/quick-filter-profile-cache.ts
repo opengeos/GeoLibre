@@ -18,6 +18,12 @@ import {
  * store replaces a layer's `features` array whenever the features change, and
  * keeps it across the paint and visibility patches that do not, so reselecting
  * a layer or reopening the panel costs nothing.
+ *
+ * That relies on one invariant: nothing mutates a `features` array, or a
+ * feature's `properties`, in place. Every edit path (attribute edits, the field
+ * calculator, adding a field) builds new objects today. One that mutated in
+ * place would leave stale counts here, because the array's identity would not
+ * change.
  */
 
 /** What is known about one record array so far. */

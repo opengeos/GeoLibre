@@ -208,7 +208,10 @@ export function useQuickFilterProfiles(
     (field: string): Promise<QuickFilterFieldProfile | undefined> =>
       new Promise((resolve) => {
         // The layer the field was picked on. A profile from any other layer
-        // would describe the wrong data, so a selection change ends the wait.
+        // would describe the wrong data, so the wait ends if this hook's layer
+        // changes under it. The current caller keys its section by layer, so a
+        // layer switch remounts it instead and this check is a backstop for a
+        // caller that does not.
         const pickedLayerId = sourceRef.current.layerId;
         const attempt = (): void => {
           const { source: current, properties: propertiesOf } = sourceRef.current;

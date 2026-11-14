@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { ChevronDown, Filter, Info } from "lucide-react";
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuickFilterProfiles } from "../../hooks/useQuickFilterProfiles";
 import type { QuickFilterFieldProfile } from "../../lib/quick-filter-profile";
@@ -102,12 +102,10 @@ export function QuickFiltersSection({
 
   // A field's profile decides which control it gets, and is computed only now
   // that the field has been picked (issue #3426), so adding a filter waits for
-  // it. The layer is re-read afterwards: it may have changed in the meantime.
-  // If the panel moved to another layer during the wait, the pick is dropped:
-  // the profile could not describe the layer the filter was meant for.
+  // it. The section is keyed by layer, so the filter lands on the layer it was
+  // picked on, profiled from that layer's records. The layer's filters are
+  // re-read afterwards: they may have changed in the meantime.
   const layerId = layer.id;
-  const shownLayerId = useRef(layerId);
-  shownLayerId.current = layerId;
   const addField = async (field: string): Promise<void> => {
     setAddingField(field);
     let profile: QuickFilterFieldProfile | undefined;
@@ -116,7 +114,6 @@ export function QuickFiltersSection({
     } finally {
       setAddingField(null);
     }
-    if (shownLayerId.current !== layerId) return;
     const current =
       useAppStore.getState().layers.find((candidate) => candidate.id === layerId)?.quickFilters ??
       [];
