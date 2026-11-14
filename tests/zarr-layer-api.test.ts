@@ -597,7 +597,7 @@ describe("addZarrRasterLayer without a selector", () => {
 // not layer sync, so without a restore it sits in the Layers panel and paints
 // nothing on MapLibre.
 describe("restoreZarrLayers", () => {
-  const SST_URL = "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr";
+  const SST_URL = "https://data.source.coop/opengeos/data/zarr/noaa-oisst-v2-monthly.zarr";
 
   function savedZarrLayer(id: string, name: string, url = SST_URL) {
     return {

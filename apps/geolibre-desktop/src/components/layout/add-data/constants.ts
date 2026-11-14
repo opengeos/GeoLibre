@@ -335,7 +335,7 @@ export interface ZarrSample {
 export const ZARR_GLOBE_SAMPLES: readonly ZarrSample[] = [
   {
     label: "Sea surface temperature, monthly 1981-2023 (NOAA OISST)",
-    url: "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr",
+    url: "https://data.source.coop/opengeos/data/zarr/noaa-oisst-v2-monthly.zarr",
     variable: "sst",
     clim: [-2, 32],
     colormap: "turbo",
