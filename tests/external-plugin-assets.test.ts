@@ -61,14 +61,38 @@ describe("pluginAssetUrlFromSource", () => {
     );
   });
 
-  it("rejects percent-encoded path traversal (%2e%2e)", () => {
-    // The literal-segment checks pass "%2e%2e", but URL normalization decodes
-    // it to ".." and the resolved URL lands outside the plugin directory, so
-    // the directory-containment guard still rejects it.
+  it("treats a percent-encoded dot segment (%2e%2e) as a literal file name", () => {
+    // The path is a bundle-relative file path, so "%" is encoded like any other
+    // name character: "%2e%2e" names a folder literally called "%2e%2e" inside
+    // the plugin directory (as a desktop bundle read would), never "..".
     assert.equal(
       pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", "%2e%2e/secrets"),
-      null,
+      "https://geolibre.app/plugins/x/%252e%252e/secrets",
     );
+  });
+
+  it("rejects empty and dot segments", () => {
+    for (const path of ["", "a//b", "./a", "a/./b", "a/../b", "C:/x", "a\\b"]) {
+      assert.equal(
+        pluginAssetUrlFromSource("https://geolibre.app/plugins/x/plugin.json", path),
+        null,
+        path,
+      );
+    }
+  });
+
+  it("keeps #, ?, % and spaces as literal file name characters (#3448)", () => {
+    // Unencoded, "#" and "?" would cut the URL into a fragment or a query and
+    // fetch a different resource than the file the plugin named.
+    const url = pluginAssetUrlFromSource(
+      "https://geolibre.app/plugins/x/plugin.json",
+      "data/run #1/what? 100%.json",
+    );
+    assert.equal(url, "https://geolibre.app/plugins/x/data/run%20%231/what%3F%20100%25.json");
+    const parsed = new URL(url!);
+    assert.equal(parsed.hash, "");
+    assert.equal(parsed.search, "");
+    assert.equal(decodeURIComponent(parsed.pathname), "/plugins/x/data/run #1/what? 100%.json");
   });
 });
 

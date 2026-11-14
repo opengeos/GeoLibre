@@ -2,6 +2,8 @@
 // browser imports so they stay unit-testable in Node and reusable by both the
 // external-plugin loader and the app API exposed to plugins.
 
+import { encodePluginAssetPath, isSafePluginAssetRelativePath } from "./plugin-asset-path";
+
 // A loaded plugin's source is a URL (a web/desktop bundled plugin or a
 // manifest-URL install) rather than a desktop filesystem path (an absolute
 // path with no scheme). Only URL sources have a fetchable asset base.
@@ -72,16 +74,27 @@ export function withPluginAssetCacheToken(url: string, token: string | null | un
   return resolved.toString();
 }
 
-// Resolve a plugin asset URL from the plugin's loaded source. Returns null for
-// a missing source, a desktop filesystem source (no URL base), or an unsafe
-// relative path, so callers can treat null as "no bundled asset URL".
+/**
+ * Resolve a plugin asset URL from the plugin's loaded source.
+ *
+ * `relativePath` is a bundle-relative file path, not a URL fragment: each
+ * segment is percent-encoded, so `#`, `?`, `%` and spaces stay literal parts of
+ * the file name and the URL names the same file a desktop bundle read would.
+ * Both `app.resolvePluginAssetUrl` and the URL branch of `app.readPluginAsset`
+ * go through here, so the two APIs always agree on which resource a path means.
+ *
+ * Returns null for a missing source, a desktop filesystem source (no URL base),
+ * or an unsafe relative path, so callers can treat null as "no bundled asset
+ * URL".
+ */
 export function pluginAssetUrlFromSource(
   source: string | undefined,
   relativePath: string,
 ): string | null {
   if (!source || !isManagedUrlSource(source)) return null;
+  if (!isSafePluginAssetRelativePath(relativePath)) return null;
   try {
-    return resolvePluginAssetUrl(source, relativePath);
+    return resolvePluginAssetUrl(source, encodePluginAssetPath(relativePath));
   } catch {
     return null;
   }

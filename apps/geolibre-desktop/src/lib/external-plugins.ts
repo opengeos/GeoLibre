@@ -29,7 +29,7 @@ import {
   withPluginAssetCacheToken,
 } from "./plugin-asset-url";
 import { readBodyBytesWithCap } from "./capped-body";
-import { encodePluginAssetPath, isSafePluginAssetRelativePath } from "./plugin-asset-path";
+import { isSafePluginAssetRelativePath } from "./plugin-asset-path";
 import {
   computePluginBundleHash,
   pinPluginBundle,
@@ -847,13 +847,14 @@ export async function readPluginAssetForLoadedPlugin(
       // Revalidate like the loader does: the asset may change at the same URL
       // between the scan and this read. The deadline covers the body read too,
       // since the signal stays live until the body is consumed.
-      const response = await fetch(
-        resolvePluginAssetUrl(source, encodePluginAssetPath(relativePath)),
-        {
-          cache: "no-cache",
-          signal: AbortSignal.timeout(PLUGIN_ASSET_TIMEOUT_MS),
-        },
-      );
+      const url = pluginAssetUrlFromSource(source, relativePath);
+      if (url === null) {
+        return null;
+      }
+      const response = await fetch(url, {
+        cache: "no-cache",
+        signal: AbortSignal.timeout(PLUGIN_ASSET_TIMEOUT_MS),
+      });
       if (!response.ok) {
         return null;
       }
