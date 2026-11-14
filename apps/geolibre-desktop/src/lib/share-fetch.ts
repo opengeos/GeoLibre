@@ -5,10 +5,8 @@
 // http://tauri.localhost on Windows); requests are never retried via native HTTP.
 
 import type { fetch as nativeHttpFetch } from "@tauri-apps/plugin-http";
-import { EXPECTED_STATUS_HEADER, OPTIONAL_RESOURCE_HEADER } from "./diagnostics";
+import { DIAGNOSTIC_REQUEST_HEADERS } from "./diagnostics";
 import { DEFAULT_SHARE_BASE_URL, resolveShareBaseUrl } from "./share-geolibre";
-
-const DIAGNOSTIC_MARKER_HEADERS = [OPTIONAL_RESOURCE_HEADER, EXPECTED_STATUS_HEADER] as const;
 
 /**
  * The active share fetch. Browser `fetch` by default; the desktop build
@@ -82,8 +80,8 @@ export function createNativeShareFetch(
     // Native HTTP bypasses the Diagnostics fetch wrapper that strips its
     // client-only markers, so drop them here: the server never sees them.
     let nativeInit = init;
-    if (DIAGNOSTIC_MARKER_HEADERS.some((name) => headers.has(name))) {
-      for (const name of DIAGNOSTIC_MARKER_HEADERS) headers.delete(name);
+    if (DIAGNOSTIC_REQUEST_HEADERS.some((name) => headers.has(name))) {
+      for (const name of DIAGNOSTIC_REQUEST_HEADERS) headers.delete(name);
       nativeInit = { ...init, headers };
     }
     if (!protectedRequest) return tauriFetch(input, nativeInit);

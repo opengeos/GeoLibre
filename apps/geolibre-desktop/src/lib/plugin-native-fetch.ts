@@ -14,6 +14,7 @@ import type { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";
 import { redactUrlCredentials } from "@geolibre/core";
 import {
   EXPECTED_STATUS_HEADER,
+  isDiagnosticRequestHeader,
   OPTIONAL_RESOURCE_HEADER,
   parseExpectedStatuses,
   type DiagnosticInput,
@@ -136,9 +137,7 @@ export function createPluginNativeFetch(
       url: request.url,
       method: request.method,
       // The markers only shape the Diagnostics record; the server never sees them.
-      headers: [...request.headers].filter(
-        ([name]) => name !== OPTIONAL_RESOURCE_HEADER && name !== EXPECTED_STATUS_HEADER,
-      ),
+      headers: [...request.headers].filter(([name]) => !isDiagnosticRequestHeader(name)),
       ...(bytes ? { body: toBase64(bytes) } : {}),
     };
     const startedAt = performance.now();

@@ -117,6 +117,8 @@ describe("share server optional routes", () => {
     // GET /api/users/me exists on every share server; a 404 there is a fault.
     await assert.rejects(
       gallery.fetchMyShareUsername({ token: "glb_tok", baseUrl: BASE, fetchImpl: viaWindowFetch }),
+      (error: unknown) =>
+        error instanceof gallery.GalleryError && error.code === "http" && error.status === 404,
     );
     assert.deepEqual(
       networkRecords().map((r) => [r.status, r.level]),
