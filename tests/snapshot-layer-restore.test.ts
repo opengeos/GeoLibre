@@ -15,6 +15,7 @@ import {
   type LayerGroup,
 } from "@geolibre/core";
 import {
+  applySnapshotLayerRestore,
   restoreLayerFromSnapshot,
   restoreLayerReferencesFromSnapshot,
 } from "../apps/geolibre-desktop/src/lib/snapshot-layer-restore";
@@ -303,10 +304,7 @@ describe("restoring a deleted layer's references", () => {
     useAppStore.getState().removeLayer("a");
     useAppStore.temporal.getState().clear();
 
-    const state = useAppStore.getState();
-    const layers = restoreLayerFromSnapshot(state, snapshot, "a")!;
-    const references = restoreLayerReferencesFromSnapshot(state, snapshot, "a");
-    useAppStore.setState({ layers, ...references, isDirty: true });
+    applySnapshotLayerRestore(snapshot, "a", () => {});
     assert.ok(useAppStore.getState().widgets.some((w) => w.layerId === "a"));
 
     undo();
@@ -366,5 +364,89 @@ describe("restoring a deleted layer's references", () => {
     const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
     useAppStore.getState().removeLayer("a");
     assert.deepEqual(restoreLayerReferencesFromSnapshot(useAppStore.getState(), snapshot, "a"), {});
+  });
+});
+
+describe("applySnapshotLayerRestore", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject();
+    useAppStore.temporal.getState().clear();
+  });
+
+  // An Add Vector Layer layer GeoLibre adopted from a URL: it holds its
+  // features in the store, but a snapshot saves only the URL, so restoring it
+  // brings back a record with no features that only the vector control's
+  // restore pass can fill (the bug: "Restore this layer" listed it and drew
+  // nothing).
+  const adoptedUrlLayer = (id: string): GeoLibreLayer =>
+    layer(id, {
+      source: { type: "geojson", url: "https://example.com/sites.geojson" },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "site" },
+            geometry: { type: "Point", coordinates: [-119.8, 39.5] },
+          },
+        ],
+      },
+      metadata: { sourceKind: "maplibre-gl-vector-adopted" },
+    });
+
+  it("hands a deleted layer to redraw after the store holds it", () => {
+    useAppStore.getState().addLayer(layer("a"));
+    useAppStore.getState().addLayer(adoptedUrlLayer("sites"));
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    assert.equal(
+      snapshot.layers.find((l) => l.id === "sites")?.geojson,
+      undefined,
+      "the snapshot saved the adopted layer by URL (precondition)",
+    );
+    useAppStore.getState().removeLayer("sites");
+
+    const redrawn: GeoLibreLayer[] = [];
+    let inStoreWhenRedrawn = false;
+    const restored = applySnapshotLayerRestore(snapshot, "sites", (l) => {
+      redrawn.push(l);
+      inStoreWhenRedrawn = useAppStore.getState().layers.some((s) => s.id === l.id);
+    });
+
+    assert.equal(redrawn.length, 1, "the owning restore pass is asked to draw it");
+    assert.equal(redrawn[0], restored);
+    assert.equal(redrawn[0].id, "sites");
+    assert.equal(redrawn[0].metadata.sourceKind, "maplibre-gl-vector-adopted");
+    assert.equal(redrawn[0].geojson, undefined, "only the control can read the features back");
+    assert.ok(inStoreWhenRedrawn, "the restore pass reads the store, so it must hold the layer");
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      ["a", "sites"],
+    );
+  });
+
+  it("hands a layer replaced in place to redraw too", () => {
+    useAppStore.getState().addLayer(adoptedUrlLayer("sites"));
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().updateLayer("sites", { opacity: 0.3 });
+
+    const redrawn: string[] = [];
+    applySnapshotLayerRestore(snapshot, "sites", (l) => redrawn.push(l.id));
+    assert.deepEqual(redrawn, ["sites"]);
+    assert.equal(useAppStore.getState().layers[0].opacity, 1);
+  });
+
+  it("throws without touching the store or redrawing when the snapshot lacks the layer", () => {
+    useAppStore.getState().addLayer(layer("a"));
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    const before = useAppStore.getState().layers;
+    let redrawn = false;
+    assert.throws(() =>
+      applySnapshotLayerRestore(snapshot, "missing", () => {
+        redrawn = true;
+      }),
+    );
+    assert.equal(useAppStore.getState().layers, before);
+    assert.equal(redrawn, false);
   });
 });
