@@ -125,7 +125,9 @@ export function canRestoreLibraryLayer(layer: GeoLibreLayer): boolean {
  *   snapshot).
  * @param app - The plugin app API (from `createAppAPI`).
  * @param options - `failureNotice` builds the error notice text shown
- *   when the pass throws (defaults to the Layer Library's).
+ *   when the pass throws or rejects (defaults to the Layer Library's). A pass
+ *   that settles its replays internally (the vector pass) logs a failed
+ *   re-read instead, the same as on project load, so this does not fire then.
  * @returns Resolves once the pass has been dispatched (immediately when none was
  *   needed). The passes log their own per-layer failures.
  */

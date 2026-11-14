@@ -78,7 +78,7 @@
       "restoreLayerAria": "Restore the layer {{name}} from this snapshot",
       "layerRestored": "Restored “{{name}}”. Use Undo to revert it.",
       "restoreLayerError": "Could not restore this layer from the snapshot.",
-      "restoreLayerRedrawError": "Restored \"{{name}}\", but could not draw it on the map."
+      "restoreLayerRedrawError": "Restored “{{name}}”, but could not draw it on the map."
     }
   },
   "browser": {
