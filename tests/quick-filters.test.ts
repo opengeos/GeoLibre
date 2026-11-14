@@ -11,10 +11,16 @@ import {
   type LayerQuickFilter,
 } from "@geolibre/core";
 import {
+  createQuickFilterScan,
   profileQuickFilterFields,
   type QuickFilterFieldProfile,
   QUICK_FILTER_PROFILE_LIMIT,
 } from "../apps/geolibre-desktop/src/lib/quick-filter-profile";
+import {
+  ensureQuickFilterProfiles,
+  hasQuickFilterProfiles,
+  readQuickFilterProfileCache,
+} from "../apps/geolibre-desktop/src/lib/quick-filter-profile-cache";
 
 /**
  * Run a compiled quick filter through MapLibre's own filter evaluator, so the
@@ -564,5 +570,224 @@ describe("profileQuickFilterFields", () => {
       ["a"],
     );
     assert.equal(profiles[0]?.sampled, 3);
+  });
+});
+
+describe("createQuickFilterScan (issue #3426)", () => {
+  const rows = Array.from({ length: 2000 }, (_, index) => ({
+    state: index % 2 === 0 ? "TN" : "OR",
+    pop: index,
+    ...(index === 1500 ? { late: "x" } : {}),
+  }));
+
+  it("profiles only the requested fields, identically to a full pass", () => {
+    const full = new Map(profileQuickFilterFields(rows).map((p) => [p.field, p]));
+    const only = profileQuickFilterFields(rows, { fields: ["pop"] });
+    assert.deepEqual(
+      only.map((profile) => profile.field),
+      ["pop"],
+    );
+    assert.deepEqual(only[0], full.get("pop"));
+  });
+
+  it("gives no profile to a requested field the records do not carry", () => {
+    assert.deepEqual(profileQuickFilterFields(rows, { fields: ["missing"] }), []);
+  });
+
+  it("lists field names without tallying any values", () => {
+    const scan = createQuickFilterScan(rows, { fields: [], names: true });
+    assert.equal(scan.step(), true);
+    assert.deepEqual(scan.fieldNames(), ["state", "pop", "late"]);
+    assert.deepEqual(scan.profiles(), []);
+  });
+
+  it("reads features in place through a property accessor", () => {
+    const features = rows.map((properties) => ({ type: "Feature", properties }));
+    const [state] = profileQuickFilterFields(features, {
+      fields: ["state"],
+      properties: (feature) => feature.properties,
+    });
+    assert.deepEqual(state?.values, [
+      { value: "OR", count: 1000 },
+      { value: "TN", count: 1000 },
+    ]);
+  });
+
+  it("resumes across slices and matches a single pass", () => {
+    const scan = createQuickFilterScan(rows, { fields: ["state", "pop"] });
+    let slices = 1;
+    // Asking to yield at every poll forces the smallest possible slices.
+    while (!scan.step(() => true)) slices += 1;
+    assert.ok(slices > 1, "a 2,000-record scan should take more than one slice");
+    assert.deepEqual(scan.profiles(), profileQuickFilterFields(rows, { fields: ["state", "pop"] }));
+  });
+});
+
+describe("ensureQuickFilterProfiles (issue #3426)", () => {
+  const makeRows = (length = 3000) =>
+    Array.from({ length }, (_, index) => ({ state: index % 3 === 0 ? "TN" : "OR", pop: index }));
+
+  it("answers a small request synchronously and caches it by array identity", () => {
+    const rows = makeRows(10);
+    assert.equal(readQuickFilterProfileCache(rows), undefined);
+    let done = 0;
+    ensureQuickFilterProfiles(rows, { fields: ["state"], names: true }, { onDone: () => done++ });
+    assert.equal(done, 1);
+    const cached = readQuickFilterProfileCache(rows);
+    assert.deepEqual(cached?.names, ["state", "pop"]);
+    assert.equal(cached?.profiles.get("state")?.kind, "categorical");
+    // Only what was asked for is profiled.
+    assert.equal(cached?.profiles.has("pop"), false);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["state"], names: true }), true);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["pop"] }), false);
+    // An equal but distinct array is a different dataset.
+    assert.equal(readQuickFilterProfileCache(makeRows(10)), undefined);
+  });
+
+  it("scans only the fields the cache is missing", () => {
+    const rows = makeRows(10);
+    ensureQuickFilterProfiles(rows, { fields: ["state"] });
+    const first = readQuickFilterProfileCache(rows)?.profiles.get("state");
+    let reads = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state", "pop"] },
+      {
+        properties: (row) => {
+          reads += 1;
+          // A second tally of `state` would double its counts.
+          return row;
+        },
+      },
+    );
+    assert.equal(reads, rows.length);
+    const cached = readQuickFilterProfileCache(rows);
+    assert.equal(cached?.profiles.get("state"), first);
+    assert.equal(cached?.profiles.get("pop")?.kind, "range");
+    // Fully cached: no scan at all, and `onDone` still fires.
+    let done = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["pop"] },
+      {
+        properties: () => assert.fail("a cached request must not rescan"),
+        onDone: () => done++,
+      },
+    );
+    assert.equal(done, 1);
+  });
+
+  it("remembers a field no record carries instead of rescanning for it", () => {
+    const rows = makeRows(10);
+    ensureQuickFilterProfiles(rows, { fields: ["missing"] });
+    assert.equal(readQuickFilterProfileCache(rows)?.profiles.get("missing"), null);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["missing"] }), true);
+  });
+
+  it("slices a large scan across tasks and commits nothing until it finishes", async () => {
+    const rows = makeRows();
+    const yields: (() => void)[] = [];
+    let done = 0;
+    let clock = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"], names: true },
+      {
+        onDone: () => done++,
+        sliceBudgetMs: 1,
+        // Every poll sees the budget spent, so each slice is one poll long.
+        now: () => (clock += 1),
+        yieldControl: () => new Promise<void>((resolve) => yields.push(resolve)),
+      },
+    );
+    assert.equal(done, 0, "the first slice must not finish a 3,000-record scan");
+    assert.equal(readQuickFilterProfileCache(rows), undefined);
+
+    let slices = 1;
+    while (done === 0) {
+      const next = yields.shift();
+      assert.ok(next, "the scan should be waiting on a yield");
+      next();
+      await new Promise((resolve) => setImmediate(resolve));
+      slices += 1;
+      assert.ok(slices < 100, "the scan should terminate");
+    }
+    assert.ok(slices > 2);
+    assert.deepEqual(readQuickFilterProfileCache(rows)?.profiles.get("state")?.values, [
+      { value: "OR", count: 2000 },
+      { value: "TN", count: 1000 },
+    ]);
+  });
+
+  it("drops a cancelled scan without caching or calling back", async () => {
+    const rows = makeRows();
+    const yields: (() => void)[] = [];
+    let done = 0;
+    let clock = 0;
+    const cancel = ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"] },
+      {
+        onDone: () => done++,
+        sliceBudgetMs: 1,
+        now: () => (clock += 1),
+        yieldControl: () => new Promise<void>((resolve) => yields.push(resolve)),
+      },
+    );
+    cancel();
+    yields.shift()?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(done, 0);
+    assert.equal(yields.length, 0);
+    assert.equal(readQuickFilterProfileCache(rows), undefined);
+  });
+
+  it("settles the caller and records no values when a later slice throws", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const rows = makeRows();
+    let done = 0;
+    let clock = 0;
+    let reads = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"] },
+      {
+        onDone: () => done++,
+        sliceBudgetMs: 1,
+        now: () => (clock += 1),
+        yieldControl: () => Promise.resolve(),
+        properties: (row) => {
+          reads += 1;
+          if (reads > 1000) throw new Error("unreadable record");
+          return row;
+        },
+      },
+    );
+    assert.equal(done, 0);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(done, 1, "a failed scan must still call back");
+    // Cached as "no values", so a caller stops reporting the field as loading.
+    assert.equal(readQuickFilterProfileCache(rows)?.profiles.get("state"), null);
+    assert.equal(hasQuickFilterProfiles(rows, { fields: ["state"] }), true);
+  });
+
+  it("settles the caller when the first, synchronous slice throws", (t) => {
+    t.mock.method(console, "error", () => {});
+    const rows = makeRows(10);
+    let done = 0;
+    ensureQuickFilterProfiles(
+      rows,
+      { fields: ["state"], names: true },
+      {
+        onDone: () => done++,
+        properties: () => {
+          throw new Error("unreadable record");
+        },
+      },
+    );
+    assert.equal(done, 1);
+    const cached = readQuickFilterProfileCache(rows);
+    assert.equal(cached?.profiles.get("state"), null);
+    assert.deepEqual(cached?.names, []);
   });
 });

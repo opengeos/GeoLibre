@@ -1,12 +1,26 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import type { Feature } from "geojson";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { getColumnSettings } from "../lib/attribute-columns";
 import {
-  profileQuickFilterFields,
   QUICK_FILTER_PROFILE_LIMIT,
   type QuickFilterFieldProfile,
 } from "../lib/quick-filter-profile";
+import {
+  ensureQuickFilterProfiles,
+  hasQuickFilterProfiles,
+  readQuickFilterProfileCache,
+} from "../lib/quick-filter-profile-cache";
 import {
   isVectorTileLayer,
   loadedVectorTileFeatures,
@@ -23,11 +37,30 @@ import {
  * compromise the Style panel's vector-tile classification makes — and reports
  * that through {@link QuickFilterProfiles.sampledFromViewport} so the UI can
  * say where the value list came from instead of implying it is complete.
+ *
+ * Profiling is lazy (issue #3426): only the fields the layer has a quick filter
+ * on are profiled, off the render path and in slices, and a field picked from
+ * the "Add a filter" menu is profiled when it is picked. Until a profile
+ * arrives its field is listed in {@link QuickFilterProfiles.loadingFields}.
  */
 export interface QuickFilterProfiles {
-  /** One profile per field, sorted by field name. */
-  profiles: QuickFilterFieldProfile[];
+  /**
+   * Field names a filter can be added on, sorted, minus the fields the layer
+   * hides from its attribute table. Empty unless the hook was asked to list
+   * fields, and until the listing pass has finished.
+   */
+  fields: string[];
+  /** The field list was asked for and is still being read. */
+  fieldsLoading: boolean;
+  /** Profiles of the fields the layer has a quick filter on, as they arrive. */
   byField: Map<string, QuickFilterFieldProfile>;
+  /** Filtered fields whose profile is still being computed. */
+  loadingFields: ReadonlySet<string>;
+  /**
+   * Profile one field on demand, for the moment a field is picked from the
+   * menu and its suggested control is needed.
+   */
+  profileField: (field: string) => Promise<QuickFilterFieldProfile | undefined>;
   /** The profiles describe the loaded tiles, not the whole dataset. */
   sampledFromViewport: boolean;
   /**
@@ -35,16 +68,35 @@ export interface QuickFilterProfiles {
    * value counts and extents describe only the first `inspected` of `total`.
    */
   partialSample?: { inspected: number; total: number };
-  /** Nothing to profile yet: no local features and no tiles decoded. */
+  /**
+   * Nothing to filter on: no local features and no tiles decoded, or (when
+   * fields are listed) records that carry no attributes at all.
+   */
   empty: boolean;
 }
 
-const EMPTY_PROFILES: QuickFilterProfiles = {
-  profiles: [],
-  byField: new Map(),
-  sampledFromViewport: false,
-  empty: true,
-};
+export interface UseQuickFilterProfilesOptions {
+  /**
+   * Also list the layer's field names, for the "Add a filter" menu. Off by
+   * default: the viewer only renders the filters a project already has.
+   */
+  listFields?: boolean;
+}
+
+const NO_FIELDS: string[] = [];
+
+/** Joins field names into one string a hook dependency can compare by value. */
+const KEY_SEPARATOR = "\u0000";
+
+function splitKey(key: string): string[] {
+  return key === "" ? [] : key.split(KEY_SEPARATOR);
+}
+
+type PropertiesOf = (record: unknown) => Record<string, unknown> | null | undefined;
+
+/** Local features are scanned in place rather than mapped to property bags first. */
+const featureProperties: PropertiesOf = (feature) =>
+  (feature as Feature | null)?.properties as Record<string, unknown> | null | undefined;
 
 /**
  * Profile a layer's fields for the quick-filter controls.
@@ -59,12 +111,14 @@ const EMPTY_PROFILES: QuickFilterProfiles = {
  *   before attaching its `idle` listener and never retry, leaving a tile-backed
  *   layer stuck on "no features loaded". Mirrors
  *   {@link useVectorTileGeometryBackfill}, which closes the same race.
+ * @param options - Whether to list the layer's field names as well.
  * @returns The field profiles and where they came from.
  */
 export function useQuickFilterProfiles(
   layer: GeoLibreLayer | null | undefined,
   mapControllerRef: RefObject<MapEngine | null>,
   mapReadyGeneration = 0,
+  { listFields = false }: UseQuickFilterProfilesOptions = {},
 ): QuickFilterProfiles {
   const features = layer?.geojson?.features;
   const hasLocalFeatures = (features?.length ?? 0) > 0;
@@ -117,37 +171,145 @@ export function useQuickFilterProfiles(
   }, [layerId, mapControllerRef, mapReadyGeneration, tileBacked]);
 
   // A field the layer hides from its attribute table has been declared
-  // uninteresting; do not offer a filter control for it either. Read outside
-  // the memo and reduced to a string key for the same reason as `layerRef`
-  // above: the settings object is rebuilt on every layer patch, so depending on
-  // it directly would re-profile up to 50,000 records per paint tick.
-  const hiddenKey = (getColumnSettings(layer).hidden ?? []).join("\u0000");
+  // uninteresting; do not offer to add a filter on it either. Reduced to a
+  // string key for the same reason as `layerRef` above: the settings object is
+  // rebuilt on every layer patch.
+  const hiddenKey = (getColumnSettings(layer).hidden ?? []).join(KEY_SEPARATOR);
 
-  return useMemo(() => {
-    if (!layerId) return EMPTY_PROFILES;
-    const records = hasLocalFeatures
-      ? (features ?? []).map((feature) => feature.properties ?? {})
-      : tileRecords;
-    if (records.length === 0) {
-      return { ...EMPTY_PROFILES, sampledFromViewport: tileBacked };
-    }
-    const profiles = profileQuickFilterFields(records, {
-      exclude: hiddenKey === "" ? [] : hiddenKey.split("\u0000"),
-    }).sort((a, b) =>
-      a.field.localeCompare(b.field, undefined, {
-        numeric: true,
-        sensitivity: "base",
+  // Likewise the filtered fields: `quickFilters` is a new array on every edit
+  // of a filter's values, but which fields need a profile only changes when a
+  // filter is added or removed.
+  const wantedKey = [...new Set((layer?.quickFilters ?? []).map((filter) => filter.field))]
+    .sort()
+    .join(KEY_SEPARATOR);
+
+  // The record array is both what gets scanned and the cache key, so a layer
+  // whose features have not changed is never scanned twice.
+  const source: readonly unknown[] | null = !layerId
+    ? null
+    : hasLocalFeatures
+      ? (features ?? null)
+      : tileRecords.length > 0
+        ? tileRecords
+        : null;
+  // Sampled tile records are already property bags; local features are not.
+  const properties = hasLocalFeatures ? featureProperties : undefined;
+  // What the committed render scans, for the callbacks below. Written in a
+  // layout effect rather than during render so a discarded render cannot leave
+  // them pointing at a source that was never committed.
+  const sourceRef = useRef({ layerId, source, properties });
+  // Whether the committed render is still waiting on the cache.
+  const pendingRef = useRef(false);
+
+  // Bumped when a scan lands in the cache, to re-read it.
+  const [cacheVersion, bumpCacheVersion] = useReducer((version: number) => version + 1, 0);
+
+  const profileField = useCallback(
+    (field: string): Promise<QuickFilterFieldProfile | undefined> =>
+      new Promise((resolve) => {
+        // The layer the field was picked on. A profile from any other layer
+        // would describe the wrong data, so a selection change ends the wait.
+        const pickedLayerId = sourceRef.current.layerId;
+        const attempt = (): void => {
+          const { source: current, properties: propertiesOf } = sourceRef.current;
+          if (!current || sourceRef.current.layerId !== pickedLayerId) {
+            resolve(undefined);
+            return;
+          }
+          ensureQuickFilterProfiles(
+            current,
+            { fields: [field] },
+            {
+              properties: propertiesOf,
+              onDone: () => {
+                // The features were replaced while a sliced scan was running:
+                // the profile describes data the layer no longer has, so read
+                // the field again from what it has now.
+                if (sourceRef.current.source !== current) attempt();
+                else
+                  resolve(readQuickFilterProfileCache(current)?.profiles.get(field) ?? undefined);
+              },
+            },
+          );
+        };
+        attempt();
       }),
-    );
+    [],
+  );
+
+  const result = useMemo(() => {
+    // Not read, but the cache it stands for is: a scan landing bumps it.
+    void cacheVersion;
+    const cached = source ? readQuickFilterProfileCache(source) : undefined;
+    const wanted = splitKey(wantedKey);
+    const byField = new Map<string, QuickFilterFieldProfile>();
+    const loadingFields = new Set<string>();
+    for (const field of wanted) {
+      const profile = cached?.profiles.get(field);
+      if (profile) byField.set(field, profile);
+      else if (source && profile === undefined) loadingFields.add(field);
+    }
+
+    const hidden = new Set(splitKey(hiddenKey));
+    const names = listFields ? cached?.names : undefined;
+    const fields = names
+      ? names
+          .filter((name) => !hidden.has(name))
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
+      : NO_FIELDS;
+    const fieldsLoading = listFields && !!source && !names;
+
     return {
-      profiles,
-      byField: new Map(profiles.map((profile) => [profile.field, profile])),
+      fields,
+      fieldsLoading,
+      byField,
+      loadingFields,
+      profileField,
       sampledFromViewport: tileBacked,
       partialSample:
-        hasLocalFeatures && records.length > QUICK_FILTER_PROFILE_LIMIT
-          ? { inspected: QUICK_FILTER_PROFILE_LIMIT, total: records.length }
+        hasLocalFeatures && source && source.length > QUICK_FILTER_PROFILE_LIMIT
+          ? { inspected: QUICK_FILTER_PROFILE_LIMIT, total: source.length }
           : undefined,
-      empty: profiles.length === 0,
+      empty: !source || (listFields && !!names && fields.length === 0),
     };
-  }, [features, hasLocalFeatures, hiddenKey, layerId, tileBacked, tileRecords]);
+  }, [
+    cacheVersion,
+    hasLocalFeatures,
+    hiddenKey,
+    listFields,
+    profileField,
+    source,
+    tileBacked,
+    wantedKey,
+  ]);
+
+  // Layout effects run in declaration order, so this one keeps the refs in
+  // step with the committed render before the scanning effect below reads them.
+  const pending = result.fieldsLoading || result.loadingFields.size > 0;
+  useLayoutEffect(() => {
+    sourceRef.current = { layerId, source, properties };
+    pendingRef.current = pending;
+  });
+
+  // A layout effect so the scan's first slice — which is the whole scan for an
+  // ordinary layer — lands before the browser paints, and the controls never
+  // flash a loading state they do not need.
+  useLayoutEffect(() => {
+    if (!source) return;
+    const request = { fields: splitKey(wantedKey), names: listFields };
+    // Already answerable (a reselected layer, a reopened panel): there is
+    // nothing to scan. This render normally read the answer too; it has not
+    // only when another instance of this hook filled the cache from its own
+    // layout effect in this same commit, after this one rendered.
+    if (hasQuickFilterProfiles(source, request)) {
+      if (pendingRef.current) bumpCacheVersion();
+      return;
+    }
+    return ensureQuickFilterProfiles(source, request, {
+      properties,
+      onDone: bumpCacheVersion,
+    });
+  }, [listFields, properties, source, wantedKey]);
+
+  return result;
 }

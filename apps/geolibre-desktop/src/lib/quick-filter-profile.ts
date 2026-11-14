@@ -48,11 +48,45 @@ export interface QuickFilterFieldProfile {
   present: number;
 }
 
-export interface ProfileQuickFilterOptions {
+export interface ProfileQuickFilterOptions<T = Record<string, unknown> | null | undefined> {
   /** Features to inspect. Defaults to {@link PROFILE_LIMIT}. */
   sampleLimit?: number;
   /** Field names to skip (geometry helpers, tracking columns, …). */
   exclude?: readonly string[];
+  /**
+   * Profile only these fields instead of every field. A quick filter needs the
+   * profile of the one field it is on, so asking for that field alone costs a
+   * property read per feature rather than a tally of the whole attribute table.
+   * A requested field that no inspected record carries gets no profile.
+   */
+  fields?: readonly string[];
+  /**
+   * How to reach a record's property bag. Lets a caller hand over its features
+   * as they are instead of first mapping them to a second array of bags.
+   */
+  properties?: (record: T) => Record<string, unknown> | null | undefined;
+}
+
+/**
+ * A pass over a layer's records that can be run a slice at a time, so a caller
+ * can keep it off the render path and yield to the event loop between slices.
+ */
+export interface QuickFilterScan {
+  /**
+   * Read records until the pass is complete or `shouldYield` asks for a break.
+   *
+   * @param shouldYield - Polled every {@link SCAN_YIELD_INTERVAL} records;
+   *   return `true` to stop the slice. Omit to run to completion.
+   * @returns `true` once every record within the sample limit has been read.
+   */
+  step(shouldYield?: () => boolean): boolean;
+  /** One profile per scanned field, in first-seen order. Call once the scan is done. */
+  profiles(): QuickFilterFieldProfile[];
+  /**
+   * Every field name seen, in first-seen order, when the scan was created with
+   * `names: true`. Not narrowed by `fields` or `exclude`.
+   */
+  fieldNames(): string[];
 }
 
 /**
@@ -60,9 +94,9 @@ export interface ProfileQuickFilterOptions {
  * each checkbox and the numeric/date extents bound the range sliders, so the
  * profile reads every feature of an ordinary layer (as the attribute table's
  * column explorer does) rather than presenting a sample as totals. At this
- * many features a pass already takes about half a second on the main thread, so a
- * larger layer is profiled from its first {@link PROFILE_LIMIT} features and
- * the panel says so (see `useQuickFilterProfiles`).
+ * many features a pass over a wide attribute table already takes about half a
+ * second, so a larger layer is profiled from its first {@link PROFILE_LIMIT}
+ * features and the panel says so (see `useQuickFilterProfiles`).
  */
 const PROFILE_LIMIT = 50_000;
 
@@ -307,35 +341,100 @@ function profileFromTally(
 }
 
 /**
- * Profile every field across feature property bags.
+ * Records read between two `shouldYield` polls of a {@link QuickFilterScan}.
+ * Small enough that a wide attribute table cannot run far past a caller's time
+ * budget between polls; a poll is one clock read, so it costs next to nothing.
+ */
+const SCAN_YIELD_INTERVAL = 128;
+
+const hasOwn = Object.prototype.hasOwnProperty;
+
+/**
+ * Start a resumable pass over a layer's records.
+ *
+ * With `fields`, only those fields are tallied; without it, every field is
+ * (minus `exclude`). With `names`, the pass also collects every field name it
+ * sees, which is all the "Add a filter" menu needs until a field is picked: a
+ * scan created with `fields: []` and `names: true` lists the fields without
+ * tallying a single value.
+ *
+ * @param records - The layer's records, in sample order.
+ * @param options - Sample size, the fields to profile or skip, how to reach a
+ *   record's properties, and whether to collect field names.
+ * @returns The scan, not yet started.
+ */
+export function createQuickFilterScan<T = Record<string, unknown> | null | undefined>(
+  records: readonly T[],
+  options: ProfileQuickFilterOptions<T> & { names?: boolean } = {},
+): QuickFilterScan {
+  const limit = Math.max(0, options.sampleLimit ?? PROFILE_LIMIT);
+  const excluded = new Set(options.exclude ?? []);
+  const wanted = options.fields ? [...new Set(options.fields)] : null;
+  const propertiesOf = options.properties;
+  const names = options.names ? new Set<string>() : null;
+  const tallies = new Map<string, FieldTally>();
+  const inspected = Math.min(records.length, limit);
+  let index = 0;
+
+  const tallyField = (field: string, value: unknown): void => {
+    let tally = tallies.get(field);
+    if (!tally) tallies.set(field, (tally = newTally()));
+    if (!isEmptyValue(value)) tallyValue(tally, value);
+  };
+
+  return {
+    step(shouldYield) {
+      while (index < inspected) {
+        const record = records[index];
+        index += 1;
+        const properties = propertiesOf
+          ? propertiesOf(record)
+          : (record as Record<string, unknown> | null | undefined);
+        if (properties) {
+          if (wanted) {
+            if (names) for (const field of Object.keys(properties)) names.add(field);
+            for (const field of wanted) {
+              if (hasOwn.call(properties, field)) tallyField(field, properties[field]);
+            }
+          } else {
+            for (const [field, value] of Object.entries(properties)) {
+              names?.add(field);
+              if (!excluded.has(field)) tallyField(field, value);
+            }
+          }
+        }
+        if (index % SCAN_YIELD_INTERVAL === 0 && index < inspected && shouldYield?.()) {
+          return false;
+        }
+      }
+      return true;
+    },
+    profiles() {
+      return [...tallies.entries()].map(([field, tally]) =>
+        profileFromTally(field, tally, inspected),
+      );
+    },
+    fieldNames() {
+      return names ? [...names] : [];
+    },
+  };
+}
+
+/**
+ * Profile fields across feature property bags in one synchronous pass.
  *
  * @param records - Feature property bags, in sample order. Tile-backed layers
  *   pass whatever is currently loaded; GeoJSON layers pass their features.
- * @param options - Sample size and fields to skip.
+ * @param options - Sample size, and the fields to profile or skip.
  * @returns One profile per field, in first-seen order.
  */
-export function profileQuickFilterFields(
-  records: readonly (Record<string, unknown> | null | undefined)[],
-  options: ProfileQuickFilterOptions = {},
+export function profileQuickFilterFields<T = Record<string, unknown> | null | undefined>(
+  records: readonly T[],
+  options: ProfileQuickFilterOptions<T> = {},
 ): QuickFilterFieldProfile[] {
-  const limit = Math.max(0, options.sampleLimit ?? PROFILE_LIMIT);
-  const excluded = new Set(options.exclude ?? []);
-  const tallies = new Map<string, FieldTally>();
-  const inspected = Math.min(records.length, limit);
-
-  for (let index = 0; index < inspected; index += 1) {
-    const properties = records[index];
-    if (!properties) continue;
-    for (const [field, value] of Object.entries(properties)) {
-      if (excluded.has(field)) continue;
-      let tally = tallies.get(field);
-      if (!tally) tallies.set(field, (tally = newTally()));
-      if (isEmptyValue(value)) continue;
-      tallyValue(tally, value);
-    }
-  }
-
-  return [...tallies.entries()].map(([field, tally]) => profileFromTally(field, tally, inspected));
+  const scan = createQuickFilterScan(records, options);
+  scan.step();
+  return scan.profiles();
 }
 
 export const QUICK_FILTER_PROFILE_LIMIT = PROFILE_LIMIT;

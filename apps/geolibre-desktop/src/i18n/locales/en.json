@@ -9424,6 +9424,7 @@
     },
     "searchValues": "Search values",
     "noValues": "This field has no values to choose from.",
+    "loadingValues": "Reading values…",
     "noMatchingValues": "No values match your search.",
     "selectAll": "Select all",
     "selectNone": "Select none",

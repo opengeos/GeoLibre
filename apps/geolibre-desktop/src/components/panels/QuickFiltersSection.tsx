@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { ChevronDown, Filter, Info } from "lucide-react";
-import { useMemo, type RefObject } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuickFilterProfiles } from "../../hooks/useQuickFilterProfiles";
 import type { QuickFilterFieldProfile } from "../../lib/quick-filter-profile";
@@ -35,13 +35,21 @@ function newFilterId(): string {
 /**
  * Build the control a field's profile calls for, pre-filled with nothing so a
  * newly added filter shows every feature until it is answered.
+ *
+ * A field with no profile (its values could not be read, say because a
+ * tile-backed layer's loaded tiles changed between listing the field and
+ * picking it) still gets a text match, the one control that needs no profile,
+ * rather than the pick being dropped.
  */
-function filterForProfile(profile: QuickFilterFieldProfile): LayerQuickFilter {
+function filterForField(
+  field: string,
+  profile: QuickFilterFieldProfile | undefined,
+): LayerQuickFilter {
   return {
     id: newFilterId(),
-    field: profile.field,
-    kind: profile.kind,
-    ...(profile.dateKind ? { dateKind: profile.dateKind } : {}),
+    field,
+    kind: profile?.kind ?? "text",
+    ...(profile?.dateKind ? { dateKind: profile.dateKind } : {}),
   };
 }
 
@@ -68,18 +76,23 @@ export function QuickFiltersSection({
 }: QuickFiltersSectionProps) {
   const { t, i18n } = useTranslation();
   const setLayerQuickFilters = useAppStore((s) => s.setLayerQuickFilters);
-  const { profiles, byField, sampledFromViewport, partialSample, empty } = useQuickFilterProfiles(
-    layer,
-    mapControllerRef,
-    mapReadyGeneration,
-  );
+  const {
+    fields,
+    fieldsLoading,
+    byField,
+    loadingFields,
+    profileField,
+    sampledFromViewport,
+    partialSample,
+    empty,
+  } = useQuickFilterProfiles(layer, mapControllerRef, mapReadyGeneration, { listFields: true });
+  // The field being profiled between its pick from the menu and its filter
+  // being added. Only a large layer holds it long enough to notice.
+  const [addingField, setAddingField] = useState<string | null>(null);
 
   const filters = useMemo(() => layer.quickFilters ?? [], [layer.quickFilters]);
   const used = useMemo(() => new Set(filters.map((filter) => filter.field)), [filters]);
-  const addable = useMemo(
-    () => profiles.filter((profile) => !used.has(profile.field)),
-    [profiles, used],
-  );
+  const addable = useMemo(() => fields.filter((field) => !used.has(field)), [fields, used]);
   const activeCount = useMemo(
     () => filters.filter((filter) => compileQuickFilters([filter]) !== null).length,
     [filters],
@@ -87,10 +100,28 @@ export function QuickFiltersSection({
 
   const update = (next: LayerQuickFilter[]): void => setLayerQuickFilters(layer.id, next);
 
-  const addField = (field: string): void => {
-    const profile = byField.get(field);
-    if (!profile) return;
-    update([...filters, filterForProfile(profile)]);
+  // A field's profile decides which control it gets, and is computed only now
+  // that the field has been picked (issue #3426), so adding a filter waits for
+  // it. The layer is re-read afterwards: it may have changed in the meantime.
+  // If the panel moved to another layer during the wait, the pick is dropped:
+  // the profile could not describe the layer the filter was meant for.
+  const layerId = layer.id;
+  const shownLayerId = useRef(layerId);
+  shownLayerId.current = layerId;
+  const addField = async (field: string): Promise<void> => {
+    setAddingField(field);
+    let profile: QuickFilterFieldProfile | undefined;
+    try {
+      profile = await profileField(field);
+    } finally {
+      setAddingField(null);
+    }
+    if (shownLayerId.current !== layerId) return;
+    const current =
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId)?.quickFilters ??
+      [];
+    if (current.some((filter) => filter.field === field)) return;
+    setLayerQuickFilters(layerId, [...current, filterForField(field, profile)]);
   };
 
   return (
@@ -119,6 +150,7 @@ export function QuickFiltersSection({
           key={filter.id}
           filter={filter}
           profile={byField.get(filter.field)}
+          loading={loadingFields.has(filter.field)}
           idPrefix={`style-${layer.id}`}
           onChange={(next) =>
             update(filters.map((current) => (current.id === filter.id ? next : current)))
@@ -148,18 +180,21 @@ export function QuickFiltersSection({
                 variant="outline"
                 size="sm"
                 className="h-9 flex-1 justify-between font-normal"
-                disabled={addable.length === 0}
+                disabled={addable.length === 0 || addingField !== null}
+                aria-busy={fieldsLoading || addingField !== null}
               >
-                {addable.length === 0
-                  ? t("quickFilters.allFieldsUsed")
-                  : t("quickFilters.addFilter")}
+                {addingField !== null
+                  ? t("quickFilters.loadingValues")
+                  : addable.length === 0 && !fieldsLoading
+                    ? t("quickFilters.allFieldsUsed")
+                    : t("quickFilters.addFilter")}
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-              {addable.map((profile) => (
-                <DropdownMenuItem key={profile.field} onSelect={() => addField(profile.field)}>
-                  {profile.field}
+              {addable.map((field) => (
+                <DropdownMenuItem key={field} onSelect={() => void addField(field)}>
+                  {field}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
