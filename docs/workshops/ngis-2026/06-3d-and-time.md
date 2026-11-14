@@ -91,8 +91,8 @@ Classified LiDAR assigns every point an ASPRS class code:
 | 3, 4, 5 | Low, medium, high vegetation | 17 | Bridge deck |
 | | | 18 | High noise |
 
-Ground points (class 2) build bare-earth DEMs like the Reno-Tahoe DEM from
-Section 3. How far a survey goes beyond ground depends on its contract, as
+Ground points (class 2) build bare-earth DEMs like the Reno-Tahoe DEM you
+styled in Section 3. How far a survey goes beyond ground depends on its contract, as
 Exercise 6.2 shows.
 
 ### Terrain, and the honesty rule
