@@ -4,6 +4,7 @@ import {
   getExternalNativePaintBridge,
   pluginOwnsPaint,
   createProjectLayerSerializationCache,
+  parseProject,
   projectFromStore,
   serializeProject,
   serializeProjectWithLayerCache,
@@ -15,6 +16,7 @@ import {
   addCloudNetcdfLayer,
   addZarrRasterLayer,
   queryZarrLayer,
+  restoreZarrLayers,
   setZarrLayerSelector,
   type ComponentsModules,
 } from "../packages/plugins/src/plugins/maplibre-components.ts";
@@ -150,7 +152,9 @@ class ZarrLayerControlStub {
     visibilityCalls.push({ layerId, visible, opacity });
   }
 
-  removeLayer() {}
+  removeLayer(id?: string) {
+    if (id) this.instances.delete(id);
+  }
 
   private emit(event: string, payload: unknown) {
     for (const handler of this.handlers.get(event) ?? []) handler(payload);
@@ -573,5 +577,169 @@ describe("addZarrRasterLayer without a selector", () => {
     await addZarrRasterLayer(app, { url: "https://example.org/store.zarr", variable: "sst" });
 
     assert.deepEqual(addCalls.at(-1)?.options?.selector, {});
+  });
+});
+
+// A saved Zarr layer reopens as an inert store record: the Zarr control draws it,
+// not layer sync, so without a restore it sits in the Layers panel and paints
+// nothing on MapLibre.
+describe("restoreZarrLayers", () => {
+  const SST_URL = "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr";
+
+  function savedZarrLayer(id: string, name: string, url = SST_URL) {
+    return {
+      id,
+      name,
+      type: "zarr" as const,
+      source: {
+        clim: [-2, 32] as [number, number],
+        colormap: ["#30123b", "#7a0403"],
+        sourceId: id,
+        type: "raster",
+        url,
+        variable: "sst",
+      },
+      visible: true,
+      opacity: 0.85,
+      style: { fillOpacity: 1 } as never,
+      metadata: {
+        externalNativeLayer: true,
+        nativeLayerIds: [id],
+        paintMode: "plugin",
+        sourceKind: "zarr-url",
+        description: "kept",
+      },
+      sourcePath: url,
+    };
+  }
+
+  function otherLayer(id: string) {
+    return {
+      id,
+      name: id,
+      type: "geojson" as const,
+      source: {},
+      visible: true,
+      opacity: 1,
+      style: {} as never,
+      metadata: {},
+    };
+  }
+
+  it("re-adds a reopened project's Zarr layer with its saved settings", async () => {
+    installStubModule();
+    // Round-trip the record through the real project file, so this also pins
+    // that saving writes everything a restore needs.
+    const id = await addZarrRasterLayer(app, {
+      url: SST_URL,
+      variable: "sst",
+      name: "Sea surface temperature",
+      clim: [-2, 32],
+      colormap: ["#30123b", "#7a0403"],
+      opacity: 0.85,
+    });
+    useAppStore.getState().setLayerVisibility(id, false);
+    const project = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    // Opening a project drops the session's layers, and the control's with them.
+    useAppStore.setState({ layers: [] });
+    useAppStore.setState({ layers: [otherLayer("below"), ...project.layers, otherLayer("above")] });
+    addCalls.length = 0;
+    visibilityCalls.length = 0;
+
+    await restoreZarrLayers(app);
+
+    assert.equal(addCalls.length, 1);
+    const call = addCalls[0];
+    assert.equal(call.url, SST_URL);
+    assert.equal(call.variable, "sst");
+    assert.deepEqual(call.options?.clim, [-2, 32]);
+    assert.deepEqual(call.options?.colormap, ["#30123b", "#7a0403"]);
+    assert.deepEqual(call.options?.selector, {});
+    assert.equal(call.options?.opacity, 0.85);
+
+    const layers = useAppStore.getState().layers;
+    assert.deepEqual(
+      layers.map((layer) => layer.type),
+      ["geojson", "zarr", "geojson"],
+      "the live layer takes the saved record's place, not a second entry",
+    );
+    const restored = layers[1];
+    assert.equal(restored.name, "Sea surface temperature");
+    assert.equal(restored.visible, false);
+    assert.ok(
+      visibilityCalls.some((c) => c.layerId === restored.id && c.visible === false),
+      "a layer saved hidden stays hidden",
+    );
+    assert.ok(getExternalNativePaintBridge(restored.id), "panels reach the restored layer");
+  });
+
+  it("keeps saved metadata and moves aside a record whose id the control reuses", async () => {
+    installStubModule();
+    // Learn the control's next id, then save two records that collide with the
+    // ids it will hand out: the first restore is given the second record's id.
+    const probe = await addZarrRasterLayer(app, {
+      url: "https://example.org/a.zarr",
+      variable: "x",
+    });
+    const next = Number(probe.split("-").at(-1)) + 1;
+    useAppStore.setState({
+      layers: [
+        savedZarrLayer(`zarr-layer-${next + 1}`, "First"),
+        savedZarrLayer(`zarr-layer-${next}`, "Second"),
+      ],
+    });
+    addCalls.length = 0;
+
+    await restoreZarrLayers(app);
+
+    assert.equal(addCalls.length, 2);
+    const layers = useAppStore.getState().layers;
+    assert.deepEqual(
+      layers.map((layer) => [layer.id, layer.name]),
+      [
+        [`zarr-layer-${next}`, "First"],
+        [`zarr-layer-${next + 1}`, "Second"],
+      ],
+    );
+    assert.equal(layers[0].metadata.description, "kept");
+    assert.deepEqual(layers[0].metadata.nativeLayerIds, [`zarr-layer-${next}`]);
+  });
+
+  it("restores each record once and skips stores the URL alone cannot open", async () => {
+    installStubModule();
+    useAppStore.setState({
+      layers: [
+        savedZarrLayer("saved-sst", "SST"),
+        savedZarrLayer("local", "Folder", "local-zarr:cube?1"),
+        savedZarrLayer("icechunk", "Repo", "https://example.org/repo#icechunk=main"),
+      ],
+    });
+    addCalls.length = 0;
+
+    await Promise.all([restoreZarrLayers(app), restoreZarrLayers(app)]);
+    await restoreZarrLayers(app);
+
+    assert.deepEqual(
+      addCalls.map((call) => call.url),
+      [SST_URL],
+    );
+    assert.equal(useAppStore.getState().layers.length, 3);
+  });
+
+  it("leaves the record in place when the store fails to load", async () => {
+    installStubModule();
+    useAppStore.setState({ layers: [savedZarrLayer("broken", "Broken")] });
+    failNextAdd = "Failed to load Zarr: 404";
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await restoreZarrLayers(app);
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.id),
+      ["broken"],
+    );
   });
 });

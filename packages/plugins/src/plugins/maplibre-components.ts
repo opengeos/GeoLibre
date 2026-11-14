@@ -193,6 +193,7 @@ export {
   openZarrLayerPanel,
   queryZarrLayer,
   restoreArcgisZarrLayers,
+  restoreZarrLayers,
   setZarrLayerSelector,
   setZarrLocalStoreProvider,
   type ZarrRasterLayerOptions,
