@@ -369,7 +369,9 @@ export function createQuickFilterScan<T = Record<string, unknown> | null | undef
 ): QuickFilterScan {
   const limit = Math.max(0, options.sampleLimit ?? PROFILE_LIMIT);
   const excluded = new Set(options.exclude ?? []);
-  const wanted = options.fields ? [...new Set(options.fields)] : null;
+  const wanted = options.fields
+    ? [...new Set(options.fields)].filter((field) => !excluded.has(field))
+    : null;
   const propertiesOf = options.properties;
   const names = options.names ? new Set<string>() : null;
   const tallies = new Map<string, FieldTally>();
@@ -394,7 +396,6 @@ export function createQuickFilterScan<T = Record<string, unknown> | null | undef
           if (wanted) {
             if (names) for (const field of Object.keys(properties)) names.add(field);
             for (const field of wanted) {
-              if (excluded.has(field)) continue;
               if (hasOwn.call(properties, field)) tallyField(field, properties[field]);
             }
           } else {
