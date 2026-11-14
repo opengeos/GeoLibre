@@ -310,6 +310,24 @@ const enhanceLidarSelect = (select: HTMLSelectElement) => {
   });
 
   select.addEventListener("change", () => syncLidarSelectProxy(select, button));
+  // The control also sets `select.value` itself when its state changes from
+  // code (setColorScheme, setColormap, a project reset), which fires no
+  // `change` event, so the proxy kept showing the old choice. Mirror those
+  // writes too.
+  const valueProperty = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+  if (valueProperty?.get && valueProperty.set) {
+    const { get, set } = valueProperty;
+    Object.defineProperty(select, "value", {
+      configurable: true,
+      get() {
+        return get.call(this);
+      },
+      set(value: string) {
+        set.call(this, value);
+        syncLidarSelectProxy(select, button);
+      },
+    });
+  }
   select.classList.add("is-proxied");
   select.insertAdjacentElement("afterend", button);
 };

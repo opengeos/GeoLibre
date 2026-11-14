@@ -39,6 +39,7 @@ class LidarControlStub {
   constructor(options: { autoZoom?: boolean }) {
     constructorOptions.push({ ...options });
     this._options = { ...options, autoZoom: options.autoZoom ?? true };
+    lastControl = this;
   }
 
   on(event: string, handler: (event: unknown) => void) {
@@ -84,11 +85,72 @@ class LidarControlStub {
     return undefined;
   }
 
+  // Panel display state, mutated through the same setters the real control
+  // exposes, so a test can change Color By and check what opening a project
+  // puts back.
+  state = {
+    pointSize: 2,
+    colorScheme: "elevation" as unknown,
+    colormap: "viridis",
+    colorRange: { mode: "percentile", percentileLow: 2, percentileHigh: 98 } as unknown,
+    usePercentile: true,
+    pickable: false,
+    elevationRange: null as [number, number] | null,
+    hiddenClassifications: new Set<number>(),
+  };
+
+  getState() {
+    return { ...this.state };
+  }
+
+  setPointSize(size: number) {
+    this.state.pointSize = size;
+  }
+
+  setColorScheme(scheme: unknown) {
+    this.state.colorScheme = scheme;
+  }
+
+  setColormap(colormap: string) {
+    this.state.colormap = colormap;
+  }
+
+  setColorRange(range: unknown) {
+    this.state.colorRange = range;
+  }
+
+  setUsePercentile(usePercentile: boolean) {
+    this.state.usePercentile = usePercentile;
+  }
+
+  setElevationRange(min: number, max: number) {
+    this.state.elevationRange = [min, max];
+  }
+
+  clearElevationRange() {
+    this.state.elevationRange = null;
+  }
+
+  setClassificationVisibility(code: number, visible: boolean) {
+    if (visible) this.state.hiddenClassifications.delete(code);
+    else this.state.hiddenClassifications.add(code);
+  }
+
+  showAllClassifications() {
+    this.state.hiddenClassifications.clear();
+  }
+
+  setPickable(pickable: boolean) {
+    this.state.pickable = pickable;
+  }
+
   collapse() {}
   expand() {}
   setState() {}
   onRemove() {}
 }
+
+let lastControl: LidarControlStub | null = null;
 
 class LidarLayerAdapterStub {
   destroy() {}
@@ -165,6 +227,34 @@ describe("restoreLidarLayers", () => {
     // Auto-zoom comes back on for layers the user adds afterwards.
     await addLidarLayerFromUrl(app, "https://example.com/new.copc.laz");
     assert.equal(loadCalls[1]!.autoZoom, true);
+  });
+
+  it("resets Color By and picking when another project opens", async () => {
+    // Color By and picking belong to the one shared control and are not saved
+    // with a project, so they leaked into the next one: its restored cloud
+    // drew by Classification and the old cloud's Point Info card stayed up.
+    installStubModule();
+    await addLidarLayerFromUrl(app, "https://example.com/a.copc.laz");
+    const control = lastControl!;
+    control.setColorScheme("classification");
+    control.setColormap("plasma");
+    control.setPointSize(5);
+    control.setElevationRange(10, 20);
+    control.setClassificationVisibility(2, false);
+    control.setPickable(true);
+
+    // An unrelated store change leaves the user's choices alone.
+    useAppStore.getState().setProjectName("Renamed");
+    assert.equal(control.state.colorScheme, "classification");
+
+    useAppStore.getState().newProject();
+
+    assert.equal(control.state.colorScheme, "elevation");
+    assert.equal(control.state.colormap, "viridis");
+    assert.equal(control.state.pointSize, 2);
+    assert.equal(control.state.elevationRange, null);
+    assert.equal(control.state.hiddenClassifications.size, 0);
+    assert.equal(control.state.pickable, false);
   });
 
   it("does not mount the control for a project without LiDAR", async () => {

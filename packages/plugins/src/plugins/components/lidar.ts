@@ -523,6 +523,37 @@ export async function restoreLidarLayers(
   }
 }
 
+type LidarDisplayState = Pick<
+  ReturnType<LidarControl["getState"]>,
+  "pointSize" | "colorScheme" | "colormap" | "colorRange" | "usePercentile" | "pickable"
+>;
+
+/**
+ * Put the LiDAR control's panel-wide display settings back to how the control
+ * started, and drop its point picking UI.
+ *
+ * Color By, the colormap, point size, filters and picking are settings of the
+ * one shared control, not of a layer, and a project does not save them. Left
+ * alone they carried over into the next opened project, so its restored cloud
+ * drew with the previous project's Classification coloring, and a Point Info
+ * card from the previous cloud stayed on screen (picking off hides it).
+ *
+ * @param control - The mounted LiDAR control.
+ * @param defaults - The control's display state captured when it was created.
+ */
+export function resetLidarControlDisplay(control: LidarControl, defaults: LidarDisplayState): void {
+  control.setPointSize(defaults.pointSize);
+  control.setColorScheme(defaults.colorScheme);
+  // After the color scheme: switching it can swap the colormap and range.
+  control.setColormap(defaults.colormap);
+  control.setColorRange({ ...defaults.colorRange });
+  control.setUsePercentile(defaults.usePercentile);
+  control.clearElevationRange();
+  control.showAllClassifications();
+  // Turning picking off also hides a Point Info card left over from a hover.
+  control.setPickable(defaults.pickable);
+}
+
 function createLidarControl(
   LidarControlClass: LidarControlConstructor,
   LidarLayerAdapterClass: LidarLayerAdapterConstructor,
@@ -535,6 +566,15 @@ function createLidarControl(
     ...LIDAR_OPTIONS,
     theme: resolveDocumentTheme(),
   });
+  const initialState = control.getState();
+  const displayDefaults: LidarDisplayState = {
+    pointSize: initialState.pointSize,
+    colorScheme: initialState.colorScheme,
+    colormap: initialState.colormap,
+    colorRange: { ...initialState.colorRange },
+    usePercentile: initialState.usePercentile,
+    pickable: initialState.pickable,
+  };
   // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "arcgis") {
     // The SDK owns terrain; do not install the plugin's MapLibre DEM source.
@@ -581,6 +621,11 @@ function createLidarControl(
   control.on("load", handleLoad);
   control.on("unload", onUnload);
   lidarStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    // Opening (or starting) a project brings its own layers; the panel's
+    // display settings and picking UI belong to the project being left.
+    if (state.projectGeneration !== previous.projectGeneration && lidarControl) {
+      resetLidarControlDisplay(lidarControl, displayDefaults);
+    }
     if (state.layers === previous.layers) return;
     if (state.layers.some(isLidarControlLayer)) acquireMercatorProjectionLock("lidar", app);
     else releaseMercatorProjectionLock("lidar", app);
