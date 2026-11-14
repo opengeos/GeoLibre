@@ -200,6 +200,10 @@ export function filterRowsBySelections(
   );
 }
 
+// One collator for every text comparison: a bare localeCompare re-resolves the
+// locale on each call, and a sort makes O(n log n) of them.
+const textCollator = new Intl.Collator();
+
 /**
  * Order rows by one property for the dashboard list widget. Two finite-number
  * values (numeric strings included) compare numerically, anything else as
@@ -213,10 +217,6 @@ export function filterRowsBySelections(
  * @param direction "asc" for smallest first, "desc" for largest first.
  * @returns A sorted copy, or the original array when no field is given.
  */
-// One collator for every text comparison: a bare localeCompare re-resolves the
-// locale on each call, and a sort makes O(n log n) of them.
-const textCollator = new Intl.Collator();
-
 export function sortRowsByField(
   rows: ChartRow[],
   field: string | undefined,
