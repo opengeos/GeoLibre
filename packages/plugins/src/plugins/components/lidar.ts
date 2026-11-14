@@ -525,7 +525,7 @@ export async function restoreLidarLayers(
 
 type LidarDisplayState = Pick<
   ReturnType<LidarControl["getState"]>,
-  "pointSize" | "colorScheme" | "colormap" | "colorRange" | "usePercentile" | "pickable"
+  "pointSize" | "opacity" | "colorScheme" | "colormap" | "colorRange" | "usePercentile" | "pickable"
 >;
 
 /**
@@ -541,13 +541,27 @@ type LidarDisplayState = Pick<
  * @param control - The mounted LiDAR control.
  * @param defaults - The control's display state captured when it was created.
  */
-export function resetLidarControlDisplay(control: LidarControl, defaults: LidarDisplayState): void {
+function resetLidarControlDisplay(control: LidarControl, defaults: LidarDisplayState): void {
   control.setPointSize(defaults.pointSize);
+  // Panel-wide: newly streamed clouds inherit it, and a saved layer at
+  // opacity 1 never sets its own, so a leftover 0 would hide the next cloud.
+  control.setOpacity(defaults.opacity);
   control.setColorScheme(defaults.colorScheme);
   // After the color scheme: switching it can swap the colormap and range.
   control.setColormap(defaults.colormap);
   control.setColorRange({ ...defaults.colorRange });
   control.setUsePercentile(defaults.usePercentile);
+  // The panel's Elevation Filter checkbox and slider are not synced from
+  // state, so untick the box the way a user would; its change handler clears
+  // the range and hides the slider. clearElevationRange covers a control
+  // whose panel has not been built.
+  const elevationFilter = control
+    .getPanelElement()
+    ?.querySelector<HTMLInputElement>("#lidar-elevation-filter-checkbox");
+  if (elevationFilter?.checked) {
+    elevationFilter.checked = false;
+    elevationFilter.dispatchEvent(new Event("change"));
+  }
   control.clearElevationRange();
   control.showAllClassifications();
   // Turning picking off also hides a Point Info card left over from a hover.
@@ -569,6 +583,7 @@ function createLidarControl(
   const initialState = control.getState();
   const displayDefaults: LidarDisplayState = {
     pointSize: initialState.pointSize,
+    opacity: initialState.opacity,
     colorScheme: initialState.colorScheme,
     colormap: initialState.colormap,
     colorRange: { ...initialState.colorRange },
@@ -627,13 +642,10 @@ function createLidarControl(
     // replaces the layers. A collaboration session also bumps it on its own,
     // after each peer snapshot, to re-run plugin restore; that is not a new
     // project, so it must keep the user's panel settings.
-    if (
-      state.projectGeneration !== previous.projectGeneration &&
-      state.layers !== previous.layers &&
-      lidarControl
-    ) {
-      resetLidarControlDisplay(lidarControl, displayDefaults);
-    }
+    // Applied after the loop below so departing clouds are removed before the
+    // reset recolors whatever is still loaded.
+    const projectOpened =
+      state.projectGeneration !== previous.projectGeneration && state.layers !== previous.layers;
     if (state.layers === previous.layers) return;
     if (state.layers.some(isLidarControlLayer)) acquireMercatorProjectionLock("lidar", app);
     else releaseMercatorProjectionLock("lidar", app);
@@ -660,6 +672,7 @@ function createLidarControl(
         lidarLayerAdapter?.setOpacity(currentLayer.id, currentLayer.opacity);
       }
     }
+    if (projectOpened && lidarControl) resetLidarControlDisplay(lidarControl, displayDefaults);
   });
   return control;
 }

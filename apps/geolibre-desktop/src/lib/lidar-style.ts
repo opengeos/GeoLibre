@@ -315,15 +315,13 @@ const enhanceLidarSelect = (select: HTMLSelectElement) => {
   // `change` event, so the proxy kept showing the old choice. Mirror those
   // writes too.
   const valueProperty = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
-  if (valueProperty?.get && valueProperty.set) {
-    const { get, set } = valueProperty;
+  if (valueProperty?.set) {
+    const nativeSet = valueProperty.set;
     Object.defineProperty(select, "value", {
       configurable: true,
-      get() {
-        return get.call(this);
-      },
+      get: valueProperty.get,
       set(value: string) {
-        set.call(this, value);
+        nativeSet.call(this, value);
         syncLidarSelectProxy(select, button);
       },
     });

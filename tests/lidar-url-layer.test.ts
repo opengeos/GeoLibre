@@ -77,6 +77,10 @@ class LidarControlStub {
     return this.pointClouds;
   }
 
+  getPanelElement() {
+    return null;
+  }
+
   getContainer() {
     return null;
   }
@@ -90,6 +94,7 @@ class LidarControlStub {
   // puts back.
   state = {
     pointSize: 2,
+    opacity: 1,
     colorScheme: "elevation" as unknown,
     colormap: "viridis",
     colorRange: { mode: "percentile", percentileLow: 2, percentileHigh: 98 } as unknown,
@@ -101,6 +106,10 @@ class LidarControlStub {
 
   getState() {
     return { ...this.state };
+  }
+
+  setOpacity(opacity: number) {
+    this.state.opacity = opacity;
   }
 
   setPointSize(size: number) {
@@ -239,6 +248,9 @@ describe("restoreLidarLayers", () => {
     control.setColorScheme("classification");
     control.setColormap("plasma");
     control.setPointSize(5);
+    control.setOpacity(0);
+    control.setColorRange({ mode: "absolute", min: 1, max: 9 });
+    control.setUsePercentile(false);
     control.setElevationRange(10, 20);
     control.setClassificationVisibility(2, false);
     control.setPickable(true);
@@ -257,6 +269,13 @@ describe("restoreLidarLayers", () => {
     assert.equal(control.state.colorScheme, "elevation");
     assert.equal(control.state.colormap, "viridis");
     assert.equal(control.state.pointSize, 2);
+    assert.equal(control.state.opacity, 1);
+    assert.deepEqual(control.state.colorRange, {
+      mode: "percentile",
+      percentileLow: 2,
+      percentileHigh: 98,
+    });
+    assert.equal(control.state.usePercentile, true);
     assert.equal(control.state.elevationRange, null);
     assert.equal(control.state.hiddenClassifications.size, 0);
     assert.equal(control.state.pickable, false);
