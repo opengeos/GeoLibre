@@ -279,6 +279,44 @@ describe("project parsing", () => {
     assert.equal(parseProject(JSON.stringify(legacy)).preferences.map.terrainEnabled, false);
   });
 
+  it("round-trips the 3D look: view, terrain, exaggeration and DEM source", () => {
+    // A pitched view with COG terrain must reopen in 3D (NGIS 2026 workshop).
+    const base = createEmptyProject("3D view");
+    const dem = "https://data.source.coop/opengeos/data/workshops/ngis-2026/reno_tahoe_dem.tif";
+    const saved = {
+      ...base,
+      mapView: { center: [-119.8, 39.25] as [number, number], zoom: 10.2, pitch: 55, bearing: -15 },
+      preferences: {
+        ...base.preferences,
+        map: {
+          ...base.preferences.map,
+          terrainEnabled: true,
+          terrainExaggeration: 2,
+          terrainSource: dem,
+        },
+      },
+    };
+    const reloaded = parseProject(serializeProject(saved));
+    assert.equal(reloaded.mapView.pitch, 55);
+    // Bearings are normalized to [0, 360): -15 reads back as 345.
+    assert.equal(reloaded.mapView.bearing, 345);
+    assert.equal(reloaded.preferences.map.terrainEnabled, true);
+    assert.equal(reloaded.preferences.map.terrainExaggeration, 2);
+    assert.equal(reloaded.preferences.map.terrainSource, dem);
+
+    // Older projects and unusable values keep the renderer defaults.
+    assert.equal(base.preferences.map.terrainExaggeration, undefined);
+    assert.equal(base.preferences.map.terrainSource, undefined);
+    const bad = structuredClone(saved) as unknown as {
+      preferences: { map: Record<string, unknown> };
+    };
+    bad.preferences.map.terrainExaggeration = -1;
+    bad.preferences.map.terrainSource = "file:///tmp/dem.tif";
+    const cleaned = parseProject(JSON.stringify(bad));
+    assert.equal(cleaned.preferences.map.terrainExaggeration, undefined);
+    assert.equal(cleaned.preferences.map.terrainSource, undefined);
+  });
+
   it("round-trips zoom-to-new-layers and keeps it on for legacy projects", () => {
     const base = createEmptyProject("Auto zoom");
     assert.equal(base.preferences.map.zoomToNewLayers, true);

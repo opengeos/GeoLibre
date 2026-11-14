@@ -1609,6 +1609,14 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       terrainIonAssetId:
         parseCesiumIonAssetId((map as Partial<ProjectPreferences["map"]>).terrainIonAssetId) ??
         undefined,
+      // Absent in projects written before the terrain look was saved; they
+      // keep opening with the default exaggeration and global terrain.
+      terrainExaggeration: normalizeTerrainExaggeration(
+        (map as Partial<ProjectPreferences["map"]>).terrainExaggeration,
+      ),
+      terrainSource: normalizeTerrainSource(
+        (map as Partial<ProjectPreferences["map"]>).terrainSource,
+      ),
       // Kept as a free string here; the app coerces an unknown notation to
       // decimal degrees when it renders, so a hand-edited project cannot break
       // the readout.
@@ -1733,6 +1741,36 @@ function normalizeBounds(bounds: unknown): ProjectPreferences["map"]["bounds"] {
   }
 
   return DEFAULT_PROJECT_PREFERENCES.map.bounds;
+}
+
+/**
+ * Keep a saved terrain exaggeration only when it is a finite, non-negative
+ * number; anything else falls back to the renderer default.
+ *
+ * Args:
+ *   value: The raw `terrainExaggeration` from a project file.
+ *
+ * Returns:
+ *   The exaggeration, or `undefined` for the default.
+ */
+function normalizeTerrainExaggeration(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Keep a saved terrain DEM only when it is an HTTP(S) URL, the one kind of
+ * source a project can reopen on another device.
+ *
+ * Args:
+ *   value: The raw `terrainSource` from a project file.
+ *
+ * Returns:
+ *   The trimmed URL, or `undefined` for the built-in global terrain.
+ */
+function normalizeTerrainSource(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : undefined;
 }
 
 function normalizeNumber(value: unknown, fallback: number): number {

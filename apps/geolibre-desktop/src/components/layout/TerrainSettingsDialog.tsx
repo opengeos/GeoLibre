@@ -1,4 +1,9 @@
-import { parseCesiumIonAssetId, useAppStore, useLayersWhen } from "@geolibre/core";
+import {
+  parseCesiumIonAssetId,
+  useAppStore,
+  useLayersWhen,
+  type MapPreferences,
+} from "@geolibre/core";
 import {
   CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -35,6 +40,57 @@ import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
 
 type TerrainSourceAction = "url" | "file" | "layer" | "default" | "ion";
+
+/**
+ * Record the terrain look in the project preferences, so it is saved with the
+ * project and comes back when it is reopened (useTerrainRestore).
+ *
+ * Args:
+ *   patch: The terrain fields to change. `undefined` clears a field back to
+ *     the renderer default.
+ */
+function setTerrainPreferences(
+  patch: Partial<Pick<MapPreferences, "terrainExaggeration" | "terrainSource">>,
+): void {
+  const { preferences, setPreferences } = useAppStore.getState();
+  const map = { ...preferences.map, ...patch };
+  if (
+    map.terrainExaggeration === preferences.map.terrainExaggeration &&
+    map.terrainSource === preferences.map.terrainSource
+  ) {
+    return;
+  }
+  setPreferences({ ...preferences, map });
+}
+
+/**
+ * The project-saveable form of a terrain source: an HTTP(S) URL, or nothing for
+ * the built-in terrain and for a local file, which has no URL to reopen.
+ *
+ * Args:
+ *   source: The source just applied to the map.
+ *
+ * Returns:
+ *   The URL to save, or `undefined`.
+ */
+function savedTerrainSource(source: string | Blob | null): string | undefined {
+  return typeof source === "string" && /^https?:\/\//i.test(source.trim())
+    ? source.trim()
+    : undefined;
+}
+
+/**
+ * The project-saveable exaggeration: the default is left out of the file.
+ *
+ * Args:
+ *   value: The clamped exaggeration.
+ *
+ * Returns:
+ *   The value to save, or `undefined` for the default.
+ */
+function savedTerrainExaggeration(value: number): number | undefined {
+  return value === DEFAULT_EXAGGERATION ? undefined : value;
+}
 
 // @geolibre/map is i18n-agnostic and throws English messages, so the failure
 // kinds it tags are mapped to the catalog here rather than shown verbatim.
@@ -151,6 +207,15 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     }
   };
 
+  // Saved on commit (slider release, typed value, Reset) rather than on every
+  // drag frame, since each preference change re-applies the map preferences.
+  const commitExaggeration = (value: number) => {
+    applyExaggeration(value);
+    setTerrainPreferences({
+      terrainExaggeration: savedTerrainExaggeration(clampExaggeration(value)),
+    });
+  };
+
   const commitDraft = () => {
     const parsed = Number(draft);
     if (draft.trim() === "" || !Number.isFinite(parsed)) {
@@ -159,7 +224,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       return;
     }
     const clamped = clampExaggeration(parsed);
-    applyExaggeration(clamped);
+    commitExaggeration(clamped);
     // Reflect clamping in the field even when the state value is unchanged
     // (e.g. "7" committed while already at the max of 5).
     setDraft(String(clamped));
@@ -203,6 +268,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       // selection; a COG source outranks Ion in the engine, so clearing Ion
       // afterwards does not fetch it again.
       if (!(await controller.setTerrainCogSource(source)) || !isCurrent()) return;
+      setTerrainPreferences({ terrainSource: savedTerrainSource(source) });
       if (ionTerrainSupported && controller.setTerrainIonAssetId) {
         if (controller.getTerrainIonAssetId?.() !== null) {
           const clearIon = await controller.setTerrainIonAssetId(null);
@@ -297,7 +363,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       const preferences = useAppStore.getState().preferences;
       useAppStore.getState().setPreferences({
         ...preferences,
-        map: { ...preferences.map, terrainIonAssetId: assetId },
+        map: { ...preferences.map, terrainIonAssetId: assetId, terrainSource: undefined },
       });
       setTerrainUrl("");
       setRasterLayerId("");
@@ -345,6 +411,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
               step={EXAGGERATION_STEP}
               value={[exaggeration]}
               onValueChange={(value: number[]) => applyExaggeration(value[0])}
+              onValueCommit={(value: number[]) => commitExaggeration(value[0])}
             />
           </div>
           <div className="space-y-2 border-t pt-4">
@@ -501,7 +568,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
             <Button
               type="button"
               variant="outline"
-              onClick={() => applyExaggeration(DEFAULT_EXAGGERATION)}
+              onClick={() => commitExaggeration(DEFAULT_EXAGGERATION)}
             >
               {t("terrainSettings.reset")}
             </Button>

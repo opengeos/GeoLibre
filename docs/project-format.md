@@ -58,6 +58,14 @@ file contents do not change.
 | `interaction`     | object  | Optional startup Identify target and control visibility (see below); omitted by default                      |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
+The map's 3D look is part of the project. `mapView.pitch` and `mapView.bearing`
+hold the camera tilt and rotation, and `preferences.map` holds the terrain:
+`terrainEnabled` (3D terrain on or off), `terrainExaggeration` (vertical
+exaggeration; omitted for the default of 1) and `terrainSource` (the HTTP(S) URL
+of a Cloud Optimized GeoTIFF DEM; omitted for the built-in global terrain). A DEM
+opened from a local file has no URL, so it is not saved. `terrainIonAssetId`
+picks a Cesium Ion terrain asset for the globe.
+
 ## Plugin state
 
 ```json
