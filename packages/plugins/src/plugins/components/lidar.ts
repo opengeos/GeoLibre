@@ -623,7 +623,15 @@ function createLidarControl(
   lidarStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     // Opening (or starting) a project brings its own layers; the panel's
     // display settings and picking UI belong to the project being left.
-    if (state.projectGeneration !== previous.projectGeneration && lidarControl) {
+    // loadProject/newProject bump the generation in the same update that
+    // replaces the layers. A collaboration session also bumps it on its own,
+    // after each peer snapshot, to re-run plugin restore; that is not a new
+    // project, so it must keep the user's panel settings.
+    if (
+      state.projectGeneration !== previous.projectGeneration &&
+      state.layers !== previous.layers &&
+      lidarControl
+    ) {
       resetLidarControlDisplay(lidarControl, displayDefaults);
     }
     if (state.layers === previous.layers) return;

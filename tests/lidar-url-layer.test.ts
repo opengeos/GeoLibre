@@ -246,6 +246,11 @@ describe("restoreLidarLayers", () => {
     // An unrelated store change leaves the user's choices alone.
     useAppStore.getState().setProjectName("Renamed");
     assert.equal(control.state.colorScheme, "classification");
+    // Nor does a collaboration session's bare generation bump, which re-runs
+    // plugin restore after a peer snapshot without opening a project.
+    useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    assert.equal(control.state.colorScheme, "classification");
+    assert.equal(control.state.pickable, true);
 
     useAppStore.getState().newProject();
 
