@@ -2,6 +2,7 @@
 // (useLayoutOptions) and Export as HTML (html-export) read them the same way.
 
 export const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
+const HIDDEN_TOOLBAR_VALUES = new Set(["hidden", "hide", "none", "off"]);
 const TRUTHY_FLAG_VALUES = new Set(["", "true", "1", "yes", "on"]);
 
 /** A query param value trimmed and lowercased; `""` when absent. */
@@ -15,6 +16,19 @@ export function normalizedParam(value: string | null): string {
  */
 export function isMapOnly(params: URLSearchParams): boolean {
   return params.has("maponly") && TRUTHY_FLAG_VALUES.has(normalizedParam(params.get("maponly")));
+}
+
+/**
+ * Whether the query hides the top toolbar (`?maponly`, `?toolbar=hidden`), and
+ * with it the menus and the keyboard shortcuts it owns.
+ */
+export function isToolbarHidden(params: URLSearchParams): boolean {
+  return isMapOnly(params) || HIDDEN_TOOLBAR_VALUES.has(normalizedParam(params.get("toolbar")));
+}
+
+/** Whether the query asks for the read-only `layout=viewer` chrome. */
+export function isViewerLayoutParams(params: URLSearchParams): boolean {
+  return normalizedParam(params.get("layout")) === "viewer";
 }
 
 /**
