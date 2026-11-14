@@ -149,7 +149,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
 
 ## Hands-on (35 min)
 
-### Exercise 3.1: Set up the project (3 min)
+### Exercise 3.1: Set up the project (2 min)
 
 1. Choose **Project → New…**, name the project
    `NGIS 2026 - 3 Visualization and styling`, pick the **Positron** basemap
@@ -181,7 +181,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
 5. Hide both rasters (eye icon) for now, and click **Zoom to layer** on
    `nv_counties`.
 
-### Exercise 3.2: Graduated symbols and classification schemes (6 min)
+### Exercise 3.2: Graduated symbols and classification schemes (5 min)
 
 1. Click the palette icon on `nv_earthquakes` to open its Style panel. Above
    **Style type**, the **Style suggestions** strip offers **Categorize by
@@ -215,7 +215,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
     first class. Which scheme would you publish for a general audience, and
     which for seismologists who care about the rare large events?
 
-### Exercise 3.3: Proportional symbols, heatmap, and clusters (6 min)
+### Exercise 3.3: Proportional symbols, heatmap, and clusters (5 min)
 
 1. Still on `nv_earthquakes`, find **Proportional size** and tick **Size by
    value**. Set **Size field** to `mag`. GeoLibre fills **Min value** `2.5`
@@ -245,7 +245,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
 
 ![Earthquakes as graduated, proportional symbols with labeled county outlines and the generated legend](https://data.source.coop/opengeos/data/workshops/ngis-2026/images/s03-vector-symbology.webp)
 
-### Exercise 3.4: County outlines and labels (5 min)
+### Exercise 3.4: County outlines and labels (4 min)
 
 1. Open the Style panel for `nv_counties`.
 2. Next to **Fill color**, tick **Transparent**. Set **Outline color** to
@@ -270,7 +270,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
     put the rest in the popup. Use **Min zoom** on labels so a layer that is
     right at zoom 10 is not noise at zoom 5.
 
-### Exercise 3.5: Design a popup and a hover tooltip (6 min)
+### Exercise 3.5: Design a popup and a hover tooltip (5 min)
 
 1. Still in the `nv_counties` Style panel, scroll to **Popup**.
 2. Set **Title field** to `NAMELSAD` (for example "Elko County") and untick
@@ -306,7 +306,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
     and story maps (Section 7) show readers your popup, not the raw table.
     Fields hidden in the attribute table stay out of the popup too.
 
-### Exercise 3.6: Style the elevation model (7 min)
+### Exercise 3.6: Style the elevation model (6 min)
 
 1. Show `reno_tahoe_dem.tif` and `reno_tahoe_hillshade.tif` again and click
    **Zoom to layer** on the DEM.
@@ -337,7 +337,7 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
     will print beside a legend, and when is a viewport stretch the better
     choice?
 
-### Exercise 3.7: Edit the legend (4 min)
+### Exercise 3.7: Edit the legend (3 min)
 
 1. Choose **Controls → Legend**. It lists the earthquake classes with the
    caption **Quantile, 5 classes**, the counties, and gradient bars for both
@@ -359,8 +359,9 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
 
 ### Exercise 3.8: Print layout (5 min)
 
-1. Hide `reno_tahoe_dem.tif` and `reno_tahoe_hillshade.tif`. This page is an
-   earthquake map; see the warning below.
+1. This page is an earthquake map, so hide `reno_tahoe_dem.tif` and
+   `reno_tahoe_hillshade.tif` to keep it uncluttered. (Leave them on if you
+   prefer: the layout prints the colored DEM and hillshade too.)
 2. Choose **Project → Print layout…**. The defaults are **A4**,
    **Landscape**, with **Title**, **Subtitle**, **Legend**, **Scale bar**,
    **North arrow**, and **Date** ticked.
@@ -373,17 +374,10 @@ north arrow, date, and footer, and exports PNG, PDF, or SVG.
 6. Click **Export PNG**. The A4 page renders at 150 DPI, 1754 × 1240 pixels.
    Chrome and Edge may ask where to save it; otherwise it goes to your
    downloads folder.
-7. Close the dialog, show both rasters again, and save the project
-   (**Project → Save**).
+7. Close the dialog, show both rasters again if you hid them, and save the
+   project (**Project → Save**).
 
 ![An A4 landscape print layout exported to PNG](https://data.source.coop/opengeos/data/workshops/ngis-2026/images/s03-print-layout.webp)
-
-!!! warning "If the preview says Could not capture the map image"
-    The layout waits for the map to finish rendering before it copies it. In
-    the current release a recolored COG raster can keep the map from
-    settling, and after 30 seconds the preview gives up with **Could not
-    capture the map image**. Close the dialog, hide the raster layers, and
-    open the layout again.
 
 ### Bonus: Save a style and try a categorized renderer (if you finish early)
 

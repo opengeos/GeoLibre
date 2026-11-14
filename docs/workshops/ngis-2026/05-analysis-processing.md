@@ -118,7 +118,9 @@ cold spots at 90, 95, and 99% confidence.
     1. **Significance is not importance.** With many cells, small differences
        reach significance.
     2. **The cell size is a choice.** Rerun at a coarser and a finer
-       resolution; a pattern that survives all of them is real (this is the
+       resolution as a sensitivity check. A pattern that survives all of them
+       is robust to cell size, not proven real: a bias in the data, such as
+       the one in point 3, survives every resolution too (this is the
        modifiable areal unit problem, and hexagons do not make it go away).
     3. **Counts are not rates.** A hot spot of incident counts is often a hot
        spot of population. For earthquakes there is no population

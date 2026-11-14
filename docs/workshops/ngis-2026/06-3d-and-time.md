@@ -283,11 +283,16 @@ view; its buildings rise in 3D when you zoom in to a city.
     | 2019 | 3,070 | M7.1 | 2024 | 444 | M5.7 |
     | 2020 | 1,871 | M6.5 | 2025 | 424 | M4.8 |
 
-6. Pause, then switch the step to **M** (month). The marker reads
-   **Jan 2020**. Click **Next** (⏭) four times to reach **May 2020** (811
+6. Pause, click **2020** again, then switch the step to **M** (month). The
+   marker reads **Jan 2020**, and **Next** (⏭) now moves one month at a time.
+   The filter does not shrink with it: **In the current step** means the step
+   that was active when you bound the layer (a year), so each click slides a
+   12-month window. Click **Next** four times to reach **May 2020**. The map
+   shows May 2020 through April 2021 (1,851 events), not May alone (811
    events: the Monte Cristo Range M6.5 of May 15 and its aftershocks). Then
-   click **Previous** (⏮) ten times to reach **Jul 2019**, the busiest month
-   of the decade (2,486 events: Ridgecrest, M7.1 on July 6).
+   click **Previous** (⏮) ten times to reach **Jul 2019**: the window holds
+   4,274 events, and 2,486 of them fall in July 2019 alone, the busiest month
+   of the decade (Ridgecrest, M7.1 on July 6).
 
 !!! question "Discussion"
     2019 has ten times the events of 2018, yet most of them are not in
@@ -329,9 +334,9 @@ Save the project (**Project → Save**).
    earthquake and LiDAR layers. The Liberty basemap's buildings stand as 3D
    blocks along Virginia Street and the Truckee River.
 2. Choose **Controls → Sun**. The panel opens on **06/21/2024**, the summer
-   solstice. Click the month in **Date** and type `12` to make it
-   December 21, the winter solstice (change only the month: retyping the
-   year resets the field). Click the hour in **Time** and type `0330P` for
+   solstice. Click the month in **Date** and type `12212024` to make it
+   December 21, the winter solstice; the panel header updates to **Dec 21,
+   2024**. Click the hour in **Time** and type `0330P` for
    **03:30 PM**. The buildings take on warm, low-angle winter light. Drag the
    time-of-day slider under the clock, or press play, to watch the light
    move. The sun position is computed on your machine; nothing is sent

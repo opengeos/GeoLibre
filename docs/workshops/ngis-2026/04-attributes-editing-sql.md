@@ -418,7 +418,8 @@ were in Nevada?
    as **Field name**, keep **Type** Text, and click **Add field**.
 8. Click **Calculate field values from an expression**: **Create field**
    `area_km2`, expression `round($area("square-kilometers"), 1)`. The preview
-   shows your polygon's area (85.5 km² for the instructor's box).
+   shows your polygon's area (85.5 km² for the instructor's box). Click
+   **Calculate**; the table gains an `area_km2` column.
 9. Click **Edit attribute values** (the pencil). Type a name such as
    `East Truckee Meadows` into the `name` cell and click **Save attribute
    edits**.

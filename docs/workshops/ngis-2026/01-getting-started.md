@@ -142,7 +142,10 @@ plugin state. Three things about it matter today:
 - **It stores references, not copies.** A layer records *where* its data is,
   so a project that maps a national dataset is still a few kilobytes. The flip
   side is that a project can save perfectly and still draw nothing for a
-  colleague who cannot reach its sources.
+  colleague who cannot reach its sources. The exceptions are layers with no
+  URL to point at: points built from a CSV, features fetched from a feature
+  service, layers you draw, and analysis results are embedded in the file.
+  Check what a project embeds before you share one built from private data.
 - **It never contains credentials.** API keys and tokens stay on the device,
   so a project file is safe to commit to Git or email.
 - **It is plain JSON.** Projects save as `.geolibre` files. Earlier releases
@@ -209,7 +212,7 @@ handles it accordingly.
 
     | Format | Readout |
     | --- | --- |
-    | Decimal degrees (longitude first) | `-119.81600, 39.54420` |
+    | Decimal degrees (longitude first) | `-119.81600, 39.54406` |
     | Degrees, minutes, seconds | `39°32'38.64"N 119°48'57.6"W` |
     | Degrees, decimal minutes | `39°32.6441'N 119°48.96'W` |
     | UTM | `11S 258017mE 4380943mN` |
@@ -312,6 +315,12 @@ handles it accordingly.
    points again.
 
 ![Project history comparing the pre-mistake snapshot with the current project](https://data.source.coop/opengeos/data/workshops/ngis-2026/images/s01-history-compare.webp)
+
+!!! tip "Restore one layer instead of the whole snapshot"
+    The **Removed · Reno-Tahoe sites** row in the comparison has its own
+    **Restore this layer** button. It brings back just that layer and leaves
+    everything else as it is now; the dialog confirms with **Restored
+    "Reno-Tahoe sites". Use Undo to revert it.**
 
 !!! tip "Undo is faster for the last step"
     **Edit → Undo** (`Ctrl+Z`) also brings back a removed layer. History is

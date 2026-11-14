@@ -146,9 +146,9 @@ A project stores **where each layer comes from**, not a copy of the data, so a
 URL-based layer reopens from its URL. Two exceptions matter today: points
 built from a CSV are embedded in the project (so the file grows), and a
 feature service result (OGC API, WFS) is saved as the features you fetched.
-Zarr layers are not restored on the default MapLibre engine yet; add them
-again from their source. Credentials (API keys, S3 keys, ArcGIS sign-ins) are
-never written to a project.
+A Zarr layer is saved as its store URL plus the variable, time selector, and
+color settings, and reopens from the store. Credentials (API keys, S3 keys,
+ArcGIS sign-ins) are never written to a project.
 
 ## Hands-on (35 min)
 
@@ -180,7 +180,7 @@ All workshop files are read in place from
    Reno-Tahoe sites (zoom about 10).
 5. Click **Close panel** (×) on the Add Vector Layer panel.
 
-### Exercise 2.2: Earthquakes from a CSV (5 min)
+### Exercise 2.2: Earthquakes from a CSV (4 min)
 
 The USGS earthquake catalog exports CSV with `latitude` and `longitude`
 columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
@@ -209,7 +209,7 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
     from an address column instead, sending each address to a geocoding
     service.
 
-### Exercise 2.3: Stream a GeoParquet file in place (5 min)
+### Exercise 2.3: Stream a GeoParquet file in place (4 min)
 
 1. Choose **Add data → GeoParquet layer**. The same Add Vector Layer panel
    opens.
@@ -235,7 +235,7 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
     streaming off: the layer is handed to GeoLibre and gets the full Style
     panel and attribute table.
 
-### Exercise 2.4: The same counties as PMTiles (5 min)
+### Exercise 2.4: The same counties as PMTiles (4 min)
 
 1. Choose **Add data → PMTiles layer**. The **PMTiles Layer** panel opens.
 2. Paste the URL into **PMTiles URL**:
@@ -290,7 +290,7 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
     and a stretch. **Inspect pixel values** on the layer row reads elevations
     now if you are curious.
 
-### Exercise 2.6: Search Sentinel-2 with STAC (8 min)
+### Exercise 2.6: Search Sentinel-2 with STAC (7 min)
 
 1. Type `Lake Tahoe` in the search box at the bottom left and pick **Lake
    Tahoe, Placer County, California, United States**. Search results fly to
@@ -336,7 +336,7 @@ columns. This extract holds 8,031 M2.5+ earthquakes from 2016 through 2025.
     and why does a summer date range over Lake Tahoe still return mostly clear
     scenes?
 
-### Exercise 2.7: A feature service and a map service (6 min)
+### Exercise 2.7: A feature service and a map service (5 min)
 
 1. Choose **Add data → OGC API - Features**.
 2. Set **Layer name** to `USGS monitoring locations (OGC API)` and paste the
@@ -399,9 +399,10 @@ Eleven layers is already a long list. Groups are folders in the layer stack.
 - **FlatGeobuf.** **Add data → FlatGeobuf layer** opens a panel with **Format**
   already set to **FlatGeobuf**. Paste
   `https://data.source.coop/opengeos/data/workshops/ngis-2026/us_counties.fgb`
-  into **Vector URL** and click **Add Layer**. The panel reports **Added 3235
-  features (flatgeobuf).**, the layer arrives as `us_counties` tagged
-  **FLATGEOBUF**, and the map zooms out to a world view. Compare the
+  into **Vector URL**, set **Layer Name** to `US counties (FlatGeobuf)`, and
+  click **Add Layer**. The panel reports **Added 3235 features
+  (flatgeobuf).**, the layer arrives under your name tagged **FLATGEOBUF**,
+  and the map zooms out to a world view. Compare the
   load time with the streamed GeoParquet copy, then remove it (trash icon,
   then **Remove**).
 - **Zarr.** **Add data → Zarr layer**, then **Load sample data… → Sea surface
@@ -412,8 +413,8 @@ Eleven layers is already a long list. Groups are folders in the layer stack.
   Change **Selector (JSON)** to `{"time": 12}` and add a second time step.
   The **Diagnostics** counter in the status bar goes to 1: the reader first
   checks for a Zarr v3 `zarr.json`, gets a harmless 404 from this v2 store,
-  and falls back to `.zmetadata`. Remove the Zarr layers before saving: they
-  do not restore on the MapLibre engine.
+  and falls back to `.zmetadata`. Zarr layers save with the project and
+  reopen from the store, so you can keep them.
 - **A deep link.** Open this URL in a new tab. GeoLibre starts with the
   earthquake GeoParquet already loaded and zooms to it, no menus involved:
 

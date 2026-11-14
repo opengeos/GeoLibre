@@ -61,8 +61,10 @@ Three properties follow from that design:
 2. **It is undoable.** Tools act through the same project store as the rest
    of the app, so **Edit → Undo** reverses a restyle or a new layer.
 3. **It is scoped.** The provider receives layer names, field names, and the
-   current view, **not your feature data**. SQL runs locally in DuckDB, and
-   only the result summary goes back to the model.
+   current view, **not whole layers**. SQL runs locally in DuckDB, and what
+   goes back to the model is the column names, the row count, and a preview
+   of up to 10 result rows. Ask for counts and only the counts are sent; ask
+   for individual records and those attribute values reach the provider.
 
 !!! warning "The code fallback is the exception"
     When no tool fits, the assistant can run JavaScript against the map or
@@ -83,11 +85,15 @@ endpoint, and **Ollama**, which runs a model on your own machine.
   storage. On the desktop app, the recommended route is to export the key in
   your shell profile, so it is never typed into Settings or written to a
   project.
-- **No data leaves your machine until you send a prompt.** Then the prompt
-  and the schema context go to the provider you chose.
-- With **Ollama**, nothing leaves your machine at all. To use it from the
-  hosted web app, start Ollama with `OLLAMA_ORIGINS=https://web.geolibre.app`
-  so the page may call it.
+- **No data leaves your machine until you send a prompt.** Then the prompt,
+  the schema context, and tool results such as SQL previews go to the
+  provider you chose.
+- With **Ollama**, the model runs on your machine. Two optional features
+  still send data elsewhere: the fast path for simple commands, when
+  enabled, sends the request text and layer names to TypeSafe, and voice
+  input in Chrome sends audio to Google. Leave both off for sensitive work.
+  To use Ollama from the hosted web app, start it with
+  `OLLAMA_ORIGINS=https://web.geolibre.app` so the page may call it.
 - Layer and field names are metadata, and metadata can be sensitive. A layer
   named `2026_layoffs_by_site` says something even if no rows are sent. If you
   cannot share the schema, use Ollama or leave the assistant off.
@@ -119,11 +125,12 @@ notebook, and an MCP agent can edit either one.
 
 ## Hands-on (25 min)
 
-Start a new project: **Project → New...**, choose **Do not save** if asked
-about the current project, name it `NGIS 2026 - 8 AI and automation`, pick
-the **Positron** basemap, and click **Create**. Then use
-**Add data → Vector layer** to load these two URLs (paste each and click
-**Load**):
+Start a new project: **Project → New...**. If GeoLibre asks **Save current
+project?**, click **Save** to keep your Section 7 work (choose **Do not save**
+only if you mean to discard unsaved changes). Name the new project
+`NGIS 2026 - 8 AI and automation`, pick the **Positron** basemap, and click
+**Create**. Then use **Add data → Vector layer** to load these two URLs (paste
+each and click **Load**):
 
 ```text
 https://data.source.coop/opengeos/data/workshops/ngis-2026/nv_counties.geojson

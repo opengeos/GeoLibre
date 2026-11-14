@@ -82,7 +82,8 @@ network does not block them.
 
 The earthquake extract covers latitude 35 to 42.1 and longitude -120.1 to -114,
 so it includes events just outside Nevada, mostly in eastern California.
-Section 4 clips it to Nevada with a spatial join.
+Section 4 keeps only the events inside Nevada counties with a spatial join
+(Exercise 4.7).
 
 Other sections also read large public datasets in place: Sentinel-2 imagery
 from [Earth Search](https://earth-search.aws.element84.com/v1), the USGS
