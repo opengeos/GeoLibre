@@ -26,6 +26,9 @@ function isNonEmptyString(value: unknown): value is string {
  * @returns True when the layer's features reload from their source.
  */
 export function reloadsFeaturesFromSource(layer: GeoLibreLayer): boolean {
+  // `metadata.originalUrl` counts because `prepareLayerForSave` in
+  // @geolibre/core (`hasRestorableSourceUrl`) drops an external native layer's
+  // `geojson` when it is set; an edit to such a layer would vanish the same way.
   return (
     isNonEmptyString(layer.source.url) ||
     isNonEmptyString(layer.metadata.originalUrl) ||
