@@ -1065,39 +1065,34 @@ function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
   return Math.max(0, total);
 }
 
-/** True when two `[west, south, east, north]` boxes overlap or touch. */
-function bboxesOverlap(a: BBox, b: BBox): boolean {
+/** True when two `[west, south, east, north]` boxes overlap or touch; a missing box never does. */
+function bboxesOverlap(a: BBox | null, b: BBox | null): boolean {
+  if (!a || !b) return false;
   return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 }
 
-/** Turf intersect that treats a geometry error as "no overlap". */
-function safeIntersect(
-  a: Feature<Polygon | MultiPolygon>,
-  b: Feature<Polygon | MultiPolygon>,
-): Feature<Polygon | MultiPolygon> | null {
-  try {
-    return intersect(featureCollection([a, b])) as Feature<Polygon | MultiPolygon> | null;
-  } catch {
-    return null;
-  }
-}
+/**
+ * Upper bound on polygon-to-polygon clips in one Summarize within run. Each is a
+ * full polygon-clipping pass, which costs milliseconds on detailed parcels, so
+ * the pair cap alone does not bound the runtime.
+ */
+const MAX_SUMMARIZE_CLIPS = 20_000;
 
 /**
  * Area of the union of the overlap pieces inside one polygon, so two pieces of
- * the summarized layer that overlap each other are not counted twice. If Turf
- * cannot union them it falls back to the summed areas (the caller caps the
- * share at 100%).
+ * the summarized layer that overlap each other are not counted twice. Returns
+ * null when Turf cannot union them: summing the pieces instead would double
+ * count exactly the overlaps the union exists to remove.
  */
-function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number {
+function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number | null {
   if (!pieces.length) return 0;
   if (pieces.length === 1) return polygonAreaM2(pieces[0].geometry);
   try {
     const merged = union(featureCollection(pieces));
-    if (merged) return polygonAreaM2(merged.geometry as Polygon | MultiPolygon);
+    return merged ? polygonAreaM2(merged.geometry as Polygon | MultiPolygon) : null;
   } catch {
-    // fall through to the sum below
+    return null;
   }
-  return pieces.reduce((sum, piece) => sum + polygonAreaM2(piece.geometry), 0);
 }
 
 /**
@@ -1165,6 +1160,9 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       return;
     }
     const overlayFeatures = (overlayLayer.geojson?.features ?? []).filter((f) => f.geometry);
+    if (!overlayFeatures.length) {
+      ctx.log("Warning: the layer to summarize has no features, so every count is 0");
+    }
     // Pairwise on the main thread (or a worker); cap it like Spatial join.
     const pairs = targets.length * overlayFeatures.length;
     if (pairs > MAX_CLIENT_PAIRS) {
@@ -1173,8 +1171,21 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       );
       return;
     }
-    const overlayBoxes = overlayFeatures.map((f) => bbox(f));
-    const hasPolygons = overlayFeatures.some((f) => isFamily(f.geometry, "polygon"));
+    // horizontalBbox drops the elevation a six-value (3D) bbox carries.
+    const overlayBoxes = overlayFeatures.map((f) => horizontalBbox(bbox(f)));
+    const isPolygon = overlayFeatures.map((f) => isFamily(f.geometry, "polygon"));
+    const hasPolygons = isPolygon.some(Boolean);
+    const candidates = targets.map((target) => {
+      const box = horizontalBbox(bbox(target));
+      return overlayFeatures.flatMap((_, i) => (bboxesOverlap(box, overlayBoxes[i]) ? [i] : []));
+    });
+    const clips = candidates.reduce((n, list) => n + list.filter((i) => isPolygon[i]).length, 0);
+    if (clips > MAX_SUMMARIZE_CLIPS) {
+      ctx.log(
+        `Error: summarize within needs ${clips} polygon overlaps (limit ${MAX_SUMMARIZE_CLIPS}); filter or clip the layers first`,
+      );
+      return;
+    }
 
     const statKeys = field ? SUMMARIZE_STATS.map((stat) => `${stat}_${field}`) : [];
     const outputKeys = [
@@ -1189,32 +1200,42 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     }
 
     let slivers = 0;
-    const results: Feature[] = targets.map((target) => {
-      const targetBox = bbox(target);
+    let failedClips = 0;
+    let failedUnions = 0;
+    const results: Feature[] = targets.map((target, targetIndex) => {
       const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
       let count = 0;
       const values: number[] = [];
       const pieces: Feature<Polygon | MultiPolygon>[] = [];
-      overlayFeatures.forEach((feature, index) => {
-        if (!bboxesOverlap(targetBox, overlayBoxes[index])) return;
-        if (isFamily(feature.geometry, "polygon")) {
-          const piece = safeIntersect(target, feature as Feature<Polygon | MultiPolygon>);
+      for (const index of candidates[targetIndex]) {
+        const feature = overlayFeatures[index];
+        if (isPolygon[index]) {
+          let piece: Feature<Polygon | MultiPolygon> | null;
+          try {
+            piece = intersect(
+              featureCollection([target, feature as Feature<Polygon | MultiPolygon>]),
+            ) as Feature<Polygon | MultiPolygon> | null;
+          } catch {
+            // Invalid or self-intersecting geometry; reported once below.
+            failedClips += 1;
+            continue;
+          }
           const pieceArea = piece ? polygonAreaM2(piece.geometry) : 0;
-          if (!piece || pieceArea <= 0) return;
+          if (!piece || pieceArea <= 0) continue;
           if (targetArea > 0 && (pieceArea / targetArea) * 100 < minPct) {
             slivers += 1;
-            return;
+            continue;
           }
           pieces.push(piece);
         } else if (!matchesPredicate(feature, target, "intersects")) {
-          return;
+          continue;
         }
         count += 1;
         if (field) {
           const value = toNumeric(feature.properties?.[field]);
           if (value !== null) values.push(value);
         }
-      });
+      }
 
       const properties: Record<string, unknown> = { ...(target.properties ?? {}), count };
       SUMMARIZE_STATS.forEach((stat, i) => {
@@ -1222,11 +1243,12 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       });
       if (hasPolygons) {
         const covered = coveredAreaM2(pieces);
+        if (covered === null) failedUnions += 1;
         // Rounded so the table reads cleanly: km² to 6 places (about 1 m²), the
         // share to 2 places. Geodesic edges leave noise past those digits.
-        properties.overlap_km2 = Math.round(covered) / 1e6;
+        properties.overlap_km2 = covered === null ? null : Math.round(covered) / 1e6;
         properties.overlap_pct =
-          targetArea > 0
+          covered !== null && targetArea > 0
             ? Math.round(Math.min(100, (covered / targetArea) * 100) * 100) / 100
             : null;
       }
@@ -1237,6 +1259,16 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     ctx.log(`Summarize within: ${matched} of ${results.length} polygon(s) contain features`);
     if (slivers) {
       ctx.log(`Summarize within: ignored ${slivers} overlap(s) below ${minPct}% of a polygon`);
+    }
+    if (failedClips) {
+      ctx.log(
+        `Warning: skipped ${failedClips} polygon pair(s) whose geometry could not be intersected; try Fix geometries first`,
+      );
+    }
+    if (failedUnions) {
+      ctx.log(
+        `Warning: could not merge the overlaps in ${failedUnions} polygon(s), so their coverage is left empty`,
+      );
     }
     ctx.addResultLayer?.("Summarize within", featureCollection(results));
   },

@@ -1575,4 +1575,52 @@ describe("summarize within", () => {
     assert.equal(replaced.result!.features[0].properties?.count, 1);
     assert.ok(replaced.logs.some((line) => line.includes("replacing the existing field(s) count")));
   });
+
+  it("reads a 3D bbox by its horizontal bounds", () => {
+    // A six-value bbox keeps elevation at index 2; read as east it would hide
+    // the point.
+    const tract = { ...rect(10, 10, 12, 12, { name: "z" }), bbox: [10, 10, 0, 12, 12, 0] };
+    const { result } = run([asLayer("z", [tract]), asLayer("p", [pt(11, 11)])], {
+      layer: "z",
+      overlay: "p",
+    });
+    assert.equal(result!.features[0].properties?.count, 1);
+  });
+
+  it("reports polygon pairs it could not intersect", () => {
+    const broken = {
+      ...rect(0, 0, 1, 1, { zone: "bad" }),
+      // An explicit bbox lets the pair past the box test; the NaN makes the clip throw.
+      bbox: [0, 0, 1, 1],
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [
+          [
+            [0, 0],
+            [1, Number.NaN],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    };
+    const { result, logs } = run([tracts, asLayer("broken", [broken])], {
+      layer: "tracts",
+      overlay: "broken",
+    });
+    assert.equal(result!.features[0].properties?.count, 0);
+    assert.ok(logs.some((line) => line.includes("skipped 1 polygon pair(s)")));
+  });
+
+  it("warns when the layer to summarize is empty", () => {
+    const { result, logs } = run([tracts, asLayer("none", [])], {
+      layer: "tracts",
+      overlay: "none",
+    });
+    assert.deepEqual(
+      result!.features.map((f) => f.properties?.count),
+      [0, 0, 0],
+    );
+    assert.ok(logs.some((line) => line.includes("has no features")));
+  });
 });

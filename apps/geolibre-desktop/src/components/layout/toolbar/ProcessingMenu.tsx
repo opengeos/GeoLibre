@@ -26,7 +26,7 @@ import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
-import type { ToolbarChrome } from "./constants";
+import { VECTOR_JOIN_TOOL_COMMANDS, type ToolbarChrome } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 import { PlanetaryComputerMenuItem } from "./PlanetaryComputerMenuItem";
 import { PluginMenuContributions } from "./PluginMenuContributions";
@@ -424,15 +424,11 @@ export function ProcessingMenu({
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupJoin")}
                     </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("spatial-join")}>
-                      {t("toolbar.vectorTool.spatialJoin")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("summarize-within")}>
-                      {t("toolbar.vectorTool.summarizeWithin")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setVectorToolOpen("attribute-join")}>
-                      {t("toolbar.vectorTool.attributeJoin")}
-                    </DropdownMenuItem>
+                    {VECTOR_JOIN_TOOL_COMMANDS.map(({ kind, titleKey }) => (
+                      <DropdownMenuItem key={kind} onSelect={() => setVectorToolOpen(kind)}>
+                        {t(titleKey)}
+                      </DropdownMenuItem>
+                    ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                       {t("toolbar.item.subGroupSelect")}

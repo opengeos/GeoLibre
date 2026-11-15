@@ -213,6 +213,17 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
 ];
 
+const VECTOR_JOIN_KINDS: ReadonlySet<VectorToolKind> = new Set([
+  "spatial-join",
+  "summarize-within",
+  "attribute-join",
+]);
+
+/** The Processing menu's Join group, in command-list order. */
+export const VECTOR_JOIN_TOOL_COMMANDS = VECTOR_TOOL_COMMANDS.filter(({ kind }) =>
+  VECTOR_JOIN_KINDS.has(kind),
+);
+
 export const RASTER_TOOL_COMMANDS: Array<{
   kind: RasterToolKind;
   titleKey: ParseKeys;

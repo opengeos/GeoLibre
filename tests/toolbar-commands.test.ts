@@ -4,6 +4,7 @@ import {
   buildToolbarCommands,
   type ToolbarCommandContext,
 } from "../apps/geolibre-desktop/src/components/layout/toolbar/toolbar-commands";
+import { VECTOR_JOIN_TOOL_COMMANDS } from "../apps/geolibre-desktop/src/components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../apps/geolibre-desktop/src/lib/build-flags";
 import { useCvdPreviewStore } from "../apps/geolibre-desktop/src/lib/cvd-preview-store";
 import { IS_STORE_BUILD } from "../apps/geolibre-desktop/src/lib/updates";
@@ -346,5 +347,14 @@ describe("buildToolbarCommands", () => {
       context({ isPluginEngineSupported: () => false }),
     ).filter((entry) => entry.id === "plugin.demo");
     assert.equal(command?.disabledReason, "renderer.pluginUnsupported");
+  });
+});
+
+describe("Processing menu Join group", () => {
+  it("lists the join tools in menu order", () => {
+    assert.deepEqual(
+      VECTOR_JOIN_TOOL_COMMANDS.map(({ kind }) => kind),
+      ["spatial-join", "summarize-within", "attribute-join"],
+    );
   });
 });
