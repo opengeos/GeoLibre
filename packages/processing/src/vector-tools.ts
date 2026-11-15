@@ -1208,6 +1208,7 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
 
     let slivers = 0;
     let failedClips = 0;
+    let matched = 0;
     const results: Feature[] = targets.map((target, targetIndex) => {
       const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
       let count = 0;
@@ -1243,10 +1244,13 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
         }
       }
 
+      if (count > 0) matched += 1;
       const properties: Record<string, unknown> = { ...(target.properties ?? {}), count };
-      SUMMARIZE_STATS.forEach((stat, i) => {
-        if (field) properties[statKeys[i]] = computeStat(values, stat);
-      });
+      if (field) {
+        SUMMARIZE_STATS.forEach((stat, i) => {
+          properties[statKeys[i]] = computeStat(values, stat);
+        });
+      }
       if (hasPolygons) {
         const covered = coveredAreaM2(pieces);
         if (covered === null) {
@@ -1265,7 +1269,6 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       return { ...target, properties };
     });
 
-    const matched = results.filter((f) => (f.properties?.count as number) > 0).length;
     ctx.log(`Summarize within: ${matched} of ${results.length} polygon(s) contain features`);
     if (slivers) {
       ctx.log(`Summarize within: ignored ${slivers} overlap(s) below ${minPct}% of a polygon`);

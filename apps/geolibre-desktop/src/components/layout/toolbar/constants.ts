@@ -1,6 +1,7 @@
 import type { ConversionToolKind, RasterToolKind, VectorToolKind } from "@geolibre/core";
 import { type BuiltInMapControl, type MapEngine } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
+import { VECTOR_TOOLS } from "@geolibre/processing";
 import type { ParseKeys } from "i18next";
 import type { createAppAPI } from "../../../hooks/usePlugins";
 import type { AddDataKind } from "../AddDataDialog";
@@ -213,11 +214,10 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
 ];
 
-const VECTOR_JOIN_KINDS: ReadonlySet<VectorToolKind> = new Set([
-  "spatial-join",
-  "summarize-within",
-  "attribute-join",
-]);
+/** Tool ids the registry files under its Join group, so the menu follows the registry. */
+const VECTOR_JOIN_KINDS: ReadonlySet<string> = new Set(
+  VECTOR_TOOLS.filter((tool) => tool.group === "Join").map((tool) => tool.id),
+);
 
 /** The Processing menu's Join group, in command-list order. */
 export const VECTOR_JOIN_TOOL_COMMANDS = VECTOR_TOOL_COMMANDS.filter(({ kind }) =>

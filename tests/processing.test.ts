@@ -1532,7 +1532,8 @@ describe("summarize within", () => {
     const west = byName.get("west")!;
     assert.equal(west.count, 2);
     assert.equal(west.overlap_pct, 50);
-    assert.ok((west.overlap_km2 as number) > 0);
+    // The covered half is 1° × 2° at the equator: about 24,780 km² on the WGS 84 sphere.
+    assert.ok(Math.abs((west.overlap_km2 as number) - 24780) < 250);
     const east = byName.get("east")!;
     assert.equal(east.count, 1);
     assert.equal(east.overlap_pct, 100);
@@ -1594,6 +1595,8 @@ describe("summarize within", () => {
     const broken: FeatureCollection["features"][number] = {
       ...rect(0, 0, 1, 1, { zone: "bad" }),
       // An explicit bbox lets the pair past the box test; the NaN makes the clip throw.
+      // This assumes Turf's clip throws on NaN coordinates. If a Turf upgrade returns
+      // an empty piece instead, the "skipped" log line is not written and this fails.
       bbox: [0, 0, 1, 1],
       geometry: {
         type: "Polygon" as const,
