@@ -19,6 +19,8 @@ import { applyMapboxStyleImport, parseMapboxStyle } from "./mapbox-style-import"
 import { applySldImport, parseSld } from "./sld-import";
 import { applyQmlImport, parseQml } from "./qml-import";
 
+export { qgisLengthToPixels } from "./qml-import";
+
 /**
  * Whether an XML style document is a QGIS QML (as opposed to an OGC SLD): a QML has a `<qgis>`
  * root, or is a fragment cut out of one, whose root is then `<renderer-v2>` or `<labeling>`.

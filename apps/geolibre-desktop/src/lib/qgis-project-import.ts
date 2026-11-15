@@ -11,7 +11,7 @@ import {
   type LayerStyle,
   type MapViewState,
 } from "@geolibre/core";
-import { importStyleText } from "@geolibre/map/style-import";
+import { importStyleText, qgisLengthToPixels } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
 import { collectionMetadata } from "./field-collection";
@@ -912,17 +912,12 @@ function parseLayerStyle(
   }
   const width = optionalNumber(options.get("outline_width") ?? options.get("line_width"));
   const widthUnit = options.get("outline_width_unit") ?? options.get("line_width_unit") ?? "MM";
-  if (width !== null && (widthUnit === "MM" || widthUnit === "Pixel")) {
-    style.strokeWidth = Math.max(0, width * (widthUnit === "MM" ? 3.78 : 1));
-  }
+  const widthPx = width === null ? null : qgisLengthToPixels(width, widthUnit);
+  if (widthPx !== null) style.strokeWidth = Math.max(0, widthPx);
   const size = optionalNumber(options.get("size"));
-  const sizeUnit = options.get("size_unit") ?? "MM";
-  if (
-    symbolLayer?.getAttribute("class") === "SimpleMarker" &&
-    size !== null &&
-    (sizeUnit === "MM" || sizeUnit === "Pixel")
-  ) {
-    style.circleRadius = Math.max(1, (size * (sizeUnit === "MM" ? 3.78 : 1)) / 2);
+  const sizePx = size === null ? null : qgisLengthToPixels(size, options.get("size_unit") ?? "MM");
+  if (symbolLayer?.getAttribute("class") === "SimpleMarker" && sizePx !== null) {
+    style.circleRadius = Math.max(1, sizePx / 2);
   }
   return applySimpleLabels(element, style, warnings);
 }
