@@ -246,3 +246,17 @@ describe("explainS3ReadError", () => {
     assert.equal(await explainS3ReadError("https://example.com/a.tif", offSite), offSite);
   });
 });
+
+describe("GCS readable URLs", () => {
+  it("normalizes the scheme and preserves signed queries and fragments", async () => {
+    assert.equal(
+      await resolveReadableUrl(" GS://bucket/data.geojson?token=abc#part "),
+      "https://storage.googleapis.com/bucket/data.geojson?token=abc#part",
+    );
+  });
+  it("rejects literal and encoded dot path segments", async () => {
+    for (const key of ["a/../b", "./b", "a/%2e%2e/b", "a/.%2E/b"]) {
+      await assert.rejects(resolveReadableUrl(`gs://bucket/${key}`), /segment/);
+    }
+  });
+});

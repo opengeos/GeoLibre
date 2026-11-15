@@ -298,3 +298,5 @@ export {
 } from "./cog-jpeg-tables";
 
 export * from "./geoarrow";
+
+export * from "./gcs";

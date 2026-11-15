@@ -11,6 +11,7 @@
  * plain object URL); the signed one is minted again on every load, so a saved
  * project never carries a signature or a session token.
  */
+import { gcsUriToHttps } from "./gcs";
 
 /** A bucket and object key, with the endpoint the URL named, if any. */
 export interface S3ObjectLocation {
@@ -476,17 +477,8 @@ export function unsignedSourceUrl(url: string | undefined): string | undefined {
  * @throws When the bucket is covered but its credentials cannot be resolved.
  */
 export async function resolveReadableUrl(url: string, signal?: AbortSignal): Promise<string> {
-  // Google Cloud Storage: gs://bucket/key → https://storage.googleapis.com/bucket/key
-  const trimmed = url.trim();
-  if (trimmed.toLowerCase().startsWith("gs://")) {
-    const rest = trimmed.slice(5);
-    const pathPart = rest.split(/[?#]/)[0];
-    const queryPart = rest.slice(pathPart.length);
-    if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
-      throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
-    }
-    return `https://storage.googleapis.com/${rest}`;
-  }
+  const gcsUrl = gcsUriToHttps(url);
+  if (gcsUrl !== url) return gcsUrl;
   const location = parseS3Url(url);
   if (!location) return url;
   if (activeSigner?.covers(location.bucket)) {

@@ -20,6 +20,7 @@ import {
   isTileAddressError,
   resolveLayerTileAddress,
   useAppStore,
+  resolveReadableUrl,
 } from "@geolibre/core";
 import {
   normalizePMTilesUrl,
@@ -428,11 +429,13 @@ function applyExternalNativeFeatureFilters(
   }
 }
 
+// Remember attempted URLs per source, including failures, until the source changes.
+const remoteFetchAttempts = new WeakMap<object, string>();
+
 // Native layer ids whose zoom range GeoLibre has taken over. A pristine external
 // layer keeps its source-declared range, but once the user sets a non-default
 // range we keep applying the style range on every sync, including a later reset
 // back to the full [0, 24] window.
-const remoteFetchPending = new Set<string>();
 const managedZoomRangeLayerIds = new Set<string>();
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 
@@ -500,18 +503,41 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     case "geojson":
       if (!layer.geojson) {
         const remoteUrl = typeof layer.source?.url === "string" ? layer.source.url : null;
-        if (remoteUrl && !remoteFetchPending.has(layer.id)) {
-          remoteFetchPending.add(layer.id);
-          fetch(remoteUrl)
-            .then((res) => res.json())
+        if (remoteUrl && remoteFetchAttempts.get(layer.source) !== remoteUrl) {
+          remoteFetchAttempts.set(layer.source, remoteUrl);
+          resolveReadableUrl(remoteUrl)
+            .then((url) => fetch(url))
+            .then((res) => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.json();
+            })
             .then((data) => {
+              if (
+                data?.type !== "FeatureCollection" ||
+                !Array.isArray(data.features) ||
+                !data.features.every(
+                  (feature: unknown) =>
+                    feature !== null &&
+                    typeof feature === "object" &&
+                    "type" in feature &&
+                    feature.type === "Feature" &&
+                    "geometry" in feature &&
+                    (feature.geometry === null || typeof feature.geometry === "object"),
+                )
+              )
+                throw new Error("Remote data must be a GeoJSON FeatureCollection");
               const store = useAppStore.getState();
-              store.updateLayer(layer.id, { geojson: data } as any);
-              remoteFetchPending.delete(layer.id);
+              const current = store.layers.find((item) => item.id === layer.id);
+              if (
+                current?.source === layer.source &&
+                current.source.url === remoteUrl &&
+                !current.geojson
+              ) {
+                store.updateLayer(layer.id, { geojson: data });
+              }
             })
             .catch((err) => {
               console.warn(`[layer-sync] Failed to fetch remote GeoJSON for ${layer.id}:`, err);
-              remoteFetchPending.delete(layer.id);
             });
         }
         return;

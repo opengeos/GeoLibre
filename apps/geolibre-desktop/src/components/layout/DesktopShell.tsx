@@ -1189,7 +1189,7 @@ export function DesktopShell({
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
       <FileNamePromptDialog />
-      <GcsExportDialog />
+      {!layoutOptions.panelsHidden && <GcsExportDialog />}
       <CreationTemplateDialog />
       {/* Trust prompt for plugin URLs carried by an opened project (#1062);
           inert unless the project references an untrusted plugin URL. */}

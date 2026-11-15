@@ -1,3 +1,4 @@
+import { gcsUriToHttps } from "./gcs";
 import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeMapCrs } from "./map-crs";
 import { normalizeCesiumBasemap } from "./cesium-imagery";
@@ -2041,16 +2042,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       : rest.source;
   if (source && typeof source === "object") {
     const url = source.url;
-    if (typeof url === "string" && url.startsWith("gs://")) {
-      const rest = url.slice(5);
-      const pathPart = rest.split(/[?#]/)[0];
-      if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
-        throw new Error(
-          `GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`,
-        );
-      }
-      source.url = `https://storage.googleapis.com/${rest}`;
-    }
+    if (typeof url === "string") source.url = gcsUriToHttps(url);
   }
 
   return {

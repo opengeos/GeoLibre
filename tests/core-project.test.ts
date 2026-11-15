@@ -2231,3 +2231,22 @@ describe("print layout persistence", () => {
     assert.equal(useAppStore.getState().isDirty, true);
   });
 });
+
+describe("GCS project sources", () => {
+  it("normalizes GCS URLs without mutating the original source", () => {
+    const layer = geojsonLayer({ source: { url: " GS://bucket/a.geojson?token=x#part " } });
+    const project = { ...createEmptyProject(), layers: [layer] };
+    assert.equal(
+      parseProject(JSON.stringify(project)).layers[0].source.url,
+      "https://storage.googleapis.com/bucket/a.geojson?token=x#part",
+    );
+    assert.equal(layer.source.url, " GS://bucket/a.geojson?token=x#part ");
+  });
+  it("defaults absent and null sources to an empty object", () => {
+    for (const source of [undefined, null]) {
+      const layer = { ...geojsonLayer(), source };
+      const project = { ...createEmptyProject(), layers: [layer] };
+      assert.deepEqual(parseProject(JSON.stringify(project)).layers[0].source, {});
+    }
+  });
+});

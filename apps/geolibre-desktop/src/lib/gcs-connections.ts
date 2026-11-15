@@ -26,12 +26,7 @@ export function isGcsUri(url: string): boolean {
   return /^gs:\/\//i.test(url.trim());
 }
 
-export function gcsUriToHttps(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed.toLowerCase().startsWith("gs://")) return url;
-  const rest = trimmed.slice(5).split(/[?#]/)[0];
-  return `https://storage.googleapis.com/${rest}`;
-}
+export { gcsUriToHttps } from "@geolibre/core";
 
 export function newGcsConnection(): GcsConnection {
   return {
