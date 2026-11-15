@@ -1598,28 +1598,30 @@ describe("summarize within", () => {
   it("reports polygon pairs it could not intersect", () => {
     const broken: FeatureCollection["features"][number] = {
       ...rect(0, 0, 1, 1, { zone: "bad" }),
-      // The recomputed bbox skips the NaN, so the pair passes the box test and the
-      // NaN makes the clip throw. This assumes Turf's clip throws on NaN coordinates.
-      // If a Turf upgrade returns an empty piece instead, the "skipped" log line is
-      // not written and this fails.
+      // An empty position fails polygon-clipping's input validation ("not a valid
+      // Polygon or MultiPolygon"), a deliberate check rather than a side effect of
+      // how bad numbers are handled. The bbox skips it, so the pair still reaches
+      // the clip.
       geometry: {
         type: "Polygon" as const,
-        coordinates: [
-          [
-            [0, 0],
-            [1, Number.NaN],
-            [1, 1],
-            [0, 0],
-          ],
-        ],
+        coordinates: [[[0, 0], [] as unknown as [number, number], [1, 1], [0, 0]]],
       },
     };
-    const { result, logs } = run([tracts, asLayer("broken", [broken])], {
+    const { logs } = run([tracts, asLayer("broken", [broken])], {
       layer: "tracts",
       overlay: "broken",
     });
-    assert.equal(result!.features[0].properties?.count, 0);
     assert.ok(logs.some((line) => line.includes("skipped 1 polygon pair(s)")));
+  });
+
+  it("notes non-polygon features it leaves out of the result", () => {
+    const mixed = asLayer("mixed", [rect(0, 0, 2, 2, { name: "a" }), pt(5, 5), pt(6, 6)]);
+    const { result, logs } = run([mixed, asLayer("p", [pt(1, 1)])], {
+      layer: "mixed",
+      overlay: "p",
+    });
+    assert.equal(result!.features.length, 1);
+    assert.ok(logs.some((line) => line.includes("2 non-polygon feature(s)")));
   });
 
   it("warns when the layer to summarize is empty", () => {

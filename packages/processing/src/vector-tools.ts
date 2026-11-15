@@ -1153,6 +1153,12 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       ctx.log("Error: the polygon layer has no polygon features");
       return;
     }
+    const nonPolygons = input.features.length - targets.length;
+    if (nonPolygons > 0) {
+      ctx.log(
+        `Note: ${nonPolygons} non-polygon feature(s) in the polygon layer were skipped and are not in the result`,
+      );
+    }
     const field = typeof ctx.parameters.field === "string" ? ctx.parameters.field.trim() : "";
     const minPct = numberParam(ctx, "min_overlap_pct", 0);
     if (minPct < 0 || minPct > 100) {
