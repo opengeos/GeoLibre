@@ -1163,6 +1163,13 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     if (!overlayFeatures.length) {
       ctx.log("Warning: the layer to summarize has no features, so every count is 0");
     }
+    if (
+      field &&
+      overlayFeatures.length &&
+      !overlayFeatures.some((f) => f.properties && field in f.properties)
+    ) {
+      ctx.log(`Warning: no feature in the layer to summarize has a field "${field}"`);
+    }
     // Pairwise on the main thread (or a worker); cap it like Spatial join.
     const pairs = targets.length * overlayFeatures.length;
     if (pairs > MAX_CLIENT_PAIRS) {
@@ -1201,7 +1208,6 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
 
     let slivers = 0;
     let failedClips = 0;
-    let failedUnions = 0;
     const results: Feature[] = targets.map((target, targetIndex) => {
       const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
       let count = 0;
@@ -1243,7 +1249,11 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       });
       if (hasPolygons) {
         const covered = coveredAreaM2(pieces);
-        if (covered === null) failedUnions += 1;
+        if (covered === null) {
+          ctx.log(
+            `Warning: could not merge the overlaps in polygon ${targetIndex + 1}, so its coverage is left empty`,
+          );
+        }
         // Rounded so the table reads cleanly: km² to 6 places (about 1 m²), the
         // share to 2 places. Geodesic edges leave noise past those digits.
         properties.overlap_km2 = covered === null ? null : Math.round(covered) / 1e6;
@@ -1263,11 +1273,6 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     if (failedClips) {
       ctx.log(
         `Warning: skipped ${failedClips} polygon pair(s) whose geometry could not be intersected; try Fix geometries first`,
-      );
-    }
-    if (failedUnions) {
-      ctx.log(
-        `Warning: could not merge the overlaps in ${failedUnions} polygon(s), so their coverage is left empty`,
       );
     }
     ctx.addResultLayer?.("Summarize within", featureCollection(results));

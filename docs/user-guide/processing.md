@@ -126,6 +126,7 @@ GeoLibre's own tools, under **Processing → GeoLibre Toolbox**.
 | --- | --- |
 | **Spatial join** | Attach attributes from a join layer to each input feature based on a spatial relationship (intersects, within, or contains). Choose an *inner* join to keep only matched features or a *left* join to keep all input features. Works with any geometry type. |
 | **Attribute join** | Attach attributes from a join layer (a table) onto each input feature where a key field matches — no geometry involved (e.g. join census stats to boundary polygons by FIPS code). One-to-one: the first matching join row wins. Choose which fields to bring over, and an *inner* join (keep only matched) or *left* join (keep all input). |
+| **Summarize within** | Count the features of another layer inside each polygon, summarize a numeric field (sum, mean, min, max), and, when that layer has polygons, measure how much of each polygon they cover without double-counting. Overlaps below a set share of a polygon can be ignored. |
 
 **Select**
 

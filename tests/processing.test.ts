@@ -1579,7 +1579,10 @@ describe("summarize within", () => {
   it("reads a 3D bbox by its horizontal bounds", () => {
     // A six-value bbox keeps elevation at index 2; read as east it would hide
     // the point.
-    const tract = { ...rect(10, 10, 12, 12, { name: "z" }), bbox: [10, 10, 0, 12, 12, 0] };
+    const tract: FeatureCollection["features"][number] = {
+      ...rect(10, 10, 12, 12, { name: "z" }),
+      bbox: [10, 10, 0, 12, 12, 0],
+    };
     const { result } = run([asLayer("z", [tract]), asLayer("p", [pt(11, 11)])], {
       layer: "z",
       overlay: "p",
@@ -1588,7 +1591,7 @@ describe("summarize within", () => {
   });
 
   it("reports polygon pairs it could not intersect", () => {
-    const broken = {
+    const broken: FeatureCollection["features"][number] = {
       ...rect(0, 0, 1, 1, { zone: "bad" }),
       // An explicit bbox lets the pair past the box test; the NaN makes the clip throw.
       bbox: [0, 0, 1, 1],
@@ -1622,5 +1625,14 @@ describe("summarize within", () => {
       [0, 0, 0],
     );
     assert.ok(logs.some((line) => line.includes("has no features")));
+  });
+
+  it("warns when no feature in the layer to summarize has the chosen field", () => {
+    const { logs } = run([tracts, asLayer("costs", [pt(1, 1, { cost: 5 })])], {
+      layer: "tracts",
+      overlay: "costs",
+      field: "cots",
+    });
+    assert.ok(logs.some((line) => line.includes('has a field "cots"')));
   });
 });
