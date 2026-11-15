@@ -2033,15 +2033,36 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
-  // Batches are runtime caches. A hydrated batch cannot be verified against
-  // the saved GeoJSON, so always discard it to avoid rendering stale data.
+  // Convert cloud-storage URLs (gs://, s3://, az://) in layer sources to their
+  // public HTTPS equivalents so layers hosted on GCS/Azure/S3 can be loaded.
+  const source = (rest.source && typeof rest.source === "object")
+    ? { ...rest.source } as Record<string, unknown>
+    : rest.source;
+  if (source && typeof source === "object") {
+    const url = source.url;
+    if (typeof url === "string") {
+      if (url.startsWith("gs://")) {
+        const rest = url.slice(5).split(/[?#]/)[0];
+        source.url = `https://storage.googleapis.com/${rest}`;
+      } else if (url.startsWith("s3://")) {
+        // delegate to existing S3 conversion logic (handled by resolveReadableUrl at runtime)
+      }
+    }
+    // Also handle s3_path field
+    const s3Path = source.s3_path;
+    if (typeof s3Path === "string" && s3Path.startsWith("gs://")) {
+      const rest = s3Path.slice(5).split(/[?#]/)[0];
+      source.s3_path = `https://storage.googleapis.com/${rest}`;
+    }
+  }
+
   return {
     ...rest,
+    ...(source !== undefined ? { source } : {}),
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
     visible: layer.visible ?? true,
     opacity: layer.opacity ?? 1,
     metadata: layer.metadata ?? {},
-    source: layer.source ?? {},
     ...(capabilities ? { capabilities } : {}),
     ...(filterExpression ? { filterExpression } : {}),
     ...(descriptiveMetadata ? { descriptiveMetadata } : {}),

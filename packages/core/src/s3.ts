@@ -476,6 +476,12 @@ export function unsignedSourceUrl(url: string | undefined): string | undefined {
  * @throws When the bucket is covered but its credentials cannot be resolved.
  */
 export async function resolveReadableUrl(url: string, signal?: AbortSignal): Promise<string> {
+  // Google Cloud Storage: gs://bucket/key → https://storage.googleapis.com/bucket/key
+  const trimmed = url.trim();
+  if (trimmed.toLowerCase().startsWith("gs://")) {
+    const rest = trimmed.slice(5).split(/[?#]/)[0];
+    return `https://storage.googleapis.com/${rest}`;
+  }
   const location = parseS3Url(url);
   if (!location) return url;
   if (activeSigner?.covers(location.bucket)) {
