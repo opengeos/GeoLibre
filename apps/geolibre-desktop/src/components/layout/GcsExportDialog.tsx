@@ -79,7 +79,11 @@ export function GcsExportDialog() {
           { headers: { "X-API-Key": apiKey } },
         );
         const poll = await pollResp.json();
-        if (poll.status === "succeeded" || poll.status === "failed" || poll.status === "completed") {
+        if (
+          poll.status === "succeeded" ||
+          poll.status === "failed" ||
+          poll.status === "completed"
+        ) {
           done = true;
           if (poll.status === "succeeded" || poll.status === "completed") {
             setStatus("done");
@@ -119,7 +123,11 @@ export function GcsExportDialog() {
           </div>
           <div>
             <Label>Data URL (portal or direct file)</Label>
-            <Input value={dataUrl} onChange={(e) => setDataUrl(e.target.value)} placeholder="https://www.data.qld.gov.au/dataset/..." />
+            <Input
+              value={dataUrl}
+              onChange={(e) => setDataUrl(e.target.value)}
+              placeholder="https://www.data.qld.gov.au/dataset/..."
+            />
           </div>
           <div>
             <Label>Licence (direct downloads)</Label>
@@ -135,12 +143,18 @@ export function GcsExportDialog() {
         )}
 
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button onClick={handleRun} disabled={status === "running"}>
             {status === "running" ? (
-              <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Running...</>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Running...
+              </>
             ) : (
-              <><Cloud className="w-4 h-4 mr-2" /> Harvest & Export</>
+              <>
+                <Cloud className="w-4 h-4 mr-2" /> Harvest & Export
+              </>
             )}
           </Button>
         </div>
