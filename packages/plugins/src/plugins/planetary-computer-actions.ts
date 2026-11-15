@@ -375,8 +375,12 @@ registerTimeSliderSourceRehydrator((spec) => {
   // A stack whose description did not survive cannot be drawn: its tile URL was
   // a function. Drop it rather than hand the dock a source with no tiles.
   if (!stack || typeof spec.id !== "string") return null;
+  // The extent is recomputed from the stack's footprints; a saved one must not
+  // survive the spread when the rebuilt source declares none (a scene crossing
+  // the antimeridian, a footprint dropped as invalid).
+  const { bounds: _savedBounds, ...saved } = record;
   return {
-    ...spec,
+    ...saved,
     ...planetaryComputerStackSource(spec.id, spec.name ?? spec.id, stack),
   } as SourceSpec;
 });
