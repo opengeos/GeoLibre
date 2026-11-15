@@ -6604,7 +6604,7 @@
         },
         "summarize-within": {
           "name": "Summarize within",
-          "description": "Count the features of another layer inside each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+          "description": "Count the features of another layer that intersect each polygon, summarize a numeric field, and measure how much of each polygon they cover",
           "params": {
             "layer": {
               "label": "Polygon layer"

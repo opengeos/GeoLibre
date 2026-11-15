@@ -1110,7 +1110,7 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
   id: "summarize-within",
   name: "Summarize within",
   description:
-    "Count the features of another layer inside each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+    "Count the features of another layer that intersect each polygon, summarize a numeric field, and measure how much of each polygon they cover",
   group: "Join",
   parameters: [
     {
@@ -1147,6 +1147,13 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     if (!overlayLayer) {
       ctx.log('Error: parameter "overlay" has no layer selected');
       return;
+    }
+    if (ctx.parameters.layer === ctx.parameters.overlay) {
+      // Not an error (Spatial join allows it too), but every polygon then
+      // matches itself and reads as fully covered.
+      ctx.log(
+        "Warning: both inputs are the same layer, so each polygon counts itself and shows 100% coverage",
+      );
     }
     const targets = polygonFeatures(input);
     if (!targets.length) {

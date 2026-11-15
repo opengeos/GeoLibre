@@ -1614,6 +1614,12 @@ describe("summarize within", () => {
     assert.ok(logs.some((line) => line.includes("skipped 1 polygon pair(s)")));
   });
 
+  it("warns when both inputs are the same layer", () => {
+    const { result, logs } = run([tracts], { layer: "tracts", overlay: "tracts" });
+    assert.ok(result);
+    assert.ok(logs.some((line) => line.includes("both inputs are the same layer")));
+  });
+
   it("notes non-polygon features it leaves out of the result", () => {
     const mixed = asLayer("mixed", [rect(0, 0, 2, 2, { name: "a" }), pt(5, 5), pt(6, 6)]);
     const { result, logs } = run([mixed, asLayer("p", [pt(1, 1)])], {
