@@ -19,6 +19,7 @@ import {
   documentLocale,
   isTileAddressError,
   resolveLayerTileAddress,
+  useAppStore,
 } from "@geolibre/core";
 import {
   normalizePMTilesUrl,
@@ -431,6 +432,7 @@ function applyExternalNativeFeatureFilters(
 // layer keeps its source-declared range, but once the user sets a non-default
 // range we keep applying the style range on every sync, including a later reset
 // back to the full [0, 24] window.
+const remoteFetchPending = new Set<string>();
 const managedZoomRangeLayerIds = new Set<string>();
 const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 
@@ -496,7 +498,24 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (!hasLayerKindSupport(MAPLIBRE_SUPPORTED_LAYER_KINDS, kind, "native")) return;
   switch (kind) {
     case "geojson":
-      if (!layer.geojson) return;
+      if (!layer.geojson) {
+        const remoteUrl = typeof layer.source?.url === "string" ? layer.source.url : null;
+        if (remoteUrl && !remoteFetchPending.has(layer.id)) {
+          remoteFetchPending.add(layer.id);
+          fetch(remoteUrl)
+            .then((res) => res.json())
+            .then((data) => {
+              const store = useAppStore.getState();
+              store.updateLayer(layer.id, { geojson: data } as any);
+              remoteFetchPending.delete(layer.id);
+            })
+            .catch((err) => {
+              console.warn(`[layer-sync] Failed to fetch remote GeoJSON for ${layer.id}:`, err);
+              remoteFetchPending.delete(layer.id);
+            });
+        }
+        return;
+      }
       // 3D Z-value rendering hands the layer to the shared deck.gl overlay
       // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
       // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
