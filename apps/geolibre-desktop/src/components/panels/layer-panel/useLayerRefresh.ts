@@ -42,7 +42,8 @@ function isPublicHttpUrl(url: string): boolean {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") return false;
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0")
+      return false;
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
     return true;
   } catch {

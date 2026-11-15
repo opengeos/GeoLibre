@@ -225,7 +225,9 @@ it("hydrates startup URL layers once, keeping the workspace clean and out of und
       return Response.json(collection("startup"));
     };
     render(createElement(RefreshHost));
-    await waitFor(() => assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1));
+    await waitFor(() =>
+      assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1),
+    );
     assert.equal(calls, 1);
     assert.equal(useAppStore.getState().isDirty, false);
     assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
