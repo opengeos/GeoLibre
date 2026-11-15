@@ -6,7 +6,7 @@ import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { FloorPickerSection } from "../../floor-picker/FloorPickerSection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
-import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
+import { STYLE_PANEL_ASIDE_CLASS, STYLE_PANEL_SCROLL_CLASS } from "./constants";
 import { RasterStyleSlider } from "./style-inputs";
 
 interface PluginPaintedStylePanelProps {
@@ -67,7 +67,7 @@ export function PluginPaintedStylePanel({
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className={STYLE_PANEL_SCROLL_CLASS}>
         <div className="space-y-4 p-3 pe-5">
           {beforeIdControl}
           {zoomRangeControls}

@@ -151,7 +151,9 @@ function CategoricalControl({
                 checked={selected.has(option.value)}
                 onChange={(event) => toggle(option.value, event.target.checked)}
               />
-              <span className="min-w-0 flex-1 truncate">{valueLabel(option.value)}</span>
+              <span className="min-w-0 flex-1 truncate" title={valueLabel(option.value)}>
+                {valueLabel(option.value)}
+              </span>
               {option.count > 0 && (
                 <span className="shrink-0 tabular-nums text-muted-foreground">
                   {countFormatter.format(option.count)}

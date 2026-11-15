@@ -8,7 +8,7 @@ import { getNetcdfLayerState, NETCDF_IMAGE_SOURCE_KIND } from "../../../lib/netc
 import { NetcdfProfilePanel } from "../NetcdfProfilePanel";
 import { NetcdfSymbologySection } from "../NetcdfSymbologySection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
-import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
+import { STYLE_PANEL_ASIDE_CLASS, STYLE_PANEL_SCROLL_CLASS } from "./constants";
 import { I3sBuildingSection } from "./I3sBuildingSection";
 import { TilesetHeightOffsetSection } from "./TilesetHeightOffsetSection";
 
@@ -81,7 +81,7 @@ export function NoPaintControlsStylePanel({
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className={STYLE_PANEL_SCROLL_CLASS}>
         <div className="space-y-4 p-3 pe-5">
           {beforeIdControl}
           {blendModeControl}

@@ -7,5 +7,14 @@ import { DEFAULT_LAYER_STYLE } from "@geolibre/core";
 export const STYLE_PANEL_ASIDE_CLASS =
   "relative flex h-[min(24rem,42vh)] supports-[height:1dvh]:h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:h-auto md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
 
+// The scroll area inside that shell. Radix wraps the viewport content in
+// `display: table; min-width: 100%`, which sizes it to the widest row and
+// defeats every `truncate` below it: one long field name in Quick filters
+// pushed that filter's type picker, its Remove button and the value counts
+// past the panel edge. A block wrapper keeps rows at the panel width, the same
+// override LayerPanel and BrowserPanel use.
+export const STYLE_PANEL_SCROLL_CLASS =
+  "flex-1 [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!";
+
 export const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 export const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;

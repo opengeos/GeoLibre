@@ -114,6 +114,51 @@ test("long layer names truncate without widening the layer panel", async ({ page
     .toBe(true);
 });
 
+test("a long field name keeps the Quick filters controls inside the Style panel", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await waitForMap(page);
+  // Real county exports carry field names this long; one used to size the
+  // whole Style panel content to its width.
+  const field = "land_use_category_description_from_county_assessor_2025";
+  const value = "Agricultural / Open Space / Conservation Easement (Act 319 Clean & Green)";
+  const point = (category: string, lon: number) => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [lon, 41.41] },
+    properties: { [field]: category },
+  });
+  await dropGeoJson(
+    page,
+    "parcels",
+    JSON.stringify({
+      type: "FeatureCollection",
+      features: [point(value, -75.66), point("Residential", -75.65)],
+    }),
+  );
+  await layerRow(page, "parcels").getByRole("button", { name: "Open Style panel" }).click();
+
+  const stylePanel = page.getByRole("complementary", { name: "Layer style", exact: true });
+  await stylePanel.getByRole("button", { name: "Add a filter…" }).click();
+  await page.getByRole("menuitem", { name: field, exact: true }).click();
+
+  const remove = stylePanel.getByRole("button", { name: `Remove the filter on ${field}` });
+  await expect(remove).toBeVisible();
+  await expect
+    .poll(async () => {
+      const [panelBox, removeBox] = await Promise.all([
+        stylePanel.boundingBox(),
+        remove.boundingBox(),
+      ]);
+      return Boolean(
+        panelBox && removeBox && removeBox.x + removeBox.width <= panelBox.x + panelBox.width,
+      );
+    })
+    .toBe(true);
+  // A value that truncates stays readable in full from its tooltip.
+  await expect(stylePanel.getByTitle(value, { exact: true })).toBeVisible();
+});
+
 test("opens the selected layer in the Style panel from its card", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 720 });
   await waitForMap(page);

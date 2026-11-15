@@ -25,7 +25,7 @@ import { PopupSection } from "../PopupSection";
 import { FloorPickerSection } from "../../floor-picker/FloorPickerSection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
 import { VirtualFieldsSection } from "../VirtualFieldsSection";
-import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
+import { STYLE_PANEL_ASIDE_CLASS, STYLE_PANEL_SCROLL_CLASS } from "./constants";
 import { DiagramSection } from "./DiagramSection";
 import { Elevation3dControls } from "./Elevation3dControls";
 import { ExtrusionControls } from "./ExtrusionControls";
@@ -362,7 +362,7 @@ export function VectorStylePanel({
           </ul>
         </div>
       )}
-      <ScrollArea className="flex-1">
+      <ScrollArea className={STYLE_PANEL_SCROLL_CLASS}>
         {/* Padding lives on the inner content (not the ScrollArea root) with
             extra right clearance so the overlay scrollbar never covers the
             right edge of a control (e.g. the "Transparent" label). */}
