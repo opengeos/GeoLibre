@@ -37,6 +37,19 @@ import {
   rememberMssqlLoadedRows,
 } from "../../../lib/mssql-writeback";
 
+function isPublicHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") return false;
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface UseLayerRefreshOptions {
   /** The project's layers, in store order. */
   layers: GeoLibreLayer[];
@@ -477,16 +490,32 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         observedSourceUrlsRef.current.delete(layer.id);
         continue;
       }
-      if (layer.geojson && layer.metadata.sourceKind !== "wfs-getfeature") continue;
       const alreadyObserved = observedSourceUrlsRef.current.has(layer.id);
-      if (alreadyObserved && observedSourceUrlsRef.current.get(layer.id) === sourceUrl) {
-        continue;
+      const sameUrl = alreadyObserved && observedSourceUrlsRef.current.get(layer.id) === sourceUrl;
+      const isWfs = layer.metadata.sourceKind === "wfs-getfeature";
+
+      // Hydrated non-WFS layers: record the observed URL on first sight so a
+      // later URL change is detected, but do not auto-fetch on project open
+      // (security: only public http(s) sources are bootstrapped automatically).
+      if (layer.geojson && !isWfs) {
+        if (!alreadyObserved) observedSourceUrlsRef.current.set(layer.id, sourceUrl);
+        if (sameUrl) continue;
+        if (!alreadyObserved) continue;
       }
+
+      if (sameUrl) continue;
       observedSourceUrlsRef.current.set(layer.id, sourceUrl);
-      // A hydrated layer present at first observation needs no bootstrap. Once
-      // observed, a changed URL must refresh even if old features are still set.
+
+      // Security: never auto-bootstrap private/localhost hosts, and never sign
+      // bucket reads (s3/s3a) on the automatic path. Public http(s) and gs://
+      // sources (which resolve to public HTTPS) are allowed.
+      const isGs = /^gs:\/\//i.test(sourceUrl);
+      if (!isGs && !isPublicHttpUrl(sourceUrl)) continue;
+
+      // A hydrated layer present at first observation needs no bootstrap.
       if (layer.geojson && !alreadyObserved) continue;
-      void handleRefreshLayerRef.current(layer, false, !layer.geojson);
+
+      void handleRefreshLayerRef.current(layer, false, !alreadyObserved && !layer.geojson);
     }
   }, [layers, projectGeneration]);
 

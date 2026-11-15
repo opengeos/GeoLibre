@@ -49,7 +49,7 @@ export function GcsExportDialog() {
   const [backendUrl, setBackendUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [dataUrl, setDataUrl] = useState("");
-  const [licenceName, setLicenceName] = useState("CC-BY-4.0");
+  const [licenceName, setLicenceName] = useState("");
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -217,6 +217,7 @@ export function GcsExportDialog() {
               <Input
                 id="gcs-api-key"
                 type="password"
+                autoComplete="off"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />

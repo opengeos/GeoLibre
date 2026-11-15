@@ -208,23 +208,29 @@ it("hydrates startup URL layers once, keeping the workspace clean and out of und
     geojson: undefined,
   });
   const settings = normalizeDesktopSettings({});
-  useDesktopSettingsStore.getState().setDesktopSettings({
-    ...settings,
-    startup: {
-      ...settings.startup,
-      layers: { fileName: "layers.json", path: "layers.json", layers: [bare], layerGroups: [] },
-    },
-  });
-  useAppStore.getState().loadProject(withStartupLayers(createEmptyProject()), null);
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return Response.json(collection("startup"));
-  };
-  render(createElement(RefreshHost));
-  await waitFor(() => assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1));
-  assert.equal(calls, 1);
-  assert.equal(useAppStore.getState().isDirty, false);
-  assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
-  useDesktopSettingsStore.getState().setDesktopSettings(settings);
+  const originalFetch = globalThis.fetch;
+  const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
+  try {
+    useDesktopSettingsStore.getState().setDesktopSettings({
+      ...settings,
+      startup: {
+        ...settings.startup,
+        layers: { fileName: "layers.json", path: "layers.json", layers: [bare], layerGroups: [] },
+      },
+    });
+    useAppStore.getState().loadProject(withStartupLayers(createEmptyProject()), null);
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return Response.json(collection("startup"));
+    };
+    render(createElement(RefreshHost));
+    await waitFor(() => assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1));
+    assert.equal(calls, 1);
+    assert.equal(useAppStore.getState().isDirty, false);
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    useDesktopSettingsStore.getState().setDesktopSettings(originalSettings);
+  }
 });

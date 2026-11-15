@@ -2043,8 +2043,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       try {
         source.url = gcsUriToHttps(url);
       } catch {
-        // Preserve the layer so the refresh pipeline can report its URL error.
-        source.url = url;
+        // Keep the original URL so the refresh pipeline can report its error.
       }
     }
   }
