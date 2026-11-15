@@ -211,7 +211,26 @@ export function GcsExportDialog() {
               <p>{t("gcsExport.helpWhat")}</p>
               <p>{t("gcsExport.helpBackend")}</p>
               <ol className="list-decimal list-inside space-y-1">
-                <li>{t("gcsExport.helpStep1")}</li>
+                <li>
+                  {t("gcsExport.helpStep1Prefix")}{" "}
+                  <a
+                    className="underline text-primary"
+                    href="https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    deploy/harvester_service
+                  </a>{" "}
+                  {t("gcsExport.helpStep1And")}{" "}
+                  <a
+                    className="underline text-primary"
+                    href="https://github.com/GetBack2Basics/ops-intel-crafter/blob/main/tools/harvest_portal_dataset.py"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    tools/harvest_portal_dataset.py
+                  </a>
+                </li>
                 <li>{t("gcsExport.helpStep2")}</li>
                 <li>{t("gcsExport.helpStep3")}</li>
                 <li>{t("gcsExport.helpStep4")}</li>
