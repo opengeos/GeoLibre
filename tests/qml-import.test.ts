@@ -202,6 +202,10 @@ describe("parseQml", () => {
     const px = parse(`${marker("0", "8", "Pixel")}${marker("1", "8", "Pixel")}`);
     assert.equal(px.style.circleRadius, 4);
 
+    // Points and inches are fixed physical sizes: 6 pt = 1/12 in = 8 px at 96 dpi.
+    const pt = parse(`${marker("0", "6", "Point")}${marker("1", "6", "Point")}`);
+    assert.equal(pt.style.circleRadius, 4);
+
     // Map units have no fixed pixel size, so the layer keeps its own.
     const mapUnits = parse(`${marker("0", "50", "MapUnit")}${marker("1", "50", "MapUnit")}`);
     assert.equal(mapUnits.style.circleRadius, undefined);

@@ -212,25 +212,44 @@ function applyDash(info: SymbolInfo, dash: ReturnType<typeof readDash>): void {
   else if (dash !== undefined) info.strokeDash = dash;
 }
 
-/** Screen pixels per millimetre for QGIS lengths, shared with the single-symbol project import. */
-export const QGIS_PIXELS_PER_MM = 3.78;
+/** Screen pixels per millimetre for QGIS lengths (about 96 dpi). */
+const QGIS_PIXELS_PER_MM = 3.78;
+
+/** Millimetres per QGIS render unit that has a fixed physical size. */
+const QGIS_UNIT_MM: Readonly<Record<string, number>> = {
+  MM: 1,
+  Point: 25.4 / 72,
+  Inch: 25.4,
+};
+
+/**
+ * Convert a QGIS symbol length to screen pixels. Pixels pass through and the
+ * physical units (millimetres, points, inches) convert at
+ * {@link QGIS_PIXELS_PER_MM}. Units with no fixed pixel size (map units,
+ * meters at scale) return `null`, so the caller keeps its own value. Shared by
+ * the QML reader and the single-symbol QGIS project import so the two agree.
+ *
+ * @param value - The length as written in the QGIS file.
+ * @param unit - The QGIS render unit, e.g. `MM`, `Pixel`, `Point`, `MapUnit`.
+ * @returns The length in pixels, rounded to hundredths, or `null`.
+ */
+export function qgisLengthToPixels(value: number, unit: string): number | null {
+  if (unit === "Pixel") return value;
+  const mm = Object.hasOwn(QGIS_UNIT_MM, unit) ? QGIS_UNIT_MM[unit] : undefined;
+  if (mm === undefined) return null;
+  // Rounded to hundredths so 18 mm reads as 68.04 px, not 68.03999999999999.
+  return Math.round(value * mm * QGIS_PIXELS_PER_MM * 100) / 100;
+}
 
 /**
  * Read a length option (`size`, `line_width`, `outline_width`) in pixels. QGIS
  * writes each length beside a `<key>_unit` option and defaults it to
- * millimetres. Units with no fixed pixel size (map units, meters at scale)
- * return `null`, and so do points and inches, which this reader does not
- * convert. The layer keeps its own value, like the single-symbol project
- * import does.
+ * millimetres; see {@link qgisLengthToPixels} for the units it converts.
  */
 function readPixelLength(opts: Map<string, string>, key: string): number | null {
   const value = toNum(opts.get(key) ?? null);
   if (value === null) return null;
-  const unit = opts.get(`${key}_unit`) ?? "MM";
-  if (unit === "Pixel") return value;
-  // Rounded to hundredths so 18 mm reads as 68.04 px, not 68.03999999999999.
-  if (unit === "MM") return Math.round(value * QGIS_PIXELS_PER_MM * 100) / 100;
-  return null;
+  return qgisLengthToPixels(value, opts.get(`${key}_unit`) ?? "MM");
 }
 
 /** Parse one `<symbol>` element into a {@link SymbolInfo}. */
