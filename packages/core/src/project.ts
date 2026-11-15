@@ -2033,8 +2033,8 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
     validateMapExpression(JSON.stringify(rawFilterExpression), { expectedType: "boolean" }).ok
       ? rawFilterExpression
       : undefined;
-  // Convert cloud-storage URLs (gs://, s3://, az://) in layer sources to their
-  // public HTTPS equivalents so layers hosted on GCS/Azure/S3 can be loaded.
+  // Convert Google Cloud Storage URLs (gs://) in layer sources to their
+  // public HTTPS equivalents so layers hosted on GCS can be loaded.
   const source =
     rest.source && typeof rest.source === "object"
       ? ({ ...rest.source } as Record<string, unknown>)
@@ -2048,16 +2048,6 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
         throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
       }
       source.url = `https://storage.googleapis.com/${rest}`;
-    }
-    // Also handle s3_path field
-    const s3Path = source.s3_path;
-    if (typeof s3Path === "string" && s3Path.startsWith("gs://")) {
-      const rest = s3Path.slice(5);
-      const pathPart = rest.split(/[?#]/)[0];
-      if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
-        throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
-      }
-      source.s3_path = `https://storage.googleapis.com/${rest}`;
     }
   }
 
