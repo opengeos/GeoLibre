@@ -218,9 +218,10 @@ export const QGIS_PIXELS_PER_MM = 3.78;
 /**
  * Read a length option (`size`, `line_width`, `outline_width`) in pixels. QGIS
  * writes each length beside a `<key>_unit` option and defaults it to
- * millimetres. Units that cannot be turned into a fixed pixel length (map
- * units, meters at scale, points, inches) return `null`, so the layer keeps its
- * own value, like the single-symbol project import does.
+ * millimetres. Units with no fixed pixel size (map units, meters at scale)
+ * return `null`, and so do points and inches, which this reader does not
+ * convert. The layer keeps its own value, like the single-symbol project
+ * import does.
  */
 function readPixelLength(opts: Map<string, string>, key: string): number | null {
   const value = toNum(opts.get(key) ?? null);
