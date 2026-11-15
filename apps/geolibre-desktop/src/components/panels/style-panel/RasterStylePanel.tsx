@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { NetcdfProfilePanel } from "../NetcdfProfilePanel";
 import { RasterSymbologySection } from "../RasterSymbologySection";
 import { TimeSliderSymbologySection } from "../TimeSliderSymbologySection";
-import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
+import { STYLE_PANEL_ASIDE_CLASS, STYLE_PANEL_SCROLL_CLASS } from "./constants";
 import { WmsLegendSection } from "./WmsLegendSection";
 import { StacRenderingSection } from "./StacRenderingSection";
 import { RasterStyleSlider } from "./style-inputs";
@@ -65,7 +65,7 @@ export function RasterStylePanel({
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className={STYLE_PANEL_SCROLL_CLASS}>
         {/* Padding on the inner content with extra right clearance so the
             overlay scrollbar never covers a control's right edge. */}
         <div className="space-y-4 p-3 pe-5">
