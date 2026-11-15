@@ -212,8 +212,8 @@ function applyDash(info: SymbolInfo, dash: ReturnType<typeof readDash>): void {
   else if (dash !== undefined) info.strokeDash = dash;
 }
 
-/** Screen pixels per millimetre, the factor the single-symbol QGIS project import uses too. */
-const PIXELS_PER_MM = 3.78;
+/** Screen pixels per millimetre for QGIS lengths, shared with the single-symbol project import. */
+export const QGIS_PIXELS_PER_MM = 3.78;
 
 /**
  * Read a length option (`size`, `line_width`, `outline_width`) in pixels. QGIS
@@ -228,7 +228,7 @@ function readPixelLength(opts: Map<string, string>, key: string): number | null 
   const unit = opts.get(`${key}_unit`) ?? "MM";
   if (unit === "Pixel") return value;
   // Rounded to hundredths so 18 mm reads as 68.04 px, not 68.03999999999999.
-  if (unit === "MM") return Math.round(value * PIXELS_PER_MM * 100) / 100;
+  if (unit === "MM") return Math.round(value * QGIS_PIXELS_PER_MM * 100) / 100;
   return null;
 }
 

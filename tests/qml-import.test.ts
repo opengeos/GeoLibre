@@ -118,6 +118,21 @@ describe("parseQml", () => {
     assert.notEqual(result.style.markerEnabled, true);
   });
 
+  // QGIS's default unit is millimetres, so a single-symbol QML with no size_unit converts too.
+  it("reads a unitless SimpleMarker size as millimetres", () => {
+    const result = parseQml(
+      qgis(`<renderer-v2 type="singleSymbol"><symbols>
+        <symbol type="marker" name="0"><layer class="SimpleMarker"><Option type="Map">
+          <Option name="name" type="QString" value="circle"/>
+          <Option name="size" type="QString" value="4"/>
+          <Option name="outline_width" type="QString" value="0.5"/>
+        </Option></layer></symbol>
+      </symbols></renderer-v2>`),
+    );
+    assert.equal(result.style.circleRadius, 7.56);
+    assert.equal(result.style.strokeWidth, 1.89);
+  });
+
   it("recovers a diamond shape marker", () => {
     const result = parseQml(
       qgis(`<renderer-v2 type="singleSymbol"><symbols>

@@ -11,7 +11,7 @@ import {
   type LayerStyle,
   type MapViewState,
 } from "@geolibre/core";
-import { importStyleText } from "@geolibre/map/style-import";
+import { importStyleText, QGIS_PIXELS_PER_MM } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
 import { collectionMetadata } from "./field-collection";
@@ -913,7 +913,7 @@ function parseLayerStyle(
   const width = optionalNumber(options.get("outline_width") ?? options.get("line_width"));
   const widthUnit = options.get("outline_width_unit") ?? options.get("line_width_unit") ?? "MM";
   if (width !== null && (widthUnit === "MM" || widthUnit === "Pixel")) {
-    style.strokeWidth = Math.max(0, width * (widthUnit === "MM" ? 3.78 : 1));
+    style.strokeWidth = Math.max(0, width * (widthUnit === "MM" ? QGIS_PIXELS_PER_MM : 1));
   }
   const size = optionalNumber(options.get("size"));
   const sizeUnit = options.get("size_unit") ?? "MM";
@@ -922,7 +922,7 @@ function parseLayerStyle(
     size !== null &&
     (sizeUnit === "MM" || sizeUnit === "Pixel")
   ) {
-    style.circleRadius = Math.max(1, (size * (sizeUnit === "MM" ? 3.78 : 1)) / 2);
+    style.circleRadius = Math.max(1, (size * (sizeUnit === "MM" ? QGIS_PIXELS_PER_MM : 1)) / 2);
   }
   return applySimpleLabels(element, style, warnings);
 }
