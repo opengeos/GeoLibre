@@ -37,7 +37,7 @@ export function GcsExportDialog() {
   // Keyboard shortcut: Ctrl+Shift+G
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === "G") {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "g") {
         e.preventDefault();
         setOpen(true);
       }
@@ -173,6 +173,7 @@ export function GcsExportDialog() {
         onClick={() => setOpen(true)}
         className="fixed bottom-4 end-4 z-40 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full p-3 shadow-lg"
         title={t("gcsExport.triggerTitle")}
+        aria-label={t("gcsExport.triggerTitle")}
       >
         <Cloud className="w-5 h-5" />
       </button>

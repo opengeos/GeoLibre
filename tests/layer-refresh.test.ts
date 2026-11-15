@@ -569,6 +569,7 @@ describe("remote geometry validation", () => {
     try {
       for (const feature of [
         null,
+        { type: "Feature", properties: {} },
         { type: "Feature", geometry: { type: "GeometryCollection", geometries: [null] } },
         { type: "Feature", geometry: { type: "GeometryCollection" } },
         {
@@ -590,4 +591,30 @@ describe("remote geometry validation", () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+it("accepts valid nested GeometryCollections and null top-level geometry", async () => {
+  const originalFetch = globalThis.fetch;
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {}, geometry: null },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "GeometryCollection",
+          geometries: [
+            { type: "GeometryCollection", geometries: [{ type: "Point", coordinates: [1, 2] }] },
+          ],
+        },
+      },
+    ],
+  };
+  try {
+    globalThis.fetch = async () => Response.json(data);
+    assert.deepEqual(await fetchGeoJsonFeatureCollection("https://example.com/nested.json"), data);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

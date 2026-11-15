@@ -391,14 +391,22 @@ record of a table's capabilities and cannot tell one caller from another. Use
 database grants for restrictions that must hold against an untrusted client.
 
 A GeoJSON layer with `source.url` and no inline `geojson` loads a remote
-FeatureCollection through the app’s layer refresh pipeline. Public `gs://` URLs are converted to
-Google Cloud Storage HTTPS URLs; private S3 URLs use the configured connection.
+FeatureCollection through the app's layer refresh pipeline. Public `gs://` URLs
+are converted to Google Cloud Storage HTTPS URLs; private S3 URLs use the configured connection.
 The server must allow browser requests through CORS. Loaded data becomes the
 layer's inline snapshot and is included on save unless sharing capabilities
 exclude it. Failed initial requests display an error and can be retried with
-the layer’s Refresh action. Responses for removed layers or replaced sources
+the layer's Refresh action. Responses for removed layers or replaced sources
 are ignored. A malformed GCS URL leaves the project loadable and reports an
 error when its layer loads.
+
+Opening a project automatically requests these layer URLs, including localhost
+and LAN addresses reachable by the app. Only open projects whose data sources
+you trust. GCS URLs use URL syntax: encode literal `?` and `#` in object names
+as `%3F` and `%23`; unescaped characters begin the query and fragment. Queries
+and fragments supplied by the user are preserved in saved projects, including
+credential-bearing parameters. Remove credential-bearing parameters before
+distributing a saved project.
 
 For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
 optional auto-refresh interval. `intervalMs` can be any positive interval in

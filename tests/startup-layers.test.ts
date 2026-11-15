@@ -14,7 +14,6 @@ import {
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
   buildLayersFileContent,
-  fetchStartupLayerFeatures,
   withStartupLayers,
   type LayersFileHost,
 } from "../apps/geolibre-desktop/src/lib/startup-layers";
@@ -117,34 +116,6 @@ describe("startup layers", () => {
       withStartupLayers(createEmptyProject()).layers.map((entry) => entry.name),
       ["Tiles", "From disk"],
     );
-  });
-
-  it("fetch URL features into a clean workspace and keep it clean", async () => {
-    const bare = { ...fromUrl, geojson: undefined };
-    useAppStore.getState().loadProject({ ...createEmptyProject(), layers: [bare] }, null);
-    assert.equal(useAppStore.getState().isDirty, false);
-    await fetchStartupLayerFeatures(
-      (entry) => !entry.geojson,
-      async () => features,
-    );
-    const state = useAppStore.getState();
-    assert.equal(state.layers[0].geojson?.features.length, 1);
-    assert.equal(state.isDirty, false);
-    // The fetch is not an undo step.
-    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
-  });
-
-  it("drop a fetch that lands after the workspace changed", async () => {
-    const bare = { ...fromUrl, geojson: undefined };
-    useAppStore.getState().loadProject({ ...createEmptyProject(), layers: [bare] }, null);
-    await fetchStartupLayerFeatures(
-      (entry) => !entry.geojson,
-      async () => {
-        useAppStore.getState().newProject();
-        return features;
-      },
-    );
-    assert.equal(useAppStore.getState().layers.length, 0);
   });
 });
 

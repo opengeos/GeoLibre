@@ -2036,10 +2036,7 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       : undefined;
   // Convert Google Cloud Storage URLs (gs://) in layer sources to their
   // public HTTPS equivalents so layers hosted on GCS can be loaded.
-  const source =
-    rest.source && typeof rest.source === "object"
-      ? ({ ...rest.source } as Record<string, unknown>)
-      : rest.source;
+  const source = rest.source && typeof rest.source === "object" ? { ...rest.source } : rest.source;
   if (source && typeof source === "object") {
     const url = source.url;
     if (typeof url === "string") {

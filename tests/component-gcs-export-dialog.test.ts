@@ -152,3 +152,12 @@ it("stops polling when the backend returns an unknown status", async () => {
   );
   assert.equal(calls, 2);
 });
+
+it("opens with Ctrl+Shift+G regardless of Caps Lock", () => {
+  render(createElement(GcsExportDialog));
+  for (const key of ["g", "G"]) {
+    fireEvent.keyDown(window, { key, ctrlKey: true, shiftKey: true });
+    assert.ok(screen.getByRole("button", { name: "Harvest & Export" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  }
+});

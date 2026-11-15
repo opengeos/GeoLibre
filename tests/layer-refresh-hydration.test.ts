@@ -3,6 +3,12 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { act, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+import { createEmptyProject } from "@geolibre/core";
+import {
+  normalizeDesktopSettings,
+  useDesktopSettingsStore,
+} from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
+import { withStartupLayers } from "../apps/geolibre-desktop/src/lib/startup-layers";
 import type { FeatureCollection } from "geojson";
 
 const { useLayerRefresh } =
@@ -193,4 +199,32 @@ describe("WFS hydration lifecycle", () => {
       );
     });
   });
+});
+
+it("hydrates startup URL layers once, keeping the workspace clean and out of undo history", async () => {
+  const bare = geojsonLayer({
+    id: LAYER_ID,
+    source: { type: "geojson", url: "https://example.test/startup.json" },
+    geojson: undefined,
+  });
+  const settings = normalizeDesktopSettings({});
+  useDesktopSettingsStore.getState().setDesktopSettings({
+    ...settings,
+    startup: {
+      ...settings.startup,
+      layers: { fileName: "layers.json", path: "layers.json", layers: [bare], layerGroups: [] },
+    },
+  });
+  useAppStore.getState().loadProject(withStartupLayers(createEmptyProject()), null);
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json(collection("startup"));
+  };
+  render(createElement(RefreshHost));
+  await waitFor(() => assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1));
+  assert.equal(calls, 1);
+  assert.equal(useAppStore.getState().isDirty, false);
+  assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
+  useDesktopSettingsStore.getState().setDesktopSettings(settings);
 });

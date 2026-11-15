@@ -266,3 +266,13 @@ it("encodes literal GCS path backslashes without altering query or fragment", as
   assert.equal(result, "https://storage.googleapis.com/bucket/a%5Cb.geojson?token=a\\b#part");
   assert.equal(new URL(result).pathname, "/bucket/a%5Cb.geojson");
 });
+
+it("rejects empty GCS buckets and preserves encoded key delimiters", async () => {
+  for (const url of ["gs:///key", "gs://", "gs://?token=x"]) {
+    await assert.rejects(resolveReadableUrl(url), /bucket name/);
+  }
+  assert.equal(
+    await resolveReadableUrl("gs://bucket/data%231%3F.json?generation=2#part"),
+    "https://storage.googleapis.com/bucket/data%231%3F.json?generation=2#part",
+  );
+});

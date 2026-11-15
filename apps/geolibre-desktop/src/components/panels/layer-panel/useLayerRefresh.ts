@@ -1,7 +1,7 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, withoutHistory } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
 import {
@@ -118,7 +118,16 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   );
 
   const handleRefreshLayer = useCallback(
-    async (layer: GeoLibreLayer, automatic = false) => {
+    async (layer: GeoLibreLayer, automatic = false, bootstrap = false) => {
+      // Initial hydration is a restore, not an edit or an undo step.
+      const applyLayerUpdate: typeof updateLayer = (id, patch) => {
+        if (!bootstrap) return updateLayer(id, patch);
+        const wasDirty = useAppStore.getState().isDirty;
+        withoutHistory(() => {
+          updateLayer(id, patch);
+          if (!wasDirty) useAppStore.setState({ isDirty: false });
+        });
+      };
       const requestGeneration = projectGeneration;
       const requestSourceUrl = layer.source.url;
       const mssqlRecoveryRefresh = layer.mssqlWritebackPending === true;
@@ -181,7 +190,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           );
           const latest = getCurrentRequestLayer();
           if (!latest) return;
-          updateLayer(layer.id, {
+          applyLayerUpdate(layer.id, {
             geojson: refreshed.geojson,
             mssqlWritebackPending: undefined,
             ...setLayerConnectionResult(latest, {
@@ -217,7 +226,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          updateLayer(layer.id, {
+          applyLayerUpdate(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -249,7 +258,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          updateLayer(layer.id, {
+          applyLayerUpdate(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -287,7 +296,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           const latest = getCurrentRequestLayer();
           if (!latest) return;
 
-          updateLayer(layer.id, {
+          applyLayerUpdate(layer.id, {
             geojson,
             ...setLayerConnectionResult(latest, {
               syncedAt: new Date().toISOString(),
@@ -346,7 +355,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
           // the toast below.
           const featureCount = typeof info.featureCount === "number" ? info.featureCount : null;
           if (latest) {
-            updateLayer(
+            applyLayerUpdate(
               layer.id,
               setLayerConnectionResult(latest, {
                 syncedAt: new Date().toISOString(),
@@ -377,7 +386,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         const latest = getCurrentRequestLayer();
         if (!latest) return;
 
-        updateLayer(layer.id, {
+        applyLayerUpdate(layer.id, {
           geojson,
           ...setLayerConnectionResult(latest, {
             syncedAt: new Date().toISOString(),
@@ -411,7 +420,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
             : error instanceof Error
               ? error.message
               : t("layers.refreshError");
-        updateLayer(
+        applyLayerUpdate(
           layer.id,
           getRefreshFailureLayerPatch(
             latest,
@@ -477,7 +486,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // A hydrated layer present at first observation needs no bootstrap. Once
       // observed, a changed URL must refresh even if old features are still set.
       if (layer.geojson && !alreadyObserved) continue;
-      void handleRefreshLayerRef.current(layer);
+      void handleRefreshLayerRef.current(layer, false, !layer.geojson);
     }
   }, [layers, projectGeneration]);
 
