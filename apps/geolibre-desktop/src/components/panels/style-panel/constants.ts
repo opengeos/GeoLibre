@@ -16,8 +16,7 @@ export const STYLE_PANEL_ASIDE_CLASS =
 // control that really is wider than the panel still overflows the wrapper and
 // scrolls sideways. The child selector keeps the override on this viewport,
 // not on any ScrollArea nested inside a section.
-export const STYLE_PANEL_SCROLL_CLASS =
-  "flex-1 [&>[data-radix-scroll-area-viewport]>div]:block!";
+export const STYLE_PANEL_SCROLL_CLASS = "flex-1 [&>[data-radix-scroll-area-viewport]>div]:block!";
 
 export const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 export const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
