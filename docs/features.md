@@ -280,13 +280,13 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - EPSG parameters sit beside a searchable CRS catalog grouped into Geographic and Projected, with the typed code's official EPSG name confirmed under the field
     - Download OSM Vector's four boundary numbers render as one Area of interest control with Use map extent and Draw on map shortcuts
 - Vector menu
-    - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
+    - **Geometry and analysis**: buffer, centroids, convex hull, dissolve, bounding box, simplify, clip, intersection, difference, union, spatial join, summarize within, attribute join, select by value, select by expression, select by location, random extract, movement, space-time, and cell coverage
     - Buffer takes a side: Outside grows each feature, Inside shrinks it, and Both sides keeps only the zone within the distance on either side of its boundary. Inside shrinks polygons only: a point or line has no interior, so the inward buffer empties it and the feature is dropped from the result and reported in the run log
     - Buffer can also dissolve its result: the buffers merge into one feature with the overlaps between them dissolved away (a multipolygon where they do not touch). The merged shape belongs to no input feature, so it carries no attributes; to dissolve by an attribute instead, run Dissolve on the result
     - **Data management**: merge layers, through a multi-layer parameter picker that unites attribute schemas and can record each feature's source layer
     - **Vertices and sampling**: extract vertices as points carrying their part and vertex index, and generate points along lines and polygon boundaries at a fixed geodesic interval
     - **Data quality**: check validity, fix geometries, and check topology rules
-    - **Engines**: Turf.js in the browser, an optional GeoPandas sidecar engine for every tool, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
+    - **Engines**: Turf.js in the browser, an optional GeoPandas sidecar engine for the tools that support one, and an in-browser GeoPandas engine via Pyodide (no server, same results as the sidecar)
 - Raster menu with hillshade, slope, aspect, reproject, resample, clip by extent, clip by mask layer, polygonize, contour, zonal statistics, raster calculator, reclassify, mosaic, and focal statistics
     - Backed by a rasterio Python sidecar, with a client-side fallback so core tools also run in the browser when no sidecar is available
     - Plus in-browser extraction of COG, WMS, and XYZ bounding-box subsets, a keyless global DEM downloader under Processing → GeoLibre Toolbox → Raster (public AWS Terrain Tiles; current-view or drawn extent), and a normalized-difference index builder for any HTTP COG

@@ -190,6 +190,7 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
   { kind: "union", titleKey: "toolbar.vectorTool.union" },
   { kind: "spatial-join", titleKey: "toolbar.vectorTool.spatialJoin" },
+  { kind: "summarize-within", titleKey: "toolbar.vectorTool.summarizeWithin" },
   { kind: "attribute-join", titleKey: "toolbar.vectorTool.attributeJoin" },
   { kind: "select-by-value", titleKey: "toolbar.vectorTool.selectByValue" },
   {
@@ -211,6 +212,21 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "dggs-bin", titleKey: "toolbar.vectorTool.dggsBinning" },
   { kind: "dggs-compact", titleKey: "toolbar.vectorTool.dggsCompact" },
 ];
+
+/**
+ * Tool ids in the registry's Join group. Kept static so this table doesn't pull
+ * in the tool registry; tests/toolbar-commands.test.ts checks it still matches.
+ */
+const VECTOR_JOIN_KINDS: ReadonlySet<VectorToolKind> = new Set<VectorToolKind>([
+  "spatial-join",
+  "summarize-within",
+  "attribute-join",
+]);
+
+/** The Processing menu's Join group, in command-list order. */
+export const VECTOR_JOIN_TOOL_COMMANDS = VECTOR_TOOL_COMMANDS.filter(({ kind }) =>
+  VECTOR_JOIN_KINDS.has(kind),
+);
 
 export const RASTER_TOOL_COMMANDS: Array<{
   kind: RasterToolKind;

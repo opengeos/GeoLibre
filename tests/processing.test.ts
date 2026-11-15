@@ -1425,3 +1425,229 @@ describe("processing registry", () => {
     assert.deepEqual(fittedBounds, [-78, 35, -77, 36]);
   });
 });
+
+describe("summarize within", () => {
+  const rect = (
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    properties: Record<string, unknown> = {},
+  ) => ({
+    type: "Feature" as const,
+    properties,
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [west, south],
+          [east, south],
+          [east, north],
+          [west, north],
+          [west, south],
+        ],
+      ],
+    },
+  });
+  const pt = (lon: number, lat: number, properties: Record<string, unknown> = {}) => ({
+    type: "Feature" as const,
+    properties,
+    geometry: { type: "Point" as const, coordinates: [lon, lat] },
+  });
+  const asLayer = (id: string, features: FeatureCollection["features"]): GeoLibreLayer => ({
+    ...layer,
+    id,
+    name: id,
+    geojson: { type: "FeatureCollection", features },
+  });
+  const run = (layers: GeoLibreLayer[], parameters: Record<string, unknown>) => {
+    const tool = getVectorTool("summarize-within");
+    assert.ok(tool);
+    const logs: string[] = [];
+    let result: FeatureCollection | null = null;
+    tool.run({
+      layers,
+      parameters,
+      log: (message) => logs.push(message),
+      addResultLayer: (_name, geojson) => {
+        result = geojson;
+      },
+    });
+    return { logs, result: result as FeatureCollection | null };
+  };
+
+  const tracts = asLayer("tracts", [
+    rect(0, 0, 2, 2, { name: "west" }),
+    rect(2, 0, 4, 2, { name: "east" }),
+    rect(10, 10, 11, 11, { name: "empty" }),
+  ]);
+
+  it("counts points per polygon and reduces a numeric field", () => {
+    const permits = asLayer("permits", [
+      pt(0.5, 0.5, { cost: 100 }),
+      pt(1.5, 1.5, { cost: "300" }),
+      pt(1, 1, { cost: "n/a" }),
+      pt(3, 1, { cost: 50 }),
+      pt(20, 20, { cost: 999 }),
+    ]);
+    const { result } = run([tracts, permits], {
+      layer: "tracts",
+      overlay: "permits",
+      field: "cost",
+    });
+    const byName = new Map(result!.features.map((f) => [f.properties?.name, f.properties]));
+    assert.equal(result!.features.length, 3);
+    // The text value still counts as a feature but is skipped by the stats.
+    assert.deepEqual(
+      { ...byName.get("west") },
+      {
+        name: "west",
+        count: 3,
+        sum_cost: 400,
+        mean_cost: 200,
+        min_cost: 100,
+        max_cost: 300,
+      },
+    );
+    assert.equal(byName.get("east")?.count, 1);
+    assert.equal(byName.get("east")?.sum_cost, 50);
+    // An empty polygon sums to 0 and has no mean, like Aggregate by attribute.
+    assert.equal(byName.get("empty")?.count, 0);
+    assert.equal(byName.get("empty")?.sum_cost, 0);
+    assert.equal(byName.get("empty")?.mean_cost, null);
+    // A point layer adds no coverage columns.
+    assert.equal("overlap_pct" in byName.get("west")!, false);
+  });
+
+  it("measures polygon coverage without double-counting or edge neighbours", () => {
+    const flood = asLayer("flood", [
+      // Two overlapping zones that both cover the western half of "west".
+      rect(0, 0, 1, 2, { zone: "AE" }),
+      rect(0, 0, 1, 2, { zone: "X" }),
+      // Touches "west" only along its edge at lon 2, and covers all of "east".
+      rect(2, 0, 4, 2, { zone: "A" }),
+    ]);
+    const { result } = run([tracts, flood], { layer: "tracts", overlay: "flood" });
+    const byName = new Map(result!.features.map((f) => [f.properties?.name, f.properties]));
+    const west = byName.get("west")!;
+    assert.equal(west.count, 2);
+    assert.equal(west.overlap_pct, 50);
+    // The covered half is 1° × 2° at the equator: about 24,780 km² on the WGS 84 sphere.
+    assert.ok(Math.abs((west.overlap_km2 as number) - 24780) < 250);
+    const east = byName.get("east")!;
+    assert.equal(east.count, 1);
+    assert.equal(east.overlap_pct, 100);
+    assert.equal(byName.get("empty")?.overlap_pct, 0);
+  });
+
+  it("drops slivers below the minimum overlap", () => {
+    const zones = asLayer("zones", [
+      rect(0, 0, 1, 2, { zone: "big" }),
+      // 1% of "west": a digitizing sliver along its western edge.
+      rect(-1, 0, 0.02, 2, { zone: "sliver" }),
+    ]);
+    const all = run([tracts, zones], { layer: "tracts", overlay: "zones" });
+    assert.equal(all.result!.features[0].properties?.count, 2);
+    const trimmed = run([tracts, zones], {
+      layer: "tracts",
+      overlay: "zones",
+      min_overlap_pct: 5,
+    });
+    const west = trimmed.result!.features[0].properties!;
+    assert.equal(west.count, 1);
+    assert.equal(west.overlap_pct, 50);
+    assert.ok(trimmed.logs.some((line) => line.includes("ignored 1 overlap")));
+  });
+
+  it("validates inputs and warns before replacing fields", () => {
+    const pts = asLayer("pts", [pt(1, 1, { count: 7 })]);
+    const noPolygons = run([pts, pts], { layer: "pts", overlay: "pts" });
+    assert.equal(noPolygons.result, null);
+    assert.ok(noPolygons.logs.some((line) => line.includes("no polygon features")));
+
+    const badPct = run([tracts, pts], { layer: "tracts", overlay: "pts", min_overlap_pct: 150 });
+    assert.equal(badPct.result, null);
+
+    const missing = run([tracts], { layer: "tracts", overlay: "nope" });
+    assert.equal(missing.result, null);
+
+    const clash = asLayer("clash", [rect(0, 0, 2, 2, { count: "old" })]);
+    const replaced = run([clash, pts], { layer: "clash", overlay: "pts" });
+    assert.equal(replaced.result!.features[0].properties?.count, 1);
+    assert.ok(replaced.logs.some((line) => line.includes("replacing the existing field(s) count")));
+  });
+
+  it("ignores stale bbox members from the source file", () => {
+    // Both stored boxes are far from the real geometry. Trusted, they would
+    // fail the overlap test and hide the match.
+    const tract: FeatureCollection["features"][number] = {
+      ...rect(10, 10, 12, 12, { name: "stale" }),
+      bbox: [50, 50, 51, 51],
+    };
+    const point: FeatureCollection["features"][number] = {
+      ...pt(11, 11),
+      bbox: [-50, -50, -50, -50],
+    };
+    const { result } = run([asLayer("z", [tract]), asLayer("p", [point])], {
+      layer: "z",
+      overlay: "p",
+    });
+    assert.equal(result!.features[0].properties?.count, 1);
+  });
+
+  it("reports polygon pairs it could not intersect", () => {
+    const broken: FeatureCollection["features"][number] = {
+      ...rect(0, 0, 1, 1, { zone: "bad" }),
+      // An empty position fails polygon-clipping's input validation ("not a valid
+      // Polygon or MultiPolygon"), a deliberate check rather than a side effect of
+      // how bad numbers are handled. The bbox skips it, so the pair still reaches
+      // the clip.
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [[[0, 0], [] as unknown as [number, number], [1, 1], [0, 0]]],
+      },
+    };
+    const { logs } = run([tracts, asLayer("broken", [broken])], {
+      layer: "tracts",
+      overlay: "broken",
+    });
+    assert.ok(logs.some((line) => line.includes("skipped 1 polygon pair(s)")));
+  });
+
+  it("warns when both inputs are the same layer", () => {
+    const { result, logs } = run([tracts], { layer: "tracts", overlay: "tracts" });
+    assert.ok(result);
+    assert.ok(logs.some((line) => line.includes("both inputs are the same layer")));
+  });
+
+  it("notes non-polygon features it leaves out of the result", () => {
+    const mixed = asLayer("mixed", [rect(0, 0, 2, 2, { name: "a" }), pt(5, 5), pt(6, 6)]);
+    const { result, logs } = run([mixed, asLayer("p", [pt(1, 1)])], {
+      layer: "mixed",
+      overlay: "p",
+    });
+    assert.equal(result!.features.length, 1);
+    assert.ok(logs.some((line) => line.includes("2 non-polygon feature(s)")));
+  });
+
+  it("warns when the layer to summarize is empty", () => {
+    const { result, logs } = run([tracts, asLayer("none", [])], {
+      layer: "tracts",
+      overlay: "none",
+    });
+    assert.deepEqual(
+      result!.features.map((f) => f.properties?.count),
+      [0, 0, 0],
+    );
+    assert.ok(logs.some((line) => line.includes("has no features")));
+  });
+
+  it("warns when no feature in the layer to summarize has the chosen field", () => {
+    const { logs } = run([tracts, asLayer("costs", [pt(1, 1, { cost: 5 })])], {
+      layer: "tracts",
+      overlay: "costs",
+      field: "cots",
+    });
+    assert.ok(logs.some((line) => line.includes('has a field "cots"')));
+  });
+});
