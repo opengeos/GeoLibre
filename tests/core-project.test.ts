@@ -2250,3 +2250,14 @@ describe("GCS project sources", () => {
     }
   });
 });
+
+it("keeps projects with an unaddressable GCS layer loadable", () => {
+  const url = "gs://bucket/../data.json";
+  const project = {
+    ...createEmptyProject(),
+    layers: [geojsonLayer({ source: { url } }), geojsonLayer({ id: "valid" })],
+  };
+  const parsed = parseProject(JSON.stringify(project));
+  assert.equal(parsed.layers.length, 2);
+  assert.equal(parsed.layers[0].source.url, url);
+});

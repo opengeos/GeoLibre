@@ -260,3 +260,9 @@ describe("GCS readable URLs", () => {
     }
   });
 });
+
+it("encodes literal GCS path backslashes without altering query or fragment", async () => {
+  const result = await resolveReadableUrl("gs://bucket/a\\b.geojson?token=a\\b#part");
+  assert.equal(result, "https://storage.googleapis.com/bucket/a%5Cb.geojson?token=a\\b#part");
+  assert.equal(new URL(result).pathname, "/bucket/a%5Cb.geojson");
+});

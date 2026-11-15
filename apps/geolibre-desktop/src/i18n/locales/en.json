@@ -1,4 +1,23 @@
 {
+  "gcsExport": {
+    "title": "Harvest & Export to GCS",
+    "triggerTitle": "Harvest & Export to GCS (Ctrl+Shift+G)",
+    "backendUrl": "Backend URL (Cloud Run)",
+    "apiKey": "API Key",
+    "dataUrl": "Data URL (portal or direct file)",
+    "licence": "Licence (direct downloads)",
+    "running": "Running…",
+    "run": "Harvest & Export",
+    "errors": {
+      "dataUrlRequired": "Data URL is required",
+      "httpsBackendRequired": "Enter an HTTPS backend URL without credentials, query, or fragment.",
+      "http": "HTTP {{status}}",
+      "missingExecution": "Missing harvest execution ID",
+      "harvestFailed": "Harvest failed",
+      "invalidStatus": "The backend returned an unknown harvest status.",
+      "timeout": "Harvest observation timed out. Check the backend for its final status."
+    }
+  },
   "mcpPreview": {
     "networkConsent": {
       "previewLabel": "GeoLibre map preview",

@@ -7,5 +7,5 @@ export function gcsUriToHttps(url: string): string {
   if (path.split("/").some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment))) {
     throw new Error('GCS object key has a "." or ".." segment a URL cannot address: ' + path);
   }
-  return `https://storage.googleapis.com/${rest}`;
+  return `https://storage.googleapis.com/${path.replaceAll("\\", "%5C")}${rest.slice(path.length)}`;
 }

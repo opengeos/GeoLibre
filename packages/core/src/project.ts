@@ -2042,7 +2042,14 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       : rest.source;
   if (source && typeof source === "object") {
     const url = source.url;
-    if (typeof url === "string") source.url = gcsUriToHttps(url);
+    if (typeof url === "string") {
+      try {
+        source.url = gcsUriToHttps(url);
+      } catch {
+        // Preserve the layer so the refresh pipeline can report its URL error.
+        source.url = url;
+      }
+    }
   }
 
   return {

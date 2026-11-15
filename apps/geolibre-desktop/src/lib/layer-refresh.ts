@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { resolveReadableUrl, type GeoLibreLayer } from "@geolibre/core";
 import { parseGeoRssLayer } from "./georss";
 import { looksLikeGmlFeatureCollection } from "./gml";
 import { parseGmlWithReprojection } from "./gml-projection";
@@ -218,7 +218,7 @@ export async function fetchGeoJsonFeatureCollection(
     : AbortSignal.timeout(FETCH_TIMEOUT_MS);
   let response: FetchedText;
   try {
-    response = await fetchText(url, options, signal);
+    response = await fetchText(await resolveReadableUrl(url, signal), options, signal);
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
       throw new Error("The request timed out.");
@@ -834,6 +834,36 @@ function appendQuery(endpoint: string, params: Array<[string, string]>): string 
   return `${endpoint}${separator}${query}`;
 }
 
+/** Check nested collections before downstream renderers traverse their members. */
+function isGeoJsonGeometry(value: unknown): boolean {
+  if (!value || typeof value !== "object" || !("type" in value)) return false;
+  if (value.type === "GeometryCollection") {
+    return (
+      "geometries" in value &&
+      Array.isArray(value.geometries) &&
+      value.geometries.every(isGeoJsonGeometry)
+    );
+  }
+  return (
+    ["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon"].includes(
+      String(value.type),
+    ) &&
+    "coordinates" in value &&
+    Array.isArray(value.coordinates)
+  );
+}
+
+function isGeoJsonFeature(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "type" in value &&
+    value.type === "Feature" &&
+    "geometry" in value &&
+    (value.geometry === null || isGeoJsonGeometry(value.geometry)),
+  );
+}
+
 function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   if (
     !value ||
@@ -841,7 +871,8 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
     !("type" in value) ||
     value.type !== "FeatureCollection" ||
     !("features" in value) ||
-    !Array.isArray(value.features)
+    !Array.isArray(value.features) ||
+    !value.features.every(isGeoJsonFeature)
   ) {
     throw new Error("The response is not a GeoJSON FeatureCollection.");
   }
@@ -853,7 +884,7 @@ function layerHttpUrl(layer: GeoLibreLayer): string | null {
   const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";
   const url = sourceUrl || sourcePath;
-  return isHttpUrl(url) ? url : null;
+  return isHttpUrl(url) || /^(?:gs|s3|s3a):\/\//i.test(url) ? url : null;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   isRefreshableLayer,
   isVectorControlRefreshLayer,
   refreshGeoJsonLayer,
+  refreshSourceUrl,
   setLayerConnectionResult,
   setLayerRefreshConfig,
   supportsAutoRefresh,
@@ -79,8 +80,8 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
     return () => window.clearInterval(timer);
   }, [isCollapsed, hasSyncTimestamps]);
   const refreshingLayerIdsRef = useRef(new Set<string>());
-  const observedWfsSourceUrlsRef = useRef(new Map<string, unknown>());
-  const observedWfsGenerationRef = useRef(projectGeneration);
+  const observedSourceUrlsRef = useRef(new Map<string, unknown>());
+  const observedSourceGenerationRef = useRef(projectGeneration);
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
   // Active filesystem watchers for "watch local file" layers, keyed by layer id.
@@ -128,7 +129,8 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
         if (
           !current ||
           current.source.url !== requestSourceUrl ||
-          current.sourcePath !== layer.sourcePath
+          current.sourcePath !== layer.sourcePath ||
+          (!layer.geojson && current.geojson !== layer.geojson)
         ) {
           return undefined;
         }
@@ -441,9 +443,9 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
   }, [handleRefreshLayer]);
 
   useEffect(() => {
-    if (observedWfsGenerationRef.current !== projectGeneration) {
-      observedWfsGenerationRef.current = projectGeneration;
-      observedWfsSourceUrlsRef.current.clear();
+    if (observedSourceGenerationRef.current !== projectGeneration) {
+      observedSourceGenerationRef.current = projectGeneration;
+      observedSourceUrlsRef.current.clear();
       for (const timer of refreshStatusTimersRef.current.values()) {
         window.clearTimeout(timer);
       }
@@ -457,30 +459,24 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       }
     }
     const currentIds = new Set(layers.map((layer) => layer.id));
-    for (const id of observedWfsSourceUrlsRef.current.keys()) {
-      if (!currentIds.has(id)) observedWfsSourceUrlsRef.current.delete(id);
+    for (const id of observedSourceUrlsRef.current.keys()) {
+      if (!currentIds.has(id)) observedSourceUrlsRef.current.delete(id);
     }
     for (const layer of layers) {
-      if (layer.type !== "geojson" || layer.metadata.sourceKind !== "wfs-getfeature") {
-        observedWfsSourceUrlsRef.current.delete(layer.id);
+      const sourceUrl = refreshSourceUrl(layer);
+      if (!sourceUrl) {
+        observedSourceUrlsRef.current.delete(layer.id);
         continue;
       }
-      const alreadyObserved = observedWfsSourceUrlsRef.current.has(layer.id);
-      if (alreadyObserved && observedWfsSourceUrlsRef.current.get(layer.id) === layer.source.url) {
+      if (layer.geojson && layer.metadata.sourceKind !== "wfs-getfeature") continue;
+      const alreadyObserved = observedSourceUrlsRef.current.has(layer.id);
+      if (alreadyObserved && observedSourceUrlsRef.current.get(layer.id) === sourceUrl) {
         continue;
       }
-      observedWfsSourceUrlsRef.current.set(layer.id, layer.source.url);
+      observedSourceUrlsRef.current.set(layer.id, sourceUrl);
       // A hydrated layer present at first observation needs no bootstrap. Once
       // observed, a changed URL must refresh even if old features are still set.
       if (layer.geojson && !alreadyObserved) continue;
-      if (typeof layer.source.url !== "string") continue;
-      let requestUrl: URL;
-      try {
-        requestUrl = new URL(layer.source.url);
-      } catch {
-        continue;
-      }
-      if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") continue;
       void handleRefreshLayerRef.current(layer);
     }
   }, [layers, projectGeneration]);

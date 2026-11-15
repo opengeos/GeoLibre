@@ -562,3 +562,32 @@ describe("fetchWfsGeoJson GML fallback (issue #2746)", () => {
     assert.deepEqual((data.features[0].geometry as Point).coordinates, [14.11, 54.44]);
   });
 });
+
+describe("remote geometry validation", () => {
+  it("rejects malformed features and nested collections before storing data", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      for (const feature of [
+        null,
+        { type: "Feature", geometry: { type: "GeometryCollection", geometries: [null] } },
+        { type: "Feature", geometry: { type: "GeometryCollection" } },
+        {
+          type: "Feature",
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [{ type: "GeometryCollection", geometries: [null] }],
+          },
+        },
+      ]) {
+        globalThis.fetch = async () =>
+          Response.json({ type: "FeatureCollection", features: [feature] });
+        await assert.rejects(
+          fetchGeoJsonFeatureCollection("https://example.com/data.json"),
+          /FeatureCollection/,
+        );
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

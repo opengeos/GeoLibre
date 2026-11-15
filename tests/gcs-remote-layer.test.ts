@@ -1,59 +1,67 @@
+import { act, cleanup, fireEvent, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, it, mock } from "node:test";
-import { setImmediate } from "node:timers/promises";
-import type { Map as MapLibreMap } from "maplibre-gl";
-import { useAppStore } from "@geolibre/core";
-import { syncLayer } from "../packages/map/src/layer-sync";
+import { createElement } from "react";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
-const map = {} as MapLibreMap;
+const { useLayerRefresh } =
+  await import("../apps/geolibre-desktop/src/components/panels/layer-panel/useLayerRefresh");
+
+function RefreshHost() {
+  const layers = useAppStore((state) => state.layers);
+  const refresh = useLayerRefresh({ layers, isCollapsed: true });
+  return createElement(
+    "button",
+    { onClick: () => void refresh.handleRefreshLayer(layers[0]) },
+    "Retry",
+  );
+}
+
 afterEach(() => {
+  cleanup();
   mock.restoreAll();
-  useAppStore.setState({ layers: [] });
 });
 
-it("resolves GCS before fetching remote GeoJSON", async () => {
+it("hydrates GCS through the refresh pipeline and supports manual retry after failure", async () => {
+  let fail = true;
   const data = { type: "FeatureCollection", features: [] };
-  const fetcher = mock.method(globalThis, "fetch", async (_input: RequestInfo | URL) =>
-    Response.json(data),
+  const fetcher = mock.method(globalThis, "fetch", async (_url: RequestInfo | URL) =>
+    fail ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json(data),
   );
   const layer = geojsonLayer({ geojson: undefined, source: { url: " GS://bucket/data.json " } });
   useAppStore.setState({ layers: [layer] });
-  syncLayer(map, layer);
-  syncLayer(map, layer);
-  await setImmediate();
+  render(createElement(RefreshHost));
+  await waitFor(() =>
+    assert.match(useAppStore.getState().layers[0].connection?.lastError ?? "", /503/),
+  );
   assert.equal(fetcher.mock.callCount(), 1);
   assert.equal(
     fetcher.mock.calls[0].arguments[0],
     "https://storage.googleapis.com/bucket/data.json",
   );
-  assert.deepEqual(useAppStore.getState().layers[0].geojson, data);
+  act(() => useAppStore.getState().updateLayer(layer.id, { name: "Renamed" }));
+  assert.equal(fetcher.mock.callCount(), 1);
+  fail = false;
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => assert.deepEqual(useAppStore.getState().layers[0].geojson, data));
 });
 
-it("rejects error responses and malformed GeoJSON without retrying every sync", async () => {
-  for (const response of [
-    Response.json({ error: "unavailable" }, { status: 503 }),
-    Response.json({ type: "FeatureCollection", features: [null] }),
-    Response.json({ type: "FeatureCollection", features: {} }),
-  ]) {
-    const fetcher = mock.method(globalThis, "fetch", async () => response);
-    mock.method(console, "warn", () => {});
-    const layer = geojsonLayer({
-      geojson: undefined,
-      source: { url: "https://example.com/data.json" },
-    });
-    useAppStore.setState({ layers: [layer] });
-    syncLayer(map, layer);
-    await setImmediate();
-    syncLayer(map, layer);
-    await setImmediate();
-    assert.equal(fetcher.mock.callCount(), 1);
-    assert.equal(useAppStore.getState().layers[0].geojson, undefined);
-    mock.restoreAll();
-  }
+it("does not hydrate source kinds owned by other loaders", () => {
+  const fetcher = mock.method(globalThis, "fetch", async () => Response.json({}));
+  useAppStore.setState({
+    layers: [
+      geojsonLayer({
+        geojson: undefined,
+        source: { url: "https://example.com/data.json" },
+        metadata: { sourceKind: "other-loader" },
+      }),
+    ],
+  });
+  render(createElement(RefreshHost));
+  assert.equal(fetcher.mock.callCount(), 0);
 });
 
-it("ignores a response after the source changes or the layer is removed", async () => {
+it("ignores stale responses after source replacement or removal", async () => {
   for (const remove of [false, true]) {
     let finish!: (response: Response) => void;
     mock.method(
@@ -69,16 +77,21 @@ it("ignores a response after the source changes or the layer is removed", async 
       source: { url: "https://example.com/old.json" },
     });
     useAppStore.setState({ layers: [layer] });
-    syncLayer(map, layer);
-    await setImmediate();
-    if (remove) useAppStore.setState({ layers: [] });
-    else
-      useAppStore
-        .getState()
-        .updateLayer(layer.id, { source: { url: "https://example.com/new.json" } });
-    finish(Response.json({ type: "FeatureCollection", features: [] }));
-    await setImmediate();
-    assert.equal(useAppStore.getState().layers[0]?.geojson, undefined);
+    render(createElement(RefreshHost));
+    await waitFor(() => assert.ok(finish));
+    const finishOld = finish;
+    act(() => {
+      if (remove) useAppStore.setState({ layers: [] });
+      else
+        useAppStore
+          .getState()
+          .updateLayer(layer.id, { source: { url: "https://example.com/new.json" } });
+    });
+    // Resolve the old request before the newer request settles.
+    await act(async () => finishOld(Response.json({ type: "FeatureCollection", features: [] })));
+    if (remove) assert.equal(useAppStore.getState().layers.length, 0);
+    else assert.equal(useAppStore.getState().layers[0].geojson, undefined);
+    cleanup();
     mock.restoreAll();
   }
 });
