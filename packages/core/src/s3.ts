@@ -479,7 +479,12 @@ export async function resolveReadableUrl(url: string, signal?: AbortSignal): Pro
   // Google Cloud Storage: gs://bucket/key → https://storage.googleapis.com/bucket/key
   const trimmed = url.trim();
   if (trimmed.toLowerCase().startsWith("gs://")) {
-    const rest = trimmed.slice(5).split(/[?#]/)[0];
+    const rest = trimmed.slice(5);
+    const pathPart = rest.split(/[?#]/)[0];
+    const queryPart = rest.slice(pathPart.length);
+    if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
+      throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
+    }
     return `https://storage.googleapis.com/${rest}`;
   }
   const location = parseS3Url(url);

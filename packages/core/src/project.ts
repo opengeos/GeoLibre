@@ -2041,25 +2041,29 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       : rest.source;
   if (source && typeof source === "object") {
     const url = source.url;
-    if (typeof url === "string") {
-      if (url.startsWith("gs://")) {
-        const rest = url.slice(5).split(/[?#]/)[0];
-        source.url = `https://storage.googleapis.com/${rest}`;
-      } else if (url.startsWith("s3://")) {
-        // delegate to existing S3 conversion logic (handled by resolveReadableUrl at runtime)
+    if (typeof url === "string" && url.startsWith("gs://")) {
+      const rest = url.slice(5);
+      const pathPart = rest.split(/[?#]/)[0];
+      if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
+        throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
       }
+      source.url = `https://storage.googleapis.com/${rest}`;
     }
     // Also handle s3_path field
     const s3Path = source.s3_path;
     if (typeof s3Path === "string" && s3Path.startsWith("gs://")) {
-      const rest = s3Path.slice(5).split(/[?#]/)[0];
+      const rest = s3Path.slice(5);
+      const pathPart = rest.split(/[?#]/)[0];
+      if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
+        throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
+      }
       source.s3_path = `https://storage.googleapis.com/${rest}`;
     }
   }
 
   return {
     ...rest,
-    ...(source !== undefined ? { source } : {}),
+    source: source ?? {},
     style: { ...DEFAULT_LAYER_STYLE, ...layer.style },
     visible: layer.visible ?? true,
     opacity: layer.opacity ?? 1,
