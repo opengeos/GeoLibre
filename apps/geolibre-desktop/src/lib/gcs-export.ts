@@ -44,6 +44,8 @@ export async function exportToGcs(config: GcsExportConfig): Promise<GcsExportRes
   return {
     projectUrl: `https://storage.googleapis.com/${config.bucket}/${config.prefix}project.geolibre.json`,
     layersExported,
-    errors: ["GCS export is a work in progress. Use the OIC harvester for full cloud-first pipeline."],
+    errors: [
+      "GCS export is a work in progress. Use the OIC harvester for full cloud-first pipeline.",
+    ],
   };
 }
