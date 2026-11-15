@@ -203,6 +203,23 @@ export function GcsExportDialog() {
             </button>
           </div>
 
+          <details className="text-sm text-muted-foreground border border-border rounded-md p-3">
+            <summary className="cursor-pointer font-medium text-foreground">
+              {t("gcsExport.helpTitle")}
+            </summary>
+            <div className="mt-2 space-y-2 text-xs leading-relaxed">
+              <p>{t("gcsExport.helpWhat")}</p>
+              <p>{t("gcsExport.helpBackend")}</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>{t("gcsExport.helpStep1")}</li>
+                <li>{t("gcsExport.helpStep2")}</li>
+                <li>{t("gcsExport.helpStep3")}</li>
+                <li>{t("gcsExport.helpStep4")}</li>
+              </ol>
+              <p className="italic">{t("gcsExport.helpByok")}</p>
+            </div>
+          </details>
+
           <div className="space-y-3">
             <div>
               <Label htmlFor="gcs-backend">{t("gcsExport.backendUrl")}</Label>
