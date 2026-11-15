@@ -1264,14 +1264,12 @@ function normalizeBounds(value: unknown): [number, number, number, number] | nul
  */
 function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void {
   const id = spec.id;
-  if (!id || boundsAttempted.has(id)) return;
+  // A declared extent is read straight off the spec by createStoreLayer, so it
+  // is not cached: a cached copy would outlive a same-id replacement that
+  // declares none (a re-run Planetary Computer stack) and zoom to the old one.
+  if (!id || normalizeBounds((spec as { bounds?: unknown }).bounds)) return;
+  if (boundsAttempted.has(id)) return;
   boundsAttempted.add(id);
-
-  const declared = normalizeBounds((spec as { bounds?: unknown }).bounds);
-  if (declared) {
-    sourceBounds.set(id, declared);
-    return;
-  }
   if (spec.type !== "mosaic") return;
 
   const generation = boundsGeneration.get(id) ?? 0;
@@ -1298,6 +1296,11 @@ function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void 
       // expected failure here and is not worth surfacing.
     }
   })();
+}
+
+/** Test seam for {@link ensureSourceBounds}. */
+export function __ensureSourceBoundsForTests(control: TimeSliderControl, spec: SourceSpec): void {
+  ensureSourceBounds(control, spec);
 }
 
 /** Drops a removed source's cached extent so a later source reusing the id

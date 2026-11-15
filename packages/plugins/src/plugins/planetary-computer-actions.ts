@@ -147,9 +147,14 @@ function bbox2d(bbox: unknown): [number, number, number, number] | null {
   const box =
     bbox.length === 6 ? [bbox[0], bbox[1], bbox[3], bbox[4]] : bbox.length === 4 ? bbox : null;
   // West may exceed east (a footprint crossing the antimeridian), but south
-  // above north is not a box.
+  // above north is not a box, and nothing lies outside ±180° / ±90°.
   return box &&
-    box.every((value) => typeof value === "number" && Number.isFinite(value)) &&
+    box.every(
+      (value, i) =>
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        Math.abs(value) <= (i % 2 === 0 ? 180 : 90),
+    ) &&
     box[1] <= box[3]
     ? (box as [number, number, number, number])
     : null;

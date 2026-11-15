@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  __ensureSourceBoundsForTests,
   __resetBoundFilterScheduleForTests,
   __reconcileBoundLayersForTests,
   __scheduleBoundFiltersForTests,
@@ -412,6 +413,25 @@ describe("Time Slider store layer identify metadata", () => {
       bounds: [-10, -5, 10, 5],
     } as SourceSpec);
     assert.deepEqual(layer.metadata.bounds, [-10, -5, 10, 5]);
+  });
+
+  // A Planetary Computer stack re-run under the same id may declare no extent
+  // (a scene crossing the antimeridian); it must not zoom to the old stack's.
+  it("does not carry a declared extent over to a same-id source that declares none", () => {
+    const control = {} as TimeSliderControl;
+    __ensureSourceBoundsForTests(control, {
+      type: "xyz",
+      id: "pc-stack-replaced",
+      tiles: ["https://example.com/{z}/{x}/{y}.png"],
+      bounds: [-10, -5, 10, 5],
+    } as unknown as SourceSpec);
+    const replacement = {
+      type: "xyz",
+      id: "pc-stack-replaced",
+      tiles: ["https://example.com/{z}/{x}/{y}.png"],
+    } as unknown as SourceSpec;
+    __ensureSourceBoundsForTests(control, replacement);
+    assert.equal("bounds" in createStoreLayer(replacement).metadata, false);
   });
 
   it("omits the extent when the source declares none", () => {

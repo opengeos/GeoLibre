@@ -390,6 +390,14 @@ describe("Planetary Computer time-series stack", () => {
       })?.items,
       [{ id: "a", date: "2024-06-07" }],
     );
+    // So is one outside the valid longitude and latitude ranges.
+    assert.deepEqual(
+      parsePlanetaryComputerStack({
+        collection: "x",
+        items: [{ id: "a", date: "2024-06-07", bbox: [0, 1, 2, 200] }],
+      })?.items,
+      [{ id: "a", date: "2024-06-07" }],
+    );
     // A malformed footprint is dropped rather than poisoning the bounds.
     assert.deepEqual(
       parsePlanetaryComputerStack({
