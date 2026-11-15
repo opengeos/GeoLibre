@@ -2045,7 +2045,9 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       const rest = url.slice(5);
       const pathPart = rest.split(/[?#]/)[0];
       if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
-        throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
+        throw new Error(
+          `GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`,
+        );
       }
       source.url = `https://storage.googleapis.com/${rest}`;
     }
@@ -2055,7 +2057,9 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
       const rest = s3Path.slice(5);
       const pathPart = rest.split(/[?#]/)[0];
       if (pathPart.split("/").some((segment) => segment === "." || segment === "..")) {
-        throw new Error(`GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`);
+        throw new Error(
+          `GCS object key has a "." or ".." segment a URL cannot address: ${pathPart}`,
+        );
       }
       source.s3_path = `https://storage.googleapis.com/${rest}`;
     }
