@@ -1178,12 +1178,14 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
       );
       return;
     }
-    // horizontalBbox drops the elevation a six-value (3D) bbox carries.
-    const overlayBoxes = overlayFeatures.map((f) => horizontalBbox(bbox(f)));
+    // Turf returns a feature's stored bbox member unless told to recompute, and
+    // a stale one from the source file would hide real matches.
+    const boundsOf = (f: Feature) => horizontalBbox(bbox(f, { recompute: true }));
+    const overlayBoxes = overlayFeatures.map(boundsOf);
     const isPolygon = overlayFeatures.map((f) => isFamily(f.geometry, "polygon"));
     const hasPolygons = isPolygon.some(Boolean);
     const candidates = targets.map((target) => {
-      const box = horizontalBbox(bbox(target));
+      const box = boundsOf(target);
       return overlayFeatures.flatMap((_, i) => (bboxesOverlap(box, overlayBoxes[i]) ? [i] : []));
     });
     const clips = candidates.reduce((n, list) => n + list.filter((i) => isPolygon[i]).length, 0);

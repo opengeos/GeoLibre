@@ -1577,14 +1577,18 @@ describe("summarize within", () => {
     assert.ok(replaced.logs.some((line) => line.includes("replacing the existing field(s) count")));
   });
 
-  it("reads a 3D bbox by its horizontal bounds", () => {
-    // A six-value bbox keeps elevation at index 2; read as east it would hide
-    // the point.
+  it("ignores stale bbox members from the source file", () => {
+    // Both stored boxes are far from the real geometry. Trusted, they would
+    // fail the overlap test and hide the match.
     const tract: FeatureCollection["features"][number] = {
-      ...rect(10, 10, 12, 12, { name: "z" }),
-      bbox: [10, 10, 0, 12, 12, 0],
+      ...rect(10, 10, 12, 12, { name: "stale" }),
+      bbox: [50, 50, 51, 51],
     };
-    const { result } = run([asLayer("z", [tract]), asLayer("p", [pt(11, 11)])], {
+    const point: FeatureCollection["features"][number] = {
+      ...pt(11, 11),
+      bbox: [-50, -50, -50, -50],
+    };
+    const { result } = run([asLayer("z", [tract]), asLayer("p", [point])], {
       layer: "z",
       overlay: "p",
     });
@@ -1594,10 +1598,10 @@ describe("summarize within", () => {
   it("reports polygon pairs it could not intersect", () => {
     const broken: FeatureCollection["features"][number] = {
       ...rect(0, 0, 1, 1, { zone: "bad" }),
-      // An explicit bbox lets the pair past the box test; the NaN makes the clip throw.
-      // This assumes Turf's clip throws on NaN coordinates. If a Turf upgrade returns
-      // an empty piece instead, the "skipped" log line is not written and this fails.
-      bbox: [0, 0, 1, 1],
+      // The recomputed bbox skips the NaN, so the pair passes the box test and the
+      // NaN makes the clip throw. This assumes Turf's clip throws on NaN coordinates.
+      // If a Turf upgrade returns an empty piece instead, the "skipped" log line is
+      // not written and this fails.
       geometry: {
         type: "Polygon" as const,
         coordinates: [
