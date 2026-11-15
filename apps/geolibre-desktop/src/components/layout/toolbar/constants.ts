@@ -190,6 +190,7 @@ export const VECTOR_TOOL_COMMANDS: Array<{
   { kind: "difference", titleKey: "toolbar.vectorTool.difference" },
   { kind: "union", titleKey: "toolbar.vectorTool.union" },
   { kind: "spatial-join", titleKey: "toolbar.vectorTool.spatialJoin" },
+  { kind: "summarize-within", titleKey: "toolbar.vectorTool.summarizeWithin" },
   { kind: "attribute-join", titleKey: "toolbar.vectorTool.attributeJoin" },
   { kind: "select-by-value", titleKey: "toolbar.vectorTool.selectByValue" },
   {

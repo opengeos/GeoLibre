@@ -130,6 +130,7 @@ const FULL_REGISTRY_IDS = [
   "proc.vector.difference",
   "proc.vector.union",
   "proc.vector.spatial-join",
+  "proc.vector.summarize-within",
   "proc.vector.attribute-join",
   "proc.vector.select-by-value",
   "proc.vector.select-by-location",

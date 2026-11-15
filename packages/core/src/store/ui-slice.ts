@@ -35,6 +35,7 @@ export type VectorToolKind =
   | "difference"
   | "union"
   | "spatial-join"
+  | "summarize-within"
   | "attribute-join"
   | "select-by-value"
   | "select-by-location"

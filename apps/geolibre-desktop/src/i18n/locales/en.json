@@ -3917,6 +3917,7 @@
       "difference": "Difference",
       "union": "Union",
       "spatialJoin": "Spatial join",
+      "summarizeWithin": "Summarize within",
       "attributeJoin": "Attribute join",
       "selectByValue": "Select by value",
       "selectByLocation": "Select by location",
@@ -6598,6 +6599,26 @@
                 "inner": "Inner (keep only matched features)",
                 "left": "Left (keep all input features)"
               }
+            }
+          }
+        },
+        "summarize-within": {
+          "name": "Summarize within",
+          "description": "Count the features of another layer inside each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+          "params": {
+            "layer": {
+              "label": "Polygon layer"
+            },
+            "overlay": {
+              "label": "Layer to summarize"
+            },
+            "field": {
+              "label": "Numeric field",
+              "description": "Optional. Adds the sum, mean, min and max of this field for each polygon."
+            },
+            "min_overlap_pct": {
+              "label": "Ignore overlaps smaller than (%)",
+              "description": "When the layer to summarize has polygons, skip any that cover less than this share of a polygon, such as slivers along shared edges."
             }
           }
         },

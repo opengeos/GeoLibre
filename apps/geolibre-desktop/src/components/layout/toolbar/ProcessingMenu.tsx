@@ -427,6 +427,9 @@ export function ProcessingMenu({
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("spatial-join")}>
                       {t("toolbar.vectorTool.spatialJoin")}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setVectorToolOpen("summarize-within")}>
+                      {t("toolbar.vectorTool.summarizeWithin")}
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setVectorToolOpen("attribute-join")}>
                       {t("toolbar.vectorTool.attributeJoin")}
                     </DropdownMenuItem>

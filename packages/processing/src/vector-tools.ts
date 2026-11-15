@@ -48,6 +48,7 @@ import {
   centralAngle,
   geodesicDistance,
   geodesicRadiusBounds,
+  geodesicRingArea,
   isLonLat,
   withinGeodesicDistance,
 } from "@geolibre/core/geodesic";
@@ -1043,6 +1044,201 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     }
     ctx.log(`Spatial join: produced ${results.length} feature(s)`);
     ctx.addResultLayer?.("Spatial join", featureCollection(results));
+  },
+};
+
+/** Statistics Summarize within adds for its optional numeric field. */
+const SUMMARIZE_STATS = ["sum", "mean", "min", "max"] as const;
+
+/**
+ * Area in square metres of a Polygon or MultiPolygon on the active body: each
+ * outer ring minus its holes, measured geodesically like the Measure tool.
+ */
+function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let total = 0;
+  for (const rings of polygons) {
+    rings.forEach((ring, index) => {
+      total += index === 0 ? geodesicRingArea(ring) : -geodesicRingArea(ring);
+    });
+  }
+  return Math.max(0, total);
+}
+
+/** True when two `[west, south, east, north]` boxes overlap or touch. */
+function bboxesOverlap(a: BBox, b: BBox): boolean {
+  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+}
+
+/** Turf intersect that treats a geometry error as "no overlap". */
+function safeIntersect(
+  a: Feature<Polygon | MultiPolygon>,
+  b: Feature<Polygon | MultiPolygon>,
+): Feature<Polygon | MultiPolygon> | null {
+  try {
+    return intersect(featureCollection([a, b])) as Feature<Polygon | MultiPolygon> | null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Area of the union of the overlap pieces inside one polygon, so two pieces of
+ * the summarized layer that overlap each other are not counted twice. If Turf
+ * cannot union them it falls back to the summed areas (the caller caps the
+ * share at 100%).
+ */
+function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number {
+  if (!pieces.length) return 0;
+  if (pieces.length === 1) return polygonAreaM2(pieces[0].geometry);
+  try {
+    const merged = union(featureCollection(pieces));
+    if (merged) return polygonAreaM2(merged.geometry as Polygon | MultiPolygon);
+  } catch {
+    // fall through to the sum below
+  }
+  return pieces.reduce((sum, piece) => sum + polygonAreaM2(piece.geometry), 0);
+}
+
+/**
+ * Summarize within: for each polygon, count the features of another layer that
+ * fall in it, reduce one of their numeric fields, and, when that layer has
+ * polygons, report how much of the polygon they cover.
+ *
+ * Points and lines count when they intersect the polygon (a point on a shared
+ * edge counts for both sides). Polygons count only when they overlap it by a
+ * positive area at least `min_overlap_pct` of the polygon, so a neighbour that
+ * only touches along an edge, or a digitizing sliver, is left out of the count,
+ * the statistics and the covered area alike.
+ */
+export const summarizeWithinTool: ProcessingAlgorithm = {
+  id: "summarize-within",
+  name: "Summarize within",
+  description:
+    "Count the features of another layer inside each polygon, summarize a numeric field, and measure how much of each polygon they cover",
+  group: "Join",
+  parameters: [
+    {
+      id: "layer",
+      label: "Polygon layer",
+      type: "layer",
+      required: true,
+      geometryFilter: ["polygon"],
+    },
+    { id: "overlay", label: "Layer to summarize", type: "layer", required: true },
+    {
+      id: "field",
+      label: "Numeric field",
+      type: "field",
+      fieldSource: "overlay",
+      description: "Optional. Adds the sum, mean, min and max of this field for each polygon.",
+    },
+    {
+      id: "min_overlap_pct",
+      label: "Ignore overlaps smaller than (%)",
+      type: "number",
+      default: 0,
+      min: 0,
+      max: 100,
+      step: 0.1,
+      description:
+        "When the layer to summarize has polygons, skip any that cover less than this share of a polygon, such as slivers along shared edges.",
+    },
+  ],
+  run: (ctx) => {
+    const input = requireFeatures(ctx, "layer");
+    if (!input) return;
+    const overlayLayer = getLayer(ctx, "overlay");
+    if (!overlayLayer) {
+      ctx.log('Error: parameter "overlay" has no layer selected');
+      return;
+    }
+    const targets = polygonFeatures(input);
+    if (!targets.length) {
+      ctx.log("Error: the polygon layer has no polygon features");
+      return;
+    }
+    const field = typeof ctx.parameters.field === "string" ? ctx.parameters.field.trim() : "";
+    const minPct = numberParam(ctx, "min_overlap_pct", 0);
+    if (minPct < 0 || minPct > 100) {
+      ctx.log("Error: the minimum overlap must be between 0 and 100%");
+      return;
+    }
+    const overlayFeatures = (overlayLayer.geojson?.features ?? []).filter((f) => f.geometry);
+    // Pairwise on the main thread (or a worker); cap it like Spatial join.
+    const pairs = targets.length * overlayFeatures.length;
+    if (pairs > MAX_CLIENT_PAIRS) {
+      ctx.log(
+        `Error: summarize within needs ${pairs} comparisons (limit ${MAX_CLIENT_PAIRS}); filter or clip the layers first`,
+      );
+      return;
+    }
+    const overlayBoxes = overlayFeatures.map((f) => bbox(f));
+    const hasPolygons = overlayFeatures.some((f) => isFamily(f.geometry, "polygon"));
+
+    const statKeys = field ? SUMMARIZE_STATS.map((stat) => `${stat}_${field}`) : [];
+    const outputKeys = [
+      "count",
+      ...statKeys,
+      ...(hasPolygons ? ["overlap_km2", "overlap_pct"] : []),
+    ];
+    const existing = new Set(targets.flatMap((t) => Object.keys(t.properties ?? {})));
+    const clashes = outputKeys.filter((key) => existing.has(key));
+    if (clashes.length) {
+      ctx.log(`Warning: replacing the existing field(s) ${clashes.join(", ")}`);
+    }
+
+    let slivers = 0;
+    const results: Feature[] = targets.map((target) => {
+      const targetBox = bbox(target);
+      const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
+      let count = 0;
+      const values: number[] = [];
+      const pieces: Feature<Polygon | MultiPolygon>[] = [];
+      overlayFeatures.forEach((feature, index) => {
+        if (!bboxesOverlap(targetBox, overlayBoxes[index])) return;
+        if (isFamily(feature.geometry, "polygon")) {
+          const piece = safeIntersect(target, feature as Feature<Polygon | MultiPolygon>);
+          const pieceArea = piece ? polygonAreaM2(piece.geometry) : 0;
+          if (!piece || pieceArea <= 0) return;
+          if (targetArea > 0 && (pieceArea / targetArea) * 100 < minPct) {
+            slivers += 1;
+            return;
+          }
+          pieces.push(piece);
+        } else if (!matchesPredicate(feature, target, "intersects")) {
+          return;
+        }
+        count += 1;
+        if (field) {
+          const value = toNumeric(feature.properties?.[field]);
+          if (value !== null) values.push(value);
+        }
+      });
+
+      const properties: Record<string, unknown> = { ...(target.properties ?? {}), count };
+      SUMMARIZE_STATS.forEach((stat, i) => {
+        if (field) properties[statKeys[i]] = computeStat(values, stat);
+      });
+      if (hasPolygons) {
+        const covered = coveredAreaM2(pieces);
+        // Rounded so the table reads cleanly: km² to 6 places (about 1 m²), the
+        // share to 2 places. Geodesic edges leave noise past those digits.
+        properties.overlap_km2 = Math.round(covered) / 1e6;
+        properties.overlap_pct =
+          targetArea > 0
+            ? Math.round(Math.min(100, (covered / targetArea) * 100) * 100) / 100
+            : null;
+      }
+      return { ...target, properties };
+    });
+
+    const matched = results.filter((f) => (f.properties?.count as number) > 0).length;
+    ctx.log(`Summarize within: ${matched} of ${results.length} polygon(s) contain features`);
+    if (slivers) {
+      ctx.log(`Summarize within: ignored ${slivers} overlap(s) below ${minPct}% of a polygon`);
+    }
+    ctx.addResultLayer?.("Summarize within", featureCollection(results));
   },
 };
 
