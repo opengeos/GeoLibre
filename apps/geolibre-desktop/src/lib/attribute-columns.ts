@@ -509,6 +509,29 @@ export function inferColumnTypes(
 }
 
 /**
+ * Which of `columns` hold numbers, judged like {@link inferColumnTypes} by each
+ * column's first non-null value. It looks only at the given columns and stops
+ * each one at its first value, so it stays cheap when the rows are rebuilt on
+ * every render (DuckDB query layers); only an all-null column reads every row,
+ * and then just that one property.
+ */
+export function numericColumnSet(
+  rows: readonly { properties: Record<string, unknown> }[],
+  columns: readonly string[],
+): Set<string> {
+  const numeric = new Set<string>();
+  for (const column of columns) {
+    for (const { properties } of rows) {
+      const value = properties[column];
+      if (value == null) continue;
+      if (typeof value === "number") numeric.add(column);
+      break;
+    }
+  }
+  return numeric;
+}
+
+/**
  * Significant digits kept when a fractional number is shown in the attribute
  * table. A double carries 15–17 significant decimal digits, and only the first
  * 15 always survive a round trip (C's `DBL_DIG`); the digits past that are the
@@ -517,6 +540,13 @@ export function inferColumnTypes(
  * keeps small values such as `0.0000025` visible instead of showing `0`.
  */
 const DISPLAY_SIGNIFICANT_DIGITS = 15;
+
+/**
+ * From here up, 15 significant digits no longer cover a number's integer part,
+ * so it is shown with its integer digits and no fraction (a double this large
+ * resolves no finer than about 0.1 anyway) rather than having them rounded off.
+ */
+const WHOLE_DIGITS_FROM = 10 ** DISPLAY_SIGNIFICANT_DIGITS;
 
 const numberFormatCache = new Map<
   string,
@@ -528,12 +558,16 @@ function numberFormatsFor(locale: string | undefined) {
   let formats = numberFormatCache.get(key);
   if (!formats) {
     const make = (options: Intl.NumberFormatOptions) => {
+      // No thousands separators, as in QGIS: a year (2024), an OBJECTID or a
+      // FIPS code stored as a number must not read as 2,024. The locale still
+      // picks the decimal separator and digits.
+      const withoutGrouping = { ...options, useGrouping: false };
       try {
-        return new Intl.NumberFormat(locale, options);
+        return new Intl.NumberFormat(locale, withoutGrouping);
       } catch {
         // An unknown tag (i18next's "cimode", a malformed ?locale=) throws a
         // RangeError; fall back to the runtime's default locale.
-        return new Intl.NumberFormat(undefined, options);
+        return new Intl.NumberFormat(undefined, withoutGrouping);
       }
     };
     formats = {
@@ -549,16 +583,19 @@ function numberFormatsFor(locale: string | undefined) {
 /**
  * The text the attribute table shows for a cell, or `null` when the value is
  * null or missing so the table can render a distinct NULL marker (an empty
- * string stays an empty string). Finite numbers are rounded for display only
- * and grouped with the active locale's separators; every other value reads as
- * {@link formatAttributeValue} writes it. Sorting, filtering, editing and
- * export keep working on the raw value.
+ * string stays an empty string). Finite numbers are rounded for display only,
+ * with the active locale's decimal separator and no grouping; every other value
+ * reads as {@link formatAttributeValue} writes it. Sorting, filtering, editing
+ * and export keep working on the raw value.
  */
 export function formatAttributeCellText(value: unknown, locale?: string): string | null {
   if (value == null) return null;
   if (typeof value === "number" && Number.isFinite(value)) {
     const formats = numberFormatsFor(locale);
-    return (Number.isInteger(value) ? formats.integer : formats.fraction).format(value);
+    // `-0` is an integer, and Intl would print its sign.
+    const number = value === 0 ? 0 : value;
+    const whole = Number.isInteger(number) || Math.abs(number) >= WHOLE_DIGITS_FROM;
+    return (whole ? formats.integer : formats.fraction).format(number);
   }
   return formatAttributeValue(value);
 }

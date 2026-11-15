@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatAttributeCellText } from "../apps/geolibre-desktop/src/lib/attribute-columns";
+import {
+  formatAttributeCellText,
+  numericColumnSet,
+} from "../apps/geolibre-desktop/src/lib/attribute-columns";
 
 describe("formatAttributeCellText", () => {
   it("rounds float noise for display", () => {
@@ -16,21 +19,37 @@ describe("formatAttributeCellText", () => {
 
   it("prints every digit of an integer", () => {
     assert.equal(formatAttributeCellText(0, "en"), "0");
-    assert.equal(formatAttributeCellText(9007199254740991, "en"), "9,007,199,254,740,991");
-    assert.equal(formatAttributeCellText(1_000_000_000_000, "en"), "1,000,000,000,000");
+    assert.equal(formatAttributeCellText(9007199254740991, "en"), "9007199254740991");
+    assert.equal(formatAttributeCellText(1_000_000_000_000, "en"), "1000000000000");
   });
 
-  it("groups and separates with the given locale", () => {
-    assert.equal(formatAttributeCellText(1234567.891, "en"), "1,234,567.891");
-    assert.equal(formatAttributeCellText(1234567.891, "de"), "1.234.567,891");
-    // French groups with a narrow no-break space.
-    assert.equal(formatAttributeCellText(1234.5, "fr"), "1 234,5");
+  it("does not group digits, so years and IDs read as stored", () => {
+    assert.equal(formatAttributeCellText(2024, "en"), "2024");
+    assert.equal(formatAttributeCellText(42001, "de"), "42001");
+    assert.equal(formatAttributeCellText(1234567.891, "en"), "1234567.891");
+  });
+
+  it("uses the locale's decimal separator", () => {
+    assert.equal(formatAttributeCellText(1234567.891, "de"), "1234567,891");
+    assert.equal(formatAttributeCellText(1234.5, "fr"), "1234,5");
+  });
+
+  it("shows negative zero as 0", () => {
+    assert.equal(formatAttributeCellText(-0, "en"), "0");
+  });
+
+  it("keeps the integer digits of fractional values from 1e15 up", () => {
+    // 15 significant digits would print 1234567890123460.
+    assert.equal(formatAttributeCellText(1234567890123456.7, "en"), "1234567890123457");
+    assert.equal(formatAttributeCellText(-1234567890123456.7, "en"), "-1234567890123457");
+    // Below 1e15 the fraction keeps whatever of the 15 digits are left.
+    assert.equal(formatAttributeCellText(12345678901234.56, "en"), "12345678901234.6");
   });
 
   it("falls back to the default locale for an unknown tag", () => {
     assert.equal(
       formatAttributeCellText(1234.5, "cimode"),
-      new Intl.NumberFormat(undefined).format(1234.5),
+      new Intl.NumberFormat(undefined, { useGrouping: false }).format(1234.5),
     );
   });
 
@@ -51,5 +70,26 @@ describe("formatAttributeCellText", () => {
   it("leaves non-finite numbers unformatted", () => {
     assert.equal(formatAttributeCellText(Number.NaN, "en"), "NaN");
     assert.equal(formatAttributeCellText(Number.POSITIVE_INFINITY, "en"), "Infinity");
+  });
+});
+
+describe("numericColumnSet", () => {
+  const rows = [
+    { properties: { id: null, area: null, name: "Alpha", code: "00123", empty: null } },
+    { properties: { id: 7, area: 0.5, name: "Beta", code: 42 } },
+    { properties: { id: 8, name: null, code: "0042", empty: null } },
+  ];
+
+  it("types each column by its first non-null value", () => {
+    assert.deepEqual(
+      [...numericColumnSet(rows, ["id", "area", "name", "code", "empty", "missing"])].sort(),
+      ["area", "id"],
+    );
+  });
+
+  it("only looks at the requested columns", () => {
+    assert.deepEqual([...numericColumnSet(rows, ["name", "area"])], ["area"]);
+    assert.equal(numericColumnSet(rows, []).size, 0);
+    assert.equal(numericColumnSet([], ["id"]).size, 0);
   });
 });

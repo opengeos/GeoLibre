@@ -129,6 +129,7 @@ import {
   type NewColumnType,
   inferColumnTypes,
   formatAttributeCellText,
+  numericColumnSet,
 } from "../../lib/attribute-columns";
 import { markAttributeEdit } from "../../lib/edited-geometry-save";
 import {
@@ -714,15 +715,6 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
     ? duckDBRowsToAttributeRows(duckdbRows)
     : geojsonRows;
-  // Number columns read like QGIS: right-aligned, with display-only rounding.
-  // A column's type comes from its first non-null value, as for editing.
-  const numericColumns = useMemo(() => {
-    const numeric = new Set<string>();
-    for (const [column, type] of inferColumnTypes(attributeRows.map((row) => row.properties))) {
-      if (type === "number") numeric.add(column);
-    }
-    return numeric;
-  }, [attributeRows]);
   const layerCaps = resolveLayerCapabilities(layer);
   // ArcGIS service attachments of the one selected record, keyed by its object
   // ID; a feature not yet saved to the service has none to show.
@@ -1154,6 +1146,14 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
+  // Number columns read like QGIS: right-aligned, with display-only rounding.
+  // A column's type comes from its first non-null value, as for editing. Keyed
+  // on the column names, not the array, which is rebuilt every render.
+  const columnsKey = columns.join("\u0000");
+  const numericColumns = useMemo(
+    () => numericColumnSet(attributeRows, columnsKey ? columnsKey.split("\u0000") : []),
+    [attributeRows, columnsKey],
+  );
   const hiddenCols = hiddenColumns(discoveredColumns, columnSettings);
   const hiddenColSet = new Set(hiddenCols);
   const tableColumns = ["__featureId", ...columns];
