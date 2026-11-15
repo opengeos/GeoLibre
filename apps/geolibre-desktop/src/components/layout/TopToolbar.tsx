@@ -109,6 +109,7 @@ interface TopToolbarProps {
   onOpenBasemapExtract: () => void;
   /** Activates the map tool for placing an anchored review comment. */
   onAddComment: () => void;
+  onOpenGcsHarvest?: () => void;
   viewer?: boolean;
 }
 
@@ -127,6 +128,7 @@ export function TopToolbar({
   onToggleThemeMode,
   onOpenBasemapExtract,
   onAddComment,
+  onOpenGcsHarvest,
   viewer = false,
 }: TopToolbarProps) {
   const { t } = useTranslation();
@@ -435,6 +437,7 @@ export function TopToolbar({
           }}
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
           onOpenTilePackageDialog={() => tilePackage.setDialogOpen(true)}
+          onOpenGcsHarvest={onOpenGcsHarvest}
         />
       )}
       {!viewer &&

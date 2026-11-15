@@ -4133,6 +4133,7 @@
       "vtpkLayer": "ArcGIS VTPK/TPKX layer",
       "stacLayer": "STAC layer",
       "geoparquetLayer": "GeoParquet layer",
+      "harvestToGcs": "Harvest to Google Cloud Storage (GCS)",
       "flatgeobufLayer": "FlatGeobuf layer",
       "pmtilesLayer": "PMTiles layer",
       "basemapExtract": "Offline basemap extract",

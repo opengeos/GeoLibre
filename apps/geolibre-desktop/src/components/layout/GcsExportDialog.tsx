@@ -7,9 +7,13 @@ import { Cloud, Loader2, X } from "lucide-react";
  * App-wide dialog for harvesting and exporting to Google Cloud Storage.
  * Opened by the floating button or Ctrl+Shift+G shortcut.
  */
-export function GcsExportDialog() {
+interface GcsExportDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const operationRef = useRef<AbortController | null>(null);
 
@@ -31,20 +35,10 @@ export function GcsExportDialog() {
     setStatus("idle");
     setError(null);
     setResult(null);
-    setOpen(false);
+    onOpenChange(false);
   };
 
-  // Keyboard shortcut: Ctrl+Shift+G
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "g") {
-        e.preventDefault();
-        setOpen(true);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+  // (Ctrl+Shift+G shortcut removed per contributor feedback; open via Add Data menu.)
 
   const [backendUrl, setBackendUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -168,15 +162,6 @@ export function GcsExportDialog() {
 
   return (
     <>
-      <button
-        hidden={open}
-        onClick={() => setOpen(true)}
-        className="fixed bottom-4 end-4 z-40 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full p-3 shadow-lg"
-        title={t("gcsExport.triggerTitle")}
-        aria-label={t("gcsExport.triggerTitle")}
-      >
-        <Cloud className="w-5 h-5" />
-      </button>
       <dialog
         ref={dialogRef}
         aria-labelledby="gcs-export-title"

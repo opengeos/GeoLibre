@@ -330,6 +330,7 @@ export function DesktopShell({
   // A new failure bumps the revision, which re-shows a dismissed warning.
   const [dismissedCredentialRevision, setDismissedCredentialRevision] = useState(0);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [gcsExportOpen, setGcsExportOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
   // Gate plugin URLs carried inside an opened project behind an explicit trust
@@ -612,6 +613,7 @@ export function DesktopShell({
             onToggleThemeMode={onToggleThemeMode}
             onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
             onAddComment={commentTool.toggleTool}
+            onOpenGcsHarvest={() => setGcsExportOpen(true)}
             viewer={layoutOptions.viewer}
           />
         </SectionErrorBoundary>
@@ -1189,7 +1191,7 @@ export function DesktopShell({
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
       <FileNamePromptDialog />
-      {!layoutOptions.panelsHidden && <GcsExportDialog />}
+      {!layoutOptions.panelsHidden && <GcsExportDialog open={gcsExportOpen} onOpenChange={setGcsExportOpen} />}
       <CreationTemplateDialog />
       {/* Trust prompt for plugin URLs carried by an opened project (#1062);
           inert unless the project references an untrusted plugin URL. */}
