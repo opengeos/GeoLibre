@@ -8629,6 +8629,7 @@
     "loadingAttributes": "Loading layer attributes…",
     "requiresVectorLayer": "Attribute table requires a vector or DuckDB query layer.",
     "invalidJson": "Invalid JSON",
+    "nullValue": "NULL",
     "editCellAria": "Edit {{col}} for feature {{featureId}}",
     "resizeColumn": "Resize {{name}} column",
     "renameFieldAria": "Rename field {{name}}",

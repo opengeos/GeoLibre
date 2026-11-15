@@ -128,6 +128,7 @@ import {
   type ColumnMoveDirection,
   type NewColumnType,
   inferColumnTypes,
+  formatAttributeCellText,
 } from "../../lib/attribute-columns";
 import { markAttributeEdit } from "../../lib/edited-geometry-save";
 import {
@@ -580,7 +581,7 @@ interface AttributeTableProps {
 }
 
 export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Column order is visual: in a right-to-left layout the first column renders
   // rightmost, so the move-left/right actions and their guards swap.
   const isRtl = document.documentElement.dir === "rtl";
@@ -713,6 +714,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
     ? duckDBRowsToAttributeRows(duckdbRows)
     : geojsonRows;
+  // Number columns read like QGIS: right-aligned, with display-only rounding.
+  // A column's type comes from its first non-null value, as for editing.
+  const numericColumns = useMemo(() => {
+    const numeric = new Set<string>();
+    for (const [column, type] of inferColumnTypes(attributeRows.map((row) => row.properties))) {
+      if (type === "number") numeric.add(column);
+    }
+    return numeric;
+  }, [attributeRows]);
   const layerCaps = resolveLayerCapabilities(layer);
   // ArcGIS service attachments of the one selected record, keyed by its object
   // ID; a feature not yet saved to the service has none to show.
@@ -1746,11 +1756,13 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     setCalcOpen(false);
   };
 
-  const sortableHeader = (key: SortKey, label: string) => (
+  const sortableHeader = (key: SortKey, label: string, numeric = false) => (
     <div className="relative flex h-full min-h-10 items-center">
       <button
         type="button"
-        className="flex h-full min-w-0 flex-1 items-center gap-1 pe-3 text-start font-medium"
+        className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-3 font-medium ${
+          numeric ? "justify-end text-end" : "text-start"
+        }`}
         onClick={() => toggleSort(key)}
       >
         <span className="truncate">{label}</span>
@@ -1803,13 +1815,16 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
     // Read-only / non-manageable layers (DuckDB, Add Vector Layer) keep the
     // plain sortable header with no management affordances.
-    if (!canManageColumns || isEditing) return sortableHeader(col, col);
+    const numeric = numericColumns.has(col);
+    if (!canManageColumns || isEditing) return sortableHeader(col, col, numeric);
 
     return (
       <div className="relative flex h-full min-h-10 items-center">
         <button
           type="button"
-          className="flex h-full min-w-0 flex-1 items-center gap-1 pe-1 text-start font-medium"
+          className={`flex h-full min-w-0 flex-1 items-center gap-1 pe-1 font-medium ${
+            numeric ? "justify-end text-end" : "text-start"
+          }`}
           onClick={() => toggleSort(col)}
           title={virtualFieldColumns.has(col) ? t("attributeTable.virtualColumnTitle") : undefined}
         >
@@ -2454,6 +2469,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                             ? config.valueMap?.find((entry) => entry.value === String(value))?.label
                             : undefined;
                         const formattedValue = formatAttributeValue(value);
+                        // Display-only text: numbers rounded and grouped for
+                        // the active language, null/missing as null so it can
+                        // read NULL. Edits, sorting and export use the raw value.
+                        const cellText = formatAttributeCellText(value, i18n.language);
+                        const numeric = numericColumns.has(col);
                         const current = draft ?? formattedValue;
                         const isEditableCell = isEditing && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
@@ -2572,12 +2592,27 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                               >
                                 {codeLabel}
                               </span>
+                            ) : cellText === null ? (
+                              <span
+                                className={`block max-w-full truncate italic text-muted-foreground ${
+                                  numeric ? "text-end" : ""
+                                }`}
+                                title={columnHint}
+                              >
+                                {t("attributeTable.nullValue")}
+                              </span>
                             ) : (
                               <span
-                                className="block max-w-full truncate"
+                                className={
+                                  numeric
+                                    ? "block max-w-full truncate text-end tabular-nums"
+                                    : "block max-w-full truncate"
+                                }
+                                // The raw value stays in the tooltip, so the
+                                // unrounded number is one hover away.
                                 title={withColumnHint(formattedValue)}
                               >
-                                {formattedValue}
+                                {cellText}
                               </span>
                             )}
                           </TableCell>
