@@ -215,7 +215,9 @@ export const VECTOR_TOOL_COMMANDS: Array<{
 
 /**
  * Tool ids in the registry's Join group. Kept static so this table doesn't pull
- * in the tool registry; tests/toolbar-commands.test.ts checks it still matches.
+ * in the tool registry. When you add a tool with `group: "Join"`, add its id
+ * here too; "matches the registry's Join group" in
+ * tests/toolbar-commands.test.ts fails until you do.
  */
 const VECTOR_JOIN_KINDS: ReadonlySet<VectorToolKind> = new Set<VectorToolKind>([
   "spatial-join",

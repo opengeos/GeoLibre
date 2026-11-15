@@ -1194,12 +1194,24 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     // Turf returns a feature's stored bbox member unless told to recompute, and
     // a stale one from the source file would hide real matches.
     const boundsOf = (f: Feature) => horizontalBbox(bbox(f, { recompute: true }));
-    const overlayBoxes = overlayFeatures.map(boundsOf);
+    // Turf throws on a geometry type it doesn't know; skip that feature rather
+    // than abort the run, and report it below.
+    const overlayBoxes = overlayFeatures.map((f) => {
+      try {
+        return boundsOf(f);
+      } catch {
+        return null;
+      }
+    });
+    const unreadable = overlayBoxes.filter((box) => box === null).length;
     const isPolygon = overlayFeatures.map((f) => isFamily(f.geometry, "polygon"));
     const hasPolygons = isPolygon.some(Boolean);
     const candidates = targets.map((target) => {
       const box = boundsOf(target);
-      return overlayFeatures.flatMap((_, i) => (bboxesOverlap(box, overlayBoxes[i]) ? [i] : []));
+      return overlayFeatures.flatMap((_, i) => {
+        const other = overlayBoxes[i];
+        return other && bboxesOverlap(box, other) ? [i] : [];
+      });
     });
     const clips = candidates.reduce((n, list) => n + list.filter((i) => isPolygon[i]).length, 0);
     if (clips > MAX_SUMMARIZE_CLIPS) {
@@ -1223,6 +1235,7 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
 
     let slivers = 0;
     let failedClips = 0;
+    let failedChecks = 0;
     let matched = 0;
     const results: Feature[] = targets.map((target, targetIndex) => {
       const targetArea = hasPolygons ? polygonAreaM2(target.geometry) : 0;
@@ -1249,8 +1262,16 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
             continue;
           }
           pieces.push(piece);
-        } else if (!matchesPredicate(feature, target, "intersects")) {
-          continue;
+        } else {
+          let hit: boolean;
+          try {
+            hit = rawPredicate(feature, target, "intersects");
+          } catch {
+            // Reported once below, like a polygon pair that fails to clip.
+            failedChecks += 1;
+            continue;
+          }
+          if (!hit) continue;
         }
         count += 1;
         if (field) {
@@ -1291,6 +1312,16 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
     if (failedClips) {
       ctx.log(
         `Warning: skipped ${failedClips} polygon pair(s) whose geometry could not be intersected; try Fix geometries first`,
+      );
+    }
+    if (failedChecks) {
+      ctx.log(
+        `Warning: skipped ${failedChecks} point or line pair(s) whose geometry could not be compared; try Fix geometries first`,
+      );
+    }
+    if (unreadable) {
+      ctx.log(
+        `Warning: skipped ${unreadable} feature(s) in the layer to summarize with a geometry that could not be read`,
       );
     }
     ctx.addResultLayer?.("Summarize within", featureCollection(results));
