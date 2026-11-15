@@ -11,10 +11,13 @@ export const STYLE_PANEL_ASIDE_CLASS =
 // `display: table; min-width: 100%`, which sizes it to the widest row and
 // defeats every `truncate` below it: one long field name in Quick filters
 // pushed that filter's type picker, its Remove button and the value counts
-// past the panel edge. A block wrapper keeps rows at the panel width, the same
-// override LayerPanel and BrowserPanel use.
+// past the panel edge. A block wrapper takes the panel width, so text truncates
+// again (the block-only form ProcessingDialog uses). It sets no width, so a
+// control that really is wider than the panel still overflows the wrapper and
+// scrolls sideways. The child selector keeps the override on this viewport,
+// not on any ScrollArea nested inside a section.
 export const STYLE_PANEL_SCROLL_CLASS =
-  "flex-1 [&_[data-radix-scroll-area-viewport]>div]:block! [&_[data-radix-scroll-area-viewport]>div]:w-full! [&_[data-radix-scroll-area-viewport]>div]:min-w-0!";
+  "flex-1 [&>[data-radix-scroll-area-viewport]>div]:block!";
 
 export const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 export const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;

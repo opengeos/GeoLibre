@@ -151,7 +151,10 @@ test("a long field name keeps the Quick filters controls inside the Style panel"
         remove.boundingBox(),
       ]);
       return Boolean(
-        panelBox && removeBox && removeBox.x + removeBox.width <= panelBox.x + panelBox.width,
+        panelBox &&
+        removeBox &&
+        removeBox.x >= panelBox.x &&
+        removeBox.x + removeBox.width <= panelBox.x + panelBox.width,
       );
     })
     .toBe(true);
