@@ -98,6 +98,11 @@ export interface PlanetaryComputerStackItem {
   id: string;
   /** Acquisition day, `YYYY-MM-DD` (UTC). */
   date: string;
+  /**
+   * The item's footprint `[west, south, east, north]`. Stacks saved before
+   * footprints were recorded lack it.
+   */
+  bbox?: [number, number, number, number];
 }
 
 /**
@@ -124,11 +129,66 @@ export interface PlanetaryComputerStack {
  * @returns The overlap area, or 0 when they do not overlap.
  */
 function overlapArea(a: [number, number, number, number], b: number[] | undefined): number {
-  const box = b?.length === 6 ? [b[0], b[1], b[3], b[4]] : b?.length === 4 ? b : null;
+  const box = bbox2d(b);
   if (!box) return 0;
   const width = Math.min(a[2], box[2]) - Math.max(a[0], box[0]);
   const height = Math.min(a[3], box[3]) - Math.max(a[1], box[1]);
   return width > 0 && height > 0 ? width * height : 0;
+}
+
+/**
+ * Reduces a STAC bbox (2D or 3D) to a finite 2D `[west, south, east, north]`.
+ *
+ * @param bbox - The STAC bbox.
+ * @returns The 2D box, or null when it is missing or malformed.
+ */
+function bbox2d(bbox: unknown): [number, number, number, number] | null {
+  if (!Array.isArray(bbox)) return null;
+  const box =
+    bbox.length === 6 ? [bbox[0], bbox[1], bbox[3], bbox[4]] : bbox.length === 4 ? bbox : null;
+  // West may exceed east (a footprint crossing the antimeridian), but south
+  // above north is not a box, and nothing lies outside ±180° / ±90°.
+  return box &&
+    box.every(
+      (value, i) =>
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        Math.abs(value) <= (i % 2 === 0 ? 180 : 90),
+    ) &&
+    box[1] <= box[3]
+    ? (box as [number, number, number, number])
+    : null;
+}
+
+/**
+ * The box covering every item of a stack, so the Time Slider's raster source
+ * only requests tiles where some date has data. Without it MapLibre asks the
+ * Data API for tiles worldwide, and each one outside the scene is a 404 sent
+ * without CORS headers: a console error per tile (hundreds per pan).
+ *
+ * @param items - The stack items.
+ * @returns The union box, or undefined when any item lacks a footprint or one
+ *   crosses the antimeridian.
+ */
+export function planetaryComputerStackBounds(
+  items: PlanetaryComputerStackItem[],
+): [number, number, number, number] | undefined {
+  let union: [number, number, number, number] | undefined;
+  for (const { bbox } of items) {
+    // A footprint crossing the antimeridian (west > east) has no plain
+    // min/max union with the others; leave such a stack unbounded rather than
+    // clip that scene's tiles away.
+    if (!bbox || bbox[0] > bbox[2]) return undefined;
+    union = union
+      ? [
+          Math.min(union[0], bbox[0]),
+          Math.min(union[1], bbox[1]),
+          Math.max(union[2], bbox[2]),
+          Math.max(union[3], bbox[3]),
+        ]
+      : [...bbox];
+  }
+  return union;
 }
 
 /**
@@ -150,7 +210,10 @@ export function planetaryComputerStackItems(
   items: STACItem[],
   focus?: [number, number, number, number],
 ): PlanetaryComputerStackItem[] {
-  const byDate = new Map<string, { id: string; score: number }>();
+  const byDate = new Map<
+    string,
+    { id: string; score: number; bbox: [number, number, number, number] | null }
+  >();
   for (const item of items) {
     const datetime = planetaryComputerItemDate(item);
     const time = datetime ? Date.parse(datetime) : Number.NaN;
@@ -159,11 +222,13 @@ export function planetaryComputerStackItems(
     if (score <= 0) continue;
     const date = new Date(time).toISOString().slice(0, 10);
     const current = byDate.get(date);
-    if (!current || score > current.score) byDate.set(date, { id: item.id, score });
+    if (!current || score > current.score) {
+      byDate.set(date, { id: item.id, score, bbox: bbox2d(item.bbox) });
+    }
   }
   return [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, { id }]) => ({ id, date }));
+    .map(([date, { id, bbox }]) => ({ id, date, ...(bbox ? { bbox } : {}) }));
 }
 
 /**
@@ -177,14 +242,19 @@ export function parsePlanetaryComputerStack(value: unknown): PlanetaryComputerSt
   const candidate = value as Partial<PlanetaryComputerStack>;
   if (typeof candidate.collection !== "string" || !candidate.collection) return null;
   if (!Array.isArray(candidate.items)) return null;
-  const items = candidate.items.filter(
-    (item): item is PlanetaryComputerStackItem =>
-      !!item &&
-      typeof item.id === "string" &&
-      item.id !== "" &&
-      typeof item.date === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(item.date),
-  );
+  const items = candidate.items
+    .filter(
+      (item): item is PlanetaryComputerStackItem =>
+        !!item &&
+        typeof item.id === "string" &&
+        item.id !== "" &&
+        typeof item.date === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(item.date),
+    )
+    .map(({ id, date, bbox }) => {
+      const box = bbox2d(bbox);
+      return box ? { id, date, bbox: box } : { id, date };
+    });
   if (items.length === 0) return null;
   // The stack is walked in date order; a hand-edited project may not keep it.
   items.sort((a, b) => a.date.localeCompare(b.date));
@@ -236,12 +306,14 @@ export function planetaryComputerStackSource(
   name: string,
   stack: PlanetaryComputerStack,
 ): SourceSpec {
+  const bounds = planetaryComputerStackBounds(stack.items);
   return {
     id,
     name,
     type: "xyz",
     tileSize: 256,
     attribution: "Microsoft Planetary Computer",
+    ...(bounds ? { bounds } : {}),
     tiles: async (date: Date) => {
       const { tiler } = await getPlanetaryComputerClients();
       const item = planetaryComputerStackItemAt(stack, date);
@@ -303,8 +375,12 @@ registerTimeSliderSourceRehydrator((spec) => {
   // A stack whose description did not survive cannot be drawn: its tile URL was
   // a function. Drop it rather than hand the dock a source with no tiles.
   if (!stack || typeof spec.id !== "string") return null;
+  // The extent is recomputed from the stack's footprints; a saved one must not
+  // survive the spread when the rebuilt source declares none (a scene crossing
+  // the antimeridian, a footprint dropped as invalid).
+  const { bounds: _savedBounds, ...saved } = record;
   return {
-    ...spec,
+    ...saved,
     ...planetaryComputerStackSource(spec.id, spec.name ?? spec.id, stack),
   } as SourceSpec;
 });

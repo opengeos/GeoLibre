@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  __ensureSourceBoundsForTests,
   __resetBoundFilterScheduleForTests,
   __reconcileBoundLayersForTests,
   __scheduleBoundFiltersForTests,
@@ -414,6 +415,25 @@ describe("Time Slider store layer identify metadata", () => {
     assert.deepEqual(layer.metadata.bounds, [-10, -5, 10, 5]);
   });
 
+  // A Planetary Computer stack re-run under the same id may declare no extent
+  // (a scene crossing the antimeridian); it must not zoom to the old stack's.
+  it("does not carry a declared extent over to a same-id source that declares none", () => {
+    const control = {} as TimeSliderControl;
+    __ensureSourceBoundsForTests(control, {
+      type: "xyz",
+      id: "pc-stack-replaced",
+      tiles: ["https://example.com/{z}/{x}/{y}.png"],
+      bounds: [-10, -5, 10, 5],
+    } as unknown as SourceSpec);
+    const replacement = {
+      type: "xyz",
+      id: "pc-stack-replaced",
+      tiles: ["https://example.com/{z}/{x}/{y}.png"],
+    } as unknown as SourceSpec;
+    __ensureSourceBoundsForTests(control, replacement);
+    assert.equal("bounds" in createStoreLayer(replacement).metadata, false);
+  });
+
   it("omits the extent when the source declares none", () => {
     const layer = createStoreLayer({
       type: "cog",
@@ -658,5 +678,39 @@ describe("source rehydration", () => {
       ["pc-stack"],
     );
     assert.deepEqual(sources[0][PLANETARY_COMPUTER_STACK_KEY], stack);
+  });
+
+  it("drops a saved stack extent the rebuilt stack no longer declares", async () => {
+    const { PLANETARY_COMPUTER_STACK_KEY } =
+      await import("../packages/plugins/src/plugins/planetary-computer-actions");
+    // A scene crossing the antimeridian leaves the rebuilt stack unbounded, so
+    // the extent saved beside it must not be spread back on.
+    const savedSource = {
+      id: "pc-stack-wrapped",
+      name: "Stack",
+      type: "xyz",
+      bounds: [170, -20, 175, -16],
+      [PLANETARY_COMPUTER_STACK_KEY]: {
+        collection: "sentinel-2-l2a",
+        items: [
+          { id: "first", date: "2024-06-20", bbox: [177, -20, -178, -16] },
+          { id: "second", date: "2024-09-06", bbox: [170, -20, 175, -16] },
+        ],
+      },
+    };
+    let restored: Record<string, unknown> | undefined;
+    const unregister = (
+      await import("../packages/plugins/src/plugins/maplibre-time-slider")
+    ).registerTimeSliderSourceRehydrator((spec) => {
+      if (spec.id === "pc-stack-wrapped") restored = spec as unknown as Record<string, unknown>;
+      return undefined;
+    });
+    try {
+      apply(baseConfig({ dates: ["2024-06-20", "2024-09-06"], sources: [savedSource] }));
+    } finally {
+      unregister();
+    }
+    assert.equal(typeof restored?.tiles, "function");
+    assert.equal("bounds" in (restored ?? {}), false);
   });
 });
