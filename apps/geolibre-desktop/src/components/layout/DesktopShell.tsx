@@ -122,6 +122,7 @@ import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { CreationTemplateDialog } from "./CreationTemplateDialog";
 import { FileNamePromptDialog } from "./FileNamePromptDialog";
+import { GcsExportDialog } from "./GcsExportDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { RegistryPluginTrustDialog } from "./RegistryPluginTrustDialog";
 import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
@@ -1188,6 +1189,7 @@ export function DesktopShell({
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
       <FileNamePromptDialog />
+      <GcsExportDialog />
       <CreationTemplateDialog />
       {/* Trust prompt for plugin URLs carried by an opened project (#1062);
           inert unless the project references an untrusted plugin URL. */}
