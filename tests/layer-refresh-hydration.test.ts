@@ -25,6 +25,9 @@ it("bootstraps public sources while blocking private hosts and potentially signe
     "http://tiles.localhost/data.json",
     "http://127.2.3.4/data.json",
     "http://0.0.0.0/data.json",
+    "http://0.1.2.3/data.json",
+    "http://100.64.0.1/data.json",
+    "http://100.127.255.254/data.json",
     "http://10.0.0.1/data.json",
     "http://172.16.0.1/data.json",
     "http://192.168.0.1/data.json",
@@ -64,6 +67,8 @@ it("bootstraps public sources while blocking private hosts and potentially signe
 
   for (const [url, metadata] of [
     ["https://example.test/data.json", {}],
+    ["https://100.63.255.254/data.json", {}],
+    ["https://100.128.0.1/data.json", {}],
     ["gs://public-bucket/data.json", {}],
     ["http://localhost/wfs", { sourceKind: "wfs-getfeature" }],
   ] as const) {

@@ -847,6 +847,15 @@ Auto-bootstrap rules (see `useLayerRefresh`):
   apply credential redaction before sharing them.
 - `gs://` sources are auto-fetched (not manual-only).
 
+These rules also apply to layers added by the user's Startup setting. Unlike
+the earlier startup loader, private-host and S3 startup layers now need manual
+refresh or a configured refresh interval. WFS keeps its existing exception.
+The public-host check rejects known private, loopback, link-local, unspecified,
+and shared-address literals, but does not resolve DNS. Internal DNS names and
+public names resolving to private addresses can still be requested. This
+heuristic is not a complete network isolation boundary; open only trusted
+projects and data sources.
+
 The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the
 dialog stops local polling only -- the backend harvest job keeps running, and the
 last execution ID stays visible.

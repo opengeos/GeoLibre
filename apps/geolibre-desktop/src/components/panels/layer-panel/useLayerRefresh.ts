@@ -44,8 +44,9 @@ function isPublicHttpUrl(url: string): boolean {
     const host = u.hostname.toLowerCase().replace(/\.$/, "");
     // Loopback (IPv4 127.0.0.0/8, IPv6 [::1], and *.localhost)
     if (host === "localhost" || host.endsWith(".localhost")) return false;
-    if (host === "0.0.0.0" || host === "[::]" || host === "[::1]") return false;
+    if (/^0\./.test(host) || host === "[::]" || host === "[::1]") return false;
     if (/^127\./.test(host)) return false;
+    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)) return false;
     // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
     if (

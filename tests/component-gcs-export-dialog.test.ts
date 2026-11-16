@@ -189,3 +189,28 @@ it("reports a non-JSON successful submission as a missing execution ID", async (
   fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
   await waitFor(() => assert.ok(screen.getByText(/execution ID/i)));
 });
+
+it("shows abort API setup errors without sending a request or leaving the dialog busy", async () => {
+  mock.method(AbortSignal, "any", () => {
+    throw new TypeError("AbortSignal.any is unavailable");
+  });
+  const fetcher = mock.method(globalThis, "fetch", async () => Response.json({}));
+  openDialog();
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(screen.getByText("AbortSignal.any is unavailable")));
+  assert.equal(fetcher.mock.callCount(), 0);
+  assert.equal(
+    screen.getByRole("button", { name: "Harvest & Export" }).hasAttribute("disabled"),
+    false,
+  );
+});
+
+it("renders the backend deployment instructions with named links", () => {
+  openDialog();
+  const deploy = screen.getByRole("link", { name: "deploy/harvester_service", hidden: true });
+  assert.equal(
+    deploy.getAttribute("href"),
+    "https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service",
+  );
+  assert.ok(screen.getByRole("link", { name: "tools/harvest_portal_dataset.py", hidden: true }));
+});

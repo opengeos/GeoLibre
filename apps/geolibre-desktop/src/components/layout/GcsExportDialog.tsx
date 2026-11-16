@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Label } from "@geolibre/ui";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Cloud, Loader2, X } from "lucide-react";
 
 /**
@@ -73,11 +73,12 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     operationRef.current?.abort();
     const operation = new AbortController();
     operationRef.current = operation;
-    const signal = AbortSignal.any([operation.signal, AbortSignal.timeout(30 * 60 * 1000)]);
+    let signal = operation.signal;
     setStatus("running");
     setError(null);
     setResult(null);
     try {
+      signal = AbortSignal.any([operation.signal, AbortSignal.timeout(30 * 60 * 1000)]);
       const resp = await fetch(`${endpoint}/harvest-large`, {
         method: "POST",
         signal,
@@ -198,24 +199,31 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
               <p>{t("gcsExport.helpBackend")}</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>
-                  {t("gcsExport.helpStep1Prefix")}{" "}
-                  <a
-                    className="underline text-primary"
-                    href="https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    deploy/harvester_service
-                  </a>{" "}
-                  {t("gcsExport.helpStep1And")}{" "}
-                  <a
-                    className="underline text-primary"
-                    href="https://github.com/GetBack2Basics/ops-intel-crafter/blob/main/tools/harvest_portal_dataset.py"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    tools/harvest_portal_dataset.py
-                  </a>
+                  <Trans
+                    i18nKey="gcsExport.helpStep1"
+                    components={{
+                      deployLink: (
+                        <a
+                          className="underline text-primary"
+                          href="https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          deploy/harvester_service
+                        </a>
+                      ),
+                      scriptLink: (
+                        <a
+                          className="underline text-primary"
+                          href="https://github.com/GetBack2Basics/ops-intel-crafter/blob/main/tools/harvest_portal_dataset.py"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          tools/harvest_portal_dataset.py
+                        </a>
+                      ),
+                    }}
+                  />
                 </li>
                 <li>{t("gcsExport.helpStep2")}</li>
                 <li>{t("gcsExport.helpStep3")}</li>

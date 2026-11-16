@@ -1,7 +1,6 @@
 {
   "gcsExport": {
     "title": "Harvest & Export to GCS",
-    "triggerTitle": "Harvest & Export to GCS (Ctrl+Shift+G)",
     "backendUrl": "Backend URL (Cloud Run)",
     "apiKey": "API Key",
     "dataUrl": "Data URL (portal or direct file)",
@@ -15,8 +14,7 @@
     "helpTitle": "What is this and how do I use it?",
     "helpWhat": "This harvests a public portal dataset (CKAN, Opendatasoft, ArcGIS REST, or a direct GeoJSON/GeoPackage/Shapefile/KML/CSV file) into a GeoParquet file in your own Google Cloud Storage bucket, with QA and optional Wherobots loading.",
     "helpBackend": "You bring your own backend (BYOK): deploy the harvester service into your own GCP project, then paste its HTTPS URL and API key here. No shared bucket or key is provided.",
-    "helpStep1Prefix": "Deploy the backend: see",
-    "helpStep1And": "and",
+    "helpStep1": "Deploy the backend: see <deployLink>deploy/harvester_service</deployLink> and <scriptLink>tools/harvest_portal_dataset.py</scriptLink>.",
     "helpStep2": "Set OIC_GCP_PROJECT, OIC_GCS_BUCKET, HARVESTER_API_KEY (and optionally WHEROBOTS_API_KEY) as Cloud Run env vars / secrets.",
     "helpStep3": "Paste the resulting Cloud Run URL and API key above.",
     "helpStep4": "Enter a portal or direct data URL, choose dry-run or live, and run.",
