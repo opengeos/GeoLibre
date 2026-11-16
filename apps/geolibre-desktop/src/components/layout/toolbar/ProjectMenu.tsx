@@ -183,8 +183,8 @@ export function ProjectMenu({
   const showSaveGroup =
     show("project.save") ||
     show("project.saveAs") ||
-    show("project.duplicate") ||
-    show("project.saveAsTemplate") ||
+    (show("project.duplicate") && Boolean(onDuplicate)) ||
+    (show("project.saveAsTemplate") && Boolean(onSaveAsTemplate)) ||
     (!shareHidden && show("project.share")) ||
     exportItems.some((item) => show(`project.${item.name}`)) ||
     (collaborationEnabled && show("project.collaborate"));
