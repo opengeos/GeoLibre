@@ -350,7 +350,9 @@ export function nonMaxSuppression(candidates: Candidate[], iouThreshold: number)
  * Auto-detects the Ultralytics YOLOv8/v11 layout (`[1, 4 + nc, anchors]`, no
  * objectness) versus the YOLOv5 layout (`[1, anchors, 5 + nc]`, with an
  * objectness channel) by matching each trailing dim against the anchor count a
- * standard head produces at `inputSize`.
+ * standard head produces at `inputSize`: one prediction per grid cell for
+ * v8/v11, three per cell for v5. At a tiny `inputSize` the two can tie (a v5
+ * head of `[1, 63, 21]` at 32); a tie reads as v8.
  *
  * Assumes the model output is already sigmoid-activated, which is true of the
  * standard Ultralytics ONNX export (`yolo export format=onnx`) for both v5 and
