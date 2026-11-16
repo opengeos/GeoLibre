@@ -125,7 +125,7 @@ export function LayerOpacitySlider({
           type="button"
           disabled={disabled}
           className="w-9 shrink-0 cursor-text text-end disabled:cursor-not-allowed font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
-          title={t("layers.opacityExactHint")}
+          title={disabled ? disabledHint : t("layers.opacityExactHint")}
           // The name leads with the visible value (WCAG 2.5.3, axe
           // label-content-name-mismatch).
           aria-label={t("layers.opacityValueEditAria", {
