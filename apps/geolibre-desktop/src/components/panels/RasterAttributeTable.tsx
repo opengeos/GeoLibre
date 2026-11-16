@@ -565,7 +565,7 @@ export function RasterAttributeTable() {
       ref={sectionRef}
       aria-label={t("rasterAttributeTable.title")}
       data-testid="raster-attribute-table"
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: panelHeight }}
     >
       <div

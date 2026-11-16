@@ -786,7 +786,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     <section
       ref={sectionRef}
       aria-label={t("assistant.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height }}
     >
       <div
