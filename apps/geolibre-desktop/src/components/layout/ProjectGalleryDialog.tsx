@@ -967,14 +967,14 @@ export function ProjectGalleryDialog({
                       : effectiveScope === "collections"
                         ? t("gallery.emptyCollection")
                         : effectiveScope === "mine"
-                      ? t("gallery.emptyMine")
-                      : effectiveScope === "organizations"
-                        ? t("gallery.emptyOrganizations")
-                        : effectiveScope === "groups"
-                          ? t("gallery.emptyGroups")
-                          : effectiveScope === "featured"
-                            ? t("gallery.emptyFeatured")
-                            : t("gallery.empty")}
+                          ? t("gallery.emptyMine")
+                          : effectiveScope === "organizations"
+                            ? t("gallery.emptyOrganizations")
+                            : effectiveScope === "groups"
+                              ? t("gallery.emptyGroups")
+                              : effectiveScope === "featured"
+                                ? t("gallery.emptyFeatured")
+                                : t("gallery.empty")}
                 </p>
               ) : showingCollections ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
