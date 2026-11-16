@@ -13,6 +13,8 @@ import type { RasterData } from "../packages/processing/src/raster-client";
 // anchor-count matching resolves the layout the way a real export would.
 const INPUT = 32;
 const ANCHORS = 21;
+// A YOLOv5 head predicts 3 anchor boxes per grid cell: 63 at inputSize 32.
+const V5_ANCHORS = 3 * ANCHORS;
 
 /** Build a YOLOv8/v11 output `[1, 4 + nc, anchors]` (channels-major, no
  * objectness) with one "hot" anchor carrying a box + class scores. */
@@ -34,16 +36,17 @@ function buildV8(
 function buildV5(
   nc: number,
   hot: { i: number; box: [number, number, number, number]; obj: number; cls: number[] },
+  anchors = V5_ANCHORS,
 ): { data: Float32Array; dims: number[] } {
   const c = 5 + nc;
-  const data = new Float32Array(ANCHORS * c);
+  const data = new Float32Array(anchors * c);
   const set = (i: number, chan: number, v: number) => {
     data[i * c + chan] = v;
   };
   hot.box.forEach((v, k) => set(hot.i, k, v));
   set(hot.i, 4, hot.obj);
   hot.cls.forEach((v, k) => set(hot.i, 5 + k, v));
-  return { data, dims: [1, ANCHORS, c] };
+  return { data, dims: [1, anchors, c] };
 }
 
 describe("decodeYolo", () => {
@@ -88,6 +91,35 @@ describe("decodeYolo", () => {
     assert.equal(out[0].classIndex, 42);
     // v8 has no objectness, so the score is the raw class prob (not ×objectness).
     assert.ok(Math.abs(out[0].score - 0.7) < 1e-6);
+  });
+
+  it("decodes a real-size v5 head with 3 anchors per grid cell", () => {
+    // The built-in YOLOv5n COCO export outputs [1, 25200, 85] at 640: 3 anchor
+    // boxes for each of the 8400 grid cells. Matching only the 8400 cell count
+    // picked the 85 channels as the anchor axis and decoded garbage class ids.
+    const cls = new Array(80).fill(0);
+    cls[2] = 0.8; // "car"
+    const { data, dims } = buildV5(80, { i: 20000, box: [320, 320, 20, 10], obj: 0.9, cls }, 25200);
+    assert.deepEqual(dims, [1, 25200, 85]);
+    const out = decodeYolo(data, dims, 0.5, 640);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].classIndex, 2);
+    assert.ok(Math.abs(out[0].score - 0.72) < 1e-6);
+    assert.deepEqual(out[0].box, [310, 315, 330, 325]);
+  });
+
+  it("still reads a real-size v8 head [1, 84, 8400] as channels-major", () => {
+    const anchors = 8400;
+    const data = new Float32Array(84 * anchors);
+    const hot = 1234;
+    [100, 200, 40, 20].forEach((v, k) => {
+      data[k * anchors + hot] = v;
+    });
+    data[(4 + 5) * anchors + hot] = 0.6; // class 5
+    const out = decodeYolo(data, [1, 84, anchors], 0.5, 640);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].classIndex, 5);
+    assert.deepEqual(out[0].box, [80, 190, 120, 210]);
   });
 
   it("throws on a non-3D output shape", () => {
