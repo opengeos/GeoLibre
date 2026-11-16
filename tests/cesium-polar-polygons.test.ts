@@ -230,6 +230,77 @@ describe("slicePoleWrappingPolygons", () => {
     assert.ok(performance.now() - started < 1000);
   });
 
+  it("does not mistake opposite half-turn steps for a pole wrap", () => {
+    const band: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [-90, 10],
+            [90, 10],
+            [90, 20],
+            [-90, 20],
+            [-90, 10],
+          ],
+        ],
+      },
+    };
+    assert.equal(slicePoleWrappingPolygons(band), band);
+  });
+
+  it("finishes on a wrapping ring at huge longitudes", () => {
+    const L = 2 ** 60 + 1024;
+    const far: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [L, 80],
+            [L + 256, 81],
+            [L + 512, 82],
+            [L, 80],
+          ],
+        ],
+      },
+    };
+    const started = performance.now();
+    slicePoleWrappingPolygons(far);
+    assert.ok(performance.now() - started < 1000);
+  });
+
+  it("keeps a rejected wrapping part of a MultiPolygon beside a sliced one", () => {
+    const ring: Position[] = [];
+    let lon = 0;
+    for (let i = 0; i < 2000; i++, lon += 170) ring.push([((lon + 180) % 360) - 180, 80]);
+    for (let i = 0; i < 1998; i++, lon -= 170) ring.push([((lon + 180) % 360) - 180, 81]);
+    ring.push(ring[0]);
+    const square: Position[][] = [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ],
+    ];
+    const mixed: Feature<MultiPolygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [[ring], square, (antarctica().geometry as Polygon).coordinates],
+      },
+    };
+    const parts = (slicePoleWrappingPolygons(mixed).geometry as MultiPolygon).coordinates;
+    assert.equal(parts.length, 6, "the rejected ring, the square, and Antarctica's four slices");
+    assert.deepEqual(parts[0], [ring]);
+    assert.deepEqual(parts[1], square);
+  });
+
   it("returns every other feature unchanged", () => {
     const square: Feature<Polygon> = {
       type: "Feature",

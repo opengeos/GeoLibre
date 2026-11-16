@@ -15,6 +15,9 @@ function lonStep(a: number, b: number): number {
   // Closed form, not a loop: projected metres mislabelled as degrees would
   // otherwise spin for millions of steps per vertex.
   const d = (((b - a) % 360) + 360) % 360;
+  // Exactly half a turn is ambiguous; keep the raw direction so opposite
+  // half-turn steps cancel instead of adding up to a false full turn.
+  if (d === 180) return b - a < 0 ? -180 : 180;
   return d > 180 ? d - 360 : d;
 }
 
@@ -138,7 +141,12 @@ function slicePolarPolygon(rings: Position[][]): Position[][][] {
     );
   });
   const slices: Position[][][] = [];
-  for (let start = west; start < east; start += SLICE_DEGREES) {
+  if (!Number.isFinite(west) || !Number.isFinite(east)) return [];
+  // An integer counter, not `start += 90`: at huge longitudes adding 90 can
+  // round back to the same value and never reach `east`.
+  const count = Math.ceil((east - west) / SLICE_DEGREES);
+  for (let k = 0; k < count; k++) {
+    const start = west + k * SLICE_DEGREES;
     const end = Math.min(start + SLICE_DEGREES, east);
     const clip = (ring: Position[]) => clipRing(clipRing(ring, start, true), end, false);
     const shell = clip(outer);
@@ -206,6 +214,10 @@ function clampPolarRings(rings: Position[][]): Position[][] {
  * with it (Canada, Mexico, ...) never drew. Such a polygon is cut into
  * quarter-globe slices of one MultiPolygon, which Cesium draws as separate
  * pieces of one fill, and vertices on a pole are pulled just short of it.
+ * The globe turns the outline off for a sliced feature's polygons (see
+ * {@link isSlicedPolarGeometry}) so the cut meridians draw no stroke; the
+ * trade-off is that an extruded or Z-carrying layer also loses that
+ * feature's coastline stroke (ground-clamped polygons have none anyway).
  * Every other geometry is returned unchanged.
  *
  * @param feature - A GeoJSON feature.
@@ -225,18 +237,24 @@ export function slicePoleWrappingPolygons(feature: Feature): Feature {
     touches: touchesPole(rings),
   }));
   if (!flags.some((f) => f.wraps || f.touches)) return feature;
+  let anySliced = false;
   const coordinates = polygons.flatMap((rings, i) => {
-    const pieces = flags[i].wraps ? slicePolarPolygon(rings) : [rings];
-    return pieces.map((piece) =>
-      flags[i].wraps || flags[i].touches ? clampPolarRings(piece) : piece,
-    );
+    const sliced = flags[i].wraps ? slicePolarPolygon(rings) : [];
+    if (sliced.length > 0) {
+      anySliced = true;
+      return sliced.map(clampPolarRings);
+    }
+    // Not sliced (or a wrapping ring the slicer rejects): keep the polygon's
+    // own rings, pulled off the pole if they touch it, rather than letting it
+    // vanish from a MultiPolygon.
+    return [flags[i].touches ? clampPolarRings(rings) : rings];
   });
-  // Nothing drawable came out (a degenerate ring): leave the feature as it was.
-  if (coordinates.length === 0) return feature;
+  // Nothing changed (only rejected wrapping rings): leave the feature as it was.
+  if (!anySliced && !flags.some((f) => f.touches)) return feature;
   const out: Polygon | MultiPolygon =
     geometry.type === "Polygon" && coordinates.length === 1
       ? { type: "Polygon", coordinates: coordinates[0] }
       : { type: "MultiPolygon", coordinates };
-  if (flags.some((f) => f.wraps)) slicedGeometries.add(out);
+  if (anySliced) slicedGeometries.add(out);
   return { ...feature, geometry: out };
 }
