@@ -841,4 +841,3 @@ Auto-bootstrap rules (see `useLayerRefresh`):
 The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the
 dialog stops local polling only -- the backend harvest job keeps running, and the
 last execution ID stays visible.
-

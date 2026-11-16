@@ -48,7 +48,12 @@ function isPublicHttpUrl(url: string): boolean {
     if (/^127\./.test(host)) return false;
     // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
-    if (/^\[?fe80:/.test(host) || /^\[?fc[0-9a-f]{2}:/.test(host) || /^\[?fd[0-9a-f]{2}:/.test(host)) return false;
+    if (
+      /^\[?fe80:/.test(host) ||
+      /^\[?fc[0-9a-f]{2}:/.test(host) ||
+      /^\[?fd[0-9a-f]{2}:/.test(host)
+    )
+      return false;
     if (/^\[?::ffff:/i.test(host)) return false;
     return true;
   } catch {

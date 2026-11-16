@@ -267,11 +267,19 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
 
           <div className="flex items-center gap-4 text-sm">
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+              />
               {t("gcsExport.dryRun")}
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={skipWherobots} onChange={(e) => setSkipWherobots(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={skipWherobots}
+                onChange={(e) => setSkipWherobots(e.target.checked)}
+              />
               {t("gcsExport.skipWherobots")}
             </label>
           </div>
