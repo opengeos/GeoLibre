@@ -208,12 +208,13 @@ export function DelimitedTextSource() {
     if ("text" in download) return { sourcePath, text: download.text, workbook: false };
     const [first] = download.worksheets;
     if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
-    // The source changed while downloading: keep what replaced it.
-    if (generation === sourceGenerationRef.current) {
-      setDelimitedTextDelimiter("comma");
-      setSelectedWorksheet(first.name);
-      setSelectedDelimitedText({ path: sourcePath, text: "", worksheets: download.worksheets });
+    // The source changed while downloading: drop this result, keep what replaced it.
+    if (generation !== sourceGenerationRef.current) {
+      throw new DOMException("The source changed while downloading.", "AbortError");
     }
+    setDelimitedTextDelimiter("comma");
+    setSelectedWorksheet(first.name);
+    setSelectedDelimitedText({ path: sourcePath, text: "", worksheets: download.worksheets });
     return { sourcePath, text: first.toCsv(), workbook: true };
   };
 
@@ -308,6 +309,8 @@ export function DelimitedTextSource() {
             }),
       );
     } catch (err) {
+      // A download superseded by a newer source: its columns no longer apply.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       source.setError(errorMessage(err, t("addData.delimitedText.errorRetrieveColumns")));
       setDelimitedTextFields([]);
     } finally {

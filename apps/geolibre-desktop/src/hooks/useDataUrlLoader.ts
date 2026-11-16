@@ -175,8 +175,9 @@ export async function loadDataUrl(
     if (rawStyle !== null) throw new Error(i18next.t("kml.dataUrlStyleUnsupported"));
     const previousIds = new Set(store.layers.map((layer) => layer.id));
     // The host importer frames the import itself (honouring the zoom-to-new-layers
-    // preference) and reports its own failures, so an empty result is the only
-    // signal here that nothing was added.
+    // preference), even in a `fit: false` batch, which then reframes the whole
+    // set. It reports its own failures, so an empty result is the only signal
+    // here that nothing was added.
     if (!(await routeKmlFileSelection([{ file: remote.file }]))) {
       throw new Error(i18next.t("kml.dataUrlNoImporter", { name: remote.name }));
     }
@@ -184,11 +185,11 @@ export async function loadDataUrl(
       .getState()
       .layers.filter((layer) => !previousIds.has(layer.id))
       .map((layer) => layer.id);
-    if (!added.length) throw new Error(i18next.t("kml.dataUrlAddFailed", { name: remote.name }));
     if (options.signal?.aborted) {
       for (const id of added) store.removeLayer(id);
       throw new DOMException("The operation was aborted", "AbortError");
     }
+    if (!added.length) throw new Error(i18next.t("kml.dataUrlAddFailed", { name: remote.name }));
     layerIds.push(...added);
   } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
     const styleResult = rawStyle === null ? null : parseMapboxStyle(rawStyle);

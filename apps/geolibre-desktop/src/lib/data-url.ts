@@ -519,6 +519,13 @@ export async function fetchRemoteData(
     contentType.includes("zip") ||
     /filename\*?=[^;]*\.zip(?:[;"']|$)/i.test(disposition) ||
     zipSignature;
+  if (isKmlDownload(ext, contentType, disposition)) {
+    // A KMZ is a ZIP too, but of a KML document and its images, not of GeoJSON:
+    // it goes to the host KML importer, as a dropped file does. Checked before
+    // the plugin offer, which would rename it `.kmz.zip` for a `.zip` handler.
+    const name = kmlFileNameFromUrl(url, bytes);
+    return { kind: "kml", name: remoteName(url), file: kmlImportFile(name, bytes) };
+  }
   if (fileHandlers) {
     await waitForReady(fileHandlers.ready, options.signal);
     const handlers = fileHandlers.list();
@@ -529,12 +536,6 @@ export async function fetchRemoteData(
       const result = await offerRemoteFileToHandlers(name, bytes, handlers);
       if (result.opened.length + result.failed.length > 0) return { kind: "handled", ...result };
     }
-  }
-  if (isKmlDownload(ext, contentType, disposition)) {
-    // A KMZ is a ZIP too, but of a KML document and its images, not of GeoJSON:
-    // it goes to the host KML importer, as a dropped file does.
-    const name = kmlFileNameFromUrl(url, bytes);
-    return { kind: "kml", name: remoteName(url), file: kmlImportFile(name, bytes) };
   }
   if (!isZip) {
     return {
