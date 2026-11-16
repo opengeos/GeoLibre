@@ -66,12 +66,14 @@ import {
   openCopcSource,
   openEptSource,
   loadLasPointCloud,
+  pointCloudGroundOffset,
   pointCloudSourceKind,
   setPointCloudOpacity,
   type OpenCopcOptions,
   type LoadEptOptions,
   type LoadLasOptions,
 } from "./cesium-point-cloud";
+import { slicePoleWrappingPolygons } from "./cesium-polar-polygons";
 import {
   buildPointBatch,
   clusterActiveAtZoom,
@@ -357,8 +359,14 @@ interface LayerEntry {
    */
   added?: boolean;
   loadError?: string;
-  /** The tileset altitude offset (metres) last applied as a model matrix. */
+  /** The tileset or point-cloud altitude offset (metres) last applied as a model matrix. */
   appliedAltitude?: number;
+  /**
+   * A decoded point cloud's ground height in metres (its low percentile, as
+   * decoded, before any altitude offset), which the globe lowers onto the
+   * ellipsoid when there is no terrain (#3476).
+   */
+  pointCloudBase?: number;
   /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
   appliedAlpha?: string;
   /** Last filter expression key applied in place (skips redundant filter evaluations). */
@@ -1355,17 +1363,41 @@ function tileTemplateImageryProvider(
 const FEATURE_INDEX_KEY = "__geolibre_cesium_feature_index";
 
 /**
+ * A copy of `collection` without the legacy GeoJSON 2008 `crs` member.
+ *
+ * Layer GeoJSON is always longitude/latitude WGS 84 (the 2D engines draw it
+ * as such and ignore `crs`), but files often keep the member their writer
+ * added. Cesium's GeoJsonDataSource only knows three spellings of it and
+ * throws "Unknown crs name" on the rest, so a layer naming
+ * `urn:ogc:def:crs:OGC::CRS84` (GDAL's spelling) failed to load on the globe
+ * (#3476). Dropping it makes Cesium read the coordinates as lon/lat, exactly
+ * as the 2D map does.
+ *
+ * @param collection - The layer's FeatureCollection.
+ * @returns The collection itself when it has no `crs`, else a shallow copy without it.
+ */
+export function withoutGeoJsonCrs(collection: FeatureCollection): FeatureCollection {
+  if (!("crs" in collection)) return collection;
+  const copy: FeatureCollection & { crs?: unknown } = { ...collection };
+  delete copy.crs;
+  return copy;
+}
+
+/**
  * A copy of `collection` whose features carry a stable id and their index
  * (under {@link FEATURE_INDEX_KEY}), so each entity maps back to its feature.
+ * The legacy `crs` member is dropped (see {@link withoutGeoJsonCrs}), and a
+ * polygon that goes round a pole is cut into slices Cesium can triangulate
+ * (see {@link slicePoleWrappingPolygons}).
  */
 function indexedFeatureCollection(
   layerId: string,
   collection: FeatureCollection,
 ): FeatureCollection {
   return {
-    ...collection,
+    ...withoutGeoJsonCrs(collection),
     features: collection.features.map((feature, index) => ({
-      ...feature,
+      ...slicePoleWrappingPolygons(feature),
       id: JSON.stringify([layerId, index]),
       properties: { ...feature.properties, [FEATURE_INDEX_KEY]: index },
     })),
@@ -2403,6 +2435,7 @@ export class CesiumLayerSync {
     const remove = scene.terrainProviderChanged?.addEventListener(() => {
       for (const entry of this.entries.values()) {
         if (entry.kind === "3dtiles" && isI3sLayer(entry.layer)) this.applyTilesetAltitude(entry);
+        else if (entry.kind === "pointcloud") this.applyPointCloudGround(entry);
       }
     });
     this.unwatchTerrain = typeof remove === "function" ? (remove as () => void) : () => {};
@@ -3050,6 +3083,7 @@ export class CesiumLayerSync {
         await streamer.start();
         if (entry.cancelled) return;
         entry.handle = streamer.collection;
+        entry.pointCloudBase = streamer.baseHeight;
         entry.appliedAlpha = String(this.effectiveOpacity(entry));
         this.applyAppearance(entry);
         return;
@@ -3071,6 +3105,7 @@ export class CesiumLayerSync {
       );
       viewer.scene.primitives.add(collection);
       entry.handle = collection;
+      if (cloud.count > 0) entry.pointCloudBase = cloud.zMin;
       entry.appliedAlpha = String(this.effectiveOpacity(entry));
       this.applyAppearance(entry);
       if (cloud.truncated)
@@ -3861,6 +3896,51 @@ export class CesiumLayerSync {
   }
 
   /**
+   * Lower a decoded point cloud onto a globe without terrain (#3476).
+   *
+   * A LiDAR survey stores absolute heights (the Knoxville COPC sample spans
+   * 181 to 342 m). The 2D map's LiDAR control lowers a cloud by its ground
+   * height so it sits on the basemap; on the bare ellipsoid the globe has no
+   * ground either, so the cloud floated a survey height above the imagery and
+   * drifted off it in a tilted view. This applies the same offset as a model
+   * matrix, so switching terrain on (which keeps the absolute heights) or off
+   * moves the loaded cloud in place instead of decoding it again.
+   *
+   * @param entry The point-cloud entry to position.
+   */
+  private applyPointCloudGround(entry: LayerEntry): void {
+    const collection = entry.handle as PointPrimitiveCollection | null;
+    if (!collection || entry.kind !== "pointcloud") return;
+    // A streamed cloud whose first view showed nothing learns its base later.
+    entry.pointCloudBase ??= entry.streamer?.baseHeight;
+    const offset = pointCloudGroundOffset(entry.pointCloudBase, this.globeHasTerrain());
+    if ((entry.appliedAltitude ?? 0) === offset) return;
+    const { Cesium } = this;
+    if (offset === 0) {
+      collection.modelMatrix = Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY);
+    } else {
+      // Any point of the cloud anchors the local "up": the cloud spans a few
+      // kilometres at most, so one translation lowers all of it evenly.
+      const sample = collection.length > 0 ? collection.get(0)?.position : undefined;
+      // Nothing shown yet: leave the offset unrecorded so a later pass retries.
+      if (!sample) return;
+      const anchor = Cesium.Cartographic.fromCartesian(sample);
+      const surface = Cesium.Cartesian3.fromRadians(anchor.longitude, anchor.latitude, 0);
+      const target = Cesium.Cartesian3.fromRadians(anchor.longitude, anchor.latitude, offset);
+      const translation = Cesium.Cartesian3.subtract(target, surface, new Cesium.Cartesian3());
+      collection.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    }
+    entry.appliedAltitude = offset;
+    this.viewer.scene.requestRender();
+  }
+
+  /** Whether the globe draws a terrain surface rather than the bare ellipsoid. */
+  private globeHasTerrain(): boolean {
+    const Ellipsoid = this.Cesium.EllipsoidTerrainProvider;
+    return !Ellipsoid || !(this.viewer.terrainProvider instanceof Ellipsoid);
+  }
+
+  /**
    * How far to lower an I3S scene layer onto a globe without terrain (#3374).
    *
    * A scene layer stores absolute elevations (Building E in Redlands sits at
@@ -3874,8 +3954,7 @@ export class CesiumLayerSync {
    */
   private i3sEntryGroundOffset(entry: LayerEntry): number {
     if (!isI3sLayer(entry.layer) || !entry.handle) return 0;
-    const Ellipsoid = this.Cesium.EllipsoidTerrainProvider;
-    if (!Ellipsoid || !(this.viewer.terrainProvider instanceof Ellipsoid)) return 0;
+    if (this.globeHasTerrain()) return 0;
     const data = (entry.handle as Partial<I3SDataProvider>).data as
       | { fullExtent?: { zmin?: unknown } }
       | undefined;
@@ -3930,6 +4009,7 @@ export class CesiumLayerSync {
         entry.appliedAlpha = key;
         setPointCloudOpacity(collection, opacity);
       }
+      this.applyPointCloudGround(entry);
     } else if (entry.kind === "points") {
       (handle as PointPrimitiveCollection).show = layer.visible;
       this.applyPointBatchStyle(entry);

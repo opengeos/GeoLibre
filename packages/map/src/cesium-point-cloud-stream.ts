@@ -251,6 +251,14 @@ export class PointCloudStreamer {
     await this.refresh();
   }
 
+  /**
+   * The cloud's ground height in metres as decoded (the root node's low
+   * percentile, else the first node shown's), or undefined before any node.
+   */
+  get baseHeight(): number | undefined {
+    return this.zRange?.zMin;
+  }
+
   /** Points currently held as primitives. */
   get pointCount(): number {
     return this.collection.length;
