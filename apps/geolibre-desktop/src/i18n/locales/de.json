@@ -2128,6 +2128,18 @@
     "resizeDialog": "Galerie in der Größe ändern",
     "scopeFeatured": "Empfohlen",
     "scopeAll": "Alle Projekte",
+    "scopeCollections": "Sammlungen",
+    "loadingCollections": "Sammlungen werden geladen…",
+    "collectionsSearchPlaceholder": "Sammlungen nach Titel, Autor oder Beschreibung filtern",
+    "noCollectionMatches": "Keine Sammlungen entsprechen Ihrem Filter.",
+    "emptyCollections": "Noch keine öffentlichen Sammlungen vorhanden.",
+    "emptyCollection": "Diese Sammlung enthält keine öffentlichen Projekte.",
+    "untitledCollection": "Unbenannte Sammlung",
+    "openCollection": "Projekte dieser Sammlung anzeigen",
+    "openCollectionOnWeb": "Sammlung im Web ansehen",
+    "backToCollections": "Alle Sammlungen",
+    "collectionProjects_one": "{{count}} Projekt",
+    "collectionProjects_other": "{{count}} Projekte",
     "scopeMine": "Meine Projekte",
     "scopeOrganizations": "Organisationen",
     "scopeGroups": "Gruppen",
@@ -3917,6 +3929,7 @@
       "difference": "Differenz",
       "union": "Vereinigung",
       "spatialJoin": "Räumliche Verknüpfung",
+      "summarizeWithin": "Innerhalb zusammenfassen",
       "attributeJoin": "Attributverknüpfung",
       "selectByValue": "Nach Wert auswählen",
       "selectByLocation": "Nach Lage auswählen",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Innerhalb zusammenfassen",
+          "description": "Die Features einer anderen Ebene zählen, die jedes Polygon schneiden, ein numerisches Feld zusammenfassen und messen, wie viel von jedem Polygon sie abdecken",
+          "params": {
+            "layer": {
+              "label": "Polygonebene"
+            },
+            "overlay": {
+              "label": "Zusammenzufassende Ebene"
+            },
+            "field": {
+              "label": "Numerisches Feld",
+              "description": "Optional. Fügt für jedes Polygon Summe, Mittelwert, Minimum und Maximum dieses Felds hinzu."
+            },
+            "min_overlap_pct": {
+              "label": "Überlappungen ignorieren kleiner als (%)",
+              "description": "Wenn die zusammenzufassende Ebene Polygone enthält, werden alle übersprungen, die weniger als diesen Anteil eines Polygons abdecken, etwa Splitterflächen entlang gemeinsamer Kanten."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Attributverknüpfung",
           "description": "Attribute einer Verknüpfungsebene (einer Tabelle) an jedes Eingabeobjekt anhängen, bei dem ein Schlüsselfeld übereinstimmt, ohne Geometrie zu verwenden. Eins-zu-eins: die erste übereinstimmende Verknüpfungszeile gewinnt.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Ebenenattribute werden geladen…",
     "requiresVectorLayer": "Die Attributtabelle erfordert eine Vektor- oder DuckDB-Abfrageebene.",
     "invalidJson": "Ungültiges JSON",
+    "nullValue": "NULL",
     "editCellAria": "{{col}} für Objekt {{featureId}} bearbeiten",
     "resizeColumn": "Größe der Spalte {{name}} ändern",
     "renameFieldAria": "Feld {{name}} umbenennen",

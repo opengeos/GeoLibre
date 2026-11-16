@@ -2128,6 +2128,18 @@
     "resizeDialog": "Galerij van grootte veranderen",
     "scopeFeatured": "Uitgelicht",
     "scopeAll": "Alle projecten",
+    "scopeCollections": "Collecties",
+    "loadingCollections": "Collecties laden…",
+    "collectionsSearchPlaceholder": "Filter collecties op titel, auteur of beschrijving",
+    "noCollectionMatches": "Geen collecties komen overeen met uw filter.",
+    "emptyCollections": "Nog geen openbare collecties om te tonen.",
+    "emptyCollection": "Deze collectie bevat geen openbare projecten.",
+    "untitledCollection": "Naamloze collectie",
+    "openCollection": "De projecten in deze collectie tonen",
+    "openCollectionOnWeb": "Collectie bekijken op het web",
+    "backToCollections": "Alle collecties",
+    "collectionProjects_one": "{{count}} project",
+    "collectionProjects_other": "{{count}} projecten",
     "scopeMine": "Mijn projecten",
     "scopeOrganizations": "Organisaties",
     "scopeGroups": "Groepen",
@@ -3917,6 +3929,7 @@
       "difference": "Verschil",
       "union": "Vereniging",
       "spatialJoin": "Ruimtelijke join",
+      "summarizeWithin": "Samenvatten binnen",
       "attributeJoin": "Attribuutjoin",
       "selectByValue": "Selecteren op waarde",
       "selectByLocation": "Selecteren op locatie",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Samenvatten binnen",
+          "description": "Tel de objecten van een andere laag die elke polygoon snijden, vat een numeriek veld samen en meet hoeveel van elke polygoon ze bedekken",
+          "params": {
+            "layer": {
+              "label": "Polygoonlaag"
+            },
+            "overlay": {
+              "label": "Samen te vatten laag"
+            },
+            "field": {
+              "label": "Numeriek veld",
+              "description": "Optioneel. Voegt de som, het gemiddelde, het minimum en het maximum van dit veld toe voor elke polygoon."
+            },
+            "min_overlap_pct": {
+              "label": "Overlappingen kleiner dan (%) negeren",
+              "description": "Als de samen te vatten laag polygonen bevat, worden die overgeslagen die minder dan dit aandeel van een polygoon bedekken, zoals splinters langs gedeelde randen."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Attribuutjoin",
           "description": "Koppel attributen uit een joinlaag (een tabel) aan elk invoerobject waar een sleutelveld overeenkomt, zonder geometrie te gebruiken. Een-op-een: de eerste overeenkomende joinrij wint.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Laagattributen laden…",
     "requiresVectorLayer": "De attribuuttabel vereist een vector- of DuckDB-querylaag.",
     "invalidJson": "Ongeldige JSON",
+    "nullValue": "NULL",
     "editCellAria": "{{col}} bewerken voor object {{featureId}}",
     "resizeColumn": "Grootte van kolom {{name}} wijzigen",
     "renameFieldAria": "Veld {{name}} hernoemen",

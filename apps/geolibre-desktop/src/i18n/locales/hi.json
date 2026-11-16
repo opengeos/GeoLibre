@@ -2128,6 +2128,18 @@
     "resizeDialog": "गैलरी का आकार बदलें",
     "scopeFeatured": "विशेष रुप से प्रदर्शित",
     "scopeAll": "सभी प्रोजेक्ट",
+    "scopeCollections": "कलेक्शन",
+    "loadingCollections": "कलेक्शन लोड हो रहे हैं…",
+    "collectionsSearchPlaceholder": "शीर्षक, लेखक या विवरण के आधार पर कलेक्शन फ़िल्टर करें",
+    "noCollectionMatches": "आपके फ़िल्टर से कोई कलेक्शन मेल नहीं खाता।",
+    "emptyCollections": "अभी दिखाने के लिए कोई सार्वजनिक कलेक्शन नहीं है।",
+    "emptyCollection": "इस कलेक्शन में कोई सार्वजनिक प्रोजेक्ट नहीं है।",
+    "untitledCollection": "शीर्षकहीन कलेक्शन",
+    "openCollection": "इस कलेक्शन के प्रोजेक्ट दिखाएँ",
+    "openCollectionOnWeb": "वेब पर कलेक्शन देखें",
+    "backToCollections": "सभी कलेक्शन",
+    "collectionProjects_one": "{{count}} प्रोजेक्ट",
+    "collectionProjects_other": "{{count}} प्रोजेक्ट",
     "scopeMine": "मेरे प्रोजेक्ट",
     "scopeOrganizations": "संगठन",
     "scopeGroups": "समूह",
@@ -3917,6 +3929,7 @@
       "difference": "अंतर",
       "union": "संघ (Union)",
       "spatialJoin": "स्थानिक जॉइन",
+      "summarizeWithin": "भीतर सारांश",
       "attributeJoin": "विशेषता जॉइन",
       "selectByValue": "मान द्वारा चुनें",
       "selectByLocation": "स्थान द्वारा चुनें",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "भीतर सारांश",
+          "description": "प्रत्येक बहुभुज को काटने वाली किसी अन्य लेयर की फ़ीचर गिनें, एक संख्यात्मक फ़ील्ड का सारांश बनाएँ, और मापें कि वे प्रत्येक बहुभुज का कितना भाग ढकती हैं",
+          "params": {
+            "layer": {
+              "label": "बहुभुज लेयर"
+            },
+            "overlay": {
+              "label": "सारांशित की जाने वाली लेयर"
+            },
+            "field": {
+              "label": "संख्यात्मक फ़ील्ड",
+              "description": "वैकल्पिक। प्रत्येक बहुभुज के लिए इस फ़ील्ड का योग, माध्य, न्यूनतम और अधिकतम जोड़ता है।"
+            },
+            "min_overlap_pct": {
+              "label": "इससे छोटे ओवरलैप अनदेखा करें (%)",
+              "description": "जब सारांशित की जाने वाली लेयर में बहुभुज हों, तो उन्हें छोड़ दें जो किसी बहुभुज के इस अंश से कम भाग ढकते हैं, जैसे साझा किनारों के साथ बने स्लिवर।"
+            }
+          }
+        },
         "attribute-join": {
           "name": "विशेषता जॉइन",
           "description": "ज्यामिति का उपयोग किए बिना, जहाँ कुंजी फ़ील्ड मेल खाती है वहाँ जॉइन लेयर (एक तालिका) की विशेषताएँ प्रत्येक इनपुट फ़ीचर से जोड़ें। एक-से-एक: पहली मेल खाने वाली जॉइन पंक्ति मान्य होती है।",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "लेयर एट्रिब्यूट लोड हो रहे हैं…",
     "requiresVectorLayer": "एट्रिब्यूट तालिका के लिए वेक्टर या DuckDB क्वेरी लेयर आवश्यक है।",
     "invalidJson": "अमान्य JSON",
+    "nullValue": "NULL",
     "editCellAria": "फ़ीचर {{featureId}} के लिए {{col}} संपादित करें",
     "resizeColumn": "{{name}} कॉलम का आकार बदलें",
     "renameFieldAria": "फ़ील्ड {{name}} का नाम बदलें",

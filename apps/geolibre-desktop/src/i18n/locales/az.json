@@ -2128,6 +2128,18 @@
     "resizeDialog": "Qalereyanın ölçüsünü dəyiş",
     "scopeFeatured": "Seçilmişlər",
     "scopeAll": "Bütün layihələr",
+    "scopeCollections": "Kolleksiyalar",
+    "loadingCollections": "Kolleksiyalar yüklənir…",
+    "collectionsSearchPlaceholder": "Kolleksiyaları ada, müəllifə və ya təsvirə görə süzgəcdən keçirin",
+    "noCollectionMatches": "Heç bir kolleksiya filtrinizə uyğun gəlmir.",
+    "emptyCollections": "Hələ göstəriləcək hamıya açıq kolleksiya yoxdur.",
+    "emptyCollection": "Bu kolleksiyada hamıya açıq layihə yoxdur.",
+    "untitledCollection": "Adsız kolleksiya",
+    "openCollection": "Bu kolleksiyadakı layihələri göstər",
+    "openCollectionOnWeb": "Kolleksiyaya vebdə bax",
+    "backToCollections": "Bütün kolleksiyalar",
+    "collectionProjects_one": "{{count}} layihə",
+    "collectionProjects_other": "{{count}} layihə",
     "scopeMine": "Mənim layihələrim",
     "scopeOrganizations": "Təşkilatlar",
     "scopeGroups": "Qruplar",
@@ -3917,6 +3929,7 @@
       "difference": "Fərq",
       "union": "Birləşmə",
       "spatialJoin": "Məkan üzrə birləşdirmə",
+      "summarizeWithin": "Daxilində ümumiləşdir",
       "attributeJoin": "Atribut üzrə birləşdirmə",
       "selectByValue": "Dəyərə görə seç",
       "selectByLocation": "Məkana görə seç",
@@ -6601,6 +6614,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Daxilində ümumiləşdir",
+          "description": "Hər poliqonla kəsişən başqa layın obyektlərini sayın, ədədi sahəni ümumiləşdirin və onların hər poliqonun nə qədərini örtdüyünü ölçün",
+          "params": {
+            "layer": {
+              "label": "Poliqon layı"
+            },
+            "overlay": {
+              "label": "Ümumiləşdiriləcək lay"
+            },
+            "field": {
+              "label": "Ədədi sahə",
+              "description": "İstəyə bağlı. Hər poliqon üçün bu sahənin cəmini, ortasını, minimumunu və maksimumunu əlavə edir."
+            },
+            "min_overlap_pct": {
+              "label": "Bundan kiçik üst-üstə düşmələrə məhəl qoyma (%)",
+              "description": "Ümumiləşdiriləcək layda poliqonlar olduqda, poliqonun bu payından azını örtənləri, məsələn ortaq kənarlar boyunca qırıntıları, ötür."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Atributlara görə birləşdirmə",
           "description": "Həndəsədən istifadə etmədən, açar sahəsi uyğun gələn hər bir giriş obyektinə birləşdirilən layın (cədvəlin) atributlarını əlavə edin. Birə-bir: uyğun gələn ilk sətir götürülür.",
@@ -8629,6 +8662,7 @@
     "loadingAttributes": "Lay atributları yüklənir…",
     "requiresVectorLayer": "Atribut cədvəli üçün vektor və ya DuckDB sorğu layı lazımdır.",
     "invalidJson": "Etibarsız JSON",
+    "nullValue": "NULL",
     "editCellAria": "{{featureId}} obyektinin {{col}} dəyərini redaktə et",
     "resizeColumn": "{{name}} sütununun ölçüsünü dəyiş",
     "renameFieldAria": "{{name}} sahəsinin adını dəyiş",

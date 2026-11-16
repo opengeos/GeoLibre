@@ -2340,6 +2340,22 @@
     "resizeDialog": "تغيير حجم المعرض",
     "scopeFeatured": "المميزة",
     "scopeAll": "جميع المشاريع",
+    "scopeCollections": "مجموعات المشاريع",
+    "loadingCollections": "جارٍ تحميل المجموعات…",
+    "collectionsSearchPlaceholder": "تصفية المجموعات حسب العنوان أو المؤلف أو الوصف",
+    "noCollectionMatches": "لا توجد مجموعات تطابق عامل التصفية.",
+    "emptyCollections": "لا توجد مجموعات عامة لعرضها بعد.",
+    "emptyCollection": "لا تحتوي هذه المجموعة على مشاريع عامة.",
+    "untitledCollection": "مجموعة بلا عنوان",
+    "openCollection": "عرض المشاريع في هذه المجموعة",
+    "openCollectionOnWeb": "عرض المجموعة على الويب",
+    "backToCollections": "جميع المجموعات",
+    "collectionProjects_zero": "{{count}} مشروع",
+    "collectionProjects_one": "مشروع واحد ({{count}})",
+    "collectionProjects_two": "مشروعان ({{count}})",
+    "collectionProjects_few": "{{count}} مشاريع",
+    "collectionProjects_many": "{{count}} مشروعًا",
+    "collectionProjects_other": "{{count}} مشروع",
     "scopeMine": "مشاريعي",
     "scopeOrganizations": "المؤسسات",
     "scopeGroups": "المجموعات",
@@ -4172,6 +4188,7 @@
       "difference": "فرق",
       "union": "اتحاد",
       "spatialJoin": "ربط مكاني",
+      "summarizeWithin": "تلخيص داخل المضلعات",
       "attributeJoin": "ربط بالسمات",
       "selectByValue": "تحديد حسب القيمة",
       "selectByLocation": "تحديد حسب الموقع",
@@ -6920,6 +6937,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "تلخيص داخل المضلعات",
+          "description": "عدّ معالم طبقة أخرى التي تتقاطع مع كل مضلع، وتلخيص حقل رقمي، وقياس مقدار ما تغطيه من كل مضلع",
+          "params": {
+            "layer": {
+              "label": "طبقة المضلعات"
+            },
+            "overlay": {
+              "label": "الطبقة المراد تلخيصها"
+            },
+            "field": {
+              "label": "حقل رقمي",
+              "description": "اختياري. يضيف المجموع والمتوسط والحد الأدنى والحد الأقصى لهذا الحقل لكل مضلع."
+            },
+            "min_overlap_pct": {
+              "label": "تجاهل التداخلات الأصغر من (%)",
+              "description": "عندما تحتوي الطبقة المراد تلخيصها على مضلعات، تخطَّ أي مضلع يغطي أقل من هذه النسبة من المضلع، مثل الشظايا على امتداد الحواف المشتركة."
+            }
+          }
+        },
         "attribute-join": {
           "name": "ربط بالسمات",
           "description": "إلحاق سمات من طبقة ربط (جدول) بكل معلم إدخال حيثما يتطابق حقل مفتاح، دون استخدام الشكل الهندسي. واحد إلى واحد: يُعتمد أول صف ربط متطابق.",
@@ -9088,6 +9125,7 @@
     "loadingAttributes": "جارٍ تحميل سمات الطبقة…",
     "requiresVectorLayer": "يتطلب جدول السمات طبقة متجه أو طبقة استعلام DuckDB.",
     "invalidJson": "JSON غير صالح",
+    "nullValue": "NULL",
     "editCellAria": "تحرير {{col}} للمعلم {{featureId}}",
     "resizeColumn": "تغيير حجم العمود {{name}}",
     "renameFieldAria": "إعادة تسمية الحقل {{name}}",

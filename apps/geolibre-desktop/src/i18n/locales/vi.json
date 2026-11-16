@@ -2057,6 +2057,17 @@
     "resizeDialog": "Thay đổi kích thước thư viện",
     "scopeFeatured": "Nổi bật",
     "scopeAll": "Tất cả dự án",
+    "scopeCollections": "Bộ sưu tập",
+    "loadingCollections": "Đang tải bộ sưu tập…",
+    "collectionsSearchPlaceholder": "Lọc bộ sưu tập theo tiêu đề, tác giả hoặc mô tả",
+    "noCollectionMatches": "Không có bộ sưu tập nào phù hợp với bộ lọc của bạn.",
+    "emptyCollections": "Chưa có bộ sưu tập công khai nào để hiển thị.",
+    "emptyCollection": "Bộ sưu tập này không có dự án công khai nào.",
+    "untitledCollection": "Bộ sưu tập chưa có tiêu đề",
+    "openCollection": "Hiển thị các dự án trong bộ sưu tập này",
+    "openCollectionOnWeb": "Xem bộ sưu tập trên web",
+    "backToCollections": "Tất cả bộ sưu tập",
+    "collectionProjects_other": "{{count}} dự án",
     "scopeMine": "dự án của tôi",
     "scopeOrganizations": "Tổ chức",
     "scopeGroups": "Nhóm",
@@ -3853,6 +3864,7 @@
       "difference": "Sự khác biệt",
       "union": "Hợp nhất",
       "spatialJoin": "Nối không gian",
+      "summarizeWithin": "Tóm tắt bên trong",
       "attributeJoin": "Nối thuộc tính",
       "selectByValue": "Chọn theo giá trị",
       "selectByLocation": "Chọn theo vị trí",
@@ -6441,6 +6453,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Tóm tắt bên trong",
+          "description": "Đếm các đối tượng của một lớp khác giao với mỗi đa giác, tóm tắt một trường số và đo mức độ chúng phủ lên mỗi đa giác",
+          "params": {
+            "layer": {
+              "label": "Lớp đa giác"
+            },
+            "overlay": {
+              "label": "Lớp cần tóm tắt"
+            },
+            "field": {
+              "label": "Trường số",
+              "description": "Tùy chọn. Thêm tổng, trung bình, nhỏ nhất và lớn nhất của trường này cho mỗi đa giác."
+            },
+            "min_overlap_pct": {
+              "label": "Bỏ qua phần chồng lấn nhỏ hơn (%)",
+              "description": "Khi lớp cần tóm tắt có đa giác, bỏ qua những đa giác phủ ít hơn tỷ lệ này của một đa giác, chẳng hạn các mảnh vụn dọc theo cạnh chung."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Nối thuộc tính",
           "description": "Gắn thuộc tính từ lớp nối (một bảng) vào mỗi đối tượng đầu vào khi trường khóa khớp nhau, không dùng hình học. Một-một: hàng nối khớp đầu tiên được chọn.",
@@ -8434,6 +8466,7 @@
     "loadingAttributes": "Đang tải thuộc tính lớp…",
     "requiresVectorLayer": "Bảng thuộc tính yêu cầu lớp truy vấn vectơ hoặc DuckDB.",
     "invalidJson": "JSON không hợp lệ",
+    "nullValue": "NULL",
     "editCellAria": "Chỉnh sửa {{col}} cho tính năng {{featureId}}",
     "resizeColumn": "Thay đổi kích thước cột {{name}}",
     "joinedColumnTitle": "Cột đã nối, bắt nguồn từ một bảng nối. Thay vào đó hãy chỉnh sửa bảng nối hoặc định nghĩa nối.",

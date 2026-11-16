@@ -2075,6 +2075,17 @@
     "resizeDialog": "ギャラリーのサイズを変更",
     "scopeFeatured": "注目",
     "scopeAll": "すべてのプロジェクト",
+    "scopeCollections": "コレクション",
+    "loadingCollections": "コレクションを読み込み中…",
+    "collectionsSearchPlaceholder": "タイトル、作成者、説明でコレクションを絞り込む",
+    "noCollectionMatches": "絞り込み条件に一致するコレクションがありません。",
+    "emptyCollections": "表示できる公開コレクションはまだありません。",
+    "emptyCollection": "このコレクションには公開プロジェクトがありません。",
+    "untitledCollection": "無題のコレクション",
+    "openCollection": "このコレクションのプロジェクトを表示",
+    "openCollectionOnWeb": "Webでコレクションを表示",
+    "backToCollections": "すべてのコレクション",
+    "collectionProjects_other": "{{count}} 件のプロジェクト",
     "scopeMine": "自分のプロジェクト",
     "scopeOrganizations": "組織",
     "scopeGroups": "グループ",
@@ -3853,6 +3864,7 @@
       "difference": "差分",
       "union": "統合",
       "spatialJoin": "空間結合",
+      "summarizeWithin": "範囲内で集計",
       "attributeJoin": "属性結合",
       "selectByValue": "値で選択",
       "selectByLocation": "位置で選択",
@@ -6441,6 +6453,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "範囲内で集計",
+          "description": "各ポリゴンと交差する別レイヤーのフィーチャを数え、数値フィールドを要約し、各ポリゴンをどれだけ覆っているかを測定します",
+          "params": {
+            "layer": {
+              "label": "ポリゴンレイヤー"
+            },
+            "overlay": {
+              "label": "集計するレイヤー"
+            },
+            "field": {
+              "label": "数値フィールド",
+              "description": "任意。各ポリゴンについて、このフィールドの合計、平均、最小、最大を追加します。"
+            },
+            "min_overlap_pct": {
+              "label": "次より小さい重なりを無視 (%)",
+              "description": "集計するレイヤーがポリゴンの場合、ポリゴンのこの割合未満しか覆わないもの（共有境界に沿ったスリバーなど）をスキップします。"
+            }
+          }
+        },
         "attribute-join": {
           "name": "属性結合",
           "description": "ジオメトリを使わずに、キーフィールドが一致する各入力フィーチャに結合レイヤー（テーブル）の属性を付加します。1 対 1: 最初に一致した結合行が採用されます。",
@@ -8434,6 +8466,7 @@
     "loadingAttributes": "レイヤー属性を読み込み中…",
     "requiresVectorLayer": "属性テーブルにはベクターまたはDuckDBクエリレイヤーが必要です。",
     "invalidJson": "無効なJSON",
+    "nullValue": "NULL",
     "editCellAria": "フィーチャ{{featureId}}の{{col}}を編集",
     "resizeColumn": "{{name}}列のサイズを変更",
     "renameFieldAria": "フィールド{{name}}の名前を変更",
