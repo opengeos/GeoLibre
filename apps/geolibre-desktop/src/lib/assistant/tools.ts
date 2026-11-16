@@ -335,6 +335,18 @@ export function resolveSetView(current: MapViewState, input: SetViewInput): MapV
   return next;
 }
 
+/** True when two cameras show the same view, within float noise. */
+function sameCamera(a: MapViewState, b: MapViewState): boolean {
+  const close = (x: number, y: number) => Math.abs(x - y) < 1e-9;
+  return (
+    close(a.center[0], b.center[0]) &&
+    close(a.center[1], b.center[1]) &&
+    close(a.zoom, b.zoom) &&
+    close(a.bearing, b.bearing) &&
+    close(a.pitch, b.pitch)
+  );
+}
+
 /** A camera reduced to the fields `set_view` reports back to the model. */
 function cameraSummary(view: MapViewState) {
   return { center: view.center, zoom: view.zoom, bearing: view.bearing, pitch: view.pitch };
@@ -751,11 +763,17 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       const controller = deps.getMapController();
       if (!controller) throw new Error("The map is not ready yet.");
       const previous = controller.readView();
-      await controller.applyView(resolveSetView(previous, input));
-      return json({
-        view: cameraSummary(controller.readView()),
-        previous: cameraSummary(previous),
-      });
+      const target = resolveSetView(previous, input);
+      await controller.applyView(target);
+      const view = controller.readView();
+      // An engine skips the jump while the user is dragging the map; report
+      // that instead of letting the model claim a move that did not happen.
+      if (!sameCamera(target, previous) && sameCamera(view, previous)) {
+        throw new Error(
+          "The map did not move, most likely because it is being dragged. Try again in a moment.",
+        );
+      }
+      return json({ view: cameraSummary(view), previous: cameraSummary(previous) });
     },
   });
 

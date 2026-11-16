@@ -88,6 +88,20 @@ describe("set_view tool", () => {
     assert.equal(applied.length, 0);
   });
 
+  it("reports a jump the engine skipped instead of claiming success", async () => {
+    // MapController.applyView returns without moving while the map is dragged.
+    const engine = {
+      readView: () => ({ ...START }),
+      applyView: () => undefined,
+    } as unknown as MapEngine;
+    await assert.rejects(() => setViewTool(engine).invoke({ zoom: 9 }), /did not move/);
+  });
+
+  it("succeeds when the camera already shows the requested view", async () => {
+    const { engine } = fakeEngine();
+    await setViewTool(engine).invoke({ zoom: START.zoom });
+  });
+
   it("reports when the map is not ready", async () => {
     await assert.rejects(() => setViewTool(null).invoke({ zoom: 3 }), /not ready/);
   });

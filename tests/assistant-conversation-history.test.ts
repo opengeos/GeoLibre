@@ -11,11 +11,41 @@ import {
 } from "@strands-agents/sdk";
 import type { AssistantProfile } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 
-const { portableHistory } =
+/** Run a stream to completion, discarding its events. */
+async function drain(events: AsyncIterable<unknown>): Promise<void> {
+  for await (const _event of events) {
+    // Only the side effects (the requests sent) matter here.
+  }
+}
+
+const { MAX_CARRIED_TOOL_RESULT_CHARS, portableHistory } =
   await import("../apps/geolibre-desktop/src/lib/assistant/conversation-history");
 const { AssistantSession } = await import("../apps/geolibre-desktop/src/lib/assistant/agent");
 
 describe("portableHistory", () => {
+  it("cuts an oversized tool result so a smaller model can take the history", () => {
+    const big = "x".repeat(MAX_CARRIED_TOOL_RESULT_CHARS * 3);
+    const history = portableHistory([
+      new Message({
+        role: "user",
+        content: [
+          new ToolResultBlock({
+            toolUseId: "t1",
+            status: "success",
+            content: [new TextBlock(big), new TextBlock("short")],
+          }),
+        ],
+      }),
+    ]);
+    const block = history[0].content[0];
+    assert.ok("toolResult" in block);
+    const [first, second] = block.toolResult.content;
+    assert.ok("text" in first && "text" in second);
+    assert.ok(first.text.length < MAX_CARRIED_TOOL_RESULT_CHARS + 100);
+    assert.match(first.text, /truncated/);
+    assert.equal(second.text, "short");
+  });
+
   it("keeps text, tool calls and tool results", () => {
     const history = portableHistory([
       new Message({ role: "user", content: [new TextBlock("Where is Tokyo?")] }),
@@ -114,10 +144,10 @@ describe("AssistantSession profile switch", () => {
 
     const session = new AssistantSession({ getMapController: () => null });
     session.setSelection(customProfile("a", "https://a.example/v1"));
-    for await (const _event of session.stream("What is the capital of Australia?"));
+    await drain(session.stream("What is the capital of Australia?"));
 
     session.setSelection(customProfile("b", "https://b.example/v1"));
-    for await (const _event of session.stream("What did you just tell me?"));
+    await drain(session.stream("What did you just tell me?"));
 
     assert.equal(requests.length, 2);
     assert.match(requests[0].url, /^https:\/\/a\.example\/v1\//);
@@ -138,9 +168,9 @@ describe("AssistantSession profile switch", () => {
 
     const session = new AssistantSession({ getMapController: () => null });
     session.setSelection(customProfile("a", "https://a.example/v1"));
-    for await (const _event of session.stream("first question"));
+    await drain(session.stream("first question"));
     session.reset();
-    for await (const _event of session.stream("second question"));
+    await drain(session.stream("second question"));
 
     const sent = JSON.stringify(requests[1].messages);
     assert.doesNotMatch(sent, /first question/);
