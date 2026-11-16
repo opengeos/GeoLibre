@@ -144,6 +144,30 @@ async function warpToMercatorPng(image: ImageBitmap, tile: TileCoords): Promise<
   return (await toPng()).arrayBuffer();
 }
 
+// USGS sends no cache headers, so the browser HTTP cache never reuses a
+// GetMap response. Keep the most recent warped tiles in memory instead, so
+// panning back, switching basemaps back, and the Cesium globe reading the same
+// tiles as MapLibre don't refetch and re-warp them. A tile PNG is ~100 KB, so
+// this caps the cache near 25 MB. Only successful tiles are cached; a failed
+// request is retried the next time the tile is asked for.
+const TILE_CACHE_LIMIT = 256;
+const tileCache = new Map<string, ArrayBuffer>();
+
+/** Remember a warped tile, evicting the least recently used past the limit. */
+function cacheTile(key: string, data: ArrayBuffer): void {
+  tileCache.delete(key);
+  tileCache.set(key, data);
+  if (tileCache.size > TILE_CACHE_LIMIT) {
+    const oldest = tileCache.keys().next().value;
+    if (oldest !== undefined) tileCache.delete(oldest);
+  }
+}
+
+/** Drop every cached tile. Exported for tests. */
+export function clearUsgsWmsTileCache(): void {
+  tileCache.clear();
+}
+
 /**
  * The MapLibre handler for `usgs-wms://` tiles.
  *
@@ -165,6 +189,13 @@ export async function usgsWmsProtocolHandler(
 ): Promise<{ data: ArrayBuffer }> {
   const tile = parseUsgsWmsTileUrl(params.url);
   if (!tile) throw new Error(`Unknown USGS WMS tile: ${params.url}`);
+  const key = `${tile.basemapId}/${tile.z}/${tile.x}/${tile.y}`;
+  const cached = tileCache.get(key);
+  if (cached) {
+    cacheTile(key, cached); // refresh its recency
+    // A copy, because MapLibre may transfer the buffer to a worker (detaching it).
+    return { data: cached.slice(0) };
+  }
   const response = await fetch(usgsWmsGetMapUrl(tile.wms, tile), {
     signal: abortController.signal,
   });
@@ -177,7 +208,9 @@ export async function usgsWmsProtocolHandler(
   }
   const image = await createImageBitmap(await response.blob());
   try {
-    return { data: await warpToMercatorPng(image, tile) };
+    const data = await warpToMercatorPng(image, tile);
+    cacheTile(key, data);
+    return { data: data.slice(0) };
   } finally {
     image.close();
   }

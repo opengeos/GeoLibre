@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { PLANETARY_BASEMAPS, USGS_ASTRO_WMS_BASE, USGS_WMS_PROTOCOL } from "@geolibre/core";
-import { parseUsgsWmsTileUrl, usgsWmsGetMapUrl } from "../packages/map/src/usgs-wms-protocol";
+import { afterEach, describe, it } from "node:test";
+import {
+  type EllipsoidId,
+  PLANETARY_BASEMAPS,
+  USGS_ASTRO_WMS_BASE,
+  USGS_WMS_PROTOCOL,
+} from "@geolibre/core";
+import type { RequestParameters } from "maplibre-gl";
+import {
+  clearUsgsWmsTileCache,
+  parseUsgsWmsTileUrl,
+  usgsWmsGetMapUrl,
+  usgsWmsProtocolHandler,
+} from "../packages/map/src/usgs-wms-protocol";
 
 const wmsBasemaps = PLANETARY_BASEMAPS.filter((b) => b.wms);
 
 describe("USGS WMS planetary basemaps", () => {
   it("covers every body that isn't Earth, the Moon, or Mars", () => {
     const bodies = new Set(wmsBasemaps.map((b) => b.ellipsoidId));
-    for (const id of [
+    const expected: EllipsoidId[] = [
       "mercury",
       "venus",
       "io",
@@ -18,8 +29,9 @@ describe("USGS WMS planetary basemaps", () => {
       "titan",
       "pluto",
       "charon",
-    ]) {
-      assert.ok(bodies.has(id as never), `${id} should have a USGS WMS basemap`);
+    ];
+    for (const id of expected) {
+      assert.ok(bodies.has(id), `${id} should have a USGS WMS basemap`);
     }
   });
 
@@ -67,5 +79,69 @@ describe("USGS WMS planetary basemaps", () => {
     assert.equal(e, 180);
     assert.equal(s, 0);
     assert.ok(Math.abs(n - 85.0511287798066) < 1e-9);
+  });
+});
+
+describe("usgsWmsProtocolHandler", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    clearUsgsWmsTileCache();
+  });
+
+  const request = (url: string) => ({ url, type: "image" }) as RequestParameters;
+
+  it("rejects an unknown tile URL without fetching", async () => {
+    let fetched = false;
+    globalThis.fetch = (async () => {
+      fetched = true;
+      return new Response();
+    }) as typeof fetch;
+    await assert.rejects(
+      usgsWmsProtocolHandler(request("usgs-wms://nope/0/0/0"), new AbortController()),
+      /Unknown USGS WMS tile/,
+    );
+    assert.equal(fetched, false);
+  });
+
+  it("throws on a WMS ServiceException instead of drawing a blank tile", async () => {
+    // A misconfigured layer answers 200 with XML, which the old Worker turned
+    // into a silent transparent tile.
+    globalThis.fetch = (async () =>
+      new Response("<ServiceExceptionReport/>", {
+        status: 200,
+        headers: { "content-type": "application/vnd.ogc.se_xml" },
+      })) as typeof fetch;
+    await assert.rejects(
+      usgsWmsProtocolHandler(request("usgs-wms://venus-magellan/0/0/0"), new AbortController()),
+      /USGS WMS venus-magellan 0\/0\/0: 200 application\/vnd\.ogc\.se_xml/,
+    );
+  });
+
+  it("throws on an upstream block page", async () => {
+    globalThis.fetch = (async () =>
+      new Response("<html>blocked</html>", {
+        status: 403,
+        headers: { "content-type": "text/html" },
+      })) as typeof fetch;
+    await assert.rejects(
+      usgsWmsProtocolHandler(request("usgs-wms://titan-cassini/1/0/0"), new AbortController()),
+      /403 text\/html/,
+    );
+  });
+
+  it("passes MapLibre's abort signal to the fetch", async () => {
+    const controller = new AbortController();
+    let seen: AbortSignal | null | undefined;
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      seen = init?.signal;
+      throw new DOMException("aborted", "AbortError");
+    }) as typeof fetch;
+    controller.abort();
+    await assert.rejects(
+      usgsWmsProtocolHandler(request("usgs-wms://pluto-mosaic/0/0/0"), controller),
+      /aborted/,
+    );
+    assert.equal(seen, controller.signal);
   });
 });
