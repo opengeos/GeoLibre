@@ -204,6 +204,21 @@ export function ProjectMenu({
     (!shareHidden && show("project.share")) ||
     (collaborationEnabled && show("project.collaborate"));
   const showPrintGroup = show("project.printLayout") || show("project.offlineRegion");
+  // A deployment that withholds both `project:edit` and `export:data` (e.g.
+  // `capabilities: []`) leaves nothing to list, and a button that opens an
+  // empty menu reads as broken, so drop the button (issue #3474).
+  const hasVisibleItem =
+    showSaveGroup ||
+    showPrintGroup ||
+    [
+      "project.new",
+      "project.openFrom",
+      "project.openRecent",
+      "project.history",
+      "project.import",
+      "project.storymap",
+    ].some(show);
+  if (!hasVisibleItem) return null;
 
   return (
     <DropdownMenu>

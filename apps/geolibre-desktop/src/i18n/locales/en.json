@@ -280,10 +280,15 @@
     "bodyNote": "Measured on: {{body}} (spherical approximation)"
   },
   "statusBar": {
+    "coords": "Coords",
     "elevation": "Elev",
     "elevationLong": "Elevation",
     "cameraAltitude": "Eye alt",
     "cameraAltitudeLong": "Camera altitude above sea level",
+    "zoom": "Zoom",
+    "bearing": "Bearing",
+    "pitch": "Pitch",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Decimal degrees",
       "dms": "Degrees, minutes, seconds",
@@ -4385,6 +4390,7 @@
       "loadingVtpk": "Opening tile package…",
       "loadingVtpkDesc": "Reading the package directory and its style",
       "projectName": "Project name",
+      "untitledProject": "Untitled project",
       "storymapEllipsis": "Story map…",
       "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
       "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests.",
@@ -9696,6 +9702,9 @@
     "hiddenByGroup": "Hidden because its group is not visible",
     "empty": "No data layers. Add data from the toolbar.",
     "emptyBeginner": "No layers yet. Add basemaps via Plugins → Basemaps, or your own data via the Add data menu.",
+    "emptyBeginnerBasemapsOnly": "No layers yet. Add basemaps via Plugins → Basemaps.",
+    "emptyBeginnerDataOnly": "No layers yet. Add your own data via the Add data menu.",
+    "emptyNoAdd": "No data layers.",
     "hideAllLayers": "Hide all layers",
     "showAllLayers": "Show all layers",
     "compactView": "Compact view",

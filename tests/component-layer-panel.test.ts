@@ -1,4 +1,12 @@
-import { act, fireEvent, render, screen, useAppStore, within } from "./helpers/dom";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  useAppStore,
+  useDesktopSettingsStore,
+  within,
+} from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { createElement } from "react";
@@ -107,6 +115,41 @@ describe("LayerPanel", () => {
     useAppStore.getState().addGeoJsonLayer("Rivers", { type: "FeatureCollection", features: [] });
     renderLayerPanel();
     assert.equal(screen.queryByText("Hover tooltips"), null);
+  });
+
+  // Issue #3474: the empty-panel hint must not point at a menu the deployment
+  // policy withheld.
+  it("names only the menus the deployment offers in the empty-panel hint", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No data layers. Add data from the toolbar."));
+  });
+
+  it("drops the Add data pointer when data:add is withheld", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    useAppStore.getState().setDeploymentCapabilities([]);
+    renderLayerPanel();
+    assert.ok(screen.getByText("No data layers."));
+  });
+
+  it("drops the Plugins pointer from the beginner hint when plugins:install is withheld", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    useAppStore.getState().setDeploymentCapabilities(["data:add"]);
+    const settings = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.setState({
+      desktopSettings: {
+        ...settings,
+        uiProfile: {
+          ...settings.uiProfile,
+          enabled: true,
+          level: "beginner",
+          hiddenMenus: [],
+        },
+      },
+    });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No layers yet. Add your own data via the Add data menu."));
+    assert.equal(screen.queryByText(/Plugins → Basemaps/), null);
   });
 
   it("lists the store's layers with the topmost map layer first", () => {

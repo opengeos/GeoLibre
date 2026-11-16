@@ -308,10 +308,15 @@
     "bodyNote": "القياس على: {{body}} (تقريب كروي)"
   },
   "statusBar": {
+    "coords": "الإحداثيات",
     "elevation": "ارتفاع",
     "elevationLong": "الارتفاع",
     "cameraAltitude": "ارتفاع الرؤية",
     "cameraAltitudeLong": "ارتفاع الكاميرا فوق مستوى سطح البحر",
+    "zoom": "التكبير",
+    "bearing": "الاتجاه",
+    "pitch": "الميل",
+    "bbox": "الصندوق المحيط",
     "coordinateFormat": {
       "dd": "درجات عشرية",
       "dms": "درجات ودقائق وثوانٍ",
@@ -4659,6 +4664,7 @@
       "loadingVtpk": "جارٍ فتح حزمة البلاطات…",
       "loadingVtpkDesc": "قراءة دليل الحزمة ونمطها",
       "projectName": "اسم المشروع",
+      "untitledProject": "مشروع بلا عنوان",
       "storymapEllipsis": "خريطة قصصية...",
       "pointerElevationNoticeTitle": "الارتفاع يستخدم خدمة ارتفاعات عامة",
       "pointerElevationNoticeDesc": "يُحسب الارتفاع من تضاريس الخريطة ثلاثية الأبعاد عند تفعيلها دون إرسال أي بيانات. وبدونها تُستخدم واجهة Open-Meteo العامة، فتغادر إحداثيات المؤشر جهازك.",

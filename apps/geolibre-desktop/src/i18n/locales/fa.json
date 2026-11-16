@@ -280,10 +280,15 @@
     "bodyNote": "اندازه‌گیری روی: {{body}} (تقریب کروی)"
   },
   "statusBar": {
+    "coords": "مختصات",
     "elevation": "ارتفاع",
     "elevationLong": "ارتفاع",
     "cameraAltitude": "ارتفاع دید",
     "cameraAltitudeLong": "ارتفاع دوربین از سطح دریا",
+    "zoom": "بزرگ‌نمایی",
+    "bearing": "سمت",
+    "pitch": "شیب دید",
+    "bbox": "کادر محدوده",
     "coordinateFormat": {
       "dd": "درجه اعشاری",
       "dms": "درجه، دقیقه، ثانیه",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "در حال باز کردن بستهٔ کاشی…",
       "loadingVtpkDesc": "در حال خواندن فهرست بسته و شیوهٔ نمایش آن",
       "projectName": "نام پروژه",
+      "untitledProject": "پروژهٔ بی‌نام",
       "storymapEllipsis": "نقشهٔ روایی...",
       "pointerElevationNoticeTitle": "ارتفاع از یک سرویس عمومی گرفته می‌شود",
       "pointerElevationNoticeDesc": "وقتی زمین سه‌بعدی فعال باشد ارتفاع از خود نقشه محاسبه می‌شود و چیزی ارسال نمی‌گردد. در نبود زمین سه‌بعدی از Open-Meteo عمومی استفاده می‌شود و مختصات زیر نشانگر از دستگاه شما خارج می‌شود.",

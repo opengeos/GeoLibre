@@ -737,7 +737,10 @@ export function TopToolbar({
             <Input
               aria-label={t("toolbar.item.projectName")}
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
-              value={projectName}
+              // The store keeps the canonical English default so saved files do
+              // not vary by UI language; show it as a translated placeholder.
+              value={projectName === DEFAULT_PROJECT_NAME ? "" : projectName}
+              placeholder={t("toolbar.item.untitledProject")}
               readOnly={viewer}
               onChange={(event) => {
                 if (viewer) return;

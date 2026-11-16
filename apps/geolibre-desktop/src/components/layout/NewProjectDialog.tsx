@@ -1,6 +1,7 @@
 import {
   BLANK_BASEMAP,
   createDefaultMapView,
+  DEFAULT_PROJECT_NAME,
   createEmptyProject,
   detachProjectCopy,
   OPENFREEMAP_BASEMAPS,
@@ -47,7 +48,6 @@ import { useTranslation } from "react-i18next";
 const DEFAULT_BASEMAP_ID = "liberty";
 const CUSTOM_BASEMAP_ID = "custom";
 const BLANK_BASEMAP_ID = "blank";
-const DEFAULT_PROJECT_NAME = "Untitled Project";
 
 const THREE_D_MAP_VIEW: MapViewState = {
   center: [-0.114, 51.506],
@@ -134,7 +134,7 @@ export function NewProjectDialog({
   const templateLibrary = useAppStore((s) => s.templateLibrary);
   const deleteTemplateEntry = useAppStore((s) => s.deleteTemplateEntry);
   const [selectedBasemapId, setSelectedBasemapId] = useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
-  const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
+  const [projectName, setProjectName] = useState("");
   const [customUrl, setCustomUrl] = useState("");
   const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -207,7 +207,7 @@ export function NewProjectDialog({
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
-    setProjectName(DEFAULT_PROJECT_NAME);
+    setProjectName("");
     setCustomUrl("");
     setCustomFlavor("light");
     setShowSavePrompt(false);
@@ -387,6 +387,9 @@ export function NewProjectDialog({
                   id="new-project-name"
                   autoFocus
                   value={projectName}
+                  // Blank means the canonical default name; the placeholder shows
+                  // it translated without writing a localized name into the file.
+                  placeholder={t("toolbar.item.untitledProject")}
                   onChange={(event) => setProjectName(event.target.value)}
                 />
               </div>

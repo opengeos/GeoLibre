@@ -32,7 +32,7 @@ import { usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import { isMobile } from "../../lib/is-mobile";
 import { masHidesDataSource } from "../../lib/mas-build";
-import { activeInterfaceProfile, isDataSourceVisible } from "../../lib/ui-profile";
+import { activeInterfaceProfile, isDataSourceVisible, isMenuVisible } from "../../lib/ui-profile";
 import { Button, ScrollArea, Separator } from "@geolibre/ui";
 import { Layers, PanelLeftOpen } from "lucide-react";
 import { PasteStyleDialog } from "./PasteStyleDialog";
@@ -41,7 +41,11 @@ import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
-import { ADD_DATA_DIALOG_SOURCES, BACKGROUND_SELECTION_ID } from "./layer-panel/layer-panel-utils";
+import {
+  ADD_DATA_DIALOG_SOURCES,
+  BACKGROUND_SELECTION_ID,
+  emptyLayersHintKey,
+} from "./layer-panel/layer-panel-utils";
 import { BackgroundAppearanceDialog, BackgroundLayerRow } from "./layer-panel/BackgroundLayerRow";
 import { BindTimeSliderDialog } from "./layer-panel/BindTimeSliderDialog";
 import type { LayerActionsMenuShared } from "./layer-panel/LayerActionsMenu";
@@ -138,6 +142,15 @@ export function LayerPanel({
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  // The empty-panel hint names the Add data and Plugins menus, so it follows
+  // the same gates TopToolbar applies before rendering them.
+  const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
+  const emptyHintKey = emptyLayersHintKey({
+    beginner: isBeginnerProfile,
+    canAddData: deploymentCapabilities.has("data:add") && isMenuVisible(uiProfile, "addData"),
+    canUsePlugins:
+      deploymentCapabilities.has("plugins:install") && isMenuVisible(uiProfile, "plugins"),
+  });
   const compactLayerList = useDesktopSettingsStore(
     (s) => s.desktopSettings.layout.compactLayerList,
   );
@@ -571,9 +584,7 @@ export function LayerPanel({
         // targets.
       >
         {layers.length === 0 && (
-          <p className="px-4 pb-2 pt-6 text-xs text-muted-foreground">
-            {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
-          </p>
+          <p className="px-4 pb-2 pt-6 text-xs text-muted-foreground">{t(emptyHintKey)}</p>
         )}
         {/* Rows, group headers and the Background card are listitems carrying
             their nesting depth as aria-level. */}
