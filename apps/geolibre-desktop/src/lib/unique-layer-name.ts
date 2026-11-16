@@ -8,7 +8,7 @@
  */
 
 /**
- * Return `base` when no existing layer uses it, otherwise `base (n)` with the
+ * Return `base` (trimmed) when no existing layer uses it, otherwise `base (n)` with the
  * smallest `n >= 2` that is free.
  *
  * Names compare case-sensitively after trimming, matching how the Layers panel
@@ -23,7 +23,7 @@ export function uniqueLayerName(base: string, layers: Iterable<{ name: string }>
   const taken = new Set<string>();
   for (const layer of layers) taken.add(layer.name.trim());
   const trimmed = base.trim();
-  if (!taken.has(trimmed)) return base;
+  if (!taken.has(trimmed)) return trimmed;
   for (let n = 2; ; n++) {
     const candidate = `${trimmed} (${n})`;
     if (!taken.has(candidate)) return candidate;

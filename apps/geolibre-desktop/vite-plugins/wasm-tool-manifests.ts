@@ -42,7 +42,10 @@ export function wasmToolManifestsPlugin(packageDir: string): Plugin {
         throw new Error("geolibre-wasm listManifests() returned no tools");
       }
       return JSON.stringify(list);
-    })();
+    })().catch((err: unknown) => {
+      manifests = null; // let the next dev request or build retry
+      throw err;
+    });
     return manifests;
   };
 

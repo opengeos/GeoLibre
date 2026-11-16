@@ -44,8 +44,9 @@ export function postgisBundleUrls(postgisModuleUrl: string): string[] {
 /**
  * Download the first mirror that answers with a 2xx response.
  *
- * Each mirror but the last must deliver its response headers within
- * `headerTimeoutMs`; once headers arrive the body is read with no time limit.
+ * Each mirror but the last must deliver its response headers, and then every
+ * body chunk, within `headerTimeoutMs` of the previous one; a slow but moving
+ * download is never cut short, and the last mirror has no limit.
  *
  * @param urls Mirrors to try in order.
  * @param fetchImpl The fetch implementation (injectable for tests).
@@ -66,22 +67,30 @@ export async function fetchFromMirrors(
     const url = urls[i];
     const isLast = i === urls.length - 1;
     const controller = new AbortController();
-    const timer = isLast ? undefined : setTimeout(() => controller.abort(), headerTimeoutMs);
+    // For every mirror but the last, abort when nothing arrives for
+    // `headerTimeoutMs`: first the response headers, then each body chunk, so
+    // a mirror that stalls mid-download also falls through to the next one.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      if (isLast) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), headerTimeoutMs);
+    };
+    arm();
     try {
-      let response: Response;
-      try {
-        response = await fetchImpl(url, { signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
-      }
+      const response = await fetchImpl(url, { signal: controller.signal });
       if (!response.ok) {
         failures.push(`${url}: HTTP ${response.status}`);
         continue;
       }
-      const blob = await response.blob();
+      const blob = await readBody(response, arm);
       if (expectedSha256) {
         const actual = await sha256Hex(blob);
-        if (actual && actual !== expectedSha256.toLowerCase()) {
+        if (actual === null) {
+          console.warn(
+            "[GeoLibre] Web Crypto is unavailable; the PostGIS bundle was not checked against its SHA-256.",
+          );
+        } else if (actual !== expectedSha256.toLowerCase()) {
           failures.push(`${url}: SHA-256 mismatch`);
           continue;
         }
@@ -89,14 +98,37 @@ export async function fetchFromMirrors(
       return blob;
     } catch (err) {
       const reason = controller.signal.aborted
-        ? `no response within ${Math.round(headerTimeoutMs / 1000)} s`
+        ? `no data for ${Math.round(headerTimeoutMs / 1000)} s`
         : err instanceof Error
           ? err.message
           : String(err);
       failures.push(`${url}: ${reason}`);
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw new Error(`Could not download the PostGIS extension bundle (${failures.join("; ")}).`);
+}
+
+/**
+ * Read a response body, calling `onProgress` after each chunk (to re-arm the
+ * stall timer).
+ *
+ * @param response The response to read.
+ * @param onProgress Called once per received chunk.
+ * @returns The body as a blob.
+ */
+async function readBody(response: Response, onProgress: () => void): Promise<Blob> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.blob();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    onProgress();
+  }
+  return new Blob(chunks as BlobPart[]);
 }
 
 /**

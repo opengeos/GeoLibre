@@ -7,6 +7,7 @@ const named = (...names: string[]) => names.map((name) => ({ name }));
 describe("uniqueLayerName (issue #3472)", () => {
   it("keeps a name nothing uses", () => {
     assert.equal(uniqueLayerName("Buffer", named("Roads")), "Buffer");
+    assert.equal(uniqueLayerName(" Buffer ", named("Roads")), "Buffer");
   });
 
   it("suffixes a repeated output with the next free number", () => {

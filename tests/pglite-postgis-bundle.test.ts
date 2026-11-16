@@ -117,3 +117,20 @@ describe("PostGIS bundle integrity and reuse", () => {
     URL.revokeObjectURL(first.bundlePath.href);
   });
 });
+
+describe("PostGIS mirror stall handling", () => {
+  it("falls back when a mirror stops sending body data", async () => {
+    const fake = ((url: string, init?: RequestInit) => {
+      if (url !== "a") return Promise.resolve(new Response("ok", { status: 200 }));
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("partial"));
+          init?.signal?.addEventListener("abort", () => controller.error(new Error("aborted")));
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    }) as unknown as typeof fetch;
+    const blob = await fetchFromMirrors(["a", "b"], fake, 20);
+    assert.equal(await blob.text(), "ok");
+  });
+});
