@@ -381,8 +381,9 @@ function rawGraduatedClassBreaks(
  * its own, so a geometric series spanning many orders of magnitude keeps its
  * small breaks. Natural breaks are data values and are not rounded. The first
  * break is the sample minimum and stays exact, so the lowest feature is never
- * pushed below the first class; the caller collapses any breaks that rounding
- * made equal and sizes its colors off the result.
+ * pushed below the first class, and a break whose rounding would reach the one
+ * before it (or move it further than that bound) keeps its raw value, so
+ * rounding never drops a class.
  */
 function roundClassBreaks(breaks: number[], values: number[]): number[] {
   let min = Infinity;
@@ -395,10 +396,22 @@ function roundClassBreaks(breaks: number[], values: number[]): number[] {
   const range = max - min;
   if (!(range > 0) || !Number.isFinite(range)) return breaks;
   const decimals = Math.max(0, 3 - Math.floor(Math.log10(range)));
+  // A rounded break must still move by at most 0.05% of the range and stay
+  // above the break before it; otherwise the raw value is kept, so rounding
+  // never merges two classes (a cluster at the minimum, or a large offset
+  // range past the 15-digit precision cap).
+  const tolerance = range * 5e-4;
+  let previous = -Infinity;
   return breaks.map((value, index) => {
-    if (index === 0 || !Number.isFinite(value) || value === 0) return value;
-    const digits = Math.floor(Math.log10(Math.abs(value))) + 1 + decimals;
-    return Number(value.toPrecision(Math.min(15, Math.max(4, digits))));
+    if (!Number.isFinite(value)) return value;
+    let next = value;
+    if (index > 0 && value !== 0) {
+      const digits = Math.floor(Math.log10(Math.abs(value))) + 1 + decimals;
+      const rounded = Number(value.toPrecision(Math.min(15, Math.max(4, digits))));
+      if (Math.abs(rounded - value) <= tolerance && rounded > previous) next = rounded;
+    }
+    previous = next;
+    return next;
   });
 }
 

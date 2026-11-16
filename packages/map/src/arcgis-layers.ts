@@ -27,7 +27,7 @@ import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { createFeatureStyleResolver, type FeatureSymbol } from "./feature-style";
 import { KML_ICON_URL_PROPERTY } from "./markers";
 import { compileMapboxLayer } from "./gl-style-compiler";
-import { heatmapWeightMax } from "./style-mapper";
+import { heatmapWeightMax, heatmapWeightNumber } from "./style-mapper";
 import { arcgisVectorStyle } from "./vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
 import { hasRegisteredProtocol, protocolScheme } from "./protocol-tiles";
@@ -1058,7 +1058,7 @@ function heatmapWeight(feature: Feature, style: LayerStyle, weightMax: number | 
   const field = style.heatmapWeightProperty.trim();
   // Scaled into 0..1 by the field maximum, as the MapLibre heatmap does (see
   // `heatmapWeightMax`), so a weight in the millions does not saturate.
-  const value = field ? Number(feature.properties?.[field] ?? 0) / (weightMax ?? 1) : 1;
+  const value = field ? heatmapWeightNumber(feature.properties?.[field]) / (weightMax ?? 1) : 1;
   const intensity = Number.isFinite(style.heatmapIntensity)
     ? Math.max(0, style.heatmapIntensity)
     : 1;

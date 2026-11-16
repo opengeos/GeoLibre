@@ -251,17 +251,25 @@ export function heatmapWeightMax(
   if (property === "" || !Array.isArray(features)) return null;
   let max = 0;
   for (const feature of features) {
-    const raw = feature?.properties?.[property];
-    // Mirrors MapLibre's `to-number`: numbers and numeric strings count.
-    const value =
-      typeof raw === "number"
-        ? raw
-        : typeof raw === "string" && raw.trim() !== ""
-          ? Number(raw)
-          : NaN;
+    const value = heatmapWeightNumber(feature?.properties?.[property]);
     if (Number.isFinite(value) && value > max) max = value;
   }
   return max > 0 ? max : null;
+}
+
+/**
+ * A heatmap weight value as MapLibre's `to-number` reads it: numbers,
+ * numeric strings and booleans convert with `Number`; anything else is NaN.
+ * Shared by the field-maximum scan and the ArcGIS weight bake so both agree on
+ * which values count.
+ *
+ * @param raw - A feature property value.
+ * @returns The numeric value, or NaN.
+ */
+export function heatmapWeightNumber(raw: unknown): number {
+  if (typeof raw === "number" || typeof raw === "boolean") return Number(raw);
+  if (typeof raw === "string" && raw.trim() !== "") return Number(raw);
+  return NaN;
 }
 
 function heatmapWeight(

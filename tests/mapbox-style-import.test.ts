@@ -372,8 +372,6 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     for (const weight of [
       ["get", "nb_ruches"],
       ["to-number", ["get", "nb_ruches"], 0],
-      // GeoLibre's own export normalizes by the field maximum (#3471).
-      ["/", ["max", 0, ["to-number", ["get", "nb_ruches"], 0]], 1250],
     ]) {
       const result = parseMapboxStyle({
         layers: [{ id: "heat", type: "heatmap", paint: { "heatmap-weight": weight } }],
@@ -381,6 +379,43 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
       assert.equal(result.style.heatmapWeightProperty, "nb_ruches");
       assert.deepEqual(result.warnings, []);
     }
+  });
+
+  it("recovers GeoLibre's normalized weight but not an authored divisor (#3471)", () => {
+    const data = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { w: 40 },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { w: 80 },
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+      ],
+    };
+    const weight = (divisor: number) => ["/", ["max", 0, ["to-number", ["get", "w"], 0]], divisor];
+    const parse = (divisor: number) =>
+      parseMapboxStyle({
+        sources: { src: { type: "geojson", data } },
+        layers: [
+          {
+            id: "heat",
+            type: "heatmap",
+            source: "src",
+            paint: { "heatmap-weight": weight(divisor) },
+          },
+        ],
+      });
+    const normalized = parse(80);
+    assert.equal(normalized.style.heatmapWeightProperty, "w");
+    assert.deepEqual(normalized.warnings, []);
+    const authored = parse(1000);
+    assert.equal(authored.style.heatmapWeightProperty, undefined);
+    assert.ok(authored.warnings.some((warning) => /heatmap weight expression/.test(warning)));
   });
 
   it("warns instead of throwing for a malformed clamped heatmap weight", () => {

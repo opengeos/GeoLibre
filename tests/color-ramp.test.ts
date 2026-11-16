@@ -147,6 +147,15 @@ describe("createGraduatedClassBreaks", () => {
     assert.deepEqual(fine, [0.1, 0.4, 0.7]);
     const small = createGraduatedClassBreaks([0, 1 / 3, 2 / 3, 1], 3, "quantile");
     assert.deepEqual(small, [0, 0.3333, 0.6667]);
+    // Rounding never merges a break into the one before it.
+    const clustered = createGraduatedClassBreaks(
+      [28579.2, 28579.3, 28579.35, 28579.4, 150000],
+      3,
+      "quantile",
+    );
+    assert.equal(clustered.length, 3, clustered.join(", "));
+    const offset = createGraduatedClassBreaks([1e15, 1e15 + 2], 2, "equal-interval");
+    assert.deepEqual(offset, [1e15, 1e15 + 1]);
     // Natural breaks are data values and stay exact, so no feature changes class.
     const natural = createGraduatedClassBreaks(
       [1, 1.23456, 50.98765, 51, 99.1],
