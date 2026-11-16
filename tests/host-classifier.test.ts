@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-const { isPublicHttpUrl } =
-  await import("../apps/geolibre-desktop/src/lib/layer-refresh");
+const { isPublicHttpUrl } = await import("../apps/geolibre-desktop/src/lib/layer-refresh");
 
 describe("isPublicHttpUrl", () => {
   it("allows public http(s) hosts", () => {

@@ -123,11 +123,15 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         });
         let poll: any;
         try {
-          const pollResp = await fetch(`${endpoint}/harvest-large/${encodeURIComponent(execution)}`, {
-            headers: { "X-API-Key": apiKey },
-            signal,
-          });
-          if (!pollResp.ok) throw new Error(t("gcsExport.errors.http", { status: pollResp.status }));
+          const pollResp = await fetch(
+            `${endpoint}/harvest-large/${encodeURIComponent(execution)}`,
+            {
+              headers: { "X-API-Key": apiKey },
+              signal,
+            },
+          );
+          if (!pollResp.ok)
+            throw new Error(t("gcsExport.errors.http", { status: pollResp.status }));
           poll = await pollResp.json();
           transientRetries = 0;
         } catch (e) {
@@ -279,11 +283,19 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
 
           <div className="flex items-center gap-4 text-sm">
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+              />
               {t("gcsExport.dryRun")}
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={skipWherobots} onChange={(e) => setSkipWherobots(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={skipWherobots}
+                onChange={(e) => setSkipWherobots(e.target.checked)}
+              />
               {t("gcsExport.skipWherobots")}
             </label>
           </div>

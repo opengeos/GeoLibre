@@ -893,7 +893,12 @@ export function isPublicHttpUrl(url: string): boolean {
     if (host === "0.0.0.0" || host === "[::1]" || host === "::1") return false;
     if (/^127\./.test(host)) return false;
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
-    if (/^\[?fe80:/.test(host) || /^\[?fc[0-9a-f]{2}:/.test(host) || /^\[?fd[0-9a-f]{2}:/.test(host)) return false;
+    if (
+      /^\[?fe80:/.test(host) ||
+      /^\[?fc[0-9a-f]{2}:/.test(host) ||
+      /^\[?fd[0-9a-f]{2}:/.test(host)
+    )
+      return false;
     if (/^\[?::ffff:/i.test(host)) return false;
     if (/^192\.0\.0\./.test(host)) return false;
     if (/^198\.(1[89])\./.test(host)) return false;
