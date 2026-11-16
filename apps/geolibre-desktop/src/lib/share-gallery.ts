@@ -364,6 +364,41 @@ function normalizeCollection(raw: RawSharedCollection, base: string): SharedColl
   };
 }
 
+/**
+ * Filter collections by a lowercased query against their title, owner, and
+ * description. An empty query returns the list unchanged.
+ *
+ * @param collections - The loaded collections.
+ * @param query - The already trimmed and lowercased filter text.
+ * @returns The matching collections, in their original order.
+ */
+export function filterCollections(
+  collections: SharedCollection[],
+  query: string,
+): SharedCollection[] {
+  if (!query) return collections;
+  return collections.filter((c) =>
+    [c.title, c.username, c.description].join(" ").toLowerCase().includes(query),
+  );
+}
+
+/**
+ * The collection's page on the share website
+ * (`{base}/{username}/collections/{slug}`).
+ *
+ * @param collection - The collection's owner and slug.
+ * @param baseUrl - Overrides the configured share host.
+ * @returns The absolute URL, or `null` when sharing is not configured.
+ */
+export function collectionPageUrl(
+  collection: Pick<SharedCollection, "username" | "slug">,
+  baseUrl?: string,
+): string | null {
+  const base = baseUrl ?? resolveShareBaseUrl();
+  if (!base) return null;
+  return `${base.replace(/\/+$/, "")}/${encodeURIComponent(collection.username)}/collections/${encodeURIComponent(collection.slug)}`;
+}
+
 export interface FetchCollectionsOptions {
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;

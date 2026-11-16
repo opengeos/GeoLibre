@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import {
   canOwnOrganizationProjects,
+  collectionPageUrl,
   declineProjectTransfer,
   fetchCollectionProjects,
   fetchCollections,
@@ -14,6 +15,7 @@ import {
   fetchMyShareUsername,
   fetchProjectsSharedWithMe,
   fetchSharedProjects,
+  filterCollections,
   GalleryError,
   isPublicSharingBlocked,
   isProjectInMyGroups,
@@ -312,6 +314,52 @@ describe("fetchCollections", () => {
     await assert.rejects(
       () => fetchCollections({ baseUrl: BASE, fetchImpl: fn }),
       (err: unknown) => err instanceof GalleryError && err.code === "http" && err.status === 503,
+    );
+  });
+});
+
+describe("collection helpers", () => {
+  const collection = (overrides: Record<string, unknown> = {}) => ({
+    id: "c1",
+    username: "giswqs",
+    slug: "official-demos",
+    title: "Official Demos",
+    description: "Showcase maps",
+    createdAt: "",
+    projectCount: 1,
+    thumbnailUrl: null,
+    ...overrides,
+  });
+
+  it("filters collections by title, owner, or description", () => {
+    const list = [
+      collection(),
+      collection({ id: "c2", username: "clarawe", title: "HS_Karto", description: "" }),
+    ];
+    assert.equal(filterCollections(list, ""), list);
+    assert.deepEqual(
+      filterCollections(list, "karto").map((c) => c.id),
+      ["c2"],
+    );
+    assert.deepEqual(
+      filterCollections(list, "showcase").map((c) => c.id),
+      ["c1"],
+    );
+    assert.deepEqual(
+      filterCollections(list, "clarawe").map((c) => c.id),
+      ["c2"],
+    );
+    assert.deepEqual(filterCollections(list, "nothing"), []);
+  });
+
+  it("builds the collection page URL on the share host", () => {
+    assert.equal(
+      collectionPageUrl(collection(), `${BASE}/`),
+      `${BASE}/giswqs/collections/official-demos`,
+    );
+    assert.equal(
+      collectionPageUrl(collection({ username: "a b", slug: "c/d" }), BASE),
+      `${BASE}/a%20b/collections/c%2Fd`,
     );
   });
 });

@@ -9,7 +9,6 @@ import {
 } from "@geolibre/ui";
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRightLeft,
   Eye,
   EyeOff,
@@ -58,6 +57,7 @@ import {
   declineProjectTransfer,
   fetchCollectionProjects,
   fetchCollections,
+  filterCollections,
   fetchIncomingTransfers,
   fetchMyProjects,
   fetchMyGroups,
@@ -79,6 +79,7 @@ import {
   type ShareGroup,
 } from "../../lib/share-gallery";
 import { resolveShareBaseUrl, shareHostLabel } from "../../lib/share-geolibre";
+import { CollectionGrid, CollectionHeader, galleryEmptyKey } from "./GalleryCollections";
 import { TransferProjectDialog } from "./TransferProjectDialog";
 
 type GalleryScope = "featured" | "all" | "collections" | "mine" | "organizations" | "groups";
@@ -118,11 +119,6 @@ const PAGE_SIZE = 24;
 /** Lowercased haystack for the client-side title/author/tag filter. */
 function searchHaystack(project: SharedProject): string {
   return [project.title, project.username, ...project.tags].join(" ").toLowerCase();
-}
-
-/** Lowercased haystack for the client-side collection filter. */
-function collectionHaystack(collection: SharedCollection): string {
-  return [collection.title, collection.username, collection.description].join(" ").toLowerCase();
 }
 
 /**
@@ -328,22 +324,15 @@ export function ProjectGalleryDialog({
           if (incoming.status === "fulfilled") setIncomingTransfers(incoming.value);
           if (outgoing.status === "fulfilled") setOutgoingTransfers(outgoing.value);
         } else if (effectiveScope === "collections") {
-          // Neither collection endpoint paginates: the list and a collection's
-          // projects each arrive whole.
+          // Neither collection endpoint paginates, so `hasMore` stays false.
+          const signal = controller.signal;
           if (selectedCollection) {
-            const items = await fetchCollectionProjects({
-              username: selectedCollection.username,
-              slug: selectedCollection.slug,
-              signal: controller.signal,
-            });
-            if (controller.signal.aborted) return;
-            setProjects(items);
+            const items = await fetchCollectionProjects({ ...selectedCollection, signal });
+            if (!signal.aborted) setProjects(items);
           } else {
-            const items = await fetchCollections({ signal: controller.signal });
-            if (controller.signal.aborted) return;
-            setCollections(items);
+            const items = await fetchCollections({ signal });
+            if (!signal.aborted) setCollections(items);
           }
-          setHasMore(false);
         } else if (effectiveScope === "organizations" || effectiveScope === "groups") {
           const token = await resolveShareRequestToken(trimmedToken);
           const result = await fetchProjectsSharedWithMe({
@@ -483,6 +472,12 @@ export function ProjectGalleryDialog({
       if (membershipAbortRef.current === controller) membershipAbortRef.current = null;
     };
   }, [open, hasToken, trimmedToken, oauthIssuer, oauthSessionRevision]);
+
+  // Show one collection's projects, or (null) go back to the collection list.
+  const openCollection = (collection: SharedCollection | null) => {
+    setProjects([]);
+    setSelectedCollection(collection);
+  };
 
   const selectScope = (nextScope: GalleryScope) => {
     defaultScopePendingRef.current = false;
@@ -649,10 +644,7 @@ export function ProjectGalleryDialog({
     : projects;
   // The "Collections" scope shows collection cards until one is picked.
   const showingCollections = effectiveScope === "collections" && selectedCollection === null;
-  const visibleCollections = trimmedQuery
-    ? collections.filter((c) => collectionHaystack(c).includes(trimmedQuery))
-    : collections;
-  const shareBase = resolveShareBaseUrl()?.replace(/\/+$/, "") ?? "";
+  const visibleCollections = filterCollections(collections, trimmedQuery);
 
   // Fetch the next page shortly before the end of the gallery scrolls into
   // view. Recreating the observer after each request also prevents a sentinel
@@ -673,12 +665,12 @@ export function ProjectGalleryDialog({
     });
   }, [hasMore, loadPage, open, rawOffset, status, trimmedQuery]);
 
-  const showInitialSpinner =
-    status === "loading" && (showingCollections ? collections.length === 0 : projects.length === 0);
+  const nothingLoaded = showingCollections ? collections.length === 0 : projects.length === 0;
+  const showInitialSpinner = status === "loading" && nothingLoaded;
   const showEmpty =
     status !== "loading" &&
     !error &&
-    (showingCollections ? visibleCollections.length === 0 : visibleProjects.length === 0);
+    (showingCollections ? visibleCollections : visibleProjects).length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -776,52 +768,12 @@ export function ProjectGalleryDialog({
                 : t("gallery.searchPlaceholder")
             }
             className="ps-8"
-            disabled={
-              (showingCollections ? collections.length === 0 : projects.length === 0) &&
-              status !== "idle"
-            }
+            disabled={nothingLoaded && status !== "idle"}
           />
         </div>
 
         {effectiveScope === "collections" && selectedCollection ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={() => {
-                setSelectedCollection(null);
-                setProjects([]);
-              }}
-            >
-              <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
-              {t("gallery.backToCollections")}
-            </Button>
-            <span className="min-w-0 truncate text-sm font-medium" title={selectedCollection.title}>
-              {selectedCollection.title || t("gallery.untitledCollection")}
-            </span>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {t("gallery.byAuthor", { author: selectedCollection.username })}
-            </span>
-            {shareBase ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="ms-auto shrink-0"
-                aria-label={t("gallery.openCollectionOnWeb")}
-                title={t("gallery.openCollectionOnWeb")}
-                onClick={() =>
-                  void openExternalLink(
-                    `${shareBase}/${encodeURIComponent(selectedCollection.username)}/collections/${encodeURIComponent(selectedCollection.slug)}`,
-                  )
-                }
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            ) : null}
-          </div>
+          <CollectionHeader collection={selectedCollection} onBack={() => openCollection(null)} />
         ) : null}
 
         {!hasToken ? (
@@ -958,37 +910,10 @@ export function ProjectGalleryDialog({
             <>
               {showEmpty ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  {trimmedQuery
-                    ? showingCollections
-                      ? t("gallery.noCollectionMatches")
-                      : t("gallery.noMatches")
-                    : showingCollections
-                      ? t("gallery.emptyCollections")
-                      : effectiveScope === "collections"
-                        ? t("gallery.emptyCollection")
-                        : effectiveScope === "mine"
-                          ? t("gallery.emptyMine")
-                          : effectiveScope === "organizations"
-                            ? t("gallery.emptyOrganizations")
-                            : effectiveScope === "groups"
-                              ? t("gallery.emptyGroups")
-                              : effectiveScope === "featured"
-                                ? t("gallery.emptyFeatured")
-                                : t("gallery.empty")}
+                  {t(galleryEmptyKey(effectiveScope, showingCollections, trimmedQuery !== ""))}
                 </p>
               ) : showingCollections ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {visibleCollections.map((collection) => (
-                    <CollectionCard
-                      key={collection.id}
-                      collection={collection}
-                      onSelect={() => {
-                        setProjects([]);
-                        setSelectedCollection(collection);
-                      }}
-                    />
-                  ))}
-                </div>
+                <CollectionGrid collections={visibleCollections} onSelect={openCollection} />
               ) : (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {visibleProjects.map((project) => (
@@ -1089,65 +1014,6 @@ function ScopeTab({
       {icon}
       {label}
     </Button>
-  );
-}
-
-/**
- * A collection card in the "Collections" scope. Selecting it lists the
- * collection's projects. Collection covers are public, so the thumbnail loads
- * straight from its URL.
- */
-function CollectionCard({
-  collection,
-  onSelect,
-}: {
-  collection: SharedCollection;
-  onSelect: () => void;
-}) {
-  const { t } = useTranslation();
-  const [thumbBroken, setThumbBroken] = useState(false);
-  const title = collection.title || t("gallery.untitledCollection");
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group flex flex-col overflow-hidden rounded-lg border bg-card text-start transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      title={t("gallery.openCollection")}
-    >
-      <span className="relative block aspect-video w-full overflow-hidden bg-muted">
-        {collection.thumbnailUrl && !thumbBroken ? (
-          <img
-            src={collection.thumbnailUrl}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-            onError={() => setThumbBroken(true)}
-          />
-        ) : (
-          <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
-            <Library className="h-6 w-6" />
-            <span className="text-xs">{t("gallery.noThumbnail")}</span>
-          </span>
-        )}
-      </span>
-      <span className="flex flex-1 flex-col gap-1 p-3">
-        <span className="truncate text-sm font-medium" title={title}>
-          {title}
-        </span>
-        {collection.description ? (
-          <span className="line-clamp-2 text-xs text-muted-foreground">
-            {collection.description}
-          </span>
-        ) : null}
-        <span className="mt-auto flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-          <span className="truncate">{t("gallery.byAuthor", { author: collection.username })}</span>
-          <span className="ms-auto shrink-0">
-            {t("gallery.collectionProjects", { count: collection.projectCount })}
-          </span>
-        </span>
-      </span>
-    </button>
   );
 }
 
