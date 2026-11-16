@@ -280,10 +280,15 @@
     "bodyNote": "Gemessen auf: {{body}} (Kugelnäherung)"
   },
   "statusBar": {
+    "coords": "Koord.",
     "elevation": "Höhe",
     "elevationLong": "Höhe",
     "cameraAltitude": "Kamerahöhe",
     "cameraAltitudeLong": "Kamerahöhe über dem Meeresspiegel",
+    "zoom": "Zoom",
+    "bearing": "Peilung",
+    "pitch": "Neigung",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Dezimalgrad",
       "dms": "Grad, Minuten, Sekunden",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Kachelpaket wird geöffnet…",
       "loadingVtpkDesc": "Verzeichnis und Stil des Pakets werden gelesen",
       "projectName": "Projektname",
+      "untitledProject": "Unbenanntes Projekt",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "Höhe nutzt einen öffentlichen Höhendienst",
       "pointerElevationNoticeDesc": "Die Höhenanzeige wird aus dem 3D-Gelände der Karte berechnet, wenn dieses aktiv ist – dabei werden keine Daten gesendet. Ohne 3D-Gelände wird die öffentliche Open-Meteo-API abgefragt, und die Koordinaten unter dem Zeiger verlassen Ihr Gerät.",

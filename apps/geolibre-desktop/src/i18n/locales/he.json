@@ -287,10 +287,15 @@
     "bodyNote": "נמדד על: {{body}} (קירוב כדורי)"
   },
   "statusBar": {
+    "coords": "קואורדינטות",
     "elevation": "גובה",
     "elevationLong": "גובה",
     "cameraAltitude": "גובה עין",
     "cameraAltitudeLong": "גובה המצלמה מעל פני הים",
+    "zoom": "זום",
+    "bearing": "אזימוט",
+    "pitch": "הטיה",
+    "bbox": "תיבה תוחמת",
     "coordinateFormat": {
       "dd": "מעלות עשרוניות",
       "dms": "מעלות, דקות, שניות",
@@ -4438,6 +4443,7 @@
       "loadingVtpk": "פותח את חבילת האריחים…",
       "loadingVtpkDesc": "קורא את ספריית החבילה ואת הסגנון שלה",
       "projectName": "שם הפרויקט",
+      "untitledProject": "פרויקט ללא שם",
       "storymapEllipsis": "StoryMap...",
       "pointerElevationNoticeTitle": "גובה משתמש בשירות גבהים ציבורי",
       "pointerElevationNoticeDesc": "נתון הגובה בשורת המצב נגזר מפני השטח התלת-ממדיים של המפה עצמה כשהם מופעלים, ואז דבר אינו נשלח לשום מקום. ללא פני שטח תלת-ממדיים, המערכת נסוגה ל-API הגבהים הציבורי של Open-Meteo, והקואורדינטות שמתחת לסמן יוצאות מהמכשיר שלך עבור בקשות אלה.",

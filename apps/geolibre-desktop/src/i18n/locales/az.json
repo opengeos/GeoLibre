@@ -280,10 +280,15 @@
     "bodyNote": "Ölçmə aparılan göy cismi: {{body}} (sferik yaxınlaşma)"
   },
   "statusBar": {
+    "coords": "Koordinatlar",
     "elevation": "Yüks.",
     "elevationLong": "Yüksəklik",
     "cameraAltitude": "Göz yüks.",
     "cameraAltitudeLong": "Kameranın dəniz səviyyəsindən yüksəkliyi",
+    "zoom": "Miqyas",
+    "bearing": "İstiqamət",
+    "pitch": "Meyil",
+    "bbox": "Əhatə çərçivəsi",
     "coordinateFormat": {
       "dd": "Onluq dərəcələr",
       "dms": "Dərəcə, dəqiqə, saniyə",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Plitə paketi açılır…",
       "loadingVtpkDesc": "Paket kataloqu və onun üslubu oxunur",
       "projectName": "Layihənin adı",
+      "untitledProject": "Adsız layihə",
       "storymapEllipsis": "Hekayə xəritəsi...",
       "pointerElevationNoticeTitle": "Yüksəklik ictimai yüksəklik xidmətindən istifadə edir",
       "pointerElevationNoticeDesc": "Status sətrindəki yüksəklik göstəricisi 3D relyef aktiv olduqda xəritənin öz relyefindən hesablanır və heç bir verilən göndərilmir. 3D relyef olmadıqda ictimai Open-Meteo yüksəklik API-sindən istifadə edilir və bu sorğular zamanı göstəricinizin altındakı koordinatlar cihazınızı tərk edir.",

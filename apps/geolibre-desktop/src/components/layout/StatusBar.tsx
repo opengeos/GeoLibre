@@ -178,7 +178,7 @@ export function StatusBar({
           }),
         })}
       >
-        {compact ? "XY" : "Coords"}: {coordText}
+        {compact ? "XY" : t("statusBar.coords")}: {coordText}
       </button>
       {elevationText && (
         <span className="shrink-0" title={t("statusBar.elevationLong")}>
@@ -186,15 +186,25 @@ export function StatusBar({
         </span>
       )}
       {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
-      <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
+      <span className="shrink-0">
+        {t("statusBar.zoom")}: {mapView.zoom.toFixed(2)}
+      </span>
       {altitudeText && (
         <span className="shrink-0" title={t("statusBar.cameraAltitudeLong")}>
           {t("statusBar.cameraAltitude")}: {altitudeText}
         </span>
       )}
-      <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
-      <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
-      {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
+      <span className="shrink-0">
+        {t("statusBar.bearing")}: {mapView.bearing.toFixed(1)}°
+      </span>
+      <span className="shrink-0">
+        {t("statusBar.pitch")}: {mapView.pitch.toFixed(1)}°
+      </span>
+      {compact ? null : (
+        <span className="min-w-0 flex-1 truncate">
+          {t("statusBar.bbox")}: {bboxText}
+        </span>
+      )}
       {/* Always mounted so screen readers announce the pause when it starts,
           with the full explanation (the visible label's tooltip is not
           keyboard-reachable). */}
@@ -229,7 +239,7 @@ export function StatusBar({
         onClick={onOpenDiagnostics}
       >
         <Bug className="h-3 w-3" />
-        {compact ? "Diag" : "Diagnostics"}: {diagnosticsCount}
+        {compact ? "Diag" : t("diagnostics.title")}: {diagnosticsCount}
       </button>
     </footer>
   );

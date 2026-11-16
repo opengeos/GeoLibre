@@ -1,5 +1,4 @@
 import {
-  DEFAULT_PROJECT_NAME,
   excludeHiddenFieldsFromProject,
   redactProjectCredentials,
   serializeProject,
@@ -16,9 +15,9 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
 } from "@geolibre/plugins";
-import { Button, cn, Input } from "@geolibre/ui";
+import { Button, cn } from "@geolibre/ui";
 import { Map, Moon, Sun } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
@@ -80,6 +79,8 @@ import { TilePackageDialogs } from "./toolbar/TilePackageDialogs";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
+import { ProjectNameField } from "./toolbar/ProjectNameField";
+import { entryMenuOffered } from "../../lib/deployment-gates";
 import {
   createAddLayerHandlers,
   resetRuntimeControlsForNewProject,
@@ -150,7 +151,6 @@ export function TopToolbar({
   const projectName = useAppStore((s) => s.projectName);
   const projectPath = useAppStore((s) => s.projectPath);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
-  const setProjectName = useAppStore((s) => s.setProjectName);
   // The Collaborate dialog's visibility lives in the store so the on-canvas
   // session-status badge can reopen it from outside this component tree (#754).
   // The dialog itself is rendered by DesktopShell (not here) so it survives
@@ -210,10 +210,6 @@ export function TopToolbar({
     mapReadyGeneration,
     projectGeneration,
   );
-
-  // Tracks an active IME composition so pressing Enter to confirm a CJK
-  // candidate doesn't blur the project-name field mid-composition.
-  const projectNameComposingRef = useRef(false);
 
   const { controlsVisible, setControlsVisible, toggleMapControl } = useMapControlVisibility(
     mapControllerRef,
@@ -421,7 +417,11 @@ export function TopToolbar({
           }
         />
       </MountWhenOpened>
-      {!viewer && isMenuVisible(uiProfile, "addData") && deploymentCapabilities.has("data:add") && (
+      {entryMenuOffered("addData", {
+        viewer,
+        capabilities: deploymentCapabilities,
+        menuVisible: isMenuVisible(uiProfile, "addData"),
+      }) && (
         <AddDataMenu
           disabled={!addDataReady}
           chrome={chrome}
@@ -482,23 +482,23 @@ export function TopToolbar({
           onOpenRecordVideo={() => dialogs.setRecordVideoOpen(true)}
         />
       )}
-      {!viewer &&
-        isMenuVisible(uiProfile, "plugins") &&
-        deploymentCapabilities.has("plugins:install") && (
-          <PluginsMenu
-            chrome={chrome}
-            appApi={appApi}
-            plugins={plugins}
-            isActive={isActive}
-            toggle={toggle}
-            getMapControlPosition={getMapControlPosition}
-            setMapControlPosition={setMapControlPosition}
-            hiddenPluginIds={hiddenPluginIds}
-            onOpenManagePlugins={
-              IS_MAS_BUILD ? undefined : () => dialogs.setManagePluginsOpen(true)
-            }
-          />
-        )}
+      {entryMenuOffered("plugins", {
+        viewer,
+        capabilities: deploymentCapabilities,
+        menuVisible: isMenuVisible(uiProfile, "plugins"),
+      }) && (
+        <PluginsMenu
+          chrome={chrome}
+          appApi={appApi}
+          plugins={plugins}
+          isActive={isActive}
+          toggle={toggle}
+          getMapControlPosition={getMapControlPosition}
+          setMapControlPosition={setMapControlPosition}
+          hiddenPluginIds={hiddenPluginIds}
+          onOpenManagePlugins={IS_MAS_BUILD ? undefined : () => dialogs.setManagePluginsOpen(true)}
+        />
+      )}
       {/* Top-level toolbar menus registered by built-in plugins via
           app.registerToolbarMenu(); external plugin menus render after Help
           (below). Renders nothing when none exist. */}
@@ -734,39 +734,7 @@ export function TopToolbar({
         </Button>
         {showProjectInfo ? (
           <>
-            <Input
-              aria-label={t("toolbar.item.projectName")}
-              className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
-              value={projectName}
-              readOnly={viewer}
-              onChange={(event) => {
-                if (viewer) return;
-                setProjectName(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !projectNameComposingRef.current &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.currentTarget.blur();
-                }
-              }}
-              onCompositionStart={() => {
-                projectNameComposingRef.current = true;
-              }}
-              onCompositionEnd={() => {
-                projectNameComposingRef.current = false;
-              }}
-              onBlur={(event) => {
-                if (viewer) return;
-                const nextName = event.target.value.trim();
-                // Persist the canonical, locale-independent default name; a
-                // translated string would otherwise be written into the saved
-                // project file and vary by UI language.
-                if (!nextName) setProjectName(DEFAULT_PROJECT_NAME);
-              }}
-            />
+            <ProjectNameField viewer={viewer} />
             {projectPath ? (
               <span className="hidden truncate lg:inline" title={projectPath}>
                 {projectPath}

@@ -273,10 +273,15 @@
     "bodyNote": "計測対象: {{body}}（球体近似）"
   },
   "statusBar": {
+    "coords": "座標",
     "elevation": "標高",
     "elevationLong": "標高",
     "cameraAltitude": "視点高度",
     "cameraAltitudeLong": "海面からのカメラ高度",
+    "zoom": "ズーム",
+    "bearing": "方位",
+    "pitch": "傾き",
+    "bbox": "範囲",
     "coordinateFormat": {
       "dd": "十進度",
       "dms": "度分秒",
@@ -4295,6 +4300,7 @@
       "loadingVtpk": "タイルパッケージを開いています…",
       "loadingVtpkDesc": "パッケージのディレクトリとスタイルを読み込んでいます",
       "projectName": "プロジェクト名",
+      "untitledProject": "無題のプロジェクト",
       "storymapEllipsis": "ストーリーマップ...",
       "pointerElevationNoticeTitle": "標高は公開サービスを利用します",
       "pointerElevationNoticeDesc": "3D地形が有効な場合、標高は地図自体から求められ、何も送信されません。3D地形がない場合は公開のOpen-Meteo APIに問い合わせ、ポインター位置の座標が端末外に送信されます。",

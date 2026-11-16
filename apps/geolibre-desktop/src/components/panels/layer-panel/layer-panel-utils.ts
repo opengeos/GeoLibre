@@ -360,3 +360,41 @@ export function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
 
   return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
 }
+
+/**
+ * Pick the hint the empty Layers panel shows.
+ *
+ * The beginner hint points at Plugins → Basemaps and the Add data menu, so it
+ * must not name a menu the deployment policy or the interface profile has
+ * hidden (issue #3474): a hint that sends the user to a missing menu reads as
+ * a bug.
+ *
+ * @param options - What the toolbar currently offers.
+ * @param options.beginner - Whether the beginner interface profile is active.
+ * @param options.canAddData - Whether the Add data menu is on the toolbar.
+ * @param options.canAddBasemaps - Whether the Plugins menu is on the toolbar and
+ *   lists the Basemaps plugin.
+ * @returns The `layers.*` catalog key to render.
+ */
+export function emptyLayersHintKey({
+  beginner,
+  canAddData,
+  canAddBasemaps,
+}: {
+  beginner: boolean;
+  canAddData: boolean;
+  canAddBasemaps: boolean;
+}):
+  | "layers.empty"
+  | "layers.emptyBeginner"
+  | "layers.emptyBeginnerBasemapsOnly"
+  | "layers.emptyBeginnerDataOnly"
+  | "layers.emptyNoAdd" {
+  if (beginner) {
+    if (canAddData && canAddBasemaps) return "layers.emptyBeginner";
+    if (canAddBasemaps) return "layers.emptyBeginnerBasemapsOnly";
+    if (canAddData) return "layers.emptyBeginnerDataOnly";
+    return "layers.emptyNoAdd";
+  }
+  return canAddData ? "layers.empty" : "layers.emptyNoAdd";
+}
