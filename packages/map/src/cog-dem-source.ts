@@ -116,7 +116,10 @@ export function isDemOverviewIfd(subfileType: unknown): boolean {
  * undefined for every tag, which silently dropped the declared nodata (so
  * -9999 drew as a pit) and every overview (so each tile read full resolution).
  * Both shapes are accepted so a plain record (tests, older readers) still works.
- * Exported for tests.
+ * Synchronous on purpose, unlike the spectral profile's `loadValue` reader:
+ * geotiff.js 3 parses both tags read here eagerly (its own `getGDALNoData`
+ * reads `GDAL_NODATA` through `getValue` too), and the dataset is registered
+ * synchronously after the IFD walk. Exported for tests.
  *
  * @param directory - The image's file directory.
  * @param name - The tag name, e.g. `GDAL_NODATA`.
