@@ -1,7 +1,7 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppStore, withoutHistory } from "@geolibre/core";
+import { parseS3Url, useAppStore, withoutHistory } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
 import {
@@ -41,15 +41,15 @@ function isPublicHttpUrl(url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
+    const host = u.hostname.toLowerCase().replace(/\.$/, "");
     // Loopback (IPv4 127.0.0.0/8, IPv6 [::1], and *.localhost)
     if (host === "localhost" || host.endsWith(".localhost")) return false;
-    if (host === "0.0.0.0" || host === "[::1]" || host === "::1") return false;
+    if (host === "0.0.0.0" || host === "[::]" || host === "[::1]") return false;
     if (/^127\./.test(host)) return false;
     // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
     if (
-      /^\[?fe80:/.test(host) ||
+      /^\[?fe[89ab][0-9a-f]:/.test(host) ||
       /^\[?fc[0-9a-f]{2}:/.test(host) ||
       /^\[?fd[0-9a-f]{2}:/.test(host)
     )
@@ -510,20 +510,17 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // (security: only public http(s) sources are bootstrapped automatically).
       if (layer.geojson && !isWfs) {
         if (!alreadyObserved) observedSourceUrlsRef.current.set(layer.id, sourceUrl);
-        if (sameUrl) continue;
-        if (!alreadyObserved) continue;
+        if (!alreadyObserved || sameUrl) continue;
       }
 
       if (sameUrl) continue;
       observedSourceUrlsRef.current.set(layer.id, sourceUrl);
 
-      // Security: never auto-bootstrap private/localhost hosts. Public http(s),
-      // gs:// (resolves to public HTTPS), and s3/s3a (signed, user-configured
-      // bucket) sources are allowed. WFS layers are exempt to preserve prior
+      // Bootstrap public HTTP/GCS sources without initiating signed S3 reads.
+      // Configured refresh timers remain opt-in. WFS retains its existing
       // auto-load behaviour on localhost/LAN hosts.
       const isGs = /^gs:\/\//i.test(sourceUrl);
-      const isS3 = /^s3a?:\/\//i.test(sourceUrl);
-      if (!isWfs && !isGs && !isS3 && !isPublicHttpUrl(sourceUrl)) continue;
+      if (!isWfs && (parseS3Url(sourceUrl) || (!isGs && !isPublicHttpUrl(sourceUrl)))) continue;
 
       // A hydrated layer present at first observation needs no bootstrap.
       if (layer.geojson && !alreadyObserved) continue;

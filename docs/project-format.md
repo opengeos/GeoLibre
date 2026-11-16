@@ -400,13 +400,19 @@ the layer's Refresh action. Responses for removed layers or replaced sources
 are ignored. A malformed GCS URL leaves the project loadable and reports an
 error when its layer loads.
 
-Opening a project automatically requests these layer URLs, including localhost
-and LAN addresses reachable by the app. Only open projects whose data sources
-you trust. GCS URLs use URL syntax: encode literal `?` and `#` in object names
+Opening a project automatically requests public HTTP(S) and GCS layer URLs.
+Non-WFS localhost, LAN, and S3 sources require manual refresh unless an
+auto-refresh interval is configured. WFS retains automatic loading on localhost
+and LAN hosts. Only open projects whose data sources you trust.
+Remote responses must contain a FeatureCollection of valid Features and geometries,
+including valid nested GeometryCollections. Missing feature geometry is normalized
+to `null` for compatibility with servers that omit it; other malformed features
+reject the entire response and display a layer error instead of partial data.
+GCS URLs use URL syntax: encode literal `?` and `#` in object names
 as `%3F` and `%23`; unescaped characters begin the query and fragment. Queries
 and fragments supplied by the user are preserved in saved projects, including
-credential-bearing parameters. Remove credential-bearing parameters before
-distributing a saved project.
+credential-bearing parameters stored in plaintext. Remove credential-bearing
+parameters or apply credential redaction before distributing a saved project.
 
 For WFS GetFeature and GeoJSON URL layers, `metadata.refresh` can persist an
 optional auto-refresh interval. `intervalMs` can be any positive interval in
@@ -822,20 +828,23 @@ must configure their own settings.
 
 ## Harvest dialog and automatic GeoJSON hydration
 
-The desktop shell mounts the GCS harvest dialog (`GcsExportDialog`) in every build.
-It is tied to a user-configured harvester backend. Opening a project may issue GET
+The toolbar opens the GCS harvest dialog (`GcsExportDialog`) through Add Data >
+Cloud formats. It uses a user-configured harvester backend. Opening a project may issue GET
 requests to GeoJSON layer URLs that have no inline data.
 
 Auto-bootstrap rules (see `useLayerRefresh`):
+
 - WFS layers (`sourceKind === "wfs-getfeature"`) auto-load on any host, including
   localhost and LAN, preserving prior behaviour.
 - Non-WFS layers auto-load only from public `http(s)` hosts and `gs://` URIs
-  (`gs://` resolves to public HTTPS). Private/localhost hosts are skipped and
-  require an explicit manual refresh.
+  (`gs://` resolves to public HTTPS). Private/localhost hosts and S3 sources
+  (including S3 HTTPS URLs) are skipped during bootstrap and require manual
+  refresh or a configured auto-refresh interval.
 - `s3://` and `s3a://` sources may be signed on the automatic refresh path
   (timer/catch-up) via `resolveReadableUrl`, since they are user-configured
-  buckets. Treat saved projects containing such sources as potentially carrying
-  live signed URLs.
+  buckets. Merely opening a URL-only S3 layer without that configuration does
+  not sign a read. Saved projects may contain plaintext credential-bearing URLs;
+  apply credential redaction before sharing them.
 - `gs://` sources are auto-fetched (not manual-only).
 
 The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the

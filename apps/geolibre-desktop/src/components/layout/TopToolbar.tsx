@@ -46,6 +46,7 @@ import { resolveShareHost } from "../../lib/share-geolibre";
 import { isTauri } from "../../lib/tauri-io";
 import { MENU_MANAGED_PLUGIN_IDS, isMenuVisible, isPluginVisible } from "../../lib/ui-profile";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
+import { GcsExportDialog } from "./GcsExportDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
@@ -109,7 +110,6 @@ interface TopToolbarProps {
   onOpenBasemapExtract: () => void;
   /** Activates the map tool for placing an anchored review comment. */
   onAddComment: () => void;
-  onOpenGcsHarvest?: () => void;
   viewer?: boolean;
 }
 
@@ -128,10 +128,10 @@ export function TopToolbar({
   onToggleThemeMode,
   onOpenBasemapExtract,
   onAddComment,
-  onOpenGcsHarvest,
   viewer = false,
 }: TopToolbarProps) {
   const { t } = useTranslation();
+  const [gcsExportOpen, setGcsExportOpen] = useState(false);
   const deploymentCapabilities = useAppStore((state) => state.deploymentCapabilities);
   usePluginLabelSync();
 
@@ -437,7 +437,7 @@ export function TopToolbar({
           }}
           onOpenOsmPbfDialog={() => osmPbf.setDialogOpen(true)}
           onOpenTilePackageDialog={() => tilePackage.setDialogOpen(true)}
-          onOpenGcsHarvest={onOpenGcsHarvest}
+          onOpenGcsHarvest={() => setGcsExportOpen(true)}
         />
       )}
       {!viewer &&
@@ -778,6 +778,7 @@ export function TopToolbar({
           </>
         ) : null}
       </div>
+      <GcsExportDialog open={gcsExportOpen} onOpenChange={setGcsExportOpen} />
     </header>
   );
 }

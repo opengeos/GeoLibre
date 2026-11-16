@@ -564,12 +564,32 @@ describe("fetchWfsGeoJson GML fallback (issue #2746)", () => {
 });
 
 describe("remote geometry validation", () => {
+  it("normalizes missing geometry to null while preserving feature properties", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () =>
+        Response.json({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", id: "missing", properties: { name: "no geometry" } }],
+        });
+      const result = await fetchGeoJsonFeatureCollection("https://example.com/data.json");
+      assert.deepEqual(result.features, [
+        {
+          type: "Feature",
+          id: "missing",
+          properties: { name: "no geometry" },
+          geometry: null,
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
   it("rejects malformed features and nested collections before storing data", async () => {
     const originalFetch = globalThis.fetch;
     try {
       for (const feature of [
         null,
-        { type: "Feature", properties: {} },
         { type: "Feature", geometry: { type: "GeometryCollection", geometries: [null] } },
         { type: "Feature", geometry: { type: "GeometryCollection" } },
         {

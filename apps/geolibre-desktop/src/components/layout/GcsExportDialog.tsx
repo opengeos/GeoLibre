@@ -5,7 +5,7 @@ import { Cloud, Loader2, X } from "lucide-react";
 
 /**
  * App-wide dialog for harvesting and exporting to Google Cloud Storage.
- * Opened by the floating button or Ctrl+Shift+G shortcut.
+ * Opened from Add Data > Cloud formats.
  */
 interface GcsExportDialogProps {
   open: boolean;
@@ -36,8 +36,6 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     setError(null);
     onOpenChange(false);
   };
-
-  // (Ctrl+Shift+G shortcut removed per contributor feedback; open via Add Data menu.)
 
   const [backendUrl, setBackendUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -101,7 +99,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         const message = typeof err?.error === "string" ? err.error : undefined;
         throw new Error(detail || message || t("gcsExport.errors.http", { status: resp.status }));
       }
-      const execution = (await resp.json())?.execution;
+      const execution = (await resp.json().catch(() => null))?.execution;
       signal.throwIfAborted();
       if (typeof execution !== "string" || !execution)
         throw new Error(t("gcsExport.errors.missingExecution"));

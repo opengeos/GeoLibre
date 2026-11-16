@@ -859,8 +859,7 @@ function isGeoJsonFeature(value: unknown): boolean {
     typeof value === "object" &&
     "type" in value &&
     value.type === "Feature" &&
-    "geometry" in value &&
-    (value.geometry === null || isGeoJsonGeometry(value.geometry)),
+    (!("geometry" in value) || value.geometry === null || isGeoJsonGeometry(value.geometry)),
   );
 }
 
@@ -877,7 +876,12 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
     throw new Error("The response is not a GeoJSON FeatureCollection.");
   }
 
-  return value as FeatureCollection;
+  return {
+    ...value,
+    features: value.features.map((feature) =>
+      "geometry" in feature ? feature : { ...feature, geometry: null },
+    ),
+  } as FeatureCollection;
 }
 
 function layerHttpUrl(layer: GeoLibreLayer): string | null {

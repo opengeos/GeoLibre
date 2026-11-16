@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import { createElement } from "react";
-import { act, render, screen, useAppStore, waitFor } from "./helpers/dom";
+import { act, cleanup, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import { createEmptyProject } from "@geolibre/core";
 import {
@@ -15,6 +15,105 @@ const { useLayerRefresh } =
   await import("../apps/geolibre-desktop/src/components/panels/layer-panel/useLayerRefresh");
 
 const LAYER_ID = "wfs-hydration";
+
+afterEach(() => mock.restoreAll());
+
+it("bootstraps public sources while blocking private hosts and potentially signed S3 reads", async () => {
+  for (const url of [
+    "http://localhost/data.json",
+    "http://localhost./data.json",
+    "http://tiles.localhost/data.json",
+    "http://127.2.3.4/data.json",
+    "http://0.0.0.0/data.json",
+    "http://10.0.0.1/data.json",
+    "http://172.16.0.1/data.json",
+    "http://192.168.0.1/data.json",
+    "http://169.254.1.1/data.json",
+    "http://[::]/data.json",
+    "http://[::1]/data.json",
+    "http://[fc00::1]/data.json",
+    "http://[fdff::1]/data.json",
+    "http://[fe80::1]/data.json",
+    "http://[fe90::1]/data.json",
+    "http://[fea0::1]/data.json",
+    "http://[febf::1]/data.json",
+    "http://[::ffff:192.168.0.1]/data.json",
+    "s3://private-bucket/data.json",
+    "s3a://private-bucket/data.json",
+    "https://private-bucket.s3.amazonaws.com/data.json",
+    "https://s3.amazonaws.com/private-bucket/data.json",
+  ]) {
+    useAppStore.getState().newProject({ name: url });
+    useAppStore.getState().addLayer(
+      geojsonLayer({
+        id: LAYER_ID,
+        source: { type: "geojson", url },
+        geojson: undefined,
+      }),
+    );
+    const fetcher = mock.method(globalThis, "fetch", async () =>
+      Response.json(collection("blocked")),
+    );
+    await act(async () => {
+      render(createElement(RefreshHost));
+    });
+    assert.equal(fetcher.mock.callCount(), 0, url);
+    cleanup();
+    mock.restoreAll();
+  }
+
+  for (const [url, metadata] of [
+    ["https://example.test/data.json", {}],
+    ["gs://public-bucket/data.json", {}],
+    ["http://localhost/wfs", { sourceKind: "wfs-getfeature" }],
+  ] as const) {
+    useAppStore.getState().newProject({ name: url });
+    useAppStore.getState().addLayer(
+      geojsonLayer({
+        id: LAYER_ID,
+        source: { type: "geojson", url },
+        metadata,
+        geojson: undefined,
+      }),
+    );
+    const fetcher = mock.method(globalThis, "fetch", async () =>
+      Response.json(collection("allowed")),
+    );
+    render(createElement(RefreshHost));
+    await waitFor(() =>
+      assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1),
+    );
+    assert.equal(fetcher.mock.callCount(), 1, url);
+    cleanup();
+    mock.restoreAll();
+  }
+});
+
+it("refreshes a hydrated non-WFS layer after its public URL changes", async () => {
+  useAppStore.getState().newProject({ name: "Hydrated GeoJSON" });
+  useAppStore.getState().addLayer(
+    geojsonLayer({
+      id: LAYER_ID,
+      source: { type: "geojson", url: "https://example.test/first.json" },
+      geojson: collection("first"),
+    }),
+  );
+  const fetcher = mock.method(globalThis, "fetch", async () => Response.json(collection("second")));
+  render(createElement(RefreshHost));
+  assert.equal(fetcher.mock.callCount(), 0);
+  act(() =>
+    useAppStore.getState().updateLayer(LAYER_ID, {
+      source: { type: "geojson", url: "https://example.test/second.json" },
+    }),
+  );
+  await waitFor(() =>
+    assert.equal(
+      useAppStore.getState().layers[0]?.geojson?.features[0]?.properties?.label,
+      "second",
+    ),
+  );
+  assert.equal(fetcher.mock.callCount(), 1);
+});
 
 function RefreshHost() {
   const layers = useAppStore((state) => state.layers);
@@ -55,8 +154,11 @@ describe("WFS hydration lifecycle", () => {
       }),
     );
     const pendingResponses: Array<(response: Response) => void> = [];
-    globalThis.fetch = (() =>
-      new Promise<Response>((resolve) => pendingResponses.push(resolve))) as typeof fetch;
+    mock.method(
+      globalThis,
+      "fetch",
+      () => new Promise<Response>((resolve) => pendingResponses.push(resolve)),
+    );
 
     render(createElement(RefreshHost));
     await waitFor(() => assert.equal(pendingResponses.length, 1));
@@ -107,8 +209,11 @@ describe("WFS hydration lifecycle", () => {
     const firstUrl = "https://example.test/first/wfs";
     const secondUrl = "https://example.test/second/wfs";
     const pendingResponses: Array<(response: Response) => void> = [];
-    globalThis.fetch = (() =>
-      new Promise<Response>((resolve) => pendingResponses.push(resolve))) as typeof fetch;
+    mock.method(
+      globalThis,
+      "fetch",
+      () => new Promise<Response>((resolve) => pendingResponses.push(resolve)),
+    );
     useAppStore.getState().newProject({ name: "Original project" });
     useAppStore.getState().addLayer(
       geojsonLayer({
@@ -162,8 +267,11 @@ describe("WFS hydration lifecycle", () => {
     const secondUrl = "https://example.test/wfs?typeNames=bridges";
     const layerId = LAYER_ID;
     const pendingResponses: Array<(response: Response) => void> = [];
-    globalThis.fetch = (() =>
-      new Promise<Response>((resolve) => pendingResponses.push(resolve))) as typeof fetch;
+    mock.method(
+      globalThis,
+      "fetch",
+      () => new Promise<Response>((resolve) => pendingResponses.push(resolve)),
+    );
     useAppStore.getState().newProject({ name: "Hydrated WFS URL change" });
     useAppStore.getState().addLayer(
       geojsonLayer({
@@ -208,7 +316,6 @@ it("hydrates startup URL layers once, keeping the workspace clean and out of und
     geojson: undefined,
   });
   const settings = normalizeDesktopSettings({});
-  const originalFetch = globalThis.fetch;
   const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
   try {
     useDesktopSettingsStore.getState().setDesktopSettings({
@@ -220,10 +327,10 @@ it("hydrates startup URL layers once, keeping the workspace clean and out of und
     });
     useAppStore.getState().loadProject(withStartupLayers(createEmptyProject()), null);
     let calls = 0;
-    globalThis.fetch = async () => {
+    mock.method(globalThis, "fetch", async () => {
       calls += 1;
       return Response.json(collection("startup"));
-    };
+    });
     render(createElement(RefreshHost));
     await waitFor(() =>
       assert.equal(useAppStore.getState().layers[0]?.geojson?.features.length, 1),
@@ -232,7 +339,6 @@ it("hydrates startup URL layers once, keeping the workspace clean and out of und
     assert.equal(useAppStore.getState().isDirty, false);
     assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
   } finally {
-    globalThis.fetch = originalFetch;
     useDesktopSettingsStore.getState().setDesktopSettings(originalSettings);
   }
 });

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, it, mock } from "node:test";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 
 const { GcsExportDialog } =
   await import("../apps/geolibre-desktop/src/components/layout/GcsExportDialog");
@@ -11,9 +11,18 @@ afterEach(() => {
   mock.restoreAll();
 });
 
+function DialogHost() {
+  const [open, setOpen] = useState(true);
+  return createElement(
+    "div",
+    null,
+    createElement("button", { onClick: () => setOpen(true) }, "Open harvest"),
+    createElement(GcsExportDialog, { open, onOpenChange: setOpen }),
+  );
+}
+
 function openDialog() {
-  render(createElement(GcsExportDialog));
-  fireEvent.click(screen.getByTitle("Harvest & Export to GCS (Ctrl+Shift+G)"));
+  render(createElement(DialogHost));
   fireEvent.change(screen.getByLabelText("Backend URL (Cloud Run)"), {
     target: { value: "https://example.com" },
   });
@@ -35,7 +44,7 @@ it("cancels an in-flight request on dismissal and allows a fresh run", async () 
   await waitFor(() => assert.ok(signal));
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   assert.equal(signal?.aborted, true);
-  fireEvent.click(screen.getByTitle("Harvest & Export to GCS (Ctrl+Shift+G)"));
+  fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
   assert.equal(
     screen.getByRole("button", { name: "Harvest & Export" }).hasAttribute("disabled"),
     false,
@@ -127,7 +136,7 @@ it("normalizes null, structured, and non-JSON HTTP error bodies and clears them 
     fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
     await waitFor(() => assert.ok(screen.getByText("HTTP 422")));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByTitle("Harvest & Export to GCS (Ctrl+Shift+G)"));
+    fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
     assert.equal(screen.queryByText("HTTP 422"), null);
     cleanup();
     mock.restoreAll();
@@ -153,11 +162,30 @@ it("stops polling when the backend returns an unknown status", async () => {
   assert.equal(calls, 2);
 });
 
-it("opens with Ctrl+Shift+G regardless of Caps Lock", () => {
-  render(createElement(GcsExportDialog));
-  for (const key of ["g", "G"]) {
-    fireEvent.keyDown(window, { key, ctrlKey: true, shiftKey: true });
-    assert.ok(screen.getByRole("button", { name: "Harvest & Export" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  }
+it("keeps the execution ID after dismissal and defaults to a dry run without Wherobots", async () => {
+  const fetcher = mock.method(globalThis, "fetch", async (_url: unknown, _options?: RequestInit) =>
+    Response.json({ execution: "run-1" }),
+  );
+  openDialog();
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(screen.getByText(/run-1/)));
+  const options = fetcher.mock.calls[0].arguments[1] as RequestInit;
+  assert.deepEqual(JSON.parse(options.body as string), {
+    url: "https://example.com/data.json",
+    dry_run: true,
+    skip_wherobots: true,
+    refresh_geolibre: true,
+    licence_name: null,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  assert.ok(screen.getByText(/run-1/));
+  assert.ok(screen.getByText(/backend job keeps running/i));
+});
+
+it("reports a non-JSON successful submission as a missing execution ID", async () => {
+  mock.method(globalThis, "fetch", async () => new Response("Not JSON"));
+  openDialog();
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(screen.getByText(/execution ID/i)));
 });
