@@ -1,5 +1,5 @@
 import { IS_MAS_BUILD } from "../build-flags";
-import { isTauri } from "../is-tauri";
+import { isDesktopRuntime } from "../is-mobile";
 import type { DiscoveredModel } from "./model-discovery";
 
 /**
@@ -55,13 +55,14 @@ let loaded = false;
 const listeners = new Set<() => void>();
 
 /**
- * Whether this build can sign in with ChatGPT: the desktop app, outside the
- * Mac App Store (whose sandbox build may not open a loopback listener).
+ * Whether this build can sign in with ChatGPT: the desktop app (the mobile
+ * apps have no keychain backend), outside the Mac App Store (whose sandbox
+ * build may not open a loopback listener).
  *
  * @returns True in a desktop build with the sign-in compiled in.
  */
 export function isChatGptSignInAvailable(): boolean {
-  return isTauri() && !IS_MAS_BUILD;
+  return isDesktopRuntime() && !IS_MAS_BUILD;
 }
 
 /** The last known status (signed out until {@link refreshChatGptStatus} runs). */
@@ -134,7 +135,11 @@ export interface ChatGptSignInOptions {
   anotherAccount?: boolean;
   /** Called with the authorization page once the listener is ready. */
   onUrl?: (url: string) => void;
-  /** Stops waiting (and cancels the sign-in in the backend). */
+  /**
+   * Stops waiting here only: the backend keeps the attempt, so the browser can
+   * still finish it (see {@link waitForChatGptSignIn}). Cancel it with
+   * {@link cancelChatGptSignIn}.
+   */
   signal?: AbortSignal;
 }
 
@@ -159,14 +164,28 @@ export async function signInWithChatGpt(
     signingIn: true,
     registered: !options.anotherAccount && status.registered,
   });
-  options.onUrl?.(url);
-  await openChatGptPage(url);
+  try {
+    options.onUrl?.(url);
+    await openChatGptPage(url);
+  } catch (cause) {
+    // Nobody can reach the page: stop the attempt rather than leave it waiting.
+    await cancelChatGptSignIn().catch(() => undefined);
+    throw cause;
+  }
+  return waitForChatGptSignIn(options.signal);
+}
+
+/**
+ * Wait for the sign-in under way in the backend to finish.
+ *
+ * @param signal Stops waiting here; the attempt itself carries on.
+ * @returns The status after the sign-in.
+ * @throws When the sign-in fails, times out or is cancelled, or `signal` aborts.
+ */
+export async function waitForChatGptSignIn(signal?: AbortSignal): Promise<ChatGptStatus> {
   try {
     for (;;) {
-      if (options.signal?.aborted) {
-        await invoke("chatgpt_sign_in_cancel");
-        throw new DOMException("The sign-in was cancelled.", "AbortError");
-      }
+      if (signal?.aborted) throw new DOMException("Stopped waiting for the sign-in.", "AbortError");
       const poll = await invoke<{ state: string; error?: string | null }>("chatgpt_sign_in_poll");
       if (poll.state === "done") break;
       if (poll.state === "failed") throw new Error(poll.error || "The sign-in failed.");
@@ -247,10 +266,22 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-async function requestBody(body: BodyInit | null | undefined): Promise<string | undefined> {
-  if (body === null || body === undefined) return undefined;
+/** The body of a request, from `init` or else a `Request` input (as fetch does). */
+async function requestBody(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+): Promise<string | undefined> {
+  const body = init?.body;
+  if (body === null || body === undefined) {
+    if (typeof input === "string" || input instanceof URL || input.body === null) return undefined;
+    return input.clone().text();
+  }
   if (typeof body === "string") return body;
   return new Response(body).text();
+}
+
+function abortError(): DOMException {
+  return new DOMException("The request was aborted.", "AbortError");
 }
 
 /**
@@ -270,10 +301,15 @@ export async function chatGptFetch(
 ): Promise<Response> {
   const route = chatGptRoute(requestUrl(input));
   if (!route) throw new TypeError("This request can't use the ChatGPT sign-in.");
-  const body = await requestBody(init?.body);
-  const signal = init?.signal ?? undefined;
-  if (signal?.aborted) throw new DOMException("The request was aborted.", "AbortError");
+  const signal =
+    init?.signal ??
+    (typeof input === "string" || input instanceof URL ? undefined : input.signal) ??
+    undefined;
+  if (signal?.aborted) throw abortError();
+  const body = await requestBody(input, init);
   const { invoke: tauriInvoke, Channel } = await import("@tauri-apps/api/core");
+  // The awaits above may have spanned an abort the listener below won't see.
+  if (signal?.aborted) throw abortError();
   const requestId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -288,7 +324,11 @@ export async function chatGptFetch(
         controller = c;
       },
       cancel() {
-        if (!finished) void tauriInvoke("chatgpt_request_cancel", { requestId });
+        // The reader is gone: ignore any chunk or end still on the channel.
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener("abort", onAbort);
+        void tauriInvoke("chatgpt_request_cancel", { requestId });
       },
     });
     const fail = (error: unknown) => {
@@ -305,10 +345,10 @@ export async function chatGptFetch(
         }
       }
     };
-    const onAbort = () => {
+    function onAbort() {
       void tauriInvoke("chatgpt_request_cancel", { requestId });
-      fail(new DOMException("The request was aborted.", "AbortError"));
-    };
+      fail(abortError());
+    }
     signal?.addEventListener("abort", onAbort, { once: true });
 
     const channel = new Channel<ChatGptEvent>();

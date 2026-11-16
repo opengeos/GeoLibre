@@ -804,6 +804,9 @@ struct Session {
     tokens: Option<Tokens>,
     /// The refresh token is in the keychain (false: this session only).
     in_keychain: bool,
+    /// Changes with every sign-in and sign-out (not renewal): a request begun
+    /// for one account is never retried with another's token.
+    generation: u64,
 }
 
 impl Session {
@@ -842,7 +845,50 @@ impl Session {
         }
         let _ = keychain_delete();
         self.in_keychain = false;
+        self.generation += 1;
         tokens
+    }
+}
+
+/// A request's cancellation: a flag, and a wake-up for the wait it interrupts.
+#[derive(Default)]
+struct Cancel {
+    flag: AtomicBool,
+    notify: tokio::sync::Notify,
+}
+
+impl Cancel {
+    fn cancel(&self) {
+        self.flag.store(true, Ordering::SeqCst);
+        self.notify.notify_waiters();
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::SeqCst)
+    }
+
+    /// Runs `work` until it finishes or the request is cancelled (`None`),
+    /// dropping the pending network wait in that case.
+    async fn or_cancelled<T>(&self, work: impl std::future::Future<Output = T>) -> Option<T> {
+        use std::future::Future;
+        use std::task::Poll;
+        let mut work = std::pin::pin!(work);
+        let mut notified = std::pin::pin!(self.notify.notified());
+        // Registered before the flag is read, so a cancel in between still wakes it.
+        notified.as_mut().enable();
+        if self.is_cancelled() {
+            return None;
+        }
+        std::future::poll_fn(|cx| {
+            if let Poll::Ready(value) = work.as_mut().poll(cx) {
+                return Poll::Ready(Some(value));
+            }
+            if notified.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(None);
+            }
+            Poll::Pending
+        })
+        .await
     }
 }
 
@@ -855,7 +901,10 @@ struct LoginAttempt {
 pub struct ChatGptAuthState {
     session: Arc<tokio::sync::Mutex<Session>>,
     login: Mutex<Option<LoginAttempt>>,
-    requests: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Held for a whole `chatgpt_sign_in_start`, so overlapping starts run in
+    /// turn and each one cancels the attempt the previous one installed.
+    starting: tokio::sync::Mutex<()>,
+    requests: Mutex<HashMap<String, Arc<Cancel>>>,
 }
 
 impl ChatGptAuthState {
@@ -1202,11 +1251,29 @@ async fn finish(
             // A keychain entry from an earlier sign-in must not outlive this one.
             let _ = tauri::async_runtime::spawn_blocking(keychain_delete).await;
         }
+        // A cancel that arrived while the keychain was written still wins:
+        // put back what the keychain held before, and keep nothing.
+        if cancel.load(Ordering::SeqCst) {
+            let previous = session
+                .reg
+                .clone()
+                .zip(session.tokens.clone())
+                .filter(|_| session.in_keychain);
+            let _ = tauri::async_runtime::spawn_blocking(move || match previous {
+                Some((reg, tokens)) => keychain_save(&reg, &tokens),
+                None => keychain_delete(),
+            })
+            .await;
+            return Err("The sign-in was cancelled.".to_string());
+        }
+        // No await from here on: the check above and the install are one step
+        // under the session lock.
         write_registration(&dir, Some(&reg))?;
         let allowed = reg.plan_allowed();
         session.reg = Some(reg);
         session.tokens = Some(tokens);
         session.in_keychain = in_keychain;
+        session.generation += 1;
         Ok(allowed)
     }
     .await;
@@ -1240,6 +1307,7 @@ pub async fn chatgpt_sign_in_start(
     state: tauri::State<'_, ChatGptAuthState>,
     another_account: Option<bool>,
 ) -> Result<ChatGptSignInStart, String> {
+    let _starting = state.starting.lock().await;
     state.cancel_login();
     let (dir, saved) = {
         let mut session = state.session.lock().await;
@@ -1386,7 +1454,7 @@ pub async fn chatgpt_request(
     if method == reqwest::Method::POST && body.is_none() {
         return Err("The request has no body.".into());
     }
-    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel = Arc::new(Cancel::default());
     {
         let mut requests = state.requests.lock().unwrap_or_else(|p| p.into_inner());
         if requests.contains_key(&request_id) {
@@ -1407,15 +1475,22 @@ pub async fn chatgpt_request(
     let _done = Done(&state, request_id);
 
     let url = format!("{API}/{route}");
+    const CANCELLED: &str = "The request was cancelled.";
     let mut response = None;
+    let mut generation = None;
     for attempt in 0..2 {
         let token = {
             let mut session = state.session.lock().await;
             ensure_loaded(&mut session, &app).await?;
+            // The retry stays with the account the request began with.
+            if generation.is_some_and(|g| g != session.generation) {
+                return Err("The ChatGPT sign-in changed; send the request again.".into());
+            }
+            generation = Some(session.generation);
             fresh_access_token(&mut session, attempt > 0).await?
         };
-        if cancel.load(Ordering::SeqCst) {
-            return Err("The request was cancelled.".into());
+        if cancel.is_cancelled() {
+            return Err(CANCELLED.into());
         }
         let mut builder = client()?
             .request(method.clone(), &url)
@@ -1433,9 +1508,10 @@ pub async fn chatgpt_request(
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body.clone());
         }
-        let reply = builder
-            .send()
+        let reply = cancel
+            .or_cancelled(builder.send())
             .await
+            .ok_or(CANCELLED)?
             .map_err(|e| format!("Can't reach OpenAI: {}", e.without_url()))?;
         if reply.status().as_u16() == 401 && attempt == 0 {
             continue;
@@ -1458,14 +1534,12 @@ pub async fn chatgpt_request(
             content_type,
         })
         .map_err(|e| e.to_string())?;
-    while let Some(chunk) = response
-        .chunk()
+    while let Some(chunk) = cancel
+        .or_cancelled(response.chunk())
         .await
+        .ok_or(CANCELLED)?
         .map_err(|e| format!("The reply was interrupted: {}", e.without_url()))?
     {
-        if cancel.load(Ordering::SeqCst) {
-            return Err("The request was cancelled.".into());
-        }
         events
             .send(ChatGptEvent::Chunk {
                 data: STANDARD.encode(&chunk),
@@ -1484,7 +1558,7 @@ pub fn chatgpt_request_cancel(state: tauri::State<'_, ChatGptAuthState>, request
         .unwrap_or_else(|p| p.into_inner())
         .get(&request_id)
     {
-        cancel.store(true, Ordering::SeqCst);
+        cancel.cancel();
     }
 }
 
@@ -1492,6 +1566,32 @@ pub fn chatgpt_request_cancel(state: tauri::State<'_, ChatGptAuthState>, request
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_cancel_interrupts_a_pending_wait() {
+        let cancel = Arc::new(Cancel::default());
+        assert_eq!(
+            tauri::async_runtime::block_on(cancel.or_cancelled(async { 7 })),
+            Some(7)
+        );
+        // A wait that would never end returns once cancelled from elsewhere.
+        let other = cancel.clone();
+        let canceller = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            other.cancel();
+        });
+        let pending = std::future::pending::<()>();
+        assert_eq!(
+            tauri::async_runtime::block_on(cancel.or_cancelled(pending)),
+            None
+        );
+        canceller.join().unwrap();
+        // Already cancelled: the work is not even started.
+        assert_eq!(
+            tauri::async_runtime::block_on(cancel.or_cancelled(async { 7 })),
+            None
+        );
+    }
 
     #[test]
     fn pkce_matches_the_rfc_7636_example() {

@@ -10,6 +10,7 @@ import {
   openChatGptPage,
   signInWithChatGpt,
   signOutOfChatGpt,
+  waitForChatGptSignIn,
 } from "../lib/assistant/chatgpt";
 
 /**
@@ -22,14 +23,48 @@ export function ChatGptAccount(): ReactElement {
   const { t } = useTranslation();
   const status = useChatGptStatus();
   const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [signInUrl, setSignInUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Leaving the settings stops waiting here; the backend keeps the attempt
-  // until it finishes or times out, and the status picks it up.
+  /** Wait here on a sign-in the backend runs; errors other than a stop are shown. */
+  const follow = async (wait: (signal: AbortSignal) => Promise<unknown>) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setBusy(true);
+    setWaiting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await wait(controller.signal);
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setBusy(false);
+        setWaiting(false);
+        setSignInUrl(null);
+      }
+    }
+  };
+
+  // Leaving the settings only stops waiting here: the backend keeps the
+  // attempt, so the browser can still finish it. Coming back to a sign-in
+  // still under way waits on it again.
   useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => {
+    if (status.signingIn && !abortRef.current) {
+      void follow((signal) => waitForChatGptSignIn(signal));
+    }
+    // `follow` only reads refs and setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.signingIn]);
 
   if (!isChatGptSignInAvailable()) {
     return (
@@ -40,32 +75,10 @@ export function ChatGptAccount(): ReactElement {
     );
   }
 
-  const signIn = async (anotherAccount: boolean) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await signInWithChatGpt({
-        anotherAccount,
-        onUrl: setSignInUrl,
-        signal: controller.signal,
-      });
-    } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-        setError(cause instanceof Error ? cause.message : String(cause));
-      }
-    } finally {
-      if (abortRef.current === controller) {
-        abortRef.current = null;
-        setBusy(false);
-        setSignInUrl(null);
-      }
-    }
-  };
+  const signIn = (anotherAccount: boolean) =>
+    follow((signal) => signInWithChatGpt({ anotherAccount, onUrl: setSignInUrl, signal }));
 
+  /** The Cancel button: the one place that ends the backend's attempt. */
   const cancel = async () => {
     abortRef.current?.abort();
     await cancelChatGptSignIn().catch(() => undefined);
@@ -84,8 +97,6 @@ export function ChatGptAccount(): ReactElement {
       setBusy(false);
     }
   };
-
-  const waiting = busy && signInUrl !== null;
 
   return (
     <div className="space-y-3 rounded-md border p-3 text-xs">
@@ -141,13 +152,15 @@ export function ChatGptAccount(): ReactElement {
             {t("settings.ai.chatgpt.waiting")}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => signInUrl && void openChatGptPage(signInUrl)}
-            >
-              {t("settings.ai.chatgpt.openAgain")}
-            </Button>
+            {signInUrl ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void openChatGptPage(signInUrl).catch(() => undefined)}
+              >
+                {t("settings.ai.chatgpt.openAgain")}
+              </Button>
+            ) : null}
             <Button size="sm" variant="ghost" onClick={() => void cancel()}>
               {t("settings.ai.cancel")}
             </Button>

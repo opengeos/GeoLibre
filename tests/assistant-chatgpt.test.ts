@@ -93,6 +93,12 @@ describe("the chatgpt provider", () => {
     assert.deepEqual(availableProviders({}), ["chatgpt"]);
   });
 
+  it("is not offered outside the desktop app", async () => {
+    const { isChatGptSignInAvailable } =
+      await import("../apps/geolibre-desktop/src/lib/assistant/chatgpt");
+    assert.equal(isChatGptSignInAvailable(), false);
+  });
+
   it("reports readiness changes", () => {
     applyChatGptStatus({
       ...READY,
@@ -173,6 +179,36 @@ describe("chatGptFetch", () => {
     const { requests } = installTauri({ status: 200, contentType: "", body: "" });
     await assert.rejects(chatGptFetch("https://api.openai.com/v1/files"), TypeError);
     assert.equal(requests.length, 0);
+  });
+
+  it("takes the body and signal of a Request input", async () => {
+    const { requests } = installTauri({ status: 200, contentType: "", body: "" });
+    const response = await chatGptFetch(
+      new Request("https://api.openai.com/v1/responses", { method: "POST", body: '{"a":1}' }),
+    );
+    await response.text();
+    assert.equal(requests[0].body, '{"a":1}');
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      chatGptFetch(
+        new Request("https://api.openai.com/v1/responses", {
+          method: "POST",
+          body: "{}",
+          signal: controller.signal,
+        }),
+      ),
+      { name: "AbortError" },
+    );
+    assert.equal(requests.length, 1);
+  });
+
+  it("ignores events that arrive after the reader cancels", async () => {
+    installTauri({ status: 200, contentType: "text/plain", body: "x".repeat(64) });
+    const response = await chatGptFetch("https://api.openai.com/v1/models");
+    // The fake backend delivers every event synchronously; cancelling the
+    // already-filled body must not throw on a closed stream.
+    await response.body!.cancel();
   });
 
   it("loads the plan's model catalog", async () => {

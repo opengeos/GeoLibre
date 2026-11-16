@@ -132,7 +132,12 @@ pub(crate) fn get_blocking(account: &str) -> Result<Option<String>, String> {
 const RESERVED_PREFIX: &str = "chatgpt.";
 
 fn check_webview_account(account: &str) -> Result<(), String> {
-    if account.starts_with(RESERVED_PREFIX) {
+    // Windows credential targets are case-insensitive, so `ChatGPT.signIn`
+    // names the same entry as `chatgpt.signIn`.
+    let reserved = account
+        .get(..RESERVED_PREFIX.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(RESERVED_PREFIX));
+    if reserved {
         return Err("This credential is managed by GeoLibre.".to_string());
     }
     Ok(())
@@ -205,6 +210,10 @@ mod tests {
     #[test]
     fn webview_cannot_touch_reserved_credentials() {
         assert!(check_webview_account("chatgpt.signIn").is_err());
+        assert!(check_webview_account("ChatGPT.signIn").is_err());
+        assert!(check_webview_account("CHATGPT.SIGNIN").is_err());
+        assert!(check_webview_account("chatgpt").is_ok());
+        assert!(check_webview_account("é").is_ok());
         assert!(check_webview_account("ai.profile.OPENAI_API_KEY").is_ok());
     }
 
