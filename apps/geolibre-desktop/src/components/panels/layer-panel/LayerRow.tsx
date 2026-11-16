@@ -248,6 +248,11 @@ export function LayerRow({
   // and attributes, so a read-only reference layer can still be
   // renamed or taken off the map.
   const layerEditable = canEditLayer(layer.id);
+  // Why a guest cannot touch this layer: the host locked it, or the session
+  // (or the host's override for this guest) is view-only.
+  const readOnlyHint = isLayerLocked
+    ? t("collaborate.layerLockedHint")
+    : t("collaborate.viewOnlyHint");
   const refreshConfig = getLayerRefreshConfig(layer);
   const refreshStatus: LayerRefreshStatus | undefined =
     transientRefreshStatus ??
@@ -330,7 +335,10 @@ export function LayerRow({
         </span>
         <button
           type="button"
-          className="rounded p-0.5 hover:bg-muted"
+          className="rounded p-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+          // A guest cannot change a host-locked layer, nor anything in a
+          // view-only session: the relay would refuse the change (#3477).
+          disabled={!layerEditable}
           // The eye stays the layer's *own* switch even while a
           // group hides it — showing EyeOff here would offer a
           // "Show layer" that turns the layer's own toggle off,
@@ -339,10 +347,11 @@ export function LayerRow({
           // Same string for the tooltip and the accessible name,
           // so the group-hidden context reaches a screen reader
           // and not only a sighted hover.
-          title={visibilityToggleLabel}
+          title={layerEditable ? visibilityToggleLabel : readOnlyHint}
           aria-label={visibilityToggleLabel}
           onClick={(e) => {
             e.stopPropagation();
+            if (!layerEditable) return;
             setLayerVisibility(layer.id, !layer.visible);
           }}
         >
@@ -545,6 +554,8 @@ export function LayerRow({
             label={t("layers.opacity")}
             ariaLabel={t("layers.opacityFor", { name: layer.name })}
             value={layer.opacity}
+            disabled={!layerEditable}
+            disabledHint={readOnlyHint}
             onChange={(v) => setLayerOpacity(layer.id, v)}
           />
         )}
@@ -679,7 +690,7 @@ export function LayerRow({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-destructive disabled:opacity-40"
-            title={!layerEditable ? t("collaborate.layerLockedHint") : t("layers.removeLayer")}
+            title={!layerEditable ? readOnlyHint : t("layers.removeLayer")}
             aria-label={t("layers.removeLayer")}
             disabled={!layerEditable}
             onClick={(e) => {

@@ -87,7 +87,7 @@ Server → client:
 | type | payload | notes |
 | --- | --- | --- |
 | `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev, requireIdentity, identitySupported, lockedLayerIds, invites[]` | sent once on join; the late-joiner bootstrap |
-| `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
+| `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot; also sent back to a sender whose snapshot was refused as `layer-locked`, with `origin: "relay"` and the stored project, so the sender drops the refused change and its next edit can sync |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
 | `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` and `identity` |
 | `mode` | `mode` | host changed the session mode |
