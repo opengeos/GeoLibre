@@ -19,6 +19,9 @@ describe("inline image lists in the Identify popup (#3477)", () => {
     assert.equal(isInlineImageList([PNG_A, "photo.jpg"]), false);
     assert.equal(isInlineImageList(["data:image/svg+xml;base64,AAAA"]), false);
     assert.equal(isInlineImageList(PNG_A), false);
+    // A map engine's rendered features carry nested arrays as JSON strings.
+    assert.equal(isInlineImageList(JSON.stringify([PNG_A, PNG_B])), true);
+    assert.equal(isInlineImageList("[not json"), false);
   });
 
   it("draws a feature's geolibre_photos as thumbnails, not as base64 text", () => {

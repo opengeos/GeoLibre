@@ -399,6 +399,9 @@ export function useCollaboration(
     };
 
     const unsubscribe = useAppStore.subscribe((state, prev) => {
+      // Re-arm the view-only notice when edit rights return, even with no edit.
+      if (state.collaboration !== prev.collaboration && canEdit())
+        viewOnlyNoticeRef.current.reset();
       if (!projectChanged(state, prev)) return;
       scheduleSnapshot();
       viewOnlyNoticeRef.current.onLocalChange({

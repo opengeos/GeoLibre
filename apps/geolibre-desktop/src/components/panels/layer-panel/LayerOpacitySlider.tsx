@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, Slider } from "@geolibre/ui";
 import { clamp } from "../../../lib/clamp";
@@ -42,6 +42,10 @@ export function LayerOpacitySlider({
   const commit = (raw: string) => {
     if (handledRef.current) return;
     handledRef.current = true;
+    if (disabled) {
+      setEditing(false);
+      return;
+    }
     const parsed = Number(raw);
     // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
     // (Number("") === 0 would otherwise silently reset the slider to its min).
@@ -55,6 +59,14 @@ export function LayerOpacitySlider({
     handledRef.current = true;
     setEditing(false);
   };
+
+  // A host may lock the layer while its exact value is being typed: drop the
+  // edit rather than leave an enabled input that commits on Enter or blur.
+  useEffect(() => {
+    if (!disabled) return;
+    handledRef.current = true;
+    setEditing(false);
+  }, [disabled]);
 
   const startEditing = () => {
     // The slider stays mounted while editing, so a second double-click on its

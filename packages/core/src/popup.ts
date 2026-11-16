@@ -514,8 +514,27 @@ export function isInlineImageValue(value: unknown): value is string {
  * photos. Under `"auto"` the popup draws these as a row of thumbnails instead
  * of printing the array as JSON, which would be megabytes of base64 (#3477).
  */
-export function isInlineImageList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length > 0 && value.every(isInlineImageValue);
+export function isInlineImageList(value: unknown): boolean {
+  return inlineImageList(value) !== null;
+}
+
+/**
+ * The inline image data URLs of a {@link isInlineImageList} value, or `null`.
+ * Also reads the list from a JSON string, the form a map engine's rendered
+ * features carry nested arrays in.
+ */
+export function inlineImageList(value: unknown): string[] | null {
+  let list = value;
+  if (typeof list === "string" && list.trimStart().startsWith("[")) {
+    try {
+      list = JSON.parse(list);
+    } catch {
+      return null;
+    }
+  }
+  return Array.isArray(list) && list.length > 0 && list.every(isInlineImageValue)
+    ? (list as string[])
+    : null;
 }
 
 /**

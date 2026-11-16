@@ -1,6 +1,6 @@
 import {
   stringifyPopupValue,
-  isInlineImageList,
+  inlineImageList,
   isInlineImageValue,
   isSafePopupUrl,
   resolvePopupTitle,
@@ -198,10 +198,11 @@ function renderPopupValue(cell: HTMLElement, row: PopupRow): void {
     }
     // A list of inline images (Field collection's `geolibre_photos`) draws as
     // a wrapping row of thumbnails, never as the array's JSON (#3477).
-    if (isInlineImageList(row.value)) {
+    const imageList = inlineImageList(row.value);
+    if (imageList) {
       const gallery = document.createElement("div");
       gallery.className = "geolibre-popup-inline-image-list flex flex-wrap gap-1";
-      row.value.forEach((source, index) => {
+      imageList.forEach((source, index) => {
         const image = document.createElement("img");
         image.src = source;
         image.alt = `${row.field} ${index + 1}`;
