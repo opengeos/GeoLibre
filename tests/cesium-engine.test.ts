@@ -1241,6 +1241,21 @@ describe("CesiumEngine framing", () => {
     engine.destroy();
   });
 
+  it("flies across the antimeridian for an unwrapped extent (#3469)", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    // getLayerBounds reports an Aleutian-to-Maine extent with east past 180;
+    // Cesium's Rectangle takes it as west > east.
+    engine.fitBounds([172, 18, 293, 72]);
+    assert.deepEqual((fakes.flights[0] as { destination: unknown }).destination, {
+      w: 172,
+      s: 18,
+      e: -67,
+      n: 72,
+    });
+    engine.destroy();
+  });
+
   it("ignores a non-finite extent instead of flying to NaN", () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

@@ -11,6 +11,7 @@ export * from "./cesium-imagery";
 export * from "./arcgis-projection";
 export * from "./map-crs";
 export * from "./geojson-z";
+export * from "./antimeridian";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";

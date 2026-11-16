@@ -169,6 +169,23 @@ function shortestLongitudeInterval(longitudes: readonly number[]): [number, numb
 }
 
 /**
+ * A `MapExtent`'s west/east pair in the form Cesium's `Rectangle` takes:
+ * longitudes within ±180, with `west` greater than `east` for a box across the
+ * antimeridian. Layer extents arrive unwrapped (`east > 180`, the MapLibre
+ * form), which `Rectangle.fromDegrees` would read as an out-of-range east edge.
+ *
+ * @param west - West edge in degrees.
+ * @param east - East edge in degrees, possibly past 180.
+ * @returns The `[west, east]` pair for `Rectangle.fromDegrees`.
+ */
+export function cesiumLongitudes(west: number, east: number): [number, number] {
+  if (east - west >= 360) return [-180, 180];
+  const wrap = (lon: number) =>
+    lon >= -180 && lon <= 180 ? lon : ((((lon + 180) % 360) + 360) % 360) - 180;
+  return [wrap(west), wrap(east)];
+}
+
+/**
  * The globe's native scene, for the handful of plugins that drive Cesium
  * directly (issue #2287): the Sun simulation lights the globe, Atmospheric
  * Effects toggles the sky box and atmosphere, the Flight Simulator places the
@@ -622,8 +639,9 @@ export class CesiumEngine implements MapEngine {
       return;
     }
     this.startFlight();
+    const [rectWest, rectEast] = cesiumLongitudes(west, east);
     viewer.camera.flyTo({
-      destination: this.Cesium.Rectangle.fromDegrees(west, south, east, north),
+      destination: this.Cesium.Rectangle.fromDegrees(rectWest, south, rectEast, north),
       duration: FLY_SECONDS,
       complete: () => this.settleStillFlight(),
     });
