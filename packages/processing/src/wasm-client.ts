@@ -276,9 +276,13 @@ export function fetchPrebuiltToolManifests(
       if (!response.ok) return null;
       const data: unknown = await response.json();
       if (!Array.isArray(data) || data.length === 0) return null;
-      if (!data.every((item) => typeof (item as ToolManifest | null)?.id === "string")) {
-        return null;
-      }
+      // Shape-check what the conversion relies on, so a malformed file falls
+      // back to the runner instead of throwing in manifestToWhiteboxTool.
+      const usable = (item: ToolManifest | null) =>
+        typeof item?.id === "string" &&
+        (item.params == null || Array.isArray(item.params)) &&
+        (item.source == null || typeof item.source === "string");
+      if (!data.every((item) => usable(item as ToolManifest | null))) return null;
       return data as ToolManifest[];
     } catch {
       return null;

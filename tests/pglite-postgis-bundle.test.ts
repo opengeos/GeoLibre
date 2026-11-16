@@ -135,3 +135,26 @@ describe("PostGIS mirror stall handling", () => {
     assert.equal(await blob.text(), "ok");
   });
 });
+
+describe("PostGIS mirror deadline after headers", () => {
+  it("gives the first body chunk a fresh deadline once headers arrive", async () => {
+    const fake = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        // Headers arrive late (35 of 50 ms), then the body 30 ms after them.
+        setTimeout(() => {
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              setTimeout(() => {
+                controller.enqueue(new TextEncoder().encode("primary"));
+                controller.close();
+              }, 30);
+            },
+          });
+          resolve(new Response(body, { status: 200 }));
+        }, 35);
+      })) as unknown as typeof fetch;
+    const blob = await fetchFromMirrors(["a", "b"], fake, 50);
+    assert.equal(await blob.text(), "primary");
+  });
+});

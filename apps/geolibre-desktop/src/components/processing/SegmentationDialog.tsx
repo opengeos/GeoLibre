@@ -187,11 +187,13 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
         setResultMessage(t("segmentation.noObjects"));
         return;
       }
-      const name =
+      const name = uniqueLayerName(
         mode === "text"
           ? t("segmentation.layerName", { prompt: prompt.trim() })
-          : t("segmentation.layerNameDefault");
-      const layerId = addGeoJsonLayer(uniqueLayerName(name, useAppStore.getState().layers), fc);
+          : t("segmentation.layerNameDefault"),
+        useAppStore.getState().layers,
+      );
+      const layerId = addGeoJsonLayer(name, fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentation.added", { count: features.length, name }));

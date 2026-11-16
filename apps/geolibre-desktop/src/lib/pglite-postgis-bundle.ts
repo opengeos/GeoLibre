@@ -83,6 +83,7 @@ export async function fetchFromMirrors(
         failures.push(`${url}: HTTP ${response.status}`);
         continue;
       }
+      arm(); // a fresh deadline for the first body chunk
       const blob = await readBody(response, arm);
       if (expectedSha256) {
         const actual = await sha256Hex(blob);

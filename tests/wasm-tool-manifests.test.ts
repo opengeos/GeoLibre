@@ -748,6 +748,8 @@ describe("fetchPrebuiltToolManifests (issue #3472)", () => {
       json([], 200),
       json({ error: "nope" }, 404),
       json([{ name: "no id" }]),
+      json([{ id: "slope", params: {} }]),
+      json([{ id: "slope", source: 42 }]),
       (async () => new Response("<!doctype html>", { status: 200 })) as unknown as typeof fetch,
       (async () => {
         throw new Error("offline");

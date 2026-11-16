@@ -24,8 +24,8 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
   // dynamic imports.
   if (!__PGLITE_CDN_URL__ || !__PGLITE_POSTGIS_CDN_URL__) {
     throw new Error(
-      "PGlite CDN URLs were not injected. This loader is only meant for the " +
-        "embed build (GEOLIBRE_PGLITE_CDN=1).",
+      "PGlite CDN URLs were not injected. This loader is only meant for " +
+        "builds that load PGlite from the CDN (GEOLIBRE_PGLITE_CDN is not 0).",
     );
   }
   let modules: { PGlite: unknown; postgis: unknown };

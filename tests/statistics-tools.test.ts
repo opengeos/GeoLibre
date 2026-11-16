@@ -1391,5 +1391,11 @@ describe("space-time cube time steps (issue #3472)", () => {
     assert.ok(messages.some((m) => m.includes("Merged a partial final time step")));
     const props = results[0].geojson.features[0].properties ?? {};
     assert.equal(props.time_steps, 52);
+    // Merging keeps the trailing event: every point is still counted.
+    const total = results[0].geojson.features.reduce(
+      (sum, f) => sum + (f.properties?.total as number),
+      0,
+    );
+    assert.equal(total, pts.length);
   });
 });
