@@ -1598,10 +1598,13 @@ describe("summarize within", () => {
   it("reports polygon pairs it could not intersect", () => {
     const broken: FeatureCollection["features"][number] = {
       ...rect(0, 0, 1, 1, { zone: "bad" }),
-      // An empty position fails polygon-clipping's input validation ("not a valid
-      // Polygon or MultiPolygon"), a deliberate check rather than a side effect of
-      // how bad numbers are handled. The bbox skips it, so the pair still reaches
-      // the clip.
+      // Two Turf behaviours make this reach the failure path:
+      // 1. @turf/bbox ignores the empty position and still returns [0, 0, 1, 1],
+      //    so the pair passes the bbox pre-filter instead of being dropped there.
+      // 2. polygon-clipping's input validation then rejects the ring ("not a valid
+      //    Polygon or MultiPolygon"), so intersect throws.
+      // If an upgrade changes the first, the pair never reaches the clip and this
+      // fails without the tool being wrong.
       geometry: {
         type: "Polygon" as const,
         coordinates: [[[0, 0], [] as unknown as [number, number], [1, 1], [0, 0]]],
@@ -1612,6 +1615,21 @@ describe("summarize within", () => {
       overlay: "broken",
     });
     assert.ok(logs.some((line) => line.includes("skipped 1 polygon pair(s)")));
+  });
+
+  it("skips features with a geometry type Turf cannot read", () => {
+    // Turf's bbox throws "Unknown Geometry Type" on this; it used to abort the run.
+    const bogus = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Bogus", coordinates: [1, 1] },
+    } as unknown as FeatureCollection["features"][number];
+    const { result, logs } = run([tracts, asLayer("odd", [pt(1, 1), bogus])], {
+      layer: "tracts",
+      overlay: "odd",
+    });
+    assert.equal(result!.features[0].properties?.count, 1);
+    assert.ok(logs.some((line) => line.includes("skipped 1 feature(s)")));
   });
 
   it("warns when both inputs are the same layer", () => {
