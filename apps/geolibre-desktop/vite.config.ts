@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
@@ -14,6 +15,7 @@ import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 import { isolateMaplibreRegistryPlugin } from "./vite-plugins/isolate-maplibre-registry";
 import { sharedH5wasmChunkPlugin, workerH5wasmFromMainPlugin } from "./vite-plugins/shared-h5wasm";
+import { wasmToolManifestsPlugin } from "./vite-plugins/wasm-tool-manifests";
 import {
   proxyAircraftRequestGuarded,
   proxyAdsbdbAircraftRequestGuarded,
@@ -504,6 +506,17 @@ function pgliteCdnUrl(pkg: string): string | null {
 }
 const PGLITE_CDN_URL = pgliteCdnUrl("@electric-sql/pglite");
 const PGLITE_POSTGIS_CDN_URL = pgliteCdnUrl("@electric-sql/pglite-postgis");
+// SHA-256 of the installed PostGIS extension bundle. The CDN loader downloads
+// that file from unpkg or jsDelivr (src/lib/pglite-postgis-bundle.ts) and checks
+// it against this digest, so either mirror serving other bytes is rejected.
+function pglitePostgisBundleSha256(): string | null {
+  if (!PGLITE_CDN) return null;
+  // The extension resolves `./postgis.tar.gz` next to its entry module.
+  const entry = pgliteCdnRequire.resolve("@electric-sql/pglite-postgis");
+  const bundle = readFileSync(path.join(path.dirname(entry), "postgis.tar.gz"));
+  return createHash("sha256").update(bundle).digest("hex");
+}
+const PGLITE_POSTGIS_BUNDLE_SHA256 = pglitePostgisBundleSha256();
 
 // CereusDB (Apache Sedona spatial SQL, compiled to WASM) ships a ~40 MB wasm
 // blob that brotli only shrinks to ~8.6 MB — the entire 27 → 36 MB desktop
@@ -1504,16 +1517,21 @@ function pwaPlugin(): Plugin[] {
           // GEOLIBRE_PGLITE_CDN=0 / GEOLIBRE_CEREUS_CDN=0, those engines are
           // bundled under /assets/ instead and this rule simply never matches them
           // (Pyodide is always CDN-loaded regardless).
+          // The PostGIS bundle is fetched from unpkg first (jsDelivr's cache
+          // miss for that ~20 MB file times out, issue #3472; see
+          // src/lib/pglite-postgis-bundle.ts), so cache that path there too.
           urlPattern: ({ url }: { url: URL }) =>
-            url.hostname === "cdn.jsdelivr.net" &&
-            (url.pathname.startsWith("/pyodide/") ||
-              url.pathname.startsWith("/npm/@electric-sql/") ||
-              url.pathname.startsWith("/npm/@cereusdb/") ||
-              // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
-              // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
-              // its own DuckDB from here regardless, so this caches that too.
-              url.pathname.startsWith("/npm/@duckdb/") ||
-              url.pathname.startsWith("/npm/gdal3.js")),
+            (url.hostname === "unpkg.com" &&
+              url.pathname.startsWith("/@electric-sql/pglite-postgis@")) ||
+            (url.hostname === "cdn.jsdelivr.net" &&
+              (url.pathname.startsWith("/pyodide/") ||
+                url.pathname.startsWith("/npm/@electric-sql/") ||
+                url.pathname.startsWith("/npm/@cereusdb/") ||
+                // Only populated when GEOLIBRE_DUCKDB_WASM_CDN=1 moves the engine
+                // off the origin; harmless otherwise. maplibre-gl-duckdb fetches
+                // its own DuckDB from here regardless, so this caches that too.
+                url.pathname.startsWith("/npm/@duckdb/") ||
+                url.pathname.startsWith("/npm/gdal3.js"))),
           handler: "CacheFirst",
           options: {
             cacheName: "geolibre-cdn-engines",
@@ -1575,6 +1593,9 @@ export default defineConfig({
     thirdPartyLicensePlugin(),
     isolateMaplibreRegistryPlugin(),
     projectUrlQueryPlugin(),
+    wasmToolManifestsPlugin(
+      fileURLToPath(new URL("../../node_modules/geolibre-wasm/", import.meta.url)),
+    ),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
     copyVectorOps(
       path.resolve(__dirname, "../../backend/geolibre_server/geolibre_server/vector_ops.py"),
@@ -1600,6 +1621,7 @@ export default defineConfig({
     __NO_EXTERNAL_CDN__: JSON.stringify(NO_EXTERNAL_CDN),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
+    __PGLITE_POSTGIS_BUNDLE_SHA256__: JSON.stringify(PGLITE_POSTGIS_BUNDLE_SHA256),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
     __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
     // The allowlisted build-time env (see BUILD_ENV_KEYS). runtime-env.ts reads

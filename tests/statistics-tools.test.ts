@@ -25,6 +25,8 @@ import {
 import {
   buildNeighbors,
   meanNearestNeighborDistance,
+  spaceTimeCubeSteps,
+  timestampResolutionMs,
 } from "../packages/processing/src/statistics-tools";
 import type { Feature, FeatureCollection, Point } from "geojson";
 
@@ -1324,4 +1326,76 @@ describe("bounded neighbor search", () => {
       assert.equal(meanNearestNeighborDistance(coords), bruteMeanNearest(coords));
     });
   }
+});
+
+describe("space-time cube time steps (issue #3472)", () => {
+  const HOUR = 3_600_000;
+  const DAY = 86_400_000;
+  const WEEK = 7 * DAY;
+
+  it("merges a sliver of a trailing week into the previous step", () => {
+    // A year of continuous timestamps in weekly steps: 52 weeks + 17 hours.
+    const r = spaceTimeCubeSteps(364 * DAY + 17 * HOUR, WEEK, 0);
+    assert.equal(r.timeSteps, 52);
+    assert.equal(r.mergedTrailing, true);
+  });
+
+  it("merges the one-day 53rd week of date-only data", () => {
+    const r = spaceTimeCubeSteps(364 * DAY, WEEK, DAY);
+    assert.equal(r.timeSteps, 52);
+    assert.equal(r.mergedTrailing, true);
+  });
+
+  it("keeps a final step that the data fills", () => {
+    // Daily data in daily steps: the last day is a whole step.
+    assert.deepEqual(spaceTimeCubeSteps(4 * DAY, DAY, DAY), {
+      timeSteps: 5,
+      mergedTrailing: false,
+      trailingFraction: 1,
+    });
+    // More than half a week of tail stays its own step.
+    assert.equal(spaceTimeCubeSteps(2 * WEEK + 4 * DAY, WEEK, 0).timeSteps, 3);
+    // Daily data in hourly steps: the resolution is capped at one step, so no
+    // empty trailing hours are added.
+    assert.equal(spaceTimeCubeSteps(2 * DAY, HOUR, DAY).timeSteps, 49);
+  });
+
+  it("never merges below two steps", () => {
+    const r = spaceTimeCubeSteps(WEEK + HOUR, WEEK, 0);
+    assert.equal(r.timeSteps, 2);
+    assert.equal(r.mergedTrailing, false);
+  });
+
+  it("detects daily, hourly and continuous timestamps", () => {
+    assert.equal(timestampResolutionMs([5, 5 + DAY, 5 + 3 * DAY], 5), DAY);
+    assert.equal(timestampResolutionMs([0, HOUR, DAY], 0), HOUR);
+    assert.equal(timestampResolutionMs([0, 1234, DAY], 0), 0);
+  });
+
+  it("drops the partial final week from an Emerging Hot Spot run", () => {
+    const BASE = Date.UTC(2025, 0, 1, 3);
+    const pts: Array<[number, number, Record<string, unknown>]> = [];
+    // 52 full weeks of background events on a 4×4 grid, then one late event.
+    for (let week = 0; week < 52; week++)
+      for (let row = 0; row < 4; row++)
+        for (let col = 0; col < 4; col++)
+          pts.push([col * 0.05, row * 0.05, { t: BASE + week * WEEK + (row + col) * HOUR }]);
+    pts.push([0.15, 0.15, { t: BASE + 52 * WEEK + 5 * HOUR }]);
+    const { messages, results } = run(emergingHotSpotTool, pointLayer(pts), {
+      timeField: "t",
+      cellSize: 5,
+      timeStep: 1,
+      timeStepUnit: "weeks",
+      confidence: "95",
+    });
+    assert.ok(messages.some((m) => m.includes("Merged a partial final time step")));
+    const props = results[0].geojson.features[0].properties ?? {};
+    assert.equal(props.time_steps, 52);
+    // Merging keeps the trailing event: every point is still counted.
+    const total = results[0].geojson.features.reduce(
+      (sum, f) => sum + (f.properties?.total as number),
+      0,
+    );
+    assert.equal(total, pts.length);
+  });
 });

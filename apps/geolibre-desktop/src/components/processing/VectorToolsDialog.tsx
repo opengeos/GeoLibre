@@ -16,6 +16,7 @@ import {
   type VectorToolResult,
 } from "@geolibre/processing";
 import { rejectOnAbort } from "../../lib/abortable";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { onPyodideProgress, runVectorToolInPyodide } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
@@ -306,8 +307,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
         appendLog(`No features produced for "${name}"`);
         return;
       }
-      const layerId = addGeoJsonLayer(name, fc);
-      runTrackerRef.current?.addOutputLayer(name);
+      const layerName = uniqueLayerName(name, useAppStore.getState().layers);
+      const layerId = addGeoJsonLayer(layerName, fc);
+      runTrackerRef.current?.addOutputLayer(layerName);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },

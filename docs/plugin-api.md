@@ -925,6 +925,8 @@ if (subBasins) app.removeLayerGroup?.(subBasins);
 
 `moveLayerGroupToGroup` is the group-of-groups counterpart of `moveLayersToGroup`: the same reparenting the Layers panel's own "Move to group" menu performs. It is a no-op when either id is unknown, when the group is already in that parent, and when the move would make a group its own ancestor — the host refuses the cycle rather than corrupting the tree, so a plugin does not have to walk the parent chain itself.
 
+A call to `addLayerGroup` that names its layers reuses a folder of the same name that holds nothing but some of those layers (or nothing at all) instead of creating a second one. That is what happens when a saved project is reopened: the folder comes back with the plugin's layers in it, and the plugin, reactivated, asks for it again. A namesake that holds anything else, another layer or a subgroup, is a different folder and is left alone, and a call without layers always creates a new group. An empty folder of that name, even one the user made, is reused.
+
 `addLayerGroup` is the only source of group ids for folders a plugin creates. To address a folder it did not create — one the user made, or one another plugin made — read the tree first:
 
 ```typescript

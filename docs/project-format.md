@@ -66,7 +66,9 @@ of a Cloud Optimized GeoTIFF DEM; omitted for the built-in global terrain). A DE
 opened from a local file has no URL, so it is not saved. Like other URLs in a project,
 `terrainSource` passes through [credential redaction](#credential-redaction), so
 a presigned or keyed DEM URL loses its signature and needs re-signing to load
-again. `terrainIonAssetId`
+again. `terrainFillOutside` says whether that DEM is surrounded by the global
+terrain instead of a flat 0 m plain; omitted, it is on for a URL DEM and off for
+a local file. `terrainIonAssetId`
 picks a Cesium Ion terrain asset for the globe.
 
 ## Plugin state

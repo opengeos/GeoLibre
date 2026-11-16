@@ -26,7 +26,16 @@ interface CogDemDataset {
   /** Tile reads still using the reader; see closeWhenIdle. */
   pendingReads: number;
   disposed: boolean;
+  /** Fills pixels outside the DEM or on its nodata; see CogDemFallback. */
+  fallback: CogDemFallback | null;
 }
+
+/**
+ * Elevations for one 256 x 256 XYZ tile from another terrain source, used to
+ * fill what the COG does not cover. Row-major metres; NaN where it has none.
+ * Resolves null when that source has nothing for the tile.
+ */
+export type CogDemFallback = (z: number, x: number, y: number) => Promise<ArrayLike<number> | null>;
 
 /** Failure kinds the app layer can translate; see CogDemError. */
 export type CogDemErrorCode = "empty-source" | "unsupported-band" | "unsupported-projection";
@@ -55,6 +64,13 @@ export interface CogDemSourceRegistration {
   renderTile: (z: number, x: number, y: number) => Promise<Uint8ClampedArray>;
   /** Release the COG reader after this terrain source is replaced. */
   dispose: () => void;
+  /**
+   * Set or clear the source that fills pixels outside the DEM and on its
+   * nodata. Takes effect for tiles rendered afterwards, so the caller re-adds
+   * its terrain source to drop tiles already cached. Optional so a stand-in
+   * registration (tests, other engines) need not implement it.
+   */
+  setFallback?: (fallback: CogDemFallback | null) => void;
 }
 
 const datasets = new Map<string, CogDemDataset>();
@@ -76,6 +92,66 @@ function closeQuietly(tiff: GeoTIFF): void {
  */
 function closeWhenIdle(dataset: CogDemDataset): void {
   if (dataset.disposed && dataset.pendingReads === 0) closeQuietly(dataset.tiff);
+}
+
+/**
+ * Fill a DEM tile's missing pixels (outside the COG, or its nodata) from a
+ * fallback tile of the same size, in place. Pixels the fallback has no value
+ * for stay missing. Exported for tests.
+ *
+ * @param elevations - The COG tile, row-major.
+ * @param nodata - The COG's declared nodata, if any.
+ * @param fallback - Elevations for the same pixels from another source.
+ * @returns The same array, filled.
+ */
+export function fillMissingElevations(
+  elevations: Float64Array,
+  nodata: number | null,
+  fallback: ArrayLike<number>,
+): Float64Array {
+  for (let index = 0; index < elevations.length; index += 1) {
+    if (!isMissing(elevations[index], nodata)) continue;
+    const value = Number(fallback[index]);
+    if (Number.isFinite(value)) elevations[index] = value;
+  }
+  return elevations;
+}
+
+/** Whether any pixel of a tile is missing, so a fallback read is worth making. */
+function hasMissing(elevations: ArrayLike<number>, nodata: number | null): boolean {
+  for (let index = 0; index < elevations.length; index += 1) {
+    if (isMissing(Number(elevations[index]), nodata)) return true;
+  }
+  return false;
+}
+
+/**
+ * Render one tile's Terrarium RGBA: the COG's elevations, with the fallback
+ * filling what the COG lacks when one is set. A failed fallback read leaves the
+ * tile as the COG alone rather than failing it.
+ */
+async function renderDatasetTile(
+  dataset: CogDemDataset,
+  z: number,
+  x: number,
+  y: number,
+): Promise<Uint8ClampedArray> {
+  const elevations = Float64Array.from(await readTileHoldingReader(dataset, z, x, y));
+  const fallback = dataset.fallback;
+  if (!fallback || !hasMissing(elevations, dataset.nodata)) {
+    return encodeTerrariumDem(elevations, dataset.nodata);
+  }
+  // The COG's nodata becomes NaN before the merge and the merged tile is
+  // encoded without it: a fallback elevation that happens to equal the COG's
+  // sentinel (255 m against nodata 255) is real ground, not a gap.
+  for (let index = 0; index < elevations.length; index += 1) {
+    if (isMissing(elevations[index], dataset.nodata)) elevations[index] = Number.NaN;
+  }
+  const filler = await fallback(z, x, y).catch(() => null);
+  if (filler && filler.length === elevations.length) {
+    fillMissingElevations(elevations, null, filler);
+  }
+  return encodeTerrariumDem(elevations, null);
 }
 
 /** Read one tile, holding the reader open for as long as the read needs it. */
@@ -478,8 +554,7 @@ function ensureCogDemProtocol(): void {
     const { key, z, x, y } = parseTileRequest(request);
     const dataset = datasets.get(key);
     if (!dataset) throw new Error("The COG DEM source is no longer available.");
-    const elevations = await readTileHoldingReader(dataset, z, x, y);
-    return { data: await rgbaToPng(encodeTerrariumDem(elevations, dataset.nodata)) };
+    return { data: await rgbaToPng(await renderDatasetTile(dataset, z, x, y)) };
   });
   protocolRegistered = true;
 }
@@ -553,6 +628,7 @@ export async function registerCogDemSource(
     band: band - 1,
     pendingReads: 0,
     disposed: false,
+    fallback: null,
   });
   const sourceBounds = image.getBoundingBox();
   const bounds = geographicBounds(sourceBounds, projection);
@@ -560,12 +636,14 @@ export async function registerCogDemSource(
   return {
     tiles: [`${PROTOCOL}://${key}/{z}/{x}/{y}`],
     bounds,
-    renderTile: async (z, x, y) =>
-      encodeTerrariumDem(await readTileHoldingReader(dataset, z, x, y), dataset.nodata),
+    renderTile: (z, x, y) => renderDatasetTile(dataset, z, x, y),
     dispose: () => {
       datasets.delete(key);
       dataset.disposed = true;
       closeWhenIdle(dataset);
+    },
+    setFallback: (fallback) => {
+      dataset.fallback = fallback;
     },
   };
 }

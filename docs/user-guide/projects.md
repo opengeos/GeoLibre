@@ -60,6 +60,8 @@ Snapshots are stored per project — keyed by file path, or by name for a projec
 
 **Project → Import → Import QGIS Project…** reads a QGIS `.qgs` or `.qgz` project and rebuilds it as a GeoLibre project: its layers, layer groups (including nested ones), group visibility, layer order, styling, the saved map view, and each layer's attribute form.
 
+Layers QGIS reads over HTTP through GDAL's `/vsicurl/` (GeoJSON, GeoParquet, GeoPackage, FlatGeobuf, KML and the other vector formats GeoLibre opens) are downloaded and loaded. WMS layers and XYZ tile layers become GeoLibre tile layers; WMS tiles are requested in Web Mercator whatever CRS the QGIS layer used. WMTS layers are listed as skipped, so add those services from **Add data**. When the project has no saved map canvas, the map opens at the project's default view extent (Project Properties → View Settings).
+
 Every layer of a multi-layer GeoPackage is read from its own table. A GeoPackage table without geometry (a lookup list, a table of reviews or photos linked to a point) is imported as a table layer: it draws nothing on the map, its rows open in the attribute table, dropdowns read from it, and records can be added to it. A geometry-less table in any other format is listed as skipped.
 
 ### Forms from QGIS and QField

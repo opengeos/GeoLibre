@@ -19,3 +19,21 @@ describe("object-detection ORT version", () => {
     assert.equal(pkg.dependencies["onnxruntime-web"], ORT_VERSION);
   });
 });
+
+describe("built-in detection model URLs", () => {
+  it("are commit-pinned raw.githubusercontent.com URLs, not jsDelivr /gh/", async () => {
+    const { BUILTIN_DETECTION_MODELS } =
+      await import("../apps/geolibre-desktop/src/lib/detection-models");
+    assert.ok(BUILTIN_DETECTION_MODELS.length > 0);
+    for (const model of BUILTIN_DETECTION_MODELS) {
+      // jsDelivr's /gh/ mirror stopped serving these files (503 without a CORS
+      // header, issue #3472); GitHub's raw host serves them with ACAO: *.
+      assert.doesNotMatch(model.url, /cdn\.jsdelivr\.net\/gh\//, model.id);
+      assert.match(
+        model.url,
+        /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\/.+\.onnx$/,
+        model.id,
+      );
+    }
+  });
+});

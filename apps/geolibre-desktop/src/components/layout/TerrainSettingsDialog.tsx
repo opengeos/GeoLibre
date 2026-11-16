@@ -32,6 +32,7 @@ import {
   MAX_EXAGGERATION,
   MIN_EXAGGERATION,
 } from "../../lib/terrain-exaggeration";
+import { displayedTerrainFillOutside, resolveTerrainFillOutside } from "../../lib/terrain-fill";
 import { terrainRasterLayerOptions } from "../../lib/terrain-raster-layer";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
@@ -50,13 +51,16 @@ type TerrainSourceAction = "url" | "file" | "layer" | "default" | "ion";
  *     the renderer default.
  */
 function setTerrainPreferences(
-  patch: Partial<Pick<MapPreferences, "terrainExaggeration" | "terrainSource">>,
+  patch: Partial<
+    Pick<MapPreferences, "terrainExaggeration" | "terrainSource" | "terrainFillOutside">
+  >,
 ): void {
   const { preferences, setPreferences } = useAppStore.getState();
   const map = { ...preferences.map, ...patch };
   if (
     map.terrainExaggeration === preferences.map.terrainExaggeration &&
-    map.terrainSource === preferences.map.terrainSource
+    map.terrainSource === preferences.map.terrainSource &&
+    map.terrainFillOutside === preferences.map.terrainFillOutside
   ) {
     return;
   }
@@ -128,6 +132,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   const [rasterLayerId, setRasterLayerId] = useState("");
   const [sourceLoading, setSourceLoading] = useState<TerrainSourceAction | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const [fillOutside, setFillOutside] = useState(true);
   // Free-text draft for the number input so a fractional value like "2.5" can be
   // typed without the controlled numeric value snapping the field mid-keystroke.
   // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
@@ -160,6 +165,15 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       );
       setTerrainUrl(!currentLayer && /^https?:\/\//i.test(currentSource) ? currentSource : "");
       setRasterLayerId(currentLayer?.id ?? "");
+      const controller = mapControllerRef.current;
+      setFillOutside(
+        displayedTerrainFillOutside(
+          controller?.hasCustomTerrainSource()
+            ? (controller.getTerrainFillOutside?.() ?? null)
+            : null,
+          useAppStore.getState().preferences.map.terrainFillOutside,
+        ),
+      );
       setSourceError(null);
       // A COG still opening from a previous session of this dialog would
       // otherwise leave the controls disabled and the button reading "Opening
@@ -267,7 +281,28 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       // The COG source goes first so a failed registration keeps the saved Ion
       // selection; a COG source outranks Ion in the engine, so clearing Ion
       // afterwards does not fetch it again.
-      if (!(await controller.setTerrainCogSource(source)) || !isCurrent()) return;
+      // Handed to the engine with the source, which applies it only once the
+      // DEM has opened, so a failed open leaves the working DEM's fill alone.
+      const fill =
+        source === null
+          ? undefined
+          : resolveTerrainFillOutside(
+              useAppStore.getState().preferences.map.terrainFillOutside,
+              source,
+            );
+      if (
+        !(await controller.setTerrainCogSource(
+          source,
+          undefined,
+          fill === undefined ? undefined : { fillOutside: fill },
+        )) ||
+        !isCurrent()
+      ) {
+        return;
+      }
+      if (fill !== undefined && controller.getTerrainFillOutside) {
+        setFillOutside(controller.getTerrainFillOutside());
+      }
       setTerrainPreferences({ terrainSource: savedTerrainSource(source) });
       if (ionTerrainSupported && controller.setTerrainIonAssetId) {
         if (controller.getTerrainIonAssetId?.() !== null) {
@@ -328,6 +363,16 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setTerrainUrl("");
       setRasterLayerId("");
     });
+
+  // An explicit choice is saved, so it holds for this project from then on,
+  // whatever kind of DEM is opened next.
+  const changeFillOutside = (fill: boolean) => {
+    setFillOutside(fill);
+    setTerrainPreferences({ terrainFillOutside: fill });
+    mapControllerRef.current?.setTerrainFillOutside?.(fill);
+  };
+  const fillOutsideSupported =
+    typeof mapControllerRef.current?.setTerrainFillOutside === "function";
 
   const applyIonTerrainSource = async () => {
     const assetId = parseCesiumIonAssetId(ionAssetId);
@@ -499,6 +544,24 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
                     {t("terrainSettings.localSourceDescription")}
                   </p>
                 </div>
+                {fillOutsideSupported && (
+                  <div className="space-y-1">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        id="terrain-fill-outside"
+                        type="checkbox"
+                        checked={fillOutside}
+                        disabled={!!sourceLoading}
+                        onChange={(event) => changeFillOutside(event.target.checked)}
+                        className="h-4 w-4 accent-foreground"
+                      />
+                      {t("terrainSettings.fillOutside")}
+                    </label>
+                    <p className="text-muted-foreground text-xs">
+                      {t("terrainSettings.fillOutsideDescription")}
+                    </p>
+                  </div>
+                )}
                 {sourceError ? (
                   <p className="text-destructive text-sm" role="alert">
                     {sourceError}

@@ -234,7 +234,22 @@ export interface MapEngine {
   /** The COG URL currently backing terrain, or `null` for the default source. */
   getTerrainCogSource(): string | null;
   hasCustomTerrainSource(): boolean;
-  setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /**
+   * `options.fillOutside` sets {@link MapEngine.setTerrainFillOutside} along
+   * with the new DEM, applied only once it has opened.
+   */
+  setTerrainCogSource(
+    source: string | Blob | null,
+    band?: number,
+    options?: { fillOutside?: boolean },
+  ): Promise<boolean>;
+  /**
+   * Whether a custom COG DEM is surrounded by the engine's global terrain.
+   * Optional: only engines that can composite the two implement it.
+   */
+  getTerrainFillOutside?(): boolean;
+  /** Fill outside a custom COG DEM (and its nodata) with the global terrain. */
+  setTerrainFillOutside?(fill: boolean): void;
   /** Cesium-only Ion terrain asset, or `null` when the normal global source is used. */
   getTerrainIonAssetId?(): number | null;
   /** Select or clear the Cesium-only Ion terrain source. */

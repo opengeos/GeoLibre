@@ -3661,10 +3661,38 @@ html
    with no usable height after the toolbar and status bar are laid out. Give the
    open panel a viewport-relative height on narrow portrait screens so the rows
    remain scrollable. The desktop inline height and resize handle still govern
-   every other layout. */
+   every other layout.
+
+   That height is a preferred size, not a fixed one: the toolbar, the side-tab
+   strips, the status bar and the map's own 18rem floor all share the same
+   screen, and on a typical phone (less still with the browser's own bars
+   showing) they leave less than 60dvh. So the panel may shrink down to 13rem
+   and the map gives up part of its floor while the panel is open. Otherwise
+   the panel's footer, or the tab strip under the map, ends up off screen or
+   under the panel.
+
+   Under the map (the default), the map column may shrink below its content so
+   the panel's shrinking is what absorbs the shortfall. Full width, the
+   workspace row keeps its content height for the same reason, instead of the
+   map drawing behind the panel. */
 @media (max-width: 639px) and (orientation: portrait) {
   .geolibre-attribute-table-panel:not([data-collapsed]) {
     height: clamp(22rem, 60dvh, 32rem) !important;
+    flex-shrink: 1;
+    min-height: 13rem;
+  }
+
+  [data-map-column]:has(.geolibre-attribute-table-panel:not([data-collapsed])) {
+    min-height: 0;
+  }
+
+  [data-workspace-row]:has(~ .geolibre-attribute-table-panel:not([data-collapsed])) {
+    min-height: auto;
+  }
+
+  [data-map-column]:has(.geolibre-attribute-table-panel:not([data-collapsed])) > main,
+  [data-workspace-row]:has(~ .geolibre-attribute-table-panel:not([data-collapsed])) main {
+    min-height: min(18rem, 35dvh);
   }
 
   .geolibre-attribute-table-resize-handle {
