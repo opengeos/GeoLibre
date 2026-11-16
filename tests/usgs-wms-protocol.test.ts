@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   type EllipsoidId,
   PLANETARY_BASEMAPS,
@@ -7,12 +7,15 @@ import {
   USGS_WMS_PROTOCOL,
 } from "@geolibre/core";
 import type { RequestParameters } from "maplibre-gl";
+import { hasRegisteredProtocol } from "../packages/map/src/protocol-tiles";
 import {
   clearUsgsWmsTileCache,
+  ensureUsgsWmsProtocol,
   parseUsgsWmsTileUrl,
   usgsWmsGetMapUrl,
   usgsWmsProtocolHandler,
 } from "../packages/map/src/usgs-wms-protocol";
+import { remapRowsToMercator, tileGeoBounds } from "../packages/map/src/wms-reproject";
 
 const wmsBasemaps = PLANETARY_BASEMAPS.filter((b) => b.wms);
 
@@ -59,6 +62,9 @@ describe("USGS WMS planetary basemaps", () => {
     assert.equal(parseUsgsWmsTileUrl("usgs-wms://mars-hillshade/0/0/0"), null);
     assert.equal(parseUsgsWmsTileUrl("usgs-wms://constructor/0/0/0"), null);
     assert.equal(parseUsgsWmsTileUrl("usgs-wms://venus-magellan/1/2/0"), null);
+    // Deeper than the basemap's maxZoom (6 for Venus) would only waste a request.
+    assert.equal(parseUsgsWmsTileUrl("usgs-wms://venus-magellan/7/0/0"), null);
+    assert.ok(parseUsgsWmsTileUrl("usgs-wms://venus-magellan/6/0/0"));
     assert.equal(parseUsgsWmsTileUrl("https://example.com/venus-magellan/0/0/0"), null);
   });
 
@@ -143,5 +149,142 @@ describe("usgsWmsProtocolHandler", () => {
       /aborted/,
     );
     assert.equal(seen, controller.signal);
+  });
+});
+
+// Deterministic doubles for the browser image pipeline. The "PNG" a stubbed
+// fetch returns is raw RGBA; the bitmap double carries those bytes, and the
+// canvas double copies pixels through drawImage/getImageData/putImageData and
+// "encodes" by returning them as-is. So the handler's output bytes are exactly
+// the warped pixels it produced.
+const SIZE = 256;
+
+class FakeContext {
+  pixels = new Uint8ClampedArray(SIZE * SIZE * 4);
+  drawImage(image: { bytes: Uint8Array }) {
+    this.pixels = new Uint8ClampedArray(image.bytes);
+  }
+  getImageData() {
+    return { data: new Uint8ClampedArray(this.pixels) };
+  }
+  createImageData(w: number, h: number) {
+    return { data: new Uint8ClampedArray(w * h * 4) };
+  }
+  putImageData(image: { data: Uint8ClampedArray }) {
+    this.pixels = new Uint8ClampedArray(image.data);
+  }
+}
+
+class FakeOffscreenCanvas {
+  ctx = new FakeContext();
+  getContext() {
+    return this.ctx;
+  }
+  async convertToBlob() {
+    return new Blob([this.ctx.pixels]);
+  }
+}
+
+/** A source image whose every pixel in row r is (r, r, r, 255). */
+function rowCodedImage(): Uint8Array {
+  const src = new Uint8Array(SIZE * SIZE * 4);
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) src.set([r, r, r, 255], (r * SIZE + c) * 4);
+  }
+  return src;
+}
+
+describe("usgsWmsProtocolHandler success path", () => {
+  const g = globalThis as Record<string, unknown>;
+  const real = {
+    fetch: globalThis.fetch,
+    createImageBitmap: g.createImageBitmap,
+    OffscreenCanvas: g.OffscreenCanvas,
+  };
+  const src = rowCodedImage();
+  let fetches: string[] = [];
+  let failNext = false;
+
+  beforeEach(() => {
+    fetches = [];
+    failNext = false;
+    clearUsgsWmsTileCache();
+    globalThis.fetch = (async (url: string) => {
+      fetches.push(url);
+      if (failNext) {
+        failNext = false;
+        return new Response("busy", { status: 503, headers: { "content-type": "text/plain" } });
+      }
+      return new Response(src.slice(), { headers: { "content-type": "image/png" } });
+    }) as typeof fetch;
+    g.createImageBitmap = async (blob: Blob) => ({
+      bytes: new Uint8Array(await blob.arrayBuffer()),
+      close() {},
+    });
+    g.OffscreenCanvas = FakeOffscreenCanvas;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = real.fetch;
+    g.createImageBitmap = real.createImageBitmap;
+    g.OffscreenCanvas = real.OffscreenCanvas;
+    clearUsgsWmsTileCache();
+  });
+
+  const tileUrl = (z: number, x: number, y: number) => `usgs-wms://venus-magellan/${z}/${x}/${y}`;
+  const get = (url: string) =>
+    usgsWmsProtocolHandler({ url, type: "image" } as RequestParameters, new AbortController());
+
+  it("returns the WMS window warped onto the Mercator rows", async () => {
+    const tile = { z: 1, x: 0, y: 0 };
+    const { data } = await get(tileUrl(1, 0, 0));
+    const expected = remapRowsToMercator(src, SIZE, tile, tileGeoBounds(tile));
+    assert.deepEqual(new Uint8Array(data), expected);
+    // Sanity: the warp is not the identity at this zoom.
+    assert.notDeepEqual(expected, src);
+  });
+
+  it("serves a repeat request from the cache as an independent buffer", async () => {
+    const first = await get(tileUrl(2, 1, 1));
+    new Uint8Array(first.data).fill(0); // a consumer mutating its copy
+    structuredClone(first.data, { transfer: [first.data] }); // ...or transferring it
+    const second = await get(tileUrl(2, 1, 1));
+    assert.equal(fetches.length, 1);
+    const tile = { z: 2, x: 1, y: 1 };
+    assert.deepEqual(
+      new Uint8Array(second.data),
+      remapRowsToMercator(src, SIZE, tile, tileGeoBounds(tile)),
+    );
+  });
+
+  it("does not cache a failed request", async () => {
+    failNext = true;
+    await assert.rejects(get(tileUrl(1, 1, 1)), /503/);
+    await get(tileUrl(1, 1, 1));
+    assert.equal(fetches.length, 2);
+  });
+
+  it("evicts the least recently used tile past 256 entries", async () => {
+    // Tiles 0..255 of zoom 6 (64 tiles wide) fill the cache.
+    const nth = (i: number) => tileUrl(6, i % 64, Math.floor(i / 64));
+    for (let i = 0; i < 256; i++) await get(nth(i));
+    assert.equal(fetches.length, 256);
+    await get(nth(0)); // a hit refreshes tile 0's recency
+    assert.equal(fetches.length, 256);
+    await get(nth(256)); // the 257th tile evicts tile 1, not tile 0
+    assert.equal(fetches.length, 257);
+    await get(nth(0));
+    assert.equal(fetches.length, 257);
+    await get(nth(1));
+    assert.equal(fetches.length, 258);
+  });
+});
+
+describe("ensureUsgsWmsProtocol", () => {
+  it("registers the usgs-wms protocol with MapLibre", () => {
+    ensureUsgsWmsProtocol();
+    assert.ok(hasRegisteredProtocol(USGS_WMS_PROTOCOL));
+    ensureUsgsWmsProtocol(); // idempotent
+    assert.ok(hasRegisteredProtocol(USGS_WMS_PROTOCOL));
   });
 });

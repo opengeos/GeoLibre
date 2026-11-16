@@ -4,7 +4,8 @@ import {
   USGS_WMS_PROTOCOL,
   type UsgsWmsLayer,
 } from "@geolibre/core";
-import { addProtocol, config, type RequestParameters } from "maplibre-gl";
+import { addProtocol, type RequestParameters } from "maplibre-gl";
+import { hasRegisteredProtocol } from "./protocol-tiles";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor, type TileCoords } from "./wms-reproject";
 
 // The `usgs-wms://<basemap id>/{z}/{x}/{y}` MapLibre protocol behind the
@@ -43,7 +44,8 @@ export interface UsgsWmsTileRequest extends TileCoords {
  *
  * Returns:
  *   The tile coordinates and its USGS layer, or `null` when the URL is
- *   malformed, outside the tile pyramid, or names a basemap without a WMS layer.
+ *   malformed, deeper than the basemap's `maxZoom`, outside the tile pyramid,
+ *   or names a basemap without a WMS layer.
  */
 export function parseUsgsWmsTileUrl(url: string): UsgsWmsTileRequest | null {
   const match = TILE_URL.exec(url);
@@ -52,11 +54,14 @@ export function parseUsgsWmsTileUrl(url: string): UsgsWmsTileRequest | null {
   const z = Number(zs);
   const x = Number(xs);
   const y = Number(ys);
+  const basemap = getPlanetaryBasemapById(basemapId);
+  if (!basemap?.wms) return null;
+  // MapLibre and Cesium both stop at the source's max zoom, so a deeper tile
+  // would only be a wasted USGS request.
+  if (z > basemap.maxZoom) return null;
   const dim = 2 ** z;
   if (x >= dim || y >= dim) return null;
-  const wms = getPlanetaryBasemapById(basemapId)?.wms;
-  if (!wms) return null;
-  return { basemapId, wms, z, x, y };
+  return { basemapId, wms: basemap.wms, z, x, y };
 }
 
 /**
@@ -218,8 +223,6 @@ export async function usgsWmsProtocolHandler(
 
 /** Register the `usgs-wms://` protocol with MapLibre once per page. */
 export function ensureUsgsWmsProtocol(): void {
-  const registered = (config as { REGISTERED_PROTOCOLS?: Record<string, unknown> })
-    .REGISTERED_PROTOCOLS?.[USGS_WMS_PROTOCOL];
-  if (registered) return;
+  if (hasRegisteredProtocol(USGS_WMS_PROTOCOL)) return;
   addProtocol(USGS_WMS_PROTOCOL, usgsWmsProtocolHandler);
 }
