@@ -225,18 +225,85 @@ export function heatmapColorRampExpression(colors: readonly string[]): Expressio
   return expression as ExpressionSpecification;
 }
 
-function heatmapWeight(style: LayerStyle): PropertyValueSpecification<number> {
+/** Per-features-array memo of each weight field's largest value. */
+const heatmapWeightMaxCache = new WeakMap<object, Map<string, number | null>>();
+
+/**
+ * The largest positive value of a layer's heatmap weight field, which
+ * {@link heatmapPaint} divides every weight by.
+ *
+ * MapLibre adds a feature's raw weight into the density, and its ramp
+ * saturates once the density reaches 1, so a field such as a city population
+ * (millions) painted the whole surface the top color at any intensity
+ * (GeoLibre#3471). Scaling into 0..1 by the field maximum (QGIS's automatic
+ * "maximum value") makes the heaviest point weigh what an unweighted point
+ * does, leaving intensity to tune the look. Memoized per features array, which
+ * the store replaces on every data edit.
+ *
+ * @param style - The layer style (reads `heatmapWeightProperty`).
+ * @param geojson - The layer's in-memory features, when it has them.
+ * @returns The field maximum, or `null` with no weight field, no in-memory
+ *   features, or no positive value (the raw weight is used then).
+ */
+export function heatmapWeightMax(
+  style: LayerStyle,
+  geojson: { features?: readonly { properties?: Record<string, unknown> | null }[] } | undefined,
+): number | null {
   const property = styleValue(style, "heatmapWeightProperty").trim();
-  return property === ""
-    ? 1
-    : (["max", 0, ["to-number", ["get", property], 0]] as PropertyValueSpecification<number>);
+  const features = geojson?.features;
+  if (property === "" || !Array.isArray(features)) return null;
+  let byProperty = heatmapWeightMaxCache.get(features);
+  if (!byProperty) {
+    byProperty = new Map();
+    heatmapWeightMaxCache.set(features, byProperty);
+  }
+  const cached = byProperty.get(property);
+  if (cached !== undefined) return cached;
+  let max = 0;
+  for (const feature of features) {
+    const raw = feature?.properties?.[property];
+    // Mirrors MapLibre's `to-number`: numbers and numeric strings count.
+    const value =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string" && raw.trim() !== ""
+          ? Number(raw)
+          : NaN;
+    if (Number.isFinite(value) && value > max) max = value;
+  }
+  const result = max > 0 ? max : null;
+  byProperty.set(property, result);
+  return result;
 }
 
-export function heatmapPaint(style: LayerStyle, opacity: number) {
+function heatmapWeight(
+  style: LayerStyle,
+  weightMax: number | null | undefined,
+): PropertyValueSpecification<number> {
+  const property = styleValue(style, "heatmapWeightProperty").trim();
+  if (property === "") return 1;
+  const weight = ["max", 0, ["to-number", ["get", property], 0]];
+  return (
+    weightMax !== null && weightMax !== undefined && Number.isFinite(weightMax) && weightMax > 0
+      ? ["/", weight, weightMax]
+      : weight
+  ) as PropertyValueSpecification<number>;
+}
+
+/**
+ * The heatmap layer paint.
+ *
+ * @param style - The layer style.
+ * @param opacity - The effective layer opacity.
+ * @param weightMax - The weight field's maximum (see {@link heatmapWeightMax});
+ *   weights are divided by it so they fall in 0..1. Omit to use raw weights.
+ * @returns The `heatmap-*` paint properties.
+ */
+export function heatmapPaint(style: LayerStyle, opacity: number, weightMax?: number | null) {
   return {
     "heatmap-radius": styleValue(style, "heatmapRadius"),
     "heatmap-intensity": styleValue(style, "heatmapIntensity"),
-    "heatmap-weight": heatmapWeight(style),
+    "heatmap-weight": heatmapWeight(style, weightMax),
     "heatmap-opacity": opacity,
     "heatmap-color": heatmapColorRampExpression(heatmapRampColors(style)),
   };

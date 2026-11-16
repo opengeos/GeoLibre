@@ -133,6 +133,22 @@ describe("createGraduatedClassBreaks", () => {
     });
   });
 
+  it("rounds interior breaks to the precision the range calls for (#3471)", () => {
+    // Interpolated quantiles of these values land on float noise such as
+    // 66399.59999999999 without rounding.
+    const values = [28579, 52506.4, 59496.1, 66399.3, 75896.2, 98000, 144640];
+    for (const scheme of ["quantile", "equal-interval", "standard-deviation"] as const) {
+      const breaks = createGraduatedClassBreaks(values, 5, scheme);
+      assert.equal(breaks[0], 28579);
+      for (const value of breaks) assert.ok(Number.isInteger(value), `${scheme}: ${value}`);
+    }
+    // A small range keeps decimals: four significant digits of 0.9 is 0.0001.
+    const fine = createGraduatedClassBreaks([0.1, 0.2337, 0.53333, 1.0], 3, "equal-interval");
+    assert.deepEqual(fine, [0.1, 0.4, 0.7]);
+    const small = createGraduatedClassBreaks([0, 1 / 3, 2 / 3, 1], 3, "quantile");
+    assert.deepEqual(small, [0, 0.3333, 0.6667]);
+  });
+
   it("keeps geometric breaks finite across extreme ranges", () => {
     const breaks = createGraduatedClassBreaks([1e-200, 1e200], 4, "geometric-interval");
     assert.equal(breaks.length, 4);

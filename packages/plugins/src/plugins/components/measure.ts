@@ -158,7 +158,12 @@ async function openStandaloneMeasureControl(
       return false;
     }
     measureControlMounted = true;
-    measureTerrainDetach = attachMeasurePanelAddons(app, measureControl);
+    const detachAddons = attachMeasurePanelAddons(app, measureControl);
+    const detachStyleHeal = healMeasureLayersOnStyleSwap(measureControl);
+    measureTerrainDetach = () => {
+      detachAddons();
+      detachStyleHeal();
+    };
   }
   refreshLidarMeasureMirror(app);
 
@@ -209,6 +214,62 @@ function attachMeasurePanelAddons(app: GeoLibreAppAPI, control: MeasureControl):
   return () => {
     control.off("expand", onExpand);
     detach?.();
+  };
+}
+
+/** Private members of the upstream MeasureControl the style-swap heal uses. */
+interface MeasureControlStyleInternals {
+  _map?: {
+    getSource(id: string): unknown;
+    on(type: "style.load", listener: () => void): unknown;
+    off(type: "style.load", listener: () => void): unknown;
+  };
+  _sourceId?: string;
+  _setupMapSources?: () => void;
+  _updateMapGeometry?: () => void;
+}
+
+/**
+ * Re-add the control's line/fill source and layers after a basemap swap.
+ *
+ * GeoLibre swaps basemaps (including the celestial body switch to Mars or the
+ * Moon) with `setStyle(..., { diff: false })`, which drops every source and
+ * layer the old style held. The upstream MeasureControl adds its geometry
+ * source once in `onAdd` and never again, so after a swap its markers (DOM)
+ * and readouts keep working while the measured line and polygon are never
+ * drawn (GeoLibre#3471). On each `style.load` this restores them and replays
+ * the measurements already taken.
+ *
+ * The members used are private as of maplibre-gl-components@0.31.x; when they
+ * are missing this does nothing, so an upstream rename only loses the heal.
+ *
+ * @param control - The mounted Measure control.
+ * @returns Stops listening for style swaps.
+ */
+export function healMeasureLayersOnStyleSwap(control: MeasureControl): () => void {
+  const internals = control as unknown as MeasureControlStyleInternals;
+  const map = internals._map;
+  const sourceId = internals._sourceId;
+  if (
+    !map ||
+    !sourceId ||
+    typeof internals._setupMapSources !== "function" ||
+    typeof internals._updateMapGeometry !== "function"
+  ) {
+    return () => {};
+  }
+  const onStyleLoad = (): void => {
+    if (map.getSource(sourceId)) return;
+    try {
+      internals._setupMapSources?.call(control);
+      internals._updateMapGeometry?.call(control);
+    } catch (error) {
+      console.warn("MeasureControl: could not restore its layers after a style swap.", error);
+    }
+  };
+  map.on("style.load", onStyleLoad);
+  return () => {
+    map.off("style.load", onStyleLoad);
   };
 }
 

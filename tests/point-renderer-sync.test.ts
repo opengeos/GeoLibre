@@ -103,6 +103,31 @@ describe("point renderer sync", () => {
     assert.ok(!layers.has("layer-pts-circle"));
   });
 
+  it("scales the heatmap weight into 0..1 by the field maximum (#3471)", () => {
+    const { map, layers } = makeMap();
+    const layer = pointLayer({ pointRenderer: "heatmap", heatmapWeightProperty: "pop_max" });
+    const features = layer.geojson?.features ?? [];
+    features[0].properties = { pop_max: 35_676_000 };
+    features[1].properties = { pop_max: "1200" };
+    syncLayer(map as never, layer);
+
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], [
+      "/",
+      ["max", 0, ["to-number", ["get", "pop_max"], 0]],
+      35_676_000,
+    ]);
+  });
+
+  it("keeps the raw heatmap weight when the field has no positive value", () => {
+    const { map, layers } = makeMap();
+    const layer = pointLayer({ pointRenderer: "heatmap", heatmapWeightProperty: "pop_max" });
+    for (const feature of layer.geojson?.features ?? []) feature.properties = { pop_max: -99 };
+    syncLayer(map as never, layer);
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], ["max", 0, ["to-number", ["get", "pop_max"], 0]]);
+  });
+
   it("applies the selected heatmap ramp and numeric weight field", () => {
     const { map, layers } = makeMap();
     syncLayer(

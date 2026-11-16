@@ -240,6 +240,12 @@ export interface LegendSwatch {
    * legend box, keeping ratios across the entry).
    */
   size?: number;
+  /**
+   * Index of the matching class row in the on-map Legend panel's derivation
+   * (`auto-legend.ts`), so a class renamed there carries into the print legend
+   * (GeoLibre#3471). Absent for swatches with no one-to-one panel row.
+   */
+  panelRowIndex?: number;
 }
 
 export interface LegendEntry {

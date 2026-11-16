@@ -57,6 +57,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -69,6 +70,7 @@ import {
   createCategorizedStops,
   createGraduatedStops,
 } from "../../lib/vector-style-classification";
+import { stylePreviewColors } from "../../lib/style-preview";
 import { regeneratingClassificationScheme } from "./style-panel/classification-helpers";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
@@ -88,6 +90,9 @@ type StatusNote = { type: "success" | "error"; text: string } | null;
  * glyphs for symbol and full-style entries.
  */
 function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
+  // The same entry can list in both the app and project libraries, so the
+  // class-band clip path needs a per-instance id.
+  const clipId = useId();
   const style = { ...DEFAULT_LAYER_STYLE, ...entry.style };
   if (entry.kind === "ramp") {
     // Clamp to the Style panel's class-count range: sanitization only checks
@@ -121,19 +126,43 @@ function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
     );
   }
   const strokeWidth = Math.min(Math.max(style.strokeWidth, 0.5), 4);
+  // Rule-based / graduated / categorized styles color per class, so their
+  // glyphs show the class colors rather than the flat fill (GeoLibre#3471).
+  const classColors = stylePreviewColors(style);
+  const bandWidth = classColors ? 20 / classColors.length : 0;
   return (
     <svg
       className="h-8 w-16 shrink-0 rounded border border-border bg-background"
       viewBox="0 0 64 32"
       aria-hidden="true"
     >
+      {classColors ? (
+        <>
+          <clipPath id={clipId}>
+            <rect x="4" y="6" width="20" height="20" rx="2" />
+          </clipPath>
+          <g clipPath={`url(#${clipId})`}>
+            {classColors.map((color, index) => (
+              <rect
+                key={index}
+                x={4 + index * bandWidth}
+                y="6"
+                width={bandWidth}
+                height="20"
+                fill={color}
+                fillOpacity={style.fillOpacity}
+              />
+            ))}
+          </g>
+        </>
+      ) : null}
       <rect
         x="4"
         y="6"
         width="20"
         height="20"
         rx="2"
-        fill={style.fillColor}
+        fill={classColors ? "none" : style.fillColor}
         fillOpacity={style.fillOpacity}
         stroke={style.strokeColor}
         strokeWidth={strokeWidth}
@@ -149,7 +178,7 @@ function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
         cx="56"
         cy="16"
         r={Math.min(Math.max(style.circleRadius, 2), 6)}
-        fill={style.markerEnabled ? style.markerColor : style.fillColor}
+        fill={style.markerEnabled ? style.markerColor : (classColors?.[0] ?? style.fillColor)}
         stroke={style.strokeColor}
         strokeWidth="1"
       />

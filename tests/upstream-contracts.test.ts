@@ -386,7 +386,7 @@ describe("maplibre-gl-components", () => {
     }
   });
 
-  it("keeps MeasureControl's private `_panel` and `_sourceId`", async () => {
+  it("keeps MeasureControl's private `_panel`, `_sourceId` and source setup", async () => {
     const { MeasureControl } = await import("maplibre-gl-components");
     const control = new MeasureControl({}) as unknown as Record<string, unknown>;
     assert.ok(
@@ -407,6 +407,17 @@ describe("maplibre-gl-components", () => {
       ),
     );
     assert.ok((control._sourceId as string).length > 0);
+    for (const method of ["_setupMapSources", "_updateMapGeometry"]) {
+      assert.equal(
+        typeof control[method],
+        "function",
+        contractMessage(
+          "maplibre-gl-components",
+          section,
+          `MeasureControl has no \`${method}\` method (healMeasureLayersOnStyleSwap)`,
+        ),
+      );
+    }
   });
 });
 

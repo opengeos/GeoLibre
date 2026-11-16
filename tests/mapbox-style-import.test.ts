@@ -372,6 +372,8 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     for (const weight of [
       ["get", "nb_ruches"],
       ["to-number", ["get", "nb_ruches"], 0],
+      // GeoLibre's own export normalizes by the field maximum (#3471).
+      ["/", ["max", 0, ["to-number", ["get", "nb_ruches"], 0]], 1250],
     ]) {
       const result = parseMapboxStyle({
         layers: [{ id: "heat", type: "heatmap", paint: { "heatmap-weight": weight } }],

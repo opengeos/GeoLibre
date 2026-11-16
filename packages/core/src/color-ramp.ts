@@ -342,23 +342,60 @@ export function createGraduatedClassBreaks(
   scheme: GraduatedClassificationScheme,
 ): number[] {
   if (count <= 0 || values.length === 0) return [];
-  if (scheme === "natural-breaks") return ascendingUnique(naturalClassBreaks(values, count));
+  return ascendingUnique(roundClassBreaks(rawGraduatedClassBreaks(values, count, scheme), values));
+}
+
+/** The unrounded lower bounds behind {@link createGraduatedClassBreaks}. */
+function rawGraduatedClassBreaks(
+  values: number[],
+  count: number,
+  scheme: GraduatedClassificationScheme,
+): number[] {
+  if (scheme === "natural-breaks") return naturalClassBreaks(values, count);
   const sorted = [...values].sort((a, b) => a - b);
   if (scheme === "quantile") {
-    return ascendingUnique(
-      Array.from({ length: count }, (_, index) =>
-        quantileAtPosition(sorted, (index / count) * (sorted.length - 1)),
-      ),
+    return Array.from({ length: count }, (_, index) =>
+      quantileAtPosition(sorted, (index / count) * (sorted.length - 1)),
     );
   }
-  if (scheme === "standard-deviation") {
-    return ascendingUnique(standardDeviationClassBreaks(sorted, count));
-  }
+  if (scheme === "standard-deviation") return standardDeviationClassBreaks(sorted, count);
   if (scheme === "geometric-interval") {
     const breaks = geometricIntervalClassBreaks(sorted, count);
-    if (breaks) return ascendingUnique(breaks);
+    if (breaks) return breaks;
   }
-  return ascendingUnique(equalIntervalClassBreaks(sorted, count));
+  return equalIntervalClassBreaks(sorted, count);
+}
+
+/**
+ * Round interior class breaks to a precision that suits the data's range.
+ *
+ * Interpolated quantiles, equal intervals, and the standard-deviation and
+ * geometric schemes produce values such as `66399.59999999999` or
+ * `40750.34578910171` that the Style panel would show verbatim
+ * (GeoLibre#3471). Each break keeps the decimals that four significant digits
+ * of the range call for (never coarser than whole units), which moves a class
+ * edge by at most 0.05% of the range, and at least four significant digits of
+ * its own, so a geometric series spanning many orders of magnitude keeps its
+ * small breaks. The first break is the sample minimum and stays exact, so the
+ * lowest feature is never pushed below the first class; the caller collapses
+ * any breaks that rounding made equal.
+ */
+function roundClassBreaks(breaks: number[], values: number[]): number[] {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  const range = max - min;
+  if (!(range > 0) || !Number.isFinite(range)) return breaks;
+  const decimals = Math.max(0, 3 - Math.floor(Math.log10(range)));
+  return breaks.map((value, index) => {
+    if (index === 0 || !Number.isFinite(value) || value === 0) return value;
+    const digits = Math.floor(Math.log10(Math.abs(value))) + 1 + decimals;
+    return Number(value.toPrecision(Math.min(15, Math.max(4, digits))));
+  });
 }
 
 /** Equal-interval lower bounds over the range of an ascending sample. */

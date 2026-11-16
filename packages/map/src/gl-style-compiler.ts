@@ -22,6 +22,7 @@ import {
   fillPaint,
   fillExtrusionPaint,
   heatmapPaint,
+  heatmapWeightMax,
   linePaint,
   rasterPaint,
 } from "./style-mapper";
@@ -243,7 +244,9 @@ export function compileMapboxLayer(
           id: `${id}-heatmap`,
           type: "heatmap",
           filter: withFilter(plainPoint),
-          paint: mapboxPaint(heatmapPaint(style, layer.opacity)),
+          paint: mapboxPaint(
+            heatmapPaint(style, layer.opacity, heatmapWeightMax(style, layer.geojson)),
+          ),
         } as LayerSpecification,
       ];
     }

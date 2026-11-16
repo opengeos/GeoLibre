@@ -27,6 +27,7 @@ import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { createFeatureStyleResolver, type FeatureSymbol } from "./feature-style";
 import { KML_ICON_URL_PROPERTY } from "./markers";
 import { compileMapboxLayer } from "./gl-style-compiler";
+import { heatmapWeightMax } from "./style-mapper";
 import { arcgisVectorStyle } from "./vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
 import { hasRegisteredProtocol, protocolScheme } from "./protocol-tiles";
@@ -1053,9 +1054,11 @@ function compileExtrusion(style: LayerStyle): ExtrusionReader {
   };
 }
 
-function heatmapWeight(feature: Feature, style: LayerStyle): number {
+function heatmapWeight(feature: Feature, style: LayerStyle, weightMax: number | null): number {
   const field = style.heatmapWeightProperty.trim();
-  const value = field ? Number(feature.properties?.[field] ?? 0) : 1;
+  // Scaled into 0..1 by the field maximum, as the MapLibre heatmap does (see
+  // `heatmapWeightMax`), so a weight in the millions does not saturate.
+  const value = field ? Number(feature.properties?.[field] ?? 0) / (weightMax ?? 1) : 1;
   const intensity = Number.isFinite(style.heatmapIntensity)
     ? Math.max(0, style.heatmapIntensity)
     : 1;
@@ -1144,6 +1147,7 @@ function compileGeoJson(
   // label class, keyed through the symbol field.
   const textMarkers: Feature[] = [];
   const textColors = new Map<string, string>();
+  const weightMax = style.pointRenderer === "heatmap" ? heatmapWeightMax(style, geojson) : null;
   data.features.forEach((feature, index) => {
     if (!feature.geometry) return;
     if (filter.test && !filter.test(feature, zoom)) return;
@@ -1208,7 +1212,7 @@ function compileGeoJson(
           [ARCGIS_SYMBOL_FIELD]: symbolId,
           [ARCGIS_LABEL_FIELD]: text,
           ...(kind === "point" && style.pointRenderer === "heatmap"
-            ? { [ARCGIS_WEIGHT_FIELD]: heatmapWeight(feature, style) }
+            ? { [ARCGIS_WEIGHT_FIELD]: heatmapWeight(feature, style, weightMax) }
             : {}),
           ...(extruded ? { [ARCGIS_HEIGHT_FIELD]: extrusion.height(feature, zoom) } : {}),
           ...(extruded && extrusion.dataDrivenBase

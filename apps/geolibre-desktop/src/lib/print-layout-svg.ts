@@ -64,10 +64,29 @@ export function renderLayoutSvg(opts: LayoutOptions): string {
   };
 
   drawLayoutContext(ctx, width, height, opts);
+  stripUndefinedSvgAttributes(svg);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", `${size.width}${size.unit}`);
   svg.setAttribute("height", `${size.height}${size.unit}`);
   // Keep consecutive spaces and non-ASCII labels intact in SVG editors.
   svg.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
   return `<?xml version="1.0" encoding="UTF-8"?>\n${ctx.getSerializedSvg()}`;
+}
+
+/**
+ * Remove attributes whose value is the literal string `"undefined"`.
+ *
+ * svgcanvas writes `text-decoration` from an underline flag it never sets, so
+ * every `<text>` came out with `text-decoration="undefined"` (GeoLibre#3471),
+ * an invalid value that strict SVG editors and validators flag. No attribute
+ * the layout writes can legitimately hold that string.
+ *
+ * @param root - The SVG root element to clean in place.
+ */
+export function stripUndefinedSvgAttributes(root: Element): void {
+  for (const element of [root, ...Array.from(root.querySelectorAll("*"))]) {
+    for (const attribute of Array.from(element.attributes)) {
+      if (attribute.value === "undefined") element.removeAttribute(attribute.name);
+    }
+  }
 }

@@ -48,7 +48,8 @@ describe("vector style classification", () => {
     assert.equal(stops.length, 5);
     assert.deepEqual(
       stops.map((stop) => stop.value),
-      [0, 29_999.8, 59_999.6, 89_999.4, 119_999.2],
+      // Rounded to whole units, which four significant digits of the range allow.
+      [0, 30_000, 60_000, 89_999, 119_999],
     );
   });
 

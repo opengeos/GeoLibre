@@ -29,6 +29,12 @@ function heatmapWeightProperty(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
 
   let expression = value;
+  // GeoLibre's own export divides by the field maximum (`heatmapWeightMax`);
+  // the divisor is re-derived from the data on render, so only the field matters.
+  if (expression.length === 3 && expression[0] === "/" && typeof expression[2] === "number") {
+    expression = expression[1];
+  }
+  if (!Array.isArray(expression)) return null;
   if (expression.length === 3 && expression[0] === "max" && expression[1] === 0) {
     expression = expression[2];
   }
