@@ -10,6 +10,7 @@ import {
 } from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
+import { ensureUsgsWmsProtocol } from "./usgs-wms-protocol";
 
 // Resolves a project's basemap style URL to what a GL map can load: GeoLibre's
 // `geolibre://` sentinels (blank, planetary, offline, regional) expand to
@@ -159,6 +160,9 @@ function createRegionalMapStyle(basemap: RegionalBasemap): maplibregl.StyleSpeci
  * tiles fade to black at the poles (and reading as space around the globe).
  */
 function createPlanetaryMapStyle(basemap: PlanetaryBasemap): maplibregl.StyleSpecification {
+  // The USGS bodies' tiles come from the `usgs-wms://` protocol, which must be
+  // registered before MapLibre requests the first one.
+  if (basemap.wms) ensureUsgsWmsProtocol();
   return {
     version: 8,
     sources: {

@@ -263,6 +263,20 @@ export interface PlanetaryBasemap {
   attribution: string;
   /** The body this basemap depicts, so selecting it can set the ellipsoid. */
   ellipsoidId: EllipsoidId;
+  /**
+   * The USGS Astrogeology WMS layer behind a {@link USGS_WMS_PROTOCOL} tile URL.
+   * Those layers are equirectangular only, so `@geolibre/map` requests one WMS
+   * window per tile and warps it to Web Mercator in the browser.
+   */
+  wms?: UsgsWmsLayer;
+}
+
+/** A layer on the USGS Astrogeology MapServer (see {@link USGS_ASTRO_WMS_BASE}). */
+export interface UsgsWmsLayer {
+  /** MapServer `map=` file path, e.g. `/maps/mercury/mercury_simp_cyl.map`. */
+  map: string;
+  /** WMS `LAYERS=` value. */
+  layer: string;
 }
 
 export const PLANETARY_BASEMAP_SENTINEL_PREFIX = "geolibre://basemap/";
@@ -277,12 +291,23 @@ const opmCredit = (source: string) => `${source} · ${OPM_ATTRIBUTION}`;
 // Tile path: `${TILE_PROXY_BASE}/<dataset>/{z}/{x}/{y}.png`.
 const TILE_PROXY_BASE = "https://tiles.geolibre.app/opm";
 
-// The GeoLibre tiles Worker's reprojection endpoint, which warps the USGS
-// Astrogeology equirectangular WMS layers to Web Mercator so MapLibre can render
-// them (the USGS server offers no EPSG:3857 for these bodies). Its dataset keys
-// mirror the WMS_DATASETS map in that Worker (workers/tiles/src/index.ts).
-// Tile path: `${WMS_PROXY_BASE}/<dataset>/{z}/{x}/{y}.png` — standard XYZ.
-const WMS_PROXY_BASE = "https://tiles.geolibre.app/wms";
+// The USGS Astrogeology MapServer. Its planetary layers are served only in
+// equirectangular EPSG:4326, which MapLibre can't draw, so these basemaps use a
+// `usgs-wms://<basemap id>/{z}/{x}/{y}` tile URL handled by a MapLibre custom
+// protocol (`@geolibre/map`'s usgs-wms-protocol.ts). The handler fetches the
+// WMS window for each tile straight from the browser (the server sends
+// `Access-Control-Allow-Origin: *`) and warps it to Web Mercator.
+//
+// This used to go through the GeoLibre tiles Worker, but USGS now sits behind
+// Cloudflare bot protection that answers requests from Cloudflare Workers with
+// a 403 block page, so every proxied tile came back blank.
+export const USGS_ASTRO_WMS_BASE = "https://planetarymaps.usgs.gov/cgi-bin/mapserv";
+
+/** The MapLibre custom-protocol scheme for reprojected USGS WMS basemaps. */
+export const USGS_WMS_PROTOCOL = "usgs-wms";
+
+/** The `{z}/{x}/{y}` tile template for a reprojected USGS WMS basemap. */
+const usgsWmsTiles = (id: string) => `${USGS_WMS_PROTOCOL}://${id}/{z}/{x}/{y}`;
 
 // USGS Astrogeology, the origin of every reprojected WMS basemap below.
 const USGS_ASTRO_ATTRIBUTION = '<a href="https://astrogeology.usgs.gov/">USGS Astrogeology</a>';
@@ -391,13 +416,14 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     ellipsoidId: "moon",
   },
   // --- Mercury ------------------------------------------------------------
-  // USGS Astrogeology WMS layers reprojected to Web Mercator by the tiles
-  // Worker (see WMS_PROXY_BASE). Standard XYZ, so no `scheme`.
+  // USGS Astrogeology WMS layers reprojected to Web Mercator in the browser
+  // (see USGS_ASTRO_WMS_BASE). Standard XYZ, so no `scheme`.
   {
     id: "mercury-messenger-color",
     name: "MESSENGER Colour Mosaic",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mercury-messenger-color`,
-    tileUrl: `${WMS_PROXY_BASE}/mercury-messenger-color/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("mercury-messenger-color"),
+    wms: { map: "/maps/mercury/mercury_simp_cyl.map", layer: "MESSENGER_Color" },
     maxZoom: 7,
     attribution: usgsCredit("NASA / JHU APL / CIW"),
     ellipsoidId: "mercury",
@@ -406,7 +432,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "mercury-messenger",
     name: "MESSENGER Basemap",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mercury-messenger`,
-    tileUrl: `${WMS_PROXY_BASE}/mercury-messenger/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("mercury-messenger"),
+    wms: { map: "/maps/mercury/mercury_simp_cyl.map", layer: "MESSENGER" },
     maxZoom: 7,
     attribution: usgsCredit("NASA / JHU APL"),
     ellipsoidId: "mercury",
@@ -416,7 +443,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "venus-magellan",
     name: "Magellan FMAP",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}venus-magellan`,
-    tileUrl: `${WMS_PROXY_BASE}/venus-magellan/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("venus-magellan"),
+    wms: { map: "/maps/venus/venus_simp_cyl.map", layer: "MAGELLAN" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "venus",
@@ -425,7 +453,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "venus-magellan-color",
     name: "Magellan C3-MDIR Colour",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}venus-magellan-color`,
-    tileUrl: `${WMS_PROXY_BASE}/venus-magellan-color/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("venus-magellan-color"),
+    wms: { map: "/maps/venus/venus_simp_cyl.map", layer: "MAGELLAN_color" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "venus",
@@ -435,7 +464,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "io-galileo-color",
     name: "Galileo SSI Colour",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}io-galileo-color`,
-    tileUrl: `${WMS_PROXY_BASE}/io-galileo-color/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("io-galileo-color"),
+    wms: { map: "/maps/jupiter/io_simp_cyl.map", layer: "SSI_color" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "io",
@@ -444,7 +474,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "europa-galileo-voyager",
     name: "Galileo / Voyager",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}europa-galileo-voyager`,
-    tileUrl: `${WMS_PROXY_BASE}/europa-galileo-voyager/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("europa-galileo-voyager"),
+    wms: { map: "/maps/jupiter/europa_simp_cyl.map", layer: "GALILEO_VOYAGER" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "europa",
@@ -453,7 +484,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "ganymede-galileo-voyager",
     name: "Galileo / Voyager",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}ganymede-galileo-voyager`,
-    tileUrl: `${WMS_PROXY_BASE}/ganymede-galileo-voyager/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("ganymede-galileo-voyager"),
+    wms: { map: "/maps/jupiter/ganymede_simp_cyl.map", layer: "GALILEO_VOYAGER" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "ganymede",
@@ -462,7 +494,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "callisto-galileo-voyager",
     name: "Galileo / Voyager",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}callisto-galileo-voyager`,
-    tileUrl: `${WMS_PROXY_BASE}/callisto-galileo-voyager/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("callisto-galileo-voyager"),
+    wms: { map: "/maps/jupiter/callisto_simp_cyl.map", layer: "GALILEO_VOYAGER" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL"),
     ellipsoidId: "callisto",
@@ -472,7 +505,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "titan-cassini",
     name: "Cassini ISS Mosaic",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}titan-cassini`,
-    tileUrl: `${WMS_PROXY_BASE}/titan-cassini/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("titan-cassini"),
+    wms: { map: "/maps/saturn/titan_simp_cyl.map", layer: "Titan_ISS_Controlled_Mosaic" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL / SSI"),
     ellipsoidId: "titan",
@@ -481,7 +515,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "titan-hisar",
     name: "Cassini HiSAR Mosaic",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}titan-hisar`,
-    tileUrl: `${WMS_PROXY_BASE}/titan-hisar/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("titan-hisar"),
+    wms: { map: "/maps/saturn/titan_simp_cyl.map", layer: "Titan_HiSAR_Mosaic" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JPL / USGS"),
     ellipsoidId: "titan",
@@ -491,7 +526,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "pluto-mosaic",
     name: "New Horizons Mosaic",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}pluto-mosaic`,
-    tileUrl: `${WMS_PROXY_BASE}/pluto-mosaic/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("pluto-mosaic"),
+    wms: { map: "/maps/pluto/pluto_simp_cyl.map", layer: "NEWHORIZONS_PLUTO_MOSAIC" },
     maxZoom: 7,
     attribution: usgsCredit("NASA / JHU APL / SwRI"),
     ellipsoidId: "pluto",
@@ -500,7 +536,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "pluto-color",
     name: "New Horizons Colour Shaded Relief",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}pluto-color`,
-    tileUrl: `${WMS_PROXY_BASE}/pluto-color/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("pluto-color"),
+    wms: { map: "/maps/pluto/pluto_simp_cyl.map", layer: "NEWHORIZONS_PLUTO_ClrSHADE" },
     maxZoom: 7,
     attribution: usgsCredit("NASA / JHU APL / SwRI"),
     ellipsoidId: "pluto",
@@ -509,7 +546,8 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     id: "charon-mosaic",
     name: "New Horizons Mosaic",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}charon-mosaic`,
-    tileUrl: `${WMS_PROXY_BASE}/charon-mosaic/{z}/{x}/{y}.png`,
+    tileUrl: usgsWmsTiles("charon-mosaic"),
+    wms: { map: "/maps/pluto/charon_simp_cyl.map", layer: "NEWHORIZONS_CHARON_MOSAIC" },
     maxZoom: 6,
     attribution: usgsCredit("NASA / JHU APL / SwRI"),
     ellipsoidId: "charon",

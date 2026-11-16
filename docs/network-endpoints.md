@@ -90,7 +90,7 @@ so and skips the relay; the table notes those cases.
 
 | Route | Upstream | Used by | Desktop |
 | --- | --- | --- | --- |
-| `/opm/...`, `/wms/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder`, `planetarymaps.usgs.gov` | Mars, Moon, and other planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
+| `/opm/...` | `s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net`, `s3.us-east-2.amazonaws.com/opmmarstiles`, `s3.amazonaws.com/opmbuilder` | Mars and Moon planetary basemaps (`packages/core/src/ellipsoids.ts`) | Relay |
 | `/overpass` (POST) | `z.overpass-api.de` (run by FOSSGIS e.V.), then `overpass.private.coffee` (run by Private.coffee, an Austrian non-profit association) on a 429, 5xx or network error. No other instance is tried; when both fail the relay answers 502 with an "Overpass is busy" message. Each instance that is tried sees the query and its area of interest, and the `x-overpass-upstream` response header names the one that answered. | OSM Downloader plugin, God's Eye View road layers | Relay |
 | `/oam/meta` | `api.openaerialmap.org` | OpenAerialMap search | Direct |
 | `/source-coop/...` | `source.coop` (API and feed) | Source Cooperative and Natural Earth plugins | Direct |
@@ -110,6 +110,7 @@ so and skips the relay; the table notes those cases.
 | Feature | Hosts | Builds | Route |
 | --- | --- | --- | --- |
 | Basemap picker and Basemaps plugin | CARTO (`basemaps.cartocdn.com`), Esri (`server.arcgisonline.com`, `services.arcgisonline.com`), EOX (`tiles.maps.eox.at`), USGS (`basemap.nationalmap.gov`), NASA GIBS, OpenStreetMap, Protomaps, Mapbox, MapTiler, Stadia, TomTom, HERE, Amazon Location, Tianditu, Google, swisstopo, BKG, Waymarked Trails, OpenRailwayMap. OpenFreeMap is the default basemap (see above). Opening the Basemaps panel loads a thumbnail per visible row, which contacts many of these hosts before the user picks one. Keyed providers receive the key the user or build supplies. | All | Direct |
+| Other planetary basemaps | USGS Astrogeology WMS (`planetarymaps.usgs.gov`) for Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, reprojected to Web Mercator in the app. Only when the user selects one of those bodies. | All | Direct |
 | Regional basemaps (China) | Amap (`webst01.is.autonavi.com`, `wprd01.is.autonavi.com`) and Tencent (`rt0.map.gtimg.com`). Only when the user selects one, or opens a project that selected one. | All | Direct |
 | Place search and reverse geocoding | Nominatim (`nominatim.openstreetmap.org`) by default; Pelias (`api.geocode.earth`), ArcGIS (`geocode.arcgis.com`), Mapbox, Google (`maps.googleapis.com`), and CartoCiudad (`www.cartociudad.es`) when configured. The query text or clicked point is sent. Reverse geocoding asks for consent first. | All | Direct |
 | Routing, isochrones, drive and walk time | `valhalla1.openstreetmap.de` (FOSSGIS Valhalla), or `VITE_ROUTING_ENDPOINT`. The Directions plugin uses `router.project-osrm.org` and asks for consent first. | All | Direct |
