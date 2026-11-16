@@ -716,4 +716,34 @@ describe("QGIS project import", () => {
       [["Countries", "remote-unreadable"]],
     );
   });
+
+  it("downloads non-GeoJSON files one at a time", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "A", source: "https://example.com/a.parquet" },
+          { id: "cities", name: "B", source: "https://example.com/b.parquet" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    let active = 0;
+    let peak = 0;
+    await materializeQgisRemoteLayers(
+      result,
+      async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        return new Response(new Uint8Array([1]));
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { type: "FeatureCollection", features: [] };
+      },
+    );
+
+    assert.equal(peak, 1);
+    assert.equal(result.project.layers.length, 2);
+  });
 });

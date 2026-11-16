@@ -168,6 +168,10 @@ export async function materializeQgisRemoteLayers(
     (layer) => layer.type === "geojson" && layer.sourcePath && isHttpSource(layer.sourcePath),
   );
   let nextIndex = 0;
+  // Non-GeoJSON files can be hundreds of megabytes and are read one at a
+  // time anyway, so they also download one at a time: parallel downloads
+  // would only hold several whole files in memory waiting for the reader.
+  let largeSlot: Promise<void> = Promise.resolve();
   async function worker(): Promise<void> {
     while (nextIndex < remoteLayers.length) {
       const layer = remoteLayers[nextIndex++];
@@ -178,6 +182,14 @@ export async function materializeQgisRemoteLayers(
       const lastSegment = (sourcePath.split(/[?#]/, 1)[0] ?? "").split("/").pop() ?? "";
       const extension = lastSegment.includes(".") ? sourceExtension(sourcePath) : "";
       const asGeoJson = extension === "" || REMOTE_GEOJSON_EXTENSIONS.has(extension);
+      let release: (() => void) | undefined;
+      if (!asGeoJson && readVector) {
+        const previous = largeSlot;
+        largeSlot = new Promise((resolve) => {
+          release = resolve;
+        });
+        await previous;
+      }
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(),
@@ -220,6 +232,7 @@ export async function materializeQgisRemoteLayers(
         });
       } finally {
         clearTimeout(timeout);
+        release?.();
       }
     }
   }
@@ -1030,8 +1043,11 @@ function qgisWebTileLayer(dataSource: string): QgisWebTileLayer {
     }
     const minzoom = optionalNumber(params.get("zmin") ?? undefined);
     const maxzoom = optionalNumber(params.get("zmax") ?? undefined);
-    const zoomRange =
-      minzoom !== null && maxzoom !== null && minzoom <= maxzoom ? { minzoom, maxzoom } : {};
+    // Each bound applies on its own; a reversed pair is dropped whole.
+    const ordered = minzoom === null || maxzoom === null || minzoom <= maxzoom;
+    const zoomRange = ordered
+      ? { ...(minzoom !== null ? { minzoom } : {}), ...(maxzoom !== null ? { maxzoom } : {}) }
+      : {};
     return {
       kind: "xyz",
       source: { type: "raster", tiles: [template], tileSize: 256, url: template, ...zoomRange },
