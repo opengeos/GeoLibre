@@ -748,8 +748,14 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       "Move the camera to an exact position: center the map on [longitude, latitude], set the zoom level, and optionally rotate (bearing) or tilt (pitch). Omitted fields keep their current value. Use this for requests like 'center on 40.7, -74.0 at zoom 12' or 'tilt the map 60 degrees'; use zoom_to to frame a layer or a bounding box instead. Returns the new camera and the previous one, so a later 'go back' can restore it with another set_view.",
     inputSchema: z
       .object({
+        // A plain array, not z.tuple: some providers (Gemini) reject the
+        // tuple form (`prefixItems`) in a function-call schema.
         center: z
-          .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+          .array(z.number())
+          .length(2)
+          .refine(([lng, lat]) => Math.abs(lng) <= 180 && Math.abs(lat) <= 90, {
+            message: "center must be [longitude, latitude] within [-180, 180] and [-90, 90].",
+          })
           .optional()
           .describe("[longitude, latitude] in WGS84. Note the order: longitude first."),
         zoom: z

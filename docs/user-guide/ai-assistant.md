@@ -283,6 +283,8 @@ it is working, **Send** becomes **Stop** — click it to cancel. **Clear** (the
 eraser icon) starts a fresh conversation. Switching the profile in the panel's
 dropdown keeps the conversation: the newly selected model continues with the
 earlier turns, so you can ask it about an answer the previous model gave.
+Those turns, including tool output such as query results, are sent to the newly
+selected provider; click **Clear** before switching if they should not be.
 
 ```text
 show me all parcels larger than 1 hectare within 500 m of a river
