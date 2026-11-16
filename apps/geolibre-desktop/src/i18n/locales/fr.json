@@ -2128,6 +2128,18 @@
     "resizeDialog": "Redimensionner la galerie",
     "scopeFeatured": "En vedette",
     "scopeAll": "Tous les projets",
+    "scopeCollections": "Collections",
+    "loadingCollections": "Chargement des collections…",
+    "collectionsSearchPlaceholder": "Filtrer les collections par titre, auteur ou description",
+    "noCollectionMatches": "Aucune collection ne correspond à votre filtre.",
+    "emptyCollections": "Aucune collection publique à afficher pour le moment.",
+    "emptyCollection": "Cette collection ne contient aucun projet public.",
+    "untitledCollection": "Collection sans titre",
+    "openCollection": "Afficher les projets de cette collection",
+    "openCollectionOnWeb": "Voir la collection sur le web",
+    "backToCollections": "Toutes les collections",
+    "collectionProjects_one": "{{count}} projet",
+    "collectionProjects_other": "{{count}} projets",
     "scopeMine": "Mes projets",
     "scopeOrganizations": "Organisations",
     "scopeGroups": "Groupes",
@@ -3917,6 +3929,7 @@
       "difference": "Différence",
       "union": "Union",
       "spatialJoin": "Jointure spatiale",
+      "summarizeWithin": "Résumer à l'intérieur",
       "attributeJoin": "Jointure attributaire",
       "selectByValue": "Sélectionner par valeur",
       "selectByLocation": "Sélectionner par emplacement",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Résumer à l'intérieur",
+          "description": "Compter les entités d'une autre couche qui intersectent chaque polygone, résumer un champ numérique et mesurer la part de chaque polygone qu'elles couvrent",
+          "params": {
+            "layer": {
+              "label": "Couche de polygones"
+            },
+            "overlay": {
+              "label": "Couche à résumer"
+            },
+            "field": {
+              "label": "Champ numérique",
+              "description": "Facultatif. Ajoute la somme, la moyenne, le minimum et le maximum de ce champ pour chaque polygone."
+            },
+            "min_overlap_pct": {
+              "label": "Ignorer les chevauchements inférieurs à (%)",
+              "description": "Lorsque la couche à résumer contient des polygones, ignorer ceux qui couvrent moins que cette part d'un polygone, comme les éclats le long des bords partagés."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Jointure attributaire",
           "description": "Attacher les attributs d'une couche de jointure (une table) à chaque entité d'entrée lorsqu'un champ clé correspond, sans utiliser la géométrie. Un à un : la première ligne de jointure correspondante l'emporte.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Chargement des attributs de la couche…",
     "requiresVectorLayer": "La table attributaire nécessite une couche vectorielle ou de requête DuckDB.",
     "invalidJson": "JSON invalide",
+    "nullValue": "NULL",
     "editCellAria": "Modifier {{col}} pour l'entité {{featureId}}",
     "resizeColumn": "Redimensionner la colonne {{name}}",
     "renameFieldAria": "Renommer le champ {{name}}",

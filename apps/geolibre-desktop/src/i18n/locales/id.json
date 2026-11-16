@@ -2075,6 +2075,17 @@
     "resizeDialog": "Ubah ukuran galeri",
     "scopeFeatured": "Unggulan",
     "scopeAll": "Semua proyek",
+    "scopeCollections": "Koleksi",
+    "loadingCollections": "Memuat koleksi…",
+    "collectionsSearchPlaceholder": "Filter koleksi berdasarkan judul, penulis, atau deskripsi",
+    "noCollectionMatches": "Tidak ada koleksi yang sesuai dengan filter Anda.",
+    "emptyCollections": "Belum ada koleksi publik untuk ditampilkan.",
+    "emptyCollection": "Koleksi ini tidak memiliki proyek publik.",
+    "untitledCollection": "Koleksi tanpa judul",
+    "openCollection": "Tampilkan proyek dalam koleksi ini",
+    "openCollectionOnWeb": "Lihat koleksi di web",
+    "backToCollections": "Semua koleksi",
+    "collectionProjects_other": "{{count}} proyek",
     "scopeMine": "Proyek saya",
     "scopeOrganizations": "Organisasi",
     "scopeGroups": "Grup",
@@ -3853,6 +3864,7 @@
       "difference": "Selisih",
       "union": "Gabungan",
       "spatialJoin": "Gabungan spasial",
+      "summarizeWithin": "Ringkas di dalam",
       "attributeJoin": "Gabungan atribut",
       "selectByValue": "Pilih berdasarkan nilai",
       "selectByLocation": "Pilih berdasarkan lokasi",
@@ -6441,6 +6453,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Ringkas di dalam",
+          "description": "Menghitung fitur layer lain yang berpotongan dengan setiap poligon, meringkas bidang numerik, dan mengukur seberapa besar bagian setiap poligon yang tertutupi",
+          "params": {
+            "layer": {
+              "label": "Layer poligon"
+            },
+            "overlay": {
+              "label": "Layer yang diringkas"
+            },
+            "field": {
+              "label": "Bidang numerik",
+              "description": "Opsional. Menambahkan jumlah, rata-rata, minimum, dan maksimum bidang ini untuk setiap poligon."
+            },
+            "min_overlap_pct": {
+              "label": "Abaikan tumpang tindih yang lebih kecil dari (%)",
+              "description": "Jika layer yang diringkas berisi poligon, lewati poligon yang menutupi kurang dari porsi ini dari sebuah poligon, seperti serpihan di sepanjang tepi bersama."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Join atribut",
           "description": "Melampirkan atribut dari layer join (sebuah tabel) ke setiap fitur masukan jika bidang kunci cocok, tanpa menggunakan geometri. Satu-ke-satu: baris join pertama yang cocok yang dipakai.",
@@ -8434,6 +8466,7 @@
     "loadingAttributes": "Memuat atribut layer…",
     "requiresVectorLayer": "Tabel atribut memerlukan layer vektor atau kueri DuckDB.",
     "invalidJson": "JSON tidak valid",
+    "nullValue": "NULL",
     "editCellAria": "Edit {{col}} untuk fitur {{featureId}}",
     "resizeColumn": "Ubah ukuran kolom {{name}}",
     "renameFieldAria": "Ganti nama bidang {{name}}",

@@ -2128,6 +2128,18 @@
     "resizeDialog": "Ridimensiona la galleria",
     "scopeFeatured": "In evidenza",
     "scopeAll": "Tutti i progetti",
+    "scopeCollections": "Collezioni",
+    "loadingCollections": "Caricamento collezioni…",
+    "collectionsSearchPlaceholder": "Filtra le collezioni per titolo, autore o descrizione",
+    "noCollectionMatches": "Nessuna collezione corrisponde al filtro.",
+    "emptyCollections": "Nessuna collezione pubblica da mostrare.",
+    "emptyCollection": "Questa collezione non contiene progetti pubblici.",
+    "untitledCollection": "Collezione senza titolo",
+    "openCollection": "Mostra i progetti di questa collezione",
+    "openCollectionOnWeb": "Visualizza la collezione sul web",
+    "backToCollections": "Tutte le collezioni",
+    "collectionProjects_one": "{{count}} progetto",
+    "collectionProjects_other": "{{count}} progetti",
     "scopeMine": "I miei progetti",
     "scopeOrganizations": "Organizzazioni",
     "scopeGroups": "Gruppi",
@@ -3917,6 +3929,7 @@
       "difference": "Differenza",
       "union": "Unione",
       "spatialJoin": "Join spaziale",
+      "summarizeWithin": "Riassumi all'interno",
       "attributeJoin": "Join per attributi",
       "selectByValue": "Seleziona per valore",
       "selectByLocation": "Seleziona per posizione",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Riassumi all'interno",
+          "description": "Conta gli elementi di un altro layer che intersecano ogni poligono, riassume un campo numerico e misura quanta parte di ogni poligono coprono",
+          "params": {
+            "layer": {
+              "label": "Layer poligonale"
+            },
+            "overlay": {
+              "label": "Layer da riassumere"
+            },
+            "field": {
+              "label": "Campo numerico",
+              "description": "Facoltativo. Aggiunge somma, media, minimo e massimo di questo campo per ogni poligono."
+            },
+            "min_overlap_pct": {
+              "label": "Ignora sovrapposizioni inferiori a (%)",
+              "description": "Quando il layer da riassumere contiene poligoni, salta quelli che coprono meno di questa quota di un poligono, come le schegge lungo i bordi condivisi."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Join per attributi",
           "description": "Associa a ogni elemento di input gli attributi di un layer di join (una tabella) dove un campo chiave corrisponde, senza usare la geometria. Uno a uno: vince la prima riga di join corrispondente.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Caricamento degli attributi del layer…",
     "requiresVectorLayer": "La tabella degli attributi richiede un layer vettoriale o un layer di query DuckDB.",
     "invalidJson": "JSON non valido",
+    "nullValue": "NULL",
     "editCellAria": "Modifica {{col}} per l'elemento {{featureId}}",
     "resizeColumn": "Ridimensiona la colonna {{name}}",
     "renameFieldAria": "Rinomina il campo {{name}}",

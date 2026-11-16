@@ -2128,6 +2128,18 @@
     "resizeDialog": "Galeriyi yeniden boyutlandır",
     "scopeFeatured": "Öne çıkanlar",
     "scopeAll": "Tüm projeler",
+    "scopeCollections": "Koleksiyonlar",
+    "loadingCollections": "Koleksiyonlar yükleniyor…",
+    "collectionsSearchPlaceholder": "Koleksiyonları başlığa, yazara veya açıklamaya göre filtrele",
+    "noCollectionMatches": "Filtrenizle eşleşen koleksiyon yok.",
+    "emptyCollections": "Henüz gösterilecek genel koleksiyon yok.",
+    "emptyCollection": "Bu koleksiyonda genel proje yok.",
+    "untitledCollection": "Adsız koleksiyon",
+    "openCollection": "Bu koleksiyondaki projeleri göster",
+    "openCollectionOnWeb": "Koleksiyonu web'de görüntüle",
+    "backToCollections": "Tüm koleksiyonlar",
+    "collectionProjects_one": "{{count}} proje",
+    "collectionProjects_other": "{{count}} proje",
     "scopeMine": "Projelerim",
     "scopeOrganizations": "Kuruluşlar",
     "scopeGroups": "Gruplar",
@@ -3917,6 +3929,7 @@
       "difference": "Fark",
       "union": "Birleşim",
       "spatialJoin": "Konumsal birleştirme",
+      "summarizeWithin": "İçinde özetle",
       "attributeJoin": "Öznitelik birleştirme",
       "selectByValue": "Değere göre seç",
       "selectByLocation": "Konuma göre seç",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "İçinde özetle",
+          "description": "Her poligonla kesişen başka bir katmanın objelerini sayar, sayısal bir alanı özetler ve her poligonun ne kadarını kapladıklarını ölçer",
+          "params": {
+            "layer": {
+              "label": "Poligon katmanı"
+            },
+            "overlay": {
+              "label": "Özetlenecek katman"
+            },
+            "field": {
+              "label": "Sayısal alan",
+              "description": "İsteğe bağlı. Her poligon için bu alanın toplamını, ortalamasını, minimumunu ve maksimumunu ekler."
+            },
+            "min_overlap_pct": {
+              "label": "Şundan küçük örtüşmeleri yok say (%)",
+              "description": "Özetlenecek katmanda poligonlar varsa, bir poligonun bu oranından azını kaplayanları (ortak kenarlar boyunca oluşan şeritler gibi) atlar."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Öznitelik birleştirme",
           "description": "Geometri kullanmadan, bir anahtar alanın eşleştiği yerlerde birleştirme katmanındaki (bir tablo) öznitelikleri her girdi öğesine ekler. Bire bir: eşleşen ilk birleştirme satırı kazanır.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Katman öznitelikleri yükleniyor…",
     "requiresVectorLayer": "Öznitelik tablosu bir vektör veya DuckDB sorgu katmanı gerektirir.",
     "invalidJson": "Geçersiz JSON",
+    "nullValue": "NULL",
     "editCellAria": "{{featureId}} öğesi için {{col}} düzenle",
     "resizeColumn": "{{name}} sütununu yeniden boyutlandır",
     "renameFieldAria": "{{name}} alanını yeniden adlandır",

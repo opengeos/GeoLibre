@@ -2075,6 +2075,17 @@
     "resizeDialog": "갤러리 크기 조절",
     "scopeFeatured": "추천",
     "scopeAll": "모든 프로젝트",
+    "scopeCollections": "컬렉션",
+    "loadingCollections": "컬렉션 불러오는 중…",
+    "collectionsSearchPlaceholder": "제목, 작성자 또는 설명으로 컬렉션 필터링",
+    "noCollectionMatches": "필터와 일치하는 컬렉션이 없습니다.",
+    "emptyCollections": "표시할 공개 컬렉션이 아직 없습니다.",
+    "emptyCollection": "이 컬렉션에는 공개 프로젝트가 없습니다.",
+    "untitledCollection": "제목 없는 컬렉션",
+    "openCollection": "이 컬렉션의 프로젝트 표시",
+    "openCollectionOnWeb": "웹에서 컬렉션 보기",
+    "backToCollections": "모든 컬렉션",
+    "collectionProjects_other": "프로젝트 {{count}}개",
     "scopeMine": "내 프로젝트",
     "scopeOrganizations": "조직",
     "scopeGroups": "그룹",
@@ -3853,6 +3864,7 @@
       "difference": "차집합",
       "union": "합집합",
       "spatialJoin": "공간 조인",
+      "summarizeWithin": "범위 내 요약",
       "attributeJoin": "속성 조인",
       "selectByValue": "값으로 선택",
       "selectByLocation": "위치로 선택",
@@ -6441,6 +6453,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "범위 내 요약",
+          "description": "각 폴리곤과 교차하는 다른 레이어의 피처 수를 세고, 숫자 필드를 요약하며, 각 폴리곤을 얼마나 덮는지 측정합니다",
+          "params": {
+            "layer": {
+              "label": "폴리곤 레이어"
+            },
+            "overlay": {
+              "label": "요약할 레이어"
+            },
+            "field": {
+              "label": "숫자 필드",
+              "description": "선택 사항. 각 폴리곤에 대해 이 필드의 합계, 평균, 최솟값, 최댓값을 추가합니다."
+            },
+            "min_overlap_pct": {
+              "label": "다음보다 작은 중첩 무시(%)",
+              "description": "요약할 레이어에 폴리곤이 있으면, 공유 경계를 따라 생긴 슬리버처럼 폴리곤의 이 비율보다 적게 덮는 폴리곤은 건너뜁니다."
+            }
+          }
+        },
         "attribute-join": {
           "name": "속성 조인",
           "description": "지오메트리를 사용하지 않고 키 필드가 일치하는 곳에서 조인 레이어(테이블)의 속성을 각 입력 피처에 연결합니다. 일대일: 처음 일치하는 조인 행이 사용됩니다.",
@@ -8434,6 +8466,7 @@
     "loadingAttributes": "레이어 속성을 불러오는 중…",
     "requiresVectorLayer": "속성 테이블에는 벡터 또는 DuckDB 쿼리 레이어가 필요합니다.",
     "invalidJson": "잘못된 JSON",
+    "nullValue": "NULL",
     "editCellAria": "피처 {{featureId}}의 {{col}} 편집",
     "resizeColumn": "{{name}} 열 크기 조정",
     "renameFieldAria": "필드 {{name}} 이름 변경",

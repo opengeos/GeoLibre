@@ -2128,6 +2128,18 @@
     "resizeDialog": "Redimensionar galeria",
     "scopeFeatured": "Em destaque",
     "scopeAll": "Todos os projetos",
+    "scopeCollections": "Coleções",
+    "loadingCollections": "Carregando coleções…",
+    "collectionsSearchPlaceholder": "Filtrar coleções por título, autor ou descrição",
+    "noCollectionMatches": "Nenhuma coleção corresponde ao seu filtro.",
+    "emptyCollections": "Ainda não há coleções públicas para mostrar.",
+    "emptyCollection": "Esta coleção não tem projetos públicos.",
+    "untitledCollection": "Coleção sem título",
+    "openCollection": "Mostrar os projetos desta coleção",
+    "openCollectionOnWeb": "Ver a coleção na web",
+    "backToCollections": "Todas as coleções",
+    "collectionProjects_one": "{{count}} projeto",
+    "collectionProjects_other": "{{count}} projetos",
     "scopeMine": "Meus projetos",
     "scopeOrganizations": "Organizações",
     "scopeGroups": "Grupos",
@@ -3917,6 +3929,7 @@
       "difference": "Diferença",
       "union": "União",
       "spatialJoin": "Junção espacial",
+      "summarizeWithin": "Resumir dentro",
       "attributeJoin": "Junção de atributos",
       "selectByValue": "Selecionar por valor",
       "selectByLocation": "Selecionar por localização",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Resumir dentro",
+          "description": "Contar as feições de outra camada que intersectam cada polígono, resumir um campo numérico e medir quanto de cada polígono elas cobrem",
+          "params": {
+            "layer": {
+              "label": "Camada de polígonos"
+            },
+            "overlay": {
+              "label": "Camada a resumir"
+            },
+            "field": {
+              "label": "Campo numérico",
+              "description": "Opcional. Adiciona a soma, a média, o mínimo e o máximo deste campo para cada polígono."
+            },
+            "min_overlap_pct": {
+              "label": "Ignorar sobreposições menores que (%)",
+              "description": "Quando a camada a resumir tem polígonos, ignorar os que cobrem menos que esta parcela de um polígono, como lascas ao longo de bordas compartilhadas."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Junção de atributos",
           "description": "Anexar atributos de uma camada de junção (uma tabela) a cada feição de entrada onde um campo-chave coincide, sem usar geometria. Um para um: a primeira linha de junção correspondente prevalece.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Carregando atributos da camada…",
     "requiresVectorLayer": "A tabela de atributos requer uma camada vetorial ou uma camada de consulta DuckDB.",
     "invalidJson": "JSON inválido",
+    "nullValue": "NULL",
     "editCellAria": "Editar {{col}} da feição {{featureId}}",
     "resizeColumn": "Redimensionar a coluna {{name}}",
     "renameFieldAria": "Renomear o campo {{name}}",

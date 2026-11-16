@@ -2180,6 +2180,19 @@
     "resizeDialog": "שנה גודל גלריה",
     "scopeFeatured": "מומלצים",
     "scopeAll": "כל הפרויקטים",
+    "scopeCollections": "אוספים",
+    "loadingCollections": "טוען אוספים…",
+    "collectionsSearchPlaceholder": "סנן אוספים לפי כותרת, מחבר או תיאור",
+    "noCollectionMatches": "אין אוספים שתואמים לסינון.",
+    "emptyCollections": "אין עדיין אוספים ציבוריים להצגה.",
+    "emptyCollection": "אין באוסף זה פרויקטים ציבוריים.",
+    "untitledCollection": "אוסף ללא שם",
+    "openCollection": "הצג את הפרויקטים באוסף זה",
+    "openCollectionOnWeb": "הצג את האוסף באינטרנט",
+    "backToCollections": "כל האוספים",
+    "collectionProjects_one": "פרויקט {{count}}",
+    "collectionProjects_two": "{{count}} פרויקטים",
+    "collectionProjects_other": "{{count}} פרויקטים",
     "scopeMine": "הפרויקטים שלי",
     "scopeOrganizations": "ארגונים",
     "scopeGroups": "קבוצות",
@@ -3981,6 +3994,7 @@
       "difference": "הפרש",
       "union": "איחוד",
       "spatialJoin": "צירוף מרחבי",
+      "summarizeWithin": "סיכום בתוך פוליגונים",
       "attributeJoin": "צירוף לפי מאפיין",
       "selectByValue": "בחירה לפי ערך",
       "selectByLocation": "בחירה לפי מיקום",
@@ -6697,6 +6711,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "סיכום בתוך פוליגונים",
+          "description": "ספירת הישויות משכבה אחרת שחותכות כל פוליגון, סיכום שדה מספרי ומדידת החלק של כל פוליגון שהן מכסות",
+          "params": {
+            "layer": {
+              "label": "שכבת פוליגונים"
+            },
+            "overlay": {
+              "label": "שכבה לסיכום"
+            },
+            "field": {
+              "label": "שדה מספרי",
+              "description": "אופציונלי. מוסיף את הסכום, הממוצע, המינימום והמקסימום של שדה זה לכל פוליגון."
+            },
+            "min_overlap_pct": {
+              "label": "התעלם מחפיפות קטנות מ- (%)",
+              "description": "כאשר השכבה לסיכום מכילה פוליגונים, דלג על כאלה שמכסים פחות מחלק זה של פוליגון, כגון רסיסים לאורך גבולות משותפים."
+            }
+          }
+        },
         "attribute-join": {
           "name": "צירוף מאפיינים",
           "description": "צירוף מאפיינים משכבת צירוף (טבלה) לכל ישות קלט שבה שדה המפתח תואם, ללא שימוש בגאומטריה. אחד-לאחד: שורת הצירוף התואמת הראשונה קובעת.",
@@ -8757,6 +8791,7 @@
     "loadingAttributes": "טוען מאפייני שכבה…",
     "requiresVectorLayer": "טבלת מאפיינים מחייבת שכבה וקטורית או שכבת שאילתת DuckDB.",
     "invalidJson": "JSON לא תקין",
+    "nullValue": "NULL",
     "editCellAria": "עריכת {{col}} עבור הישות {{featureId}}",
     "resizeColumn": "שינוי גודל העמודה {{name}}",
     "renameFieldAria": "שינוי שם השדה {{name}}",

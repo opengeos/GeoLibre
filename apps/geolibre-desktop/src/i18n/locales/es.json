@@ -2128,6 +2128,18 @@
     "resizeDialog": "Cambiar el tamaño de la galería",
     "scopeFeatured": "Destacados",
     "scopeAll": "Todos los proyectos",
+    "scopeCollections": "Colecciones",
+    "loadingCollections": "Cargando colecciones…",
+    "collectionsSearchPlaceholder": "Filtrar colecciones por título, autor o descripción",
+    "noCollectionMatches": "Ninguna colección coincide con su filtro.",
+    "emptyCollections": "Aún no hay colecciones públicas que mostrar.",
+    "emptyCollection": "Esta colección no tiene proyectos públicos.",
+    "untitledCollection": "Colección sin título",
+    "openCollection": "Mostrar los proyectos de esta colección",
+    "openCollectionOnWeb": "Ver la colección en la web",
+    "backToCollections": "Todas las colecciones",
+    "collectionProjects_one": "{{count}} proyecto",
+    "collectionProjects_other": "{{count}} proyectos",
     "scopeMine": "Mis proyectos",
     "scopeOrganizations": "Organizaciones",
     "scopeGroups": "Grupos",
@@ -3917,6 +3929,7 @@
       "difference": "Diferencia",
       "union": "Unión",
       "spatialJoin": "Unión espacial",
+      "summarizeWithin": "Resumir dentro",
       "attributeJoin": "Unión de atributos",
       "selectByValue": "Seleccionar por valor",
       "selectByLocation": "Seleccionar por ubicación",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "Resumir dentro",
+          "description": "Cuenta las entidades de otra capa que intersecan cada polígono, resume un campo numérico y mide qué parte de cada polígono cubren",
+          "params": {
+            "layer": {
+              "label": "Capa de polígonos"
+            },
+            "overlay": {
+              "label": "Capa que resumir"
+            },
+            "field": {
+              "label": "Campo numérico",
+              "description": "Opcional. Añade la suma, la media, el mínimo y el máximo de este campo para cada polígono."
+            },
+            "min_overlap_pct": {
+              "label": "Ignorar superposiciones menores que (%)",
+              "description": "Cuando la capa que resumir tiene polígonos, omite los que cubren menos de esta proporción de un polígono, como las astillas a lo largo de bordes compartidos."
+            }
+          }
+        },
         "attribute-join": {
           "name": "Unión de atributos",
           "description": "Adjunta atributos de una capa de unión (una tabla) a cada entidad de entrada donde coincide un campo clave, sin usar la geometría. Uno a uno: gana la primera fila de unión coincidente.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "Cargando atributos de la capa…",
     "requiresVectorLayer": "La tabla de atributos requiere una capa vectorial o de consulta DuckDB.",
     "invalidJson": "JSON no válido",
+    "nullValue": "NULL",
     "editCellAria": "Editar {{col}} de la entidad {{featureId}}",
     "resizeColumn": "Cambiar el tamaño de la columna {{name}}",
     "renameFieldAria": "Cambiar el nombre del campo {{name}}",

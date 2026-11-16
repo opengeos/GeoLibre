@@ -2128,6 +2128,18 @@
     "resizeDialog": "تغییر اندازهٔ نگارخانه",
     "scopeFeatured": "برگزیده",
     "scopeAll": "همهٔ پروژه‌ها",
+    "scopeCollections": "مجموعه‌ها",
+    "loadingCollections": "در حال بارگیری مجموعه‌ها…",
+    "collectionsSearchPlaceholder": "فیلتر مجموعه‌ها بر پایهٔ عنوان، نویسنده یا توضیحات",
+    "noCollectionMatches": "هیچ مجموعه‌ای با فیلتر شما هم‌خوان نیست.",
+    "emptyCollections": "هنوز مجموعهٔ عمومی‌ای برای نمایش نیست.",
+    "emptyCollection": "این مجموعه هیچ پروژهٔ عمومی‌ای ندارد.",
+    "untitledCollection": "مجموعهٔ بی‌نام",
+    "openCollection": "نمایش پروژه‌های این مجموعه",
+    "openCollectionOnWeb": "دیدن مجموعه روی وب",
+    "backToCollections": "همهٔ مجموعه‌ها",
+    "collectionProjects_one": "{{count}} پروژه",
+    "collectionProjects_other": "{{count}} پروژه",
     "scopeMine": "پروژه‌های من",
     "scopeOrganizations": "سازمان‌ها",
     "scopeGroups": "گروه‌ها",
@@ -3917,6 +3929,7 @@
       "difference": "تفاضل",
       "union": "اجتماع",
       "spatialJoin": "پیوند مکانی",
+      "summarizeWithin": "خلاصه‌سازی درون چندضلعی‌ها",
       "attributeJoin": "پیوند صفات",
       "selectByValue": "انتخاب بر پایهٔ مقدار",
       "selectByLocation": "انتخاب بر پایهٔ موقعیت",
@@ -6537,6 +6550,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "خلاصه‌سازی درون چندضلعی‌ها",
+          "description": "شمارش عارضه‌های لایه‌ای دیگر که هر چندضلعی را قطع می‌کنند، خلاصه‌سازی یک فیلد عددی و اندازه‌گیری اینکه چه بخشی از هر چندضلعی را می‌پوشانند",
+          "params": {
+            "layer": {
+              "label": "لایهٔ چندضلعی"
+            },
+            "overlay": {
+              "label": "لایهٔ مورد خلاصه‌سازی"
+            },
+            "field": {
+              "label": "فیلد عددی",
+              "description": "اختیاری. مجموع، میانگین، کمینه و بیشینهٔ این فیلد را برای هر چندضلعی می‌افزاید."
+            },
+            "min_overlap_pct": {
+              "label": "نادیده گرفتن همپوشانی‌های کوچک‌تر از (%)",
+              "description": "وقتی لایهٔ مورد خلاصه‌سازی چندضلعی دارد، هر کدام را که کمتر از این سهم یک چندضلعی را می‌پوشاند، مانند تکه‌های باریک در امتداد لبه‌های مشترک، رد کن."
+            }
+          }
+        },
         "attribute-join": {
           "name": "پیوند صفات",
           "description": "الحاق صفات یک لایهٔ پیوند (یک جدول) به هر عارضهٔ ورودی در جایی که یک فیلد کلید منطبق است، بدون استفاده از هندسه. یک‌به‌یک: نخستین سطر منطبق پیوند برنده است.",
@@ -8565,6 +8598,7 @@
     "loadingAttributes": "در حال بارگیری صفات لایه…",
     "requiresVectorLayer": "جدول صفات به یک لایهٔ برداری یا لایهٔ پرس‌وجوی DuckDB نیاز دارد.",
     "invalidJson": "JSON نامعتبر",
+    "nullValue": "NULL",
     "editCellAria": "ویرایش {{col}} برای عارضهٔ {{featureId}}",
     "resizeColumn": "تغییر اندازهٔ ستون {{name}}",
     "renameFieldAria": "تغییر نام فیلد {{name}}",
