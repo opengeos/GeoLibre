@@ -382,8 +382,8 @@ function rawGraduatedClassBreaks(
  * small breaks. Natural breaks are data values and are not rounded. The first
  * break is the sample minimum and stays exact, so the lowest feature is never
  * pushed below the first class, and a break whose rounding would reach the one
- * before it (or move it further than that bound) keeps its raw value, so
- * rounding never drops a class.
+ * before it or the raw one after it (or move it further than that bound) keeps
+ * its raw value, so rounding never drops a class.
  */
 function roundClassBreaks(breaks: number[], values: number[]): number[] {
   let min = Infinity;
@@ -408,7 +408,14 @@ function roundClassBreaks(breaks: number[], values: number[]): number[] {
     if (index > 0 && value !== 0) {
       const digits = Math.floor(Math.log10(Math.abs(value))) + 1 + decimals;
       const rounded = Number(value.toPrecision(Math.min(15, Math.max(4, digits))));
-      if (Math.abs(rounded - value) <= tolerance && rounded > previous) next = rounded;
+      const following = breaks[index + 1];
+      if (
+        Math.abs(rounded - value) <= tolerance &&
+        rounded > previous &&
+        !(Number.isFinite(following) && rounded >= following)
+      ) {
+        next = rounded;
+      }
     }
     previous = next;
     return next;

@@ -659,8 +659,8 @@ function ruleSwatches(layer: GeoLibreLayer): (LegendSwatch & { label: string })[
     swatches.push({
       color: elseRule.color,
       label: elseRule.label || "Other",
-      // Past the panel's row cap its else row is cut, so leave it untagged.
-      ...(rules.length < MAX_CATEGORY_SWATCHES ? { panelRowIndex: rules.length } : {}),
+      // The panel appends its else row after the capped rule rows.
+      panelRowIndex: Math.min(rules.length, MAX_CATEGORY_SWATCHES),
     });
   }
   return swatches;

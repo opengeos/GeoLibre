@@ -154,6 +154,14 @@ describe("createGraduatedClassBreaks", () => {
       "quantile",
     );
     assert.equal(clustered.length, 3, clustered.join(", "));
+    // Quantiles 50000.67, 50000.75 and 50000.83 all round to 50001: none may
+    // be rounded onto the raw break after it.
+    const straddling = createGraduatedClassBreaks(
+      [0, 50000.6, 50000.7, 50000.8, 50000.9, 100000],
+      6,
+      "quantile",
+    );
+    assert.equal(straddling.length, 6, straddling.join(", "));
     const offset = createGraduatedClassBreaks([1e15, 1e15 + 2], 2, "equal-interval");
     assert.deepEqual(offset, [1e15, 1e15 + 1]);
     // Natural breaks are data values and stay exact, so no feature changes class.

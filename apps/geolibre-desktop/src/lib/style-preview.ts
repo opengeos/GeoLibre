@@ -26,7 +26,8 @@ export function stylePreviewColors(style: LayerStyle): string[] | null {
     const stops = styleValue(style, "vectorStyleStops");
     colors = Array.isArray(stops) ? stops.map((stop) => stop.color) : [];
   }
-  colors = colors.filter((color) => typeof color === "string" && color.trim() !== "");
+  // An invalid color would draw as a black band, so keep the valid ones only.
+  colors = colors.filter(isHexColor);
   if (colors.length === 0) return null;
   if (colors.length <= MAX_STYLE_PREVIEW_COLORS) return colors;
   return Array.from(

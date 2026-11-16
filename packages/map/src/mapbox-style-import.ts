@@ -1488,8 +1488,8 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       warnings.push("The heatmap color expression is not a built-in GeoLibre color ramp.");
     }
     const sources = (root as { sources?: Record<string, { data?: unknown }> }).sources;
-    const sourceData =
-      typeof heatmap.source === "string" ? sources?.[heatmap.source]?.data : undefined;
+    const sourceId = (heatmap as { source?: unknown }).source;
+    const sourceData = typeof sourceId === "string" ? sources?.[sourceId]?.data : undefined;
     const weightProperty = heatmapWeightProperty(paint["heatmap-weight"], (property) =>
       heatmapWeightMax(
         { ...DEFAULT_LAYER_STYLE, heatmapWeightProperty: property },
