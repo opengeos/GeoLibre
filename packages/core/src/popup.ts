@@ -264,8 +264,7 @@ export function formatPopupValue(
 /** Whether a row would draw as a picture rather than as text. */
 function rendersAsImage(kind: PopupFieldKind, value: unknown): boolean {
   return (
-    kind === "image" ||
-    (kind === "auto" && (isInlineImageValue(value) || isInlineImageList(value)))
+    kind === "image" || (kind === "auto" && (isInlineImageValue(value) || isInlineImageList(value)))
   );
 }
 

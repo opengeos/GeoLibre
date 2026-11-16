@@ -296,7 +296,13 @@ describe("layoutHandoutFooter (#3477)", () => {
 
   it("keeps a two-word byline whole next to a centered footer", () => {
     // A4 portrait: 210 mm minus two 12 mm margins.
-    const layout = layoutHandoutFooter(measure, 186, "Jane Researcher", "Made with GeoLibre", "1 / 3");
+    const layout = layoutHandoutFooter(
+      measure,
+      186,
+      "Jane Researcher",
+      "Made with GeoLibre",
+      "1 / 3",
+    );
     assert.equal(layout.byline, "Jane Researcher");
     assert.equal(layout.footer, "Made with GeoLibre");
   });

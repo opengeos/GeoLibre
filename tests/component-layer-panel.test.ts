@@ -248,7 +248,13 @@ describe("LayerPanel", () => {
       mode: "co-edit",
       clientId: "guest-1",
       participants: [
-        { clientId: "guest-1", displayName: "Guest", color: "#ff0000", role: "guest", editOverride: null },
+        {
+          clientId: "guest-1",
+          displayName: "Guest",
+          color: "#ff0000",
+          role: "guest",
+          editOverride: null,
+        },
       ],
       lockedLayerIds: ["historic"],
     });
@@ -265,7 +271,10 @@ describe("LayerPanel", () => {
 
     const openEye = within(row("Places of worship")).getByRole("button", { name: "Hide layer" });
     assert.equal((openEye as HTMLButtonElement).disabled, false);
-    assert.equal(within(row("Places of worship")).getByRole("slider").hasAttribute("data-disabled"), false);
+    assert.equal(
+      within(row("Places of worship")).getByRole("slider").hasAttribute("data-disabled"),
+      false,
+    );
   });
 
   it("renames a layer on double-click and Enter", () => {

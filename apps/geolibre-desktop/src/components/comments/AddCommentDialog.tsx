@@ -63,8 +63,7 @@ export function AddCommentDialog({
 
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState(savedName ?? "");
-  const canSubmit =
-    !!text.trim() && (!!sessionAuthor || hasSavedName || !!authorName.trim());
+  const canSubmit = !!text.trim() && (!!sessionAuthor || hasSavedName || !!authorName.trim());
   const shortcutLabel = formatShortcut(POST_COMMENT_SHORTCUT, isMacPlatform());
 
   const handleSubmit = (e: FormEvent) => {
