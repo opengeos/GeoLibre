@@ -18,9 +18,9 @@ describe("emptyLayersHintKey", () => {
     [false, false, true, "layers.emptyNoAdd"],
     [false, false, false, "layers.emptyNoAdd"],
   ] as const;
-  for (const [beginner, canAddData, canUsePlugins, expected] of cases) {
-    it(`beginner=${beginner} addData=${canAddData} plugins=${canUsePlugins} -> ${expected}`, () => {
-      assert.equal(emptyLayersHintKey({ beginner, canAddData, canUsePlugins }), expected);
+  for (const [beginner, canAddData, canAddBasemaps, expected] of cases) {
+    it(`beginner=${beginner} addData=${canAddData} plugins=${canAddBasemaps} -> ${expected}`, () => {
+      assert.equal(emptyLayersHintKey({ beginner, canAddData, canAddBasemaps }), expected);
     });
   }
 });

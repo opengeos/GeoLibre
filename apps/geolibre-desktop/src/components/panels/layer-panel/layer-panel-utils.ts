@@ -372,17 +372,18 @@ export function hasNativeIdentifyLayers(layer: GeoLibreLayer): boolean {
  * @param options - What the toolbar currently offers.
  * @param options.beginner - Whether the beginner interface profile is active.
  * @param options.canAddData - Whether the Add data menu is on the toolbar.
- * @param options.canUsePlugins - Whether the Plugins menu is on the toolbar.
+ * @param options.canAddBasemaps - Whether the Plugins menu is on the toolbar and
+ *   lists the Basemaps plugin.
  * @returns The `layers.*` catalog key to render.
  */
 export function emptyLayersHintKey({
   beginner,
   canAddData,
-  canUsePlugins,
+  canAddBasemaps,
 }: {
   beginner: boolean;
   canAddData: boolean;
-  canUsePlugins: boolean;
+  canAddBasemaps: boolean;
 }):
   | "layers.empty"
   | "layers.emptyBeginner"
@@ -390,8 +391,8 @@ export function emptyLayersHintKey({
   | "layers.emptyBeginnerDataOnly"
   | "layers.emptyNoAdd" {
   if (beginner) {
-    if (canAddData && canUsePlugins) return "layers.emptyBeginner";
-    if (canUsePlugins) return "layers.emptyBeginnerBasemapsOnly";
+    if (canAddData && canAddBasemaps) return "layers.emptyBeginner";
+    if (canAddBasemaps) return "layers.emptyBeginnerBasemapsOnly";
     if (canAddData) return "layers.emptyBeginnerDataOnly";
     return "layers.emptyNoAdd";
   }

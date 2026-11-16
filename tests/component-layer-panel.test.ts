@@ -132,6 +132,25 @@ describe("LayerPanel", () => {
     assert.ok(screen.getByText("No data layers."));
   });
 
+  it("drops the Basemaps pointer when the profile hides the Basemaps plugin", () => {
+    useAppStore.getState().newProject({ name: "Empty" });
+    const settings = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.setState({
+      desktopSettings: {
+        ...settings,
+        uiProfile: {
+          ...settings.uiProfile,
+          enabled: true,
+          level: "beginner",
+          hiddenMenus: [],
+          hiddenPlugins: ["maplibre-gl-basemap-control"],
+        },
+      },
+    });
+    renderLayerPanel();
+    assert.ok(screen.getByText("No layers yet. Add your own data via the Add data menu."));
+  });
+
   it("drops the Add data pointer in the read-only viewer layout", () => {
     const original = window.location.href;
     window.history.replaceState(null, "", "/?layout=viewer");

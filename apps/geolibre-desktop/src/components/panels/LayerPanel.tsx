@@ -24,7 +24,11 @@ import {
   layerPanelGroupHeaders,
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
-import { getTemporalLayersVersion, subscribeTemporalLayers } from "@geolibre/plugins";
+import {
+  BASEMAP_CONTROL_PLUGIN_ID,
+  getTemporalLayersVersion,
+  subscribeTemporalLayers,
+} from "@geolibre/plugins";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import type { ThemeMode } from "../../hooks/useThemeMode";
@@ -34,7 +38,12 @@ import { useLayoutOptions } from "../../hooks/useLayoutOptions";
 import { entryMenuOffered } from "../../lib/deployment-gates";
 import { isMobile } from "../../lib/is-mobile";
 import { masHidesDataSource } from "../../lib/mas-build";
-import { activeInterfaceProfile, isDataSourceVisible, isMenuVisible } from "../../lib/ui-profile";
+import {
+  activeInterfaceProfile,
+  isDataSourceVisible,
+  isMenuVisible,
+  isPluginVisible,
+} from "../../lib/ui-profile";
 import { Button, ScrollArea, Separator } from "@geolibre/ui";
 import { Layers, PanelLeftOpen } from "lucide-react";
 import { PasteStyleDialog } from "./PasteStyleDialog";
@@ -155,11 +164,13 @@ export function LayerPanel({
       capabilities: deploymentCapabilities,
       menuVisible: isMenuVisible(uiProfile, "addData"),
     }),
-    canUsePlugins: entryMenuOffered("plugins", {
-      viewer,
-      capabilities: deploymentCapabilities,
-      menuVisible: isMenuVisible(uiProfile, "plugins"),
-    }),
+    // The hint names Plugins → Basemaps, so the profile must also list that plugin.
+    canAddBasemaps:
+      entryMenuOffered("plugins", {
+        viewer,
+        capabilities: deploymentCapabilities,
+        menuVisible: isMenuVisible(uiProfile, "plugins"),
+      }) && isPluginVisible(uiProfile, BASEMAP_CONTROL_PLUGIN_ID),
   });
 
   const compactLayerList = useDesktopSettingsStore(
