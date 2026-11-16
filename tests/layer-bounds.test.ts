@@ -48,23 +48,24 @@ describe("getLayerBounds", () => {
     const bounds = getLayerBounds(
       layerWith({
         type: "FeatureCollection",
-        bbox: [-179.9224, -61.5305, -3.6, 179.7358, 66.921, 621.93],
+        bbox: [-122.5, 36.1, -3.6, -117.2, 38.9, 621.93],
         features: [
           {
             type: "Feature",
-            geometry: { type: "Point", coordinates: [-179.9224, -61.5305, 10] },
+            geometry: { type: "Point", coordinates: [-122.4, 36.2, 10] },
             properties: {},
           },
           {
             type: "Feature",
-            geometry: { type: "Point", coordinates: [179.7358, 66.921, 621.93] },
+            geometry: { type: "Point", coordinates: [-117.3, 38.8, 621.93] },
             properties: {},
           },
         ],
       }),
     );
 
-    assert.deepEqual(bounds, [-179.9224, -61.5305, 179.7358, 66.921]);
+    // The stored member is used (trimmed), not recomputed from the points.
+    assert.deepEqual(bounds, [-122.5, 36.1, -117.2, 38.9]);
   });
 
   it("returns null for a table layer whose features all have null geometry", () => {

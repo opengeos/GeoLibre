@@ -12,6 +12,7 @@ import { DEFAULT_LAYER_STYLE, type MapViewState } from "../packages/core/src/typ
 import {
   CesiumEngine,
   CESIUM_CAPABILITIES,
+  cesiumLongitudes,
   resetPrimaryCesiumBuiltInControlState,
 } from "../packages/map/src/cesium-engine";
 import {
@@ -1239,6 +1240,30 @@ describe("CesiumEngine framing", () => {
       n: 5,
     });
     engine.destroy();
+  });
+
+  it("flies across the antimeridian for an unwrapped extent (#3469)", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    // getLayerBounds reports an Aleutian-to-Maine extent with east past 180;
+    // Cesium's Rectangle takes it as west > east.
+    engine.fitBounds([172, 18, 293, 72]);
+    assert.deepEqual((fakes.flights[0] as { destination: unknown }).destination, {
+      w: 172,
+      s: 18,
+      e: -67,
+      n: 72,
+    });
+    engine.destroy();
+  });
+
+  it("wraps extent longitudes for Rectangle.fromDegrees", () => {
+    assert.deepEqual(cesiumLongitudes(-180, 180), [-180, 180]);
+    assert.deepEqual(cesiumLongitudes(-170, 190), [-180, 180]);
+    assert.deepEqual(cesiumLongitudes(172, 293), [172, -67]);
+    assert.deepEqual(cesiumLongitudes(-190, -170), [170, -170]);
+    assert.deepEqual(cesiumLongitudes(-10, 10), [-10, 10]);
+    assert.deepEqual(cesiumLongitudes(172, -67), [172, -67]);
   });
 
   it("ignores a non-finite extent instead of flying to NaN", () => {

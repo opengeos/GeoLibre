@@ -1,6 +1,5 @@
-import bbox from "@turf/bbox";
 import type { Feature } from "geojson";
-import { type GeoLibreLayer, horizontalBbox } from "@geolibre/core";
+import { antimeridianAwareBbox, type GeoLibreLayer } from "@geolibre/core";
 
 /**
  * The slice of a MapLibre/Mapbox map this module reads. Both engines expose
@@ -70,5 +69,5 @@ export function loadedVectorTileFeatureBounds(
     }
   }
   if (features.length === 0) return null;
-  return horizontalBbox(bbox({ type: "FeatureCollection", features }));
+  return antimeridianAwareBbox({ type: "FeatureCollection", features });
 }
