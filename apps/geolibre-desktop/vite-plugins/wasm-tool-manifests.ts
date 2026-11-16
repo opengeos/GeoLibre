@@ -17,7 +17,9 @@ import type { Plugin } from "vite";
 //
 // The file is generated from the same installed `geolibre-wasm` that the build
 // bundles, so it cannot drift from the runner. `wasm-client.ts` falls back to
-// asking the runner when the file is missing or unreadable.
+// asking the runner when the file is missing or unreadable at runtime. A
+// failure to generate it fails the build on purpose: `geolibre-wasm` is a hard
+// dependency, and silently skipping the file would bring back the slow list.
 
 /** Served file name, resolved against the document base by `wasm-client.ts`. */
 export const WASM_TOOL_MANIFESTS_FILE = "whitebox-wasm-manifests.json";

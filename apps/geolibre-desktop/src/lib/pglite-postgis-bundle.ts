@@ -157,7 +157,10 @@ interface PgliteExtensionLike {
  * URL it would otherwise fetch.
  *
  * The bundle is checked against the SHA-256 of the installed package's copy
- * (injected at build time), so neither mirror is trusted on its own, and the
+ * (injected at build time), so neither mirror is trusted on its own. The check
+ * needs Web Crypto, which browsers only expose in secure contexts (https,
+ * localhost, the desktop app); on a plain-http LAN origin it is skipped with a
+ * console warning rather than turning PostGIS off. The
  * `blob:` URL is created once per wrapper: a retried PGlite start reuses it
  * instead of downloading and holding another ~20 MB.
  *

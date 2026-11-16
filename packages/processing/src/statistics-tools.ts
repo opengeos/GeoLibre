@@ -994,7 +994,9 @@ const MIN_TRAILING_STEP_FRACTION = 0.5;
  *
  * Date-only data ("2025-03-04") is daily: its last timestamp stands for that
  * whole day, not an instant, which {@link spaceTimeCubeSteps} needs to know to
- * measure how much of the final step the data really covers.
+ * measure how much of the final step the data really covers. Instants that all
+ * share one time of day (every event at 03:00) look the same and also count
+ * as daily, so their trailing step reads up to a day fuller than it is.
  *
  * @param times Event timestamps in ms.
  * @param minTime The earliest of `times`.
