@@ -1,4 +1,4 @@
-import type { Feature, MultiPolygon, Position } from "geojson";
+import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
 
 /**
  * Widest longitude span (degrees) of one slice. Cesium triangulates a polygon
@@ -12,10 +12,10 @@ const WINDING_TOLERANCE = 1;
 
 /** The signed longitude step from `a` to `b`, taking the short way round. */
 function lonStep(a: number, b: number): number {
-  let d = b - a;
-  while (d > 180) d -= 360;
-  while (d < -180) d += 360;
-  return d;
+  // Closed form, not a loop: projected metres mislabelled as degrees would
+  // otherwise spin for millions of steps per vertex.
+  const d = (((b - a) % 360) + 360) % 360;
+  return d > 180 ? d - 360 : d;
 }
 
 /** A ring without the repeated closing vertex GeoJSON puts at its end. */
@@ -149,6 +149,23 @@ function slicePolarPolygon(rings: Position[][]): Position[][][] {
 }
 
 /**
+ * Geometries this module cut into slices (not those it only clamped), so the
+ * caller can tell cut meridians, which are not in the data, from real edges.
+ */
+const slicedGeometries = new WeakSet<object>();
+
+/**
+ * Whether `geometry` came out of {@link slicePoleWrappingPolygons} cut into
+ * slices, as opposed to unchanged or only pulled off the pole.
+ *
+ * @param geometry - A geometry returned by {@link slicePoleWrappingPolygons}.
+ * @returns True when it was sliced.
+ */
+export function isSlicedPolarGeometry(geometry: unknown): boolean {
+  return typeof geometry === "object" && geometry !== null && slicedGeometries.has(geometry);
+}
+
+/**
  * Furthest latitude (degrees) a polygon vertex is given to Cesium. A vertex
  * exactly on a pole has no rhumb heading, so the shadow-volume walls of a
  * ground polygon through it throw `RangeError: Invalid array length`; 0.001
@@ -211,8 +228,10 @@ export function slicePoleWrappingPolygons(feature: Feature): Feature {
   });
   // Nothing drawable came out (a degenerate ring): leave the feature as it was.
   if (coordinates.length === 0) return feature;
-  if (geometry.type === "Polygon" && coordinates.length === 1)
-    return { ...feature, geometry: { type: "Polygon", coordinates: coordinates[0] } };
-  const sliced: MultiPolygon = { type: "MultiPolygon", coordinates };
-  return { ...feature, geometry: sliced };
+  const out: Polygon | MultiPolygon =
+    geometry.type === "Polygon" && coordinates.length === 1
+      ? { type: "Polygon", coordinates: coordinates[0] }
+      : { type: "MultiPolygon", coordinates };
+  if (flags.some((f) => f.wraps)) slicedGeometries.add(out);
+  return { ...feature, geometry: out };
 }

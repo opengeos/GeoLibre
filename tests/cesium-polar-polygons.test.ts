@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ArcType, Cartesian3, PolygonGeometry, PolygonHierarchy } from "@cesium/engine";
 import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
-import { slicePoleWrappingPolygons } from "../packages/map/src/cesium-polar-polygons";
+import {
+  isSlicedPolarGeometry,
+  slicePoleWrappingPolygons,
+} from "../packages/map/src/cesium-polar-polygons";
 
 // Polygons that reach or go round a pole on the Cesium globe (#3476). The
 // geometry is built with Cesium's own PolygonGeometry, the code its polygon
@@ -163,6 +166,50 @@ describe("slicePoleWrappingPolygons", () => {
     assert.equal(ring[2][0], 15);
     assert.ok(ring[2][1] > -90 && ring[2][1] < -89.99);
     assert.doesNotThrow(() => buildAll(out));
+  });
+
+  it("tells a sliced polygon from one only pulled off the pole", () => {
+    assert.equal(isSlicedPolarGeometry(slicePoleWrappingPolygons(antarctica()).geometry), true);
+    const wedge: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, -80],
+            [30, -80],
+            [15, -90],
+            [0, -80],
+          ],
+        ],
+      },
+    };
+    const clamped = slicePoleWrappingPolygons(wedge);
+    assert.notEqual(clamped.geometry, wedge.geometry);
+    assert.equal(isSlicedPolarGeometry(clamped.geometry), false, "clamping keeps the outline");
+    assert.equal(isSlicedPolarGeometry(wedge.geometry), false);
+  });
+
+  it("does not stall on projected metres mislabelled as degrees", () => {
+    const metres: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [-2e15, 1e6],
+            [2e15, 1e6],
+            [2e15, 2e6],
+            [-2e15, 1e6],
+          ],
+        ],
+      },
+    };
+    const started = performance.now();
+    slicePoleWrappingPolygons(metres);
+    assert.ok(performance.now() - started < 1000);
   });
 
   it("returns every other feature unchanged", () => {

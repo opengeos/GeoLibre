@@ -73,7 +73,7 @@ import {
   type LoadEptOptions,
   type LoadLasOptions,
 } from "./cesium-point-cloud";
-import { slicePoleWrappingPolygons } from "./cesium-polar-polygons";
+import { isSlicedPolarGeometry, slicePoleWrappingPolygons } from "./cesium-polar-polygons";
 import {
   buildPointBatch,
   clusterActiveAtZoom,
@@ -1414,18 +1414,17 @@ function indexedFeatureCollection(
  *
  * @param viewer The globe, for reading entity properties.
  * @param dataSource The loaded data source.
- * @param source The layer's FeatureCollection as given.
  * @param loaded The collection handed to Cesium (see {@link indexedFeatureCollection}).
  */
 function hideSlicedPolygonOutlines(
   viewer: CesiumWidget,
   dataSource: DataSource,
-  source: FeatureCollection,
   loaded: FeatureCollection,
 ): void {
   const sliced = new Set<number>();
   loaded.features.forEach((feature, index) => {
-    if (feature.geometry !== source.features[index]?.geometry) sliced.add(index);
+    // Only real slices: a polygon merely pulled off the pole keeps its outline.
+    if (isSlicedPolarGeometry(feature.geometry)) sliced.add(index);
   });
   if (sliced.size === 0) return;
   for (const entity of dataSource.entities.values) {
@@ -3562,7 +3561,7 @@ export class CesiumLayerSync {
       (dataSource.entities as { suspendEvents?: () => void }).suspendEvents?.();
       try {
         this.indexGeoJsonEntities(entry, dataSource);
-        hideSlicedPolygonOutlines(viewer, dataSource, sourceGeoJson, data);
+        hideSlicedPolygonOutlines(viewer, dataSource, data);
         // Per-feature symbology (issue #2278): the resolver evaluates the same
         // expressions the 2D map paints with, and the sprites it needs (marker
         // shapes per classified colour, the fill pattern tile) are rasterised
@@ -3942,7 +3941,11 @@ export class CesiumLayerSync {
    * @param entry The point-cloud entry to position.
    */
   private applyPointCloudGround(entry: LayerEntry): void {
-    const collection = entry.handle as PointPrimitiveCollection | null;
+    // A streamed cloud's collection is in the scene before start() resolves
+    // and sets the handle, so nodes landing in the first refresh are grounded too.
+    const collection = (entry.handle ??
+      entry.streamer?.collection ??
+      null) as PointPrimitiveCollection | null;
     if (!collection || entry.kind !== "pointcloud") return;
     // A streamed cloud's ground height can change as nodes land (the root
     // replaces a fallback node's), so it is read from the streamer each time.
@@ -3953,8 +3956,10 @@ export class CesiumLayerSync {
     if (offset === 0) {
       collection.modelMatrix = Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY);
     } else {
-      // Any point of the cloud anchors the local "up": the cloud spans a few
-      // kilometres at most, so one translation lowers all of it evenly.
+      // Any point of the cloud anchors the local "up". One translation is
+      // exact for a survey a few kilometres across; at distance d from the
+      // anchor it drifts sideways by about offset * d / R (a few metres for
+      // a 100 km cloud 200 m up), which a per-node anchor would remove.
       const sample = collection.length > 0 ? collection.get(0)?.position : undefined;
       // Nothing shown yet: leave the offset unrecorded so a later pass retries.
       if (!sample) return;
