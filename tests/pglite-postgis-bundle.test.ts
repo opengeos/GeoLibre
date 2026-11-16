@@ -138,27 +138,29 @@ describe("PostGIS mirror stall handling", () => {
 
 describe("PostGIS mirror deadline after headers", () => {
   it("gives the first body chunk a fresh deadline once headers arrive", async () => {
-    const fake = ((_url: string, init?: RequestInit) =>
-      new Promise<Response>((resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
-        // Headers arrive late (35 of 50 ms), then the body 30 ms after them.
-        setTimeout(() => {
-          const body = new ReadableStream<Uint8Array>({
-            start(controller) {
-              // An abort must also stop the body, as a real fetch does.
-              const timer = setTimeout(() => {
-                controller.enqueue(new TextEncoder().encode("primary"));
-                controller.close();
-              }, 30);
-              init?.signal?.addEventListener("abort", () => {
-                clearTimeout(timer);
-                controller.error(new Error("aborted"));
+    const fake = ((url: string, init?: RequestInit) =>
+      url !== "a"
+        ? Promise.resolve(new Response("fallback", { status: 200 }))
+        : new Promise<Response>((resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+            // Headers arrive late (35 of 50 ms), then the body 30 ms after them.
+            setTimeout(() => {
+              const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                  // An abort must also stop the body, as a real fetch does.
+                  const timer = setTimeout(() => {
+                    controller.enqueue(new TextEncoder().encode("primary"));
+                    controller.close();
+                  }, 30);
+                  init?.signal?.addEventListener("abort", () => {
+                    clearTimeout(timer);
+                    controller.error(new Error("aborted"));
+                  });
+                },
               });
-            },
-          });
-          resolve(new Response(body, { status: 200 }));
-        }, 35);
-      })) as unknown as typeof fetch;
+              resolve(new Response(body, { status: 200 }));
+            }, 35);
+          })) as unknown as typeof fetch;
     const blob = await fetchFromMirrors(["a", "b"], fake, 50);
     assert.equal(await blob.text(), "primary");
   });
