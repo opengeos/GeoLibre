@@ -6,7 +6,8 @@
 // the Galilean moons, Titan, Pluto, Charon) are only served as *equirectangular*
 // WMS layers — MapLibre can't render those directly, because it only draws Web
 // Mercator. This module warps a single equirectangular WMS image into the Web-
-// Mercator tile MapLibre asks for.
+// Mercator tile MapLibre asks for. It runs in the browser, inside the
+// `usgs-wms://` protocol handler (usgs-wms-protocol.ts).
 //
 // The warp is cheap because both projections are **linear in longitude**: a tile
 // and the WMS window requested for it share the same longitude span, so columns
