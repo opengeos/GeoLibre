@@ -17,6 +17,7 @@ import type { FeatureCollection } from "geojson";
 import {
   createWmsTileUrl,
   normalizeWmsVersion,
+  readLimitedBody,
   stripOgcOperationParams,
 } from "../components/layout/add-data/helpers";
 import { collectionMetadata } from "./field-collection";
@@ -171,6 +172,8 @@ export async function materializeQgisRemoteLayers(
   // Non-GeoJSON files can be hundreds of megabytes and are read one at a
   // time anyway, so they also download one at a time: parallel downloads
   // would only hold several whole files in memory waiting for the reader.
+  // A worker waiting here keeps its slot, so GeoJSON layers can queue behind
+  // large ones; that is accepted to keep this a plain worker pool.
   let largeSlot: Promise<void> = Promise.resolve();
   async function worker(): Promise<void> {
     while (nextIndex < remoteLayers.length) {
@@ -205,11 +208,7 @@ export async function materializeQgisRemoteLayers(
         if (asGeoJson) {
           data = (await response.json()) as unknown;
         } else {
-          const advertised = Number(response.headers.get("content-length"));
-          if (Number.isFinite(advertised) && advertised > MAX_REMOTE_VECTOR_BYTES) {
-            throw new Error(`The file is too large to import (${advertised} bytes)`);
-          }
-          const bytes = await readCappedBody(response, MAX_REMOTE_VECTOR_BYTES);
+          const bytes = await readLimitedBody(response, MAX_REMOTE_VECTOR_BYTES);
           // The download is done. The host reader bounds its own work.
           clearTimeout(timeout);
           const sourceLayer = layer.metadata.sourceLayer;
@@ -249,48 +248,6 @@ export async function materializeQgisRemoteLayers(
     );
   }
   return result;
-}
-
-/**
- * Read a response body, giving up as soon as it passes `maxBytes`, so a
- * server that sends no `Content-Length` cannot make the import buffer an
- * unbounded download first.
- *
- * @param response - The response to read.
- * @param maxBytes - Largest body accepted.
- * @returns The whole body.
- * @throws When the body is larger than `maxBytes`.
- */
-async function readCappedBody(
-  response: Response,
-  maxBytes: number,
-): Promise<Uint8Array<ArrayBuffer>> {
-  const tooLarge = () => new Error(`The file is larger than ${maxBytes} bytes`);
-  if (!response.body) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maxBytes) throw tooLarge();
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => {});
-      throw tooLarge();
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
 }
 
 /**
