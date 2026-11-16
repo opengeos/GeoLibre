@@ -122,12 +122,21 @@ interface FakeChannel {
  * Install a fake `__TAURI_INTERNALS__` whose `chatgpt_request` answers with
  * `reply` (streamed in `chunkSize`-byte chunks), recording each request.
  */
-function installTauri(reply: { status: number; contentType: string; body: string }) {
+function installTauri(
+  reply: { status: number; contentType: string; body: string },
+  options: { holdAfterHead?: boolean } = {},
+) {
   const callbacks = new Map<number, (message: unknown) => void>();
   let nextId = 1;
   const requests: { path: unknown; body: unknown }[] = [];
+  const cancelled: unknown[] = [];
+  // With `holdAfterHead`, everything after the head waits for `release()`.
+  let release: () => void = () => {};
   const invoke: Invoke = async (cmd, args) => {
-    if (cmd === "chatgpt_request_cancel") return null;
+    if (cmd === "chatgpt_request_cancel") {
+      cancelled.push(args.requestId);
+      return null;
+    }
     assert.equal(cmd, "chatgpt_request");
     requests.push({ path: args.path, body: args.body });
     const channel = callbacks.get((args.events as FakeChannel).id)!;
@@ -139,7 +148,14 @@ function installTauri(reply: { status: number; contentType: string; body: string
       messages.push({ event: "chunk", data: bytes.subarray(i, i + 7).toString("base64") });
     }
     messages.push({ event: "end" });
-    messages.forEach((message, index) => channel({ index, message }));
+    const deliver = (from: number) =>
+      messages.slice(from).forEach((message, i) => channel({ index: from + i, message }));
+    if (options.holdAfterHead) {
+      channel({ index: 0, message: messages[0] });
+      release = () => deliver(1);
+    } else {
+      deliver(0);
+    }
     return null;
   };
   (globalThis as unknown as { window: unknown }).window = {
@@ -154,7 +170,7 @@ function installTauri(reply: { status: number; contentType: string; body: string
     },
     dispatchEvent: () => true,
   };
-  return { requests };
+  return { requests, cancelled, release: () => release() };
 }
 
 function sse(events: unknown[]): string {
@@ -204,11 +220,27 @@ describe("chatGptFetch", () => {
   });
 
   it("ignores events that arrive after the reader cancels", async () => {
-    installTauri({ status: 200, contentType: "text/plain", body: "x".repeat(64) });
+    const backend = installTauri(
+      { status: 200, contentType: "text/plain", body: "x".repeat(64) },
+      { holdAfterHead: true },
+    );
     const response = await chatGptFetch("https://api.openai.com/v1/models");
-    // The fake backend delivers every event synchronously; cancelling the
-    // already-filled body must not throw on a closed stream.
     await response.body!.cancel();
+    assert.equal(backend.cancelled.length, 1, "the native request is cancelled");
+    // Chunks and the end still on the channel must not reach the closed stream.
+    assert.doesNotThrow(() => backend.release());
+  });
+
+  it("delivers held chunks to a reader that keeps reading", async () => {
+    const backend = installTauri(
+      { status: 200, contentType: "text/plain", body: "late body" },
+      { holdAfterHead: true },
+    );
+    const response = await chatGptFetch("https://api.openai.com/v1/models");
+    const text = response.text();
+    backend.release();
+    assert.equal(await text, "late body");
+    assert.equal(backend.cancelled.length, 0);
   });
 
   it("loads the plan's model catalog", async () => {

@@ -901,6 +901,9 @@ struct LoginAttempt {
 pub struct ChatGptAuthState {
     session: Arc<tokio::sync::Mutex<Session>>,
     login: Mutex<Option<LoginAttempt>>,
+    /// Advanced (under `login`) by every cancel and sign-out, so a start that
+    /// was overtaken before it stored its attempt cancels that attempt itself.
+    login_generation: std::sync::atomic::AtomicU64,
     /// Held for a whole `chatgpt_sign_in_start`, so overlapping starts run in
     /// turn and each one cancels the attempt the previous one installed.
     starting: tokio::sync::Mutex<()>,
@@ -923,7 +926,9 @@ impl ChatGptAuthState {
     }
 
     fn cancel_login(&self) {
-        if let Some(attempt) = self.login.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        let mut login = self.login.lock().unwrap_or_else(|p| p.into_inner());
+        self.login_generation.fetch_add(1, Ordering::SeqCst);
+        if let Some(attempt) = login.take() {
             attempt.cancel.store(true, Ordering::SeqCst);
         }
     }
@@ -1309,6 +1314,7 @@ pub async fn chatgpt_sign_in_start(
 ) -> Result<ChatGptSignInStart, String> {
     let _starting = state.starting.lock().await;
     state.cancel_login();
+    let generation = state.login_generation.load(Ordering::SeqCst);
     let (dir, saved) = {
         let mut session = state.session.lock().await;
         ensure_loaded(&mut session, &app).await?;
@@ -1365,7 +1371,15 @@ pub async fn chatgpt_sign_in_start(
         let result = serve(&listener, &stop, &pending, &session);
         *out.lock().unwrap_or_else(|p| p.into_inner()) = Some(result);
     });
-    *state.login.lock().unwrap_or_else(|p| p.into_inner()) = Some(LoginAttempt { cancel, outcome });
+    {
+        let mut login = state.login.lock().unwrap_or_else(|p| p.into_inner());
+        // A cancel or sign-out while this start was under way stops it here.
+        if state.login_generation.load(Ordering::SeqCst) != generation {
+            cancel.store(true, Ordering::SeqCst);
+            return Err("The sign-in was cancelled.".into());
+        }
+        *login = Some(LoginAttempt { cancel, outcome });
+    }
     Ok(ChatGptSignInStart { url })
 }
 
