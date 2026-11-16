@@ -5,7 +5,10 @@ import {
   decodeTerrariumRgba,
   sampleAncestorTile,
 } from "../packages/map/src/terrarium-fallback";
-import { resolveTerrainFillOutside } from "../apps/geolibre-desktop/src/lib/terrain-fill";
+import {
+  displayedTerrainFillOutside,
+  resolveTerrainFillOutside,
+} from "../apps/geolibre-desktop/src/lib/terrain-fill";
 
 const SIZE = 256;
 
@@ -111,5 +114,13 @@ describe("resolveTerrainFillOutside", () => {
   it("follows an explicit choice either way", () => {
     assert.equal(resolveTerrainFillOutside(false, "https://data.test/dem.tif"), false);
     assert.equal(resolveTerrainFillOutside(true, new Blob(["x"])), true);
+  });
+});
+
+describe("displayedTerrainFillOutside", () => {
+  it("shows the engine's fill for the DEM on the map, else the saved or URL default", () => {
+    assert.equal(displayedTerrainFillOutside(false, true), false);
+    assert.equal(displayedTerrainFillOutside(null, false), false);
+    assert.equal(displayedTerrainFillOutside(null, undefined), true);
   });
 });

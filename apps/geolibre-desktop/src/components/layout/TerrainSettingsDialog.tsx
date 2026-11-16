@@ -32,7 +32,7 @@ import {
   MAX_EXAGGERATION,
   MIN_EXAGGERATION,
 } from "../../lib/terrain-exaggeration";
-import { resolveTerrainFillOutside } from "../../lib/terrain-fill";
+import { displayedTerrainFillOutside, resolveTerrainFillOutside } from "../../lib/terrain-fill";
 import { terrainRasterLayerOptions } from "../../lib/terrain-raster-layer";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
@@ -165,16 +165,14 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       );
       setTerrainUrl(!currentLayer && /^https?:\/\//i.test(currentSource) ? currentSource : "");
       setRasterLayerId(currentLayer?.id ?? "");
-      // What the engine is doing for the DEM on the map, or, with none yet, what
-      // the next URL DEM would get.
       const controller = mapControllerRef.current;
       setFillOutside(
-        controller?.hasCustomTerrainSource() && controller.getTerrainFillOutside
-          ? controller.getTerrainFillOutside()
-          : // No DEM yet: show the saved choice, else what a URL DEM (the
-            // common case) would get. A local file still resolves to off
-            // when it is opened, unless the box was set explicitly.
-            (useAppStore.getState().preferences.map.terrainFillOutside ?? true),
+        displayedTerrainFillOutside(
+          controller?.hasCustomTerrainSource()
+            ? (controller.getTerrainFillOutside?.() ?? null)
+            : null,
+          useAppStore.getState().preferences.map.terrainFillOutside,
+        ),
       );
       setSourceError(null);
       // A COG still opening from a previous session of this dialog would

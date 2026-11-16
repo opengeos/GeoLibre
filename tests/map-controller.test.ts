@@ -2881,6 +2881,29 @@ describe("COG DEM terrain source", () => {
     controller.destroy();
   });
 
+  it("keeps a fill set while a DEM is still opening", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const slow = fakeRegistration("slow");
+    let release: () => void = () => {};
+    const opened = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    internal.openCogDem = async () => {
+      await opened;
+      return slow;
+    };
+    const pending = controller.setTerrainCogSource("https://example.com/slow.tif", 1, {
+      fillOutside: true,
+    });
+    controller.setTerrainFillOutside(false);
+    release();
+    assert.equal(await pending, true);
+    assert.equal(controller.getTerrainFillOutside(), false);
+    assert.equal(slow.fallback, null);
+    controller.destroy();
+  });
+
   it("discards a slow open that a newer selection has already superseded", async () => {
     const { controller } = terrainController();
     const internal = controller as unknown as TerrainInternals;

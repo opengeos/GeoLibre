@@ -327,6 +327,8 @@ export class MapController implements MapEngine {
   private cogDemGeneration = 0;
   /** Fill outside a custom COG DEM from the global terrain; see setTerrainFillOutside. */
   private terrainFillOutside = false;
+  /** Bumped by each explicit fill change; see setTerrainCogSource. */
+  private terrainFillGeneration = 0;
   private terrainFallback: CogDemFallback | null = null;
   // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
   // the generation-guard tests in setTerrainCogSource have no use for.
@@ -2847,6 +2849,7 @@ export class MapController implements MapEngine {
   ): Promise<boolean> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
+    const fillGeneration = this.terrainFillGeneration;
     let registration: CogDemSourceRegistration | null = null;
     try {
       registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
@@ -2872,7 +2875,10 @@ export class MapController implements MapEngine {
 
     // Only now that the DEM has opened: a failed open leaves the working DEM
     // and its fill exactly as they were.
-    if (options.fillOutside !== undefined) this.terrainFillOutside = options.fillOutside;
+    // A fill set explicitly while the DEM was opening is newer than this one.
+    if (options.fillOutside !== undefined && fillGeneration === this.terrainFillGeneration) {
+      this.terrainFillOutside = options.fillOutside;
+    }
     const previous = this.cogDemRegistration;
     this.cogDemRegistration = registration;
     this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;
@@ -2906,6 +2912,7 @@ export class MapController implements MapEngine {
    * @param fill - Whether to fill outside the DEM.
    */
   setTerrainFillOutside(fill: boolean): void {
+    this.terrainFillGeneration += 1;
     if (fill === this.terrainFillOutside) return;
     this.terrainFillOutside = fill;
     const registration = this.cogDemRegistration;

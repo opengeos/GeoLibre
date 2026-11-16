@@ -138,13 +138,20 @@ async function renderDatasetTile(
 ): Promise<Uint8ClampedArray> {
   const elevations = Float64Array.from(await readTileHoldingReader(dataset, z, x, y));
   const fallback = dataset.fallback;
-  if (fallback && hasMissing(elevations, dataset.nodata)) {
-    const filler = await fallback(z, x, y).catch(() => null);
-    if (filler && filler.length === elevations.length) {
-      fillMissingElevations(elevations, dataset.nodata, filler);
-    }
+  if (!fallback || !hasMissing(elevations, dataset.nodata)) {
+    return encodeTerrariumDem(elevations, dataset.nodata);
   }
-  return encodeTerrariumDem(elevations, dataset.nodata);
+  // The COG's nodata becomes NaN before the merge and the merged tile is
+  // encoded without it: a fallback elevation that happens to equal the COG's
+  // sentinel (255 m against nodata 255) is real ground, not a gap.
+  for (let index = 0; index < elevations.length; index += 1) {
+    if (isMissing(elevations[index], dataset.nodata)) elevations[index] = Number.NaN;
+  }
+  const filler = await fallback(z, x, y).catch(() => null);
+  if (filler && filler.length === elevations.length) {
+    fillMissingElevations(elevations, null, filler);
+  }
+  return encodeTerrariumDem(elevations, null);
 }
 
 /** Read one tile, holding the reader open for as long as the read needs it. */
@@ -556,7 +563,6 @@ function ensureCogDemProtocol(): void {
 export async function registerCogDemSource(
   source: string | Blob,
   band = 1,
-  options: { fallback?: CogDemFallback | null } = {},
 ): Promise<CogDemSourceRegistration> {
   const normalizedSource = typeof source === "string" ? source.trim() : source;
   if (
@@ -622,7 +628,7 @@ export async function registerCogDemSource(
     band: band - 1,
     pendingReads: 0,
     disposed: false,
-    fallback: options.fallback ?? null,
+    fallback: null,
   });
   const sourceBounds = image.getBoundingBox();
   const bounds = geographicBounds(sourceBounds, projection);
