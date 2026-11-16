@@ -884,6 +884,25 @@ function parseGeoJsonFeatureCollection(value: unknown): FeatureCollection {
   } as FeatureCollection;
 }
 
+export function isPublicHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host.endsWith(".localhost")) return false;
+    if (host === "0.0.0.0" || host === "[::1]" || host === "::1") return false;
+    if (/^127\./.test(host)) return false;
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+    if (/^\[?fe80:/.test(host) || /^\[?fc[0-9a-f]{2}:/.test(host) || /^\[?fd[0-9a-f]{2}:/.test(host)) return false;
+    if (/^\[?::ffff:/i.test(host)) return false;
+    if (/^192\.0\.0\./.test(host)) return false;
+    if (/^198\.(1[89])\./.test(host)) return false;
+    if (/^240\./.test(host)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 function layerHttpUrl(layer: GeoLibreLayer): string | null {
   const sourcePath = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   const sourceUrl = typeof layer.source.url === "string" ? layer.source.url.trim() : "";

@@ -2040,10 +2040,15 @@ function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   if (source && typeof source === "object") {
     const url = source.url;
     if (typeof url === "string") {
+      const wasGs = /^gs:\/\//i.test(url.trim());
       try {
         source.url = gcsUriToHttps(url);
       } catch {
         // Keep the original URL so the refresh pipeline can report its error.
+      }
+      // Strip signed-URL parameters from gs:// sources so they never persist.
+      if (wasGs && typeof source.url === "string") {
+        source.url = redactUrlCredentials(source.url);
       }
     }
   }

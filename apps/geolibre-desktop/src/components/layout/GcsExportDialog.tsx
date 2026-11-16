@@ -1,21 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Label } from "@geolibre/ui";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { Cloud, Loader2, X } from "lucide-react";
 
 /**
  * App-wide dialog for harvesting and exporting to Google Cloud Storage.
- * Opened from Add Data > Cloud formats.
+ * Opened by the floating button or Ctrl+Shift+G shortcut.
  */
 interface GcsExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-interface HarvestExecution {
-  id: string;
-  endpoint: string;
-  apiKey: string;
 }
 
 export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
@@ -43,6 +37,8 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     onOpenChange(false);
   };
 
+  // (Ctrl+Shift+G shortcut removed per contributor feedback; open via Add Data menu.)
+
   const [backendUrl, setBackendUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [dataUrl, setDataUrl] = useState("");
@@ -52,124 +48,124 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastExecution, setLastExecution] = useState<HarvestExecution | null>(null);
-  const [canResume, setCanResume] = useState(false);
+  const [lastExecution, setLastExecution] = useState<string | null>(null);
 
-  const observeHarvest = async (
-    execution: string,
-    endpoint: string,
-    key: string,
-    signal: AbortSignal,
-  ) => {
-    let done = false;
-    while (!done) {
-      await new Promise<void>((resolve, reject) => {
-        signal.throwIfAborted();
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(signal.reason);
-        };
-        const timer = setTimeout(() => {
-          signal.removeEventListener("abort", onAbort);
-          resolve();
-        }, 5000);
-        signal.addEventListener("abort", onAbort, { once: true });
-      });
-      const pollResp = await fetch(`${endpoint}/harvest-large/${encodeURIComponent(execution)}`, {
-        headers: { "X-API-Key": key },
-        signal,
-      });
-      if (!pollResp.ok) throw new Error(t("gcsExport.errors.http", { status: pollResp.status }));
-      const poll = await pollResp.json();
-      signal.throwIfAborted();
-      if (
-        !poll ||
-        !["pending", "queued", "running", "succeeded", "failed", "completed"].includes(poll.status)
-      ) {
-        throw new Error(t("gcsExport.errors.invalidStatus"));
-      }
-      if (poll.status === "succeeded" || poll.status === "failed" || poll.status === "completed") {
-        done = true;
-        setCanResume(false);
-        if (poll.status === "succeeded" || poll.status === "completed") {
-          setStatus("done");
-          setResult(JSON.stringify(poll.result || poll, null, 2));
-        } else {
-          setStatus("error");
-          setError(
-            typeof poll.log_tail === "string" ? poll.log_tail : t("gcsExport.errors.harvestFailed"),
-          );
-        }
-      }
-    }
-  };
-
-  const handleRun = async (resume?: HarvestExecution) => {
-    if (!resume && !dataUrl.trim()) {
+  const handleRun = async () => {
+    if (!dataUrl.trim()) {
       setError(t("gcsExport.errors.dataUrlRequired"));
       return;
     }
-    let endpoint = resume?.endpoint;
-    if (!endpoint) {
-      let backend: URL;
-      try {
-        backend = new URL(backendUrl.trim());
-        if (
-          backend.protocol !== "https:" ||
-          backend.username ||
-          backend.password ||
-          backend.search ||
-          backend.hash
-        ) {
-          throw new Error();
-        }
-      } catch {
-        setError(t("gcsExport.errors.httpsBackendRequired"));
-        return;
+    let backend: URL;
+    try {
+      backend = new URL(backendUrl.trim());
+      if (
+        backend.protocol !== "https:" ||
+        backend.username ||
+        backend.password ||
+        backend.search ||
+        backend.hash
+      ) {
+        throw new Error();
       }
-      endpoint = backend.href.replace(/\/$/, "");
+    } catch {
+      setError(t("gcsExport.errors.httpsBackendRequired"));
+      return;
     }
+    const endpoint = backend.href.replace(/\/$/, "");
     operationRef.current?.abort();
     const operation = new AbortController();
     operationRef.current = operation;
-    let signal = operation.signal;
+    const signal = AbortSignal.any([operation.signal, AbortSignal.timeout(30 * 60 * 1000)]);
     setStatus("running");
     setError(null);
     setResult(null);
     try {
-      signal = AbortSignal.any([operation.signal, AbortSignal.timeout(30 * 60 * 1000)]);
-      let execution = resume?.id;
-      if (!execution) {
-        const resp = await fetch(`${endpoint}/harvest-large`, {
-          method: "POST",
-          signal,
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey,
-          },
-          body: JSON.stringify({
-            url: dataUrl.trim(),
-            dry_run: dryRun,
-            skip_wherobots: skipWherobots,
-            refresh_geolibre: true,
-            licence_name: licenceName.trim() || null,
-          }),
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-          const detail = typeof err?.detail === "string" ? err.detail : undefined;
-          const message = typeof err?.error === "string" ? err.error : undefined;
-          throw new Error(detail || message || t("gcsExport.errors.http", { status: resp.status }));
-        }
-        const receivedExecution = (await resp.json().catch(() => null))?.execution;
-        signal.throwIfAborted();
-        if (typeof receivedExecution !== "string" || !receivedExecution)
-          throw new Error(t("gcsExport.errors.missingExecution"));
-        execution = receivedExecution;
-        setLastExecution({ id: receivedExecution, endpoint, apiKey });
-        setCanResume(true);
+      const resp = await fetch(`${endpoint}/harvest-large`, {
+        method: "POST",
+        signal,
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey,
+        },
+        body: JSON.stringify({
+          url: dataUrl.trim(),
+          dry_run: dryRun,
+          skip_wherobots: skipWherobots,
+          refresh_geolibre: true,
+          licence_name: licenceName.trim() || null,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        const detail = typeof err?.detail === "string" ? err.detail : undefined;
+        const message = typeof err?.error === "string" ? err.error : undefined;
+        throw new Error(detail || message || t("gcsExport.errors.http", { status: resp.status }));
       }
-      await observeHarvest(execution, endpoint, resume?.apiKey ?? apiKey, signal);
+      const execution = (await resp.json())?.execution;
+      signal.throwIfAborted();
+      if (typeof execution !== "string" || !execution)
+        throw new Error(t("gcsExport.errors.missingExecution"));
+      setLastExecution(execution);
+      let done = false;
+      let transientRetries = 0;
+      while (!done) {
+        await new Promise<void>((resolve, reject) => {
+          signal.throwIfAborted();
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          };
+          const timer = setTimeout(() => {
+            signal.removeEventListener("abort", onAbort);
+            resolve();
+          }, 5000);
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
+        let poll: any;
+        try {
+          const pollResp = await fetch(`${endpoint}/harvest-large/${encodeURIComponent(execution)}`, {
+            headers: { "X-API-Key": apiKey },
+            signal,
+          });
+          if (!pollResp.ok) throw new Error(t("gcsExport.errors.http", { status: pollResp.status }));
+          poll = await pollResp.json();
+          transientRetries = 0;
+        } catch (e) {
+          if (operation.signal.aborted) return;
+          if (transientRetries < 3) {
+            transientRetries++;
+            continue;
+          }
+          throw e;
+        }
+        signal.throwIfAborted();
+        if (
+          !poll ||
+          !["pending", "queued", "running", "succeeded", "failed", "completed"].includes(
+            poll.status,
+          )
+        ) {
+          throw new Error(t("gcsExport.errors.invalidStatus"));
+        }
+        if (
+          poll.status === "succeeded" ||
+          poll.status === "failed" ||
+          poll.status === "completed"
+        ) {
+          done = true;
+          if (poll.status === "succeeded" || poll.status === "completed") {
+            setStatus("done");
+            setResult(JSON.stringify(poll.result || poll, null, 2));
+          } else {
+            setStatus("error");
+            setError(
+              typeof poll.log_tail === "string"
+                ? poll.log_tail
+                : t("gcsExport.errors.harvestFailed"),
+            );
+          }
+        }
+      }
     } catch (e) {
       if (operation.signal.aborted) return;
       setStatus("error");
@@ -216,31 +212,24 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
               <p>{t("gcsExport.helpBackend")}</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>
-                  <Trans
-                    i18nKey="gcsExport.helpStep1"
-                    components={{
-                      deployLink: (
-                        <a
-                          className="underline text-primary"
-                          href="https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          deploy/harvester_service
-                        </a>
-                      ),
-                      scriptLink: (
-                        <a
-                          className="underline text-primary"
-                          href="https://github.com/GetBack2Basics/ops-intel-crafter/blob/main/tools/harvest_portal_dataset.py"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          tools/harvest_portal_dataset.py
-                        </a>
-                      ),
-                    }}
-                  />
+                  {t("gcsExport.helpStep1Prefix")}{" "}
+                  <a
+                    className="underline text-primary"
+                    href="https://github.com/GetBack2Basics/ops-intel-crafter/tree/main/deploy/harvester_service"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    deploy/harvester_service
+                  </a>{" "}
+                  {t("gcsExport.helpStep1And")}{" "}
+                  <a
+                    className="underline text-primary"
+                    href="https://github.com/GetBack2Basics/ops-intel-crafter/blob/main/tools/harvest_portal_dataset.py"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    tools/harvest_portal_dataset.py
+                  </a>
                 </li>
                 <li>{t("gcsExport.helpStep2")}</li>
                 <li>{t("gcsExport.helpStep3")}</li>
@@ -290,26 +279,18 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
 
           <div className="flex items-center gap-4 text-sm">
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={dryRun}
-                onChange={(e) => setDryRun(e.target.checked)}
-              />
+              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
               {t("gcsExport.dryRun")}
             </label>
             <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={skipWherobots}
-                onChange={(e) => setSkipWherobots(e.target.checked)}
-              />
+              <input type="checkbox" checked={skipWherobots} onChange={(e) => setSkipWherobots(e.target.checked)} />
               {t("gcsExport.skipWherobots")}
             </label>
           </div>
 
           {lastExecution && (
             <div className="text-xs text-muted-foreground">
-              {t("gcsExport.lastExecution", { id: lastExecution.id })}
+              {t("gcsExport.lastExecution", { id: lastExecution })}
               <span className="block italic">{t("gcsExport.backendContinues")}</span>
             </div>
           )}
@@ -325,12 +306,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
             <Button variant="ghost" onClick={closeDialog}>
               {t("common.cancel")}
             </Button>
-            {canResume && lastExecution && (
-              <Button onClick={() => void handleRun(lastExecution)} disabled={status === "running"}>
-                {t("gcsExport.resume")}
-              </Button>
-            )}
-            <Button onClick={() => void handleRun()} disabled={status === "running"}>
+            <Button onClick={handleRun} disabled={status === "running"}>
               {status === "running" ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin me-2" /> {t("gcsExport.running")}

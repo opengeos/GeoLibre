@@ -15,6 +15,7 @@ import {
   setLayerConnectionResult,
   setLayerRefreshConfig,
   supportsAutoRefresh,
+  isPublicHttpUrl,
 } from "../../../lib/layer-refresh";
 import { isIcebergLayer, refreshIcebergLayer } from "../../../lib/iceberg";
 import {
@@ -485,6 +486,9 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // Hydrated non-WFS layers: record the observed URL on first sight so a
       // later URL change is detected, but do not auto-fetch on project open
       // (security: only public http(s) sources are bootstrapped automatically).
+      // Note: a URL change on a hydrated non-WFS layer triggers an automatic
+      // refresh that overwrites geojson and is recorded as an undo step. This
+      // matches WFS behaviour and is intentional; before this PR only WFS did it.
       if (layer.geojson && !isWfs) {
         if (!alreadyObserved) observedSourceUrlsRef.current.set(layer.id, sourceUrl);
         if (!alreadyObserved || sameUrl) continue;
