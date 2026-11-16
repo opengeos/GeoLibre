@@ -57,3 +57,32 @@ export function isExcelBytes(bytes: Uint8Array): boolean {
   const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
   return zip || ole;
 }
+
+/** A URL's path, so a query string cannot hide its extension; the input when it does not parse. */
+function urlPathname(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Interprets a download from the Delimited text URL source. An Excel workbook
+ * (by its URL's extension or its bytes) is read as worksheets, since decoding
+ * it as text would yield the ZIP's bytes as CSV; anything else is UTF-8 text.
+ *
+ * @param url - The URL the bytes came from.
+ * @param buffer - The downloaded payload.
+ * @returns The workbook's non-empty worksheets, or the decoded text.
+ */
+export async function readDelimitedTextDownload(
+  url: string,
+  buffer: ArrayBuffer,
+): Promise<{ worksheets: ExcelWorksheet[] } | { text: string }> {
+  const bytes = new Uint8Array(buffer);
+  if (isExcelFile(urlPathname(url)) || isExcelBytes(bytes)) {
+    return { worksheets: await readExcelWorksheets(buffer) };
+  }
+  return { text: new TextDecoder().decode(bytes) };
+}

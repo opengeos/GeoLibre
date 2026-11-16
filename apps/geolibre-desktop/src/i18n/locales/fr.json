@@ -280,10 +280,15 @@
     "bodyNote": "Mesuré sur : {{body}} (approximation sphérique)"
   },
   "statusBar": {
+    "coords": "Coords",
     "elevation": "Alt",
     "elevationLong": "Altitude",
     "cameraAltitude": "Alt. caméra",
     "cameraAltitudeLong": "Altitude de la caméra au-dessus du niveau de la mer",
+    "zoom": "Zoom",
+    "bearing": "Orientation",
+    "pitch": "Inclinaison",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Degrés décimaux",
       "dms": "Degrés, minutes, secondes",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Ouverture du paquet de tuiles…",
       "loadingVtpkDesc": "Lecture du répertoire du paquet et de son style",
       "projectName": "Nom du projet",
+      "untitledProject": "Projet sans titre",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "L'altitude est obtenue d'un service public",
       "pointerElevationNoticeDesc": "L'altitude est calculée à partir du relief 3D de la carte lorsqu'il est actif, sans rien envoyer. Sans relief 3D, l'API publique Open-Meteo est interrogée et les coordonnées sous le pointeur quittent votre appareil.",

@@ -344,6 +344,9 @@ export function DesktopShell({
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
   const collaboration = useCollaboration(mapControllerRef, mapReadyGeneration);
+  const collaborationSessionName = useAppStore((s) =>
+    s.collaboration.isActive ? s.collaboration.selfName : null,
+  );
   const commentTool = useCommentTool({
     mapControllerRef,
     collaboration,
@@ -1323,6 +1326,7 @@ export function DesktopShell({
           pendingComment={commentTool.pendingComment}
           onSubmit={commentTool.submitComment}
           onCancel={commentTool.cancelPendingComment}
+          sessionName={collaborationSessionName}
         />
       )}
     </div>

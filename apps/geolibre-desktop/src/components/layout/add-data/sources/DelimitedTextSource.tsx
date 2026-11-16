@@ -25,8 +25,8 @@ import {
 } from "../../../../lib/delimited-text";
 import {
   type ExcelWorksheet,
-  isExcelBytes,
   isExcelFile,
+  readDelimitedTextDownload,
   readExcelWorksheets,
 } from "../../../../lib/excel-workbook";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
@@ -46,15 +46,6 @@ import {
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { DelimitedTextDelimiter, DelimitedTextImportMode, DelimitedTextMode } from "../types";
-
-/** A URL's path, so a query string cannot hide its extension; the input when it does not parse. */
-function urlPathname(url: string): string {
-  try {
-    return new URL(url).pathname;
-  } catch {
-    return url;
-  }
-}
 
 /** A cancellable delay that rejects with an AbortError when the signal fires. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -212,24 +203,18 @@ export function DelimitedTextSource() {
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    const buffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    // An Excel workbook is binary: decoding it as text yields the ZIP's bytes as
-    // CSV. Read it as a workbook, as the file source does.
-    if (isExcelFile(urlPathname(sourcePath)) || isExcelBytes(bytes)) {
-      const worksheets = await readExcelWorksheets(buffer);
-      const [first] = worksheets;
-      if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
-      // The source changed while downloading: keep what replaced it.
-      if (generation !== sourceGenerationRef.current) {
-        return { sourcePath, text: first.toCsv(), workbook: true };
-      }
+    // An Excel workbook is read as one, as the file source does, not as text.
+    const download = await readDelimitedTextDownload(sourcePath, await response.arrayBuffer());
+    if ("text" in download) return { sourcePath, text: download.text, workbook: false };
+    const [first] = download.worksheets;
+    if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
+    // The source changed while downloading: keep what replaced it.
+    if (generation === sourceGenerationRef.current) {
       setDelimitedTextDelimiter("comma");
       setSelectedWorksheet(first.name);
-      setSelectedDelimitedText({ path: sourcePath, text: "", worksheets });
-      return { sourcePath, text: first.toCsv(), workbook: true };
+      setSelectedDelimitedText({ path: sourcePath, text: "", worksheets: download.worksheets });
     }
-    return { sourcePath, text: new TextDecoder().decode(bytes), workbook: false };
+    return { sourcePath, text: first.toCsv(), workbook: true };
   };
 
   const handleChooseDelimitedText = async () => {

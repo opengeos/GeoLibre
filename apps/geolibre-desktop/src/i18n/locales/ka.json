@@ -280,10 +280,15 @@
     "bodyNote": "გაზომილია: {{body}} (სფერული მიახლოება)"
   },
   "statusBar": {
+    "coords": "კოორდ.",
     "elevation": "სიმაღლე",
     "elevationLong": "სიმაღლე",
     "cameraAltitude": "კამერის სიმაღლე",
     "cameraAltitudeLong": "კამერის სიმაღლე ზღვის დონიდან",
+    "zoom": "მასშტაბი",
+    "bearing": "მიმართულება",
+    "pitch": "დახრა",
+    "bbox": "საზღვრები",
     "coordinateFormat": {
       "dd": "ათწილადი გრადუსი",
       "dms": "გრადუსი, წუთი, წამი",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "ფილების პაკეტი იხსნება…",
       "loadingVtpkDesc": "იკითხება პაკეტის კატალოგი და მისი სტილი",
       "projectName": "პროექტის სახელი",
+      "untitledProject": "უსახელო პროექტი",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "სიმაღლე იყენებს საჯარო სერვისს",
       "pointerElevationNoticeDesc": "3D რელიეფის ჩართვისას სიმაღლე გამოითვლება თავად რუკიდან და არაფერი იგზავნება. მის გარეშე გამოიყენება საჯარო Open-Meteo API და კურსორის კოორდინატები ტოვებს თქვენს მოწყობილობას.",

@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, Slider } from "@geolibre/ui";
 import { clamp } from "../../../lib/clamp";
@@ -8,6 +8,10 @@ interface LayerOpacitySliderProps {
   ariaLabel: string;
   value: number;
   onChange: (value: number) => void;
+  /** Read-only, e.g. a host-locked layer in a live collaboration session. */
+  disabled?: boolean;
+  /** Tooltip explaining why the slider is disabled. */
+  disabledHint?: string;
 }
 
 // Opacity control for the layer panel cards: a compact slider paired with a
@@ -15,7 +19,14 @@ interface LayerOpacitySliderProps {
 // user can type an exact value instead of dragging to it. This mirrors the
 // Style panel's RasterStyleSlider (#832) to keep interaction parity between the
 // two panels (#838). Enter/blur commits the clamped value, Escape cancels.
-export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerOpacitySliderProps) {
+export function LayerOpacitySlider({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  disabled = false,
+  disabledHint,
+}: LayerOpacitySliderProps) {
   const { t } = useTranslation();
   const min = 0;
   const max = 1;
@@ -31,6 +42,10 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
   const commit = (raw: string) => {
     if (handledRef.current) return;
     handledRef.current = true;
+    if (disabled) {
+      setEditing(false);
+      return;
+    }
     const parsed = Number(raw);
     // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
     // (Number("") === 0 would otherwise silently reset the slider to its min).
@@ -45,26 +60,35 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
     setEditing(false);
   };
 
+  // A host may lock the layer while its exact value is being typed: drop the
+  // edit rather than leave an enabled input that commits on Enter or blur.
+  useEffect(() => {
+    if (!disabled) return;
+    handledRef.current = true;
+    setEditing(false);
+  }, [disabled]);
+
   const startEditing = () => {
     // The slider stays mounted while editing, so a second double-click on its
     // track must not re-enter and clobber the in-progress draft (the value
     // button is unmounted while editing, so it cannot re-trigger this).
-    if (editing) return;
+    if (editing || disabled) return;
     handledRef.current = false;
     setDraft(value.toFixed(2));
     setEditing(true);
   };
 
   return (
-    <div className="mt-2 flex items-center gap-1">
+    <div className="mt-2 flex items-center gap-1" title={disabled ? disabledHint : undefined}>
       <span className="text-[10px] text-muted-foreground">{label}</span>
       <Slider
         aria-label={ariaLabel}
-        className="flex-1"
+        className={disabled ? "flex-1 cursor-not-allowed opacity-50" : "flex-1"}
         min={min}
         max={max}
         step={step}
         value={[value]}
+        disabled={disabled}
         onValueChange={([v]: number[]) => onChange(v ?? value)}
         onClick={(e: ReactMouseEvent) => e.stopPropagation()}
         onDoubleClick={(e: ReactMouseEvent) => {
@@ -99,8 +123,9 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
       ) : (
         <button
           type="button"
-          className="w-9 shrink-0 cursor-text text-end font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
-          title={t("layers.opacityExactHint")}
+          disabled={disabled}
+          className="w-9 shrink-0 cursor-text text-end disabled:cursor-not-allowed font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
+          title={disabled ? disabledHint : t("layers.opacityExactHint")}
           // The name leads with the visible value (WCAG 2.5.3, axe
           // label-content-name-mismatch).
           aria-label={t("layers.opacityValueEditAria", {

@@ -280,7 +280,11 @@ Type a request and press **Enter** (or click **Send**); **Shift + Enter**
 inserts a newline, and **Ctrl/Cmd + Enter** still sends. The
 assistant streams its reply, runs tools as needed, and reports what it did. While
 it is working, **Send** becomes **Stop** — click it to cancel. **Clear** (the
-eraser icon) starts a fresh conversation.
+eraser icon) starts a fresh conversation. Switching the profile in the panel's
+dropdown keeps the conversation: the newly selected model continues with the
+earlier turns, so you can ask it about an answer the previous model gave.
+Those turns, including tool output such as query results, are sent to the newly
+selected provider; click **Clear** before switching if they should not be.
 
 ```text
 show me all parcels larger than 1 hectare within 500 m of a river
@@ -488,7 +492,7 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **Symbology** | Applies a **graduated** (numeric) or **categorized** (text) color ramp to a layer. |
 | **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
 | **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds a scene over the current view as a raster layer, or a mosaic of every scene matching a date range and cloud-cover limit ("a cloud-free Sentinel-2 composite for last summer"). It can pick a render preset such as NDVI or false color. The layer is listed in the [Planetary Computer panel](data-integrations.md#planetary-computer), where it can be restyled, and no credentials are needed. |
-| **Map control** | Moves the camera (fit a layer or a bounding box), switches the basemap, toggles layer visibility/opacity, and removes layers. |
+| **Map control** | Moves the camera (fit a layer or a bounding box, or go to an exact center, zoom, rotation, and tilt with `set_view`), switches the basemap, toggles layer visibility/opacity, and removes layers. |
 | **Web search** | Looks up current information online (best with `TAVILY_API_KEY`). |
 | **Plugin tools** | Calls the tools an installed plugin registers while it is on. It can also turn on an installed plugin that is off when the plugin declares assistant tools: ask for the plugin by name ("open the RNDT plugin and search for…"), or describe the task and the assistant picks the plugin. The plugin turns on as it would from the Plugins menu, and its tools are usable in the same reply. |
 | **Code fallback** | For tasks with no dedicated tool, runs a small **JavaScript** snippet against the live map (e.g. globe projection) or a **Python** snippet in the [Pyodide runtime](python-console.md). |
@@ -545,6 +549,8 @@ add this GeoJSON: https://example.com/data.geojson
 ```text
 zoom to the parcels layer
 fly to San Francisco
+center the map on 40.71, -74.01 at zoom 12
+tilt the map 60 degrees and rotate it to face east
 switch to a dark basemap
 hide the buildings layer and set the parcels opacity to 0.5
 remove the temporary buffer layer

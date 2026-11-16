@@ -169,13 +169,17 @@ export function legendSwatchesForLayer(
       // the class list is long. A graduated ramp is a continuous range, so
       // sampling evenly still describes it; categories are discrete, so every
       // one is listed (GH #1608).
-      const displayedStops =
+      const displayedIndices =
         mode === "categorized"
-          ? stops.slice(0, MAX_CATEGORY_SWATCHES)
-          : stops.length > MAX_RAMP_SWATCHES
-            ? sampleEvenly(stops, MAX_RAMP_SWATCHES)
-            : stops;
-      const ramp = rampSwatches(displayedStops, mode);
+          ? stops.slice(0, MAX_CATEGORY_SWATCHES).map((_, index) => index)
+          : sampleEvenly(
+              stops.map((_, index) => index),
+              Math.min(stops.length, MAX_RAMP_SWATCHES),
+            );
+      const displayedStops = displayedIndices.map((index) => stops[index]);
+      // The on-map legend lists every class up to its own row cap, so a class's
+      // panel row is its stop index.
+      const ramp = withPanelRowIndices(rampSwatches(displayedStops, mode), displayedIndices);
       const classProperty = styleValue(layer.style, "vectorStyleProperty");
       // Same field classified and sized: merge sizes into the class rows so the
       // print legend matches the on-map auto-legend (one block, not two).
@@ -359,6 +363,28 @@ function swatchKey(layerId: string, index: number): string {
 }
 
 /**
+ * The on-map Legend panel's override key for a row. A copy of `legendRowKey`
+ * in `auto-legend.ts`, which imports this module (so importing it back would
+ * be circular); `tests/print-legend.test.ts` asserts the two agree.
+ */
+export function panelLegendRowKey(entryId: string, index: number): string {
+  return `${entryId}::p:${index}`;
+}
+
+/**
+ * The class label to print by default: the name the class was given in the
+ * on-map Legend panel, else the derived label. Print-layout overrides still win
+ * over it. A layer with a hand-authored panel entry is skipped, since its panel
+ * rows are the custom items rather than the derived classes.
+ */
+function swatchDefaultLabel(entryId: string, swatch: LegendSwatch, config: LegendConfig): string {
+  const fallback = swatch.label ?? "";
+  if (swatch.panelRowIndex === undefined || config.customEntries?.[entryId]) return fallback;
+  const panelOverride = config.overrides[panelLegendRowKey(entryId, swatch.panelRowIndex)];
+  return renderedLabel(panelOverride?.label, fallback);
+}
+
+/**
  * The label to render for an item: the override trimmed of surrounding
  * whitespace when it has visible content, otherwise the fallback. Trimming here
  * (rather than when storing) keeps the editor input free to accept spaces while
@@ -426,11 +452,14 @@ export function applyLegendConfig(base: LegendEntry[], config: LegendConfig): Le
     entry.swatches.forEach((swatch, index) => {
       const override = config.overrides[swatchKey(entry.id, index)];
       if (override?.hidden) return;
+      const defaultLabel = swatchDefaultLabel(entry.id, swatch, config);
       swatches.push({
         color: swatch.color,
         label: hasLabelOverride(override?.label)
-          ? renderedLabel(override?.label, swatch.label ?? "")
-          : swatch.label,
+          ? renderedLabel(override?.label, defaultLabel)
+          : swatch.label === undefined && defaultLabel === ""
+            ? undefined
+            : defaultLabel,
         // Preserve the marker so a point layer with both a marker icon and
         // diagram symbology (a multi-swatch entry: [marker primary, ...diagrams])
         // still draws its marker rather than regressing to a color square.
@@ -564,7 +593,7 @@ export function legendEditorRows(base: LegendEntry[], config: LegendConfig): Leg
     entry.swatches.forEach((swatch, index) => {
       const key = swatchKey(entry.id, index);
       const override = config.overrides[key];
-      const defaultLabel = swatch.label ?? "";
+      const defaultLabel = swatchDefaultLabel(entry.id, swatch, config);
       rows.push({
         key,
         layerId: entry.id,
@@ -612,17 +641,46 @@ export function diagramSwatches(
  * live map), plus the catch-all else rule when it has a valid color. Labels
  * fall back to the rule's filter text so unlabeled rules stay identifiable.
  */
-function ruleSwatches(layer: GeoLibreLayer): { color: string; label: string }[] {
+function ruleSwatches(layer: GeoLibreLayer): (LegendSwatch & { label: string })[] {
   const { rules, elseRule } = effectiveVectorRules(layer.style);
-  const limited = rules.length > MAX_RAMP_SWATCHES ? sampleEvenly(rules, MAX_RAMP_SWATCHES) : rules;
-  const swatches = limited.map((rule) => ({
-    color: rule.color,
-    label: rule.label || JSON.stringify(rule.filter),
-  }));
+  const indices = sampleEvenly(
+    rules.map((_, index) => index),
+    Math.min(rules.length, MAX_RAMP_SWATCHES),
+  );
+  const swatches = withPanelRowIndices(
+    indices.map((index) => ({
+      color: rules[index].color,
+      label: rules[index].label || JSON.stringify(rules[index].filter),
+    })),
+    indices,
+  );
   if (elseRule && isHexColor(elseRule.color)) {
-    swatches.push({ color: elseRule.color, label: elseRule.label || "Other" });
+    // The on-map legend appends the else rule after its (capped) rule rows.
+    swatches.push({
+      color: elseRule.color,
+      label: elseRule.label || "Other",
+      // The panel appends its else row after the capped rule rows.
+      panelRowIndex: Math.min(rules.length, MAX_CATEGORY_SWATCHES),
+    });
   }
   return swatches;
+}
+
+/**
+ * Tag class swatches with the on-map Legend panel row each one mirrors. Rows
+ * past the panel's cap ({@link MAX_CATEGORY_SWATCHES}, the same value as its
+ * `MAX_LEGEND_ROWS`) do not exist there, so they stay untagged.
+ */
+function withPanelRowIndices<T extends { color: string; label: string }>(
+  swatches: T[],
+  indices: number[],
+): (T & { panelRowIndex?: number })[] {
+  return swatches.map((swatch, position) => {
+    const index = indices[position];
+    return index !== undefined && index < MAX_CATEGORY_SWATCHES
+      ? { ...swatch, panelRowIndex: index }
+      : swatch;
+  });
 }
 
 function rampSwatches(
@@ -631,7 +689,10 @@ function rampSwatches(
 ): { color: string; label: string }[] {
   return stops.map((stop) => ({
     color: stop.color,
-    label: mode === "graduated" ? `≥ ${formatStopValue(stop.value)}` : formatStopValue(stop.value),
+    // A class label set in the Style panel wins, as on the map's own legend.
+    label:
+      stop.label?.trim() ||
+      (mode === "graduated" ? `≥ ${formatStopValue(stop.value)}` : formatStopValue(stop.value)),
   }));
 }
 

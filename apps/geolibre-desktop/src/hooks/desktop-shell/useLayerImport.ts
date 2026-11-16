@@ -1,4 +1,9 @@
-import { shouldZoomToNewLayers, detectNonGeographicCoordinates, useAppStore } from "@geolibre/core";
+import {
+  shouldZoomToNewLayers,
+  detectNonGeographicCoordinates,
+  unionLonLatExtents,
+  useAppStore,
+} from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getLayerBounds } from "@geolibre/map";
 import {
@@ -281,12 +286,9 @@ export function useLayerImport({
           .map(getLayerBounds)
           .filter((value): value is [number, number, number, number] => value !== null);
         if (bounds.length) {
-          mapControllerRef.current?.fitBounds([
-            Math.min(...bounds.map((value) => value[0])),
-            Math.min(...bounds.map((value) => value[1])),
-            Math.max(...bounds.map((value) => value[2])),
-            Math.max(...bounds.map((value) => value[3])),
-          ]);
+          // Short way round the antimeridian, not a plain min/max (GeoLibre#3469).
+          const combined = unionLonLatExtents(bounds);
+          if (combined) mapControllerRef.current?.fitBounds(combined);
           return;
         }
       }

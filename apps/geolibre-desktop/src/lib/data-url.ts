@@ -1,4 +1,4 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { type GeoLibreLayer, unionLonLatExtents } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { AsyncUnzipInflate, strFromU8, Unzip, UnzipPassThrough, type UnzipFile } from "fflate";
 import { isFileHandlerDataType } from "@geolibre/plugins/file-handler-registry";
@@ -822,10 +822,6 @@ export function dataUrlFitBounds(
     else if (waitForAll && layer.type === "cog") return "pending";
   }
   if (!bounds.length) return null;
-  return [
-    Math.min(...bounds.map((value) => value[0])),
-    Math.min(...bounds.map((value) => value[1])),
-    Math.max(...bounds.map((value) => value[2])),
-    Math.max(...bounds.map((value) => value[3])),
-  ];
+  // Short way round the antimeridian, not a plain min/max (GeoLibre#3469).
+  return unionLonLatExtents(bounds);
 }

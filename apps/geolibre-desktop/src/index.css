@@ -3635,6 +3635,13 @@ html
   max-width: 100%;
 }
 
+/* Several photos of one feature (Field collection's `geolibre_photos`) sit
+   side by side as smaller thumbnails. */
+.geolibre-popup-inline-image-list .geolibre-popup-inline-image {
+  max-height: 5rem;
+  max-width: calc(50% - 0.125rem);
+}
+
 .geolibre-identify-image-popup .geolibre-popup-image {
   max-height: none;
 }

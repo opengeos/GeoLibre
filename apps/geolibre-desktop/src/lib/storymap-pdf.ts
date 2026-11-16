@@ -118,6 +118,79 @@ function truncateWithEllipsis(pdf: jsPDF, line: string, maxWidth: number): strin
   return "…";
 }
 
+/** Space kept between neighbouring footer items (byline, footer, page number). */
+const FOOTER_GAP_MM = 4;
+
+/** The footer band's text, each already fitted to its slot. */
+export interface HandoutFooterLayout {
+  byline: string;
+  footer: string;
+}
+
+/**
+ * Fit `text` on one line of at most `maxWidth`, dropping whole words and then
+ * characters behind an ellipsis, so a cut is visible rather than silent.
+ */
+function fitOneLine(text: string, maxWidth: number, measure: (text: string) => number): string {
+  if (measure(text) <= maxWidth) return text;
+  const words = text.trimEnd().split(/\s+/);
+  while (words.length > 1) {
+    words.pop();
+    const candidate = `${words.join(" ")}…`;
+    if (measure(candidate) <= maxWidth) return candidate;
+  }
+  let chars = Array.from(words[0] ?? "");
+  while (chars.length > 0) {
+    chars = chars.slice(0, -1);
+    const candidate = `${chars.join("")}…`;
+    if (measure(candidate) <= maxWidth) return candidate;
+  }
+  return "…";
+}
+
+/**
+ * Lay out the handout footer band: the byline on the left, the footer text
+ * centered, and the page number on the right.
+ *
+ * The byline used to be cut to a fixed 24 mm slot, which printed only the first
+ * word of an ordinary two-word name (#3477). It now gets the width it needs: all
+ * of the band left of the page number when there is no footer text, and up to a
+ * third of it when the centered footer shares the band. The footer is then
+ * bounded symmetrically by whichever side is wider, so it stays centered and
+ * clear of both neighbours.
+ *
+ * @param measure Width of a string in mm at the footer font.
+ * @param contentWidth Width of the band between the page margins, in mm.
+ * @param byline Single-line byline, or "" for none.
+ * @param footer Single-line footer text, or "" for none.
+ * @param pageNumber The page-number label, e.g. "2 / 5".
+ * @returns The byline and footer text to draw, each fitted to its slot.
+ */
+export function layoutHandoutFooter(
+  measure: (text: string) => number,
+  contentWidth: number,
+  byline: string,
+  footer: string,
+  pageNumber: string,
+): HandoutFooterLayout {
+  const pageNumberSlot = Math.max(PAGE_NUM_SLOT_MM, measure(pageNumber) + FOOTER_GAP_MM);
+  let fittedByline = "";
+  let bylineSlot = 0;
+  if (byline) {
+    const bylineMax = footer
+      ? Math.max(PAGE_NUM_SLOT_MM, contentWidth / 3 - FOOTER_GAP_MM)
+      : Math.max(20, contentWidth - pageNumberSlot);
+    fittedByline = fitOneLine(byline, bylineMax, measure);
+    bylineSlot = measure(fittedByline) + FOOTER_GAP_MM;
+  }
+  let fittedFooter = "";
+  if (footer) {
+    const side = Math.max(pageNumberSlot, bylineSlot);
+    fittedFooter = fitOneLine(footer, Math.max(20, contentWidth - 2 * side), measure);
+  }
+  return { byline: fittedByline, footer: fittedFooter };
+}
+
 /** Scale `(w, h)` to fit inside a `boxW x boxH` box, preserving aspect ratio. */
 function fitInto(
   w: number,
@@ -426,27 +499,19 @@ function drawChapterPage(
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(footerSize);
   pdf.setTextColor(130, 130, 130);
-  if (byline) {
-    // Left-aligned in the footer band, occupying the left slot that mirrors the
-    // page-number slot on the right. The centered footer text is kept clear of
-    // both slots (see footerMaxWidth below), so bounding the byline to
-    // PAGE_NUM_SLOT_MM guarantees it never runs into the footer. The first
-    // wrapped line is kept; a very long byline is truncated to this slot.
-    const bylineMaxWidth = Math.max(20, PAGE_NUM_SLOT_MM);
-    const [line] = pdf.splitTextToSize(byline, bylineMaxWidth) as string[];
-    pdf.text(line, MARGIN_MM, footerY);
+  const pageLabel = `${pageNumber} / ${pageCount}`;
+  const footerLayout = layoutHandoutFooter(
+    (text) => pdf.getTextWidth(text),
+    contentWidth,
+    byline,
+    footerText,
+    pageLabel,
+  );
+  if (footerLayout.byline) pdf.text(footerLayout.byline, MARGIN_MM, footerY);
+  if (footerLayout.footer) {
+    pdf.text(footerLayout.footer, widthMm / 2, footerY, { align: "center" });
   }
-  if (footerText) {
-    // Keep the footer centered but bound its width symmetrically so it stays
-    // clear of the byline (left) and the page number (right) on both sides, even
-    // on wide pages (e.g. Tabloid landscape). Only the first wrapped line is kept.
-    const footerMaxWidth = Math.max(20, widthMm - 2 * (MARGIN_MM + PAGE_NUM_SLOT_MM));
-    // splitTextToSize always returns at least one element for non-empty input,
-    // and footerText is non-empty here, so `line` is always a string.
-    const [line] = pdf.splitTextToSize(footerText, footerMaxWidth) as string[];
-    pdf.text(line, widthMm / 2, footerY, { align: "center" });
-  }
-  pdf.text(`${pageNumber} / ${pageCount}`, widthMm - MARGIN_MM, footerY, {
+  pdf.text(pageLabel, widthMm - MARGIN_MM, footerY, {
     align: "right",
   });
 }

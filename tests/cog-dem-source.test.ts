@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ImageFileDirectory } from "geotiff";
 import {
   demTilePlacement,
   encodeTerrariumDem,
+  fileDirectoryValue,
   isDemOverviewIfd,
   normalizeNoData,
 } from "../packages/map/src/cog-dem-source";
@@ -129,5 +131,31 @@ describe("terrain tile placement", () => {
     assert.equal(demTilePlacement([2000, 2000, 3000, 3000], source, 1000, 1000), null);
     // Touching along an edge is not an overlap either.
     assert.equal(demTilePlacement([1000, 0, 2000, 1000], source, 1000, 1000), null);
+  });
+});
+
+describe("fileDirectoryValue", () => {
+  it("reads tags from a geotiff.js 3 ImageFileDirectory", () => {
+    // geotiff.js 3 keys actualized fields by numeric tag id behind getValue;
+    // indexing the object like a record finds nothing.
+    const NEW_SUBFILE_TYPE = 254;
+    const GDAL_NODATA = 42113;
+    const directory = new ImageFileDirectory(
+      new Map<number, number | string>([
+        [NEW_SUBFILE_TYPE, 1],
+        [GDAL_NODATA, "-9999\0"],
+      ]),
+      new Map(),
+      new Map(),
+      0,
+    );
+    assert.equal((directory as unknown as Record<string, unknown>).GDAL_NODATA, undefined);
+    assert.equal(isDemOverviewIfd(fileDirectoryValue(directory, "NewSubfileType")), true);
+    assert.equal(normalizeNoData(fileDirectoryValue(directory, "GDAL_NODATA")), -9999);
+  });
+
+  it("still reads a plain tag record", () => {
+    assert.equal(fileDirectoryValue({ GDAL_NODATA: "0" }, "GDAL_NODATA"), "0");
+    assert.equal(fileDirectoryValue(undefined, "GDAL_NODATA"), undefined);
   });
 });

@@ -1,8 +1,7 @@
-import bbox from "@turf/bbox";
 import type { FeatureCollection, Geometry } from "geojson";
 import {
+  antimeridianAwareBbox,
   type GeoLibreLayer,
-  horizontalBbox,
   isGeoArrowBatch,
   computeGeoArrowBBox,
   type GeoArrowBatch,
@@ -56,6 +55,16 @@ function addGeometryToProfile(profile: GeometryProfile, geometry: Geometry): voi
   }
 }
 
+/**
+ * A layer's extent as `[west, south, east, north]`, for fitting the camera.
+ *
+ * A GeoJSON layer that crosses the antimeridian gets the narrow extent across
+ * it with `east > 180` (see `antimeridianAwareBbox`); combine several with
+ * `unionLonLatExtents` rather than a plain min/max.
+ *
+ * @param layer - The layer to measure.
+ * @returns The extent, or null when the layer has none.
+ */
 export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
   // A layer that loads by viewport (an ArcGIS feature layer) holds only the
   // features in view, so their extent is the view, not the layer: prefer the
@@ -71,11 +80,18 @@ export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, n
   if (layer.geojson?.features?.length) {
     // A collection whose features all carry a null geometry (e.g. a delimited
     // text file imported as an attribute table, or a non-spatial SQL result)
-    // yields a degenerate ±Infinity box, and one that carries its own 3D `bbox`
-    // member yields six values. `horizontalBbox` answers null to the first and
-    // trims the second; either way, continue to the stored extent rather than
-    // flying to invalid coordinates.
-    const box = horizontalBbox(bbox(layer.geojson));
+    // has no extent, and one that carries its own 3D `bbox` member holds six
+    // values. `antimeridianAwareBbox` answers null to the first and trims the
+    // second; either way, continue to the stored extent rather than flying to
+    // invalid coordinates.
+    //
+    // The extent takes the short way round the antimeridian: a layer with
+    // features on both sides of it (Alaska's Aleutians, Fiji, Pacific
+    // earthquakes) reads as the narrow band across it, unwrapped to `east > 180`
+    // the way MapLibre's own bounds are, rather than as the whole globe
+    // (GeoLibre#3469). A consumer that needs RFC 7946 longitudes converts with
+    // `toRfc7946Bbox`.
+    const box = antimeridianAwareBbox(layer.geojson);
     if (box) return box;
   }
   return storedLayerBounds(layer);

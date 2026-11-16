@@ -12,6 +12,8 @@ import {
   MIN_CHAT_INTERVAL_MS,
   authorizeHostAction,
   authorizeSnapshot,
+  RELAY_SNAPSHOT_ORIGIN,
+  shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
   diffLockedLayers,
   getParticipantKey,
@@ -444,6 +446,14 @@ export function createRelay(options: RelayOptions = {}): {
           code: authorization.code,
           message: authorization.message,
         });
+        if (shouldResyncRejectedSnapshot(authorization) && persisted.snapshot) {
+          send(peer, {
+            type: "snapshot",
+            project: persisted.snapshot,
+            origin: RELAY_SNAPSHOT_ORIGIN,
+            rev: persisted.rev ?? 0,
+          });
+        }
         return;
       }
       const project = preserveStoredComments(message.project ?? null, persisted.snapshot);

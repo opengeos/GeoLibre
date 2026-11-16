@@ -280,10 +280,15 @@
     "bodyNote": "Measured on: {{body}} (spherical approximation)"
   },
   "statusBar": {
+    "coords": "Coords",
     "elevation": "Elev",
     "elevationLong": "Elevation",
     "cameraAltitude": "Eye alt",
     "cameraAltitudeLong": "Camera altitude above sea level",
+    "zoom": "Zoom",
+    "bearing": "Bearing",
+    "pitch": "Pitch",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Decimal degrees",
       "dms": "Degrees, minutes, seconds",
@@ -1977,7 +1982,10 @@
     "lockLayer": "Lock layer for guests",
     "unlockLayer": "Unlock layer for guests",
     "layerLocked": "Locked",
-    "layerLockedHint": "This layer is locked by the host and cannot be edited"
+    "layerLockedHint": "This layer is locked by the host and cannot be edited",
+    "viewOnlyHint": "You're view-only in this session, so you can't change this layer",
+    "layerLockedRejected": "That change was not shared because the host has locked the layer. Your map was reset to the session's version.",
+    "viewOnlyLocalChange": "You're view-only in this session, so your changes stay on your screen and are not shared."
   },
   "share": {
     "title": "Share project",
@@ -3410,6 +3418,7 @@
       "noProfiles": "No profiles yet. Add one below to configure the AI assistant.",
       "setDefault": "Set as default",
       "defaultProfile": "Default",
+      "proxyIsDefault": "No profile is the default, so the assistant starts on the deployment proxy. Set a profile as the default to start on it instead.",
       "edit": "Edit",
       "deleteProfile": "Delete profile",
       "backToProfiles": "← Back to profiles",
@@ -4388,6 +4397,7 @@
       "loadingVtpk": "Opening tile package…",
       "loadingVtpkDesc": "Reading the package directory and its style",
       "projectName": "Project name",
+      "untitledProject": "Untitled project",
       "storymapEllipsis": "Story map…",
       "pointerElevationNoticeTitle": "Elevation uses a public elevation service",
       "pointerElevationNoticeDesc": "The status bar's elevation readout is resolved from the map's own 3D terrain when that is enabled, which sends nothing anywhere. Without 3D terrain it falls back to the public Open-Meteo elevation API, and the coordinates under your pointer leave your device for those requests.",
@@ -9699,6 +9709,9 @@
     "hiddenByGroup": "Hidden because its group is not visible",
     "empty": "No data layers. Add data from the toolbar.",
     "emptyBeginner": "No layers yet. Add basemaps via Plugins → Basemaps, or your own data via the Add data menu.",
+    "emptyBeginnerBasemapsOnly": "No layers yet. Add basemaps via Plugins → Basemaps.",
+    "emptyBeginnerDataOnly": "No layers yet. Add your own data via the Add data menu.",
+    "emptyNoAdd": "No data layers.",
     "hideAllLayers": "Hide all layers",
     "showAllLayers": "Show all layers",
     "compactView": "Compact view",
@@ -10015,6 +10028,9 @@
     "localRasterNotRestored_one": "{{count}} local raster layer could not be restored",
     "localRasterNotRestored_other": "{{count}} local raster layers could not be restored",
     "localRasterNotRestoredDesc": "Loaded from a local file: {{names}}. The project does not hold raster data, or the file could not be read. Add the file again."
+  },
+  "zarrPanel": {
+    "selectorUnmatched": "Selector value not found ({{values}}). Use a coordinate value, a date on the time axis, or an index."
   },
   "attributeForm": {
     "error": {

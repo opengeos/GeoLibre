@@ -17,6 +17,11 @@ export {
 } from "./ellipsoids";
 export { decodePolyline, decodePolylineDetailed, encodePolyline } from "./polyline";
 export { horizontalBbox } from "./geojson-z";
+export {
+  antimeridianAwareBbox,
+  partLongitudeIntervals,
+  shortestLongitudeExtent,
+} from "./antimeridian";
 export { layerJoinKey } from "./joins";
 // Project History's compare view parses and diffs projects off the main thread.
 export type { GeoLibreProject } from "./types";

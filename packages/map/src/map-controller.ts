@@ -1,9 +1,9 @@
 import { showGlSearchResult } from "./gl-search-result";
 import {
+  antimeridianAwareBbox,
   BLANK_BASEMAP,
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
-  horizontalBbox,
   mapZoomStepOutputs,
   normalizeMapCrs,
   scaleAltitudeToActiveBody,
@@ -19,7 +19,6 @@ import type {
   StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
-import bbox from "@turf/bbox";
 import type { Feature, FeatureCollection, Geometry, Point, Polygon } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import { getLayerMetadataBounds, LayerControlHost } from "./layer-control-host";
@@ -2299,7 +2298,9 @@ export class MapController implements MapEngine {
 
   private fitFeature(featureCollection: FeatureCollection): void {
     if (!this.map || featureCollection.features.length === 0) return;
-    const box = horizontalBbox(bbox(featureCollection));
+    // Short way round the antimeridian, so a selection on both sides of it
+    // frames the band across it rather than the whole globe (GeoLibre#3469).
+    const box = antimeridianAwareBbox(featureCollection);
     // fitBounds validates the box and handles point-sized boxes.
     if (box) this.fitBounds(box);
   }

@@ -352,7 +352,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // profile effect below deliberately does nothing when the profile itself is
   // unchanged, and would leave the agent on the superseded key.
   //
-  // Deferred rather than dropped while a response is streaming: reset() cancels
+  // The rebuild keeps the conversation, so the next agent still knows the turns
+  // on screen.
+  //
+  // Deferred rather than dropped while a response is streaming: rebuild() cancels
   // the in-flight agent, and that cancellation is not user-initiated, so send()'s
   // catch would surface it as an error turn and drop the reply. The effect below
   // flushes the deferred reset once the run finishes.
@@ -364,7 +367,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         envResetPendingRef.current = true;
         return;
       }
-      session.reset();
+      session.rebuild();
     };
     window.addEventListener(RUNTIME_ENV_EVENT, onEnvChange);
     return () => window.removeEventListener(RUNTIME_ENV_EVENT, onEnvChange);
@@ -377,7 +380,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   useEffect(() => {
     if (running || !envResetPendingRef.current) return;
     envResetPendingRef.current = false;
-    session.reset();
+    session.rebuild();
   }, [running, session]);
 
   // When the default profile changes (user set a new default in Settings),
@@ -397,15 +400,18 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Push the active profile into the session. When no profile is available,
   // fall back to auto-resolution (which reads from the runtime env directly).
   //
-  // Deferred while a response is streaming: applying a *changed* profile resets
-  // the session, which cancels the in-flight agent. That cancellation is not
+  // A changed profile rebuilds the agent on the new provider and seeds it with
+  // the conversation so far, so switching profiles keeps the context.
+  //
+  // Deferred while a response is streaming: applying a *changed* profile
+  // rebuilds the agent, which cancels the in-flight one. That cancellation is not
   // user-initiated, so send()'s catch would surface it as an error turn and drop
   // the reply. The panel dropdown is disabled while running, but Settings can
   // still change the default profile, so guard here. `running` is a dependency,
   // so the latest activeProfile is applied as soon as the run finishes — and it
   // flips back to false after every turn, which re-runs this effect on turns
   // where nothing changed. setSelection compares the selection by value and
-  // no-ops on those, which is what keeps the conversation history alive.
+  // no-ops on those, so the agent is not rebuilt after every turn.
   useEffect(() => {
     if (running) return;
     session.setSelection(activeProfile ?? null);

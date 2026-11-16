@@ -98,6 +98,7 @@ export {
   linePaint,
   circlePaint,
   heatmapPaint,
+  heatmapWeightMax,
   clusterCirclePaint,
   fillExtrusionPaint,
   rasterPaint,

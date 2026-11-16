@@ -1,6 +1,7 @@
 import {
   buildLayerStacItem,
   redactUrlCredentials,
+  toRfc7946Bbox,
   type GeoLibreLayer,
   type StacItem,
 } from "@geolibre/core";
@@ -49,18 +50,22 @@ export function layerStacAssetHref(layer: GeoLibreLayer): string | null {
  *
  * @param layer - The layer being described.
  * @param map - The live map, to read source-backed features from.
- * @returns `[west, south, east, north]`, or `null` when unknown.
+ * @returns `[west, south, east, north]`, with `west > east` across the
+ *   antimeridian, or `null` when unknown.
  */
 export async function layerStacBbox(
   layer: GeoLibreLayer,
   map: MapLibreMap | undefined,
 ): Promise<[number, number, number, number] | null> {
+  // A layer across the antimeridian measures with `east > 180`; STAC writes
+  // that box with `west > east` instead (RFC 7946 §5.2).
   const bounds = getLayerBounds(layer);
-  if (bounds) return bounds;
+  if (bounds) return toRfc7946Bbox(bounds);
   if (layer.geojson) return null;
   try {
     const geojson = await resolveLayerGeojson(layer, map);
-    return geojson ? getLayerBounds({ ...layer, geojson }) : null;
+    const resolved = geojson ? getLayerBounds({ ...layer, geojson }) : null;
+    return resolved ? toRfc7946Bbox(resolved) : null;
   } catch {
     return null;
   }

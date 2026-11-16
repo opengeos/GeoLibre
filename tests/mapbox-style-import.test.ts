@@ -381,6 +381,43 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     }
   });
 
+  it("recovers GeoLibre's normalized weight but not an authored divisor (#3471)", () => {
+    const data = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { w: 40 },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { w: 80 },
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+      ],
+    };
+    const weight = (divisor: number) => ["/", ["max", 0, ["to-number", ["get", "w"], 0]], divisor];
+    const parse = (divisor: number) =>
+      parseMapboxStyle({
+        sources: { src: { type: "geojson", data } },
+        layers: [
+          {
+            id: "heat",
+            type: "heatmap",
+            source: "src",
+            paint: { "heatmap-weight": weight(divisor) },
+          },
+        ],
+      });
+    const normalized = parse(80);
+    assert.equal(normalized.style.heatmapWeightProperty, "w");
+    assert.deepEqual(normalized.warnings, []);
+    const authored = parse(1000);
+    assert.equal(authored.style.heatmapWeightProperty, undefined);
+    assert.ok(authored.warnings.some((warning) => /heatmap weight expression/.test(warning)));
+  });
+
   it("warns instead of throwing for a malformed clamped heatmap weight", () => {
     const result = parseMapboxStyle({
       layers: [{ id: "heat", type: "heatmap", paint: { "heatmap-weight": ["max", 0, null] } }],
