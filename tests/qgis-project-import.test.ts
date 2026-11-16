@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { applyGroupEffects } from "@geolibre/core";
 import { strToU8, zipSync } from "fflate";
 import { DOMParser } from "linkedom";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 import {
   importQgisProject,
   MAX_REMOTE_VECTOR_BYTES,
@@ -590,7 +591,7 @@ describe("QGIS project import", () => {
         reads.push([file.name, file.extension, file.data.byteLength, file.sourceLayer]);
         return {
           type: "FeatureCollection",
-          features: [{ type: "Feature", geometry: null, properties: { name: file.name } }],
+          features: [{ type: "Feature", geometry: NULL_GEOMETRY, properties: { name: file.name } }],
         };
       },
     );
