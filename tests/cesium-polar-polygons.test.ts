@@ -49,7 +49,8 @@ describe("slicePoleWrappingPolygons", () => {
     const sliced = slicePoleWrappingPolygons(source);
     assert.notEqual(sliced, source);
     assert.equal(sliced.geometry.type, "MultiPolygon");
-    const slices = (sliced.geometry as MultiPolygon).coordinates;
+    // The generic return keeps the input type; slicing turns it into a MultiPolygon.
+    const slices = (sliced.geometry as unknown as MultiPolygon).coordinates;
     assert.equal(slices.length, 4);
     for (const [shell] of slices) {
       const lons = shell.map((p) => p[0]);
