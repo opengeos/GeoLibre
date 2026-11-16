@@ -1,7 +1,7 @@
-// CDN PGlite loader: used only by the embed (Jupyter wheel) build, which aliases
-// `./pglite-loader` to this module when GEOLIBRE_PGLITE_CDN=1 (see vite.config.ts).
-// It fetches PGlite and its PostGIS extension from jsDelivr at runtime instead of
-// vendoring their ~25 MB of WASM/data/postgis.tar into the wheel. PGlite resolves
+// CDN PGlite loader: every build (web, desktop, embed) aliases `./pglite-loader`
+// to this module unless GEOLIBRE_PGLITE_CDN=0 (see vite.config.ts). It fetches
+// PGlite and its PostGIS extension at runtime instead of vendoring their ~25 MB
+// of WASM/data/postgis.tar into the build output. PGlite resolves
 // its own .wasm/.data/postgis.tar relative to the loaded module URL, so the pinned
 // jsDelivr URL transparently pulls those companion files from the CDN too.
 //

@@ -107,7 +107,8 @@ describe("PostGIS bundle integrity and reuse", () => {
       name: "postgis",
       setup: async () => ({ bundlePath: new URL(JSDELIVR) }),
     };
-    const wrapped = withMirroredPostgisBundle(ext, [UNPKG], fake, GOOD_SHA) as typeof ext;
+    // A mirror list of its own: downloaded bundles are cached per list.
+    const wrapped = withMirroredPostgisBundle(ext, ["retry-mirror"], fake, GOOD_SHA) as typeof ext;
     await assert.rejects(wrapped.setup());
     fail = false;
     const first = await wrapped.setup();

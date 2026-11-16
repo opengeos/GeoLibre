@@ -145,6 +145,12 @@ async function sha256Hex(blob: Blob): Promise<string | null> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Downloaded bundle `blob:` URLs, keyed by mirror list, shared across wrappers
+ * so a retried PGlite start does not download another ~20 MB copy.
+ */
+const bundleUrls = new Map<string, Promise<string>>();
+
 /** The slice of a PGlite extension the wrapper relies on. */
 interface PgliteExtensionLike {
   name: string;
@@ -161,7 +167,8 @@ interface PgliteExtensionLike {
  * needs Web Crypto, which browsers only expose in secure contexts (https,
  * localhost, the desktop app); on a plain-http LAN origin it is skipped with a
  * console warning rather than turning PostGIS off. The
- * `blob:` URL is created once per wrapper: a retried PGlite start reuses it
+ * `blob:` URL is created once per page for a mirror list: a retried PGlite
+ * start (which reloads the modules and builds a new wrapper) reuses it
  * instead of downloading and holding another ~20 MB.
  *
  * @param postgis The `postgis` export of `@electric-sql/pglite-postgis`.
@@ -178,12 +185,13 @@ export function withMirroredPostgisBundle(
 ): unknown {
   const ext = postgis as PgliteExtensionLike;
   if (!ext || typeof ext.setup !== "function") return postgis;
-  let bundleUrl: Promise<string> | null = null;
+  const key = urls.join("\n");
   return {
     ...ext,
     setup: async (...args: unknown[]) => {
       const result = await ext.setup(...args);
       if (!result?.bundlePath) return result;
+      let bundleUrl = bundleUrls.get(key);
       bundleUrl ??= fetchFromMirrors(
         urls,
         fetchImpl,
@@ -194,10 +202,11 @@ export function withMirroredPostgisBundle(
         // hook after that read, so the URL lives as long as the wrapper.
         (blob) => URL.createObjectURL(blob),
         (err: unknown) => {
-          bundleUrl = null; // let a later start retry the download
+          bundleUrls.delete(key); // let a later start retry the download
           throw err;
         },
       );
+      bundleUrls.set(key, bundleUrl);
       return { ...result, bundlePath: new URL(await bundleUrl) };
     },
   };

@@ -237,6 +237,8 @@ async function listRunnerManifests(): Promise<ToolManifest[]> {
  */
 export const PREBUILT_TOOL_MANIFESTS_FILE = "whitebox-wasm-manifests.json";
 
+/** The installed geolibre-wasm version, injected by vite.config.ts. */
+declare const __GEOLIBRE_WASM_VERSION__: string | undefined;
 let prebuiltManifestsPromise: Promise<ToolManifest[] | null> | null = null;
 
 /**
@@ -262,7 +264,13 @@ export function fetchPrebuiltToolManifests(
   prebuiltManifestsPromise ??= (async () => {
     if (!baseUrl) return null;
     try {
-      const response = await fetchImpl(new URL(PREBUILT_TOOL_MANIFESTS_FILE, baseUrl).href, {
+      const url = new URL(PREBUILT_TOOL_MANIFESTS_FILE, baseUrl);
+      // The file name is not content-hashed; key it by the runner version so a
+      // deploy that bumps geolibre-wasm cannot be answered from a stale cache.
+      if (typeof __GEOLIBRE_WASM_VERSION__ === "string") {
+        url.searchParams.set("v", __GEOLIBRE_WASM_VERSION__);
+      }
+      const response = await fetchImpl(url.href, {
         headers: { accept: "application/json" },
       });
       if (!response.ok) return null;
