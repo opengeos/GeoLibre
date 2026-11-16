@@ -16,6 +16,7 @@ import {
   fillExtrusionPaint,
   fillPaint,
   heatmapPaint,
+  heatmapWeightMax,
   linePaint,
 } from "./style-mapper";
 
@@ -388,7 +389,7 @@ export function buildMapboxStyle(
         source: sourceKey,
         ...zoom,
         filter: withRuleVisibility(POINT_FILTER),
-        paint: heatmapPaint(style, opacity),
+        paint: heatmapPaint(style, opacity, heatmapWeightMax(style, geojson ?? undefined)),
         layout: { visibility },
       } as LayerSpecification);
     } else if (effectiveRenderer === "cluster") {

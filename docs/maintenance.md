@@ -329,6 +329,13 @@ black — it declines the stack.
   `MeasureControl` and fails if either field is gone. After a bump, still
   confirm the Terrain section appears and a measured line shows inside a point
   cloud.
+- **The MeasureControl's `_setupMapSources` and `_updateMapGeometry`**
+  (`healMeasureLayersOnStyleSwap`, `packages/plugins/src/plugins/components/measure.ts`)
+  re-add the measured line and polygon after a basemap swap: the control adds
+  its source once in `onAdd`, so a `setStyle` (the celestial body switch, any
+  basemap change) left the line undrawn (#3471). The heal is skipped when
+  either method is gone, and `tests/upstream-contracts.test.ts` checks both.
+  Drop it once the control re-adds its own layers on `style.load`.
 - **The measure paint** (`MEASURE_LINE_COLOR`/`MEASURE_LINE_WIDTH`/
   `MEASURE_FILL_COLOR`, `packages/plugins/src/plugins/lidar-measure-mirror.ts`)
   is passed to the control explicitly rather than left to its defaults, because
