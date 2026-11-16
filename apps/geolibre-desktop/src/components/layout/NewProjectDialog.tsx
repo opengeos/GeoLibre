@@ -1,8 +1,8 @@
 import {
   BLANK_BASEMAP,
   createDefaultMapView,
-  DEFAULT_PROJECT_NAME,
   createEmptyProject,
+  DEFAULT_PROJECT_NAME,
   detachProjectCopy,
   OPENFREEMAP_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,

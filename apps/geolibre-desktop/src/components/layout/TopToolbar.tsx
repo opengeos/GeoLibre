@@ -214,6 +214,10 @@ export function TopToolbar({
   // Tracks an active IME composition so pressing Enter to confirm a CJK
   // candidate doesn't blur the project-name field mid-composition.
   const projectNameComposingRef = useRef(false);
+  // The field's text while it has focus. Unfocused, a default name renders as
+  // the translated placeholder; deciding that by focus rather than by content
+  // keeps a typed "Untitled Project" from vanishing on its last keystroke.
+  const [projectNameDraft, setProjectNameDraft] = useState<string | null>(null);
 
   const { controlsVisible, setControlsVisible, toggleMapControl } = useMapControlVisibility(
     mapControllerRef,
@@ -739,11 +743,12 @@ export function TopToolbar({
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               // The store keeps the canonical English default so saved files do
               // not vary by UI language; show it as a translated placeholder.
-              value={projectName === DEFAULT_PROJECT_NAME ? "" : projectName}
+              value={projectNameDraft ?? (projectName === DEFAULT_PROJECT_NAME ? "" : projectName)}
               placeholder={t("toolbar.item.untitledProject")}
               readOnly={viewer}
               onChange={(event) => {
                 if (viewer) return;
+                setProjectNameDraft(event.target.value);
                 setProjectName(event.target.value);
               }}
               onKeyDown={(event) => {
@@ -755,6 +760,10 @@ export function TopToolbar({
                   event.currentTarget.blur();
                 }
               }}
+              onFocus={() => {
+                if (viewer) return;
+                setProjectNameDraft(projectName === DEFAULT_PROJECT_NAME ? "" : projectName);
+              }}
               onCompositionStart={() => {
                 projectNameComposingRef.current = true;
               }}
@@ -762,6 +771,7 @@ export function TopToolbar({
                 projectNameComposingRef.current = false;
               }}
               onBlur={(event) => {
+                setProjectNameDraft(null);
                 if (viewer) return;
                 const nextName = event.target.value.trim();
                 // Persist the canonical, locale-independent default name; a
