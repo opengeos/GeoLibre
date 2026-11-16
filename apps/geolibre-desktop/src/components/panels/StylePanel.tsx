@@ -23,6 +23,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { PanelRightClose, PanelRightOpen, SlidersHorizontal } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, type RefObject, useEffect, useState } from "react";
+import { useSideSheet } from "../../hooks/useSideSheet";
 import { getAttributePropertyNames } from "../../lib/expression-inputs";
 import {
   IMPORTED_STYLE_NOTE_DURATION_MS,
@@ -126,6 +127,8 @@ export function StylePanel({
     controlledCollapsed,
     onCollapsedChange,
   });
+  // On a narrow viewport, fold back to the rail when Layers opens after us.
+  useSideSheet("style", isCollapsed, setIsCollapsed);
   // Layers whose style suggestions the user waved off this session (#1519).
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   // Which expression surface the shared Expression Builder is editing; null
