@@ -223,6 +223,12 @@ export class PointCloudStreamer {
   private readonly abort = new AbortController();
   private removeListener: (() => void) | null = null;
   private zRange: { zMin: number; zMax: number } | null = null;
+  /**
+   * The ground height {@link baseHeight} reports: the root's low percentile,
+   * else the first non-empty node's. An empty node (all noise) has no heights,
+   * so it never sets this.
+   */
+  private groundZ: number | undefined;
   /** Whether {@link zRange} came from the root rather than a fallback node. */
   private rootRange = false;
   private readonly ramp = getVectorColorRamp("viridis").colors;
@@ -255,10 +261,10 @@ export class PointCloudStreamer {
 
   /**
    * The cloud's ground height in metres as decoded (the root node's low
-   * percentile, else the first node shown's), or undefined before any node.
+   * percentile, else the first non-empty node's), or undefined before one.
    */
   get baseHeight(): number | undefined {
-    return this.zRange?.zMin;
+    return this.groundZ;
   }
 
   /** Points currently held as primitives. */
@@ -454,6 +460,10 @@ export class PointCloudStreamer {
       // the root's scale now, so the whole cloud colours consistently.
       if (fallback) this.recolorShown();
     } else this.zRange ??= { zMin: node.zMin, zMax: node.zMax };
+    if (node.count > 0) {
+      if (key === ROOT) this.groundZ = node.zMin;
+      else this.groundZ ??= node.zMin;
+    }
     const ramp = { ...node, ...this.zRange };
     const alpha = Math.min(1, Math.max(0, this.options.opacity()));
     const lift = Number.isFinite(this.options.altitudeOffset)

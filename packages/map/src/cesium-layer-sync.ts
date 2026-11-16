@@ -1405,6 +1405,35 @@ function indexedFeatureCollection(
   };
 }
 
+/**
+ * Turn off the outline of every polygon entity cut from a pole-wrapping
+ * polygon. Each slice is its own polygon, so its outline would also trace the
+ * cut meridians from the coast to the pole, lines that are not in the data.
+ * (A ground-clamped polygon has no outline anyway; this matters for extruded
+ * or Z-carrying layers.)
+ *
+ * @param viewer The globe, for reading entity properties.
+ * @param dataSource The loaded data source.
+ * @param source The layer's FeatureCollection as given.
+ * @param loaded The collection handed to Cesium (see {@link indexedFeatureCollection}).
+ */
+function hideSlicedPolygonOutlines(
+  viewer: CesiumWidget,
+  dataSource: DataSource,
+  source: FeatureCollection,
+  loaded: FeatureCollection,
+): void {
+  const sliced = new Set<number>();
+  loaded.features.forEach((feature, index) => {
+    if (feature.geometry !== source.features[index]?.geometry) sliced.add(index);
+  });
+  if (sliced.size === 0) return;
+  for (const entity of dataSource.entities.values) {
+    if (!entity.polygon || !sliced.has(entityFeatureIndex(viewer, entity))) continue;
+    entity.polygon.outline = false as never;
+  }
+}
+
 /** The feature index an entity carries (see {@link indexedFeatureCollection}). */
 function entityFeatureIndex(viewer: CesiumWidget, entity: Entity): number {
   const propIndex = entity.properties?.[FEATURE_INDEX_KEY];
@@ -3533,6 +3562,7 @@ export class CesiumLayerSync {
       (dataSource.entities as { suspendEvents?: () => void }).suspendEvents?.();
       try {
         this.indexGeoJsonEntities(entry, dataSource);
+        hideSlicedPolygonOutlines(viewer, dataSource, sourceGeoJson, data);
         // Per-feature symbology (issue #2278): the resolver evaluates the same
         // expressions the 2D map paints with, and the sprites it needs (marker
         // shapes per classified colour, the fill pattern tile) are rasterised

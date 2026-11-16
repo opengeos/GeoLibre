@@ -121,15 +121,16 @@ function slicePolarPolygon(rings: Position[][]): Position[][][] {
     west = Math.min(west, p[0]);
     east = Math.max(east, p[0]);
   }
-  const mid = (west + east) / 2;
-  // Holes keep their own longitudes; shift each by whole turns onto the outer
-  // ring's unrolled range so it lands in the right slice.
-  const holes = rings.slice(1).map((hole) => {
+  // Holes keep their own longitudes. A hole near the unrolling seam can sit
+  // partly at each end of the outer ring's range, so each is offered to the
+  // clip a whole turn either side as well; the copies outside the range clip
+  // away.
+  const holes = rings.slice(1).flatMap((hole) => {
     const unrolled = unrollRing(hole);
-    if (unrolled.length === 0) return unrolled;
-    const centre = unrolled.reduce((sum, p) => sum + p[0], 0) / unrolled.length;
-    const shift = Math.round((mid - centre) / 360) * 360;
-    return shift === 0 ? unrolled : unrolled.map((p) => [p[0] + shift, ...p.slice(1)]);
+    if (unrolled.length === 0) return [];
+    return [-360, 0, 360].map((shift) =>
+      shift === 0 ? unrolled : unrolled.map((p) => [p[0] + shift, ...p.slice(1)]),
+    );
   });
   const slices: Position[][][] = [];
   for (let start = west; start < east; start += SLICE_DEGREES) {
@@ -189,18 +190,27 @@ function clampPolarRings(rings: Position[][]): Position[][] {
  * @returns The feature itself when no polygon reaches or wraps a pole, else a
  *   copy with those polygons sliced and clamped.
  */
-export function slicePoleWrappingPolygons<F extends Feature>(feature: F): F {
+export function slicePoleWrappingPolygons(feature: Feature): Feature {
   const geometry = feature.geometry;
   if (!geometry) return feature;
   let polygons: Position[][][];
   if (geometry.type === "Polygon") polygons = [geometry.coordinates];
   else if (geometry.type === "MultiPolygon") polygons = geometry.coordinates;
   else return feature;
-  const wraps = (rings: Position[][]) => rings.length > 0 && wrapsPole(rings[0]);
-  if (!polygons.some((rings) => wraps(rings) || touchesPole(rings))) return feature;
-  const coordinates = polygons
-    .flatMap((rings) => (wraps(rings) ? slicePolarPolygon(rings) : [rings]))
-    .map((rings) => (touchesPole(rings) ? clampPolarRings(rings) : rings));
+  // One pass over the rings per polygon: this runs on every globe feature.
+  const flags = polygons.map((rings) => ({
+    wraps: rings.length > 0 && wrapsPole(rings[0]),
+    touches: touchesPole(rings),
+  }));
+  if (!flags.some((f) => f.wraps || f.touches)) return feature;
+  const coordinates = polygons.flatMap((rings, i) => {
+    const pieces = flags[i].wraps ? slicePolarPolygon(rings) : [rings];
+    return pieces.map((piece) =>
+      flags[i].wraps || flags[i].touches ? clampPolarRings(piece) : piece,
+    );
+  });
+  // Nothing drawable came out (a degenerate ring): leave the feature as it was.
+  if (coordinates.length === 0) return feature;
   if (geometry.type === "Polygon" && coordinates.length === 1)
     return { ...feature, geometry: { type: "Polygon", coordinates: coordinates[0] } };
   const sliced: MultiPolygon = { type: "MultiPolygon", coordinates };

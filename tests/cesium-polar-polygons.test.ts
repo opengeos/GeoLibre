@@ -40,6 +40,20 @@ function buildAll(feature: Feature): void {
         extrudedHeight: 9000,
       }),
     );
+    // The ground worker's own path: a shadow volume (top and bottom
+    // surfaces plus walls), which is where a pole vertex used to throw.
+    PolygonGeometry.createGeometry(
+      new PolygonGeometry({
+        polygonHierarchy: new PolygonHierarchy(
+          cartesians(rings[0]),
+          rings.slice(1).map((hole) => new PolygonHierarchy(cartesians(hole))),
+        ),
+        arcType: ArcType.RHUMB,
+        height: -1000,
+        extrudedHeight: 9000,
+        shadowVolume: true,
+      } as ConstructorParameters<typeof PolygonGeometry>[0]),
+    );
   }
 }
 
@@ -49,8 +63,7 @@ describe("slicePoleWrappingPolygons", () => {
     const sliced = slicePoleWrappingPolygons(source);
     assert.notEqual(sliced, source);
     assert.equal(sliced.geometry.type, "MultiPolygon");
-    // The generic return keeps the input type; slicing turns it into a MultiPolygon.
-    const slices = (sliced.geometry as unknown as MultiPolygon).coordinates;
+    const slices = (sliced.geometry as MultiPolygon).coordinates;
     assert.equal(slices.length, 4);
     for (const [shell] of slices) {
       const lons = shell.map((p) => p[0]);
@@ -96,6 +109,36 @@ describe("slicePoleWrappingPolygons", () => {
     // Closed along the north pole, just short of it.
     assert.ok(parts.slice(0, 4).every(([shell]) => shell.some((p) => p[1] > 89.99)));
     assert.doesNotThrow(() => buildAll(sliced));
+  });
+
+  it("keeps both parts of a hole that straddles the unrolling seam", () => {
+    const shell: Position[] = [];
+    for (let lon = -170; lon <= 180; lon += 10) shell.push([lon, 80]);
+    shell.push(shell[0]);
+    // The shell unrolls to [-170, 190]; this hole sits across -170.
+    const hole: Position[] = [
+      [-175, 83],
+      [-175, 85],
+      [-165, 85],
+      [-165, 83],
+      [-175, 83],
+    ];
+    const arctic: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Polygon", coordinates: [shell, hole] },
+    };
+    const parts = (slicePoleWrappingPolygons(arctic).geometry as MultiPolygon).coordinates;
+    const holeLons = parts.flatMap((rings) => rings.slice(1).flatMap((r) => r.map((p) => p[0])));
+    assert.ok(
+      holeLons.some((lon) => lon < -168),
+      "the part east of the seam is kept",
+    );
+    assert.ok(
+      holeLons.some((lon) => lon > 185),
+      "the part west of the seam is kept",
+    );
+    assert.doesNotThrow(() => buildAll(slicePoleWrappingPolygons(arctic)));
   });
 
   it("pulls a pole vertex of an ordinary polygon just short of the pole", () => {
