@@ -39,6 +39,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { galleryEmptyKey } from "../../lib/gallery-empty-key";
 import { galleryErrorMessage } from "../../lib/gallery-errors";
 import { observeGalleryEnd } from "../../lib/gallery-auto-load";
 import { openExternalLink } from "../../lib/open-external";
@@ -79,7 +80,7 @@ import {
   type ShareGroup,
 } from "../../lib/share-gallery";
 import { resolveShareBaseUrl, shareHostLabel } from "../../lib/share-geolibre";
-import { CollectionGrid, CollectionHeader, galleryEmptyKey } from "./GalleryCollections";
+import { CollectionGrid, CollectionHeader } from "./GalleryCollections";
 import { TransferProjectDialog } from "./TransferProjectDialog";
 
 type GalleryScope = "featured" | "all" | "collections" | "mine" | "organizations" | "groups";
@@ -148,8 +149,7 @@ export function ProjectGalleryDialog({
   const hasToken = oauthSignedIn || trimmedToken.length > 0;
   const [scope, setScope] = useState<GalleryScope>("featured");
   const [projects, setProjects] = useState<SharedProject[]>([]);
-  // The "Collections" scope lists collections first, then the projects of the
-  // one the user picks (`selectedCollection`).
+  // "Collections" lists collections, then the projects of `selectedCollection`.
   const [collections, setCollections] = useState<SharedCollection[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<SharedCollection | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">("idle");
@@ -211,8 +211,9 @@ export function ProjectGalleryDialog({
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   useEffect(() => {
+    // Clear the collection on close, so a reopen never fetches the old one.
+    if (!open) setSelectedCollection(null);
     if (open) {
-      setSelectedCollection(null);
       if (defaultScope === "mine") {
         defaultScopePendingRef.current = false;
         setScope("mine");

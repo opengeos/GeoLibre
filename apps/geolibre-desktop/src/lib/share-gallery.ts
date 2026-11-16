@@ -365,20 +365,21 @@ function normalizeCollection(raw: RawSharedCollection, base: string): SharedColl
 }
 
 /**
- * Filter collections by a lowercased query against their title, owner, and
- * description. An empty query returns the list unchanged.
+ * Filter collections by a case-insensitive query against their title, owner,
+ * and description. A blank query returns the list unchanged.
  *
  * @param collections - The loaded collections.
- * @param query - The already trimmed and lowercased filter text.
+ * @param query - The filter text; it is trimmed and lowercased here.
  * @returns The matching collections, in their original order.
  */
 export function filterCollections(
   collections: SharedCollection[],
   query: string,
 ): SharedCollection[] {
-  if (!query) return collections;
+  const needle = query.trim().toLowerCase();
+  if (!needle) return collections;
   return collections.filter((c) =>
-    [c.title, c.username, c.description].join(" ").toLowerCase().includes(query),
+    [c.title, c.username, c.description].join(" ").toLowerCase().includes(needle),
   );
 }
 

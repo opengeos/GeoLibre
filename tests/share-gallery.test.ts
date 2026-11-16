@@ -337,8 +337,9 @@ describe("collection helpers", () => {
       collection({ id: "c2", username: "clarawe", title: "HS_Karto", description: "" }),
     ];
     assert.equal(filterCollections(list, ""), list);
+    assert.equal(filterCollections(list, "   "), list);
     assert.deepEqual(
-      filterCollections(list, "karto").map((c) => c.id),
+      filterCollections(list, "  KARTO ").map((c) => c.id),
       ["c2"],
     );
     assert.deepEqual(
