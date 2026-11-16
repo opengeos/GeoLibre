@@ -300,7 +300,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       ) {
         return;
       }
-      if (fill !== undefined && controller.getTerrainFillOutside) setFillOutside(fill);
+      if (fill !== undefined && controller.getTerrainFillOutside) {
+        setFillOutside(controller.getTerrainFillOutside());
+      }
       setTerrainPreferences({ terrainSource: savedTerrainSource(source) });
       if (ionTerrainSupported && controller.setTerrainIonAssetId) {
         if (controller.getTerrainIonAssetId?.() !== null) {

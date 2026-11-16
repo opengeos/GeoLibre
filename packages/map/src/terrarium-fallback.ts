@@ -109,6 +109,9 @@ export interface TerrariumFallbackOptions {
   now?: () => number;
 }
 
+/** A global tile request that takes longer than this counts as failed. */
+const FETCH_TIMEOUT_MS = 10_000;
+
 /** A failed tile is not refetched for this long, so a dead source is not hammered. */
 const DEFAULT_RETRY_AFTER_MS = 10_000;
 
@@ -125,9 +128,17 @@ export function createTerrariumFallback(options: TerrariumFallbackOptions): CogD
   const loadRgba =
     options.loadRgba ??
     (async (url: string) => {
-      const response = await fetch(url);
-      if (!response.ok) return null;
-      return decodePng(await response.blob());
+      // A stalled request would hold every tile under this ancestor, so it is
+      // cut off and handled like any other failure.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) return null;
+        return await decodePng(await response.blob());
+      } finally {
+        clearTimeout(timer);
+      }
     });
   const retryAfterMs = options.retryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
   const now = options.now ?? Date.now;

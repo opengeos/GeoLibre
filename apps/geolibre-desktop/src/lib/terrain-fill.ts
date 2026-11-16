@@ -35,5 +35,5 @@ export function displayedTerrainFillOutside(
   engineFill: boolean | null,
   saved: boolean | undefined,
 ): boolean {
-  return engineFill ?? resolveTerrainFillOutside(saved, "https://");
+  return engineFill ?? saved ?? true;
 }
