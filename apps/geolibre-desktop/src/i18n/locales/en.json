@@ -2432,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Could not import KML/KMZ.",
-    "timeOverlayGroup": "Time overlay animation"
+    "timeOverlayGroup": "Time overlay animation",
+    "dataUrlStyleUnsupported": "A style cannot be applied to a KML document.",
+    "dataUrlNoImporter": "Could not add {{name}} to the map: no KML importer is available."
   },
   "map": {
     "boundsRestricted": "Bounds locked",
@@ -10185,7 +10187,8 @@
     "panelRenderFailed": "The panel \"{{name}}\" failed to open.",
     "sharedSettingsFailed": "Could not load the shared settings from the link, so your own settings are in use.",
     "sharedLanguageFailed": "Could not switch to the language the shared settings ask for.",
-    "languageCatalogFailed": "Could not load the {{language}} translation, so GeoLibre is showing English."
+    "languageCatalogFailed": "Could not load the {{language}} translation, so GeoLibre is showing English.",
+    "dataUrlLoadFailed": "Could not load the data URL."
   },
   "shell": {
     "workspaceTitle": "GeoLibre map workspace",

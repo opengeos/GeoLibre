@@ -6,6 +6,7 @@ import {
   augmentConnections,
   augmentFolders,
   buildBrowserTree,
+  isRepeatClick,
   buildDirectoryNodes,
   buildFavoriteNodes,
   buildMssqlTableNodes,
@@ -1017,5 +1018,20 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
     );
     // An unexpanded service keeps its empty child list.
     assert.deepEqual(arcgisServices(augmentArcGISServices(tree, {}, LABELS))[0].children, []);
+  });
+});
+
+describe("isRepeatClick", () => {
+  it("ignores the repeat clicks of a double-click on the row it just activated", () => {
+    assert.equal(isRepeatClick(2, 200), true);
+    assert.equal(isRepeatClick(3, 400), true);
+  });
+
+  it("activates on a single or keyboard click, or a counted click on another row", () => {
+    assert.equal(isRepeatClick(0, 100), false);
+    assert.equal(isRepeatClick(1, 100), false);
+    // This row was never (or long ago) activated: the count came from a neighbour.
+    assert.equal(isRepeatClick(2, Number.POSITIVE_INFINITY), false);
+    assert.equal(isRepeatClick(2, 5000), false);
   });
 });
