@@ -362,9 +362,10 @@ interface LayerEntry {
   /** The tileset or point-cloud altitude offset (metres) last applied as a model matrix. */
   appliedAltitude?: number;
   /**
-   * A decoded point cloud's ground height in metres (its low percentile, as
+   * A plain LAS cloud's ground height in metres (its low percentile, as
    * decoded, before any altitude offset), which the globe lowers onto the
-   * ellipsoid when there is no terrain (#3476).
+   * ellipsoid when there is no terrain (#3476). A streamed cloud's comes from
+   * its streamer instead.
    */
   pointCloudBase?: number;
   /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
@@ -3077,13 +3078,15 @@ export class CesiumLayerSync {
           onError: (message) => {
             entry.loadError ??= message;
           },
+          // The first nodes can land after start() (outside the first view),
+          // and the root can replace a fallback node's ground height.
+          onNodeShown: () => this.applyPointCloudGround(entry),
         });
         entry.streamer = streamer;
         viewer.scene.primitives.add(streamer.collection);
         await streamer.start();
         if (entry.cancelled) return;
         entry.handle = streamer.collection;
-        entry.pointCloudBase = streamer.baseHeight;
         entry.appliedAlpha = String(this.effectiveOpacity(entry));
         this.applyAppearance(entry);
         return;
@@ -3911,9 +3914,10 @@ export class CesiumLayerSync {
   private applyPointCloudGround(entry: LayerEntry): void {
     const collection = entry.handle as PointPrimitiveCollection | null;
     if (!collection || entry.kind !== "pointcloud") return;
-    // A streamed cloud whose first view showed nothing learns its base later.
-    entry.pointCloudBase ??= entry.streamer?.baseHeight;
-    const offset = pointCloudGroundOffset(entry.pointCloudBase, this.globeHasTerrain());
+    // A streamed cloud's ground height can change as nodes land (the root
+    // replaces a fallback node's), so it is read from the streamer each time.
+    const base = entry.streamer ? entry.streamer.baseHeight : entry.pointCloudBase;
+    const offset = pointCloudGroundOffset(base, this.globeHasTerrain());
     if ((entry.appliedAltitude ?? 0) === offset) return;
     const { Cesium } = this;
     if (offset === 0) {

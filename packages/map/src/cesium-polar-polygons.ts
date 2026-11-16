@@ -114,9 +114,13 @@ function closeRing(ring: Position[]): Position[] {
  */
 function slicePolarPolygon(rings: Position[][]): Position[][][] {
   const outer = unrollRing(rings[0]);
-  const lons = outer.map((p) => p[0]);
-  const west = Math.min(...lons);
-  const east = Math.max(...lons);
+  // A loop, not Math.min(...lons): a dense ring would overflow the argument limit.
+  let west = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  for (const p of outer) {
+    west = Math.min(west, p[0]);
+    east = Math.max(east, p[0]);
+  }
   const mid = (west + east) / 2;
   // Holes keep their own longitudes; shift each by whole turns onto the outer
   // ring's unrolled range so it lands in the right slice.

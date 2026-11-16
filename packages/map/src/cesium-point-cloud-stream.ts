@@ -203,6 +203,8 @@ export interface PointCloudStreamerOptions {
   altitudeOffset?: number;
   /** Reports a load failure (the first node that fails, or the root). */
   onError?: (message: string) => void;
+  /** Called after a node's points join the collection (its ground height may have changed). */
+  onNodeShown?: () => void;
 }
 
 /**
@@ -474,6 +476,7 @@ export class PointCloudStreamer {
       );
     }
     this.shown.set(key, points);
+    this.options.onNodeShown?.();
   }
 
   /** Re-apply the height ramp to every shown node, keeping each point's alpha. */
