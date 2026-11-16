@@ -5,6 +5,8 @@ import { describe, it } from "node:test";
 import {
   canOwnOrganizationProjects,
   declineProjectTransfer,
+  fetchCollectionProjects,
+  fetchCollections,
   fetchIncomingTransfers,
   fetchMyGroups,
   fetchMyOrganizations,
@@ -246,6 +248,122 @@ describe("fetchSharedProjects", () => {
     // the server actually returned (so the next offset stays correct).
     assert.equal(result.projects.length, 1);
     assert.equal(result.rawCount, 2);
+  });
+});
+
+describe("fetchCollections", () => {
+  it("lists public collections with absolute cover thumbnails", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      collections: [
+        {
+          id: "c1",
+          username: "giswqs",
+          slug: "official-demos",
+          title: "Official Demos",
+          description: "Demo maps",
+          createdAt: "2026-09-28T13:12:05.000Z",
+          projectCount: 105,
+          thumbnailUrl: "/api/thumbnails/abc-123?v=1",
+        },
+        // No cover and no count: both fall back rather than breaking the card.
+        { id: "c2", username: "someone", slug: "empty", title: "Empty" },
+      ],
+    });
+    const collections = await fetchCollections({ baseUrl: `${BASE}/`, fetchImpl: fn });
+    assert.deepEqual(calls, [`${BASE}/api/collections/browse`]);
+    assert.equal(collections.length, 2);
+    assert.deepEqual(collections[0], {
+      id: "c1",
+      username: "giswqs",
+      slug: "official-demos",
+      title: "Official Demos",
+      description: "Demo maps",
+      createdAt: "2026-09-28T13:12:05.000Z",
+      projectCount: 105,
+      thumbnailUrl: `${BASE}/api/thumbnails/abc-123?v=1`,
+    });
+    assert.equal(collections[1].thumbnailUrl, null);
+    assert.equal(collections[1].projectCount, 0);
+  });
+
+  it("drops collections that cannot be addressed by username and slug", async () => {
+    const { fn } = fakeFetch(200, {
+      collections: [
+        { id: "c1", username: "giswqs", slug: "" },
+        { id: "c2", username: "", slug: "x" },
+        { id: "", username: "giswqs", slug: "x" },
+        { id: "c3", username: "giswqs", slug: "ok" },
+      ],
+    });
+    const collections = await fetchCollections({ baseUrl: BASE, fetchImpl: fn });
+    assert.deepEqual(
+      collections.map((c) => c.id),
+      ["c3"],
+    );
+  });
+
+  it("returns an empty list when the payload has no collections array", async () => {
+    const { fn } = fakeFetch(200, {});
+    assert.deepEqual(await fetchCollections({ baseUrl: BASE, fetchImpl: fn }), []);
+  });
+
+  it("throws a coded GalleryError on a non-2xx response", async () => {
+    const { fn } = fakeFetch(503, null);
+    await assert.rejects(
+      () => fetchCollections({ baseUrl: BASE, fetchImpl: fn }),
+      (err: unknown) => err instanceof GalleryError && err.code === "http" && err.status === 503,
+    );
+  });
+});
+
+describe("fetchCollectionProjects", () => {
+  it("fetches a collection by owner and slug and normalizes its projects", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      collection: {
+        id: "c1",
+        username: "giswqs",
+        slug: "official-demos",
+        projects: [rawProject(), rawProject({ id: "def-456", rawJsonUrl: "" })],
+      },
+    });
+    const projects = await fetchCollectionProjects({
+      username: "giswqs",
+      slug: "official-demos",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.deepEqual(calls, [`${BASE}/api/collections/giswqs/official-demos`]);
+    // The record without a raw JSON URL cannot be opened, so it is dropped.
+    assert.equal(projects.length, 1);
+    assert.equal(projects[0].id, "abc-123");
+    assert.equal(projects[0].thumbnailUrl, `${BASE}/api/thumbnails/abc-123?v=1`);
+  });
+
+  it("encodes the username and slug path segments", async () => {
+    const { fn, calls } = fakeFetch(200, { collection: { projects: [] } });
+    await fetchCollectionProjects({
+      username: "a/b",
+      slug: "c d",
+      baseUrl: BASE,
+      fetchImpl: fn,
+    });
+    assert.deepEqual(calls, [`${BASE}/api/collections/a%2Fb/c%20d`]);
+  });
+
+  it("returns an empty list when the collection has no projects", async () => {
+    const { fn } = fakeFetch(200, { collection: { id: "c1" } });
+    assert.deepEqual(
+      await fetchCollectionProjects({ username: "u", slug: "s", baseUrl: BASE, fetchImpl: fn }),
+      [],
+    );
+  });
+
+  it("surfaces a deleted collection as an http 404 GalleryError", async () => {
+    const { fn } = fakeFetch(404, { error: "collection not found" });
+    await assert.rejects(
+      () => fetchCollectionProjects({ username: "u", slug: "gone", baseUrl: BASE, fetchImpl: fn }),
+      (err: unknown) => err instanceof GalleryError && err.code === "http" && err.status === 404,
+    );
   });
 });
 

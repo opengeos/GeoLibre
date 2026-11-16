@@ -9,12 +9,14 @@ import {
 } from "@geolibre/ui";
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRightLeft,
   Eye,
   EyeOff,
   ExternalLink,
   Globe2,
   ImageOff,
+  Library,
   Loader2,
   Lock,
   LogIn,
@@ -54,6 +56,8 @@ import {
   acceptProjectTransfer,
   cancelProjectTransfer,
   declineProjectTransfer,
+  fetchCollectionProjects,
+  fetchCollections,
   fetchIncomingTransfers,
   fetchMyProjects,
   fetchMyGroups,
@@ -69,6 +73,7 @@ import {
   setProjectDeleteProtection,
   type ProjectTransfer,
   type ProjectTransferTarget,
+  type SharedCollection,
   type SharedProject,
   type ShareOrganization,
   type ShareGroup,
@@ -76,7 +81,7 @@ import {
 import { resolveShareBaseUrl, shareHostLabel } from "../../lib/share-geolibre";
 import { TransferProjectDialog } from "./TransferProjectDialog";
 
-type GalleryScope = "featured" | "all" | "mine" | "organizations" | "groups";
+type GalleryScope = "featured" | "all" | "collections" | "mine" | "organizations" | "groups";
 
 interface ProjectGalleryDialogProps {
   open: boolean;
@@ -115,6 +120,11 @@ function searchHaystack(project: SharedProject): string {
   return [project.title, project.username, ...project.tags].join(" ").toLowerCase();
 }
 
+/** Lowercased haystack for the client-side collection filter. */
+function collectionHaystack(collection: SharedCollection): string {
+  return [collection.title, collection.username, collection.description].join(" ").toLowerCase();
+}
+
 /**
  * Browse public projects shared on the configured share host and open one in
  * GeoLibre.
@@ -142,6 +152,10 @@ export function ProjectGalleryDialog({
   const hasToken = oauthSignedIn || trimmedToken.length > 0;
   const [scope, setScope] = useState<GalleryScope>("featured");
   const [projects, setProjects] = useState<SharedProject[]>([]);
+  // The "Collections" scope lists collections first, then the projects of the
+  // one the user picks (`selectedCollection`).
+  const [collections, setCollections] = useState<SharedCollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<SharedCollection | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">("idle");
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<GalleryErrorCode | null>(null);
@@ -202,6 +216,7 @@ export function ProjectGalleryDialog({
 
   useEffect(() => {
     if (open) {
+      setSelectedCollection(null);
       if (defaultScope === "mine") {
         defaultScopePendingRef.current = false;
         setScope("mine");
@@ -312,6 +327,23 @@ export function ProjectGalleryDialog({
           if (controller.signal.aborted) return;
           if (incoming.status === "fulfilled") setIncomingTransfers(incoming.value);
           if (outgoing.status === "fulfilled") setOutgoingTransfers(outgoing.value);
+        } else if (effectiveScope === "collections") {
+          // Neither collection endpoint paginates: the list and a collection's
+          // projects each arrive whole.
+          if (selectedCollection) {
+            const items = await fetchCollectionProjects({
+              username: selectedCollection.username,
+              slug: selectedCollection.slug,
+              signal: controller.signal,
+            });
+            if (controller.signal.aborted) return;
+            setProjects(items);
+          } else {
+            const items = await fetchCollections({ signal: controller.signal });
+            if (controller.signal.aborted) return;
+            setCollections(items);
+          }
+          setHasMore(false);
         } else if (effectiveScope === "organizations" || effectiveScope === "groups") {
           const token = await resolveShareRequestToken(trimmedToken);
           const result = await fetchProjectsSharedWithMe({
@@ -352,7 +384,7 @@ export function ProjectGalleryDialog({
         if (!controller.signal.aborted) setStatus("idle");
       }
     },
-    [t, effectiveScope, trimmedToken, oauthSupported],
+    [t, effectiveScope, selectedCollection, trimmedToken, oauthSupported],
   );
   useLayoutEffect(() => {
     if (previousSessionRevisionRef.current === oauthSessionRevision) return;
@@ -454,6 +486,7 @@ export function ProjectGalleryDialog({
 
   const selectScope = (nextScope: GalleryScope) => {
     defaultScopePendingRef.current = false;
+    setSelectedCollection(null);
     setScope(nextScope);
   };
 
@@ -614,6 +647,12 @@ export function ProjectGalleryDialog({
   const visibleProjects = trimmedQuery
     ? projects.filter((p) => searchHaystack(p).includes(trimmedQuery))
     : projects;
+  // The "Collections" scope shows collection cards until one is picked.
+  const showingCollections = effectiveScope === "collections" && selectedCollection === null;
+  const visibleCollections = trimmedQuery
+    ? collections.filter((c) => collectionHaystack(c).includes(trimmedQuery))
+    : collections;
+  const shareBase = resolveShareBaseUrl()?.replace(/\/+$/, "") ?? "";
 
   // Fetch the next page shortly before the end of the gallery scrolls into
   // view. Recreating the observer after each request also prevents a sentinel
@@ -634,8 +673,12 @@ export function ProjectGalleryDialog({
     });
   }, [hasMore, loadPage, open, rawOffset, status, trimmedQuery]);
 
-  const showInitialSpinner = status === "loading" && projects.length === 0;
-  const showEmpty = status !== "loading" && !error && visibleProjects.length === 0;
+  const showInitialSpinner =
+    status === "loading" && (showingCollections ? collections.length === 0 : projects.length === 0);
+  const showEmpty =
+    status !== "loading" &&
+    !error &&
+    (showingCollections ? visibleCollections.length === 0 : visibleProjects.length === 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -692,6 +735,12 @@ export function ProjectGalleryDialog({
             icon={<Globe2 className="h-3.5 w-3.5" />}
             label={t("gallery.scopeAll")}
           />
+          <ScopeTab
+            active={effectiveScope === "collections"}
+            onClick={() => selectScope("collections")}
+            icon={<Library className="h-3.5 w-3.5" />}
+            label={t("gallery.scopeCollections")}
+          />
           {hasToken ? (
             <>
               <ScopeTab
@@ -721,11 +770,59 @@ export function ProjectGalleryDialog({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("gallery.searchPlaceholder")}
+            placeholder={
+              showingCollections
+                ? t("gallery.collectionsSearchPlaceholder")
+                : t("gallery.searchPlaceholder")
+            }
             className="ps-8"
-            disabled={projects.length === 0 && status !== "idle"}
+            disabled={
+              (showingCollections ? collections.length === 0 : projects.length === 0) &&
+              status !== "idle"
+            }
           />
         </div>
+
+        {effectiveScope === "collections" && selectedCollection ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => {
+                setSelectedCollection(null);
+                setProjects([]);
+              }}
+            >
+              <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
+              {t("gallery.backToCollections")}
+            </Button>
+            <span className="min-w-0 truncate text-sm font-medium" title={selectedCollection.title}>
+              {selectedCollection.title || t("gallery.untitledCollection")}
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {t("gallery.byAuthor", { author: selectedCollection.username })}
+            </span>
+            {shareBase ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ms-auto shrink-0"
+                aria-label={t("gallery.openCollectionOnWeb")}
+                title={t("gallery.openCollectionOnWeb")}
+                onClick={() =>
+                  void openExternalLink(
+                    `${shareBase}/${encodeURIComponent(selectedCollection.username)}/collections/${encodeURIComponent(selectedCollection.slug)}`,
+                  )
+                }
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         {!hasToken ? (
           oauthSupported ? (
@@ -833,7 +930,7 @@ export function ProjectGalleryDialog({
           {showInitialSpinner ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {t("gallery.loading")}
+              {showingCollections ? t("gallery.loadingCollections") : t("gallery.loading")}
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -862,8 +959,14 @@ export function ProjectGalleryDialog({
               {showEmpty ? (
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   {trimmedQuery
-                    ? t("gallery.noMatches")
-                    : effectiveScope === "mine"
+                    ? showingCollections
+                      ? t("gallery.noCollectionMatches")
+                      : t("gallery.noMatches")
+                    : showingCollections
+                      ? t("gallery.emptyCollections")
+                      : effectiveScope === "collections"
+                        ? t("gallery.emptyCollection")
+                        : effectiveScope === "mine"
                       ? t("gallery.emptyMine")
                       : effectiveScope === "organizations"
                         ? t("gallery.emptyOrganizations")
@@ -873,6 +976,19 @@ export function ProjectGalleryDialog({
                             ? t("gallery.emptyFeatured")
                             : t("gallery.empty")}
                 </p>
+              ) : showingCollections ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleCollections.map((collection) => (
+                    <CollectionCard
+                      key={collection.id}
+                      collection={collection}
+                      onSelect={() => {
+                        setProjects([]);
+                        setSelectedCollection(collection);
+                      }}
+                    />
+                  ))}
+                </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {visibleProjects.map((project) => (
@@ -973,6 +1089,65 @@ function ScopeTab({
       {icon}
       {label}
     </Button>
+  );
+}
+
+/**
+ * A collection card in the "Collections" scope. Selecting it lists the
+ * collection's projects. Collection covers are public, so the thumbnail loads
+ * straight from its URL.
+ */
+function CollectionCard({
+  collection,
+  onSelect,
+}: {
+  collection: SharedCollection;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation();
+  const [thumbBroken, setThumbBroken] = useState(false);
+  const title = collection.title || t("gallery.untitledCollection");
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group flex flex-col overflow-hidden rounded-lg border bg-card text-start transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      title={t("gallery.openCollection")}
+    >
+      <span className="relative block aspect-video w-full overflow-hidden bg-muted">
+        {collection.thumbnailUrl && !thumbBroken ? (
+          <img
+            src={collection.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            onError={() => setThumbBroken(true)}
+          />
+        ) : (
+          <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+            <Library className="h-6 w-6" />
+            <span className="text-xs">{t("gallery.noThumbnail")}</span>
+          </span>
+        )}
+      </span>
+      <span className="flex flex-1 flex-col gap-1 p-3">
+        <span className="truncate text-sm font-medium" title={title}>
+          {title}
+        </span>
+        {collection.description ? (
+          <span className="line-clamp-2 text-xs text-muted-foreground">
+            {collection.description}
+          </span>
+        ) : null}
+        <span className="mt-auto flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+          <span className="truncate">{t("gallery.byAuthor", { author: collection.username })}</span>
+          <span className="ms-auto shrink-0">
+            {t("gallery.collectionProjects", { count: collection.projectCount })}
+          </span>
+        </span>
+      </span>
+    </button>
   );
 }
 

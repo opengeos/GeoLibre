@@ -232,6 +232,50 @@ function normalizeProject(raw: RawSharedProject, base: string): SharedProject | 
 }
 
 /**
+ * GET a public (unauthenticated) JSON endpoint on the share host and decode it.
+ *
+ * Sends no credentials, so a public read stays a simple CORS request.
+ *
+ * @throws {GalleryError} `timeout`, `network`, `http` (non-2xx), or
+ *   `invalid-response` (a body that is not JSON). A caller-initiated abort
+ *   propagates as the original `AbortError`.
+ */
+async function publicJsonGet(
+  url: string,
+  options: { signal?: AbortSignal; fetchImpl: typeof fetch },
+): Promise<unknown> {
+  // Combine the caller's abort signal (dialog close) with a hard deadline.
+  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await options.fetchImpl(url, {
+      headers: { Accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") throw error;
+      if (error.name === "TimeoutError") throw new GalleryError("timeout");
+    }
+    throw new GalleryError("network");
+  }
+
+  if (!response.ok) {
+    throw new GalleryError("http", response.status);
+  }
+
+  // A malformed/HTML 200 body must surface as a retryable error, not an empty
+  // gallery, so let a JSON parse failure throw rather than swallowing it.
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new GalleryError("invalid-response");
+  }
+}
+
+/**
  * Fetch a page of public projects from share.geolibre.app.
  *
  * @param options - Pagination (`limit`/`offset`), an optional host override, an
@@ -256,40 +300,10 @@ export async function fetchSharedProjects(
   if (options.offset) params.set("offset", String(options.offset));
   if (options.featured) params.set("featured", "true");
   const query = params.toString();
-  const url = `${base}/api/projects${query ? `?${query}` : ""}`;
-
-  // Combine the caller's abort signal (dialog close) with a hard deadline.
-  const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-
-  let response: Response;
-  try {
-    response = await fetchImpl(url, {
-      headers: { Accept: "application/json" },
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException) {
-      if (error.name === "AbortError") throw error;
-      if (error.name === "TimeoutError") throw new GalleryError("timeout");
-    }
-    throw new GalleryError("network");
-  }
-
-  if (!response.ok) {
-    throw new GalleryError("http", response.status);
-  }
-
-  // A malformed/HTML 200 body must surface as a retryable error, not an empty
-  // gallery, so let a JSON parse failure throw rather than swallowing it.
-  let payload: { projects?: RawSharedProject[] } | null;
-  try {
-    payload = (await response.json()) as {
-      projects?: RawSharedProject[];
-    } | null;
-  } catch {
-    throw new GalleryError("invalid-response");
-  }
+  const payload = (await publicJsonGet(`${base}/api/projects${query ? `?${query}` : ""}`, {
+    signal: options.signal,
+    fetchImpl,
+  })) as { projects?: RawSharedProject[] } | null;
   const rawProjects = Array.isArray(payload?.projects) ? payload.projects : [];
   const projects = rawProjects
     .map((raw) => normalizeProject(raw, base))
@@ -300,6 +314,121 @@ export async function fetchSharedProjects(
   const hasMore = options.limit != null && rawProjects.length >= options.limit;
 
   return { projects, hasMore, rawCount: rawProjects.length };
+}
+
+/** A public collection (a curated group of projects) on the share host. */
+export interface SharedCollection {
+  id: string;
+  /** Owner's username; with `slug`, addresses the collection. */
+  username: string;
+  slug: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  /** Number of projects in the collection, as reported by the listing. */
+  projectCount: number;
+  /** Absolute cover thumbnail URL, or `null` when the collection has none. */
+  thumbnailUrl: string | null;
+}
+
+interface RawSharedCollection {
+  id?: unknown;
+  username?: unknown;
+  slug?: unknown;
+  title?: unknown;
+  description?: unknown;
+  createdAt?: unknown;
+  projectCount?: unknown;
+  thumbnailUrl?: unknown;
+  projects?: unknown;
+}
+
+/**
+ * Normalize one raw collection record. Returns `null` when it lacks the
+ * `username` + `slug` pair needed to fetch its projects.
+ */
+function normalizeCollection(raw: RawSharedCollection, base: string): SharedCollection | null {
+  const id = asString(raw.id);
+  const username = asString(raw.username);
+  const slug = asString(raw.slug);
+  if (!id || !username || !slug) return null;
+  return {
+    id,
+    username,
+    slug,
+    title: asString(raw.title),
+    description: asString(raw.description),
+    createdAt: asString(raw.createdAt),
+    projectCount: asNumber(raw.projectCount),
+    thumbnailUrl: resolveThumbnailUrl(raw.thumbnailUrl, base),
+  };
+}
+
+export interface FetchCollectionsOptions {
+  /** Override the share host; defaults to the configured/production URL. */
+  baseUrl?: string;
+  signal?: AbortSignal;
+  /** Injected for testing; defaults to the share fetch. */
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * List the public collections on the share host (`GET /api/collections/browse`,
+ * the same listing as the website's Collections page). The endpoint is not
+ * paginated, so the full set is returned at once.
+ *
+ * @param options - An optional host override, abort `signal`, and `fetchImpl`.
+ * @returns The normalized collections, in the server's order.
+ * @throws {GalleryError} On a network failure, timeout, non-2xx response, or
+ *   unparseable body. A caller-initiated abort propagates as `AbortError`.
+ */
+export async function fetchCollections(
+  options: FetchCollectionsOptions = {},
+): Promise<SharedCollection[]> {
+  const base = requireShareBase(options.baseUrl);
+  const payload = (await publicJsonGet(`${base}/api/collections/browse`, {
+    signal: options.signal,
+    fetchImpl: options.fetchImpl ?? getShareFetch(),
+  })) as { collections?: RawSharedCollection[] } | null;
+  const raw = Array.isArray(payload?.collections) ? payload.collections : [];
+  return raw
+    .map((item) => normalizeCollection(item, base))
+    .filter((item): item is SharedCollection => item !== null);
+}
+
+export interface FetchCollectionProjectsOptions extends FetchCollectionsOptions {
+  /** The collection owner's username. */
+  username: string;
+  /** The collection's slug. */
+  slug: string;
+}
+
+/**
+ * Fetch the projects in one public collection
+ * (`GET /api/collections/{username}/{slug}`). The endpoint returns every
+ * project at once, without pagination.
+ *
+ * @param options - The collection's `username` and `slug`, plus an optional
+ *   host override, abort `signal`, and `fetchImpl`.
+ * @returns The collection's normalized projects, in the server's order.
+ * @throws {GalleryError} On a network failure, timeout, non-2xx response (404
+ *   when the collection was deleted), or unparseable body.
+ */
+export async function fetchCollectionProjects(
+  options: FetchCollectionProjectsOptions,
+): Promise<SharedProject[]> {
+  const base = requireShareBase(options.baseUrl);
+  const path = `/api/collections/${encodeURIComponent(options.username)}/${encodeURIComponent(options.slug)}`;
+  const payload = (await publicJsonGet(`${base}${path}`, {
+    signal: options.signal,
+    fetchImpl: options.fetchImpl ?? getShareFetch(),
+  })) as { collection?: RawSharedCollection } | null;
+  const rawProjects = Array.isArray(payload?.collection?.projects)
+    ? (payload.collection.projects as RawSharedProject[])
+    : [];
+  return rawProjects
+    .map((raw) => normalizeProject(raw, base))
+    .filter((project): project is SharedProject => project !== null);
 }
 
 /**
