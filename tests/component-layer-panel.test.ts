@@ -119,7 +119,7 @@ describe("LayerPanel", () => {
 
   // Issue #3474: the empty-panel hint must not point at a menu the deployment
   // policy withheld.
-  it("names only the menus the deployment offers in the empty-panel hint", () => {
+  it("shows the full empty-panel hint under the default grant", () => {
     useAppStore.getState().newProject({ name: "Empty" });
     renderLayerPanel();
     assert.ok(screen.getByText("No data layers. Add data from the toolbar."));
@@ -130,6 +130,18 @@ describe("LayerPanel", () => {
     useAppStore.getState().setDeploymentCapabilities([]);
     renderLayerPanel();
     assert.ok(screen.getByText("No data layers."));
+  });
+
+  it("drops the Add data pointer in the read-only viewer layout", () => {
+    const original = window.location.href;
+    window.history.replaceState(null, "", "/?layout=viewer");
+    try {
+      useAppStore.getState().newProject({ name: "Empty" });
+      renderLayerPanel();
+      assert.ok(screen.getByText("No data layers."));
+    } finally {
+      window.history.replaceState(null, "", original);
+    }
   });
 
   it("drops the Plugins pointer from the beginner hint when plugins:install is withheld", () => {

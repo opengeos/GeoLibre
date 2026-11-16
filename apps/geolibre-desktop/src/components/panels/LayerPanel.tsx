@@ -30,6 +30,7 @@ import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { useLayoutOptions } from "../../hooks/useLayoutOptions";
 import { isMobile } from "../../lib/is-mobile";
 import { masHidesDataSource } from "../../lib/mas-build";
 import { activeInterfaceProfile, isDataSourceVisible, isMenuVisible } from "../../lib/ui-profile";
@@ -143,13 +144,18 @@ export function LayerPanel({
   );
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   // The empty-panel hint names the Add data and Plugins menus, so it follows
-  // the same gates TopToolbar applies before rendering them.
+  // the same gates TopToolbar applies before rendering them, including the
+  // read-only viewer layout, which drops both menus.
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
+  const { viewer } = useLayoutOptions();
   const emptyHintKey = emptyLayersHintKey({
     beginner: isBeginnerProfile,
-    canAddData: deploymentCapabilities.has("data:add") && isMenuVisible(uiProfile, "addData"),
+    canAddData:
+      !viewer && deploymentCapabilities.has("data:add") && isMenuVisible(uiProfile, "addData"),
     canUsePlugins:
-      deploymentCapabilities.has("plugins:install") && isMenuVisible(uiProfile, "plugins"),
+      !viewer &&
+      deploymentCapabilities.has("plugins:install") &&
+      isMenuVisible(uiProfile, "plugins"),
   });
   const compactLayerList = useDesktopSettingsStore(
     (s) => s.desktopSettings.layout.compactLayerList,
