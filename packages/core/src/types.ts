@@ -1925,6 +1925,13 @@ export interface MapPreferences {
    * from a local file has no URL to save, so it is not kept.
    */
   terrainSource?: string;
+  /**
+   * Whether a custom terrain DEM is surrounded by the global terrain, so it
+   * does not stand as a raised block with vertical walls (#3470). Absent means
+   * the default for the source: on for a DEM read from a URL, off for a local
+   * file, which should not send requests off the device unasked.
+   */
+  terrainFillOutside?: boolean;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
   /**

@@ -1,6 +1,7 @@
 import type { MapPreferences } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { clampExaggeration } from "./terrain-exaggeration";
+import { resolveTerrainFillOutside } from "./terrain-fill";
 
 /** The engine calls {@link applyTerrainLook} makes (stubbed in tests). */
 export type TerrainLookEngine = Pick<
@@ -10,6 +11,7 @@ export type TerrainLookEngine = Pick<
   | "getTerrainCogSource"
   | "hasCustomTerrainSource"
   | "setTerrainCogSource"
+  | "setTerrainFillOutside"
 >;
 
 /**
@@ -26,7 +28,7 @@ export type TerrainLookEngine = Pick<
  */
 export function applyTerrainLook(
   engine: TerrainLookEngine,
-  map: Pick<MapPreferences, "terrainExaggeration" | "terrainSource">,
+  map: Pick<MapPreferences, "terrainExaggeration" | "terrainSource" | "terrainFillOutside">,
   options: { reset: boolean; defaultExaggeration: number },
 ): void {
   if (map.terrainExaggeration !== undefined || options.reset) {
@@ -38,6 +40,11 @@ export function applyTerrainLook(
   }
   if (!engine.capabilities.terrainSource) return;
   const source = map.terrainSource ?? null;
+  // Before the source, so a restored DEM opens with its fill already set
+  // rather than being rebuilt a second time.
+  if (source !== null) {
+    engine.setTerrainFillOutside?.(resolveTerrainFillOutside(map.terrainFillOutside, source));
+  }
   if (source === null) {
     if (!options.reset || !engine.hasCustomTerrainSource()) return;
   } else if (engine.getTerrainCogSource() === source) {

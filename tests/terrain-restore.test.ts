@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { createEmptyProject, redactCredentials } from "@geolibre/core";
+import { createEmptyProject, parseProject, redactCredentials } from "@geolibre/core";
 import {
   applyTerrainLook,
   type TerrainLookEngine,
@@ -142,6 +142,34 @@ describe("applyTerrainLook", () => {
     assert.deepEqual(calls, { exaggeration: [], sources: [] });
   });
 
+  it("sets the saved fill, or the URL default, before restoring a DEM (#3470)", () => {
+    for (const [saved, expected] of [
+      [undefined, true],
+      [false, false],
+    ] as const) {
+      const { engine, calls } = fakeEngine();
+      const order: string[] = [];
+      const fills: boolean[] = [];
+      engine.setTerrainFillOutside = (fill) => {
+        fills.push(fill);
+        order.push("fill");
+      };
+      const setSource = engine.setTerrainCogSource;
+      engine.setTerrainCogSource = (source, band) => {
+        order.push("source");
+        return setSource(source, band);
+      };
+      applyTerrainLook(
+        engine,
+        { terrainSource: DEM, terrainFillOutside: saved },
+        { reset: true, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
+      );
+      assert.deepEqual(fills, [expected]);
+      assert.deepEqual(order, ["fill", "source"]);
+      assert.deepEqual(calls.sources, [DEM]);
+    }
+  });
+
   it("only sets the exaggeration where the engine takes no DEM", () => {
     const { engine, calls } = fakeEngine({ terrainSource: false });
     applyTerrainLook(
@@ -150,6 +178,25 @@ describe("applyTerrainLook", () => {
       { reset: true, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
     );
     assert.deepEqual(calls, { exaggeration: [3], sources: [] });
+  });
+});
+
+describe("terrainFillOutside in a project file", () => {
+  it("keeps a saved boolean and drops anything else", () => {
+    const base = createEmptyProject("Fill");
+    const read = (value: unknown) =>
+      parseProject(
+        JSON.stringify({
+          ...base,
+          preferences: {
+            ...base.preferences,
+            map: { ...base.preferences.map, terrainFillOutside: value },
+          },
+        }),
+      ).preferences.map.terrainFillOutside;
+    assert.equal(read(false), false);
+    assert.equal(read(true), true);
+    assert.equal(read("yes"), undefined);
   });
 });
 

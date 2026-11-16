@@ -2812,12 +2812,54 @@ describe("COG DEM terrain source", () => {
       bounds: undefined,
       renderTile: async () => new Uint8ClampedArray(),
       disposed: false,
+      fallback: null as unknown,
       dispose() {
         this.disposed = true;
+      },
+      setFallback(fallback: unknown) {
+        this.fallback = fallback;
       },
     };
     return registration;
   }
+
+  it("fills outside the DEM from the global terrain when asked (#3470)", async () => {
+    const { controller, sources, terrain } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const registration = {
+      ...fakeRegistration("dem"),
+      bounds: [-84, 35, -83, 36] as [number, number, number, number],
+    };
+    internal.openCogDem = async () => registration;
+
+    // Off: the DEM alone, its requests limited to its bounds, no fallback.
+    await controller.setTerrainCogSource("https://example.com/dem.tif");
+    assert.equal(controller.getTerrainFillOutside(), false);
+    assert.equal(registration.fallback, null);
+    assert.deepEqual((internal.terrainSource as { bounds?: unknown }).bounds, [-84, 35, -83, 36]);
+
+    // On: the fallback is set and the bounds dropped, so tiles beyond the DEM
+    // are requested and carry the global terrain. Terrain stays enabled.
+    controller.setTerrainEnabled(true);
+    controller.setTerrainFillOutside(true);
+    assert.equal(typeof registration.fallback, "function");
+    assert.equal((internal.terrainSource as { bounds?: unknown }).bounds, undefined);
+    assert.equal(
+      (sources.get(TERRAIN_SOURCE_ID) as { bounds?: unknown } | undefined)?.bounds,
+      undefined,
+    );
+    assert.equal(terrain()?.source, TERRAIN_SOURCE_ID);
+
+    // A DEM opened next gets the fill straight away.
+    const next = fakeRegistration("next");
+    internal.openCogDem = async () => next;
+    await controller.setTerrainCogSource("https://example.com/next.tif");
+    assert.equal(typeof next.fallback, "function");
+
+    controller.setTerrainFillOutside(false);
+    assert.equal(next.fallback, null);
+    controller.destroy();
+  });
 
   it("discards a slow open that a newer selection has already superseded", async () => {
     const { controller } = terrainController();

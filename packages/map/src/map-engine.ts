@@ -235,6 +235,13 @@ export interface MapEngine {
   getTerrainCogSource(): string | null;
   hasCustomTerrainSource(): boolean;
   setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /**
+   * Whether a custom COG DEM is surrounded by the engine's global terrain.
+   * Optional: only engines that can composite the two implement it.
+   */
+  getTerrainFillOutside?(): boolean;
+  /** Fill outside a custom COG DEM (and its nodata) with the global terrain. */
+  setTerrainFillOutside?(fill: boolean): void;
   /** Cesium-only Ion terrain asset, or `null` when the normal global source is used. */
   getTerrainIonAssetId?(): number | null;
   /** Select or clear the Cesium-only Ion terrain source. */

@@ -2512,6 +2512,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Local COG DEM",
     "localSourceDescription": "The file stays on this device and is read in small ranges as terrain tiles are needed.",
+    "fillOutside": "Fill outside the DEM with global terrain",
+    "fillOutsideDescription": "Surrounds the DEM, and fills its no-data gaps, with the global terrain instead of a flat plain. On by default for a DEM from a URL and off for a local file, which otherwise reads nothing from the network.",
     "useCog": "Use COG DEM",
     "ionAssetLabel": "Cesium Ion terrain asset",
     "ionAssetDescription": "Use a quantized-mesh terrain asset from Cesium Ion on the globe. The asset must be available to the configured Ion account.",

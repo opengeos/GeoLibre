@@ -1617,6 +1617,12 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       terrainSource: normalizeTerrainSource(
         (map as Partial<ProjectPreferences["map"]>).terrainSource,
       ),
+      // Absent in projects written before #3470: the default for the source
+      // applies (fill around a URL DEM, not around a local file).
+      terrainFillOutside:
+        typeof (map as Partial<ProjectPreferences["map"]>).terrainFillOutside === "boolean"
+          ? (map as Partial<ProjectPreferences["map"]>).terrainFillOutside
+          : undefined,
       // Kept as a free string here; the app coerces an unknown notation to
       // decimal degrees when it renders, so a hand-edited project cannot break
       // the readout.
