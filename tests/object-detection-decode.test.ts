@@ -13,6 +13,8 @@ import type { RasterData } from "../packages/processing/src/raster-client";
 // anchor-count matching resolves the layout the way a real export would.
 const INPUT = 32;
 const ANCHORS = 21;
+// A YOLOv5 head predicts 3 anchor boxes per grid cell: 63 at inputSize 32.
+const V5_ANCHORS = 3 * ANCHORS;
 
 /** Build a YOLOv8/v11 output `[1, 4 + nc, anchors]` (channels-major, no
  * objectness) with one "hot" anchor carrying a box + class scores. */
@@ -34,7 +36,7 @@ function buildV8(
 function buildV5(
   nc: number,
   hot: { i: number; box: [number, number, number, number]; obj: number; cls: number[] },
-  anchors = ANCHORS,
+  anchors = V5_ANCHORS,
 ): { data: Float32Array; dims: number[] } {
   const c = 5 + nc;
   const data = new Float32Array(anchors * c);

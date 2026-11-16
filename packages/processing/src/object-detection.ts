@@ -387,9 +387,7 @@ export function decodeYolo(
   //
   // v8/v11 heads are anchor-free (one prediction per grid cell), but a v5 head
   // predicts 3 anchor boxes per cell, so its anchor axis is 3x as long (25200
-  // rather than 8400 at 640). Matching only the per-cell count picked the 85
-  // channels of a real `[1, 25200, 85]` v5 output as the anchor axis, which
-  // read every anchor's values as class scores (class ids in the thousands).
+  // rather than 8400 at 640). Match either count.
   const cellsPerImage = (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
   const anchorDistance = (n: number) =>
     Math.min(Math.abs(n - cellsPerImage), Math.abs(n - 3 * cellsPerImage));
