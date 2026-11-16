@@ -6,7 +6,12 @@ import { getLayerBounds } from "../packages/map/src/geojson-loader";
 
 /** A COG-like layer whose extent is stored once its header has been read. */
 function raster(id: string, bounds?: [number, number, number, number]): GeoLibreLayer {
-  return { id, source: {}, metadata: bounds ? { bounds } : {} } as unknown as GeoLibreLayer;
+  return {
+    id,
+    type: "cog",
+    source: {},
+    metadata: bounds ? { bounds } : {},
+  } as unknown as GeoLibreLayer;
 }
 
 describe("dataUrlFitBounds", () => {
@@ -37,5 +42,19 @@ describe("dataUrlFitBounds", () => {
       [-84, 35.9, -83.93, 35.95],
     );
     assert.equal(dataUrlFitBounds(layers, ["east"], false, getLayerBounds), null);
+  });
+
+  it("does not wait on a layer that never reports an extent", () => {
+    const vector = {
+      id: "v",
+      type: "pmtiles",
+      source: {},
+      metadata: {},
+    } as unknown as GeoLibreLayer;
+    const layers = [raster("west", [-84, 35.9, -83.93, 35.95]), vector];
+    assert.deepEqual(
+      dataUrlFitBounds(layers, ["west", "v"], true, getLayerBounds),
+      [-84, 35.9, -83.93, 35.95],
+    );
   });
 });

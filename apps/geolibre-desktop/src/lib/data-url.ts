@@ -796,12 +796,12 @@ export async function loadDataUrlBatch<Entry>(
 type Bounds = [number, number, number, number];
 
 /**
- * The combined extent of the layers to frame, or `pending` while one of them
- * that is still in the store has not reported an extent yet.
+ * The combined extent of the layers to frame, or `pending` while a COG among
+ * them that is still in the store has not reported its extent yet.
  *
  * @param layers - The store's layers.
  * @param fitLayerIds - The ids to frame.
- * @param waitForAll - Whether a layer without an extent should hold the fit back.
+ * @param waitForAll - Whether a COG without an extent should hold the fit back.
  * @param boundsOf - A layer's extent, or null while it is unknown.
  * @returns The union of the known extents, null when none is known, or `pending`.
  */
@@ -816,7 +816,10 @@ export function dataUrlFitBounds(
     if (!fitLayerIds.includes(layer.id)) continue;
     const box = boundsOf(layer);
     if (box) bounds.push(box);
-    else if (waitForAll) return "pending";
+    // Only a COG learns its extent after it is added (from its header, as it
+    // first renders); any other layer without one never gets it, so it must
+    // not hold the fit back.
+    else if (waitForAll && layer.type === "cog") return "pending";
   }
   if (!bounds.length) return null;
   return [

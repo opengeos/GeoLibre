@@ -10,6 +10,7 @@ import {
   listFileHandlers,
   routeKmlFileSelection,
 } from "@geolibre/plugins";
+import i18next from "i18next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dataUrlParameters,
@@ -146,7 +147,12 @@ export async function loadDataUrl(
       // A striped GeoTIFF is not a failure: the raster control hands it to the
       // convert-to-COG offer, which owns the layer from here (it adds the
       // converted raster or, when declined, removes the striped one).
-      if (isRecoverableNonTiledRasterError(error)) return { layerIds, fitLayerIds };
+      if (isRecoverableNonTiledRasterError(error)) {
+        if (options.signal?.aborted) {
+          throw new DOMException("The operation was aborted", "AbortError");
+        }
+        return { layerIds, fitLayerIds };
+      }
       throw error;
     }
     if (options.signal?.aborted) {
@@ -166,19 +172,19 @@ export async function loadDataUrl(
     }
     layerIds.push(id);
   } else if (remote.kind === "kml") {
-    if (rawStyle !== null) throw new Error("A style cannot be applied to a KML document.");
+    if (rawStyle !== null) throw new Error(i18next.t("kml.dataUrlStyleUnsupported"));
     const previousIds = new Set(store.layers.map((layer) => layer.id));
     // The host importer frames the import itself (honouring the zoom-to-new-layers
     // preference) and reports its own failures, so an empty result is the only
     // signal here that nothing was added.
     if (!(await routeKmlFileSelection([{ file: remote.file }]))) {
-      throw new Error(`Could not add ${remote.name} to the map: no KML importer is available.`);
+      throw new Error(i18next.t("kml.dataUrlNoImporter", { name: remote.name }));
     }
     const added = useAppStore
       .getState()
       .layers.filter((layer) => !previousIds.has(layer.id))
       .map((layer) => layer.id);
-    if (!added.length) throw new Error(`Could not add ${remote.name} to the map.`);
+    if (!added.length) throw new Error(i18next.t("kml.dataUrlAddFailed", { name: remote.name }));
     if (options.signal?.aborted) {
       for (const id of added) store.removeLayer(id);
       throw new DOMException("The operation was aborted", "AbortError");
@@ -293,7 +299,8 @@ export function useDataUrlLoader(
         {
           removeLayer: (id) => useAppStore.getState().removeLayer(id),
           onEntryError: (error) => {
-            const message = error instanceof Error ? error.message : "Could not load the data URL.";
+            const message =
+              error instanceof Error ? error.message : i18next.t("notifications.dataUrlLoadFailed");
             notify.error(message, { dedupeKey: `url-load:data:${message}` });
           },
         },

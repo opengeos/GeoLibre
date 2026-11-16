@@ -114,6 +114,9 @@ export function DelimitedTextSource() {
     worksheets?: ExcelWorksheet[];
   } | null>(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState("");
+  // Bumped whenever the source changes (mode, URL, or picked file), so a URL
+  // workbook download that finishes after the change cannot overwrite it.
+  const sourceGenerationRef = useRef(0);
   // Whether points are built from coordinate columns (default, unchanged
   // behaviour) or by geocoding an address composed from one or more columns.
   const [delimitedTextImportMode, setDelimitedTextImportMode] =
@@ -149,6 +152,7 @@ export function DelimitedTextSource() {
   };
 
   const handleDelimitedTextModeChange = (mode: DelimitedTextMode) => {
+    sourceGenerationRef.current += 1;
     setDelimitedTextMode(mode);
     setSelectedDelimitedText(null);
     setSelectedWorksheet("");
@@ -203,6 +207,7 @@ export function DelimitedTextSource() {
       if (worksheet) return { sourcePath, text: worksheet.toCsv(), workbook: true };
     }
 
+    const generation = sourceGenerationRef.current;
     const response = await fetch(sourcePath);
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
@@ -215,6 +220,10 @@ export function DelimitedTextSource() {
       const worksheets = await readExcelWorksheets(buffer);
       const [first] = worksheets;
       if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
+      // The source changed while downloading: keep what replaced it.
+      if (generation !== sourceGenerationRef.current) {
+        return { sourcePath, text: first.toCsv(), workbook: true };
+      }
       setDelimitedTextDelimiter("comma");
       setSelectedWorksheet(first.name);
       setSelectedDelimitedText({ path: sourcePath, text: "", worksheets });
@@ -238,6 +247,7 @@ export function DelimitedTextSource() {
         readText: true,
       });
       if (!result) return;
+      sourceGenerationRef.current += 1;
       const worksheets =
         isExcelFile(result.path) && result.data
           ? await readExcelWorksheets(result.data)
@@ -652,6 +662,7 @@ export function DelimitedTextSource() {
                 placeholder={t("addData.delimitedText.urlPlaceholder")}
                 value={delimitedTextUrl}
                 onChange={(event) => {
+                  sourceGenerationRef.current += 1;
                   setDelimitedTextUrl(event.target.value);
                   setSelectedDelimitedText(null);
                   setSelectedWorksheet("");
@@ -864,6 +875,7 @@ export function DelimitedTextSource() {
             { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
           ]}
           onSelect={(url) => {
+            sourceGenerationRef.current += 1;
             setDelimitedTextMode("url");
             setSelectedDelimitedText(null);
             setSelectedWorksheet("");
