@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
@@ -505,6 +506,17 @@ function pgliteCdnUrl(pkg: string): string | null {
 }
 const PGLITE_CDN_URL = pgliteCdnUrl("@electric-sql/pglite");
 const PGLITE_POSTGIS_CDN_URL = pgliteCdnUrl("@electric-sql/pglite-postgis");
+// SHA-256 of the installed PostGIS extension bundle. The CDN loader downloads
+// that file from unpkg or jsDelivr (src/lib/pglite-postgis-bundle.ts) and checks
+// it against this digest, so either mirror serving other bytes is rejected.
+function pglitePostgisBundleSha256(): string | null {
+  if (!PGLITE_CDN) return null;
+  // The extension resolves `./postgis.tar.gz` next to its entry module.
+  const entry = pgliteCdnRequire.resolve("@electric-sql/pglite-postgis");
+  const bundle = readFileSync(path.join(path.dirname(entry), "postgis.tar.gz"));
+  return createHash("sha256").update(bundle).digest("hex");
+}
+const PGLITE_POSTGIS_BUNDLE_SHA256 = pglitePostgisBundleSha256();
 
 // CereusDB (Apache Sedona spatial SQL, compiled to WASM) ships a ~40 MB wasm
 // blob that brotli only shrinks to ~8.6 MB — the entire 27 → 36 MB desktop
@@ -1609,6 +1621,7 @@ export default defineConfig({
     __NO_EXTERNAL_CDN__: JSON.stringify(NO_EXTERNAL_CDN),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
+    __PGLITE_POSTGIS_BUNDLE_SHA256__: JSON.stringify(PGLITE_POSTGIS_BUNDLE_SHA256),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
     __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
     // The allowlisted build-time env (see BUILD_ENV_KEYS). runtime-env.ts reads

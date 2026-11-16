@@ -236,12 +236,13 @@ export function ObiaSegmentStep({
         result = await segmentInBrowser(image, method, params, nativeParams, run);
         size = { width: image.width, height: image.height };
       }
+      // Fingerprint before adding the layer, so a failure here leaves nothing behind.
+      const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
+      // Name it after the await so a layer added meanwhile is not duplicated.
       const name = uniqueLayerName(
         t("obia.layerName", { name: sourceLayer.name }),
         useAppStore.getState().layers,
       );
-      // Fingerprint before adding the layer, so a failure here leaves nothing behind.
-      const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
       const objectsLayerId = addGeoJsonLayer(name, result.objects);
       const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);
       if (added) {

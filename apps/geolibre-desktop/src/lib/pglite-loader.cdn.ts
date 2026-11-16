@@ -69,6 +69,10 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
     postgis: withMirroredPostgisBundle(
       modules.postgis,
       postgisBundleUrls(__PGLITE_POSTGIS_CDN_URL__),
+      fetch,
+      typeof __PGLITE_POSTGIS_BUNDLE_SHA256__ === "string"
+        ? __PGLITE_POSTGIS_BUNDLE_SHA256__
+        : null,
     ),
   };
 }

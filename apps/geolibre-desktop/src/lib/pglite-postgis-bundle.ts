@@ -50,6 +50,8 @@ export function postgisBundleUrls(postgisModuleUrl: string): string[] {
  * @param urls Mirrors to try in order.
  * @param fetchImpl The fetch implementation (injectable for tests).
  * @param headerTimeoutMs Header deadline for every mirror except the last.
+ * @param expectedSha256 Hex SHA-256 the bundle must match; a mirror serving
+ *   other bytes counts as failed. Null skips the check.
  * @returns The downloaded bundle.
  * @throws An error naming every mirror's failure when none succeeds.
  */
@@ -57,6 +59,7 @@ export async function fetchFromMirrors(
   urls: readonly string[],
   fetchImpl: typeof fetch = fetch,
   headerTimeoutMs: number = POSTGIS_MIRROR_HEADER_TIMEOUT_MS,
+  expectedSha256: string | null = null,
 ): Promise<Blob> {
   const failures: string[] = [];
   for (let i = 0; i < urls.length; i++) {
@@ -75,7 +78,15 @@ export async function fetchFromMirrors(
         failures.push(`${url}: HTTP ${response.status}`);
         continue;
       }
-      return await response.blob();
+      const blob = await response.blob();
+      if (expectedSha256) {
+        const actual = await sha256Hex(blob);
+        if (actual && actual !== expectedSha256.toLowerCase()) {
+          failures.push(`${url}: SHA-256 mismatch`);
+          continue;
+        }
+      }
+      return blob;
     } catch (err) {
       const reason = controller.signal.aborted
         ? `no response within ${Math.round(headerTimeoutMs / 1000)} s`
@@ -86,6 +97,20 @@ export async function fetchFromMirrors(
     }
   }
   throw new Error(`Could not download the PostGIS extension bundle (${failures.join("; ")}).`);
+}
+
+/**
+ * Hex SHA-256 of a blob, or null where Web Crypto is unavailable (a non-secure
+ * context), in which case the caller skips the integrity check.
+ *
+ * @param blob The bytes to hash.
+ * @returns The lower-case hex digest, or null.
+ */
+async function sha256Hex(blob: Blob): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  const digest = new Uint8Array(await subtle.digest("SHA-256", await blob.arrayBuffer()));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** The slice of a PGlite extension the wrapper relies on. */
@@ -99,28 +124,46 @@ interface PgliteExtensionLike {
  * and handed to PGlite as a `blob:` URL instead of the module-relative jsDelivr
  * URL it would otherwise fetch.
  *
+ * The bundle is checked against the SHA-256 of the installed package's copy
+ * (injected at build time), so neither mirror is trusted on its own, and the
+ * `blob:` URL is created once per wrapper: a retried PGlite start reuses it
+ * instead of downloading and holding another ~20 MB.
+ *
  * @param postgis The `postgis` export of `@electric-sql/pglite-postgis`.
  * @param urls Mirrors for the bundle, from {@link postgisBundleUrls}.
  * @param fetchImpl The fetch implementation (injectable for tests).
+ * @param expectedSha256 Hex SHA-256 of the bundle, or null to skip the check.
  * @returns An extension with the same name whose setup swaps `bundlePath`.
  */
 export function withMirroredPostgisBundle(
   postgis: unknown,
   urls: readonly string[],
   fetchImpl: typeof fetch = fetch,
+  expectedSha256: string | null = null,
 ): unknown {
   const ext = postgis as PgliteExtensionLike;
   if (!ext || typeof ext.setup !== "function") return postgis;
+  let bundleUrl: Promise<string> | null = null;
   return {
     ...ext,
     setup: async (...args: unknown[]) => {
       const result = await ext.setup(...args);
       if (!result?.bundlePath) return result;
-      const blob = await fetchFromMirrors(urls, fetchImpl);
-      // PGlite fetches this URL once while it starts. The extension API has no
-      // hook that runs after that read, so the URL is not revoked; PGlite is a
-      // page-lifetime singleton (pglite-workspace.ts), so this is one blob.
-      return { ...result, bundlePath: new URL(URL.createObjectURL(blob)) };
+      bundleUrl ??= fetchFromMirrors(
+        urls,
+        fetchImpl,
+        POSTGIS_MIRROR_HEADER_TIMEOUT_MS,
+        expectedSha256,
+      ).then(
+        // PGlite fetches this URL while it starts and the extension API has no
+        // hook after that read, so the URL lives as long as the wrapper.
+        (blob) => URL.createObjectURL(blob),
+        (err: unknown) => {
+          bundleUrl = null; // let a later start retry the download
+          throw err;
+        },
+      );
+      return { ...result, bundlePath: new URL(await bundleUrl) };
     },
   };
 }

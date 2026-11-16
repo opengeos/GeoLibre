@@ -82,3 +82,38 @@ describe("withMirroredPostgisBundle", () => {
     URL.revokeObjectURL(result.bundlePath.href);
   });
 });
+
+describe("PostGIS bundle integrity and reuse", () => {
+  // SHA-256 of the ASCII string "good".
+  const GOOD_SHA = "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c";
+
+  it("rejects a mirror whose bytes do not match the expected digest", async () => {
+    const fake = (async (url: string) =>
+      new Response(url === "a" ? "evil" : "good", { status: 200 })) as unknown as typeof fetch;
+    const blob = await fetchFromMirrors(["a", "b"], fake, 1000, GOOD_SHA);
+    assert.equal(await blob.text(), "good");
+    await assert.rejects(fetchFromMirrors(["a"], fake, 1000, GOOD_SHA), /a: SHA-256 mismatch/);
+  });
+
+  it("downloads once across repeated setups and retries after a failure", async () => {
+    let calls = 0;
+    let fail = true;
+    const fake = (async () => {
+      calls++;
+      if (fail) return new Response("", { status: 503 });
+      return new Response("good", { status: 200 });
+    }) as unknown as typeof fetch;
+    const ext = {
+      name: "postgis",
+      setup: async () => ({ bundlePath: new URL(JSDELIVR) }),
+    };
+    const wrapped = withMirroredPostgisBundle(ext, [UNPKG], fake, GOOD_SHA) as typeof ext;
+    await assert.rejects(wrapped.setup());
+    fail = false;
+    const first = await wrapped.setup();
+    const second = await wrapped.setup();
+    assert.equal(first.bundlePath.href, second.bundlePath.href);
+    assert.equal(calls, 2);
+    URL.revokeObjectURL(first.bundlePath.href);
+  });
+});

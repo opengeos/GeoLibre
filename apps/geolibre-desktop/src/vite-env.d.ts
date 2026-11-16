@@ -37,6 +37,7 @@ declare const __NO_EXTERNAL_CDN__: boolean;
 // these (the define values are null there).
 declare const __PGLITE_CDN_URL__: string | null;
 declare const __PGLITE_POSTGIS_CDN_URL__: string | null;
+declare const __PGLITE_POSTGIS_BUNDLE_SHA256__: string | null;
 
 // jsDelivr URL for the CereusDB (Apache Sedona) WASM blob, injected by
 // vite.config.ts and read by cereus-loader.cdn.ts. By default every build
