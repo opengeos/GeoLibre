@@ -1202,7 +1202,9 @@ export interface GeoLibreAppAPI {
   queryOvertureFeatures?: (query: GeoLibreOvertureQuery) => Promise<GeoLibreOvertureQueryResult>;
   /**
    * Create a named Layers-panel group, optionally assigning existing layer ids
-   * to it, and return the new group id.
+   * to it, and return the new group id. A call that names layers reuses a
+   * same-named group holding only some of those layers (or none), such as the
+   * one a reopened project restored, and returns that group's id instead.
    */
   addLayerGroup?: (name?: string, layerIds?: string[]) => string;
   /**

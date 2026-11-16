@@ -118,6 +118,44 @@ function osmBasemapProjectXml(): string {
   </qgis>`;
 }
 
+function webLayersProjectXml(): string {
+  const layer = (id: string, name: string, source: string, opacity = "1") => `
+      <maplayer type="raster">
+        <id>${id}</id>
+        <layername>${name}</layername>
+        <datasource>${source}</datasource>
+        <provider>wms</provider>
+        <pipe><rasterrenderer type="singlebandcolordata" opacity="${opacity}"/></pipe>
+      </maplayer>`;
+  return `<qgis version="4.2.3">
+    <layer-tree-group>
+      <layer-tree-group name="Services" checked="Qt::Checked">
+        <layer-tree-layer id="wmts" checked="Qt::Checked"/>
+        <layer-tree-layer id="xyz" checked="Qt::Checked"/>
+        <layer-tree-layer id="wms" checked="Qt::Unchecked"/>
+      </layer-tree-group>
+    </layer-tree-group>
+    <projectlayers>
+      ${layer(
+        "wms",
+        "OSM WMS (terrestris)",
+        "contextualWMSLegend=0&amp;crs=EPSG%3A4326&amp;dpiMode=7&amp;format=image%2Fpng&amp;layers=OSM-WMS&amp;layers=SRTM30-Contour&amp;styles&amp;styles&amp;url=https%3A%2F%2Fows.terrestris.de%2Fosm%2Fservice%3Fservice%3DWMS%26request%3DGetCapabilities",
+        "0.5",
+      )}
+      ${layer(
+        "xyz",
+        "Topo tiles",
+        "type=xyz&amp;url=https://tile.opentopomap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png&amp;zmax=17&amp;zmin=0",
+      )}
+      ${layer(
+        "wmts",
+        "Ortho",
+        "crs=EPSG:3857&amp;format=image/png&amp;layers=ortho&amp;styles=default&amp;tileMatrixSet=GoogleMapsCompatible&amp;url=https://example.com/wmts",
+      )}
+    </projectlayers>
+  </qgis>`;
+}
+
 describe("QGIS project import", () => {
   it("imports vector layers, styles, visibility, nested groups, extent, and relative paths", () => {
     const result = importQgisProject(projectXml(), "/work/projects/example.qgs");
@@ -189,6 +227,65 @@ describe("QGIS project import", () => {
     assert.deepEqual(result.project.layers, []);
     assert.deepEqual(result.rasters, []);
     assert.deepEqual(result.warnings, []);
+  });
+
+  it("imports WMS and XYZ layers as tile layers and names what WMTS lacks (#3473)", () => {
+    const result = importQgisProject(webLayersProjectXml(), "/work/web.qgs");
+
+    assert.deepEqual(
+      result.project.layers.map((layer) => [layer.name, layer.type, layer.visible, layer.opacity]),
+      [
+        ["OSM WMS (terrestris)", "wms", false, 0.5],
+        ["Topo tiles", "xyz", true, 1],
+      ],
+    );
+    const [wms, xyz] = result.project.layers;
+    assert.equal(wms.groupId, xyz.groupId);
+    assert.ok(wms.groupId);
+    assert.equal(wms.sourcePath, undefined);
+    assert.equal(wms.source.type, "raster");
+    // The capabilities query QGIS kept on the URL is not part of the endpoint.
+    assert.equal(wms.source.url, "https://ows.terrestris.de/osm/service");
+    assert.equal(wms.source.layers, "OSM-WMS,SRTM30-Contour");
+    assert.equal(wms.source.styles, "");
+    assert.equal(wms.source.crs, "EPSG:3857");
+    const [tile] = wms.source.tiles as string[];
+    const query = new URL(tile.replace("{bbox-epsg-3857}", "0,0,1,1")).searchParams;
+    assert.equal(query.get("REQUEST"), "GetMap");
+    assert.equal(query.get("LAYERS"), "OSM-WMS,SRTM30-Contour");
+    assert.equal(query.get("FORMAT"), "image/png");
+    assert.equal(query.get("TRANSPARENT"), "TRUE");
+    assert.equal(query.get("SRS"), "EPSG:3857");
+    assert.match(tile, /BBOX=\{bbox-epsg-3857\}/);
+
+    assert.deepEqual(xyz.source.tiles, ["https://tile.opentopomap.org/{z}/{x}/{y}.png"]);
+    assert.equal(xyz.source.minzoom, 0);
+    assert.equal(xyz.source.maxzoom, 17);
+
+    assert.deepEqual(result.warnings, [{ layerName: "Ortho", reason: "wmts", provider: "wms" }]);
+  });
+
+  it("reads a default view extent stored as attributes when there is no canvas (#3473)", () => {
+    const xml = projectXml({ extent: "" })
+      .replace(/<mapcanvas>[\s\S]*<\/mapcanvas>/, "")
+      .replace(
+        "</qgis>",
+        `<ProjectViewSettings UseProjectScales="0" rotation="0">
+          <DefaultViewExtent xmin="-9349000" ymin="4285000" xmax="-9331000" ymax="4301000">
+            <spatialrefsys nativeFormat="Wkt"><authid>EPSG:3857</authid></spatialrefsys>
+          </DefaultViewExtent>
+        </ProjectViewSettings>
+      </qgis>`,
+      );
+    const { mapView } = importQgisProject(xml, "/work/knoxville.qgs").project;
+
+    assert.ok(mapView.bbox);
+    const [west, south, east, north] = mapView.bbox;
+    assert.ok(Math.abs(west - -83.9835) < 1e-3, `west ${west}`);
+    assert.ok(Math.abs(east - -83.8218) < 1e-3, `east ${east}`);
+    assert.ok(Math.abs(south - 35.8864) < 1e-3, `south ${south}`);
+    assert.ok(Math.abs(north - 36.0028) < 1e-3, `north ${north}`);
+    assert.ok(mapView.zoom > 9, `zoom ${mapView.zoom}`);
   });
 
   it("falls back to the default view for a missing or unsupported-CRS extent", () => {
@@ -462,7 +559,75 @@ describe("QGIS project import", () => {
     );
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
-      [["Bad", "remote-file"]],
+      [["Bad", "remote-unreadable"]],
+    );
+  });
+
+  it("reads remote non-GeoJSON files through the host reader (#3473)", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          {
+            id: "roads",
+            name: "Countries",
+            source: "/vsicurl/https://example.com/data/world_countries.parquet",
+          },
+          {
+            id: "cities",
+            name: "Sites",
+            source: "/vsicurl/https://example.com/data/sites.gpkg|layername=field_sites",
+          },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    const reads: Array<[string, string, number, string | undefined]> = [];
+    await materializeQgisRemoteLayers(
+      result,
+      async () => new Response(new Uint8Array([1, 2, 3])),
+      async (file) => {
+        reads.push([file.name, file.extension, file.data.byteLength, file.sourceLayer]);
+        return {
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: null, properties: { name: file.name } }],
+        };
+      },
+    );
+
+    assert.deepEqual(reads.sort(), [
+      ["sites.gpkg", "gpkg", 3, "field_sites"],
+      ["world_countries.parquet", "parquet", 3, undefined],
+    ]);
+    assert.deepEqual(
+      result.project.layers.map((layer) => [layer.name, layer.geojson?.features.length]),
+      [
+        ["Sites", 1],
+        ["Countries", 1],
+      ],
+    );
+    assert.deepEqual(result.warnings, []);
+  });
+
+  it("reports a remote non-GeoJSON file as unreadable without a host reader", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Countries", source: "https://example.com/world.parquet" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    let fetched = false;
+    await materializeQgisRemoteLayers(result, async () => {
+      fetched = true;
+      return new Response("");
+    });
+
+    assert.equal(fetched, false);
+    assert.deepEqual(result.project.layers, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Countries", "remote-unreadable"]],
     );
   });
 });

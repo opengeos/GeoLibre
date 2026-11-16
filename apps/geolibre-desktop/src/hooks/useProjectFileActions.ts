@@ -87,7 +87,7 @@ import {
   type ProjectSaveChoices,
 } from "../lib/project-save-choices";
 import { startupSettingsAfterForcedSaveAs } from "../lib/startup-project";
-import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import { resolveProjectXyzLayers, routeWmsLayerThroughNativeProtocol } from "../lib/xyz-url";
 import {
   importQgisProject,
   materializeQgisFormRelations,
@@ -97,6 +97,7 @@ import {
   type QgisStyleImportNote,
 } from "../lib/qgis-project-import";
 import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
+import { readQgisRemoteVector } from "../lib/qgis-remote-vector";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
@@ -642,7 +643,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const imported = await materializeQgisRemoteLayers(
         importQgisProject(result.data, result.path),
+        fetch,
+        readQgisRemoteVector,
       );
+      // WMS layers fetch through the desktop app's CORS-exempt client, as
+      // those added from Add Data do.
+      imported.project.layers = imported.project.layers.map(routeWmsLayerThroughNativeProtocol);
       if (!isTauri()) {
         const unavailableLayerIds = new Set<string>();
         for (const layer of imported.project.layers) {
