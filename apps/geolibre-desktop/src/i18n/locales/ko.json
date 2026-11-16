@@ -273,10 +273,15 @@
     "bodyNote": "측정 대상: {{body}} (구형 근사)"
   },
   "statusBar": {
+    "coords": "좌표",
     "elevation": "고도",
     "elevationLong": "고도",
     "cameraAltitude": "시점 고도",
     "cameraAltitudeLong": "해수면 기준 카메라 고도",
+    "zoom": "확대/축소",
+    "bearing": "방위각",
+    "pitch": "기울기",
+    "bbox": "경계 상자",
     "coordinateFormat": {
       "dd": "십진 도",
       "dms": "도, 분, 초",
@@ -4295,6 +4300,7 @@
       "loadingVtpk": "타일 패키지를 여는 중…",
       "loadingVtpkDesc": "패키지 디렉터리와 스타일을 읽는 중",
       "projectName": "프로젝트 이름",
+      "untitledProject": "제목 없는 프로젝트",
       "storymapEllipsis": "스토리 맵...",
       "pointerElevationNoticeTitle": "고도는 공개 서비스를 사용합니다",
       "pointerElevationNoticeDesc": "3D 지형이 켜져 있으면 고도는 지도 자체에서 계산되며 아무것도 전송되지 않습니다. 3D 지형이 없으면 공개 Open-Meteo API를 조회하며 포인터 아래 좌표가 기기를 벗어납니다.",

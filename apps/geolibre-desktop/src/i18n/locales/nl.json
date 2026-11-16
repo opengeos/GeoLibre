@@ -280,10 +280,15 @@
     "bodyNote": "Gemeten op: {{body}} (bolbenadering)"
   },
   "statusBar": {
+    "coords": "Coörd.",
     "elevation": "Hoogte",
     "elevationLong": "Hoogte",
     "cameraAltitude": "Camerahoogte",
     "cameraAltitudeLong": "Camerahoogte boven zeeniveau",
+    "zoom": "Zoom",
+    "bearing": "Richting",
+    "pitch": "Kanteling",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Decimale graden",
       "dms": "Graden, minuten, seconden",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Tegelpakket openen…",
       "loadingVtpkDesc": "De pakketmap en de stijl ervan worden gelezen",
       "projectName": "Projectnaam",
+      "untitledProject": "Naamloos project",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "Hoogte gebruikt een openbare dienst",
       "pointerElevationNoticeDesc": "De hoogte wordt uit het 3D-terrein van de kaart bepaald als dat aanstaat; er wordt dan niets verzonden. Zonder 3D-terrein wordt de openbare Open-Meteo-API geraadpleegd en verlaten de coördinaten onder de aanwijzer uw apparaat.",

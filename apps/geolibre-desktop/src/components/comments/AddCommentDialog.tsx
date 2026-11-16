@@ -34,9 +34,20 @@ interface AddCommentDialogProps {
   pendingComment: PendingCommentState;
   onSubmit: (body: string, authorName?: string) => void;
   onCancel: () => void;
+  /**
+   * The name of this participant in a live collaboration session. A session
+   * comment is always posted under it (see `useCommentTool`), so the dialog
+   * shows it instead of the locally saved author name (#3477).
+   */
+  sessionName?: string | null;
 }
 
-export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddCommentDialogProps) {
+export function AddCommentDialog({
+  pendingComment,
+  onSubmit,
+  onCancel,
+  sessionName,
+}: AddCommentDialogProps) {
   const { t } = useTranslation();
   const [savedName, setSavedName] = useState<string | null>(() => {
     try {
@@ -48,15 +59,23 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
     }
   });
   const hasSavedName = !!savedName && savedName.trim().length > 0;
+  const sessionAuthor = sessionName?.trim() || null;
 
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState(savedName ?? "");
-  const canSubmit = !!text.trim() && (hasSavedName || !!authorName.trim());
+  const canSubmit = !!text.trim() && (!!sessionAuthor || hasSavedName || !!authorName.trim());
   const shortcutLabel = formatShortcut(POST_COMMENT_SHORTCUT, isMacPlatform());
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
+    if (sessionAuthor) {
+      // The session name is not the saved comment name: leave that untouched
+      // for comments made outside a session.
+      onSubmit(text.trim(), sessionAuthor);
+      setText("");
+      return;
+    }
 
     const finalName = authorName.trim() || savedName?.trim() || t("comments.defaultAuthorName");
     if (typeof localStorage !== "undefined" && finalName) {
@@ -132,7 +151,15 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
           </div>
 
           {/* Prompt for name 1 time if not saved in localStorage */}
-          {!hasSavedName ? (
+          {sessionAuthor ? (
+            <div className="text-[11px] text-muted-foreground px-1">
+              <PostingAsTrans
+                i18nKey="comments.postingAs"
+                values={{ name: sessionAuthor }}
+                components={postingAsComponents}
+              />
+            </div>
+          ) : !hasSavedName ? (
             <div className="space-y-1">
               <label
                 htmlFor="author-name-input"
@@ -191,7 +218,7 @@ export function AddCommentDialog({ pendingComment, onSubmit, onCancel }: AddComm
               placeholder={t("comments.commentPlaceholder")}
               rows={3}
               className="text-xs min-h-20 resize-none"
-              autoFocus={hasSavedName}
+              autoFocus={hasSavedName || !!sessionAuthor}
             />
           </div>
 

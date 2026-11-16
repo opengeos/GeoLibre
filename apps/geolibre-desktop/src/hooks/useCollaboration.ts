@@ -33,6 +33,7 @@ import {
   participantCanEditLayer,
 } from "../lib/collab-protocol";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
+import { createViewOnlyNotice, notifyLayerLockedRejection } from "../lib/collab-local-edits";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
 const CURSOR_THROTTLE_MS = 40;
@@ -85,6 +86,9 @@ export function useCollaboration(
   const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
   const syncPausedRef = useRef(false);
+  // Set while a peer's snapshot is written, so it is not taken for a local edit.
+  const applyingRemoteRef = useRef(false);
+  const viewOnlyNoticeRef = useRef(createViewOnlyNotice());
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingConnectRef = useRef<{
     resolve: () => void;
@@ -178,6 +182,15 @@ export function useCollaboration(
   };
 
   const applyRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
+    applyingRemoteRef.current = true;
+    try {
+      writeRemoteSnapshot(project, initial);
+    } finally {
+      applyingRemoteRef.current = false;
+    }
+  };
+
+  const writeRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
     const state = useAppStore.getState();
     const localView = mapControllerRef.current?.readView() ?? state.mapView;
     const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
@@ -355,6 +368,10 @@ export function useCollaboration(
           pending.reject(new Error(message.message));
           return;
         }
+        if (message.code === "layer-locked") {
+          notifyLayerLockedRejection(message.message);
+          break;
+        }
         store.setCollaboration({ error: message.message });
         if (message.code === "too-large") syncPausedRef.current = true;
         break;
@@ -382,7 +399,16 @@ export function useCollaboration(
     };
 
     const unsubscribe = useAppStore.subscribe((state, prev) => {
-      if (projectChanged(state, prev)) scheduleSnapshot();
+      // Re-arm the view-only notice when edit rights return, even with no edit.
+      if (state.collaboration !== prev.collaboration && canEdit())
+        viewOnlyNoticeRef.current.reset();
+      if (!projectChanged(state, prev)) return;
+      scheduleSnapshot();
+      viewOnlyNoticeRef.current.onLocalChange({
+        active: state.collaboration.isActive,
+        applyingRemote: applyingRemoteRef.current,
+        canEdit: canEdit(),
+      });
     });
 
     conn.send({
@@ -445,6 +471,7 @@ export function useCollaboration(
   ): Promise<void> => {
     disconnect();
     syncPausedRef.current = false;
+    viewOnlyNoticeRef.current.reset();
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
     basemapEgressRef.current.reset();

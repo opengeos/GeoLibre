@@ -9,7 +9,7 @@ import {
   type LayerStyle,
   type VectorStyleStop,
 } from "@geolibre/core";
-import { heatmapColorRampExpression } from "./style-mapper";
+import { heatmapColorRampExpression, heatmapWeightMax } from "./style-mapper";
 import { readQueryStyleFillPattern } from "./query-style-fill-pattern";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
@@ -24,11 +24,23 @@ function heatmapRampName(value: unknown): string | null {
   );
 }
 
-function heatmapWeightProperty(value: unknown): string | null {
+function heatmapWeightProperty(
+  value: unknown,
+  /** The field maximum of the layer's embedded data, for a divided weight. */
+  fieldMax: (property: string) => number | null = () => null,
+): string | null {
   if (value === undefined || value === 1) return "";
   if (!Array.isArray(value)) return null;
 
   let expression = value;
+  // GeoLibre's own export divides by the field maximum (`heatmapWeightMax`),
+  // which render re-derives from the data. Any other divisor is an authored
+  // scale GeoLibre cannot keep, so it stays unsupported (and warned about).
+  if (expression.length === 3 && expression[0] === "/" && typeof expression[2] === "number") {
+    const divisor = expression[2];
+    const property = heatmapWeightProperty(expression[1]);
+    return property && fieldMax(property) === divisor ? property : null;
+  }
   if (expression.length === 3 && expression[0] === "max" && expression[1] === 0) {
     expression = expression[2];
   }
@@ -1475,7 +1487,17 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     else if (paint["heatmap-color"] !== undefined) {
       warnings.push("The heatmap color expression is not a built-in GeoLibre color ramp.");
     }
-    const weightProperty = heatmapWeightProperty(paint["heatmap-weight"]);
+    const sources = (root as { sources?: Record<string, { data?: unknown }> }).sources;
+    const sourceId = (heatmap as { source?: unknown }).source;
+    const sourceData = typeof sourceId === "string" ? sources?.[sourceId]?.data : undefined;
+    const weightProperty = heatmapWeightProperty(paint["heatmap-weight"], (property) =>
+      heatmapWeightMax(
+        { ...DEFAULT_LAYER_STYLE, heatmapWeightProperty: property },
+        typeof sourceData === "object" && sourceData !== null
+          ? (sourceData as Parameters<typeof heatmapWeightMax>[1])
+          : undefined,
+      ),
+    );
     if (weightProperty !== null) patch.heatmapWeightProperty = weightProperty;
     else {
       warnings.push("The heatmap weight expression is not a single GeoLibre attribute field.");

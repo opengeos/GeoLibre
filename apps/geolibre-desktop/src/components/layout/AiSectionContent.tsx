@@ -5,6 +5,7 @@ import {
   configForProvider,
   defaultModelFor,
   getApiKey,
+  hasManagedAssistantProxy,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -41,6 +42,7 @@ import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model
 import { ProviderModelPicker } from "../ProviderModelPicker";
 import { ChatGptAccount } from "../ChatGptAccount";
 import { isChatGptSignInAvailable } from "../../lib/assistant/chatgpt";
+import { effectiveDefaultProfileId } from "../../lib/assistant/profiles";
 
 /**
  * The providers a profile can choose. "ChatGPT (sign in)" needs the desktop
@@ -387,7 +389,16 @@ export function AiSectionContent({
     setEditingProfileId(null);
   };
 
-  const isDefault = (profileId: string) => defaultAiProfileId === profileId;
+  // The badge marks the profile the assistant actually starts on. Without a
+  // saved default that is the first profile (or the deployment proxy), so
+  // comparing against the saved id alone left every row unmarked.
+  const proxyConfigured = hasManagedAssistantProxy();
+  const defaultProfileId = effectiveDefaultProfileId(
+    draftDesktopSettings.aiProfiles,
+    defaultAiProfileId,
+    proxyConfigured,
+  );
+  const isDefault = (profileId: string) => defaultProfileId === profileId;
 
   return (
     <div className="space-y-5">
@@ -600,6 +611,10 @@ export function AiSectionContent({
             </Button>
           </div>
 
+          {draftDesktopSettings.aiProfiles.length > 0 && defaultProfileId === null ? (
+            <p className="text-xs text-muted-foreground">{t("settings.ai.proxyIsDefault")}</p>
+          ) : null}
+
           {draftDesktopSettings.aiProfiles.length === 0 ? (
             <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
               {t("settings.ai.noProfiles")}
@@ -633,7 +648,11 @@ export function AiSectionContent({
                       <p className="truncate text-xs text-muted-foreground">{profile.modelId}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {!isDefaultProfile ? (
+                      {/* Offered unless this profile is the saved default: an
+                          implicit default still needs the button, because a
+                          profile picked in the panel overrides it until a
+                          default is saved. */}
+                      {defaultAiProfileId !== profile.id ? (
                         <Button
                           size="sm"
                           variant="ghost"

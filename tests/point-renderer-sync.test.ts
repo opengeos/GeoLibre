@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
 import { syncLayer } from "../packages/map/src/layer-sync";
+import { heatmapWeightMax } from "../packages/map/src/style-mapper";
 
 // Stateful fake MapLibre map: tracks sources and layers across sync passes so a
 // test can assert which native layers/sources a point renderer produces and
@@ -101,6 +102,39 @@ describe("point renderer sync", () => {
     syncLayer(map as never, pointLayer({ pointRenderer: "heatmap" }));
     assert.equal((layers.get("layer-pts-heatmap") as { type: string }).type, "heatmap");
     assert.ok(!layers.has("layer-pts-circle"));
+  });
+
+  it("scales the heatmap weight into 0..1 by the field maximum (#3471)", () => {
+    const { map, layers } = makeMap();
+    const layer = pointLayer({ pointRenderer: "heatmap", heatmapWeightProperty: "pop_max" });
+    const features = layer.geojson?.features ?? [];
+    features[0].properties = { pop_max: 35_676_000 };
+    features[1].properties = { pop_max: "1200" };
+    syncLayer(map as never, layer);
+
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], [
+      "/",
+      ["max", 0, ["to-number", ["get", "pop_max"], 0]],
+      35_676_000,
+    ]);
+  });
+
+  it("counts booleans toward the weight maximum as to-number does", () => {
+    const layer = pointLayer({ pointRenderer: "heatmap", heatmapWeightProperty: "w" });
+    const features = layer.geojson?.features ?? [];
+    features[0].properties = { w: 0.25 };
+    features[1].properties = { w: true };
+    assert.equal(heatmapWeightMax(layer.style, layer.geojson), 1);
+  });
+
+  it("keeps the raw heatmap weight when the field has no positive value", () => {
+    const { map, layers } = makeMap();
+    const layer = pointLayer({ pointRenderer: "heatmap", heatmapWeightProperty: "pop_max" });
+    for (const feature of layer.geojson?.features ?? []) feature.properties = { pop_max: -99 };
+    syncLayer(map as never, layer);
+    const paint = layers.get("layer-pts-heatmap")?.paint as Record<string, unknown>;
+    assert.deepEqual(paint["heatmap-weight"], ["max", 0, ["to-number", ["get", "pop_max"], 0]]);
   });
 
   it("applies the selected heatmap ramp and numeric weight field", () => {

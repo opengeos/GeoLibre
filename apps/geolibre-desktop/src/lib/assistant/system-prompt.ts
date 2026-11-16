@@ -16,6 +16,7 @@ Guidelines:
 - When the user asks to create, design, or build a reusable Model Builder model, do not execute the pipeline immediately. Call list_model_algorithms, then create_model_builder_model to save a validated editable graph and open it for review.
 - To add satellite/aerial imagery or other earth-observation data, use search_stac and add_stac_layer against the Planetary Computer (collections such as sentinel-2-l2a, landsat-c2-l2, naip, cop-dem-glo-30); the bounding box defaults to the current view. add_stac_layer takes a preset (e.g. ndvi, false-color) and mosaic=true to composite every scene matching a date range and cloud-cover limit into one seamless layer.
 - To add tile basemaps (OpenStreetMap, OpenTopoMap, CARTO Dark Matter, etc.), use add_tile_layer with a known name or an XYZ url, rather than asking the user or saying you cannot.
+- To move the camera to coordinates, a zoom level, a rotation, or a tilt, use set_view; to frame a layer or a bounding box, use zoom_to. Do not use run_maplibre_js for camera moves.
 - Use web_search when you need current information from the internet.
 - When no dedicated tool fits the request (e.g. changing the map projection to globe, enabling terrain or sky, setting a custom paint/layout property), do not say you can't — use run_maplibre_js to accomplish it with a small JavaScript snippet against the live \`map\` object.
 - For data processing or computation (numpy/pandas/geopandas, custom analysis), use run_python; a \`geolibre\` object is available there to drive the map.

@@ -12,11 +12,12 @@ import {
   buildLegend,
   legendEditorRows,
   MAX_CATEGORY_SWATCHES,
+  panelLegendRowKey,
   reorderLegendEntry,
   setLegendItemLabel,
   toggleLegendItemHidden,
 } from "../apps/geolibre-desktop/src/lib/print-legend";
-import { MAX_LEGEND_ROWS } from "../apps/geolibre-desktop/src/lib/auto-legend";
+import { legendRowKey, MAX_LEGEND_ROWS } from "../apps/geolibre-desktop/src/lib/auto-legend";
 
 function config(overrides: Partial<LegendConfig> = {}): LegendConfig {
   return { ...DEFAULT_LEGEND_CONFIG, order: [], overrides: {}, ...overrides };
@@ -235,8 +236,8 @@ describe("buildLegend rule-based swatches", () => {
     ]);
     assert.equal(legend.length, 1);
     assert.deepEqual(legend[0].swatches, [
-      { color: "#00ff00", label: "Parks" },
-      { color: "#cccccc", label: "Other" },
+      { color: "#00ff00", label: "Parks", panelRowIndex: 0 },
+      { color: "#cccccc", label: "Other", panelRowIndex: 1 },
     ]);
   });
 
@@ -1060,6 +1061,93 @@ describe("buildLegend proportional size", () => {
         ["≥ 70", sizeAt(80)],
         ["≥ 90", sizeAt(90)],
       ],
+    );
+  });
+});
+
+describe("print legend follows the on-map Legend panel's class names (#3471)", () => {
+  const graduated = (stopCount: number) =>
+    makeLayer({
+      style: {
+        vectorStyleMode: "graduated",
+        vectorStyleProperty: "median_income",
+        vectorStyleStops: Array.from({ length: stopCount }, (_, index) => ({
+          value: index * 1000,
+          color: "#000000",
+        })),
+      } as LayerStyle,
+    });
+
+  it("keys the panel rows the way the on-map legend does", () => {
+    assert.equal(panelLegendRowKey("layer-1", 2), legendRowKey("layer-1", 2));
+  });
+
+  it("prints a class renamed in the on-map Legend panel", () => {
+    const base = buildLegend([graduated(3)]);
+    const legendConfig = config({
+      overrides: { [legendRowKey("layer-1", 1)]: { label: "Middle income" } },
+    });
+    const applied = applyLegendConfig(base, legendConfig);
+    assert.deepEqual(
+      applied[0].swatches.map((swatch) => swatch.label),
+      ["≥ 0", "Middle income", "≥ 2000"],
+    );
+    const editorRow = legendEditorRows(base, legendConfig).find((row) => row.key === "layer-1::1");
+    assert.equal(editorRow?.defaultLabel, "Middle income");
+    assert.equal(editorRow?.label, "Middle income");
+  });
+
+  it("lets a Print Layout rename win over the panel's", () => {
+    const applied = applyLegendConfig(
+      buildLegend([graduated(3)]),
+      config({
+        overrides: {
+          [legendRowKey("layer-1", 1)]: { label: "Panel name" },
+          "layer-1::1": { label: "Print name" },
+        },
+      }),
+    );
+    assert.equal(applied[0].swatches[1].label, "Print name");
+  });
+
+  it("maps sampled graduated swatches back to their own panel rows", () => {
+    const base = buildLegend([graduated(10)]);
+    // Ten classes sample to six print swatches; the last is the panel's row 9.
+    assert.equal(base[0].swatches.length, 6);
+    assert.equal(base[0].swatches.at(-1)?.panelRowIndex, 9);
+    const applied = applyLegendConfig(
+      base,
+      config({ overrides: { [legendRowKey("layer-1", 9)]: { label: "Top" } } }),
+    );
+    assert.equal(applied[0].swatches.at(-1)?.label, "Top");
+  });
+
+  it("ignores panel row names while the layer has a hand-authored panel entry", () => {
+    const applied = applyLegendConfig(
+      buildLegend([graduated(3)]),
+      config({
+        overrides: { [legendRowKey("layer-1", 1)]: { label: "Custom item" } },
+        customEntries: { "layer-1": { items: [] } },
+      }),
+    );
+    assert.equal(applied[0].swatches[1].label, "≥ 1000");
+  });
+
+  it("prints the class labels set in the Style panel", () => {
+    const legend = buildLegend([
+      makeLayer({
+        style: {
+          vectorStyleMode: "categorized",
+          vectorStyleStops: [
+            { value: "a", color: "#111111", label: "Alpha" },
+            { value: "b", color: "#222222" },
+          ],
+        } as LayerStyle,
+      }),
+    ]);
+    assert.deepEqual(
+      legend[0].swatches.map((swatch) => swatch.label),
+      ["Alpha", "b"],
     );
   });
 });

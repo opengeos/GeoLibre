@@ -9,8 +9,10 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ImageFileDirectory } from "geotiff";
 import {
   readProfileFromImage,
+  type FileDirectoryLike,
   type ImageLike,
 } from "../packages/plugins/src/plugins/cog-spectral-profile";
 
@@ -105,6 +107,38 @@ describe("readProfileFromImage", () => {
     assert.ok(profile);
     assert.equal(profile.axis.name, "wavelength");
     assert.deepEqual(profile.axis.values, [443, 560, 665]);
+  });
+
+  it("reads GDAL_METADATA through a geotiff.js 3 ImageFileDirectory", async () => {
+    // geotiff.js 3 hands back an ImageFileDirectory, not a plain record, and
+    // keeps GDAL_METADATA deferred until loadValue. Indexing it like a record
+    // found nothing, so real Sentinel-2 stacks charted against band number.
+    const xml =
+      "<GDALMetadata>" +
+      '<Item name="wavelength" sample="0">490</Item>' +
+      '<Item name="wavelength" sample="1">560</Item>' +
+      "</GDALMetadata>";
+    const GDAL_METADATA_TAG = 42112;
+    const directory = new ImageFileDirectory(
+      new Map(),
+      new Map([[GDAL_METADATA_TAG, async () => xml]]),
+      new Map(),
+      0,
+    );
+    assert.equal((directory as unknown as Record<string, unknown>).GDAL_METADATA, undefined);
+    const profile = await readProfileFromImage(
+      {
+        ...stubImage({ bands: 2 }),
+        // The real class's tag-name generics are narrower than this module's
+        // structural type; the runtime shape is what is under test.
+        getFileDirectory: () => directory as unknown as FileDirectoryLike,
+      },
+      0,
+      0,
+    );
+    assert.ok(profile);
+    assert.equal(profile.axis.name, "wavelength");
+    assert.deepEqual(profile.axis.values, [490, 560]);
   });
 
   it("orders GDAL_METADATA wavelengths by sample, not by document order", async () => {

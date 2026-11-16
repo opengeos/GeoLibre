@@ -53,6 +53,11 @@ import {
   withinGeodesicDistance,
 } from "@geolibre/core/geodesic";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
+import {
+  prepareAntimeridianInput,
+  splitPolygonalAtAntimeridian,
+  unwrapPolygonal,
+} from "./antimeridian-buffer";
 
 /** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
 export const MAX_CLIENT_PAIRS = 250_000;
@@ -319,21 +324,39 @@ function bufferOneFeature(
   units: BufferUnits,
 ): Feature | null {
   const options = { units };
-  if (side === "inside") return nonEmptyBuffer(buffer(feature, -radius, options));
-  const outer = nonEmptyBuffer(buffer(feature, radius, options));
-  if (side === "outside" || !outer) return outer;
-  const inner = nonEmptyBuffer(buffer(feature, -radius, options));
-  if (!inner) return outer;
+  // A feature split at the antimeridian is buffered as one continuous shape,
+  // and every result is made continuous again (unwrapped past ±180) before it
+  // is combined, then cut at ±180 on the way out (GeoLibre#3469).
+  const { feature: input, referenceLon } = prepareAntimeridianInput(feature);
+  const grow = (distance: number): Feature | null => {
+    const result = nonEmptyBuffer(buffer(input, distance, options));
+    if (!result) return null;
+    const geometry = unwrapPolygonal(result.geometry as Polygon | MultiPolygon, referenceLon);
+    return geometry === result.geometry ? result : { ...result, geometry };
+  };
+  const finish = (result: Feature | null): Feature | null => {
+    if (!result) return null;
+    const geometry = splitPolygonalAtAntimeridian(
+      result.geometry as Polygon | MultiPolygon,
+      referenceLon,
+    );
+    // turf carries its input's properties through, but for a shifted feature
+    // that input is our own copy — restore the source feature's attributes.
+    // Cutting can leave nothing (every piece degenerate); drop that too.
+    return nonEmptyBuffer({ ...result, geometry, properties: feature.properties ?? {} });
+  };
+  if (side === "inside") return finish(grow(-radius));
+  const outer = grow(radius);
+  if (side === "outside" || !outer) return finish(outer);
+  const inner = grow(-radius);
+  if (!inner) return finish(outer);
   const band = difference(
     featureCollection([
       outer as Feature<Polygon | MultiPolygon>,
       inner as Feature<Polygon | MultiPolygon>,
     ]),
   );
-  const kept = nonEmptyBuffer(band as Feature | null);
-  // turf carries the first input's properties through, but that input is our own
-  // intermediate buffer — restore the source feature's attributes explicitly.
-  return kept ? { ...kept, properties: feature.properties ?? {} } : null;
+  return finish(nonEmptyBuffer(band as Feature | null));
 }
 
 /**

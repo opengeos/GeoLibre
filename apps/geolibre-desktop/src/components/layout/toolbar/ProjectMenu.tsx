@@ -178,23 +178,23 @@ export function ProjectMenu({
     { name: "exportLayerStyles", onSelect: onExportLayerStyles, Icon: Palette },
     { name: "exportLayers", onSelect: onExportLayers, Icon: Layers },
   ] as const;
+  // The two save-group items that also need an optional callback to render.
+  const showDuplicate = show("project.duplicate") && Boolean(onDuplicate);
+  const showSaveAsTemplate = show("project.saveAsTemplate") && Boolean(onSaveAsTemplate);
   // Group-visibility flags so the separators between groups aren't left orphaned
   // when a whole group is hidden by the active profile.
   const showSaveGroup =
     show("project.save") ||
     show("project.saveAs") ||
-    show("project.duplicate") ||
-    show("project.saveAsTemplate") ||
+    showDuplicate ||
+    showSaveAsTemplate ||
     (!shareHidden && show("project.share")) ||
     exportItems.some((item) => show(`project.${item.name}`)) ||
     (collaborationEnabled && show("project.collaborate"));
   // Narrower than showSaveGroup, which also covers share/export/collaborate: the
   // `project:save` note must not render when only those siblings are on screen.
   const showSaveActions =
-    show("project.save") ||
-    show("project.saveAs") ||
-    (show("project.duplicate") && Boolean(onDuplicate)) ||
-    (show("project.saveAsTemplate") && Boolean(onSaveAsTemplate));
+    show("project.save") || show("project.saveAs") || showDuplicate || showSaveAsTemplate;
   // The two `export:data` entries sit in different groups, so their shared note
   // renders at the menu's foot and needs to know whether either is on screen.
   const showExportMenu = exportItems.some((item) => show(`project.${item.name}`));
@@ -204,6 +204,23 @@ export function ProjectMenu({
     (!shareHidden && show("project.share")) ||
     (collaborationEnabled && show("project.collaborate"));
   const showPrintGroup = show("project.printLayout") || show("project.offlineRegion");
+  // A deployment that withholds both `project:edit` and `export:data` (e.g.
+  // `capabilities: []`) leaves nothing to list, and a button that opens an
+  // empty menu reads as broken, so drop the button (issue #3474).
+  // Keep the ids below in step with the top-level `show(...)` gates in the JSX
+  // that are not already covered by the group flags.
+  const hasVisibleItem =
+    showSaveGroup ||
+    showPrintGroup ||
+    [
+      "project.new",
+      "project.openFrom",
+      "project.openRecent",
+      "project.history",
+      "project.import",
+      "project.storymap",
+    ].some(show);
+  if (!hasVisibleItem) return null;
 
   return (
     <DropdownMenu>
@@ -369,7 +386,7 @@ export function ProjectMenu({
             {t("toolbar.item.saveAsEllipsis")}
           </DropdownMenuItem>
         )}
-        {show("project.duplicate") && onDuplicate && (
+        {showDuplicate && onDuplicate && (
           <DropdownMenuItem
             onSelect={onDuplicate}
             disabled={!saveCapability.granted}
@@ -379,7 +396,7 @@ export function ProjectMenu({
             {t("toolbar.item.duplicate")}
           </DropdownMenuItem>
         )}
-        {show("project.saveAsTemplate") && onSaveAsTemplate && (
+        {showSaveAsTemplate && onSaveAsTemplate && (
           <DropdownMenuItem
             onSelect={onSaveAsTemplate}
             disabled={!saveCapability.granted}

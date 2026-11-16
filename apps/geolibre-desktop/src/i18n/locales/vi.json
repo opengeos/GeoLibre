@@ -273,10 +273,15 @@
     "bodyNote": "Đo trên: {{body}} (xấp xỉ hình cầu)"
   },
   "statusBar": {
+    "coords": "Tọa độ",
     "elevation": "Độ cao",
     "elevationLong": "Độ cao của camera so với mực nước biển",
     "cameraAltitude": "Độ cao camera",
     "cameraAltitudeLong": "Độ cao của camera so với mực nước biển",
+    "zoom": "Thu phóng",
+    "bearing": "Hướng",
+    "pitch": "Góc nghiêng",
+    "bbox": "Hộp giới hạn",
     "coordinateFormat": {
       "dd": "Độ thập phân",
       "dms": "Độ, phút, giây",
@@ -4295,6 +4300,7 @@
       "loadingVtpk": "Đang mở gói ô…",
       "loadingVtpkDesc": "Đang đọc thư mục gói và kiểu hiển thị của gói",
       "projectName": "Tên dự án",
+      "untitledProject": "Dự án chưa có tiêu đề",
       "storymapEllipsis": "Bản đồ câu chuyện...",
       "pointerElevationNoticeTitle": "Độ cao sử dụng dịch vụ độ cao công cộng",
       "pointerElevationNoticeDesc": "Việc đọc độ cao của thanh trạng thái được phân giải từ địa hình 3D của chính bản đồ khi tính năng này được bật, tính năng này sẽ không gửi đi đâu cả. Nếu không có địa hình 3D, nó sẽ quay trở lại API độ cao Open-Meteo công khai và tọa độ dưới con trỏ sẽ rời khỏi thiết bị của bạn cho những yêu cầu đó.",

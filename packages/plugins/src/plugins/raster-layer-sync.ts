@@ -2,6 +2,7 @@ import {
   applyGroupEffects,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  isPlaceholderBandName,
   styleValue,
   unsignedSourceUrl,
   useAppStore,
@@ -659,8 +660,19 @@ function rasterStateRecord(layer: GeoLibreLayer): Record<string, unknown> {
     : {};
 }
 
-function serializeBandNames(bandNames: Map<number, string> | null): [number, string][] | null {
-  return bandNames ? [...bandNames.entries()] : null;
+/**
+ * Serialize the control's band names for the store, dropping placeholder
+ * descriptions (`*`) so the band picker falls back to "Band N" for them.
+ *
+ * @param bandNames - 1-indexed band number to name map from the control.
+ * @returns Pairs for the store, or null when no band has a real name.
+ */
+export function serializeBandNames(
+  bandNames: Map<number, string> | null,
+): [number, string][] | null {
+  if (!bandNames) return null;
+  const named = [...bandNames.entries()].filter(([, name]) => !isPlaceholderBandName(name));
+  return named.length > 0 ? named : null;
 }
 
 /**

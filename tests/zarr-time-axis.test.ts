@@ -7,6 +7,7 @@ import {
   parseCfTimeUnits,
   pickTimeDimension,
   readCoordinateTimeAttributes,
+  resolveZarrSelectorDates,
   resolveZarrTimeAxis,
 } from "../packages/plugins/src/plugins/zarr-time-axis.ts";
 
@@ -394,5 +395,50 @@ describe("readCoordinateTimeAttributes", () => {
       "0/time/.zattrs",
       "0/time/zarr.json",
     ]);
+  });
+});
+
+describe("resolveZarrSelectorDates", () => {
+  // NOAA OISST monthly: `time` as days since 1800-01-01, one step per month.
+  const days = [safeDays("2020-07-01"), safeDays("2020-08-01"), safeDays("2020-09-01")];
+  const axis = {
+    dimension: "time",
+    values: days.map((d) => Date.UTC(1800, 0, 1) + d * DAY),
+  };
+  function safeDays(iso: string): number {
+    return (Date.parse(iso) - Date.UTC(1800, 0, 1)) / DAY;
+  }
+
+  it("turns a date on a CF time axis into its index (#3470)", () => {
+    const result = resolveZarrSelectorDates({ time: "2020-08-01" }, { time: days }, axis);
+    assert.deepEqual(result, { selector: { time: 1 }, unresolved: [] });
+  });
+
+  it("takes a date between steps to the nearest one", () => {
+    const result = resolveZarrSelectorDates({ time: "2020-08-20" }, { time: days }, axis);
+    assert.deepEqual(result.selector, { time: 2 });
+  });
+
+  it("reports a date far outside the axis rather than clamping it", () => {
+    const result = resolveZarrSelectorDates({ time: "1990-01-01" }, { time: days }, axis);
+    assert.deepEqual(result, { selector: null, unresolved: ["time"] });
+  });
+
+  it("leaves indices and natively matching labels alone", () => {
+    const result = resolveZarrSelectorDates(
+      { time: 1, band: "prec" },
+      { time: days, band: ["prec", "tavg"] },
+      axis,
+    );
+    assert.deepEqual(result, { selector: null, unresolved: [] });
+  });
+
+  it("reports a label that names no coordinate on a non-time axis", () => {
+    const result = resolveZarrSelectorDates(
+      { band: "precip" },
+      { time: days, band: ["prec", "tavg"] },
+      axis,
+    );
+    assert.deepEqual(result, { selector: null, unresolved: ["band"] });
   });
 });

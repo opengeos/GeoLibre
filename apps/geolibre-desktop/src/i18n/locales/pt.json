@@ -280,10 +280,15 @@
     "bodyNote": "Medido em: {{body}} (aproximação esférica)"
   },
   "statusBar": {
+    "coords": "Coords.",
     "elevation": "Elev",
     "elevationLong": "Elevação",
     "cameraAltitude": "Alt. câmara",
     "cameraAltitudeLong": "Altitude da câmara acima do nível do mar",
+    "zoom": "Zoom",
+    "bearing": "Direção",
+    "pitch": "Inclinação",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Graus decimais",
       "dms": "Graus, minutos, segundos",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Abrindo pacote de tiles…",
       "loadingVtpkDesc": "Lendo o diretório do pacote e o estilo dele",
       "projectName": "Nome do projeto",
+      "untitledProject": "Projeto sem título",
       "storymapEllipsis": "Story Map...",
       "pointerElevationNoticeTitle": "A elevação usa um serviço público",
       "pointerElevationNoticeDesc": "A elevação é obtida do relevo 3D do mapa quando este está ativo, sem enviar nada. Sem relevo 3D é consultada a API pública Open-Meteo e as coordenadas sob o ponteiro saem do seu dispositivo.",

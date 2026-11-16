@@ -280,10 +280,15 @@
     "bodyNote": "Misurato su: {{body}} (approssimazione sferica)"
   },
   "statusBar": {
+    "coords": "Coord.",
     "elevation": "Quota",
     "elevationLong": "Quota",
     "cameraAltitude": "Quota vista",
     "cameraAltitudeLong": "Quota della camera sul livello del mare",
+    "zoom": "Zoom",
+    "bearing": "Orientamento",
+    "pitch": "Inclinazione",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Gradi decimali",
       "dms": "Gradi, primi, secondi",
@@ -4368,6 +4373,7 @@
       "loadingVtpk": "Apertura del pacchetto di tile…",
       "loadingVtpkDesc": "Lettura della directory del pacchetto e del suo stile",
       "projectName": "Nome del progetto",
+      "untitledProject": "Progetto senza titolo",
       "storymapEllipsis": "Mappa narrativa...",
       "pointerElevationNoticeTitle": "La quota usa un servizio pubblico",
       "pointerElevationNoticeDesc": "La quota è ricavata dal terreno 3D della mappa quando è attivo, senza inviare nulla. Senza terreno 3D viene interrogata l'API pubblica Open-Meteo e le coordinate sotto il puntatore lasciano il dispositivo.",

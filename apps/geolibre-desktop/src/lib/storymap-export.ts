@@ -6,6 +6,7 @@ import {
   extrusionColorValue,
   extrusionHeightValue,
   isHexColor,
+  isInlineImageList,
   isInlineImageValue,
   isPopupClickEnabled,
   isPopupHoverEnabled,
@@ -438,9 +439,12 @@ function buildLayerPopups(
       if (body !== null) {
         entry.b = body;
       } else {
-        entry.r = resolvePopupRows(properties, { popup, fieldVisibility, locale }).map(
-          exportPopupRow,
-        );
+        entry.r = resolvePopupRows(properties, { popup, fieldVisibility, locale })
+          // The page draws one image per row from a single property, so a
+          // list of inline photos has no exported form; printing it as text
+          // would inline megabytes of base64 (#3477).
+          .filter((row) => !(row.kind === "auto" && isInlineImageList(row.value)))
+          .map(exportPopupRow);
       }
     }
     if (hover) {
@@ -996,6 +1000,13 @@ function renderTemplate(
         /* Keep the nav toggle reachable on small screens so the chapter list
            stays discoverable; only cap the pane width to the viewport. */
         @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav { width: auto; max-width: calc(100vw - 24px); } }
+        /* While the chapter list is open, start left-hand and full-width cards
+           past it (12px inset + 220px list + 12px gap) so the list never covers
+           a card's title (#3477). Small screens keep the centered column. */
+        @media (min-width: 751px) {
+            body.sm-nav-open .lefty { margin-left: max(5vw, 244px); }
+            body.sm-nav-open .fully { margin-left: 244px; width: calc(100% - 244px); }
+        }
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: unset; }
         #inset-map { position: fixed; width: 180px; height: 180px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); z-index: 10; }
@@ -1220,10 +1231,12 @@ function renderTemplate(
         navToggle.textContent = '☰';
         navToggle.addEventListener('click', function () {
             var nowHidden = nav.classList.toggle('hidden-nav');
+            document.body.classList.toggle('sm-nav-open', !nowHidden);
             navToggle.setAttribute('aria-pressed', nowHidden ? 'false' : 'true');
         });
         document.body.appendChild(navToggle);
         if (config.hideChapterNav) nav.classList.add('hidden-nav');
+        else document.body.classList.add('sm-nav-open');
 
         // Solid cover for a blank/black start or closing slide (#998).
         var cover = document.createElement('div');

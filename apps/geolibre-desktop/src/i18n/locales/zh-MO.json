@@ -273,10 +273,15 @@
     "bodyNote": "測量天體：{{body}}（球體近似）"
   },
   "statusBar": {
+    "coords": "座標",
     "elevation": "高程",
     "elevationLong": "高程",
     "cameraAltitude": "視點高度",
     "cameraAltitudeLong": "相機海拔高度",
+    "zoom": "縮放",
+    "bearing": "方位角",
+    "pitch": "俯仰角",
+    "bbox": "邊界框",
     "coordinateFormat": {
       "dd": "十進制度",
       "dms": "度分秒",
@@ -4294,6 +4299,7 @@
       "loadingVtpk": "正在打開瓦片包…",
       "loadingVtpkDesc": "正在讀取包目錄及其樣式",
       "projectName": "項目名稱",
+      "untitledProject": "未命名項目",
       "storymapEllipsis": "故事地圖...",
       "pointerElevationNoticeTitle": "高程會使用公共服務",
       "pointerElevationNoticeDesc": "啓用三維地形時，高程直接由地圖計算，不會發送任何數據。未啓用時將查詢公共 Open-Meteo API，指針下方的座標會離開您的設備。",

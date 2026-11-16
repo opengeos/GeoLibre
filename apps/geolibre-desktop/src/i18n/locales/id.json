@@ -273,10 +273,15 @@
     "bodyNote": "Diukur di: {{body}} (aproksimasi bola)"
   },
   "statusBar": {
+    "coords": "Koordinat",
     "elevation": "Elev",
     "elevationLong": "Elevasi",
     "cameraAltitude": "Alt. kamera",
     "cameraAltitudeLong": "Ketinggian kamera di atas permukaan laut",
+    "zoom": "Zoom",
+    "bearing": "Arah",
+    "pitch": "Kemiringan",
+    "bbox": "BBox",
     "coordinateFormat": {
       "dd": "Derajat desimal",
       "dms": "Derajat, menit, detik",
@@ -4295,6 +4300,7 @@
       "loadingVtpk": "Membuka paket ubin…",
       "loadingVtpkDesc": "Membaca direktori paket dan gayanya",
       "projectName": "Nama proyek",
+      "untitledProject": "Proyek tanpa judul",
       "storymapEllipsis": "Peta Cerita...",
       "pointerElevationNoticeTitle": "Elevasi memakai layanan publik",
       "pointerElevationNoticeDesc": "Elevasi dihitung dari medan 3D peta bila aktif, tanpa mengirim apa pun. Tanpa medan 3D, API publik Open-Meteo dikueri dan koordinat di bawah penunjuk meninggalkan perangkat Anda.",
