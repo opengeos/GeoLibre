@@ -2434,8 +2434,7 @@
     "importFailed": "Could not import KML/KMZ.",
     "timeOverlayGroup": "Time overlay animation",
     "dataUrlStyleUnsupported": "A style cannot be applied to a KML document.",
-    "dataUrlNoImporter": "Could not add {{name}} to the map: no KML importer is available.",
-    "dataUrlAddFailed": "Could not add {{name}} to the map."
+    "dataUrlNoImporter": "Could not add {{name}} to the map: no KML importer is available."
   },
   "map": {
     "boundsRestricted": "Bounds locked",

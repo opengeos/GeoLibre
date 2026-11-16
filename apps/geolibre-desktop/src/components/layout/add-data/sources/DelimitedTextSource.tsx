@@ -29,6 +29,7 @@ import {
   readDelimitedTextDownload,
   readExcelWorksheets,
 } from "../../../../lib/excel-workbook";
+import { readCappedBytes } from "../../../../lib/data-url";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import {
   COMMON_CRS_PRESETS,
@@ -203,8 +204,9 @@ export function DelimitedTextSource() {
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    // An Excel workbook is read as one, as the file source does, not as text.
-    const download = await readDelimitedTextDownload(sourcePath, await response.arrayBuffer());
+    // Capped like a `?data=` download; a workbook is then read as one, not as text.
+    const bytes = await readCappedBytes(response, sourcePath);
+    const download = await readDelimitedTextDownload(sourcePath, bytes.buffer as ArrayBuffer);
     // The source changed while downloading: drop this result, keep what replaced it.
     if (generation !== sourceGenerationRef.current) {
       throw new DOMException("The source changed while downloading.", "AbortError");

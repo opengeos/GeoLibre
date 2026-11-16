@@ -184,6 +184,9 @@ export function BrowserTreeNode({
   onExportLibrary,
 }: BrowserTreeNodeProps) {
   const { t } = useTranslation();
+  // When this row was last activated by a click, so only the repeat clicks of
+  // a double-click on this same row are ignored.
+  const lastActivatedAtRef = useRef(Number.NEGATIVE_INFINITY);
   // A status row (loading / error) is non-interactive text, not a tree control.
   if (node.kind === "info") {
     return (
@@ -275,7 +278,10 @@ export function BrowserTreeNode({
               // A double-click delivers two clicks. The busy guard only covers
               // an add still in flight, and a quick one (a My Data layer) is
               // done before the second click lands, so it added the layer twice.
-              else if (!isRepeatClick(event.detail)) onActivate(node);
+              else if (!isRepeatClick(event.detail, event.timeStamp - lastActivatedAtRef.current)) {
+                lastActivatedAtRef.current = event.timeStamp;
+                onActivate(node);
+              }
             }}
           >
             {isGroup ? (

@@ -264,7 +264,7 @@ async function fetchOk(url: string, signal: AbortSignal | undefined, fetchImpl: 
  * payload has been read. Falls back to `arrayBuffer()` for a response with no
  * readable stream.
  */
-async function readCappedBytes(response: Response, url: string): Promise<Uint8Array> {
+export async function readCappedBytes(response: Response, url: string): Promise<Uint8Array> {
   const tooLarge = () => new Error(`${url} is too large to open from a URL.`);
   const body = response.body;
   if (!body?.getReader) {

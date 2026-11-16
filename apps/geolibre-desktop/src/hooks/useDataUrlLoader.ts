@@ -189,7 +189,9 @@ export async function loadDataUrl(
       for (const id of added) store.removeLayer(id);
       throw new DOMException("The operation was aborted", "AbortError");
     }
-    if (!added.length) throw new Error(i18next.t("kml.dataUrlAddFailed", { name: remote.name }));
+    // Nothing added: the importer already showed why in the import banner, so
+    // a second message here would only repeat it.
+    if (!added.length) return { layerIds, fitLayerIds };
     layerIds.push(...added);
   } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
     const styleResult = rawStyle === null ? null : parseMapboxStyle(rawStyle);

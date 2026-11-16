@@ -1022,10 +1022,16 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
 });
 
 describe("isRepeatClick", () => {
-  it("ignores the second click of a double-click but not a single or keyboard click", () => {
-    assert.equal(isRepeatClick(0), false);
-    assert.equal(isRepeatClick(1), false);
-    assert.equal(isRepeatClick(2), true);
-    assert.equal(isRepeatClick(3), true);
+  it("ignores the repeat clicks of a double-click on the row it just activated", () => {
+    assert.equal(isRepeatClick(2, 200), true);
+    assert.equal(isRepeatClick(3, 400), true);
+  });
+
+  it("activates on a single or keyboard click, or a counted click on another row", () => {
+    assert.equal(isRepeatClick(0, 100), false);
+    assert.equal(isRepeatClick(1, 100), false);
+    // This row was never (or long ago) activated: the count came from a neighbour.
+    assert.equal(isRepeatClick(2, Number.POSITIVE_INFINITY), false);
+    assert.equal(isRepeatClick(2, 5000), false);
   });
 });
