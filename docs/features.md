@@ -243,6 +243,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
     - An in-panel model picker over the active profile's models, credentials that survive a provider change, and arrow-key recall of previous prompts
     - Opt-in keyless Parallel web search through the managed AI proxy, alongside the Tavily and DuckDuckGo search tools. See [Keyless Parallel web search](user-guide/ai-assistant.md#keyless-parallel-web-search)
     - OpenRouter, Vercel AI Gateway, and TrustedRouter providers, and live model discovery for Google, Anthropic, OpenAI, and Bedrock rather than a hard-coded model list
+    - Sign in with ChatGPT in the desktop app to use your ChatGPT plan instead of an API key, with the tokens kept in the system keychain and out of the page. See [Signing in with ChatGPT](user-guide/ai-assistant.md#signing-in-with-chatgpt-desktop)
     - A sub-second fast path that resolves simple map commands (hide a layer, switch the basemap, zoom to a layer) through TypeSafe when a credential is configured, falling through to the full agent whenever it is unsure, and plugin tools loaded on demand once more than twelve are registered
     - Voice commands: click the microphone for an open mic, or hold Space for push-to-talk, and have answers read back — the spoken request runs the same tools, so it stays auditable and undoable (needs a browser with the Web Speech API)
 - In-app Python Console plus a Python automation API for scripting the app

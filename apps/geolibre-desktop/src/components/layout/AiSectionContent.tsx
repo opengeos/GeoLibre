@@ -39,6 +39,18 @@ import { classifyFetchFailure } from "../../lib/fetch-error";
 import { credentialStorageLocation } from "../../lib/credential-store";
 import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
+import { ChatGptAccount } from "../ChatGptAccount";
+import { isChatGptSignInAvailable } from "../../lib/assistant/chatgpt";
+
+/**
+ * The providers a profile can choose. "ChatGPT (sign in)" needs the desktop
+ * app; a profile that already uses it keeps it listed.
+ */
+function selectableProviders(current: AssistantProviderId): AssistantProviderId[] {
+  return ASSISTANT_PROVIDER_IDS.filter(
+    (id) => id !== "chatgpt" || current === "chatgpt" || isChatGptSignInAvailable(),
+  );
+}
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -433,7 +445,7 @@ export function AiSectionContent({
                 ollamaDiscovery.reset();
               }}
             >
-              {ASSISTANT_PROVIDER_IDS.map((id) => (
+              {selectableProviders(newProfileProvider).map((id) => (
                 <option key={id} value={id}>
                   {PROVIDER_LABELS[id]}
                 </option>
@@ -504,17 +516,21 @@ export function AiSectionContent({
             </div>
           ) : null}
 
-          {/* Secrets note */}
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              {t(
-                credentialStorageLocation() === "keychain"
-                  ? "settings.ai.secretsNoteKeychain"
-                  : "settings.ai.secretsNote",
-              )}
-            </span>
-          </div>
+          {/* ChatGPT sign-in instead of a key; otherwise the secrets note */}
+          {newProfileProvider === "chatgpt" ? (
+            <ChatGptAccount />
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {t(
+                  credentialStorageLocation() === "keychain"
+                    ? "settings.ai.secretsNoteKeychain"
+                    : "settings.ai.secretsNote",
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Credential fields for the selected provider */}
           <div className="space-y-4">
@@ -790,7 +806,7 @@ function ProfileEditor({
           value={profile.provider}
           onChange={(e) => updateProvider(e.target.value as AssistantProviderId)}
         >
-          {ASSISTANT_PROVIDER_IDS.map((id) => (
+          {selectableProviders(profile.provider).map((id) => (
             <option key={id} value={id}>
               {PROVIDER_LABELS[id]}
             </option>
@@ -843,17 +859,21 @@ function ProfileEditor({
         </div>
       ) : null}
 
-      {/* Secrets note */}
-      <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>
-          {t(
-            credentialStorageLocation() === "keychain"
-              ? "settings.ai.secretsNoteKeychain"
-              : "settings.ai.secretsNote",
-          )}
-        </span>
-      </div>
+      {/* ChatGPT sign-in instead of a key; otherwise the secrets note */}
+      {profile.provider === "chatgpt" ? (
+        <ChatGptAccount />
+      ) : (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {t(
+              credentialStorageLocation() === "keychain"
+                ? "settings.ai.secretsNoteKeychain"
+                : "settings.ai.secretsNote",
+            )}
+          </span>
+        </div>
+      )}
 
       {/* OS env note */}
       {hasOsEnvNote ? (

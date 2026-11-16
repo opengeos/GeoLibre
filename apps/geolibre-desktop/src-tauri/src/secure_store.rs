@@ -115,14 +115,37 @@ fn get_many_blocking(accounts: Vec<String>) -> Result<HashMap<String, String>, S
     Ok(found)
 }
 
-fn set_blocking(account: String, secret: String) -> Result<(), String> {
+/// Reads one entry for the app's own Rust code (not the webview): the read gate
+/// guards only [`secure_store_get_many`].
+pub(crate) fn get_blocking(account: &str) -> Result<Option<String>, String> {
+    let _guard = lock();
+    match entry(account)?.get_password() {
+        Ok(secret) => Ok(Some(secret)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// Entries only the app's own Rust code may write or delete. The ChatGPT
+/// sign-in's refresh token (chatgpt_auth.rs) lives here; external plugins share
+/// the webview and could otherwise replace or erase it.
+const RESERVED_PREFIX: &str = "chatgpt.";
+
+fn check_webview_account(account: &str) -> Result<(), String> {
+    if account.starts_with(RESERVED_PREFIX) {
+        return Err("This credential is managed by GeoLibre.".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn set_blocking(account: String, secret: String) -> Result<(), String> {
     let _guard = lock();
     entry(&account)?
         .set_password(&secret)
         .map_err(|error| error.to_string())
 }
 
-fn delete_blocking(account: String) -> Result<(), String> {
+pub(crate) fn delete_blocking(account: String) -> Result<(), String> {
     let _guard = lock();
     match entry(&account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -141,6 +164,10 @@ pub async fn secure_store_get_many(
     accounts: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
     with_read_gate(|gate| gate.claim(webview.label()))?;
+    let accounts = accounts
+        .into_iter()
+        .filter(|account| check_webview_account(account).is_ok())
+        .collect();
     tauri::async_runtime::spawn_blocking(move || get_many_blocking(accounts))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -156,6 +183,7 @@ pub fn secure_store_seal(webview: tauri::Webview) {
 
 #[tauri::command]
 pub async fn secure_store_set(account: String, secret: String) -> Result<(), String> {
+    check_webview_account(&account)?;
     tauri::async_runtime::spawn_blocking(move || set_blocking(account, secret))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -164,6 +192,7 @@ pub async fn secure_store_set(account: String, secret: String) -> Result<(), Str
 /// Deleting an account that does not exist succeeds.
 #[tauri::command]
 pub async fn secure_store_delete(account: String) -> Result<(), String> {
+    check_webview_account(&account)?;
     tauri::async_runtime::spawn_blocking(move || delete_blocking(account))
         .await
         .map_err(|error| format!("Could not join secure storage task: {error}"))?
@@ -171,7 +200,13 @@ pub async fn secure_store_delete(account: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_account, ReadGate, READS_SEALED};
+    use super::{check_webview_account, validate_account, ReadGate, READS_SEALED};
+
+    #[test]
+    fn webview_cannot_touch_reserved_credentials() {
+        assert!(check_webview_account("chatgpt.signIn").is_err());
+        assert!(check_webview_account("ai.profile.OPENAI_API_KEY").is_ok());
+    }
 
     #[test]
     fn read_gate_answers_one_read_per_page_load() {

@@ -50,6 +50,8 @@ export const PROVIDER_FIELDS = {
       required: true,
     },
   ],
+  // Signed in under Settings → AI Providers instead of a key.
+  chatgpt: [],
   openrouter: [
     {
       envKey: "OPENROUTER_API_KEY",

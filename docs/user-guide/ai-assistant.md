@@ -29,6 +29,7 @@ providers in **Settings → AI Providers**:
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3.6-flash` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-5` |
 | OpenAI | `OPENAI_API_KEY` | `gpt-5.6` |
+| **ChatGPT (sign in)**, desktop | none: sign in with your ChatGPT account | the plan's first model |
 | **OpenRouter** | `OPENROUTER_API_KEY` (+ optional `OPENROUTER_MODEL`) | `openai/gpt-5.6-luna` |
 | **Vercel AI Gateway** | `AI_GATEWAY_API_KEY` (+ optional `AI_GATEWAY_MODEL`) | `openai/gpt-5.6-luna` |
 | **TrustedRouter** | `TRUSTEDROUTER_API_KEY` (+ optional `TRUSTEDROUTER_MODEL`) | `trustedrouter/auto` |
@@ -63,10 +64,41 @@ providers in **Settings → AI Providers**:
   without sending your key and keeps models that accept tools and return text.
   Set `TRUSTEDROUTER_MODEL` to choose a different default.
 - **Custom** covers any OpenAI-compatible endpoint — LiteLLM, vLLM, Groq, Together, a local server, etc. — via its chat-completions API.
+- **ChatGPT (sign in)** uses your ChatGPT plan instead of an API key, through
+  OpenAI's [Sign in with ChatGPT for open-source apps](https://developers.openai.com/siwc/token-sharing-open-source).
+  See [Signing in with ChatGPT](#signing-in-with-chatgpt-desktop).
 
 Hosted keys (and AWS credentials) are used **directly from your browser** to call
 the provider; they are never sent to GeoLibre's servers. Saving the setting
 enables the panel immediately — no reload needed.
+
+### Signing in with ChatGPT (desktop)
+
+With a ChatGPT plan you can use the assistant without an API key. In the
+desktop app, add a profile in **Settings → AI Providers**, choose **ChatGPT
+(sign in)** and click **Continue with ChatGPT**. Your browser opens OpenAI's
+sign-in page, where you allow GeoLibre to use your plan (the first time, OpenAI
+registers GeoLibre as an app of your account; you can rename it there). The
+browser then returns to GeoLibre on `127.0.0.1`, and the profile shows the
+account's email and **Using your ChatGPT plan**. The **Model** list loads the
+models your plan offers; when the profile's model isn't one of them, the first
+is chosen.
+
+- **Tokens never reach the page.** The sign-in, its tokens and every request
+  stay in the desktop app's native side: the refresh token is kept in the
+  system keychain (macOS Keychain, Windows Credential Manager, Linux Secret
+  Service), and the access token only in memory. Plugins cannot read either,
+  and the token is only ever sent to OpenAI's Responses API and model list.
+  Without a usable keychain the sign-in lasts until GeoLibre closes.
+- **Sign out** forgets the tokens and asks OpenAI to end the session. If
+  OpenAI doesn't confirm, GeoLibre says so; disconnect GeoLibre under
+  **Usage and connected apps** (your ChatGPT settings) to be sure. The
+  registration is kept for the next sign-in; **Use another account** forgets
+  it so a different ChatGPT account can sign in.
+- A signed-in plan is never picked automatically: a profile (or
+  `GEOLIBRE_ASSISTANT_PROVIDER=chatgpt`) must choose it.
+- Desktop only. The web build and the Mac App Store build cannot accept the
+  browser's return to `127.0.0.1`, so they don't offer it.
 
 ### Using local Ollama from web.geolibre.app
 
@@ -532,7 +564,8 @@ load a CSV from a URL with pandas and summarize its columns
 - **Scoped context.** Only layer/table **names**, attribute **field names**, and
   the current view are sent to the model — not your feature data.
 - **What leaves your browser.** When you send a prompt, it (plus that scoped
-  context) is sent to your chosen LLM provider using your own key. Don't enable
+  context) is sent to your chosen LLM provider using your own key (or, with a
+  ChatGPT sign-in, to OpenAI on your plan). Don't enable
   the assistant on sensitive data you can't share with that provider. A TypeSafe
   credential adds a second destination for two things: the
   [fast path](#fast-path-for-simple-commands-optional) sends the prompt and your

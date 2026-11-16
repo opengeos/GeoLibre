@@ -3436,6 +3436,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (if required)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT account",
+        "intro": "Use your ChatGPT plan instead of an API key. Your browser opens OpenAI's sign-in page, where you allow GeoLibre to use your plan.",
+        "continue": "Continue with ChatGPT",
+        "waiting": "Waiting for you to finish signing in in the browser…",
+        "openAgain": "Open browser again",
+        "signedInAs": "Signed in as {{email}}",
+        "usingPlan": "Using your ChatGPT plan.",
+        "planDeclined": "GeoLibre isn't allowed to use your ChatGPT plan. Sign in again and allow it.",
+        "signInAgain": "Sign in again",
+        "notRemembered": "The system keychain isn't available, so this sign-in lasts until GeoLibre closes.",
+        "signOut": "Sign out",
+        "useAnotherAccount": "Use another account",
+        "usage": "Usage and connected apps",
+        "revokeUnconfirmed": "Signed out here, but OpenAI didn't confirm ending the session. Disconnect GeoLibre in your ChatGPT settings to be sure.",
+        "desktopOnly": "Sign in with ChatGPT is available in the GeoLibre desktop app."
       }
     }
   },
@@ -5829,6 +5846,7 @@
     "setupTitle": "Set up the AI assistant",
     "setupStatus": "The assistant needs an AI provider to do the thinking. Add credentials for any one provider below and the panel switches to chat mode as soon as you save.",
     "setupProviders": "Add credentials for any one provider",
+    "setupSignIn": "Sign in under Settings → AI Providers",
     "setupOpenSettings": "Open Settings → AI providers",
     "thinking": "Working…",
     "toolError": "failed",

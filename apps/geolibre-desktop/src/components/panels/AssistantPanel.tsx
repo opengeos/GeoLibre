@@ -37,6 +37,8 @@ import { openExternalLink } from "../../lib/open-external";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
+import { useChatGptStatus } from "../../hooks/useChatGptStatus";
+import { isChatGptSignInAvailable } from "../../lib/assistant/chatgpt";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
@@ -84,6 +86,8 @@ const SETUP_PROVIDERS: ReadonlyArray<{
   { id: "google", envs: ["GEMINI_API_KEY"] },
   { id: "anthropic", envs: ["ANTHROPIC_API_KEY"] },
   { id: "openai", envs: ["OPENAI_API_KEY"] },
+  // No variable: signed in under Settings → AI Providers (desktop only).
+  { id: "chatgpt", envs: [] },
   { id: "openrouter", envs: ["OPENROUTER_API_KEY"] },
   { id: "vercel", envs: ["AI_GATEWAY_API_KEY"] },
   { id: "trustedrouter", envs: ["TRUSTEDROUTER_API_KEY"] },
@@ -203,6 +207,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
+  // Loads the ChatGPT sign-in once; a change fires the runtime-env event the
+  // effect below already rebuilds the provider state on.
+  useChatGptStatus();
   const [hasKey, setHasKey] = useState(() => hasProviderKey());
   const [providers, setProviders] = useState<AssistantProviderId[]>(() => availableProviders());
 
@@ -889,12 +896,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 {t("assistant.setupProviders")}
               </p>
               <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
-                {SETUP_PROVIDERS.map(({ id, envs }) => (
+                {SETUP_PROVIDERS.filter(
+                  ({ id }) => id !== "chatgpt" || isChatGptSignInAvailable(),
+                ).map(({ id, envs }) => (
                   <li key={id} className="flex items-start justify-between gap-3 text-xs">
                     <span className="shrink-0 text-foreground">{PROVIDER_LABELS[id]}</span>
                     {/* One chip per variable so a multi-credential provider
                         never reads as a single oddly-named env var. */}
                     <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
+                      {envs.length === 0 ? (
+                        <span className="font-sans">{t("assistant.setupSignIn")}</span>
+                      ) : null}
                       {envs.map((name, index) => (
                         <span key={name} className="whitespace-nowrap">
                           {index > 0 ? (

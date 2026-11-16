@@ -307,6 +307,11 @@ export class AssistantSession {
 
     if (!config) {
       const pinned = this.selection?.provider ?? this.profile?.provider;
+      if (pinned === "chatgpt") {
+        throw new Error(
+          "Not signed in with ChatGPT, or GeoLibre isn't allowed to use your plan. Sign in under Settings → AI Providers, or pick another provider.",
+        );
+      }
       throw new Error(
         pinned
           ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment variables, or pick another provider.`
