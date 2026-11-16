@@ -1,6 +1,10 @@
+import "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { viewOnlyLocalChangeAction } from "../apps/geolibre-desktop/src/lib/collab-local-edits";
+
+// Loaded after the harness: the module imports the app's i18n, which reads Vite globals.
+const { viewOnlyLocalChangeAction } =
+  await import("../apps/geolibre-desktop/src/lib/collab-local-edits");
 
 const base = { active: true, applyingRemote: false, canEdit: false, noticeShown: false };
 
