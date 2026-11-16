@@ -3412,6 +3412,7 @@
       "noProfiles": "No profiles yet. Add one below to configure the AI assistant.",
       "setDefault": "Set as default",
       "defaultProfile": "Default",
+      "proxyIsDefault": "No profile is the default, so the assistant starts on the deployment proxy. Set a profile as the default to start on it instead.",
       "edit": "Edit",
       "deleteProfile": "Delete profile",
       "backToProfiles": "← Back to profiles",

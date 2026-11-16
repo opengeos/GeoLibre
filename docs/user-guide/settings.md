@@ -76,7 +76,7 @@ Panels also auto-hide on small screens for a responsive layout.
 
 ## AI Providers
 
-**Settings → AI Providers** configures the credentials for the [AI Assistant](ai-assistant.md). Each configuration is a named **profile**, such as *Work Gemini* or *Local Ollama*. Choose **Add profile**, pick a provider, fill in the fields it asks for, then **Save profile**. Mark one profile **Set as default** to use it when the assistant opens; one configured profile is enough to start chatting. Credentials are saved on the current device, never in the project file. When a system keychain is available, the secret fields go there. On the desktop app, a blank key field falls back to the matching operating-system environment variable. See [AI Assistant → Setup](ai-assistant.md#setup-choose-an-ai-provider).
+**Settings → AI Providers** configures the credentials for the [AI Assistant](ai-assistant.md). Each configuration is a named **profile**, such as *Work Gemini* or *Local Ollama*. Choose **Add profile**, pick a provider, fill in the fields it asks for, then **Save profile**. Mark one profile **Set as default** to use it when the assistant opens; the default profile carries a **Default** badge. Until you choose one, the first profile is the default (on a deployment that provides its own AI proxy, the proxy is used instead and no profile is marked). One configured profile is enough to start chatting. Credentials are saved on the current device, never in the project file. When a system keychain is available, the secret fields go there. On the desktop app, a blank key field falls back to the matching operating-system environment variable. See [AI Assistant → Setup](ai-assistant.md#setup-choose-an-ai-provider).
 
 ## Environment Variables
 
