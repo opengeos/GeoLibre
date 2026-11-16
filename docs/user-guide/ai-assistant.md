@@ -90,6 +90,11 @@ is chosen.
   Service), and the access token only in memory. Plugins cannot read either,
   and the token is only ever sent to OpenAI's Responses API and model list.
   Without a usable keychain the sign-in lasts until GeoLibre closes.
+- **Plugins can still use the plan.** External plugins run in the same page
+  as the app, so while you are signed in an installed plugin could send
+  requests to OpenAI on your plan and see the account's email, even though it
+  never sees a token. Install only plugins you trust, and watch your usage
+  under **Usage and connected apps**.
 - **Sign out** forgets the tokens and asks OpenAI to end the session. If
   OpenAI doesn't confirm, GeoLibre says so; disconnect GeoLibre under
   **Usage and connected apps** (your ChatGPT settings) to be sure. The

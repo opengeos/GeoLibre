@@ -1016,6 +1016,11 @@ async fn fresh_access_token(session: &mut Session, force: bool) -> Result<String
             .await
             .map(|r| r.is_ok())
             .unwrap_or(false);
+        if !session.in_keychain {
+            // The keychain still holds the rotated-out refresh token, which a
+            // later launch would load: drop it. This sign-in lasts the session.
+            let _ = tauri::async_runtime::spawn_blocking(keychain_delete).await;
+        }
     }
     if let Some(dir) = &session.dir {
         let _ = write_registration(dir, Some(&reg));
@@ -1211,6 +1216,16 @@ fn serve(
     }
 }
 
+/// Puts back the keychain entry a sign-in that isn't kept replaced: the
+/// previous sign-in's, or none.
+async fn restore_keychain(previous: Option<(Registration, Tokens)>) {
+    let _ = tauri::async_runtime::spawn_blocking(move || match previous {
+        Some((reg, tokens)) => keychain_save(&reg, &tokens),
+        None => keychain_delete(),
+    })
+    .await;
+}
+
 /// Exchanges the code, verifies the id token and keeps the sign-in. True when
 /// the plan may be used.
 async fn finish(
@@ -1247,6 +1262,12 @@ async fn finish(
             return Err("The sign-in was cancelled.".to_string());
         }
         let dir = session.dir.clone().ok_or("No config folder")?;
+        // What the keychain held before, to put back if this sign-in isn't kept.
+        let previous = session
+            .reg
+            .clone()
+            .zip(session.tokens.clone())
+            .filter(|_| session.in_keychain);
         let (r, t) = (reg.clone(), tokens.clone());
         let in_keychain = tauri::async_runtime::spawn_blocking(move || keychain_save(&r, &t))
             .await
@@ -1259,21 +1280,16 @@ async fn finish(
         // A cancel that arrived while the keychain was written still wins:
         // put back what the keychain held before, and keep nothing.
         if cancel.load(Ordering::SeqCst) {
-            let previous = session
-                .reg
-                .clone()
-                .zip(session.tokens.clone())
-                .filter(|_| session.in_keychain);
-            let _ = tauri::async_runtime::spawn_blocking(move || match previous {
-                Some((reg, tokens)) => keychain_save(&reg, &tokens),
-                None => keychain_delete(),
-            })
-            .await;
+            restore_keychain(previous).await;
             return Err("The sign-in was cancelled.".to_string());
         }
-        // No await from here on: the check above and the install are one step
+        // The grant is revoked when this fails, so the keychain must not keep it.
+        if let Err(e) = write_registration(&dir, Some(&reg)) {
+            restore_keychain(previous).await;
+            return Err(e);
+        }
+        // No await from here on: the checks above and the install are one step
         // under the session lock.
-        write_registration(&dir, Some(&reg))?;
         let allowed = reg.plan_allowed();
         session.reg = Some(reg);
         session.tokens = Some(tokens);

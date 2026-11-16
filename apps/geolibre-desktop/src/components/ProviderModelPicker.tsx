@@ -137,11 +137,15 @@ export function ProviderModelPicker({
         if (generation !== requestGeneration.current) return;
         setDiscovered({ provider, key, models });
         // A ChatGPT plan offers only its catalog's models, in the order it
-        // suggests them: switch to the first when the current one isn't there.
+        // suggests them: replace the built-in placeholder (or no model) with
+        // the first. A model the user chose is kept, even if the plan doesn't
+        // list it right now.
+        const current = valueRef.current.trim();
         if (
           provider === "chatgpt" &&
           models.length > 0 &&
-          !models.some((model) => model.id === valueRef.current)
+          (!current || PROVIDER_MODELS.chatgpt.includes(current)) &&
+          !models.some((model) => model.id === current)
         ) {
           onChangeRef.current(models[0].id);
         }
