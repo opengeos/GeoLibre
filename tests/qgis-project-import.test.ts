@@ -146,7 +146,7 @@ function webLayersProjectXml(): string {
       ${layer(
         "xyz",
         "Topo tiles",
-        "type=xyz&amp;url=https://tile.opentopomap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png&amp;zmax=17&amp;zmin=0",
+        "type=xyz&amp;url=https://tile.opentopomap.org/%7BZ%7D/%7Bx%7D/%7By%7D.png&amp;zmax=17&amp;zmin=0",
       )}
       ${layer(
         "wmts",
@@ -685,5 +685,35 @@ describe("QGIS project import", () => {
 
     assert.deepEqual(result.warnings, []);
     assert.equal(result.project.layers[0]?.geojson?.features.length, 1);
+  });
+
+  it("stops reading a remote body that passes the ceiling without a length", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Countries", source: "https://example.com/world.parquet" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    const chunk = new Uint8Array(64 * 1024 * 1024);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    await materializeQgisRemoteLayers(
+      result,
+      async () => new Response(body),
+      async () => ({ type: "FeatureCollection", features: [] }),
+    );
+
+    assert.ok(sent <= 6, `read ${sent} chunks`);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Countries", "remote-unreadable"]],
+    );
   });
 });

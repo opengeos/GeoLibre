@@ -35,7 +35,10 @@ export const readQgisRemoteVector: QgisRemoteVectorReader = (file) => {
   // a name of its own, since a read that times out keeps running (DuckDB
   // cannot cancel it) and two layers may share a file name. The time bound
   // sits inside the queue, so it covers the read and not the wait for it,
-  // and a stalled read releases the queue for the next layer.
+  // and a stalled read releases the queue for the next layer. That read
+  // still holds its file until DuckDB finishes with it, so after a timeout
+  // more than one file can be in memory at once; the 250 MB download ceiling
+  // bounds each of them.
   const name = `qgis-${++readCount}-${file.name}`;
   const next = readQueue.then(() =>
     withTimeout(readOne({ ...file, name }), REMOTE_READ_TIMEOUT_MS),

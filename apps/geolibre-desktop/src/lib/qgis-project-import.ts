@@ -197,10 +197,7 @@ export async function materializeQgisRemoteLayers(
           if (Number.isFinite(advertised) && advertised > MAX_REMOTE_VECTOR_BYTES) {
             throw new Error(`The file is too large to import (${advertised} bytes)`);
           }
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes.byteLength > MAX_REMOTE_VECTOR_BYTES) {
-            throw new Error(`The file is too large to import (${bytes.byteLength} bytes)`);
-          }
+          const bytes = await readCappedBody(response, MAX_REMOTE_VECTOR_BYTES);
           // The download is done. The host reader bounds its own work.
           clearTimeout(timeout);
           const sourceLayer = layer.metadata.sourceLayer;
@@ -239,6 +236,48 @@ export async function materializeQgisRemoteLayers(
     );
   }
   return result;
+}
+
+/**
+ * Read a response body, giving up as soon as it passes `maxBytes`, so a
+ * server that sends no `Content-Length` cannot make the import buffer an
+ * unbounded download first.
+ *
+ * @param response - The response to read.
+ * @param maxBytes - Largest body accepted.
+ * @returns The whole body.
+ * @throws When the body is larger than `maxBytes`.
+ */
+async function readCappedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const tooLarge = () => new Error(`The file is larger than ${maxBytes} bytes`);
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > maxBytes) throw tooLarge();
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 /**
@@ -981,7 +1020,12 @@ function qgisWebTileLayer(dataSource: string): QgisWebTileLayer {
   }
   if (!isHttpSource(url)) return { kind: "unsupported", reason: "missing-source" };
   if (type === "xyz") {
-    if (!/\{z\}/i.test(url) || !/\{x\}/i.test(url) || !/\{-?y\}/i.test(url)) {
+    // MapLibre substitutes only lower-case placeholders.
+    const template = url.replace(
+      /\{(-?)([xyz])\}/gi,
+      (_, dash: string, axis: string) => `{${dash}${axis.toLowerCase()}}`,
+    );
+    if (!/\{z\}/.test(template) || !/\{x\}/.test(template) || !/\{-?y\}/.test(template)) {
       return { kind: "unsupported", reason: "missing-source" };
     }
     const minzoom = optionalNumber(params.get("zmin") ?? undefined);
@@ -990,7 +1034,7 @@ function qgisWebTileLayer(dataSource: string): QgisWebTileLayer {
       minzoom !== null && maxzoom !== null && minzoom <= maxzoom ? { minzoom, maxzoom } : {};
     return {
       kind: "xyz",
-      source: { type: "raster", tiles: [url], tileSize: 256, url, ...zoomRange },
+      source: { type: "raster", tiles: [template], tileSize: 256, url: template, ...zoomRange },
       metadata: { sourceKind: "xyz-url" },
     };
   }
