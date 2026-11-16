@@ -275,6 +275,16 @@ describe("Node collaboration relay", () => {
     const accepted = await next(host, "snapshot");
     assert.deepEqual(accepted.project, unlockedEdit);
     assert.equal(accepted.rev, 2);
+
+    // A view-only refusal is not answered with the project: the guest keeps its
+    // local change on screen, and a tiny frame cannot pull megabytes back.
+    host.send(JSON.stringify({ type: "set-mode", mode: "view-only" }));
+    await next(guest, "mode");
+    const frames: string[] = [];
+    guest.on("message", (raw) => frames.push((JSON.parse(raw.toString()) as Message).type));
+    guest.send(JSON.stringify({ type: "snapshot", project: {}, rev: 3 }));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.deepEqual(frames, ["error"]);
     host.close();
     guest.close();
   });

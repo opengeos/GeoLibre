@@ -83,7 +83,7 @@ export function LayerOpacitySlider({
       <span className="text-[10px] text-muted-foreground">{label}</span>
       <Slider
         aria-label={ariaLabel}
-        className={`flex-1 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+        className={disabled ? "flex-1 cursor-not-allowed opacity-50" : "flex-1"}
         min={min}
         max={max}
         step={step}

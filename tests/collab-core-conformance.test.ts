@@ -59,7 +59,7 @@ describe("collaboration relay conformance", () => {
     });
   });
 
-  it("resyncs a sender refused for a locked layer or view-only, not for size (#3477)", () => {
+  it("resyncs a sender refused for a locked layer only (#3477)", () => {
     const stored = { layers: [{ id: "a", name: "A", opacity: 1 }] };
     const inbound = { layers: [{ id: "a", name: "A", opacity: 0 }] };
     const locked = authorizeSnapshot(
@@ -75,7 +75,7 @@ describe("collaboration relay conformance", () => {
     assert.equal(shouldResyncRejectedSnapshot(locked), true);
     assert.equal(
       shouldResyncRejectedSnapshot(authorizeSnapshot(participant("guest"), "view-only", 20)),
-      true,
+      false,
     );
     assert.equal(
       shouldResyncRejectedSnapshot(authorizeSnapshot(participant("guest"), "co-edit", 20, 10)),
