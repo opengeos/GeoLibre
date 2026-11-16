@@ -225,9 +225,6 @@ export function heatmapColorRampExpression(colors: readonly string[]): Expressio
   return expression as ExpressionSpecification;
 }
 
-/** Per-features-array memo of each weight field's largest value. */
-const heatmapWeightMaxCache = new WeakMap<object, Map<string, number | null>>();
-
 /**
  * The largest positive value of a layer's heatmap weight field, which
  * {@link heatmapPaint} divides every weight by.
@@ -237,8 +234,8 @@ const heatmapWeightMaxCache = new WeakMap<object, Map<string, number | null>>();
  * (millions) painted the whole surface the top color at any intensity
  * (GeoLibre#3471). Scaling into 0..1 by the field maximum (QGIS's automatic
  * "maximum value") makes the heaviest point weigh what an unweighted point
- * does, leaving intensity to tune the look. Memoized per features array, which
- * the store replaces on every data edit.
+ * does, leaving intensity to tune the look. Recomputed on every call (one pass
+ * over the features), so an in-place property edit can never leave it stale.
  *
  * @param style - The layer style (reads `heatmapWeightProperty`).
  * @param geojson - The layer's in-memory features, when it has them.
@@ -252,13 +249,6 @@ export function heatmapWeightMax(
   const property = styleValue(style, "heatmapWeightProperty").trim();
   const features = geojson?.features;
   if (property === "" || !Array.isArray(features)) return null;
-  let byProperty = heatmapWeightMaxCache.get(features);
-  if (!byProperty) {
-    byProperty = new Map();
-    heatmapWeightMaxCache.set(features, byProperty);
-  }
-  const cached = byProperty.get(property);
-  if (cached !== undefined) return cached;
   let max = 0;
   for (const feature of features) {
     const raw = feature?.properties?.[property];
@@ -271,9 +261,7 @@ export function heatmapWeightMax(
           : NaN;
     if (Number.isFinite(value) && value > max) max = value;
   }
-  const result = max > 0 ? max : null;
-  byProperty.set(property, result);
-  return result;
+  return max > 0 ? max : null;
 }
 
 function heatmapWeight(

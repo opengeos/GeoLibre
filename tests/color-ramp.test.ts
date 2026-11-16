@@ -147,6 +147,14 @@ describe("createGraduatedClassBreaks", () => {
     assert.deepEqual(fine, [0.1, 0.4, 0.7]);
     const small = createGraduatedClassBreaks([0, 1 / 3, 2 / 3, 1], 3, "quantile");
     assert.deepEqual(small, [0, 0.3333, 0.6667]);
+    // Natural breaks are data values and stay exact, so no feature changes class.
+    const natural = createGraduatedClassBreaks(
+      [1, 1.23456, 50.98765, 51, 99.1],
+      3,
+      "natural-breaks",
+    );
+    for (const value of natural)
+      assert.ok([1, 1.23456, 50.98765, 51, 99.1].includes(value), String(value));
   });
 
   it("keeps geometric breaks finite across extreme ranges", () => {

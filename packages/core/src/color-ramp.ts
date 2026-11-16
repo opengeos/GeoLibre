@@ -342,7 +342,10 @@ export function createGraduatedClassBreaks(
   scheme: GraduatedClassificationScheme,
 ): number[] {
   if (count <= 0 || values.length === 0) return [];
-  return ascendingUnique(roundClassBreaks(rawGraduatedClassBreaks(values, count, scheme), values));
+  const breaks = rawGraduatedClassBreaks(values, count, scheme);
+  // Natural breaks are data values already, so rounding would only move
+  // features between classes.
+  return ascendingUnique(scheme === "natural-breaks" ? breaks : roundClassBreaks(breaks, values));
 }
 
 /** The unrounded lower bounds behind {@link createGraduatedClassBreaks}. */
@@ -376,9 +379,10 @@ function rawGraduatedClassBreaks(
  * of the range call for (never coarser than whole units), which moves a class
  * edge by at most 0.05% of the range, and at least four significant digits of
  * its own, so a geometric series spanning many orders of magnitude keeps its
- * small breaks. The first break is the sample minimum and stays exact, so the
- * lowest feature is never pushed below the first class; the caller collapses
- * any breaks that rounding made equal.
+ * small breaks. Natural breaks are data values and are not rounded. The first
+ * break is the sample minimum and stays exact, so the lowest feature is never
+ * pushed below the first class; the caller collapses any breaks that rounding
+ * made equal and sizes its colors off the result.
  */
 function roundClassBreaks(breaks: number[], values: number[]): number[] {
   let min = Infinity;
