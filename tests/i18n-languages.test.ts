@@ -29,6 +29,34 @@ describe("resolveLanguage", () => {
     assert.equal(resolveLanguage("zh-Hans-CN", available), "zh");
   });
 
+  it("routes Traditional Chinese tags to the matching Traditional catalog", () => {
+    const traditional = ["en", "zh", "zh-TW", "zh-HK", "zh-MO"];
+    assert.equal(resolveLanguage("zh-TW", traditional), "zh-TW");
+    assert.equal(resolveLanguage("zh_tw", traditional), "zh-TW");
+    assert.equal(resolveLanguage("zh-Hant", traditional), "zh-TW");
+    assert.equal(resolveLanguage("zh-Hant-TW", traditional), "zh-TW");
+    assert.equal(resolveLanguage("zh-HK", traditional), "zh-HK");
+    assert.equal(resolveLanguage("zh-Hant-HK", traditional), "zh-HK");
+    assert.equal(resolveLanguage("zh-MO", traditional), "zh-MO");
+    assert.equal(resolveLanguage("zh-Hant-MO", traditional), "zh-MO");
+    assert.equal(resolveLanguage("zh", traditional), "zh");
+    assert.equal(resolveLanguage("zh-CN", traditional), "zh");
+    assert.equal(resolveLanguage("zh-Hans-CN", traditional), "zh");
+    assert.equal(resolveLanguage("zh-Hans-HK", traditional), "zh");
+    assert.equal(resolveLanguage("zh-SG", traditional), "zh");
+  });
+
+  it("falls back across Traditional catalogs before Simplified", () => {
+    assert.equal(resolveLanguage("zh-MO", ["en", "zh", "zh-HK"]), "zh-HK");
+    assert.equal(resolveLanguage("zh-Hant", ["en", "zh", "zh-HK"]), "zh-HK");
+    assert.equal(resolveLanguage("zh-HK", ["en", "zh", "zh-TW"]), "zh-TW");
+  });
+
+  it("falls back to zh for Traditional tags when no Traditional catalog ships", () => {
+    assert.equal(resolveLanguage("zh-Hant", available), "zh");
+    assert.equal(resolveLanguage("zh-TW", available), "zh");
+  });
+
   it("returns null when only the region differs from an unavailable base", () => {
     assert.equal(resolveLanguage("fr-CA", available), null);
   });
@@ -52,8 +80,20 @@ describe("languageOptions", () => {
     assert.equal(unknown.englishName, "xx");
 
     const zh = languageOptions(["zh"])[0];
-    assert.equal(zh.nativeName, "中文");
-    assert.equal(zh.englishName, "Chinese");
+    assert.equal(zh.nativeName, "简体中文");
+    assert.equal(zh.englishName, "Chinese (Simplified)");
+
+    const zhTw = languageOptions(["zh-TW"])[0];
+    assert.equal(zhTw.nativeName, "繁體中文（台灣）");
+    assert.equal(zhTw.englishName, "Chinese (Traditional, Taiwan)");
+  });
+
+  it("orders the Chinese variants Simplified first, then Traditional by region", () => {
+    const options = languageOptions(["zh-TW", "zh-MO", "zh", "zh-HK", "en"]);
+    assert.deepEqual(
+      options.map((option) => option.code),
+      ["en", "zh", "zh-HK", "zh-MO", "zh-TW"],
+    );
   });
 });
 
