@@ -66,6 +66,15 @@ test("itemBands drops an offset Earth Search says it already applied", () => {
   const red = itemBands(applied).find((band) => band.common === "red")!;
   assert.equal(red.scale, 0.0001);
   assert.equal(red.offset, 0);
+  // Another asset's own offset is not the baseline's, so it is kept.
+  const mixed = {
+    ...applied,
+    assets: {
+      ...sentinel.assets,
+      aot: asset("https://x.test/AOT.tif", { "raster:bands": [{ scale: 0.001, offset: 5 }] }),
+    },
+  } as unknown as StacItem;
+  assert.equal(itemBands(mixed).find((band) => band.asset === "aot")!.offset, 5);
   const notApplied = {
     ...sentinel,
     properties: { "earthsearch:boa_offset_applied": false },

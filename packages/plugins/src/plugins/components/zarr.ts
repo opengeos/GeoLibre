@@ -1028,7 +1028,12 @@ function registerZarrTemporalAdapter(
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
-    await applyZarrSelectorDates(layerId, dimensionValues, axis);
+    // Non-fatal: a rejected setSelector must not stop the Time Slider binding below.
+    try {
+      await applyZarrSelectorDates(layerId, dimensionValues, axis);
+    } catch (error) {
+      console.warn("[zarr] Could not apply date selector values", error);
+    }
     if (!axis) return true;
     // The layer may have been removed while the axis was being resolved.
     if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;

@@ -109,6 +109,9 @@ function calibration(
   };
 }
 
+/** The Sentinel-2 processing baseline 04.00 BOA offset, as reflectance (-1000 DN at scale 1e-4). */
+const BOA_OFFSET = -0.1;
+
 /**
  * Every raster band the item offers: one per band of each asset that can be drawn as a COG (a
  * single-band asset gives one).
@@ -118,8 +121,11 @@ export function itemBands(item: StacItem): StacBand[] {
   // Earth Search subtracts the processing-baseline 04.00 BOA offset (-1000 DN) from its Sentinel-2
   // L2A COGs and flags it with this property, yet its `raster:bands` still declare `offset: -0.1`.
   // Applying that offset again pushes most land pixels below zero reflectance, so a true-colour
-  // composite comes out nearly black (#3470). The flag is the catalog saying the offset is done.
-  const offsetAlreadyApplied = item.properties?.["earthsearch:boa_offset_applied"] === true;
+  // composite comes out nearly black (#3470). The flag is the catalog saying the offset is done, and
+  // only the baseline's own -0.1 is skipped, so another asset's real offset is kept.
+  const boaOffsetApplied = item.properties?.["earthsearch:boa_offset_applied"] === true;
+  const effectiveOffset = (offset: number) =>
+    boaOffsetApplied && Math.abs(offset - BOA_OFFSET) < 1e-9 ? 0 : offset;
   for (const [key, asset] of Object.entries(item.assets ?? {})) {
     if (!asset?.href || assetFormat(asset) !== "cog") continue;
     const raw = record(asset);
@@ -137,7 +143,7 @@ export function itemBands(item: StacItem): StacBand[] {
         common,
         href: asset.href,
         scale,
-        offset: offsetAlreadyApplied ? 0 : offset,
+        offset: effectiveOffset(offset),
         ...(nodata !== undefined ? { nodata } : {}),
       });
       continue;
@@ -158,7 +164,7 @@ export function itemBands(item: StacItem): StacBand[] {
         common,
         href: asset.href,
         scale,
-        offset: offsetAlreadyApplied ? 0 : offset,
+        offset: effectiveOffset(offset),
         ...(nodata !== undefined ? { nodata } : {}),
       });
     });
