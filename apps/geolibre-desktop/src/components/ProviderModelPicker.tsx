@@ -10,7 +10,9 @@ import {
   discoverBedrockModels,
   discoverProviderModels,
 } from "../lib/assistant/model-discovery";
+import { discoverChatGptModels } from "../lib/assistant/chatgpt";
 import { discoverOpenRouterModels } from "../lib/assistant/openrouter";
+import { useChatGptStatus } from "../hooks/useChatGptStatus";
 import { discoverTrustedRouterModels } from "../lib/assistant/trustedrouter";
 import { discoverVercelGatewayModels } from "../lib/assistant/vercel-gateway";
 import { PROVIDER_LABELS, PROVIDER_MODELS } from "../lib/assistant/provider";
@@ -54,6 +56,7 @@ export function ProviderModelPicker({
 }: ProviderModelPickerProps): ReactElement {
   const { t } = useTranslation();
   const listId = `${useId()}-${provider}-models`;
+  const chatGpt = useChatGptStatus();
   // A string identity for the credentials, so discovery reruns when a value
   // changes but not when a caller passes an equal Bedrock object each render.
   const key =
@@ -66,12 +69,21 @@ export function ProviderModelPicker({
             bedrockAuth.sessionToken ?? "",
           ].join("\u0000")
         : ""
-      : usesPublicCatalog(provider)
-        ? // Public catalogs: typing the key must not refetch.
-          ""
-        : (apiKey?.trim() ?? "");
+      : provider === "chatgpt"
+        ? // The signed-in account's catalog: reload on sign-in or a new account.
+          chatGpt.signedIn && chatGpt.planAllowed
+          ? `chatgpt:${chatGpt.email}`
+          : ""
+        : usesPublicCatalog(provider)
+          ? // Public catalogs: typing the key must not refetch.
+            ""
+          : (apiKey?.trim() ?? "");
   const bedrockAuthRef = useRef(bedrockAuth);
   bedrockAuthRef.current = bedrockAuth;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const canDiscover = usesPublicCatalog(provider) || key.length > 0;
   // Tagged with the inputs that produced it, so a catalog loaded for one
   // provider or key is never shown under another while the next one loads.
@@ -111,17 +123,32 @@ export function ProviderModelPicker({
       try {
         const options = { signal: controller.signal, force };
         const models =
-          provider === "openrouter"
-            ? await discoverOpenRouterModels(controller.signal)
-            : provider === "vercel"
-              ? await discoverVercelGatewayModels(controller.signal)
-              : provider === "trustedrouter"
-                ? await discoverTrustedRouterModels(controller.signal)
-                : provider === "bedrock"
-                  ? await discoverBedrockModels(bedrockAuthRef.current!, options)
-                  : await discoverProviderModels(provider, key, options);
+          provider === "chatgpt"
+            ? await discoverChatGptModels(controller.signal)
+            : provider === "openrouter"
+              ? await discoverOpenRouterModels(controller.signal)
+              : provider === "vercel"
+                ? await discoverVercelGatewayModels(controller.signal)
+                : provider === "trustedrouter"
+                  ? await discoverTrustedRouterModels(controller.signal)
+                  : provider === "bedrock"
+                    ? await discoverBedrockModels(bedrockAuthRef.current!, options)
+                    : await discoverProviderModels(provider, key, options);
         if (generation !== requestGeneration.current) return;
         setDiscovered({ provider, key, models });
+        // A ChatGPT plan offers only its catalog's models, in the order it
+        // suggests them: replace the built-in placeholder (or no model) with
+        // the first. A model the user chose is kept, even if the plan doesn't
+        // list it right now.
+        const current = valueRef.current.trim();
+        if (
+          provider === "chatgpt" &&
+          models.length > 0 &&
+          (!current || PROVIDER_MODELS.chatgpt.includes(current)) &&
+          !models.some((model) => model.id === current)
+        ) {
+          onChangeRef.current(models[0].id);
+        }
       } catch (cause) {
         if (generation !== requestGeneration.current || controller.signal.aborted) return;
         const failure = classifyFetchFailure(cause);

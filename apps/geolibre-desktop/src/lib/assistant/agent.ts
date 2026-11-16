@@ -7,6 +7,7 @@ import { Agent, type Tool } from "@strands-agents/sdk";
 import i18next from "i18next";
 import { configForProvider, createModel, readRuntimeEnv, resolveProviderConfig } from "./provider";
 import { NAMED_TILE_BASEMAPS } from "./basemaps";
+import { isChatGptReady } from "./chatgpt";
 import {
   resolveFastPathAction,
   runToolDirectly,
@@ -307,6 +308,18 @@ export class AssistantSession {
 
     if (!config) {
       const pinned = this.selection?.provider ?? this.profile?.provider;
+      if (!pinned && isChatGptReady()) {
+        // A ChatGPT sign-in is never auto-selected, so it counts as configured
+        // (the panel is enabled) but only a profile can choose it.
+        throw new Error(
+          'You\'re signed in with ChatGPT, but no AI profile uses it. Choose a "ChatGPT (sign in)" profile in the assistant panel or under Settings → AI Providers.',
+        );
+      }
+      if (pinned === "chatgpt") {
+        throw new Error(
+          "Not signed in with ChatGPT, or GeoLibre isn't allowed to use your plan. Sign in under Settings → AI Providers, or pick another provider.",
+        );
+      }
       throw new Error(
         pinned
           ? `No API key for the selected provider "${pinned}". Add its key in Settings → Environment variables, or pick another provider.`

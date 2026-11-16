@@ -67,7 +67,9 @@ the request you make, and are governed by their own privacy policies:
   the configured geocoding provider.
 - **AI assistant**: if you use it, the prompts you enter, together with metadata
   about the layers currently loaded in your project (layer names and attribute
-  field names), are sent to the configured AI/LLM provider.
+  field names), are sent to the configured AI/LLM provider. Signing in with
+  ChatGPT (desktop) contacts OpenAI's sign-in service in your browser and on
+  this computer; the sign-in's refresh token is kept in the system keychain.
 - **Cloud data catalogs**: if you connect to services such as the Microsoft
   Planetary Computer or Google Earth Engine, your queries are sent to them.
 - **Real-time collaboration**: if you join a shared session, your project data

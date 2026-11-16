@@ -32,6 +32,55 @@ mod earth_engine_oauth {
         Err(UNAVAILABLE.to_string())
     }
 }
+// Sign in with ChatGPT for the AI Assistant: an OAuth loopback listener like
+// Earth Engine's (so never in an Apple App Store build), with the refresh token
+// in the OS keychain (so desktop only).
+#[cfg(all(
+    any(target_os = "macos", target_os = "windows", target_os = "linux"),
+    not(feature = "mas")
+))]
+mod chatgpt_auth;
+#[cfg(not(all(
+    any(target_os = "macos", target_os = "windows", target_os = "linux"),
+    not(feature = "mas")
+)))]
+mod chatgpt_auth {
+    const UNAVAILABLE: &str = "Sign in with ChatGPT is not available in this build of GeoLibre.";
+
+    #[derive(Default)]
+    pub struct ChatGptAuthState;
+
+    #[tauri::command]
+    pub fn chatgpt_status() -> Result<serde_json::Value, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn chatgpt_sign_in_start() -> Result<serde_json::Value, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn chatgpt_sign_in_poll() -> Result<serde_json::Value, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn chatgpt_sign_in_cancel() {}
+
+    #[tauri::command]
+    pub fn chatgpt_sign_out() -> Result<serde_json::Value, String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn chatgpt_request() -> Result<(), String> {
+        Err(UNAVAILABLE.to_string())
+    }
+
+    #[tauri::command]
+    pub fn chatgpt_request_cancel() {}
+}
 #[cfg(feature = "native-duckdb")]
 mod native_duckdb;
 #[cfg(not(feature = "native-duckdb"))]
@@ -513,6 +562,9 @@ pub fn run() {
     // every build, the App Store one included (which has no AWS CLI fallback).
     let builder = builder.manage(aws_credentials::AwsSsoLoginState::default());
 
+    // The ChatGPT sign-in (and the requests it authorizes) for the AI Assistant.
+    let builder = builder.manage(chatgpt_auth::ChatGptAuthState::default());
+
     // Pools for the in-process PostGIS tile renderer, created on first connect.
     let builder = builder.manage(postgis_tiles::PostgisTilesState::default());
 
@@ -587,6 +639,13 @@ pub fn run() {
             stop_jupyter_server,
             start_earth_engine_oauth,
             poll_earth_engine_oauth,
+            chatgpt_auth::chatgpt_status,
+            chatgpt_auth::chatgpt_sign_in_start,
+            chatgpt_auth::chatgpt_sign_in_poll,
+            chatgpt_auth::chatgpt_sign_in_cancel,
+            chatgpt_auth::chatgpt_sign_out,
+            chatgpt_auth::chatgpt_request,
+            chatgpt_auth::chatgpt_request_cancel,
             secure_store::secure_store_get_many,
             secure_store::secure_store_seal,
             secure_store::secure_store_set,

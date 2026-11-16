@@ -1,5 +1,6 @@
 import type { Model } from "@strands-agents/sdk";
 import { getDeploymentPolicy, readDeploymentEnv } from "../deployment-env";
+import { isChatGptReady } from "./chatgpt";
 
 /**
  * Supported LLM providers for the natural-language assistant. The boundary is
@@ -7,12 +8,14 @@ import { getDeploymentPolicy, readDeploymentEnv } from "../deployment-env";
  * Strands model class that is dynamically imported so only the selected
  * provider's SDK is pulled into the bundle. `openrouter`, `vercel`,
  * `trustedrouter`, `ollama`, and `custom` reuse the OpenAI-compatible client
- * against a base URL.
+ * against a base URL. `chatgpt` uses the Responses API through the desktop
+ * app's Sign in with ChatGPT (`chatgpt.ts`) instead of a key.
  */
 export type AssistantProviderId =
   | "google"
   | "anthropic"
   | "openai"
+  | "chatgpt"
   | "openrouter"
   | "vercel"
   | "trustedrouter"
@@ -20,11 +23,16 @@ export type AssistantProviderId =
   | "bedrock"
   | "custom";
 
-/** All provider ids, in auto-selection preference order. */
+/**
+ * All provider ids, in auto-selection preference order. `chatgpt` is listed
+ * for the settings but never auto-selected: a ChatGPT plan is used only when
+ * a profile (or `GEOLIBRE_ASSISTANT_PROVIDER`) chooses it.
+ */
 export const ASSISTANT_PROVIDER_IDS: readonly AssistantProviderId[] = [
   "google",
   "anthropic",
   "openai",
+  "chatgpt",
   "openrouter",
   "vercel",
   "trustedrouter",
@@ -257,6 +265,9 @@ export const PROVIDER_MODELS: Record<AssistantProviderId, readonly string[]> = {
   ],
   anthropic: ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"],
   openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+  // OpenAI's example model; the signed-in plan's catalog replaces it once it
+  // loads and says which models the account may use.
+  chatgpt: ["gpt-6.1-sol"],
   openrouter: ["openai/gpt-5.6-luna"],
   vercel: ["openai/gpt-5.6-luna"],
   trustedrouter: ["trustedrouter/auto"],
@@ -277,6 +288,7 @@ const DEFAULT_MODEL: Record<AssistantProviderId, string> = {
   google: PROVIDER_MODELS.google[0],
   anthropic: PROVIDER_MODELS.anthropic[0],
   openai: PROVIDER_MODELS.openai[0],
+  chatgpt: PROVIDER_MODELS.chatgpt[0],
   openrouter: PROVIDER_MODELS.openrouter[0],
   vercel: PROVIDER_MODELS.vercel[0],
   trustedrouter: PROVIDER_MODELS.trustedrouter[0],
@@ -290,6 +302,7 @@ export const PROVIDER_LABELS: Record<AssistantProviderId, string> = {
   google: "Google Gemini",
   anthropic: "Anthropic",
   openai: "OpenAI",
+  chatgpt: "ChatGPT (sign in)",
   openrouter: "OpenRouter",
   vercel: "Vercel AI Gateway",
   trustedrouter: "TrustedRouter",
@@ -504,6 +517,8 @@ function resolveModelId(
  *   `AWS_SESSION_TOKEN`).
  * - custom — `OPENAI_COMPATIBLE_BASE_URL` (+ optional `OPENAI_COMPATIBLE_API_KEY`)
  *   and a model via `OPENAI_COMPATIBLE_MODEL`.
+ * - chatgpt — no variable: the desktop app's Sign in with ChatGPT, signed in
+ *   with the plan's use allowed.
  */
 export function configForProvider(
   provider: AssistantProviderId,
@@ -520,6 +535,8 @@ export function configForProvider(
       if (!apiKey) return null;
       return { provider, apiKey, modelId };
     }
+    case "chatgpt":
+      return isChatGptReady() ? { provider, modelId } : null;
     case "openrouter":
     case "vercel":
     case "trustedrouter": {
@@ -590,7 +607,7 @@ export function resolveProviderConfig(
   const order =
     requested && ASSISTANT_PROVIDER_IDS.includes(requested as AssistantProviderId)
       ? [requested as AssistantProviderId]
-      : ASSISTANT_PROVIDER_IDS;
+      : ASSISTANT_PROVIDER_IDS.filter((provider) => provider !== "chatgpt");
 
   for (const provider of order) {
     const config = configForProvider(provider, undefined, env);
@@ -599,9 +616,12 @@ export function resolveProviderConfig(
   return null;
 }
 
-/** True when at least one provider is configured. */
+/**
+ * True when at least one provider is configured, a ChatGPT sign-in included
+ * (which a profile must still choose; it is never auto-selected).
+ */
 export function hasProviderKey(env: RuntimeEnv = readRuntimeEnv()): boolean {
-  return resolveProviderConfig(env) !== null;
+  return resolveProviderConfig(env) !== null || isChatGptReady();
 }
 
 /** Providers that are currently configured, in preference order. */
@@ -709,6 +729,27 @@ export async function createModel(config: AssistantProviderConfig): Promise<Mode
         apiKey: config.apiKey,
         modelId: config.modelId,
         clientConfig: { dangerouslyAllowBrowser: true },
+      }) as unknown as Model;
+    }
+    case "chatgpt": {
+      // A ChatGPT plan speaks the Responses API, streamed and stateless
+      // (`store: false`, the SDK's default). Requests go through the desktop
+      // backend, which puts on the signed-in account's token; the key here is
+      // only a marker the SDK requires.
+      const [{ OpenAIModel }, chatgpt] = await Promise.all([
+        import("@strands-agents/sdk/models/openai"),
+        import("./chatgpt"),
+      ]);
+      return new OpenAIModel({
+        api: "responses",
+        apiKey: chatgpt.CHATGPT_KEY_PLACEHOLDER,
+        modelId: config.modelId,
+        clientConfig: {
+          baseURL: chatgpt.CHATGPT_API_BASE,
+          fetch: chatgpt.chatGptFetch,
+          defaultHeaders: openAiCompatibleHeaders(true),
+          dangerouslyAllowBrowser: true,
+        },
       }) as unknown as Model;
     }
     case "openrouter":
