@@ -34,7 +34,6 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
     operationRef.current?.abort();
     setStatus("idle");
     setError(null);
-    setResult(null);
     onOpenChange(false);
   };
 
@@ -44,9 +43,12 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const [dataUrl, setDataUrl] = useState("");
   const [licenceName, setLicenceName] = useState("");
+  const [dryRun, setDryRun] = useState(true);
+  const [skipWherobots, setSkipWherobots] = useState(true);
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastExecution, setLastExecution] = useState<string | null>(null);
 
   const handleRun = async () => {
     if (!dataUrl.trim()) {
@@ -87,8 +89,8 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
         },
         body: JSON.stringify({
           url: dataUrl.trim(),
-          dry_run: false,
-          skip_wherobots: false,
+          dry_run: dryRun,
+          skip_wherobots: skipWherobots,
           refresh_geolibre: true,
           licence_name: licenceName.trim() || null,
         }),
@@ -103,6 +105,7 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
       signal.throwIfAborted();
       if (typeof execution !== "string" || !execution)
         throw new Error(t("gcsExport.errors.missingExecution"));
+      setLastExecution(execution);
       let done = false;
       while (!done) {
         await new Promise<void>((resolve, reject) => {
@@ -261,6 +264,24 @@ export function GcsExportDialog({ open, onOpenChange }: GcsExportDialogProps) {
               />
             </div>
           </div>
+
+          <div className="flex items-center gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              {t("gcsExport.dryRun")}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={skipWherobots} onChange={(e) => setSkipWherobots(e.target.checked)} />
+              {t("gcsExport.skipWherobots")}
+            </label>
+          </div>
+
+          {lastExecution && (
+            <div className="text-xs text-muted-foreground">
+              {t("gcsExport.lastExecution", { id: lastExecution })}
+              <span className="block italic">{t("gcsExport.backendContinues")}</span>
+            </div>
+          )}
 
           {error && <div className="text-destructive text-sm">{error}</div>}
           {result && (

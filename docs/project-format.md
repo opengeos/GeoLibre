@@ -784,15 +784,6 @@ import {
 
 ## Credential redaction
 
-## Harvest dialog and automatic GeoJSON hydration
-
-The desktop shell mounts the GCS harvest dialog (`GcsExportDialog`) in every build.
-It is tied to a user-configured harvester backend. Opening a project may issue GET
-requests to GeoJSON layer URLs that have no inline data. Only public `http(s)`
-hosts are bootstrapped automatically; `gs://`, `s3://`, `s3a://` and
-private/localhost hosts require an explicit manual refresh, and signed bucket
-reads are never performed on the automatic path.
-
 A local project may contain credentials needed to restore authenticated data,
 including layer request headers, geocoding API keys, environment variables, and
 plugin settings. Any project leaving the local workspace must pass through
@@ -828,3 +819,26 @@ parameters in URLs while preserving non-secret broker references. External
 plugin settings are arbitrary, so they are omitted from egress snapshots by
 default. Recipients retain the plugin manifest and activation metadata, but
 must configure their own settings.
+
+## Harvest dialog and automatic GeoJSON hydration
+
+The desktop shell mounts the GCS harvest dialog (`GcsExportDialog`) in every build.
+It is tied to a user-configured harvester backend. Opening a project may issue GET
+requests to GeoJSON layer URLs that have no inline data.
+
+Auto-bootstrap rules (see `useLayerRefresh`):
+- WFS layers (`sourceKind === "wfs-getfeature"`) auto-load on any host, including
+  localhost and LAN, preserving prior behaviour.
+- Non-WFS layers auto-load only from public `http(s)` hosts and `gs://` URIs
+  (`gs://` resolves to public HTTPS). Private/localhost hosts are skipped and
+  require an explicit manual refresh.
+- `s3://` and `s3a://` sources may be signed on the automatic refresh path
+  (timer/catch-up) via `resolveReadableUrl`, since they are user-configured
+  buckets. Treat saved projects containing such sources as potentially carrying
+  live signed URLs.
+- `gs://` sources are auto-fetched (not manual-only).
+
+The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the
+dialog stops local polling only -- the backend harvest job keeps running, and the
+last execution ID stays visible.
+

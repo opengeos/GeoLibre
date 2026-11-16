@@ -42,9 +42,14 @@ function isPublicHttpUrl(url: string): boolean {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0")
-      return false;
+    // Loopback (IPv4 127.0.0.0/8, IPv6 [::1], and *.localhost)
+    if (host === "localhost" || host.endsWith(".localhost")) return false;
+    if (host === "0.0.0.0" || host === "[::1]" || host === "::1") return false;
+    if (/^127\./.test(host)) return false;
+    // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
     if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+    if (/^\[?fe80:/.test(host) || /^\[?fc[0-9a-f]{2}:/.test(host) || /^\[?fd[0-9a-f]{2}:/.test(host)) return false;
+    if (/^\[?::ffff:/i.test(host)) return false;
     return true;
   } catch {
     return false;
@@ -507,11 +512,13 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       if (sameUrl) continue;
       observedSourceUrlsRef.current.set(layer.id, sourceUrl);
 
-      // Security: never auto-bootstrap private/localhost hosts, and never sign
-      // bucket reads (s3/s3a) on the automatic path. Public http(s) and gs://
-      // sources (which resolve to public HTTPS) are allowed.
+      // Security: never auto-bootstrap private/localhost hosts. Public http(s),
+      // gs:// (resolves to public HTTPS), and s3/s3a (signed, user-configured
+      // bucket) sources are allowed. WFS layers are exempt to preserve prior
+      // auto-load behaviour on localhost/LAN hosts.
       const isGs = /^gs:\/\//i.test(sourceUrl);
-      if (!isGs && !isPublicHttpUrl(sourceUrl)) continue;
+      const isS3 = /^s3a?:\/\//i.test(sourceUrl);
+      if (!isWfs && !isGs && !isS3 && !isPublicHttpUrl(sourceUrl)) continue;
 
       // A hydrated layer present at first observation needs no bootstrap.
       if (layer.geojson && !alreadyObserved) continue;
