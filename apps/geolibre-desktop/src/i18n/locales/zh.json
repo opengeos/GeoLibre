@@ -2075,6 +2075,17 @@
     "resizeDialog": "调整图库大小",
     "scopeFeatured": "精选",
     "scopeAll": "全部项目",
+    "scopeCollections": "合集",
+    "loadingCollections": "正在加载合集…",
+    "collectionsSearchPlaceholder": "按标题、作者或描述筛选合集",
+    "noCollectionMatches": "没有合集匹配您的筛选条件。",
+    "emptyCollections": "暂无公开合集可供显示。",
+    "emptyCollection": "此合集中没有公开项目。",
+    "untitledCollection": "未命名合集",
+    "openCollection": "显示此合集中的项目",
+    "openCollectionOnWeb": "在网页上查看合集",
+    "backToCollections": "所有合集",
+    "collectionProjects_other": "{{count}} 个项目",
     "scopeMine": "我的项目",
     "scopeOrganizations": "组织",
     "scopeGroups": "群组",
@@ -3851,6 +3862,7 @@
       "difference": "差集",
       "union": "联合",
       "spatialJoin": "空间连接",
+      "summarizeWithin": "区域内汇总",
       "attributeJoin": "属性连接",
       "selectByValue": "按属性选择",
       "selectByLocation": "按位置选择",
@@ -6441,6 +6453,26 @@
             }
           }
         },
+        "summarize-within": {
+          "name": "区域内汇总",
+          "description": "统计与每个多边形相交的另一图层要素数量，汇总一个数值字段，并测量这些要素覆盖每个多边形的面积比例",
+          "params": {
+            "layer": {
+              "label": "多边形图层"
+            },
+            "overlay": {
+              "label": "要汇总的图层"
+            },
+            "field": {
+              "label": "数值字段",
+              "description": "可选。为每个多边形添加该字段的总和、平均值、最小值和最大值。"
+            },
+            "min_overlap_pct": {
+              "label": "忽略小于此值的重叠 (%)",
+              "description": "当要汇总的图层包含多边形时，跳过覆盖面积小于多边形此比例的要素，例如沿共享边界的碎片多边形。"
+            }
+          }
+        },
         "attribute-join": {
           "name": "属性连接",
           "description": "在键字段匹配时，将连接图层（表）的属性附加到每个输入要素，不使用几何。一对一：以第一条匹配的连接行为准。",
@@ -8434,6 +8466,7 @@
     "loadingAttributes": "正在加载图层属性…",
     "requiresVectorLayer": "属性表需要矢量图层或 DuckDB 查询图层。",
     "invalidJson": "无效的 JSON",
+    "nullValue": "NULL",
     "editCellAria": "编辑要素 {{featureId}} 的 {{col}}",
     "resizeColumn": "调整 {{name}} 列宽",
     "renameFieldAria": "重命名字段 {{name}}",

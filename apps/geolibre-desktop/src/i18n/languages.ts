@@ -18,7 +18,10 @@ export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: s
   en: { nativeName: "English", englishName: "English" },
   az: { nativeName: "Azərbaycanca", englishName: "Azerbaijani" },
   he: { nativeName: "עברית", englishName: "Hebrew" },
-  zh: { nativeName: "中文", englishName: "Chinese" },
+  zh: { nativeName: "简体中文", englishName: "Chinese (Simplified)" },
+  "zh-TW": { nativeName: "繁體中文（台灣）", englishName: "Chinese (Traditional, Taiwan)" },
+  "zh-HK": { nativeName: "繁體中文（香港）", englishName: "Chinese (Traditional, Hong Kong)" },
+  "zh-MO": { nativeName: "繁體中文（澳門）", englishName: "Chinese (Traditional, Macau)" },
   es: { nativeName: "Español", englishName: "Spanish" },
   fa: { nativeName: "فارسی", englishName: "Persian" },
   fr: { nativeName: "Français", englishName: "French" },
@@ -88,7 +91,9 @@ export function languageOptions(codes: readonly string[]): LanguageOption[] {
 /**
  * Normalize a raw language string (query param, navigator, stored setting) to a
  * catalog code we actually ship, or `null` if there is no match. Matches the
- * full tag first (`pt-BR`) then the base subtag (`pt`).
+ * full tag first (`pt-BR`) then the base subtag (`pt`). A `zh` tag also picks a
+ * script first: Traditional tags resolve to a shipped Traditional catalog
+ * (see `resolveTraditionalChinese`), everything else to Simplified `zh`.
  */
 export function resolveLanguage(
   raw: string | null | undefined,
@@ -102,7 +107,48 @@ export function resolveLanguage(
   const byLower = new Map(available.map((code) => [code.trim().toLowerCase(), code] as const));
   const exact = byLower.get(normalized);
   if (exact) return exact;
-  const base = normalized.split(/[-_]/)[0];
+  const subtags = normalized.split(/[-_]/);
+  const base = subtags[0];
   if (!base) return null;
+  if (base === "zh") {
+    const traditional = resolveTraditionalChinese(subtags, byLower);
+    if (traditional) return traditional;
+  }
   return byLower.get(base) ?? null;
+}
+
+/**
+ * Traditional Chinese catalogs, in fallback order: a bare `zh-Hant` (or a
+ * Traditional region whose own catalog is missing) uses the first one shipped.
+ */
+const TRADITIONAL_CHINESE = ["zh-TW", "zh-HK", "zh-MO"] as const;
+
+/** Regions whose default Chinese script is Traditional. */
+const TRADITIONAL_CHINESE_REGIONS = new Set(["tw", "hk", "mo"]);
+
+/**
+ * Pick a Traditional Chinese catalog for lowercased `zh` subtags, or `null` when
+ * the tag asks for Simplified or no Traditional catalog ships. Traditional means
+ * an explicit `Hant` script (`zh-Hant`, `zh-Hant-HK`) or a Traditional-script
+ * region with no script given (`zh-HK`, `zh-MO`); an explicit `Hans` always
+ * wins, so `zh-Hans-TW` stays Simplified. The tag's own region is preferred
+ * (`zh-Hant-HK` → `zh-HK`), then the fallback order above.
+ */
+function resolveTraditionalChinese(
+  subtags: readonly string[],
+  byLower: ReadonlyMap<string, string>,
+): string | null {
+  // Script and region come before any extension or private-use section, which
+  // starts at a single-character subtag (`-u-nu-hans`, `-x-hk`).
+  const singleton = subtags.findIndex((tag, i) => i > 0 && tag.length === 1);
+  const rest = subtags.slice(1, singleton === -1 ? undefined : singleton);
+  if (rest.includes("hans")) return null;
+  const region = rest.find((tag) => TRADITIONAL_CHINESE_REGIONS.has(tag));
+  if (!region && !rest.includes("hant")) return null;
+  const candidates = [...(region ? [`zh-${region}`] : []), ...TRADITIONAL_CHINESE];
+  for (const candidate of candidates) {
+    const code = byLower.get(candidate.toLowerCase());
+    if (code) return code;
+  }
+  return null;
 }
