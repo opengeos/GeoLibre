@@ -18,7 +18,12 @@ async function drain(events: AsyncIterable<unknown>): Promise<void> {
   }
 }
 
-const { MAX_CARRIED_TOOL_RESULT_CHARS, portableHistory } =
+/** A successful tool result block holding `text`. */
+function toolResult(toolUseId: string, text: string): ToolResultBlock {
+  return new ToolResultBlock({ toolUseId, status: "success", content: [new TextBlock(text)] });
+}
+
+const { MAX_CARRIED_TOOL_RESULT_CHARS, MAX_CARRIED_TOOL_RESULTS_TOTAL_CHARS, portableHistory } =
   await import("../apps/geolibre-desktop/src/lib/assistant/conversation-history");
 const { AssistantSession } = await import("../apps/geolibre-desktop/src/lib/assistant/agent");
 
@@ -95,15 +100,59 @@ describe("portableHistory", () => {
           }),
         ],
       }),
+      new Message({ role: "user", content: [toolResult("t2", "ok")] }),
     ]);
     // The reasoning-only message disappears instead of becoming an empty turn.
-    assert.equal(history.length, 2);
+    assert.equal(history.length, 3);
     assert.deepEqual(history[0].content, [{ text: "Tokyo is in Japan." }]);
     const block = history[1].content[0];
     assert.ok("toolUse" in block);
     const toolUse = block.toolUse;
     assert.equal(toolUse.name, "set_view");
     assert.equal("reasoningSignature" in toolUse, false);
+  });
+
+  it("drops a tool call that never got a result", () => {
+    const history = portableHistory([
+      new Message({ role: "user", content: [new TextBlock("zoom in")] }),
+      new Message({
+        role: "assistant",
+        content: [
+          new TextBlock("Zooming."),
+          new ToolUseBlock({ name: "set_view", toolUseId: "stopped", input: { zoom: 9 } }),
+        ],
+      }),
+      new Message({
+        role: "assistant",
+        content: [new ToolUseBlock({ name: "set_view", toolUseId: "lonely", input: {} })],
+      }),
+    ]);
+    assert.equal(history.length, 2);
+    assert.deepEqual(history[1].content, [{ text: "Zooming." }]);
+  });
+
+  it("omits the oldest tool output once the total budget is spent", () => {
+    const chunk = "y".repeat(MAX_CARRIED_TOOL_RESULT_CHARS);
+    const count = Math.ceil(MAX_CARRIED_TOOL_RESULTS_TOTAL_CHARS / chunk.length) + 2;
+    const messages: Message[] = [];
+    for (let i = 0; i < count; i += 1) {
+      messages.push(
+        new Message({
+          role: "assistant",
+          content: [new ToolUseBlock({ name: "run_sql", toolUseId: `q${i}`, input: {} })],
+        }),
+        new Message({ role: "user", content: [toolResult(`q${i}`, chunk)] }),
+      );
+    }
+    const texts = portableHistory(messages)
+      .flatMap((message) => message.content)
+      .flatMap((block) => ("toolResult" in block ? block.toolResult.content : []))
+      .map((part) => ("text" in part ? part.text : ""));
+    const total = texts.reduce((sum, text) => sum + text.length, 0);
+    assert.ok(total <= MAX_CARRIED_TOOL_RESULTS_TOTAL_CHARS);
+    assert.match(texts[0], /omitted/);
+    // The newest result survives intact.
+    assert.equal(texts.at(-1), chunk);
   });
 });
 

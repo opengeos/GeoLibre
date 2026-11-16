@@ -102,6 +102,29 @@ describe("set_view tool", () => {
     await setViewTool(engine).invoke({ zoom: START.zoom });
   });
 
+  it("treats bearing 360 as the north-up view it already shows", async () => {
+    const engine = {
+      readView: () => ({ ...START, bearing: 0 }),
+      // The engine normalizes 360 back to 0, so the camera reads unchanged.
+      applyView: () => undefined,
+    } as unknown as MapEngine;
+    await setViewTool(engine).invoke({ bearing: 360 });
+  });
+
+  it("wraps a world-copy longitude so the reported view is valid input", async () => {
+    let view: MapViewState = { ...START, center: [200, 10] };
+    const engine = {
+      readView: () => ({ ...view }),
+      applyView: (next: MapViewState) => {
+        view = { ...next };
+      },
+    } as unknown as MapEngine;
+    const result = (await setViewTool(engine).invoke({ zoom: 6 })) as unknown as {
+      previous: MapViewState;
+    };
+    assert.deepEqual(result.previous.center, [-160, 10]);
+  });
+
   it("reports when the map is not ready", async () => {
     await assert.rejects(() => setViewTool(null).invoke({ zoom: 3 }), /not ready/);
   });

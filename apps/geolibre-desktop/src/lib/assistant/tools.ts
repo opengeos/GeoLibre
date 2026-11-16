@@ -338,18 +338,29 @@ export function resolveSetView(current: MapViewState, input: SetViewInput): MapV
 /** True when two cameras show the same view, within float noise. */
 function sameCamera(a: MapViewState, b: MapViewState): boolean {
   const close = (x: number, y: number) => Math.abs(x - y) < 1e-9;
+  // Bearings are angles: 360 and 0 face the same way.
+  const turn = Math.abs(((((a.bearing - b.bearing + 180) % 360) + 360) % 360) - 180);
   return (
     close(a.center[0], b.center[0]) &&
     close(a.center[1], b.center[1]) &&
     close(a.zoom, b.zoom) &&
-    close(a.bearing, b.bearing) &&
+    turn < 1e-9 &&
     close(a.pitch, b.pitch)
   );
 }
 
 /** A camera reduced to the fields `set_view` reports back to the model. */
 function cameraSummary(view: MapViewState) {
-  return { center: view.center, zoom: view.zoom, bearing: view.bearing, pitch: view.pitch };
+  const [lng, lat] = view.center;
+  // Panning across the antimeridian with world copies leaves the longitude
+  // outside [-180, 180]; wrap it so a reported view is valid set_view input.
+  const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+  return {
+    center: [wrapped, lat] as [number, number],
+    zoom: view.zoom,
+    bearing: view.bearing,
+    pitch: view.pitch,
+  };
 }
 
 /**
@@ -766,11 +777,12 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
       const target = resolveSetView(previous, input);
       await controller.applyView(target);
       const view = controller.readView();
-      // An engine skips the jump while the user is dragging the map; report
-      // that instead of letting the model claim a move that did not happen.
+      // An engine skips the jump while the user is dragging the map, and Map
+      // preferences can clamp the request back to where the camera already is;
+      // report that instead of letting the model claim a move that did not happen.
       if (!sameCamera(target, previous) && sameCamera(view, previous)) {
         throw new Error(
-          "The map did not move, most likely because it is being dragged. Try again in a moment.",
+          "The map did not move. It may be mid-drag, or the requested view is outside the limits set in Map preferences. Try again or pick another view.",
         );
       }
       return json({ view: cameraSummary(view), previous: cameraSummary(previous) });
