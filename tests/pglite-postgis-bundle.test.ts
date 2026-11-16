@@ -145,10 +145,15 @@ describe("PostGIS mirror deadline after headers", () => {
         setTimeout(() => {
           const body = new ReadableStream<Uint8Array>({
             start(controller) {
-              setTimeout(() => {
+              // An abort must also stop the body, as a real fetch does.
+              const timer = setTimeout(() => {
                 controller.enqueue(new TextEncoder().encode("primary"));
                 controller.close();
               }, 30);
+              init?.signal?.addEventListener("abort", () => {
+                clearTimeout(timer);
+                controller.error(new Error("aborted"));
+              });
             },
           });
           resolve(new Response(body, { status: 200 }));
