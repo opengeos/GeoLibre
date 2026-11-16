@@ -121,6 +121,11 @@ function slicePolarPolygon(rings: Position[][]): Position[][][] {
     west = Math.min(west, p[0]);
     east = Math.max(east, p[0]);
   }
+  // A ring that goes round a pole spans one turn of longitude. Anything wider
+  // is not a polar outline (e.g. projected metres), and slicing it would take a
+  // pass over the whole ring per 90 degrees of span; no slices leaves the
+  // feature unchanged.
+  if (east - west > 360 + WINDING_TOLERANCE) return [];
   // Holes keep their own longitudes. A hole near the unrolling seam can sit
   // partly at each end of the outer ring's range, so each is offered to the
   // clip a whole turn either side as well; the copies outside the range clip

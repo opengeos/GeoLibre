@@ -212,6 +212,24 @@ describe("slicePoleWrappingPolygons", () => {
     assert.ok(performance.now() - started < 1000);
   });
 
+  it("leaves a wrapping ring with a huge unrolled span unchanged", () => {
+    // Each step is the short way round, yet the ring swings across about
+    // 340,000 degrees before netting one turn round the pole.
+    const ring: Position[] = [];
+    let lon = 0;
+    for (let i = 0; i < 2000; i++, lon += 170) ring.push([((lon + 180) % 360) - 180, 80]);
+    for (let i = 0; i < 1998; i++, lon -= 170) ring.push([((lon + 180) % 360) - 180, 81]);
+    ring.push(ring[0]);
+    const swirl: Feature<Polygon> = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Polygon", coordinates: [ring] },
+    };
+    const started = performance.now();
+    assert.equal(slicePoleWrappingPolygons(swirl), swirl);
+    assert.ok(performance.now() - started < 1000);
+  });
+
   it("returns every other feature unchanged", () => {
     const square: Feature<Polygon> = {
       type: "Feature",
