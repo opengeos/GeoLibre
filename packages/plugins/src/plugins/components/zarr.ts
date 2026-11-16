@@ -31,6 +31,7 @@ import type {
   ZarrLocalStoreProvider,
 } from "maplibre-gl-components";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
+import { localizedMessage } from "../../localized-error";
 import {
   assertSecureRequestHeaders,
   KerchunkReferenceStore,
@@ -52,8 +53,10 @@ import {
 import {
   pickTimeDimension,
   readCoordinateTimeAttributes,
+  resolveZarrSelectorDates,
   resolveZarrTimeAxis,
   type ZarrTimeAttributes,
+  type ZarrTimeAxis,
 } from "../zarr-time-axis";
 import { getComponentsConstructors, type ZarrLayerControlConstructor } from "./constructors";
 import { layerNameFromUrl } from "./shared";
@@ -929,6 +932,64 @@ function zarrTimeAttributesFromRefs(
 }
 
 /**
+ * Swap date strings in a just-added layer's selector for time indices, and say
+ * so in the panel when a value matches nothing.
+ *
+ * The renderer only matches a string against raw coordinate values, so a CF
+ * time axis never matches `{ "time": "2020-08-01" }`; it logs a warning and
+ * draws nothing while the panel reports success (#3470).
+ *
+ * @param layerId - The new layer's id.
+ * @param dimensionValues - Raw coordinate values the renderer loaded.
+ * @param axis - The decoded time axis, or null when the store has none.
+ */
+async function applyZarrSelectorDates(
+  layerId: string,
+  dimensionValues: Record<string, (number | string)[]>,
+  axis: ZarrTimeAxis | null,
+): Promise<void> {
+  const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
+  const selector = layer?.source.selector as Record<string, number | string> | undefined;
+  const { selector: resolved, unresolved } = resolveZarrSelectorDates(
+    selector,
+    dimensionValues,
+    axis,
+  );
+  if (resolved) await setZarrLayerSelector(layerId, resolved);
+  if (unresolved.length > 0) reportZarrSelectorProblem(unresolved, selector ?? {});
+}
+
+/**
+ * Replace the panel's "added successfully" with an error naming the selector
+ * values that matched nothing. The panel exposes no API for this, so its state
+ * is set the same way its own failure path does. Logged as well, for a layer
+ * added while the panel is hidden.
+ *
+ * @param dimensions - The dimensions whose values matched nothing.
+ * @param selector - The selector those values came from.
+ */
+function reportZarrSelectorProblem(
+  dimensions: string[],
+  selector: Record<string, number | string>,
+): void {
+  const values = dimensions.map((dimension) => `${dimension}: "${selector[dimension]}"`).join(", ");
+  const message = localizedMessage(
+    "zarrPanel.selectorUnmatched",
+    "Selector value not found ({{values}}). Use a coordinate value, a date on the time axis, or an index.",
+    { values },
+  );
+  console.warn(`[zarr] ${message}`);
+  const control = zarrControl as unknown as {
+    _state?: { error?: string | null; status?: string | null };
+    _render?: () => void;
+  } | null;
+  if (!control?._state) return;
+  control._state.error = message;
+  control._state.status = null;
+  control._render?.();
+}
+
+/**
  * Resolve a freshly added Zarr layer's time axis and, when it has one, register
  * the temporal adapter that lets the Time Slider step it via
  * {@link setZarrLayerSelector}.
@@ -967,6 +1028,7 @@ function registerZarrTemporalAdapter(
       ...(headers ? { headers } : {}),
       ...(attributes !== undefined ? { attributes } : {}),
     });
+    await applyZarrSelectorDates(layerId, dimensionValues, axis);
     if (!axis) return true;
     // The layer may have been removed while the axis was being resolved.
     if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;

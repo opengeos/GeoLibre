@@ -108,6 +108,34 @@ export function isDemOverviewIfd(subfileType: unknown): boolean {
   return (flags & REDUCED_RESOLUTION_SUBFILE_TYPE) !== 0 && (flags & MASK_SUBFILE_TYPE) === 0;
 }
 
+/**
+ * Read an eagerly parsed tag from a GeoTIFF file directory.
+ *
+ * geotiff.js 3 returns an `ImageFileDirectory` whose tags are reached through
+ * `getValue`; indexing it like the plain record geotiff.js 2 returned yields
+ * undefined for every tag, which silently dropped the declared nodata (so
+ * -9999 drew as a pit) and every overview (so each tile read full resolution).
+ * Both shapes are accepted so a plain record (tests, older readers) still works.
+ * Exported for tests.
+ *
+ * @param directory - The image's file directory.
+ * @param name - The tag name, e.g. `GDAL_NODATA`.
+ * @returns The tag's value, or undefined when absent or deferred.
+ */
+export function fileDirectoryValue(directory: unknown, name: string): unknown {
+  if (!directory || typeof directory !== "object") return undefined;
+  const reader = directory as { getValue?: unknown };
+  if (typeof reader.getValue === "function") {
+    try {
+      return (reader.getValue as (tag: string) => unknown).call(directory, name);
+    } catch {
+      // A deferred tag needs an async load; neither tag read here is one.
+      return undefined;
+    }
+  }
+  return (directory as Record<string, unknown>)[name];
+}
+
 function isMissing(value: number, nodata: number | null): boolean {
   if (!Number.isFinite(value)) return true;
   if (nodata === null) return false;
@@ -505,9 +533,7 @@ export async function registerCogDemSource(
     images = allImages.filter(
       (candidate, index) =>
         index === 0 ||
-        isDemOverviewIfd(
-          (candidate.getFileDirectory() as unknown as Record<string, unknown>).NewSubfileType,
-        ),
+        isDemOverviewIfd(fileDirectoryValue(candidate.getFileDirectory(), "NewSubfileType")),
     );
   } catch (error) {
     // A truncated or corrupt overview IFD must not leak the open reader.
@@ -515,13 +541,12 @@ export async function registerCogDemSource(
     throw error;
   }
   const key = String(++datasetSequence);
-  const directory = image.getFileDirectory() as unknown as Record<string, unknown>;
   datasets.set(key, {
     tiff,
     images,
     sourceBounds: image.getBoundingBox() as [number, number, number, number],
     projection,
-    nodata: normalizeNoData(directory.GDAL_NODATA),
+    nodata: normalizeNoData(fileDirectoryValue(image.getFileDirectory(), "GDAL_NODATA")),
     band: band - 1,
     pendingReads: 0,
     disposed: false,

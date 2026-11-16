@@ -1,4 +1,4 @@
-import { formatPixelValue } from "@geolibre/core";
+import { formatPixelValue, isPlaceholderBandName } from "@geolibre/core";
 import type { PlanetaryComputerPixelReading } from "@geolibre/plugins";
 import type { PixelReading } from "maplibre-gl-raster";
 
@@ -48,7 +48,9 @@ export function rasterPixelIdentifyProperties(
   labels: RasterIdentifyLabels,
 ): Record<string, unknown> {
   const rows: Array<[string, unknown]> = reading.bands.map((band) => {
-    const label = band.name ?? labels.band(band.index);
+    // A placeholder description (`*`) names nothing; label it by number.
+    const label =
+      band.name && !isPlaceholderBandName(band.name) ? band.name : labels.band(band.index);
     const value = formatPixelValue(band.value);
     return [label, band.isNodata ? `${value} (${labels.nodata})` : value];
   });

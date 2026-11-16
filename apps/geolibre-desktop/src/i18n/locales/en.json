@@ -10013,6 +10013,9 @@
     "localRasterNotRestored_other": "{{count}} local raster layers could not be restored",
     "localRasterNotRestoredDesc": "Loaded from a local file: {{names}}. The project does not hold raster data, or the file could not be read. Add the file again."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Selector value not found ({{values}}). Use a coordinate value, a date on the time axis, or an index."
+  },
   "attributeForm": {
     "error": {
       "required": "A value is required",

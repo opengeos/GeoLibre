@@ -13,3 +13,18 @@ export function formatPixelValue(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return String(Number(value.toPrecision(6)));
 }
+
+/**
+ * Whether a band description is a placeholder meaning "no name" rather than an
+ * actual name. Esri tools write a literal `*` into `DESCRIPTION` (alongside
+ * `BandDefinitionKeyword=*`) for a band they know nothing about; shown as is,
+ * the band reads as `*` in Identify and the band picker. Callers fall back to
+ * their "Band N" label instead.
+ *
+ * @param name A band description read from the file, if any.
+ * @returns True when the name is missing, blank, or a known placeholder.
+ */
+export function isPlaceholderBandName(name: string | null | undefined): boolean {
+  const trimmed = name?.trim() ?? "";
+  return trimmed === "" || trimmed === "*";
+}

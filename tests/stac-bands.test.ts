@@ -55,6 +55,24 @@ test("itemBands lists the drawable bands with their common names and scale", () 
   );
 });
 
+test("itemBands drops an offset Earth Search says it already applied", () => {
+  // Earth Search's Sentinel-2 L2A COGs have the -1000 DN baseline offset removed already
+  // (earthsearch:boa_offset_applied), but raster:bands still declare offset -0.1; applying it
+  // again turned true colour nearly black (#3470).
+  const applied = {
+    ...sentinel,
+    properties: { "earthsearch:boa_offset_applied": true },
+  } as unknown as StacItem;
+  const red = itemBands(applied).find((band) => band.common === "red")!;
+  assert.equal(red.scale, 0.0001);
+  assert.equal(red.offset, 0);
+  const notApplied = {
+    ...sentinel,
+    properties: { "earthsearch:boa_offset_applied": false },
+  } as unknown as StacItem;
+  assert.equal(itemBands(notApplied).find((band) => band.common === "red")!.offset, -0.1);
+});
+
 test("itemBands reads each band of a multi-band asset", () => {
   const naip = {
     type: "Feature",
