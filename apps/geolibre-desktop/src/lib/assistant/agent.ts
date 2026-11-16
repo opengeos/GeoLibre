@@ -3,7 +3,7 @@ import {
   listAssistantToolEntries,
 } from "@geolibre/plugins/assistant-tool-registry";
 import { OPENFREEMAP_BASEMAPS, useAppStore } from "@geolibre/core";
-import { Agent, type Tool } from "@strands-agents/sdk";
+import { Agent, type MessageData, type Tool } from "@strands-agents/sdk";
 import i18next from "i18next";
 import { configForProvider, createModel, readRuntimeEnv, resolveProviderConfig } from "./provider";
 import { NAMED_TILE_BASEMAPS } from "./basemaps";
@@ -22,6 +22,7 @@ import {
   type AssistantProviderSelection,
 } from "./profiles";
 import type { AssistantProfile } from "./provider";
+import { portableHistory } from "./conversation-history";
 import { describeLayers } from "./layer-summary";
 import {
   activatablePluginsKey,
@@ -122,6 +123,11 @@ export class AssistantSession {
   /** Tool instances for direct (non-model) invocation by the fast path. */
   private cachedTools: Tool[] | null = null;
   private cachedToolsVersion = -1;
+  /**
+   * Conversation carried over from an agent dropped by {@link rebuild}, used to
+   * seed the next one so a profile switch does not wipe the model's memory.
+   */
+  private carriedHistory: MessageData[] = [];
 
   constructor(private readonly deps: AssistantToolDeps) {}
 
@@ -156,15 +162,33 @@ export class AssistantSession {
       this.selection = selection as AssistantProviderSelection | null;
       this.profile = null;
     }
-    this.reset();
+    this.rebuild();
   }
 
-  /** Drop the underlying agent so the next prompt rebuilds it (and its key). */
+  /**
+   * Drop the underlying agent so the next prompt rebuilds it (and its key),
+   * keeping the conversation: the next agent is seeded with this one's history,
+   * so the model still knows what the transcript on screen shows. Used for a
+   * profile switch or a credential change; {@link reset} clears instead.
+   */
+  rebuild(): void {
+    if (this.agent) this.carriedHistory = portableHistory(this.agent.messages);
+    this.dropAgent();
+  }
+
+  /** Drop the underlying agent and its conversation history (a fresh chat). */
   reset(): void {
+    this.dropAgent();
+    this.carriedHistory = [];
+    this.pluginTools.clear();
+  }
+
+  private dropAgent(): void {
     this.agent?.cancel();
     this.agent = null;
+    // The layer context is re-sent to the next agent, which may be a different
+    // model; the carried history holds it, but restating it costs one message.
     this.lastContext = null;
-    this.pluginTools.clear();
   }
 
   /** Cancel the in-flight model/tool run, if any. */
@@ -329,7 +353,8 @@ export class AssistantSession {
     const model = await createModel(config);
     const inputsKey = this.currentInputsKey();
     const { tools, systemPrompt } = this.composeAgentInputs();
-    this.agent = new Agent({ model, tools, systemPrompt });
+    this.agent = new Agent({ model, tools, systemPrompt, messages: this.carriedHistory });
+    this.carriedHistory = [];
     this.inputsKey = inputsKey;
     return this.agent;
   }

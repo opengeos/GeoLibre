@@ -3,6 +3,7 @@ import {
   OPENFREEMAP_BASEMAPS,
   useAppStore,
   type GeoLibreLayer,
+  type MapViewState,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
@@ -300,6 +301,43 @@ function asFeatureCollection(data: unknown): FeatureCollection {
     return { type: "FeatureCollection", features: [value as never] };
   }
   throw new Error("URL did not return a GeoJSON Feature or FeatureCollection.");
+}
+
+/** Camera fields `set_view` accepts, named like the MCP server's `set_view`. */
+export interface SetViewInput {
+  center?: number[];
+  zoom?: number;
+  bearing?: number;
+  pitch?: number;
+}
+
+/**
+ * Merge a `set_view` request into the current camera. Omitted fields keep their
+ * current value; zoom is clamped to [0, 24] and pitch to [0, 85], matching the
+ * MCP server's `set_view`, so an out-of-range model guess still lands somewhere
+ * sensible instead of failing. A stale `bbox` is dropped once the center or
+ * zoom moves, since it would no longer describe the visible extent.
+ *
+ * @param current The camera the map shows now.
+ * @param input The fields to change.
+ * @returns The camera to apply.
+ */
+export function resolveSetView(current: MapViewState, input: SetViewInput): MapViewState {
+  const next: MapViewState = { ...current };
+  if (input.center !== undefined) {
+    const [lng, lat] = input.center;
+    next.center = [lng, lat];
+  }
+  if (input.zoom !== undefined) next.zoom = Math.min(24, Math.max(0, input.zoom));
+  if (input.bearing !== undefined) next.bearing = input.bearing;
+  if (input.pitch !== undefined) next.pitch = Math.min(85, Math.max(0, input.pitch));
+  if (input.center !== undefined || input.zoom !== undefined) delete next.bbox;
+  return next;
+}
+
+/** A camera reduced to the fields `set_view` reports back to the model. */
+function cameraSummary(view: MapViewState) {
+  return { center: view.center, zoom: view.zoom, bearing: view.bearing, pitch: view.pitch };
 }
 
 /**
@@ -678,6 +716,46 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
         return json({ fit: "layer", layerId: layer.id });
       }
       throw new Error("Provide either a layer or a bbox.");
+    },
+  });
+
+  const setView = tool({
+    name: "set_view",
+    description:
+      "Move the camera to an exact position: center the map on [longitude, latitude], set the zoom level, and optionally rotate (bearing) or tilt (pitch). Omitted fields keep their current value. Use this for requests like 'center on 40.7, -74.0 at zoom 12' or 'tilt the map 60 degrees'; use zoom_to to frame a layer or a bounding box instead. Returns the new camera and the previous one, so a later 'go back' can restore it with another set_view.",
+    inputSchema: z
+      .object({
+        center: z
+          .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+          .optional()
+          .describe("[longitude, latitude] in WGS84. Note the order: longitude first."),
+        zoom: z
+          .number()
+          .optional()
+          .describe("Zoom level, 0 (whole world) to 24 (building); about 10 is a city."),
+        bearing: z
+          .number()
+          .optional()
+          .describe("Rotation in degrees clockwise from north; 0 is north-up."),
+        pitch: z.number().optional().describe("Tilt in degrees, 0 (straight down) to 85."),
+      })
+      .refine(
+        (value) =>
+          value.center !== undefined ||
+          value.zoom !== undefined ||
+          value.bearing !== undefined ||
+          value.pitch !== undefined,
+        { message: "Provide at least one of center, zoom, bearing, or pitch." },
+      ),
+    callback: async (input) => {
+      const controller = deps.getMapController();
+      if (!controller) throw new Error("The map is not ready yet.");
+      const previous = controller.readView();
+      await controller.applyView(resolveSetView(previous, input));
+      return json({
+        view: cameraSummary(controller.readView()),
+        previous: cameraSummary(previous),
+      });
     },
   });
 
@@ -1151,6 +1229,7 @@ export function createHostAssistantTools(deps: AssistantToolDeps): Tool[] {
     setLayerOpacity,
     setBasemap,
     zoomTo,
+    setView,
     applySymbology,
     runMaplibreJs,
     runPython,
