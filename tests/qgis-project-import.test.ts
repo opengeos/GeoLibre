@@ -660,4 +660,30 @@ describe("QGIS project import", () => {
       [["Countries", "remote-unreadable"]],
     );
   });
+
+  it("reads an extensionless remote endpoint as GeoJSON without the host reader", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [{ id: "roads", name: "Items", source: "https://example.com/items.geojson" }],
+      }),
+      "/work/example.qgs",
+    );
+    // The parser only imports sources with a known extension; a caller that
+    // hands over an extensionless endpoint still gets it read as GeoJSON.
+    result.project.layers[0].sourcePath = "https://example.com/api/items?f=json";
+    await materializeQgisRemoteLayers(
+      result,
+      async () =>
+        Response.json({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: null, properties: {} }],
+        }),
+      async () => {
+        throw new Error("the host reader must not be asked");
+      },
+    );
+
+    assert.deepEqual(result.warnings, []);
+    assert.equal(result.project.layers[0]?.geojson?.features.length, 1);
+  });
 });

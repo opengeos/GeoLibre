@@ -117,8 +117,10 @@ export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 const MAX_QGS_BYTES = 25 * 1024 * 1024;
 const REMOTE_FETCH_CONCURRENCY = 4;
 const REMOTE_FETCH_TIMEOUT_MS = 10_000;
+/** Bound on downloading a whole non-GeoJSON dataset, as Add data allows one. */
+export const REMOTE_DOWNLOAD_TIMEOUT_MS = 180_000;
 /** Bound on reading one downloaded non-GeoJSON file, so a stalled reader fails the layer. */
-const REMOTE_READ_TIMEOUT_MS = 120_000;
+export const REMOTE_READ_TIMEOUT_MS = 120_000;
 /** Largest remote non-GeoJSON file read, matching the `?data=` download ceiling. */
 export const MAX_REMOTE_VECTOR_BYTES = 250 * 1024 * 1024;
 
@@ -170,10 +172,16 @@ export async function materializeQgisRemoteLayers(
       const layer = remoteLayers[nextIndex++];
       const sourcePath = layer.sourcePath;
       if (!sourcePath) continue;
-      const extension = sourceExtension(sourcePath);
-      const asGeoJson = REMOTE_GEOJSON_EXTENSIONS.has(extension);
+      // An endpoint with no file extension (`.../items?f=json`) is read as
+      // GeoJSON, as it always was.
+      const lastSegment = (sourcePath.split(/[?#]/, 1)[0] ?? "").split("/").pop() ?? "";
+      const extension = lastSegment.includes(".") ? sourceExtension(sourcePath) : "";
+      const asGeoJson = extension === "" || REMOTE_GEOJSON_EXTENSIONS.has(extension);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        asGeoJson ? REMOTE_FETCH_TIMEOUT_MS : REMOTE_DOWNLOAD_TIMEOUT_MS,
+      );
       try {
         if (!asGeoJson && !readVector) throw new Error("No reader for this format");
         const response = await fetcher(sourcePath, {
@@ -235,8 +243,14 @@ export async function materializeQgisRemoteLayers(
   return result;
 }
 
-/** Reject when `promise` has not settled within `ms`. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+/**
+ * Reject when `promise` has not settled within `ms`.
+ *
+ * @param promise - The work to bound.
+ * @param ms - Milliseconds to wait.
+ * @returns `promise`'s result, or a rejection once the time is up.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
