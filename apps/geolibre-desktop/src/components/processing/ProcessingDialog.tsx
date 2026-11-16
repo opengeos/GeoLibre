@@ -60,6 +60,7 @@ import {
   pickSavePathWithFallback,
 } from "../../lib/tauri-io";
 import { clamp } from "../../lib/clamp";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import {
   layersForSubsetUrl,
   subsetUrlFieldValues,
@@ -1336,7 +1337,10 @@ export function ProcessingDialog({
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value) ? value : await fetchWhiteboxJsonOutput(path);
         if (!isFeatureCollection(data)) continue;
-        const layerName = `${jobToolLabel} ${humanize(name)}`;
+        const layerName = uniqueLayerName(
+          `${jobToolLabel} ${humanize(name)}`,
+          useAppStore.getState().layers,
+        );
         const layerId = addGeoJsonLayer(layerName, data, path || undefined);
         historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
         const layer = useAppStore.getState().layers.find((item) => item.id === layerId);

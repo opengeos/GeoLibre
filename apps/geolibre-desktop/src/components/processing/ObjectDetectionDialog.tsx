@@ -31,6 +31,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
 import { readPhotoLocation } from "../../lib/geotagged-photos";
 import {
@@ -407,10 +408,16 @@ export function ObjectDetectionDialog({
       }
 
       for (const [cls, features] of byClass) {
-        addGeoJsonLayer(t("objectDetection.layerName", { class: cls }), {
-          type: "FeatureCollection",
-          features,
-        });
+        addGeoJsonLayer(
+          uniqueLayerName(
+            t("objectDetection.layerName", { class: cls }),
+            useAppStore.getState().layers,
+          ),
+          {
+            type: "FeatureCollection",
+            features,
+          },
+        );
       }
       // Fit to the union of every detected box across all classes, not just the
       // first class's layer, so no class's detections end up off-screen.

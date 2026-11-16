@@ -21,6 +21,7 @@ import { useCallback, useMemo, useRef, useState, type ReactElement } from "react
 import { useTranslation } from "react-i18next";
 import type { FeatureCollection } from "geojson";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import { uniqueLayerName } from "../../../lib/unique-layer-name";
 import { parseRuleset, rulesetFields } from "../../../lib/obia/obia-ruleset-run";
 import {
   DEFAULT_OBIA_NATIVE_PARAMS,
@@ -228,7 +229,10 @@ export function ObiaBatchStep(): ReactElement | null {
         // layer and its batch record are added together or not at all.
         if (stale()) throw new Error(t("obia.batch.error.changed"));
         const objectsLayerId = addGeoJsonLayer(
-          t("obia.layerName", { name: target.name }),
+          uniqueLayerName(
+            t("obia.layerName", { name: target.name }),
+            useAppStore.getState().layers,
+          ),
           applyPredictions(segmented.objects, result.predictions),
         );
         const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);

@@ -221,9 +221,83 @@ function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
  * {@link mergeWasmToolManifests} to reconcile these against the catalog.
  */
 export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
-  const { listManifests } = await loadToolsModule();
-  const manifests = await listManifests();
+  const manifests = (await fetchPrebuiltToolManifests()) ?? (await listRunnerManifests());
   return manifests.map(manifestToWhiteboxTool);
+}
+
+/** Ask the WASM runner itself; downloads and compiles the ~24 MB runner. */
+async function listRunnerManifests(): Promise<ToolManifest[]> {
+  const { listManifests } = await loadToolsModule();
+  return listManifests();
+}
+
+/**
+ * File the build writes the runner's manifests to, next to index.html
+ * (`vite-plugins/wasm-tool-manifests.ts`).
+ */
+export const PREBUILT_TOOL_MANIFESTS_FILE = "whitebox-wasm-manifests.json";
+
+/** The installed geolibre-wasm version, injected by vite.config.ts. */
+declare const __GEOLIBRE_WASM_VERSION__: string | undefined;
+let prebuiltManifestsPromise: Promise<ToolManifest[] | null> | null = null;
+
+/**
+ * Load the build-time copy of the WASM runner's tool manifests.
+ *
+ * Listing them from the runner means downloading and compiling the whole
+ * `geolibre-cli.wasm` first, which held the Processing dialog's tool list on
+ * "Loading…" for ~30 s on a slow link (issue #3472). The build writes the same
+ * manifests to {@link PREBUILT_TOOL_MANIFESTS_FILE}, so the list shows as soon
+ * as that small file arrives and the runner downloads only when a tool runs.
+ *
+ * @param baseUrl Document base to resolve the file against (defaults to
+ *   `document.baseURI`; none outside a browser).
+ * @param fetchImpl The fetch implementation (injectable for tests).
+ * @returns The manifests, or null when the file is absent or malformed (an SPA
+ *   fallback answers a missing file with index.html), so the caller can ask the
+ *   runner instead.
+ */
+export function fetchPrebuiltToolManifests(
+  baseUrl: string | undefined = typeof document !== "undefined" ? document.baseURI : undefined,
+  fetchImpl: typeof fetch = (...args) => fetch(...args),
+): Promise<ToolManifest[] | null> {
+  prebuiltManifestsPromise ??= (async () => {
+    if (!baseUrl) return null;
+    try {
+      const url = new URL(PREBUILT_TOOL_MANIFESTS_FILE, baseUrl);
+      // The file name is not content-hashed; key it by the runner version so a
+      // deploy that bumps geolibre-wasm cannot be answered from a stale cache.
+      if (typeof __GEOLIBRE_WASM_VERSION__ === "string") {
+        url.searchParams.set("v", __GEOLIBRE_WASM_VERSION__);
+      }
+      const response = await fetchImpl(url.href, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) return null;
+      const data: unknown = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return null;
+      // Shape-check what the conversion relies on, so a malformed file falls
+      // back to the runner instead of throwing in manifestToWhiteboxTool.
+      const usable = (item: ToolManifest | null) =>
+        typeof item?.id === "string" &&
+        (item.params == null || Array.isArray(item.params)) &&
+        (item.source == null || typeof item.source === "string");
+      if (!data.every((item) => usable(item as ToolManifest | null))) return null;
+      return data as ToolManifest[];
+    } catch {
+      return null;
+    }
+  })().then((result) => {
+    // Retry on a later call after a miss (a transient network error).
+    if (!result) prebuiltManifestsPromise = null;
+    return result;
+  });
+  return prebuiltManifestsPromise;
+}
+
+/** Forget the memoized prebuilt manifests (tests only). */
+export function resetPrebuiltToolManifestsCache(): void {
+  prebuiltManifestsPromise = null;
 }
 
 /**

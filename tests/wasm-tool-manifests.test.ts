@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  PREBUILT_TOOL_MANIFESTS_FILE,
+  fetchPrebuiltToolManifests,
   fileOutputTargetExtension,
   lidarBytesExtension,
   lidarOutputTargetExtension,
@@ -8,6 +10,7 @@ import {
   mergeWasmToolManifests,
   normalizeVectorOutputFormat,
   outputTextFormatHint,
+  resetPrebuiltToolManifestsCache,
   type ToolManifest,
   type WhiteboxTool,
 } from "@geolibre/processing";
@@ -715,5 +718,48 @@ describe("lidarBytesExtension", () => {
   it("falls back to .las for bytes that are not LAS", () => {
     assert.equal(lidarBytesExtension(new Uint8Array([0x49, 0x49, 0x2a, 0x00])), "las");
     assert.equal(lidarBytesExtension(new Uint8Array()), "las");
+  });
+});
+
+describe("fetchPrebuiltToolManifests (issue #3472)", () => {
+  const BASE = "https://app.example/sub/index.html";
+  const json = (body: unknown, status = 200) =>
+    (async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+
+  it("reads the build-time manifests next to the document", async () => {
+    resetPrebuiltToolManifestsCache();
+    let requested = "";
+    const fake = (async (url: string) => {
+      requested = url;
+      return new Response(JSON.stringify([{ id: "slope", params: [] }]));
+    }) as unknown as typeof fetch;
+    const manifests = await fetchPrebuiltToolManifests(BASE, fake);
+    assert.deepEqual(manifests, [{ id: "slope", params: [] }]);
+    assert.equal(requested, `https://app.example/sub/${PREBUILT_TOOL_MANIFESTS_FILE}`);
+    resetPrebuiltToolManifestsCache();
+  });
+
+  it("returns null so the caller asks the runner when the file is missing or bad", async () => {
+    for (const fake of [
+      json([], 200),
+      json({ error: "nope" }, 404),
+      json([{ name: "no id" }]),
+      json([{ id: "slope", params: {} }]),
+      json([{ id: "slope", source: 42 }]),
+      (async () => new Response("<!doctype html>", { status: 200 })) as unknown as typeof fetch,
+      (async () => {
+        throw new Error("offline");
+      }) as unknown as typeof fetch,
+    ]) {
+      resetPrebuiltToolManifestsCache();
+      assert.equal(await fetchPrebuiltToolManifests(BASE, fake), null);
+    }
+    resetPrebuiltToolManifestsCache();
+    assert.equal(await fetchPrebuiltToolManifests(undefined, json([{ id: "x" }])), null);
+    resetPrebuiltToolManifestsCache();
   });
 });
