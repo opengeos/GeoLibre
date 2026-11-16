@@ -205,13 +205,13 @@ export function DelimitedTextSource() {
     }
     // An Excel workbook is read as one, as the file source does, not as text.
     const download = await readDelimitedTextDownload(sourcePath, await response.arrayBuffer());
-    if ("text" in download) return { sourcePath, text: download.text, workbook: false };
-    const [first] = download.worksheets;
-    if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
     // The source changed while downloading: drop this result, keep what replaced it.
     if (generation !== sourceGenerationRef.current) {
       throw new DOMException("The source changed while downloading.", "AbortError");
     }
+    if ("text" in download) return { sourcePath, text: download.text, workbook: false };
+    const [first] = download.worksheets;
+    if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
     setDelimitedTextDelimiter("comma");
     setSelectedWorksheet(first.name);
     setSelectedDelimitedText({ path: sourcePath, text: "", worksheets: download.worksheets });
@@ -489,7 +489,15 @@ export function DelimitedTextSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || defaultName;
-    const { sourcePath, text, workbook } = await readDelimitedTextSource();
+    let read: Awaited<ReturnType<typeof readDelimitedTextSource>>;
+    try {
+      read = await readDelimitedTextSource();
+    } catch (error) {
+      // Superseded by a newer source while downloading: nothing to add or report.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      throw error;
+    }
+    const { sourcePath, text, workbook } = read;
     const delimiter = workbook
       ? ","
       : resolveDelimitedTextDelimiter(delimitedTextDelimiter, delimitedTextCustomDelimiter);

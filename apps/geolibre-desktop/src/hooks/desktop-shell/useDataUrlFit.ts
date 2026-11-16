@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getLayerBounds } from "@geolibre/map";
 import { useEffect, useRef, type RefObject } from "react";
@@ -59,9 +59,30 @@ export function useDataUrlFit(
     stopWaitRef.current = stop;
     tryFit(true);
     if (done) return;
-    unsubscribe = useAppStore.subscribe((state, previous) => {
-      if (state.layers !== previous.layers) tryFit(true);
+    // Re-check only when one of the batch's COGs changed (its bounds land on a
+    // new layer record), not on every store edit, which would re-scan large
+    // vector layers in the batch.
+    const cogsOf = (layers: readonly GeoLibreLayer[]) =>
+      layers.filter((layer) => layer.type === "cog" && fitLayerIds.includes(layer.id));
+    const store = useAppStore.subscribe((state, previous) => {
+      if (state.layers === previous.layers) return;
+      const before = cogsOf(previous.layers);
+      const after = cogsOf(state.layers);
+      if (after.length !== before.length || after.some((layer, i) => layer !== before[i])) {
+        tryFit(true);
+      }
     });
+    // A user who moves the map while a raster is still loading has taken over
+    // the camera; do not pull it back when the extent arrives.
+    const map = mapControllerRef.current?.getMap() ?? null;
+    const onMoveStart = (event: { originalEvent?: unknown }) => {
+      if (event.originalEvent) stop();
+    };
+    map?.on("movestart", onMoveStart);
+    unsubscribe = () => {
+      store();
+      map?.off("movestart", onMoveStart);
+    };
     timer = window.setTimeout(() => tryFit(false), BOUNDS_WAIT_MS);
   }, [dataUrlLoadState?.fitLayerIds, dataUrlLoadState?.status, mapControllerRef]);
 }

@@ -57,4 +57,18 @@ describe("dataUrlFitBounds", () => {
       [-84, 35.9, -83.93, 35.95],
     );
   });
+
+  it("does not wait on a COG that failed to load", () => {
+    const failed = {
+      id: "f",
+      type: "cog",
+      source: {},
+      metadata: { error: "HTTP 404" },
+    } as unknown as GeoLibreLayer;
+    const layers = [raster("west", [-84, 35.9, -83.93, 35.95]), failed];
+    assert.deepEqual(
+      dataUrlFitBounds(layers, ["west", "f"], true, getLayerBounds),
+      [-84, 35.9, -83.93, 35.95],
+    );
+  });
 });

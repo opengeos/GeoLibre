@@ -819,8 +819,8 @@ export function dataUrlFitBounds(
     if (box) bounds.push(box);
     // Only a COG learns its extent after it is added (from its header, as it
     // first renders); any other layer without one never gets it, so it must
-    // not hold the fit back.
-    else if (waitForAll && layer.type === "cog") return "pending";
+    // not hold the fit back. Nor does a COG that failed to load.
+    else if (waitForAll && layer.type === "cog" && !layer.metadata.error) return "pending";
   }
   if (!bounds.length) return null;
   // Short way round the antimeridian, not a plain min/max (GeoLibre#3469).
