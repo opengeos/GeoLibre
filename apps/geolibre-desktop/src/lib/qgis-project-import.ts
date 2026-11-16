@@ -14,6 +14,12 @@ import {
 import { importStyleText, qgisLengthToPixels } from "@geolibre/map/style-import";
 import { strFromU8, unzipSync } from "fflate";
 import type { FeatureCollection } from "geojson";
+import {
+  createWmsTileUrl,
+  normalizeWmsVersion,
+  readLimitedBody,
+  stripOgcOperationParams,
+} from "../components/layout/add-data/helpers";
 import { collectionMetadata } from "./field-collection";
 import {
   MAX_RELATION_ENTRIES,
@@ -34,7 +40,9 @@ export interface QgisProjectImportWarning {
     | "missing-source"
     | "format"
     | "remote-file"
+    | "remote-unreadable"
     | "network-path"
+    | "wmts"
     | "browser-local-file"
     | "browser-local-raster"
     | "no-geometry";
@@ -110,48 +118,120 @@ export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 const MAX_QGS_BYTES = 25 * 1024 * 1024;
 const REMOTE_FETCH_CONCURRENCY = 4;
 const REMOTE_FETCH_TIMEOUT_MS = 10_000;
+/** Bound on downloading a whole non-GeoJSON dataset, as Add data allows one. */
+export const REMOTE_DOWNLOAD_TIMEOUT_MS = 180_000;
+/** Bound on reading one downloaded non-GeoJSON file, so a stalled reader fails the layer. */
+export const REMOTE_READ_TIMEOUT_MS = 120_000;
+/** Largest remote non-GeoJSON file read, matching the `?data=` download ceiling. */
+export const MAX_REMOTE_VECTOR_BYTES = 250 * 1024 * 1024;
 
 /**
- * Fetch remote GeoJSON sources referenced by a parsed QGIS project.
+ * Reads a downloaded remote vector file that is not GeoJSON (GeoParquet,
+ * GeoPackage, FlatGeobuf, KML, ...) into features. Supplied by the host, which
+ * owns the DuckDB-backed readers this module must not pull in. The reader
+ * bounds its own time: it may queue reads, and only it knows when one starts.
+ */
+export type QgisRemoteVectorReader = (file: {
+  /** File name taken from the URL, extension included. */
+  name: string;
+  /** Lower-case extension without the dot. */
+  extension: string;
+  data: Uint8Array<ArrayBuffer>;
+  /** Table to read from a multi-layer file (`layername=` in QGIS). */
+  sourceLayer?: string;
+}) => Promise<FeatureCollection>;
+
+/** Remote extensions read as GeoJSON text without a host reader. */
+const REMOTE_GEOJSON_EXTENSIONS = new Set(["geojson", "json"]);
+
+/**
+ * Fetch remote vector sources referenced by a parsed QGIS project.
  *
  * QGIS commonly stores HTTP-backed OGR layers behind GDAL's `/vsicurl/`
  * prefix. The synchronous parser normalizes that prefix to an HTTP URL; this
  * step materializes those features before the project enters the store because
  * GeoLibre's GeoJSON renderer consumes an in-memory FeatureCollection.
+ * GeoJSON is parsed here; any other format goes to `readVector`, and without
+ * one it is reported as unreadable.
+ *
+ * @param result - A parsed import; mutated in place and returned.
+ * @param fetcher - `fetch` replacement, for tests.
+ * @param readVector - Host reader for the formats that are not GeoJSON.
+ * @returns `result`.
  */
 export async function materializeQgisRemoteLayers(
   result: QgisProjectImportResult,
   fetcher: typeof fetch = fetch,
+  readVector?: QgisRemoteVectorReader,
 ): Promise<QgisProjectImportResult> {
   const failedLayerIds = new Set<string>();
   const remoteLayers = result.project.layers.filter(
-    (layer) => layer.sourcePath && isHttpSource(layer.sourcePath),
+    (layer) => layer.type === "geojson" && layer.sourcePath && isHttpSource(layer.sourcePath),
   );
   let nextIndex = 0;
+  // Non-GeoJSON files can be hundreds of megabytes and are read one at a
+  // time anyway, so they also download one at a time: parallel downloads
+  // would only hold several whole files in memory waiting for the reader.
+  // A worker waiting here keeps its slot, so GeoJSON layers can queue behind
+  // large ones; that is accepted to keep this a plain worker pool.
+  let largeSlot: Promise<void> = Promise.resolve();
   async function worker(): Promise<void> {
     while (nextIndex < remoteLayers.length) {
       const layer = remoteLayers[nextIndex++];
       const sourcePath = layer.sourcePath;
       if (!sourcePath) continue;
+      // An endpoint with no file extension (`.../items?f=json`) is read as
+      // GeoJSON, as it always was.
+      const lastSegment = (sourcePath.split(/[?#]/, 1)[0] ?? "").split("/").pop() ?? "";
+      const extension = lastSegment.includes(".") ? sourceExtension(sourcePath) : "";
+      const asGeoJson = extension === "" || REMOTE_GEOJSON_EXTENSIONS.has(extension);
+      let release: (() => void) | undefined;
+      if (!asGeoJson && readVector) {
+        const previous = largeSlot;
+        largeSlot = new Promise((resolve) => {
+          release = resolve;
+        });
+        await previous;
+      }
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        asGeoJson ? REMOTE_FETCH_TIMEOUT_MS : REMOTE_DOWNLOAD_TIMEOUT_MS,
+      );
       try {
+        if (!asGeoJson && !readVector) throw new Error("No reader for this format");
         const response = await fetcher(sourcePath, {
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = (await response.json()) as unknown;
+        let data: unknown;
+        if (asGeoJson) {
+          data = (await response.json()) as unknown;
+        } else {
+          const bytes = await readLimitedBody(response, MAX_REMOTE_VECTOR_BYTES);
+          // The download is done. The host reader bounds its own work.
+          clearTimeout(timeout);
+          const sourceLayer = layer.metadata.sourceLayer;
+          data = await readVector!({
+            name: remoteFileNameFromUrl(sourcePath, extension),
+            extension,
+            data: bytes,
+            ...(typeof sourceLayer === "string" && sourceLayer ? { sourceLayer } : {}),
+          });
+        }
         if (!isFeatureCollection(data))
           throw new Error("Response is not a GeoJSON FeatureCollection");
         layer.geojson = data;
-      } catch {
+      } catch (error) {
+        console.warn(`[GeoLibre] Could not load the QGIS layer "${layer.name}".`, error);
         failedLayerIds.add(layer.id);
         result.warnings.push({
           layerName: layer.name,
-          reason: "remote-file",
+          reason: "remote-unreadable",
         });
       } finally {
         clearTimeout(timeout);
+        release?.();
       }
     }
   }
@@ -168,6 +248,32 @@ export async function materializeQgisRemoteLayers(
     );
   }
   return result;
+}
+
+/**
+ * Reject when `promise` has not settled within `ms`.
+ *
+ * @param promise - The work to bound.
+ * @param ms - Milliseconds to wait.
+ * @returns `promise`'s result, or a rejection once the time is up.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
+}
+
+/** The last path segment of a URL, or `layer.<extension>` when it has none. */
+function remoteFileNameFromUrl(url: string, extension: string): string {
+  try {
+    const name = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "");
+    if (name) return name;
+  } catch {
+    // Fall through to the generic name.
+  }
+  return `layer.${extension}`;
 }
 
 /**
@@ -337,6 +443,32 @@ export function importQgisProject(
       project.basemapStyleUrl = DEFAULT_BASEMAP;
       project.basemapVisible = visibilityByLayerId.get(id) ?? true;
       project.basemapOpacity = parseOpacity(element);
+      continue;
+    }
+
+    if (provider === "wms" && element.getAttribute("type")?.toLowerCase() === "raster") {
+      const web = qgisWebTileLayer(dataSource);
+      if (web.kind === "unsupported") {
+        warnings.push({ layerName: name, reason: web.reason, provider });
+        continue;
+      }
+      const groupId = groupByLayerId.get(id);
+      layers.push({
+        id: uniqueLayerId(id, layers),
+        name,
+        type: web.kind,
+        source: web.source,
+        visible: visibilityByLayerId.get(id) ?? true,
+        opacity: parseRasterOpacity(element),
+        style: structuredClone(DEFAULT_LAYER_STYLE),
+        metadata: {
+          ...web.metadata,
+          importedFrom: "qgis",
+          qgisLayerId: id,
+          qgisProvider: provider,
+        },
+        ...(groupId ? { groupId } : {}),
+      });
       continue;
     }
 
@@ -591,31 +723,53 @@ function qgisProjectXml(data: ArrayBuffer | Uint8Array | string, sourcePath: str
   return strFromU8(entries[qgsName]);
 }
 
+/**
+ * The view the project opens at: the map canvas extent QGIS saved, else the
+ * project's default view extent (Project Properties > View Settings). QGIS
+ * 3.x and 4.x write `<DefaultViewExtent>` with its bounds as attributes and
+ * its CRS as a child, and a project saved without a canvas (by a script, or
+ * QGIS Server tooling) carries only that.
+ */
 function parseMapView(document: Document): MapViewState {
-  const extent =
-    document.querySelector("mapcanvas > extent") ??
-    document.querySelector("projectviewsettings extent");
-  const xmin = numberText(extent?.querySelector("xmin"));
-  const ymin = numberText(extent?.querySelector("ymin"));
-  const xmax = numberText(extent?.querySelector("xmax"));
-  const ymax = numberText(extent?.querySelector("ymax"));
-  const authId =
-    text(document.querySelector("mapcanvas > destinationsrs authid")) ||
-    text(document.querySelector("projectCrs authid"));
-  if ([xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+  const projectCrs = text(document.querySelector("projectCrs authid"));
+  const canvasExtent = document.querySelector("mapcanvas > extent");
+  const canvas = canvasExtent
+    ? {
+        xmin: numberText(canvasExtent.querySelector("xmin")),
+        ymin: numberText(canvasExtent.querySelector("ymin")),
+        xmax: numberText(canvasExtent.querySelector("xmax")),
+        ymax: numberText(canvasExtent.querySelector("ymax")),
+        authId: text(document.querySelector("mapcanvas > destinationsrs authid")) || projectCrs,
+      }
+    : null;
+  const defaultExtent = document.documentElement.querySelector(
+    ":scope > ProjectViewSettings > DefaultViewExtent",
+  );
+  const fallback = defaultExtent
+    ? {
+        xmin: numberAttribute(defaultExtent, "xmin"),
+        ymin: numberAttribute(defaultExtent, "ymin"),
+        xmax: numberAttribute(defaultExtent, "xmax"),
+        ymax: numberAttribute(defaultExtent, "ymax"),
+        authId: text(defaultExtent.querySelector("spatialrefsys authid")) || projectCrs,
+      }
+    : null;
+  for (const extent of [canvas, fallback]) {
+    if (!extent) continue;
+    const { xmin, ymin, xmax, ymax, authId } = extent;
+    if (![xmin, ymin, xmax, ymax].every(Number.isFinite) || xmin >= xmax || ymin >= ymax) continue;
     const southwest = toWgs84(xmin, ymin, authId);
     const northeast = toWgs84(xmax, ymax, authId);
-    if (southwest && northeast) {
-      const [west, south] = southwest;
-      const [east, north] = northeast;
-      return {
-        center: [(west + east) / 2, (south + north) / 2],
-        zoom: zoomForBounds(west, south, east, north),
-        bearing: 0,
-        pitch: 0,
-        bbox: [west, south, east, north],
-      };
-    }
+    if (!southwest || !northeast) continue;
+    const [west, south] = southwest;
+    const [east, north] = northeast;
+    return {
+      center: [(west + east) / 2, (south + north) / 2],
+      zoom: zoomForBounds(west, south, east, north),
+      bearing: 0,
+      pitch: 0,
+      bbox: [west, south, east, north],
+    };
   }
   return { center: [-100, 40], zoom: 2, bearing: 0, pitch: 0 };
 }
@@ -806,12 +960,120 @@ function isOpenStreetMapBasemap(element: Element, provider: string, dataSource: 
   }
 }
 
+type QgisWebTileLayer =
+  | {
+      kind: "wms" | "xyz";
+      source: GeoLibreLayer["source"];
+      metadata: Record<string, unknown>;
+    }
+  | { kind: "unsupported"; reason: QgisProjectImportWarning["reason"] };
+
+/**
+ * Read a layer of the QGIS `wms` provider, which serves WMS, WMTS and XYZ
+ * tiles from one URI-encoded data source (`url=...&layers=...&format=...`).
+ * WMS and XYZ become GeoLibre tile layers; WMTS is reported, since its tile
+ * matrix needs the service's capabilities to address.
+ *
+ * WMS tiles are requested in Web Mercator, as Add Data does, whatever CRS
+ * QGIS asked the server for: QGIS reprojects on the fly, and a GetMap in
+ * another CRS would not line up with the map's tile grid in the browser.
+ *
+ * @param dataSource - The layer's `<datasource>` text.
+ * @returns The tile layer's source and metadata, or why it was skipped.
+ */
+function qgisWebTileLayer(dataSource: string): QgisWebTileLayer {
+  const params = new URLSearchParams(dataSource);
+  const type = params.get("type")?.trim().toLowerCase() ?? "";
+  const url = params.get("url")?.trim() ?? "";
+  if (type === "wmts" || params.has("tileMatrixSet")) {
+    return { kind: "unsupported", reason: "wmts" };
+  }
+  if (!isHttpSource(url)) return { kind: "unsupported", reason: "missing-source" };
+  if (type === "xyz") {
+    // MapLibre substitutes only lower-case placeholders.
+    const template = url.replace(
+      /\{(-?)([xyz])\}/gi,
+      (_, dash: string, axis: string) => `{${dash}${axis.toLowerCase()}}`,
+    );
+    if (!/\{z\}/.test(template) || !/\{x\}/.test(template) || !/\{-?y\}/.test(template)) {
+      return { kind: "unsupported", reason: "missing-source" };
+    }
+    const minzoom = optionalNumber(params.get("zmin") ?? undefined);
+    const maxzoom = optionalNumber(params.get("zmax") ?? undefined);
+    // Each bound applies on its own; a reversed pair is dropped whole.
+    const ordered = minzoom === null || maxzoom === null || minzoom <= maxzoom;
+    const zoomRange = ordered
+      ? { ...(minzoom !== null ? { minzoom } : {}), ...(maxzoom !== null ? { maxzoom } : {}) }
+      : {};
+    return {
+      kind: "xyz",
+      source: { type: "raster", tiles: [template], tileSize: 256, url: template, ...zoomRange },
+      metadata: { sourceKind: "xyz-url" },
+    };
+  }
+  if (type !== "") return { kind: "unsupported", reason: "provider" };
+  // A layer list (and its style list) repeats the key once per entry.
+  const layers = params
+    .getAll("layers")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(",");
+  if (!layers) return { kind: "unsupported", reason: "missing-source" };
+  const styles = params
+    .getAll("styles")
+    .map((value) => value.trim())
+    .join(",")
+    .replace(/^,+$/, "");
+  const endpoint = stripOgcOperationParams(url, "WMS");
+  const format = params.get("format")?.trim() || "image/png";
+  const transparent = format.toLowerCase() !== "image/jpeg";
+  const version = normalizeWmsVersion(undefined);
+  const crs = "EPSG:3857";
+  const tileSize = 256;
+  const tileUrl = createWmsTileUrl({
+    endpoint,
+    layers,
+    styles,
+    format,
+    transparent,
+    tileSize,
+    version,
+    crs,
+  });
+  return {
+    kind: "wms",
+    source: {
+      type: "raster",
+      tiles: [tileUrl],
+      tileSize,
+      url: endpoint,
+      layers,
+      styles,
+      format,
+      transparent,
+      version,
+      crs,
+    },
+    metadata: { service: "wms" },
+  };
+}
+
+/** A raster layer's opacity, which QGIS keeps on the renderer, not the layer. */
+function parseRasterOpacity(element: Element): number {
+  const renderer = element.querySelector(":scope > pipe > rasterrenderer");
+  const value = optionalNumber(renderer?.getAttribute("opacity") ?? undefined);
+  return value !== null ? Math.max(0, Math.min(1, value)) : parseOpacity(element);
+}
+
 function unsupportedReason(
   element: Element,
   provider: string,
   source: string,
 ): QgisProjectImportWarning["reason"] {
   if (element.getAttribute("type")?.toLowerCase() === "raster") {
+    // A raster from a service or database provider has no file format to
+    // blame; name the provider instead.
+    if (provider && provider !== "gdal") return "provider";
     if (isHttpSource(source)) return "remote-file";
     return "format";
   }

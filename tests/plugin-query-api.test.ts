@@ -300,6 +300,58 @@ describe("external plugin layer-group API", () => {
       [layerId],
     );
   });
+
+  it("reuses the restored folder when a plugin rebuilds it on reopen (#3473)", () => {
+    const store = useAppStore.getState();
+    const collection = { type: "FeatureCollection" as const, features: [] };
+    const gauges = store.addGeoJsonLayer("Gauges", collection);
+    const hexes = store.addGeoJsonLayer("Hexes", collection);
+    // The saved project restores the plugin's folder with its layers in it.
+    const restored = store.addLayerGroup("US Live Flood Gauges", [gauges, hexes]);
+
+    // The reactivated plugin asks for its folder again.
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const groupId = app.addLayerGroup("US Live Flood Gauges", [gauges, hexes]);
+
+    assert.equal(groupId, restored);
+    assert.deepEqual(
+      app.listLayerGroups().map((group) => group.name),
+      ["US Live Flood Gauges"],
+    );
+    assert.deepEqual(
+      useAppStore.getState().layers.map((layer) => layer.groupId),
+      [restored, restored],
+    );
+  });
+
+  it("reuses an empty namesake folder for the plugin's layers", () => {
+    const layerId = useAppStore
+      .getState()
+      .addGeoJsonLayer("Gauges", { type: "FeatureCollection", features: [] });
+    const empty = useAppStore.getState().addLayerGroup("US Live Flood Gauges");
+
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    assert.equal(app.addLayerGroup("US Live Flood Gauges", [layerId]), empty);
+    assert.equal(useAppStore.getState().layers[0]?.groupId, empty);
+    assert.equal(app.listLayerGroups().length, 1);
+  });
+
+  it("still creates a new folder when the namesake holds other layers", () => {
+    const store = useAppStore.getState();
+    const collection = { type: "FeatureCollection" as const, features: [] };
+    const mine = store.addGeoJsonLayer("Mine", collection);
+    const theirs = store.addGeoJsonLayer("Theirs", collection);
+    const existing = store.addLayerGroup("Results", [theirs]);
+
+    const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
+    const groupId = app.addLayerGroup("Results", [mine]);
+
+    assert.notEqual(groupId, existing);
+    assert.equal(app.listLayerGroups().length, 2);
+    // A call without layers keeps creating a group, as before.
+    assert.notEqual(app.addLayerGroup("Results"), groupId);
+    assert.equal(app.listLayerGroups().length, 3);
+  });
 });
 
 describe("external plugin layer-visibility API", () => {
