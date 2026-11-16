@@ -158,7 +158,8 @@ export function partLongitudeIntervals(
  * Collect the parts of a geometry whose longitudes are contiguous: each point,
  * each line, and each polygon's outer ring (its holes lie inside it). RFC 7946
  * asks for a geometry that crosses the antimeridian to be split into such parts,
- * so these are the pieces the extent is assembled from.
+ * so these are the pieces the extent is assembled from. An unsplit part that
+ * jumps across 180° reads as near-global, as MapLibre also draws it.
  *
  * @param geometry - The geometry to walk; null and malformed members are skipped.
  * @param out - Receives one extent per part.

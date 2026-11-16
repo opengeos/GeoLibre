@@ -96,6 +96,17 @@ describe("shortestLongitudeExtent", () => {
     );
   });
 
+  it("takes the shorter arc for a layer wider than a hemisphere", () => {
+    // -150 and 50 are 200 degrees apart one way and 160 the other.
+    assert.deepEqual(
+      shortestLongitudeExtent([
+        [-150, -150],
+        [50, 50],
+      ]),
+      [50, 210],
+    );
+  });
+
   it("reads unwrapped and RFC 7946 crossing intervals", () => {
     assert.deepEqual(shortestLongitudeExtent([[170, 200]]), [170, 200]);
     assert.deepEqual(shortestLongitudeExtent([[170, -160]]), [170, 200]);
