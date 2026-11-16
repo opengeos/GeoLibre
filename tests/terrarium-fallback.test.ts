@@ -77,11 +77,14 @@ describe("createTerrariumFallback", () => {
     assert.equal(tile?.[SIZE * 128 + 128], 800);
   });
 
-  it("resolves null for a tile the source does not have, and retries it later", async () => {
+  it("resolves null for a missing tile and retries it only after a pause", async () => {
     let calls = 0;
+    let clock = 0;
     const fallback = createTerrariumFallback({
       template: "{z}/{x}/{y}",
       maxzoom: 15,
+      retryAfterMs: 1000,
+      now: () => clock,
       loadRgba: async () => {
         calls += 1;
         return null;
@@ -89,6 +92,10 @@ describe("createTerrariumFallback", () => {
     });
     assert.equal(await fallback(3, 1, 1), null);
     await new Promise((resolve) => setTimeout(resolve, 0));
+    // Within the pause: no new request, so a dead source is not hammered.
+    assert.equal(await fallback(3, 1, 1), null);
+    assert.equal(calls, 1);
+    clock = 1500;
     assert.equal(await fallback(3, 1, 1), null);
     assert.equal(calls, 2);
   });

@@ -171,10 +171,10 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setFillOutside(
         controller?.hasCustomTerrainSource() && controller.getTerrainFillOutside
           ? controller.getTerrainFillOutside()
-          : resolveTerrainFillOutside(
-              useAppStore.getState().preferences.map.terrainFillOutside,
-              "https://",
-            ),
+          : // No DEM yet: show the saved choice, else what a URL DEM (the
+            // common case) would get. A local file still resolves to off
+            // when it is opened, unless the box was set explicitly.
+            (useAppStore.getState().preferences.map.terrainFillOutside ?? true),
       );
       setSourceError(null);
       // A COG still opening from a previous session of this dialog would
@@ -283,16 +283,26 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       // The COG source goes first so a failed registration keeps the saved Ion
       // selection; a COG source outranks Ion in the engine, so clearing Ion
       // afterwards does not fetch it again.
-      // Set before the source so the DEM opens with it rather than being rebuilt.
-      if (source !== null) {
-        const fill = resolveTerrainFillOutside(
-          useAppStore.getState().preferences.map.terrainFillOutside,
+      // Handed to the engine with the source, which applies it only once the
+      // DEM has opened, so a failed open leaves the working DEM's fill alone.
+      const fill =
+        source === null
+          ? undefined
+          : resolveTerrainFillOutside(
+              useAppStore.getState().preferences.map.terrainFillOutside,
+              source,
+            );
+      if (
+        !(await controller.setTerrainCogSource(
           source,
-        );
-        controller.setTerrainFillOutside?.(fill);
-        setFillOutside(fill);
+          undefined,
+          fill === undefined ? undefined : { fillOutside: fill },
+        )) ||
+        !isCurrent()
+      ) {
+        return;
       }
-      if (!(await controller.setTerrainCogSource(source)) || !isCurrent()) return;
+      if (fill !== undefined && controller.getTerrainFillOutside) setFillOutside(fill);
       setTerrainPreferences({ terrainSource: savedTerrainSource(source) });
       if (ionTerrainSupported && controller.setTerrainIonAssetId) {
         if (controller.getTerrainIonAssetId?.() !== null) {

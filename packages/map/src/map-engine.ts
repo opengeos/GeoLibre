@@ -234,7 +234,15 @@ export interface MapEngine {
   /** The COG URL currently backing terrain, or `null` for the default source. */
   getTerrainCogSource(): string | null;
   hasCustomTerrainSource(): boolean;
-  setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /**
+   * `options.fillOutside` sets {@link MapEngine.setTerrainFillOutside} along
+   * with the new DEM, applied only once it has opened.
+   */
+  setTerrainCogSource(
+    source: string | Blob | null,
+    band?: number,
+    options?: { fillOutside?: boolean },
+  ): Promise<boolean>;
   /**
    * Whether a custom COG DEM is surrounded by the engine's global terrain.
    * Optional: only engines that can composite the two implement it.

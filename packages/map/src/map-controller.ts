@@ -2840,7 +2840,11 @@ export class MapController implements MapEngine {
    * happens, and quietly loading an earlier pick behind a visible error would
    * be the greater surprise. Concurrent callers can tell the two apart.
    */
-  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+  async setTerrainCogSource(
+    source: string | Blob | null,
+    band = 1,
+    options: { fillOutside?: boolean } = {},
+  ): Promise<boolean> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
     let registration: CogDemSourceRegistration | null = null;
@@ -2866,6 +2870,9 @@ export class MapController implements MapEngine {
     }
     if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
 
+    // Only now that the DEM has opened: a failed open leaves the working DEM
+    // and its fill exactly as they were.
+    if (options.fillOutside !== undefined) this.terrainFillOutside = options.fillOutside;
     const previous = this.cogDemRegistration;
     this.cogDemRegistration = registration;
     this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;

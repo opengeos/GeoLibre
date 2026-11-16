@@ -40,17 +40,20 @@ export function applyTerrainLook(
   }
   if (!engine.capabilities.terrainSource) return;
   const source = map.terrainSource ?? null;
-  // Before the source, so a restored DEM opens with its fill already set
-  // rather than being rebuilt a second time.
-  if (source !== null) {
-    engine.setTerrainFillOutside?.(resolveTerrainFillOutside(map.terrainFillOutside, source));
-  }
+  const fillOutside =
+    source === null ? undefined : resolveTerrainFillOutside(map.terrainFillOutside, source);
   if (source === null) {
     if (!options.reset || !engine.hasCustomTerrainSource()) return;
   } else if (engine.getTerrainCogSource() === source) {
+    // Already drawn: only the fill may differ, and the engine skips a no-op.
+    if (fillOutside !== undefined) engine.setTerrainFillOutside?.(fillOutside);
     return;
   }
-  void engine.setTerrainCogSource(source).catch((error: unknown) => {
-    console.warn("[terrain] could not restore the project's terrain source", source, error);
-  });
+  // The fill goes with the source, so a restored DEM opens with it rather than
+  // being rebuilt a second time.
+  void engine
+    .setTerrainCogSource(source, undefined, fillOutside === undefined ? undefined : { fillOutside })
+    .catch((error: unknown) => {
+      console.warn("[terrain] could not restore the project's terrain source", source, error);
+    });
 }

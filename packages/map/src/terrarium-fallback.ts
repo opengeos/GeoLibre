@@ -68,12 +68,25 @@ export function sampleAncestorTile(
   return out;
 }
 
-/** Decode a PNG to RGBA with the browser's image pipeline. */
+/**
+ * Decode a PNG to RGBA with the browser's image pipeline. Uses an
+ * `OffscreenCanvas` where there is one and a detached `<canvas>` otherwise,
+ * so an older desktop WebView decodes too.
+ */
 async function decodePng(bytes: Blob): Promise<Uint8ClampedArray> {
   const bitmap = await createImageBitmap(bytes);
   try {
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const context = canvas.getContext("2d", { willReadFrequently: true });
+    let context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+    if (typeof OffscreenCanvas !== "undefined") {
+      context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d", {
+        willReadFrequently: true,
+      });
+    } else {
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      context = canvas.getContext("2d", { willReadFrequently: true });
+    }
     if (!context) throw new Error("Could not create a canvas to decode a terrain tile.");
     context.drawImage(bitmap, 0, 0);
     return context.getImageData(0, 0, bitmap.width, bitmap.height).data;
@@ -90,7 +103,14 @@ export interface TerrariumFallbackOptions {
   maxzoom: number;
   /** Fetch and decode one tile to RGBA, or null when it has none (tests). */
   loadRgba?: (url: string) => Promise<ArrayLike<number> | null>;
+  /** How long a failed tile is remembered before it is tried again (ms). */
+  retryAfterMs?: number;
+  /** Clock, for tests. */
+  now?: () => number;
 }
+
+/** A failed tile is not refetched for this long, so a dead source is not hammered. */
+const DEFAULT_RETRY_AFTER_MS = 10_000;
 
 /**
  * A {@link CogDemFallback} reading a global Terrarium tile source, so a custom
@@ -109,9 +129,18 @@ export function createTerrariumFallback(options: TerrariumFallbackOptions): CogD
       if (!response.ok) return null;
       return decodePng(await response.blob());
     });
+  const retryAfterMs = options.retryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
+  const now = options.now ?? Date.now;
   const cache = new Map<string, Promise<Float32Array | null>>();
+  /** When each failed tile failed; it is served as null until the retry delay passes. */
+  const failedAt = new Map<string, number>();
   const load = (z: number, x: number, y: number): Promise<Float32Array | null> => {
     const key = `${z}/${x}/${y}`;
+    const failed = failedAt.get(key);
+    if (failed !== undefined) {
+      if (now() - failed < retryAfterMs) return Promise.resolve(null);
+      failedAt.delete(key);
+    }
     const cached = cache.get(key);
     if (cached) {
       cache.delete(key);
@@ -132,9 +161,16 @@ export function createTerrariumFallback(options: TerrariumFallbackOptions): CogD
       const oldest = cache.keys().next();
       if (!oldest.done) cache.delete(oldest.value);
     }
-    // A failed read should be retried by the next tile that needs it.
+    // A failed read is retried, but only after a pause: offline or with the
+    // tiles blocked, every tile under this ancestor would otherwise refetch it.
     void pending.then((tile) => {
-      if (!tile && cache.get(key) === pending) cache.delete(key);
+      if (tile || cache.get(key) !== pending) return;
+      cache.delete(key);
+      failedAt.set(key, now());
+      if (failedAt.size > MAX_CACHED_TILES) {
+        const oldest = failedAt.keys().next();
+        if (!oldest.done) failedAt.delete(oldest.value);
+      }
     });
     return pending;
   };

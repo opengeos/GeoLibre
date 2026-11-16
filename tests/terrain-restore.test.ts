@@ -142,21 +142,16 @@ describe("applyTerrainLook", () => {
     assert.deepEqual(calls, { exaggeration: [], sources: [] });
   });
 
-  it("sets the saved fill, or the URL default, before restoring a DEM (#3470)", () => {
+  it("restores a DEM with the saved fill, or the URL default (#3470)", () => {
     for (const [saved, expected] of [
       [undefined, true],
       [false, false],
     ] as const) {
       const { engine, calls } = fakeEngine();
-      const order: string[] = [];
-      const fills: boolean[] = [];
-      engine.setTerrainFillOutside = (fill) => {
-        fills.push(fill);
-        order.push("fill");
-      };
+      const options: unknown[] = [];
       const setSource = engine.setTerrainCogSource;
-      engine.setTerrainCogSource = (source, band) => {
-        order.push("source");
+      engine.setTerrainCogSource = (source, band, opts) => {
+        options.push(opts);
         return setSource(source, band);
       };
       applyTerrainLook(
@@ -164,10 +159,22 @@ describe("applyTerrainLook", () => {
         { terrainSource: DEM, terrainFillOutside: saved },
         { reset: true, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
       );
-      assert.deepEqual(fills, [expected]);
-      assert.deepEqual(order, ["fill", "source"]);
+      assert.deepEqual(options, [{ fillOutside: expected }]);
       assert.deepEqual(calls.sources, [DEM]);
     }
+  });
+
+  it("only updates the fill of a DEM the engine already draws", () => {
+    const { engine, calls } = fakeEngine({ cogSource: DEM });
+    const fills: boolean[] = [];
+    engine.setTerrainFillOutside = (fill) => fills.push(fill);
+    applyTerrainLook(
+      engine,
+      { terrainSource: DEM, terrainFillOutside: false },
+      { reset: false, defaultExaggeration: DEFAULT_TERRAIN_EXAGGERATION },
+    );
+    assert.deepEqual(fills, [false]);
+    assert.deepEqual(calls.sources, []);
   });
 
   it("only sets the exaggeration where the engine takes no DEM", () => {

@@ -2861,6 +2861,26 @@ describe("COG DEM terrain source", () => {
     controller.destroy();
   });
 
+  it("applies a fill passed with a DEM only once that DEM opens", async () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+    const working = fakeRegistration("working");
+    internal.openCogDem = async () => working;
+    await controller.setTerrainCogSource("https://example.com/a.tif", 1, { fillOutside: false });
+    assert.equal(controller.getTerrainFillOutside(), false);
+
+    internal.openCogDem = async () => {
+      throw new Error("404");
+    };
+    await assert.rejects(() =>
+      controller.setTerrainCogSource("https://example.com/missing.tif", 1, { fillOutside: true }),
+    );
+    // The failed open changed nothing: the working DEM keeps its fill.
+    assert.equal(controller.getTerrainFillOutside(), false);
+    assert.equal(working.fallback, null);
+    controller.destroy();
+  });
+
   it("discards a slow open that a newer selection has already superseded", async () => {
     const { controller } = terrainController();
     const internal = controller as unknown as TerrainInternals;
