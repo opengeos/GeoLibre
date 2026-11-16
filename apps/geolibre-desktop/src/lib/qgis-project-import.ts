@@ -127,7 +127,8 @@ export const MAX_REMOTE_VECTOR_BYTES = 250 * 1024 * 1024;
 /**
  * Reads a downloaded remote vector file that is not GeoJSON (GeoParquet,
  * GeoPackage, FlatGeobuf, KML, ...) into features. Supplied by the host, which
- * owns the DuckDB-backed readers this module must not pull in.
+ * owns the DuckDB-backed readers this module must not pull in. The reader
+ * bounds its own time: it may queue reads, and only it knows when one starts.
  */
 export type QgisRemoteVectorReader = (file: {
   /** File name taken from the URL, extension included. */
@@ -200,18 +201,15 @@ export async function materializeQgisRemoteLayers(
           if (bytes.byteLength > MAX_REMOTE_VECTOR_BYTES) {
             throw new Error(`The file is too large to import (${bytes.byteLength} bytes)`);
           }
-          // The download is done; the read below has its own, longer bound.
+          // The download is done. The host reader bounds its own work.
           clearTimeout(timeout);
           const sourceLayer = layer.metadata.sourceLayer;
-          data = await withTimeout(
-            readVector!({
-              name: remoteFileNameFromUrl(sourcePath, extension),
-              extension,
-              data: bytes,
-              ...(typeof sourceLayer === "string" && sourceLayer ? { sourceLayer } : {}),
-            }),
-            REMOTE_READ_TIMEOUT_MS,
-          );
+          data = await readVector!({
+            name: remoteFileNameFromUrl(sourcePath, extension),
+            extension,
+            data: bytes,
+            ...(typeof sourceLayer === "string" && sourceLayer ? { sourceLayer } : {}),
+          });
         }
         if (!isFeatureCollection(data))
           throw new Error("Response is not a GeoJSON FeatureCollection");

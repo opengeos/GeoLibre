@@ -30,17 +30,22 @@ import { isTauri } from "./is-tauri";
  * @throws When the file holds no readable vector data.
  */
 export const readQgisRemoteVector: QgisRemoteVectorReader = (file) => {
-  // The importer reads several layers at once, but DuckDB registers each file
-  // under its bare name, so two layers named `countries.parquet` on different
-  // hosts would overwrite each other. One read at a time.
-  // The bound sits inside the queue so a stalled read releases it for the
-  // next layer instead of holding every later read behind it.
-  const next = readQueue.then(() => withTimeout(readOne(file), REMOTE_READ_TIMEOUT_MS));
+  // The importer downloads several layers at once; their reads run one at a
+  // time, which keeps DuckDB's memory to one file. Each read registers under
+  // a name of its own, since a read that times out keeps running (DuckDB
+  // cannot cancel it) and two layers may share a file name. The time bound
+  // sits inside the queue, so it covers the read and not the wait for it,
+  // and a stalled read releases the queue for the next layer.
+  const name = `qgis-${++readCount}-${file.name}`;
+  const next = readQueue.then(() =>
+    withTimeout(readOne({ ...file, name }), REMOTE_READ_TIMEOUT_MS),
+  );
   readQueue = next.catch(() => undefined);
   return next;
 };
 
 let readQueue: Promise<unknown> = Promise.resolve();
+let readCount = 0;
 
 const readOne: QgisRemoteVectorReader = async ({ name, extension, data, sourceLayer }) => {
   if (sourceLayer) {
@@ -78,5 +83,7 @@ export async function qgisRemoteFetch(
     timeoutSecs: REMOTE_DOWNLOAD_TIMEOUT_MS / 1000,
     maxBytes: MAX_REMOTE_VECTOR_BYTES,
   });
-  return new Response(new Uint8Array(bytes));
+  // Tauri hands back a typed array for binary bodies; copy only a plain array.
+  const body = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  return new Response(body as Uint8Array<ArrayBuffer>);
 }
