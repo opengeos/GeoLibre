@@ -118,13 +118,15 @@ export function resolveLanguage(
 }
 
 /**
- * Traditional Chinese catalogs, in fallback order: a bare `zh-Hant` (or a
- * Traditional region whose own catalog is missing) uses the first one shipped.
+ * Traditional Chinese catalogs to try, in order, for each Traditional-script
+ * region: the region's own catalog, then the closest variant (Hong Kong and
+ * Macau share conventions), then Taiwan. A bare `zh-Hant` uses the `tw` order.
  */
-const TRADITIONAL_CHINESE = ["zh-TW", "zh-HK", "zh-MO"] as const;
-
-/** Regions whose default Chinese script is Traditional. */
-const TRADITIONAL_CHINESE_REGIONS = new Set(["tw", "hk", "mo"]);
+const TRADITIONAL_CHINESE: Readonly<Record<string, readonly string[]>> = {
+  tw: ["zh-TW", "zh-HK", "zh-MO"],
+  hk: ["zh-HK", "zh-MO", "zh-TW"],
+  mo: ["zh-MO", "zh-HK", "zh-TW"],
+};
 
 /**
  * Pick a Traditional Chinese catalog for lowercased `zh` subtags, or `null` when
@@ -132,7 +134,7 @@ const TRADITIONAL_CHINESE_REGIONS = new Set(["tw", "hk", "mo"]);
  * an explicit `Hant` script (`zh-Hant`, `zh-Hant-HK`) or a Traditional-script
  * region with no script given (`zh-HK`, `zh-MO`); an explicit `Hans` always
  * wins, so `zh-Hans-TW` stays Simplified. The tag's own region is preferred
- * (`zh-Hant-HK` → `zh-HK`), then the fallback order above.
+ * (`zh-Hant-HK` → `zh-HK`), then that region's fallback order above.
  */
 function resolveTraditionalChinese(
   subtags: readonly string[],
@@ -143,10 +145,9 @@ function resolveTraditionalChinese(
   const singleton = subtags.findIndex((tag, i) => i > 0 && tag.length === 1);
   const rest = subtags.slice(1, singleton === -1 ? undefined : singleton);
   if (rest.includes("hans")) return null;
-  const region = rest.find((tag) => TRADITIONAL_CHINESE_REGIONS.has(tag));
+  const region = rest.find((tag) => Object.hasOwn(TRADITIONAL_CHINESE, tag));
   if (!region && !rest.includes("hant")) return null;
-  const candidates = [...(region ? [`zh-${region}`] : []), ...TRADITIONAL_CHINESE];
-  for (const candidate of candidates) {
+  for (const candidate of TRADITIONAL_CHINESE[region ?? "tw"]) {
     const code = byLower.get(candidate.toLowerCase());
     if (code) return code;
   }

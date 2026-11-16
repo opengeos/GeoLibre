@@ -59,6 +59,10 @@ describe("resolveLanguage", () => {
     assert.equal(resolveLanguage("zh-MO", ["en", "zh", "zh-HK"]), "zh-HK");
     assert.equal(resolveLanguage("zh-Hant", ["en", "zh", "zh-HK"]), "zh-HK");
     assert.equal(resolveLanguage("zh-HK", ["en", "zh", "zh-TW"]), "zh-TW");
+    // Hong Kong and Macau prefer each other over Taiwan.
+    assert.equal(resolveLanguage("zh-MO", ["en", "zh", "zh-TW", "zh-HK"]), "zh-HK");
+    assert.equal(resolveLanguage("zh-HK", ["en", "zh", "zh-TW", "zh-MO"]), "zh-MO");
+    assert.equal(resolveLanguage("zh-Hant", ["en", "zh", "zh-HK", "zh-MO"]), "zh-HK");
   });
 
   it("falls back to zh for Traditional tags when no Traditional catalog ships", () => {
