@@ -946,8 +946,8 @@
       "errorTimeout": "讀取地理資料庫超時。",
       "crs": "源座標系",
       "crsPlaceholder": "例如 EPSG:26915",
-      "crsHelp": "無法檢測此要素類的座標系。請輸入其儲存時使用的 EPSG（或 ESRI）程式碼，以便重投影至 WGS84。",
-      "errorMissingCrs": "無法檢測此要素類的座標系。請輸入其源座標系後再新增。"
+      "crsHelp": "無法偵測此要素類的座標系。請輸入其儲存時使用的 EPSG（或 ESRI）程式碼，以便重投影至 WGS84。",
+      "errorMissingCrs": "無法偵測此要素類的座標系。請輸入其源座標系後再新增。"
     },
     "delimitedText": {
       "errorWorkbookEmpty": "Excel 工作簿中沒有非空工作表。",
@@ -960,7 +960,7 @@
       "readError": "無法讀取分隔文字檔案。",
       "errorDataMissing": "缺少分隔文字資料。",
       "retrievedColumns_other": "已獲取 {{count}} 個欄位。",
-      "retrievedColumnsTable_other": "已獲取 {{count}} 個欄位。未檢測到座標欄位；將作為屬性表新增。",
+      "retrievedColumnsTable_other": "已獲取 {{count}} 個欄位。未偵測到座標欄位；將作為屬性表新增。",
       "errorRetrieveColumns": "無法獲取欄位名稱。",
       "url": "分隔文字 URL",
       "file": "分隔文字檔案",
@@ -1220,7 +1220,7 @@
       "errorNoFootprints": "沒有與所選波束和篩選條件匹配的足跡。",
       "atl03": {
         "product": "ICESat-2 ATL03 地理定位光子",
-        "help": "ATL03 包含一個軌道分段的所有光子，因此按需從檔案中讀取而不是整體載入：當前地圖檢視中的光子將作為點新增，並包含高度（h_ph）、訊號置信度和沿軌距離。",
+        "help": "ATL03 包含一個軌道分段的所有光子，因此按需從檔案中讀取而不是整體載入：當前地圖檢視中的光子將作為點新增，並包含高度（h_ph）、訊號信賴度和沿軌距離。",
         "photonCount": "{{count}} 個光子",
         "surface": "地表類型",
         "surfaces": {
@@ -1230,7 +1230,7 @@
           "land_ice": "陸地冰",
           "inland_water": "內陸水體"
         },
-        "confidence": "最低訊號置信度",
+        "confidence": "最低訊號信賴度",
         "confidenceLevels": {
           "0": "噪聲及以上（全部）",
           "1": "緩衝及以上",
@@ -1242,7 +1242,7 @@
         "add": "新增檢視中的光子",
         "reading": "正在讀取檢視中的光子…",
         "zoomIn": "請放大：僅在檢視寬度不超過 {{degrees}}° 時讀取光子。",
-        "noPhotons": "此檢視中沒有通過篩選的光子。請平移到地面軌跡，或降低訊號置信度。",
+        "noPhotons": "此檢視中沒有通過篩選的光子。請平移到地面軌跡，或降低訊號信賴度。",
         "added": "已新增 {{kept}} 個光子。",
         "addedThinned": "已新增 {{matched}} 個光子中的 {{kept}} 個（已均勻抽稀至最大值）。",
         "readingProgress": "正在讀取檢視中的光子… {{mb}} MB"
@@ -2110,7 +2110,7 @@
     "transferUsername": "使用者名稱",
     "transferOrganization": "組織",
     "transferSlug": "專案 URL 名稱",
-    "transferUserHint": "對方必須接受後項目才會轉移。舊連結將重定向到新連結。",
+    "transferUserHint": "對方必須接受後專案才會轉移。舊連結將重定向到新連結。",
     "transferOrganizationHint": "立即轉讓。舊連結將重定向。如果該組織限制公開共享，公開專案將變為僅限組織存取。",
     "transferSubmit": "轉讓",
     "transferCancelDialog": "取消",
@@ -2892,7 +2892,7 @@
       "bucketsPlaceholder": "my-bucket, data-*",
       "bucketsHelp": "以逗號分隔的儲存桶名稱；* 為萬用字元。留空則將此連線用於其他連線未列出的所有儲存桶。",
       "region": "區域",
-      "regionPlaceholder": "自動檢測",
+      "regionPlaceholder": "自動偵測",
       "endpoint": "端點",
       "endpointPlaceholder": "AWS 請留空，例如 https://minio.example.com",
       "pathStyle": "路徑樣式定址（大多數 S3 相容儲存）",
@@ -3623,7 +3623,7 @@
       "smartPaste": "貼上座標",
       "smartPasteInputLabel": "座標字串",
       "smartPastePlaceholder": "例如 51.5074, -0.1278 或 51°30'26\"N, 0°07'39\"W",
-      "smartPasteInfo": "以 DD、DMS 或 DDM 格式鍵入或貼上完整的座標字串，然後執行「處理輸入」。GeoLibre 會檢測格式並填充下方的經度和緯度欄位。請在前往目標位置前分別調整縮放、傾斜角和方位角。",
+      "smartPasteInfo": "以 DD、DMS 或 DDM 格式鍵入或貼上完整的座標字串，然後執行「處理輸入」。GeoLibre 會偵測格式並填充下方的經度和緯度欄位。請在前往目標位置前分別調整縮放、傾斜角和方位角。",
       "smartPasteInfoLabel": "關於貼上座標",
       "smartPasteInvalid": "無法讀取這些座標。請以 DD、DMS 或 DDM 格式輸入完整的經緯度，例如 51.5074, -0.1278。部分或不完整的字串無法解析。",
       "processInput": "處理輸入",
@@ -3704,7 +3704,7 @@
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI 分割",
-      "objectDetection": "目標檢測",
+      "objectDetection": "目標偵測",
       "segmentEverything": "萬物分割",
       "lineOfSight": "視線分析",
       "toggleControl": "切換{{name}}控制元件",
@@ -3878,7 +3878,7 @@
       "dggsBinning": "DGGS 分箱統計",
       "dggsCompact": "DGGS 壓縮",
       "trajectorySpeed": "軌跡速度",
-      "detectStops": "檢測停留點",
+      "detectStops": "偵測停留點",
       "spaceTimeProximity": "時空鄰近性",
       "checkValidity": "檢查有效性",
       "fixGeometries": "修復幾何",
@@ -7008,7 +7008,7 @@
           }
         },
         "detect-stops": {
-          "name": "檢測停留點",
+          "name": "偵測停留點",
           "description": "查詢目標停留的位置：連續定位點在一定距離內（容納 GPS 漂移）持續至少最短時長的片段。每個停留點輸出一個點。類似 QGIS TrajecTools。",
           "params": {
             "layer": {
@@ -7020,7 +7020,7 @@
             },
             "idField": {
               "label": "目標 ID 欄位",
-              "description": "按目標分別檢測停留點。留空則將所有點視為同一目標。"
+              "description": "按目標分別偵測停留點。留空則將所有點視為同一目標。"
             },
             "maxDistance": {
               "label": "最大距離",
@@ -7900,7 +7900,7 @@
     "modeAutomatic": "自動（全部分割）",
     "promptLabel": "提示詞",
     "promptPlaceholder": "例如 樹木、建築物、水體",
-    "confidenceLabel": "置信度閾值",
+    "confidenceLabel": "信賴度閾值",
     "segment": "分割",
     "status": {
       "checking": "正在檢查 AI 分割服務…",
@@ -7926,10 +7926,10 @@
     }
   },
   "objectDetection": {
-    "title": "目標檢測",
-    "description": "在瀏覽器中執行匯出為 ONNX 格式的 YOLO 模型處理 GeoTIFF。檢測到的框會被地理配準，每個類別新增為單獨圖層。",
-    "hint": "使用內建 COCO 模型（下載並快取一次）或使用自己的 YOLOv5/v8/v11 ONNX。檢測在瀏覽器本機執行。內建模型檢測日常物體；對於航拍影像，請提供自己訓練的俯視模型。",
-    "unavailableNoExternalCdn": "此構建版本無法使用目標檢測。它需要 ONNX Runtime，而該執行時從外部 CDN 載入，此部署已停用外部 CDN。提供您自己的模型檔案也無濟於事。",
+    "title": "目標偵測",
+    "description": "在瀏覽器中執行匯出為 ONNX 格式的 YOLO 模型處理 GeoTIFF。偵測到的框會被地理配準，每個類別新增為單獨圖層。",
+    "hint": "使用內建 COCO 模型（下載並快取一次）或使用自己的 YOLOv5/v8/v11 ONNX。偵測在瀏覽器本機執行。內建模型偵測日常物件；對於航拍影像，請提供自己訓練的俯視模型。",
+    "unavailableNoExternalCdn": "此構建版本無法使用目標偵測。它需要 ONNX Runtime，而該執行時從外部 CDN 載入，此部署已停用外部 CDN。提供您自己的模型檔案也無濟於事。",
     "imageLabel": "影像 (GeoTIFF)",
     "imagePlaceholder": "選擇 GeoTIFF…",
     "chooseImage": "選擇影像",
@@ -7943,24 +7943,24 @@
     "downloadingModel": "正在下載模型…",
     "classNamesLabel": "類別名稱（逗號分隔，可選）",
     "classNamesPlaceholder": "例如：汽車、樹木、建築",
-    "confidenceLabel": "置信度",
+    "confidenceLabel": "信賴度",
     "iouLabel": "IoU (NMS)",
     "inputSizeLabel": "輸入尺寸",
-    "detect": "檢測",
-    "noObjects": "未檢測到物體。請嘗試降低置信度閾值。",
-    "added": "已新增 {{count}} 個檢測結果，共 {{classes}} 個類別。",
-    "layerName": "檢測：{{class}}",
+    "detect": "偵測",
+    "noObjects": "未偵測到物件。請嘗試降低信賴度閾值。",
+    "added": "已新增 {{count}} 個偵測結果，共 {{classes}} 個類別。",
+    "layerName": "偵測：{{class}}",
     "error": {
-      "chooseImage": "請選擇一個影像 (GeoTIFF) 進行檢測。",
+      "chooseImage": "請選擇一個影像 (GeoTIFF) 進行偵測。",
       "photoLocation": "此照片沒有可用的 GPS 座標。請選擇帶地理標記的照片。",
       "chooseModel": "請選擇匯出為 ONNX 的 YOLO 模型 (.onnx)。",
       "downloadModel": "無法下載模型。請檢查網路連線後重試。",
-      "failed": "檢測失敗。"
+      "failed": "偵測失敗。"
     }
   },
   "segmentEverything": {
     "title": "萬物分割",
-    "description": "在瀏覽器中自動執行 SlimSAM 處理 GeoTIFF。每個檢測到的物件都會成為地理配準的多邊形並新增為一個圖層。",
+    "description": "在瀏覽器中自動執行 SlimSAM 處理 GeoTIFF。每個偵測到的物件都會成為地理配準的多邊形並新增為一個圖層。",
     "hint": "在影像上取樣網格點並使用 SlimSAM 分割（下載並快取一次）。無需點選或標註 — 更密集的網格能找到更多物件，但耗時更長。",
     "unavailableNoExternalCdn": "此構建版本無法使用「萬物分割」。它需要 ONNX Runtime，而該執行時從外部 CDN 載入，此部署已停用外部 CDN。",
     "imageLabel": "影像 (GeoTIFF)",
@@ -10102,7 +10102,7 @@
     "sam2ModelId": "SAM2 模型",
     "automaticHint": "自動模式使用 SAM2 的掩膜生成器，可分割每一個物件；SAM3 僅回應提示。",
     "textPrompt": "文字提示",
-    "confidence": "置信度閾值",
+    "confidence": "信賴度閾值",
     "minSize": "最小掩膜尺寸（畫素）",
     "maxSize": "最大掩膜尺寸（0 = 不限制）",
     "backend": "後端",
@@ -11155,7 +11155,7 @@
   "spaceborneLidar": {
     "errors": {
       "notHdf5": "無法將該檔案讀取為 HDF5。（{{detail}}）",
-      "unsupportedProduct": "不是受支援的 ICESat-2 或 GEDI 產品（檢測到 {{found}}）。支援：ATL06、ATL08、GEDI L2A、GEDI L2B、GEDI L4A。",
+      "unsupportedProduct": "不是受支援的 ICESat-2 或 GEDI 產品（偵測到 {{found}}）。支援：ATL06、ATL08、GEDI L2A、GEDI L2B、GEDI L4A。",
       "unrecognizedProduct": "不是可識別的 ICESat-2 或 GEDI 產品。支援：ATL06、ATL08、GEDI L2A、GEDI L2B、GEDI L4A。",
       "noBeams": "該 {{product}} 檔案中沒有包含足跡的波束。"
     }

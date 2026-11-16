@@ -43,7 +43,16 @@ describe("resolveLanguage", () => {
     assert.equal(resolveLanguage("zh-CN", traditional), "zh");
     assert.equal(resolveLanguage("zh-Hans-CN", traditional), "zh");
     assert.equal(resolveLanguage("zh-Hans-HK", traditional), "zh");
+    assert.equal(resolveLanguage("zh-Hans-TW", traditional), "zh");
     assert.equal(resolveLanguage("zh-SG", traditional), "zh");
+  });
+
+  it("ignores extension and private-use subtags when picking the script", () => {
+    const traditional = ["en", "zh", "zh-TW", "zh-HK", "zh-MO"];
+    assert.equal(resolveLanguage("zh-Hant-HK-u-nu-hans", traditional), "zh-HK");
+    assert.equal(resolveLanguage("zh-TW-u-ca-roc", traditional), "zh-TW");
+    assert.equal(resolveLanguage("zh-CN-x-hk", traditional), "zh");
+    assert.equal(resolveLanguage("zh-x-hant", traditional), "zh");
   });
 
   it("falls back across Traditional catalogs before Simplified", () => {

@@ -91,7 +91,9 @@ export function languageOptions(codes: readonly string[]): LanguageOption[] {
 /**
  * Normalize a raw language string (query param, navigator, stored setting) to a
  * catalog code we actually ship, or `null` if there is no match. Matches the
- * full tag first (`pt-BR`) then the base subtag (`pt`).
+ * full tag first (`pt-BR`) then the base subtag (`pt`). A `zh` tag also picks a
+ * script first: Traditional tags resolve to a shipped Traditional catalog
+ * (see `resolveTraditionalChinese`), everything else to Simplified `zh`.
  */
 export function resolveLanguage(
   raw: string | null | undefined,
@@ -136,7 +138,10 @@ function resolveTraditionalChinese(
   subtags: readonly string[],
   byLower: ReadonlyMap<string, string>,
 ): string | null {
-  const rest = subtags.slice(1);
+  // Script and region come before any extension or private-use section, which
+  // starts at a single-character subtag (`-u-nu-hans`, `-x-hk`).
+  const singleton = subtags.findIndex((tag, i) => i > 0 && tag.length === 1);
+  const rest = subtags.slice(1, singleton === -1 ? undefined : singleton);
   if (rest.includes("hans")) return null;
   const region = rest.find((tag) => TRADITIONAL_CHINESE_REGIONS.has(tag));
   if (!region && !rest.includes("hant")) return null;
