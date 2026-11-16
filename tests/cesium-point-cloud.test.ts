@@ -18,6 +18,7 @@ import {
   isSplatTilesetUrl,
   openCopcSource,
   pointCloudColor,
+  pointCloudGroundOffset,
   pointCloudSourceKind,
   rampColor,
   setPointCloudOpacity,
@@ -672,6 +673,67 @@ describe("CesiumLayerSync native 3D routing", () => {
     assert.deepEqual(status.pending, []);
     assert.equal(status.errors.length, 1);
     assert.match(status.errors[0], /no usable CRS/);
+  });
+});
+
+describe("point cloud ground offset (#3476)", () => {
+  it("lowers a cloud by its ground height only on the bare ellipsoid", () => {
+    assert.equal(pointCloudGroundOffset(181, false), -181);
+    assert.equal(pointCloudGroundOffset(-4, false), 4, "a cloud below 0 m is raised");
+    assert.equal(pointCloudGroundOffset(181, true), 0, "terrain keeps surveyed heights");
+    assert.equal(pointCloudGroundOffset(undefined, false), 0);
+    assert.equal(pointCloudGroundOffset(Number.NaN, false), 0);
+    assert.equal(Object.is(pointCloudGroundOffset(0, false), 0), true, "never -0");
+  });
+
+  it("seats a COPC cloud on the globe without terrain and restores it with terrain", async () => {
+    const calls = { tilesets: [] as unknown[], i3s: [] as unknown[] };
+    class EllipsoidTerrainProvider {}
+    const listeners: Array<() => void> = [];
+    const Cesium = {
+      ...makeCesium(calls),
+      EllipsoidTerrainProvider,
+      Matrix4: {
+        IDENTITY: { identity: true },
+        clone: (m: unknown) => ({ ...(m as object) }),
+        fromTranslation: (t: unknown) => ({ translation: t }),
+      },
+    };
+    const f = makeViewer();
+    const viewer = f.viewer as typeof f.viewer & { terrainProvider: unknown; scene: unknown };
+    viewer.terrainProvider = new EllipsoidTerrainProvider();
+    Object.assign(viewer.scene as object, {
+      terrainProviderChanged: { addEventListener: (fn: () => void) => listeners.push(fn) },
+    });
+    const sync = new CesiumLayerSync(Cesium as never, viewer as never, () => 10, {
+      copcOptions: {
+        copc: fakeCopc().module,
+        projector: async () => identity,
+        lazPerf: async () => ({}),
+      },
+    });
+    const copc = layer({ id: "c", type: "lidar", source: { url: "https://x/a.copc.laz" } });
+    sync.sync([copc]);
+    for (let i = 0; i < 8; i++) await flush();
+    const collection = f.primitives[0] as { modelMatrix?: { translation?: { z: number } } };
+    // Every decoded point is 10 m up, so the cloud is lowered 10 m onto 0 m.
+    assert.equal(collection.modelMatrix?.translation?.z, -10);
+    // World terrain arriving keeps the surveyed heights, in place.
+    viewer.terrainProvider = {};
+    for (const fn of listeners) fn();
+    assert.deepEqual(collection.modelMatrix, { identity: true });
+    viewer.terrainProvider = new EllipsoidTerrainProvider();
+    for (const fn of listeners) fn();
+    assert.equal(collection.modelMatrix?.translation?.z, -10);
+    // The Style panel offset still lifts the cloud above the ground it sits on.
+    sync.sync([{ ...copc, source: { ...copc.source, altitudeOffset: 5 } }]);
+    for (let i = 0; i < 8; i++) await flush();
+    const lifted = f.primitives[0] as {
+      modelMatrix?: { translation?: { z: number } };
+      get(i: number): { position: { z: number } };
+    };
+    assert.equal(lifted.get(0).position.z + (lifted.modelMatrix?.translation?.z ?? 0), 5);
+    sync.sync([]);
   });
 });
 
