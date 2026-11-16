@@ -5,6 +5,7 @@ import { strToU8, zipSync } from "fflate";
 import { DOMParser } from "linkedom";
 import {
   importQgisProject,
+  MAX_REMOTE_VECTOR_BYTES,
   materializeQgisRemoteLayers,
 } from "../apps/geolibre-desktop/src/lib/qgis-project-import";
 
@@ -625,6 +626,35 @@ describe("QGIS project import", () => {
 
     assert.equal(fetched, false);
     assert.deepEqual(result.project.layers, []);
+    assert.deepEqual(
+      result.warnings.map((warning) => [warning.layerName, warning.reason]),
+      [["Countries", "remote-unreadable"]],
+    );
+  });
+
+  it("refuses a remote non-GeoJSON file larger than the import ceiling", async () => {
+    const result = importQgisProject(
+      projectXml({
+        dataSources: [
+          { id: "roads", name: "Countries", source: "https://example.com/world.parquet" },
+        ],
+      }),
+      "/work/example.qgs",
+    );
+    let read = false;
+    await materializeQgisRemoteLayers(
+      result,
+      async () =>
+        new Response("x", {
+          headers: { "content-length": String(MAX_REMOTE_VECTOR_BYTES + 1) },
+        }),
+      async () => {
+        read = true;
+        return { type: "FeatureCollection", features: [] };
+      },
+    );
+
+    assert.equal(read, false);
     assert.deepEqual(
       result.warnings.map((warning) => [warning.layerName, warning.reason]),
       [["Countries", "remote-unreadable"]],

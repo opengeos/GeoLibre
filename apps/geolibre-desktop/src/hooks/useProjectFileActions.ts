@@ -97,7 +97,7 @@ import {
   type QgisStyleImportNote,
 } from "../lib/qgis-project-import";
 import { readQgisSnapshotTable } from "../lib/qgis-form-tables";
-import { readQgisRemoteVector } from "../lib/qgis-remote-vector";
+import { qgisRemoteFetch, readQgisRemoteVector } from "../lib/qgis-remote-vector";
 import { importArcgisProject, type ArcgisProjectImportWarning } from "../lib/arcgis-project-import";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 import { IS_MAS_BUILD } from "../lib/build-flags";
@@ -643,7 +643,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const imported = await materializeQgisRemoteLayers(
         importQgisProject(result.data, result.path),
-        fetch,
+        qgisRemoteFetch,
         readQgisRemoteVector,
       );
       // WMS layers fetch through the desktop app's CORS-exempt client, as

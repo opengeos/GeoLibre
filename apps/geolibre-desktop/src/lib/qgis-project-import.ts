@@ -117,6 +117,10 @@ export const GEOPACKAGE_TABLE_ROW_LIMIT = 5000;
 const MAX_QGS_BYTES = 25 * 1024 * 1024;
 const REMOTE_FETCH_CONCURRENCY = 4;
 const REMOTE_FETCH_TIMEOUT_MS = 10_000;
+/** Bound on reading one downloaded non-GeoJSON file, so a stalled reader fails the layer. */
+const REMOTE_READ_TIMEOUT_MS = 120_000;
+/** Largest remote non-GeoJSON file read, matching the `?data=` download ceiling. */
+export const MAX_REMOTE_VECTOR_BYTES = 250 * 1024 * 1024;
 
 /**
  * Reads a downloaded remote vector file that is not GeoJSON (GeoParquet,
@@ -180,16 +184,26 @@ export async function materializeQgisRemoteLayers(
         if (asGeoJson) {
           data = (await response.json()) as unknown;
         } else {
+          const advertised = Number(response.headers.get("content-length"));
+          if (Number.isFinite(advertised) && advertised > MAX_REMOTE_VECTOR_BYTES) {
+            throw new Error(`The file is too large to import (${advertised} bytes)`);
+          }
           const bytes = new Uint8Array(await response.arrayBuffer());
-          // The download is done; reading the file is not a network wait.
+          if (bytes.byteLength > MAX_REMOTE_VECTOR_BYTES) {
+            throw new Error(`The file is too large to import (${bytes.byteLength} bytes)`);
+          }
+          // The download is done; the read below has its own, longer bound.
           clearTimeout(timeout);
           const sourceLayer = layer.metadata.sourceLayer;
-          data = await readVector!({
-            name: remoteFileNameFromUrl(sourcePath, extension),
-            extension,
-            data: bytes,
-            ...(typeof sourceLayer === "string" && sourceLayer ? { sourceLayer } : {}),
-          });
+          data = await withTimeout(
+            readVector!({
+              name: remoteFileNameFromUrl(sourcePath, extension),
+              extension,
+              data: bytes,
+              ...(typeof sourceLayer === "string" && sourceLayer ? { sourceLayer } : {}),
+            }),
+            REMOTE_READ_TIMEOUT_MS,
+          );
         }
         if (!isFeatureCollection(data))
           throw new Error("Response is not a GeoJSON FeatureCollection");
@@ -219,6 +233,15 @@ export async function materializeQgisRemoteLayers(
     );
   }
   return result;
+}
+
+/** Reject when `promise` has not settled within `ms`. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
 }
 
 /** The last path segment of a URL, or `layer.<extension>` when it has none. */
@@ -698,9 +721,9 @@ function parseMapView(document: Document): MapViewState {
         authId: text(document.querySelector("mapcanvas > destinationsrs authid")) || projectCrs,
       }
     : null;
-  const defaultExtent = Array.from(
-    document.documentElement.querySelectorAll(":scope > ProjectViewSettings > DefaultViewExtent"),
-  )[0];
+  const defaultExtent = document.documentElement.querySelector(
+    ":scope > ProjectViewSettings > DefaultViewExtent",
+  );
   const fallback = defaultExtent
     ? {
         xmin: numberAttribute(defaultExtent, "xmin"),

@@ -9,6 +9,7 @@ import type { FeatureCollection } from "geojson";
 import { isLoadedVectorLayer } from "./file-io/loaded-layer";
 import { loadDuckDbVector, mergeFeatureCollections } from "./file-io/vector-shared";
 import type { QgisRemoteVectorReader } from "./qgis-project-import";
+import { isTauri } from "./is-tauri";
 
 /**
  * Read one remote QGIS layer's file into features.
@@ -22,12 +23,18 @@ import type { QgisRemoteVectorReader } from "./qgis-project-import";
  * @returns Every feature of the layer, in WGS84.
  * @throws When the file holds no readable vector data.
  */
-export const readQgisRemoteVector: QgisRemoteVectorReader = async ({
-  name,
-  extension,
-  data,
-  sourceLayer,
-}) => {
+export const readQgisRemoteVector: QgisRemoteVectorReader = (file) => {
+  // The importer reads several layers at once, but DuckDB registers each file
+  // under its bare name, so two layers named `countries.parquet` on different
+  // hosts would overwrite each other. One read at a time.
+  const next = readQueue.then(() => readOne(file));
+  readQueue = next.catch(() => undefined);
+  return next;
+};
+
+let readQueue: Promise<unknown> = Promise.resolve();
+
+const readOne: QgisRemoteVectorReader = async ({ name, extension, data, sourceLayer }) => {
   if (sourceLayer) {
     return loadDuckDbVector({ name, extension, data }, { layer: sourceLayer });
   }
@@ -39,3 +46,23 @@ export const readQgisRemoteVector: QgisRemoteVectorReader = async ({
   const collections: FeatureCollection[] = vectors.map((layer) => layer.data);
   return collections.length === 1 ? collections[0] : mergeFeatureCollections(collections);
 };
+
+/**
+ * Download a remote QGIS layer's file. The desktop app goes through its
+ * native HTTP client, which CORS does not apply to (the webview's `fetch`
+ * would refuse a server that sends no CORS headers); the browser build uses
+ * `fetch`.
+ *
+ * @param input - The file's URL.
+ * @param init - Request options; only the abort signal is honored natively.
+ * @returns The response, whole.
+ */
+export async function qgisRemoteFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (!isTauri()) return fetch(input, init);
+  const { fetchRemoteArrayBuffer } = await import("./app-api");
+  const url = input instanceof Request ? input.url : String(input);
+  return new Response(await fetchRemoteArrayBuffer(url));
+}
