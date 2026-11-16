@@ -12,6 +12,7 @@ import {
   rendersNativeMapLibreLayer,
   runWithRasterStoreSyncSuspended,
   savedRasterState,
+  serializeBandNames,
   setTransientRasterVisibility,
   syncRasterLayersToStore,
   syncRasterLayersToStoreWithOptions,
@@ -1122,5 +1123,21 @@ describe("savedRasterState", () => {
     const layer = createRasterStoreLayer(rasterInfo());
     delete layer.metadata.rasterState;
     assert.deepEqual(savedRasterState(layer), {});
+  });
+});
+
+describe("serializeBandNames", () => {
+  it("drops the '*' placeholder Esri tools write for an unnamed band", () => {
+    assert.equal(serializeBandNames(new Map([[1, "*"]])), null);
+    assert.deepEqual(
+      serializeBandNames(
+        new Map([
+          [1, "B02"],
+          [2, " * "],
+        ]),
+      ),
+      [[1, "B02"]],
+    );
+    assert.equal(serializeBandNames(null), null);
   });
 });

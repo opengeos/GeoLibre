@@ -45,6 +45,20 @@ describe("rasterPixelIdentifyProperties", () => {
     });
   });
 
+  it("labels a band by number when its description is the '*' placeholder", () => {
+    const properties = rasterPixelIdentifyProperties(
+      {
+        lngLat: [-83.9, 35.98],
+        row: 1,
+        col: 2,
+        bands: [{ index: 1, value: 285, isNodata: false, name: "*" }],
+      },
+      labels,
+    );
+    assert.equal(properties["Band 1"], "285");
+    assert.equal(Object.hasOwn(properties, "*"), false);
+  });
+
   it("keeps every band when display labels collide", () => {
     const properties = rasterPixelIdentifyProperties(
       {

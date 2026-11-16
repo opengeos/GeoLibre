@@ -462,3 +462,94 @@ export async function resolveZarrTimeAxis(
 export function __resetZarrTimeAttributeCacheForTests(): void {
   attributeCache.clear();
 }
+
+/** The outcome of {@link resolveZarrSelectorDates}. */
+export interface ZarrSelectorDateResolution {
+  /** The selector with date strings swapped for indices, or null when nothing changed. */
+  selector: Record<string, number | string> | null;
+  /** Dimensions whose string value matched neither a coordinate nor a date on the axis. */
+  unresolved: string[];
+}
+
+/**
+ * Turn date strings in a Zarr selector into indices along the store's time axis.
+ *
+ * `@carbonplan/zarr-layer` matches a string selector value against the raw
+ * coordinate values, so `{ time: "2020-08-01" }` never matches a CF time axis
+ * stored as `days since 1800-01-01` numbers. It reports that only as a console
+ * warning and draws nothing, while the panel has already said the layer was
+ * added (#3470). This reads the date against the decoded axis instead.
+ *
+ * A value that already names a coordinate is left alone, so a string-labelled
+ * axis (`band: "prec"`) keeps matching natively. A date is taken to its nearest
+ * time step, as the Time Slider does, but only within one step of the axis' own
+ * span: a date years past the data is reported, not clamped to the last step.
+ *
+ * @param selector - The layer's selector, e.g. `{ time: "2020-08-01" }`.
+ * @param dimensionValues - Raw coordinate values keyed by dimension name.
+ * @param axis - The decoded time axis, or null when the store has none.
+ * @returns The rewritten selector (null when unchanged) and the dimensions whose
+ *   value could not be matched at all.
+ */
+export function resolveZarrSelectorDates(
+  selector: Record<string, number | string> | null | undefined,
+  dimensionValues: Record<string, ReadonlyArray<number | string> | undefined> | null | undefined,
+  axis: ZarrTimeAxis | null,
+): ZarrSelectorDateResolution {
+  const unresolved: string[] = [];
+  if (!selector) return { selector: null, unresolved };
+  let changed = false;
+  const next: Record<string, number | string> = { ...selector };
+  for (const [dimension, value] of Object.entries(selector)) {
+    if (typeof value !== "string") continue;
+    const raw = dimensionValues?.[dimension];
+    // The renderer only matches against values it loaded; with none loaded there
+    // is nothing to check the selector against here either.
+    if (!raw || raw.length === 0) continue;
+    if (raw.includes(value)) continue;
+    const index = axis?.dimension === dimension ? dateIndexOnAxis(axis.values, value) : -1;
+    if (index >= 0) {
+      next[dimension] = index;
+      changed = true;
+    } else {
+      unresolved.push(dimension);
+    }
+  }
+  return { selector: changed ? next : null, unresolved };
+}
+
+/**
+ * The index of the time step nearest a date string, or -1 when the string is
+ * not a date or falls more than one step outside the axis.
+ *
+ * @param values - The axis in epoch milliseconds, index-aligned with the store.
+ * @param text - The selector's date, e.g. `"2020-08-01"`.
+ * @returns The nearest index, or -1.
+ */
+function dateIndexOnAxis(values: readonly number[], text: string): number {
+  const target = parseTimeValue(text);
+  if (target === null) return -1;
+  let best = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let step = 0;
+  let previous: number | null = null;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+    if (previous !== null) step = Math.max(step, Math.abs(value - previous));
+    previous = value;
+    const distance = Math.abs(value - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  if (best < 0) return -1;
+  // A single-step axis has no spacing to measure; allow a day either side.
+  const tolerance = step > 0 ? step : 86_400_000;
+  return target >= min - tolerance && target <= max + tolerance ? best : -1;
+}

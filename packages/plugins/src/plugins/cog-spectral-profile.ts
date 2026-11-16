@@ -43,11 +43,58 @@ export interface ImageLike {
   getSamplesPerPixel: () => number;
   getGeoKeys: () => Record<string, unknown> | undefined;
   getGDALNoData?: () => number | null;
-  getFileDirectory: () => Record<string, unknown>;
+  /**
+   * geotiff.js 3 returns an `ImageFileDirectory` whose tags sit behind
+   * `loadValue` (deferred ones, like `GDAL_METADATA`, are only read on demand);
+   * older versions and test stubs return a plain tag-name record.
+   */
+  getFileDirectory: () => Record<string, unknown> | FileDirectoryLike;
   readRasters: (options: {
     window: number[];
     samples?: number[];
   }) => Promise<ArrayLike<ArrayLike<number>>>;
+}
+
+/** The accessor half of geotiff.js 3's `ImageFileDirectory`. */
+export interface FileDirectoryLike {
+  hasTag: (name: string) => boolean;
+  loadValue: (name: string) => Promise<unknown>;
+}
+
+function isFileDirectoryLike(directory: unknown): directory is FileDirectoryLike {
+  return (
+    typeof directory === "object" &&
+    directory !== null &&
+    typeof (directory as FileDirectoryLike).hasTag === "function" &&
+    typeof (directory as FileDirectoryLike).loadValue === "function"
+  );
+}
+
+/**
+ * Read one tag by name from either directory shape.
+ *
+ * Indexing a geotiff.js 3 `ImageFileDirectory` like a record silently yields
+ * undefined for every tag, which is how the wavelength axis went missing for
+ * files that carry it. A name the TIFF tag table does not know (the ENVI-style
+ * `wavelength`) makes `hasTag` throw there, which reads as "absent".
+ *
+ * @param directory - The image's file directory.
+ * @param name - The tag name, e.g. `GDAL_METADATA`.
+ * @returns The tag's value, or undefined when it is absent or unreadable.
+ */
+async function directoryTag(
+  directory: Record<string, unknown> | FileDirectoryLike | undefined,
+  name: string,
+): Promise<unknown> {
+  if (!directory) return undefined;
+  if (isFileDirectoryLike(directory)) {
+    try {
+      return directory.hasTag(name) ? await directory.loadValue(name) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return directory[name];
 }
 
 let geokeysParser: Promise<((keys: Record<string, unknown>) => string | null) | null> | null = null;
@@ -97,16 +144,12 @@ async function projectionFor(geoKeys: Record<string, unknown> | undefined): Prom
  * for, and an XML parser on file-supplied content is a larger surface than the
  * data warrants.
  *
- * @param directory - The image's file directory.
+ * @param xml - The `GDAL_METADATA` tag's value, if the file has one.
  * @param bandCount - How many bands the image has.
  * @returns One wavelength per band in band order, or null when the tag is
  *   absent, unparseable, or does not cover exactly every band.
  */
-function gdalMetadataWavelengths(
-  directory: Record<string, unknown> | undefined,
-  bandCount: number,
-): number[] | null {
-  const xml = directory?.["GDAL_METADATA"];
+function gdalMetadataWavelengths(xml: unknown, bandCount: number): number[] | null {
   if (typeof xml !== "string" || !xml) return null;
   const bySample = new Map<number, number>();
   const item = /<Item\b([^>]*)>([^<]*)<\/Item>/gi;
@@ -143,11 +186,15 @@ function gdalMetadataWavelengths(
  * file directory. Neither is guaranteed, so a file with neither charts against
  * band number instead — which is still the useful axis, just less physical.
  */
-function wavelengthsFor(image: ImageLike, bandCount: number): number[] | null {
+async function wavelengthsFor(image: ImageLike, bandCount: number): Promise<number[] | null> {
   const directory = image.getFileDirectory();
-  const fromGdal = gdalMetadataWavelengths(directory, bandCount);
+  const fromGdal = gdalMetadataWavelengths(
+    await directoryTag(directory, "GDAL_METADATA"),
+    bandCount,
+  );
   if (fromGdal) return fromGdal;
-  const raw = directory?.["wavelength"] ?? directory?.["Wavelength"];
+  const raw =
+    (await directoryTag(directory, "wavelength")) ?? (await directoryTag(directory, "Wavelength"));
   // Trimmed before splitting: a leading space on " 443, 560, 665" would
   // otherwise produce an empty first element, fail the band-count match, and
   // drop a perfectly good wavelength list for being loosely formatted.
@@ -353,7 +400,7 @@ export async function readProfileFromImage(
   // line of nulls says nothing, so report it as no profile.
   if (values.every((value) => value === null)) return null;
 
-  const wavelengths = wavelengthsFor(image, bandCount);
+  const wavelengths = await wavelengthsFor(image, bandCount);
   return {
     axis: wavelengths
       ? { name: "wavelength", size: bandCount, values: wavelengths, units: "nm" }
