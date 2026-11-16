@@ -214,10 +214,11 @@ export function TopToolbar({
   // Tracks an active IME composition so pressing Enter to confirm a CJK
   // candidate doesn't blur the project-name field mid-composition.
   const projectNameComposingRef = useRef(false);
-  // The field's text while it has focus. Unfocused, a default name renders as
-  // the translated placeholder; deciding that by focus rather than by content
-  // keeps a typed "Untitled Project" from vanishing on its last keystroke.
-  const [projectNameDraft, setProjectNameDraft] = useState<string | null>(null);
+  // Whether the user has typed in the name field since focusing it. The store
+  // stays the field's source of truth; a default name renders as the
+  // translated placeholder only until the user types, so a typed "Untitled
+  // Project" does not vanish on its last keystroke.
+  const [projectNameTyped, setProjectNameTyped] = useState(false);
 
   const { controlsVisible, setControlsVisible, toggleMapControl } = useMapControlVisibility(
     mapControllerRef,
@@ -743,12 +744,12 @@ export function TopToolbar({
               className="hidden h-7 w-44 border-transparent px-2 text-xs shadow-none focus-visible:border-input md:block"
               // The store keeps the canonical English default so saved files do
               // not vary by UI language; show it as a translated placeholder.
-              value={projectNameDraft ?? (projectName === DEFAULT_PROJECT_NAME ? "" : projectName)}
+              value={projectName === DEFAULT_PROJECT_NAME && !projectNameTyped ? "" : projectName}
               placeholder={t("toolbar.item.untitledProject")}
               readOnly={viewer}
               onChange={(event) => {
                 if (viewer) return;
-                setProjectNameDraft(event.target.value);
+                setProjectNameTyped(true);
                 setProjectName(event.target.value);
               }}
               onKeyDown={(event) => {
@@ -760,20 +761,18 @@ export function TopToolbar({
                   event.currentTarget.blur();
                 }
               }}
-              onFocus={() => {
-                if (viewer) return;
-                setProjectNameDraft(projectName === DEFAULT_PROJECT_NAME ? "" : projectName);
-              }}
               onCompositionStart={() => {
                 projectNameComposingRef.current = true;
               }}
               onCompositionEnd={() => {
                 projectNameComposingRef.current = false;
               }}
-              onBlur={(event) => {
-                setProjectNameDraft(null);
+              onBlur={() => {
+                setProjectNameTyped(false);
                 if (viewer) return;
-                const nextName = event.target.value.trim();
+                // Read the store, not the field, so a project loaded while the
+                // field had focus is never overwritten by stale text.
+                const nextName = useAppStore.getState().projectName.trim();
                 // Persist the canonical, locale-independent default name; a
                 // translated string would otherwise be written into the saved
                 // project file and vary by UI language.
