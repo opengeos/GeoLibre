@@ -5,6 +5,7 @@ import {
   demTilePlacement,
   encodeTerrariumDem,
   fileDirectoryValue,
+  fillMissingElevations,
   isDemOverviewIfd,
   normalizeNoData,
 } from "../packages/map/src/cog-dem-source";
@@ -157,5 +158,19 @@ describe("fileDirectoryValue", () => {
   it("still reads a plain tag record", () => {
     assert.equal(fileDirectoryValue({ GDAL_NODATA: "0" }, "GDAL_NODATA"), "0");
     assert.equal(fileDirectoryValue(undefined, "GDAL_NODATA"), undefined);
+  });
+});
+
+describe("fillMissingElevations", () => {
+  it("fills NaN and nodata pixels from the fallback and keeps the DEM's own (#3470)", () => {
+    const tile = Float64Array.from([100, Number.NaN, -9999, 200]);
+    fillMissingElevations(tile, -9999, [1, 2, 3, 4]);
+    assert.deepEqual([...tile], [100, 2, 3, 200]);
+  });
+
+  it("leaves a pixel missing where the fallback has nothing either", () => {
+    const tile = Float64Array.from([Number.NaN]);
+    fillMissingElevations(tile, null, [Number.NaN]);
+    assert.ok(Number.isNaN(tile[0]));
   });
 });

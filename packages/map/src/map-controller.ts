@@ -95,7 +95,12 @@ import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
 import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control";
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
-import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
+import {
+  registerCogDemSource,
+  type CogDemFallback,
+  type CogDemSourceRegistration,
+} from "./cog-dem-source";
+import { createTerrariumFallback } from "./terrarium-fallback";
 import { installMapTransformCompat } from "./map-transform-compat";
 import {
   isInitialMapCrsFrameRequested,
@@ -319,6 +324,11 @@ export class MapController implements MapEngine {
   private cogDemRegistration: CogDemSourceRegistration | null = null;
   private cogDemUrl: string | null = null;
   private cogDemGeneration = 0;
+  /** Fill outside a custom COG DEM from the global terrain; see setTerrainFillOutside. */
+  private terrainFillOutside = false;
+  /** Bumped by each explicit fill change; see setTerrainCogSource. */
+  private terrainFillGeneration = 0;
+  private terrainFallback: CogDemFallback | null = null;
   // Seam for tests: opening a COG needs a real GeoTIFF over the network, which
   // the generation-guard tests in setTerrainCogSource have no use for.
   private openCogDem: typeof registerCogDemSource = registerCogDemSource;
@@ -2833,9 +2843,14 @@ export class MapController implements MapEngine {
    * happens, and quietly loading an earlier pick behind a visible error would
    * be the greater surprise. Concurrent callers can tell the two apart.
    */
-  async setTerrainCogSource(source: string | Blob | null, band = 1): Promise<boolean> {
+  async setTerrainCogSource(
+    source: string | Blob | null,
+    band = 1,
+    options: { fillOutside?: boolean } = {},
+  ): Promise<boolean> {
     const normalizedSource = typeof source === "string" ? source.trim() || null : source;
     const generation = ++this.cogDemGeneration;
+    const fillGeneration = this.terrainFillGeneration;
     let registration: CogDemSourceRegistration | null = null;
     try {
       registration = normalizedSource ? await this.openCogDem(normalizedSource, band) : null;
@@ -2859,20 +2874,17 @@ export class MapController implements MapEngine {
     }
     if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
 
+    // Only now that the DEM has opened: a failed open leaves the working DEM
+    // and its fill exactly as they were.
+    // A fill set explicitly while the DEM was opening is newer than this one.
+    if (options.fillOutside !== undefined && fillGeneration === this.terrainFillGeneration) {
+      this.terrainFillOutside = options.fillOutside;
+    }
     const previous = this.cogDemRegistration;
     this.cogDemRegistration = registration;
     this.cogDemUrl = typeof normalizedSource === "string" ? normalizedSource : null;
-    this.terrainSource = registration
-      ? {
-          type: "raster-dem",
-          tiles: registration.tiles,
-          tileSize: 256,
-          maxzoom: 22,
-          encoding: "terrarium",
-          ...(registration.bounds ? { bounds: registration.bounds } : {}),
-          attribution: "Elevation from user-provided Cloud Optimized GeoTIFF",
-        }
-      : DEFAULT_TERRAIN_SOURCE;
+    registration?.setFallback?.(this.terrainFillOutside ? this.globalTerrainFallback() : null);
+    this.terrainSource = this.cogTerrainSourceSpec(registration);
     previous?.dispose();
 
     if (this.map && this.isStyleReady()) this.addTerrainSource();
@@ -2884,6 +2896,75 @@ export class MapController implements MapEngine {
       this.terrainEnablePending = true;
     }
     return true;
+  }
+
+  /** Whether a custom COG DEM is surrounded by the global terrain. */
+  getTerrainFillOutside(): boolean {
+    return this.terrainFillOutside;
+  }
+
+  /**
+   * Fill the area outside a custom COG DEM, and its nodata, with the global
+   * terrain, so the DEM does not stand as a raised block with vertical walls
+   * (#3470). Off, the DEM is drawn alone over a flat 0 m surface, with no
+   * requests to the global tiles. Applies to the current DEM at once and is
+   * remembered for the next one.
+   *
+   * @param fill - Whether to fill outside the DEM.
+   */
+  setTerrainFillOutside(fill: boolean): void {
+    this.terrainFillGeneration += 1;
+    if (fill === this.terrainFillOutside) return;
+    this.terrainFillOutside = fill;
+    const registration = this.cogDemRegistration;
+    if (!registration) return;
+    registration.setFallback?.(fill ? this.globalTerrainFallback() : null);
+    // The source spec changes (bounds come and go) and cached tiles were drawn
+    // without or with the fill, so the source is rebuilt the way a new DEM is.
+    const wasEnabled = this.isTerrainEnabled();
+    if (wasEnabled) {
+      if (this.terrainControl) this.terrainControl.setEnabled(false);
+      else this.map?.setTerrain(null);
+    }
+    if (this.map?.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
+    this.terrainSource = this.cogTerrainSourceSpec(registration);
+    if (this.map && this.isStyleReady()) this.addTerrainSource();
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
+  }
+
+  /** The global Terrarium tiles as a COG DEM fallback, created once. */
+  private globalTerrainFallback(): CogDemFallback {
+    this.terrainFallback ??= createTerrariumFallback({
+      template: DEFAULT_TERRAIN_SOURCE.tiles![0],
+      maxzoom: DEFAULT_TERRAIN_SOURCE.maxzoom ?? 15,
+    });
+    return this.terrainFallback;
+  }
+
+  /**
+   * The raster-dem source for a COG DEM registration, or the global source
+   * when there is none. Bounds limit tile requests to the DEM, so they are
+   * dropped while filling outside it: the tiles beyond carry the global
+   * terrain.
+   */
+  private cogTerrainSourceSpec(
+    registration: CogDemSourceRegistration | null,
+  ): maplibregl.RasterDEMSourceSpecification {
+    if (!registration) return DEFAULT_TERRAIN_SOURCE;
+    const filled = this.terrainFillOutside;
+    return {
+      type: "raster-dem",
+      tiles: registration.tiles,
+      tileSize: 256,
+      maxzoom: 22,
+      encoding: "terrarium",
+      ...(registration.bounds && !filled ? { bounds: registration.bounds } : {}),
+      attribution: filled
+        ? `Elevation from user-provided Cloud Optimized GeoTIFF; ${DEFAULT_TERRAIN_SOURCE.attribution}`
+        : "Elevation from user-provided Cloud Optimized GeoTIFF",
+    };
   }
 
   /**

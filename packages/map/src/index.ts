@@ -123,7 +123,9 @@ export {
   encodeTerrariumDem,
   registerCogDemSource,
   type CogDemErrorCode,
+  type CogDemFallback,
 } from "./cog-dem-source";
+export { createTerrariumFallback, type TerrariumFallbackOptions } from "./terrarium-fallback";
 export {
   detectGeometryProfile,
   getLayerBounds,
