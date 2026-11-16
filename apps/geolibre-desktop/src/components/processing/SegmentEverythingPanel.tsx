@@ -30,6 +30,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import {
   fetchSegmentModel,
@@ -257,7 +258,10 @@ export function SegmentEverythingPanel({
       // The panel may have been closed while the loader chunk or the
       // reprojection was pending.
       if (controller.signal.aborted) return;
-      const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
+      const layerId = addGeoJsonLayer(
+        uniqueLayerName(t("segmentEverything.layerName"), useAppStore.getState().layers),
+        fc,
+      );
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentEverything.added", { count: masks.length }));

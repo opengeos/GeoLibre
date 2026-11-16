@@ -10,6 +10,7 @@
 // `@vite-ignore` comments keep Vite from trying to resolve/bundle the CDN URLs.
 
 import type { PgliteModules } from "./pglite-loader";
+import { postgisBundleUrls, withMirroredPostgisBundle } from "./pglite-postgis-bundle";
 
 export type { PgliteModules };
 
@@ -63,6 +64,11 @@ export async function loadPgliteModules(): Promise<PgliteModules> {
   }
   return {
     PGlite: modules.PGlite as PgliteModules["PGlite"],
-    postgis: modules.postgis,
+    // Fetch the ~20 MB postgis.tar.gz from unpkg first: jsDelivr's cache-miss
+    // path for it is slow enough to time out (issue #3472).
+    postgis: withMirroredPostgisBundle(
+      modules.postgis,
+      postgisBundleUrls(__PGLITE_POSTGIS_CDN_URL__),
+    ),
   };
 }

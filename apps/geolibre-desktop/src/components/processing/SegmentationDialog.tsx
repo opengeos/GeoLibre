@@ -26,6 +26,7 @@ import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { UPDATE_URL } from "../../lib/updates";
@@ -190,7 +191,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
         mode === "text"
           ? t("segmentation.layerName", { prompt: prompt.trim() })
           : t("segmentation.layerNameDefault");
-      const layerId = addGeoJsonLayer(name, fc);
+      const layerId = addGeoJsonLayer(uniqueLayerName(name, useAppStore.getState().layers), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentation.added", { count: features.length, name }));

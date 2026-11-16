@@ -1,9 +1,12 @@
 /**
  * Built-in object-detection models for the Object Detection dialog (issue #902).
  *
- * These are stock COCO YOLO models exported to ONNX, hosted on jsDelivr (which
- * serves with permissive CORS, so the browser/webview can fetch them directly)
- * and pinned to immutable commit SHAs so the file can never change under us.
+ * These are stock COCO YOLO models exported to ONNX, fetched from
+ * raw.githubusercontent.com (which serves with `Access-Control-Allow-Origin: *`,
+ * so the browser/webview can fetch them directly) and pinned to immutable commit
+ * SHAs so the file can never change under us. They used to come from jsDelivr's
+ * `/gh/` mirror, but that endpoint stopped serving these files (503 with no
+ * CORS header, or a hang; issue #3472), so the built-in models could not load.
  * They let a user run detection without supplying their own `.onnx`.
  *
  * Source repos (MIT-licensed browser demos); the YOLOv5/v8 weights themselves
@@ -14,7 +17,7 @@
  *
  * Provenance/trust note: these URLs point at a third-party individual's public
  * repos, not an official Ultralytics/ONNX-zoo source. The immutable commit-SHA
- * pin is the main mitigation (jsDelivr serves that exact byte content); the
+ * pin is the main mitigation (GitHub serves that exact byte content); the
  * remaining risk is availability if the account/repo is ever deleted. Follow-up:
  * mirror these files into a GeoLibre-controlled repo so the built-in option does
  * not depend on an external account.
@@ -125,14 +128,14 @@ export const BUILTIN_DETECTION_MODELS: readonly BuiltinDetectionModel[] = NO_EXT
       {
         id: "yolov8n-coco",
         label: "YOLOv8n (COCO, 80 classes)",
-        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov8-onnxruntime-web@fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
+        url: "https://raw.githubusercontent.com/Hyuto/yolov8-onnxruntime-web/fc4a52c466d15ad4519873a0cef22fbc935b93b6/public/model/yolov8n.onnx",
         classNames: COCO_CLASSES,
         inputSize: 640,
       },
       {
         id: "yolov5n-coco",
         label: "YOLOv5n (COCO, 80 classes)",
-        url: "https://cdn.jsdelivr.net/gh/Hyuto/yolov5-onnxruntime-web@203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
+        url: "https://raw.githubusercontent.com/Hyuto/yolov5-onnxruntime-web/203637cc45962e40a81b2a7e78f98813f93971db/public/model/yolov5n.onnx",
         classNames: COCO_CLASSES,
         inputSize: 640,
       },
@@ -146,8 +149,8 @@ const MODEL_CACHE = "geolibre-detection-models";
  * (and offline use) are instant.
  *
  * Uses the Cache API when available (and falls back to a plain fetch otherwise,
- * e.g. in a non-secure context). The jsDelivr URLs send permissive CORS
- * headers, so the response is readable and cacheable rather than opaque.
+ * e.g. in a non-secure context). The raw.githubusercontent.com URLs send
+ * permissive CORS headers, so the response is readable and cacheable rather than opaque.
  *
  * @param url The model URL (from {@link BUILTIN_DETECTION_MODELS}).
  * @returns The `.onnx` file bytes.

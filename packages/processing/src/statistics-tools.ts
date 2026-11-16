@@ -982,6 +982,72 @@ const MAX_STCUBE_POINTS = 1_000_000;
  */
 const MAX_STCUBE_STEPS = 1000;
 
+/**
+ * Share of a full step the trailing time step must cover to stand on its own.
+ * A shorter trailing step is folded into the one before it.
+ */
+const MIN_TRAILING_STEP_FRACTION = 0.5;
+
+/**
+ * The coarsest of whole days or whole hours that every event's offset from the
+ * earliest event is a multiple of, else 0 (continuous timestamps).
+ *
+ * Date-only data ("2025-03-04") is daily: its last timestamp stands for that
+ * whole day, not an instant, which {@link spaceTimeCubeSteps} needs to know to
+ * measure how much of the final step the data really covers.
+ *
+ * @param times Event timestamps in ms.
+ * @param minTime The earliest of `times`.
+ * @returns 86 400 000, 3 600 000, or 0.
+ */
+export function timestampResolutionMs(times: Iterable<number>, minTime: number): number {
+  let daily = true;
+  let hourly = true;
+  for (const t of times) {
+    const offset = t - minTime;
+    if (daily && offset % TIME_STEP_MS.days !== 0) daily = false;
+    if (hourly && offset % TIME_STEP_MS.hours !== 0) hourly = false;
+    if (!hourly) return 0;
+  }
+  return daily ? TIME_STEP_MS.days : TIME_STEP_MS.hours;
+}
+
+/**
+ * Number of equal time steps for a space-time cube spanning `spanMs`.
+ *
+ * Steps start at the earliest event, so the last one usually covers only the
+ * remainder of the span. A sliver of a step (a year of data in weekly steps
+ * leaves a one-day 53rd week) holds a handful of events against an otherwise
+ * empty slice, which makes every cell with a late event read as a "New Hot
+ * Spot" with the same final z-score (issue #3472). When the trailing step
+ * covers less than {@link MIN_TRAILING_STEP_FRACTION} of a step and at least
+ * two steps remain without it, it is merged into the step before (the caller
+ * clamps those events into the last kept step).
+ *
+ * @param spanMs Time from the earliest to the latest event, in ms.
+ * @param stepMs Length of one time step, in ms.
+ * @param resolutionMs How long each timestamp stands for (from
+ *   {@link timestampResolutionMs}); 0 for instants. Capped at one step.
+ * @returns The step count, whether a short trailing step was merged, and the
+ *   share of a step the trailing remainder covered.
+ */
+export function spaceTimeCubeSteps(
+  spanMs: number,
+  stepMs: number,
+  resolutionMs = 0,
+): { timeSteps: number; mergedTrailing: boolean; trailingFraction: number } {
+  const resolution = Math.min(Math.max(0, resolutionMs), stepMs);
+  // The latest event falls in the last step; how much of that step the data
+  // covers is its offset into the step plus the span its timestamp stands for.
+  const steps = Math.floor(spanMs / stepMs) + 1;
+  const covered = spanMs - (steps - 1) * stepMs + resolution;
+  const trailingFraction = Math.min(1, covered / stepMs);
+  if (steps > 2 && trailingFraction < MIN_TRAILING_STEP_FRACTION) {
+    return { timeSteps: steps - 1, mergedTrailing: true, trailingFraction };
+  }
+  return { timeSteps: steps, mergedTrailing: false, trailingFraction };
+}
+
 interface MannKendall {
   s: number;
   tau: number;
@@ -1263,7 +1329,14 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
     const cellLat = cellSizeKm / kmPerDegLat;
     const cols = Math.max(1, Math.ceil((maxLon - minLon) / cellLon));
     const rows = Math.max(1, Math.ceil((maxLat - minLat) / cellLat));
-    const timeSteps = Math.floor((maxTime - minTime) / stepMs) + 1;
+    const { timeSteps, mergedTrailing, trailingFraction } = spaceTimeCubeSteps(
+      maxTime - minTime,
+      stepMs,
+      timestampResolutionMs(
+        events.map((e) => e.time),
+        minTime,
+      ),
+    );
     if (timeSteps < 2) {
       ctx.log(
         "Error: the data spans fewer than 2 time steps; reduce the time-step interval so events fall into at least 2 bins.",
@@ -1282,6 +1355,12 @@ export const emergingHotSpotTool: ProcessingAlgorithm = {
         `Error: ${cols}×${rows} cells × ${timeSteps} time steps = ${(nCells * timeSteps).toLocaleString()} bins exceeds the ${MAX_STCUBE_BINS.toLocaleString()}-bin limit. Increase the cell size or the time-step interval.`,
       );
       return;
+    }
+
+    if (mergedTrailing) {
+      ctx.log(
+        `Merged a partial final time step (${Math.round(trailingFraction * 100)}% of a step) into the previous one so a short tail is not analyzed as a full step.`,
+      );
     }
 
     // Aggregate events into the cube: cube[step][cell] = summed count/weight.

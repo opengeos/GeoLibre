@@ -221,9 +221,71 @@ function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
  * {@link mergeWasmToolManifests} to reconcile these against the catalog.
  */
 export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
-  const { listManifests } = await loadToolsModule();
-  const manifests = await listManifests();
+  const manifests = (await fetchPrebuiltToolManifests()) ?? (await listRunnerManifests());
   return manifests.map(manifestToWhiteboxTool);
+}
+
+/** Ask the WASM runner itself; downloads and compiles the ~24 MB runner. */
+async function listRunnerManifests(): Promise<ToolManifest[]> {
+  const { listManifests } = await loadToolsModule();
+  return listManifests();
+}
+
+/**
+ * File the build writes the runner's manifests to, next to index.html
+ * (`vite-plugins/wasm-tool-manifests.ts`).
+ */
+export const PREBUILT_TOOL_MANIFESTS_FILE = "whitebox-wasm-manifests.json";
+
+let prebuiltManifestsPromise: Promise<ToolManifest[] | null> | null = null;
+
+/**
+ * Load the build-time copy of the WASM runner's tool manifests.
+ *
+ * Listing them from the runner means downloading and compiling the whole
+ * `geolibre-cli.wasm` first, which held the Processing dialog's tool list on
+ * "Loading…" for ~30 s on a slow link (issue #3472). The build writes the same
+ * manifests to {@link PREBUILT_TOOL_MANIFESTS_FILE}, so the list shows as soon
+ * as that small file arrives and the runner downloads only when a tool runs.
+ *
+ * @param baseUrl Document base to resolve the file against (defaults to
+ *   `document.baseURI`; none outside a browser).
+ * @param fetchImpl The fetch implementation (injectable for tests).
+ * @returns The manifests, or null when the file is absent or malformed (an SPA
+ *   fallback answers a missing file with index.html), so the caller can ask the
+ *   runner instead.
+ */
+export function fetchPrebuiltToolManifests(
+  baseUrl: string | undefined = typeof document !== "undefined" ? document.baseURI : undefined,
+  fetchImpl: typeof fetch = (...args) => fetch(...args),
+): Promise<ToolManifest[] | null> {
+  prebuiltManifestsPromise ??= (async () => {
+    if (!baseUrl) return null;
+    try {
+      const response = await fetchImpl(new URL(PREBUILT_TOOL_MANIFESTS_FILE, baseUrl).href, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) return null;
+      const data: unknown = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return null;
+      if (!data.every((item) => typeof (item as ToolManifest | null)?.id === "string")) {
+        return null;
+      }
+      return data as ToolManifest[];
+    } catch {
+      return null;
+    }
+  })().then((result) => {
+    // Retry on a later call after a miss (a transient network error).
+    if (!result) prebuiltManifestsPromise = null;
+    return result;
+  });
+  return prebuiltManifestsPromise;
+}
+
+/** Forget the memoized prebuilt manifests (tests only). */
+export function resetPrebuiltToolManifestsCache(): void {
+  prebuiltManifestsPromise = null;
 }
 
 /**

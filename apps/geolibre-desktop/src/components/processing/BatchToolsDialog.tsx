@@ -11,6 +11,7 @@ import {
   type RunnerHost,
 } from "@geolibre/processing";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
+import { uniqueLayerName } from "../../lib/unique-layer-name";
 import {
   Button,
   Dialog,
@@ -334,7 +335,10 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
           rejectOnAbort(signal),
         ]);
         if (output && output.features.length) {
-          addGeoJsonLayer(`${tool.name}: ${layer.name}`, output);
+          addGeoJsonLayer(
+            uniqueLayerName(`${tool.name}: ${layer.name}`, useAppStore.getState().layers),
+            output,
+          );
           produced++;
         } else {
           appendLog(`No features produced for ${layer.name}`);

@@ -7,6 +7,7 @@ import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
+import { uniqueLayerName } from "../../../lib/unique-layer-name";
 import {
   browserPixelLimit,
   isNativeMethod,
@@ -235,7 +236,10 @@ export function ObiaSegmentStep({
         result = await segmentInBrowser(image, method, params, nativeParams, run);
         size = { width: image.width, height: image.height };
       }
-      const name = t("obia.layerName", { name: sourceLayer.name });
+      const name = uniqueLayerName(
+        t("obia.layerName", { name: sourceLayer.name }),
+        useAppStore.getState().layers,
+      );
       // Fingerprint before adding the layer, so a failure here leaves nothing behind.
       const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
       const objectsLayerId = addGeoJsonLayer(name, result.objects);
