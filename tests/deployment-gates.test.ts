@@ -5,6 +5,7 @@ import {
   commandAppPrivileges,
   commandCapability,
   editMenuItemCapability,
+  entryMenuOffered,
   filterCommandsByCapabilities,
   filterCommandsByPrivileges,
   projectMenuItemCapability,
@@ -326,6 +327,40 @@ describe("filterCommandsByPrivileges", () => {
     assert.deepEqual(
       filterCommandsByPrivileges(sidecarRegistry, ROLE_PRIVILEGES.publisher).map((c) => c.id),
       sidecarRegistry.map((c) => c.id),
+    );
+  });
+});
+
+describe("entryMenuOffered", () => {
+  const all = new Set<DeploymentCapability>(["data:add", "plugins:install"]);
+  it("offers a menu only when not in the viewer, visible, and granted", () => {
+    assert.equal(
+      entryMenuOffered("addData", { viewer: false, capabilities: all, menuVisible: true }),
+      true,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: true }),
+      true,
+    );
+    assert.equal(
+      entryMenuOffered("addData", { viewer: true, capabilities: all, menuVisible: true }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", { viewer: false, capabilities: all, menuVisible: false }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("plugins", {
+        viewer: false,
+        capabilities: new Set(["data:add"]),
+        menuVisible: true,
+      }),
+      false,
+    );
+    assert.equal(
+      entryMenuOffered("addData", { viewer: false, capabilities: new Set(), menuVisible: true }),
+      false,
     );
   });
 });
