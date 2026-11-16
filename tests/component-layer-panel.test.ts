@@ -235,6 +235,39 @@ describe("LayerPanel", () => {
     assert.equal(layer("parks")?.visible, true);
   });
 
+  it("disables the eye and opacity of a host-locked layer for a guest (#3477)", () => {
+    useAppStore.setState({
+      layers: [
+        geojsonLayer({ id: "historic", name: "Historic sites" }),
+        geojsonLayer({ id: "worship", name: "Places of worship" }),
+      ],
+    });
+    useAppStore.getState().setCollaboration({
+      isActive: true,
+      role: "guest",
+      mode: "co-edit",
+      clientId: "guest-1",
+      participants: [
+        { clientId: "guest-1", displayName: "Guest", color: "#ff0000", role: "guest", editOverride: null },
+      ],
+      lockedLayerIds: ["historic"],
+    });
+    renderLayerPanel();
+
+    const lockedEye = within(row("Historic sites")).getByRole("button", { name: "Hide layer" });
+    assert.equal((lockedEye as HTMLButtonElement).disabled, true);
+    fireEvent.click(lockedEye);
+    assert.equal(layer("historic")?.visible, true);
+    assert.equal(
+      within(row("Historic sites")).getByRole("slider").getAttribute("data-disabled"),
+      "",
+    );
+
+    const openEye = within(row("Places of worship")).getByRole("button", { name: "Hide layer" });
+    assert.equal((openEye as HTMLButtonElement).disabled, false);
+    assert.equal(within(row("Places of worship")).getByRole("slider").hasAttribute("data-disabled"), false);
+  });
+
   it("renames a layer on double-click and Enter", () => {
     useAppStore.setState({ layers: [geojsonLayer({ id: "parks", name: "Parks" })] });
     renderLayerPanel();

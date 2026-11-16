@@ -263,7 +263,10 @@ export function formatPopupValue(
 
 /** Whether a row would draw as a picture rather than as text. */
 function rendersAsImage(kind: PopupFieldKind, value: unknown): boolean {
-  return kind === "image" || (kind === "auto" && isInlineImageValue(value));
+  return (
+    kind === "image" ||
+    (kind === "auto" && (isInlineImageValue(value) || isInlineImageList(value)))
+  );
 }
 
 /**
@@ -504,6 +507,16 @@ export function resolvePopupBody(
  */
 export function isInlineImageValue(value: unknown): value is string {
   return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value);
+}
+
+/**
+ * Whether a value is a non-empty array of inline image data URLs, such as the
+ * `geolibre_photos` list Field collection writes for a feature with several
+ * photos. Under `"auto"` the popup draws these as a row of thumbnails instead
+ * of printing the array as JSON, which would be megabytes of base64 (#3477).
+ */
+export function isInlineImageList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isInlineImageValue);
 }
 
 /**

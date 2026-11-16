@@ -23,6 +23,8 @@ import {
 import {
   authorizeHostAction,
   authorizeSnapshot,
+  RELAY_SNAPSHOT_ORIGIN,
+  shouldResyncRejectedSnapshot,
   CHAT_HISTORY_LIMIT,
   clearParticipantOverrides,
   diffLockedLayers,
@@ -670,6 +672,14 @@ export class CollabSession extends DurableObject<Env> {
         code: decision.code,
         message: decision.message,
       });
+      if (shouldResyncRejectedSnapshot(decision) && storedSnapshot !== null) {
+        this.send(ws, {
+          type: "snapshot",
+          project: storedSnapshot,
+          origin: RELAY_SNAPSHOT_ORIGIN,
+          rev: (await this.ctx.storage.get<number>("rev")) ?? 0,
+        });
+      }
       return;
     }
 

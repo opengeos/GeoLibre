@@ -8,6 +8,10 @@ interface LayerOpacitySliderProps {
   ariaLabel: string;
   value: number;
   onChange: (value: number) => void;
+  /** Read-only, e.g. a host-locked layer in a live collaboration session. */
+  disabled?: boolean;
+  /** Tooltip explaining why the slider is disabled. */
+  disabledHint?: string;
 }
 
 // Opacity control for the layer panel cards: a compact slider paired with a
@@ -15,7 +19,14 @@ interface LayerOpacitySliderProps {
 // user can type an exact value instead of dragging to it. This mirrors the
 // Style panel's RasterStyleSlider (#832) to keep interaction parity between the
 // two panels (#838). Enter/blur commits the clamped value, Escape cancels.
-export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerOpacitySliderProps) {
+export function LayerOpacitySlider({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  disabled = false,
+  disabledHint,
+}: LayerOpacitySliderProps) {
   const { t } = useTranslation();
   const min = 0;
   const max = 1;
@@ -49,22 +60,23 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
     // The slider stays mounted while editing, so a second double-click on its
     // track must not re-enter and clobber the in-progress draft (the value
     // button is unmounted while editing, so it cannot re-trigger this).
-    if (editing) return;
+    if (editing || disabled) return;
     handledRef.current = false;
     setDraft(value.toFixed(2));
     setEditing(true);
   };
 
   return (
-    <div className="mt-2 flex items-center gap-1">
+    <div className="mt-2 flex items-center gap-1" title={disabled ? disabledHint : undefined}>
       <span className="text-[10px] text-muted-foreground">{label}</span>
       <Slider
         aria-label={ariaLabel}
-        className="flex-1"
+        className={`flex-1 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
         min={min}
         max={max}
         step={step}
         value={[value]}
+        disabled={disabled}
         onValueChange={([v]: number[]) => onChange(v ?? value)}
         onClick={(e: ReactMouseEvent) => e.stopPropagation()}
         onDoubleClick={(e: ReactMouseEvent) => {
@@ -99,7 +111,8 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
       ) : (
         <button
           type="button"
-          className="w-9 shrink-0 cursor-text text-end font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
+          disabled={disabled}
+          className="w-9 shrink-0 cursor-text text-end disabled:cursor-not-allowed font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
           title={t("layers.opacityExactHint")}
           // The name leads with the visible value (WCAG 2.5.3, axe
           // label-content-name-mismatch).

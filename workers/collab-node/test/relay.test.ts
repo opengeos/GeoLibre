@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { WebSocket } from "ws";
-import { signIdentityToken } from "@geolibre/collab-core";
+import { RELAY_SNAPSHOT_ORIGIN, signIdentityToken } from "@geolibre/collab-core";
 import { createRelay } from "../src/server.js";
 
 /** Issuer secret for the identity tests; a relay without one rejects all tokens. */
@@ -232,6 +232,49 @@ describe("Node collaboration relay", () => {
     const snapshot = await next(host, "snapshot");
     assert.deepEqual(snapshot.project, { name: "accepted" });
     assert.equal(snapshot.rev, 1);
+    host.close();
+    guest.close();
+  });
+
+  it("resyncs a guest whose snapshot touched a locked layer so later edits sync (#3477)", async () => {
+    const { http } = await start();
+    const created = await createSession(http);
+    const host = await connect(http, created.sessionId);
+    const guest = await connect(http, created.sessionId);
+    await joinSession(host, created.hostToken, "Host");
+    await joinSession(guest, undefined, "Guest");
+
+    const stored = {
+      name: "Knoxville",
+      layers: [
+        { id: "historic", name: "Historic sites", opacity: 1 },
+        { id: "worship", name: "Places of worship", opacity: 1 },
+      ],
+    };
+    host.send(JSON.stringify({ type: "snapshot", project: stored, rev: 1 }));
+    await next(guest, "snapshot");
+    host.send(JSON.stringify({ type: "set-layer-locks", lockedLayerIds: ["historic"] }));
+    await next(guest, "layer-locks");
+
+    // The guest's opacity change to the locked layer is refused, and the relay
+    // hands the stored project back so the guest drops the refused change.
+    const touchesLocked = structuredClone(stored);
+    touchesLocked.layers[0].opacity = 0;
+    const resync = next(guest, "snapshot");
+    guest.send(JSON.stringify({ type: "snapshot", project: touchesLocked, rev: 1 }));
+    assert.equal((await next(guest, "error")).code, "layer-locked");
+    const restored = await resync;
+    assert.equal(restored.origin, RELAY_SNAPSHOT_ORIGIN);
+    assert.deepEqual(restored.project, stored);
+    assert.equal(restored.rev, 1);
+
+    // Built on the restored project, an edit to an unlocked layer now syncs.
+    const unlockedEdit = structuredClone(stored);
+    unlockedEdit.layers[1].opacity = 0.5;
+    guest.send(JSON.stringify({ type: "snapshot", project: unlockedEdit, rev: 2 }));
+    const accepted = await next(host, "snapshot");
+    assert.deepEqual(accepted.project, unlockedEdit);
+    assert.equal(accepted.rev, 2);
     host.close();
     guest.close();
   });

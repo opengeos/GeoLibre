@@ -4,6 +4,7 @@ import {
   buildStoryMapHandoutPdf,
   hexToRgb,
   htmlToPlainText,
+  layoutHandoutFooter,
   type HandoutChapter,
   type HandoutOptions,
 } from "../apps/geolibre-desktop/src/lib/storymap-pdf";
@@ -286,5 +287,41 @@ describe("buildStoryMapHandoutPdf", () => {
     const text = Buffer.from(bytes).toString("latin1");
     const match = text.match(/\/Count (\d+)/);
     assert.equal(match ? Number(match[1]) : -1, 1);
+  });
+});
+
+describe("layoutHandoutFooter (#3477)", () => {
+  // 2 mm per character keeps the arithmetic readable.
+  const measure = (text: string) => text.length * 2;
+
+  it("keeps a two-word byline whole next to a centered footer", () => {
+    // A4 portrait: 210 mm minus two 12 mm margins.
+    const layout = layoutHandoutFooter(measure, 186, "Jane Researcher", "Made with GeoLibre", "1 / 3");
+    assert.equal(layout.byline, "Jane Researcher");
+    assert.equal(layout.footer, "Made with GeoLibre");
+  });
+
+  it("gives the byline the whole band when there is no footer", () => {
+    const byline = "Department of Geography, University of Tennessee";
+    assert.equal(layoutHandoutFooter(measure, 186, byline, "", "1 / 3").byline, byline);
+  });
+
+  it("marks a byline too long for its slot with an ellipsis", () => {
+    const layout = layoutHandoutFooter(
+      measure,
+      186,
+      "Department of Geography, University of Tennessee",
+      "Footer",
+      "1 / 3",
+    );
+    assert.ok(layout.byline.endsWith("…"));
+    assert.ok(measure(layout.byline) <= 186 / 3);
+  });
+
+  it("keeps the footer clear of a wide byline on both sides", () => {
+    const layout = layoutHandoutFooter(measure, 186, "Jane Researcher", "x".repeat(200), "1 / 3");
+    // The byline slot is 30 + 4 mm, so the centered footer gets 186 - 2 * 34.
+    assert.ok(measure(layout.footer) <= 186 - 2 * 34);
+    assert.ok(layout.footer.endsWith("…"));
   });
 });

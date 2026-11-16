@@ -33,6 +33,7 @@ import {
   participantCanEditLayer,
 } from "../lib/collab-protocol";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
+import { viewOnlyLocalChangeAction } from "../lib/collab-local-edits";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
 const CURSOR_THROTTLE_MS = 40;
@@ -85,6 +86,12 @@ export function useCollaboration(
   const snapshotRequestRef = useRef(0);
   const selfIdRef = useRef<string | null>(null);
   const syncPausedRef = useRef(false);
+  // True while an inbound snapshot is written to the store, so the project
+  // subscription can tell a peer's change from this user's own edit.
+  const applyingRemoteRef = useRef(false);
+  // The "view-only: your change stays local" notice shows once per stretch of
+  // view-only editing rather than on every slider tick.
+  const viewOnlyNoticeShownRef = useRef(false);
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingConnectRef = useRef<{
     resolve: () => void;
@@ -178,6 +185,15 @@ export function useCollaboration(
   };
 
   const applyRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
+    applyingRemoteRef.current = true;
+    try {
+      writeRemoteSnapshot(project, initial);
+    } finally {
+      applyingRemoteRef.current = false;
+    }
+  };
+
+  const writeRemoteSnapshot = (project: GeoLibreProject, initial: boolean): void => {
     const state = useAppStore.getState();
     const localView = mapControllerRef.current?.readView() ?? state.mapView;
     const merged = mergeInboundCollaborationProject(project, localView, state.projectPlugins);
@@ -355,6 +371,16 @@ export function useCollaboration(
           pending.reject(new Error(message.message));
           return;
         }
+        if (message.code === "layer-locked") {
+          // Transient, not a session error: the relay follows the refusal with
+          // the session's project, which undoes the change, so say so in a
+          // toast instead of leaving a stale error in the Collaborate dialog.
+          notify.warning(i18n.t("collaborate.layerLockedRejected"), {
+            description: message.message,
+            dedupeKey: "collab-layer-locked",
+          });
+          break;
+        }
         store.setCollaboration({ error: message.message });
         if (message.code === "too-large") syncPausedRef.current = true;
         break;
@@ -382,7 +408,21 @@ export function useCollaboration(
     };
 
     const unsubscribe = useAppStore.subscribe((state, prev) => {
-      if (projectChanged(state, prev)) scheduleSnapshot();
+      if (!projectChanged(state, prev)) return;
+      scheduleSnapshot();
+      const action = viewOnlyLocalChangeAction({
+        active: state.collaboration.isActive,
+        applyingRemote: applyingRemoteRef.current,
+        canEdit: canEdit(),
+        noticeShown: viewOnlyNoticeShownRef.current,
+      });
+      if (action === "reset") viewOnlyNoticeShownRef.current = false;
+      if (action === "notify") {
+        viewOnlyNoticeShownRef.current = true;
+        notify.info(i18n.t("collaborate.viewOnlyLocalChange"), {
+          dedupeKey: "collab-view-only-local-change",
+        });
+      }
     });
 
     conn.send({
@@ -445,6 +485,7 @@ export function useCollaboration(
   ): Promise<void> => {
     disconnect();
     syncPausedRef.current = false;
+    viewOnlyNoticeShownRef.current = false;
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
     basemapEgressRef.current.reset();

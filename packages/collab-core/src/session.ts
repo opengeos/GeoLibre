@@ -205,6 +205,30 @@ export function authorizeSnapshot(
   return { ok: true };
 }
 
+/**
+ * `origin` of a snapshot the relay sends back to a sender whose snapshot it
+ * rejected. It never collides with a participant `clientId` (a UUID), so every
+ * client applies it as a remote snapshot.
+ */
+export const RELAY_SNAPSHOT_ORIGIN = "relay";
+
+/**
+ * Whether a rejected snapshot should be answered with the stored one.
+ *
+ * A guest's snapshot is the whole project, so after one is refused for touching
+ * a locked layer (or for arriving after the guest became view-only) the guest's
+ * local copy still carries the refused change, and every later snapshot it sends
+ * is refused for that same change until a peer's snapshot happens to overwrite
+ * it (#3477). Sending the stored project back resets the sender to the session's
+ * state, so its next edit can sync. An oversized project is not resent: the
+ * client pauses sync instead, and the stored copy is unrelated to its size.
+ */
+export function shouldResyncRejectedSnapshot(
+  decision: SnapshotDecision,
+): decision is Extract<SnapshotDecision, { ok: false }> {
+  return !decision.ok && (decision.code === "layer-locked" || decision.code === "forbidden");
+}
+
 export function authorizeHostAction(
   participant: Pick<SessionParticipant, "role">,
   action: string,

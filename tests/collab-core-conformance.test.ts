@@ -13,6 +13,7 @@ import {
   sanitizeDisplayName,
   sanitizeView,
   setParticipantOverride,
+  shouldResyncRejectedSnapshot,
   toWireParticipant,
   type SessionParticipant,
 } from "../packages/collab-core/src/index";
@@ -56,6 +57,31 @@ describe("collaboration relay conformance", () => {
       code: "forbidden",
       message: "The host has set you to view-only.",
     });
+  });
+
+  it("resyncs a sender refused for a locked layer or view-only, not for size (#3477)", () => {
+    const stored = { layers: [{ id: "a", name: "A", opacity: 1 }] };
+    const inbound = { layers: [{ id: "a", name: "A", opacity: 0 }] };
+    const locked = authorizeSnapshot(
+      participant("guest"),
+      "co-edit",
+      20,
+      MAX_SNAPSHOT_BYTES,
+      stored,
+      inbound,
+      ["a"],
+    );
+    assert.equal(locked.ok, false);
+    assert.equal(shouldResyncRejectedSnapshot(locked), true);
+    assert.equal(
+      shouldResyncRejectedSnapshot(authorizeSnapshot(participant("guest"), "view-only", 20)),
+      true,
+    );
+    assert.equal(
+      shouldResyncRejectedSnapshot(authorizeSnapshot(participant("guest"), "co-edit", 20, 10)),
+      false,
+    );
+    assert.equal(shouldResyncRejectedSnapshot({ ok: true }), false);
   });
 
   it("gates set-mode and set-participant-mode to the host", () => {
