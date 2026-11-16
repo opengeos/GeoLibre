@@ -19,7 +19,7 @@ import {
 import { useDesktopSettingsStore } from "../hooks/useDesktopSettings";
 import { openLocalDataFileWithFallback } from "./file-io/file-dialogs";
 import { isTauri } from "./is-tauri";
-import { refreshSourceUrl } from "./layer-refresh";
+import { canBootstrapLayer } from "./layer-refresh";
 import { layerStylesFileName } from "./layer-style-files";
 import { isLocalFileLayer } from "./local-file-watch";
 
@@ -150,5 +150,5 @@ export function withStartupLayers(project: GeoLibreProject): GeoLibreProject {
 export const APP_LAYERS_FILE_HOST: LayersFileHost = {
   // Only the desktop host can read a path back.
   isReloadableLocalFile: (layer) => isTauri() && isLocalFileLayer(layer),
-  canRefetch: (layer) => refreshSourceUrl(layer) !== null,
+  canRefetch: canBootstrapLayer,
 };

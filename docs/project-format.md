@@ -856,6 +856,14 @@ public names resolving to private addresses can still be requested. This
 heuristic is not a complete network isolation boundary; open only trusted
 projects and data sources.
 
+Export Layers reports inline GeoJSON layers that cannot bootstrap automatically
+as skipped, including S3 and private-host non-WFS layers. It does not strip their
+features to write a reference that would reload empty. Editing an observed public URL
+on an already hydrated GeoJSON layer fetches its replacement data automatically.
+That replacement is recorded in undo history; initial hydration is not.
+Local saves, autosave snapshots, and undo history may retain signed URLs until
+they are redacted for sharing or export.
+
 The dialog defaults to dry-run + skip-Wherobots; both are togglable. Closing the
 dialog stops local polling only -- the backend harvest job keeps running, and the
 last execution ID stays visible.

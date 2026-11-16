@@ -11,6 +11,7 @@
     "backendContinues": "Closing this dialog stops local polling only; the backend job keeps running.",
     "running": "Running…",
     "run": "Harvest & Export",
+    "resume": "Resume job observation",
     "helpTitle": "What is this and how do I use it?",
     "helpWhat": "This harvests a public portal dataset (CKAN, Opendatasoft, ArcGIS REST, or a direct GeoJSON/GeoPackage/Shapefile/KML/CSV file) into a GeoParquet file in your own Google Cloud Storage bucket, with QA and optional Wherobots loading.",
     "helpBackend": "You bring your own backend (BYOK): deploy the harvester service into your own GCP project, then paste its HTTPS URL and API key here. No shared bucket or key is provided.",

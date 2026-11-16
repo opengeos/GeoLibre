@@ -1,10 +1,11 @@
 import { arcGISLayerHasPendingEdits } from "@geolibre/plugins";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { parseS3Url, useAppStore, withoutHistory } from "@geolibre/core";
+import { useAppStore, withoutHistory } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { reloadVectorControlLayer, replayVectorControlLayerById } from "@geolibre/plugins";
 import {
+  canBootstrapLayer,
   getLayerRefreshConfig,
   getRefreshFailureLayerPatch,
   isRefreshableLayer,
@@ -36,31 +37,6 @@ import {
   reconcileMssqlWritebackMetadata,
   rememberMssqlLoadedRows,
 } from "../../../lib/mssql-writeback";
-
-function isPublicHttpUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase().replace(/\.$/, "");
-    // Loopback (IPv4 127.0.0.0/8, IPv6 [::1], and *.localhost)
-    if (host === "localhost" || host.endsWith(".localhost")) return false;
-    if (/^0\./.test(host) || host === "[::]" || host === "[::1]") return false;
-    if (/^127\./.test(host)) return false;
-    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)) return false;
-    // Private ranges (RFC1918 + link-local + ULA + IPv4-mapped)
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
-    if (
-      /^\[?fe[89ab][0-9a-f]:/.test(host) ||
-      /^\[?fc[0-9a-f]{2}:/.test(host) ||
-      /^\[?fd[0-9a-f]{2}:/.test(host)
-    )
-      return false;
-    if (/^\[?::ffff:/i.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 interface UseLayerRefreshOptions {
   /** The project's layers, in store order. */
@@ -520,8 +496,7 @@ export function useLayerRefresh({ layers, isCollapsed }: UseLayerRefreshOptions)
       // Bootstrap public HTTP/GCS sources without initiating signed S3 reads.
       // Configured refresh timers remain opt-in. WFS retains its existing
       // auto-load behaviour on localhost/LAN hosts.
-      const isGs = /^gs:\/\//i.test(sourceUrl);
-      if (!isWfs && (parseS3Url(sourceUrl) || (!isGs && !isPublicHttpUrl(sourceUrl)))) continue;
+      if (!canBootstrapLayer(layer)) continue;
 
       // A hydrated layer present at first observation needs no bootstrap.
       if (layer.geojson && !alreadyObserved) continue;

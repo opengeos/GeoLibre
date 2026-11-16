@@ -89,6 +89,44 @@ it("reports HTTP polling failures and enables a new run", async () => {
   );
 });
 
+it("resumes a failed observation on the original backend without submitting another job", async () => {
+  const originalTimeout = globalThis.setTimeout;
+  mock.method(globalThis, "setTimeout", ((
+    callback: (...args: unknown[]) => void,
+    delay?: number,
+    ...args: unknown[]
+  ) => originalTimeout(callback, delay === 5000 ? 0 : delay, ...args)) as typeof setTimeout);
+  const requests: Array<{ url: string; method: string; key: string | null }> = [];
+  mock.method(globalThis, "fetch", async (url: string, options?: RequestInit) => {
+    requests.push({
+      url,
+      method: options?.method ?? "GET",
+      key: new Headers(options?.headers).get("X-API-Key"),
+    });
+    if (requests.length === 1) return Response.json({ execution: "existing-job" });
+    if (requests.length === 2) return new Response("Unavailable", { status: 503 });
+    return Response.json({ status: "succeeded", result: { finished: true } });
+  });
+  openDialog();
+  fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "original-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Harvest & Export" }));
+  await waitFor(() => assert.ok(screen.getByText("HTTP 503")));
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open harvest" }));
+  fireEvent.change(screen.getByLabelText("Backend URL (Cloud Run)"), {
+    target: { value: "https://another.example.com" },
+  });
+  fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "other-backend-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Resume job observation" }));
+  await waitFor(() => assert.ok(screen.getByText(/"finished": true/)));
+  assert.deepEqual(requests, [
+    { url: "https://example.com/harvest-large", method: "POST", key: "original-key" },
+    { url: "https://example.com/harvest-large/existing-job", method: "GET", key: "original-key" },
+    { url: "https://example.com/harvest-large/existing-job", method: "GET", key: "original-key" },
+  ]);
+  assert.equal(screen.queryByRole("button", { name: "Resume job observation" }), null);
+});
+
 it("clears the polling timer when observation stops", async () => {
   const originalTimeout = globalThis.setTimeout;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;

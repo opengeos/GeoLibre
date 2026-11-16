@@ -13,6 +13,7 @@ import {
   useDesktopSettingsStore,
 } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
 import {
+  APP_LAYERS_FILE_HOST,
   buildLayersFileContent,
   withStartupLayers,
   type LayersFileHost,
@@ -74,6 +75,53 @@ beforeEach(() => {
 });
 
 describe("buildLayersFileContent", () => {
+  it("does not strip snapshots from sources that cannot bootstrap on reload", () => {
+    const urls = [
+      "s3://private-bucket/data.json",
+      "s3a://private-bucket/data.json",
+      "https://private-bucket.s3.amazonaws.com/data.json",
+      "http://localhost/data.json",
+      "http://192.168.1.2/data.json",
+    ];
+    const layers = urls.map((url, index) =>
+      layer({
+        id: `blocked-${index}`,
+        name: url,
+        geojson: features,
+        source: { type: "geojson", url },
+      }),
+    );
+    useAppStore.setState({ layers });
+    for (const entry of layers) assert.equal(APP_LAYERS_FILE_HOST.canRefetch(entry), false);
+    const build = buildLayersFileContent(APP_LAYERS_FILE_HOST);
+    assert.deepEqual(build.content.layers, []);
+    assert.deepEqual(build.skipped, urls);
+    assert.ok(useAppStore.getState().layers.every((entry) => entry.geojson === features));
+  });
+
+  it("exports public GeoJSON and private-host WFS as bootstrapable references", () => {
+    useAppStore.setState({
+      layers: [
+        layer({
+          id: "public",
+          name: "Public",
+          geojson: features,
+          source: { type: "geojson", url: "https://example.test/data.json" },
+        }),
+        layer({
+          id: "wfs",
+          name: "WFS",
+          geojson: features,
+          source: { type: "geojson", url: "http://localhost/wfs" },
+          metadata: { sourceKind: "wfs-getfeature" },
+        }),
+      ],
+    });
+    const build = buildLayersFileContent(APP_LAYERS_FILE_HOST);
+    assert.deepEqual(build.skipped, []);
+    assert.equal(build.content.layers.length, 2);
+    assert.ok(build.content.layers.every((entry) => entry.geojson === undefined));
+  });
   it("writes references without features or credentials, and reports the rest", () => {
     useAppStore.setState({ layers: [tiles, fromUrl, fromDisk, drawn] });
     const build = buildLayersFileContent(host);
