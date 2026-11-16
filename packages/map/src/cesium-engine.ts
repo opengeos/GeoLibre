@@ -1,5 +1,6 @@
 import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
 import {
+  shortestLongitudeExtent,
   useAppStore,
   type GeoLibreLayer,
   type MapPreferences,
@@ -137,36 +138,6 @@ const FLY_SECONDS = 0.8;
 const FEATURE_PICK_APERTURE_PX = 12;
 /** Zoom floor when framing a point-sized extent; matches MapController.fitBounds. */
 const POINT_FIT_ZOOM = 14;
-
-/**
- * The shortest longitude interval covering `longitudes`, in the `[west, east]`
- * form {@link CesiumEngine.fitBounds} reads: `west` greater than `east` means
- * the interval crosses the antimeridian, the repo-wide convention.
- *
- * A plain min/max reads a pair at 179° and −179° as 358° apart and frames
- * almost the whole globe instead of the two-degree cluster. The enclosing arc
- * is instead the complement of the widest gap between neighbouring longitudes:
- * the one stretch of the circle nothing selected sits in is the one to leave
- * out. Measuring from any single member instead — the first, say — only finds
- * the minimum while the answer is under 180° wide, and reports 340° for a
- * three-point spread whose true arc is 190°.
- */
-function shortestLongitudeInterval(longitudes: readonly number[]): [number, number] {
-  const sorted = longitudes.map(normalizeBearing).sort((a, b) => a - b);
-  if (sorted.length === 1) return [sorted[0], sorted[0]];
-  // Start from the gap that wraps the antimeridian, then the ordinary ones.
-  let widest = sorted[0] + 360 - sorted[sorted.length - 1];
-  let before = sorted.length - 1;
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const gap = sorted[i + 1] - sorted[i];
-    if (gap > widest) {
-      widest = gap;
-      before = i;
-    }
-  }
-  // The arc runs from the longitude just after the gap to the one just before.
-  return [sorted[(before + 1) % sorted.length], sorted[before]];
-}
 
 /**
  * A `MapExtent`'s west/east pair in the form Cesium's `Rectangle` takes:
@@ -975,7 +946,11 @@ export class CesiumEngine implements MapEngine {
         this.animateTo({ center: [...coordinates[0]], zoom: 4, bearing: 0, pitch: 0 }, FLY_SECONDS);
       } else {
         const latitudes = coordinates.map(([, latitude]) => latitude);
-        const [west, east] = shortestLongitudeInterval(coordinates.map(([longitude]) => longitude));
+        // Short way round: a pair at 179° and -179° is two degrees apart, not
+        // 358°. fitBounds hands the unwrapped pair to Cesium as west > east.
+        const [west, east] = shortestLongitudeExtent(
+          coordinates.map(([longitude]) => [longitude, longitude]),
+        ) ?? [-180, 180];
         this.fitBounds([west, Math.min(...latitudes), east, Math.max(...latitudes)]);
       }
       return;

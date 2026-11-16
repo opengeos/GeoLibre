@@ -143,6 +143,14 @@ describe("antimeridianAwareBbox", () => {
     assert.deepEqual(antimeridianAwareBbox(fc), [172, 44, 291, 70]);
   });
 
+  it("re-measures a conventional bbox member wider than a hemisphere", () => {
+    const fc = { ...US_LIKE, bbox: [-180, 44, 179.999, 70] } as FeatureCollection;
+    assert.deepEqual(antimeridianAwareBbox(fc), [172, 44, 291, 70]);
+    // A narrow one is trusted as is.
+    const narrow = { ...US_LIKE, bbox: [-75, 40, -65, 50] } as FeatureCollection;
+    assert.deepEqual(antimeridianAwareBbox(narrow), [-75, 40, -65, 50]);
+  });
+
   it("returns null when no feature has coordinates", () => {
     assert.equal(
       antimeridianAwareBbox({

@@ -2300,8 +2300,8 @@ export class MapController implements MapEngine {
     if (!this.map || featureCollection.features.length === 0) return;
     // Short way round the antimeridian, so a selection on both sides of it
     // frames the band across it rather than the whole globe (GeoLibre#3469).
-    // fitBounds validates the box and handles point-sized boxes.
     const box = antimeridianAwareBbox(featureCollection);
+    // fitBounds validates the box and handles point-sized boxes.
     if (box) this.fitBounds(box);
   }
 

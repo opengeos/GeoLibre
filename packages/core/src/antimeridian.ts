@@ -140,6 +140,21 @@ function positionsExtent(positions: readonly Position[]): PartExtent | null {
 }
 
 /**
+ * The `[min, max]` longitude of every contiguous part of a geometry (each
+ * point, each line, each polygon's outer ring), the intervals
+ * {@link shortestLongitudeExtent} combines.
+ *
+ * @param geometry - The geometry to walk; null yields no intervals.
+ */
+export function partLongitudeIntervals(
+  geometry: Geometry | null | undefined,
+): Array<[number, number]> {
+  const parts: PartExtent[] = [];
+  collectParts(geometry, parts);
+  return parts.map((part) => [part.minLon, part.maxLon]);
+}
+
+/**
  * Collect the parts of a geometry whose longitudes are contiguous: each point,
  * each line, and each polygon's outer ring (its holes lie inside it). RFC 7946
  * asks for a geometry that crosses the antimeridian to be split into such parts,
@@ -199,8 +214,23 @@ export function antimeridianAwareBbox(geojson: GeoJSON | null | undefined): LonL
   const own = horizontalBbox(geojson.bbox);
   if (own) {
     const [west, south, east, north] = own;
-    return west > east ? [west, south, east + 360, north] : own;
+    // An RFC 7946 box across the antimeridian, or one no wider than a
+    // hemisphere, is already the short extent. A wider conventional box may be
+    // a plain min/max over data split at 180°, so measure the coordinates.
+    if (west > east) return [west, south, east + 360, north];
+    if (east - west <= 180) return own;
   }
+  const measured = measureParts(geojson);
+  return measured ?? own;
+}
+
+/**
+ * The short-way-round extent of a GeoJSON object's coordinates, ignoring any
+ * `bbox` member.
+ *
+ * @param geojson - A FeatureCollection, Feature, or bare geometry.
+ */
+function measureParts(geojson: GeoJSON): LonLatExtent | null {
   const parts: PartExtent[] = [];
   if (geojson.type === "FeatureCollection") {
     for (const feature of geojson.features ?? []) collectParts(feature?.geometry, parts);

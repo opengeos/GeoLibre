@@ -342,7 +342,8 @@ function bufferOneFeature(
     );
     // turf carries its input's properties through, but for a shifted feature
     // that input is our own copy — restore the source feature's attributes.
-    return { ...result, geometry, properties: feature.properties ?? {} };
+    // Cutting can leave nothing (every piece degenerate); drop that too.
+    return nonEmptyBuffer({ ...result, geometry, properties: feature.properties ?? {} });
   };
   if (side === "inside") return finish(grow(-radius));
   const outer = grow(radius);

@@ -21,7 +21,7 @@
 import intersect from "@turf/intersect";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, Geometry, MultiPolygon, Polygon, Position } from "geojson";
-import { shortestLongitudeExtent } from "@geolibre/core/worker-safe";
+import { partLongitudeIntervals, shortestLongitudeExtent } from "@geolibre/core/worker-safe";
 
 /** A longitude step larger than this between neighbours is read as a wrap. */
 const WRAP_JUMP = 180;
@@ -51,44 +51,6 @@ function mapGeometry(geometry: Geometry, fn: (position: Position) => Position): 
   return { ...geometry, coordinates: mapPositions(geometry.coordinates, fn) } as Geometry;
 }
 
-/** The `[min, max]` longitude of every contiguous part of a geometry. */
-function partIntervals(geometry: Geometry, out: Array<[number, number]>): void {
-  const add = (positions: readonly Position[] | undefined) => {
-    let min = Number.POSITIVE_INFINITY;
-    let max = Number.NEGATIVE_INFINITY;
-    for (const position of positions ?? []) {
-      const lon = position?.[0];
-      if (!Number.isFinite(lon)) continue;
-      if (lon < min) min = lon;
-      if (lon > max) max = lon;
-    }
-    if (min <= max) out.push([min, max]);
-  };
-  switch (geometry.type) {
-    case "Point":
-      add([geometry.coordinates]);
-      break;
-    case "MultiPoint":
-      for (const position of geometry.coordinates) add([position]);
-      break;
-    case "LineString":
-      add(geometry.coordinates);
-      break;
-    case "MultiLineString":
-      for (const line of geometry.coordinates) add(line);
-      break;
-    case "Polygon":
-      add(geometry.coordinates[0]);
-      break;
-    case "MultiPolygon":
-      for (const polygon of geometry.coordinates) add(polygon[0]);
-      break;
-    case "GeometryCollection":
-      for (const member of geometry.geometries) partIntervals(member, out);
-      break;
-  }
-}
-
 /**
  * Shift the parts of a feature that sit just east of the antimeridian a full
  * turn east, so a feature split there (`[177, 180]` and `[-180, -178]`) becomes
@@ -104,9 +66,7 @@ export function prepareAntimeridianInput(feature: Feature): {
   referenceLon: number;
 } {
   if (!feature.geometry) return { feature, referenceLon: 0 };
-  const intervals: Array<[number, number]> = [];
-  partIntervals(feature.geometry, intervals);
-  const extent = shortestLongitudeExtent(intervals);
+  const extent = shortestLongitudeExtent(partLongitudeIntervals(feature.geometry));
   if (!extent) return { feature, referenceLon: 0 };
   const referenceLon = (extent[0] + extent[1]) / 2;
   if (extent[1] <= 180) return { feature, referenceLon };
@@ -114,7 +74,13 @@ export function prepareAntimeridianInput(feature: Feature): {
   const geometry = mapGeometry(feature.geometry, (position) =>
     position[0] < west ? [position[0] + 360, ...position.slice(1)] : position,
   );
-  return { feature: { ...feature, geometry }, referenceLon };
+  // Drop any stored `bbox`: turf takes the buffer's projection centre from
+  // `@turf/bbox`, which returns a stored member verbatim, and the source's box
+  // describes the unshifted coordinates.
+  const shifted: Feature = { ...feature, geometry };
+  delete shifted.bbox;
+  delete geometry.bbox;
+  return { feature: shifted, referenceLon };
 }
 
 /**
@@ -252,7 +218,13 @@ export function unwrapPolygonal(
   referenceLon: number,
 ): Polygon | MultiPolygon {
   const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
-  if (!crossesAntimeridian(polygons) && Math.abs(referenceLon) <= 180) return geometry;
+  // Nothing to do when no ring crosses and every ring already sits on the
+  // reference side; a part of a split feature that turf wrapped to the other
+  // side (-179° for a reference of 179.5°) must still be moved across.
+  const onReferenceSide = polygons.every((rings) =>
+    rings.every((ring) => ring.length === 0 || Math.abs(ring[0][0] - referenceLon) <= 180),
+  );
+  if (!crossesAntimeridian(polygons) && onReferenceSide) return geometry;
   const unwrapped = polygons.map((rings) =>
     rings.map((ring) => closeAroundPole(unwrapRing(ring, referenceLon))),
   );
@@ -281,9 +253,13 @@ export function splitPolygonalAtAntimeridian(
     continuous.type === "Polygon" ? [continuous.coordinates] : continuous.coordinates;
   const out: Position[][][] = [];
   for (const rings of polygons) {
-    // A ring needs four positions; anything shorter is a degenerate leftover.
-    const kept = rings.filter((ring) => ring.length >= 4);
-    if (kept.length && kept[0] === rings[0]) cutIntoWorld(kept, out);
+    // A ring needs four positions; anything shorter is a degenerate leftover,
+    // and a polygon whose outer ring is one has nothing left to cut.
+    if ((rings[0]?.length ?? 0) < 4) continue;
+    cutIntoWorld(
+      rings.filter((ring) => ring.length >= 4),
+      out,
+    );
   }
   if (out.length === 1) return { type: "Polygon", coordinates: out[0] };
   return { type: "MultiPolygon", coordinates: out };
