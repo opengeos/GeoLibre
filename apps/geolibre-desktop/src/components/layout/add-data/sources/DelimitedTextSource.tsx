@@ -25,6 +25,7 @@ import {
 } from "../../../../lib/delimited-text";
 import {
   type ExcelWorksheet,
+  isExcelBytes,
   isExcelFile,
   readExcelWorksheets,
 } from "../../../../lib/excel-workbook";
@@ -45,6 +46,15 @@ import {
 } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 import type { DelimitedTextDelimiter, DelimitedTextImportMode, DelimitedTextMode } from "../types";
+
+/** A URL's path, so a query string cannot hide its extension; the input when it does not parse. */
+function urlPathname(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
 
 /** A cancellable delay that rejects with an AbortError when the signal fires. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -158,9 +168,15 @@ export function DelimitedTextSource() {
     );
   };
 
+  /**
+   * Reads the chosen file or URL as delimited text. `workbook` marks text
+   * converted from an Excel sheet, which is always comma-separated whatever
+   * delimiter the form shows.
+   */
   const readDelimitedTextSource = async (): Promise<{
     sourcePath: string;
     text: string;
+    workbook: boolean;
   }> => {
     if (delimitedTextMode === "file") {
       if (!selectedDelimitedText) {
@@ -172,20 +188,39 @@ export function DelimitedTextSource() {
       return {
         sourcePath: selectedDelimitedText.path,
         text: worksheet?.toCsv() ?? selectedDelimitedText.text,
+        workbook: Boolean(worksheet),
       };
     }
 
     const sourcePath = delimitedTextUrl.trim();
     if (!sourcePath) throw new Error(t("addData.delimitedText.errorUrl"));
 
+    // A workbook already downloaded from this URL (by Retrieve columns): read
+    // the sheet picked since rather than downloading it again.
+    if (selectedDelimitedText?.path === sourcePath && selectedDelimitedText.worksheets) {
+      const { worksheets } = selectedDelimitedText;
+      const worksheet = worksheets.find((item) => item.name === selectedWorksheet) ?? worksheets[0];
+      if (worksheet) return { sourcePath, text: worksheet.toCsv(), workbook: true };
+    }
+
     const response = await fetch(sourcePath);
     if (!response.ok) {
       throw new Error(t("addData.common.requestFailed", { status: response.status }));
     }
-    return {
-      sourcePath,
-      text: await response.text(),
-    };
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    // An Excel workbook is binary: decoding it as text yields the ZIP's bytes as
+    // CSV. Read it as a workbook, as the file source does.
+    if (isExcelFile(urlPathname(sourcePath)) || isExcelBytes(bytes)) {
+      const worksheets = await readExcelWorksheets(buffer);
+      const [first] = worksheets;
+      if (!first) throw new Error(t("addData.delimitedText.errorWorkbookEmpty"));
+      setDelimitedTextDelimiter("comma");
+      setSelectedWorksheet(first.name);
+      setSelectedDelimitedText({ path: sourcePath, text: "", worksheets });
+      return { sourcePath, text: first.toCsv(), workbook: true };
+    }
+    return { sourcePath, text: new TextDecoder().decode(bytes), workbook: false };
   };
 
   const handleChooseDelimitedText = async () => {
@@ -238,11 +273,10 @@ export function DelimitedTextSource() {
     setIsRetrievingDelimitedTextColumns(true);
 
     try {
-      const delimiter = resolveDelimitedTextDelimiter(
-        delimitedTextDelimiter,
-        delimitedTextCustomDelimiter,
-      );
-      const { text } = await readDelimitedTextSource();
+      const { text, workbook } = await readDelimitedTextSource();
+      const delimiter = workbook
+        ? ","
+        : resolveDelimitedTextDelimiter(delimitedTextDelimiter, delimitedTextCustomDelimiter);
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
       // Resolve the coordinate columns as an all-or-nothing pair so the file is
@@ -457,11 +491,10 @@ export function DelimitedTextSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     const name = source.layerName.trim() || defaultName;
-    const delimiter = resolveDelimitedTextDelimiter(
-      delimitedTextDelimiter,
-      delimitedTextCustomDelimiter,
-    );
-    const { sourcePath, text } = await readDelimitedTextSource();
+    const { sourcePath, text, workbook } = await readDelimitedTextSource();
+    const delimiter = workbook
+      ? ","
+      : resolveDelimitedTextDelimiter(delimitedTextDelimiter, delimitedTextCustomDelimiter);
     if (!text) throw new Error(t("addData.delimitedText.errorDataMissing"));
 
     if (delimitedTextImportMode === "addresses") {
@@ -545,6 +578,29 @@ export function DelimitedTextSource() {
   const missingCustomDelimiter =
     delimitedTextDelimiter === "custom" && !delimitedTextCustomDelimiter.trim();
 
+  // An Excel workbook (a picked file or a downloaded URL) offers its sheets.
+  const worksheetSelect = selectedDelimitedText?.worksheets ? (
+    <div className="space-y-1.5">
+      <Label htmlFor="delimited-text-worksheet">{t("addData.delimitedText.worksheet")}</Label>
+      <Select
+        id="delimited-text-worksheet"
+        value={selectedWorksheet}
+        onChange={(event) => {
+          setSelectedWorksheet(event.target.value);
+          setDelimitedTextDelimiter("comma");
+          resetDelimitedTextColumns();
+          resetDelimitedTextCrs();
+        }}
+      >
+        {selectedDelimitedText.worksheets.map((worksheet) => (
+          <option key={worksheet.name} value={worksheet.name}>
+            {worksheet.name}
+          </option>
+        ))}
+      </Select>
+    </div>
+  ) : null;
+
   return (
     <AddDataSourceForm
       layerName={source.layerName}
@@ -585,43 +641,26 @@ export function DelimitedTextSource() {
                   : t("addData.common.noFileSelected")}
               </span>
             </div>
-            {selectedDelimitedText?.worksheets ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="delimited-text-worksheet">
-                  {t("addData.delimitedText.worksheet")}
-                </Label>
-                <Select
-                  id="delimited-text-worksheet"
-                  value={selectedWorksheet}
-                  onChange={(event) => {
-                    setSelectedWorksheet(event.target.value);
-                    setDelimitedTextDelimiter("comma");
-                    resetDelimitedTextColumns();
-                    resetDelimitedTextCrs();
-                  }}
-                >
-                  {selectedDelimitedText.worksheets.map((worksheet) => (
-                    <option key={worksheet.name} value={worksheet.name}>
-                      {worksheet.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null}
+            {worksheetSelect}
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <Label htmlFor="delimited-text-url">{t("addData.delimitedText.url")}</Label>
-            <Input
-              id="delimited-text-url"
-              placeholder={t("addData.delimitedText.urlPlaceholder")}
-              value={delimitedTextUrl}
-              onChange={(event) => {
-                setDelimitedTextUrl(event.target.value);
-                resetDelimitedTextColumns();
-                resetDelimitedTextCrs();
-              }}
-            />
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="delimited-text-url">{t("addData.delimitedText.url")}</Label>
+              <Input
+                id="delimited-text-url"
+                placeholder={t("addData.delimitedText.urlPlaceholder")}
+                value={delimitedTextUrl}
+                onChange={(event) => {
+                  setDelimitedTextUrl(event.target.value);
+                  setSelectedDelimitedText(null);
+                  setSelectedWorksheet("");
+                  resetDelimitedTextColumns();
+                  resetDelimitedTextCrs();
+                }}
+              />
+            </div>
+            {worksheetSelect}
           </div>
         )}
 

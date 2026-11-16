@@ -40,3 +40,20 @@ export async function readExcelWorksheets(data: ArrayBuffer): Promise<ExcelWorks
 export function isExcelFile(path: string): boolean {
   return /\.(?:xls|xlsx)$/i.test(path);
 }
+
+/**
+ * Whether downloaded bytes are an Excel workbook, by signature: an `.xlsx` is
+ * a ZIP archive (`PK\x03\x04`) and a legacy `.xls` an OLE compound document
+ * (`D0 CF 11 E0`). Lets a URL without an `.xlsx` suffix still be read as a
+ * workbook rather than decoded as text. No delimited text file starts with
+ * either signature.
+ *
+ * @param bytes - The downloaded payload.
+ * @returns True when the payload is a ZIP or OLE container.
+ */
+export function isExcelBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 4) return false;
+  const zip = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  return zip || ole;
+}

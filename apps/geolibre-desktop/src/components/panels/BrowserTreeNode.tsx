@@ -24,7 +24,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../layout/AddDataDialog";
 import { isFavoritableKind } from "../../lib/browser-favorites";
-import type { BrowserNode } from "../../lib/browser-tree";
+import { type BrowserNode, isRepeatClick } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
   node: BrowserNode;
@@ -266,13 +266,16 @@ export function BrowserTreeNode({
             tabIndex={node.id === activeRowId ? 0 : -1}
             data-browser-row={node.id}
             onFocus={() => onRowFocus(node.id)}
-            onClick={() => {
+            onClick={(event) => {
               // Also sync from onClick: some browsers (WebKit) don't focus a
               // button on mouse click, so onFocus alone would leave the roving
               // active row stale after a click.
               onRowFocus(node.id);
               if (isGroup) onToggle(node.id);
-              else onActivate(node);
+              // A double-click delivers two clicks. The busy guard only covers
+              // an add still in flight, and a quick one (a My Data layer) is
+              // done before the second click lands, so it added the layer twice.
+              else if (!isRepeatClick(event.detail)) onActivate(node);
             }}
           >
             {isGroup ? (

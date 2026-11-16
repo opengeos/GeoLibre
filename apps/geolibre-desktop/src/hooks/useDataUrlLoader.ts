@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
 import {
   addLidarLayerFromUrl,
@@ -6,7 +6,9 @@ import {
   addRasterToMap,
   addVectorLayerFromUrl,
   findFileHandlerByDataType,
+  isRecoverableNonTiledRasterError,
   listFileHandlers,
+  routeKmlFileSelection,
 } from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -14,6 +16,8 @@ import {
   type DataTypeHint,
   fetchRemoteData,
   fetchRemoteStyle,
+  layerPointsAt,
+  loadDataUrlBatch,
   mapboxStyleForDataLayer,
   parseRasterUrlStyle,
 } from "../lib/data-url";
@@ -26,6 +30,7 @@ import {
   trackHandlerLayers,
   urlFileHandlers,
 } from "../lib/data-url-file-handlers";
+import { notify } from "../lib/notify";
 import { isViewerLayout } from "./useLayoutOptions";
 import { type createAppAPI, whenPluginsSettled } from "./usePlugins";
 import type { ProjectUrlLoadState } from "./useProjectUrlLoader";
@@ -54,13 +59,6 @@ function fileHandlersForLoad() {
       ready: whenPluginsSettled,
     },
   });
-}
-
-/** Whether a store layer records the given URL as the data it was loaded from. */
-function layerPointsAt(layer: GeoLibreLayer, url: string): boolean {
-  if (layer.sourcePath === url) return true;
-  const source = layer.source as { url?: unknown };
-  return source.url === url;
 }
 
 /** Load one URL through the same remote-data pipeline used by the `?data=` deep link. */
@@ -133,15 +131,24 @@ export async function loadDataUrl(
   const fitLayerIds: string[] = [];
   if (remote.kind === "cog") {
     const rasterStyle = rawStyle === null ? null : parseRasterUrlStyle(rawStyle);
-    const id = await addRasterToMap(mapAppAPI, remote.url, {
-      name: remote.name,
-      // A URL loader starts an empty workspace, whose raster control defaults
-      // to the native, globe-compatible WASM renderer. Do not override the
-      // control-wide engine when adding this layer.
-      defaults: deepLinkCogDefaults(),
-      zoomTo: fit,
-      ...(rasterStyle ? { state: rasterStyle } : {}),
-    });
+    let id: string;
+    try {
+      id = await addRasterToMap(mapAppAPI, remote.url, {
+        name: remote.name,
+        // A URL loader starts an empty workspace, whose raster control defaults
+        // to the native, globe-compatible WASM renderer. Do not override the
+        // control-wide engine when adding this layer.
+        defaults: deepLinkCogDefaults(),
+        zoomTo: fit,
+        ...(rasterStyle ? { state: rasterStyle } : {}),
+      });
+    } catch (error) {
+      // A striped GeoTIFF is not a failure: the raster control hands it to the
+      // convert-to-COG offer, which owns the layer from here (it adds the
+      // converted raster or, when declined, removes the striped one).
+      if (isRecoverableNonTiledRasterError(error)) return { layerIds, fitLayerIds };
+      throw error;
+    }
     if (options.signal?.aborted) {
       store.removeLayer(id);
       throw new DOMException("The operation was aborted", "AbortError");
@@ -158,6 +165,25 @@ export async function loadDataUrl(
       throw new DOMException("The operation was aborted", "AbortError");
     }
     layerIds.push(id);
+  } else if (remote.kind === "kml") {
+    if (rawStyle !== null) throw new Error("A style cannot be applied to a KML document.");
+    const previousIds = new Set(store.layers.map((layer) => layer.id));
+    // The host importer frames the import itself (honouring the zoom-to-new-layers
+    // preference) and reports its own failures, so an empty result is the only
+    // signal here that nothing was added.
+    if (!(await routeKmlFileSelection([{ file: remote.file }]))) {
+      throw new Error(`Could not add ${remote.name} to the map: no KML importer is available.`);
+    }
+    const added = useAppStore
+      .getState()
+      .layers.filter((layer) => !previousIds.has(layer.id))
+      .map((layer) => layer.id);
+    if (!added.length) throw new Error(`Could not add ${remote.name} to the map.`);
+    if (options.signal?.aborted) {
+      for (const id of added) store.removeLayer(id);
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    layerIds.push(...added);
   } else if (remote.kind === "pmtiles" || remote.kind === "vector") {
     const styleResult = rawStyle === null ? null : parseMapboxStyle(rawStyle);
     if (styleResult && styleResult.matchedLayerCount === 0) {
@@ -249,22 +275,29 @@ export function useDataUrlLoader(
           signal: controller.signal,
         });
       }
-      const layerIds: string[] = [];
-      try {
-        for (const entry of params) {
-          const result = await loadDataUrl(mapAppAPI, entry.dataUrl, {
-            styleUrl: entry.styleUrl,
-            dataType: entry.dataType,
-            signal: controller.signal,
-            fit: false,
-          });
-          layerIds.push(...result.layerIds);
-        }
-      } catch (error) {
-        const store = useAppStore.getState();
-        for (const layerId of layerIds) store.removeLayer(layerId);
-        throw error;
-      }
+      // One entry that fails (an unreachable host, an unsupported file) must
+      // not take the rest of the link down with it: load every entry that can
+      // be loaded, report each failure, and fail the link only when nothing
+      // loaded at all.
+      const layerIds = await loadDataUrlBatch(
+        params,
+        async (entry) =>
+          (
+            await loadDataUrl(mapAppAPI, entry.dataUrl, {
+              styleUrl: entry.styleUrl,
+              dataType: entry.dataType,
+              signal: controller.signal,
+              fit: false,
+            })
+          ).layerIds,
+        {
+          removeLayer: (id) => useAppStore.getState().removeLayer(id),
+          onEntryError: (error) => {
+            const message = error instanceof Error ? error.message : "Could not load the data URL.";
+            notify.error(message, { dedupeKey: `url-load:data:${message}` });
+          },
+        },
+      );
       return { layerIds, fitLayerIds: layerIds };
     };
     void queueDataLoad(load)

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as XLSX from "@e965/xlsx";
-import { isExcelFile, readExcelWorksheets } from "../apps/geolibre-desktop/src/lib/excel-workbook";
+import {
+  isExcelBytes,
+  isExcelFile,
+  readExcelWorksheets,
+} from "../apps/geolibre-desktop/src/lib/excel-workbook";
 
 for (const bookType of ["xls", "xlsx"] as const) {
   test(`reads ${bookType} worksheets as delimited text`, async () => {
@@ -43,4 +47,15 @@ test("recognizes Excel extensions case-insensitively", () => {
   assert.equal(isExcelFile("survey.xls"), true);
   assert.equal(isExcelFile("SURVEY.XLSX"), true);
   assert.equal(isExcelFile("survey.csv"), false);
+});
+
+test("recognizes xls and xlsx workbooks by their bytes, not delimited text", () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["a"], [1]]), "Sheet1");
+  for (const bookType of ["xls", "xlsx"] as const) {
+    const bytes = new Uint8Array(XLSX.write(workbook, { bookType, type: "array" }));
+    assert.equal(isExcelBytes(bytes), true, bookType);
+  }
+  assert.equal(isExcelBytes(new TextEncoder().encode("name,lon,lat\nA,1,2\n")), false);
+  assert.equal(isExcelBytes(new Uint8Array([0x50, 0x4b])), false);
 });

@@ -1054,3 +1054,16 @@ export function filterBrowserTree(nodes: readonly BrowserNode[], query: string):
 
   return nodes.map(prune).filter((node): node is BrowserNode => node !== null);
 }
+
+/**
+ * Whether a click on a tree row is the second (or later) click of a
+ * multi-click, which must not activate the row again: a double-click on a leaf
+ * would otherwise add its layer twice.
+ *
+ * @param detail - The click event's `detail` (the click count; 0 for a
+ *   keyboard-generated click).
+ * @returns True for the repeat clicks of a double- or triple-click.
+ */
+export function isRepeatClick(detail: number): boolean {
+  return detail > 1;
+}

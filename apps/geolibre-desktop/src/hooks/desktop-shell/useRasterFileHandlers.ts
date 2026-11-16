@@ -81,6 +81,9 @@ export function useRasterFileHandlers(
           bytesAreRemote &&
           !window.confirm(translateRef.current("raster.cogConvertRemoteConfirm", { name }))
         ) {
+          // Declined: the striped layer can never draw, so do not leave it
+          // behind as an empty row in the Layers panel.
+          dismiss();
           return;
         }
         // Read the source bytes in their own try so a failure to obtain them
@@ -138,7 +141,10 @@ export function useRasterFileHandlers(
                   height: info.height,
                 })
               : translateRef.current("raster.cogConvertConfirm", { name });
-          if (!window.confirm(message)) return;
+          if (!window.confirm(message)) {
+            dismiss();
+            return;
+          }
         }
         controller.signal.throwIfAborted();
         notice = notify.info(translateRef.current("raster.cogConverting", { name }), {

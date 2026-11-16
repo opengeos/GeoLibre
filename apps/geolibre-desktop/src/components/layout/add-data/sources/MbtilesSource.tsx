@@ -146,6 +146,8 @@ export function MbtilesSource() {
           tileType: metadata.tileType,
         },
       ),
+      // Frames the archive's advertised bounds, per the zoom-to-new-layers preference.
+      { fit: true },
     );
   });
 

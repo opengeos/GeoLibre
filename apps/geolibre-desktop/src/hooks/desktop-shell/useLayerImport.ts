@@ -1,7 +1,12 @@
 import { shouldZoomToNewLayers, detectNonGeographicCoordinates, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getLayerBounds } from "@geolibre/map";
-import { addRasterToMap, setKmlFileImportHandler, TIME_SLIDER_PLUGIN_ID } from "@geolibre/plugins";
+import {
+  addRasterToMap,
+  isRecoverableNonTiledRasterError,
+  setKmlFileImportHandler,
+  TIME_SLIDER_PLUGIN_ID,
+} from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from "react";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
@@ -380,12 +385,19 @@ export function useLayerImport({
       if (!rasters.length) return 0;
       const appAPI = createAppAPI(mapControllerRef);
       for (const raster of rasters) {
-        // `path` is present only for a desktop pick/drop; it is what lets a saved
-        // project reload the raster instead of dropping it (issue #1463).
-        await addRasterToMap(appAPI, raster.source, {
-          name: raster.name,
-          ...(raster.path ? { localPath: raster.path } : {}),
-        });
+        try {
+          // `path` is present only for a desktop pick/drop; it is what lets a saved
+          // project reload the raster instead of dropping it (issue #1463).
+          await addRasterToMap(appAPI, raster.source, {
+            name: raster.name,
+            ...(raster.path ? { localPath: raster.path } : {}),
+          });
+        } catch (error) {
+          // A striped GeoTIFF is handed to the convert-to-COG offer, which owns
+          // its layer from here. It is not a failed drop, and must not abort the
+          // files dropped with it (a KMZ dropped beside one was skipped).
+          if (!isRecoverableNonTiledRasterError(error)) throw error;
+        }
       }
       return rasters.length;
     },
