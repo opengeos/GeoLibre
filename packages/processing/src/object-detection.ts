@@ -382,8 +382,16 @@ export function decodeYolo(
   // many classes (few anchors, but more channels), silently swapping the axes.
   // The channel axis is then the other dim; whether it sits on d1 (v8/v11, no
   // objectness) or d2 (v5, with objectness) determines the layout.
-  const expectedAnchors = (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
-  const d2IsAnchors = Math.abs(d2 - expectedAnchors) <= Math.abs(d1 - expectedAnchors);
+  //
+  // v8/v11 heads are anchor-free (one prediction per grid cell), but a v5 head
+  // predicts 3 anchor boxes per cell, so its anchor axis is 3x as long (25200
+  // rather than 8400 at 640). Matching only the per-cell count picked the 85
+  // channels of a real `[1, 25200, 85]` v5 output as the anchor axis, which
+  // read every anchor's values as class scores (class ids in the thousands).
+  const cellsPerImage = (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
+  const anchorDistance = (n: number) =>
+    Math.min(Math.abs(n - cellsPerImage), Math.abs(n - 3 * cellsPerImage));
+  const d2IsAnchors = anchorDistance(d2) <= anchorDistance(d1);
   const numAnchors = d2IsAnchors ? d2 : d1;
   const numChannels = d2IsAnchors ? d1 : d2;
   const v8 = d2IsAnchors;
