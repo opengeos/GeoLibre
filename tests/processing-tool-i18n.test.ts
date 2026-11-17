@@ -16,7 +16,7 @@ import {
 
 function fakeT(catalog: Record<string, string> = {}): TFunction {
   const translate = ((key: string, options?: { defaultValue?: string }) =>
-    catalog[key] ?? options?.defaultValue ?? key) as TFunction;
+    catalog[key] ?? options?.defaultValue ?? key) as unknown as TFunction;
   return translate;
 }
 
