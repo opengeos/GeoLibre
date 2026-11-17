@@ -1982,7 +1982,10 @@
     "lockLayer": "Laag vergrendelen voor gasten",
     "unlockLayer": "Laag ontgrendelen voor gasten",
     "layerLocked": "Vergrendeld",
-    "layerLockedHint": "Deze laag is vergrendeld door de host en kan niet worden bewerkt"
+    "layerLockedHint": "Deze laag is vergrendeld door de host en kan niet worden bewerkt",
+    "viewOnlyHint": "U hebt in deze sessie alleen-weergave, dus u kunt deze laag niet wijzigen",
+    "layerLockedRejected": "Die wijziging is niet gedeeld omdat de host de laag heeft vergrendeld. Uw kaart is teruggezet naar de versie van de sessie.",
+    "viewOnlyLocalChange": "U hebt in deze sessie alleen-weergave, dus uw wijzigingen blijven op uw scherm en worden niet gedeeld."
   },
   "share": {
     "title": "Project delen",
@@ -2429,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Kan KML/KMZ niet importeren.",
-    "timeOverlayGroup": "Tijdgebonden overlay-animatie"
+    "timeOverlayGroup": "Tijdgebonden overlay-animatie",
+    "dataUrlStyleUnsupported": "Op een KML-document kan geen stijl worden toegepast.",
+    "dataUrlNoImporter": "Kan {{name}} niet aan de kaart toevoegen: er is geen KML-importer beschikbaar."
   },
   "map": {
     "boundsRestricted": "Grenzen vergrendeld",
@@ -2512,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Lokale COG-DEM",
     "localSourceDescription": "Het bestand blijft op dit apparaat en wordt in kleine bereiken gelezen wanneer terreintegels nodig zijn.",
+    "fillOutside": "Gebied buiten het DEM vullen met wereldwijd terrein",
+    "fillOutsideDescription": "Omringt het DEM, en vult de nodata-gaten ervan, met het wereldwijde terrein in plaats van een vlakke ondergrond. Standaard aan voor een DEM van een URL en uit voor een lokaal bestand, dat anders niets van het netwerk leest.",
     "useCog": "COG-DEM gebruiken",
     "ionAssetLabel": "Cesium Ion-terreinasset",
     "ionAssetDescription": "Gebruik een quantized-mesh-terreinasset van Cesium Ion op de globe. De asset moet beschikbaar zijn voor het geconfigureerde Ion-account.",
@@ -3411,7 +3418,9 @@
       "profileCount_other": "{{count}} profielen",
       "noProfiles": "Nog geen profielen. Voeg er hieronder een toe om de AI-assistent te configureren.",
       "setDefault": "Als standaard instellen",
+      "keepDefault": "Als standaard behouden",
       "defaultProfile": "Standaard",
+      "proxyIsDefault": "Geen enkel profiel is de standaard, dus de assistent start met de proxy van de implementatie. Stel een profiel in als standaard om daarmee te starten.",
       "edit": "Bewerken",
       "deleteProfile": "Profiel verwijderen",
       "backToProfiles": "← Terug naar profielen",
@@ -3441,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (indien vereist)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT-account",
+        "intro": "Gebruik uw ChatGPT-abonnement in plaats van een API-sleutel. Uw browser opent de aanmeldpagina van OpenAI, waar u GeoLibre toestemming geeft om uw abonnement te gebruiken.",
+        "continue": "Doorgaan met ChatGPT",
+        "waiting": "Wachten tot u het aanmelden in de browser hebt voltooid…",
+        "openAgain": "Browser opnieuw openen",
+        "signedInAs": "Aangemeld als {{email}}",
+        "usingPlan": "Uw ChatGPT-abonnement wordt gebruikt.",
+        "planDeclined": "GeoLibre mag uw ChatGPT-abonnement niet gebruiken. Meld u opnieuw aan en geef toestemming.",
+        "signInAgain": "Opnieuw aanmelden",
+        "notRemembered": "De sleutelhanger van het systeem is niet beschikbaar, dus deze aanmelding blijft alleen geldig tot GeoLibre wordt gesloten.",
+        "signOut": "Afmelden",
+        "useAnotherAccount": "Ander account gebruiken",
+        "usage": "Gebruik en verbonden apps",
+        "revokeUnconfirmed": "Hier afgemeld, maar OpenAI heeft het beëindigen van de sessie niet bevestigd. Verbreek voor de zekerheid de verbinding met GeoLibre in uw ChatGPT-instellingen.",
+        "desktopOnly": "Aanmelden met ChatGPT is beschikbaar in de desktop-app van GeoLibre."
       }
     }
   },
@@ -4256,6 +4282,8 @@
         "missing-source": "De laag heeft geen leesbare gegevensbron.",
         "format": "Het bestandsformaat van de laag wordt niet ondersteund.",
         "remote-file": "Externe QGIS-bestandsbronnen worden nog niet ondersteund.",
+        "remote-unreadable": "Het externe bestand kon niet worden gedownload of gelezen.",
+        "wmts": "WMTS-lagen worden nog niet geïmporteerd. Voeg de service in plaats daarvan toe via het menu Gegevens toevoegen.",
         "network-path": "Netwerkpaden worden om veiligheidsredenen niet geladen.",
         "browser-local-file": "Er wordt naar het lokale bestand verwezen, maar browsers kunnen QGIS-gegevenspaden niet opnieuw openen. Gebruik GeoLibre Desktop om het te laden.",
         "browser-local-raster": "Er wordt via een lokaal pad naar het raster verwezen. Gebruik GeoLibre Desktop om het te laden.",
@@ -5771,6 +5799,7 @@
     "setupTitle": "AI-assistent instellen",
     "setupStatus": "De assistent heeft een AI-provider nodig om het denkwerk te doen. Voeg hieronder inloggegevens toe voor een van de providers en het paneel schakelt over naar chatmodus zodra u opslaat.",
     "setupProviders": "Voeg inloggegevens toe voor een van de providers",
+    "setupSignIn": "Meld u aan via Instellingen → AI-providers",
     "setupOpenSettings": "Open Instellingen → AI-providers",
     "thinking": "Bezig…",
     "toolError": "mislukt",
@@ -9620,6 +9649,9 @@
     "hiddenByGroup": "Verborgen omdat de groep niet zichtbaar is",
     "empty": "Geen gegevenslagen. Voeg gegevens toe via de werkbalk.",
     "emptyBeginner": "Nog geen lagen. Voeg achtergrondkaarten toe via Plug-ins → Achtergrondkaarten, of uw eigen gegevens via het menu Gegevens toevoegen.",
+    "emptyBeginnerBasemapsOnly": "Nog geen lagen. Voeg basiskaarten toe via Plug-ins → Basiskaarten.",
+    "emptyBeginnerDataOnly": "Nog geen lagen. Voeg uw eigen gegevens toe via het menu Gegevens toevoegen.",
+    "emptyNoAdd": "Geen gegevenslagen.",
     "hideAllLayers": "Alle lagen verbergen",
     "showAllLayers": "Alle lagen tonen",
     "compactView": "Compacte weergave",
@@ -9937,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} lokale rasterlagen konden niet worden hersteld",
     "localRasterNotRestoredDesc": "Geladen uit een lokaal bestand: {{names}}. Het project bevat geen rastergegevens, of het bestand kon niet worden gelezen. Voeg het bestand opnieuw toe."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Selectorwaarde niet gevonden ({{values}}). Gebruik een coördinaatwaarde, een datum op de tijdas of een index."
+  },
   "attributeForm": {
     "error": {
       "required": "Een waarde is vereist",
@@ -10089,7 +10124,8 @@
     "panelRenderFailed": "Het paneel \"{{name}}\" kon niet worden geopend.",
     "sharedSettingsFailed": "Kan de gedeelde instellingen uit de link niet laden, dus je eigen instellingen worden gebruikt.",
     "sharedLanguageFailed": "Kan niet overschakelen naar de taal die de gedeelde instellingen vragen.",
-    "languageCatalogFailed": "Kan de vertaling voor {{language}} niet laden, dus GeoLibre toont Engels."
+    "languageCatalogFailed": "Kan de vertaling voor {{language}} niet laden, dus GeoLibre toont Engels.",
+    "dataUrlLoadFailed": "Kan de gegevens-URL niet laden."
   },
   "shell": {
     "workspaceTitle": "GeoLibre-kaartwerkruimte",

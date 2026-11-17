@@ -1982,7 +1982,10 @@
     "lockLayer": "Katmanı konuklar için kilitle",
     "unlockLayer": "Katmanın kilidini konuklar için aç",
     "layerLocked": "Kilitli",
-    "layerLockedHint": "Bu katman ev sahibi tarafından kilitlendi ve düzenlenemez"
+    "layerLockedHint": "Bu katman ev sahibi tarafından kilitlendi ve düzenlenemez",
+    "viewOnlyHint": "Bu oturumda yalnızca görüntüleme yetkiniz var, bu nedenle bu katmanı değiştiremezsiniz",
+    "layerLockedRejected": "Ev sahibi katmanı kilitlediği için bu değişiklik paylaşılmadı. Haritanız oturumun sürümüne sıfırlandı.",
+    "viewOnlyLocalChange": "Bu oturumda yalnızca görüntüleme yetkiniz var, bu nedenle değişiklikleriniz yalnızca ekranınızda kalır ve paylaşılmaz."
   },
   "share": {
     "title": "Projeyi paylaş",
@@ -2429,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "KML/KMZ içe aktarılamadı.",
-    "timeOverlayGroup": "Zaman kaplaması animasyonu"
+    "timeOverlayGroup": "Zaman kaplaması animasyonu",
+    "dataUrlStyleUnsupported": "Bir KML belgesine stil uygulanamaz.",
+    "dataUrlNoImporter": "{{name}} haritaya eklenemedi: kullanılabilir bir KML içe aktarıcı yok."
   },
   "map": {
     "boundsRestricted": "Sınırlar kilitli",
@@ -2512,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Yerel COG DEM",
     "localSourceDescription": "Dosya bu cihazda kalır ve arazi döşemeleri gerektiğinde küçük aralıklar hâlinde okunur.",
+    "fillOutside": "DEM dışını küresel araziyle doldur",
+    "fillOutsideDescription": "DEM'i düz bir düzlük yerine küresel araziyle çevreler ve veri olmayan boşluklarını doldurur. URL'den gelen bir DEM için varsayılan olarak açık, aksi hâlde ağdan hiçbir şey okumayan yerel dosya için kapalıdır.",
     "useCog": "COG DEM kullan",
     "ionAssetLabel": "Cesium Ion arazi varlığı",
     "ionAssetDescription": "Kürede Cesium Ion'dan bir quantized-mesh arazi varlığı kullanın. Varlık, yapılandırılmış Ion hesabı tarafından erişilebilir olmalıdır.",
@@ -3411,7 +3418,9 @@
       "profileCount_other": "{{count}} profil",
       "noProfiles": "Henüz profil yok. AI Asistanı'nı yapılandırmak için aşağıdan bir profil ekleyin.",
       "setDefault": "Varsayılan yap",
+      "keepDefault": "Varsayılan olarak kalsın",
       "defaultProfile": "Varsayılan",
+      "proxyIsDefault": "Hiçbir profil varsayılan değil, bu nedenle asistan dağıtım proxy'si üzerinden başlar. Bunun yerine bir profille başlamak için onu varsayılan yapın.",
       "edit": "Düzenle",
       "deleteProfile": "Profili sil",
       "backToProfiles": "← Profillere dön",
@@ -3441,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (gerekiyorsa)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT hesabı",
+        "intro": "API anahtarı yerine ChatGPT planınızı kullanın. Tarayıcınız OpenAI'nin oturum açma sayfasını açar; orada GeoLibre'nin planınızı kullanmasına izin verirsiniz.",
+        "continue": "ChatGPT ile devam et",
+        "waiting": "Tarayıcıda oturum açmayı tamamlamanız bekleniyor…",
+        "openAgain": "Tarayıcıyı yeniden aç",
+        "signedInAs": "{{email}} olarak oturum açıldı",
+        "usingPlan": "ChatGPT planınız kullanılıyor.",
+        "planDeclined": "GeoLibre'nin ChatGPT planınızı kullanmasına izin verilmiyor. Yeniden oturum açın ve izin verin.",
+        "signInAgain": "Yeniden oturum aç",
+        "notRemembered": "Sistem anahtar zinciri kullanılamıyor, bu nedenle bu oturum açma GeoLibre kapanana kadar geçerlidir.",
+        "signOut": "Oturumu kapat",
+        "useAnotherAccount": "Başka bir hesap kullan",
+        "usage": "Kullanım ve bağlı uygulamalar",
+        "revokeUnconfirmed": "Burada oturum kapatıldı, ancak OpenAI oturumun sonlandırıldığını onaylamadı. Emin olmak için ChatGPT ayarlarınızdan GeoLibre bağlantısını kesin.",
+        "desktopOnly": "ChatGPT ile oturum açma, GeoLibre masaüstü uygulamasında kullanılabilir."
       }
     }
   },
@@ -4256,6 +4282,8 @@
         "missing-source": "Katmanın okunabilir bir veri kaynağı yok.",
         "format": "Katmanın dosya biçimi desteklenmiyor.",
         "remote-file": "Uzak QGIS dosya kaynakları henüz desteklenmiyor.",
+        "remote-unreadable": "Uzak dosya indirilemedi veya okunamadı.",
+        "wmts": "WMTS katmanları henüz içe aktarılmıyor. Bunun yerine hizmeti Veri Ekle menüsünden ekleyin.",
         "network-path": "Ağ paylaşımı yolları güvenlik nedeniyle yüklenmez.",
         "browser-local-file": "Yerel dosyaya başvuruluyor, ancak tarayıcılar QGIS veri yollarını yeniden açamaz. Yüklemek için GeoLibre Desktop kullanın.",
         "browser-local-raster": "Rastera yerel bir yol üzerinden başvuruluyor. Yüklemek için GeoLibre Desktop kullanın.",
@@ -5771,6 +5799,7 @@
     "setupTitle": "AI Asistanını kur",
     "setupStatus": "Asistanın düşünebilmesi için bir AI sağlayıcısına ihtiyacı var. Aşağıdaki herhangi bir sağlayıcı için kimlik bilgilerini ekleyin; kaydettiğiniz anda panel sohbet moduna geçer.",
     "setupProviders": "Herhangi bir sağlayıcı için kimlik bilgilerini ekleyin",
+    "setupSignIn": "Ayarlar → AI Sağlayıcıları bölümünden oturum açın",
     "setupOpenSettings": "Ayarlar → AI Sağlayıcıları'nı aç",
     "thinking": "Çalışıyor…",
     "toolError": "başarısız oldu",
@@ -9620,6 +9649,9 @@
     "hiddenByGroup": "Grubu görünür olmadığı için gizli",
     "empty": "Veri katmanı yok. Araç çubuğundan veri ekleyin.",
     "emptyBeginner": "Henüz katman yok. Eklentiler → Temel Haritalar üzerinden temel haritalar, ya da Veri Ekle menüsü üzerinden kendi verinizi ekleyin.",
+    "emptyBeginnerBasemapsOnly": "Henüz katman yok. Eklentiler → Temel Haritalar üzerinden temel haritalar ekleyin.",
+    "emptyBeginnerDataOnly": "Henüz katman yok. Veri Ekle menüsü üzerinden kendi verinizi ekleyin.",
+    "emptyNoAdd": "Veri katmanı yok.",
     "hideAllLayers": "Tüm katmanları gizle",
     "showAllLayers": "Tüm katmanları göster",
     "compactView": "Kompakt görünüm",
@@ -9937,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} yerel raster katman geri yüklenemedi",
     "localRasterNotRestoredDesc": "Yerel bir dosyadan yüklendi: {{names}}. Proje raster verisi içermiyor ya da dosya okunamadı. Dosyayı tekrar ekleyin."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Seçici değeri bulunamadı ({{values}}). Bir koordinat değeri, zaman eksenindeki bir tarih veya bir indeks kullanın."
+  },
   "attributeForm": {
     "error": {
       "required": "Bir değer gerekli",
@@ -10089,7 +10124,8 @@
     "panelRenderFailed": "\"{{name}}\" paneli açılamadı.",
     "sharedSettingsFailed": "Bağlantıdaki paylaşılan ayarlar yüklenemedi, bu yüzden kendi ayarlarınız kullanılıyor.",
     "sharedLanguageFailed": "Paylaşılan ayarların istediği dile geçilemedi.",
-    "languageCatalogFailed": "{{language}} çevirisi yüklenemedi, bu yüzden GeoLibre İngilizce gösteriliyor."
+    "languageCatalogFailed": "{{language}} çevirisi yüklenemedi, bu yüzden GeoLibre İngilizce gösteriliyor.",
+    "dataUrlLoadFailed": "Veri URL'si yüklenemedi."
   },
   "shell": {
     "workspaceTitle": "GeoLibre harita çalışma alanı",
