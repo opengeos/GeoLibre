@@ -1933,7 +1933,10 @@
     "lockLayer": "为访客锁定图层",
     "unlockLayer": "为访客解锁图层",
     "layerLocked": "已锁定",
-    "layerLockedHint": "此图层已被主持人锁定，无法编辑"
+    "layerLockedHint": "此图层已被主持人锁定，无法编辑",
+    "viewOnlyHint": "您在此会话中为仅查看权限，因此无法更改此图层",
+    "layerLockedRejected": "该更改未被共享，因为主持人已锁定该图层。您的地图已重置为会话中的版本。",
+    "viewOnlyLocalChange": "您在此会话中为仅查看权限，因此您的更改只保留在您的屏幕上，不会被共享。"
   },
   "share": {
     "title": "共享项目",
@@ -2371,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "无法导入 KML/KMZ。",
-    "timeOverlayGroup": "时间叠加动画"
+    "timeOverlayGroup": "时间叠加动画",
+    "dataUrlStyleUnsupported": "无法对 KML 文档应用样式。",
+    "dataUrlNoImporter": "无法将 {{name}} 添加到地图：没有可用的 KML 导入器。"
   },
   "map": {
     "boundsRestricted": "范围已锁定",
@@ -2452,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "本地 COG DEM",
     "localSourceDescription": "文件保留在此设备上，并在需要地形切片时按小范围读取。",
+    "fillOutside": "用全球地形填充 DEM 以外的区域",
+    "fillOutsideDescription": "使用全球地形而非平坦平面环绕 DEM，并填补其无数据空隙。对于来自 URL 的 DEM 默认开启，对于本地文件默认关闭，否则本地文件不会从网络读取任何内容。",
     "useCog": "使用 COG DEM",
     "ionAssetLabel": "Cesium Ion 地形资产",
     "ionAssetDescription": "在地球上使用来自 Cesium Ion 的 quantized-mesh 地形资产。该资产必须对已配置的 Ion 账户可用。",
@@ -3346,7 +3353,9 @@
       "profileCount_other": "{{count}} 个配置文件",
       "noProfiles": "尚无配置文件。请在下方添加一个以配置 AI 助手。",
       "setDefault": "设为默认",
+      "keepDefault": "保持为默认",
       "defaultProfile": "默认",
+      "proxyIsDefault": "没有设为默认的配置文件，因此助手将使用部署代理启动。将某个配置文件设为默认即可改为使用它启动。",
       "edit": "编辑",
       "deleteProfile": "删除配置文件",
       "backToProfiles": "← 返回配置文件列表",
@@ -3376,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-…（如需要）"
+      },
+      "chatgpt": {
+        "account": "ChatGPT 账户",
+        "intro": "使用您的 ChatGPT 套餐代替 API 密钥。浏览器将打开 OpenAI 的登录页面，您可在其中允许 GeoLibre 使用您的套餐。",
+        "continue": "使用 ChatGPT 继续",
+        "waiting": "正在等待您在浏览器中完成登录…",
+        "openAgain": "再次打开浏览器",
+        "signedInAs": "已登录为 {{email}}",
+        "usingPlan": "正在使用您的 ChatGPT 套餐。",
+        "planDeclined": "GeoLibre 未获准使用您的 ChatGPT 套餐。请重新登录并允许。",
+        "signInAgain": "重新登录",
+        "notRemembered": "系统钥匙串不可用，因此此次登录仅在 GeoLibre 关闭前有效。",
+        "signOut": "退出登录",
+        "useAnotherAccount": "使用其他账户",
+        "usage": "用量和已连接的应用",
+        "revokeUnconfirmed": "已在此处退出登录，但 OpenAI 未确认结束会话。为确保安全，请在 ChatGPT 设置中断开 GeoLibre 的连接。",
+        "desktopOnly": "使用 ChatGPT 登录功能仅在 GeoLibre 桌面应用中可用。"
       }
     }
   },
@@ -4187,6 +4213,8 @@
         "missing-source": "该图层没有可读取的数据源。",
         "format": "不支持该图层的文件格式。",
         "remote-file": "暂不支持远程 QGIS 文件数据源。",
+        "remote-unreadable": "无法下载或读取远程文件。",
+        "wmts": "暂不支持导入 WMTS 图层。请改为通过“添加数据”菜单添加该服务。",
         "network-path": "出于安全原因，不加载网络共享路径。",
         "browser-local-file": "已引用该本地文件，但浏览器无法重新打开 QGIS 数据路径。请使用 GeoLibre Desktop 加载。",
         "browser-local-raster": "该栅格通过本地路径引用。请使用 GeoLibre Desktop 加载。",
@@ -5677,6 +5705,7 @@
     "setupTitle": "设置 AI 助手",
     "setupStatus": "AI 助手需要一个 AI 提供方来进行思考。请在下方为任一提供方添加凭据，保存后面板将立即切换到聊天模式。",
     "setupProviders": "为任一提供方添加凭据",
+    "setupSignIn": "在“设置 → AI 提供方”中登录",
     "setupOpenSettings": "打开“设置 → AI 提供方”",
     "thinking": "正在处理…",
     "toolError": "失败",
@@ -9480,6 +9509,9 @@
     "hiddenByGroup": "因所属分组不可见而隐藏",
     "empty": "没有数据图层。请从工具栏添加数据。",
     "emptyBeginner": "尚无图层。可通过“插件 → 底图”添加底图，或通过“添加数据”菜单添加您自己的数据。",
+    "emptyBeginnerBasemapsOnly": "暂无图层。请通过“插件 → 底图”添加底图。",
+    "emptyBeginnerDataOnly": "暂无图层。请通过“添加数据”菜单添加您自己的数据。",
+    "emptyNoAdd": "没有数据图层。",
     "hideAllLayers": "隐藏所有图层",
     "showAllLayers": "显示所有图层",
     "compactView": "紧凑视图",
@@ -9794,6 +9826,9 @@
     "localRasterNotRestored_other": "{{count}} 个本地栅格图层无法恢复",
     "localRasterNotRestoredDesc": "从本地文件加载：{{names}}。项目不包含栅格数据，或无法读取该文件。请再次添加该文件。"
   },
+  "zarrPanel": {
+    "selectorUnmatched": "未找到选择器值（{{values}}）。请使用坐标值、时间轴上的日期或索引。"
+  },
   "attributeForm": {
     "error": {
       "required": "必须提供值",
@@ -9939,7 +9974,8 @@
     "panelRenderFailed": "面板“{{name}}”打开失败。",
     "sharedSettingsFailed": "无法从链接加载共享设置，因此将使用您自己的设置。",
     "sharedLanguageFailed": "无法切换到共享设置所要求的语言。",
-    "languageCatalogFailed": "无法加载{{language}}翻译，因此 GeoLibre 将显示英文。"
+    "languageCatalogFailed": "无法加载{{language}}翻译，因此 GeoLibre 将显示英文。",
+    "dataUrlLoadFailed": "无法加载数据 URL。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre 地图工作区",

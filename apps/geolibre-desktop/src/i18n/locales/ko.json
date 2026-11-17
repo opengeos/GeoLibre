@@ -1933,7 +1933,10 @@
     "lockLayer": "게스트에 대해 레이어 잠금",
     "unlockLayer": "게스트에 대해 레이어 잠금 해제",
     "layerLocked": "잠김",
-    "layerLockedHint": "이 레이어는 호스트가 잠갔으므로 편집할 수 없습니다"
+    "layerLockedHint": "이 레이어는 호스트가 잠갔으므로 편집할 수 없습니다",
+    "viewOnlyHint": "이 세션에서 보기 전용이므로 이 레이어를 변경할 수 없습니다",
+    "layerLockedRejected": "호스트가 레이어를 잠가서 변경 사항이 공유되지 않았습니다. 지도가 세션 버전으로 재설정되었습니다.",
+    "viewOnlyLocalChange": "이 세션에서 보기 전용이므로 변경 사항은 내 화면에만 남고 공유되지 않습니다."
   },
   "share": {
     "title": "프로젝트 공유",
@@ -2371,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "KML/KMZ를 가져올 수 없습니다.",
-    "timeOverlayGroup": "시간 오버레이 애니메이션"
+    "timeOverlayGroup": "시간 오버레이 애니메이션",
+    "dataUrlStyleUnsupported": "KML 문서에는 스타일을 적용할 수 없습니다.",
+    "dataUrlNoImporter": "{{name}}을(를) 지도에 추가할 수 없습니다: 사용할 수 있는 KML 가져오기 도구가 없습니다."
   },
   "map": {
     "boundsRestricted": "경계 잠김",
@@ -2452,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "로컬 COG DEM",
     "localSourceDescription": "파일은 이 기기에 유지되며 지형 타일이 필요할 때 작은 범위로 읽습니다.",
+    "fillOutside": "DEM 바깥을 전 세계 지형으로 채우기",
+    "fillOutsideDescription": "평평한 평면 대신 전 세계 지형으로 DEM 주변을 둘러싸고 데이터 없음 구멍을 채웁니다. URL의 DEM은 기본적으로 켜져 있고 로컬 파일은 꺼져 있으며, 꺼져 있으면 네트워크에서 아무것도 읽지 않습니다.",
     "useCog": "COG DEM 사용",
     "ionAssetLabel": "Cesium Ion 지형 에셋",
     "ionAssetDescription": "지구본에서 Cesium Ion의 quantized-mesh 지형 에셋을 사용합니다. 에셋은 구성된 Ion 계정에서 사용할 수 있어야 합니다.",
@@ -3346,7 +3353,9 @@
       "profileCount_other": "프로필 {{count}}개",
       "noProfiles": "아직 프로필이 없습니다. 아래에서 추가하여 AI 어시스턴트를 구성하세요.",
       "setDefault": "기본값으로 설정",
+      "keepDefault": "기본값으로 유지",
       "defaultProfile": "기본",
+      "proxyIsDefault": "기본 프로필이 없으므로 어시스턴트는 배포 프록시로 시작합니다. 프로필을 기본값으로 설정하면 해당 프로필로 시작합니다.",
       "edit": "편집",
       "deleteProfile": "프로필 삭제",
       "backToProfiles": "← 프로필 목록으로",
@@ -3376,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-…(필요한 경우)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT 계정",
+        "intro": "API 키 대신 ChatGPT 요금제를 사용합니다. 브라우저에서 OpenAI 로그인 페이지가 열리며, 여기서 GeoLibre가 요금제를 사용하도록 허용할 수 있습니다.",
+        "continue": "ChatGPT로 계속",
+        "waiting": "브라우저에서 로그인을 완료하기를 기다리는 중…",
+        "openAgain": "브라우저 다시 열기",
+        "signedInAs": "{{email}}(으)로 로그인됨",
+        "usingPlan": "ChatGPT 요금제를 사용 중입니다.",
+        "planDeclined": "GeoLibre가 ChatGPT 요금제를 사용하도록 허용되지 않았습니다. 다시 로그인하여 허용하세요.",
+        "signInAgain": "다시 로그인",
+        "notRemembered": "시스템 키체인을 사용할 수 없어 이 로그인은 GeoLibre를 닫을 때까지만 유지됩니다.",
+        "signOut": "로그아웃",
+        "useAnotherAccount": "다른 계정 사용",
+        "usage": "사용량 및 연결된 앱",
+        "revokeUnconfirmed": "여기서는 로그아웃되었지만 OpenAI가 세션 종료를 확인하지 않았습니다. 확실히 하려면 ChatGPT 설정에서 GeoLibre 연결을 해제하세요.",
+        "desktopOnly": "ChatGPT로 로그인은 GeoLibre 데스크톱 앱에서 사용할 수 있습니다."
       }
     }
   },
@@ -4188,6 +4214,8 @@
         "missing-source": "레이어에 읽을 수 있는 데이터 소스가 없습니다.",
         "format": "레이어의 파일 형식은 지원되지 않습니다.",
         "remote-file": "원격 QGIS 파일 소스는 아직 지원되지 않습니다.",
+        "remote-unreadable": "원격 파일을 다운로드하거나 읽을 수 없습니다.",
+        "wmts": "WMTS 레이어는 아직 가져올 수 없습니다. 대신 데이터 추가 메뉴에서 서비스를 추가하세요.",
         "network-path": "네트워크 공유 경로는 보안상의 이유로 불러오지 않습니다.",
         "browser-local-file": "로컬 파일이 참조되어 있지만 브라우저는 QGIS 데이터 경로를 다시 열 수 없습니다. GeoLibre Desktop으로 불러오세요.",
         "browser-local-raster": "래스터가 로컬 경로로 참조되어 있습니다. GeoLibre Desktop으로 불러오세요.",
@@ -5677,6 +5705,7 @@
     "setupTitle": "AI 어시스턴트 설정",
     "setupStatus": "어시스턴트가 작업을 수행하려면 AI 제공자가 필요합니다. 아래에서 제공자 하나를 선택해 자격 증명을 추가하면 저장 즉시 패널이 채팅 모드로 전환됩니다.",
     "setupProviders": "제공자 하나를 선택해 자격 증명 추가",
+    "setupSignIn": "설정 → AI 제공자에서 로그인하세요",
     "setupOpenSettings": "설정 → AI 제공자 열기",
     "thinking": "작업 중…",
     "toolError": "실패",
@@ -9480,6 +9509,9 @@
     "hiddenByGroup": "그룹이 표시되지 않아 숨겨짐",
     "empty": "데이터 레이어가 없습니다. 도구 모음에서 데이터를 추가하세요.",
     "emptyBeginner": "아직 레이어가 없습니다. 플러그인 → 배경지도에서 배경지도를 추가하거나 데이터 추가 메뉴에서 직접 데이터를 추가하세요.",
+    "emptyBeginnerBasemapsOnly": "아직 레이어가 없습니다. 플러그인 → 베이스맵에서 베이스맵을 추가하세요.",
+    "emptyBeginnerDataOnly": "아직 레이어가 없습니다. 데이터 추가 메뉴에서 내 데이터를 추가하세요.",
+    "emptyNoAdd": "데이터 레이어가 없습니다.",
     "hideAllLayers": "모든 레이어 숨기기",
     "showAllLayers": "모든 레이어 표시",
     "compactView": "간결한 보기",
@@ -9794,6 +9826,9 @@
     "localRasterNotRestored_other": "로컬 래스터 레이어 {{count}}개를 복원할 수 없습니다",
     "localRasterNotRestoredDesc": "로컬 파일에서 불러옴: {{names}}. 프로젝트에 래스터 데이터가 없거나 파일을 읽을 수 없습니다. 파일을 다시 추가하세요."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "선택자 값을 찾을 수 없습니다({{values}}). 좌표 값, 시간 축의 날짜 또는 인덱스를 사용하세요."
+  },
   "attributeForm": {
     "error": {
       "required": "값이 필요합니다",
@@ -9939,7 +9974,8 @@
     "panelRenderFailed": "\"{{name}}\" 패널을 열지 못했습니다.",
     "sharedSettingsFailed": "링크의 공유 설정을 불러올 수 없어 사용자 설정을 사용합니다.",
     "sharedLanguageFailed": "공유 설정이 요청한 언어로 전환할 수 없습니다.",
-    "languageCatalogFailed": "{{language}} 번역을 불러올 수 없어 GeoLibre가 영어로 표시됩니다."
+    "languageCatalogFailed": "{{language}} 번역을 불러올 수 없어 GeoLibre가 영어로 표시됩니다.",
+    "dataUrlLoadFailed": "데이터 URL을 불러올 수 없습니다."
   },
   "shell": {
     "workspaceTitle": "GeoLibre 지도 작업 공간",

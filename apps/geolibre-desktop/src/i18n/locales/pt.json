@@ -1982,7 +1982,10 @@
     "lockLayer": "Travar camada para os convidados",
     "unlockLayer": "Destravar camada para os convidados",
     "layerLocked": "Travada",
-    "layerLockedHint": "Esta camada está travada pelo anfitrião e não pode ser editada"
+    "layerLockedHint": "Esta camada está travada pelo anfitrião e não pode ser editada",
+    "viewOnlyHint": "Você está em modo somente visualização nesta sessão, então não pode alterar esta camada",
+    "layerLockedRejected": "Essa alteração não foi compartilhada porque o anfitrião travou a camada. Seu mapa foi redefinido para a versão da sessão.",
+    "viewOnlyLocalChange": "Você está em modo somente visualização nesta sessão, então suas alterações ficam na sua tela e não são compartilhadas."
   },
   "share": {
     "title": "Compartilhar projeto",
@@ -2429,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Não foi possível importar o KML/KMZ.",
-    "timeOverlayGroup": "Animação de sobreposição temporal"
+    "timeOverlayGroup": "Animação de sobreposição temporal",
+    "dataUrlStyleUnsupported": "Não é possível aplicar um estilo a um documento KML.",
+    "dataUrlNoImporter": "Não foi possível adicionar {{name}} ao mapa: nenhum importador de KML está disponível."
   },
   "map": {
     "boundsRestricted": "Limites travados",
@@ -2512,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "DEM COG local",
     "localSourceDescription": "O ficheiro permanece neste dispositivo e é lido em pequenos intervalos à medida que os mosaicos de terreno são necessários.",
+    "fillOutside": "Preencher fora do DEM com terreno global",
+    "fillOutsideDescription": "Envolve o DEM, e preenche suas lacunas nodata, com o terreno global em vez de uma planície plana. Ativado por padrão para um DEM de uma URL e desativado para um arquivo local, que de outra forma não lê nada da rede.",
     "useCog": "Usar DEM COG",
     "ionAssetLabel": "Asset de terreno do Cesium Ion",
     "ionAssetDescription": "Use um asset de terreno quantized-mesh do Cesium Ion no globo. O asset deve estar disponível para a conta Ion configurada.",
@@ -3411,7 +3418,9 @@
       "profileCount_other": "{{count}} perfis",
       "noProfiles": "Ainda não há perfis. Adicione um abaixo para configurar o assistente de IA.",
       "setDefault": "Definir como padrão",
+      "keepDefault": "Manter como padrão",
       "defaultProfile": "Padrão",
+      "proxyIsDefault": "Nenhum perfil é o padrão, então o assistente inicia no proxy da implantação. Defina um perfil como padrão para iniciar nele.",
       "edit": "Editar",
       "deleteProfile": "Excluir perfil",
       "backToProfiles": "← Voltar aos perfis",
@@ -3441,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (se necessário)"
+      },
+      "chatgpt": {
+        "account": "Conta do ChatGPT",
+        "intro": "Use seu plano do ChatGPT em vez de uma chave de API. Seu navegador abre a página de login da OpenAI, onde você permite que o GeoLibre use seu plano.",
+        "continue": "Continuar com o ChatGPT",
+        "waiting": "Aguardando você concluir o login no navegador…",
+        "openAgain": "Abrir o navegador novamente",
+        "signedInAs": "Conectado como {{email}}",
+        "usingPlan": "Usando seu plano do ChatGPT.",
+        "planDeclined": "O GeoLibre não tem permissão para usar seu plano do ChatGPT. Entre novamente e permita.",
+        "signInAgain": "Entrar novamente",
+        "notRemembered": "O chaveiro do sistema não está disponível, então este login dura até o GeoLibre ser fechado.",
+        "signOut": "Sair",
+        "useAnotherAccount": "Usar outra conta",
+        "usage": "Uso e aplicativos conectados",
+        "revokeUnconfirmed": "Você saiu aqui, mas a OpenAI não confirmou o encerramento da sessão. Desconecte o GeoLibre nas configurações do ChatGPT para ter certeza.",
+        "desktopOnly": "Entrar com o ChatGPT está disponível no aplicativo para desktop do GeoLibre."
       }
     }
   },
@@ -4256,6 +4282,8 @@
         "missing-source": "A camada não tem uma fonte de dados legível.",
         "format": "O formato de arquivo da camada não é compatível.",
         "remote-file": "Fontes de arquivos remotos do QGIS ainda não são compatíveis.",
+        "remote-unreadable": "Não foi possível baixar ou ler o arquivo remoto.",
+        "wmts": "Camadas WMTS ainda não são importadas. Adicione o serviço pelo menu Adicionar dados.",
         "network-path": "Caminhos de compartilhamento de rede não são carregados por motivos de segurança.",
         "browser-local-file": "O arquivo local é referenciado, mas navegadores não conseguem reabrir caminhos de dados do QGIS. Use o GeoLibre Desktop para carregá-lo.",
         "browser-local-raster": "O raster é referenciado por um caminho local. Use o GeoLibre Desktop para carregá-lo.",
@@ -5771,6 +5799,7 @@
     "setupTitle": "Configurar o assistente de IA",
     "setupStatus": "O assistente precisa de um provedor de IA para pensar. Adicione credenciais para qualquer um dos provedores abaixo e o painel muda para o modo de conversa assim que você salvar.",
     "setupProviders": "Adicione credenciais para qualquer um dos provedores",
+    "setupSignIn": "Entre em Configurações → Provedores de IA",
     "setupOpenSettings": "Abrir Configurações → Provedores de IA",
     "thinking": "Trabalhando…",
     "toolError": "falhou",
@@ -9620,6 +9649,9 @@
     "hiddenByGroup": "Oculto porque seu grupo não está visível",
     "empty": "Nenhuma camada de dados. Adicione dados pela barra de ferramentas.",
     "emptyBeginner": "Ainda não há camadas. Adicione mapas base em Plugins → Mapas base, ou seus próprios dados pelo menu Adicionar dados.",
+    "emptyBeginnerBasemapsOnly": "Nenhuma camada ainda. Adicione mapas base em Plugins → Mapas base.",
+    "emptyBeginnerDataOnly": "Nenhuma camada ainda. Adicione seus próprios dados pelo menu Adicionar dados.",
+    "emptyNoAdd": "Nenhuma camada de dados.",
     "hideAllLayers": "Ocultar todas as camadas",
     "showAllLayers": "Mostrar todas as camadas",
     "compactView": "Visualização compacta",
@@ -9937,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} camadas raster locais não puderam ser restauradas",
     "localRasterNotRestoredDesc": "Carregado de um arquivo local: {{names}}. O projeto não contém dados raster, ou o arquivo não pôde ser lido. Adicione o arquivo novamente."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Valor do seletor não encontrado ({{values}}). Use um valor de coordenada, uma data no eixo de tempo ou um índice."
+  },
   "attributeForm": {
     "error": {
       "required": "Um valor é obrigatório",
@@ -10089,7 +10124,8 @@
     "panelRenderFailed": "Não foi possível abrir o painel \"{{name}}\".",
     "sharedSettingsFailed": "Não foi possível carregar as configurações compartilhadas do link, então suas próprias configurações estão em uso.",
     "sharedLanguageFailed": "Não foi possível mudar para o idioma solicitado pelas configurações compartilhadas.",
-    "languageCatalogFailed": "Não foi possível carregar a tradução para {{language}}, então o GeoLibre está exibindo inglês."
+    "languageCatalogFailed": "Não foi possível carregar a tradução para {{language}}, então o GeoLibre está exibindo inglês.",
+    "dataUrlLoadFailed": "Não foi possível carregar a URL dos dados."
   },
   "shell": {
     "workspaceTitle": "Espaço de trabalho do mapa do GeoLibre",

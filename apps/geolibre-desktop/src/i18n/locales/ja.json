@@ -1933,7 +1933,10 @@
     "lockLayer": "ゲスト向けにレイヤーをロック",
     "unlockLayer": "ゲスト向けにレイヤーのロックを解除",
     "layerLocked": "ロック中",
-    "layerLockedHint": "このレイヤーはホストによってロックされており、編集できません"
+    "layerLockedHint": "このレイヤーはホストによってロックされており、編集できません",
+    "viewOnlyHint": "このセッションでは閲覧のみのため、このレイヤーを変更できません",
+    "layerLockedRejected": "ホストがレイヤーをロックしているため、その変更は共有されませんでした。地図はセッションのバージョンにリセットされました。",
+    "viewOnlyLocalChange": "このセッションでは閲覧のみのため、変更は自分の画面にのみ反映され、共有されません。"
   },
   "share": {
     "title": "プロジェクトを共有",
@@ -2371,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "KML/KMZ をインポートできませんでした。",
-    "timeOverlayGroup": "時間オーバーレイアニメーション"
+    "timeOverlayGroup": "時間オーバーレイアニメーション",
+    "dataUrlStyleUnsupported": "KML ドキュメントにはスタイルを適用できません。",
+    "dataUrlNoImporter": "{{name}} を地図に追加できませんでした: 利用可能な KML インポーターがありません。"
   },
   "map": {
     "boundsRestricted": "表示範囲を固定中",
@@ -2452,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "ローカル COG DEM",
     "localSourceDescription": "ファイルはこのデバイスに保持され、地形タイルが必要になるたびに小さな範囲で読み取られます。",
+    "fillOutside": "DEM の範囲外を全球地形で埋める",
+    "fillOutsideDescription": "平坦な平面の代わりに全球地形で DEM の周囲を囲み、データのない欠損部分も埋めます。URL から読み込んだ DEM では既定でオン、ローカルファイルでは既定でオフです（オフの場合、ネットワークから何も読み込みません）。",
     "useCog": "COG DEM を使用",
     "ionAssetLabel": "Cesium Ion 地形アセット",
     "ionAssetDescription": "地球儀上で Cesium Ion の quantized-mesh 地形アセットを使用します。アセットは設定済みの Ion アカウントで利用可能である必要があります。",
@@ -3346,7 +3353,9 @@
       "profileCount_other": "{{count}} 件のプロファイル",
       "noProfiles": "プロファイルがまだありません。下で追加してAIアシスタントを設定してください。",
       "setDefault": "既定に設定",
+      "keepDefault": "既定のままにする",
       "defaultProfile": "既定",
+      "proxyIsDefault": "既定のプロファイルがないため、アシスタントはデプロイプロキシで起動します。プロファイルを既定に設定すると、そのプロファイルで起動します。",
       "edit": "編集",
       "deleteProfile": "プロファイルを削除",
       "backToProfiles": "← プロファイル一覧に戻る",
@@ -3376,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (必要な場合)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT アカウント",
+        "intro": "API キーの代わりに ChatGPT プランを使用します。ブラウザーで OpenAI のサインインページが開き、GeoLibre によるプランの使用を許可できます。",
+        "continue": "ChatGPT で続行",
+        "waiting": "ブラウザーでのサインイン完了を待っています…",
+        "openAgain": "ブラウザーをもう一度開く",
+        "signedInAs": "{{email}} としてサインイン中",
+        "usingPlan": "ChatGPT プランを使用しています。",
+        "planDeclined": "GeoLibre には ChatGPT プランの使用が許可されていません。もう一度サインインして許可してください。",
+        "signInAgain": "もう一度サインイン",
+        "notRemembered": "システムのキーチェーンを利用できないため、このサインインは GeoLibre を閉じるまでしか保持されません。",
+        "signOut": "サインアウト",
+        "useAnotherAccount": "別のアカウントを使用",
+        "usage": "使用状況と接続済みアプリ",
+        "revokeUnconfirmed": "ここではサインアウトしましたが、OpenAI はセッションの終了を確認しませんでした。確実にするには、ChatGPT の設定で GeoLibre の接続を解除してください。",
+        "desktopOnly": "ChatGPT でのサインインは GeoLibre デスクトップアプリで利用できます。"
       }
     }
   },
@@ -4188,6 +4214,8 @@
         "missing-source": "このレイヤーには読み取り可能なデータソースがありません。",
         "format": "このレイヤーのファイル形式はサポートされていません。",
         "remote-file": "リモートの QGIS ファイルソースはまだサポートされていません。",
+        "remote-unreadable": "リモートファイルをダウンロードまたは読み取れませんでした。",
+        "wmts": "WMTS レイヤーはまだインポートできません。代わりに「データ追加」メニューからサービスを追加してください。",
         "network-path": "ネットワーク共有のパスはセキュリティ上の理由から読み込まれません。",
         "browser-local-file": "ローカルファイルが参照されていますが、ブラウザーでは QGIS のデータパスを開き直せません。GeoLibre Desktop で読み込んでください。",
         "browser-local-raster": "ラスターはローカルパスで参照されています。GeoLibre Desktop で読み込んでください。",
@@ -5677,6 +5705,7 @@
     "setupTitle": "AIアシスタントを設定",
     "setupStatus": "アシスタントが処理を行うにはAIプロバイダーが必要です。以下のいずれかのプロバイダーの認証情報を追加して保存すると、パネルはすぐにチャットモードに切り替わります。",
     "setupProviders": "いずれかのプロバイダーの認証情報を追加してください",
+    "setupSignIn": "設定 → AIプロバイダー でサインインしてください",
     "setupOpenSettings": "設定 → AIプロバイダーを開く",
     "thinking": "処理中…",
     "toolError": "失敗しました",
@@ -9480,6 +9509,9 @@
     "hiddenByGroup": "グループが非表示のため隠れています",
     "empty": "データレイヤーがありません。ツールバーからデータを追加してください。",
     "emptyBeginner": "レイヤーがまだありません。プラグイン → ベースマップからベースマップを追加するか、データを追加メニューから独自のデータを追加してください。",
+    "emptyBeginnerBasemapsOnly": "レイヤーはまだありません。プラグイン → ベースマップ からベースマップを追加してください。",
+    "emptyBeginnerDataOnly": "レイヤーはまだありません。「データ追加」メニューから独自のデータを追加してください。",
+    "emptyNoAdd": "データレイヤーがありません。",
     "hideAllLayers": "すべてのレイヤーを非表示",
     "showAllLayers": "すべてのレイヤーを表示",
     "compactView": "コンパクト表示",
@@ -9794,6 +9826,9 @@
     "localRasterNotRestored_other": "{{count}} 個のローカルラスターレイヤーを復元できませんでした",
     "localRasterNotRestoredDesc": "ローカルファイルから読み込まれました: {{names}}。プロジェクトがラスターデータを保持していないか、ファイルを読み込めませんでした。ファイルを再度追加してください。"
   },
+  "zarrPanel": {
+    "selectorUnmatched": "セレクターの値が見つかりません（{{values}}）。座標値、時間軸上の日付、またはインデックスを使用してください。"
+  },
   "attributeForm": {
     "error": {
       "required": "値が必要です",
@@ -9939,7 +9974,8 @@
     "panelRenderFailed": "パネル「{{name}}」を開けませんでした。",
     "sharedSettingsFailed": "リンクから共有設定を読み込めなかったため、ご自身の設定を使用しています。",
     "sharedLanguageFailed": "共有設定が指定する言語に切り替えられませんでした。",
-    "languageCatalogFailed": "{{language}}の翻訳を読み込めなかったため、GeoLibreは英語で表示されています。"
+    "languageCatalogFailed": "{{language}}の翻訳を読み込めなかったため、GeoLibreは英語で表示されています。",
+    "dataUrlLoadFailed": "データURLを読み込めませんでした。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre マップワークスペース",

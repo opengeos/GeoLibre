@@ -1982,7 +1982,10 @@
     "lockLayer": "Layı qonaqlar üçün kilidlə",
     "unlockLayer": "Layın kilidini qonaqlar üçün aç",
     "layerLocked": "Kilidlənib",
-    "layerLockedHint": "Bu lay təşkilatçı tərəfindən kilidlənib və redaktə edilə bilməz"
+    "layerLockedHint": "Bu lay təşkilatçı tərəfindən kilidlənib və redaktə edilə bilməz",
+    "viewOnlyHint": "Bu sessiyada yalnız baxış hüququnuz var, buna görə bu layı dəyişə bilməzsiniz",
+    "layerLockedRejected": "Təşkilatçı layı kilidlədiyi üçün bu dəyişiklik paylaşılmadı. Xəritəniz sessiyanın versiyasına qaytarıldı.",
+    "viewOnlyLocalChange": "Bu sessiyada yalnız baxış hüququnuz var, buna görə dəyişiklikləriniz yalnız ekranınızda qalır və paylaşılmır."
   },
   "share": {
     "title": "Layihəni paylaş",
@@ -2429,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "KML/KMZ faylını idxal etmək mümkün olmadı.",
-    "timeOverlayGroup": "Zaman örtüyü animasiyası"
+    "timeOverlayGroup": "Zaman örtüyü animasiyası",
+    "dataUrlStyleUnsupported": "KML sənədinə üslub tətbiq etmək mümkün deyil.",
+    "dataUrlNoImporter": "{{name}} xəritəyə əlavə edilə bilmədi: KML idxalçısı mövcud deyil."
   },
   "map": {
     "boundsRestricted": "Sərhədlər kilidlənib",
@@ -2512,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "Yerli COG DEM",
     "localSourceDescription": "Fayl bu cihazda qalır və relyef plitələri lazım olduqca kiçik hissələr şəklində oxunur.",
+    "fillOutside": "DEM-dən kənarı qlobal relyeflə doldur",
+    "fillOutsideDescription": "DEM-i düz düzənlik əvəzinə qlobal relyeflə əhatə edir və onun verilənsiz boşluqlarını doldurur. URL-dən gələn DEM üçün standart olaraq aktivdir, yerli fayl üçün isə deaktivdir; əks halda yerli fayl şəbəkədən heç nə oxumur.",
     "useCog": "COG DEM istifadə et",
     "ionAssetLabel": "Cesium Ion relyef resursu",
     "ionAssetDescription": "Qlobusda Cesium Ion-dan quantized-mesh relyef resursundan istifadə edin. Resurs konfiqurasiya edilmiş Ion hesabı üçün əlçatan olmalıdır.",
@@ -3411,7 +3418,9 @@
       "profileCount_other": "{{count}} profil",
       "noProfiles": "Hələ profil yoxdur. AI köməkçisini tənzimləmək üçün aşağıdan profil əlavə edin.",
       "setDefault": "Standart olaraq təyin et",
+      "keepDefault": "Standart olaraq saxla",
       "defaultProfile": "Standart",
+      "proxyIsDefault": "Heç bir profil standart deyil, buna görə köməkçi yerləşdirmə proksisi ilə başlayır. Bunun əvəzinə profil ilə başlamaq üçün onu standart olaraq təyin edin.",
       "edit": "Redaktə et",
       "deleteProfile": "Profili sil",
       "backToProfiles": "← Profillərə qayıt",
@@ -3441,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (tələb olunursa)"
+      },
+      "chatgpt": {
+        "account": "ChatGPT hesabı",
+        "intro": "API açarı əvəzinə ChatGPT planınızdan istifadə edin. Brauzeriniz OpenAI-ın giriş səhifəsini açır və orada GeoLibre-yə planınızdan istifadə etməyə icazə verirsiniz.",
+        "continue": "ChatGPT ilə davam et",
+        "waiting": "Brauzerdə girişi tamamlamağınız gözlənilir…",
+        "openAgain": "Brauzeri yenidən aç",
+        "signedInAs": "{{email}} kimi daxil olunub",
+        "usingPlan": "ChatGPT planınızdan istifadə olunur.",
+        "planDeclined": "GeoLibre-yə ChatGPT planınızdan istifadə etməyə icazə verilməyib. Yenidən daxil olun və icazə verin.",
+        "signInAgain": "Yenidən daxil ol",
+        "notRemembered": "Sistem açar anbarı əlçatan deyil, buna görə bu giriş GeoLibre bağlanana qədər qüvvədə qalır.",
+        "signOut": "Hesabdan çıx",
+        "useAnotherAccount": "Başqa hesabdan istifadə et",
+        "usage": "İstifadə və qoşulmuş tətbiqlər",
+        "revokeUnconfirmed": "Burada hesabdan çıxıldı, lakin OpenAI sessiyanın bitdiyini təsdiqləmədi. Əmin olmaq üçün ChatGPT parametrlərində GeoLibre-ni ayırın.",
+        "desktopOnly": "ChatGPT ilə giriş GeoLibre masaüstü tətbiqində mövcuddur."
       }
     }
   },
@@ -4256,6 +4282,8 @@
         "missing-source": "Layın oxuna bilən verilənlər mənbəyi yoxdur.",
         "format": "Layın fayl formatı dəstəklənmir.",
         "remote-file": "Uzaq QGIS fayl mənbələri hələ dəstəklənmir.",
+        "remote-unreadable": "Uzaq fayl endirilə və ya oxuna bilmədi.",
+        "wmts": "WMTS layları hələ idxal edilmir. Bunun əvəzinə xidməti Verilənlər əlavə et menyusundan əlavə edin.",
         "network-path": "Təhlükəsizlik səbəbilə şəbəkə paylaşımı yolları yüklənmir.",
         "browser-local-file": "Yerli fayla istinad var, lakin brauzerlər QGIS verilənlər yollarını yenidən aça bilmir. Faylı yükləmək üçün GeoLibre Desktop-dan istifadə edin.",
         "browser-local-raster": "Rastra yerli yol vasitəsilə istinad edilir. Onu yükləmək üçün GeoLibre Desktop-dan istifadə edin.",
@@ -5835,6 +5863,7 @@
     "setupTitle": "Süni intellekt köməkçisini quraşdır",
     "setupStatus": "Köməkçinin işləməsi üçün süni intellekt provayderi lazımdır. Aşağıdakı provayderlərdən birinin giriş məlumatlarını əlavə edin; yadda saxlayan kimi panel söhbət rejiminə keçəcək.",
     "setupProviders": "Provayderlərdən birinin giriş məlumatlarını əlavə edin",
+    "setupSignIn": "Parametrlər → Süni intellekt təminatçıları bölməsində daxil olun",
     "setupOpenSettings": "Parametrlər → Süni intellekt provayderləri bölməsini aç",
     "thinking": "İşlənir…",
     "toolError": "uğursuz oldu",
@@ -9684,6 +9713,9 @@
     "hiddenByGroup": "Qrup görünmədiyi üçün gizlədilib",
     "empty": "Verilənlər layı yoxdur. Alətlər panelindən verilənlər əlavə edin.",
     "emptyBeginner": "Hələ lay yoxdur. Plaginlər → Baza xəritələr vasitəsilə baza xəritələri, yaxud Verilənlər əlavə et menyusundan öz verilənlərinizi əlavə edin.",
+    "emptyBeginnerBasemapsOnly": "Hələ lay yoxdur. Plaginlər → Baza xəritələr vasitəsilə baza xəritələri əlavə edin.",
+    "emptyBeginnerDataOnly": "Hələ lay yoxdur. Verilənlər əlavə et menyusundan öz verilənlərinizi əlavə edin.",
+    "emptyNoAdd": "Verilənlər layı yoxdur.",
     "hideAllLayers": "Bütün layları gizlət",
     "showAllLayers": "Bütün layları göstər",
     "compactView": "Yığcam görünüş",
@@ -10001,6 +10033,9 @@
     "localRasterNotRestored_other": "{{count}} yerli rastr layını bərpa etmək mümkün olmadı",
     "localRasterNotRestoredDesc": "Yerli fayldan yüklənib: {{names}}. Layihə rastr verilənlərini saxlamır və ya faylı oxumaq mümkün olmadı. Faylı yenidən əlavə edin."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Selektor dəyəri tapılmadı ({{values}}). Koordinat dəyərindən, zaman oxundakı tarixdən və ya indeksdən istifadə edin."
+  },
   "attributeForm": {
     "error": {
       "required": "Dəyər tələb olunur",
@@ -10153,7 +10188,8 @@
     "panelRenderFailed": "\"{{name}}\" paneli açıla bilmədi.",
     "sharedSettingsFailed": "Keçiddəki paylaşılmış ayarları yükləmək mümkün olmadı, ona görə sizin ayarlarınızdan istifadə olunur.",
     "sharedLanguageFailed": "Paylaşılmış ayarların tələb etdiyi dilə keçmək mümkün olmadı.",
-    "languageCatalogFailed": "{{language}} tərcüməsini yükləmək mümkün olmadı, ona görə GeoLibre ingilis dilində göstərilir."
+    "languageCatalogFailed": "{{language}} tərcüməsini yükləmək mümkün olmadı, ona görə GeoLibre ingilis dilində göstərilir.",
+    "dataUrlLoadFailed": "Verilənlərin URL-sini yükləmək mümkün olmadı."
   },
   "shell": {
     "workspaceTitle": "GeoLibre xəritə iş sahəsi",

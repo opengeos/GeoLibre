@@ -2031,6 +2031,9 @@
     "unlockLayer": "בטל נעילת שכבה לאורחים",
     "layerLocked": "נעולה",
     "layerLockedHint": "השכבה הזו נעולה על ידי המארח ולא ניתן לערוך אותה",
+    "viewOnlyHint": "יש לך הרשאת צפייה בלבד בסשן הזה, ולכן אינך יכול לשנות את השכבה הזו",
+    "layerLockedRejected": "השינוי לא שותף כי המארח נעל את השכבה. המפה שלך אופסה לגרסת הסשן.",
+    "viewOnlyLocalChange": "יש לך הרשאת צפייה בלבד בסשן הזה, ולכן השינויים שלך נשארים במסך שלך ואינם משותפים.",
     "sessionStatusUnread_two": "מפגש שיתוף פעולה חי, {{count}} הודעות שלא נקראו. לחץ כדי לראות מי מחובר ולשוחח."
   },
   "share": {
@@ -2487,7 +2490,9 @@
   },
   "kml": {
     "importFailed": "לא ניתן היה לייבא KML/KMZ.",
-    "timeOverlayGroup": "אנימציית שכבת-על של זמן"
+    "timeOverlayGroup": "אנימציית שכבת-על של זמן",
+    "dataUrlStyleUnsupported": "לא ניתן להחיל סגנון על מסמך KML.",
+    "dataUrlNoImporter": "לא ניתן היה להוסיף את {{name}} למפה: אין מייבא KML זמין."
   },
   "map": {
     "boundsRestricted": "הגבולות נעולים",
@@ -2572,6 +2577,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "COG DEM מקומי",
     "localSourceDescription": "הקובץ נשאר במכשיר הזה ונקרא בטווחים קטנים לפי הצורך באריחי פני השטח.",
+    "fillOutside": "מילוי מחוץ ל-DEM בפני שטח גלובליים",
+    "fillOutsideDescription": "מקיף את ה-DEM, וממלא את פערי היעדר הנתונים שבו, בפני שטח גלובליים במקום במישור שטוח. מופעל כברירת מחדל עבור DEM מכתובת URL וכבוי עבור קובץ מקומי, שאחרת אינו קורא דבר מהרשת.",
     "useCog": "השתמש ב-COG DEM",
     "ionAssetLabel": "נכס פני שטח של Cesium Ion",
     "ionAssetDescription": "השתמש בנכס פני שטח מסוג quantized-mesh מ-Cesium Ion בגלובוס. הנכס חייב להיות זמין לחשבון ה-Ion המוגדר.",
@@ -3475,7 +3482,9 @@
       "profileCount_other": "{{count}} פרופילים",
       "noProfiles": "אין עדיין פרופילים. יש להוסיף אחד למטה כדי להגדיר את עוזר ה-AI.",
       "setDefault": "הגדר כברירת מחדל",
+      "keepDefault": "השאר כברירת מחדל",
       "defaultProfile": "ברירת מחדל",
+      "proxyIsDefault": "אף פרופיל אינו ברירת המחדל, ולכן העוזר מתחיל בפרוקסי של הפריסה. הגדר פרופיל כברירת מחדל כדי להתחיל בו במקום זאת.",
       "edit": "ערוך",
       "deleteProfile": "מחק פרופיל",
       "backToProfiles": "← חזרה לפרופילים",
@@ -3505,6 +3514,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (אם נדרש)"
+      },
+      "chatgpt": {
+        "account": "חשבון ChatGPT",
+        "intro": "השתמש בתוכנית ChatGPT שלך במקום במפתח API. הדפדפן שלך יפתח את דף ההתחברות של OpenAI, שבו תאשר ל-GeoLibre להשתמש בתוכנית שלך.",
+        "continue": "המשך עם ChatGPT",
+        "waiting": "ממתין לסיום ההתחברות בדפדפן…",
+        "openAgain": "פתח שוב את הדפדפן",
+        "signedInAs": "מחובר בתור {{email}}",
+        "usingPlan": "נעשה שימוש בתוכנית ChatGPT שלך.",
+        "planDeclined": "ל-GeoLibre אין הרשאה להשתמש בתוכנית ChatGPT שלך. התחבר שוב ואשר זאת.",
+        "signInAgain": "התחבר שוב",
+        "notRemembered": "מחזיק המפתחות של המערכת אינו זמין, ולכן התחברות זו תקפה עד לסגירת GeoLibre.",
+        "signOut": "התנתק",
+        "useAnotherAccount": "השתמש בחשבון אחר",
+        "usage": "שימוש ואפליקציות מחוברות",
+        "revokeUnconfirmed": "התנתקת כאן, אך OpenAI לא אישרה את סיום הסשן. נתק את GeoLibre בהגדרות ChatGPT שלך כדי להיות בטוח.",
+        "desktopOnly": "התחברות עם ChatGPT זמינה באפליקציית GeoLibre לשולחן העבודה."
       },
       "profileCount_two": "{{count}} פרופילים"
     }
@@ -4321,6 +4347,8 @@
         "missing-source": "לשכבה אין מקור נתונים הניתן לקריאה.",
         "format": "פורמט הקובץ של השכבה אינו נתמך.",
         "remote-file": "מקורות קבצים מרוחקים של QGIS אינם נתמכים עדיין.",
+        "remote-unreadable": "לא ניתן היה להוריד או לקרוא את הקובץ המרוחק.",
+        "wmts": "שכבות WMTS עדיין אינן מיובאות. הוסף את השירות מתפריט הוספת נתונים במקום זאת.",
         "network-path": "נתיבי שיתוף ברשת אינם נטענים מטעמי אבטחה.",
         "browser-local-file": "יש הפניה לקובץ המקומי, אך דפדפנים אינם יכולים לפתוח מחדש נתיבי נתונים של QGIS. יש להשתמש ב-GeoLibre Desktop כדי לטעון אותו.",
         "browser-local-raster": "יש הפניה לרסטר באמצעות נתיב מקומי. יש להשתמש ב-GeoLibre Desktop כדי לטעון אותו.",
@@ -5929,6 +5957,7 @@
     "setupTitle": "הגדרת עוזר ה-AI",
     "setupStatus": "העוזר זקוק לספק AI כדי לחשוב. הוסף פרטי גישה לאחד הספקים שלהלן והחלונית תעבור למצב שיחה מיד עם השמירה.",
     "setupProviders": "הוסף פרטי גישה לאחד הספקים",
+    "setupSignIn": "התחבר דרך הגדרות ← ספקי AI",
     "setupOpenSettings": "פתח הגדרות ← ספקי AI",
     "thinking": "עובד…",
     "toolError": "נכשל",
@@ -9824,6 +9853,9 @@
     "hiddenByGroup": "מוסתר משום שהקבוצה שלו אינה גלויה",
     "empty": "אין שכבות נתונים. הוסף נתונים מסרגל הכלים.",
     "emptyBeginner": "אין עדיין שכבות. הוסף מפות בסיס דרך תוספים → מפות בסיס, או נתונים משלך דרך תפריט הוספת הנתונים.",
+    "emptyBeginnerBasemapsOnly": "אין עדיין שכבות. הוסף מפות בסיס דרך תוספים ← מפות בסיס.",
+    "emptyBeginnerDataOnly": "אין עדיין שכבות. הוסף נתונים משלך דרך תפריט הוספת נתונים.",
+    "emptyNoAdd": "אין שכבות נתונים.",
     "hideAllLayers": "הסתר את כל השכבות",
     "showAllLayers": "הצג את כל השכבות",
     "compactView": "תצוגה דחוסה",
@@ -10144,6 +10176,9 @@
     "localRasterNotRestored_other": "לא ניתן היה לשחזר {{count}} שכבות רסטר מקומיות",
     "localRasterNotRestoredDesc": "נטען מקובץ מקומי: {{names}}. הפרויקט אינו מכיל נתוני רסטר, או שלא ניתן היה לקרוא את הקובץ. יש להוסיף את הקובץ שוב."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "ערך הבורר לא נמצא ({{values}}). השתמש בערך קואורדינטה, בתאריך על ציר הזמן או באינדקס."
+  },
   "attributeForm": {
     "error": {
       "required": "נדרש ערך",
@@ -10303,7 +10338,8 @@
     "panelRenderFailed": "פתיחת החלונית \"{{name}}\" נכשלה.",
     "sharedSettingsFailed": "לא ניתן היה לטעון את ההגדרות המשותפות מהקישור, ולכן נעשה שימוש בהגדרות שלך.",
     "sharedLanguageFailed": "לא ניתן היה לעבור לשפה שההגדרות המשותפות מבקשות.",
-    "languageCatalogFailed": "לא ניתן היה לטעון את התרגום ל-{{language}}, ולכן GeoLibre מוצגת באנגלית."
+    "languageCatalogFailed": "לא ניתן היה לטעון את התרגום ל-{{language}}, ולכן GeoLibre מוצגת באנגלית.",
+    "dataUrlLoadFailed": "לא ניתן היה לטעון את כתובת ה-URL של הנתונים."
   },
   "shell": {
     "workspaceTitle": "סביבת עבודת המפה של GeoLibre",

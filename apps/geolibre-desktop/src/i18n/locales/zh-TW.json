@@ -1933,7 +1933,10 @@
     "lockLayer": "為訪客鎖定圖層",
     "unlockLayer": "為訪客解鎖圖層",
     "layerLocked": "已鎖定",
-    "layerLockedHint": "此圖層已被主持人鎖定，無法編輯"
+    "layerLockedHint": "此圖層已被主持人鎖定，無法編輯",
+    "viewOnlyHint": "您在此會話中為僅檢視權限，因此無法變更此圖層",
+    "layerLockedRejected": "該變更未被共享，因為主持人已鎖定該圖層。您的地圖已重設為會話中的版本。",
+    "viewOnlyLocalChange": "您在此會話中為僅檢視權限，因此您的變更只保留在您的螢幕上，不會被共享。"
   },
   "share": {
     "title": "共享專案",
@@ -2371,7 +2374,9 @@
   },
   "kml": {
     "importFailed": "無法匯入 KML/KMZ。",
-    "timeOverlayGroup": "時間疊加動畫"
+    "timeOverlayGroup": "時間疊加動畫",
+    "dataUrlStyleUnsupported": "無法對 KML 文件套用樣式。",
+    "dataUrlNoImporter": "無法將 {{name}} 新增到地圖：沒有可用的 KML 匯入器。"
   },
   "map": {
     "boundsRestricted": "範圍已鎖定",
@@ -2452,6 +2457,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "本機 COG DEM",
     "localSourceDescription": "檔案保留在此裝置上，並在需要地形切片時按小範圍讀取。",
+    "fillOutside": "以全球地形填滿 DEM 以外的區域",
+    "fillOutsideDescription": "使用全球地形而非平坦平面環繞 DEM，並填補其無資料空隙。對於來自 URL 的 DEM 預設開啟，對於本機檔案預設關閉，否則本機檔案不會從網路讀取任何內容。",
     "useCog": "使用 COG DEM",
     "ionAssetLabel": "Cesium Ion 地形資產",
     "ionAssetDescription": "在地球上使用來自 Cesium Ion 的 quantized-mesh 地形資產。該資產必須對已配置的 Ion 賬戶可用。",
@@ -3346,7 +3353,9 @@
       "profileCount_other": "{{count}} 個配置檔案",
       "noProfiles": "尚無配置檔案。請在下方新增一個以配置 AI 助手。",
       "setDefault": "設為預設",
+      "keepDefault": "保持為預設",
       "defaultProfile": "預設",
+      "proxyIsDefault": "沒有設為預設的配置檔案，因此助手將使用部署代理啟動。將某個配置檔案設為預設即可改為使用它啟動。",
       "edit": "編輯",
       "deleteProfile": "刪除配置檔案",
       "backToProfiles": "← 返回配置檔案列表",
@@ -3376,6 +3385,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-…（如需要）"
+      },
+      "chatgpt": {
+        "account": "ChatGPT 賬戶",
+        "intro": "使用您的 ChatGPT 方案代替 API 金鑰。瀏覽器將開啟 OpenAI 的登入頁面，您可在其中允許 GeoLibre 使用您的方案。",
+        "continue": "使用 ChatGPT 繼續",
+        "waiting": "正在等待您在瀏覽器中完成登入…",
+        "openAgain": "再次開啟瀏覽器",
+        "signedInAs": "已登入為 {{email}}",
+        "usingPlan": "正在使用您的 ChatGPT 方案。",
+        "planDeclined": "GeoLibre 未獲准使用您的 ChatGPT 方案。請重新登入並允許。",
+        "signInAgain": "重新登入",
+        "notRemembered": "系統鑰匙串無法使用，因此此次登入僅在 GeoLibre 關閉前有效。",
+        "signOut": "退出登入",
+        "useAnotherAccount": "使用其他賬戶",
+        "usage": "用量和已連線的應用程式",
+        "revokeUnconfirmed": "已在此處退出登入，但 OpenAI 未確認結束會話。為確保安全，請在 ChatGPT 設定中中斷 GeoLibre 的連線。",
+        "desktopOnly": "使用 ChatGPT 登入功能僅在 GeoLibre 桌面應用中可用。"
       }
     }
   },
@@ -4187,6 +4213,8 @@
         "missing-source": "該圖層沒有可讀取的資料來源。",
         "format": "不支援該圖層的檔案格式。",
         "remote-file": "暫不支援遠端 QGIS 檔案資料來源。",
+        "remote-unreadable": "無法下載或讀取遠端檔案。",
+        "wmts": "暫不支援匯入 WMTS 圖層。請改為透過「新增資料」選單新增該服務。",
         "network-path": "出於安全原因，不載入網路共享路徑。",
         "browser-local-file": "已引用該本機檔案，但瀏覽器無法重新開啟 QGIS 資料路徑。請使用 GeoLibre Desktop 載入。",
         "browser-local-raster": "該柵格透過本機路徑引用。請使用 GeoLibre Desktop 載入。",
@@ -5677,6 +5705,7 @@
     "setupTitle": "設定 AI 助手",
     "setupStatus": "AI 助手需要一個 AI 提供方來進行思考。請在下方為任一提供方新增憑證，儲存後面板將立即切換到聊天模式。",
     "setupProviders": "為任一提供方新增憑證",
+    "setupSignIn": "在「設定 → AI 提供方」中登入",
     "setupOpenSettings": "開啟「設定 → AI 提供方」",
     "thinking": "正在處理…",
     "toolError": "失敗",
@@ -9480,6 +9509,9 @@
     "hiddenByGroup": "因所屬分組不可見而隱藏",
     "empty": "沒有資料圖層。請從工具欄新增資料。",
     "emptyBeginner": "尚無圖層。可透過「外掛 → 底圖」新增底圖，或透過「新增資料」選單新增您自己的資料。",
+    "emptyBeginnerBasemapsOnly": "尚無圖層。請透過「外掛 → 底圖」新增底圖。",
+    "emptyBeginnerDataOnly": "尚無圖層。請透過「新增資料」選單新增您自己的資料。",
+    "emptyNoAdd": "沒有資料圖層。",
     "hideAllLayers": "隱藏所有圖層",
     "showAllLayers": "顯示所有圖層",
     "compactView": "緊湊檢視",
@@ -9794,6 +9826,9 @@
     "localRasterNotRestored_other": "{{count}} 個本機柵格圖層無法恢復",
     "localRasterNotRestoredDesc": "從本機檔案載入：{{names}}。專案不包含柵格資料，或無法讀取該檔案。請再次新增該檔案。"
   },
+  "zarrPanel": {
+    "selectorUnmatched": "找不到選擇器值（{{values}}）。請使用座標值、時間軸上的日期或索引。"
+  },
   "attributeForm": {
     "error": {
       "required": "必須提供值",
@@ -9939,7 +9974,8 @@
     "panelRenderFailed": "面板「{{name}}」開啟失敗。",
     "sharedSettingsFailed": "無法從連結載入共享設定，因此將使用您自己的設定。",
     "sharedLanguageFailed": "無法切換到共享設定所要求的語言。",
-    "languageCatalogFailed": "無法載入{{language}}翻譯，因此 GeoLibre 將顯示英文。"
+    "languageCatalogFailed": "無法載入{{language}}翻譯，因此 GeoLibre 將顯示英文。",
+    "dataUrlLoadFailed": "無法載入資料 URL。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre 地圖工作區",

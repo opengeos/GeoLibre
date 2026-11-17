@@ -1982,7 +1982,10 @@
     "lockLayer": "Verrouiller la couche pour les invités",
     "unlockLayer": "Déverrouiller la couche pour les invités",
     "layerLocked": "Verrouillée",
-    "layerLockedHint": "Cette couche est verrouillée par l'hôte et ne peut pas être modifiée"
+    "layerLockedHint": "Cette couche est verrouillée par l'hôte et ne peut pas être modifiée",
+    "viewOnlyHint": "Vous êtes en lecture seule dans cette session et ne pouvez donc pas modifier cette couche",
+    "layerLockedRejected": "Cette modification n'a pas été partagée, car l'hôte a verrouillé la couche. Votre carte a été rétablie à la version de la session.",
+    "viewOnlyLocalChange": "Vous êtes en lecture seule dans cette session : vos modifications restent sur votre écran et ne sont pas partagées."
   },
   "share": {
     "title": "Partager le projet",
@@ -2429,7 +2432,9 @@
   },
   "kml": {
     "importFailed": "Impossible d’importer le KML/KMZ.",
-    "timeOverlayGroup": "Animation de superposition temporelle"
+    "timeOverlayGroup": "Animation de superposition temporelle",
+    "dataUrlStyleUnsupported": "Impossible d'appliquer un style à un document KML.",
+    "dataUrlNoImporter": "Impossible d'ajouter {{name}} à la carte : aucun importateur KML n'est disponible."
   },
   "map": {
     "boundsRestricted": "Limites verrouillées",
@@ -2512,6 +2517,8 @@
     "sourcePlaceholder": "https://example.com/dem.tif",
     "localSourceLabel": "MNT COG local",
     "localSourceDescription": "Le fichier reste sur cet appareil et est lu par petites plages à mesure que les tuiles de terrain sont nécessaires.",
+    "fillOutside": "Remplir l'extérieur du DEM avec le terrain mondial",
+    "fillOutsideDescription": "Entoure le DEM, et comble ses lacunes nodata, avec le terrain mondial au lieu d'une plaine plate. Activé par défaut pour un DEM provenant d'une URL et désactivé pour un fichier local, qui sinon ne lit rien sur le réseau.",
     "useCog": "Utiliser le MNT COG",
     "ionAssetLabel": "Asset de terrain Cesium Ion",
     "ionAssetDescription": "Utiliser un asset de terrain quantized-mesh de Cesium Ion sur le globe. L'asset doit être accessible au compte Ion configuré.",
@@ -3411,7 +3418,9 @@
       "profileCount_other": "{{count}} profils",
       "noProfiles": "Aucun profil pour l'instant. Ajoutez-en un ci-dessous pour configurer l'assistant IA.",
       "setDefault": "Définir par défaut",
+      "keepDefault": "Conserver par défaut",
       "defaultProfile": "Par défaut",
+      "proxyIsDefault": "Aucun profil n'est défini par défaut ; l'assistant démarre donc sur le proxy du déploiement. Définissez un profil par défaut pour démarrer sur celui-ci.",
       "edit": "Modifier",
       "deleteProfile": "Supprimer le profil",
       "backToProfiles": "← Retour aux profils",
@@ -3441,6 +3450,23 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-… (si requis)"
+      },
+      "chatgpt": {
+        "account": "Compte ChatGPT",
+        "intro": "Utilisez votre forfait ChatGPT au lieu d'une clé API. Votre navigateur ouvre la page de connexion d'OpenAI, où vous autorisez GeoLibre à utiliser votre forfait.",
+        "continue": "Continuer avec ChatGPT",
+        "waiting": "En attente de la fin de votre connexion dans le navigateur…",
+        "openAgain": "Rouvrir le navigateur",
+        "signedInAs": "Connecté en tant que {{email}}",
+        "usingPlan": "Votre forfait ChatGPT est utilisé.",
+        "planDeclined": "GeoLibre n'est pas autorisé à utiliser votre forfait ChatGPT. Reconnectez-vous et autorisez-le.",
+        "signInAgain": "Se reconnecter",
+        "notRemembered": "Le trousseau du système n'est pas disponible, cette connexion ne dure donc que jusqu'à la fermeture de GeoLibre.",
+        "signOut": "Se déconnecter",
+        "useAnotherAccount": "Utiliser un autre compte",
+        "usage": "Utilisation et applications connectées",
+        "revokeUnconfirmed": "Déconnecté ici, mais OpenAI n'a pas confirmé la fin de la session. Déconnectez GeoLibre dans vos paramètres ChatGPT pour en être sûr.",
+        "desktopOnly": "La connexion avec ChatGPT est disponible dans l'application de bureau GeoLibre."
       }
     }
   },
@@ -4256,6 +4282,8 @@
         "missing-source": "La couche n'a pas de source de données lisible.",
         "format": "Le format de fichier de la couche n'est pas pris en charge.",
         "remote-file": "Les sources de fichiers QGIS distantes ne sont pas encore prises en charge.",
+        "remote-unreadable": "Le fichier distant n'a pas pu être téléchargé ou lu.",
+        "wmts": "Les couches WMTS ne sont pas encore importées. Ajoutez plutôt le service depuis le menu Ajouter des données.",
         "network-path": "Les chemins de partage réseau ne sont pas chargés pour des raisons de sécurité.",
         "browser-local-file": "Le fichier local est référencé, mais les navigateurs ne peuvent pas rouvrir les chemins de données QGIS. Utilisez GeoLibre Desktop pour le charger.",
         "browser-local-raster": "Le raster est référencé par un chemin local. Utilisez GeoLibre Desktop pour le charger.",
@@ -5771,6 +5799,7 @@
     "setupTitle": "Configurer l'assistant IA",
     "setupStatus": "L'assistant a besoin d'un fournisseur d'IA pour réfléchir. Ajoutez des identifiants pour un fournisseur ci-dessous et le panneau passe en mode discussion dès que vous enregistrez.",
     "setupProviders": "Ajouter des identifiants pour un fournisseur",
+    "setupSignIn": "Connectez-vous dans Paramètres → Fournisseurs d'IA",
     "setupOpenSettings": "Ouvrir Paramètres → Fournisseurs d'IA",
     "thinking": "Traitement en cours…",
     "toolError": "échec",
@@ -9620,6 +9649,9 @@
     "hiddenByGroup": "Masqué car son groupe n'est pas visible",
     "empty": "Aucune couche de données. Ajoutez des données depuis la barre d'outils.",
     "emptyBeginner": "Pas encore de couches. Ajoutez des fonds de carte via Extensions → Fonds de carte, ou vos propres données via le menu Ajouter des données.",
+    "emptyBeginnerBasemapsOnly": "Aucune couche pour l'instant. Ajoutez des fonds de carte via Extensions → Fonds de carte.",
+    "emptyBeginnerDataOnly": "Aucune couche pour l'instant. Ajoutez vos propres données via le menu Ajouter des données.",
+    "emptyNoAdd": "Aucune couche de données.",
     "hideAllLayers": "Masquer toutes les couches",
     "showAllLayers": "Afficher toutes les couches",
     "compactView": "Vue compacte",
@@ -9937,6 +9969,9 @@
     "localRasterNotRestored_other": "{{count}} couches raster locales n'ont pas pu être restaurées",
     "localRasterNotRestoredDesc": "Chargées depuis un fichier local : {{names}}. Le projet ne contient pas de données raster, ou le fichier n'a pas pu être lu. Ajoutez à nouveau le fichier."
   },
+  "zarrPanel": {
+    "selectorUnmatched": "Valeur du sélecteur introuvable ({{values}}). Utilisez une valeur de coordonnée, une date sur l'axe temporel ou un indice."
+  },
   "attributeForm": {
     "error": {
       "required": "Une valeur est requise",
@@ -10089,7 +10124,8 @@
     "panelRenderFailed": "Le panneau « {{name}} » n'a pas pu s'ouvrir.",
     "sharedSettingsFailed": "Impossible de charger les paramètres partagés depuis le lien, vos propres paramètres sont donc utilisés.",
     "sharedLanguageFailed": "Impossible de passer à la langue demandée par les paramètres partagés.",
-    "languageCatalogFailed": "Impossible de charger la traduction {{language}}, GeoLibre s'affiche donc en anglais."
+    "languageCatalogFailed": "Impossible de charger la traduction {{language}}, GeoLibre s'affiche donc en anglais.",
+    "dataUrlLoadFailed": "Impossible de charger l'URL des données."
   },
   "shell": {
     "workspaceTitle": "Espace de travail cartographique GeoLibre",
