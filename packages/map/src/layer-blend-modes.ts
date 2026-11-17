@@ -22,7 +22,8 @@
  * **Fill and line layers blend as a whole layer, not per primitive.** MapLibre
  * 6.3 renders a fill or line layer whose `fill-layer-opacity` /
  * `line-layer-opacity` is below 1 into a scratch framebuffer and composites it
- * in a single draw with the `layerOpacity` program (`drawLayerOpacity`). That
+ * in a single draw with the `layerComposite` program (`drawLayerComposite`; it
+ * was `layerOpacity` / `drawLayerOpacity` before maplibre-gl 6.18). That
  * is exactly the semantics a cartographic blend mode wants: two overlapping
  * polygons in one layer must not multiply against each other, only against the
  * map beneath. So `style-mapper` pins those properties just under 1 for a
@@ -477,7 +478,7 @@ function setSupported(next: boolean): void {
  */
 const COMPOSITE_LAYER_TYPES = new Set(["fill", "line"]);
 /** The program name MapLibre composites a layer-opacity render-to-texture with. */
-const COMPOSITE_PROGRAM = "layerOpacity";
+const COMPOSITE_PROGRAM = "layerComposite";
 
 /**
  * Wrap the render loop of `map` so registered layers blend. Idempotent, and
