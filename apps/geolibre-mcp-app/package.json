@@ -14,14 +14,14 @@
     "@modelcontextprotocol/core": "^2.3.1",
     "@modelcontextprotocol/ext-apps": "^2.0.4",
     "i18next": "^27.1.1",
-    "lucide": "^1.70.0",
-    "maplibre-gl": "^6.16.0",
+    "lucide": "^1.72.0",
+    "maplibre-gl": "^6.18.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6",
+    "vite": "^8.3.8",
     "vite-plugin-singlefile": "^2.3.4"
   }
 }
