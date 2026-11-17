@@ -837,7 +837,8 @@ interface ZarrTemporalContext {
    * axis. Set only for a layer the user just added in the Zarr panel, so a
    * failed selector leaves the panel's error instead of an empty layer row.
    * Never set for a restored project layer, which must not vanish on open, nor
-   * for a programmatic add (STAC, dynamical), whose caller keeps using the id
+   * for a programmatic add (`addZarrRasterLayer`, `addCloudNetcdfLayer`, used
+   * by STAC, dynamical and the NetCDF dialog), whose caller keeps using the id
    * it was given.
    */
   removeIfUnmatched?: boolean;
@@ -971,7 +972,8 @@ async function applyZarrSelectorDates(
     axis,
   );
   if (unresolved.length > 0) {
-    // A selector that matches nothing draws nothing, so a fresh add is dropped
+    // The renderer throws on any one string value it cannot resolve, so the
+    // whole slice fails and the layer draws nothing; a fresh add is dropped
     // rather than left as an empty layer row (#3492). Removing it from the
     // store also removes it from the control; the error is reported after,
     // so the control's re-render on removal does not clear it.

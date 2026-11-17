@@ -49,6 +49,9 @@ class ZarrLayerControlStub {
   }[] = [];
   private instances = new Map<string, unknown>();
   private counter = 0;
+  // The panel state the plugin writes its selector error into.
+  _state: { error: string | null; status: string | null } = { error: null, status: null };
+  _render() {}
 
   constructor() {
     controlInstance = this;
@@ -119,6 +122,8 @@ class ZarrLayerControlStub {
     if (!id) return;
     this.layers = this.layers.filter((layer) => layer.id !== id);
     this.instances.delete(id);
+    // The real panel re-renders on removal and clears its message.
+    this._state = { error: null, status: null };
     this.emit("layerremove", { layerId: id, state: { layers: this.layers } });
   }
 
@@ -409,6 +414,8 @@ describe("a Zarr layer's temporal adapter", () => {
       );
       assert.equal(controlInstance!.getLayersMap().has(id), false);
       assert.equal(getTemporalLayerAdapter(id), undefined);
+      // The error is written after the removal, so the panel still shows it.
+      assert.match(controlInstance!._state.error ?? "", /1900-01-01/);
     } finally {
       console.warn = originalWarn;
       restoreFetch();
