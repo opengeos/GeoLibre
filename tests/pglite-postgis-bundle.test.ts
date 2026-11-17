@@ -6,10 +6,10 @@ import {
   withMirroredPostgisBundle,
 } from "../apps/geolibre-desktop/src/lib/pglite-postgis-bundle";
 
-const MODULE_URL = "https://cdn.jsdelivr.net/npm/@electric-sql/pglite-postgis@0.2.15/dist/index.js";
-const UNPKG = "https://unpkg.com/@electric-sql/pglite-postgis@0.2.15/dist/postgis.tar.gz";
+const MODULE_URL = "https://cdn.jsdelivr.net/npm/@electric-sql/pglite-postgis@0.2.16/dist/index.js";
+const UNPKG = "https://unpkg.com/@electric-sql/pglite-postgis@0.2.16/dist/postgis.tar.gz";
 const JSDELIVR =
-  "https://cdn.jsdelivr.net/npm/@electric-sql/pglite-postgis@0.2.15/dist/postgis.tar.gz";
+  "https://cdn.jsdelivr.net/npm/@electric-sql/pglite-postgis@0.2.16/dist/postgis.tar.gz";
 
 describe("postgisBundleUrls", () => {
   it("puts the unpkg mirror before the module-relative jsDelivr URL", () => {

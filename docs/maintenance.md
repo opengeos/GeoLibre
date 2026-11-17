@@ -103,7 +103,8 @@ fail again with "Unsupported data format/bitsPerSample";
   one canvas and ships no per-layer blend API (upstream draft:
   maplibre/maplibre-gl-js#8073). The wrappers are `Painter.prototype.renderLayer`
   (brackets one layer's draws), `Painter.prototype.useProgram` (tells the
-  layer-opacity composite draw from the draws feeding it), and
+  layer-opacity composite draw, program `layerComposite` since maplibre-gl 6.18
+  and `layerOpacity` before, from the draws feeding it), and
   `Context.prototype.setColorMode` (the single place every draw resolves GL blend
   state). Fill and line layers additionally get `fill-layer-opacity` /
   `line-layer-opacity` pinned just under 1 by `style-mapper`, which elects
