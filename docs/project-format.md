@@ -518,9 +518,10 @@ compiled output, so a saved filter can always be reopened and changed:
 
 `kind` picks the control and the comparison: `categorical` (checkboxes over
 `values`, plus `includeBlank: true` to keep features whose value is missing,
-`null`, or empty, the ones the Dashboard charts group as "(blank)"), `range` (inclusive numeric `min`/`max`, either side `null` for an
-open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
-(case-insensitive `contains` / `startsWith` / `equals` against `text`).
+`null`, or empty, the ones the Dashboard charts group as "(blank)"), `range`
+(inclusive numeric `min`/`max`, either side `null` for an open bound), `date`
+(inclusive `YYYY-MM-DD` `start`/`end`), and `text` (case-insensitive
+`contains` / `startsWith` / `equals` against `text`).
 `dateKind` says how the field stores its timestamps — `iso` (the default,
 comparing the leading `YYYY-MM-DD` of ISO text), `epochMs`, or `epochS` — and
 `enabled: false` mutes a control without discarding what it was answered with.

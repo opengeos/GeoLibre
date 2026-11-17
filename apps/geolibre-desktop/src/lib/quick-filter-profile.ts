@@ -293,11 +293,16 @@ function profileFromTally(
   const availableKinds: QuickFilterKind[] = [];
   if (isDate) availableKinds.push("date");
   if (allNumbers && !isEpochDate) availableKinds.push("range");
-  if (canEnumerate) availableKinds.push("categorical");
-  if (tally.strings > 0) availableKinds.push("text");
+  // A sample with no values at all still has blanks to pick, so it is offered
+  // as checkboxes holding just "(blank)": the first features of a large layer
+  // can all be blank while later ones carry values.
+  if (canEnumerate || (present === 0 && sampled > 0)) availableKinds.push("categorical");
   // A field of nothing but nested values (or one with no values at all) still
-  // offers a text match, so it is never listed with no way to filter it.
-  if (availableKinds.length === 0) availableKinds.push("text");
+  // offers a text match, so it is never listed with no way to filter it. That
+  // stays true for a blank-only sample, which is still *suggested* as text.
+  if (tally.strings > 0 || present === 0 || availableKinds.length === 0) {
+    availableKinds.push("text");
+  }
 
   // A numeric field is always *suggested* as a range: guessing that a small set
   // of numbers is a code rather than a measure gets it wrong as often as right

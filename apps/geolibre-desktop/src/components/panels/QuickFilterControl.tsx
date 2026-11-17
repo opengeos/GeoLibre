@@ -16,6 +16,11 @@ import type {
   QuickFilterFieldProfile,
   QuickFilterValueCount,
 } from "../../lib/quick-filter-profile";
+import {
+  deselectShownValues,
+  selectShownValues,
+  selectedOptionCount,
+} from "../../lib/quick-filter-selection";
 
 /** Options above which the value list gets its own search box. */
 const SEARCH_THRESHOLD = 8;
@@ -114,7 +119,7 @@ function CategoricalControl({
   const blankVisible =
     hasBlankOption && (needle === "" || blankLabel.toLowerCase().includes(needle));
   const optionCount = options.length + (hasBlankOption ? 1 : 0);
-  const selectedCount = selected.size + (includeBlank ? 1 : 0);
+  const selectedCount = selectedOptionCount(filter);
 
   const toggle = (value: string | number | boolean, checked: boolean): void => {
     const next = new Set(selected);
@@ -133,7 +138,10 @@ function CategoricalControl({
 
   return (
     <div className="space-y-1.5">
-      {optionCount > SEARCH_THRESHOLD && (
+      {/* Kept while a search is active even if the list shrinks below the
+          threshold (unchecking a "(blank)" the data no longer has), so the
+          search can always be cleared and never hides the values for good. */}
+      {(optionCount > SEARCH_THRESHOLD || query !== "") && (
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -206,11 +214,13 @@ function CategoricalControl({
           type="button"
           className="text-primary hover:underline"
           onClick={() =>
-            onChange({
-              ...filter,
-              values: [...new Set([...selected, ...visible.map((option) => option.value)])],
-              includeBlank: blankVisible || includeBlank || undefined,
-            })
+            onChange(
+              selectShownValues(
+                filter,
+                visible.map((option) => option.value),
+                blankVisible,
+              ),
+            )
           }
         >
           {t("quickFilters.selectAll")}
@@ -218,14 +228,15 @@ function CategoricalControl({
         <button
           type="button"
           className="text-primary hover:underline"
-          onClick={() => {
-            const shown = new Set(visible.map((option) => option.value));
-            onChange({
-              ...filter,
-              values: [...selected].filter((value) => !shown.has(value)),
-              includeBlank: (!blankVisible && includeBlank) || undefined,
-            });
-          }}
+          onClick={() =>
+            onChange(
+              deselectShownValues(
+                filter,
+                visible.map((option) => option.value),
+                blankVisible,
+              ),
+            )
+          }
         >
           {t("quickFilters.selectNone")}
         </button>

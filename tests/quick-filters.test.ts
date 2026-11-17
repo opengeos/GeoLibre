@@ -17,6 +17,11 @@ import {
   QUICK_FILTER_PROFILE_LIMIT,
 } from "../apps/geolibre-desktop/src/lib/quick-filter-profile";
 import {
+  deselectShownValues,
+  selectShownValues,
+  selectedOptionCount,
+} from "../apps/geolibre-desktop/src/lib/quick-filter-selection";
+import {
   ensureQuickFilterProfiles,
   hasQuickFilterProfiles,
   readQuickFilterProfileCache,
@@ -583,6 +588,16 @@ describe("profileQuickFilterFields", () => {
     assert.deepEqual(a?.values, [{ value: "x", count: 2 }]);
   });
 
+  it("offers checkboxes for a field whose sample is all blank", () => {
+    // Only "(blank)" can be picked, but that is still a filter: a large layer's
+    // first features can be blank while later ones carry values.
+    const a = byField(profileQuickFilterFields([{ a: null }, { a: "" }, { b: 1 }])).get("a");
+    assert.equal(a?.blankCount, 3);
+    assert.deepEqual(a?.values, []);
+    assert.deepEqual(a?.availableKinds, ["categorical", "text"]);
+    assert.equal(a?.kind, "text");
+  });
+
   it("counts every feature by default, not a leading sample", () => {
     // 8,031 features (more than the 5,000 the profile used to stop at), with
     // the rarer values and the extreme magnitude only past row 5,000: the
@@ -853,5 +868,50 @@ describe("ensureQuickFilterProfiles (issue #3426)", () => {
     const cached = readQuickFilterProfileCache(rows);
     assert.equal(cached?.profiles.get("state"), null);
     assert.deepEqual(cached?.names, []);
+  });
+});
+
+describe("quick filter selection (issue #3455)", () => {
+  const base: LayerQuickFilter = {
+    id: "a",
+    field: "kind",
+    kind: "categorical",
+    values: ["Park"],
+  };
+
+  it("Select all adds the shown values and (blank)", () => {
+    const next = selectShownValues(base, ["Park", "School"], true);
+    assert.deepEqual(next.values, ["Park", "School"]);
+    assert.equal(next.includeBlank, true);
+    assert.equal(selectedOptionCount(next), 3);
+  });
+
+  it("Select all leaves (blank) alone when a search hides it", () => {
+    assert.equal(selectShownValues(base, ["School"], false).includeBlank, undefined);
+    const withBlank = { ...base, includeBlank: true };
+    assert.equal(selectShownValues(withBlank, ["School"], false).includeBlank, true);
+  });
+
+  it("Select none removes the shown values and (blank)", () => {
+    const next = deselectShownValues(
+      { ...base, values: ["Park", "School"], includeBlank: true },
+      ["Park", "School"],
+      true,
+    );
+    assert.deepEqual(next.values, []);
+    assert.equal(next.includeBlank, undefined);
+    assert.equal(selectedOptionCount(next), 0);
+    assert.equal(compileQuickFilter(next), null);
+  });
+
+  it("Select none keeps (blank) and the values a search hides", () => {
+    const next = deselectShownValues(
+      { ...base, values: ["Park", "School"], includeBlank: true },
+      ["School"],
+      false,
+    );
+    assert.deepEqual(next.values, ["Park"]);
+    assert.equal(next.includeBlank, true);
+    assert.equal(selectedOptionCount(next), 2);
   });
 });
