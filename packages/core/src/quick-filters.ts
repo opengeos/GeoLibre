@@ -76,10 +76,18 @@ function presenceGuard(field: string): unknown[] {
 
 function compileCategorical(filter: LayerQuickFilter): unknown[] | null {
   const values = filter.values ?? [];
-  if (values.length === 0) return null;
+  const includeBlank = filter.includeBlank === true;
+  if (values.length === 0 && !includeBlank) return null;
+  // A blank is what the profile leaves out of the value list and the Dashboard
+  // charts group as "(blank)": `get` reads a missing property as `null`, so
+  // the `null` test covers both a missing and a null value, and tile sources
+  // (which drop null properties) land there too.
+  const blank = ["any", ["==", ["get", filter.field], null], ["==", ["get", filter.field], ""]];
+  if (values.length === 0) return blank;
   // `in` keeps the values at their original type, so a numeric code and its
   // string spelling never collapse into one another the way `match` labels do.
-  return ["in", ["get", filter.field], ["literal", values]];
+  const chosen = ["in", ["get", filter.field], ["literal", values]];
+  return includeBlank ? ["any", chosen, blank] : chosen;
 }
 
 function compileRange(filter: LayerQuickFilter): unknown[] | null {
@@ -235,6 +243,7 @@ export function clearQuickFilterValues(
   return (filters ?? []).map((filter) => ({
     ...filter,
     values: filter.kind === "categorical" ? [] : filter.values,
+    includeBlank: filter.kind === "categorical" ? undefined : filter.includeBlank,
     min: filter.kind === "range" ? null : filter.min,
     max: filter.kind === "range" ? null : filter.max,
     start: filter.kind === "date" ? null : filter.start,

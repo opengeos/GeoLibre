@@ -36,6 +36,12 @@ export interface QuickFilterFieldProfile {
   values: QuickFilterValueCount[];
   /** Distinct values exceeded the cap, so `values` is not the whole set. */
   valuesTruncated: boolean;
+  /**
+   * Inspected features with no value for this field: a missing property,
+   * `null`, or an empty string. These are left out of `values`, and the value
+   * list offers them as one "(blank)" option, matching the Dashboard charts.
+   */
+  blankCount: number;
   /** Numeric extent, present for a field that supports a range control. */
   min?: number;
   max?: number;
@@ -320,6 +326,10 @@ function profileFromTally(
     availableKinds,
     values,
     valuesTruncated: tally.distinctOverflow,
+    // Every inspected feature that did not count toward `present`: the ones
+    // without the property at all are never tallied, and an empty value is
+    // tallied as absent (see `tallyField`).
+    blankCount: Math.max(0, sampled - present),
     sampled,
     present,
   };

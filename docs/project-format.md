@@ -517,7 +517,8 @@ compiled output, so a saved filter can always be reopened and changed:
 ```
 
 `kind` picks the control and the comparison: `categorical` (checkboxes over
-`values`), `range` (inclusive numeric `min`/`max`, either side `null` for an
+`values`, plus `includeBlank: true` to keep features whose value is missing,
+`null`, or empty, the ones the Dashboard charts group as "(blank)"), `range` (inclusive numeric `min`/`max`, either side `null` for an
 open bound), `date` (inclusive `YYYY-MM-DD` `start`/`end`), and `text`
 (case-insensitive `contains` / `startsWith` / `equals` against `text`).
 `dateKind` says how the field stores its timestamps — `iso` (the default,

@@ -1271,6 +1271,13 @@ export interface LayerQuickFilter {
    * filter rather than emptying the map.
    */
   values?: (string | number | boolean)[];
+  /**
+   * `categorical`: also keep features whose value is blank (a missing
+   * property, `null`, or an empty string), the ones the Dashboard charts group
+   * as "(blank)". Kept apart from `values` so it can never collide with a real
+   * value that happens to read "(blank)". On its own it keeps only the blanks.
+   */
+  includeBlank?: boolean;
   /** `range`: inclusive bounds. `null`/omitted leaves that side open. */
   min?: number | null;
   max?: number | null;

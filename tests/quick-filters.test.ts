@@ -131,6 +131,55 @@ describe("compileQuickFilters", () => {
     );
   });
 
+  describe("blank values (issue #3455)", () => {
+    // Every way a feature can have no value, next to values that only look
+    // empty or falsy: whitespace, zero and false are real values.
+    const ROWS = [
+      { id: 1, kind: "A" },
+      { id: 2, kind: "B" },
+      { id: 3, kind: null },
+      { id: 4, kind: "" },
+      { id: 5 },
+      { id: 6, kind: " " },
+      { id: 7, kind: 0 },
+      { id: 8, kind: false },
+    ];
+    const ids = (rows: Record<string, unknown>[]) => rows.map((row) => row.id);
+
+    it("keeps the blanks alongside the chosen values", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: ["A"], includeBlank: true }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [1, 3, 4, 5]);
+    });
+
+    it("keeps only the blanks when (blank) is the only choice", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: [], includeBlank: true }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [3, 4, 5]);
+    });
+
+    it("still leaves the blanks out when (blank) is not chosen", () => {
+      const kept = keptRows(
+        [{ id: "a", field: "kind", kind: "categorical", values: ["A", " ", 0, false] }],
+        ROWS,
+      );
+      assert.deepEqual(ids(kept), [1, 6, 7, 8]);
+    });
+
+    it("counts (blank) alone as an active filter", () => {
+      assert.equal(
+        hasActiveQuickFilter(
+          layerWith([{ id: "a", field: "kind", kind: "categorical", includeBlank: true }]),
+        ),
+        true,
+      );
+    });
+  });
+
   it("applies inclusive numeric bounds and drops features missing the field", () => {
     const rows = [...CITIES, { name: "Nowhere", state: "OR" }];
     const kept = keptRows(
@@ -400,7 +449,7 @@ describe("active quick filters", () => {
 
   it("clears every selection but keeps the controls", () => {
     const cleared = clearQuickFilterValues([
-      { id: "a", field: "state", kind: "categorical", values: ["OR"] },
+      { id: "a", field: "state", kind: "categorical", values: ["OR"], includeBlank: true },
       { id: "b", field: "pop", kind: "range", min: 1, max: 2 },
       {
         id: "c",
@@ -523,6 +572,15 @@ describe("profileQuickFilterFields", () => {
     const a = byField(profileQuickFilterFields(rows)).get("a");
     assert.equal(a?.sampled, 4);
     assert.equal(a?.present, 2);
+  });
+
+  it("counts the blanks the value list leaves out (issue #3455)", () => {
+    // Null, empty, a feature without the property, and one with no properties
+    // at all: the same four the Dashboard charts group as "(blank)".
+    const rows = [{ a: "x" }, { a: null }, { a: "" }, { b: 1 }, null, { a: "x" }];
+    const a = byField(profileQuickFilterFields(rows)).get("a");
+    assert.equal(a?.blankCount, 4);
+    assert.deepEqual(a?.values, [{ value: "x", count: 2 }]);
   });
 
   it("counts every feature by default, not a leading sample", () => {
