@@ -31,6 +31,7 @@ import {
 } from "@geolibre/plugins";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useSideSheet } from "../../hooks/useSideSheet";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
@@ -327,6 +328,8 @@ export function LayerPanel({
     setLayersPanelCollapsed(isCollapsed);
     return () => setLayersPanelCollapsed(false);
   }, [isCollapsed]);
+  // On a narrow viewport, fold back to the rail when Style opens after us.
+  useSideSheet("layers", isCollapsed, setIsCollapsed);
   const prevAutoCollapse = useRef<boolean | null>(null);
   const collapsedBeforeAuto = useRef(internalCollapsed);
   useEffect(() => {

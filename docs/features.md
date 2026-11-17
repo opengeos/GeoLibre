@@ -10,7 +10,7 @@ kepler.gl, and Google Earth, see the [Comparison](comparison.md).
 ## Platforms and interface
 
 - Runs across desktop (Tauri), web (browser), native Android and iOS (Tauri v2 mobile), and mobile or small screens
-    - Responsive, touch-friendly layout that adapts menus, dialogs, and panels; on phones the Layers and Style panels overlay the map as slide-over sheets
+    - Responsive, touch-friendly layout that adapts menus, dialogs, and panels; on phones the Layers and Style panels overlay the map as slide-over sheets, one at a time
     - Per-panel visibility through Layout settings, and an option (on by default) that keeps the bottom panels under the map so the side docks keep their full height
 - Command palette (`Ctrl`/`Cmd` + `K`) that searches and runs menu and toolbar actions across Add Data, Processing, Controls, Plugins, and Help
     - Global keyboard shortcuts for New, Open, Save, and Save As
