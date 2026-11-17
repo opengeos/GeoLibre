@@ -14,7 +14,7 @@ export {
   type ColorRampOption,
 } from "./components/color-ramp-select";
 export { Textarea } from "./components/textarea";
-export { Select } from "./components/select";
+export { Select, type SelectProps } from "./components/select";
 export { Label } from "./components/label";
 export { Slider } from "./components/slider";
 export { RangeSlider, type RangeSliderProps } from "./components/range-slider";

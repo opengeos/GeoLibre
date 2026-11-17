@@ -21,7 +21,7 @@ import {
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
-import { cn } from "@geolibre/ui";
+import { cn, Select } from "@geolibre/ui";
 import {
   ArrowDown,
   ArrowUp,
@@ -650,7 +650,9 @@ export function MapLegendPanel({
           </button>
           <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
             {t("legendPanel.position")}
-            <select
+            <Select
+              compact
+              className="flex-1"
               value={position}
               onChange={(event) =>
                 commit({
@@ -658,14 +660,13 @@ export function MapLegendPanel({
                   panelPosition: event.target.value as LegendPanelPosition,
                 })
               }
-              className="h-6 flex-1 rounded-sm border border-input bg-background px-1 text-xs text-foreground focus-visible:outline-none"
             >
               {POSITIONS.map((corner) => (
                 <option key={corner} value={corner}>
                   {t(`legendPanel.positions.${corner}`)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       )}
