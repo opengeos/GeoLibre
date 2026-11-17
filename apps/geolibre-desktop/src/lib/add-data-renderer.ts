@@ -46,3 +46,18 @@ export function supportsAddDataRenderer(
   if (renderer === "cesium") return !CESIUM_UNSUPPORTED_SOURCES.has(id);
   return true;
 }
+
+/**
+ * The i18n key for the tooltip on an Add Data entry the active engine cannot
+ * render. The message names the engine, so each renderer gets its own key.
+ */
+export function unsupportedAddDataTitleKey(renderer: MapRendererKind, id: string) {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the message names the engine
+  if (renderer === "cesium") return "renderer.layerUnsupported";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the message names the engine
+  if (renderer === "arcgis")
+    return requiresArcgisDeckOverlay(id)
+      ? "renderer.layerArcgisViewUnsupported"
+      : "renderer.layerArcgisUnsupported";
+  return "renderer.layerMapboxUnsupported";
+}
