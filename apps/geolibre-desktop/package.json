@@ -106,7 +106,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "^17.1.13",
+    "react-i18next": "^18.0.1",
     "shpjs": "^6.2.0",
     "sql.js": "^1.15.2",
     "svgcanvas": "^2.6.0",
