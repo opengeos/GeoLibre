@@ -45,9 +45,13 @@ class ZarrLayerControlStub {
     colormap: string[];
     clim: [number, number];
     opacity: number;
+    selector?: Record<string, number | string>;
   }[] = [];
   private instances = new Map<string, unknown>();
   private counter = 0;
+  // The panel state the plugin writes its selector error into.
+  _state: { error: string | null; status: string | null } = { error: null, status: null };
+  _render() {}
 
   constructor() {
     controlInstance = this;
@@ -69,7 +73,11 @@ class ZarrLayerControlStub {
     return this.layers.find((layer) => layer.variable === variable)?.id;
   }
 
-  async addLayer(url?: string, variable?: string) {
+  async addLayer(
+    url?: string,
+    variable?: string,
+    options?: { selector?: Record<string, number | string> },
+  ) {
     // Real asynchrony wide enough that two adds fired together are both parked
     // here at once if the plugin does not serialize them -- which is when their
     // `layeradd` events cross and each add latches onto the other's layer.
@@ -87,6 +95,8 @@ class ZarrLayerControlStub {
       colormap: ["#000000"],
       clim: [0, 1],
       opacity: 1,
+      // Reported back on the event, as the real control does.
+      ...(options?.selector ? { selector: options.selector } : {}),
     });
     // Mirrors the renderer: the loaded coordinates hang off the layer instance,
     // and the raw (undecoded) values are what the adapter has to work from.
@@ -112,6 +122,8 @@ class ZarrLayerControlStub {
     if (!id) return;
     this.layers = this.layers.filter((layer) => layer.id !== id);
     this.instances.delete(id);
+    // The real panel re-renders on removal and clears its message.
+    this._state = { error: null, status: null };
     this.emit("layerremove", { layerId: id, state: { layers: this.layers } });
   }
 
@@ -376,6 +388,70 @@ describe("a Zarr layer's temporal adapter", () => {
         useAppStore.getState().layers.some((layer) => layer.id === first),
         false,
       );
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  it("drops a Zarr panel add whose selector value matches nothing (#3492)", async () => {
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      // The first add creates the control; the second goes through the
+      // control's own `layeradd`, the path the Zarr panel's Add Layer takes.
+      await addZarrRasterLayer(app, { url: STORE_URL, variable: "t2m" });
+      await controlInstance!.addLayer(STORE_URL, "sst", { selector: { time: "1900-01-01" } });
+      const id = controlInstance!.idForVariable("sst");
+      assert.ok(id);
+      for (let i = 0; i < 40 && controlInstance!.getLayersMap().has(id); i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(
+        useAppStore.getState().layers.some((layer) => layer.id === id),
+        false,
+        "an unmatched selector must not leave an empty layer row",
+      );
+      assert.equal(controlInstance!.getLayersMap().has(id), false);
+      assert.equal(getTemporalLayerAdapter(id), undefined);
+      // The error is written after the removal, so the panel still shows it.
+      assert.match(controlInstance!._state.error ?? "", /1900-01-01/);
+    } finally {
+      console.warn = originalWarn;
+      restoreFetch();
+    }
+  });
+
+  it("keeps a programmatic add whose selector value matches nothing", async () => {
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      // STAC and dynamical keep using the id they are given, so the layer stays.
+      const id = await addZarrRasterLayer(app, {
+        url: STORE_URL,
+        variable: "t2m",
+        selector: { time: "1900-01-01" },
+      });
+      assert.ok(await waitForAdapter(id));
+      assert.ok(useAppStore.getState().layers.some((layer) => layer.id === id));
+    } finally {
+      console.warn = originalWarn;
+      restoreFetch();
+    }
+  });
+
+  it("keeps a just-added layer whose selector date is on the axis", async () => {
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    try {
+      const id = await addZarrRasterLayer(app, {
+        url: STORE_URL,
+        variable: "t2m",
+        selector: { time: "2020-01-03" },
+      });
+      assert.ok(await waitForAdapter(id));
+      assert.ok(useAppStore.getState().layers.some((layer) => layer.id === id));
+      assert.deepEqual(selectorCalls.at(-1)?.selector, { time: 2 });
     } finally {
       restoreFetch();
     }

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ensureHtmlFileName,
   ensureProjectFileName,
+  suggestedProjectName,
 } from "../apps/geolibre-desktop/src/lib/file-names";
 
 describe("ensureHtmlFileName", () => {
@@ -52,5 +53,20 @@ describe("ensureProjectFileName", () => {
     assert.equal(ensureProjectFileName("a.geolibre.json"), "a.geolibre.json");
     assert.equal(ensureProjectFileName("a.geolibre"), "a.geolibre");
     assert.equal(ensureProjectFileName("a.json"), "a.json");
+  });
+});
+
+describe("suggestedProjectName", () => {
+  it("suggests the localized untitled label for the default name", () => {
+    assert.equal(suggestedProjectName("Untitled Project", "Untitled project"), "Untitled project");
+    assert.equal(suggestedProjectName("  ", "Projet sans titre"), "Projet sans titre");
+  });
+
+  it("keeps a name the user gave", () => {
+    assert.equal(suggestedProjectName(" Rivers ", "Untitled project"), "Rivers");
+  });
+
+  it("falls back to the default name when the label is blank", () => {
+    assert.equal(suggestedProjectName("", ""), "Untitled Project");
   });
 });

@@ -1214,7 +1214,7 @@ function CodeApprovalOverlay({
         <p className="text-xs text-muted-foreground">
           {t("assistant.codeApprovalBody", { language })}
         </p>
-        <pre className="max-h-48 overflow-auto rounded border bg-muted p-2 text-xs">
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border bg-muted p-2 text-xs [overflow-wrap:anywhere]">
           <code>{code}</code>
         </pre>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">

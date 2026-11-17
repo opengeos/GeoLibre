@@ -648,10 +648,12 @@ export function AiSectionContent({
                       <p className="truncate text-xs text-muted-foreground">{profile.modelId}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {/* Offered unless this profile is the saved default: an
-                          implicit default still needs the button, because a
-                          profile picked in the panel overrides it until a
-                          default is saved. */}
+                      {/* Hidden on the saved default. An implicit default (the
+                          first profile, with none saved) still needs it, since
+                          a profile picked in the panel or a deployment proxy
+                          overrides it until a default is saved; there it reads
+                          "Keep as default" so it does not contradict the
+                          Default badge beside it (#3492). */}
                       {defaultAiProfileId !== profile.id ? (
                         <Button
                           size="sm"
@@ -659,7 +661,9 @@ export function AiSectionContent({
                           className="h-7 px-2 text-xs"
                           onClick={() => setAsDefault(profile.id)}
                         >
-                          {t("settings.ai.setDefault")}
+                          {isDefaultProfile
+                            ? t("settings.ai.keepDefault")
+                            : t("settings.ai.setDefault")}
                         </Button>
                       ) : null}
                       <Button

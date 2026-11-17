@@ -50,7 +50,12 @@ import {
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { buildProjectHtml, viewerChromeParams } from "../lib/html-export";
 import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
-import { ensureHtmlFileName, ensureJsonFileName, ensureProjectFileName } from "../lib/file-names";
+import {
+  ensureHtmlFileName,
+  ensureJsonFileName,
+  ensureProjectFileName,
+  suggestedProjectName,
+} from "../lib/file-names";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
@@ -1873,7 +1878,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // download under a fixed name, so Save As (and a first Save) would otherwise
     // reuse a default name — exactly the bug users hit. Prompt for the name so
     // they can choose it; later in-place Saves reuse the chosen name silently.
-    let saveName = `${defaultProjectName}.geolibre`;
+    const untitledLabel = t("toolbar.item.untitledProject");
+    let saveName = `${suggestedProjectName(defaultProjectName, untitledLabel)}.geolibre`;
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {

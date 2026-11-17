@@ -200,6 +200,44 @@ describe("buffer across the antimeridian (#3469)", () => {
     assert.ok(Math.abs(km2 - CIRCLE_KM2) / CIRCLE_KM2 < 0.02, `area ${km2}`);
   });
 
+  it("keeps a polar cap in one piece with its seam on the antimeridian (#3492)", async () => {
+    // An Antarctica-like cap: a wavy coast round the South Pole, closed along
+    // the pole at ±180 the way Natural Earth stores it, with an inland hole.
+    const coast: Position[] = [];
+    for (let lon = 180; lon >= -180; lon -= 2) {
+      coast.push([lon, -68 + 3 * Math.sin((lon * 3 * Math.PI) / 180)]);
+    }
+    const shell: Position[] = [[180, -90], ...coast, [-180, -90], [180, -90]];
+    const hole: Position[] = [
+      [-60, -82],
+      [-20, -82],
+      [-20, -77],
+      [-60, -77],
+      [-60, -82],
+    ];
+    const output = await runBuffer(
+      [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [shell, hole] },
+        },
+      ],
+      { distance: 100 },
+    );
+    const [buffered] = output.features;
+    // Closed at the ring's own start, the cap came back as pieces meeting along
+    // that meridian, which drew as a sliver running out from the pole.
+    assert.equal(buffered.geometry.type, "Polygon");
+    assertNoWrap(buffered.geometry);
+    const [outer, ...holes] = rings(buffered.geometry);
+    for (const [lon, lat] of outer) {
+      if (lat === -90) assert.equal(Math.abs(lon), 180, `pole vertex at ${lon}`);
+    }
+    // The inland hole shrinks but survives the cut.
+    assert.equal(holes.length, 1);
+  });
+
   it("keeps a two-sided buffer across 180° as a band", async () => {
     const output = await runBuffer(
       [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [-179.5, 52] } }],

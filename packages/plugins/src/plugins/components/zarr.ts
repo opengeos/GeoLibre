@@ -379,7 +379,10 @@ export async function addCloudNetcdfLayer(
     // manifest, not a Zarr store whose metadata documents could be walked.
     // Session-only, as for addZarrRasterLayer: never on the layer record.
     registerZarrHeaders(addedLayerId, options.headers);
-    registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
+    registerZarrTemporalAdapter(addedLayerId, options.url, {
+      refs,
+      headers: options.headers,
+    });
     // Record the extent on the layer itself. The control accepts `bounds` as a
     // render hint but does not always carry it back on the "layeradd" event,
     // and the renderer never reports the extent it resolved — so without this
@@ -829,6 +832,16 @@ interface ZarrTemporalContext {
   headers?: Record<string, string>;
   refs?: KerchunkRefs;
   readAttributes?: ZarrTimeAttributesReader;
+  /**
+   * Drop the layer when a selector value matches nothing on a decoded time
+   * axis. Set only for a layer the user just added in the Zarr panel, so a
+   * failed selector leaves the panel's error instead of an empty layer row.
+   * Never set for a restored project layer, which must not vanish on open, nor
+   * for a programmatic add (`addZarrRasterLayer`, `addCloudNetcdfLayer`, used
+   * by STAC, dynamical and the NetCDF dialog), whose caller keeps using the id
+   * it was given.
+   */
+  removeIfUnmatched?: boolean;
 }
 
 /**
@@ -942,12 +955,15 @@ function zarrTimeAttributesFromRefs(
  * @param layerId - The new layer's id.
  * @param dimensionValues - Raw coordinate values the renderer loaded.
  * @param axis - The decoded time axis, or null when the store has none.
+ * @param removeIfUnmatched - Remove the layer when a value matched nothing.
+ * @returns Whether the layer was removed.
  */
 async function applyZarrSelectorDates(
   layerId: string,
   dimensionValues: Record<string, (number | string)[]>,
   axis: ZarrTimeAxis | null,
-): Promise<void> {
+  removeIfUnmatched = false,
+): Promise<boolean> {
   const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
   const selector = layer?.source.selector as Record<string, number | string> | undefined;
   const { selector: resolved, unresolved } = resolveZarrSelectorDates(
@@ -955,8 +971,24 @@ async function applyZarrSelectorDates(
     dimensionValues,
     axis,
   );
+  if (unresolved.length > 0) {
+    // The renderer throws on any one string value it cannot resolve, so the
+    // whole slice fails and the layer draws nothing; a fresh add is dropped
+    // rather than left as an empty layer row (#3492). Removing it from the
+    // store also removes it from the control; the error is reported after,
+    // so the control's re-render on removal does not clear it.
+    // Only on a decoded axis: with no axis (its metadata failed to load) the
+    // value was never checked, so the layer is kept as before.
+    const removed = removeIfUnmatched && axis !== null && Boolean(layer);
+    if (removed) {
+      unregisterTemporalLayer(layerId);
+      useAppStore.getState().removeLayer(layerId);
+    }
+    reportZarrSelectorProblem(unresolved, selector ?? {});
+    if (removed) return true;
+  }
   if (resolved) await setZarrLayerSelector(layerId, resolved);
-  if (unresolved.length > 0) reportZarrSelectorProblem(unresolved, selector ?? {});
+  return false;
 }
 
 /**
@@ -1013,6 +1045,9 @@ function registerZarrTemporalAdapter(
   // context for, so fall back to the reader filed under this layer's own url.
   const readAttributes =
     context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
+  // A removal decided after another project opened would act on a record this
+  // add did not create, so it is dropped once the project changes.
+  const generation = useAppStore.getState().projectGeneration;
   return (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
     if (!dimensionValues) return true;
@@ -1030,7 +1065,16 @@ function registerZarrTemporalAdapter(
     });
     // Non-fatal: a rejected setSelector must not stop the Time Slider binding below.
     try {
-      await applyZarrSelectorDates(layerId, dimensionValues, axis);
+      if (
+        await applyZarrSelectorDates(
+          layerId,
+          dimensionValues,
+          axis,
+          context.removeIfUnmatched === true &&
+            useAppStore.getState().projectGeneration === generation,
+        )
+      )
+        return true;
     } catch (error) {
       console.warn("[zarr] Could not apply date selector values", error);
     }
@@ -1492,7 +1536,7 @@ function createZarrLayerAddHandler(): ZarrLayerEventHandler {
     // layer id and its own headers/references, which this event cannot be
     // attributed to (see `programmaticZarrAdds`), so it registers its own.
     if (!programmaticZarrAdds.has(layerInfo.url ?? "")) {
-      registerZarrTemporalAdapter(layer.id, layerInfo.url);
+      registerZarrTemporalAdapter(layer.id, layerInfo.url, { removeIfUnmatched: true });
     }
     if (store.layers.some((item) => item.id === layer.id)) {
       store.updateLayer(layer.id, {
