@@ -712,7 +712,9 @@ export function SqlWorkspacePanel() {
       <div
         id="sql-workspace-body"
         ref={splitContainerRef}
-        className={`flex min-h-0 flex-1 ${collapsed ? "hidden" : ""}`}
+        // Scrolls when a short window squeezes the panel (see
+        // `.geolibre-bottom-panel`), so its controls stay reachable.
+        className={`flex min-h-0 flex-1 overflow-y-auto ${collapsed ? "hidden" : ""}`}
       >
         {/* Editor pane (left) */}
         <div

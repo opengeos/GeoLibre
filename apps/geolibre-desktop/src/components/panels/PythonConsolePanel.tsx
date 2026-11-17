@@ -449,7 +449,9 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
         ref={splitContainerRef}
         // `hidden` (not unmount) keeps the runtime, scrollback, and editor
         // buffer intact while the panel is collapsed to its header.
-        className={`flex min-h-0 flex-1 ${collapsed ? "hidden" : ""}`}
+        // Scrolls when a short window squeezes the panel (see
+        // `.geolibre-bottom-panel`), so its controls stay reachable.
+        className={`flex min-h-0 flex-1 overflow-y-auto ${collapsed ? "hidden" : ""}`}
       >
         <div className="flex min-w-0 flex-1 flex-col">
           <div

@@ -881,261 +881,268 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         </div>
       </div>
 
-      <div
-        ref={outputRef}
-        className="flex-1 space-y-2 overflow-auto px-3 py-2 text-sm leading-relaxed"
-      >
-        {showSetup ? (
-          // No provider yet: show only the setup card. The capability blurb and
-          // input box stay hidden until a provider is configured, so we never
-          // invite a prompt the assistant can't run (issue #547). The action
-          // button lives in the footer below so it stays visible if the list
-          // grows past the panel height.
-          <div className="mx-auto flex max-w-md flex-col gap-2.5">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-              <p className="font-medium text-foreground">{t("assistant.setupTitle")}</p>
+      {/* The messages and the input row scroll together when a short window
+          squeezes the panel (see `.geolibre-bottom-panel`), so focusing the
+          input brings it into view instead of leaving it clipped. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div
+          ref={outputRef}
+          className="flex-1 space-y-2 overflow-auto px-3 py-2 text-sm leading-relaxed"
+        >
+          {showSetup ? (
+            // No provider yet: show only the setup card. The capability blurb and
+            // input box stay hidden until a provider is configured, so we never
+            // invite a prompt the assistant can't run (issue #547). The action
+            // button lives in the footer below so it stays visible if the list
+            // grows past the panel height.
+            <div className="mx-auto flex max-w-md flex-col gap-2.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                <p className="font-medium text-foreground">{t("assistant.setupTitle")}</p>
+              </div>
+              <p className="text-muted-foreground">{t("assistant.setupStatus")}</p>
+              <div className="rounded-md border bg-muted/40 p-2">
+                <p className="mb-1.5 text-xs font-medium text-foreground">
+                  {t("assistant.setupProviders")}
+                </p>
+                <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
+                  {SETUP_PROVIDERS.filter(
+                    ({ id }) => id !== "chatgpt" || isChatGptSignInAvailable(),
+                  ).map(({ id, envs }) => (
+                    <li key={id} className="flex items-start justify-between gap-3 text-xs">
+                      <span className="shrink-0 text-foreground">{PROVIDER_LABELS[id]}</span>
+                      {/* One chip per variable so a multi-credential provider
+                          never reads as a single oddly-named env var. */}
+                      <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
+                        {envs.length === 0 ? (
+                          <span className="font-sans">{t("assistant.setupSignIn")}</span>
+                        ) : null}
+                        {envs.map((name, index) => (
+                          <span key={name} className="whitespace-nowrap">
+                            {index > 0 ? (
+                              <span className="me-1 text-muted-foreground/60">+</span>
+                            ) : null}
+                            <code>{name}</code>
+                          </span>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <p className="text-muted-foreground">{t("assistant.setupStatus")}</p>
-            <div className="rounded-md border bg-muted/40 p-2">
-              <p className="mb-1.5 text-xs font-medium text-foreground">
-                {t("assistant.setupProviders")}
-              </p>
-              <ul aria-label={t("assistant.setupProviders")} className="space-y-1">
-                {SETUP_PROVIDERS.filter(
-                  ({ id }) => id !== "chatgpt" || isChatGptSignInAvailable(),
-                ).map(({ id, envs }) => (
-                  <li key={id} className="flex items-start justify-between gap-3 text-xs">
-                    <span className="shrink-0 text-foreground">{PROVIDER_LABELS[id]}</span>
-                    {/* One chip per variable so a multi-credential provider
-                        never reads as a single oddly-named env var. */}
-                    <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
-                      {envs.length === 0 ? (
-                        <span className="font-sans">{t("assistant.setupSignIn")}</span>
-                      ) : null}
-                      {envs.map((name, index) => (
-                        <span key={name} className="whitespace-nowrap">
-                          {index > 0 ? (
-                            <span className="me-1 text-muted-foreground/60">+</span>
-                          ) : null}
-                          <code>{name}</code>
+          ) : turns.length === 0 ? (
+            <p className="text-muted-foreground">{t("assistant.intro")}</p>
+          ) : (
+            turns.map((turn) => {
+              if (turn.role === "tool") {
+                return (
+                  <div
+                    key={turn.id}
+                    className={cn(
+                      "flex items-start gap-1.5 font-mono text-xs",
+                      turn.failed ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span className="break-all">
+                      <span className="font-semibold">{turn.tool}</span>
+                      {turn.routed ? (
+                        <span
+                          className="ms-1 rounded-sm border px-1 py-px text-[0.65rem] align-middle"
+                          title={t("assistant.fastPath.routedHint")}
+                        >
+                          {t("assistant.fastPath.routed")}
                         </span>
-                      ))}
+                      ) : null}
+                      {turn.text ? ` · ${turn.text}` : ""}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ) : turns.length === 0 ? (
-          <p className="text-muted-foreground">{t("assistant.intro")}</p>
-        ) : (
-          turns.map((turn) => {
-            if (turn.role === "tool") {
+                  </div>
+                );
+              }
+              if (turn.role === "error") {
+                return (
+                  <p key={turn.id} className="flex items-start gap-1.5 text-xs text-destructive">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{turn.text}</span>
+                  </p>
+                );
+              }
+              if (turn.role === "user") {
+                return (
+                  <div key={turn.id} className="whitespace-pre-wrap font-medium text-foreground">
+                    {`❯ ${turn.text}`}
+                  </div>
+                );
+              }
+              // Assistant replies are markdown — render (and sanitize) them.
               return (
                 <div
                   key={turn.id}
                   className={cn(
-                    "flex items-start gap-1.5 font-mono text-xs",
-                    turn.failed ? "text-destructive" : "text-muted-foreground",
+                    "text-foreground",
+                    "[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+                    "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-5",
+                    "[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-5",
+                    "[&_a]:text-primary [&_a]:underline",
+                    "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
+                    "[&_pre]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2",
+                    "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
+                  )}
+                  dangerouslySetInnerHTML={{
+                    __html: renderAssistantMarkdown(turn.text),
+                  }}
+                />
+              );
+            })
+          )}
+        </div>
+
+        {showSetup ? (
+          // Keep the call to action pinned to the bottom so it is reachable even
+          // when the provider list scrolls.
+          <div className="border-t px-3 py-2">
+            <Button size="sm" className="w-full" onClick={() => openSettingsSection("ai")}>
+              <Settings className="me-1 h-4 w-4" />
+              {t("assistant.setupOpenSettings")}
+            </Button>
+          </div>
+        ) : (
+          <div className="border-t">
+            {voice.supported && (voiceActive || voice.errorKey) ? (
+              <div className="flex items-center gap-2 px-3 pt-2 text-xs">
+                {/* Bars are driven per frame straight from the analyser (see
+                    useVoiceCommands), which is why they carry no React state. */}
+                <div
+                  ref={voice.visualizerRef}
+                  aria-hidden="true"
+                  className="flex h-4 shrink-0 items-end gap-px"
+                >
+                  {Array.from({ length: VOICE_VISUALIZER_BARS }, (_, index) => (
+                    <span
+                      key={index}
+                      className={cn(
+                        "w-0.5 rounded-full",
+                        "h-[calc(2px_+_var(--voice-level,0)_*_14px)]",
+                        voice.errorKey ? "bg-destructive/50" : "bg-primary/70",
+                      )}
+                    />
+                  ))}
+                </div>
+                {/* The live region carries the status only. The interim preview
+                    is revised several times a second, and a polite region would
+                    queue and read back every revision of a half-heard phrase. */}
+                <span
+                  aria-live="polite"
+                  className={cn(
+                    "truncate",
+                    voice.errorKey ? "text-destructive" : "text-muted-foreground",
+                    // Yields the line to the preview without leaving the
+                    // accessibility tree: the status text itself is unchanged, so
+                    // this does not re-announce it.
+                    showVoiceInterim && "sr-only",
                   )}
                 >
-                  <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span className="break-all">
-                    <span className="font-semibold">{turn.tool}</span>
-                    {turn.routed ? (
-                      <span
-                        className="ms-1 rounded-sm border px-1 py-px text-[0.65rem] align-middle"
-                        title={t("assistant.fastPath.routedHint")}
-                      >
-                        {t("assistant.fastPath.routed")}
-                      </span>
-                    ) : null}
-                    {turn.text ? ` · ${turn.text}` : ""}
-                  </span>
-                </div>
-              );
-            }
-            if (turn.role === "error") {
-              return (
-                <p key={turn.id} className="flex items-start gap-1.5 text-xs text-destructive">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{turn.text}</span>
-                </p>
-              );
-            }
-            if (turn.role === "user") {
-              return (
-                <div key={turn.id} className="whitespace-pre-wrap font-medium text-foreground">
-                  {`❯ ${turn.text}`}
-                </div>
-              );
-            }
-            // Assistant replies are markdown — render (and sanitize) them.
-            return (
-              <div
-                key={turn.id}
-                className={cn(
-                  "text-foreground",
-                  "[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
-                  "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-5",
-                  "[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-5",
-                  "[&_a]:text-primary [&_a]:underline",
-                  "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
-                  "[&_pre]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2",
-                  "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
-                )}
-                dangerouslySetInnerHTML={{
-                  __html: renderAssistantMarkdown(turn.text),
-                }}
-              />
-            );
-          })
-        )}
-      </div>
-
-      {showSetup ? (
-        // Keep the call to action pinned to the bottom so it is reachable even
-        // when the provider list scrolls.
-        <div className="border-t px-3 py-2">
-          <Button size="sm" className="w-full" onClick={() => openSettingsSection("ai")}>
-            <Settings className="me-1 h-4 w-4" />
-            {t("assistant.setupOpenSettings")}
-          </Button>
-        </div>
-      ) : (
-        <div className="border-t">
-          {voice.supported && (voiceActive || voice.errorKey) ? (
-            <div className="flex items-center gap-2 px-3 pt-2 text-xs">
-              {/* Bars are driven per frame straight from the analyser (see
-                  useVoiceCommands), which is why they carry no React state. */}
-              <div
-                ref={voice.visualizerRef}
-                aria-hidden="true"
-                className="flex h-4 shrink-0 items-end gap-px"
-              >
-                {Array.from({ length: VOICE_VISUALIZER_BARS }, (_, index) => (
-                  <span
-                    key={index}
-                    className={cn(
-                      "w-0.5 rounded-full",
-                      "h-[calc(2px_+_var(--voice-level,0)_*_14px)]",
-                      voice.errorKey ? "bg-destructive/50" : "bg-primary/70",
-                    )}
-                  />
-                ))}
-              </div>
-              {/* The live region carries the status only. The interim preview
-                  is revised several times a second, and a polite region would
-                  queue and read back every revision of a half-heard phrase. */}
-              <span
-                aria-live="polite"
-                className={cn(
-                  "truncate",
-                  voice.errorKey ? "text-destructive" : "text-muted-foreground",
-                  // Yields the line to the preview without leaving the
-                  // accessibility tree: the status text itself is unchanged, so
-                  // this does not re-announce it.
-                  showVoiceInterim && "sr-only",
-                )}
-              >
-                {voice.errorKey ? t(voice.errorKey) : t(voiceStatusKey(voice.status, voice.mode))}
-              </span>
-              {showVoiceInterim ? (
-                <span aria-hidden="true" className="truncate text-muted-foreground">
-                  {voiceInterim}
+                  {voice.errorKey ? t(voice.errorKey) : t(voiceStatusKey(voice.status, voice.mode))}
                 </span>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="flex items-end gap-2 px-3 py-2">
-            <Textarea
-              ref={inputRef}
-              value={input}
-              onChange={(event) => {
-                setInput(event.target.value);
-                if (promptHistoryIndexRef.current === null) {
-                  promptDraftRef.current = event.target.value;
-                }
-              }}
-              onKeyDown={onKeyDown}
-              placeholder={t("assistant.placeholder")}
-              spellCheck
-              rows={2}
-              // Stays disabled if the key is removed mid-run; the Stop button is a
-              // separate control, so it remains reachable until the run ends.
-              disabled={!hasKey}
-              className="min-h-[2.5rem] flex-1 resize-none text-sm"
-            />
-            {voice.supported ? (
-              <>
-                {voice.canSpeak ? (
+                {showVoiceInterim ? (
+                  <span aria-hidden="true" className="truncate text-muted-foreground">
+                    {voiceInterim}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="flex items-end gap-2 px-3 py-2">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  if (promptHistoryIndexRef.current === null) {
+                    promptDraftRef.current = event.target.value;
+                  }
+                }}
+                onKeyDown={onKeyDown}
+                placeholder={t("assistant.placeholder")}
+                spellCheck
+                rows={2}
+                // Stays disabled if the key is removed mid-run; the Stop button is a
+                // separate control, so it remains reachable until the run ends.
+                disabled={!hasKey}
+                className="min-h-[2.5rem] flex-1 resize-none text-sm"
+              />
+              {voice.supported ? (
+                <>
+                  {voice.canSpeak ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      aria-pressed={voice.speakReplies}
+                      title={t(
+                        voice.speakReplies
+                          ? "assistant.voice.muteReplies"
+                          : "assistant.voice.speakRepliesTitle",
+                      )}
+                      onClick={() => voice.setSpeakReplies(!voice.speakReplies)}
+                    >
+                      {voice.speakReplies ? (
+                        <Volume2 className="h-4 w-4" />
+                      ) : (
+                        <VolumeX className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  ) : null}
                   <Button
-                    variant="ghost"
+                    variant={voiceActive ? "default" : "outline"}
                     size="icon"
                     className="h-9 w-9 shrink-0"
-                    aria-pressed={voice.speakReplies}
-                    title={t(
-                      voice.speakReplies
-                        ? "assistant.voice.muteReplies"
-                        : "assistant.voice.speakRepliesTitle",
-                    )}
-                    onClick={() => voice.setSpeakReplies(!voice.speakReplies)}
+                    aria-pressed={voiceActive}
+                    disabled={!hasKey}
+                    title={t(voiceActive ? "assistant.voice.stop" : "assistant.voice.start")}
+                    onClick={(event) => {
+                      // Space activates a focused button natively, so a hold that
+                      // is claiming push-to-talk must not also toggle this off.
+                      // An open mic is the exception: Space never claims there, so
+                      // a click must still stop it even with a hand resting on the
+                      // spacebar — and a real mouse click is honoured either way.
+                      if (
+                        shouldIgnoreVoiceButtonClick(
+                          voice.spaceHeld && voice.mode !== "open-mic",
+                          event.detail,
+                        )
+                      ) {
+                        return;
+                      }
+                      voice.toggle();
+                    }}
                   >
-                    {voice.speakReplies ? (
-                      <Volume2 className="h-4 w-4" />
-                    ) : (
-                      <VolumeX className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    <Mic
+                      className={cn("h-4 w-4", voice.status === "listening" && "animate-pulse")}
+                    />
                   </Button>
-                ) : null}
-                <Button
-                  variant={voiceActive ? "default" : "outline"}
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  aria-pressed={voiceActive}
-                  disabled={!hasKey}
-                  title={t(voiceActive ? "assistant.voice.stop" : "assistant.voice.start")}
-                  onClick={(event) => {
-                    // Space activates a focused button natively, so a hold that
-                    // is claiming push-to-talk must not also toggle this off.
-                    // An open mic is the exception: Space never claims there, so
-                    // a click must still stop it even with a hand resting on the
-                    // spacebar — and a real mouse click is honoured either way.
-                    if (
-                      shouldIgnoreVoiceButtonClick(
-                        voice.spaceHeld && voice.mode !== "open-mic",
-                        event.detail,
-                      )
-                    ) {
-                      return;
-                    }
-                    voice.toggle();
-                  }}
-                >
-                  <Mic className={cn("h-4 w-4", voice.status === "listening" && "animate-pulse")} />
+                </>
+              ) : null}
+              {running ? (
+                <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
+                  <Square className="me-1 h-4 w-4" />
+                  {t("assistant.stop")}
                 </Button>
-              </>
-            ) : null}
-            {running ? (
-              <Button size="sm" variant="outline" onClick={stop} title={t("assistant.stop")}>
-                <Square className="me-1 h-4 w-4" />
-                {t("assistant.stop")}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => void send()}
-                disabled={!hasKey || !input.trim()}
-                title={t("assistant.sendHint")}
-              >
-                <Send className="me-1 h-4 w-4" />
-                {t("assistant.send")}
-              </Button>
-            )}
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => void send()}
+                  disabled={!hasKey || !input.trim()}
+                  title={t("assistant.sendHint")}
+                >
+                  <Send className="me-1 h-4 w-4" />
+                  {t("assistant.send")}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {codeQueue.length > 0 ? (
         <CodeApprovalOverlay

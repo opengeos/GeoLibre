@@ -523,7 +523,10 @@ export function RasterAttributeTable() {
   function startResize(event: React.MouseEvent) {
     event.preventDefault();
     const startY = event.clientY;
-    const startHeight = sectionRef.current?.offsetHeight ?? panelHeight;
+    // Start from the stored preferred height, not the rendered one: a short
+    // window can shrink the panel below it (see `.geolibre-bottom-panel`), and
+    // starting from the rendered height would write that smaller size back.
+    const startHeight = panelHeight;
     const maxHeight = Math.round(window.innerHeight * 0.6);
     let nextHeight = startHeight;
     window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));

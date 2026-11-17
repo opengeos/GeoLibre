@@ -3665,12 +3665,15 @@ html
 
    Not every panel's body shrinks with it (the Python console's input row keeps
    its height), so a squeezed panel clips what no longer fits rather than
-   drawing it over the panel below or the status bar. The clip leaves room
-   above the panel for its resize handle, which straddles the top edge. */
+   drawing it over the panel below or the status bar. Only the bottom edge is
+   clipped: a clip path also cuts fixed-position descendants, and the resize
+   handle straddles the top edge while the attribute table's drag guide (the
+   desktop app's deferred resize) can sit anywhere along the window's width
+   and above the panel. */
 .geolibre-bottom-panel:not([data-collapsed]) {
   flex-shrink: 1;
   min-height: 3rem;
-  clip-path: inset(-0.5rem 0 0 0);
+  clip-path: inset(-100vh -100vw 0 -100vw);
 }
 
 /* On a narrow or short viewport (a phone, or a laptop at 200% zoom, which is
