@@ -382,7 +382,6 @@ export async function addCloudNetcdfLayer(
     registerZarrTemporalAdapter(addedLayerId, options.url, {
       refs,
       headers: options.headers,
-      removeIfUnmatched: true,
     });
     // Record the extent on the layer itself. The control accepts `bounds` as a
     // render hint but does not always carry it back on the "layeradd" event,
@@ -715,7 +714,6 @@ async function addZarrLayerExclusively(
   registerZarrHeaders(addedLayerId, headers);
   registerZarrTemporalAdapter(addedLayerId, url, {
     headers,
-    removeIfUnmatched: true,
     ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
   });
 
@@ -835,9 +833,12 @@ interface ZarrTemporalContext {
   refs?: KerchunkRefs;
   readAttributes?: ZarrTimeAttributesReader;
   /**
-   * Drop the layer when a selector value matches nothing. Set for a layer the
-   * user just added, so a failed selector leaves the error instead of an empty
-   * layer row; never for a restored project layer, which must not vanish on open.
+   * Drop the layer when a selector value matches nothing on a decoded time
+   * axis. Set only for a layer the user just added in the Zarr panel, so a
+   * failed selector leaves the panel's error instead of an empty layer row.
+   * Never set for a restored project layer, which must not vanish on open, nor
+   * for a programmatic add (STAC, dynamical), whose caller keeps using the id
+   * it was given.
    */
   removeIfUnmatched?: boolean;
 }
@@ -974,7 +975,9 @@ async function applyZarrSelectorDates(
     // rather than left as an empty layer row (#3492). Removing it from the
     // store also removes it from the control; the error is reported after,
     // so the control's re-render on removal does not clear it.
-    const removed = removeIfUnmatched && Boolean(layer);
+    // Only on a decoded axis: with no axis (its metadata failed to load) the
+    // value was never checked, so the layer is kept as before.
+    const removed = removeIfUnmatched && axis !== null && Boolean(layer);
     if (removed) {
       unregisterTemporalLayer(layerId);
       useAppStore.getState().removeLayer(layerId);
@@ -1040,6 +1043,9 @@ function registerZarrTemporalAdapter(
   // context for, so fall back to the reader filed under this layer's own url.
   const readAttributes =
     context.readAttributes ?? localZarrTimeAttributesReader(url ?? "") ?? undefined;
+  // A removal decided after another project opened would act on a record this
+  // add did not create, so it is dropped once the project changes.
+  const generation = useAppStore.getState().projectGeneration;
   return (async () => {
     const dimensionValues = await readZarrDimensionValues(layerId);
     if (!dimensionValues) return true;
@@ -1062,7 +1068,8 @@ function registerZarrTemporalAdapter(
           layerId,
           dimensionValues,
           axis,
-          context.removeIfUnmatched === true,
+          context.removeIfUnmatched === true &&
+            useAppStore.getState().projectGeneration === generation,
         )
       )
         return true;

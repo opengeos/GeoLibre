@@ -648,17 +648,22 @@ export function AiSectionContent({
                       <p className="truncate text-xs text-muted-foreground">{profile.modelId}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {/* Hidden on the row that carries the Default badge, so
-                          the badge and the button never contradict each other
-                          (#3492). Any other row can still be made the default. */}
-                      {!isDefaultProfile ? (
+                      {/* Hidden on the saved default. An implicit default (the
+                          first profile, with none saved) still needs it, since
+                          a profile picked in the panel or a deployment proxy
+                          overrides it until a default is saved; there it reads
+                          "Keep as default" so it does not contradict the
+                          Default badge beside it (#3492). */}
+                      {defaultAiProfileId !== profile.id ? (
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-7 px-2 text-xs"
                           onClick={() => setAsDefault(profile.id)}
                         >
-                          {t("settings.ai.setDefault")}
+                          {isDefaultProfile
+                            ? t("settings.ai.keepDefault")
+                            : t("settings.ai.setDefault")}
                         </Button>
                       ) : null}
                       <Button

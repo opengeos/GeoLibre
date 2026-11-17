@@ -1628,10 +1628,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // 3. Name prompt
     const { defaultProjectName } = buildCurrentProject();
     const currentName = useAppStore.getState().projectName.trim();
-    const promptDefaultName = suggestedProjectName(
-      currentName && currentName !== DEFAULT_PROJECT_NAME ? currentName : defaultProjectName,
-      t("toolbar.item.untitledProject"),
-    );
+    const promptDefaultName =
+      currentName && currentName !== DEFAULT_PROJECT_NAME ? currentName : defaultProjectName;
     const chosen = await askSaveName(
       promptDefaultName,
       {
@@ -1880,7 +1878,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // download under a fixed name, so Save As (and a first Save) would otherwise
     // reuse a default name — exactly the bug users hit. Prompt for the name so
     // they can choose it; later in-place Saves reuse the chosen name silently.
-    let saveName = `${suggestedProjectName(defaultProjectName, t("toolbar.item.untitledProject"))}.geolibre`;
+    const untitledLabel = t("toolbar.item.untitledProject");
+    let saveName = `${suggestedProjectName(defaultProjectName, untitledLabel)}.geolibre`;
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {

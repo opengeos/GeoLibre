@@ -388,18 +388,18 @@ describe("a Zarr layer's temporal adapter", () => {
     }
   });
 
-  it("drops a just-added layer whose selector value matches nothing (#3492)", async () => {
+  it("drops a Zarr panel add whose selector value matches nothing (#3492)", async () => {
     const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
     const originalWarn = console.warn;
     console.warn = () => {};
     try {
-      const id = await addZarrRasterLayer(app, {
-        url: STORE_URL,
-        variable: "t2m",
-        selector: { time: "1900-01-01" },
-      });
-      // The date resolves (or fails to) once the axis is read, after the add.
-      for (let i = 0; i < 40 && useAppStore.getState().layers.some((l) => l.id === id); i += 1) {
+      // The first add creates the control; the second goes through the
+      // control's own `layeradd`, the path the Zarr panel's Add Layer takes.
+      await addZarrRasterLayer(app, { url: STORE_URL, variable: "t2m" });
+      await controlInstance!.addLayer(STORE_URL, "sst", { selector: { time: "1900-01-01" } });
+      const id = controlInstance!.idForVariable("sst");
+      assert.ok(id);
+      for (let i = 0; i < 40 && controlInstance!.getLayersMap().has(id); i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       assert.equal(
@@ -407,8 +407,27 @@ describe("a Zarr layer's temporal adapter", () => {
         false,
         "an unmatched selector must not leave an empty layer row",
       );
-      assert.equal(controlInstance?.getLayersMap().has(id), false);
+      assert.equal(controlInstance!.getLayersMap().has(id), false);
       assert.equal(getTemporalLayerAdapter(id), undefined);
+    } finally {
+      console.warn = originalWarn;
+      restoreFetch();
+    }
+  });
+
+  it("keeps a programmatic add whose selector value matches nothing", async () => {
+    const restoreFetch = installFetchStub({ units: "days since 2020-01-01" });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      // STAC and dynamical keep using the id they are given, so the layer stays.
+      const id = await addZarrRasterLayer(app, {
+        url: STORE_URL,
+        variable: "t2m",
+        selector: { time: "1900-01-01" },
+      });
+      assert.ok(await waitForAdapter(id));
+      assert.ok(useAppStore.getState().layers.some((layer) => layer.id === id));
     } finally {
       console.warn = originalWarn;
       restoreFetch();
