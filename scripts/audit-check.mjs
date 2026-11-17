@@ -15,7 +15,23 @@ import { spawnSync } from "node:child_process";
 // Severities that fail the build. Moderate/low are left to Dependabot PRs.
 const BLOCKING = new Set(["high", "critical"]);
 
-const ALLOWLIST = new Map();
+const ALLOWLIST = new Map([
+  [
+    "GHSA-fc5q-39xc-vjpf",
+    "picomatch ReDoS through single-branch repeated extglobs. No patched version " +
+      "exists: the advisory covers <=4.0.7, 4.0.7 is the latest release, and the " +
+      "GitHub advisory API reports first_patched_version: null. Two production " +
+      "paths reach it, both Node-only tooling. (1) patch-package → " +
+      "find-yarn-workspace-root → micromatch, run once at install time by " +
+      "scripts/apply-dependency-patches.mjs, where micromatch only matches the " +
+      "root package.json's own `workspaces` globs. (2) @osmix/geojson → " +
+      "@placemarkio/geojson-rewind, which declares @changesets/cli as a runtime " +
+      "dependency but never imports it (its dist has no require or import), so " +
+      "the changesets → micromatch/fast-glob → picomatch tree is never loaded. " +
+      "The built web app contains no picomatch code, and no glob is ever built " +
+      "from user input, so no GeoLibre runtime path reaches the flaw.",
+  ],
+]);
 
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   encoding: "utf8",
