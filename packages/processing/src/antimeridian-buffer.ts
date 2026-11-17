@@ -112,20 +112,65 @@ function unwrapRing(ring: readonly Position[], referenceLon: number): Position[]
 /**
  * Close a ring that went once round a pole. Unwrapped, such a ring ends a full
  * turn east or west of where it started; it bounds the cap around the pole, so
- * it is closed by running down to the pole, back along it, and up to the start.
+ * it is closed by running down to the pole, back along it, and up again.
  *
- * @param ring - An unwrapped ring.
+ * The closing edges are placed on an antimeridian the ring crosses, not at the
+ * ring's first position: closed at its start (wherever turf began the ring,
+ * e.g. near the Antarctic Peninsula), the cap spanned two world copies and was
+ * cut into pieces meeting along that meridian, which drew as a sliver from the
+ * pole (#3492). Closed on an antimeridian, the cap fits one world copy and the
+ * only cut is at ±180, where the source polygon has its own seam.
+ *
+ * @param ring - An unwrapped, closed ring.
  * @returns The ring, closed through a pole when it needed to be.
  */
 function closeAroundPole(ring: Position[]): Position[] {
   if (ring.length < 2) return ring;
   const first = ring[0];
   const last = ring[ring.length - 1];
-  if (Math.abs(last[0] - first[0]) < WRAP_JUMP) return ring;
+  const turn = last[0] - first[0];
+  if (Math.abs(turn) < WRAP_JUMP) return ring;
   let latitudeSum = 0;
   for (const position of ring) latitudeSum += position[1];
   const pole = latitudeSum < 0 ? -90 : 90;
-  return [...ring, [last[0], pole], [first[0], pole], [first[0], first[1]]];
+  const rotated = rotateOntoAntimeridian(ring, turn);
+  const start = rotated[0];
+  const end = rotated[rotated.length - 1];
+  return [...rotated, [end[0], pole], [start[0], pole], [start[0], start[1]]];
+}
+
+/**
+ * Restart an unwrapped ring that winds once round a pole where it crosses an
+ * antimeridian (a longitude of 180° plus a whole number of turns), so it runs
+ * from that antimeridian to the same one a turn later.
+ *
+ * @param ring - An unwrapped, closed ring whose last position is `turn`
+ *   degrees of longitude from its first.
+ * @param turn - The ring's net change in longitude, about ±360.
+ * @returns The restarted ring (open: it ends a turn from where it starts), or
+ *   the ring itself when no edge crosses an antimeridian.
+ */
+function rotateOntoAntimeridian(ring: Position[], turn: number): Position[] {
+  for (let i = 0; i < ring.length - 1; i++) {
+    const a = ring[i];
+    const b = ring[i + 1];
+    // The antimeridian copies lie at 180 + 360k; find one strictly inside, or
+    // at the far end of, this edge.
+    const low = Math.min(a[0], b[0]);
+    const high = Math.max(a[0], b[0]);
+    const meridian = Math.floor((high - 180) / 360) * 360 + 180;
+    if (meridian <= low || meridian > high) continue;
+    const t = (meridian - a[0]) / (b[0] - a[0]);
+    const lat = a[1] + t * (b[1] - a[1]);
+    const crossing: Position = [meridian, lat];
+    const shift = Math.round(turn / 360) * 360;
+    // From the crossing round to the ring's end, then on through its start,
+    // shifted a turn so the walk stays continuous, back to the crossing.
+    const head = ring.slice(i + 1, ring.length - 1);
+    const tail = ring.slice(0, i + 1).map((p) => [p[0] + shift, ...p.slice(1)]);
+    return [crossing, ...head, ...tail, [meridian + shift, lat]];
+  }
+  return ring;
 }
 
 /**
@@ -204,6 +249,23 @@ function cutIntoWorld(rings: Position[][], out: Position[][][]): void {
 }
 
 /**
+ * The middle of a ring's longitude range.
+ *
+ * @param ring - An unwrapped ring.
+ * @param fallback - Returned for an empty ring.
+ */
+function longitudeMiddle(ring: readonly Position[], fallback: number): number {
+  if (ring.length === 0) return fallback;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const position of ring) {
+    if (position[0] < min) min = position[0];
+    if (position[0] > max) max = position[0];
+  }
+  return (min + max) / 2;
+}
+
+/**
  * Make a buffered polygon continuous across the antimeridian. The result is
  * still unwrapped (it may run past ±180), so two buffers of one feature, such
  * as the grown and eroded shapes of a two-sided buffer, can be combined in the
@@ -225,9 +287,14 @@ export function unwrapPolygonal(
     rings.every((ring) => ring.length === 0 || Math.abs(ring[0][0] - referenceLon) <= 180),
   );
   if (!crossesAntimeridian(polygons) && onReferenceSide) return geometry;
-  const unwrapped = polygons.map((rings) =>
-    rings.map((ring) => closeAroundPole(unwrapRing(ring, referenceLon))),
-  );
+  const unwrapped = polygons.map((rings) => {
+    const outer = closeAroundPole(unwrapRing(rings[0] ?? [], referenceLon));
+    // Unwrap each hole near the outer ring's middle, not near the reference: a
+    // cap closed round a pole can sit a world copy away from the reference,
+    // and a hole left behind would fall outside it and be dropped on cutting.
+    const middle = longitudeMiddle(outer, referenceLon);
+    return [outer, ...rings.slice(1).map((ring) => closeAroundPole(unwrapRing(ring, middle)))];
+  });
   return geometry.type === "Polygon"
     ? { type: "Polygon", coordinates: unwrapped[0] }
     : { type: "MultiPolygon", coordinates: unwrapped };

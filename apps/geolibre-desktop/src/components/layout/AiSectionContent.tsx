@@ -648,11 +648,10 @@ export function AiSectionContent({
                       <p className="truncate text-xs text-muted-foreground">{profile.modelId}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {/* Offered unless this profile is the saved default: an
-                          implicit default still needs the button, because a
-                          profile picked in the panel overrides it until a
-                          default is saved. */}
-                      {defaultAiProfileId !== profile.id ? (
+                      {/* Hidden on the row that carries the Default badge, so
+                          the badge and the button never contradict each other
+                          (#3492). Any other row can still be made the default. */}
+                      {!isDefaultProfile ? (
                         <Button
                           size="sm"
                           variant="ghost"

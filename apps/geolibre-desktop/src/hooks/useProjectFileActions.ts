@@ -50,7 +50,12 @@ import {
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 import { buildProjectHtml, viewerChromeParams } from "../lib/html-export";
 import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
-import { ensureHtmlFileName, ensureJsonFileName, ensureProjectFileName } from "../lib/file-names";
+import {
+  ensureHtmlFileName,
+  ensureJsonFileName,
+  ensureProjectFileName,
+  suggestedProjectName,
+} from "../lib/file-names";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
 import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
@@ -1623,8 +1628,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // 3. Name prompt
     const { defaultProjectName } = buildCurrentProject();
     const currentName = useAppStore.getState().projectName.trim();
-    const promptDefaultName =
-      currentName && currentName !== DEFAULT_PROJECT_NAME ? currentName : defaultProjectName;
+    const promptDefaultName = suggestedProjectName(
+      currentName && currentName !== DEFAULT_PROJECT_NAME ? currentName : defaultProjectName,
+      t("toolbar.item.untitledProject"),
+    );
     const chosen = await askSaveName(
       promptDefaultName,
       {
@@ -1873,7 +1880,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     // download under a fixed name, so Save As (and a first Save) would otherwise
     // reuse a default name — exactly the bug users hit. Prompt for the name so
     // they can choose it; later in-place Saves reuse the chosen name silently.
-    let saveName = `${defaultProjectName}.geolibre`;
+    let saveName = `${suggestedProjectName(defaultProjectName, t("toolbar.item.untitledProject"))}.geolibre`;
     const promptForName =
       browserSaveFallsBackToDownload() && (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {

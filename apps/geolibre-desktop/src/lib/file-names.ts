@@ -20,6 +20,22 @@ export function ensureProjectFileName(name: string): string {
 }
 
 /**
+ * The name to suggest for a project's file. An untitled project carries the
+ * English {@link DEFAULT_PROJECT_NAME} in the store, but the toolbar shows the
+ * localized "Untitled project" label, so the save dialog suggests that label
+ * instead of a differently cased English name (#3492).
+ *
+ * @param name - The project's current name.
+ * @param untitledLabel - The localized label for an untitled project.
+ * @returns The project name, or the localized label when it is untitled.
+ */
+export function suggestedProjectName(name: string, untitledLabel: string): string {
+  const trimmed = name.trim();
+  if (trimmed && trimmed !== DEFAULT_PROJECT_NAME) return trimmed;
+  return untitledLabel.trim() || DEFAULT_PROJECT_NAME;
+}
+
+/**
  * Ensure an exported HTML file name carries an `.html`/`.htm` extension,
  * defaulting to a slug-based name when blank so the browser download opens as a
  * web page rather than an unknown file type.
