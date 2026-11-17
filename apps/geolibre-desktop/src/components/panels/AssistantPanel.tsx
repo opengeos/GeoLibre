@@ -786,7 +786,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     <section
       ref={sectionRef}
       aria-label={t("assistant.title")}
-      className="relative flex shrink-0 flex-col border-t bg-card"
+      className="geolibre-bottom-panel relative flex shrink-0 flex-col border-t bg-card"
       style={{ height }}
     >
       <div
@@ -1180,7 +1180,11 @@ function CodeApprovalOverlay({
         role="dialog"
         aria-modal="true"
         aria-label={t("assistant.codeApprovalTitle")}
-        className="flex max-h-full w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-4 shadow-lg"
+        // Scrolls when the panel is too short for it (a short window shrinks
+        // the panel), so the checkbox and buttons stay reachable. The code
+        // shrinks first, but only to a few lines (`min-h-16`) rather than
+        // away: it is what the user is approving.
+        className="flex max-h-full w-full max-w-md flex-col gap-3 overflow-y-auto rounded-lg border bg-card p-4 shadow-lg"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -1214,7 +1218,7 @@ function CodeApprovalOverlay({
         <p className="text-xs text-muted-foreground">
           {t("assistant.codeApprovalBody", { language })}
         </p>
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border bg-muted p-2 text-xs [overflow-wrap:anywhere]">
+        <pre className="max-h-48 min-h-16 overflow-auto whitespace-pre-wrap rounded border bg-muted p-2 text-xs [overflow-wrap:anywhere]">
           <code>{code}</code>
         </pre>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
