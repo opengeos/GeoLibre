@@ -3,6 +3,10 @@
 !!! info "11:00 a.m. - 12:00 p.m."
     Lecture 10 min · Hands-on 40 min · Break 11:50 - 12:00, then lunch until 1:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=uEdoKROdutg&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/uEdoKROdutg/maxresdefault.jpg" alt="Recording of section 4: Attributes, Editing, and Spatial SQL" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

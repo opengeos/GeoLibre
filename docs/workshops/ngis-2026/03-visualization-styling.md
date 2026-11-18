@@ -3,6 +3,10 @@
 !!! info "10:00 - 11:00 a.m."
     Lecture 15 min · Hands-on 35 min · Break 10:50 - 11:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=2uWzNPHbbOE&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/2uWzNPHbbOE/maxresdefault.jpg" alt="Recording of section 3: Visualization and Styling" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:
