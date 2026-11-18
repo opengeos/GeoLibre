@@ -2787,6 +2787,30 @@ body,
   color-scheme: dark;
 }
 
+/* Plain-DOM plugin panel selects (`withSelectChevron` in @geolibre/plugins):
+   replace the browser's disclosure arrow, whose insets and look differ between
+   Chromium and the macOS WebKit webview, with the chevron the React `Select`
+   draws (lucide chevron-down, muted). `!important` because the panels style
+   their selects inline, and an inline `background` shorthand would otherwise
+   reset the image. */
+select.geolibre-native-select:not([multiple]):not([size]) {
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-opacity='.75' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-position: right 0.4rem center !important;
+  background-repeat: no-repeat !important;
+  background-size: 0.875rem !important;
+  padding-inline-end: 1.6rem !important;
+  text-overflow: ellipsis;
+}
+
+[dir="rtl"] select.geolibre-native-select:not([multiple]):not([size]) {
+  background-position: left 0.4rem center !important;
+}
+
+.dark select.geolibre-native-select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-opacity='.75' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+}
+
 .geolibre-colorbar-control .colorbar-gui-input,
 .geolibre-colorbar-control .colorbar-gui-select,
 .geolibre-colorbar-control .colorbar-gui-textarea,

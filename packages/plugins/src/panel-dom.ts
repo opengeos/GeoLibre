@@ -35,3 +35,26 @@ export function setDisabled(button: HTMLButtonElement, disabled: boolean): void 
   button.style.opacity = disabled ? "0.5" : "1";
   button.style.cursor = disabled ? "not-allowed" : "pointer";
 }
+
+/** Class that gives a plugin panel's native `<select>` the app's own chevron (see `index.css`). */
+export const SELECT_CHEVRON_CLASS = "geolibre-native-select";
+
+/**
+ * Swaps a native `<select>`'s disclosure arrow for the chevron the app's React
+ * `Select` draws, and returns the select.
+ *
+ * The browser's own arrow has different insets and looks in Chromium and in
+ * WebKit (the desktop webview on macOS), so plain-DOM panel selects never
+ * matched the rest of the app. The rule behind the class sets `appearance`,
+ * the chevron and the end padding with `!important`, so it holds even when
+ * the panel styles the select inline (`style.cssText`, `background: …`). It
+ * is a class rather than inline styles so the chevron can follow dark mode
+ * and right-to-left layouts. Not for `multiple` or `size` list boxes, which
+ * have no arrow.
+ *
+ * @param select Select to update.
+ */
+export function withSelectChevron<T extends HTMLSelectElement>(select: T): T {
+  select.classList.add(SELECT_CHEVRON_CLASS);
+  return select;
+}

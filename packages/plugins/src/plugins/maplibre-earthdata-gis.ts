@@ -46,6 +46,7 @@ import { layerTypeForTiles } from "./web-service-sync";
 import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 export const EARTHDATA_GIS_PLUGIN_ID = "maplibre-gl-earthdata-gis";
 const PANEL_ID = EARTHDATA_GIS_PLUGIN_ID;
@@ -489,7 +490,7 @@ function buildRasterFunctionSelect(
   item: EarthdataGisItem,
   onError: (message: string) => void,
 ): HTMLSelectElement {
-  const select = document.createElement("select");
+  const select = withSelectChevron(document.createElement("select"));
   select.style.cssText = CSS.functionSelect;
   select.title = labels.rasterFunctionTitle;
   select.setAttribute("aria-label", labels.rasterFunction);

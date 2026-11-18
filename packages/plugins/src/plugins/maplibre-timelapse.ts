@@ -45,6 +45,7 @@ import {
   type TimelapseProvider,
 } from "./timelapse-providers";
 import { getStyleMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 export const TIMELAPSE_PLUGIN_ID = "geolibre-timelapse";
 
@@ -803,7 +804,7 @@ export class TimelapseControl {
     // registered (a single-provider install has nothing to switch between).
     const providers = listTimelapseProviders();
     if (providers.length > 1) {
-      const providerSelect = document.createElement("select");
+      const providerSelect = withSelectChevron(document.createElement("select"));
       styleThemedSelect(providerSelect);
       providerSelect.style.width = "100%";
       for (const item of providers) {
@@ -884,7 +885,7 @@ export class TimelapseControl {
     const speedText = document.createTextNode(labels.speed);
     speedLabel.appendChild(speedText);
     this.speedText = speedText;
-    const speedSelect = document.createElement("select");
+    const speedSelect = withSelectChevron(document.createElement("select"));
     styleThemedSelect(speedSelect);
     for (const step of TIMELAPSE_SPEED_STEPS) {
       const option = document.createElement("option");

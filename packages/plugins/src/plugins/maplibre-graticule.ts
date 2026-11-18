@@ -11,6 +11,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { buildMgrsGrid } from "./mgrs-grid";
 import { gridZoneLongitudeRange, utmZoneNumber } from "./mgrs-reference";
 import { getControlMap } from "./style-map";
+import { withSelectChevron } from "../panel-dom";
 
 /**
  * Coordinate graticule plugin.
@@ -1261,7 +1262,7 @@ function buildPanelBody(container: HTMLElement): void {
     get: () => string,
     set: (value: string) => void,
   ): void => {
-    const el = document.createElement("select");
+    const el = withSelectChevron(document.createElement("select"));
     for (const opt of options) {
       const o = document.createElement("option");
       o.value = opt.value;

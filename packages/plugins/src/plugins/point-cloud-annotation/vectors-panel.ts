@@ -14,6 +14,7 @@ import { localFrame } from "./cuboid";
 import { resolveExportCrs, safeFileStem } from "./las-writer";
 import { getOverlayViewport, getRenderElevationRange, getRenderZOffset } from "./lidar-access";
 import { createOffsetProjector } from "./selection";
+import { withSelectChevron } from "../../panel-dom";
 
 /** The kinds of vector annotation. */
 export type VectorKind = "polyline" | "polygon" | "keypoint";
@@ -565,7 +566,7 @@ export class VectorSection {
         object.kind === "keypoint"
           ? `#${object.id} · ${this.kindLabel(object.kind)} · ${object.points[0][2].toFixed(2)} m`
           : `#${object.id} · ${this.kindLabel(object.kind)} · ${object.points.length} · ${vectorLength(object).toFixed(1)} m`;
-      const classSelect = document.createElement("select");
+      const classSelect = withSelectChevron(document.createElement("select"));
       classSelect.style.cssText =
         "padding:2px;border:1px solid hsl(var(--border));border-radius:4px;background:hsl(var(--background));min-width:0;max-width:9em;";
       classSelect.style.setProperty("color", "hsl(var(--foreground))", "important");
