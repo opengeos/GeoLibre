@@ -9,7 +9,13 @@ const { RegionalBasemapPrompt } =
   await import("../apps/geolibre-desktop/src/components/layout/RegionalBasemapPrompt");
 const { RegionalBasemapSection } =
   await import("../apps/geolibre-desktop/src/components/panels/RegionalBasemapSection");
-const { CHINA_BASEMAPS, DEFAULT_BASEMAP, createEmptyProject } = await import("@geolibre/core");
+const {
+  CHINA_BASEMAPS,
+  DEFAULT_BASEMAP,
+  PLANETARY_BASEMAPS,
+  createEmptyProject,
+  mapCrsPreferencePatch,
+} = await import("@geolibre/core");
 const { useNotificationStore } = await import("../apps/geolibre-desktop/src/lib/notify");
 const { useLastBasemapPersistence } =
   await import("../apps/geolibre-desktop/src/hooks/useLastBasemapPersistence");
@@ -166,5 +172,53 @@ describe("useLastBasemapPersistence", () => {
     const again = renderHook(() => useLastBasemapPersistence());
     assert.equal(useAppStore.getState().basemapStyleUrl, AMAP.styleUrl);
     again.unmount();
+  });
+
+  // GeoLibre#3515: a `?crs=` link seeds the CRS and its body before this
+  // restore runs; a remembered basemap of another body must not undo it.
+  function seedLinkedCrs(mapCrs: string) {
+    const { preferences } = useAppStore.getState();
+    useAppStore.setState({
+      projectGeneration: 0,
+      projectPath: null,
+      isDirty: false,
+      preferences: {
+        ...preferences,
+        map: { ...preferences.map, ...mapCrsPreferencePatch(mapCrs) },
+      },
+    });
+  }
+
+  it("keeps a linked planetary CRS's body over a remembered Earth basemap", () => {
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, DEFAULT_BASEMAP);
+    seedLinkedCrs("mars-north-polar");
+    const hook = renderHook(() => useLastBasemapPersistence());
+    assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "mars");
+    assert.equal(useAppStore.getState().preferences.map.mapCrs, "mars-north-polar");
+    assert.equal(readLastBasemap(), DEFAULT_BASEMAP);
+    hook.unmount();
+  });
+
+  it("keeps a linked Earth CRS on Earth over a remembered Mars basemap", () => {
+    const mars = PLANETARY_BASEMAPS.find((basemap) => basemap.ellipsoidId === "mars")!;
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, mars.styleUrl);
+    useAppStore.setState({ basemapStyleUrl: DEFAULT_BASEMAP });
+    seedLinkedCrs("earth-arctic");
+    const hook = renderHook(() => useLastBasemapPersistence());
+    assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "earth");
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    // The Mars basemap stays remembered for a launch without the link.
+    assert.equal(readLastBasemap(), mars.styleUrl);
+    hook.unmount();
+  });
+
+  it("restores a remembered basemap of the linked CRS's own body", () => {
+    const mars = PLANETARY_BASEMAPS.find((basemap) => basemap.ellipsoidId === "mars")!;
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, mars.styleUrl);
+    seedLinkedCrs("mars-north-polar");
+    const hook = renderHook(() => useLastBasemapPersistence());
+    assert.equal(useAppStore.getState().basemapStyleUrl, mars.styleUrl);
+    assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "mars");
+    hook.unmount();
   });
 });
