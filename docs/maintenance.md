@@ -143,7 +143,10 @@ fail again with "Unsupported data format/bitsPerSample";
   (the PMTiles panel) stay on a custom CRS's tile grid. They assume MapLibre
   clamps the camera center to the grid, draws the grid 512 px wide at zoom 0
   (`cameraForMapCrsBox`), and that `fitBounds` stays an own-instance-overridable
-  method that MapLibre itself does not rely on internally. After a bump, run
+  method that MapLibre itself does not rely on internally. The guard also covers the
+  frame applied when a CRS is entered (`applyMapCrs` fits the preset's
+  `bounds`), so a new preset whose box straddles its grid edge is framed on
+  the clipped part. After a bump, run
   `tests/map-crs-fit.test.ts`, then on `?crs=earth-arctic` add
   `https://data.geolibre.app/knoxville_buildings.pmtiles`: the camera must stay
   on the Arctic view and Zoom to layer must explain why it cannot move.

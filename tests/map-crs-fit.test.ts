@@ -36,8 +36,14 @@ describe("map-crs-fit", () => {
     // A box spanning the pole's meridians: the corners alone miss the bulge.
     const box = projectBoundsToCrs([-180, 60, 180, 90], converter);
     assert.ok(box);
-    const [x] = converter.forward([-45 + 180, 60]);
-    assert.ok(box[2] >= x - 1, "covers the far side of the ring");
+    // The ring's corners all project to one meridian; its far side does not.
+    for (const lng of [-135, 45, 135]) {
+      const [x, y] = converter.forward([lng, 60]);
+      assert.ok(
+        x >= box[0] - 1 && x <= box[2] + 1 && y >= box[1] - 1 && y <= box[3] + 1,
+        `covers ${lng}, 60`,
+      );
+    }
   });
 
   it("places an extent off the Arctic grid outside it", () => {
