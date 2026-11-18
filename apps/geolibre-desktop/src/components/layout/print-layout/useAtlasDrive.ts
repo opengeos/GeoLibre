@@ -12,6 +12,7 @@ import { setPrintExtentVisible, type PrintExtent } from "../../../lib/print-exte
 import {
   captureEngineMapImage,
   captureMapImage,
+  resolveGeorefProjection,
   type CapturedMap,
 } from "../../../lib/print-layout-export";
 import {
@@ -110,6 +111,9 @@ export function useAtlasCapture({
       // Hide the drawn print-extent box while reading the buffer, as recapture
       // does, so its outline is never baked into a page.
       const nativeMap = engine.getMap();
+      // Resolved once per page (it may load proj4), so the synchronous
+      // MapLibre capture below can still georeference the page (GH #3523).
+      const projection = nativeMap ? await resolveGeorefProjection(engine) : null;
       const capture = async () => {
         if (!nativeMap) {
           // Another engine draws the box as its own preview; capture through
@@ -128,7 +132,7 @@ export function useAtlasCapture({
         }
         setPrintExtentVisible(nativeMap, false);
         try {
-          return captureMapImage(nativeMap, null);
+          return captureMapImage(nativeMap, null, undefined, projection);
         } finally {
           setPrintExtentVisible(nativeMap, true);
         }

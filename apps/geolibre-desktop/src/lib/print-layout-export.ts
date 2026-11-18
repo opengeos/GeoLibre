@@ -6,13 +6,28 @@
  * PNG/PDF helpers rasterize {@link drawLayout} at print resolution; SVG keeps
  * the layout furniture editable and embeds the captured map image.
  */
-import { getActiveMeanRadiusMeters } from "@geolibre/core";
+import { getActiveEllipsoid, getActiveMeanRadiusMeters } from "@geolibre/core";
 import { zipSync } from "fflate";
 import type { jsPDF } from "jspdf";
 import type { MapEngine } from "@geolibre/map";
 import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
-import { drawLayout, pageMm, pagePx, resolvePageSize, type LayoutOptions } from "./print-layout";
+import {
+  drawLayout,
+  mapImagePlacement,
+  pageMm,
+  pagePx,
+  resolvePageSize,
+  type LayoutOptions,
+} from "./print-layout";
 import type { PrintExtent } from "./print-extent";
+import {
+  epsgFromCode,
+  geoPdfViewportEntry,
+  solveCaptureGeoref,
+  WEB_MERCATOR,
+  type CaptureGeoref,
+  type GeorefProjection,
+} from "./geopdf";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 
 export {
@@ -34,6 +49,11 @@ export interface CapturedMap {
   /** Device pixels per CSS pixel in the captured map canvas. */
   pixelRatio: number;
   bearingDeg: number;
+  /**
+   * Affine georeference of {@link image}, or null when the view is not an
+   * affine view of the map's CRS (pitch, globe, another body). GH #3523.
+   */
+  georef: CaptureGeoref | null;
 }
 
 interface MapLike {
@@ -84,13 +104,14 @@ function projectClipRectCss(
  * Crop a composited capture to the CSS-pixel rectangle of a geographic extent.
  * Returns `null` when the projected rect is degenerate or falls entirely
  * outside the viewport, so the caller can fail rather than silently export the
- * full viewport at a scale measured for the (off-screen) clip centre.
+ * full viewport at a scale measured for the (off-screen) clip centre. The crop's
+ * top-left corner in device pixels comes back with it, for georeferencing.
  */
 function cropCaptureToClip(
   source: HTMLCanvasElement,
   rectCss: { minX: number; minY: number; maxX: number; maxY: number },
   dpr: number,
-): HTMLCanvasElement | null {
+): { canvas: HTMLCanvasElement; x0: number; y0: number } | null {
   // CSS px -> device px, clamped to the captured buffer.
   const x0 = Math.max(0, Math.floor(rectCss.minX * dpr));
   const y0 = Math.max(0, Math.floor(rectCss.minY * dpr));
@@ -105,7 +126,39 @@ function cropCaptureToClip(
   const cctx = cropped.getContext("2d");
   if (!cctx) return null;
   cctx.drawImage(source, x0, y0, cw, ch, 0, 0, cw, ch);
-  return cropped;
+  return { canvas: cropped, x0, y0 };
+}
+
+/**
+ * The projection a print capture of `engine` can be georeferenced in: Web
+ * Mercator on the default map, or the map's custom CRS when it has an EPSG
+ * code (proj4 converts it). Null on another body, whose coordinates a GeoPDF
+ * reader would take as Earth's, and on a CRS without an EPSG code.
+ *
+ * @param engine - The live map engine.
+ * @returns The projection, or null when the capture cannot be georeferenced.
+ */
+export async function resolveGeorefProjection(
+  engine: Pick<MapEngine, "getMapCrs">,
+): Promise<GeorefProjection | null> {
+  if (getActiveEllipsoid().id !== "earth") return null;
+  const crs = engine.getMapCrs?.() ?? null;
+  if (!crs) return WEB_MERCATOR;
+  const epsg = epsgFromCode(crs.code);
+  if (epsg === null) return null;
+  try {
+    const { default: proj4 } = await import("proj4");
+    const converter = proj4(crs.definition);
+    return {
+      epsg,
+      wkt: null,
+      geographic: /\+proj=(?:longlat|latlong|lonlat|latlon)\b/.test(crs.definition),
+      forward: (lng, lat) => converter.forward([lng, lat]) as [number, number],
+      inverse: (x, y) => converter.inverse([x, y]) as [number, number],
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -125,6 +178,7 @@ export async function captureEngineMapImage(
 ): Promise<CapturedMap> {
   const surface = engine.getRenderSurface();
   if (!surface) throw new Error("The map is not ready yet");
+  const projection = await resolveGeorefProjection(engine);
   const bitmap = await createImageBitmap(await engine.captureImage());
   try {
     if (engine.getRenderSurface() !== surface)
@@ -137,7 +191,7 @@ export async function captureEngineMapImage(
     context.drawImage(bitmap, 0, 0);
     const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
     decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
-    return captureMapImage(surface, clip, canvas);
+    return captureMapImage(surface, clip, canvas, projection);
   } finally {
     bitmap.close();
   }
@@ -151,6 +205,10 @@ export async function captureEngineMapImage(
  * @param map - The MapLibre map instance.
  * @param clip - Optional geographic extent to crop the snapshot to (GH #523);
  *   when omitted the full viewport is captured.
+ * @param captured - An already composited capture of the map's viewport, used
+ *   instead of reading the container's canvases.
+ * @param projection - The map's CRS, to georeference the capture in; omitted
+ *   or null leaves the capture without a georeference.
  * @returns The composited image plus the ground scale and bearing needed to
  *   render a scale bar and north arrow.
  */
@@ -158,6 +216,7 @@ export function captureMapImage(
   map: MapLike,
   clip?: CaptureClip | null,
   captured?: HTMLCanvasElement,
+  projection?: GeorefProjection | null,
 ): CapturedMap {
   // Force a synchronous render first. MapLibre only paints on demand, so when
   // the Print Layout modal opens without any recent camera movement the
@@ -240,6 +299,8 @@ export function captureMapImage(
   // the extent is entirely off-screen: throw so the dialog reports a capture
   // error instead of silently exporting the wrong (full-viewport) area.
   let image = out;
+  let originX = 0;
+  let originY = 0;
   if (rectCss) {
     const cropped = cropCaptureToClip(out, rectCss, dpr);
     if (!cropped) {
@@ -248,8 +309,27 @@ export function captureMapImage(
         "Could not crop to the print extent (it may be outside the map view, or a canvas context was unavailable)",
       );
     }
-    image = cropped;
+    image = cropped.canvas;
+    originX = cropped.x0;
+    originY = cropped.y0;
   }
+
+  // Image pixel -> viewport CSS pixel -> lng/lat, for the GeoPDF georeference.
+  const scaleToCss = dpr > 0 ? 1 / dpr : 1;
+  const georef = projection
+    ? solveCaptureGeoref(
+        image.width,
+        image.height,
+        (px, py) => {
+          try {
+            return map.unproject([(originX + px) * scaleToCss, (originY + py) * scaleToCss]);
+          } catch {
+            return null;
+          }
+        },
+        projection,
+      )
+    : null;
 
   return {
     image,
@@ -258,6 +338,7 @@ export function captureMapImage(
     metersPerPixel,
     pixelRatio: dpr,
     bearingDeg: map.getBearing(),
+    georef,
   };
 }
 
@@ -397,12 +478,63 @@ export async function exportLayoutPdf(
   // Pass the canvas directly so jsPDF reads its pixels without an intermediate
   // base64 data URL (synchronous and ~33% larger in memory).
   pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
+  writeGeoPdfViewports(pdf, [geoPdfPageEntry(opts, canvas, widthMm, heightMm)]);
   const bytes = new Uint8Array(pdf.output("arraybuffer"));
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
     browserTypes: [{ description: "PDF Document", accept: { "application/pdf": [".pdf"] } }],
     mimeType: "application/pdf",
+  });
+}
+
+/** Millimetres to PDF points. */
+const MM_TO_PT = 72 / 25.4;
+
+/**
+ * The GeoPDF `/VP` entry for one rendered page, or null when its capture has
+ * no georeference.
+ *
+ * @param opts - The page's layout options, carrying the capture's georeference.
+ * @param canvas - The page as rasterized for the PDF.
+ * @param widthMm - Page width in millimetres.
+ * @param heightMm - Page height in millimetres.
+ * @returns The page dictionary entry, or null.
+ */
+function geoPdfPageEntry(
+  opts: LayoutOptions,
+  canvas: HTMLCanvasElement,
+  widthMm: number,
+  heightMm: number,
+): string | null {
+  if (!opts.mapGeoref) return null;
+  const placement = mapImagePlacement(opts, canvas.width, canvas.height);
+  if (!placement) return null;
+  return geoPdfViewportEntry(
+    opts.mapGeoref,
+    placement,
+    canvas.width,
+    canvas.height,
+    widthMm * MM_TO_PT,
+    heightMm * MM_TO_PT,
+  );
+}
+
+/**
+ * Write each page's GeoPDF viewport into its page dictionary as jsPDF emits it.
+ * jsPDF publishes `putPage` while the dictionary is still open, which is how
+ * its own annotations plugin adds `/Annots`. The Measure and GCS dictionaries
+ * are written inline, so no extra PDF objects are needed.
+ *
+ * @param pdf - The document, before `output()`.
+ * @param entries - The `/VP` entry per page, in page order (null for none).
+ */
+export function writeGeoPdfViewports(pdf: jsPDF, entries: readonly (string | null)[]): void {
+  if (!entries.some(Boolean)) return;
+  const internal = pdf.internal as typeof pdf.internal & { write(...text: string[]): void };
+  internal.events.subscribe("putPage", (data: { pageNumber: number }) => {
+    const entry = entries[data.pageNumber - 1];
+    if (entry) internal.write(entry);
   });
 }
 
@@ -451,6 +583,7 @@ export async function exportAtlasPdf(
   // (e.g. offline) stops the export up front.
   const JsPdf = await loadJsPdf();
   let pdf: jsPDF | null = null;
+  const viewports: (string | null)[] = [];
   for (let i = 0; i < total; i++) {
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
@@ -466,7 +599,9 @@ export async function exportAtlasPdf(
       pdf.addPage([widthMm, heightMm], orientation);
     }
     pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
+    viewports.push(geoPdfPageEntry(opts, canvas, widthMm, heightMm));
   }
+  writeGeoPdfViewports(pdf as jsPDF, viewports);
   const bytes = new Uint8Array((pdf as jsPDF).output("arraybuffer"));
   return saveBinaryFileWithFallback(bytes, {
     defaultName: filename,

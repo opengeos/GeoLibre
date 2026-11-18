@@ -17,6 +17,7 @@ import {
   type MarkerShape,
 } from "@geolibre/core";
 import { prefersLightForeground } from "./theme-schemes";
+import type { CaptureGeoref, MapImagePlacement } from "./geopdf";
 
 export type PaperSizeId =
   | "a4"
@@ -507,6 +508,12 @@ export interface LayoutOptions {
    * an active graticule's edge labels are not trimmed by the cover crop.
    */
   mapFit?: "cover" | "contain";
+  /**
+   * Georeference of {@link mapImage}, when the capture is an affine view of the
+   * map's CRS. PDF export writes it as a GeoPDF viewport (GH #3523); null or
+   * absent exports a plain PDF.
+   */
+  mapGeoref?: CaptureGeoref | null;
 }
 
 const PAGE_BACKGROUND = "#ffffff";
@@ -669,6 +676,44 @@ function coverScaleFor(
   return fit === "contain"
     ? Math.min(bodyW / imgW, bodyH / imgH)
     : Math.max(bodyW / imgW, bodyH / imgH);
+}
+
+/**
+ * Where the captured map image lands on a page drawn at `W` x `H` pixels: the
+ * same cover/contain placement {@link drawLayoutContext} draws, plus the part of
+ * it the body's clip leaves visible. GeoPDF export georeferences that visible
+ * rectangle (GH #3523).
+ *
+ * @param opts - Layout content and options.
+ * @param W - Page width in pixels.
+ * @param H - Page height in pixels.
+ * @returns The placement, or null when there is no captured image or nothing of
+ *   it is visible.
+ */
+export function mapImagePlacement(
+  opts: LayoutOptions,
+  W: number,
+  H: number,
+): MapImagePlacement | null {
+  if (!opts.mapImage || opts.mapImageWidth <= 0 || opts.mapImageHeight <= 0) return null;
+  const { bodyX, bodyY, bodyW, bodyH } = computeBodyRect(opts, W, H);
+  const scale = coverScaleFor(
+    bodyW,
+    bodyH,
+    opts.mapImageWidth,
+    opts.mapImageHeight,
+    opts.mapFit ?? "cover",
+  );
+  const drawW = opts.mapImageWidth * scale;
+  const drawH = opts.mapImageHeight * scale;
+  const dx = bodyX + (bodyW - drawW) / 2;
+  const dy = bodyY + (bodyH - drawH) / 2;
+  const x0 = Math.max(bodyX, dx);
+  const y0 = Math.max(bodyY, dy);
+  const x1 = Math.min(bodyX + bodyW, dx + drawW);
+  const y1 = Math.min(bodyY + bodyH, dy + drawH);
+  if (!(x1 > x0) || !(y1 > y0)) return null;
+  return { clip: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, dx, dy, scale };
 }
 
 /**

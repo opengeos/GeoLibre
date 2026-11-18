@@ -67,6 +67,11 @@ export interface PrintLayoutConfig {
   showPageBorder: boolean;
   pageBorderColor: string;
   pageBorderWidth: number;
+  /**
+   * Resolution PNG and PDF exports rasterize a paper page at. Screen-sized
+   * pages are exact pixels and ignore it.
+   */
+  exportDpi: PrintLayoutExportDpi;
 
   // Map frame
   mapBorderColor: string;
@@ -156,6 +161,10 @@ export interface PrintLayoutConfig {
   atlasFilenamePattern: string;
 }
 
+/** The export resolutions the composer offers, in dots per inch. */
+export const PRINT_LAYOUT_EXPORT_DPIS = [72, 150, 300] as const;
+export type PrintLayoutExportDpi = (typeof PRINT_LAYOUT_EXPORT_DPIS)[number];
+
 const CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
 const PAGE_FILTERS = ["all", "contained", "intersecting"] as const;
 
@@ -181,6 +190,7 @@ export const DEFAULT_PRINT_LAYOUT: PrintLayoutConfig = {
   showPageBorder: false,
   pageBorderColor: "#111827",
   pageBorderWidth: 2,
+  exportDpi: 150,
 
   mapBorderColor: "#9ca3af",
   mapBorderWidth: 1,
@@ -346,6 +356,13 @@ function claimsId(value: unknown[], index: number, id: string): boolean {
   return false;
 }
 
+/** One of the offered export resolutions, or `fallback` for anything else. */
+function exportDpi(value: unknown, fallback: PrintLayoutExportDpi): PrintLayoutExportDpi {
+  return (PRINT_LAYOUT_EXPORT_DPIS as readonly unknown[]).includes(value)
+    ? (value as PrintLayoutExportDpi)
+    : fallback;
+}
+
 function extent(value: unknown): [number, number, number, number] | null {
   if (!Array.isArray(value) || value.length !== 4) return null;
   if (!value.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
@@ -395,6 +412,7 @@ export function normalizePrintLayoutConfig(value: unknown): PrintLayoutConfig | 
     // A page border is drawn only when `showPageBorder` is on, so a zero width
     // would be an invisible "visible" border; the editor's own floor is 1.
     pageBorderWidth: num(raw.pageBorderWidth, d.pageBorderWidth, 1, 20),
+    exportDpi: exportDpi(raw.exportDpi, d.exportDpi),
 
     mapBorderColor: str(raw.mapBorderColor, d.mapBorderColor),
     mapBorderWidth: num(raw.mapBorderWidth, d.mapBorderWidth, 0, 10),

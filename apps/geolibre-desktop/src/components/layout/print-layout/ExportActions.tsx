@@ -8,6 +8,8 @@ import type { useExportActions } from "./useExportActions";
 interface ExportActionsProps {
   ui: Pick<PrintLayoutUiState, "atlasProgress" | "atlasBusy" | "exporting" | "copied">;
   hasCapture: boolean;
+  /** Whether the capture carries a georeference, so the PDF is a GeoPDF. */
+  georeferenced: boolean;
   /** The atlas setting, AND-ed with the renderer being able to drive it. */
   atlasEnabled: boolean;
   atlas: AtlasSeries;
@@ -18,6 +20,7 @@ interface ExportActionsProps {
 export function ExportActions({
   ui,
   hasCapture,
+  georeferenced,
   atlasEnabled,
   atlas,
   actions,
@@ -86,6 +89,15 @@ export function ExportActions({
           atlasBusy ||
           atlasConfigBlocked ||
           (atlasEnabled ? !atlasActive : !hasCapture)
+        }
+        // Say whether the PDF carries map coordinates (GeoPDF, GH #3523): a
+        // tilted or globe view exports as a plain PDF.
+        title={
+          hasCapture
+            ? georeferenced
+              ? t("printLayout.geoPdf.georeferenced")
+              : t("printLayout.geoPdf.notGeoreferenced")
+            : undefined
         }
         onClick={() => void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))}
       >
