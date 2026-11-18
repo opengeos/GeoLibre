@@ -579,8 +579,14 @@ export class MapController implements MapEngine {
         } catch {
           // Not a box MapLibre reads either; let it report that.
         }
-        const padding = typeof options?.padding === "number" ? options.padding : FIT_BOUNDS_PADDING;
-        if (box && box.every(Number.isFinite) && this.fitInMapCrs(box, null, padding) !== null) {
+        // The caller's animation and zoom ceiling carry over to a clipped fit.
+        const fit = {
+          padding: typeof options?.padding === "number" ? options.padding : FIT_BOUNDS_PADDING,
+          duration: options?.duration,
+          animate: options?.animate,
+          maxZoom: options?.maxZoom,
+        };
+        if (box && box.every(Number.isFinite) && this.fitInMapCrs(box, null, fit) !== null) {
           return map;
         }
       }
@@ -1728,7 +1734,7 @@ export class MapController implements MapEngine {
   isLayerOutsideMapCrs(layer: GeoLibreLayer): boolean {
     const crs = this.activeCrs;
     const converter = this.activeCrsConverter;
-    if (!crs || !converter || layer.type === "3d-tiles") return false;
+    if (!crs || !converter) return false;
     const bounds = this.resolveLayerBounds(layer);
     if (!bounds) return false;
     return placeExtentInMapCrs(bounds, converter, crs.tileMatrixSet)?.kind === "outside";
@@ -1746,7 +1752,7 @@ export class MapController implements MapEngine {
   private fitInMapCrs(
     bounds: [number, number, number, number],
     minRenderZoom: number | null,
-    padding: number = FIT_BOUNDS_PADDING,
+    options: { padding?: number; duration?: number; animate?: boolean; maxZoom?: number } = {},
   ): boolean | null {
     const map = this.map;
     const crs = this.activeCrs;
@@ -1762,14 +1768,21 @@ export class MapController implements MapEngine {
       converter,
       crs.tileMatrixSet,
       viewport,
-      padding,
+      options.padding ?? FIT_BOUNDS_PADDING,
     );
     if (!camera) return null;
     const zoom = Math.min(
       Math.max(camera.zoom, minRenderZoom ?? 0),
       typeof map.getMaxZoom === "function" ? map.getMaxZoom() : 24,
+      options.maxZoom ?? Infinity,
     );
-    map.flyTo({ center: camera.center, zoom, bearing: 0, duration: 800 });
+    map.flyTo({
+      center: camera.center,
+      zoom,
+      bearing: 0,
+      duration: options.duration ?? 800,
+      ...(options.animate === undefined ? {} : { animate: options.animate }),
+    });
     return true;
   }
 

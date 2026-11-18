@@ -55,7 +55,32 @@ describe("map-crs-fit", () => {
     const [gridMinX, gridMinY, gridMaxX, gridMaxY] = mapCrsGridBox(grid);
     const [minX, minY, maxX, maxY] = placement.box;
     assert.ok(minX >= gridMinX && minY >= gridMinY && maxX <= gridMaxX && maxY <= gridMaxY);
-    assert.equal(minY, gridMinY, "the southern part is cut at the grid edge");
+    assert.ok(
+      minY - gridMinY < grid.extentAtZoom0 * 0.05,
+      "the southern part is cut at the grid edge",
+    );
+  });
+
+  it("samples a box written across the antimeridian on its real meridians", () => {
+    const plate = getMapCrsPreset("earth-cylindrical")!;
+    const lngLat = proj4(plate.definition);
+    // [170, 190] is Fiji-ish: wrapped, it is on the grid, not half past its edge.
+    assert.deepEqual(placeExtentInMapCrs([170, -20, 190, -10], lngLat, plate.tileMatrixSet), {
+      kind: "inside",
+    });
+  });
+
+  it("tests the footprint, not its box: a band of latitude past a polar grid's edge is outside", () => {
+    const moon = getMapCrsPreset("moon-north-polar");
+    assert.ok(moon, "the Moon north polar preset exists");
+    const moonConverter = proj4(moon.definition);
+    // The band's box covers the whole grid, but the band itself rings it.
+    const box = projectBoundsToCrs([-180, 0, 180, 10], moonConverter)!;
+    const gridBox = mapCrsGridBox(moon.tileMatrixSet);
+    assert.ok(box[0] <= gridBox[0] && box[2] >= gridBox[2]);
+    assert.deepEqual(placeExtentInMapCrs([-180, 0, 180, 10], moonConverter, moon.tileMatrixSet), {
+      kind: "outside",
+    });
   });
 
   it("returns null for an extent that does not project", () => {
@@ -200,6 +225,30 @@ describe("MapController.fitLayer in a custom CRS", () => {
     internal.activeCrs = null;
     map.fitBounds(KNOXVILLE);
     assert.deepEqual(calls, ["flyTo", "fitBounds", "fitBounds"], "the default map passes through");
+  });
+
+  it("carries the caller's animation and zoom ceiling into a clipped fit", () => {
+    const { controller, flyTo } = crsController();
+    const internal = controller as unknown as Internals;
+    const map = internal.map as { fitBounds: (...args: unknown[]) => unknown };
+    internal.guardMapCrsFits(map);
+    map.fitBounds(CONUS, { animate: false, duration: 0, maxZoom: 0 });
+    assert.deepEqual(
+      [
+        (flyTo[0] as { animate?: boolean }).animate,
+        (flyTo[0] as { duration: number }).duration,
+        (flyTo[0] as { zoom: number }).zoom,
+      ],
+      [false, 0, 0],
+    );
+  });
+
+  it("reports a 3D Tiles layer with only bounds, off the grid, as outside the CRS", () => {
+    const { controller, calls } = crsController();
+    const layer = { ...pmtilesLayer(KNOXVILLE), type: "3d-tiles" } as GeoLibreLayer;
+    assert.equal(controller.fitLayer(layer), false);
+    assert.deepEqual(calls, []);
+    assert.equal(controller.isLayerOutsideMapCrs(layer), true);
   });
 
   it("leaves the default map's fit alone", () => {

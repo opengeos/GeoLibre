@@ -35,7 +35,7 @@ export type MapCrsExtentPlacement =
   | { kind: "clipped"; box: CrsBox };
 
 /** Samples per edge of the lng/lat box; polar grids bend its edges into arcs. */
-const SAMPLES_PER_EDGE = 16;
+const SAMPLES_PER_EDGE = 32;
 
 /**
  * The grid square of a tile matrix set, `[minX, minY, maxX, maxY]` in CRS
@@ -54,6 +54,57 @@ export function mapCrsGridBox(tileMatrixSet: MapCrsTileMatrixSet): CrsBox {
 }
 
 /**
+ * Points sampled over a lng/lat extent, projected into the CRS.
+ *
+ * Longitudes are wrapped into [-180, 180] before projecting, so a box written
+ * across the antimeridian (`[170, -10, 190, 10]`) samples the real meridians
+ * on a geographic grid rather than ones past its edge.
+ *
+ * Args:
+ *   bounds: `[west, south, east, north]` in degrees.
+ *   converter: The CRS converter.
+ *
+ * Returns:
+ *   The finite projected samples, `[x, y]` in CRS units.
+ */
+function sampleBoundsInCrs(
+  bounds: [number, number, number, number],
+  converter: MapCrsConverter,
+): [number, number][] {
+  const [west, south, east, north] = bounds;
+  const points: [number, number][] = [];
+  for (let i = 0; i <= SAMPLES_PER_EDGE; i++) {
+    const raw = west + ((east - west) * i) / SAMPLES_PER_EDGE;
+    const lng = raw > 180 || raw < -180 ? ((((raw + 180) % 360) + 360) % 360) - 180 : raw;
+    for (let j = 0; j <= SAMPLES_PER_EDGE; j++) {
+      const lat = south + ((north - south) * j) / SAMPLES_PER_EDGE;
+      let point: number[];
+      try {
+        point = converter.forward([lng, lat]);
+      } catch {
+        continue;
+      }
+      const [x, y] = point;
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push([x, y]);
+    }
+  }
+  return points;
+}
+
+/** The box around `points`, or null when there are none. */
+function boxAround(points: readonly [number, number][]): CrsBox | null {
+  if (!points.length) return null;
+  const box: CrsBox = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of points) {
+    if (x < box[0]) box[0] = x;
+    if (y < box[1]) box[1] = y;
+    if (x > box[2]) box[2] = x;
+    if (y > box[3]) box[3] = y;
+  }
+  return box;
+}
+
+/**
  * The CRS-plane box around a lng/lat extent, from points sampled over it.
  *
  * Args:
@@ -67,34 +118,15 @@ export function projectBoundsToCrs(
   bounds: [number, number, number, number],
   converter: MapCrsConverter,
 ): CrsBox | null {
-  const [west, south, east, north] = bounds;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i <= SAMPLES_PER_EDGE; i++) {
-    const lng = west + ((east - west) * i) / SAMPLES_PER_EDGE;
-    for (let j = 0; j <= SAMPLES_PER_EDGE; j++) {
-      const lat = south + ((north - south) * j) / SAMPLES_PER_EDGE;
-      let point: number[];
-      try {
-        point = converter.forward([lng, lat]);
-      } catch {
-        continue;
-      }
-      const [x, y] = point;
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  }
-  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
+  return boxAround(sampleBoundsInCrs(bounds, converter));
 }
 
 /**
  * Place a lng/lat extent on a CRS's tile grid.
+ *
+ * The test is on the sampled footprint, not its bounding box: a band of
+ * latitude around a polar grid has a box that covers the whole grid while
+ * the band itself may lie wholly past its edge.
  *
  * Args:
  *   bounds: `[west, south, east, north]` in degrees.
@@ -110,26 +142,31 @@ export function placeExtentInMapCrs(
   converter: MapCrsConverter,
   tileMatrixSet: MapCrsTileMatrixSet,
 ): MapCrsExtentPlacement | null {
-  const box = projectBoundsToCrs(bounds, converter);
+  const points = sampleBoundsInCrs(bounds, converter);
+  const box = boxAround(points);
   if (!box) return null;
   const grid = mapCrsGridBox(tileMatrixSet);
   // A sliver of float noise along the grid edge is still "on" it.
   const tolerance = tileMatrixSet.extentAtZoom0 * 1e-9;
-  const clipped: CrsBox = [
-    Math.max(box[0], grid[0]),
-    Math.max(box[1], grid[1]),
-    Math.min(box[2], grid[2]),
-    Math.min(box[3], grid[3]),
-  ];
-  if (clipped[0] > clipped[2] + tolerance || clipped[1] > clipped[3] + tolerance) {
-    return { kind: "outside" };
-  }
-  const inside =
-    box[0] >= grid[0] - tolerance &&
-    box[1] >= grid[1] - tolerance &&
-    box[2] <= grid[2] + tolerance &&
-    box[3] <= grid[3] + tolerance;
-  return inside ? { kind: "inside" } : { kind: "clipped", box: clipped };
+  const onGrid = ([x, y]: [number, number]) =>
+    x >= grid[0] - tolerance &&
+    y >= grid[1] - tolerance &&
+    x <= grid[2] + tolerance &&
+    y <= grid[3] + tolerance;
+  const inside = points.filter(onGrid);
+  if (inside.length === points.length) return { kind: "inside" };
+  const clipped = boxAround(inside);
+  if (!clipped) return { kind: "outside" };
+  // Clamp the noise allowance back onto the grid.
+  return {
+    kind: "clipped",
+    box: [
+      Math.max(clipped[0], grid[0]),
+      Math.max(clipped[1], grid[1]),
+      Math.min(clipped[2], grid[2]),
+      Math.min(clipped[3], grid[3]),
+    ],
+  };
 }
 
 /**
