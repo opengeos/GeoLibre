@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Iterable
 from typing import Any, Callable, Optional
 
 WGS84 = "EPSG:4326"
@@ -412,6 +413,74 @@ def _clip(
     return _to_feature_collection(clipped), [f"Clip: produced {len(clipped)} feature(s)"]
 
 
+# Suffix a join tool gives a join field whose name clashes with an input field;
+# mirrors the client's JOIN_FIELD_SUFFIX and GeoPandas' sjoin rsuffix.
+_JOIN_FIELD_SUFFIX = "_right"
+
+
+def _join_field_output_names(input_keys: Iterable[str], join_keys: Iterable[str]) -> dict[str, str]:
+    """Output name for each join field so no two columns differ only in case.
+
+    Mirrors the client's ``joinFieldOutputNames``. DuckDB treats column names
+    case-insensitively, so a join that keeps both ``NAME`` and ``name`` yields a
+    layer the SQL workspace cannot query (issue #3514). A join field that exactly
+    matches an input field keeps its name (the input value wins); one that
+    matches an input field, or an earlier join field, only case-insensitively is
+    renamed ``<name>_right`` (then ``<name>_right_2``, ...).
+
+    Args:
+        input_keys: Every property name on the input (target) features.
+        join_keys: Join-layer property names in first-seen order.
+
+    Returns:
+        A mapping from each join key to its output name.
+    """
+    input_set = set(input_keys)
+    taken = {key.lower() for key in input_set}
+    names: dict[str, str] = {}
+    for key in join_keys:
+        if key in names:
+            continue
+        if key in input_set:
+            names[key] = key
+            continue
+        name = key
+        if name.lower() in taken:
+            name = f"{key}{_JOIN_FIELD_SUFFIX}"
+            n = 2
+            while name.lower() in taken:
+                name = f"{key}{_JOIN_FIELD_SUFFIX}_{n}"
+                n += 1
+        taken.add(name.lower())
+        names[key] = name
+    return names
+
+
+def _dedupe_columns_case_insensitive(columns: Iterable[str]) -> list[str]:
+    """Rename later columns that repeat an earlier one ignoring case.
+
+    A safety net after ``gpd.sjoin``: its own ``_left``/``_right`` suffixes can
+    land on a name another column already has in a different case.
+
+    Args:
+        columns: Column names in output order.
+
+    Returns:
+        The names with each case-insensitive repeat suffixed ``_2``, ``_3``, ...
+    """
+    taken: set[str] = set()
+    out: list[str] = []
+    for column in columns:
+        name = column
+        n = 2
+        while name.lower() in taken:
+            name = f"{column}_{n}"
+            n += 1
+        taken.add(name.lower())
+        out.append(name)
+    return out
+
+
 # Spatial-join predicates exposed by the UI (a safe subset of the predicates
 # GeoPandas' spatial index accepts). The relationship reads left (input) → right
 # (join): "within" is input-within-join, "contains" is input-contains-join.
@@ -447,10 +516,17 @@ def _spatial_join(
             [f"Spatial join: produced {len(result)} feature(s)"],
         )
     right = _load_gdf(overlay, "Join layer")
+    # sjoin suffixes exact name clashes _left/_right but keeps `NAME` and `name`
+    # side by side; rename case-only clashes first (issue #3514).
+    left_columns = [c for c in left.columns if c != left.geometry.name]
+    right_columns = [c for c in right.columns if c != right.geometry.name]
+    renames = _join_field_output_names(left_columns, right_columns)
+    right = right.rename(columns={k: v for k, v in renames.items() if k != v})
     joined = gpd.sjoin(left, right, predicate=predicate, how=how)
     # sjoin appends an "index_right" bookkeeping column; drop it so the output
     # carries only the two layers' real attributes.
     joined = joined.drop(columns=["index_right"], errors="ignore")
+    joined.columns = _dedupe_columns_case_insensitive(joined.columns)
     return (
         _to_feature_collection(joined),
         [f"Spatial join: produced {len(joined)} feature(s)"],
@@ -719,7 +795,14 @@ def _attribute_join(
         if key not in lookup:
             lookup[key] = props
 
-    null_fill = {f: None for f in selected_fields}
+    # Rename brought-over fields that clash case-insensitively with a target
+    # field, so the output never carries both `NAME` and `name` (issue #3514).
+    input_keys: dict[str, None] = {}
+    for feature in geojson["features"]:
+        if isinstance(feature, dict):
+            input_keys.update(dict.fromkeys(feature.get("properties") or {}))
+    output_names = _join_field_output_names(input_keys, selected_fields)
+    null_fill = {output_names[f]: None for f in selected_fields}
     input_features = geojson["features"]
     results = []
     matched = 0
@@ -749,7 +832,7 @@ def _attribute_join(
         matched += 1
         # .get returns None for a key absent from this particular join row,
         # matching the client's null fill for a schemaless join layer.
-        picked = {f: join_props.get(f) for f in selected_fields}
+        picked = {output_names[f]: join_props.get(f) for f in selected_fields}
         # Target attributes win on name collisions with brought-over fields.
         picked.update(props)
         out = {

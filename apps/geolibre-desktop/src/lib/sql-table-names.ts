@@ -172,3 +172,35 @@ export function previewLayerTables(layers: GeoLibreLayer[]): SqlWorkspaceTable[]
     layerName: layer.name,
   }));
 }
+
+/** A layer the SQL workspace skipped because DuckDB could not load it. */
+export interface SqlLayerRegistrationFailure {
+  /** SQL identifier the layer would have been queryable as. */
+  tableName: string;
+  /** The layer's display name. */
+  layerName: string;
+  /** DuckDB's error message. */
+  message: string;
+}
+
+/**
+ * Append the layers that could not be registered to a query error, so a query
+ * that fails because it names a skipped table says why the table is missing.
+ *
+ * @param error What the query threw.
+ * @param failures Layers registerLayerTables skipped for this run.
+ * @returns The original error when nothing was skipped, otherwise a new Error.
+ */
+export function withRegistrationFailures(
+  error: unknown,
+  failures: SqlLayerRegistrationFailure[],
+): unknown {
+  if (!failures.length) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  const details = failures
+    .map((failure) => `"${failure.tableName}" (layer "${failure.layerName}"): ${failure.message}`)
+    .join("\n");
+  return new Error(`${message}\n\nThese layers could not be loaded as tables:\n${details}`, {
+    cause: error,
+  });
+}

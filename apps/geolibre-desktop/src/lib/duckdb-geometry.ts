@@ -487,3 +487,77 @@ export function stripAutoFidColumn(geojson: FeatureCollection): FeatureCollectio
   });
   return { ...geojson, features };
 }
+
+/**
+ * Rename map for property names that repeat an earlier name ignoring case.
+ *
+ * The first casing of a name keeps it; each later casing becomes `<name>_1`,
+ * `<name>_2`, ... (skipping any name already taken in any casing). Keys that
+ * need no rename are left out of the map.
+ *
+ * @param keys Property names in first-seen order.
+ * @returns Map from each clashing key to its replacement.
+ */
+export function caseInsensitiveKeyRenames(keys: Iterable<string>): Map<string, string> {
+  const ordered = [...new Set(keys)];
+  const taken = new Set<string>();
+  const firstCasing = new Map<string, string>();
+  for (const key of ordered) {
+    const lower = key.toLowerCase();
+    if (!firstCasing.has(lower)) firstCasing.set(lower, key);
+    taken.add(lower);
+  }
+  const renames = new Map<string, string>();
+  for (const key of ordered) {
+    if (firstCasing.get(key.toLowerCase()) === key) continue;
+    let n = 1;
+    let name = `${key}_${n}`;
+    while (taken.has(name.toLowerCase())) name = `${key}_${(n += 1)}`;
+    taken.add(name.toLowerCase());
+    renames.set(key, name);
+  }
+  return renames;
+}
+
+/**
+ * Return a copy of `geojson` whose property names are unique ignoring case.
+ *
+ * GDAL's GeoJSON driver keeps `NAME` and `name` as two fields, but DuckDB column
+ * names are case-insensitive, so `ST_Read` fails to bind with
+ * `duplicate column name "NAME"` (issue #3514). In the SQL workspace that one
+ * layer used to break every query, so later casings are renamed (`name_1`)
+ * across the whole collection, even when the casings sit on different features.
+ * The same object is returned when nothing clashes.
+ *
+ * @param geojson Feature collection about to be handed to `ST_Read`.
+ * @returns The collection with case-only duplicate property names renamed.
+ */
+export function dedupeCaseInsensitiveProperties(geojson: FeatureCollection): FeatureCollection {
+  const keys = new Set<string>();
+  for (const feature of geojson.features) {
+    for (const key in feature.properties ?? {}) keys.add(key);
+  }
+  const renames = caseInsensitiveKeyRenames(keys);
+  if (!renames.size) return geojson;
+  const features = geojson.features.map((feature) => {
+    const props = feature.properties;
+    if (!props || !Object.keys(props).some((key) => renames.has(key))) return feature;
+    const renamed = Object.fromEntries(
+      Object.entries(props).map(([key, value]) => [renames.get(key) ?? key, value]),
+    );
+    return { ...feature, properties: renamed };
+  });
+  return { ...geojson, features };
+}
+
+/**
+ * Prepare an in-memory layer for `ST_Read`: drop GDAL's reserved `OGC_FID` and
+ * rename case-only duplicate property names, either of which would otherwise
+ * make the read fail with a duplicate-column binder error.
+ *
+ * @param geojson Feature collection about to be handed to `ST_Read`.
+ * @returns A collection `ST_Read` can bind (the input when no change is needed).
+ */
+export function prepareGeoJsonForStRead(geojson: FeatureCollection): FeatureCollection {
+  return dedupeCaseInsensitiveProperties(stripAutoFidColumn(geojson));
+}

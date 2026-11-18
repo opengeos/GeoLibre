@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import {
+  caseInsensitiveKeyRenames,
+  dedupeCaseInsensitiveProperties,
   detectGeometryColumn,
   geometryExpr,
   geometryGeoJsonSql,
@@ -9,6 +11,7 @@ import {
   isGeometryColumnType,
   isUnsupportedSurfaceWkbError,
   normalizePropertyValue,
+  prepareGeoJsonForStRead,
   stripAutoFidColumn,
   SYNTHESIZED_GEOMETRY_COLUMN,
   wkbRowsToFeatureCollection,
@@ -551,5 +554,54 @@ describe("wkbRowsToFeatureCollection", () => {
     );
     assert.equal(out.features[0].geometry, null);
     assert.equal(out.features[1].geometry, null);
+  });
+});
+
+// DuckDB column names are case-insensitive, so ST_Read of a GeoJSON carrying
+// both NAME and name fails with `duplicate column name "NAME"`. A spatial join
+// output like that used to break every SQL workspace query (issue #3514).
+describe("dedupeCaseInsensitiveProperties", () => {
+  const fc = (...props: Record<string, unknown>[]): FeatureCollection => ({
+    type: "FeatureCollection",
+    features: props.map((properties) => ({
+      type: "Feature",
+      properties,
+      geometry: { type: "Point", coordinates: [0, 0] },
+    })),
+  });
+
+  it("renames later casings with a numeric suffix", () => {
+    const out = dedupeCaseInsensitiveProperties(fc({ NAME: "France", name: "Paris", pop: 1 }));
+    assert.deepEqual(out.features[0].properties, { NAME: "France", name_1: "Paris", pop: 1 });
+  });
+
+  it("renames consistently across features whose casings differ", () => {
+    const out = dedupeCaseInsensitiveProperties(fc({ Name: "a" }, { name: "b" }, { Name: "c" }));
+    assert.deepEqual(
+      out.features.map((f) => f.properties),
+      [{ Name: "a" }, { name_1: "b" }, { Name: "c" }],
+    );
+  });
+
+  it("skips a suffixed name that already exists in any casing", () => {
+    const out = dedupeCaseInsensitiveProperties(fc({ name: "a", NAME_1: "b", Name: "c" }));
+    assert.deepEqual(out.features[0].properties, { name: "a", NAME_1: "b", Name_2: "c" });
+  });
+
+  it("returns the same collection when nothing clashes", () => {
+    const input = fc({ name: "a", pop: 1 }, { name: "b" });
+    assert.equal(dedupeCaseInsensitiveProperties(input), input);
+  });
+
+  it("is applied with the OGC_FID strip before ST_Read", () => {
+    const out = prepareGeoJsonForStRead(fc({ ogc_fid: 1, NAME: "a", name: "b" }));
+    assert.deepEqual(out.features[0].properties, { NAME: "a", name_1: "b" });
+  });
+
+  it("caseInsensitiveKeyRenames lists only the keys that need renaming", () => {
+    assert.deepEqual(
+      Object.fromEntries(caseInsensitiveKeyRenames(["NAME", "pop", "name", "Name"])),
+      { name: "name_1", Name: "Name_2" },
+    );
   });
 });
