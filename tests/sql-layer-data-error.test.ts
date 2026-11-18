@@ -6,7 +6,7 @@ import { isLayerDataError } from "../apps/geolibre-desktop/src/lib/sql-table-nam
 // failure (the spatial extension missing, a poisoned instance) must still fail.
 describe("isLayerDataError", () => {
   it("skips a layer whose data DuckDB rejects", () => {
-    assert.equal(isLayerDataError(new Error("Binder Error: duplicate column name \"NAME\"")), true);
+    assert.equal(isLayerDataError(new Error('Binder Error: duplicate column name "NAME"')), true);
     assert.equal(isLayerDataError(new Error("Conversion Error: could not convert value")), true);
   });
 
