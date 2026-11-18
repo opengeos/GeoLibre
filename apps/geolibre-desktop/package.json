@@ -99,7 +99,7 @@
     "maplibre-gl-swipe": "^0.14.0",
     "maplibre-gl-time-slider": "^1.8.7",
     "maplibre-gl-usgs-lidar": "^0.11.5",
-    "maplibre-gl-vector": "^0.11.1",
+    "maplibre-gl-vector": "^0.11.2",
     "maplibre-tilepackage-protocol": "^1.2.2",
     "openai": "^7.57.0",
     "proj4": "^2.23.0",
