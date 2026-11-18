@@ -43,7 +43,9 @@ export function useLastBasemapPersistence(): void {
         ? null
         : (getPlanetaryBasemapByStyleUrl(storedBasemap)?.ellipsoidId ?? DEFAULT_ELLIPSOID_ID);
     // A map CRS on screen keeps its body; skipped, the remembered basemap is
-    // also left in storage for the next launch.
+    // also left in storage for the next launch. The CRS lives in project
+    // preferences, not device storage, so in the untitled startup workspace
+    // only a `?crs=` link can have put one there.
     const crsBodyConflict =
       storedBody !== null &&
       normalizeMapCrs(state.preferences.map.mapCrs) !== undefined &&

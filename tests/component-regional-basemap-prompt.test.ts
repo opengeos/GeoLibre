@@ -12,6 +12,7 @@ const { RegionalBasemapSection } =
 const {
   CHINA_BASEMAPS,
   DEFAULT_BASEMAP,
+  OPENFREEMAP_BASEMAPS,
   PLANETARY_BASEMAPS,
   createEmptyProject,
   mapCrsPreferencePatch,
@@ -190,12 +191,17 @@ describe("useLastBasemapPersistence", () => {
   }
 
   it("keeps a linked planetary CRS's body over a remembered Earth basemap", () => {
-    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, DEFAULT_BASEMAP);
+    // An Earth basemap other than the one on screen, so neither a restore nor
+    // the mount's write can pass unnoticed.
+    const earth = OPENFREEMAP_BASEMAPS.find((basemap) => basemap.styleUrl !== DEFAULT_BASEMAP)!;
+    window.localStorage.setItem(LAST_BASEMAP_STORAGE_KEY, earth.styleUrl);
+    useAppStore.setState({ basemapStyleUrl: DEFAULT_BASEMAP });
     seedLinkedCrs("mars-north-polar");
     const hook = renderHook(() => useLastBasemapPersistence());
     assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "mars");
     assert.equal(useAppStore.getState().preferences.map.mapCrs, "mars-north-polar");
-    assert.equal(readLastBasemap(), DEFAULT_BASEMAP);
+    assert.equal(useAppStore.getState().basemapStyleUrl, DEFAULT_BASEMAP);
+    assert.equal(readLastBasemap(), earth.styleUrl);
     hook.unmount();
   });
 
