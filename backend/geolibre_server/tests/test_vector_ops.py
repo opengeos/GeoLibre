@@ -563,6 +563,18 @@ def test_spatial_join_renames_case_only_name_clashes() -> None:
     assert props == {"NAME": "Atlantis", "name_right": "Capital"}
 
 
+@requires_geopandas
+def test_spatial_join_does_not_rename_onto_the_sjoin_index_column() -> None:
+    # Renaming the join layer's `index` to `index_right` would collide with the
+    # bookkeeping column gpd.sjoin adds, which it refuses to overwrite.
+    countries = _named({"INDEX": 1}, SQUARE["features"][0]["geometry"])
+    places = _named({"index": 2}, POINT_IN_SQUARE["features"][0]["geometry"])
+    geojson, _ = run_vector_tool(
+        "spatial-join", countries, places, parameters={"predicate": "contains"}
+    )
+    assert geojson["features"][0]["properties"] == {"INDEX": 1, "index_right_2": 2}
+
+
 def test_join_field_output_names_dedupes_case_insensitively() -> None:
     names = vector_ops._join_field_output_names(
         ["NAME", "name_right", "id"], ["name", "id", "Id", "pop"]

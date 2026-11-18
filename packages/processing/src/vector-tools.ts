@@ -998,7 +998,9 @@ function renameProperties(
   properties: GeoJsonProperties,
   names: Map<string, string>,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  // A null prototype keeps a `__proto__` key as an ordinary own property
+  // (assignment into `{}` would hit the inherited setter and drop it).
+  const out: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(properties ?? {})) {
     out[names.get(key) ?? key] = value;
   }

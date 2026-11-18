@@ -418,7 +418,9 @@ def _clip(
 _JOIN_FIELD_SUFFIX = "_right"
 
 
-def _join_field_output_names(input_keys: Iterable[str], join_keys: Iterable[str]) -> dict[str, str]:
+def _join_field_output_names(
+    input_keys: Iterable[str], join_keys: Iterable[str], reserved: Iterable[str] = ()
+) -> dict[str, str]:
     """Output name for each join field so no two columns differ only in case.
 
     Mirrors the client's ``joinFieldOutputNames``. DuckDB treats column names
@@ -431,12 +433,14 @@ def _join_field_output_names(input_keys: Iterable[str], join_keys: Iterable[str]
     Args:
         input_keys: Every property name on the input (target) features.
         join_keys: Join-layer property names in first-seen order.
+        reserved: Names no join field may take in any casing, such as the
+            ``index_right`` column ``gpd.sjoin`` adds itself.
 
     Returns:
         A mapping from each join key to its output name.
     """
     input_set = set(input_keys)
-    taken = {key.lower() for key in input_set}
+    taken = {key.lower() for key in input_set} | {key.lower() for key in reserved}
     names: dict[str, str] = {}
     for key in join_keys:
         if key in names:
@@ -520,7 +524,10 @@ def _spatial_join(
     # side by side; rename case-only clashes first (issue #3514).
     left_columns = [c for c in left.columns if c != left.geometry.name]
     right_columns = [c for c in right.columns if c != right.geometry.name]
-    renames = _join_field_output_names(left_columns, right_columns)
+    # Reserve the index column sjoin adds, which it refuses to overwrite.
+    renames = _join_field_output_names(
+        left_columns, right_columns, reserved=("index_left", "index_right")
+    )
     right = right.rename(columns={k: v for k, v in renames.items() if k != v})
     joined = gpd.sjoin(left, right, predicate=predicate, how=how)
     # sjoin appends an "index_right" bookkeeping column; drop it so the output

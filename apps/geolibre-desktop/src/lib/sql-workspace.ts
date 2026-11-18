@@ -144,6 +144,9 @@ const COLUMN_SCAN_FEATURE_LIMIT = 50;
  * @param renameCaseDuplicates Whether the engine renames property names that
  *   repeat another ignoring case (`name` next to `NAME` becomes `name_1`), as
  *   DuckDB registration does. Defaults to true; PGlite keeps them distinct.
+ *   The renames come from the scanned features only, so a clashing casing that
+ *   first appears past the scan limit can make a completion name differ from
+ *   the registered one; the query itself is unaffected.
  * @returns Table name and its column names, in the same naming as registration.
  */
 export function previewLayerColumns(

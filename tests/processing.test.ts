@@ -461,6 +461,59 @@ describe("processing registry", () => {
     );
   });
 
+  it("spatial join keeps a __proto__ property from the join layer", () => {
+    const square = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [0, 0],
+          [0, 10],
+          [10, 10],
+          [10, 0],
+          [0, 0],
+        ],
+      ],
+    };
+    const zones: GeoLibreLayer = {
+      ...layer,
+      id: "zones",
+      name: "Zones",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { zone: "z" }, geometry: square }],
+      },
+    };
+    const pts: GeoLibreLayer = {
+      ...layer,
+      id: "pts",
+      name: "Pts",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: JSON.parse('{"__proto__":"keep"}'),
+            geometry: { type: "Point", coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+    const tool = getVectorTool("spatial-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [zones, pts],
+      parameters: { layer: "zones", overlay: "pts", predicate: "contains" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    const props = out!.features[0].properties!;
+    assert.ok(Object.hasOwn(props, "__proto__"));
+    assert.equal(Object.getOwnPropertyDescriptor(props, "__proto__")?.value, "keep");
+  });
+
   it("joinFieldOutputNames keeps exact matches and suffixes case-only clashes", () => {
     const names = joinFieldOutputNames(["NAME", "name_right", "id"], ["name", "id", "Id", "pop"]);
     assert.deepEqual(Object.fromEntries(names), {
