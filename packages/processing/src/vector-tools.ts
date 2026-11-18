@@ -1594,7 +1594,9 @@ export const attributeJoinTool: ProcessingAlgorithm = {
       // Null prototype: a `__proto__` field stays an own property.
       const picked: Record<string, unknown> = Object.create(null);
       for (const f of selectedFields) {
-        picked[outputNames.get(f) ?? f] = joinProps[f] !== undefined ? joinProps[f] : null;
+        // Own properties only: an absent `__proto__` would read Object.prototype.
+        const value = Object.hasOwn(joinProps, f) ? joinProps[f] : undefined;
+        picked[outputNames.get(f) ?? f] = value !== undefined ? value : null;
       }
       results.push({
         type: "Feature",

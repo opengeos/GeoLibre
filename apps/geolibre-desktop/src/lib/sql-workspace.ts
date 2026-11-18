@@ -30,6 +30,7 @@ import { maskSqlLiterals, resolveCloudUrls } from "./sql-cloud-urls";
 export { maskSqlLiterals, resolveCloudUrls, rewriteCloudUrls } from "./sql-cloud-urls";
 import {
   assignTableNames,
+  isLayerDataError,
   withRegistrationFailures,
   type SqlLayerRegistrationFailure,
   type SqlWorkspaceTable,
@@ -249,18 +250,6 @@ export async function registerLayerTables(
   }
 
   return registered;
-}
-
-/**
- * DuckDB error classes a malformed layer can raise while `ST_Read` loads it
- * (a duplicate column, an unreadable value), as opposed to engine failures.
- */
-const LAYER_DATA_ERROR = /\b(?:Binder|Catalog|Conversion|Invalid Input|IO|Parser) Error\b/;
-
-/** True when a registration error is about the layer's data, not the engine. */
-function isLayerDataError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return LAYER_DATA_ERROR.test(message) && !/stoi:\s*no conversion/i.test(message);
 }
 
 /** Read the column names from a DuckDB-WASM Arrow result, even when empty. */

@@ -6,9 +6,9 @@ import {
   countFeaturesAlgorithm,
   getAlgorithm,
   getVectorTool,
+  joinFieldOutputNames,
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
-import { joinFieldOutputNames } from "../packages/processing/src/vector-tools";
 
 const layer: GeoLibreLayer = {
   id: "layer-a",
@@ -512,6 +512,52 @@ describe("processing registry", () => {
     const props = out!.features[0].properties!;
     assert.ok(Object.hasOwn(props, "__proto__"));
     assert.equal(Object.getOwnPropertyDescriptor(props, "__proto__")?.value, "keep");
+  });
+
+  it("attribute join gives null for a __proto__ field a matched row lacks", () => {
+    const target: GeoLibreLayer = {
+      ...layer,
+      id: "target",
+      name: "Target",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { id: 1 }, geometry: null as never },
+          { type: "Feature", properties: { id: 2 }, geometry: null as never },
+        ],
+      },
+    };
+    const table: GeoLibreLayer = {
+      ...layer,
+      id: "table",
+      name: "Table",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: JSON.parse('{"id":1,"__proto__":"keep"}'),
+            geometry: null as never,
+          },
+          { type: "Feature", properties: { id: 2 }, geometry: null as never },
+        ],
+      },
+    };
+    const tool = getVectorTool("attribute-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [target, table],
+      parameters: { layer: "target", overlay: "table", target_field: "id", join_field: "id" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    const [first, second] = out!.features.map((f) => f.properties!);
+    assert.equal(Object.getOwnPropertyDescriptor(first, "__proto__")?.value, "keep");
+    // The second row has no own __proto__, so the field is null, not Object.prototype.
+    assert.equal(Object.getOwnPropertyDescriptor(second, "__proto__")?.value, null);
   });
 
   it("joinFieldOutputNames keeps exact matches and suffixes case-only clashes", () => {

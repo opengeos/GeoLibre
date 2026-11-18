@@ -204,3 +204,22 @@ export function withRegistrationFailures(
     cause: error,
   });
 }
+
+/**
+ * DuckDB error classes a malformed layer can raise while `ST_Read` loads it
+ * (a duplicate column, an unreadable value), as opposed to engine failures.
+ */
+const LAYER_DATA_ERROR = /\b(?:Binder|Catalog|Conversion|Invalid Input|IO|Parser) Error\b/;
+
+/**
+ * True when a registration error is about the layer's data, not the engine.
+ * A missing `st_read` (the spatial extension did not load) is a Catalog Error
+ * too, so it must still fail the query instead of skipping every layer.
+ */
+export function isLayerDataError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!LAYER_DATA_ERROR.test(message)) return false;
+  // "stoi: no conversion" is the poisoned-instance symptom; leave it to the
+  // retry in runSqlQuery (isStoiConversionError) rather than skipping the layer.
+  return !/stoi:\s*no conversion/i.test(message) && !/Function with name st_read\b/i.test(message);
+}

@@ -535,7 +535,7 @@ export function caseInsensitiveKeyRenames(keys: Iterable<string>): Map<string, s
 export function dedupeCaseInsensitiveProperties(geojson: FeatureCollection): FeatureCollection {
   const keys = new Set<string>();
   for (const feature of geojson.features) {
-    for (const key in feature.properties ?? {}) keys.add(key);
+    for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
   }
   const renames = caseInsensitiveKeyRenames(keys);
   if (!renames.size) return geojson;
