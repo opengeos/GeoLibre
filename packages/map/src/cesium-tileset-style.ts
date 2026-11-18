@@ -107,6 +107,14 @@ export function tilesetExpression(node: unknown): string | null {
     case ">":
     case ">=": {
       if (args.length !== 2) return null;
+      // MapLibre's `null` comparison also matches a missing property, which a
+      // styling-language property reads as `undefined`: `undefined === null` is
+      // false. Test for a defined value instead, as the `has` case does.
+      if ((op === "==" || op === "!=") && (args[0] === null || args[1] === null)) {
+        const other = tilesetExpression(args[0] === null ? args[1] : args[0]);
+        if (other === null) return null;
+        return op === "==" ? `(!defined(${other}))` : `defined(${other})`;
+      }
       const left = tilesetExpression(args[0]);
       const right = tilesetExpression(args[1]);
       if (left === null || right === null) return null;

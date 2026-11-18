@@ -40,6 +40,8 @@ export interface QuickFilterFieldProfile {
    * Inspected features with no value for this field: a missing property,
    * `null`, or an empty string. These are left out of `values`, and the value
    * list offers them as one "(blank)" option, matching the Dashboard charts.
+   * Counted over the inspected features only (see {@link sampled}), so on a
+   * layer past the profile limit it covers that sample, not the whole layer.
    */
   blankCount: number;
   /** Numeric extent, present for a field that supports a range control. */
