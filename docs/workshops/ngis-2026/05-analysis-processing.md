@@ -3,6 +3,10 @@
 !!! info "1:00 - 2:00 p.m."
     Lecture 12 min · Hands-on 38 min · Break 1:50 - 2:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=_urA2ZWx6Ks&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/_urA2ZWx6Ks/maxresdefault.jpg" alt="Recording of section 5: Analysis and Processing" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:

@@ -3,6 +3,10 @@
 !!! info "9:00 - 10:00 a.m."
     Lecture 15 min · Hands-on 35 min · Break 9:50 - 10:00
 
+<a class="video-thumb" href="https://www.youtube.com/watch?v=yamrtUICBoU&amp;list=PLe4LOpcEE1lU" target="_blank" rel="noopener" title="Watch on YouTube">
+  <img src="https://i.ytimg.com/vi/yamrtUICBoU/maxresdefault.jpg" alt="Recording of section 2: Bringing In Cloud-Hosted Data" loading="lazy" width="1280" height="720">
+</a>
+
 ## Learning goals
 
 By the end of this section you will be able to:
