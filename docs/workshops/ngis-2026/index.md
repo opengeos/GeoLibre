@@ -18,6 +18,11 @@ desktop application. In this workshop you will use it to read cloud-hosted
 data in place, without downloading or converting it first, and to build maps
 that anyone can reopen from a single link.
 
+!!! tip "Watch the recordings"
+    All eight sections were recorded. Watch them in order on the
+    [GeoLibre Workshops playlist](https://www.youtube.com/playlist?list=PLe4LOpcEE1lU)
+    on YouTube, and follow along with the section pages below.
+
 ## Schedule
 
 | Time | Section | Topics |
