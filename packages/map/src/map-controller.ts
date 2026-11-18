@@ -1648,9 +1648,12 @@ export class MapController implements MapEngine {
   fitLayer(layer: GeoLibreLayer): boolean {
     if (layer.type === "3d-tiles" && this.map) {
       const center = tilesetCenter(layer);
-      if (center) {
-        // A center off a custom CRS's grid would be clamped to its edge (#3516).
-        if (this.isExtentOutsideMapCrs([center[0], center[1], center[0], center[1]])) return false;
+      // A center off a custom CRS's grid would be clamped to its edge (#3516):
+      // fall back to the tileset's bounds, which may still reach the grid.
+      const centerOffGrid =
+        center !== null && this.isExtentOutsideMapCrs([center[0], center[1], center[0], center[1]]);
+      if (centerOffGrid && !this.resolveLayerBounds(layer)) return false;
+      if (center && !centerOffGrid) {
         // Tilesets only expose their center, not a native zoom range. Use a
         // conservative floor so city-scale tilesets that render below zoom 18
         // are not flown past into an empty viewport.
@@ -1732,12 +1735,14 @@ export class MapController implements MapEngine {
     const crs = this.activeCrs;
     const converter = this.activeCrsConverter;
     if (!crs || !converter) return false;
-    // A tileset with a center is framed by it (fitLayer), not by its bounds.
+    // A tileset with an on-grid center is framed by it (fitLayer); otherwise
+    // by its bounds, when it has any.
     const center = layer.type === "3d-tiles" ? tilesetCenter(layer) : null;
-    const bounds = center
-      ? ([center[0], center[1], center[0], center[1]] as [number, number, number, number])
-      : this.resolveLayerBounds(layer);
-    return bounds ? this.isExtentOutsideMapCrs(bounds) : false;
+    if (center && !this.isExtentOutsideMapCrs([center[0], center[1], center[0], center[1]])) {
+      return false;
+    }
+    const bounds = this.resolveLayerBounds(layer);
+    return bounds ? this.isExtentOutsideMapCrs(bounds) : center !== null;
   }
 
   /** Whether `bounds` lies wholly off the active custom CRS's tile grid. */
@@ -1776,8 +1781,10 @@ export class MapController implements MapEngine {
     const placement = placeExtentInMapCrs(bounds, converter, crs.tileMatrixSet);
     if (!placement || placement.kind === "inside") return null;
     if (placement.kind === "outside") return false;
+    // From here the extent straddles the grid edge, so an ordinary fit would
+    // be clamped: when no camera can be worked out, stay put instead.
     const viewport = this.getViewportSize();
-    if (!viewport) return null;
+    if (!viewport) return false;
     const camera = cameraForMapCrsBox(
       placement.box,
       converter,
@@ -1785,7 +1792,7 @@ export class MapController implements MapEngine {
       viewport,
       options.padding ?? FIT_BOUNDS_PADDING,
     );
-    if (!camera) return null;
+    if (!camera) return false;
     const zoom = Math.min(
       Math.max(camera.zoom, minRenderZoom ?? 0),
       typeof map.getMaxZoom === "function" ? map.getMaxZoom() : 24,

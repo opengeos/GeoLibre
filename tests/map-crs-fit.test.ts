@@ -159,6 +159,7 @@ function crsController(): {
       return undefined;
     },
     getProjection: () => ({ type: arctic.code }),
+    getSource: () => undefined,
   };
   const controller = createMapController();
   const internal = controller as unknown as Internals;
@@ -288,6 +289,29 @@ describe("MapController.fitLayer in a custom CRS", () => {
     assert.equal(controller.fitLayer(layer), false);
     assert.deepEqual(calls, []);
     assert.equal(controller.isLayerOutsideMapCrs(layer), true);
+  });
+
+  it("frames a 3D Tiles layer by its bounds when its center is off the grid", () => {
+    const { controller, calls } = crsController();
+    const layer = {
+      ...pmtilesLayer(CONUS),
+      type: "3d-tiles",
+      metadata: { center: [-83.9, 35.96], bounds: CONUS },
+    } as unknown as GeoLibreLayer;
+    assert.equal(controller.fitLayer(layer), true);
+    assert.deepEqual(calls, ["flyTo"], "the on-grid part of its bounds");
+    assert.equal(controller.isLayerOutsideMapCrs(layer), false);
+  });
+
+  it("stays put on a straddling extent when the canvas has no size", () => {
+    const { controller, calls } = crsController();
+    const internal = controller as unknown as Internals;
+    (internal.map as { getCanvas: () => unknown }).getCanvas = () => ({
+      clientWidth: 0,
+      clientHeight: 0,
+    });
+    controller.fitBounds(CONUS);
+    assert.deepEqual(calls, [], "no unclipped fit clamps the camera to the grid edge");
   });
 
   it("reports a 3D Tiles layer with only bounds, off the grid, as outside the CRS", () => {
