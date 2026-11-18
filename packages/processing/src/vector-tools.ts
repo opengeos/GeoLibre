@@ -1090,7 +1090,8 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // Collect every join-layer attribute key so unmatched left-join rows get a
     // null for each one. This keeps the output schema consistent with matched
     // rows and mirrors GeoPandas, which fills NaN (→ null in GeoJSON) there.
-    // Only the left path consumes this, so skip the scan for inner joins.
+    // Only the left path null-fills unmatched rows, but matched rows of both
+    // joins use these names, so the scan always runs.
     // Rename join fields that clash case-insensitively with an input field so
     // the output never carries both `NAME` and `name` (issue #3514).
     const joinNames = joinFieldOutputNames(propertyKeys(inputFeatures), propertyKeys(joinFeatures));
