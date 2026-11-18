@@ -2,6 +2,7 @@ import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
   getRegionalBasemapByStyleUrl,
+  normalizeMapCrs,
   useAppStore,
 } from "@geolibre/core";
 import { useLayoutEffect } from "react";
@@ -20,6 +21,11 @@ import {
  * restored only when the user chose it: picked it, or answered Load. One that
  * arrived with data (a trusted host's project, a collaboration snapshot, an
  * undo step), or one stored before that choice was recorded, is not restored.
+ *
+ * A map CRS already in the workspace (seeded from a `?crs=` link) brings the
+ * body it maps, which outranks the remembered basemap's: a basemap of another
+ * body is not restored, so `?crs=mars-north-polar` keeps measuring on Mars
+ * after an Earth basemap was last used (GeoLibre#3515).
  */
 export function useLastBasemapPersistence(): void {
   useLayoutEffect(() => {
@@ -32,20 +38,32 @@ export function useLastBasemapPersistence(): void {
         ? null
         : lastBasemap;
 
+    const storedBody =
+      storedBasemap === null
+        ? null
+        : (getPlanetaryBasemapByStyleUrl(storedBasemap)?.ellipsoidId ?? DEFAULT_ELLIPSOID_ID);
+    // A map CRS on screen keeps its body; skipped, the remembered basemap is
+    // also left in storage for the next launch. The CRS lives in project
+    // preferences, not device storage, so in the untitled startup workspace
+    // only a `?crs=` link can have put one there.
+    const crsBodyConflict =
+      storedBody !== null &&
+      normalizeMapCrs(state.preferences.map.mapCrs) !== undefined &&
+      storedBody !== state.preferences.map.ellipsoidId;
     // Never replace a project that another startup source already loaded.
     if (
       storedBasemap !== null &&
+      storedBody !== null &&
+      !crsBodyConflict &&
       state.projectGeneration === 0 &&
       state.projectPath === null &&
       !state.isDirty
     ) {
-      const ellipsoidId =
-        getPlanetaryBasemapByStyleUrl(storedBasemap)?.ellipsoidId ?? DEFAULT_ELLIPSOID_ID;
       useAppStore.setState({
         basemapStyleUrl: storedBasemap,
         preferences: {
           ...state.preferences,
-          map: { ...state.preferences.map, ellipsoidId },
+          map: { ...state.preferences.map, ellipsoidId: storedBody },
         },
       });
     }
@@ -55,8 +73,9 @@ export function useLastBasemapPersistence(): void {
     // the previous value.
     const current = useAppStore.getState().basemapStyleUrl;
     if (
-      !getRegionalBasemapByStyleUrl(current) ||
-      (current === storedBasemap && readChosenRegionalBasemap() === current)
+      !crsBodyConflict &&
+      (!getRegionalBasemapByStyleUrl(current) ||
+        (current === storedBasemap && readChosenRegionalBasemap() === current))
     ) {
       writeLastBasemap(current);
     }
