@@ -200,7 +200,8 @@ const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
 // the last column is widened by this much and padded past it; otherwise the
 // scrollbar covers the end of right-aligned numbers.
 // Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
-// px-2) at any root font size.
+// px-2) at any root font size. CELL_PADDING mirrors TableCell/TableHead in
+// packages/ui/src/components/table.tsx and must change with them.
 const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
 const CELL_PADDING = "0.5rem";
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
@@ -1174,10 +1175,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
-  const tableWidth = `calc(${tableColumns.reduce(
-    (width, column) => width + columnWidth(column),
-    0,
-  )}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
+  const columnsWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
+  const tableWidth = `calc(${columnsWidth}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
