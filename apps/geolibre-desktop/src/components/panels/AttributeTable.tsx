@@ -199,9 +199,10 @@ const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
 // The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
 // the last column is widened by this much and padded past it; otherwise the
 // scrollbar covers the end of right-aligned numbers.
-const VERTICAL_SCROLLBAR_GUTTER = 14;
-/** TableCell/TableHead's own inline padding (p-2 / px-2), in px. */
-const CELL_PADDING = 8;
+// Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
+// px-2) at any root font size.
+const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
+const CELL_PADDING = "0.5rem";
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
@@ -1173,9 +1174,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
-  const tableWidth =
-    tableColumns.reduce((width, column) => width + columnWidth(column), 0) +
-    VERTICAL_SCROLLBAR_GUTTER;
+  const tableWidth = `calc(${tableColumns.reduce(
+    (width, column) => width + columnWidth(column),
+    0,
+  )}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
@@ -2403,7 +2405,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 {
                   minWidth: "100%",
                   width: tableWidth,
-                  "--attribute-table-last-pe": `${CELL_PADDING + VERTICAL_SCROLLBAR_GUTTER}px`,
+                  "--attribute-table-last-pe": `calc(${CELL_PADDING} + ${VERTICAL_SCROLLBAR_GUTTER})`,
                 } as CSSProperties
               }
             >
@@ -2413,8 +2415,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                     key={col}
                     style={{
                       width:
-                        columnWidth(col) +
-                        (index === tableColumns.length - 1 ? VERTICAL_SCROLLBAR_GUTTER : 0),
+                        index === tableColumns.length - 1
+                          ? `calc(${columnWidth(col)}px + ${VERTICAL_SCROLLBAR_GUTTER})`
+                          : columnWidth(col),
                     }}
                   />
                 ))}
