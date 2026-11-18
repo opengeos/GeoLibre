@@ -16,6 +16,11 @@ import type {
   QuickFilterFieldProfile,
   QuickFilterValueCount,
 } from "../../lib/quick-filter-profile";
+import {
+  deselectShownValues,
+  selectShownValues,
+  selectedOptionCount,
+} from "../../lib/quick-filter-selection";
 
 /** Options above which the value list gets its own search box. */
 const SEARCH_THRESHOLD = 8;
@@ -97,11 +102,24 @@ function CategoricalControl({
     return [...listed, ...extras];
   }, [profile?.values, selected]);
 
+  const needle = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
     if (needle === "") return options;
     return options.filter((option) => valueLabel(option.value).toLowerCase().includes(needle));
-  }, [options, query]);
+  }, [options, needle]);
+
+  // Blank values (missing, null or "") are not in the profile's value list, so
+  // they get one option of their own, last, as the Dashboard charts' "(blank)"
+  // bar. It also stays while it is checked and the data no longer has blanks,
+  // like a saved value the profile stopped listing.
+  const includeBlank = filter.includeBlank === true;
+  const blankCount = profile?.blankCount ?? 0;
+  const blankLabel = t("quickFilters.blankValue");
+  const hasBlankOption = blankCount > 0 || includeBlank;
+  const blankVisible =
+    hasBlankOption && (needle === "" || blankLabel.toLowerCase().includes(needle));
+  const optionCount = options.length + (hasBlankOption ? 1 : 0);
+  const selectedCount = selectedOptionCount(filter);
 
   const toggle = (value: string | number | boolean, checked: boolean): void => {
     const next = new Set(selected);
@@ -110,7 +128,7 @@ function CategoricalControl({
     onChange({ ...filter, values: [...next] });
   };
 
-  if (options.length === 0) {
+  if (optionCount === 0) {
     return (
       <p className="text-xs text-muted-foreground" aria-busy={loading || undefined}>
         {loading ? t("quickFilters.loadingValues") : t("quickFilters.noValues")}
@@ -120,7 +138,10 @@ function CategoricalControl({
 
   return (
     <div className="space-y-1.5">
-      {options.length > SEARCH_THRESHOLD && (
+      {/* Kept while a search is active even if the list shrinks below the
+          threshold (unchecking a "(blank)" the data no longer has), so the
+          search can always be cleared and never hides the values for good. */}
+      {(optionCount > SEARCH_THRESHOLD || query !== "") && (
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -133,7 +154,7 @@ function CategoricalControl({
         className="max-h-44 space-y-0.5 overflow-y-auto rounded-md border border-input p-1.5"
         data-testid="quick-filter-values"
       >
-        {visible.length === 0 && (
+        {visible.length === 0 && !blankVisible && (
           <p className="px-1 py-0.5 text-xs text-muted-foreground">
             {t("quickFilters.noMatchingValues")}
           </p>
@@ -162,6 +183,26 @@ function CategoricalControl({
             </label>
           );
         })}
+        {blankVisible && (
+          <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+            <input
+              type="checkbox"
+              id={`${idPrefix}-${filter.id}-blank`}
+              checked={includeBlank}
+              onChange={(event) =>
+                onChange({ ...filter, includeBlank: event.target.checked || undefined })
+              }
+            />
+            <span className="min-w-0 flex-1 truncate italic text-muted-foreground">
+              {blankLabel}
+            </span>
+            {blankCount > 0 && (
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {countFormatter.format(blankCount)}
+              </span>
+            )}
+          </label>
+        )}
       </div>
       {/* Both buttons act on what the search box is showing and leave the rest
           of the selection alone: with a search active, "Select all" adds the
@@ -173,10 +214,13 @@ function CategoricalControl({
           type="button"
           className="text-primary hover:underline"
           onClick={() =>
-            onChange({
-              ...filter,
-              values: [...new Set([...selected, ...visible.map((option) => option.value)])],
-            })
+            onChange(
+              selectShownValues(
+                filter,
+                visible.map((option) => option.value),
+                blankVisible,
+              ),
+            )
           }
         >
           {t("quickFilters.selectAll")}
@@ -184,17 +228,22 @@ function CategoricalControl({
         <button
           type="button"
           className="text-primary hover:underline"
-          onClick={() => {
-            const shown = new Set(visible.map((option) => option.value));
-            onChange({ ...filter, values: [...selected].filter((value) => !shown.has(value)) });
-          }}
+          onClick={() =>
+            onChange(
+              deselectShownValues(
+                filter,
+                visible.map((option) => option.value),
+                blankVisible,
+              ),
+            )
+          }
         >
           {t("quickFilters.selectNone")}
         </button>
         <span className="ms-auto text-muted-foreground">
-          {selected.size === 0
+          {selectedCount === 0
             ? t("quickFilters.allValues")
-            : t("quickFilters.selectedCount", { count: selected.size })}
+            : t("quickFilters.selectedCount", { count: selectedCount })}
         </span>
       </div>
     </div>
@@ -390,6 +439,7 @@ export function QuickFilterControl({
     onChange({
       ...filter,
       values: [],
+      includeBlank: undefined,
       min: null,
       max: null,
       start: null,
@@ -399,6 +449,7 @@ export function QuickFilterControl({
 
   const hasValue =
     (filter.values?.length ?? 0) > 0 ||
+    filter.includeBlank === true ||
     filter.min != null ||
     filter.max != null ||
     !!filter.start ||
@@ -465,6 +516,7 @@ export function QuickFilterControl({
                         // than carrying a selection the new control cannot
                         // show.
                         values: [],
+                        includeBlank: undefined,
                         min: null,
                         max: null,
                         start: null,
