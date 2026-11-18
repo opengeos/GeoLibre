@@ -1,6 +1,6 @@
 import type { DuckDbCapability, DuckDbGeoJsonSource } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
-import { stripAutoFidColumn } from "./duckdb-geometry";
+import { prepareGeoJsonForStRead } from "./duckdb-geometry";
 
 let counter = 0;
 
@@ -52,8 +52,10 @@ export function createDuckDbCapability(): DuckDbCapability {
       // a layer from a GDAL export (e.g. a GeoParquet whose columns include
       // OGC_FID) carries it as a property, and GDAL's GeoJSON driver adds its
       // own OGC_FID id column, so the read aborts with a duplicate-column
-      // binder error (issues #499, #944).
-      await db.registerFileText(name, JSON.stringify(stripAutoFidColumn(geojson)));
+      // binder error (issues #499, #944). Case-only duplicate property names
+      // (`NAME` and `name`) collide the same way, since DuckDB column names are
+      // case-insensitive, so later casings are renamed (issue #3514).
+      await db.registerFileText(name, JSON.stringify(prepareGeoJsonForStRead(geojson)));
       return {
         sql: `ST_Read(${quoteSqlString(name)})`,
         async release(): Promise<void> {

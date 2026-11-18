@@ -8,6 +8,7 @@ export {
 export { VECTOR_TOOLS, getVectorTool, resolveVectorRerun } from "./vector-tool-registry";
 export {
   matchFeaturesByLocation,
+  joinFieldOutputNames,
   decodePolylineTool,
   encodePolylineTool,
   MAX_CLIENT_PAIRS,

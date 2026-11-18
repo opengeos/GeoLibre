@@ -291,9 +291,11 @@ export function SqlWorkspacePanel() {
   // A single pass over the layers supplies both the columns (for autocomplete)
   // and the table names; deriving `tables` from it avoids walking the layers a
   // second time via previewLayerTables. The Sedona engine registers the geometry
-  // column as `geometry`; DuckDB and PGlite use `geom`.
+  // column as `geometry`; DuckDB and PGlite use `geom`. Only DuckDB renames a
+  // property that repeats another ignoring case (`name` next to `NAME`).
   const tableColumns = useMemo(
-    () => previewLayerColumns(layers, engine === "sedona" ? "geometry" : "geom"),
+    () =>
+      previewLayerColumns(layers, engine === "sedona" ? "geometry" : "geom", engine === "duckdb"),
     [layers, engine],
   );
   const tables = useMemo(() => tableColumns.map((table) => table.tableName), [tableColumns]);

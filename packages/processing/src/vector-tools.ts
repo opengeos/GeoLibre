@@ -949,6 +949,73 @@ function matchesPredicate(input: Feature, join: Feature, predicate: SpatialPredi
   }
 }
 
+/** Suffix a join tool gives a join field whose name clashes with an input field. */
+const JOIN_FIELD_SUFFIX = "_right";
+
+/**
+ * Output name for each join-layer field, so no two output columns differ only
+ * in case. DuckDB (the SQL workspace) and most databases treat column names
+ * case-insensitively, so a join that keeps both `NAME` and `name` produces a
+ * layer that cannot be queried (issue #3514).
+ *
+ * A join field that exactly matches an input field keeps its name: the input
+ * value wins there, as before. A join field that matches an input field, or an
+ * earlier join field, only case-insensitively is renamed with the `_right`
+ * suffix GeoPandas' `sjoin` uses (`name_right`, then `name_right_2`, ...).
+ *
+ * @param inputKeys Every property name on the input (target) features.
+ * @param joinKeys Join-layer property names in first-seen order.
+ * @returns Map from each join key to its output name.
+ */
+export function joinFieldOutputNames(
+  inputKeys: Iterable<string>,
+  joinKeys: Iterable<string>,
+): Map<string, string> {
+  const input = new Set(inputKeys);
+  const taken = new Set([...input].map((key) => key.toLowerCase()));
+  const names = new Map<string, string>();
+  for (const key of joinKeys) {
+    if (names.has(key)) continue;
+    if (input.has(key)) {
+      names.set(key, key);
+      continue;
+    }
+    let name = key;
+    if (taken.has(name.toLowerCase())) {
+      name = `${key}${JOIN_FIELD_SUFFIX}`;
+      for (let n = 2; taken.has(name.toLowerCase()); n += 1) {
+        name = `${key}${JOIN_FIELD_SUFFIX}_${n}`;
+      }
+    }
+    taken.add(name.toLowerCase());
+    names.set(key, name);
+  }
+  return names;
+}
+
+/** Copy `properties` with each key renamed through `names` (unmapped keys kept). */
+function renameProperties(
+  properties: GeoJsonProperties,
+  names: Map<string, string>,
+): Record<string, unknown> {
+  // A null prototype keeps a `__proto__` key as an ordinary own property
+  // (assignment into `{}` would hit the inherited setter and drop it).
+  const out: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of Object.entries(properties ?? {})) {
+    out[names.get(key) ?? key] = value;
+  }
+  return out;
+}
+
+/** Every property name across `features`, in first-seen order. */
+function propertyKeys(features: Feature[]): string[] {
+  const keys = new Set<string>();
+  for (const feature of features) {
+    for (const key of Object.keys(feature.properties ?? {})) keys.add(key);
+  }
+  return [...keys];
+}
+
 export const spatialJoinTool: ProcessingAlgorithm = {
   id: "spatial-join",
   name: "Spatial join",
@@ -1023,14 +1090,15 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // Collect every join-layer attribute key so unmatched left-join rows get a
     // null for each one. This keeps the output schema consistent with matched
     // rows and mirrors GeoPandas, which fills NaN (→ null in GeoJSON) there.
-    // Only the left path consumes this, so skip the scan for inner joins.
-    const nullJoinProps: GeoJsonProperties = {};
+    // Only the left path null-fills unmatched rows, but matched rows of both
+    // joins use these names, so the scan always runs.
+    // Rename join fields that clash case-insensitively with an input field so
+    // the output never carries both `NAME` and `name` (issue #3514).
+    const joinNames = joinFieldOutputNames(propertyKeys(inputFeatures), propertyKeys(joinFeatures));
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullJoinProps: Record<string, unknown> = Object.create(null);
     if (how === "left") {
-      for (const j of joinFeatures) {
-        for (const key of Object.keys(j.properties ?? {})) {
-          nullJoinProps[key] = null;
-        }
-      }
+      for (const name of joinNames.values()) nullJoinProps[name] = null;
     }
     const results: Feature[] = [];
     for (const feature of inputFeatures) {
@@ -1051,7 +1119,8 @@ export const spatialJoinTool: ProcessingAlgorithm = {
         continue;
       }
       // One output feature per match, like GeoPandas sjoin. Input attributes win
-      // on name collisions (the sidecar instead suffixes them _left/_right).
+      // on exact name collisions (the sidecar instead suffixes them
+      // _left/_right); case-only collisions were renamed above.
       // Build a fresh feature (no `id`) so a one-to-many join does not emit
       // duplicate feature ids, which would corrupt MapLibre feature state.
       for (const match of matches) {
@@ -1059,7 +1128,7 @@ export const spatialJoinTool: ProcessingAlgorithm = {
           type: "Feature",
           geometry: feature.geometry,
           properties: {
-            ...(match.properties ?? {}),
+            ...renameProperties(match.properties, joinNames),
             ...(feature.properties ?? {}),
           },
         });
@@ -1498,8 +1567,12 @@ export const attributeJoinTool: ProcessingAlgorithm = {
 
     // Null-fill the brought-over columns for unmatched left-join rows so the
     // output schema stays consistent (mirrors the spatial join and the sidecar).
-    const nullFill: GeoJsonProperties = {};
-    for (const f of selectedFields) nullFill[f] = null;
+    // Rename brought-over fields that clash case-insensitively with a target
+    // field, so the output never carries both `NAME` and `name` (issue #3514).
+    const outputNames = joinFieldOutputNames(propertyKeys(input.features), selectedFields);
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullFill: Record<string, unknown> = Object.create(null);
+    for (const f of selectedFields) nullFill[outputNames.get(f) ?? f] = null;
 
     let matched = 0;
     const results: Feature[] = [];
@@ -1519,9 +1592,12 @@ export const attributeJoinTool: ProcessingAlgorithm = {
         continue;
       }
       matched += 1;
-      const picked: GeoJsonProperties = {};
+      // Null prototype: a `__proto__` field stays an own property.
+      const picked: Record<string, unknown> = Object.create(null);
       for (const f of selectedFields) {
-        picked[f] = joinProps[f] !== undefined ? joinProps[f] : null;
+        // Own properties only: an absent `__proto__` would read Object.prototype.
+        const value = Object.hasOwn(joinProps, f) ? joinProps[f] : undefined;
+        picked[outputNames.get(f) ?? f] = value !== undefined ? value : null;
       }
       results.push({
         type: "Feature",
