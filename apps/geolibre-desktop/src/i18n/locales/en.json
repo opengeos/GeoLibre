@@ -9550,6 +9550,7 @@
     "moveDown": "Move down",
     "zoomToLayer": "Zoom to layer",
     "zoomToLayerUnknownExtent": "The extent of \"{{name}}\" is unknown. Pan the map to where its data is, then try Zoom to layer again.",
+    "zoomToLayerOutsideMapCrs": "\"{{name}}\" lies outside the area this map's coordinate reference system can show. Choose another one in Settings → Map to see it.",
     "layerActions": "Layer actions",
     "exportSketchesAsLayer": "Export Sketches as new layer",
     "exportSketchesKeep": "Keep features in Sketches",

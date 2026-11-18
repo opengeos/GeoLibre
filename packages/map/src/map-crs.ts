@@ -22,6 +22,7 @@ import {
 import * as maplibregl from "maplibre-gl";
 import { BLANK_BACKGROUND_LAYER_ID } from "./basemap-style";
 import type { ResolvedMapCrs } from "./active-map-crs";
+import type { MapCrsConverter } from "./map-crs-fit";
 import { resolveEpsgProjection } from "./epsg-proj4";
 
 export type { ResolvedMapCrs } from "./active-map-crs";
@@ -128,15 +129,19 @@ function projectionHandlerScript(): Promise<string> {
  *
  * Args:
  *   crs: The resolved CRS.
+ *
+ * Returns:
+ *   The page-side lng/lat <-> CRS converter, for framing extents in the CRS.
  */
-export async function registerMapCrs(crs: ResolvedMapCrs): Promise<void> {
+export async function registerMapCrs(crs: ResolvedMapCrs): Promise<MapCrsConverter> {
   const { default: proj4 } = await import("proj4");
+  const converter = proj4(crs.definition);
   if (!registeredCodes.has(crs.code)) {
     try {
       maplibregl.addProjection({
         name: crs.code,
         definition: crs.definition,
-        projection: proj4(crs.definition),
+        projection: converter,
         tileMatrixSet: crs.tileMatrixSet,
       });
     } catch (error) {
@@ -154,6 +159,7 @@ export async function registerMapCrs(crs: ResolvedMapCrs): Promise<void> {
   } finally {
     URL.revokeObjectURL(url);
   }
+  return converter;
 }
 
 /**

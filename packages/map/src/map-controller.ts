@@ -110,6 +110,7 @@ import {
   type ResolvedMapCrs,
 } from "./active-map-crs";
 import { createMapCrsStyle, registerMapCrs, resolveMapCrs } from "./map-crs";
+import { cameraForMapCrsBox, placeExtentInMapCrs, type MapCrsConverter } from "./map-crs-fit";
 import { transformTileRequest } from "./tile-request-headers";
 import {
   MAPLIBRE_CAPABILITIES,
@@ -382,6 +383,8 @@ export class MapController implements MapEngine {
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
   /** The custom CRS the map is drawn in (map-crs.ts); null on the default map. */
   private activeCrs: ResolvedMapCrs | null = null;
+  /** The page-side converter for `activeCrs`, used to frame extents in it. */
+  private activeCrsConverter: MapCrsConverter | null = null;
   /** The normalized `mapCrs` the map is moving to, set before it resolves. */
   private desiredCrsId: string | undefined;
   /** Bumped per CRS change so a slow resolution cannot overwrite a newer one. */
@@ -552,7 +555,37 @@ export class MapController implements MapEngine {
     // when a link names a CRS and no view.
     this.initialCrsFrame = isInitialMapCrsFrameRequested();
     this.syncMapCrs(this.initialCrsFrame);
+    this.guardMapCrsFits(this.map);
     return this.map;
+  }
+
+  /**
+   * Keep every `fitBounds` on `map` on the custom CRS's tile grid, including
+   * the ones plugin controls make on the MapLibre map directly (the PMTiles
+   * panel frames each archive it adds that way, #3516). MapLibre fits a box
+   * off the grid and then clamps the camera to the grid edge, far from the
+   * data; this skips such a fit, and frames only the on-grid part of a box
+   * that straddles the edge. On the default map it is a pass-through.
+   */
+  private guardMapCrsFits(map: maplibregl.Map): void {
+    const fitBounds = map.fitBounds.bind(map);
+    map.fitBounds = (...args: Parameters<maplibregl.Map["fitBounds"]>) => {
+      if (this.map === map && this.activeCrs && this.activeCrsConverter) {
+        const [bounds, options] = args;
+        let box: [number, number, number, number] | null = null;
+        try {
+          const lngLat = maplibregl.LngLatBounds.convert(bounds);
+          box = [lngLat.getWest(), lngLat.getSouth(), lngLat.getEast(), lngLat.getNorth()];
+        } catch {
+          // Not a box MapLibre reads either; let it report that.
+        }
+        const padding = typeof options?.padding === "number" ? options.padding : FIT_BOUNDS_PADDING;
+        if (box && box.every(Number.isFinite) && this.fitInMapCrs(box, null, padding) !== null) {
+          return map;
+        }
+      }
+      return fitBounds(...args);
+    };
   }
 
   getMap(): maplibregl.Map | null {
@@ -1021,6 +1054,7 @@ export class MapController implements MapEngine {
     // the bump drops a resolution still in flight for this map.
     const hadCrs = this.activeCrs !== null;
     this.activeCrs = null;
+    this.activeCrsConverter = null;
     this.desiredCrsId = undefined;
     this.failedCrsId = undefined;
     this.crsStyleDeferred = false;
@@ -1629,6 +1663,11 @@ export class MapController implements MapEngine {
 
     const bounds = this.resolveLayerBounds(layer);
     if (!bounds || !this.map) return false;
+    const minRenderZoom = this.getLayerMinRenderZoom(layer);
+    // On a map in a custom CRS, an extent off the CRS's tile grid cannot be
+    // framed: MapLibre clamps the camera to the grid edge (#3516).
+    const crsFit = this.fitInMapCrs(bounds, minRenderZoom);
+    if (crsFit !== null) return crsFit;
     const box: [[number, number], [number, number]] = [
       [bounds[0], bounds[1]],
       [bounds[2], bounds[3]],
@@ -1645,7 +1684,6 @@ export class MapController implements MapEngine {
     // API vector tileset served only at z17). Fitting the whole extent would
     // land far below that zoom and render nothing, so when the fit is too far
     // out, fly to the extent center at the layer's minimum render zoom instead.
-    const minRenderZoom = this.getLayerMinRenderZoom(layer);
     if (minRenderZoom !== null) {
       const camera = this.map.cameraForBounds(box, { padding: FIT_BOUNDS_PADDING });
       if (
@@ -1679,6 +1717,59 @@ export class MapController implements MapEngine {
       }
     }
     this.fitBounds(bounds);
+    return true;
+  }
+
+  /**
+   * Whether a layer's extent lies wholly off the tile grid of the custom CRS
+   * the map is drawn in, so Zoom to layer has nowhere to go (#3516). False on
+   * the default map, or when the extent is unknown.
+   */
+  isLayerOutsideMapCrs(layer: GeoLibreLayer): boolean {
+    const crs = this.activeCrs;
+    const converter = this.activeCrsConverter;
+    if (!crs || !converter || layer.type === "3d-tiles") return false;
+    const bounds = this.resolveLayerBounds(layer);
+    if (!bounds) return false;
+    return placeExtentInMapCrs(bounds, converter, crs.tileMatrixSet)?.kind === "outside";
+  }
+
+  /**
+   * Frame `bounds` on a map in a custom CRS when it does not lie wholly on the
+   * CRS's tile grid.
+   *
+   * Returns:
+   *   null to let the ordinary fit run (the default map, or an extent on the
+   *   grid); false, without moving, for an extent wholly off the grid; true
+   *   after flying to the part of the extent that is on the grid.
+   */
+  private fitInMapCrs(
+    bounds: [number, number, number, number],
+    minRenderZoom: number | null,
+    padding: number = FIT_BOUNDS_PADDING,
+  ): boolean | null {
+    const map = this.map;
+    const crs = this.activeCrs;
+    const converter = this.activeCrsConverter;
+    if (!map || !crs || !converter) return null;
+    const placement = placeExtentInMapCrs(bounds, converter, crs.tileMatrixSet);
+    if (!placement || placement.kind === "inside") return null;
+    if (placement.kind === "outside") return false;
+    const viewport = this.getViewportSize();
+    if (!viewport) return null;
+    const camera = cameraForMapCrsBox(
+      placement.box,
+      converter,
+      crs.tileMatrixSet,
+      viewport,
+      padding,
+    );
+    if (!camera) return null;
+    const zoom = Math.min(
+      Math.max(camera.zoom, minRenderZoom ?? 0),
+      typeof map.getMaxZoom === "function" ? map.getMaxZoom() : 24,
+    );
+    map.flyTo({ center: camera.center, zoom, bearing: 0, duration: 800 });
     return true;
   }
 
@@ -1723,6 +1814,9 @@ export class MapController implements MapEngine {
   fitBounds(bounds: [number, number, number, number]): void {
     if (!this.map) return;
     if (bounds.some((value) => !Number.isFinite(value))) return;
+    // A plugin's own fit (the PMTiles header bounds, #3516) comes through here
+    // rather than fitLayer: keep it on the custom CRS's grid too.
+    if (this.fitInMapCrs(bounds, null) !== null) return;
     // A degenerate point-sized box cannot be fit; fly to the point instead.
     if (bounds[0] === bounds[2] && bounds[1] === bounds[3]) {
       this.map.flyTo({
@@ -2196,8 +2290,8 @@ export class MapController implements MapEngine {
           fallBack();
           return;
         }
-        await registerMapCrs(crs);
-        if (current()) this.applyMapCrs(crs, frame);
+        const converter = await registerMapCrs(crs);
+        if (current()) this.applyMapCrs(crs, frame, converter);
       })
       .catch((error: unknown) => {
         if (!current()) return;
@@ -2225,11 +2319,16 @@ export class MapController implements MapEngine {
    * Mercator stops at ±85°). Skipped when the store set a view meanwhile (a
    * project opening with its saved view).
    */
-  private applyMapCrs(crs: ResolvedMapCrs | null, frame: boolean): void {
+  private applyMapCrs(
+    crs: ResolvedMapCrs | null,
+    frame: boolean,
+    converter: MapCrsConverter | null = null,
+  ): void {
     const map = this.map;
     if (!map) return;
     const previous = this.activeCrs;
     this.activeCrs = crs;
+    this.activeCrsConverter = crs ? converter : null;
     this.crsStyleDeferred = false;
     setActiveMapCrs(map, crs);
     const requestedMinZoom = clampNumber(this.mapPreferences.minZoom, 0, 24);

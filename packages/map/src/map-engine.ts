@@ -100,10 +100,17 @@ export interface MapEngine {
   fitBounds(bounds: [number, number, number, number]): void;
   /**
    * Frame a layer's extent. Returns false, without moving the camera, when the
-   * layer's extent is unknown, so a caller can tell the user why nothing moved.
-   * An engine that hands the fit to an asynchronous loader returns true.
+   * layer's extent is unknown or lies wholly off the map CRS's grid
+   * ({@link isLayerOutsideMapCrs}), so a caller can tell the user why nothing
+   * moved. An engine that hands the fit to an asynchronous loader returns true.
    */
   fitLayer(layer: GeoLibreLayer): boolean;
+  /**
+   * Whether a layer's extent lies wholly outside the area the map's custom CRS
+   * can show, so {@link fitLayer} cannot frame it. Only MapLibre draws other
+   * CRSs, so the other engines leave it out.
+   */
+  isLayerOutsideMapCrs?(layer: GeoLibreLayer): boolean;
   /** The projection the map is currently drawing in. */
   readProjection(): MapProjection;
   /** Apply min/max zoom, max pitch, and bounds constraints from the project. */
