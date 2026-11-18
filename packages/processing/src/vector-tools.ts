@@ -1095,7 +1095,7 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // the output never carries both `NAME` and `name` (issue #3514).
     const joinNames = joinFieldOutputNames(propertyKeys(inputFeatures), propertyKeys(joinFeatures));
     // Null prototype: a `__proto__` field stays an own property.
-    const nullJoinProps: GeoJsonProperties = Object.create(null);
+    const nullJoinProps: Record<string, unknown> = Object.create(null);
     if (how === "left") {
       for (const name of joinNames.values()) nullJoinProps[name] = null;
     }
@@ -1570,7 +1570,7 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     // field, so the output never carries both `NAME` and `name` (issue #3514).
     const outputNames = joinFieldOutputNames(propertyKeys(input.features), selectedFields);
     // Null prototype: a `__proto__` field stays an own property.
-    const nullFill: GeoJsonProperties = Object.create(null);
+    const nullFill: Record<string, unknown> = Object.create(null);
     for (const f of selectedFields) nullFill[outputNames.get(f) ?? f] = null;
 
     let matched = 0;
@@ -1592,7 +1592,7 @@ export const attributeJoinTool: ProcessingAlgorithm = {
       }
       matched += 1;
       // Null prototype: a `__proto__` field stays an own property.
-      const picked: GeoJsonProperties = Object.create(null);
+      const picked: Record<string, unknown> = Object.create(null);
       for (const f of selectedFields) {
         picked[outputNames.get(f) ?? f] = joinProps[f] !== undefined ? joinProps[f] : null;
       }
