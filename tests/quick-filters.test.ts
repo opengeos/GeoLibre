@@ -494,6 +494,47 @@ describe("profileQuickFilterFields", () => {
     assert.equal(pop?.max, 750_000);
   });
 
+  it("leaves a field without outliers on its exact extent", () => {
+    const pop = byField(profileQuickFilterFields(CITIES)).get("pop");
+    assert.equal(pop?.typical, undefined);
+  });
+
+  it("reports the typical range of a field a few outliers stretch (#3455)", () => {
+    const records = Array.from({ length: 1282 }, (_, i) => ({
+      area: Math.round((i / 1281) * 4800),
+    }));
+    records.push({ area: 1e12 }, { area: -42.5 });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.equal(area?.min, -42.5);
+    assert.equal(area?.max, 1e12);
+    assert.ok(area?.typical);
+    assert.ok(area.typical.min >= 0 && area.typical.max <= 4800);
+    assert.ok(area.typical.below >= 1 && area.typical.above >= 1);
+  });
+
+  it("profiles the typical range from numeric text too", () => {
+    const records = Array.from({ length: 200 }, (_, i) => ({ area: String(i + 1) }));
+    records.push({ area: "1000000000" });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.ok(area?.typical);
+    assert.ok(area.typical.max <= 200);
+    assert.equal(area.max, 1e9);
+  });
+
+  it("keeps the typical range of a field that also has blank values", () => {
+    const records: Array<{ area: number | null | string }> = Array.from(
+      { length: 1282 },
+      (_, i) => ({ area: Math.round((i / 1281) * 4800) }),
+    );
+    records.push({ area: 1e12 }, { area: -42.5 }, { area: null }, { area: "" }, { area: null });
+    const area = byField(profileQuickFilterFields(records)).get("area");
+    assert.equal(area?.blankCount, 3);
+    assert.equal(area?.present, 1284);
+    assert.ok(area?.typical);
+    // The blanks are neither below nor above the typical range.
+    assert.ok(area.typical.below + area.typical.above < 1284 * 0.03);
+  });
+
   it("suggests a range for a numeric code column but still offers checkboxes", () => {
     const code = byField(profileQuickFilterFields(CITIES)).get("code");
     assert.equal(code?.kind, "range");
