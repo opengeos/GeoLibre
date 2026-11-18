@@ -172,3 +172,54 @@ export function previewLayerTables(layers: GeoLibreLayer[]): SqlWorkspaceTable[]
     layerName: layer.name,
   }));
 }
+
+/** A layer the SQL workspace skipped because DuckDB could not load it. */
+export interface SqlLayerRegistrationFailure {
+  /** SQL identifier the layer would have been queryable as. */
+  tableName: string;
+  /** The layer's display name. */
+  layerName: string;
+  /** DuckDB's error message. */
+  message: string;
+}
+
+/**
+ * Append the layers that could not be registered to a query error, so a query
+ * that fails because it names a skipped table says why the table is missing.
+ *
+ * @param error What the query threw.
+ * @param failures Layers registerLayerTables skipped for this run.
+ * @returns The original error when nothing was skipped, otherwise a new Error.
+ */
+export function withRegistrationFailures(
+  error: unknown,
+  failures: SqlLayerRegistrationFailure[],
+): unknown {
+  if (!failures.length) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  const details = failures
+    .map((failure) => `"${failure.tableName}" (layer "${failure.layerName}"): ${failure.message}`)
+    .join("\n");
+  return new Error(`${message}\n\nThese layers could not be loaded as tables:\n${details}`, {
+    cause: error,
+  });
+}
+
+/**
+ * DuckDB error classes a malformed layer can raise while `ST_Read` loads it
+ * (a duplicate column, an unreadable value), as opposed to engine failures.
+ */
+const LAYER_DATA_ERROR = /\b(?:Binder|Catalog|Conversion|Invalid Input|IO|Parser) Error\b/;
+
+/**
+ * True when a registration error is about the layer's data, not the engine.
+ * A missing `st_read` (the spatial extension did not load) is a Catalog Error
+ * too, so it must still fail the query instead of skipping every layer.
+ */
+export function isLayerDataError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!LAYER_DATA_ERROR.test(message)) return false;
+  // "stoi: no conversion" is the poisoned-instance symptom; leave it to the
+  // retry in runSqlQuery (isStoiConversionError) rather than skipping the layer.
+  return !/stoi:\s*no conversion/i.test(message) && !/Function with name st_read\b/i.test(message);
+}

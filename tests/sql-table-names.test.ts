@@ -1,7 +1,10 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assignTableNames } from "../apps/geolibre-desktop/src/lib/sql-table-names";
+import {
+  assignTableNames,
+  withRegistrationFailures,
+} from "../apps/geolibre-desktop/src/lib/sql-table-names";
 
 function geojsonLayer(id: string, name: string): GeoLibreLayer {
   return {
@@ -39,5 +42,29 @@ describe("assignTableNames", () => {
       assigned.map(({ tableName: assignedName }) => assignedName),
       ["us_cities", "us_cities_2"],
     );
+  });
+});
+
+// A layer DuckDB cannot load is skipped instead of failing every query (issue
+// #3514); a query that then fails is told which layers were skipped and why.
+describe("withRegistrationFailures", () => {
+  it("returns the original error when every layer registered", () => {
+    const error = new Error("Catalog Error: Table with name nope does not exist!");
+    assert.equal(withRegistrationFailures(error, []), error);
+  });
+
+  it("appends the skipped layers to a failing query's message", () => {
+    const error = new Error("Catalog Error: Table with name bad does not exist!");
+    const wrapped = withRegistrationFailures(error, [
+      { tableName: "bad", layerName: "Bad layer", message: "Binder Error: duplicate column" },
+    ]);
+    assert.ok(wrapped instanceof Error);
+    assert.equal(
+      wrapped.message,
+      "Catalog Error: Table with name bad does not exist!\n\n" +
+        "These layers could not be loaded as tables:\n" +
+        '"bad" (layer "Bad layer"): Binder Error: duplicate column',
+    );
+    assert.equal(wrapped.cause, error);
   });
 });

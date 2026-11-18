@@ -6,6 +6,7 @@ import {
   countFeaturesAlgorithm,
   getAlgorithm,
   getVectorTool,
+  joinFieldOutputNames,
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 
@@ -347,6 +348,226 @@ describe("processing registry", () => {
     });
     assert.equal(produced, false);
     assert.ok(logs.some((m) => m.includes("unknown predicate")));
+  });
+
+  it("spatial join renames join fields that clash with input fields only by case", () => {
+    // world_countries carries NAME and world_places carries name. DuckDB column
+    // names are case-insensitive, so keeping both broke every SQL workspace
+    // query once the join output was registered (issue #3514).
+    const square = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [0, 0],
+          [0, 10],
+          [10, 10],
+          [10, 0],
+          [0, 0],
+        ],
+      ],
+    };
+    const countries: GeoLibreLayer = {
+      ...layer,
+      id: "countries",
+      name: "Countries",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { NAME: "Atlantis" }, geometry: square },
+          {
+            type: "Feature",
+            properties: { NAME: "Lemuria" },
+            geometry: {
+              ...square,
+              coordinates: [square.coordinates[0].map(([x, y]) => [x + 20, y])],
+            },
+          },
+        ],
+      },
+    };
+    const places: GeoLibreLayer = {
+      ...layer,
+      id: "places",
+      name: "Places",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { name: "Capital" },
+            geometry: { type: "Point", coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+    const tool = getVectorTool("spatial-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [countries, places],
+      parameters: { layer: "countries", overlay: "places", predicate: "contains", how: "left" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    const props = out!.features.map((f) => f.properties);
+    assert.deepEqual(props, [
+      { NAME: "Atlantis", name_right: "Capital" },
+      // The unmatched row null-fills the renamed column, not the original name.
+      { NAME: "Lemuria", name_right: null },
+    ]);
+  });
+
+  it("attribute join renames brought-over fields that clash only by case", () => {
+    const target: GeoLibreLayer = {
+      ...layer,
+      id: "target",
+      name: "Target",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { id: 1, NAME: "A" }, geometry: null as never },
+          { type: "Feature", properties: { id: 2, NAME: "B" }, geometry: null as never },
+        ],
+      },
+    };
+    const table: GeoLibreLayer = {
+      ...layer,
+      id: "table",
+      name: "Table",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { id: 1, name: "a" }, geometry: null as never }],
+      },
+    };
+    const tool = getVectorTool("attribute-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [target, table],
+      parameters: { layer: "target", overlay: "table", target_field: "id", join_field: "id" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    assert.deepEqual(
+      out!.features.map((f) => f.properties),
+      [
+        { name_right: "a", id: 1, NAME: "A" },
+        { name_right: null, id: 2, NAME: "B" },
+      ],
+    );
+  });
+
+  it("spatial join keeps a __proto__ property from the join layer", () => {
+    const square = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [0, 0],
+          [0, 10],
+          [10, 10],
+          [10, 0],
+          [0, 0],
+        ],
+      ],
+    };
+    const zones: GeoLibreLayer = {
+      ...layer,
+      id: "zones",
+      name: "Zones",
+      geojson: {
+        type: "FeatureCollection",
+        features: [{ type: "Feature", properties: { zone: "z" }, geometry: square }],
+      },
+    };
+    const pts: GeoLibreLayer = {
+      ...layer,
+      id: "pts",
+      name: "Pts",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: JSON.parse('{"__proto__":"keep"}'),
+            geometry: { type: "Point", coordinates: [5, 5] },
+          },
+        ],
+      },
+    };
+    const tool = getVectorTool("spatial-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [zones, pts],
+      parameters: { layer: "zones", overlay: "pts", predicate: "contains" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    const props = out!.features[0].properties!;
+    assert.ok(Object.hasOwn(props, "__proto__"));
+    assert.equal(Object.getOwnPropertyDescriptor(props, "__proto__")?.value, "keep");
+  });
+
+  it("attribute join gives null for a __proto__ field a matched row lacks", () => {
+    const target: GeoLibreLayer = {
+      ...layer,
+      id: "target",
+      name: "Target",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { id: 1 }, geometry: null as never },
+          { type: "Feature", properties: { id: 2 }, geometry: null as never },
+        ],
+      },
+    };
+    const table: GeoLibreLayer = {
+      ...layer,
+      id: "table",
+      name: "Table",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: JSON.parse('{"id":1,"__proto__":"keep"}'),
+            geometry: null as never,
+          },
+          { type: "Feature", properties: { id: 2 }, geometry: null as never },
+        ],
+      },
+    };
+    const tool = getVectorTool("attribute-join");
+    assert.ok(tool);
+    let out: FeatureCollection | null = null;
+    tool.run({
+      layers: [target, table],
+      parameters: { layer: "target", overlay: "table", target_field: "id", join_field: "id" },
+      log: () => {},
+      addResultLayer: (_name, geojson) => {
+        out = geojson;
+      },
+    });
+    const [first, second] = out!.features.map((f) => f.properties!);
+    assert.equal(Object.getOwnPropertyDescriptor(first, "__proto__")?.value, "keep");
+    // The second row has no own __proto__, so the field is null, not Object.prototype.
+    assert.equal(Object.getOwnPropertyDescriptor(second, "__proto__")?.value, null);
+  });
+
+  it("joinFieldOutputNames keeps exact matches and suffixes case-only clashes", () => {
+    const names = joinFieldOutputNames(["NAME", "name_right", "id"], ["name", "id", "Id", "pop"]);
+    assert.deepEqual(Object.fromEntries(names), {
+      name: "name_right_2",
+      id: "id",
+      Id: "Id_right",
+      pop: "pop",
+    });
   });
 
   it("attribute-joins a table's fields onto features by a key", () => {
