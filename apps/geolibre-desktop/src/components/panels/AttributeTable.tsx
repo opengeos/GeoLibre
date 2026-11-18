@@ -101,6 +101,7 @@ import {
   Ban,
 } from "lucide-react";
 import {
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
@@ -198,7 +199,11 @@ const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
 // The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
 // the last column is widened by this much and padded past it; otherwise the
 // scrollbar covers the end of right-aligned numbers.
-const VERTICAL_SCROLLBAR_GUTTER = 14;
+// Both are rem so they track the scrollbar (w-3.5) and cell padding (p-2 /
+// px-2) at any root font size. CELL_PADDING mirrors TableCell/TableHead in
+// packages/ui/src/components/table.tsx and must change with them.
+const VERTICAL_SCROLLBAR_GUTTER = "0.875rem";
+const CELL_PADDING = "0.5rem";
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
@@ -1170,9 +1175,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
-  const tableWidth =
-    tableColumns.reduce((width, column) => width + columnWidth(column), 0) +
-    VERTICAL_SCROLLBAR_GUTTER;
+  const columnsWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
+  const tableWidth = `calc(${columnsWidth}px + ${VERTICAL_SCROLLBAR_GUTTER})`;
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
@@ -2395,8 +2399,14 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
               data-testid="attribute-table"
               // The last column's cells pad past the vertical scrollbar
               // (p-2 + VERTICAL_SCROLLBAR_GUTTER) so its values stay visible.
-              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[1.375rem]"
-              style={{ minWidth: "100%", width: tableWidth }}
+              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[var(--attribute-table-last-pe)]"
+              style={
+                {
+                  minWidth: "100%",
+                  width: tableWidth,
+                  "--attribute-table-last-pe": `calc(${CELL_PADDING} + ${VERTICAL_SCROLLBAR_GUTTER})`,
+                } as CSSProperties
+              }
             >
               <colgroup>
                 {tableColumns.map((col, index) => (
@@ -2404,8 +2414,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                     key={col}
                     style={{
                       width:
-                        columnWidth(col) +
-                        (index === tableColumns.length - 1 ? VERTICAL_SCROLLBAR_GUTTER : 0),
+                        index === tableColumns.length - 1
+                          ? `calc(${columnWidth(col)}px + ${VERTICAL_SCROLLBAR_GUTTER})`
+                          : columnWidth(col),
                     }}
                   />
                 ))}
