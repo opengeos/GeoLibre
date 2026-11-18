@@ -571,7 +571,7 @@ export class MapController implements MapEngine {
     const fitBounds = map.fitBounds.bind(map);
     map.fitBounds = (...args: Parameters<maplibregl.Map["fitBounds"]>) => {
       if (this.map === map && this.activeCrs && this.activeCrsConverter) {
-        const [bounds, options] = args;
+        const [bounds, options, eventData] = args;
         let box: [number, number, number, number] | null = null;
         try {
           const lngLat = maplibregl.LngLatBounds.convert(bounds);
@@ -585,6 +585,7 @@ export class MapController implements MapEngine {
           duration: options?.duration,
           animate: options?.animate,
           maxZoom: options?.maxZoom,
+          eventData,
         };
         if (box && box.every(Number.isFinite) && this.fitInMapCrs(box, null, fit) !== null) {
           return map;
@@ -1646,14 +1647,10 @@ export class MapController implements MapEngine {
 
   fitLayer(layer: GeoLibreLayer): boolean {
     if (layer.type === "3d-tiles" && this.map) {
-      const center = layer.metadata.center;
-      if (
-        Array.isArray(center) &&
-        typeof center[0] === "number" &&
-        typeof center[1] === "number" &&
-        Number.isFinite(center[0]) &&
-        Number.isFinite(center[1])
-      ) {
+      const center = tilesetCenter(layer);
+      if (center) {
+        // A center off a custom CRS's grid would be clamped to its edge (#3516).
+        if (this.isExtentOutsideMapCrs([center[0], center[1], center[0], center[1]])) return false;
         // Tilesets only expose their center, not a native zoom range. Use a
         // conservative floor so city-scale tilesets that render below zoom 18
         // are not flown past into an empty viewport.
@@ -1735,8 +1732,19 @@ export class MapController implements MapEngine {
     const crs = this.activeCrs;
     const converter = this.activeCrsConverter;
     if (!crs || !converter) return false;
-    const bounds = this.resolveLayerBounds(layer);
-    if (!bounds) return false;
+    // A tileset with a center is framed by it (fitLayer), not by its bounds.
+    const center = layer.type === "3d-tiles" ? tilesetCenter(layer) : null;
+    const bounds = center
+      ? ([center[0], center[1], center[0], center[1]] as [number, number, number, number])
+      : this.resolveLayerBounds(layer);
+    return bounds ? this.isExtentOutsideMapCrs(bounds) : false;
+  }
+
+  /** Whether `bounds` lies wholly off the active custom CRS's tile grid. */
+  private isExtentOutsideMapCrs(bounds: [number, number, number, number]): boolean {
+    const crs = this.activeCrs;
+    const converter = this.activeCrsConverter;
+    if (!crs || !converter) return false;
     return placeExtentInMapCrs(bounds, converter, crs.tileMatrixSet)?.kind === "outside";
   }
 
@@ -1752,7 +1760,14 @@ export class MapController implements MapEngine {
   private fitInMapCrs(
     bounds: [number, number, number, number],
     minRenderZoom: number | null,
-    options: { padding?: number; duration?: number; animate?: boolean; maxZoom?: number } = {},
+    options: {
+      padding?: number;
+      duration?: number;
+      animate?: boolean;
+      maxZoom?: number;
+      /** Passed on to the camera move, as MapLibre's own fitBounds does. */
+      eventData?: unknown;
+    } = {},
   ): boolean | null {
     const map = this.map;
     const crs = this.activeCrs;
@@ -1776,13 +1791,16 @@ export class MapController implements MapEngine {
       typeof map.getMaxZoom === "function" ? map.getMaxZoom() : 24,
       options.maxZoom ?? Infinity,
     );
-    map.flyTo({
-      center: camera.center,
-      zoom,
-      bearing: 0,
-      duration: options.duration ?? 800,
-      ...(options.animate === undefined ? {} : { animate: options.animate }),
-    });
+    map.flyTo(
+      {
+        center: camera.center,
+        zoom,
+        bearing: 0,
+        duration: options.duration ?? 800,
+        ...(options.animate === undefined ? {} : { animate: options.animate }),
+      },
+      options.eventData as Parameters<maplibregl.Map["flyTo"]>[1],
+    );
     return true;
   }
 
@@ -3393,6 +3411,18 @@ function constrainCenterToVisibleBounds(
         : (mercatorBounds.north + mercatorBounds.south) / 2,
     ),
   );
+}
+
+/** A 3D Tiles layer's advertised `[lng, lat]` center, or null. */
+function tilesetCenter(layer: GeoLibreLayer): [number, number] | null {
+  const center = layer.metadata.center;
+  return Array.isArray(center) &&
+    typeof center[0] === "number" &&
+    typeof center[1] === "number" &&
+    Number.isFinite(center[0]) &&
+    Number.isFinite(center[1])
+    ? [center[0], center[1]]
+    : null;
 }
 
 function mapBoundsForPreferences(preferences: MapPreferences): maplibregl.LngLatBoundsLike | null {

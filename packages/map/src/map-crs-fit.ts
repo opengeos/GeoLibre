@@ -56,9 +56,10 @@ export function mapCrsGridBox(tileMatrixSet: MapCrsTileMatrixSet): CrsBox {
 /**
  * Points sampled over a lng/lat extent, projected into the CRS.
  *
- * Longitudes are wrapped into [-180, 180] before projecting, so a box written
- * across the antimeridian (`[170, -10, 190, 10]`) samples the real meridians
- * on a geographic grid rather than ones past its edge.
+ * A box crossing the antimeridian, written either way (`[170, -10, 190, 10]`
+ * or `[170, -10, -170, 10]`), is sampled the short way across it, and
+ * longitudes are wrapped into [-180, 180] before projecting so a geographic
+ * grid sees the real meridians rather than ones past its edge.
  *
  * Args:
  *   bounds: `[west, south, east, north]` in degrees.
@@ -71,7 +72,7 @@ function sampleBoundsInCrs(
   bounds: [number, number, number, number],
   converter: MapCrsConverter,
 ): [number, number][] {
-  const [west, south, east, north] = bounds;
+  const [west, south, east, north] = unwrapBounds(bounds);
   const points: [number, number][] = [];
   for (let i = 0; i <= SAMPLES_PER_EDGE; i++) {
     const raw = west + ((east - west) * i) / SAMPLES_PER_EDGE;
@@ -86,6 +87,47 @@ function sampleBoundsInCrs(
       }
       const [x, y] = point;
       if (Number.isFinite(x) && Number.isFinite(y)) points.push([x, y]);
+    }
+  }
+  return points;
+}
+
+/** `bounds` with `east` unwrapped past `west` for a box across the antimeridian. */
+function unwrapBounds(bounds: [number, number, number, number]): [number, number, number, number] {
+  const [west, south, east, north] = bounds;
+  return [west, south, east < west ? east + 360 : east, north];
+}
+
+/**
+ * Grid points, sampled over the grid square, whose lng/lat lies in `bounds`.
+ *
+ * The extent's own samples can straddle a grid much smaller than their spacing
+ * without one landing on it; sampling the grid the other way finds that
+ * overlap.
+ */
+function gridPointsInBounds(
+  bounds: [number, number, number, number],
+  converter: MapCrsConverter,
+  grid: CrsBox,
+): [number, number][] {
+  const [west, south, east, north] = unwrapBounds(bounds);
+  const span = east - west;
+  const points: [number, number][] = [];
+  for (let i = 0; i <= SAMPLES_PER_EDGE; i++) {
+    const x = grid[0] + ((grid[2] - grid[0]) * i) / SAMPLES_PER_EDGE;
+    for (let j = 0; j <= SAMPLES_PER_EDGE; j++) {
+      const y = grid[1] + ((grid[3] - grid[1]) * j) / SAMPLES_PER_EDGE;
+      let lngLat: number[];
+      try {
+        lngLat = converter.inverse([x, y]);
+      } catch {
+        continue;
+      }
+      const [lng, lat] = lngLat;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat) || lat < south || lat > north) continue;
+      // A pole is every longitude at once.
+      const offset = (((lng - west) % 360) + 360) % 360;
+      if (Math.abs(lat) >= 90 - 1e-9 || span >= 360 || offset <= span) points.push([x, y]);
     }
   }
   return points;
@@ -155,7 +197,7 @@ export function placeExtentInMapCrs(
     y <= grid[3] + tolerance;
   const inside = points.filter(onGrid);
   if (inside.length === points.length) return { kind: "inside" };
-  const clipped = boxAround(inside);
+  const clipped = boxAround([...inside, ...gridPointsInBounds(bounds, converter, grid)]);
   if (!clipped) return { kind: "outside" };
   // Clamp the noise allowance back onto the grid.
   return {

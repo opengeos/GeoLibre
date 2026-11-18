@@ -70,6 +70,27 @@ describe("map-crs-fit", () => {
     });
   });
 
+  it("samples a west > east box the short way across the antimeridian", () => {
+    const plate = getMapCrsPreset("earth-cylindrical")!;
+    const lngLat = proj4(plate.definition);
+    // A grid around Greenwich sees none of a dateline box; sampled the long
+    // way round, the box would sweep across it.
+    const greenwich = { origin: [-5, 5] as [number, number], extentAtZoom0: 10 };
+    assert.deepEqual(placeExtentInMapCrs([170, -1, -170, 1], lngLat, greenwich), {
+      kind: "outside",
+    });
+  });
+
+  it("finds a grid smaller than the extent's sample spacing", () => {
+    const identity = {
+      forward: ([x, y]: [number, number]) => [x, y],
+      inverse: ([x, y]: [number, number]) => [x, y],
+    };
+    const tiny = { origin: [1, 1] as [number, number], extentAtZoom0: 1 };
+    const placement = placeExtentInMapCrs([-180, 0, 180, 1], identity, tiny);
+    assert.equal(placement?.kind, "clipped");
+  });
+
   it("tests the footprint, not its box: a band of latitude past a polar grid's edge is outside", () => {
     const moon = getMapCrsPreset("moon-north-polar");
     assert.ok(moon, "the Moon north polar preset exists");
@@ -241,6 +262,32 @@ describe("MapController.fitLayer in a custom CRS", () => {
       ],
       [false, 0, 0],
     );
+  });
+
+  it("forwards the caller's eventData to a clipped camera move", () => {
+    const { controller } = crsController();
+    const internal = controller as unknown as Internals;
+    const map = internal.map as {
+      fitBounds: (...args: unknown[]) => unknown;
+      flyTo: (...args: unknown[]) => unknown;
+    };
+    const seen: unknown[] = [];
+    map.flyTo = (_options: unknown, eventData?: unknown) => seen.push(eventData);
+    internal.guardMapCrsFits(map);
+    map.fitBounds(CONUS, { animate: false }, { storyCameraToken: 1 });
+    assert.deepEqual(seen, [{ storyCameraToken: 1 }]);
+  });
+
+  it("does not fly to a 3D Tiles center off the CRS grid", () => {
+    const { controller, calls } = crsController();
+    const layer = {
+      ...pmtilesLayer(NORTH_SLOPE),
+      type: "3d-tiles",
+      metadata: { center: [-83.9, 35.96] },
+    } as unknown as GeoLibreLayer;
+    assert.equal(controller.fitLayer(layer), false);
+    assert.deepEqual(calls, []);
+    assert.equal(controller.isLayerOutsideMapCrs(layer), true);
   });
 
   it("reports a 3D Tiles layer with only bounds, off the grid, as outside the CRS", () => {
