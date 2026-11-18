@@ -80,7 +80,10 @@ with rasterio.open(input_path) as src:
 elev = np.ma.filled(elev, np.nan) * z_factor
 dy, dx = np.gradient(elev, yres, xres)
 slope = np.pi / 2.0 - np.arctan(np.sqrt(dx * dx + dy * dy))
-aspect = np.arctan2(-dx, dy)
+# `az` is the math-convention angle (counter-clockwise from east), so the
+# aspect must use the same convention, as the browser engine's hillshade does.
+# The compass form atan2(-dx, dy) mirrors the light about the NE-SW axis.
+aspect = np.arctan2(dy, -dx)
 az = np.radians(360.0 - azimuth + 90.0)
 alt = np.radians(altitude)
 shaded = np.sin(alt) * np.sin(slope) + np.cos(alt) * np.cos(slope) * np.cos(az - aspect)
