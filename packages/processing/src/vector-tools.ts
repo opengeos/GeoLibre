@@ -1094,7 +1094,8 @@ export const spatialJoinTool: ProcessingAlgorithm = {
     // Rename join fields that clash case-insensitively with an input field so
     // the output never carries both `NAME` and `name` (issue #3514).
     const joinNames = joinFieldOutputNames(propertyKeys(inputFeatures), propertyKeys(joinFeatures));
-    const nullJoinProps: GeoJsonProperties = {};
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullJoinProps: GeoJsonProperties = Object.create(null);
     if (how === "left") {
       for (const name of joinNames.values()) nullJoinProps[name] = null;
     }
@@ -1568,7 +1569,8 @@ export const attributeJoinTool: ProcessingAlgorithm = {
     // Rename brought-over fields that clash case-insensitively with a target
     // field, so the output never carries both `NAME` and `name` (issue #3514).
     const outputNames = joinFieldOutputNames(propertyKeys(input.features), selectedFields);
-    const nullFill: GeoJsonProperties = {};
+    // Null prototype: a `__proto__` field stays an own property.
+    const nullFill: GeoJsonProperties = Object.create(null);
     for (const f of selectedFields) nullFill[outputNames.get(f) ?? f] = null;
 
     let matched = 0;
@@ -1589,7 +1591,8 @@ export const attributeJoinTool: ProcessingAlgorithm = {
         continue;
       }
       matched += 1;
-      const picked: GeoJsonProperties = {};
+      // Null prototype: a `__proto__` field stays an own property.
+      const picked: GeoJsonProperties = Object.create(null);
       for (const f of selectedFields) {
         picked[outputNames.get(f) ?? f] = joinProps[f] !== undefined ? joinProps[f] : null;
       }

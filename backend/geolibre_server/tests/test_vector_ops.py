@@ -584,6 +584,14 @@ def test_join_field_output_names_dedupes_case_insensitively() -> None:
     assert names == {"name": "name_right_2", "id": "id", "Id": "Id_right", "pop": "pop"}
 
 
+def test_dedupe_columns_case_insensitive_never_renames_kept_columns() -> None:
+    # The active geometry column keeps its name even when a property that
+    # differs only by case comes first.
+    assert vector_ops._dedupe_columns_case_insensitive(
+        ["Geometry", "geometry", "a"], keep=("geometry",)
+    ) == ["Geometry_2", "geometry", "a"]
+
+
 def test_dedupe_columns_case_insensitive_suffixes_repeats() -> None:
     assert vector_ops._dedupe_columns_case_insensitive(["a", "A", "b", "a_2", "A"]) == [
         "a",

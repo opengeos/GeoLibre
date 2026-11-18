@@ -235,7 +235,9 @@ export async function registerLayerTables(
           `SELECT * FROM ST_Read(${quoteSqlString(fileName)})`,
       );
     } catch (error) {
-      if (!failures) throw error;
+      // Skip only errors about this layer's data; anything else (out of
+      // memory, a poisoned instance, an interrupt) must still fail the query.
+      if (!failures || !isLayerDataError(error)) throw error;
       failures.push({
         tableName,
         layerName: layer.name,
@@ -247,6 +249,18 @@ export async function registerLayerTables(
   }
 
   return registered;
+}
+
+/**
+ * DuckDB error classes a malformed layer can raise while `ST_Read` loads it
+ * (a duplicate column, an unreadable value), as opposed to engine failures.
+ */
+const LAYER_DATA_ERROR = /\b(?:Binder|Catalog|Conversion|Invalid Input|IO|Parser) Error\b/;
+
+/** True when a registration error is about the layer's data, not the engine. */
+function isLayerDataError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return LAYER_DATA_ERROR.test(message) && !/stoi:\s*no conversion/i.test(message);
 }
 
 /** Read the column names from a DuckDB-WASM Arrow result, even when empty. */

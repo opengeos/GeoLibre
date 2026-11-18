@@ -460,7 +460,7 @@ def _join_field_output_names(
     return names
 
 
-def _dedupe_columns_case_insensitive(columns: Iterable[str]) -> list[str]:
+def _dedupe_columns_case_insensitive(columns: Iterable[str], keep: Iterable[str] = ()) -> list[str]:
     """Rename later columns that repeat an earlier one ignoring case.
 
     A safety net after ``gpd.sjoin``: its own ``_left``/``_right`` suffixes can
@@ -468,13 +468,19 @@ def _dedupe_columns_case_insensitive(columns: Iterable[str]) -> list[str]:
 
     Args:
         columns: Column names in output order.
+        keep: Names that are never renamed (such as the active geometry
+            column); they claim their name before any other column.
 
     Returns:
         The names with each case-insensitive repeat suffixed ``_2``, ``_3``, ...
     """
-    taken: set[str] = set()
+    keep_set = set(keep)
+    taken: set[str] = {name.lower() for name in keep_set}
     out: list[str] = []
     for column in columns:
+        if column in keep_set:
+            out.append(column)
+            continue
         name = column
         n = 2
         while name.lower() in taken:
@@ -533,7 +539,7 @@ def _spatial_join(
     # sjoin appends an "index_right" bookkeeping column; drop it so the output
     # carries only the two layers' real attributes.
     joined = joined.drop(columns=["index_right"], errors="ignore")
-    joined.columns = _dedupe_columns_case_insensitive(joined.columns)
+    joined.columns = _dedupe_columns_case_insensitive(joined.columns, keep=(joined.geometry.name,))
     return (
         _to_feature_collection(joined),
         [f"Spatial join: produced {len(joined)} feature(s)"],
