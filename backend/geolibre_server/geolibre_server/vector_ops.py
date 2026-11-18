@@ -464,7 +464,10 @@ def _dedupe_columns_case_insensitive(columns: Iterable[str], keep: Iterable[str]
     """Rename later columns that repeat an earlier one ignoring case.
 
     A safety net after ``gpd.sjoin``: its own ``_left``/``_right`` suffixes can
-    land on a name another column already has in a different case.
+    land on a name another column already has in a different case. It also
+    renames a case-only clash that was already on the input layer (``name``
+    next to ``NAME`` becomes ``name_2``), which the client engine leaves as
+    is; either output loads in the SQL workspace, which dedupes on register.
 
     Args:
         columns: Column names in output order.
