@@ -195,6 +195,10 @@ const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
 const ESTIMATED_ROW_HEIGHT = 37;
 /** Sticky header plus horizontal scrollbar: the table's non-row height, in px. */
 const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
+// The vertical scrollbar (w-3.5) overlays the viewport's inline-end edge, so
+// the last column is widened by this much and padded past it; otherwise the
+// scrollbar covers the end of right-aligned numbers.
+const VERTICAL_SCROLLBAR_GUTTER = 14;
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
@@ -1166,7 +1170,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const columnWidth = (key: SortKey) =>
     columnWidths[key] ??
     (key === "__featureId" ? DEFAULT_FEATURE_ID_COLUMN_WIDTH : DEFAULT_ATTRIBUTE_COLUMN_WIDTH);
-  const tableWidth = tableColumns.reduce((width, column) => width + columnWidth(column), 0);
+  const tableWidth =
+    tableColumns.reduce((width, column) => width + columnWidth(column), 0) +
+    VERTICAL_SCROLLBAR_GUTTER;
 
   const columnWidthLimits = (key: SortKey) =>
     key === "__featureId"
@@ -2387,12 +2393,21 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             // scroll.
             <table
               data-testid="attribute-table"
-              className="mb-3.5 table-fixed caption-bottom text-sm"
+              // The last column's cells pad past the vertical scrollbar
+              // (p-2 + VERTICAL_SCROLLBAR_GUTTER) so its values stay visible.
+              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[1.375rem]"
               style={{ minWidth: "100%", width: tableWidth }}
             >
               <colgroup>
-                {tableColumns.map((col) => (
-                  <col key={col} style={{ width: columnWidth(col) }} />
+                {tableColumns.map((col, index) => (
+                  <col
+                    key={col}
+                    style={{
+                      width:
+                        columnWidth(col) +
+                        (index === tableColumns.length - 1 ? VERTICAL_SCROLLBAR_GUTTER : 0),
+                    }}
+                  />
                 ))}
               </colgroup>
               <TableHeader className="sticky top-0 z-10 bg-card shadow-xs">
