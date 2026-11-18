@@ -597,10 +597,15 @@ export function LayerRow({
               e.stopPropagation();
               const controller = mapControllerRef.current;
               // A layer with no known extent (e.g. a bare `{z}/{x}/{y}` vector
-              // tile URL viewed nowhere near its data) cannot be framed; say so
+              // tile URL viewed nowhere near its data), or one wholly outside
+              // the area a custom map CRS shows, cannot be framed; say so
               // rather than leave the button looking broken.
               if (controller && !controller.fitLayer(layer)) {
-                notify.info(t("layers.zoomToLayerUnknownExtent", { name: layer.name }));
+                notify.info(
+                  controller.isLayerOutsideMapCrs?.(layer)
+                    ? t("layers.zoomToLayerOutsideMapCrs", { name: layer.name })
+                    : t("layers.zoomToLayerUnknownExtent", { name: layer.name }),
+                );
               }
             }}
           >
