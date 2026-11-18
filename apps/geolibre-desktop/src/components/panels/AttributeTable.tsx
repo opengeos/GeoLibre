@@ -101,6 +101,7 @@ import {
   Ban,
 } from "lucide-react";
 import {
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
@@ -199,6 +200,8 @@ const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
 // the last column is widened by this much and padded past it; otherwise the
 // scrollbar covers the end of right-aligned numbers.
 const VERTICAL_SCROLLBAR_GUTTER = 14;
+/** TableCell/TableHead's own inline padding (p-2 / px-2), in px. */
+const CELL_PADDING = 8;
 // Tall enough to keep a few rows visible when the toolbar wraps on laptop widths.
 const DEFAULT_TABLE_HEIGHT = 240;
 const MIN_TABLE_HEIGHT = 96;
@@ -2395,8 +2398,14 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
               data-testid="attribute-table"
               // The last column's cells pad past the vertical scrollbar
               // (p-2 + VERTICAL_SCROLLBAR_GUTTER) so its values stay visible.
-              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[1.375rem]"
-              style={{ minWidth: "100%", width: tableWidth }}
+              className="mb-3.5 table-fixed caption-bottom text-sm [&_tr>*:last-child]:pe-[var(--attribute-table-last-pe)]"
+              style={
+                {
+                  minWidth: "100%",
+                  width: tableWidth,
+                  "--attribute-table-last-pe": `${CELL_PADDING + VERTICAL_SCROLLBAR_GUTTER}px`,
+                } as CSSProperties
+              }
             >
               <colgroup>
                 {tableColumns.map((col, index) => (
