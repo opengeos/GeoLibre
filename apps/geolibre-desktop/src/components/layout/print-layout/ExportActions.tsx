@@ -98,10 +98,10 @@ export function ExportActions({
           atlasActive
             ? t("printLayout.geoPdf.atlas")
             : hasCapture
-            ? georeferenced
-              ? t("printLayout.geoPdf.georeferenced")
-              : t("printLayout.geoPdf.notGeoreferenced")
-            : undefined
+              ? georeferenced
+                ? t("printLayout.geoPdf.georeferenced")
+                : t("printLayout.geoPdf.notGeoreferenced")
+              : undefined
         }
         onClick={() => void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))}
       >
