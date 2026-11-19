@@ -191,7 +191,18 @@ function georefDatumLngLat(georef: CaptureGeoref, px: number, py: number): [numb
 }
 
 /** PROJ parameters that describe a datum rather than a projection. */
-const DATUM_PARAMS = new Set(["datum", "ellps", "towgs84", "nadgrids", "a", "b", "rf", "f", "R", "pm"]);
+const DATUM_PARAMS = new Set([
+  "datum",
+  "ellps",
+  "towgs84",
+  "nadgrids",
+  "a",
+  "b",
+  "rf",
+  "f",
+  "R",
+  "pm",
+]);
 
 /**
  * The geographic (longitude/latitude) PROJ definition on the same datum as a
