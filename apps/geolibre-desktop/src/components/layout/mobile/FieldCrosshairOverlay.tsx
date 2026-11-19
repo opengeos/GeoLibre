@@ -1,7 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import { Check, Crosshair, Navigation, Plus, X } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { appendFieldCaptureFeature, useFieldCrosshairStore } from "../../../lib/field-crosshair";
+import { triggerHaptic } from "../../../lib/haptics";
+import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { notify } from "../../../lib/notify";
 import { useScreenWakeLock } from "../../../lib/wake-lock";
 
@@ -19,6 +22,14 @@ export function FieldCrosshairOverlay() {
   const mapView = useAppStore((s) => s.mapView);
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   useScreenWakeLock(active);
+
+  useEffect(() => {
+    if (!active) return;
+    return registerMobileBackHandler(() => {
+      stop();
+      return true;
+    });
+  }, [active, stop]);
 
   if (!active) return null;
 
@@ -41,6 +52,7 @@ export function FieldCrosshairOverlay() {
       store.updateLayer(id, { metadata: { fieldCrosshair: true } });
     }
     incrementCaptured();
+    triggerHaptic("medium");
     notify.info(
       t("mobileShell.crosshair.pointCaptured", {
         coords: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,

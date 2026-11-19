@@ -96,5 +96,41 @@ test("renders the touch mobile shell with bottom navigation and draggable sheets
   await expect(page.locator("html")).toHaveAttribute("data-touch-ui", "true");
   await expect(page.getByTestId("mobile-bottom-nav")).toBeVisible();
 
+  // Field sheet launches map-center crosshair capture and adds a Field captures layer.
+  await page.getByTestId("mobile-nav-field").tap();
+  await page
+    .getByTestId("mobile-sheet-field")
+    .getByRole("button", { name: "Map-center crosshair capture" })
+    .tap();
+  await expect(page.getByTestId("field-crosshair-reticle")).toBeVisible();
+  await page.getByTestId("field-crosshair-drop").tap();
+  await page.getByTestId("field-crosshair-done").tap();
+  await expect(page.getByTestId("field-crosshair-reticle")).toBeHidden();
+  await page.getByTestId("mobile-nav-layers").tap();
+  await expect(page.getByTestId("mobile-sheet-layers")).toContainText("Field captures");
+
   expect(problems, "console errors or failed same-origin requests").toEqual([]);
+});
+
+test.describe("tablet touch ergonomics", () => {
+  test.use({
+    viewport: { width: 1024, height: 768 },
+    hasTouch: true,
+    isMobile: false,
+  });
+
+  test("enables touch targets on tablets while keeping split-screen desktop chrome", async ({
+    page,
+  }) => {
+    const { problems } = collectPageProblems(page);
+    await waitForMap(page);
+    await expect(page.locator("html")).toHaveAttribute("data-touch-ui", "true");
+    await expect(page.getByTestId("desktop-shell")).not.toHaveAttribute(
+      "data-mobile-shell",
+      "true",
+    );
+    await expect(page.getByTestId("mobile-bottom-nav")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Project", exact: true })).toBeVisible();
+    expect(problems, "console errors or failed same-origin requests").toEqual([]);
+  });
 });

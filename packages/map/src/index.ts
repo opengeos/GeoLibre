@@ -58,6 +58,7 @@ export {
   finishFeatureSelection,
   undoFeatureSelectionVertex,
 } from "./map-feature-selection";
+export { MAX_MOBILE_PIXEL_RATIO, resolveMapPixelRatio } from "./mobile-pixel-ratio";
 export {
   buildIdentifyQueryGeometry,
   isTouchIdentifyActive,

@@ -20,6 +20,7 @@ import { createAppAPI } from "../../../hooks/usePlugins";
 import { useRightPanelState } from "../../../hooks/useRightPanels";
 import type { ThemeMode } from "../../../hooks/useThemeMode";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { registerMobileBackHandler } from "../../../lib/mobile-back-stack";
 import { SectionErrorBoundary } from "../../common/error-boundaries";
 import { LayerPanel } from "../../panels/LayerPanel";
 import { StylePanel } from "../../panels/StylePanel";
@@ -148,6 +149,38 @@ export function useMobileShellState(mobileShell: boolean) {
   const closeMobileTab = useCallback(() => {
     setActiveMobileTab(null);
   }, []);
+
+  useEffect(() => {
+    if (!mobileShell) return;
+    return registerMobileBackHandler(() => {
+      if (floatingPanelCount > 0) {
+        closeAllFloatingPanels();
+        return true;
+      }
+      if (activeMobileTab !== null) {
+        closeMobileTab();
+        return true;
+      }
+      if (expandedPluginPanelId) {
+        collapseRightPanel(expandedPluginPanelId);
+        return true;
+      }
+      if (anyBottomPanelOpen) {
+        closeAllBottomPanels();
+        return true;
+      }
+      return false;
+    });
+  }, [
+    mobileShell,
+    floatingPanelCount,
+    activeMobileTab,
+    expandedPluginPanelId,
+    anyBottomPanelOpen,
+    closeAllFloatingPanels,
+    closeMobileTab,
+    closeAllBottomPanels,
+  ]);
 
   const handleSelectMobileTab = useCallback(
     (tab: MobileNavTabId | null) => {

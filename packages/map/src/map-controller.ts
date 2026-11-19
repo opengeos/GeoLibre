@@ -1,4 +1,5 @@
 import { showGlSearchResult } from "./gl-search-result";
+import { resolveMapPixelRatio } from "./mobile-pixel-ratio";
 import {
   antimeridianAwareBbox,
   BLANK_BASEMAP,
@@ -486,6 +487,7 @@ export class MapController implements MapEngine {
       // that discard the drawing buffer after compositing (most mobile GPUs).
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
+      pixelRatio: resolveMapPixelRatio(),
       // The map's only request transform: plugins register headers for their
       // tile services rather than replacing it (see tile-request-headers.ts).
       transformRequest: transformTileRequest,
