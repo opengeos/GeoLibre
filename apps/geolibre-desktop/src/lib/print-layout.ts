@@ -193,6 +193,29 @@ export function pageMm(size: ResolvedPageSize): {
 }
 
 /**
+ * The largest canvas, in pixels, every engine GeoLibre runs on can draw:
+ * WebKit (Safari, and the desktop app on macOS and Linux) refuses a bigger
+ * one, which would export a blank page.
+ */
+export const MAX_EXPORT_CANVAS_PIXELS = 16_777_216;
+
+/**
+ * The resolution a page actually exports at: the chosen DPI, lowered just
+ * enough that the page fits in {@link MAX_EXPORT_CANVAS_PIXELS} (A3 at 300 DPI
+ * would be 17.4 megapixels). Screen-sized pages ignore DPI.
+ *
+ * @param size - The resolved page size.
+ * @param dpi - The chosen export resolution.
+ * @returns The DPI to render at.
+ */
+export function exportDpiForPage(size: ResolvedPageSize, dpi: number): number {
+  if (size.unit !== "mm") return dpi;
+  const { widthMm, heightMm } = pageMm(size);
+  const limit = Math.floor(25.4 * Math.sqrt(MAX_EXPORT_CANVAS_PIXELS / (widthMm * heightMm)));
+  return Math.max(1, Math.min(dpi, limit));
+}
+
+/**
  * Convert a resolved page size to output pixels at the given dpi. Pixel-unit
  * sizes are exact (dpi is ignored); millimetre sizes scale by dpi/25.4.
  */

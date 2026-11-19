@@ -10,7 +10,10 @@ import {
   WEB_MERCATOR,
 } from "../apps/geolibre-desktop/src/lib/geopdf";
 import {
+  exportDpiForPage,
+  MAX_EXPORT_CANVAS_PIXELS,
   mapImagePlacement,
+  pagePx,
   type LayoutOptions,
 } from "../apps/geolibre-desktop/src/lib/print-layout";
 import { writeGeoPdfViewports } from "../apps/geolibre-desktop/src/lib/print-layout-export";
@@ -243,5 +246,27 @@ describe("geographicDefinitionOf", () => {
     assert.ok(Math.abs(lng - airyLng) < 1e-9 && Math.abs(lat - airyLat) < 1e-9);
     // OSGB36 and WGS 84 longitudes differ by roughly 100 m here.
     assert.ok(Math.abs(lng - wgsLng) > 5e-4);
+  });
+});
+
+describe("exportDpiForPage", () => {
+  it("keeps a page that fits the canvas limit at the chosen DPI", () => {
+    assert.equal(exportDpiForPage({ width: 297, height: 210, unit: "mm" }, 300), 300);
+  });
+
+  it("lowers the DPI just enough for A3 and Tabloid at 300", () => {
+    for (const size of [
+      { width: 297, height: 420, unit: "mm" as const },
+      { width: 279.4, height: 431.8, unit: "mm" as const },
+    ]) {
+      const dpi = exportDpiForPage(size, 300);
+      assert.ok(dpi < 300 && dpi > 280, `dpi ${dpi}`);
+      const { width, height } = pagePx(size, dpi);
+      assert.ok(width * height <= MAX_EXPORT_CANVAS_PIXELS);
+    }
+  });
+
+  it("ignores DPI for a screen-sized page", () => {
+    assert.equal(exportDpiForPage({ width: 3840, height: 2160, unit: "px" }, 300), 300);
   });
 });

@@ -13,6 +13,7 @@ import type { MapEngine } from "@geolibre/map";
 import { isFullViewportMapCanvas } from "@geolibre/map/map-capture";
 import {
   drawLayout,
+  exportDpiForPage,
   mapImagePlacement,
   pageMm,
   pagePx,
@@ -395,7 +396,7 @@ function haversineMeters(a: { lng: number; lat: number }, b: { lng: number; lat:
  */
 function renderToCanvas(opts: LayoutOptions, dpi: number): HTMLCanvasElement {
   const size = resolvePageSize(opts);
-  const { width, height } = pagePx(size, dpi);
+  const { width, height } = pagePx(size, exportDpiForPage(size, dpi));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
