@@ -283,10 +283,14 @@ function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
   }
 }
 
-/** Serialize a draft target for comparison; DuckDB BIGINT columns hold BigInts. */
+/**
+ * Serialize a draft target for comparison. DuckDB BIGINT columns hold BigInts,
+ * which JSON.stringify rejects. Encode them as an object under a NUL-prefixed
+ * key no real column carries, so `1n` never matches the string "1n" or "1".
+ */
 function draftTargetJson(target: AttributeTableDraftTarget): string {
   return JSON.stringify(target, (_key, value: unknown) =>
-    typeof value === "bigint" ? `${value}n` : value,
+    typeof value === "bigint" ? { "\u0000bigint": value.toString() } : value,
   );
 }
 
