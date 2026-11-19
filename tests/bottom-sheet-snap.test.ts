@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BOTTOM_SHEET_DETENT_RATIOS,
+  BOTTOM_SHEET_VELOCITY_STALE_MS,
   clampSheetHeight,
   detentToHeightPx,
   resolveNextDetent,
+  resolveReleaseVelocity,
   sortDetents,
   stepDetent,
 } from "../packages/ui/src/lib/bottom-sheet-snap";
@@ -125,5 +127,12 @@ describe("bottom sheet snap math", () => {
     assert.equal(stepDetent("full", "up", detents), "full");
     assert.equal(stepDetent("half", "down", detents), "peek");
     assert.equal(stepDetent("peek", "down", detents), "peek");
+  });
+
+  it("drops stale drag velocity after a hold before release", () => {
+    assert.equal(resolveReleaseVelocity(1.2, 1000, 1000 + 20), 1.2);
+    assert.equal(resolveReleaseVelocity(-0.9, 1000, 1000 + BOTTOM_SHEET_VELOCITY_STALE_MS), -0.9);
+    assert.equal(resolveReleaseVelocity(1.2, 1000, 1000 + BOTTOM_SHEET_VELOCITY_STALE_MS + 1), 0);
+    assert.equal(resolveReleaseVelocity(1.2, 0, 50), 0);
   });
 });

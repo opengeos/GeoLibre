@@ -86,12 +86,14 @@ export function MobileToolbarChrome({
     capabilities: deploymentCapabilities,
     menuVisible: isMenuVisible(uiProfile, "addData"),
   });
+  const canOpenPluginsMenu = entryMenuOffered("plugins", {
+    viewer,
+    capabilities: deploymentCapabilities,
+    menuVisible: isMenuVisible(uiProfile, "plugins"),
+  });
   const canOpenBasemaps =
-    entryMenuOffered("plugins", {
-      viewer,
-      capabilities: deploymentCapabilities,
-      menuVisible: isMenuVisible(uiProfile, "plugins"),
-    }) && isPluginVisible(uiProfile, BASEMAP_CONTROL_PLUGIN_ID);
+    canOpenPluginsMenu && isPluginVisible(uiProfile, BASEMAP_CONTROL_PLUGIN_ID);
+  const canUseGeoEditor = canOpenPluginsMenu && isPluginVisible(uiProfile, GEO_EDITOR_PLUGIN_ID);
   const canRunProcessing =
     !viewer &&
     isMenuVisible(uiProfile, "processing") &&
@@ -165,6 +167,7 @@ export function MobileToolbarChrome({
             ) : null}
             {activeMobileTab === "field" ? (
               <MobileFieldSheetContent
+                canUseGeoEditor={canUseGeoEditor}
                 geoEditorActive={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
                 measureActive={measureVisible}
                 measureDisabled={!measureSupported && !measureVisible}

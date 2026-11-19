@@ -20,6 +20,26 @@ export const BOTTOM_SHEET_DISMISS_RATIO = 0.14;
  */
 export const BOTTOM_SHEET_FLICK_VELOCITY_PX_PER_MS = 0.45;
 
+/**
+ * Maximum pause (ms) between the last pointer move and release for a stored
+ * drag velocity to still count as an active flick. Holding stationary longer
+ * than this expires the velocity to 0 so the sheet snaps by position instead.
+ */
+export const BOTTOM_SHEET_VELOCITY_STALE_MS = 120;
+
+/** Expire stale drag velocity when the user paused before lifting the pointer. */
+export function resolveReleaseVelocity(
+  storedVelocityY: number,
+  lastMoveTimeMs: number,
+  releaseTimeMs: number,
+): number {
+  if (!Number.isFinite(lastMoveTimeMs) || !Number.isFinite(releaseTimeMs) || lastMoveTimeMs <= 0) {
+    return 0;
+  }
+  if (releaseTimeMs - lastMoveTimeMs > BOTTOM_SHEET_VELOCITY_STALE_MS) return 0;
+  return storedVelocityY;
+}
+
 /** Canonical order of detents from lowest to highest. */
 export const BOTTOM_SHEET_DETENT_ORDER: readonly BottomSheetDetent[] = ["peek", "half", "full"];
 

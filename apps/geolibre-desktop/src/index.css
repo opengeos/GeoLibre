@@ -6392,8 +6392,8 @@ html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
   box-shadow: none !important;
 }
 
-/* Lift toast notifications above the 56px MobileBottomNav when the phone
-   mobile shell is active so toasts never overlap bottom navigation tabs. */
+/* Lift toast notifications above the MobileBottomNav + MobileStatusPill when
+   the phone mobile shell is active so toasts never overlap bottom chrome. */
 body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
-  bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  bottom: calc(5.75rem + env(safe-area-inset-bottom));
 }

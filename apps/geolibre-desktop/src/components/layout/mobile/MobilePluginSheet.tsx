@@ -18,13 +18,16 @@ export function MobilePluginSheet({ activePanelId, contentEl }: MobilePluginShee
   const { t } = useTranslation();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
+  const hasPanel = panel !== undefined;
 
   useEffect(() => {
-    if (!activePanelId || !panel) return;
+    if (!activePanelId || !hasPanel) return;
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
-    wrapper.appendChild(contentEl);
-  }, [activePanelId, panel, contentEl]);
+    if (contentEl.parentElement !== wrapper) {
+      wrapper.appendChild(contentEl);
+    }
+  }, [activePanelId, hasPanel, contentEl]);
 
   if (!activePanelId || !panel) return null;
 

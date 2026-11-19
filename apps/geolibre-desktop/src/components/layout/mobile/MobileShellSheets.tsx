@@ -60,41 +60,65 @@ export function useMobileShellState(mobileShell: boolean) {
     if (store.ui.assistantOpen) store.setAssistantOpen(false);
   }, []);
 
-  useEffect(() => {
-    if (!mobileShell) setActiveMobileTab(null);
-  }, [mobileShell]);
-
+  const prevMobileShellRef = useRef(false);
   const prevExpandedPluginRef = useRef<string | null>(null);
-  useEffect(() => {
-    const prev = prevExpandedPluginRef.current;
-    prevExpandedPluginRef.current = expandedPluginPanelId;
-    if (mobileShell && expandedPluginPanelId && expandedPluginPanelId !== prev) {
-      setActiveMobileTab(null);
-    }
-  }, [mobileShell, expandedPluginPanelId]);
-
   const prevBottomPanelOpenRef = useRef(false);
+
   useEffect(() => {
-    const prev = prevBottomPanelOpenRef.current;
+    const enteredMobileShell = mobileShell && !prevMobileShellRef.current;
+    const pluginJustExpanded =
+      expandedPluginPanelId !== null && expandedPluginPanelId !== prevExpandedPluginRef.current;
+    const bottomJustOpened = anyBottomPanelOpen && !prevBottomPanelOpenRef.current;
+
+    prevMobileShellRef.current = mobileShell;
+    prevExpandedPluginRef.current = expandedPluginPanelId;
     prevBottomPanelOpenRef.current = anyBottomPanelOpen;
-    if (mobileShell && anyBottomPanelOpen && !prev) {
+
+    if (!mobileShell) {
+      setActiveMobileTab(null);
+      return;
+    }
+
+    if (enteredMobileShell && anyBottomPanelOpen && expandedPluginPanelId) {
+      setActiveMobileTab(null);
+      collapseRightPanel(expandedPluginPanelId);
+      return;
+    }
+
+    if (bottomJustOpened) {
       setActiveMobileTab(null);
       if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
+      return;
     }
-  }, [mobileShell, anyBottomPanelOpen, expandedPluginPanelId]);
+
+    if (pluginJustExpanded) {
+      setActiveMobileTab(null);
+      if (anyBottomPanelOpen) closeAllBottomPanels();
+    }
+  }, [mobileShell, expandedPluginPanelId, anyBottomPanelOpen, closeAllBottomPanels]);
+
+  const openMobileTab = useCallback(
+    (tab: MobileNavTabId) => {
+      if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
+      if (anyBottomPanelOpen) closeAllBottomPanels();
+      setActiveMobileTab(tab);
+    },
+    [expandedPluginPanelId, anyBottomPanelOpen, closeAllBottomPanels],
+  );
+
+  const closeMobileTab = useCallback(() => {
+    setActiveMobileTab(null);
+  }, []);
 
   const handleSelectMobileTab = useCallback(
     (tab: MobileNavTabId | null) => {
-      setActiveMobileTab((current) => {
-        const next = current === tab ? null : tab;
-        if (next !== null) {
-          if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
-          if (anyBottomPanelOpen) closeAllBottomPanels();
-        }
-        return next;
-      });
+      if (tab === null || activeMobileTab === tab) {
+        closeMobileTab();
+        return;
+      }
+      openMobileTab(tab);
     },
-    [expandedPluginPanelId, anyBottomPanelOpen, closeAllBottomPanels],
+    [activeMobileTab, closeMobileTab, openMobileTab],
   );
 
   const anyMobileSheetOpen =
@@ -106,7 +130,8 @@ export function useMobileShellState(mobileShell: boolean) {
 
   return {
     activeMobileTab,
-    setActiveMobileTab,
+    openMobileTab,
+    closeMobileTab,
     handleSelectMobileTab,
     mobileSheetHostEl,
     setMobileSheetHostEl,
@@ -119,7 +144,8 @@ export function useMobileShellState(mobileShell: boolean) {
 
 export interface MobileShellSheetsProps {
   activeMobileTab: MobileNavTabId | null;
-  onSelectMobileTab: (tab: MobileNavTabId | null) => void;
+  onOpenMobileTab: (tab: MobileNavTabId) => void;
+  onCloseMobileTab: () => void;
   expandedPluginPanelId: string | null;
   anyBottomPanelOpen: boolean;
   onCloseBottomPanels: () => void;
@@ -151,7 +177,8 @@ export interface MobileShellSheetsProps {
  */
 export function MobileShellSheets({
   activeMobileTab,
-  onSelectMobileTab,
+  onOpenMobileTab,
+  onCloseMobileTab,
   expandedPluginPanelId,
   anyBottomPanelOpen,
   onCloseBottomPanels,
@@ -183,7 +210,7 @@ export function MobileShellSheets({
         <BottomSheet
           open={activeMobileTab === "layers"}
           onOpenChange={(open) => {
-            if (!open) onSelectMobileTab(null);
+            if (!open) onCloseMobileTab();
           }}
           defaultDetent="half"
           hideHeader
@@ -209,7 +236,8 @@ export function MobileShellSheets({
               onOpenRasterSubset={onOpenRasterSubset}
               collapsed={activeMobileTab !== "layers"}
               onCollapsedChange={(collapsed) => {
-                onSelectMobileTab(collapsed ? null : "layers");
+                if (collapsed) onCloseMobileTab();
+                else onOpenMobileTab("layers");
               }}
               hideOwnRail
             />
@@ -220,7 +248,7 @@ export function MobileShellSheets({
         <BottomSheet
           open={activeMobileTab === "style"}
           onOpenChange={(open) => {
-            if (!open) onSelectMobileTab(null);
+            if (!open) onCloseMobileTab();
           }}
           defaultDetent="half"
           hideHeader
@@ -238,7 +266,8 @@ export function MobileShellSheets({
               openRequest={stylePanelOpenRequest}
               collapsed={activeMobileTab !== "style"}
               onCollapsedChange={(collapsed) => {
-                onSelectMobileTab(collapsed ? null : "style");
+                if (collapsed) onCloseMobileTab();
+                else onOpenMobileTab("style");
               }}
               autoCollapse={notebookOpen || storymapPresenting}
               hideOwnRail

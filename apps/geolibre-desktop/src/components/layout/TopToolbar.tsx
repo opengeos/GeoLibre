@@ -47,6 +47,7 @@ import { openExternalLink, type ToolbarChrome } from "./toolbar/constants";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
+import { ImageControlDialog } from "./toolbar/ImageControlDialog";
 import { PluginsMenu } from "./toolbar/PluginsMenu";
 import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
@@ -343,6 +344,7 @@ export function TopToolbar({
             onToggleThemeMode={onToggleThemeMode}
           />
         ) : null}
+        <ImageControlDialog panel={panels.image} />
         {sharedDialogs}
       </>
     );

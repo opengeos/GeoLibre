@@ -56,9 +56,11 @@ export {
   BOTTOM_SHEET_DETENT_RATIOS,
   BOTTOM_SHEET_DISMISS_RATIO,
   BOTTOM_SHEET_FLICK_VELOCITY_PX_PER_MS,
+  BOTTOM_SHEET_VELOCITY_STALE_MS,
   clampSheetHeight,
   detentToHeightPx,
   resolveNextDetent,
+  resolveReleaseVelocity,
   sortDetents,
   stepDetent,
 } from "./lib/bottom-sheet-snap";

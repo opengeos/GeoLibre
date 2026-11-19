@@ -388,15 +388,15 @@ export function DesktopShell({
   });
   useApplyTouchUiAttribute(touchUi);
   const mobile = useMobileShellState(mobileShell);
-  const { setActiveMobileTab } = mobile;
+  const { openMobileTab } = mobile;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
 
   const [stylePanelOpenRequest, setStylePanelOpenRequest] = useState(0);
   const openStylePanel = useCallback(() => {
     setStylePanelOpenRequest((request) => request + 1);
-    if (mobileShell) setActiveMobileTab("style");
-  }, [mobileShell, setActiveMobileTab]);
+    if (mobileShell) openMobileTab("style");
+  }, [mobileShell, openMobileTab]);
   const { shellStyle, startLayerPanelResize, startNotebookPanelResize, startStylePanelResize } =
     usePanelResize({ shellRef, verticalResizeGuideRef, layoutOptions, notebookOpen });
   const {
@@ -1057,15 +1057,14 @@ export function DesktopShell({
                 api={collaboration}
               />
             )}
-            {mobileShell && layoutOptions.statusBarVisible ? (
-              <MobileStatusPill
-                hidden={mobile.anyMobileSheetOpen}
-                diagnosticsErrorCount={diagnostics.errorCount}
-                diagnosticsWarningCount={diagnostics.warningCount}
-                onOpenDiagnostics={() => setDiagnosticsOpen(true)}
-              />
-            ) : null}
           </main>
+          {mobileShell && layoutOptions.statusBarVisible ? (
+            <MobileStatusPill
+              diagnosticsErrorCount={diagnostics.errorCount}
+              diagnosticsWarningCount={diagnostics.warningCount}
+              onOpenDiagnostics={() => setDiagnosticsOpen(true)}
+            />
+          ) : null}
           {!mobileShell && layoutOptions.bottomPanelsUnderMap ? bottomPanels : null}
         </div>
         {/* Same as the left dock: a map-only / hidden-panels embed skips the
@@ -1178,7 +1177,8 @@ export function DesktopShell({
         {mobileShell ? (
           <MobileShellSheets
             activeMobileTab={mobile.activeMobileTab}
-            onSelectMobileTab={mobile.setActiveMobileTab}
+            onOpenMobileTab={mobile.openMobileTab}
+            onCloseMobileTab={mobile.closeMobileTab}
             expandedPluginPanelId={mobile.expandedPluginPanelId}
             anyBottomPanelOpen={mobile.anyBottomPanelOpen}
             onCloseBottomPanels={mobile.closeAllBottomPanels}
@@ -1212,8 +1212,9 @@ export function DesktopShell({
           layerCount={layers.length}
           showLayers={layoutOptions.layerPanelVisible}
           showStyle={layoutOptions.stylePanelVisible}
-          showAdd={mobileCanAddData}
-          showField={!layoutOptions.viewer}
+          showAdd={layoutOptions.toolbarVisible && mobileCanAddData}
+          showField={layoutOptions.toolbarVisible && !layoutOptions.viewer}
+          showMore={layoutOptions.toolbarVisible}
         />
       ) : layoutOptions.statusBarVisible ? (
         <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>

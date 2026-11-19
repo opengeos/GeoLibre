@@ -11582,7 +11582,8 @@
       "settings": "Settings…",
       "diagnostics": "Diagnostics",
       "about": "About GeoLibre",
-      "switchToDesktopUi": "Switch to desktop layout"
+      "switchToDesktopUi": "Switch to desktop layout",
+      "switchToTouchUi": "Touch layout"
     },
     "status": {
       "gpsLabel": "GPS",

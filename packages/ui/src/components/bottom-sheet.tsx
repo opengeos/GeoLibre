@@ -5,6 +5,7 @@ import {
   clampSheetHeight,
   detentToHeightPx,
   resolveNextDetent,
+  resolveReleaseVelocity,
   sortDetents,
   stepDetent,
   type BottomSheetDetent,
@@ -29,9 +30,10 @@ export interface BottomSheetProps {
   /** Optional per-detent ratio overrides (0–1 of available container height). */
   detentRatios?: Partial<Record<BottomSheetDetent, number>>;
   /**
-   * When true, renders a dimmed scrim behind the sheet and blocks map taps
-   * behind it. Defaults to `false` so the map stays interactive above the sheet
-   * at `peek` / `half` detents.
+   * When true, renders a dimmed scrim behind the sheet, blocks background taps,
+   * and manages modal dialog focus entry, containment, and restoration.
+   * Defaults to `false` so the map stays interactive above the sheet at
+   * `peek` / `half` detents.
    */
   modal?: boolean;
   /** Whether the user may swipe down / tap Escape / tap close to dismiss. Defaults to `true`. */
@@ -64,22 +66,56 @@ export interface BottomSheetProps {
 
 const DRAG_ACTIVATION_PX = 4;
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+interface HostViewportMetrics {
+  /** Usable height inside the host above any overlaying software keyboard. */
+  availableHeight: number;
+  /** Bottom padding needed to lift the sheet above an overlaying keyboard. */
+  keyboardInsetPx: number;
+}
+
 /**
- * Read the live available height for a bottom sheet hosted inside `container`,
- * factoring in `window.visualViewport` so an open mobile virtual keyboard does
- * not bury the sheet's header or active input.
+ * Measure the sheet host's usable height and any overlap with the mobile
+ * virtual keyboard via `window.visualViewport`, so an overlaying keyboard lifts
+ * the sheet bottom edge rather than covering its header or focused inputs.
  */
-function measureContainerHeight(container: HTMLElement | null): number {
+function measureHostViewport(container: HTMLElement | null): HostViewportMetrics {
   const parentHeight = container?.clientHeight ?? 0;
-  if (typeof window === "undefined") return parentHeight || 640;
-  const visualHeight = window.visualViewport?.height ?? window.innerHeight;
-  if (parentHeight > 0) return Math.min(parentHeight, visualHeight);
-  return visualHeight;
+  if (typeof window === "undefined") {
+    return { availableHeight: parentHeight || 640, keyboardInsetPx: 0 };
+  }
+  const vv = window.visualViewport;
+  if (!vv) {
+    return { availableHeight: parentHeight || window.innerHeight, keyboardInsetPx: 0 };
+  }
+  const visibleBottom = vv.offsetTop + vv.height;
+  const hostBottom = container ? container.getBoundingClientRect().bottom : window.innerHeight;
+  const keyboardInsetPx = Math.max(0, Math.round(hostBottom - visibleBottom));
+  const rawHeight = parentHeight > 0 ? parentHeight - keyboardInsetPx : vv.height;
+  return {
+    availableHeight: Math.max(0, Math.min(rawHeight, Math.round(vv.height))),
+    keyboardInsetPx,
+  };
+}
+
+function getFocusableElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => el.offsetParent !== null || el.getClientRects().length > 0,
+  );
 }
 
 /**
  * Draggable bottom sheet with snap detents (`peek`, `half`, `full`), swipe-to-
- * dismiss, keyboard cycling, and non-modal map-interactive support.
+ * dismiss, keyboard cycling, modal focus management, and non-modal
+ * map-interactive support.
  *
  * Designed to sit inside a positioned host container (such as the map workspace
  * above the mobile bottom navigation bar) rather than covering the entire
@@ -125,16 +161,19 @@ export function BottomSheet({
     [controlledDetent, onDetentChange],
   );
 
-  // Track the bounding container height (updating on resize, orientation change,
-  // and mobile virtual keyboard open/close via visualViewport).
-  const [containerHeight, setContainerHeight] = React.useState<number>(() =>
-    typeof window !== "undefined" ? (window.visualViewport?.height ?? window.innerHeight) : 640,
-  );
+  // Track the bounding container height and visualViewport keyboard overlap
+  // (updating on resize, orientation change, and software keyboard open/close).
+  const [viewportMetrics, setViewportMetrics] = React.useState<HostViewportMetrics>(() => ({
+    availableHeight:
+      typeof window !== "undefined" ? (window.visualViewport?.height ?? window.innerHeight) : 640,
+    keyboardInsetPx: 0,
+  }));
+  const containerHeight = viewportMetrics.availableHeight;
 
   React.useLayoutEffect(() => {
     if (!open) return;
     const host = hostRef.current;
-    const update = () => setContainerHeight(measureContainerHeight(host));
+    const update = () => setViewportMetrics(measureHostViewport(host));
     update();
 
     const resizeObserver =
@@ -143,10 +182,12 @@ export function BottomSheet({
 
     const vv = typeof window !== "undefined" ? window.visualViewport : null;
     vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     return () => {
       resizeObserver?.disconnect();
       vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
     };
   }, [open]);
@@ -162,6 +203,75 @@ export function BottomSheet({
       );
     }
   }, [open, controlledDetent, defaultDetent, orderedDetents]);
+
+  // Modal dialog focus management: move focus into the sheet on open, trap Tab
+  // within the sheet while modal, and restore focus to the previously focused
+  // control when dismissed. Non-modal sheets stay map-interactive.
+  React.useEffect(() => {
+    if (!open || !modal) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    if (!sheet.contains(document.activeElement)) {
+      const focusables = getFocusableElements(sheet);
+      (focusables[0] ?? sheet).focus({ preventScroll: true });
+    }
+
+    const handleTrapKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      // Do not fight a nested Radix dialog/menu stacked above this sheet.
+      if (
+        document.querySelector(
+          '[role="dialog"][data-state="open"], [role="menu"][data-state="open"]',
+        )
+      ) {
+        return;
+      }
+      const focusables = getFocusableElements(sheet);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        sheet.focus({ preventScroll: true });
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || !sheet.contains(active)) {
+          event.preventDefault();
+          last.focus({ preventScroll: true });
+        }
+      } else if (active === last || !sheet.contains(active)) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!(event.target instanceof Node) || sheet.contains(event.target)) return;
+      if (
+        document.querySelector(
+          '[role="dialog"][data-state="open"], [role="menu"][data-state="open"]',
+        )
+      ) {
+        return;
+      }
+      const focusables = getFocusableElements(sheet);
+      (focusables[0] ?? sheet).focus({ preventScroll: true });
+    };
+
+    window.addEventListener("keydown", handleTrapKeyDown, true);
+    document.addEventListener("focusin", handleFocusIn, true);
+    return () => {
+      window.removeEventListener("keydown", handleTrapKeyDown, true);
+      document.removeEventListener("focusin", handleFocusIn, true);
+      if (previouslyFocused && previouslyFocused.isConnected) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
+    };
+  }, [open, modal]);
 
   // Escape dismisses the sheet when dismissible (ignoring events already handled
   // by an open nested dialog or menu).
@@ -190,6 +300,7 @@ export function BottomSheet({
   const suppressHandleClickRef = React.useRef(false);
   const dragRef = React.useRef<{
     pointerId: number;
+    captureTarget: HTMLElement;
     startY: number;
     startHeightPx: number;
     lastY: number;
@@ -240,9 +351,17 @@ export function BottomSheet({
       return;
     }
     const startHeightPx = sheetRef.current?.getBoundingClientRect().height || targetHeightPx;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Reset any leftover suppression flag before starting a new gesture, and
+    // capture on the handle button itself when the gesture originates there so
+    // a tap without dragging still fires `click` on the handle button.
+    suppressHandleClickRef.current = false;
+    const captureTarget =
+      (event.target as HTMLElement).closest<HTMLElement>("[data-sheet-handle]") ??
+      event.currentTarget;
+    captureTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
+      captureTarget,
       startY: event.clientY,
       startHeightPx,
       lastY: event.clientY,
@@ -282,8 +401,8 @@ export function BottomSheet({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (drag.captureTarget.hasPointerCapture(event.pointerId)) {
+      drag.captureTarget.releasePointerCapture(event.pointerId);
     }
     if (!drag.moved) {
       setDragHeightPx(null);
@@ -297,15 +416,16 @@ export function BottomSheet({
       0,
       maxRatio,
     );
-    finishDrag(finalHeight, drag.velocityY);
+    const releaseVelocity = resolveReleaseVelocity(drag.velocityY, drag.lastTime, event.timeStamp);
+    finishDrag(finalHeight, releaseVelocity);
   };
 
   const handleDragPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (drag.captureTarget.hasPointerCapture(event.pointerId)) {
+      drag.captureTarget.releasePointerCapture(event.pointerId);
     }
     setDragHeightPx(null);
   };
@@ -346,6 +466,11 @@ export function BottomSheet({
     <div
       ref={hostRef}
       data-bottom-sheet-host=""
+      style={
+        viewportMetrics.keyboardInsetPx > 0
+          ? { paddingBottom: `${viewportMetrics.keyboardInsetPx}px` }
+          : undefined
+      }
       className={cn(
         "absolute inset-0 z-30 flex flex-col justify-end overflow-hidden",
         modal ? "pointer-events-auto" : "pointer-events-none",
@@ -362,6 +487,7 @@ export function BottomSheet({
       ) : null}
       <section
         ref={sheetRef}
+        tabIndex={modal ? -1 : undefined}
         role={modal ? "dialog" : "region"}
         aria-modal={modal || undefined}
         aria-label={ariaLabel ?? (typeof title === "string" ? title : undefined)}
@@ -373,7 +499,7 @@ export function BottomSheet({
           ...style,
         }}
         className={cn(
-          "pointer-events-auto relative z-10 flex w-full flex-col overflow-hidden rounded-t-2xl border-t bg-card text-card-foreground shadow-2xl",
+          "pointer-events-auto relative z-10 flex w-full flex-col overflow-hidden rounded-t-2xl border-t bg-card text-card-foreground shadow-2xl focus:outline-none",
           !isDragging && "transition-[height] duration-200 ease-out",
           className,
         )}

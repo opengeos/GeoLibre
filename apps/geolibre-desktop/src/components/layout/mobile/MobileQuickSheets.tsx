@@ -44,13 +44,14 @@ function SheetActionRow({
   icon,
   label,
   badge,
-  active = false,
+  active,
   disabled = false,
   onClick,
 }: SheetActionRowProps) {
   return (
     <button
       type="button"
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -181,6 +182,7 @@ export function MobileAddSheetContent({
 }
 
 export interface MobileFieldSheetProps {
+  canUseGeoEditor: boolean;
   geoEditorActive: boolean;
   measureActive: boolean;
   measureDisabled: boolean;
@@ -194,6 +196,7 @@ export interface MobileFieldSheetProps {
 
 /** Touch action list for outdoor field collection, GPS tracking, and map tools. */
 export function MobileFieldSheetContent({
+  canUseGeoEditor,
   geoEditorActive,
   measureActive,
   measureDisabled,
@@ -218,12 +221,14 @@ export function MobileFieldSheetContent({
         label={t("mobileShell.field.gpsTracking")}
         onClick={onOpenGpsTracking}
       />
-      <SheetActionRow
-        icon={<PenTool className="h-4 w-4" />}
-        label={t("mobileShell.field.geoEditor")}
-        active={geoEditorActive}
-        onClick={onToggleGeoEditor}
-      />
+      {canUseGeoEditor ? (
+        <SheetActionRow
+          icon={<PenTool className="h-4 w-4" />}
+          label={t("mobileShell.field.geoEditor")}
+          active={geoEditorActive}
+          onClick={onToggleGeoEditor}
+        />
+      ) : null}
       <SheetActionRow
         icon={<Ruler className="h-4 w-4" />}
         label={t("mobileShell.field.measure")}

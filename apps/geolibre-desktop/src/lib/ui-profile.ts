@@ -495,6 +495,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "basic",
   },
   {
+    id: "view.touchUi",
+    menuId: "view",
+    labelKey: "settings.layout.touchUi",
+    tier: "basic",
+  },
+  {
     id: "view.googleMaps",
     menuId: "view",
     labelKey: "toolbar.item.viewInGoogleMaps",

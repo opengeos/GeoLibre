@@ -14,23 +14,22 @@ import {
 import { formatAccuracy } from "../../../lib/gps-tracking";
 
 export interface MobileStatusPillProps {
-  /** Hidden while a bottom sheet covers the lower map edge. */
-  hidden?: boolean;
   diagnosticsErrorCount: number;
   diagnosticsWarningCount: number;
   onOpenDiagnostics: () => void;
 }
 
 /**
- * Compact floating status pill replacing the 28px desktop StatusBar on phone
+ * Compact bottom status strip replacing the full desktop StatusBar on phone
  * touch screens (GeoLibre#3537).
  *
- * Shows either the live GPS fix (when tracking) or the map center coordinate
- * (since touchscreens have no hovering pointer). Tapping the coordinate pill
- * cycles DD → DMS → DDM → UTM → MGRS → USNG → EPSG just like desktop StatusBar.
+ * Rendered in flow directly beneath the map canvas (above {@link MobileBottomNav})
+ * so it never overlaps top-left map widgets, scale bars, or toasts. Shows either
+ * the live GPS fix (when tracking) or the map center coordinate (since touch
+ * screens have no hovering pointer). Tapping the coordinate cycles
+ * DD → DMS → DDM → UTM → MGRS → USNG → EPSG just like desktop StatusBar.
  */
 export function MobileStatusPill({
-  hidden = false,
   diagnosticsErrorCount,
   diagnosticsWarningCount,
   onOpenDiagnostics,
@@ -58,8 +57,6 @@ export function MobileStatusPill({
     };
   }, [coordinateFormat, coordinateEpsgCode]);
 
-  if (hidden) return null;
-
   const cycleCoordinateFormat = () => {
     const current = useAppStore.getState().preferences;
     const next = nextCoordinateFormat(normalizeCoordinateFormat(current.map.coordinateFormat));
@@ -77,7 +74,7 @@ export function MobileStatusPill({
   return (
     <div
       data-testid="mobile-status-pill"
-      className="pointer-events-none absolute top-2.5 start-2.5 end-16 z-10 flex items-center gap-1.5"
+      className="flex h-7 shrink-0 items-center justify-between gap-2 border-t bg-muted/40 px-3 font-mono text-[11px] text-muted-foreground"
     >
       <button
         type="button"
@@ -87,7 +84,7 @@ export function MobileStatusPill({
             code: coordinateEpsgCode,
           }),
         })}
-        className="pointer-events-auto inline-flex min-h-9 max-w-[75%] items-center gap-1.5 rounded-full border map-glass px-3 py-1 font-mono text-[11px] text-foreground shadow-sm active:bg-accent"
+        className="inline-flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-foreground hover:bg-accent active:bg-accent"
       >
         {gpsStatus ? (
           <Navigation className="h-3 w-3 shrink-0 text-emerald-500" aria-hidden="true" />
@@ -98,22 +95,27 @@ export function MobileStatusPill({
             : coordText}
         </span>
       </button>
-      {diagnosticsCount > 0 ? (
-        <button
-          type="button"
-          onClick={onOpenDiagnostics}
-          aria-label={t("mobileShell.status.diagnosticsLabel", { count: diagnosticsCount })}
-          className={cn(
-            "pointer-events-auto inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border map-glass px-2.5 py-1 font-mono text-[11px] font-medium shadow-sm active:bg-accent",
-            diagnosticsErrorCount > 0
-              ? "text-red-700 dark:text-red-300"
-              : "text-amber-700 dark:text-amber-300",
-          )}
-        >
-          <Bug className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{diagnosticsCount}</span>
-        </button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        <span>
+          {t("statusBar.zoom")}: {mapView.zoom.toFixed(1)}
+        </span>
+        {diagnosticsCount > 0 ? (
+          <button
+            type="button"
+            onClick={onOpenDiagnostics}
+            aria-label={t("mobileShell.status.diagnosticsLabel", { count: diagnosticsCount })}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium hover:bg-accent active:bg-accent",
+              diagnosticsErrorCount > 0
+                ? "text-red-700 dark:text-red-300"
+                : "text-amber-700 dark:text-amber-300",
+            )}
+          >
+            <Bug className="h-3 w-3" aria-hidden="true" />
+            <span>{diagnosticsCount}</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

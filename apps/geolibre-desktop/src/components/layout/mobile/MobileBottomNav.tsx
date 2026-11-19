@@ -20,6 +20,8 @@ export interface MobileBottomNavProps {
   showAdd: boolean;
   /** Whether Field/GPS tools are available (hidden in read-only viewer). */
   showField: boolean;
+  /** Whether the More menu tab is available (requires the toolbar quick-sheet host). */
+  showMore?: boolean;
 }
 
 interface NavTabSpec {
@@ -43,6 +45,7 @@ export function MobileBottomNav({
   showStyle,
   showAdd,
   showField,
+  showMore = true,
 }: MobileBottomNavProps) {
   const { t } = useTranslation();
 
@@ -76,11 +79,15 @@ export function MobileBottomNav({
       icon: <Compass className="h-5 w-5" />,
     });
   }
-  tabs.push({
-    id: "more",
-    label: t("mobileShell.tabs.more"),
-    icon: <MoreHorizontal className="h-5 w-5" />,
-  });
+  if (showMore) {
+    tabs.push({
+      id: "more",
+      label: t("mobileShell.tabs.more"),
+      icon: <MoreHorizontal className="h-5 w-5" />,
+    });
+  }
+
+  if (tabs.length === 0) return null;
 
   return (
     <nav
