@@ -69,10 +69,12 @@ export function useBeforeUnloadGuard(): void {
       // Read the latest state on each event rather than closing over a
       // render-time snapshot, so the listener never needs to be re-registered
       // (the session role's privileges can arrive after mount).
-      const { isDirty, deploymentCapabilities, capabilities } = useAppStore.getState();
+      const { isDirty, deploymentCapabilities, capabilities, ui } = useAppStore.getState();
       if (
         !shouldWarnBeforeUnload({
-          isDirty,
+          // Unsaved attribute table drafts are not project changes (they never
+          // mark the project dirty), but leaving the page still loses them.
+          isDirty: isDirty || Object.keys(ui.attributeTableDrafts).length > 0,
           deploymentCapabilities,
           privileges: capabilities.privileges,
           search: window.location.search,

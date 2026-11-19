@@ -19,6 +19,7 @@ import {
   excludeHiddenFieldsFromGeojson,
   resolveLayerCapabilities,
   type AttributeTableDrafts as AttributeDrafts,
+  type AttributeTableDraftTarget,
   type AttributeFormConfig,
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
@@ -647,7 +648,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     if (!selectedLayerId) return;
     const current =
       useAppStore.getState().ui.attributeTableDrafts[selectedLayerId]?.values ?? EMPTY_DRAFTS;
-    setAttributeTableDrafts(selectedLayerId, typeof next === "function" ? next(current) : next);
+    setAttributeTableDrafts(
+      selectedLayerId,
+      typeof next === "function" ? next(current) : next,
+      // DuckDB rows have no geojson, so snapshot their rendered rows instead.
+      isDuckDBLayer ? currentFeatures : undefined,
+    );
   };
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportWarning, setExportWarning] = useState<string | null>(null);
@@ -835,9 +841,20 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // Never partially save missing targets or apply a positional draft to a
   // different feature after refresh/undo/sync. Keep the drafts for recovery.
   const rowIds = useMemo(() => new Set(attributeRows.map((row) => row.featureId)), [attributeRows]);
-  const currentFeatures = useMemo(
-    () => new Map(features.map((feature, index) => [String(feature.id ?? index), feature])),
-    [features],
+  // DuckDB rows are keyed by rendered row index, so a re-query can put another
+  // source row at a drafted index. Compare id-less snapshots of their
+  // properties, which the positional check below treats like GeoJSON rows.
+  const currentFeatures: ReadonlyMap<string, AttributeTableDraftTarget> = useMemo(
+    () =>
+      isDuckDBLayer
+        ? new Map(
+            attributeRows.map((row) => [
+              row.featureId,
+              { type: "Feature", geometry: null, properties: row.properties },
+            ]),
+          )
+        : new Map(features.map((feature, index) => [String(feature.id ?? index), feature])),
+    [attributeRows, features, isDuckDBLayer],
   );
   const draftTargets = draftSession?.targets;
   const unsafeTargetIds = useMemo(
@@ -863,10 +880,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     ([featureId, row]) =>
       Object.keys(row).length > 0 &&
       (!rowIds.has(featureId) ||
-        (!isDuckDBLayer &&
-          (!draftTargets ||
-            !Object.hasOwn(draftTargets, featureId) ||
-            unsafeTargetIds.has(featureId)))),
+        !draftTargets ||
+        !Object.hasOwn(draftTargets, featureId) ||
+        unsafeTargetIds.has(featureId)),
   );
   const hasInvalidDrafts = attributeRows.some((row) => {
     const rowDrafts = getAttributeDraftRow(drafts, row.featureId);

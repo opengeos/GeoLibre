@@ -54,6 +54,10 @@ function uiSetterCalls(layerId: string): Array<[string, () => void]> {
     ["setNotebookOpen", () => store().setNotebookOpen(true)],
     ["setAssistantOpen", () => store().setAssistantOpen(true)],
     ["setAttributeTableOpen", () => store().setAttributeTableOpen(true)],
+    [
+      "setAttributeTableDrafts",
+      () => store().setAttributeTableDrafts(layerId, { "0": { name: "edited" } }),
+    ],
     ["requestAttributeTableEdit", () => store().requestAttributeTableEdit(layerId)],
     ["setRasterAttributeTableOpen", () => store().setRasterAttributeTableOpen(true)],
     ["setDashboardOpen", () => store().setDashboardOpen(true)],

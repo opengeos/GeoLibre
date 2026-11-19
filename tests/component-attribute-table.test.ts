@@ -550,6 +550,21 @@ describe("draft target edge cases", () => {
     assert.equal(targets["1"], feature);
   });
 
+  it("snapshots draft targets from supplied rows for a layer without geojson", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "query", geojson: undefined })],
+    });
+    const row = {
+      type: "Feature" as const,
+      geometry: null,
+      properties: { name: "Row zero" },
+    };
+    useAppStore
+      .getState()
+      .setAttributeTableDrafts("query", { "0": { name: "Edited" } }, new Map([["0", row]]));
+    assert.equal(useAppStore.getState().ui.attributeTableDrafts.query.targets["0"], row);
+  });
+
   it("retains but blocks an ID-less draft after geometry changes until its original row is restored", () => {
     const { id: _id, ...feature } = cities.features[0];
     const original = { ...cities, features: [feature] };

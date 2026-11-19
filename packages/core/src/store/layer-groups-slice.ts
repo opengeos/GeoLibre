@@ -23,6 +23,7 @@ import {
   cascadeJoinRefreshForRemoved,
   scrubSecondaryPaneLayerVisibility,
   scrubStorymapLayerRefs,
+  scrubAttributeTableDrafts,
 } from "./layer-removal";
 import type { SliceCreator } from "./types";
 
@@ -158,10 +159,9 @@ export const createLayerGroupsSlice: SliceCreator<LayerGroupsSlice> = (set, get)
         ui: removeChildren
           ? {
               ...s.ui,
-              attributeTableDrafts: Object.fromEntries(
-                Object.entries(s.ui.attributeTableDrafts).filter(
-                  ([layerId]) => !removedIds.has(layerId),
-                ),
+              attributeTableDrafts: scrubAttributeTableDrafts(
+                s.ui.attributeTableDrafts,
+                removedIds,
               ),
               selectByExpressionLayerId:
                 s.ui.selectByExpressionLayerId !== null &&

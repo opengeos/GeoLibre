@@ -4,7 +4,10 @@
  * tracks (see `undo-history.ts`), so opening or closing a dialog never records
  * an undo step and undo/redo never toggles one.
  */
-import type { Feature } from "geojson";
+import type { Feature, Geometry } from "geojson";
+
+/** A draft target: a GeoJSON feature, or an id-less row snapshot without geometry. */
+export type AttributeTableDraftTarget = Feature<Geometry | null>;
 import type { ProcessingRerunRequest } from "../types";
 import type { SliceCreator } from "./types";
 
@@ -106,7 +109,7 @@ export type AttributeTableDrafts = Record<string, Record<string, string>>;
 /** Values and the original GeoJSON targets captured when each row is first edited. */
 export interface AttributeTableDraftSession {
   values: AttributeTableDrafts;
-  targets: Record<string, Feature>;
+  targets: Record<string, AttributeTableDraftTarget>;
 }
 
 export interface UiSlice {
@@ -217,7 +220,16 @@ export interface UiSlice {
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
-  setAttributeTableDrafts: (layerId: string, drafts: AttributeTableDrafts) => void;
+  /**
+   * Replace a layer's unsaved attribute table drafts. The first edit of a row
+   * snapshots its target from `sourceFeatures` (rows of a layer with no
+   * `geojson`, such as a DuckDB query) or else from the layer's features.
+   */
+  setAttributeTableDrafts: (
+    layerId: string,
+    drafts: AttributeTableDrafts,
+    sourceFeatures?: ReadonlyMap<string, AttributeTableDraftTarget>,
+  ) => void;
   /**
    * Ask the attribute table to open in edit mode on `layerId` (opening the
    * table too), or clear a pending request with `null`.
@@ -328,15 +340,15 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setNotebookOpen: (open) => set((s) => ({ ui: { ...s.ui, notebookOpen: open } })),
   setAssistantOpen: (open) => set((s) => ({ ui: { ...s.ui, assistantOpen: open } })),
   setAttributeTableOpen: (open) => set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
-  setAttributeTableDrafts: (layerId, drafts) =>
+  setAttributeTableDrafts: (layerId, drafts, sourceFeatures) =>
     set((s) => {
       const layer = s.layers.find((candidate) => candidate.id === layerId);
       if (!layer) return s;
       const attributeTableDrafts = { ...s.ui.attributeTableDrafts };
       if (Object.values(drafts).some((row) => Object.keys(row).length > 0)) {
         const previousTargets = attributeTableDrafts[layerId]?.targets ?? {};
-        let features: Map<string, Feature> | undefined;
-        const entries: [string, Feature][] = [];
+        let features: ReadonlyMap<string, AttributeTableDraftTarget> | undefined;
+        const entries: [string, AttributeTableDraftTarget][] = [];
         let targetsChanged = false;
         for (const [featureId, row] of Object.entries(drafts)) {
           if (Object.keys(row).length === 0) continue;
@@ -347,9 +359,14 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
             continue;
           }
           targetsChanged = true;
-          features ??= new Map(
-            layer.geojson?.features.map((feature, index) => [String(feature.id ?? index), feature]),
-          );
+          features ??=
+            sourceFeatures ??
+            new Map(
+              layer.geojson?.features.map((feature, index) => [
+                String(feature.id ?? index),
+                feature,
+              ]),
+            );
           const target = features.get(featureId);
           if (target) entries.push([featureId, target]);
         }
