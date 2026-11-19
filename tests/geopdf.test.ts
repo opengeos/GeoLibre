@@ -81,6 +81,19 @@ describe("solveCaptureGeoref", () => {
     );
   });
 
+  it("refuses a capture across the antimeridian", () => {
+    // Centred on 179.9 E at 200 m/px: the right edge unwraps to about 180.6.
+    const [cx, cy] = WEB_MERCATOR.forward(179.9, 50);
+    const locate = (px: number, py: number) => {
+      const [lng, lat] = WEB_MERCATOR.inverse(
+        cx + (px - WIDTH / 2) * 200,
+        cy - (py - HEIGHT / 2) * 200,
+      );
+      return { lng, lat };
+    };
+    assert.equal(solveCaptureGeoref(WIDTH, HEIGHT, locate, WEB_MERCATOR), null);
+  });
+
   it("refuses a capture with an off-map corner", () => {
     const locate = mercatorView();
     const offMap = (px: number, py: number) => (px === 0 && py === 0 ? null : locate(px, py));
@@ -165,6 +178,14 @@ describe("geoPdfViewportEntry", () => {
       assert.ok(Math.abs(gpts[i * 2] - corner.lat) < 1e-8, `lat ${i}`);
       assert.ok(Math.abs(gpts[i * 2 + 1] - corner.lng) < 1e-8, `lng ${i}`);
     });
+  });
+
+  it("is null when a frame corner is past the antimeridian", () => {
+    const shifted = {
+      ...georef,
+      transform: [WEB_MERCATOR.forward(179.99, 50)[0], 20, 0, georef.transform[3], 0, -20] as const,
+    };
+    assert.equal(geoPdfViewportEntry(shifted, placement, 1000, 700, 500, 350), null);
   });
 
   it("is null for a CRS with neither an EPSG code nor a WKT", () => {

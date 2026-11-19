@@ -164,7 +164,20 @@ export function solveCaptureGeoref(
       if (Math.hypot(backX - px, backY - py) > tolerancePx) return null;
     }
   }
-  return { transform, projection };
+  const georef = { transform, projection };
+  // A view across the antimeridian or of a repeated world unprojects to
+  // longitudes past +/-180, which a GeoPDF cannot carry (see
+  // geoPdfViewportEntry), so it is not georeferenced.
+  for (const [px, py] of [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+  ]) {
+    const [lng] = georefLngLat(georef, px, py);
+    if (!(Math.abs(lng) <= 180)) return null;
+  }
+  return georef;
 }
 
 /**
@@ -191,7 +204,18 @@ function georefDatumLngLat(georef: CaptureGeoref, px: number, py: number): [numb
 }
 
 /** PROJ parameters that describe a datum rather than a projection. */
-const DATUM_PARAMS = new Set(["datum", "ellps", "towgs84", "nadgrids", "a", "b", "rf", "f", "R", "pm"]);
+const DATUM_PARAMS = new Set([
+  "datum",
+  "ellps",
+  "towgs84",
+  "nadgrids",
+  "a",
+  "b",
+  "rf",
+  "f",
+  "R",
+  "pm",
+]);
 
 /**
  * The geographic (longitude/latitude) PROJ definition on the same datum as a
@@ -261,17 +285,18 @@ export function geoPdfViewportEntry(
   const x1 = (clip.x + clip.w) * kx;
   const yTop = pageHeightPt - clip.y * ky;
   const yBottom = pageHeightPt - (clip.y + clip.h) * ky;
-  const corner = (pageX: number, pageY: number) => {
-    const [lng, lat] = georefDatumLngLat(georef, (pageX - dx) / scale, (pageY - dy) / scale);
-    return `${pdfNum(lat, 9)} ${pdfNum(lng, 9)}`;
-  };
   // GPTS pairs follow LPTS: upper-left, lower-left, lower-right, upper-right.
-  const gpts = [
-    corner(clip.x, clip.y),
-    corner(clip.x, clip.y + clip.h),
-    corner(clip.x + clip.w, clip.y + clip.h),
-    corner(clip.x + clip.w, clip.y),
-  ].join(" ");
+  const corners = [
+    [clip.x, clip.y],
+    [clip.x, clip.y + clip.h],
+    [clip.x + clip.w, clip.y + clip.h],
+    [clip.x + clip.w, clip.y],
+  ].map(([pageX, pageY]) => georefDatumLngLat(georef, (pageX - dx) / scale, (pageY - dy) / scale));
+  // A frame across the antimeridian (or a repeated world) has longitudes past
+  // +/-180. GPTS cannot carry them: a reader wraps 181 to -179 and rebuilds a
+  // reversed, nearly world-wide extent. Such a frame exports as a plain PDF.
+  if (corners.some(([lng, lat]) => !(Math.abs(lng) <= 180) || !(Math.abs(lat) <= 90))) return null;
+  const gpts = corners.map(([lng, lat]) => `${pdfNum(lat, 9)} ${pdfNum(lng, 9)}`).join(" ");
   const gcs = [
     `/Type /${geographic ? "GEOGCS" : "PROJCS"}`,
     epsg !== null ? `/EPSG ${epsg}` : "",
