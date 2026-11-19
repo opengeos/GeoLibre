@@ -42,6 +42,7 @@ test("does not replace edits made while dropped project layers resolve", async (
       }),
     loadProject: () => {
       loaded = true;
+      return true;
     },
     workspaceChanged: () => {
       prompted = true;
@@ -75,6 +76,7 @@ test("does not let an older overlapping drop replace the latest one", async () =
       }),
     loadProject: () => {
       loaded = true;
+      return true;
     },
     workspaceChanged: () => undefined,
   });
@@ -84,4 +86,21 @@ test("does not let an older overlapping drop replace the latest one", async () =
 
   assert.equal(await loading, false);
   assert.equal(loaded, false);
+});
+
+test("reports a declined load as not loaded", async () => {
+  const dropped = { version: 1, name: "Declined", layers: [] } as unknown as GeoLibreProject;
+  const workspace = { projectGeneration: 1, isDirty: false, projectFingerprint: null };
+  const loading = resolveDroppedProjectIfCurrent({
+    project: dropped,
+    projectGeneration: 1,
+    projectFingerprint: null,
+    isCurrentOperation: () => true,
+    getWorkspaceState: () => workspace,
+    resolveProject: async (project) => project,
+    // The user kept their pending attribute drafts.
+    loadProject: () => false,
+    workspaceChanged: () => undefined,
+  });
+  assert.equal(await loading, false);
 });

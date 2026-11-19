@@ -64,17 +64,21 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
     void import("@tauri-apps/api/window")
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested((event) => {
+          // A prompt or its save is in flight: it decides, and it asks about
+          // attribute drafts before destroying the window. Closing now could
+          // drop them even once the project turned clean meanwhile.
+          if (savingRef.current || promptOpenRef.current) {
+            event.preventDefault();
+            return;
+          }
           if (!useAppStore.getState().isDirty) {
             // Attribute drafts are not part of the project and never mark it
             // dirty, so a clean project still asks about them. Not prevented:
             // the API destroys the window after this returns.
-            if (savingRef.current || promptOpenRef.current || confirmDiscardAttributeDrafts())
-              return;
-            event.preventDefault();
+            if (!confirmDiscardAttributeDrafts()) event.preventDefault();
             return;
           }
           event.preventDefault();
-          if (savingRef.current || promptOpenRef.current) return;
           promptOpenRef.current = true;
           promptGenerationRef.current = useAppStore.getState().projectGeneration;
           setWindowClosePromptOpen(true);

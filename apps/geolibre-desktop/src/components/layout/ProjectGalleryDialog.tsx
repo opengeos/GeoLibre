@@ -519,9 +519,7 @@ export function ProjectGalleryDialog({
                 oauthIssuer && token !== trimmedToken ? oauthSessionRevision : undefined,
             },
       });
-      // False when the user kept the current session (pending attribute drafts).
-      if (loaded === false) return;
-      onOpenChange(false);
+      if (loaded !== false) onOpenChange(false); // false: the user kept pending drafts
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setOpenError(

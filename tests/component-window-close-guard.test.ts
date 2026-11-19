@@ -248,4 +248,39 @@ describe("useWindowCloseGuard", () => {
       useAppStore.getState().removeLayer(layerId);
     }
   });
+
+  it("keeps the window when closed again after a save turned the project clean", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: true });
+    let asked = 0;
+    const originalConfirm = window.confirm;
+    window.confirm = () => {
+      asked += 1;
+      return false;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      assert.equal(guard.current.windowClosePromptOpen, true);
+      // An ordinary save finishes while the close prompt is up.
+      useAppStore.setState({ isDirty: false });
+      await requestClose();
+      assert.ok(!destroyed());
+      assert.equal(asked, 0);
+      assert.equal(guard.current.windowClosePromptOpen, true);
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
 });

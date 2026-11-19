@@ -544,11 +544,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       loadProject: (project) => {
         // Asked only once the replacement is certain: after the save prompt
         // and the remote-layer awaits, so no later draft is dropped unasked.
-        if (!confirmDiscardAttributeDrafts()) return;
+        if (!confirmDiscardAttributeDrafts()) return false;
         loadProject(project, candidate.path, {
           rememberRecent: isTauri() && candidate.path !== null,
         });
         if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+        return true;
       },
       workspaceChanged: (state, project) => {
         const updated = {
