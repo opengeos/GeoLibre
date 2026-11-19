@@ -68,6 +68,21 @@ test("Sketches attribute saves preserve unfinished drawing and GeoEditor undo hi
   await page.getByRole("button", { name: /^Redo/ }).click();
   await expect(status).toContainText("2 features");
   await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
+
+  // A subsequent editor-to-store sync must retain a rename and must not
+  // resurrect the omitted old property through Geoman's property setter.
+  await table.getByRole("button", { name: "Manage field category", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Rename field", exact: true }).click();
+  const rename = table.getByRole("textbox", { name: "Rename field category", exact: true });
+  await rename.fill("land_use");
+  await rename.press("Enter");
+  await page.getByRole("button", { name: "Rectangle", exact: true }).click();
+  for (const point of [points[0], points[2]]) await page.mouse.click(point.x, point.y);
+  await expect(status).toContainText("3 features");
+  await expect(table.getByRole("columnheader").filter({ hasText: "category" })).toHaveCount(0);
+  await expect(table.getByRole("columnheader").filter({ hasText: "land_use" })).toHaveCount(1);
+  await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
+  await closeProperties(page);
 });
 
 test("existing vector feature properties commit on session Save and roll back on Cancel", async ({
