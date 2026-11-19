@@ -179,13 +179,7 @@ export function GeoPdfSource() {
       onBeforeLayerIdChange={source.setBeforeLayerId}
       onSubmit={handleSubmit}
       error={source.error}
-      // Every PDF layer unticked would add an empty, transparent image.
-      submitDisabled={
-        source.isSubmitting ||
-        loading ||
-        !opened ||
-        (opened.layers.length > 0 && opened.layers.every((layer) => hidden.has(layer.id)))
-      }
+      submitDisabled={source.isSubmitting || loading || !opened}
     >
       <div className="space-y-3">
         <div className="space-y-1.5">

@@ -567,8 +567,10 @@ export class PdfDocument {
         for (const [index, member] of [...this.objectStream(num).offsets.keys()].entries()) {
           if (!this.xref.has(member)) this.xref.set(member, { type: 2, stream: num, index });
         }
-      } catch {
-        // A damaged object stream: its members stay unknown.
+      } catch (error) {
+        // Over the decoding budget is final; a merely damaged object stream
+        // leaves its members unknown.
+        if (error instanceof PdfReadError && /too large/.test(error.message)) throw error;
       }
     }
     // The last trailer dictionary, or any catalog found by type.
