@@ -131,7 +131,14 @@ export function solveCaptureGeoref(
   const project = (px: number, py: number): [number, number] | null => {
     const ll = locate(px, py);
     if (!ll || !Number.isFinite(ll.lng) || !Number.isFinite(ll.lat)) return null;
-    const xy = projection.forward(ll.lng, ll.lat);
+    let xy: [number, number];
+    try {
+      xy = projection.forward(ll.lng, ll.lat);
+    } catch {
+      // A conversion that throws (a datum grid that will not load) refuses
+      // the georeference; the capture still exports as a plain PDF.
+      return null;
+    }
     return Number.isFinite(xy[0]) && Number.isFinite(xy[1]) ? xy : null;
   };
   const origin = project(0, 0);

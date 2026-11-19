@@ -97,6 +97,16 @@ describe("solveCaptureGeoref", () => {
     assert.equal(solveCaptureGeoref(WIDTH, HEIGHT, locate, WEB_MERCATOR), null);
   });
 
+  it("refuses, rather than throws, when the projection throws", () => {
+    const throwing = {
+      ...WEB_MERCATOR,
+      forward: () => {
+        throw new Error("grid not loaded");
+      },
+    };
+    assert.equal(solveCaptureGeoref(WIDTH, HEIGHT, mercatorView(), throwing), null);
+  });
+
   it("refuses a capture with an off-map corner", () => {
     const locate = mercatorView();
     const offMap = (px: number, py: number) => (px === 0 && py === 0 ? null : locate(px, py));

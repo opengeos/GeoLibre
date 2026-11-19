@@ -545,14 +545,20 @@ function geoPdfPageEntry(
   if (!opts.mapGeoref) return null;
   const placement = mapImagePlacement(opts, canvas.width, canvas.height);
   if (!placement) return null;
-  return geoPdfViewportEntry(
-    opts.mapGeoref,
-    placement,
-    canvas.width,
-    canvas.height,
-    widthMm * MM_TO_PT,
-    heightMm * MM_TO_PT,
-  );
+  // The datum conversion runs here, at export time: a throw must cost only
+  // the georeference, not the whole PDF.
+  try {
+    return geoPdfViewportEntry(
+      opts.mapGeoref,
+      placement,
+      canvas.width,
+      canvas.height,
+      widthMm * MM_TO_PT,
+      heightMm * MM_TO_PT,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**
