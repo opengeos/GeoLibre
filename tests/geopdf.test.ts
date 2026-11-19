@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { jsPDF } from "jspdf";
 import {
   epsgFromCode,
+  geographicDefinitionOf,
   geoPdfViewportEntry,
   georefLngLat,
   solveCaptureGeoref,
@@ -182,5 +183,44 @@ describe("writeGeoPdfViewports", () => {
     assert.equal(pages.length, 2);
     assert.ok(!pages[0].split("endobj")[0].includes("/VP"));
     assert.ok(pages[1].split("endobj")[0].includes("/VP [<< /Type /Viewport >>]"));
+  });
+});
+
+describe("geographicDefinitionOf", () => {
+  it("keeps the datum and drops the projection", () => {
+    const osgb =
+      "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy " +
+      "+towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +units=m +no_defs";
+    assert.equal(
+      geographicDefinitionOf(osgb),
+      "+proj=longlat +ellps=airy +towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +no_defs",
+    );
+  });
+
+  it("writes GPTS on the CRS's own datum", async () => {
+    const { default: proj4 } = await import("proj4");
+    const def =
+      "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy " +
+      "+towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +units=m +no_defs";
+    const wgs = proj4(def);
+    const local = proj4(def, geographicDefinitionOf(def));
+    const projection = {
+      epsg: 27700,
+      wkt: null,
+      geographic: false,
+      forward: (lng: number, lat: number) => wgs.forward([lng, lat]) as [number, number],
+      inverse: (x: number, y: number) => wgs.inverse([x, y]) as [number, number],
+      datumInverse: (x: number, y: number) => local.forward([x, y]) as [number, number],
+    };
+    // A 1 m/px north-up image whose top-left pixel is at (530000, 180000).
+    const georef = { transform: [530000, 1, 0, 180000, 0, -1] as const, projection };
+    const placement = { clip: { x: 0, y: 0, w: 100, h: 100 }, dx: 0, dy: 0, scale: 1 };
+    const entry = geoPdfViewportEntry(georef, placement, 100, 100, 100, 100)!;
+    const [lat, lng] = /\/GPTS \[([^\]]+)\]/.exec(entry)![1].split(" ").map(Number);
+    const [airyLng, airyLat] = local.forward([530000, 180000]);
+    const [wgsLng] = wgs.inverse([530000, 180000]);
+    assert.ok(Math.abs(lng - airyLng) < 1e-9 && Math.abs(lat - airyLat) < 1e-9);
+    // OSGB36 and WGS 84 longitudes differ by roughly 100 m here.
+    assert.ok(Math.abs(lng - wgsLng) > 5e-4);
   });
 });

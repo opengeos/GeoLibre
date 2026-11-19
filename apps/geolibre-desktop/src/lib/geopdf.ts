@@ -24,8 +24,14 @@ export interface GeorefProjection {
   geographic: boolean;
   /** Longitude/latitude in degrees to CRS coordinates. */
   forward: (lng: number, lat: number) => [number, number];
-  /** CRS coordinates to longitude/latitude in degrees. */
+  /** CRS coordinates to WGS 84 longitude/latitude in degrees. */
   inverse: (x: number, y: number) => [number, number];
+  /**
+   * CRS coordinates to longitude/latitude on the CRS's own datum, which is
+   * what a GeoPDF's `/GPTS` holds. Defaults to {@link inverse}, which is
+   * right for a CRS on WGS 84.
+   */
+  datumInverse?: (x: number, y: number) => [number, number];
 }
 
 /**
@@ -177,6 +183,38 @@ export function georefLngLat(georef: CaptureGeoref, px: number, py: number): [nu
   return georef.projection.inverse(a + b * px + c * py, d + e * px + f * py);
 }
 
+/** Longitude/latitude of an image pixel on the georeference CRS's own datum. */
+function georefDatumLngLat(georef: CaptureGeoref, px: number, py: number): [number, number] {
+  const [a, b, c, d, e, f] = georef.transform;
+  const { datumInverse, inverse } = georef.projection;
+  return (datumInverse ?? inverse)(a + b * px + c * py, d + e * px + f * py);
+}
+
+/** PROJ parameters that describe a datum rather than a projection. */
+const DATUM_PARAMS = new Set(["datum", "ellps", "towgs84", "nadgrids", "a", "b", "rf", "f", "R", "pm"]);
+
+/**
+ * The geographic (longitude/latitude) PROJ definition on the same datum as a
+ * projected one: `+proj=longlat` plus the datum, ellipsoid and shift
+ * parameters, with every projection parameter dropped.
+ *
+ * Args:
+ *   definition: A PROJ string.
+ *
+ * Returns:
+ *   The geographic PROJ string.
+ */
+export function geographicDefinitionOf(definition: string): string {
+  const kept = definition
+    .trim()
+    .split(/\s+/)
+    .filter((token) => {
+      const match = /^\+([A-Za-z_0-9]+)(?:=|$)/.exec(token);
+      return match !== null && DATUM_PARAMS.has(match[1]);
+    });
+  return ["+proj=longlat", ...kept, "+no_defs"].join(" ");
+}
+
 /** Format a number for a PDF content stream: finite, without exponent notation. */
 function pdfNum(value: number, digits: number): string {
   const fixed = value.toFixed(digits);
@@ -224,7 +262,7 @@ export function geoPdfViewportEntry(
   const yTop = pageHeightPt - clip.y * ky;
   const yBottom = pageHeightPt - (clip.y + clip.h) * ky;
   const corner = (pageX: number, pageY: number) => {
-    const [lng, lat] = georefLngLat(georef, (pageX - dx) / scale, (pageY - dy) / scale);
+    const [lng, lat] = georefDatumLngLat(georef, (pageX - dx) / scale, (pageY - dy) / scale);
     return `${pdfNum(lat, 9)} ${pdfNum(lng, 9)}`;
   };
   // GPTS pairs follow LPTS: upper-left, lower-left, lower-right, upper-right.

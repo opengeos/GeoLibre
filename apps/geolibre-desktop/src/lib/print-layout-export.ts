@@ -22,6 +22,7 @@ import {
 import type { PrintExtent } from "./print-extent";
 import {
   epsgFromCode,
+  geographicDefinitionOf,
   geoPdfViewportEntry,
   solveCaptureGeoref,
   WEB_MERCATOR,
@@ -130,6 +131,26 @@ function cropCaptureToClip(
 }
 
 /**
+ * A fingerprint of the map's camera: where two viewport corners land and the
+ * bearing. Two equal fingerprints mean the view did not move.
+ *
+ * @param map - The map surface.
+ * @returns The fingerprint, or an empty string when it cannot be read.
+ */
+function viewSignature(map: Pick<MapLike, "getCanvas" | "getBearing" | "unproject">): string {
+  try {
+    const canvas = map.getCanvas();
+    const corners = [
+      map.unproject([0, 0]),
+      map.unproject([canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height]),
+    ];
+    return JSON.stringify([corners, map.getBearing()]);
+  } catch {
+    return "";
+  }
+}
+
+/**
  * The projection a print capture of `engine` can be georeferenced in: Web
  * Mercator on the default map, or the map's custom CRS when it has an EPSG
  * code (proj4 converts it). Null on another body, whose coordinates a GeoPDF
@@ -149,12 +170,16 @@ export async function resolveGeorefProjection(
   try {
     const { default: proj4 } = await import("proj4");
     const converter = proj4(crs.definition);
+    // /GPTS holds longitude/latitude on the CRS's own datum, not WGS 84: a
+    // datum shift (OSGB36, NAD27, ...) would otherwise move the georeference.
+    const toDatum = proj4(crs.definition, geographicDefinitionOf(crs.definition));
     return {
       epsg,
       wkt: null,
       geographic: /\+proj=(?:longlat|latlong|lonlat|latlon)\b/.test(crs.definition),
       forward: (lng, lat) => converter.forward([lng, lat]) as [number, number],
       inverse: (x, y) => converter.inverse([x, y]) as [number, number],
+      datumInverse: (x, y) => toDatum.forward([x, y]) as [number, number],
     };
   } catch {
     return null;
@@ -179,6 +204,11 @@ export async function captureEngineMapImage(
   const surface = engine.getRenderSurface();
   if (!surface) throw new Error("The map is not ready yet");
   const projection = await resolveGeorefProjection(engine);
+  // The pixels are read before the awaits below and the georeference after
+  // them, so a camera move in between would pair this view's pixels with the
+  // next view's coordinates. Compare the view on both sides of the capture and
+  // drop the georeference (plain PDF) when it moved.
+  const viewBefore = projection ? viewSignature(surface) : null;
   const bitmap = await createImageBitmap(await engine.captureImage());
   try {
     if (engine.getRenderSurface() !== surface)
@@ -191,7 +221,11 @@ export async function captureEngineMapImage(
     context.drawImage(bitmap, 0, 0);
     const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
     decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
-    return captureMapImage(surface, clip, canvas, projection);
+    const capturedMap = captureMapImage(surface, clip, canvas, projection);
+    if (capturedMap.georef && viewSignature(surface) !== viewBefore) {
+      return { ...capturedMap, georef: null };
+    }
+    return capturedMap;
   } finally {
     bitmap.close();
   }

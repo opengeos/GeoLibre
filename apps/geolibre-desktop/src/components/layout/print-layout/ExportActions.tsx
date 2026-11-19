@@ -92,8 +92,12 @@ export function ExportActions({
         }
         // Say whether the PDF carries map coordinates (GeoPDF, GH #3523): a
         // tilted or globe view exports as a plain PDF.
+        // An atlas georeferences each page on its own, so the current capture
+        // does not speak for the whole series.
         title={
-          hasCapture
+          atlasActive
+            ? t("printLayout.geoPdf.atlas")
+            : hasCapture
             ? georeferenced
               ? t("printLayout.geoPdf.georeferenced")
               : t("printLayout.geoPdf.notGeoreferenced")
