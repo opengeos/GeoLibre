@@ -49,7 +49,10 @@ export class PdfReadError extends Error {}
 
 const WHITESPACE = new Set([0x00, 0x09, 0x0a, 0x0c, 0x0d, 0x20]);
 const DELIMITERS = new Set([0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25]);
-const MAX_STREAM_BYTES = 256 * 1024 * 1024;
+/** The most one stream may inflate to; GeoPDF object and xref streams are small. */
+const MAX_STREAM_BYTES = 64 * 1024 * 1024;
+/** The most a document may inflate in total, so many large streams cannot add up. */
+const MAX_DECODED_BYTES = 512 * 1024 * 1024;
 
 function isRegular(byte: number): boolean {
   return !WHITESPACE.has(byte) && !DELIMITERS.has(byte);
@@ -410,6 +413,7 @@ class PdfStreamTooLargeError extends Error {}
 export class PdfDocument {
   private readonly xref = new Map<number, XrefEntry>();
   private readonly cache = new Map<number, PdfValue>();
+  private decodedBytes = 0;
   private readonly objectStreams = new Map<
     number,
     { data: Uint8Array; offsets: Map<number, number> }
@@ -548,6 +552,8 @@ export class PdfDocument {
     let trailer: PdfDict | null = null;
     this.xref.clear();
     this.cache.clear();
+    // Object streams decoded through the stale table may be the wrong ones.
+    this.objectStreams.clear();
     while ((match = re.exec(text))) {
       const offset = match.index + match[0].indexOf(match[1]);
       this.xref.set(Number(match[1]), { type: 1, offset });
@@ -650,6 +656,8 @@ export class PdfDocument {
         }
       }
     });
+    this.decodedBytes += data.length;
+    if (this.decodedBytes > MAX_DECODED_BYTES) throw new PdfReadError("PDF too large to read");
     return data;
   }
 

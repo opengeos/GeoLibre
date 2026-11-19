@@ -864,6 +864,7 @@
       "layers": "PDF layers to include",
       "errorNoFile": "Choose a PDF file first.",
       "errorNotGeoreferenced": "This PDF has no georeference GeoLibre can read. It needs geospatial PDF (ISO 32000) coordinates in a supported coordinate system.",
+      "errorRender": "Could not render the PDF's map frame onto the map.",
       "errorRead": "Could not read the PDF: {{message}}"
     },
     "landxml": {

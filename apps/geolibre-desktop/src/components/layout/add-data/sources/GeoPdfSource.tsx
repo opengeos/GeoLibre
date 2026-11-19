@@ -8,6 +8,7 @@ import { subscribePendingGeoPdf, takePendingGeoPdf } from "../../../../lib/geopd
 import { PdfReadError } from "../../../../lib/geopdf/pdf-objects";
 import {
   GeoPdfNotGeoreferencedError,
+  GeoPdfRenderError,
   openGeoPdf,
   renderGeoPdfPage,
   type OpenedGeoPdf,
@@ -68,6 +69,7 @@ export function GeoPdfSource() {
   const describeError = (error: unknown): string => {
     if (error instanceof GeoPdfNotGeoreferencedError)
       return t("addData.geopdf.errorNotGeoreferenced");
+    if (error instanceof GeoPdfRenderError) return t("addData.geopdf.errorRender");
     if (error instanceof PdfReadError)
       return t("addData.geopdf.errorRead", { message: error.message });
     return error instanceof Error ? error.message : String(error);
@@ -130,6 +132,9 @@ export function GeoPdfSource() {
 
   const handleSubmit = source.runSubmit(async () => {
     if (!opened) throw new Error(t("addData.geopdf.errorNoFile"));
+    // A PDF dropped while this one renders replaces it in the form: keep the
+    // form open for that file instead of closing it with this import.
+    const generation = loadGenerationRef.current;
     let rendered;
     renderingRef.current = opened;
     try {
@@ -159,7 +164,7 @@ export function GeoPdfSource() {
     );
     source.shell.addLayer(layer, source.beforeLayer);
     if (shouldZoomToNewLayers()) source.shell.mapControllerRef.current?.fitBounds(rendered.bounds);
-    source.shell.closeDialog();
+    if (generation === loadGenerationRef.current) source.shell.closeDialog();
   });
 
   const georeferencedPages = opened
@@ -174,7 +179,13 @@ export function GeoPdfSource() {
       onBeforeLayerIdChange={source.setBeforeLayerId}
       onSubmit={handleSubmit}
       error={source.error}
-      submitDisabled={source.isSubmitting || loading || !opened}
+      // Every PDF layer unticked would add an empty, transparent image.
+      submitDisabled={
+        source.isSubmitting ||
+        loading ||
+        !opened ||
+        (opened.layers.length > 0 && opened.layers.every((layer) => hidden.has(layer.id)))
+      }
     >
       <div className="space-y-3">
         <div className="space-y-1.5">

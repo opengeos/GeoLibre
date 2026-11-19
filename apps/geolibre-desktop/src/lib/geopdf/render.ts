@@ -62,6 +62,9 @@ export interface RenderedGeoPdf {
 /** Raised when the page has no georeference GeoLibre can place. */
 export class GeoPdfNotGeoreferencedError extends Error {}
 
+/** Raised when the frame cannot be rendered or placed on the map. */
+export class GeoPdfRenderError extends Error {}
+
 /** The longest side, in pixels, a frame is rendered at. */
 export const GEOPDF_MAX_SIDE = 4096;
 
@@ -275,7 +278,7 @@ export async function renderGeoPdfPage(
     }
   }
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("Could not create a canvas to render the PDF");
+  if (!context) throw new GeoPdfRenderError("Could not create a canvas to render the PDF");
   try {
     await pdfPage.render({
       // pdf.js draws into an opaque (no-alpha) context of a canvas it is
@@ -302,10 +305,18 @@ export async function renderGeoPdfPage(
   maskToNeatline(context, vp, userToPixel);
 
   // Each canvas pixel back to PDF user space, then through the fit.
-  const toLngLat = (px: number, py: number): [number, number] => {
+  const rawLngLat = (px: number, py: number): [number, number] => {
     const [u, v] = viewport.convertToPdfPoint(px + offsetX, py + offsetY);
     const [x, y] = applyUserToCrs(userToCrs, u, v);
     return converters.crsToWgs84(x, y);
+  };
+  // Keep longitudes continuous across the frame: a sheet across the
+  // antimeridian would otherwise jump from 179 to -179 and plan a world-wide
+  // raster. Longitudes are taken within 180 degrees of the frame's centre.
+  const centerLng = rawLngLat(width / 2, height / 2)[0];
+  const toLngLat = (px: number, py: number): [number, number] => {
+    const [lng, lat] = rawLngLat(px, py);
+    return [lng + 360 * Math.round((centerLng - lng) / 360), lat];
   };
 
   let output: HTMLCanvasElement = canvas;
@@ -321,7 +332,12 @@ export async function renderGeoPdfPage(
     // The map would bend this frame between its corners: resample it into a
     // north-up Web Mercator raster instead.
     const inverse = invertAffine(userToCrs);
-    const plan = planMercatorWarp(width, height, toLngLat, GEOPDF_MAX_SIDE);
+    let plan: ReturnType<typeof planMercatorWarp>;
+    try {
+      plan = planMercatorWarp(width, height, toLngLat, GEOPDF_MAX_SIDE);
+    } catch (error) {
+      throw new GeoPdfRenderError(error instanceof Error ? error.message : String(error));
+    }
     const warped = warpToMercator(context.getImageData(0, 0, width, height), plan, (lng, lat) => {
       const [x, y] = converters.wgs84ToCrs(lng, lat);
       if (!Number.isFinite(x) || !Number.isFinite(y) || !inverse) return null;
