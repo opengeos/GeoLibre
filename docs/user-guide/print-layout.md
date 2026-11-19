@@ -39,8 +39,9 @@ and the margins. On a dark colour the title and the footer switch to light text,
 so a dark map can sit on a dark page. **Export resolution** sets the DPI that
 PNG and PDF exports render a paper page at: **72 DPI**, **150 DPI** (the
 default), or **300 DPI**. Screen sizes always export at their exact pixel size.
-On the largest papers (A3, Tabloid) 300 DPI is lowered slightly, to about 294,
-so the page stays within the largest canvas every browser engine can draw.
+On the largest papers 300 DPI is lowered slightly (A3 to about 294, Tabloid
+to about 299), so the page stays within the largest canvas every browser
+engine can draw.
 
 ## Map frame, scale, and extent
 

@@ -266,6 +266,12 @@ describe("exportDpiForPage", () => {
     }
   });
 
+  it("accounts for each side being rounded to whole pixels", () => {
+    const size = { width: 423.38, height: 284.06, unit: "mm" as const };
+    const { width, height } = pagePx(size, exportDpiForPage(size, 300));
+    assert.ok(width * height <= MAX_EXPORT_CANVAS_PIXELS);
+  });
+
   it("ignores DPI for a screen-sized page", () => {
     assert.equal(exportDpiForPage({ width: 3840, height: 2160, unit: "px" }, 300), 300);
   });

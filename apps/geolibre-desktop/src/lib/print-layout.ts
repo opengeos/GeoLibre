@@ -211,8 +211,17 @@ export const MAX_EXPORT_CANVAS_PIXELS = 16_777_216;
 export function exportDpiForPage(size: ResolvedPageSize, dpi: number): number {
   if (size.unit !== "mm") return dpi;
   const { widthMm, heightMm } = pageMm(size);
-  const limit = Math.floor(25.4 * Math.sqrt(MAX_EXPORT_CANVAS_PIXELS / (widthMm * heightMm)));
-  return Math.max(1, Math.min(dpi, limit));
+  let fitted = Math.max(
+    1,
+    Math.min(dpi, Math.floor(25.4 * Math.sqrt(MAX_EXPORT_CANVAS_PIXELS / (widthMm * heightMm)))),
+  );
+  // pagePx rounds each side, which can tip a page just over the limit.
+  while (fitted > 1) {
+    const { width, height } = pagePx(size, fitted);
+    if (width * height <= MAX_EXPORT_CANVAS_PIXELS) break;
+    fitted--;
+  }
+  return fitted;
 }
 
 /**
