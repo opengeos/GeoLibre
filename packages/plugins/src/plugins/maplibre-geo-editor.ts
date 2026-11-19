@@ -1,6 +1,8 @@
 import {
   planSketchAttributeUpdates,
   normalizeEditorFormProperties,
+  protectEditorImportAttributes,
+  editorImportAttributes,
 } from "./geo-editor-sketch-attributes";
 import {
   normalizeGeoEditorSettings,
@@ -1180,8 +1182,8 @@ export function hasViewImportBaseline(): boolean {
 /**
  * Load features queried from a map layer in the current view into the shared
  * editor, so they become editable "Sketches". Features are normalized and tagged
- * (see `tagViewFeaturesForImport`); the editor's `loadGeoJson` fires the sketches
- * sync, so they also appear as the Sketches store layer. A baseline is captured
+ * (see `tagViewFeaturesForImport`). Public attributes are preserved through the
+ * import, then synchronized to the Sketches store layer. A baseline is captured
  * from the post-import geometry for later "changed only" export.
  *
  * @param features Plain features from `queryViewLayerFeatures`.
@@ -1224,10 +1226,9 @@ export async function loadViewFeaturesIntoEditor(
     };
   }
 
-  // loadGeoJson replaces the editor's collection and fires onGeoJsonLoad, which
-  // (the restore guard being off here) syncs the loaded features to the Sketches
-  // store layer so they render and stay editable.
-  await geoEditorControl.loadGeoJson(collectionToLoad, SKETCHES_SOURCE_PATH);
+  // Import without letting Geoman claim public columns as shape parameters,
+  // then sync the restored attributes to the Sketches store layer.
+  await loadEditorCollection(collectionToLoad);
 
   // Capture the baseline from the post-import geometry: Geoman normalizes
   // coordinates on load, so comparing against the loaded values (not the raw
@@ -1580,7 +1581,7 @@ export async function startLayerGeometryEdit(
     editTargetOriginalProperties = captureEditedProperties(tagged, source);
     editTargetOriginalGeometries = captureEditedGeometries(tagged);
     editTargetOriginalIds = captureEditedFeatureIds(tagged, source);
-    await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
+    await loadEditorCollection(tagged);
     loaded = true;
   } catch (error) {
     // A "Missing source" failure means Geoman is not ready yet (handled by the
@@ -1765,7 +1766,7 @@ async function restoreSketchesNow(): Promise<void> {
   if (sketches?.features.length) {
     restoringSketchesToEditor = true;
     try {
-      await geoEditorControl.loadGeoJson(cloneFeatureCollection(sketches), SKETCHES_SOURCE_PATH);
+      await loadEditorCollection(sketches);
     } catch (error) {
       // Geoman may not be ready; the store subscription will re-restore.
       warnUnlessGeomanNotReady("restoring sketches after an edit session", error);
@@ -1839,7 +1840,7 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
   // `finally`, preventing `syncSketchesToStore` from looping.
   restoringSketchesToEditor = true;
   try {
-    await geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
+    await loadEditorCollection(storeCollection);
   } catch (error) {
     // Geoman may not be ready until the map style finishes loading.
     warnUnlessGeomanNotReady("loading the Sketches layer into the editor", error);
@@ -1847,6 +1848,29 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
     restoringSketchesToEditor = false;
   }
   scheduleApplySketchesMapDisplay();
+}
+
+/** Import without renaming public columns into Geoman's internal shape keys. */
+async function loadEditorCollection(collection: FeatureCollection): Promise<void> {
+  if (!geoEditorControl || !geomanInstance) throw new Error("Geoman not initialized");
+  const wasRestoring = restoringSketchesToEditor;
+  restoringSketchesToEditor = true;
+  try {
+    const protectedCollection = protectEditorImportAttributes(cloneFeatureCollection(collection));
+    await geoEditorControl.loadGeoJson(protectedCollection, SKETCHES_SOURCE_PATH);
+    const updates: Promise<void>[] = [];
+    // setProperties assigns synchronously before awaiting its source update.
+    // Unwrap every feature before yielding, so transient envelopes cannot be
+    // exported or synced by another browser event between individual updates.
+    geomanInstance.features.forEach((feature) => {
+      const properties = editorImportAttributes(feature.getGeoJson());
+      if (properties) updates.push(feature.setProperties(properties));
+    });
+    await Promise.all(updates);
+  } finally {
+    restoringSketchesToEditor = wasRestoring;
+  }
+  if (!wasRestoring) syncSketchesToStore();
 }
 
 async function clearSketchesFromEditor(): Promise<void> {

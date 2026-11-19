@@ -96,3 +96,33 @@ it("preserves untouched empty strings and missing form fields while allowing exp
   assert.deepEqual(result, { empty: "", cleared: null, active: null, count: 2 });
   assert.deepEqual(previous, { empty: "", cleared: "Before", active: null, count: 1 });
 });
+
+it("shields ordinary shape-named attributes during import without losing engine metadata", async () => {
+  const { protectEditorImportAttributes, editorImportAttributes } =
+    await import("../packages/plugins/src/plugins/geo-editor-sketch-attributes");
+  const source = structuredClone(original);
+  source.features[0].properties = {
+    id: "human-id",
+    shape: "public shape",
+    width: 9,
+    height: 5,
+    text: "Label",
+    __gm_id: "feature-1",
+    __gm_shape: "rectangle",
+    __gm_width: 100,
+    __gm_height: 200,
+    __geolibre_import_attributes: { real: "user column with the same name" },
+  };
+  const protectedCollection = protectEditorImportAttributes(source);
+  assert.equal(protectedCollection.features[0].properties?.height, undefined);
+  assert.equal(protectedCollection.features[0].properties?.__gm_height, 200);
+  assert.deepEqual(editorImportAttributes(protectedCollection.features[0]), {
+    id: "human-id",
+    shape: "public shape",
+    width: 9,
+    height: 5,
+    text: "Label",
+    __geolibre_import_attributes: { real: "user column with the same name" },
+  });
+  assert.equal(source.features[0].properties?.height, 5);
+});

@@ -98,3 +98,26 @@ export function normalizeEditorFormProperties(
   }
   return normalized;
 }
+
+// Temporary envelope prevents Geoman from claiming plain user columns such as
+// height, width, id and text as shape parameters while importing a collection.
+const ATTRIBUTE_ENVELOPE = "__geolibre_import_attributes";
+
+/** Shield public attributes from Geoman's shape-property normalization on import. */
+export function protectEditorImportAttributes(collection: FeatureCollection): FeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) => ({
+      ...feature,
+      properties: { ...shapeProperties(feature), [ATTRIBUTE_ENVELOPE]: customProperties(feature) },
+    })),
+  };
+}
+
+/** Read the public attributes to restore through Geoman's shape-preserving setter. */
+export function editorImportAttributes(feature: Feature): Record<string, unknown> | undefined {
+  const properties = feature.properties?.[ATTRIBUTE_ENVELOPE];
+  return properties && typeof properties === "object" && !Array.isArray(properties)
+    ? properties
+    : undefined;
+}

@@ -275,7 +275,8 @@ instead.
 GeoEditor's **Sketches** layer supports editing attributes and adding fields
 such as `stroke`, `fill`, and `marker-color`. Create and delete sketch features
 with GeoEditor. Geoman's internal `__gm_*` shape metadata is hidden in
-the Sketches table and retained for geometry editing.
+the Sketches table and retained for geometry editing. Ordinary attributes such
+as `height`, `width`, and `text` are preserved when GeoEditor reloads features.
 
 The properties popup automatically includes public text, number, and boolean
 fields from Sketches or the vector layer being edited. Nested or mixed-type values remain read-only, even when configured explicitly. Boolean fields offer true, false, and an unset option so unrelated edits preserve null values.

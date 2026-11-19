@@ -46,7 +46,9 @@ test("Sketches attribute saves preserve unfinished drawing and GeoEditor undo hi
   await drawMode(page, "Rectangle");
   const rectangle = await vertices(page);
   for (const point of [rectangle[0], rectangle[2]]) await page.mouse.click(point.x, point.y);
-  await closeProperties(page);
+  const initialProperties = page.locator(".geo-editor-attribute-panel");
+  await initialProperties.getByRole("spinbutton", { name: "Height (m)", exact: true }).fill("5");
+  await initialProperties.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Collapse toolbar", exact: true }).click();
   await layerRow(page, "Sketches").getByRole("button", { name: "Layer actions" }).click();
   await page.getByRole("menuitem", { name: "Open attribute table", exact: true }).click();
@@ -98,6 +100,18 @@ test("Sketches attribute saves preserve unfinished drawing and GeoEditor undo hi
   await expect(status).toContainText("3 features");
   await expect(table.getByRole("columnheader").filter({ hasText: "category" })).toHaveCount(0);
   await expect(table.getByRole("columnheader").filter({ hasText: "land_use" })).toHaveCount(1);
+  await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
+  await closeProperties(page);
+
+  // A full Geoman import must preserve public height independently of its
+  // internal rectangle height parameter, and retain the renamed column.
+  await page.getByRole("button", { name: "GeoEditor", exact: true }).click();
+  await expect(page.locator(".geo-editor-toolbar")).toHaveCount(0);
+  await page.getByRole("button", { name: "GeoEditor", exact: true }).click();
+  await drawMode(page, "Rectangle");
+  for (const point of [points[0], points[2]]) await page.mouse.click(point.x, point.y);
+  await expect(status).toContainText("4 features");
+  await expect(table.getByRole("cell", { name: "5", exact: true })).toBeVisible();
   await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
   await closeProperties(page);
 });
