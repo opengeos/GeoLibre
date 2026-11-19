@@ -132,6 +132,18 @@ describe("app store undo history after the slice split", () => {
     assert.deepEqual([...touched].sort(), Object.keys(store().ui).sort());
   });
 
+  it("drops attribute drafts of a layer that undo removes", () => {
+    const added = store().addGeoJsonLayer("B", emptyFC);
+    store().setAttributeTableDrafts(added, { "0": { name: "edited" } });
+    store().setAttributeTableDrafts(layerId, { "0": { name: "kept" } });
+    undo();
+    assert.equal(
+      store().layers.some((layer) => layer.id === added),
+      false,
+    );
+    assert.deepEqual(Object.keys(store().ui.attributeTableDrafts), [layerId]);
+  });
+
   it("opens the attribute table for an edit request and clears only the request", () => {
     store().requestAttributeTableEdit(layerId);
     assert.equal(store().ui.attributeTableOpen, true);
