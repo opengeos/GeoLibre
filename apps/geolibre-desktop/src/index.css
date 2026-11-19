@@ -6345,7 +6345,8 @@ html[data-touch-ui="true"] [data-slider-thumb]::before {
   inset: -0.6875rem;
 }
 
-/* Enlarge MapLibre / Mapbox corner control buttons from 29px to 44px on touch. */
+/* Enlarge MapLibre / Mapbox corner control buttons from 29px to 44px on touch
+   and scale their icons proportionally (~1.4x) so glyphs match desktop density. */
 html[data-touch-ui="true"] :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) > button {
   width: 44px;
   height: 44px;
@@ -6354,8 +6355,32 @@ html[data-touch-ui="true"] :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group) > b
 html[data-touch-ui="true"]
   :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
   > button
-  .maplibregl-ctrl-icon {
-  background-size: 24px 24px;
+  :is(.maplibregl-ctrl-icon, .mapboxgl-ctrl-icon) {
+  background-size: 36px 36px;
+}
+
+/* Globe icon uses a tighter 22x22 viewBox than MapLibre's 29x29 glyphs. */
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button:is(.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled)
+  :is(.maplibregl-ctrl-icon, .mapboxgl-ctrl-icon) {
+  background-size: 31px 31px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  .geolibre-reset-bearing-needle {
+  width: 34px;
+  height: 34px;
+}
+
+html[data-touch-ui="true"]
+  :is(.maplibregl-ctrl-group, .mapboxgl-ctrl-group)
+  > button
+  svg:not(.geolibre-reset-bearing-needle) {
+  width: 28px;
+  height: 28px;
 }
 
 /* Enlarge LayerRow interactive targets in touch mode. */
@@ -6381,7 +6406,7 @@ html[data-touch-ui="true"] [data-testid="layer-row"] [role="button"] {
   display: none;
 }
 
-[data-mobile-bottom-sheet] aside {
+[data-mobile-bottom-sheet] [data-mobile-panel-host] > aside {
   position: relative !important;
   inset: auto !important;
   z-index: auto !important;

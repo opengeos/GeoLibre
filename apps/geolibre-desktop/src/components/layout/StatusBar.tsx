@@ -16,7 +16,8 @@ import {
 import { cn } from "@geolibre/ui";
 import { Bug, DatabaseZap, Smartphone, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { setTouchUiMode, useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { getIsCoarsePointer } from "../../hooks/useTouchUi";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
 import { isMobile } from "../../lib/is-mobile";
 import { autosavePausedMessage } from "../../lib/autosave-status";
@@ -72,18 +73,7 @@ export function StatusBar({
   const mapView = useAppStore((s) => s.mapView);
   const touchUiMode = useDesktopSettingsStore((s) => s.desktopSettings.layout.touchUiMode);
   const switchToTouchUi = () => {
-    const coarsePointer =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(pointer: coarse)").matches;
-    const { desktopSettings, setDesktopSettings } = useDesktopSettingsStore.getState();
-    setDesktopSettings({
-      ...desktopSettings,
-      layout: {
-        ...desktopSettings.layout,
-        touchUiMode: coarsePointer || isMobile() ? "auto" : "touch",
-      },
-    });
+    setTouchUiMode(getIsCoarsePointer() || isMobile() ? "auto" : "touch");
   };
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
   // The pointer readout re-renders this bar on every mouse move; build the

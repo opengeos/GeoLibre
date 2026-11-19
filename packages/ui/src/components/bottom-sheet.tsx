@@ -38,6 +38,12 @@ export interface BottomSheetProps {
   modal?: boolean;
   /** Whether the user may swipe down / tap Escape / tap close to dismiss. Defaults to `true`. */
   dismissible?: boolean;
+  /**
+   * Keep children mounted (hidden and inert) while closed so stateful panels
+   * such as Layers or Style preserve scroll position and unsaved edits across
+   * tab switches. Defaults to `false`.
+   */
+  keepMounted?: boolean;
   /** Optional visible heading in the sheet header. */
   title?: React.ReactNode;
   /**
@@ -96,9 +102,12 @@ function measureHostViewport(container: HTMLElement | null): HostViewportMetrics
   if (!vv) {
     return { availableHeight: parentHeight || window.innerHeight, keyboardInsetPx: 0 };
   }
+  // Ignore visualViewport offset while pinch-zoomed: zoom pans the visual
+  // viewport inside the layout viewport without a software keyboard being open.
+  const pinchZoomed = vv.scale > 1.01;
   const visibleBottom = vv.offsetTop + vv.height;
   const hostBottom = container ? container.getBoundingClientRect().bottom : window.innerHeight;
-  const keyboardInsetPx = Math.max(0, Math.round(hostBottom - visibleBottom));
+  const keyboardInsetPx = pinchZoomed ? 0 : Math.max(0, Math.round(hostBottom - visibleBottom));
   const rawHeight = parentHeight > 0 ? parentHeight - keyboardInsetPx : vv.height;
   return {
     availableHeight: Math.max(0, Math.min(rawHeight, Math.round(vv.height))),
@@ -131,6 +140,7 @@ export function BottomSheet({
   detentRatios,
   modal = false,
   dismissible = true,
+  keepMounted = false,
   title,
   hideHeader = false,
   ariaLabel,
@@ -173,7 +183,15 @@ export function BottomSheet({
   React.useLayoutEffect(() => {
     if (!open) return;
     const host = hostRef.current;
-    const update = () => setViewportMetrics(measureHostViewport(host));
+    const update = () => {
+      const next = measureHostViewport(host);
+      setViewportMetrics((prev) =>
+        prev.availableHeight === next.availableHeight &&
+        prev.keyboardInsetPx === next.keyboardInsetPx
+          ? prev
+          : next,
+      );
+    };
     update();
 
     const resizeObserver =
@@ -273,12 +291,13 @@ export function BottomSheet({
     };
   }, [open, modal]);
 
-  // Escape dismisses the sheet when dismissible (ignoring events already handled
-  // by an open nested dialog or menu).
+  // Escape dismisses modal sheets from anywhere, and non-modal sheets only when
+  // focus is inside the sheet so Escape on the map still cancels active tools.
   React.useEffect(() => {
     if (!open || !dismissible) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (!modal && !sheetRef.current?.contains(document.activeElement)) return;
       // Do not steal Escape if a Radix dialog/menu portal is stacked above us.
       if (
         document.querySelector(
@@ -292,7 +311,7 @@ export function BottomSheet({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, dismissible, onOpenChange]);
+  }, [open, modal, dismissible, onOpenChange]);
 
   // Live drag state: `dragHeightPx` is non-null only while a pointer drag is
   // actively moving the sheet.
@@ -457,7 +476,7 @@ export function BottomSheet({
     }
   };
 
-  if (!open) return null;
+  if (!open && !keepMounted) return null;
 
   const renderedHeight = dragHeightPx ?? targetHeightPx;
   const isDragging = dragHeightPx !== null;
@@ -466,13 +485,18 @@ export function BottomSheet({
     <div
       ref={hostRef}
       data-bottom-sheet-host=""
+      hidden={!open}
+      aria-hidden={!open || undefined}
+      // React 19 accepts boolean `inert`; keeps hidden keepMounted trees out of tab order.
+      inert={!open}
       style={
-        viewportMetrics.keyboardInsetPx > 0
+        open && viewportMetrics.keyboardInsetPx > 0
           ? { paddingBottom: `${viewportMetrics.keyboardInsetPx}px` }
           : undefined
       }
       className={cn(
         "absolute inset-0 z-30 flex flex-col justify-end overflow-hidden",
+        !open && "hidden",
         modal ? "pointer-events-auto" : "pointer-events-none",
       )}
     >

@@ -11554,7 +11554,7 @@
       "delimitedText": "CSV / delimited text…",
       "xyz": "XYZ tile URL…",
       "wms": "WMS / WMTS service…",
-      "geoParquet": "GeoParquet / cloud data…",
+      "geoParquet": "GeoParquet file…",
       "basemaps": "Basemaps",
       "gallery": "Project gallery…",
       "allSources": "All data sources…"
@@ -11564,7 +11564,7 @@
       "gpsTracking": "GPS tracking…",
       "geoEditor": "Draw and edit geometry",
       "measure": "Measure distance and area",
-      "offlineBasemap": "Offline basemap extract",
+      "offlineBasemap": "Offline basemap…",
       "addComment": "Add map comment"
     },
     "more": {

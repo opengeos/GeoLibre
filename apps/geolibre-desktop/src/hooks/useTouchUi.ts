@@ -6,7 +6,7 @@ import { useIsMobileViewport } from "./useIsMobileViewport";
 
 const COARSE_POINTER_QUERY = "(pointer: coarse)";
 
-function getIsCoarsePointer(): boolean {
+export function getIsCoarsePointer(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&

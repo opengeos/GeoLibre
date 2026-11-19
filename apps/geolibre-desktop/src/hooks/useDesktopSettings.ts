@@ -711,6 +711,15 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set) => ({
   setDesktopSettings: (settings) => set({ desktopSettings: normalizeDesktopSettings(settings) }),
 }));
 
+/** Update only `layout.touchUiMode` without overwriting other desktop settings. */
+export function setTouchUiMode(mode: TouchUiMode): void {
+  const { desktopSettings, setDesktopSettings } = useDesktopSettingsStore.getState();
+  setDesktopSettings({
+    ...desktopSettings,
+    layout: { ...desktopSettings.layout, touchUiMode: mode },
+  });
+}
+
 /** Apply settings supplied by an embed URL without replacing this browser's saved preferences. */
 export function applyTemporaryDesktopSettings(settings: unknown): void {
   desktopSettingsAreTemporary = true;

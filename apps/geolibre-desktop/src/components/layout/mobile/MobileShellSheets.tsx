@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { collapseRightPanel, openRasterLayerPanel } from "@geolibre/plugins";
+import { closeFloatingPanel, collapseRightPanel, openRasterLayerPanel } from "@geolibre/plugins";
 import { BottomSheet } from "@geolibre/ui";
 import {
   type ComponentProps,
@@ -60,50 +60,89 @@ export function useMobileShellState(mobileShell: boolean) {
     if (store.ui.assistantOpen) store.setAssistantOpen(false);
   }, []);
 
+  const closeAllFloatingPanels = useCallback(() => {
+    for (const id of floatingPanelOpenIds) {
+      closeFloatingPanel(id);
+    }
+  }, [floatingPanelOpenIds]);
+
+  const floatingPanelCount = floatingPanelOpenIds.length;
   const prevMobileShellRef = useRef(false);
   const prevExpandedPluginRef = useRef<string | null>(null);
   const prevBottomPanelOpenRef = useRef(false);
+  const prevFloatingCountRef = useRef(0);
 
   useEffect(() => {
     const enteredMobileShell = mobileShell && !prevMobileShellRef.current;
     const pluginJustExpanded =
       expandedPluginPanelId !== null && expandedPluginPanelId !== prevExpandedPluginRef.current;
     const bottomJustOpened = anyBottomPanelOpen && !prevBottomPanelOpenRef.current;
+    const floatingJustOpened = floatingPanelCount > prevFloatingCountRef.current;
 
     prevMobileShellRef.current = mobileShell;
     prevExpandedPluginRef.current = expandedPluginPanelId;
     prevBottomPanelOpenRef.current = anyBottomPanelOpen;
+    prevFloatingCountRef.current = floatingPanelCount;
 
     if (!mobileShell) {
       setActiveMobileTab(null);
       return;
     }
 
-    if (enteredMobileShell && anyBottomPanelOpen && expandedPluginPanelId) {
+    if (enteredMobileShell) {
+      if (anyBottomPanelOpen) {
+        setActiveMobileTab(null);
+        if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
+        if (floatingPanelCount > 0) closeAllFloatingPanels();
+      } else if (expandedPluginPanelId && floatingPanelCount > 0) {
+        setActiveMobileTab(null);
+        closeAllFloatingPanels();
+      }
+      return;
+    }
+
+    if (floatingJustOpened) {
       setActiveMobileTab(null);
-      collapseRightPanel(expandedPluginPanelId);
+      if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
+      if (anyBottomPanelOpen) closeAllBottomPanels();
       return;
     }
 
     if (bottomJustOpened) {
       setActiveMobileTab(null);
       if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
+      if (floatingPanelCount > 0) closeAllFloatingPanels();
       return;
     }
 
     if (pluginJustExpanded) {
       setActiveMobileTab(null);
       if (anyBottomPanelOpen) closeAllBottomPanels();
+      if (floatingPanelCount > 0) closeAllFloatingPanels();
     }
-  }, [mobileShell, expandedPluginPanelId, anyBottomPanelOpen, closeAllBottomPanels]);
+  }, [
+    mobileShell,
+    expandedPluginPanelId,
+    anyBottomPanelOpen,
+    floatingPanelCount,
+    closeAllBottomPanels,
+    closeAllFloatingPanels,
+  ]);
 
   const openMobileTab = useCallback(
     (tab: MobileNavTabId) => {
       if (expandedPluginPanelId) collapseRightPanel(expandedPluginPanelId);
       if (anyBottomPanelOpen) closeAllBottomPanels();
+      if (floatingPanelCount > 0) closeAllFloatingPanels();
       setActiveMobileTab(tab);
     },
-    [expandedPluginPanelId, anyBottomPanelOpen, closeAllBottomPanels],
+    [
+      expandedPluginPanelId,
+      anyBottomPanelOpen,
+      floatingPanelCount,
+      closeAllBottomPanels,
+      closeAllFloatingPanels,
+    ],
   );
 
   const closeMobileTab = useCallback(() => {
@@ -121,13 +160,6 @@ export function useMobileShellState(mobileShell: boolean) {
     [activeMobileTab, closeMobileTab, openMobileTab],
   );
 
-  const anyMobileSheetOpen =
-    mobileShell &&
-    (activeMobileTab !== null ||
-      expandedPluginPanelId !== null ||
-      anyBottomPanelOpen ||
-      floatingPanelOpenIds.length > 0);
-
   return {
     activeMobileTab,
     openMobileTab,
@@ -137,7 +169,6 @@ export function useMobileShellState(mobileShell: boolean) {
     setMobileSheetHostEl,
     expandedPluginPanelId,
     anyBottomPanelOpen,
-    anyMobileSheetOpen,
     closeAllBottomPanels,
   };
 }
@@ -209,6 +240,7 @@ export function MobileShellSheets({
       {layoutOptions.layerPanelVisible ? (
         <BottomSheet
           open={activeMobileTab === "layers"}
+          keepMounted
           onOpenChange={(open) => {
             if (!open) onCloseMobileTab();
           }}
@@ -217,36 +249,39 @@ export function MobileShellSheets({
           ariaLabel={t("sharedRail.layers")}
           closeLabel={t("common.close")}
           dragHandleLabel={t("mobileShell.resizeSheet")}
-          bodyClassName="overflow-hidden"
+          bodyClassName="flex flex-col overflow-hidden"
           data-testid="mobile-sheet-layers"
         >
-          <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
-            <LayerPanel
-              refresh={layerRefresh}
-              themeMode={themeMode}
-              mapControllerRef={mapControllerRef}
-              collaborationApi={collaboration}
-              onResizeStart={startLayerPanelResize}
-              geometryEditLayerId={geometryEditLayerId}
-              onToggleGeometryEdit={onToggleGeometryEdit}
-              onCancelGeometryEdit={onCancelGeometryEdit}
-              onMaterializeDuckDBLayer={onMaterializeDuckDBLayer}
-              onOpenRasterStylePanel={() => openRasterLayerPanel(createAppAPI(mapControllerRef))}
-              onOpenStylePanel={layoutOptions.stylePanelVisible ? onOpenStylePanel : undefined}
-              onOpenRasterSubset={onOpenRasterSubset}
-              collapsed={activeMobileTab !== "layers"}
-              onCollapsedChange={(collapsed) => {
-                if (collapsed) onCloseMobileTab();
-                else onOpenMobileTab("layers");
-              }}
-              hideOwnRail
-            />
-          </SectionErrorBoundary>
+          <div data-mobile-panel-host="" className="flex min-h-0 flex-1 flex-col">
+            <SectionErrorBoundary label="Layer panel" displayName={t("shell.section.layerPanel")}>
+              <LayerPanel
+                refresh={layerRefresh}
+                themeMode={themeMode}
+                mapControllerRef={mapControllerRef}
+                collaborationApi={collaboration}
+                onResizeStart={startLayerPanelResize}
+                geometryEditLayerId={geometryEditLayerId}
+                onToggleGeometryEdit={onToggleGeometryEdit}
+                onCancelGeometryEdit={onCancelGeometryEdit}
+                onMaterializeDuckDBLayer={onMaterializeDuckDBLayer}
+                onOpenRasterStylePanel={() => openRasterLayerPanel(createAppAPI(mapControllerRef))}
+                onOpenStylePanel={layoutOptions.stylePanelVisible ? onOpenStylePanel : undefined}
+                onOpenRasterSubset={onOpenRasterSubset}
+                collapsed={activeMobileTab !== "layers"}
+                onCollapsedChange={(collapsed) => {
+                  if (collapsed) onCloseMobileTab();
+                  else onOpenMobileTab("layers");
+                }}
+                hideOwnRail
+              />
+            </SectionErrorBoundary>
+          </div>
         </BottomSheet>
       ) : null}
       {layoutOptions.stylePanelVisible ? (
         <BottomSheet
           open={activeMobileTab === "style"}
+          keepMounted
           onOpenChange={(open) => {
             if (!open) onCloseMobileTab();
           }}
@@ -255,24 +290,26 @@ export function MobileShellSheets({
           ariaLabel={t("sharedRail.style")}
           closeLabel={t("common.close")}
           dragHandleLabel={t("mobileShell.resizeSheet")}
-          bodyClassName="overflow-hidden"
+          bodyClassName="flex flex-col overflow-hidden"
           data-testid="mobile-sheet-style"
         >
-          <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
-            <StylePanel
-              mapControllerRef={mapControllerRef}
-              mapReadyGeneration={mapReadyGeneration}
-              onResizeStart={startStylePanelResize}
-              openRequest={stylePanelOpenRequest}
-              collapsed={activeMobileTab !== "style"}
-              onCollapsedChange={(collapsed) => {
-                if (collapsed) onCloseMobileTab();
-                else onOpenMobileTab("style");
-              }}
-              autoCollapse={notebookOpen || storymapPresenting}
-              hideOwnRail
-            />
-          </SectionErrorBoundary>
+          <div data-mobile-panel-host="" className="flex min-h-0 flex-1 flex-col">
+            <SectionErrorBoundary label="Style panel" displayName={t("shell.section.stylePanel")}>
+              <StylePanel
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+                onResizeStart={startStylePanelResize}
+                openRequest={stylePanelOpenRequest}
+                collapsed={activeMobileTab !== "style"}
+                onCollapsedChange={(collapsed) => {
+                  if (collapsed) onCloseMobileTab();
+                  else onOpenMobileTab("style");
+                }}
+                autoCollapse={notebookOpen || storymapPresenting}
+                hideOwnRail
+              />
+            </SectionErrorBoundary>
+          </div>
         </BottomSheet>
       ) : null}
       <MobilePluginSheet activePanelId={expandedPluginPanelId} contentEl={dockContentEl} />

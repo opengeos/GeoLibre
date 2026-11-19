@@ -4,7 +4,7 @@ import { BottomSheet } from "@geolibre/ui";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { ThemeMode } from "../../../hooks/useThemeMode";
-import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { setTouchUiMode, useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
 import type { ToolbarDialogs } from "../../../hooks/toolbar/useToolbarDialogs";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
@@ -108,11 +108,7 @@ export function MobileToolbarChrome({
   };
 
   const switchToDesktopUi = () => {
-    const { desktopSettings, setDesktopSettings } = useDesktopSettingsStore.getState();
-    setDesktopSettings({
-      ...desktopSettings,
-      layout: { ...desktopSettings.layout, touchUiMode: "desktop" },
-    });
+    setTouchUiMode("desktop");
   };
 
   const mobileQuickSheetOpen =

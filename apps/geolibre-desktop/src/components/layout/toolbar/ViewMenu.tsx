@@ -36,9 +36,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
 import {
+  setTouchUiMode,
   TOUCH_UI_MODES,
   useDesktopSettingsStore,
-  type TouchUiMode,
 } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
@@ -117,13 +117,6 @@ export function ViewMenu({
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const touchUiMode = useDesktopSettingsStore((s) => s.desktopSettings.layout.touchUiMode);
-  const setTouchUiMode = (mode: TouchUiMode) => {
-    const { desktopSettings, setDesktopSettings } = useDesktopSettingsStore.getState();
-    setDesktopSettings({
-      ...desktopSettings,
-      layout: { ...desktopSettings.layout, touchUiMode: mode },
-    });
-  };
   const mapLayout = useAppStore((s) => s.mapLayout);
   const setMapGrid = useAppStore((s) => s.setMapGrid);
   const setSyncView = useAppStore((s) => s.setSyncView);
