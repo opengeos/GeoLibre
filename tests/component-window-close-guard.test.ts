@@ -168,4 +168,41 @@ describe("useWindowCloseGuard", () => {
     await requestClose();
     assert.equal(guard.current.windowClosePromptOpen, true);
   });
+
+  it("asks about attribute drafts first and keeps the window when declined", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: false });
+    const asked: string[] = [];
+    const originalConfirm = window.confirm;
+    let answer = false;
+    window.confirm = (message?: string) => {
+      asked.push(String(message));
+      return answer;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      assert.equal(asked.length, 1);
+      assert.match(asked[0], /Cities/);
+      assert.equal(guard.current.windowClosePromptOpen, false);
+      assert.ok(!destroyed());
+      answer = true;
+      await requestClose();
+      assert.equal(asked.length, 2);
+      assert.ok(destroyed());
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
 });

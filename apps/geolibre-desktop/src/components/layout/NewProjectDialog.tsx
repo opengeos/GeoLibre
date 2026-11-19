@@ -29,6 +29,7 @@ import {
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import { StarterProjectsSection } from "./StarterProjectsSection";
+import { confirmDiscardAttributeDrafts } from "../../lib/attribute-draft-guard";
 import {
   Button,
   cn,
@@ -248,6 +249,9 @@ export function NewProjectDialog({
     basemapId: BasemapChoice,
     { styleUrl, ellipsoidId }: ResolvedBasemap,
   ) => {
+    // The save prompt covers project changes; attribute drafts are not part of
+    // the project, so they get their own question.
+    if (!confirmDiscardAttributeDrafts()) return;
     const name = projectName.trim() || DEFAULT_PROJECT_NAME;
     const options = {
       basemapStyleUrl: styleUrl,
@@ -297,6 +301,7 @@ export function NewProjectDialog({
     templateProject: Parameters<typeof detachProjectCopy>[0],
     templateName: string,
   ) => {
+    if (!confirmDiscardAttributeDrafts()) return;
     const copy = detachProjectCopy(templateProject, { nameSuffix: "" });
     const finalName =
       projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""

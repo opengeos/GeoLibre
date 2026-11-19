@@ -22,6 +22,7 @@ import {
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import {
   discardEditedWfsGeometry,
   embedEditedGeometry,
@@ -507,6 +508,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleOpenFromFile = async () => {
     const result = await openProjectFile();
     if (result) {
+      if (!confirmDiscardAttributeDrafts()) return;
       try {
         loadProject(await resolveProjectXyzLayers(result.project), result.path, {
           rememberRecent: isTauri(),
@@ -558,6 +560,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   /** Parse and open a project supplied by either browser or native drag-and-drop. */
   const handleDroppedProject = async (text: string, path: string | null): Promise<boolean> => {
+    if (!confirmDiscardAttributeDrafts()) return false;
     try {
       const candidate = {
         project: parseProject(text),
@@ -697,7 +700,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       imported.formNotes = imported.formNotes.filter((note) => loadedNames.has(note.layerName));
       imported.styleNotes = imported.styleNotes.filter((note) => loadedNames.has(note.layerName));
       await materializeQgisFormRelations(imported, readQgisSnapshotTable);
-      if (superseded()) return;
+      if (superseded() || !confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
@@ -806,6 +809,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           usedGroupIds.has(group.id),
         );
       }
+      if (!confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
@@ -895,7 +899,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const result = await openRecentProjectFile(normalizedUrl, controller.signal);
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return;
       loadProject(project, result.path);
       setProjectUrl("");
       setProjectUrlDialogOpen(false);
@@ -982,6 +986,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         options.oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
       )
         return;
+      if (!confirmDiscardAttributeDrafts()) return;
 
       if (options.asCopy) {
         const detached = detachProjectCopy(project, { nameSuffix: "" });
@@ -1021,7 +1026,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (!result || signal.aborted) return null;
     try {
       const project = await resolveProjectXyzLayers(result.project, signal);
-      if (signal.aborted) return null;
+      if (signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       return null;
     } catch (error) {
@@ -1068,7 +1073,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     try {
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       if (result.fromStoredCopy) {
         notify.warning(t("settings.startup.storedCopyWarning"), {
@@ -2240,6 +2245,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const handleDuplicate = () => {
+    if (!confirmDiscardAttributeDrafts()) return;
     const { project } = buildCurrentProject();
     const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
     // A copy of what is already on screen, so its basemap needs no confirmation.

@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import i18next from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import { isTauri } from "../lib/is-tauri";
 import { notify } from "../lib/notify";
 
@@ -63,10 +64,17 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
     void import("@tauri-apps/api/window")
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested((event) => {
+          const busy = savingRef.current || promptOpenRef.current;
+          // Attribute drafts are not part of the project, so the save prompt
+          // below cannot keep them; ask about them on their own first.
+          if (!busy && !confirmDiscardAttributeDrafts()) {
+            event.preventDefault();
+            return;
+          }
           // Not prevented: the API destroys the window after this returns.
           if (!useAppStore.getState().isDirty) return;
           event.preventDefault();
-          if (savingRef.current || promptOpenRef.current) return;
+          if (busy) return;
           promptOpenRef.current = true;
           promptGenerationRef.current = useAppStore.getState().projectGeneration;
           setWindowClosePromptOpen(true);
