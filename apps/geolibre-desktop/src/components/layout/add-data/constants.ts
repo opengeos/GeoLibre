@@ -21,6 +21,7 @@ export type KindI18nKey =
   | "ogcFeatures"
   | "ogcVectorTiles"
   | "gpx"
+  | "geopdf"
   | "landxml"
   | "indoorgml"
   | "georss"
@@ -59,6 +60,7 @@ export const KIND_I18N_KEY: Record<
   "ogc-features": "ogcFeatures",
   "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
+  geopdf: "geopdf",
   landxml: "landxml",
   indoorgml: "indoorgml",
   georss: "georss",

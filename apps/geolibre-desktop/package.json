@@ -102,6 +102,7 @@
     "maplibre-gl-vector": "^0.11.2",
     "maplibre-tilepackage-protocol": "^1.2.2",
     "openai": "^7.57.0",
+    "pdfjs-dist": "^6.5.438",
     "proj4": "^2.23.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.3.1",

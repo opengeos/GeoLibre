@@ -74,6 +74,7 @@ const FULL_REGISTRY_IDS = [
   "add.delimited-text",
   "add.cad",
   "add.gpx",
+  "add.geopdf",
   "add.landxml",
   "add.indoorgml",
   "add.mbtiles",
