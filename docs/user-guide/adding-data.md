@@ -19,6 +19,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **File Geodatabase (GDB)** | Opens an Esri file geodatabase (`.gdb` folder) and adds one of its feature classes as a layer. It is read by the local GeoLibre server, so it needs the desktop app. |
 | **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
+| **GeoPDF Layer** | Adds the map frame of a georeferenced PDF (a GeoPDF from Avenza Maps, USGS, QGIS, ArcGIS, or a GeoLibre Print Layout export) as an image layer. See [GeoPDF](#geopdf). |
 | **IndoorGML Layer** | Loads an OGC IndoorGML file or URL: rooms, corridors and doors extruded to their real heights, and the navigation network drawn at its own elevations, all linked to the floor picker. See [IndoorGML buildings](#indoorgml-buildings). |
 | **LandXML Layer** | Loads a LandXML file or URL and imports selected TIN surfaces, horizontal alignments, vertical profile metadata, and survey points. Projected coordinates are reprojected from the selected or embedded source CRS. |
 | **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
@@ -166,6 +167,17 @@ Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/CO
 - **LAS, LAZ, and COPC** point clouds load into the LiDAR control; a LAS 1.4 file the viewer cannot read whole is converted to COPC first.
 - **Geotagged photos** (JPEG, PNG, WebP, HEIC) become a point layer placed from their EXIF GPS tags.
 - A single **`.geolibre.json`** project file opens as the current project.
+- A **PDF** opens the GeoPDF form with the file already chosen, so you can pick its page and layers. See [GeoPDF](#geopdf).
+
+## GeoPDF
+
+**Add Data → GeoPDF Layer** (or dropping a `.pdf` on the map) reads a georeferenced PDF and adds its map frame as an image layer, placed by the coordinates the PDF carries. Only the frame is added: the title, legend, and margins of a map sheet stay off the map. The page renders with a transparent background, so a PDF layer you keep on its own overlays the map instead of hiding it.
+
+- **PDF layers to include** lists the PDF's layers (its optional content groups) when it has any, ticked the way the PDF opens. Untick a layer to leave it out of the image. The choice is made when the layer is added; to change it, add the PDF again.
+- **Page** appears when more than one page is georeferenced.
+- The georeference must be in the ISO 32000 geospatial format, which GDAL, QGIS, ArcGIS, Avenza Maps, and GeoLibre's own [Print Layout](print-layout.md) PDF exports write. The older OGC "LGIDict" encoding and encrypted PDFs are not supported.
+- The PDF's coordinate system is read from its EPSG code (with the datum shift GeoLibre's EPSG tables carry), or from its WKT when there is no code. A map in a projected CRS (UTM, a national grid) is placed by its four frame corners, which is exact for Web Mercator and close for a typical map sheet.
+- The frame is rendered at up to 4096 pixels on its longest side and saved in the project.
 
 ## The Browser panel
 

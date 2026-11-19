@@ -31,6 +31,7 @@ import { PolylineSource } from "./add-data/sources/PolylineSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { MssqlSource } from "./add-data/sources/MssqlSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
+import { GeoPdfSource } from "./add-data/sources/GeoPdfSource";
 import { WfsSource } from "./add-data/sources/WfsSource";
 import { WcsSource } from "./add-data/sources/WcsSource";
 import { WmsSource } from "./add-data/sources/WmsSource";
@@ -124,6 +125,8 @@ function renderSource(
       );
     case "gpx":
       return <GpxSource />;
+    case "geopdf":
+      return <GeoPdfSource />;
     case "landxml":
       return <LandXmlSource />;
     case "indoorgml":

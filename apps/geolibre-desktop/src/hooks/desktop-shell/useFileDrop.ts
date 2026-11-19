@@ -29,6 +29,8 @@ import {
 } from "../../lib/lidar-drop";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import { isPhotoDropFileName } from "../../lib/photo-file-names";
+import { isPdfFileName, setPendingGeoPdf } from "../../lib/geopdf/pending";
+import { openAddData } from "../../components/layout/add-data/open-add-data";
 import {
   addOsmPbfLayers,
   isOsmPbfFileName,
@@ -187,15 +189,28 @@ export function useFileDrop({
             const handledByPlugin = reportFileHandlerDrop(offer, setDropMessage, setDropError, t);
             const pbfPaths = offer.unclaimed.filter((path) => isOsmPbfFileName(path));
             const cloudPaths = offer.unclaimed.filter((path) => isPointCloudFileName(path));
+            // A PDF opens the GeoPDF form, which reads its georeference and
+            // lets the user pick its layers before anything is added (#3523).
+            const pdfPaths = offer.unclaimed.filter((path) => isPdfFileName(path));
             const otherPaths = offer.unclaimed.filter(
-              (path) => !isOsmPbfFileName(path) && !isPointCloudFileName(path),
+              (path) =>
+                !isOsmPbfFileName(path) && !isPointCloudFileName(path) && !isPdfFileName(path),
             );
+            if (pdfPaths[0]) {
+              const pdfPath = pdfPaths[0];
+              setPendingGeoPdf({
+                name: pdfPath.split(/[/\\]/).pop() || pdfPath,
+                bytes: new Uint8Array(await readLocalFileBytes(pdfPath)),
+              });
+              openAddData("geopdf");
+            }
             const onReadError = (name: string, error: unknown) =>
               setDropError(dropErrorMessage(name, error));
             await addPointClouds(
               await readDroppedPointClouds(cloudPaths, readLocalFileBytes, onReadError),
             );
-            const handledElsewhere = handledByPlugin || pbfPaths.length + cloudPaths.length > 0;
+            const handledElsewhere =
+              handledByPlugin || pbfPaths.length + cloudPaths.length + pdfPaths.length > 0;
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -420,11 +435,25 @@ export function useFileDrop({
         const handledByPlugin = reportFileHandlerDrop(offer, setDropMessage, setDropError, t);
         const pbfFiles = offer.unclaimed.filter((file) => isOsmPbfFileName(file.name));
         const cloudFiles = offer.unclaimed.filter((file) => isPointCloudFileName(file.name));
+        // A PDF opens the GeoPDF form, which reads its georeference and lets
+        // the user pick its layers before anything is added (#3523).
+        const pdfFiles = offer.unclaimed.filter((file) => isPdfFileName(file.name));
         const otherFiles = offer.unclaimed.filter(
-          (file) => !isOsmPbfFileName(file.name) && !isPointCloudFileName(file.name),
+          (file) =>
+            !isOsmPbfFileName(file.name) &&
+            !isPointCloudFileName(file.name) &&
+            !isPdfFileName(file.name),
         );
+        if (pdfFiles[0]) {
+          setPendingGeoPdf({
+            name: pdfFiles[0].name,
+            bytes: new Uint8Array(await pdfFiles[0].arrayBuffer()),
+          });
+          openAddData("geopdf");
+        }
         await addPointClouds(cloudFiles.map((file) => ({ name: file.name, data: file })));
-        const handledElsewhere = handledByPlugin || pbfFiles.length + cloudFiles.length > 0;
+        const handledElsewhere =
+          handledByPlugin || pbfFiles.length + cloudFiles.length + pdfFiles.length > 0;
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge

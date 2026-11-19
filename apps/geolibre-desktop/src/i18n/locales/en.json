@@ -464,6 +464,10 @@
         "label": "Add GPX layer",
         "description": "Add GPX waypoints, routes, and tracks as one or more vector layers."
       },
+      "geopdf": {
+        "label": "Add GeoPDF layer",
+        "description": "Add the map frame of a georeferenced PDF (GeoPDF) as an image layer, choosing which PDF layers to include."
+      },
       "landxml": {
         "label": "Add LandXML layer",
         "description": "Import LandXML TIN surfaces, horizontal alignments, vertical profile metadata, and survey points with source CRS reprojection."
@@ -846,6 +850,20 @@
       "file": "GPX file",
       "urlPlaceholder": "https://example.com/route.gpx",
       "layerTypes": "Layer types"
+    },
+    "geopdf": {
+      "defaultName": "GeoPDF",
+      "file": "PDF file",
+      "chooseFile": "Choose PDF…",
+      "noFile": "No file chosen",
+      "reading": "Reading the PDF…",
+      "hint": "A georeferenced PDF map from Avenza Maps, USGS, QGIS, ArcGIS or a GeoLibre print layout. Only the map frame is added, not the margins or legend.",
+      "page": "Page",
+      "pageOption": "Page {{page}} of {{total}}",
+      "layers": "PDF layers to include",
+      "errorNoFile": "Choose a PDF file first.",
+      "errorNotGeoreferenced": "This PDF has no georeference GeoLibre can read. It needs geospatial PDF (ISO 32000) coordinates in a supported coordinate system.",
+      "errorRead": "Could not read the PDF: {{message}}"
     },
     "landxml": {
       "defaultName": "LandXML",
@@ -3843,6 +3861,7 @@
       "delimitedText": "Delimited text layer",
       "photos": "Geotagged photos",
       "gpx": "GPX layer",
+      "geopdf": "GeoPDF layer",
       "landxml": "LandXML layer",
       "indoorgml": "IndoorGML layer",
       "polyline": "Encoded polyline",

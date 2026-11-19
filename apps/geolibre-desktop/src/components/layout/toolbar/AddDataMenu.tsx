@@ -82,6 +82,7 @@ export function AddDataMenu({
     vtpk: { onSelect: onOpenTilePackageDialog, disabled: tilePackageBusy },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
+    geopdf: { onSelect: () => onSetAddDataKind("geopdf") },
     landxml: { onSelect: () => onSetAddDataKind("landxml") },
     indoorgml: { onSelect: () => onSetAddDataKind("indoorgml") },
     polyline: { onSelect: () => onSetAddDataKind("polyline") },

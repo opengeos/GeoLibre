@@ -84,6 +84,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "vtpk", section: "files", labelKey: "toolbar.item.vtpkLayer", tier: "advanced" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
+  { id: "geopdf", section: "files", labelKey: "toolbar.layerType.geopdf", tier: "intermediate" },
   {
     id: "landxml",
     section: "files",
