@@ -6432,6 +6432,7 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
     top: auto;
     left: auto;
     transform: none;
+    translate: none;
     width: 100%;
     max-width: none;
     max-height: 92dvh;
@@ -6447,6 +6448,7 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
     top: auto !important;
     left: auto !important;
     transform: none !important;
+    translate: none !important;
     width: 100% !important;
     height: 88dvh !important;
     border-inline-width: 0;
