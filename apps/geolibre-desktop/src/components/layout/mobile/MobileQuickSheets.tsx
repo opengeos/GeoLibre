@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Cloud,
   Cpu,
+  Crosshair,
   Download,
   FilePlus2,
   FolderOpen,
@@ -183,9 +184,11 @@ export function MobileAddSheetContent({
 
 export interface MobileFieldSheetProps {
   canUseGeoEditor: boolean;
+  crosshairActive: boolean;
   geoEditorActive: boolean;
   measureActive: boolean;
   measureDisabled: boolean;
+  onStartCrosshairCapture: () => void;
   onOpenFieldCollection: () => void;
   onOpenGpsTracking: () => void;
   onToggleGeoEditor: () => void;
@@ -197,9 +200,11 @@ export interface MobileFieldSheetProps {
 /** Touch action list for outdoor field collection, GPS tracking, and map tools. */
 export function MobileFieldSheetContent({
   canUseGeoEditor,
+  crosshairActive,
   geoEditorActive,
   measureActive,
   measureDisabled,
+  onStartCrosshairCapture,
   onOpenFieldCollection,
   onOpenGpsTracking,
   onToggleGeoEditor,
@@ -211,6 +216,12 @@ export function MobileFieldSheetContent({
 
   return (
     <div className="space-y-1 p-2">
+      <SheetActionRow
+        icon={<Crosshair className="h-4 w-4" />}
+        label={t("mobileShell.field.crosshairCapture")}
+        active={crosshairActive}
+        onClick={onStartCrosshairCapture}
+      />
       <SheetActionRow
         icon={<ClipboardList className="h-4 w-4" />}
         label={t("mobileShell.field.fieldCollection")}

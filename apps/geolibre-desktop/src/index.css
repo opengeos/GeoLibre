@@ -6482,4 +6482,11 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
     overflow: auto;
     border-radius: 1rem;
   }
+
+  /* Hide narrow desktop column-resize handles in touch phone attribute views. */
+  html[data-touch-ui="true"]
+    .geolibre-attribute-table-panel
+    [role="separator"][aria-orientation="vertical"] {
+    display: none;
+  }
 }

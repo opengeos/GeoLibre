@@ -10,6 +10,7 @@ import type { ToolbarDialogs } from "../../../hooks/toolbar/useToolbarDialogs";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import type { Command } from "../../../lib/commands";
 import { entryMenuOffered } from "../../../lib/deployment-gates";
+import { useFieldCrosshairStore } from "../../../lib/field-crosshair";
 import { isDataSourceVisible, isMenuVisible, isPluginVisible } from "../../../lib/ui-profile";
 import type { AddDataKind } from "../AddDataDialog";
 import { openSettingsSection } from "../SettingsDialog";
@@ -91,6 +92,7 @@ export function MobileToolbarChrome({
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
+  const crosshairActive = useFieldCrosshairStore((s) => s.active);
 
   const canAddData = entryMenuOffered("addData", {
     viewer,
@@ -218,9 +220,17 @@ export function MobileToolbarChrome({
               {activeMobileTab === "field" ? (
                 <MobileFieldSheetContent
                   canUseGeoEditor={canUseGeoEditor}
+                  crosshairActive={crosshairActive}
                   geoEditorActive={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
                   measureActive={measureVisible}
                   measureDisabled={!measureSupported && !measureVisible}
+                  onStartCrosshairCapture={() =>
+                    runMobileAction(() => {
+                      const store = useFieldCrosshairStore.getState();
+                      if (store.active) store.stop();
+                      else store.start();
+                    })
+                  }
                   onOpenFieldCollection={() =>
                     runMobileAction(() => dialogs.setFieldCollectionOpen(true))
                   }

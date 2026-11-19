@@ -130,9 +130,9 @@ import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
 import { ProjectRecoveryDialog } from "./ProjectRecoveryDialog";
 import { BottomPanels } from "./BottomPanels";
 import { MobileBottomNav } from "./mobile/MobileBottomNav";
+import { MobileMapOverlays } from "./mobile/MobileMapOverlays";
 import { MobileShellSheets, useMobileShellState } from "./mobile/MobileShellSheets";
 import { MobileStatusPill } from "./mobile/MobileStatusPill";
-import { TouchSelectionActionBar } from "./mobile/TouchSelectionActionBar";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -1058,7 +1058,7 @@ export function DesktopShell({
                 api={collaboration}
               />
             )}
-            {touchUi ? <TouchSelectionActionBar /> : null}
+            {touchUi ? <MobileMapOverlays /> : null}
           </main>
           {mobileShell && layoutOptions.statusBarVisible ? (
             <MobileStatusPill

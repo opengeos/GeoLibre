@@ -86,6 +86,7 @@ import {
   Download,
   EyeOff,
   LayoutDashboard,
+  LayoutList,
   MoreHorizontal,
   MousePointerSquareDashed,
   Network,
@@ -117,8 +118,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import { isTauri } from "../../lib/tauri-io";
+import { useTouchUi } from "../../hooks/useTouchUi";
 import { isRefreshableLayer } from "../../lib/layer-refresh";
 import { isLocalFileLayer } from "../../lib/local-file-watch";
+import { AttributeCardList } from "./attribute-table/AttributeCardList";
 import type { LayerRefreshStatus } from "./layer-panel/layer-panel-utils";
 import {
   addColumn,
@@ -627,6 +630,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const selectFeature = useAppStore((s) => s.selectFeature);
   const selectFeatures = useAppStore((s) => s.selectFeatures);
+  const { mobileShell } = useTouchUi();
+  const [cardViewOverride, setCardViewOverride] = useState<boolean | null>(null);
+  const useCardView = cardViewOverride ?? mobileShell;
   const attributeTableOpen = useAppStore((s) => s.ui.attributeTableOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
@@ -2469,6 +2475,32 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             <Network className="h-3.5 w-3.5" />
           </Button>
         ) : null}
+        {hasAttributeSource && !isEditing ? (
+          <Button
+            variant={useCardView ? "secondary" : "ghost"}
+            size="icon"
+            data-testid="attribute-table-view-toggle"
+            className="h-7 w-7"
+            title={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-label={
+              useCardView
+                ? t("mobileShell.attributeCards.switchToTable")
+                : t("mobileShell.attributeCards.switchToCards")
+            }
+            aria-pressed={useCardView}
+            onClick={() => setCardViewOverride(!useCardView)}
+          >
+            {useCardView ? (
+              <TableProperties className="h-4 w-4" />
+            ) : (
+              <LayoutList className="h-4 w-4" />
+            )}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -2511,6 +2543,20 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 ? t("attributeTable.loadingAttributes")
                 : t("attributeTable.requiresVectorLayer")}
             </p>
+          ) : useCardView && !isEditing ? (
+            <AttributeCardList
+              rows={sorted}
+              columns={columns}
+              selectedIds={selectedIdSet}
+              onSelectRow={(featureId, event) =>
+                handleRowClick(featureId, event as unknown as ReactMouseEvent<HTMLTableRowElement>)
+              }
+              onZoomRow={(featureId) => {
+                const store = useAppStore.getState();
+                if (!store.ui.zoomToSelectedFeature) store.setZoomToSelectedFeature(true);
+                selectFeature(featureId);
+              }}
+            />
           ) : (
             // mb-3.5 reserves room for the horizontal scrollbar, which overlays
             // the viewport and would otherwise cover the last row even at full

@@ -11560,12 +11560,14 @@
       "allSources": "All data sources…"
     },
     "field": {
+      "crosshairCapture": "Map-center crosshair capture",
       "fieldCollection": "Field collection…",
       "gpsTracking": "GPS tracking…",
       "geoEditor": "Draw and edit geometry",
       "measure": "Measure distance and area",
       "offlineBasemap": "Offline basemap…",
-      "addComment": "Add map comment"
+      "addComment": "Add map comment",
+      "keepScreenAwake": "Keep screen awake"
     },
     "more": {
       "project": "Project",
@@ -11604,6 +11606,19 @@
       "label": "Selection actions",
       "undo": "Undo",
       "finish": "Finish"
+    },
+    "crosshair": {
+      "layerName": "Field captures",
+      "dropPoint": "Drop point",
+      "useGps": "Use GPS",
+      "done": "Done",
+      "pointCaptured": "Captured point at {{coords}}."
+    },
+    "attributeCards": {
+      "empty": "No features match the current filter.",
+      "zoomToFeature": "Zoom to feature",
+      "switchToCards": "Card view",
+      "switchToTable": "Table view"
     }
   }
 }
