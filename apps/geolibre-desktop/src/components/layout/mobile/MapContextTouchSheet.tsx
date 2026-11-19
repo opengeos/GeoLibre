@@ -1,0 +1,334 @@
+import { FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
+import type { TFunction } from "i18next";
+import {
+  BookOpen,
+  Braces,
+  Circle,
+  Crosshair,
+  Earth,
+  Eye,
+  MapIcon,
+  MapPin,
+  Navigation2,
+  Route,
+  Signpost,
+  Sparkles,
+  Spline,
+  ZoomIn,
+} from "lucide-react";
+import { useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { QUICK_TRAVEL_CONTOURS_LABEL, type QuickBufferPreset } from "../../../lib/quick-analysis";
+import type { TouchMenuItem } from "../../../lib/touch-menu-nav";
+import { TouchMenuSheet } from "./TouchMenuSheet";
+
+/** Decimal places used when formatting and copying map context-menu coordinates. */
+export const COORD_PRECISION = 6;
+
+/** Format a clicked point as "lat, lng" to mirror the Google Maps convention. */
+export function formatContextCoords(lat: number, lng: number): string {
+  return `${lat.toFixed(COORD_PRECISION)}, ${lng.toFixed(COORD_PRECISION)}`;
+}
+
+/** Copy plain text to the clipboard with a transient textarea fallback. */
+export async function copyContextText(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+}
+
+/** Viewshed preset radii in meters offered in the map context menu. */
+export const VIEWSHED_RADII_METERS = [2000, 5000, 15000] as const;
+
+/** Format a viewshed radius using the active scale bar unit system. */
+export function formatContextViewshedRadius(
+  meters: number,
+  scaleUnit: string,
+  language: string,
+  t: TFunction,
+): string {
+  const imperial = scaleUnit === "imperial";
+  const perUnit = imperial ? METERS_PER_MILE : 1000;
+  const large = meters >= perUnit;
+  const value = large ? meters / perUnit : imperial ? meters * FEET_PER_METER : meters;
+  const formatted = new Intl.NumberFormat(language, {
+    maximumFractionDigits: large ? 1 : 0,
+  }).format(value);
+  const unit = large
+    ? imperial
+      ? t("quickAnalysis.unit.miles")
+      : t("quickAnalysis.unit.kilometers")
+    : imperial
+      ? t("quickAnalysis.unit.feet")
+      : t("quickAnalysis.unit.meters");
+  return `${formatted} ${unit}`;
+}
+
+/** Read the camera zoom only while the engine still owns a render surface. */
+export function liveContextZoom(engine: MapEngine | null | undefined): number | undefined {
+  return engine?.getRenderSurface() ? engine.readView().zoom : undefined;
+}
+
+export interface MapContextTouchSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  coordLabel: string;
+  hasExplorePlace: boolean;
+  lineOfSightAvailable: boolean;
+  viewshedBusy: boolean;
+  bufferPresets: readonly QuickBufferPreset[];
+  viewshedRadiiMeters: readonly number[];
+  formatDistance: (preset: QuickBufferPreset) => string;
+  formatViewshedRadius: (meters: number) => string;
+  onCopyCoords: () => void;
+  onExplorePlace: () => void;
+  onCopyGeoJson: () => void;
+  onCenterHere: () => void;
+  onZoomInHere: () => void;
+  onDirections: (role: "origin" | "destination") => void;
+  onBufferHere: (preset: QuickBufferPreset) => void;
+  onTravelTimeHere: (mode: "auto" | "pedestrian") => void;
+  onViewshedHere: (radiusMeters: number) => void;
+  onLineOfSightHere: () => void;
+  onOpenBufferProcessing: () => void;
+  onViewInGoogleMaps: () => void;
+  onViewInGoogleEarth: () => void;
+}
+
+/**
+ * Touch drill-down bottom sheet for map long-press quick actions
+ * (GeoLibre#3537 Phase 3), replacing the floating Radix context dropdown.
+ */
+export function MapContextTouchSheet({
+  open,
+  onOpenChange,
+  coordLabel,
+  hasExplorePlace,
+  lineOfSightAvailable,
+  viewshedBusy,
+  bufferPresets,
+  viewshedRadiiMeters,
+  formatDistance,
+  formatViewshedRadius,
+  onCopyCoords,
+  onExplorePlace,
+  onCopyGeoJson,
+  onCenterHere,
+  onZoomInHere,
+  onDirections,
+  onBufferHere,
+  onTravelTimeHere,
+  onViewshedHere,
+  onLineOfSightHere,
+  onOpenBufferProcessing,
+  onViewInGoogleMaps,
+  onViewInGoogleEarth,
+}: MapContextTouchSheetProps) {
+  const { t } = useTranslation();
+
+  const items = useMemo<TouchMenuItem[]>(() => {
+    const quickItems: TouchMenuItem[] = [
+      {
+        kind: "action",
+        id: "copy-coords",
+        label: coordLabel,
+        description: t("mapContextMenu.copyCoordinatesHint"),
+        icon: <MapPin className="h-4 w-4" />,
+        onSelect: onCopyCoords,
+      },
+      ...(hasExplorePlace
+        ? [
+            {
+              kind: "action" as const,
+              id: "whats-here",
+              label: t("mapContextMenu.whatsHere"),
+              icon: <BookOpen className="h-4 w-4" />,
+              onSelect: onExplorePlace,
+            },
+          ]
+        : []),
+      {
+        kind: "action",
+        id: "copy-geojson",
+        label: t("mapContextMenu.copyGeoJson"),
+        icon: <Braces className="h-4 w-4" />,
+        onSelect: onCopyGeoJson,
+      },
+      {
+        kind: "action",
+        id: "center-here",
+        label: t("mapContextMenu.centerHere"),
+        icon: <Crosshair className="h-4 w-4" />,
+        onSelect: onCenterHere,
+      },
+      {
+        kind: "action",
+        id: "zoom-in-here",
+        label: t("mapContextMenu.zoomInHere"),
+        icon: <ZoomIn className="h-4 w-4" />,
+        onSelect: onZoomInHere,
+      },
+      ...(lineOfSightAvailable
+        ? [
+            {
+              kind: "action" as const,
+              id: "directions-to",
+              label: t("mapContextMenu.directionsToHere"),
+              icon: <Signpost className="h-4 w-4" />,
+              onSelect: () => onDirections("destination"),
+            },
+            {
+              kind: "action" as const,
+              id: "directions-from",
+              label: t("mapContextMenu.directionsFromHere"),
+              icon: <Navigation2 className="h-4 w-4" />,
+              onSelect: () => onDirections("origin"),
+            },
+          ]
+        : []),
+    ];
+
+    const analysisItems: TouchMenuItem[] = [
+      ...bufferPresets.map((preset) => ({
+        kind: "action" as const,
+        id: `buffer-${preset.distance}-${preset.units}`,
+        label: t("quickAnalysis.bufferHere", { distance: formatDistance(preset) }),
+        icon: <Circle className="h-4 w-4" />,
+        onSelect: () => onBufferHere(preset),
+      })),
+      {
+        kind: "action",
+        id: "drive-time",
+        label: t("quickAnalysis.driveTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL }),
+        icon: <Route className="h-4 w-4" />,
+        onSelect: () => onTravelTimeHere("auto"),
+      },
+      {
+        kind: "action",
+        id: "walk-time",
+        label: t("quickAnalysis.walkTimeHere", { contours: QUICK_TRAVEL_CONTOURS_LABEL }),
+        icon: <Route className="h-4 w-4" />,
+        onSelect: () => onTravelTimeHere("pedestrian"),
+      },
+      ...viewshedRadiiMeters.map((radiusMeters) => ({
+        kind: "action" as const,
+        id: `viewshed-${radiusMeters}`,
+        label: t("quickAnalysis.viewshedHere", { radius: formatViewshedRadius(radiusMeters) }),
+        disabled: viewshedBusy,
+        icon: <Eye className="h-4 w-4" />,
+        onSelect: () => onViewshedHere(radiusMeters),
+      })),
+      ...(lineOfSightAvailable
+        ? [
+            {
+              kind: "action" as const,
+              id: "line-of-sight",
+              label: t("quickAnalysis.lineOfSightHere"),
+              icon: <Spline className="h-4 w-4" />,
+              onSelect: onLineOfSightHere,
+            },
+          ]
+        : []),
+      {
+        kind: "action",
+        id: "open-processing",
+        label: t("quickAnalysis.openInProcessing"),
+        icon: <Sparkles className="h-4 w-4" />,
+        onSelect: onOpenBufferProcessing,
+      },
+    ];
+
+    return [
+      {
+        kind: "section",
+        id: "quick-actions",
+        label: t("mapContextMenu.quickActions"),
+        items: [
+          ...quickItems,
+          {
+            kind: "submenu",
+            id: "quick-analysis",
+            label: t("quickAnalysis.menu"),
+            icon: <Sparkles className="h-4 w-4" />,
+            items: analysisItems,
+          },
+        ],
+      },
+      {
+        kind: "section",
+        id: "external",
+        label: t("mobileShell.more.app"),
+        items: [
+          {
+            kind: "action",
+            id: "google-maps",
+            label: t("mapContextMenu.viewInGoogleMaps"),
+            icon: <MapIcon className="h-4 w-4" />,
+            onSelect: onViewInGoogleMaps,
+          },
+          {
+            kind: "action",
+            id: "google-earth",
+            label: t("mapContextMenu.viewInGoogleEarth"),
+            icon: <Earth className="h-4 w-4" />,
+            onSelect: onViewInGoogleEarth,
+          },
+        ],
+      },
+    ];
+  }, [
+    coordLabel,
+    t,
+    onCopyCoords,
+    hasExplorePlace,
+    onExplorePlace,
+    onCopyGeoJson,
+    onCenterHere,
+    onZoomInHere,
+    lineOfSightAvailable,
+    onDirections,
+    bufferPresets,
+    formatDistance,
+    onBufferHere,
+    onTravelTimeHere,
+    viewshedRadiiMeters,
+    formatViewshedRadius,
+    viewshedBusy,
+    onViewshedHere,
+    onLineOfSightHere,
+    onOpenBufferProcessing,
+    onViewInGoogleMaps,
+    onViewInGoogleEarth,
+  ]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <TouchMenuSheet
+        open={open}
+        onOpenChange={onOpenChange}
+        title={coordLabel}
+        items={items}
+        defaultDetent="half"
+        searchable={false}
+        data-testid="mobile-map-context-sheet"
+      />
+    </div>,
+    document.body,
+  );
+}

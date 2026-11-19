@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
   CONTEXT_MENU_RELEASE_WINDOW_MS,
+  CONTEXT_MENU_TOUCH_HOLD_MS,
+  CONTEXT_MENU_TOUCH_TOLERANCE_PX,
   ContextMenuGestureTracker,
   type ContextMenuRequest,
+  type ContextMenuTimerScheduler,
 } from "../apps/geolibre-desktop/src/lib/context-menu-gesture";
 
 const RIGHT = 2;
@@ -120,5 +123,103 @@ describe("ContextMenuGestureTracker", () => {
     tracker.cancel(2);
     tracker.contextMenu({ clientX: 200, clientY: 100 });
     assert.equal(opened.length, 0, "the drag is still suppressed");
+  });
+
+  it("opens on a stationary touch long-press and suppresses duplicate native contextmenu", () => {
+    const timers = new Map<number, () => void>();
+    let nextId = 1;
+    const scheduler: ContextMenuTimerScheduler = {
+      setTimeout(cb) {
+        const id = nextId++;
+        timers.set(id, cb);
+        return id;
+      },
+      clearTimeout(id) {
+        timers.delete(id as number);
+      },
+    };
+    const touchTracker = new ContextMenuGestureTracker(
+      (request) => opened.push(request),
+      () => clock,
+      scheduler,
+    );
+
+    touchTracker.pointerDown({
+      pointerId: 10,
+      pointerType: "touch",
+      button: 0,
+      clientX: 80,
+      clientY: 120,
+    });
+    assert.equal(timers.size, 1);
+    clock += CONTEXT_MENU_TOUCH_HOLD_MS;
+    for (const cb of [...timers.values()]) cb();
+    assert.deepEqual(opened, [{ clientX: 80, clientY: 120, isTouch: true }]);
+
+    // Synthetic native contextmenu on Android right after hold must not double-open.
+    touchTracker.contextMenu({ clientX: 80, clientY: 120 });
+    assert.equal(opened.length, 1);
+  });
+
+  it("cancels a touch long-press on pan or pinch (second finger)", () => {
+    const timers = new Map<number, () => void>();
+    let nextId = 1;
+    const scheduler: ContextMenuTimerScheduler = {
+      setTimeout(cb) {
+        const id = nextId++;
+        timers.set(id, cb);
+        return id;
+      },
+      clearTimeout(id) {
+        timers.delete(id as number);
+      },
+    };
+    const touchTracker = new ContextMenuGestureTracker(
+      (request) => opened.push(request),
+      () => clock,
+      scheduler,
+    );
+
+    // Pan beyond tolerance cancels hold.
+    touchTracker.pointerDown({
+      pointerId: 1,
+      pointerType: "touch",
+      button: 0,
+      clientX: 50,
+      clientY: 50,
+    });
+    touchTracker.pointerMove({
+      pointerId: 1,
+      pointerType: "touch",
+      button: 0,
+      clientX: 50 + CONTEXT_MENU_TOUCH_TOLERANCE_PX + 2,
+      clientY: 50,
+    });
+    assert.equal(timers.size, 0);
+    touchTracker.pointerUp({
+      pointerId: 1,
+      pointerType: "touch",
+      button: 0,
+      clientX: 70,
+      clientY: 50,
+    });
+
+    // Second finger cancels hold.
+    touchTracker.pointerDown({
+      pointerId: 2,
+      pointerType: "touch",
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+    });
+    assert.equal(timers.size, 1);
+    touchTracker.pointerDown({
+      pointerId: 3,
+      pointerType: "touch",
+      button: 0,
+      clientX: 150,
+      clientY: 150,
+    });
+    assert.equal(timers.size, 0);
   });
 });

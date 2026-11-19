@@ -6458,4 +6458,28 @@ body:has([data-mobile-shell="true"]) [data-testid="notification-region"] {
   html[data-touch-ui="true"] [data-processing-resize-handle] {
     display: none;
   }
+
+  /* Dock identify popups as a clean bottom card on touch phones so features
+     tapped near screen edges never clip off-screen (GeoLibre#3537 Phase 3). */
+  html[data-touch-ui="true"] .geolibre-identify-popup {
+    position: fixed !important;
+    inset-inline: 0.5rem !important;
+    bottom: calc(5.75rem + env(safe-area-inset-bottom)) !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    max-width: none !important;
+    width: auto !important;
+    z-index: 25 !important;
+  }
+
+  html[data-touch-ui="true"] .geolibre-identify-popup .maplibregl-popup-tip {
+    display: none !important;
+  }
+
+  html[data-touch-ui="true"] .geolibre-identify-popup .maplibregl-popup-content {
+    max-height: 40dvh;
+    overflow: auto;
+    border-radius: 1rem;
+  }
 }
