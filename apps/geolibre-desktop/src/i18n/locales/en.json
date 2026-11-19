@@ -2949,7 +2949,8 @@
       "environment": "Environment",
       "cloudStorage": "Cloud storage",
       "updates": "Updates",
-      "startup": "Startup"
+      "startup": "Startup",
+      "geoEditor": "GeoEditor"
     },
     "cloudStorage": {
       "title": "S3 connections",
@@ -3496,6 +3497,33 @@
         "usage": "Usage and connected apps",
         "revokeUnconfirmed": "Signed out here, but OpenAI didn't confirm ending the session. Disconnect GeoLibre in your ChatGPT settings to be sure.",
         "desktopOnly": "Sign in with ChatGPT is available in the GeoLibre desktop app."
+      }
+    },
+    "geoEditor": {
+      "title": "GeoEditor",
+      "description": "Choose the fields shown in feature properties. These settings are saved with this project and apply to newly drawn features.",
+      "showAfterDraw": "Open feature properties after drawing",
+      "field": "Field {{number}}",
+      "name": "Property name",
+      "label": "Display label",
+      "type": "Field type",
+      "geometry": "Geometry",
+      "remove": "Remove field",
+      "add": "Add field",
+      "namesHelp": "Use unique names with letters, numbers, underscores, or hyphens, starting with a letter or underscore. Invalid, duplicate, and reserved internal names are omitted when saving.",
+      "types": {
+        "string": "Text",
+        "number": "Number",
+        "boolean": "Checkbox",
+        "color": "Color",
+        "date": "Date",
+        "textarea": "Multiline text"
+      },
+      "geometries": {
+        "all": "All geometries",
+        "polygon": "Polygons",
+        "line": "Lines",
+        "point": "Points"
       }
     }
   },

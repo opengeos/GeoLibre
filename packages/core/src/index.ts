@@ -1,3 +1,9 @@
+export {
+  DEFAULT_GEO_EDITOR_SETTINGS,
+  normalizeGeoEditorSettings,
+  type GeoEditorSettings,
+  type GeoEditorAttributeField,
+} from "./geo-editor-settings";
 export * from "./types";
 export * from "./tile-address";
 export * from "./diagram";

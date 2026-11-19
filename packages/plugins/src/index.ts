@@ -624,6 +624,7 @@ export {
   buildEditorSaveCollection,
 } from "./plugins/maplibre-geo-editor";
 export {
+  stripEditorProperties,
   listViewVectorLayers,
   resolveStoreLayerViewSource,
   queryViewLayerFeatures,

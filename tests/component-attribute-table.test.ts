@@ -620,3 +620,45 @@ describe("GeoEditor Sketches attributes (#3534)", () => {
     assert.equal(layer.metadata.sourceKind, "geoeditor-sketches");
   });
 });
+
+describe("Sketches internal properties", () => {
+  it("hides Geoman columns without stripping the metadata needed to edit shapes", () => {
+    const collection: FeatureCollection = {
+      ...cities,
+      features: [
+        {
+          ...cities.features[0],
+          properties: {
+            name: "Rectangle",
+            __gm_id: "feature-1",
+            __gm_shape: "rectangle",
+            __gm_width: 100,
+            __gm_height: 50,
+          },
+        },
+      ],
+    };
+    renderTable(collection, { metadata: { sourceKind: "geoeditor-sketches" } });
+    assert.deepEqual(headers(), ["#", "name"]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit attribute values" }));
+    assert.equal(screen.queryByRole("textbox", { name: "Edit __gm_width for feature 1" }), null);
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit name for feature 1" }), {
+      target: { value: "Renamed rectangle" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save attribute edits" }));
+    assert.deepEqual(useAppStore.getState().layers[0].geojson?.features[0].properties, {
+      name: "Renamed rectangle",
+      __gm_id: "feature-1",
+      __gm_shape: "rectangle",
+      __gm_width: 100,
+      __gm_height: 50,
+    });
+  });
+  it("keeps similarly named user columns on ordinary data layers", () => {
+    renderTable({
+      ...cities,
+      features: [{ ...cities.features[0], properties: { __gm_width: 100 } }],
+    });
+    assert.deepEqual(headers(), ["#", "__gm_width"]);
+  });
+});

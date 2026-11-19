@@ -274,7 +274,13 @@ instead.
 
 GeoEditor's **Sketches** layer supports editing attributes and adding fields
 such as `stroke`, `fill`, and `marker-color`. Create and delete sketch features
-with GeoEditor.
+with GeoEditor. Geoman's internal `__gm_*` shape metadata is hidden in
+the Sketches table and retained for geometry editing.
+
+In **Settings → GeoEditor**, configure the feature-properties fields by name,
+type, label, and geometry. These settings are saved with the project and apply
+to the active editor. Turn off **Open feature properties after drawing** to
+stop the automatic popup; existing attributes remain available in the table.
 
 Click **Edit** to turn the cells into inputs. Changed cells are highlighted;
 **Save** commits them and the reset button discards every unsaved edit.

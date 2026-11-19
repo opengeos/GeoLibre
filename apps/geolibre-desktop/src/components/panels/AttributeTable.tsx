@@ -28,6 +28,7 @@ import {
   useLayer,
 } from "@geolibre/core";
 import {
+  stripEditorProperties,
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
   arcGISAttributeConstraints,
@@ -755,9 +756,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     () =>
       features.map((feature, index) => ({
         featureId: String(feature.id ?? index),
-        properties: (feature.properties ?? {}) as Record<string, unknown>,
+        properties:
+          layer?.metadata.sourceKind === "geoeditor-sketches"
+            ? stripEditorProperties(feature.properties)
+            : ((feature.properties ?? {}) as Record<string, unknown>),
       })),
-    [features],
+    [features, layer?.metadata.sourceKind],
   );
   const attributeRows: AttributeTableRow[] = isDuckDBLayer
     ? duckDBRowsToAttributeRows(duckdbRows)

@@ -1,4 +1,6 @@
+import { planSketchAttributeUpdates } from "./geo-editor-sketch-attributes";
 import {
+  normalizeGeoEditorSettings,
   currentEditorIdentity,
   editorTrackingFieldNames,
   lineWidthValue,
@@ -15,7 +17,7 @@ import {
 } from "@geolibre/map/style-layer-ids";
 import type { Feature, FeatureCollection, MultiLineString, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
-import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
+import type { AttributeSchema, GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   type EditedFeatureIds,
   type EditedFeatureProperties,
@@ -412,6 +414,22 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
   return undefined;
 }
 
+/** Build the active project's form using the control's supported field schema. */
+function geoEditorAttributeSchema(): AttributeSchema {
+  const schema: AttributeSchema = { common: [], polygon: [], line: [], point: [] };
+  const settings = normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor);
+  for (const field of settings.fields) {
+    const scope = field.geometry === "all" ? "common" : field.geometry;
+    schema[scope]!.push({
+      name: field.name,
+      label: field.label ?? (field.name === "height" ? geoEditorLabels.massingHeight : field.name),
+      type: field.type,
+      ...(field.name === "height" && field.type === "number" ? { min: 0, step: 0.5 } : {}),
+    });
+  }
+  return schema;
+}
+
 export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions {
   return {
     ...GEO_EDITOR_OPTIONS,
@@ -426,17 +444,7 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
       : {}),
     position: geoEditorPosition,
     attributePanelTitle: geoEditorLabels.attributePanelTitle,
-    attributeSchema: {
-      polygon: [
-        {
-          name: "height",
-          label: geoEditorLabels.massingHeight,
-          type: "number",
-          min: 0,
-          step: 0.5,
-        },
-      ],
-    },
+    attributeSchema: geoEditorAttributeSchema(),
     onFeatureCreate: (feature) => {
       unionSketchesWithStoreOnNextSync = true;
       // GeoEditor opens the attribute panel synchronously after this callback
@@ -447,7 +455,13 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
       queueMicrotask(() => {
         syncSketchesToStore(feature);
         applySketchesMapDisplay();
-        if (isGeometryEditSession) geoEditorControl?.closeAttributeEditor();
+        if (
+          isGeometryEditSession ||
+          !normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor)
+            .showAfterDraw
+        ) {
+          geoEditorControl?.closeAttributeEditor();
+        }
       });
     },
     onFeatureEdit: () => {
@@ -1641,6 +1655,40 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
     // Geoman may not be ready yet.
   }
 
+  // Attribute edits must not delete/reimport the collection: doing so can
+  // discard an unfinished drawing. Update existing Geoman records in place,
+  // preserving temporary geometry, selection, shape parameters and history.
+  if (geomanInstance?.loaded) {
+    const updates = planSketchAttributeUpdates(
+      geoEditorControl.getAllFeatureCollection(),
+      storeCollection,
+    );
+    if (updates !== null) {
+      const manager = geomanInstance.features;
+      const targets = updates.map((update) => ({
+        update,
+        feature: manager.get(manager.defaultSourceName, update.id),
+      }));
+      if (targets.every((target) => target.feature)) {
+        // Match a reload's dismissal of stale form values without touching
+        // the current draw mode or Geoman's temporary features.
+        if (updates.length > 0) geoEditorControl.closeAttributeEditor();
+        restoringSketchesToEditor = true;
+        try {
+          await Promise.all(
+            targets.map(({ feature, update }) => feature!.setProperties(update.properties)),
+          );
+        } catch (error) {
+          warnUnlessGeomanNotReady("updating Sketches attributes", error);
+        } finally {
+          restoringSketchesToEditor = false;
+        }
+        scheduleApplySketchesMapDisplay();
+        return;
+      }
+    }
+  }
+
   // `loadGeoJson` is async, so the guard is awaited through the load: it stays
   // set while Geoman imports and fires onGeoJsonLoad, then is cleared in
   // `finally`, preventing `syncSketchesToStore` from looping.
@@ -1677,6 +1725,12 @@ async function clearSketchesFromEditor(): Promise<void> {
 function bindSketchesStoreSync(): void {
   geoEditorStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (!pluginActive) return;
+    if (state.preferences.map.geoEditor !== previous.preferences.map.geoEditor) {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema());
+      if (!normalizeGeoEditorSettings(state.preferences.map.geoEditor).showAfterDraw) {
+        geoEditorControl?.closeAttributeEditor();
+      }
+    }
 
     // During a geometry-edit session the editor holds the target layer's
     // features, not sketches. Skip the Sketches reconciliation entirely and

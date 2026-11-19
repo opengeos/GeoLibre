@@ -1888,6 +1888,8 @@ export type MapProjection = "globe" | "mercator";
 export type MapScaleUnit = "metric" | "imperial" | "nautical";
 
 export interface MapPreferences {
+  /** Project-specific GeoEditor form fields and automatic popup preference. */
+  geoEditor?: import("./geo-editor-settings").GeoEditorSettings;
   restrictBounds: boolean;
   bounds: [number, number, number, number];
   minZoom: number;

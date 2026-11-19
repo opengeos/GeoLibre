@@ -71,6 +71,12 @@ terrain instead of a flat 0 m plain; omitted, it is on for a URL DEM and off for
 a local file. `terrainIonAssetId`
 picks a Cesium Ion terrain asset for the globe.
 
+GeoEditor form settings are stored in optional `preferences.map.geoEditor`.
+`showAfterDraw` controls automatic opening of feature properties, and `fields`
+lists each property's `name`, optional `label`, input `type` (`string`, `number`,
+`boolean`, `color`, `date`, or `textarea`), and `geometry` (`all`, `polygon`,
+`line`, or `point`). Missing settings retain the default polygon height form.
+
 ## Plugin state
 
 ```json
