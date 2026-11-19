@@ -8,6 +8,7 @@ import {
 } from "@geolibre/core";
 import {
   type BeforeUnloadGuardState,
+  hasUnsavedWork,
   shouldWarnBeforeUnload,
 } from "../apps/geolibre-desktop/src/hooks/useBeforeUnloadGuard";
 
@@ -65,5 +66,16 @@ describe("shouldWarnBeforeUnload", () => {
       (privilege) => privilege !== "project:save",
     );
     assert.equal(shouldWarnBeforeUnload(state({ privileges })), false);
+  });
+});
+
+describe("hasUnsavedWork", () => {
+  it("counts pending attribute drafts as unsaved work on a clean project", () => {
+    assert.equal(hasUnsavedWork({ isDirty: false, ui: { attributeTableDrafts: {} } }), false);
+    assert.equal(hasUnsavedWork({ isDirty: true, ui: { attributeTableDrafts: {} } }), true);
+    assert.equal(
+      hasUnsavedWork({ isDirty: false, ui: { attributeTableDrafts: { cities: {} } } }),
+      true,
+    );
   });
 });

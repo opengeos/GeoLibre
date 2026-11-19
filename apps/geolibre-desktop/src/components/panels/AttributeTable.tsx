@@ -283,6 +283,13 @@ function isInvalidObjectDraft(draft: string, previousValue: unknown): boolean {
   }
 }
 
+/** Serialize a draft target for comparison; DuckDB BIGINT columns hold BigInts. */
+function draftTargetJson(target: AttributeTableDraftTarget): string {
+  return JSON.stringify(target, (_key, value: unknown) =>
+    typeof value === "bigint" ? `${value}n` : value,
+  );
+}
+
 /** Look up a row by its literal feature ID without inheriting Object members. */
 function getAttributeDraftRow(drafts: AttributeDrafts, featureId: string) {
   return Object.hasOwn(drafts, featureId) ? drafts[featureId] : undefined;
@@ -651,8 +658,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     setAttributeTableDrafts(
       selectedLayerId,
       typeof next === "function" ? next(current) : next,
-      // DuckDB rows have no geojson, so snapshot their rendered rows instead.
-      isDuckDBLayer ? currentFeatures : undefined,
+      // The table's own row map, so the store need not rebuild it (and DuckDB
+      // rows, which have no geojson, are snapshotted too).
+      currentFeatures,
     );
   };
   const [exportError, setExportError] = useState<string | null>(null);
@@ -869,7 +877,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             return (
               (original.id == null || current.id == null) &&
               original !== current &&
-              JSON.stringify(original) !== JSON.stringify(current)
+              draftTargetJson(original) !== draftTargetJson(current)
             );
           })
           .map(([featureId]) => featureId),

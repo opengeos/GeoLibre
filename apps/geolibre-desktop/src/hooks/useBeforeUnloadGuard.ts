@@ -17,6 +17,23 @@ export interface BeforeUnloadGuardState {
 }
 
 /**
+ * Whether the session holds work that leaving would lose: unsaved project
+ * changes, or attribute table drafts (which never mark the project dirty).
+ *
+ * Args:
+ *   state: The store's dirty flag and UI state.
+ *
+ * Returns:
+ *   True when the project is dirty or any layer has pending attribute drafts.
+ */
+export function hasUnsavedWork(state: {
+  isDirty: boolean;
+  ui: { attributeTableDrafts: Record<string, unknown> };
+}): boolean {
+  return state.isDirty || Object.keys(state.ui.attributeTableDrafts).length > 0;
+}
+
+/**
  * Whether leaving the page should raise the "Leave site?" prompt.
  *
  * The prompt protects work the user could have saved, so it only applies where
@@ -69,12 +86,11 @@ export function useBeforeUnloadGuard(): void {
       // Read the latest state on each event rather than closing over a
       // render-time snapshot, so the listener never needs to be re-registered
       // (the session role's privileges can arrive after mount).
-      const { isDirty, deploymentCapabilities, capabilities, ui } = useAppStore.getState();
+      const state = useAppStore.getState();
+      const { deploymentCapabilities, capabilities } = state;
       if (
         !shouldWarnBeforeUnload({
-          // Unsaved attribute table drafts are not project changes (they never
-          // mark the project dirty), but leaving the page still loses them.
-          isDirty: isDirty || Object.keys(ui.attributeTableDrafts).length > 0,
+          isDirty: hasUnsavedWork(state),
           deploymentCapabilities,
           privileges: capabilities.privileges,
           search: window.location.search,

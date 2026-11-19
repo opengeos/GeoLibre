@@ -5,9 +5,6 @@
  * an undo step and undo/redo never toggles one.
  */
 import type { Feature, Geometry } from "geojson";
-
-/** A draft target: a GeoJSON feature, or an id-less row snapshot without geometry. */
-export type AttributeTableDraftTarget = Feature<Geometry | null>;
 import type { ProcessingRerunRequest } from "../types";
 import type { SliceCreator } from "./types";
 
@@ -105,6 +102,9 @@ export type RasterToolKind =
 
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
 export type AttributeTableDrafts = Record<string, Record<string, string>>;
+
+/** A draft target: a GeoJSON feature, or an id-less row snapshot without geometry. */
+export type AttributeTableDraftTarget = Feature<Geometry | null>;
 
 /** Values and the original GeoJSON targets captured when each row is first edited. */
 export interface AttributeTableDraftSession {
