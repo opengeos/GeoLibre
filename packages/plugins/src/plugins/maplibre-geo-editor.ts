@@ -1,6 +1,7 @@
 import { planSketchAttributeUpdates } from "./geo-editor-sketch-attributes";
 import {
   normalizeGeoEditorSettings,
+  isGeoEditorFieldName,
   currentEditorIdentity,
   editorTrackingFieldNames,
   lineWidthValue,
@@ -19,6 +20,7 @@ import type { Feature, FeatureCollection, MultiLineString, Position } from "geoj
 import type * as maplibregl from "maplibre-gl";
 import type { AttributeSchema, GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
+  GEOMETRY_EDIT_FID_PROPERTY,
   type EditedFeatureIds,
   type EditedFeatureProperties,
   type GeometryEditTrackingOptions,
@@ -415,17 +417,54 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
 }
 
 /** Build the active project's form using the control's supported field schema. */
-function geoEditorAttributeSchema(): AttributeSchema {
+function geoEditorAttributeSchema(extraFeature?: Feature): AttributeSchema {
   const schema: AttributeSchema = { common: [], polygon: [], line: [], point: [] };
   const settings = normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor);
+  const layers = useAppStore.getState().layers;
+  const layer = editTargetLayerId
+    ? layers.find((candidate) => candidate.id === editTargetLayerId)
+    : findSketchesLayer(layers);
+  const readOnly = new Set([
+    ...(editorTrackingFieldNames(layer?.editorTracking) ?? []),
+    ...(layer?.joins ?? []).flatMap((join) => join.addedFields ?? []),
+    ...(layer?.virtualFields ?? []).flatMap((field) =>
+      field.addedField ? [field.addedField] : [],
+    ),
+  ]);
   for (const field of settings.fields) {
+    if (readOnly.has(field.name)) continue;
     const scope = field.geometry === "all" ? "common" : field.geometry;
     schema[scope]!.push({
       name: field.name,
-      label: field.label ?? (field.name === "height" ? geoEditorLabels.massingHeight : field.name),
+      label:
+        field.label ??
+        (field.name === "height" && field.type === "number"
+          ? geoEditorLabels.massingHeight
+          : field.name),
       type: field.type,
       ...(field.name === "height" && field.type === "number" ? { min: 0, step: 0.5 } : {}),
     });
+  }
+  // Public table fields should be editable without first duplicating every
+  // column in Settings. Explicit configuration wins for labels, types and scope.
+  const configured = new Set(settings.fields.map((field) => field.name));
+  const candidates = new Map<string, Set<string>>();
+  const features = layer?.geojson?.features ?? [];
+  for (const feature of extraFeature ? [...features, extraFeature] : features) {
+    for (const [name, value] of Object.entries(feature.properties ?? {})) {
+      if (configured.has(name) || readOnly.has(name) || !isGeoEditorFieldName(name)) continue;
+      const types = candidates.get(name) ?? new Set<string>();
+      if (value != null) types.add(typeof value);
+      candidates.set(name, types);
+    }
+  }
+  for (const [name, types] of candidates) {
+    if (types.size > 1) continue;
+    const type = types.values().next().value ?? "string";
+    // Nested and mixed-type values stay in Other Properties as read-only,
+    // since a text widget would otherwise turn their data into strings.
+    if (type !== "string" && type !== "number" && type !== "boolean") continue;
+    schema.common!.push({ name, label: name, type });
   }
   return schema;
 }
@@ -446,17 +485,16 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
     attributePanelTitle: geoEditorLabels.attributePanelTitle,
     attributeSchema: geoEditorAttributeSchema(),
     onFeatureCreate: (feature) => {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema(feature));
       unionSketchesWithStoreOnNextSync = true;
-      // GeoEditor opens the attribute panel synchronously after this callback
-      // returns, so a geometry-edit session closes it in the same deferred pass.
-      const isGeometryEditSession = Boolean(editTargetLayerId);
+      // GeoEditor opens the attribute panel synchronously after this callback.
+      // Apply the automatic-popup preference in the same deferred pass.
       // Geoman's callback payload is authoritative even if the collection read
       // still reflects the pre-create snapshot.
       queueMicrotask(() => {
         syncSketchesToStore(feature);
         applySketchesMapDisplay();
         if (
-          isGeometryEditSession ||
           !normalizeGeoEditorSettings(useAppStore.getState().preferences.map.geoEditor)
             .showAfterDraw
         ) {
@@ -480,7 +518,19 @@ export function getGeoEditorOptions(mapboxGl: MapboxGl | null): GeoEditorOptions
     onAttributeChange: () => syncSketchesToStore(),
     onHistoryChange: () => syncSketchesToStore(),
     onModeChange: () => applySketchesMapDisplay(),
-    onSelectionChange: () => applySketchesMapDisplay(),
+    onSelectionChange: (features) => {
+      // Geoman renames reserved user columns on import. Restore their public
+      // values before the form reads them, retaining any edits already saved
+      // into the editor during this session.
+      if (editTargetLayerId) {
+        for (const feature of features) {
+          const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+          const original = tag == null ? undefined : editTargetOriginalProperties?.get(String(tag));
+          if (original) feature.properties = { ...original, ...feature.properties };
+        }
+      }
+      applySketchesMapDisplay();
+    },
   };
 }
 
@@ -1240,6 +1290,11 @@ function syncEditTargetToStore(): boolean {
     editTargetOriginalProperties ?? undefined,
     geometryEditTracking(layer),
     {
+      editableFields: new Set(
+        Object.values(geoEditorAttributeSchema()).flatMap((fields) =>
+          fields.map((field: { name: string }) => field.name),
+        ),
+      ),
       originalIds: editTargetOriginalIds ?? undefined,
       originalGeometries: editTargetOriginalGeometries ?? undefined,
       prepareNewFeature: newFeaturePreparer(layer),
@@ -1250,7 +1305,13 @@ function syncEditTargetToStore(): boolean {
   try {
     store.updateLayer(editTargetLayerId, {
       geojson: edited,
-      metadata: geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
+      metadata: edited.features.some(
+        (feature, index) =>
+          JSON.stringify(feature.properties) !==
+          JSON.stringify(layer.geojson?.features[index]?.properties),
+      )
+        ? { ...layer.metadata, geometryEdited: true }
+        : geometryEditMetadata(layer, tagged, editTargetOriginalGeometries ?? new Map()),
     });
   } finally {
     pushingSketchesToStore = false;
@@ -1433,8 +1494,8 @@ export async function startLayerGeometryEdit(
     const source = cloneFeatureCollection(layer.geojson);
     const tagged = tagFeatureKeys(source);
     // Snapshot the attributes before Geoman sees them: it renames any column
-    // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES), and this session only
-    // edits geometry, so these values are what must come back out. Read from the
+    // whose name it reserves (see GEOMAN_SHAPE_PROPERTIES). Keep untouched and
+    // read-only values intact on save. Read from the
     // pre-tag `source` so a feature with null properties stays null.
     editTargetOriginalProperties = captureEditedProperties(tagged, source);
     editTargetOriginalGeometries = captureEditedGeometries(tagged);
@@ -1471,6 +1532,8 @@ export async function startLayerGeometryEdit(
     return false;
   }
 
+  geoEditorControl.setAttributeSchema(geoEditorAttributeSchema());
+  geoEditorControl.enableSelectMode();
   applySketchesMapDisplay();
   notifyGeometryEdit();
   return true;
@@ -1479,8 +1542,8 @@ export async function startLayerGeometryEdit(
 /**
  * Select one feature of the active geometry-edit session in the editor, so the
  * session opened from an Identify result starts on the feature the user picked
- * (#2932). Select mode stays off: in it the editor would open its attribute
- * panel, and a geometry session discards attribute changes on save.
+ * (#2932). Select mode opens its attribute panel so the session can edit both
+ * geometry and public properties.
  *
  * @param featureId The feature's id in the attribute table's scheme.
  * @returns True when the feature was found and selected.
@@ -1489,6 +1552,7 @@ export function selectGeometryEditFeature(featureId: string): boolean {
   if (!pluginActive || !geoEditorControl || !editTargetLayerId) return false;
   const match = findGeometryEditFeature(geoEditorControl.getAllFeatureCollection(), featureId);
   if (!match) return false;
+  geoEditorControl.enableSelectMode();
   geoEditorControl.selectFeatures([match]);
   return true;
 }
@@ -1615,6 +1679,8 @@ async function restoreSketchesNow(): Promise<void> {
     return;
   }
   disableActiveEditModes();
+  geoEditorControl.closeAttributeEditor();
+  geoEditorControl.setAttributeSchema(geoEditorAttributeSchema());
   await clearSketchesFromEditor();
   if (savedSketchesCollection?.features.length) {
     restoringSketchesToEditor = true;
@@ -1761,6 +1827,9 @@ function bindSketchesStoreSync(): void {
 
     const sketches = findSketchesLayer(state.layers);
     const previousSketches = findSketchesLayer(previous.layers);
+    if (sketches?.geojson !== previousSketches?.geojson) {
+      geoEditorControl?.setAttributeSchema(geoEditorAttributeSchema());
+    }
 
     if (previousSketches && !sketches) {
       sketchesLayerId = null;

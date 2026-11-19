@@ -625,6 +625,7 @@ export {
 } from "./plugins/maplibre-geo-editor";
 export {
   stripEditorProperties,
+  isInternalEditorProperty,
   listViewVectorLayers,
   resolveStoreLayerViewSource,
   queryViewLayerFeatures,

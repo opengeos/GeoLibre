@@ -212,3 +212,19 @@ describe("GeoEditor settings form", () => {
     assert.deepEqual(useAppStore.getState().preferences.map.geoEditor, before);
   });
 });
+
+it("keeps queued GeoEditor field additions instead of overwriting a pending update", () => {
+  renderSettings();
+  const dialog = openAt("geoEditor");
+  const add = within(dialog).getByRole("button", { name: "Add field" });
+  act(() => {
+    fireEvent.click(add);
+    fireEvent.click(add);
+  });
+  assert.deepEqual(
+    within(dialog)
+      .getAllByRole("textbox", { name: "Property name" })
+      .map((input) => (input as HTMLInputElement).value),
+    ["height", "attribute", "attribute_1"],
+  );
+});

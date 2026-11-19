@@ -12,15 +12,27 @@ export function GeoEditorSection() {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences } = useSettingsDraft();
   const settings = draftPreferences.map.geoEditor ?? DEFAULT_GEO_EDITOR_SETTINGS;
-  const update = (patch: Partial<GeoEditorSettings>) =>
+  const update = (
+    patch:
+      | Partial<GeoEditorSettings>
+      | ((current: GeoEditorSettings) => Partial<GeoEditorSettings>),
+  ) =>
     setDraftPreferences((current) => ({
       ...current,
-      map: { ...current.map, geoEditor: { ...settings, ...patch } },
+      map: {
+        ...current.map,
+        geoEditor: {
+          ...(current.map.geoEditor ?? DEFAULT_GEO_EDITOR_SETTINGS),
+          ...(typeof patch === "function"
+            ? patch(current.map.geoEditor ?? DEFAULT_GEO_EDITOR_SETTINGS)
+            : patch),
+        },
+      },
     }));
   const updateField = (index: number, patch: Partial<GeoEditorAttributeField>) =>
-    update({
-      fields: settings.fields.map((field, i) => (i === index ? { ...field, ...patch } : field)),
-    });
+    update((current) => ({
+      fields: current.fields.map((field, i) => (i === index ? { ...field, ...patch } : field)),
+    }));
   return (
     <section className="grid gap-4">
       <h3 className="text-base font-semibold">{t("settings.geoEditor.title")}</h3>
@@ -94,7 +106,9 @@ export function GeoEditorSection() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => update({ fields: settings.fields.filter((_, i) => i !== index) })}
+              onClick={() =>
+                update((current) => ({ fields: current.fields.filter((_, i) => i !== index) }))
+              }
             >
               {t("settings.geoEditor.remove")}
             </Button>
@@ -103,13 +117,15 @@ export function GeoEditorSection() {
       </div>
       <Button
         variant="outline"
-        onClick={() => {
-          let name = "attribute";
-          let number = 1;
-          while (settings.fields.some((field) => field.name === name))
-            name = `attribute_${number++}`;
-          update({ fields: [...settings.fields, { name, type: "string", geometry: "all" }] });
-        }}
+        onClick={() =>
+          update((current) => {
+            let name = "attribute";
+            let number = 1;
+            while (current.fields.some((field) => field.name === name))
+              name = `attribute_${number++}`;
+            return { fields: [...current.fields, { name, type: "string", geometry: "all" }] };
+          })
+        }
       >
         {t("settings.geoEditor.add")}
       </Button>

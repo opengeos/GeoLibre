@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createEmptyProject,
+  DEFAULT_LAYER_STYLE,
   normalizeGeoEditorSettings,
   parseProject,
   serializeProject,
@@ -76,4 +77,76 @@ describe("GeoEditor project settings", () => {
       useAppStore.setState({ preferences: original });
     }
   });
+});
+
+it("includes existing public Sketches fields automatically while honoring configured overrides", () => {
+  const originalState = useAppStore.getState();
+  const original = { preferences: originalState.preferences, layers: originalState.layers };
+  try {
+    useAppStore.setState({
+      preferences: {
+        ...original.preferences,
+        map: {
+          ...original.preferences.map,
+          geoEditor: {
+            showAfterDraw: true,
+            fields: [{ name: "name", label: "Parcel name", type: "textarea", geometry: "polygon" }],
+          },
+        },
+      },
+      layers: [
+        {
+          id: "sketches",
+          name: "Sketches",
+          type: "geojson",
+          source: { type: "geojson" },
+          visible: true,
+          opacity: 1,
+          style: { ...DEFAULT_LAYER_STYLE },
+          metadata: { sourceKind: "geoeditor-sketches" },
+          geojson: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [0, 0] },
+                properties: {
+                  name: "One",
+                  stroke: "red",
+                  active: true,
+                  count: 2,
+                  "Road name": "A",
+                  __gm_id: "feature-1",
+                  nested: { x: 1 },
+                  mixed: 1,
+                },
+              },
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [1, 1] },
+                properties: { mixed: "text" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const schema = getGeoEditorOptions(null).attributeSchema;
+    assert.deepEqual(schema?.polygon?.[0], {
+      name: "name",
+      label: "Parcel name",
+      type: "textarea",
+    });
+    assert.deepEqual(
+      schema?.common?.map((field) => [field.name, field.type]),
+      [
+        ["stroke", "string"],
+        ["active", "boolean"],
+        ["count", "number"],
+        ["Road name", "string"],
+      ],
+    );
+  } finally {
+    useAppStore.setState(original);
+  }
 });

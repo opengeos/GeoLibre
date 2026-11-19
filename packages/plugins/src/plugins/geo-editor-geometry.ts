@@ -358,6 +358,8 @@ export type NewEditedFeatureKind = "drawn" | "copied";
 
 /** Optional inputs to {@link reconcileEditedFeatures}. */
 export interface ReconcileEditedFeaturesOptions {
+  /** Public form fields whose editor values may replace the original attributes. */
+  editableFields?: ReadonlySet<string>;
   /** Original ids from {@link captureEditedFeatureIds}, restored on loaded features. */
   originalIds?: EditedFeatureIds;
   /**
@@ -499,16 +501,26 @@ export function reconcileEditedFeatures(
       } else {
         properties = withoutEditorProperties(rawProps);
       }
+      let attributesChanged = false;
+      if (restored !== undefined && options.editableFields && rawProps) {
+        for (const name of options.editableFields) {
+          if (!Object.hasOwn(rawProps, name)) continue;
+          const value = rawProps[name];
+          if (JSON.stringify(restored?.[name]) !== JSON.stringify(value)) attributesChanged = true;
+          properties = { ...properties, [name]: value };
+        }
+      }
       if (options.prepareNewFeature && (restored === undefined || copied)) {
         properties = options.prepareNewFeature(properties, copied ? "copied" : "drawn");
       }
       if (tracking) {
-        const action = editTrackingAction(
-          tag == null ? undefined : String(tag),
-          restored !== undefined && !copied,
-          feature.geometry,
-          tracking.originalGeometries,
-        );
+        const action =
+          editTrackingAction(
+            tag == null ? undefined : String(tag),
+            restored !== undefined && !copied,
+            feature.geometry,
+            tracking.originalGeometries,
+          ) ?? (attributesChanged ? "update" : null);
         // A feature copied from a tracked one arrives carrying the original's
         // creation stamp — the session loads the layer's features with their
         // tracking columns. `"create"` is authoritative for exactly this reason,

@@ -22,6 +22,26 @@ function customProperties(feature: Feature): Record<string, unknown> {
   );
 }
 
+/** Compare JSON records without depending on object key order; array order and numbers remain exact. */
+function jsonEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => jsonEqual(value, right[index]))
+    );
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const a = left as Record<string, unknown>;
+  const b = right as Record<string, unknown>;
+  return (
+    Object.keys(a).length === Object.keys(b).length &&
+    Object.keys(a).every((key) => Object.hasOwn(b, key) && jsonEqual(a[key], b[key]))
+  );
+}
+
 /** Return property-only updates, or null if replacing geometry/identities requires a full import. */
 export function planSketchAttributeUpdates(
   editor: FeatureCollection,
@@ -41,13 +61,13 @@ export function planSketchAttributeUpdates(
     const previous = current.get(String(id));
     if (
       !previous ||
-      JSON.stringify(previous.geometry) !== JSON.stringify(feature.geometry) ||
-      JSON.stringify(shapeProperties(previous)) !== JSON.stringify(shapeProperties(feature))
+      !jsonEqual(previous.geometry, feature.geometry) ||
+      !jsonEqual(shapeProperties(previous), shapeProperties(feature))
     )
       return null;
     current.delete(String(id));
     const properties = customProperties(feature);
-    if (JSON.stringify(customProperties(previous)) !== JSON.stringify(properties)) {
+    if (!jsonEqual(customProperties(previous), properties)) {
       // Geoman preserves its own shape parameters. Keep other bookkeeping
       // (including the view-import tag) along with user attributes.
       const engineId = previous.properties?.__gm_id;

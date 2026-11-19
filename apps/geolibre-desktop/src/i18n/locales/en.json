@@ -3501,7 +3501,7 @@
     },
     "geoEditor": {
       "title": "GeoEditor",
-      "description": "Choose the fields shown in feature properties. These settings are saved with this project and apply to newly drawn features.",
+      "description": "Choose additional fields and customize field labels and types. Existing layer attributes are included automatically. These settings are saved with the project.",
       "showAfterDraw": "Open feature properties after drawing",
       "field": "Field {{number}}",
       "name": "Property name",
@@ -3510,7 +3510,7 @@
       "geometry": "Geometry",
       "remove": "Remove field",
       "add": "Add field",
-      "namesHelp": "Use unique names with letters, numbers, underscores, or hyphens, starting with a letter or underscore. Invalid, duplicate, and reserved internal names are omitted when saving.",
+      "namesHelp": "Use unique property names without quotes, backslashes, or control characters. Invalid, duplicate, and reserved names are omitted when saving.",
       "types": {
         "string": "Text",
         "number": "Number",
@@ -8811,7 +8811,8 @@
     "calcCouldNotApply": "Could not apply the calculation to this layer.",
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
     "exportFailed": "Could not export the selected layer.",
-    "saveTitleFormErrors": "Fix attribute form violations before saving"
+    "saveTitleFormErrors": "Fix attribute form violations before saving",
+    "fieldReserved": "This field name is reserved for GeoEditor."
   },
   "styleManager": {
     "title": "Style manager",

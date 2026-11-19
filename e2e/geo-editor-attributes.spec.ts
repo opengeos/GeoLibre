@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./test";
-import { layerRow, waitForMap } from "./helpers";
+import { bindMapLibreMap, layerRow, waitForMap } from "./helpers";
 
 /** Close the automatically opened properties form without changing any values. */
 async function closeProperties(page: Page) {
@@ -59,10 +59,90 @@ test("Sketches attribute saves preserve unfinished drawing and GeoEditor undo hi
   // Completing the drawing flushes Geoman's collection back into the store;
   // this value survives only if the earlier table edit reached the editor.
   await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
+  await expect(
+    page.locator("[data-panel-body]").getByRole("textbox", { name: "category", exact: true }),
+  ).toBeVisible();
   await closeProperties(page);
   await page.getByRole("button", { name: /^Undo/ }).click();
   await expect(status).toContainText("1 feature");
   await page.getByRole("button", { name: /^Redo/ }).click();
   await expect(status).toContainText("2 features");
   await expect(table.getByRole("cell", { name: "Updated", exact: true })).toBeVisible();
+});
+
+test("existing vector feature properties commit on session Save and roll back on Cancel", async ({
+  page,
+}) => {
+  const { dropGeoJson } = await import("./helpers");
+  await waitForMap(page);
+  await dropGeoJson(
+    page,
+    "Parcels",
+    JSON.stringify({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 7,
+          properties: { name: "Original", height: 12, nested: { protected: true } },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-101, 39],
+                [-99, 39],
+                [-99, 41],
+                [-101, 41],
+                [-101, 39],
+              ],
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  const row = layerRow(page, "Parcels");
+  await expect(row).toBeVisible();
+  await bindMapLibreMap(page);
+  await page.getByRole("button", { name: "GeoEditor", exact: true }).click();
+  await expect(page.locator(".geo-editor-toolbar")).toBeVisible({ timeout: 30000 });
+  async function edit() {
+    await row.getByRole("button", { name: "Layer actions" }).click();
+    await page.getByRole("menuitem", { name: "Edit geometry", exact: true }).click();
+    await expect(row.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    const location = await page.evaluate(() => {
+      const map = window.__geolibreTestMap!;
+      const point = map.project([-100, 40]);
+      const box = map.getCanvas().getBoundingClientRect();
+      return { x: point.x + box.x, y: point.y + box.y };
+    });
+    await page.mouse.click(location.x, location.y);
+  }
+  async function assertSaved(name: string) {
+    await row.getByRole("button", { name: "Layer actions" }).click();
+    await page.getByRole("menuitem", { name: "Open attribute table", exact: true }).click();
+    await expect(
+      page.getByTestId("attribute-table").getByRole("cell", { name, exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close attribute table", exact: true }).click();
+  }
+  const panel = page.locator("[data-panel-body]").locator("..");
+  await edit();
+  await expect(panel.getByRole("textbox", { name: "name", exact: true })).toHaveValue("Original");
+  await expect(panel.getByRole("spinbutton", { name: "Height (m)", exact: true })).toHaveValue(
+    "12",
+  );
+  await panel.getByRole("textbox", { name: "name", exact: true }).fill("Saved");
+  await panel.getByRole("spinbutton", { name: "Height (m)", exact: true }).fill("25");
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await row.getByRole("button", { name: "Save", exact: true }).click();
+  await assertSaved("Saved");
+  await edit();
+  await expect(panel.getByRole("spinbutton", { name: "Height (m)", exact: true })).toHaveValue(
+    "25",
+  );
+  await panel.getByRole("textbox", { name: "name", exact: true }).fill("Discarded");
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await row.getByRole("button", { name: "Cancel", exact: true }).click();
+  await assertSaved("Saved");
 });

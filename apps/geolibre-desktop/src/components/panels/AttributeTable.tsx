@@ -29,6 +29,7 @@ import {
 } from "@geolibre/core";
 import {
   stripEditorProperties,
+  isInternalEditorProperty,
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
   arcGISAttributeConstraints,
@@ -1243,6 +1244,18 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // that just turned tracking on shows what it is about to maintain (and the
   // Field Calculator's "new field" name check sees them as taken).
   const discoveredColumns = ensureEditorTrackingFields(Array.from(propKeys), layer?.editorTracking);
+  // Displayed columns omit engine metadata and large inline photos; mutation
+  // validation still needs every stored key to avoid overwriting hidden data.
+  const mutationColumns = useMemo(
+    () =>
+      ensureEditorTrackingFields(
+        Array.from(new Set(features.flatMap((feature) => Object.keys(feature.properties ?? {})))),
+        layer?.editorTracking,
+      ),
+    [features, layer?.editorTracking],
+  );
+  const isReservedFieldName = (name: string) =>
+    layer?.metadata.sourceKind === "geoeditor-sketches" && isInternalEditorProperty(name);
   const columnSettings = getColumnSettings(layer);
   // Columns rendered in the table, honoring saved order and hidden state.
   const columns = visibleColumns(discoveredColumns, columnSettings);
@@ -1560,7 +1573,9 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     // renameColumn writes. (renameColumn also trims defensively for other
     // callers; passing the already-trimmed value keeps the two in agreement.)
     const newKey = editingColumnName.trim();
-    const patch = renameColumn(layer, discoveredColumns, oldKey, newKey);
+    const patch = isReservedFieldName(newKey)
+      ? null
+      : renameColumn(layer, mutationColumns, oldKey, newKey);
     if (patch) {
       updateLayer(layer.id, markAttributeEdit(layer, patch));
       // Keep view state pointing at the renamed column.
@@ -1629,11 +1644,13 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const newColumnNameTrimmed = newColumnName.trim();
   const newColumnCollides =
-    newColumnNameTrimmed !== "" && discoveredColumns.includes(newColumnNameTrimmed);
+    newColumnNameTrimmed !== "" && mutationColumns.includes(newColumnNameTrimmed);
+  const newColumnReserved = isReservedFieldName(newColumnNameTrimmed);
   // A field is only discoverable through feature property keys, so a new column
   // cannot be added to a layer with no features (see addColumn).
   const canAddColumn = features.length > 0;
-  const canSubmitNewColumn = newColumnNameTrimmed !== "" && !newColumnCollides && canAddColumn;
+  const canSubmitNewColumn =
+    newColumnNameTrimmed !== "" && !newColumnCollides && !newColumnReserved && canAddColumn;
 
   const openAddColumn = () => {
     setNewColumnName("");
@@ -1652,13 +1669,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
   const confirmAddColumn = () => {
     if (!layer || !canManageColumns || !canSubmitNewColumn) return;
-    const patch = addColumn(
-      layer,
-      discoveredColumns,
-      newColumnName,
-      newColumnType,
-      newColumnDefault,
-    );
+    const patch = addColumn(layer, mutationColumns, newColumnName, newColumnType, newColumnDefault);
     if (patch) updateLayer(layer.id, markAttributeEdit(layer, patch));
     setAddingColumn(false);
   };
@@ -1749,9 +1760,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   const calcNameCollides =
     calcMode === "create" &&
     calcNewNameTrimmed !== "" &&
-    discoveredColumns.includes(calcNewNameTrimmed);
+    mutationColumns.includes(calcNewNameTrimmed);
+  const calcNameReserved = calcMode === "create" && isReservedFieldName(calcNewNameTrimmed);
   const calcHasTarget =
-    calcMode === "create" ? calcNewNameTrimmed !== "" && !calcNameCollides : calcTargetField !== "";
+    calcMode === "create"
+      ? calcNewNameTrimmed !== "" && !calcNameCollides && !calcNameReserved
+      : calcTargetField !== "" && !isReservedFieldName(calcTargetField);
   const calcHasSelection = selectedFeatureIds.length > 0;
 
   // Live preview of the expression against a sample feature: the selected row
@@ -1832,7 +1846,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       calcSelectedOnly && selectedFeatureIds.length > 0 ? new Set(selectedFeatureIds) : undefined;
     const result = calculateField(
       layer,
-      discoveredColumns,
+      mutationColumns,
       targetName,
       calcMode === "create",
       calcExpression,
@@ -2830,7 +2844,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 autoFocus
                 value={newColumnName}
                 placeholder={t("attributeTable.newFieldPlaceholder")}
-                aria-invalid={newColumnCollides || undefined}
+                aria-invalid={newColumnCollides || newColumnReserved || undefined}
                 onChange={(event) => setNewColumnName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && canSubmitNewColumn) {
@@ -2839,7 +2853,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   }
                 }}
               />
-              {newColumnCollides ? (
+              {newColumnReserved ? (
+                <span className="text-xs text-destructive">
+                  {t("attributeTable.fieldReserved")}
+                </span>
+              ) : newColumnCollides ? (
                 <span className="text-xs text-destructive">
                   {t("attributeTable.fieldExists", {
                     name: newColumnNameTrimmed,
@@ -2940,7 +2958,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                     className="flex-1"
                     value={calcNewName}
                     placeholder={t("attributeTable.newFieldNamePlaceholder")}
-                    aria-invalid={calcNameCollides || undefined}
+                    aria-invalid={calcNameCollides || calcNameReserved || undefined}
                     onChange={(event) => setCalcNewName(event.target.value)}
                   />
                 ) : (
@@ -2958,7 +2976,11 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                   </Select>
                 )}
               </div>
-              {calcNameCollides ? (
+              {calcNameReserved ? (
+                <span className="text-xs text-destructive">
+                  {t("attributeTable.fieldReserved")}
+                </span>
+              ) : calcNameCollides ? (
                 <span className="text-xs text-destructive">
                   {t("attributeTable.fieldExists", {
                     name: calcNewNameTrimmed,

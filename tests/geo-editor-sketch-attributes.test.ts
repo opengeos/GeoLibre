@@ -61,3 +61,17 @@ it("addresses Geoman's own ID when an imported feature has a separate public ID"
   stored.features[0].properties!.name = "Updated";
   assert.equal(planSketchAttributeUpdates(editor, stored)?.[0].id, "feature-1");
 });
+
+it("treats reordered geometry and shape-property keys as the same target", () => {
+  const stored = structuredClone(original);
+  stored.features[0].geometry = { coordinates: [10, 50], type: "Point" };
+  stored.features[0].properties = {
+    __gm_shape: "circle_marker",
+    __gm_id: "feature-1",
+    obsolete: true,
+    name: "After",
+  };
+  assert.deepEqual(planSketchAttributeUpdates(original, stored), [
+    { id: "feature-1", properties: { obsolete: true, name: "After" } },
+  ]);
+});

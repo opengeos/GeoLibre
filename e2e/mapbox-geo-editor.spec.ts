@@ -294,9 +294,8 @@ for (const theme of ["light", "dark"] as const) {
 
       await page.screenshot({ path: info.outputPath(`mapbox-geo-editor-${theme}.png`) });
 
-      // In-place geometry editing has no attribute schema for a newly drawn
-      // point. GeoEditor opens an empty form after the callback returns; the
-      // plugin must close it without changing the normal Sketches behavior above.
+      // Existing-layer sessions also expose public properties on newly drawn
+      // features, using the target layer's automatically discovered schema.
       const editableRow = layerRow(page, "Editable points");
       await editableRow.getByRole("button", { name: "Layer actions" }).click();
       await page.getByRole("menuitem", { name: "Edit geometry", exact: true }).click();
@@ -306,12 +305,16 @@ for (const theme of ["light", "dark"] as const) {
       const newPoint = await canvasPoint(page, 0.85, 0.5);
       await page.mouse.click(newPoint.x, newPoint.y);
       const attributePanel = page.locator(".geo-editor-attribute-panel");
-      await expect(attributePanel).toHaveClass(/attribute-panel--hidden/);
+      await expect(attributePanel).not.toHaveClass(/attribute-panel--hidden/);
+      await expect(
+        attributePanel.getByRole("textbox", { name: "name", exact: true }),
+      ).toBeVisible();
+      await attributePanel.getByRole("button", { name: "Close", exact: true }).click();
 
       await editableRow.getByRole("button", { name: "Layer actions" }).click();
       await page.getByRole("menuitem", { name: "Finish editing geometry", exact: true }).click();
       // Saving the session writes the drawn point back to the layer, proving the
-      // hidden-panel assertion above followed a real creation.
+      // properties-panel assertion above followed a real creation.
       await expect.poll(() => editableFeatureCount(page)).toBe(2);
 
       // The plugin declares both 2D engines, so the manager re-activates it on
