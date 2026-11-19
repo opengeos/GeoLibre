@@ -629,7 +629,7 @@ export function SettingsDialog({
               <Languages className="h-3.5 w-3.5" />
               {t("language.label")}
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-44">
+            <DropdownMenuSubContent className="w-max">
               <DropdownMenuRadioGroup value={language} onValueChange={setLanguage}>
                 {languageOptions.map((option) => (
                   <DropdownMenuRadioItem key={option.code} value={option.code}>
