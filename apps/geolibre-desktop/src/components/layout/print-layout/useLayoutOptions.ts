@@ -178,6 +178,7 @@ export function useLayoutOptions({
       mapImageWidth: captured?.width ?? 0,
       mapImageHeight: captured?.height ?? 0,
       mapFit,
+      mapGeoref: captured?.georef ?? null,
     }),
     [
       resolvedTitle,

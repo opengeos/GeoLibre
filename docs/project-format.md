@@ -156,7 +156,8 @@ carries no `printLayout` key.
 - Page: `paperSize` (`a4`, `a3`, `letter`, `legal`, `tabloid`, `fullhd`, `hd`,
   `uhd4k`, `square`, `custom`), `orientation`, `customWidth` / `customHeight` /
   `customUnit` for `custom`, `pageMargin`, `pageBackground`, `panelTheme`
-  (`light` or `dark`), and the page/map frame colours.
+  (`light` or `dark`), `exportDpi` (`72`, `150` or `300`; the resolution PNG
+  and PDF exports render a paper page at), and the page/map frame colours.
 - Elements: the `show*` toggles for legend, scale bar, north arrow, footer,
   date, attribution, colorbar, custom legend and info block, with their
   per-element settings.

@@ -1,10 +1,15 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, Label, Select } from "@geolibre/ui";
-import { DEFAULT_PRINT_LAYOUT } from "@geolibre/core";
+import {
+  DEFAULT_PRINT_LAYOUT,
+  PRINT_LAYOUT_EXPORT_DPIS,
+  type PrintLayoutExportDpi,
+} from "@geolibre/core";
 import { BackgroundColorField } from "./BackgroundColorField";
 import {
   PAPER_SIZES,
+  resolvePageSize,
   type Orientation,
   type PaperSizeId,
   type SizeUnit,
@@ -21,6 +26,14 @@ export function PageEditor({ layout, dispatch, pageBackgroundDraft }: PageEditor
   const { t } = useTranslation();
   const { paperSize, orientation, customWidth, customHeight, customUnit, pageMargin } = layout;
   const isCustom = paperSize === "custom";
+  // A screen-sized page is exact pixels, so the export resolution does not
+  // apply to it.
+  const pixelPage =
+    resolvePageSize({
+      paperSize,
+      orientation,
+      customSize: { width: customWidth, height: customHeight, unit: customUnit },
+    }).unit === "px";
   const paperOptions = useMemo(() => PAPER_SIZES.filter((p) => p.group === "paper"), []);
   const screenOptions = useMemo(
     () => PAPER_SIZES.filter((p) => p.group === "screen" && p.id !== "custom"),
@@ -137,6 +150,28 @@ export function PageEditor({ layout, dispatch, pageBackgroundDraft }: PageEditor
           <option value="normal">{t("printLayout.marginOption.normal")}</option>
           <option value="narrow">{t("printLayout.marginOption.narrow")}</option>
           <option value="none">{t("printLayout.marginOption.none")}</option>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="layout-export-dpi">{t("printLayout.exportDpi")}</Label>
+        <Select
+          id="layout-export-dpi"
+          value={String(layout.exportDpi)}
+          disabled={pixelPage}
+          title={pixelPage ? t("printLayout.exportDpiPixelPage") : undefined}
+          onChange={(e) =>
+            dispatch({
+              type: "setLayout",
+              patch: { exportDpi: Number(e.target.value) as PrintLayoutExportDpi },
+            })
+          }
+        >
+          {PRINT_LAYOUT_EXPORT_DPIS.map((dpi) => (
+            <option key={dpi} value={dpi}>
+              {t("printLayout.exportDpiOption", { dpi })}
+            </option>
+          ))}
         </Select>
       </div>
 
