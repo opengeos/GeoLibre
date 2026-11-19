@@ -2214,7 +2214,8 @@
     "geoPdf": {
       "georeferenced": "The PDF is georeferenced (GeoPDF): GIS and mobile mapping apps read its map coordinates.",
       "notGeoreferenced": "This view cannot be georeferenced, so the PDF has no map coordinates. Remove the tilt, and zoom in or switch to the Mercator projection when the map is a globe. A custom CRS needs an EPSG code.",
-      "atlas": "Each page is georeferenced (GeoPDF) when its view can be: not tilted, and flat enough on a globe."
+      "atlas": "Each page is georeferenced (GeoPDF) when its view can be: not tilted, and flat enough on a globe.",
+      "otherBody": "Maps of the Moon, Mars and other bodies export as plain PDFs: GeoPDF readers take coordinates as Earth's."
     },
     "titleLabel": "Title",
     "titlePlaceholder": "Map title",

@@ -1,3 +1,4 @@
+import { getActiveEllipsoid } from "@geolibre/core";
 import { useTranslation } from "react-i18next";
 import { Button } from "@geolibre/ui";
 import { Check, ClipboardCopy, FileImage, FileText } from "lucide-react";
@@ -100,7 +101,9 @@ export function ExportActions({
             : hasCapture
               ? georeferenced
                 ? t("printLayout.geoPdf.georeferenced")
-                : t("printLayout.geoPdf.notGeoreferenced")
+                : getActiveEllipsoid().id !== "earth"
+                  ? t("printLayout.geoPdf.otherBody")
+                  : t("printLayout.geoPdf.notGeoreferenced")
               : undefined
         }
         onClick={() => void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))}
