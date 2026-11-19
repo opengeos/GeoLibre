@@ -168,4 +168,119 @@ describe("useWindowCloseGuard", () => {
     await requestClose();
     assert.equal(guard.current.windowClosePromptOpen, true);
   });
+
+  it("asks about attribute drafts first and keeps the window when declined", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: false });
+    const asked: string[] = [];
+    const originalConfirm = window.confirm;
+    let answer = false;
+    window.confirm = (message?: string) => {
+      asked.push(String(message));
+      return answer;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      assert.equal(asked.length, 1);
+      assert.match(asked[0], /Cities/);
+      assert.equal(guard.current.windowClosePromptOpen, false);
+      assert.ok(!destroyed());
+      answer = true;
+      await requestClose();
+      assert.equal(asked.length, 2);
+      assert.ok(destroyed());
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
+
+  it("asks about drafts on a dirty project only once the close is decided", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: true });
+    let asked = 0;
+    let answer = false;
+    const originalConfirm = window.confirm;
+    window.confirm = () => {
+      asked += 1;
+      return answer;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      // The project prompt comes first; cancelling it keeps the drafts unasked.
+      assert.equal(guard.current.windowClosePromptOpen, true);
+      assert.equal(asked, 0);
+      await act(() => guard.current.resolveWindowClosePrompt("cancel"));
+      assert.equal(asked, 0);
+      await requestClose();
+      await act(() => guard.current.resolveWindowClosePrompt("discard"));
+      assert.equal(asked, 1);
+      assert.ok(!destroyed());
+      answer = true;
+      await requestClose();
+      await act(() => guard.current.resolveWindowClosePrompt("discard"));
+      assert.equal(asked, 2);
+      assert.ok(destroyed());
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
+
+  it("keeps the window when closed again after a save turned the project clean", async () => {
+    const layerId = useAppStore.getState().addGeoJsonLayer("Cities", {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "A" },
+        },
+      ],
+    });
+    useAppStore.getState().setAttributeTableDrafts(layerId, { "0": { name: "B" } });
+    useAppStore.setState({ isDirty: true });
+    let asked = 0;
+    const originalConfirm = window.confirm;
+    window.confirm = () => {
+      asked += 1;
+      return false;
+    };
+    try {
+      const guard = renderGuard(async () => true);
+      await requestClose();
+      assert.equal(guard.current.windowClosePromptOpen, true);
+      // An ordinary save finishes while the close prompt is up.
+      useAppStore.setState({ isDirty: false });
+      await requestClose();
+      assert.ok(!destroyed());
+      assert.equal(asked, 0);
+      assert.equal(guard.current.windowClosePromptOpen, true);
+    } finally {
+      window.confirm = originalConfirm;
+      useAppStore.getState().removeLayer(layerId);
+    }
+  });
 });

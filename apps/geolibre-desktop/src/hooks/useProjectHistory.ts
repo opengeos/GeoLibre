@@ -10,6 +10,7 @@ import type { MapEngine } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import {
   createAutosaveFailureNotice,
   createAutosaveStatusTracker,
@@ -229,6 +230,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
   const restore = useCallback(
     (snapshot: ProjectHistorySnapshot) => {
       setRestoreError(null);
+      if (!confirmDiscardAttributeDrafts()) return false;
       try {
         const before = buildProjectSnapshot(mapControllerRef);
         const beforePath = useAppStore.getState().projectPath;

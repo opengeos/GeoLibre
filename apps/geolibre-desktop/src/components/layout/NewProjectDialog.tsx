@@ -29,6 +29,7 @@ import {
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import { StarterProjectsSection } from "./StarterProjectsSection";
+import { confirmDiscardAttributeDrafts } from "../../lib/attribute-draft-guard";
 import {
   Button,
   cn,
@@ -112,7 +113,8 @@ interface NewProjectDialogProps {
    * from URL path). Rejects on failure so the dialog can show the error inline.
    * When omitted, the Examples section is hidden.
    */
-  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<void>;
+  /** Resolves false (or rejects) when the project was not loaded. */
+  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<boolean | void>;
   /**
    * Open with the Examples section expanded and scrolled into view (the
    * "Open Starter Examples" command). Read when the section mounts.
@@ -248,6 +250,9 @@ export function NewProjectDialog({
     basemapId: BasemapChoice,
     { styleUrl, ellipsoidId }: ResolvedBasemap,
   ) => {
+    // The save prompt covers project changes; attribute drafts are not part of
+    // the project, so they get their own question.
+    if (!confirmDiscardAttributeDrafts()) return;
     const name = projectName.trim() || DEFAULT_PROJECT_NAME;
     const options = {
       basemapStyleUrl: styleUrl,
@@ -297,6 +302,7 @@ export function NewProjectDialog({
     templateProject: Parameters<typeof detachProjectCopy>[0],
     templateName: string,
   ) => {
+    if (!confirmDiscardAttributeDrafts()) return;
     const copy = detachProjectCopy(templateProject, { nameSuffix: "" });
     const finalName =
       projectName.trim() !== DEFAULT_PROJECT_NAME && projectName.trim() !== ""
@@ -320,13 +326,15 @@ export function NewProjectDialog({
     exampleAbortRef.current?.abort();
     const controller = new AbortController();
     exampleAbortRef.current = controller;
+    let loaded: boolean | void;
     try {
-      await onOpenExample(projectUrl, controller.signal);
+      loaded = await onOpenExample(projectUrl, controller.signal);
     } catch (error) {
       if (controller.signal.aborted) return false;
       throw error;
     }
-    return !controller.signal.aborted;
+    // False when the user kept the current session (pending attribute drafts).
+    return loaded !== false && !controller.signal.aborted;
   };
 
   const handleExampleOpened = () => {

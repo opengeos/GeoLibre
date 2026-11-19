@@ -8632,6 +8632,8 @@
     "refreshTitle": "Re-read features from the source to pick up changes made elsewhere",
     "refreshTitleLocalFile": "Reload features from the file on disk",
     "refreshTitlePendingEdits": "Save or discard your edits before refreshing",
+    "discardDraftsConfirm_one": "The attribute table has unsaved edits on {{layers}}. They are not saved with the project and will be lost. Continue?",
+    "discardDraftsConfirm_other": "The attribute table has unsaved edits on {{count}} layers: {{layers}}. They are not saved with the project and will be lost. Continue?",
     "title": "Attribute table",
     "resize": "Resize attribute table",
     "editValues": "Edit attribute values",

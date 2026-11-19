@@ -22,6 +22,7 @@ import {
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
 import { type FormEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { confirmDiscardAttributeDrafts } from "../lib/attribute-draft-guard";
 import {
   discardEditedWfsGeometry,
   embedEditedGeometry,
@@ -508,7 +509,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     const result = await openProjectFile();
     if (result) {
       try {
-        loadProject(await resolveProjectXyzLayers(result.project), result.path, {
+        const project = await resolveProjectXyzLayers(result.project);
+        // Asked after the awaits, so drafts made meanwhile are covered too.
+        if (!confirmDiscardAttributeDrafts()) return;
+        loadProject(project, result.path, {
           rememberRecent: isTauri(),
         });
         rememberStartupProjectSnapshot(result.path, result.text);
@@ -538,10 +542,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       }),
       resolveProject: resolveProjectXyzLayers,
       loadProject: (project) => {
+        // Asked only once the replacement is certain: after the save prompt
+        // and the remote-layer awaits, so no later draft is dropped unasked.
+        if (!confirmDiscardAttributeDrafts()) return false;
         loadProject(project, candidate.path, {
           rememberRecent: isTauri() && candidate.path !== null,
         });
         if (candidate.path) rememberStartupProjectSnapshot(candidate.path, candidate.text);
+        return true;
       },
       workspaceChanged: (state, project) => {
         const updated = {
@@ -697,7 +705,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       imported.formNotes = imported.formNotes.filter((note) => loadedNames.has(note.layerName));
       imported.styleNotes = imported.styleNotes.filter((note) => loadedNames.has(note.layerName));
       await materializeQgisFormRelations(imported, readQgisSnapshotTable);
-      if (superseded()) return;
+      if (superseded() || !confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
@@ -806,6 +814,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           usedGroupIds.has(group.id),
         );
       }
+      if (!confirmDiscardAttributeDrafts()) return;
       const mapReady = importedProjectMapReady(
         mapControllerRef,
         useAppStore.getState().basemapStyleUrl !== imported.project.basemapStyleUrl,
@@ -895,7 +904,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       const result = await openRecentProjectFile(normalizedUrl, controller.signal);
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return;
       loadProject(project, result.path);
       setProjectUrl("");
       setProjectUrlDialogOpen(false);
@@ -943,7 +952,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
        */
       signal?: AbortSignal;
     } = {},
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const normalizedUrl = normalizeProjectUrl(url);
     if (!normalizedUrl) {
       throw new Error(t("toolbar.error.invalidProjectUrl"));
@@ -976,12 +985,13 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         project = await resolveProjectXyzLayers(result.project, controller.signal);
       }
 
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return false;
       if (
         options.oauthSessionRevision !== undefined &&
         options.oauthSessionRevision !== useShareOAuthStore.getState().sessionRevision
       )
-        return;
+        return false;
+      if (!confirmDiscardAttributeDrafts()) return false;
 
       if (options.asCopy) {
         const detached = detachProjectCopy(project, { nameSuffix: "" });
@@ -996,6 +1006,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           : null;
       }
       setRemoteSaveWarning(null);
+      return true;
     } finally {
       if (shareUrlAbortRef.current === controller) {
         shareUrlAbortRef.current = null;
@@ -1021,7 +1032,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (!result || signal.aborted) return null;
     try {
       const project = await resolveProjectXyzLayers(result.project, signal);
-      if (signal.aborted) return null;
+      if (signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       return null;
     } catch (error) {
@@ -1068,7 +1079,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
     try {
       const project = await resolveProjectXyzLayers(result.project, controller.signal);
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted || !confirmDiscardAttributeDrafts()) return null;
       loadProject(project, result.path);
       if (result.fromStoredCopy) {
         notify.warning(t("settings.startup.storedCopyWarning"), {
@@ -2240,6 +2251,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   };
 
   const handleDuplicate = () => {
+    if (!confirmDiscardAttributeDrafts()) return;
     const { project } = buildCurrentProject();
     const duplicated = detachProjectCopy(project, { nameSuffix: "(copy)" });
     // A copy of what is already on screen, so its basemap needs no confirmation.
