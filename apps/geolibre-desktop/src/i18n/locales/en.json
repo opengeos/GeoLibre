@@ -11588,6 +11588,17 @@
     "status": {
       "gpsLabel": "GPS",
       "diagnosticsLabel": "Open diagnostics ({{count}})"
+    },
+    "menu": {
+      "searchPlaceholder": "Search tools and commands…",
+      "clearSearch": "Clear search",
+      "noResults": "No matching actions found.",
+      "backTo": "Back to {{title}}"
+    },
+    "layerActions": {
+      "quickActions": "Quick actions",
+      "organize": "Organize and export",
+      "manage": "Layer info"
     }
   }
 }

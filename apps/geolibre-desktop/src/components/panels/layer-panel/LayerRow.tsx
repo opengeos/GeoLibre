@@ -2,6 +2,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
   useMemo,
+  useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -55,7 +56,9 @@ import {
   relativeSyncTime,
   type LayerRefreshStatus,
 } from "./layer-panel-utils";
+import { useTouchUi } from "../../../hooks/useTouchUi";
 import { LayerActionsMenuItems, type LayerActionsMenuShared } from "./LayerActionsMenu";
+import { LayerActionsTouchSheet } from "./LayerActionsTouchSheet";
 import { LayerOpacitySlider } from "./LayerOpacitySlider";
 import { useCompactLayerList } from "./useCompactLayerList";
 
@@ -141,6 +144,8 @@ export function LayerRow({
   menu,
 }: LayerRowProps) {
   const { i18n, t } = useTranslation();
+  const { touchUi } = useTouchUi();
+  const [touchActionsOpen, setTouchActionsOpen] = useState(false);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
@@ -323,7 +328,9 @@ export function LayerRow({
           aria-label={t("layers.dragNamedToReorder", {
             name: layer.name,
           })}
-          className="touch-none select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+          className={`select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing ${
+            dragged ? "touch-none" : touchUi ? "touch-pan-y" : "touch-none"
+          } ${touchUi ? "inline-flex min-h-11 min-w-9 items-center justify-center" : ""}`}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
           onPointerDown={(e) => onPointerDown(e, layer.id)}
           onPointerMove={onPointerMove}
@@ -647,37 +654,78 @@ export function LayerRow({
               <Palette className="h-3.5 w-3.5" />
             </Button>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          {touchUi ? (
+            <>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-7 w-7 ${
+                data-testid="layer-row-touch-actions"
+                className={`h-10 w-10 ${
                   refreshConfig.enabled ? "border border-primary text-primary" : ""
                 }`}
                 title={t("layers.layerActions")}
                 aria-label={t("layers.layerActions")}
-                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                onClick={(e: ReactMouseEvent) => {
+                  e.stopPropagation();
+                  setTouchActionsOpen(true);
+                }}
               >
-                <MoreHorizontal className="h-3.5 w-3.5" />
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e: ReactMouseEvent) => e.stopPropagation()}>
-              <LayerActionsMenuItems
+              <LayerActionsTouchSheet
+                open={touchActionsOpen}
+                onOpenChange={setTouchActionsOpen}
                 shared={menu}
                 layer={layer}
                 layerCaps={layerCaps}
                 layerRendered={layerRendered}
+                canIdentify={canIdentify}
+                identifyActive={identifyActive}
                 identifyOwnsClicks={identifyOwnsClicks}
+                identifyLabel={identifyLabel}
                 geometryEditActive={geometryEditActive}
-                geometryEditElsewhere={geometryEditElsewhere}
-                isLayerLocked={isLayerLocked}
                 layerEditable={layerEditable}
-                refreshConfig={refreshConfig}
-                isRefreshing={isRefreshing}
+                readOnlyHint={readOnlyHint}
+                onOpenMetadata={onOpenMetadata}
+                onRequestRemove={onRequestRemove}
               />
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${
+                    refreshConfig.enabled ? "border border-primary text-primary" : ""
+                  }`}
+                  title={t("layers.layerActions")}
+                  aria-label={t("layers.layerActions")}
+                  onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+              >
+                <LayerActionsMenuItems
+                  shared={menu}
+                  layer={layer}
+                  layerCaps={layerCaps}
+                  layerRendered={layerRendered}
+                  identifyOwnsClicks={identifyOwnsClicks}
+                  geometryEditActive={geometryEditActive}
+                  geometryEditElsewhere={geometryEditElsewhere}
+                  isLayerLocked={isLayerLocked}
+                  layerEditable={layerEditable}
+                  refreshConfig={refreshConfig}
+                  isRefreshing={isRefreshing}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             variant="ghost"
             size="icon"
